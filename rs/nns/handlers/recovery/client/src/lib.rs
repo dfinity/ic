@@ -16,7 +16,7 @@ pub trait RecoveryCanister {
 
     async fn get_pending_recovery_proposals(&self) -> Result<Vec<RecoveryProposal>>;
 
-    async fn vote_on_latest_proposal(&mut self, ballot: Ballot) -> Result<()>;
+    async fn vote_on_latest_proposal(&self, ballot: Ballot) -> Result<()>;
 
     async fn submit_new_recovery_proposal(&self, new_proposal: NewRecoveryProposal) -> Result<()>;
 

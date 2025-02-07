@@ -28,17 +28,6 @@ impl super::Signer for Prime256 {
     }
 }
 
-impl TryInto<Vec<u8>> for Prime256 {
-    type Error = RecoveryError;
-
-    fn try_into(self) -> Result<Vec<u8>, Self::Error> {
-        self.verifying_key
-            .to_public_key_der()
-            .map_err(|e| RecoveryError::InvalidPubKey(e.to_string()))
-            .map(|document| document.into_vec())
-    }
-}
-
 impl super::Verifier for Prime256 {
     fn verify_payload(&self, payload: &[u8], signature: &[u8]) -> crate::Result<()> {
         let signature = Signature::from_slice(&signature)
@@ -48,13 +37,18 @@ impl super::Verifier for Prime256 {
             .verify(payload, &signature)
             .map_err(|e| RecoveryError::InvalidSignature(e.to_string()))
     }
+
+    fn to_public_key_der(&self) -> crate::Result<Vec<u8>> {
+        self.verifying_key
+            .to_public_key_der()
+            .map_err(|e| RecoveryError::InvalidPubKey(e.to_string()))
+            .map(|document| document.into_vec())
+    }
 }
 
-impl TryFrom<Vec<u8>> for Prime256 {
-    type Error = RecoveryError;
-
-    fn try_from(value: Vec<u8>) -> Result<Self, Self::Error> {
-        let document: Document = Document::from_public_key_der(&value)
+impl Prime256 {
+    pub fn from_public_key_der(public_key_der: &[u8]) -> crate::Result<Self> {
+        let document: Document = Document::from_public_key_der(public_key_der)
             .map_err(|e| RecoveryError::InvalidPubKey(e.to_string()))?;
 
         let info: SubjectPublicKeyInfoRef = document
@@ -69,5 +63,12 @@ impl TryFrom<Vec<u8>> for Prime256 {
             signing_key: None,
             verifying_key,
         })
+    }
+
+    pub fn new(signing_key: SigningKey) -> Self {
+        Self {
+            verifying_key: signing_key.verifying_key().clone(),
+            signing_key: Some(signing_key),
+        }
     }
 }

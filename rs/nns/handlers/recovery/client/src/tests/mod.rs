@@ -1,15 +1,13 @@
 use std::path::PathBuf;
 
 use candid::Principal;
-use ed25519_dalek::pkcs8::EncodePublicKey;
-use ed25519_dalek::{ed25519::signature::rand_core::OsRng, SigningKey};
-use ic_agent::{agent::AgentBuilder, identity::BasicIdentity, Agent};
+use ic_agent::agent::AgentBuilder;
+use ic_agent::{Agent, Identity};
 use ic_nns_handler_recovery_interface::{
     recovery_init::RecoveryInitArgs, simple_node_operator_record::SimpleNodeOperatorRecord,
 };
 use pocket_ic::{nonblocking::PocketIc, PocketIcBuilder};
 
-use crate::{implementation::RecoveryCanisterImpl, RecoveryCanister};
 mod general;
 
 fn fetch_canister_wasm(env: &str) -> Vec<u8> {
@@ -21,7 +19,7 @@ fn fetch_canister_wasm(env: &str) -> Vec<u8> {
 }
 
 async fn init_pocket_ic(recovery_init_args: RecoveryInitArgs) -> (PocketIc, Principal) {
-    let pic = PocketIcBuilder::new()
+    let mut pic = PocketIcBuilder::new()
         .with_nns_subnet()
         .with_application_subnet()
         .build_async()
@@ -39,34 +37,8 @@ async fn init_pocket_ic(recovery_init_args: RecoveryInitArgs) -> (PocketIc, Prin
     )
     .await;
 
+    pic.make_live(None).await;
     (pic, canister)
-}
-
-fn get_agent(signing_key: SigningKey, url: &str) -> Agent {
-    let identity = BasicIdentity::from_signing_key((*signing_key.as_bytes()).into());
-
-    AgentBuilder::default()
-        .with_url(url)
-        .with_boxed_identity(Box::new(identity))
-        .build()
-        .unwrap()
-}
-
-async fn get_client(pic: &mut PocketIc, canister: Principal) -> impl RecoveryCanister {
-    let signing_key = SigningKey::generate(&mut OsRng);
-    get_client_with_key(pic, canister, signing_key).await
-}
-
-async fn get_client_with_key(
-    pic: &mut PocketIc,
-    canister: Principal,
-    signing_key: SigningKey,
-) -> impl RecoveryCanister {
-    let url = pic.make_live(None).await;
-    let agent = get_agent(signing_key.clone(), url.as_str());
-    agent.fetch_root_key().await.unwrap();
-
-    RecoveryCanisterImpl::new(agent, canister, signing_key)
 }
 
 fn preconfigured_recovery_init_args(
@@ -80,34 +52,28 @@ fn preconfigured_recovery_init_args(
     }
 }
 
+async fn get_ic_agent(identity: Box<dyn Identity>, endpoint: &str) -> Agent {
+    let agent = AgentBuilder::default()
+        .with_identity(identity)
+        .with_url(endpoint)
+        .build()
+        .unwrap();
+    agent.fetch_root_key().await.unwrap();
+    agent
+}
+
 struct NodeOperatorWithKey {
     record: SimpleNodeOperatorRecord,
-    key: SigningKey,
 }
 
-impl NodeOperatorWithKey {
-    async fn into_recovery_canister_client(
-        &self,
-        pic: &mut PocketIc,
-        canister: Principal,
-    ) -> impl RecoveryCanister {
-        get_client_with_key(pic, canister, self.key.clone()).await
-    }
-}
-
-fn generate_node_operators() -> Vec<NodeOperatorWithKey> {
-    (0..10)
-        .map(|_| {
-            let key = SigningKey::generate(&mut OsRng);
-            NodeOperatorWithKey {
-                record: SimpleNodeOperatorRecord {
-                    operator_id: Principal::self_authenticating(
-                        key.verifying_key().to_public_key_der().unwrap().into_vec(),
-                    ),
-                    nodes: (0..4).map(|_| Principal::anonymous()).collect(),
-                },
-                key,
-            }
+fn generate_node_operators(signers: Vec<Vec<u8>>) -> Vec<NodeOperatorWithKey> {
+    signers
+        .iter()
+        .map(|der_encoded_pub_key| NodeOperatorWithKey {
+            record: SimpleNodeOperatorRecord {
+                operator_id: Principal::self_authenticating(der_encoded_pub_key),
+                nodes: (0..4).map(|_| Principal::anonymous()).collect(),
+            },
         })
         .collect()
 }

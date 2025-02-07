@@ -2,7 +2,6 @@ use std::str::FromStr;
 
 use crate::*;
 use candid::{CandidType, Principal};
-use ed25519_dalek::{ed25519::signature::SignerMut, SigningKey};
 use ic_base_types::{PrincipalId, SubnetId};
 use registry_canister::mutations::{
     do_recover_subnet::RecoverSubnetPayload, do_update_subnet::UpdateSubnetPayload,
@@ -79,11 +78,6 @@ pub struct VoteOnRecoveryProposal {
 }
 
 impl RecoveryProposal {
-    pub fn sign(&self, signing_key: &mut SigningKey) -> Result<[[u8; 32]; 2]> {
-        let signature = signing_key.sign(&self.signature_payload()?);
-        Ok([*signature.r_bytes(), *signature.s_bytes()])
-    }
-
     pub fn signature_payload(&self) -> Result<Vec<u8>> {
         let self_without_ballots = Self {
             node_operator_ballots: vec![],

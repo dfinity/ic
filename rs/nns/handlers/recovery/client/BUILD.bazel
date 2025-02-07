@@ -7,7 +7,6 @@ DEPENDENCIES = [
     "//rs/nns/handlers/recovery/interface",
     "@crate_index//:candid",
     "@crate_index//:serde",
-    "@crate_index//:ed25519-dalek",
     "@crate_index//:ic-agent",
 ]
 
@@ -19,6 +18,7 @@ DEV_DEPENDENCIES = [
     "//packages/pocket-ic",
     "@crate_index//:tokio",
     "@crate_index//:p256",
+    "@crate_index//:ed25519-dalek",
 ]
 
 MACRO_DEV_DEPENDENCIES = []

@@ -1,11 +1,12 @@
+use std::sync::Arc;
+
 use async_trait::async_trait;
 use candid::{CandidType, Principal};
-use ed25519_dalek::pkcs8::EncodePublicKey;
-use ed25519_dalek::SigningKey;
 use ic_agent::Agent;
 use ic_nns_handler_recovery_interface::{
     recovery::{NewRecoveryProposal, RecoveryProposal, VoteOnRecoveryProposal},
     security_metadata::SecurityMetadata,
+    signing::Signer,
     simple_node_operator_record::SimpleNodeOperatorRecord,
     Ballot, RecoveryError, Result, VerifyIntegirty,
 };
@@ -15,15 +16,15 @@ use crate::RecoveryCanister;
 pub struct RecoveryCanisterImpl {
     canister_id: Principal,
     ic_agent: Agent,
-    signing_key: SigningKey,
+    signer: Arc<dyn Signer>,
 }
 
 impl RecoveryCanisterImpl {
-    pub fn new(ic_agent: Agent, canister_id: Principal, signing_key: SigningKey) -> Self {
+    pub fn new(ic_agent: Agent, canister_id: Principal, signer: Arc<dyn Signer>) -> Self {
         Self {
             ic_agent,
             canister_id,
-            signing_key,
+            signer,
         }
     }
 
@@ -89,10 +90,12 @@ impl RecoveryCanister for RecoveryCanisterImpl {
         Ok(response)
     }
 
-    async fn vote_on_latest_proposal(&mut self, ballot: Ballot) -> Result<()> {
+    async fn vote_on_latest_proposal(&self, ballot: Ballot) -> Result<()> {
         self.ensure_not_anonymous()?;
         let last_proposal = self.fetch_latest_proposal().await?;
-        let signature = last_proposal.sign(&mut self.signing_key)?;
+        let signature = self
+            .signer
+            .sign_payload(&last_proposal.signature_payload()?)?;
 
         self.update(
             "vote_on_proposal",
@@ -100,12 +103,7 @@ impl RecoveryCanister for RecoveryCanisterImpl {
                 security_metadata: SecurityMetadata {
                     signature,
                     payload: last_proposal.signature_payload()?,
-                    pub_key_der: self
-                        .signing_key
-                        .verifying_key()
-                        .to_public_key_der()
-                        .unwrap()
-                        .into_vec(),
+                    pub_key_der: self.signer.to_public_key_der()?,
                 },
                 ballot,
             })?,
