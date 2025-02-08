@@ -919,7 +919,7 @@ fn compute_average_icp_xdr_rate_at_time(
     }
 }
 
-#[query(hidden = true)]
+#[update(hidden = true)]
 fn set_icp_xdr_conversion_rate(
     proposed_conversion_rate: UpdateIcpXdrConversionRatePayload,
 ) -> Result<(), String> {
