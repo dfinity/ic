@@ -1,3 +1,5 @@
+use std::io::Write;
+
 use candid::Principal;
 use ic_base_types::PrincipalId;
 use ic_nns_handler_recovery_interface::{

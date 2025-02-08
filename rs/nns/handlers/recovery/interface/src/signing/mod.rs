@@ -6,6 +6,7 @@ use crate::RecoveryError;
 
 use super::Result;
 
+pub mod anonymous;
 pub mod ed25519;
 pub mod k256;
 pub mod p256;

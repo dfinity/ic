@@ -4,6 +4,8 @@ use candid::CandidType;
 use recovery::RecoveryProposal;
 use serde::Deserialize;
 
+pub const RECOVERY_CANISTER_ID: &str = "23bh6-6iaaa-aaaam-aednq-cai";
+
 pub mod recovery;
 pub mod recovery_init;
 pub mod security_metadata;
