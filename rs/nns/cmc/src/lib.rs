@@ -42,7 +42,7 @@ extern "C" {
 }
 
 #[cfg(not(target_arch = "wasm32"))]
-pub unsafe fn mint_cycles(amount: u64) -> u64 {
+pub unsafe fn mint_cycles(_amount: u64) -> u64 {
     panic!("mint_cycles should only be called inside canisters.");
 }
 
