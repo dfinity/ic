@@ -6,6 +6,7 @@ use ic_nns_handler_recovery_interface::{
 };
 use ic_nns_handler_recovery_interface::{RecoveryError, Result};
 
+pub mod builder;
 pub mod implementation;
 #[cfg(test)]
 mod tests;

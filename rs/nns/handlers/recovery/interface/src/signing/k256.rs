@@ -1,6 +1,6 @@
 use k256::ecdsa::signature::{Signer, Verifier};
 use k256::ecdsa::{Signature, SigningKey, VerifyingKey};
-use k256::pkcs8::{Document, EncodePublicKey};
+use k256::pkcs8::{DecodePrivateKey, Document, EncodePublicKey};
 use spki::{DecodePublicKey, SubjectPublicKeyInfoRef};
 
 use crate::RecoveryError;
@@ -81,5 +81,12 @@ impl Secp256k1 {
             verifying_key: *signing_key.verifying_key(),
             signing_key: Some(signing_key),
         }
+    }
+
+    pub fn from_pem(path: &str) -> crate::Result<Self> {
+        let signing_key = SigningKey::from_pkcs8_pem(path)
+            .map_err(|e| RecoveryError::InvalidIdentity(e.to_string()))?;
+
+        Ok(Self::new(signing_key))
     }
 }
