@@ -3,15 +3,13 @@ use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_cdk_macros::init;
 use ic_nervous_system_common::serve_metrics;
 
-#[cfg(target_arch = "wasm32")]
-use ic_cdk::println;
-
 use ic_cdk::{post_upgrade, query, update};
 use ic_nns_handler_recovery::{
     metrics::encode_metrics,
     node_operator_sync::{
         get_node_operators_in_nns, set_initial_node_operators, sync_node_operators,
     },
+    print_with_prefix,
     recovery_proposal::{get_recovery_proposals, submit_recovery_proposal, vote_on_proposal_inner},
 };
 use ic_nns_handler_recovery_interface::{
@@ -98,11 +96,11 @@ async fn setup_node_operator_update(args: Option<RecoveryInitArgs>) {
         set_initial_node_operators(args.initial_node_operator_records);
     }
 
-    ic_cdk::println!("Started Sync for new node operators on NNS");
+    print_with_prefix("Started Sync for new node operators on NNS");
     if let Err(e) = sync_node_operators().await {
-        ic_cdk::println!("{}", e);
+        print_with_prefix(e);
     }
-    ic_cdk::println!("Sync completed")
+    print_with_prefix("Sync completed");
 }
 
 #[cfg(test)]

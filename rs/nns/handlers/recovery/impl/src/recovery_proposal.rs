@@ -12,7 +12,7 @@ use ic_nns_handler_recovery_interface::{
 };
 use ic_nns_handler_root::now_seconds;
 
-use crate::node_operator_sync::get_node_operators_in_nns;
+use crate::{node_operator_sync::get_node_operators_in_nns, print_with_prefix};
 
 thread_local! {
   static PROPOSALS: RefCell<Vec<RecoveryProposal>> = const { RefCell::new(Vec::new()) };
@@ -37,7 +37,7 @@ pub fn submit_recovery_proposal(
             "Caller: {} is not eligible to submit proposals to this canister",
             caller
         );
-        ic_cdk::println!("{}", message);
+        print_with_prefix(&message);
         return Err(message);
     }
 
@@ -71,7 +71,7 @@ pub fn submit_recovery_proposal(
                             "Caller {} tried to place proposal {:?} which is currently not allowed",
                             caller, new_proposal
                         );
-                        ic_cdk::println!("{}", message);
+                        print_with_prefix(&message);
                         return Err(message);
                     }
                 }
@@ -85,7 +85,7 @@ pub fn submit_recovery_proposal(
                 if !first.is_byzantine_majority_yes() {
                     let message =
                         "Can't submit a proposal until the previous is decided".to_string();
-                    ic_cdk::println!("{}", message);
+                    print_with_prefix(&message);
                     return Err(message);
                 }
 
@@ -110,7 +110,7 @@ pub fn submit_recovery_proposal(
                             "Caller {} tried to place proposal {:?} which is currently not allowed",
                             caller, new_proposal
                         );
-                        ic_cdk::println!("{}", message);
+                        print_with_prefix(&message);
                         return Err(message);
                     }
                 }
@@ -125,7 +125,7 @@ pub fn submit_recovery_proposal(
                 if !second_proposal.is_byzantine_majority_yes() {
                     let message =
                         "Can't submit a proposal until the previous is decided".to_string();
-                    ic_cdk::println!("{}", message);
+                    print_with_prefix(&message);
                     return Err(message);
                 }
                 match (&second_proposal.payload, &new_proposal.payload) {
@@ -173,7 +173,7 @@ pub fn submit_recovery_proposal(
                             "Caller {} tried to place proposal {:?} which is currently not allowed",
                             caller, new_proposal
                         );
-                        ic_cdk::println!("{}", message);
+                        print_with_prefix(&message);
                         return Err(message);
                     }
                 }
@@ -184,7 +184,7 @@ pub fn submit_recovery_proposal(
                     "Caller {} tried to place proposal {:?} which is currently not allowed",
                     caller, new_proposal
                 );
-                ic_cdk::println!("{}", message);
+                print_with_prefix(&message);
                 return Err(message);
             }
             _ => unreachable!("not possible to have more than 3 proposals"),
@@ -273,7 +273,6 @@ fn check_secs_difference(seconds_payload: &[u8]) -> Result<(), String> {
     total_input.copy_from_slice(seconds_payload);
 
     let payload_seconds = u64::from_le_bytes(total_input);
-    ic_cdk::println!("NOW {}, Sent {}", now, payload_seconds);
     let abs_diff = now.abs_diff(payload_seconds);
 
     match abs_diff > ALLOWED_LAG {
