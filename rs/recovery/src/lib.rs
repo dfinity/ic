@@ -144,7 +144,7 @@ impl Recovery {
         registry_nns_url: Url,
         registry_polling_strategy: RegistryPollingStrategy,
     ) -> RecoveryResult<Self> {
-        let ssh_confirmation = !args.test_mode;
+        let ssh_confirmation = true;
         let recovery_dir = args.dir.join(RECOVERY_DIRECTORY_NAME);
         let binary_dir = if args.use_local_binaries {
             PathBuf::from_str("/opt/ic/bin/").expect("bad file path string")
@@ -191,7 +191,7 @@ impl Recovery {
         }
 
         if !args.use_local_binaries && !binary_dir.join("ic-admin").exists() {
-            if let Some(version) = args.replica_version.clone() {
+            if let Some(version) = args.replica_version {
                 block_on(download_binary(
                     &logger,
                     version,
@@ -203,21 +203,6 @@ impl Recovery {
             }
         } else {
             info!(logger, "ic-admin exists, skipping download.");
-        }
-
-        if !args.use_local_binaries && !binary_dir.join("state-tool").exists() {
-            if let Some(version) = args.replica_version.clone() {
-                block_on(download_binary(
-                    &logger,
-                    version,
-                    String::from("state-tool"),
-                    &binary_dir,
-                ))?;
-            } else {
-                info!(logger, "No state-tool version provided, skipping download.");
-            }
-        } else {
-            info!(logger, "state-tool exists, skipping download.");
         }
 
         let admin_helper = AdminHelper::new(binary_dir.clone(), args.nns_url, neuron_args);
@@ -367,19 +352,24 @@ impl Recovery {
         keep_downloaded_state: bool,
         additional_excludes: Vec<&str>,
     ) -> impl Step {
-        DownloadIcStateStep {
+        // DownloadIcStateStep {
+        //     logger: self.logger.clone(),
+        //     try_readonly,
+        //     node_ip,
+        //     target: self.data_dir.display().to_string(),
+        //     keep_downloaded_state,
+        //     working_dir: self.work_dir.display().to_string(),
+        //     require_confirmation: self.ssh_confirmation,
+        //     key_file: self.key_file.clone(),
+        //     additional_excludes: additional_excludes
+        //         .iter()
+        //         .map(std::string::ToString::to_string)
+        //         .collect(),
+        // }
+        CopyLocalIcStateStep {
             logger: self.logger.clone(),
-            try_readonly,
-            node_ip,
-            target: self.data_dir.display().to_string(),
-            keep_downloaded_state,
             working_dir: self.work_dir.display().to_string(),
             require_confirmation: self.ssh_confirmation,
-            key_file: self.key_file.clone(),
-            additional_excludes: additional_excludes
-                .iter()
-                .map(std::string::ToString::to_string)
-                .collect(),
         }
     }
 
