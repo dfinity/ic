@@ -1,5 +1,5 @@
 use crate::{
-    environment::Environment, mutate_state, read_state, set_icp_xdr_conversion_rate, State,
+    do_set_icp_xdr_conversion_rate, environment::Environment, mutate_state, read_state, State,
     ONE_MINUTE_SECONDS,
 };
 use async_trait::async_trait;
@@ -391,7 +391,7 @@ pub async fn update_exchange_rate(
                     .map_err(|error| UpdateExchangeRateError::InvalidRate(error.to_string()))?;
                 let icp_xdr_conversion_rate = IcpXdrConversionRate::from(exchange_rate);
                 if let Err(error) =
-                    set_icp_xdr_conversion_rate(safe_state, env, icp_xdr_conversion_rate)
+                    do_set_icp_xdr_conversion_rate(safe_state, env, icp_xdr_conversion_rate)
                 {
                     return Err(UpdateExchangeRateError::FailedToSetRate(error));
                 }
