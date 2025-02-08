@@ -66,6 +66,16 @@ impl Secp256k1 {
         })
     }
 
+    pub fn from_public_key(public_key: &[u8]) -> crate::Result<Self> {
+        let verifying_key = VerifyingKey::from_sec1_bytes(public_key)
+            .map_err(|e| RecoveryError::InvalidPubKey(e.to_string()))?;
+
+        Ok(Self {
+            signing_key: None,
+            verifying_key,
+        })
+    }
+
     pub fn new(signing_key: SigningKey) -> Self {
         Self {
             verifying_key: *signing_key.verifying_key(),

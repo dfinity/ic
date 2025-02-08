@@ -13,6 +13,7 @@ serde = { workspace = true }
 ic-agent.workspace = true
 async-trait.workspace = true
 ic-nns-handler-recovery-interface.path = "../interface"
+ic-identity-hsm.workspace = true
 
 [dev-dependencies]
 tokio.workspace = true

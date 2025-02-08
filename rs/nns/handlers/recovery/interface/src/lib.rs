@@ -93,6 +93,8 @@ impl Display for RecoveryError {
     }
 }
 
+impl std::error::Error for RecoveryError {}
+
 pub trait VerifyIntegirty {
     fn verify_integrity(&self) -> Result<()>;
 }

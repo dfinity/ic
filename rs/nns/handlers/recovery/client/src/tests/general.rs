@@ -2,12 +2,22 @@ use std::sync::Arc;
 
 use ed25519_dalek::SigningKey as EdSigningKey;
 use ic_agent::identity::{BasicIdentity, Prime256v1Identity, Secp256k1Identity};
+use ic_identity_hsm::HardwareIdentity;
 use ic_nns_handler_recovery_interface::{
     recovery::RecoveryPayload,
-    signing::{ed25519::EdwardsCurve, k256::Secp256k1, p256::Prime256, Verifier},
-    Ballot,
+    signing::{
+        ed25519::EdwardsCurve,
+        hsm::{Hsm, SignBytes},
+        k256::Secp256k1,
+        p256::Prime256,
+        Verifier,
+    },
+    Ballot, RecoveryError,
 };
-use k256::SecretKey as k256SecretKey;
+use k256::ecdsa::SigningKey as SecpSigningKey;
+use k256::{
+    ecdsa::signature::SignerMut, ecdsa::Signature as k256Signature, SecretKey as k256SecretKey,
+};
 use p256::{elliptic_curve::rand_core::OsRng, SecretKey as p256SecretKey};
 
 use crate::{

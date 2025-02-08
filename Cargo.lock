@@ -10846,6 +10846,7 @@ dependencies = [
  "candid",
  "ed25519-dalek",
  "ic-agent",
+ "ic-identity-hsm",
  "ic-nns-handler-recovery-interface",
  "k256 0.13.4",
  "p256",

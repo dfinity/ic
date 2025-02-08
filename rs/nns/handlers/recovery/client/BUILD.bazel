@@ -8,6 +8,7 @@ DEPENDENCIES = [
     "@crate_index//:candid",
     "@crate_index//:serde",
     "@crate_index//:ic-agent",
+    "@crate_index//:ic-identity-hsm",
 ]
 
 MACRO_DEPENDENCIES = [

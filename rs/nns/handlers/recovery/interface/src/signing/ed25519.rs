@@ -1,4 +1,6 @@
-use ed25519_dalek::{pkcs8::EncodePublicKey, Signature, Signer, SigningKey, VerifyingKey};
+use ed25519_dalek::{
+    pkcs8::EncodePublicKey, Signature, Signer, SigningKey, VerifyingKey, PUBLIC_KEY_LENGTH,
+};
 use spki::{DecodePublicKey, Document, SubjectPublicKeyInfoRef};
 
 use crate::RecoveryError;
@@ -53,6 +55,25 @@ impl EdwardsCurve {
         let verifying_key: VerifyingKey = info
             .try_into()
             .map_err(|e: spki::Error| RecoveryError::InvalidPubKey(e.to_string()))?;
+
+        Ok(Self {
+            signing_key: None,
+            verifying_key,
+        })
+    }
+
+    pub fn from_public_key(public_key: &[u8]) -> crate::Result<Self> {
+        if public_key.len() != PUBLIC_KEY_LENGTH {
+            return Err(RecoveryError::InvalidPubKey(
+                "Invalid public key length".to_string(),
+            ));
+        }
+
+        let mut pub_key = [0; 32];
+        pub_key.copy_from_slice(public_key);
+
+        let verifying_key = VerifyingKey::from_bytes(&pub_key)
+            .map_err(|e| RecoveryError::InvalidPubKey(e.to_string()))?;
 
         Ok(Self {
             signing_key: None,
