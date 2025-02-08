@@ -2,7 +2,7 @@ use candid::{candid_method, CandidType, Encode};
 use core::cmp::Ordering;
 use cycles_minting_canister::*;
 use dfn_candid::{candid_one, CandidOne};
-use dfn_core::{over, over_may_reject, stable};
+use dfn_core::{over, stable};
 use dfn_protobuf::{protobuf, ProtoBuf};
 use environment::Environment;
 use exchange_rate_canister::{
@@ -478,11 +478,12 @@ fn set_authorized_subnetwork_list(arg: SetAuthorizedSubnetworkListArgs) {
     });
 }
 
-#[export_name = "canister_update update_subnet_type"]
-fn update_subnet_type_() {
-    over_may_reject(candid_one, |args: UpdateSubnetTypeArgs| {
-        update_subnet_type(args).map_err(|err| err.to_string())
-    })
+#[update(hidden = true, manual_reply = true)]
+fn update_subnet_type(args: UpdateSubnetTypeArgs) {
+    match do_update_subnet_type(args) {
+        Ok(response) => ManualReply::<()>::one(response),
+        Err(err) => ManualReply::reject(err.to_string()),
+    };
 }
 
 /// Updates the set of available subnet types.
@@ -491,7 +492,7 @@ fn update_subnet_type_() {
 //   * Only the governance canister can call this method
 //   * Add: type does not already exist
 //   * Remove: type exists and no assigned subnets to this type exist
-fn update_subnet_type(args: UpdateSubnetTypeArgs) -> UpdateSubnetTypeResult {
+fn do_update_subnet_type(args: UpdateSubnetTypeArgs) -> UpdateSubnetTypeResult {
     let governance_canister_id = with_state(|state| state.governance_canister_id);
 
     if CanisterId::unchecked_from_principal(caller()) != governance_canister_id {
@@ -548,11 +549,12 @@ fn remove_subnet_type(subnet_type: String) -> UpdateSubnetTypeResult {
     })
 }
 
-#[export_name = "canister_update change_subnet_type_assignment"]
-fn change_subnet_type_assignment_() {
-    over_may_reject(candid_one, |args: ChangeSubnetTypeAssignmentArgs| {
-        change_subnet_type_assignment(args).map_err(|err| err.to_string())
-    })
+#[update(hidden = true, manual_reply = true)]
+fn change_subnet_type_assignment(args: ChangeSubnetTypeAssignmentArgs) {
+    match do_change_subnet_type_assignment(args) {
+        Ok(response) => ManualReply::<()>::one(response),
+        Err(err) => ManualReply::reject(err.to_string()),
+    };
 }
 
 /// Changes the assignment of provided subnets to subnet types.
@@ -561,7 +563,7 @@ fn change_subnet_type_assignment_() {
 ///  * Only the governance canister can call this method
 ///  * Add: type exists and all subnet ids should be currently unassigned and not part of the authorized subnets
 ///  * Remove: type exists and all subnet ids are currently assigned to this type
-fn change_subnet_type_assignment(
+fn do_change_subnet_type_assignment(
     args: ChangeSubnetTypeAssignmentArgs,
 ) -> ChangeSubnetTypeAssignmentResult {
     let governance_canister_id = with_state(|state| state.governance_canister_id);
