@@ -34,7 +34,7 @@ impl Step for XNet {
         rt: tokio::runtime::Handle,
     ) -> anyhow::Result<()> {
         // Only guaranteed response calls, for now.
-        // TODO(MR-638): Drop `.with_call_timeouts(&[None])` once best-effort calls are 
+        // TODO(MR-638): Drop `.with_call_timeouts(&[None])` once best-effort calls are
         // supported on mainnet.
         let config = Config::new(
             self.subnets,
