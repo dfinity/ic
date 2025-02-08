@@ -2,15 +2,14 @@ use candid::{candid_method, CandidType, Encode};
 use core::cmp::Ordering;
 use cycles_minting_canister::*;
 use dfn_candid::{candid_one, CandidOne};
-use dfn_core::{over, over_async, over_init, over_may_reject, stable};
+use dfn_core::{over, over_may_reject, stable};
 use dfn_protobuf::{protobuf, ProtoBuf};
 use environment::Environment;
 use exchange_rate_canister::{
     RealExchangeRateCanisterClient, UpdateExchangeRateError, UpdateExchangeRateState,
 };
-use ic_cdk::api::call::CallResult;
 use ic_cdk::api::call::{arg_data_raw, reply_raw, CallResult, ManualReply};
-use ic_cdk::{call, init, query, spawn, update};
+use ic_cdk::{call, heartbeat, init, post_upgrade, pre_upgrade, query, spawn, update};
 use ic_crypto_tree_hash::{
     flatmap, HashTreeBuilder, HashTreeBuilderImpl, Label, LabeledTree, WitnessGenerator,
     WitnessGeneratorImpl,
@@ -994,12 +993,8 @@ fn set_icp_xdr_conversion_rate(
     })
 }
 
-#[export_name = "canister_query neuron_maturity_modulation"]
-fn neuron_maturity_modulation_() {
-    over(candid_one, |_: ()| neuron_maturity_modulation())
-}
-
 /// The function returns the current maturity modulation in basis points.
+#[query(hidden = true)]
 fn neuron_maturity_modulation() -> Result<i32, String> {
     Ok(with_state(|state| {
         state.maturity_modulation_permyriad.unwrap_or(0)
@@ -1059,8 +1054,11 @@ fn compute_capped_maturity_modulation(
     }
 }
 
-#[export_name = "canister_update remove_subnet_from_authorized_subnet_list"]
-fn remove_subnet_from_authorized_subnet_list_() {
+#[update(hidden = true)]
+fn remove_subnet_from_authorized_subnet_list(arg: RemoveSubnetFromAuthorizedSubnetListArgs) {
+    let RemoveSubnetFromAuthorizedSubnetListArgs {
+        subnet: subnet_to_remove,
+    } = arg;
     let caller = caller();
     assert_eq!(
         caller,
@@ -1069,15 +1067,7 @@ fn remove_subnet_from_authorized_subnet_list_() {
         caller,
         "remove_subnet_from_authorized_subnet_list"
     );
-    over(
-        candid_one,
-        |RemoveSubnetFromAuthorizedSubnetListArgs { subnet }| {
-            remove_subnet_from_authorized_subnet_list(subnet)
-        },
-    )
-}
 
-fn remove_subnet_from_authorized_subnet_list(subnet_to_remove: SubnetId) {
     with_state_mut(|state| {
         state
             .authorized_subnets
@@ -2518,7 +2508,7 @@ async fn get_rng() -> Result<StdRng, String> {
     Ok(StdRng::from_seed(bytes[0..32].try_into().unwrap()))
 }
 
-#[export_name = "canister_pre_upgrade"]
+#[pre_upgrade]
 fn pre_upgrade() {
     let bytes = with_state(|state| state.encode());
     print(format!(
@@ -2528,11 +2518,7 @@ fn pre_upgrade() {
     stable::set(&bytes);
 }
 
-#[export_name = "canister_post_upgrade"]
-fn post_upgrade_() {
-    over_init(|CandidOne(args)| post_upgrade(args))
-}
-
+#[post_upgrade]
 fn post_upgrade(maybe_args: Option<CyclesCanisterInitPayload>) {
     let bytes = stable::get();
     print(format!(
@@ -2558,11 +2544,10 @@ fn post_upgrade(maybe_args: Option<CyclesCanisterInitPayload>) {
     STATE.with(|state| state.replace(Some(new_state)));
 }
 
-#[export_name = "canister_heartbeat"]
-fn canister_heartbeat() {
+#[heartbeat]
+async fn canister_heartbeat() {
     if with_state(|state| state.exchange_rate_canister_id.is_some()) {
-        let future = update_exchange_rate();
-        ic_cdk::spawn(future);
+        update_exchange_rate().await
     }
 }
 
