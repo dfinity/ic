@@ -1,13 +1,14 @@
 use candid::{CandidType, Encode};
 use core::cmp::Ordering;
 use cycles_minting_canister::*;
-use dfn_core::stable;
 use dfn_protobuf::ProtoBuf;
 use environment::Environment;
 use exchange_rate_canister::{
     RealExchangeRateCanisterClient, UpdateExchangeRateError, UpdateExchangeRateState,
 };
+use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_cdk::api::call::{arg_data_raw, reply_raw, CallResult, ManualReply};
+use ic_cdk::api::stable;
 use ic_cdk::{call, heartbeat, init, post_upgrade, pre_upgrade, query, spawn, update};
 use ic_crypto_tree_hash::{
     flatmap, HashTreeBuilder, HashTreeBuilderImpl, Label, LabeledTree, WitnessGenerator,
@@ -20,7 +21,7 @@ use ic_management_canister_types_private::{
     CanisterSettingsArgsBuilder as Ic00CanisterSettingsArgsBuilder, CreateCanisterArgs, Method,
     IC_00,
 };
-use ic_nervous_system_common::NNS_DAPP_BACKEND_CANISTER_ID;
+use ic_nervous_system_common::{serve_metrics, NNS_DAPP_BACKEND_CANISTER_ID};
 use ic_nervous_system_governance::maturity_modulation::{
     MAX_MATURITY_MODULATION_PERMYRIAD, MIN_MATURITY_MODULATION_PERMYRIAD,
 };
@@ -49,6 +50,7 @@ use std::{
 mod environment;
 mod exchange_rate_canister;
 mod limiter;
+mod stable_utils;
 
 /// The past 30 days are used for the average ICP/XDR rate.
 const NUM_DAYS_FOR_ICP_XDR_AVERAGE: usize = 30;
@@ -2508,12 +2510,12 @@ fn pre_upgrade() {
         "[cycles] serialized state prior to upgrade ({} bytes)",
         bytes.len(),
     ));
-    stable::set(&bytes);
+    stable_utils::stable_set(&bytes).expect("Could not write data to stable memory");
 }
 
 #[post_upgrade]
 fn post_upgrade(maybe_args: Option<CyclesCanisterInitPayload>) {
-    let bytes = stable::get();
+    let bytes = stable_utils::stable_get().expect("Could not read data from stable memory");
     print(format!(
         "[cycles] deserializing state after upgrade ({} bytes)",
         bytes.len(),
@@ -2571,9 +2573,12 @@ async fn update_exchange_rate() {
     }
 }
 
-#[export_name = "canister_query http_request"]
-fn http_request() {
-    dfn_http_metrics::serve_metrics(encode_metrics);
+#[query(hidden = true, decoding_quota = 10000)]
+fn http_request(request: HttpRequest) -> HttpResponse {
+    match request.path() {
+        "/metrics" => serve_metrics(encode_metrics),
+        _ => HttpResponseBuilder::not_found().build(),
+    }
 }
 
 fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::io::Result<()> {
