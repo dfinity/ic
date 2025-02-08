@@ -85,7 +85,6 @@ fn governance_mem_test() {
         GOVERNANCE_CANISTER_ID,
         real_gov_wasm.bytes(),
         module_arg,
-        true,
     );
 
     state_machine.tick();
