@@ -181,6 +181,7 @@ extern crate chrono;
 mod create_subnet;
 mod helpers;
 mod recover_subnet;
+mod recovery_canister;
 mod types;
 mod update_subnet;
 
@@ -367,6 +368,12 @@ enum SubCommand {
 
     /// Get the SSH key access lists for unassigned nodes
     GetUnassignedNodes,
+
+    /// Get proposals from recovery canister
+    GetRecoveryCanisterProposals,
+
+    /// Get node operators enlisted in the recovery canister
+    GetRecoveryCanisterNodeOperators,
 
     /// Propose to add an API Boundary Node
     ProposeToAddApiBoundaryNodes(ProposeToAddApiBoundaryNodesCmd),
@@ -3716,19 +3723,19 @@ async fn main() {
         }
 
         if opts.secret_key_pem.is_some() {
-            let secret_key_path = opts.secret_key_pem.unwrap();
+            let secret_key_path = opts.secret_key_pem.as_ref().unwrap();
             let contents = read_to_string(secret_key_path).expect("Could not read key file");
             let sig_keys = SigKeys::from_pem(&contents).expect("Failed to parse pem file");
             Sender::SigKeys(sig_keys)
         } else if opts.use_hsm {
             make_hsm_sender(
-                &opts.hsm_slot.expect(
+                &opts.hsm_slot.as_ref().expect(
                     "HSM slot must also be provided for --use-hsm; use --hsm-slot or see --help.",
                 ),
-                &opts.hsm_key_id.expect(
+                &opts.hsm_key_id.as_ref().expect(
                     "HSM key ID must also be provided for --use-hsm; use --key-id or see --help.",
                 ),
-                &opts.hsm_pin.expect(
+                &opts.hsm_pin.as_ref().expect(
                     "HSM pin must also be provided for --use-hsm; use --pin or see --help.",
                 ),
             )
@@ -4950,6 +4957,9 @@ async fn main() {
                 sender,
             );
             propose_action_from_command(cmd, canister_client, proposer).await;
+        }
+        SubCommand::GetRecoveryCanisterProposals | SubCommand::GetRecoveryCanisterNodeOperators => {
+            recovery_canister::execute(&opts).await
         }
     }
 }

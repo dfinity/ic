@@ -2,7 +2,7 @@ use std::fmt::Display;
 
 use candid::CandidType;
 use recovery::RecoveryProposal;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 pub const RECOVERY_CANISTER_ID: &str = "23bh6-6iaaa-aaaam-aednq-cai";
 
@@ -12,7 +12,7 @@ pub mod security_metadata;
 pub mod signing;
 pub mod simple_node_operator_record;
 
-#[derive(Clone, Debug, CandidType, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Debug, CandidType, Deserialize, PartialEq, Eq, Serialize)]
 /// Vote types that exist
 pub enum Ballot {
     /// Represents a positive vote on a recovery canister proposal

@@ -2,9 +2,9 @@ use crate::signing::verify_payload_naive;
 
 use super::*;
 use candid::{CandidType, Principal};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Debug, CandidType, Deserialize)]
+#[derive(Clone, Debug, CandidType, Deserialize, Serialize)]
 /// Wrapper struct containing information regarding integrity.
 pub struct SecurityMetadata {
     /// Represents an outcome of a cryptographic operation

@@ -6,11 +6,11 @@ use ic_base_types::{PrincipalId, SubnetId};
 use registry_canister::mutations::{
     do_recover_subnet::RecoverSubnetPayload, do_update_subnet::UpdateSubnetPayload,
 };
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 use crate::{security_metadata::SecurityMetadata, Ballot};
 
-#[derive(Clone, Debug, CandidType, Deserialize, Eq, PartialEq)]
+#[derive(Clone, Debug, CandidType, Deserialize, Eq, PartialEq, Serialize)]
 /// Types of acceptable payloads by the recovery canister proposals.
 pub enum RecoveryPayload {
     /// Halt NNS.
@@ -33,7 +33,7 @@ pub enum RecoveryPayload {
     Unhalt,
 }
 
-#[derive(Clone, Debug, CandidType, Deserialize)]
+#[derive(Clone, Debug, CandidType, Deserialize, Serialize)]
 /// Represents a vote from one node operator
 pub struct NodeOperatorBallot {
     /// The principal id of the node operator (must be one of the node
@@ -50,7 +50,7 @@ pub struct NodeOperatorBallot {
     pub security_metadata: SecurityMetadata,
 }
 
-#[derive(Clone, Debug, CandidType, Deserialize)]
+#[derive(Clone, Debug, CandidType, Deserialize, Serialize)]
 pub struct RecoveryProposal {
     /// The principal id of the proposer (must be one of the node
     /// operators of the NNS subnet according to the registry at

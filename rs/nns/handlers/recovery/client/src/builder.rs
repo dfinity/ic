@@ -4,7 +4,7 @@ use candid::Principal;
 use ic_agent::{
     agent::AgentBuilder,
     identity::{AnonymousIdentity, BasicIdentity, PemError, Prime256v1Identity, Secp256k1Identity},
-    Agent, Identity,
+    Identity,
 };
 use ic_identity_hsm::HardwareIdentity;
 use ic_nns_handler_recovery_interface::{
@@ -46,22 +46,19 @@ impl Default for RecoveryCanisterBuilder {
 }
 
 impl RecoveryCanisterBuilder {
-    pub fn with_url(self, url: &str) -> Self {
-        Self {
-            url: url.to_string(),
-            ..self
-        }
+    pub fn with_url(&mut self, url: &str) -> &mut Self {
+        self.url = url.to_string();
+        self
     }
 
-    pub fn with_canister_id(self, canister_id: &str) -> Self {
-        Self {
-            canister_id: canister_id.to_string(),
-            ..self
-        }
+    pub fn with_canister_id(&mut self, canister_id: &str) -> &mut Self {
+        self.canister_id = canister_id.to_string();
+        self
     }
 
-    pub fn with_sender(self, sender: SenderOpts) -> Self {
-        Self { sender, ..self }
+    pub fn with_sender(&mut self, sender: SenderOpts) -> &mut Self {
+        self.sender = sender;
+        self
     }
 
     pub fn build(self) -> Result<RecoveryCanisterImpl, RecoveryError> {
@@ -104,7 +101,11 @@ impl TryFrom<SenderOpts> for Arc<dyn Signer> {
                 })?;
                 Ok(signer)
             }
-            SenderOpts::Hsm { slot, key_id, pin } => unimplemented!("Ic agent blocks the session"),
+            SenderOpts::Hsm {
+                slot: _,
+                key_id: _,
+                pin: _,
+            } => unimplemented!("Ic agent blocks the session"),
             SenderOpts::Anonymous => Ok(Arc::new(AnonymousSigner)),
         }
     }
@@ -141,14 +142,4 @@ impl TryFrom<SenderOpts> for Box<dyn Identity> {
             SenderOpts::Anonymous => Ok(Box::new(AnonymousIdentity)),
         }
     }
-}
-
-fn resolve_signer(sender: &SenderOpts) -> Result<Arc<dyn Signer>, RecoveryError> {
-    Ok(Arc::new(AnonymousSigner {}))
-}
-
-fn resolve_ic_agent(url: &str, sender: &SenderOpts) -> Result<Agent, RecoveryError> {
-    AgentBuilder::default()
-        .build()
-        .map_err(|e| RecoveryError::AgentError(e.to_string()))
 }

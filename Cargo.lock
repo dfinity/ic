@@ -5671,6 +5671,7 @@ dependencies = [
  "ic-nns-common",
  "ic-nns-constants",
  "ic-nns-governance-api",
+ "ic-nns-handler-recovery-client",
  "ic-nns-handler-root",
  "ic-nns-init",
  "ic-nns-test-utils",
