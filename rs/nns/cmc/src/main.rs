@@ -1,9 +1,8 @@
-use candid::{candid_method, CandidType, Encode};
+use candid::{CandidType, Encode};
 use core::cmp::Ordering;
 use cycles_minting_canister::*;
-use dfn_candid::{candid_one, CandidOne};
-use dfn_core::{over, stable};
-use dfn_protobuf::{protobuf, ProtoBuf};
+use dfn_core::stable;
+use dfn_protobuf::ProtoBuf;
 use environment::Environment;
 use exchange_rate_canister::{
     RealExchangeRateCanisterClient, UpdateExchangeRateError, UpdateExchangeRateState,
@@ -832,8 +831,8 @@ fn get_icp_xdr_conversion_rate() -> IcpXdrConversionRateCertifiedResponse {
     })
 }
 
-#[export_name = "canister_query get_average_icp_xdr_conversion_rate"]
-fn get_average_icp_xdr_conversion_rate_() {
+#[query(hidden = true)]
+fn get_average_icp_xdr_conversion_rate(_: ()) -> IcpXdrConversionRateCertifiedResponse {
     with_state(|state| {
         let witness_generator = convert_data_to_mixed_hash_tree(state);
         let average_icp_xdr_conversion_rate = state
@@ -847,16 +846,11 @@ fn get_average_icp_xdr_conversion_rate_() {
             witness_generator,
         );
 
-        over(
-            candid_one,
-            |_: ()| -> IcpXdrConversionRateCertifiedResponse {
-                IcpXdrConversionRateCertifiedResponse {
-                    data: average_icp_xdr_conversion_rate.clone(),
-                    hash_tree: payload,
-                    certificate: ic_cdk::api::data_certificate().unwrap_or_default(),
-                }
-            },
-        )
+        IcpXdrConversionRateCertifiedResponse {
+            data: average_icp_xdr_conversion_rate.clone(),
+            hash_tree: payload,
+            certificate: ic_cdk::api::data_certificate().unwrap_or_default(),
+        }
     })
 }
 
@@ -925,8 +919,10 @@ fn compute_average_icp_xdr_rate_at_time(
     }
 }
 
-#[export_name = "canister_update set_icp_xdr_conversion_rate"]
-fn set_icp_xdr_conversion_rate_() {
+#[query(hidden = true)]
+fn set_icp_xdr_conversion_rate(
+    proposed_conversion_rate: UpdateIcpXdrConversionRatePayload,
+) -> Result<(), String> {
     let caller = caller();
 
     assert_eq!(
@@ -937,29 +933,24 @@ fn set_icp_xdr_conversion_rate_() {
         "set_icp_xdr_conversion_rate"
     );
 
-    over(
-        candid_one,
-        |proposed_conversion_rate: UpdateIcpXdrConversionRatePayload| -> Result<(), String> {
-            let env = CanisterEnvironment;
-            let rate = IcpXdrConversionRate::from(&proposed_conversion_rate);
-            let rate_timestamp_seconds = rate.timestamp_seconds;
-            let result = set_icp_xdr_conversion_rate(&STATE, &env, rate);
-            if result.is_ok() && with_state(|state| state.exchange_rate_canister_id.is_some()) {
-                exchange_rate_canister::set_update_exchange_rate_state(
-                    &STATE,
-                    &proposed_conversion_rate.reason,
-                    rate_timestamp_seconds,
-                );
-            }
+    let env = CanisterEnvironment;
+    let rate = IcpXdrConversionRate::from(&proposed_conversion_rate);
+    let rate_timestamp_seconds = rate.timestamp_seconds;
+    let result = do_set_icp_xdr_conversion_rate(&STATE, &env, rate);
+    if result.is_ok() && with_state(|state| state.exchange_rate_canister_id.is_some()) {
+        exchange_rate_canister::set_update_exchange_rate_state(
+            &STATE,
+            &proposed_conversion_rate.reason,
+            rate_timestamp_seconds,
+        );
+    }
 
-            result
-        },
-    );
+    result
 }
 
 /// Validates the proposed conversion rate, sets it in state, and sets the
 /// canister's certified data
-fn set_icp_xdr_conversion_rate(
+fn do_set_icp_xdr_conversion_rate(
     safe_state: &'static LocalKey<RefCell<Option<State>>>,
     env: &impl Environment,
     proposed_conversion_rate: IcpXdrConversionRate,
@@ -2476,10 +2467,10 @@ fn ensure_balance(cycles: Cycles) -> Result<(), String> {
 }
 
 #[export_name = "canister_query total_cycles_minted"]
-fn total_supply_() {
-    over(protobuf, |_: ()| -> u64 {
-        with_state(|state| state.total_cycles_minted.get().try_into().unwrap())
-    })
+fn total_cycles_minted() {
+    let value: u64 = with_state(|state| state.total_cycles_minted.get().try_into().unwrap());
+    let response = ProtoBuf::new(value).into_bytes().unwrap();
+    reply_raw(&response);
 }
 
 /// Return the list of subnets in which this controller is allowed to create
