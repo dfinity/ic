@@ -435,7 +435,8 @@ ic_nervous_system_common_build_metadata::define_get_build_metadata_candid_method
 /// canisters. If `subnets` is empty, remove the mapping for a
 /// principal. If `who` is None, set the default list of subnets.
 #[update(hidden = true)]
-fn set_authorized_subnetwork_list(who: Option<PrincipalId>, subnets: Vec<SubnetId>) {
+fn set_authorized_subnetwork_list(arg: SetAuthorizedSubnetworkListArgs) {
+    let SetAuthorizedSubnetworkListArgs { who, subnets } = arg;
     with_state_mut(|state| {
         let governance_canister_id = state.governance_canister_id;
 

@@ -29,7 +29,6 @@ DEPENDENCIES = [
     "@crate_index//:build-info",
     "@crate_index//:candid",
     "@crate_index//:ic-cdk",
-    "@crate_index//:ic-cdk-macros",
     "@crate_index//:ic-certified-map",
     "@crate_index//:ic-metrics-encoder",
     "@crate_index//:ic-xrc-types",
@@ -46,6 +45,7 @@ MACRO_DEPENDENCIES = [
     # Keep sorted.
     "//rs/nervous_system/common/build_metadata",
     "@crate_index//:async-trait",
+    "@crate_index//:ic-cdk-macros",
 ]
 
 BUILD_DEPENDENCIES = [
