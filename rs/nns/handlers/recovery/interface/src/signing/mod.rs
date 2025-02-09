@@ -16,6 +16,8 @@ pub trait Verifier: Send + Sync {
     fn verify_payload(&self, payload: &[u8], signature: &[u8]) -> Result<()>;
 
     fn to_public_key_der(&self) -> Result<Vec<u8>>;
+
+    fn to_public_key_pem(&self) -> Result<String>;
 }
 pub trait Signer: Verifier + Send + Sync {
     fn sign_payload(&self, payload: &[u8]) -> Result<Vec<u8>>;

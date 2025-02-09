@@ -10,6 +10,10 @@ impl Verifier for AnonymousSigner {
     fn to_public_key_der(&self) -> crate::Result<Vec<u8>> {
         Ok(vec![])
     }
+
+    fn to_public_key_pem(&self) -> crate::Result<String> {
+        Ok("".to_string())
+    }
 }
 
 impl Signer for AnonymousSigner {

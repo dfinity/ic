@@ -21,6 +21,10 @@ impl Verifier for Hsm {
     fn to_public_key_der(&self) -> crate::Result<Vec<u8>> {
         self.inner_pub_key.to_public_key_der()
     }
+
+    fn to_public_key_pem(&self) -> crate::Result<String> {
+        self.inner_pub_key.to_public_key_pem()
+    }
 }
 
 impl Signer for Hsm {

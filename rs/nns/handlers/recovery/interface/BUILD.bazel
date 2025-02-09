@@ -10,6 +10,7 @@ DEPENDENCIES = [
     "@crate_index//:hex",
     "@crate_index//:k256",
     "@crate_index//:p256",
+    "@crate_index//:base64",
     "//rs/registry/canister",
     "//rs/types/base_types",
     "//packages/ic-ed25519",

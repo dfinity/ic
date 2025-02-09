@@ -10863,6 +10863,7 @@ dependencies = [
 name = "ic-nns-handler-recovery-interface"
 version = "0.9.0"
 dependencies = [
+ "base64 0.13.1",
  "candid",
  "ed25519-dalek",
  "hex",

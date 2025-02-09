@@ -13,16 +13,19 @@ pub struct SecurityMetadata {
     ///
     /// Should be verified with a corresponding public key (also
     /// known as verifying key).
+    #[serde(serialize_with = "base64_serde::serialize")]
     pub signature: Vec<u8>,
     /// What is being signed.
     ///
     /// In context of recovery canister proposal it includes
     /// all fields in a proposal except the ballots of node operators
     /// serialized as vector of bytes.
+    #[serde(serialize_with = "base64_serde::serialize")]
     pub payload: Vec<u8>,
     /// Der encoded public key.
     ///
     /// It is used to verify the authenticity of a signature.
+    #[serde(serialize_with = "pub_key_serde::serialize")]
     pub pub_key_der: Vec<u8>,
 }
 
@@ -58,5 +61,28 @@ impl SecurityMetadata {
                 loaded_principal, principal,
             ))),
         }
+    }
+}
+
+mod base64_serde {
+    use serde::Serializer;
+
+    pub fn serialize<S>(bytes: &Vec<u8>, serializer: S) -> core::result::Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let encoded = base64::encode(bytes);
+        serializer.serialize_str(&encoded)
+    }
+}
+
+mod pub_key_serde {
+    use serde::Serializer;
+
+    pub fn serialize<S>(_bytes: &Vec<u8>, serializer: S) -> core::result::Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_str("Outout omitted")
     }
 }

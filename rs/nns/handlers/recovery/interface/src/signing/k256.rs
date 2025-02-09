@@ -20,6 +20,10 @@ impl super::Verifier for Secp256k1 {
     fn to_public_key_der(&self) -> crate::Result<Vec<u8>> {
         Ok(self.public_key.serialize_der())
     }
+
+    fn to_public_key_pem(&self) -> crate::Result<String> {
+        Ok(self.public_key.serialize_pem())
+    }
 }
 
 impl super::Signer for Secp256k1 {

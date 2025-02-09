@@ -26,6 +26,12 @@ impl super::Verifier for Prime256v1 {
             .map_err(|e| RecoveryError::InvalidPubKey(e.to_string()))
             .map(|document| document.into_vec())
     }
+
+    fn to_public_key_pem(&self) -> crate::Result<String> {
+        self.verifying_key
+            .to_public_key_pem(k256::pkcs8::LineEnding::LF)
+            .map_err(|e| RecoveryError::InvalidPubKey(e.to_string()))
+    }
 }
 
 impl super::Signer for Prime256v1 {

@@ -32,6 +32,11 @@ impl super::Verifier for EdwardsCurve {
     fn to_public_key_der(&self) -> crate::Result<Vec<u8>> {
         Ok(self.public_key.serialize_rfc8410_der())
     }
+
+    fn to_public_key_pem(&self) -> crate::Result<String> {
+        String::from_utf8(self.public_key.serialize_rfc8410_pem())
+            .map_err(|e| RecoveryError::InvalidPubKey(e.to_string()))
+    }
 }
 
 impl EdwardsCurve {
