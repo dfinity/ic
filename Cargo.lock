@@ -10871,7 +10871,6 @@ dependencies = [
  "k256 0.13.4",
  "registry-canister",
  "serde",
- "spki 0.7.3",
 ]
 
 [[package]]
