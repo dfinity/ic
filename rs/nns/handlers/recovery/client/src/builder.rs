@@ -8,9 +8,7 @@ use ic_agent::{
 };
 use ic_identity_hsm::HardwareIdentity;
 use ic_nns_handler_recovery_interface::{
-    signing::{
-        anonymous::AnonymousSigner, ed25519::EdwardsCurve, k256::Secp256k1, p256::Prime256, Signer,
-    },
+    signing::{anonymous::AnonymousSigner, ed25519::EdwardsCurve, k256::Secp256k1, Signer},
     RecoveryError, RECOVERY_CANISTER_ID,
 };
 
@@ -85,19 +83,12 @@ impl TryFrom<SenderOpts> for Arc<dyn Signer> {
                 let maybe_signer: Result<Arc<dyn Signer>, RecoveryError> =
                     EdwardsCurve::from_pem(&path)
                         .map(|signer| Arc::new(signer) as Arc<dyn Signer>)
-                        .or_else(|e| {
-                            eprintln!("Received error: {:?}", e);
-                            Prime256::from_pem(&path)
-                                .map(|signer| Arc::new(signer) as Arc<dyn Signer>)
-                        })
-                        .or_else(|e| {
-                            eprintln!("Received error: {:?}", e);
+                        .or_else(|_| {
                             Secp256k1::from_pem(&path)
                                 .map(|signer| Arc::new(signer) as Arc<dyn Signer>)
                         });
 
-                let signer = maybe_signer.map_err(|e| {
-                    eprintln!("Received error: {:?}", e);
+                let signer = maybe_signer.map_err(|_| {
                     RecoveryError::InvalidIdentity(
                         "Couldn't deserialize identity into any known implementation".to_string(),
                     )

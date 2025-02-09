@@ -8,8 +8,6 @@ DEPENDENCIES = [
     "@crate_index//:serde",
     "@crate_index//:ed25519-dalek",
     "@crate_index//:hex",
-    "@crate_index//:spki",
-    "@crate_index//:p256",
     "@crate_index//:k256",
     "//rs/registry/canister",
     "//rs/types/base_types",

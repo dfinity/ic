@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use crate::RecoveryError;
 
-use super::{ed25519::EdwardsCurve, k256::Secp256k1, p256::Prime256, Signer, Verifier};
+use super::{ed25519::EdwardsCurve, k256::Secp256k1, Signer, Verifier};
 
 // From ic-admin
 pub type SignBytes =
@@ -40,10 +40,6 @@ impl Hsm {
     pub fn from_public_key(pub_key: &[u8]) -> crate::Result<Self> {
         if let Ok(edwards) = EdwardsCurve::from_public_key(pub_key) {
             return Ok(Self::from_verifier(pub_key, Arc::new(edwards)));
-        }
-
-        if let Ok(prime256) = Prime256::from_public_key(pub_key) {
-            return Ok(Self::from_verifier(pub_key, Arc::new(prime256)));
         }
 
         if let Ok(secp256) = Secp256k1::from_public_key(pub_key) {

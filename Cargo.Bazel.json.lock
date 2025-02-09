@@ -1,5 +1,5 @@
 {
-  "checksum": "db92f1b23dc7421270036e33322b78b5201037b7c480b910ca77c74f414f5a6f",
+  "checksum": "71b5a5e66eaef8dd9b3113fc3de526af7b3199a43d1bc5ed8c2671250a6797f4",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -20384,10 +20384,6 @@
             {
               "id": "socket2 0.5.7",
               "target": "socket2"
-            },
-            {
-              "id": "spki 0.7.3",
-              "target": "spki"
             },
             {
               "id": "ssh2 0.9.4",
@@ -91503,7 +91499,6 @@
     "slog-scope 4.4.0",
     "slog-term 2.9.1",
     "socket2 0.5.7",
-    "spki 0.7.3",
     "ssh2 0.9.4",
     "static_assertions 1.1.0",
     "strum 0.26.3",

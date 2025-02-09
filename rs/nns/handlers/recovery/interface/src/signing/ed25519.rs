@@ -63,7 +63,9 @@ impl EdwardsCurve {
     }
 
     pub fn from_pem(path: &str) -> crate::Result<Self> {
-        let private_key = PrivateKey::deserialize_pkcs8_pem(path)
+        let contents = std::fs::read_to_string(path)
+            .map_err(|e| RecoveryError::InvalidIdentity(e.to_string()))?;
+        let private_key = PrivateKey::deserialize_pkcs8_pem(&contents)
             .map_err(|e| RecoveryError::InvalidIdentity(e.to_string()))?;
 
         Ok(Self::new(private_key))

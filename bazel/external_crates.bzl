@@ -444,9 +444,6 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^2.1.1",
                 features = ["std", "zeroize", "digest", "batch", "pkcs8", "pem", "hazmat"],
             ),
-            "spki": crate.spec(
-                version = "^0.7.3"
-            ),
             "educe": crate.spec(
                 version = "^0.4",
             ),
