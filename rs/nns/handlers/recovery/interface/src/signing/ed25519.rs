@@ -1,98 +1,71 @@
-use ed25519_dalek::{
-    pkcs8::EncodePublicKey, Signature, Signer, SigningKey, VerifyingKey, PUBLIC_KEY_LENGTH,
-};
-use k256::pkcs8::DecodePrivateKey;
-use spki::{DecodePublicKey, Document, SubjectPublicKeyInfoRef};
+use ic_ed25519::{PrivateKey, PublicKey};
 
 use crate::RecoveryError;
 
 #[derive(Clone)]
 pub struct EdwardsCurve {
-    signing_key: Option<SigningKey>,
-    verifying_key: VerifyingKey,
+    private_key: Option<PrivateKey>,
+    public_key: PublicKey,
 }
 
 impl super::Signer for EdwardsCurve {
     fn sign_payload(&self, payload: &[u8]) -> crate::Result<Vec<u8>> {
-        let signing_key = self
-            .signing_key
+        let private_key = self
+            .private_key
             .clone()
             .ok_or(RecoveryError::InvalidIdentity(
                 "Signing key missing".to_string(),
             ))?;
 
-        let signature = signing_key.sign(payload);
+        let signature = private_key.sign_message(payload);
         Ok(signature.to_vec())
     }
 }
 
 impl super::Verifier for EdwardsCurve {
     fn verify_payload(&self, payload: &[u8], signature: &[u8]) -> crate::Result<()> {
-        let signature = Signature::from_slice(signature)
-            .map_err(|e| RecoveryError::InvalidSignatureFormat(e.to_string()))?;
-
-        self.verifying_key
-            .verify_strict(payload, &signature)
+        self.public_key
+            .verify_signature(payload, signature)
             .map_err(|e| RecoveryError::InvalidSignature(e.to_string()))
     }
 
     fn to_public_key_der(&self) -> crate::Result<Vec<u8>> {
-        self.verifying_key
-            .to_public_key_der()
-            .map_err(|e| RecoveryError::InvalidPubKey(e.to_string()))
-            .map(|document| document.into_vec())
+        Ok(self.public_key.serialize_rfc8410_der())
     }
 }
 
 impl EdwardsCurve {
     pub fn from_public_key_der(public_key_der: &[u8]) -> crate::Result<Self> {
-        let document: Document = Document::from_public_key_der(public_key_der)
+        let public_key = PublicKey::deserialize_rfc8410_der(public_key_der)
             .map_err(|e| RecoveryError::InvalidPubKey(e.to_string()))?;
-
-        let info: SubjectPublicKeyInfoRef = document
-            .decode_msg()
-            .map_err(|e| RecoveryError::InvalidPubKey(e.to_string()))?;
-
-        let verifying_key: VerifyingKey = info
-            .try_into()
-            .map_err(|e: spki::Error| RecoveryError::InvalidPubKey(e.to_string()))?;
 
         Ok(Self {
-            signing_key: None,
-            verifying_key,
+            private_key: None,
+            public_key,
         })
     }
 
     pub fn from_public_key(public_key: &[u8]) -> crate::Result<Self> {
-        if public_key.len() != PUBLIC_KEY_LENGTH {
-            return Err(RecoveryError::InvalidPubKey(
-                "Invalid public key length".to_string(),
-            ));
-        }
-
-        let mut pub_key = [0; 32];
-        pub_key.copy_from_slice(public_key);
-
-        let verifying_key = VerifyingKey::from_bytes(&pub_key)
+        let public_key = PublicKey::deserialize_raw(public_key)
             .map_err(|e| RecoveryError::InvalidPubKey(e.to_string()))?;
 
         Ok(Self {
-            signing_key: None,
-            verifying_key,
+            private_key: None,
+            public_key,
         })
     }
 
-    pub fn new(signing_key: SigningKey) -> Self {
+    pub fn new(private_key: PrivateKey) -> Self {
         Self {
-            verifying_key: signing_key.verifying_key(),
-            signing_key: Some(signing_key),
+            public_key: private_key.public_key(),
+            private_key: Some(private_key),
         }
     }
 
     pub fn from_pem(path: &str) -> crate::Result<Self> {
-        let signing_key = SigningKey::from_pkcs8_pem(path)
+        let private_key = PrivateKey::deserialize_pkcs8_pem(path)
             .map_err(|e| RecoveryError::InvalidIdentity(e.to_string()))?;
 
-        Ok(Self::new(signing_key))
+        Ok(Self::new(private_key))
     }
 }

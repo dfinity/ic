@@ -126,6 +126,7 @@ use itertools::izip;
 use maplit::hashmap;
 use prost::Message;
 use recover_subnet::ProposeToUpdateRecoveryCupCmd;
+use recovery_canister::{RecoveryCanisterBallot, RecoveryCanisterProposeRecoveryCmd};
 use registry_canister::mutations::{
     complete_canister_migration::CompleteCanisterMigrationPayload,
     do_add_api_boundary_nodes::AddApiBoundaryNodesPayload,
@@ -374,6 +375,18 @@ enum SubCommand {
 
     /// Get node operators enlisted in the recovery canister
     GetRecoveryCanisterNodeOperators,
+
+    /// Propose to halt NNS
+    RecoveryCanisterProposeHalt,
+
+    /// Propose to unhalt NNS
+    RecoveryCanisterProposeUnhalt,
+
+    /// Propose to do recovery
+    RecoveryCanisterProposeRecovery(RecoveryCanisterProposeRecoveryCmd),
+
+    /// Submit a vote to the latest recovery canister proposal
+    RecoveryCanisterVoteOnLatestProposal(RecoveryCanisterBallot),
 
     /// Propose to add an API Boundary Node
     ProposeToAddApiBoundaryNodes(ProposeToAddApiBoundaryNodesCmd),
@@ -3716,6 +3729,10 @@ async fn main() {
             SubCommand::ProposeToUpdateXdrIcpConversionRate(_) => (),
             SubCommand::SubmitRootProposalToUpgradeGovernanceCanister(_) => (),
             SubCommand::VoteOnRootProposalToUpgradeGovernanceCanister(_) => (),
+            SubCommand::RecoveryCanisterProposeHalt => (),
+            SubCommand::RecoveryCanisterProposeUnhalt => (),
+            SubCommand::RecoveryCanisterProposeRecovery(_) => (),
+            SubCommand::RecoveryCanisterVoteOnLatestProposal(_) => (),
             _ => panic!(
                 "Specifying a secret key or HSM is only supported for \
                      methods that interact with NNS handlers."
@@ -4958,7 +4975,12 @@ async fn main() {
             );
             propose_action_from_command(cmd, canister_client, proposer).await;
         }
-        SubCommand::GetRecoveryCanisterProposals | SubCommand::GetRecoveryCanisterNodeOperators => {
+        SubCommand::GetRecoveryCanisterProposals
+        | SubCommand::GetRecoveryCanisterNodeOperators
+        | SubCommand::RecoveryCanisterProposeHalt
+        | SubCommand::RecoveryCanisterProposeUnhalt
+        | SubCommand::RecoveryCanisterProposeRecovery(_)
+        | SubCommand::RecoveryCanisterVoteOnLatestProposal(_) => {
             recovery_canister::execute(&opts).await
         }
     }

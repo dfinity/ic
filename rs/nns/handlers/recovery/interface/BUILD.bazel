@@ -13,6 +13,8 @@ DEPENDENCIES = [
     "@crate_index//:k256",
     "//rs/registry/canister",
     "//rs/types/base_types",
+    "//packages/ic-ed25519",
+    "//packages/ic-secp256k1",
 ]
 
 MACRO_DEPENDENCIES = []

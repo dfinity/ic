@@ -85,16 +85,19 @@ impl TryFrom<SenderOpts> for Arc<dyn Signer> {
                 let maybe_signer: Result<Arc<dyn Signer>, RecoveryError> =
                     EdwardsCurve::from_pem(&path)
                         .map(|signer| Arc::new(signer) as Arc<dyn Signer>)
-                        .or_else(|_| {
+                        .or_else(|e| {
+                            eprintln!("Received error: {:?}", e);
                             Prime256::from_pem(&path)
                                 .map(|signer| Arc::new(signer) as Arc<dyn Signer>)
                         })
-                        .or_else(|_| {
+                        .or_else(|e| {
+                            eprintln!("Received error: {:?}", e);
                             Secp256k1::from_pem(&path)
                                 .map(|signer| Arc::new(signer) as Arc<dyn Signer>)
                         });
 
-                let signer = maybe_signer.map_err(|_| {
+                let signer = maybe_signer.map_err(|e| {
+                    eprintln!("Received error: {:?}", e);
                     RecoveryError::InvalidIdentity(
                         "Couldn't deserialize identity into any known implementation".to_string(),
                     )

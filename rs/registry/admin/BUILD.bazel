@@ -45,6 +45,7 @@ DEPENDENCIES = [
     "//rs/types/management_canister_types",
     "//rs/types/types",
     "//rs/nns/handlers/recovery/client",
+    "//rs/nns/handlers/recovery/interface",
     "@crate_index//:anyhow",
     "@crate_index//:base64",
     "@crate_index//:candid",
