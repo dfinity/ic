@@ -10853,6 +10853,7 @@ dependencies = [
  "ic-nns-handler-recovery-interface",
  "ic-secp256k1",
  "k256 0.13.4",
+ "p256",
  "pocket-ic",
  "serde",
  "tokio",
@@ -10869,6 +10870,7 @@ dependencies = [
  "ic-ed25519",
  "ic-secp256k1",
  "k256 0.13.4",
+ "p256",
  "registry-canister",
  "serde",
 ]

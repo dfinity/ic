@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use crate::RecoveryError;
 
-use super::{ed25519::EdwardsCurve, k256::Secp256k1, Signer, Verifier};
+use super::{ed25519::EdwardsCurve, k256::Secp256k1, p256::Prime256v1, Signer, Verifier};
 
 // From ic-admin
 pub type SignBytes =
@@ -10,7 +10,6 @@ pub type SignBytes =
 
 pub struct Hsm {
     inner_pub_key: Arc<dyn Verifier>,
-    pub_key: Vec<u8>,
     sign_func: Option<SignBytes>,
 }
 
@@ -20,7 +19,7 @@ impl Verifier for Hsm {
     }
 
     fn to_public_key_der(&self) -> crate::Result<Vec<u8>> {
-        Ok(self.pub_key.clone())
+        self.inner_pub_key.to_public_key_der()
     }
 }
 
@@ -37,13 +36,17 @@ impl Signer for Hsm {
 }
 
 impl Hsm {
-    pub fn from_public_key(pub_key: &[u8]) -> crate::Result<Self> {
-        if let Ok(edwards) = EdwardsCurve::from_public_key(pub_key) {
-            return Ok(Self::from_verifier(pub_key, Arc::new(edwards)));
+    pub fn from_public_key_der(pub_key_der: &[u8]) -> crate::Result<Self> {
+        if let Ok(edwards) = EdwardsCurve::from_public_key_der(pub_key_der) {
+            return Ok(Self::from_verifier(Arc::new(edwards)));
         }
 
-        if let Ok(secp256) = Secp256k1::from_public_key(pub_key) {
-            return Ok(Self::from_verifier(pub_key, Arc::new(secp256)));
+        if let Ok(secp256) = Secp256k1::from_public_key_der(pub_key_der) {
+            return Ok(Self::from_verifier(Arc::new(secp256)));
+        }
+
+        if let Ok(prime) = Prime256v1::from_public_key_der(pub_key_der) {
+            return Ok(Self::from_verifier(Arc::new(prime)));
         }
 
         return Err(RecoveryError::InvalidPubKey(
@@ -51,20 +54,19 @@ impl Hsm {
         ));
     }
 
-    fn from_verifier(pub_key: &[u8], verifier: Arc<dyn Verifier>) -> Self {
+    fn from_verifier(verifier: Arc<dyn Verifier>) -> Self {
         Self {
             sign_func: None,
-            pub_key: pub_key.to_vec(),
             inner_pub_key: verifier,
         }
     }
 
-    pub fn new(pub_key: &[u8], sign_func: SignBytes) -> crate::Result<Self> {
-        let from_pub_key = Self::from_public_key(pub_key)?;
+    pub fn new(pub_key_der: &[u8], sign_func: SignBytes) -> crate::Result<Self> {
+        let from_pub_key_der = Self::from_public_key_der(pub_key_der)?;
 
         Ok(Self {
             sign_func: Some(sign_func),
-            ..from_pub_key
+            ..from_pub_key_der
         })
     }
 }

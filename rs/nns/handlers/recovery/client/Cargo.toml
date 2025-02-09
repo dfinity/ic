@@ -22,3 +22,4 @@ ic-ed25519.path = "../../../../../packages/ic-ed25519"
 [dev-dependencies]
 tokio.workspace = true
 pocket-ic.path = "../../../../../packages/pocket-ic"
+p256.workspace = true
