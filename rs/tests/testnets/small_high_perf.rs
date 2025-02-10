@@ -1,7 +1,7 @@
 // Set up a small high performance testnet containing:
 //   one 1-node System and one 1-node Application subnets, single boundary node, and a p8s (with grafana) VM.
-// The single system subnet node uses the default: 6 vCPUs, 24 GiB of RAM, and 50 GiB disk while the 
-// single application subnet node uses: 64 vCPUs, 512 GiB of RAM, and 500 GiB disk.
+// The single system subnet node uses the default: 6 vCPUs, 24 GiB of RAM, and 50 GiB disk,
+// while the single application subnet node uses: 64 vCPUs, 512 GiB of RAM, and 500 GiB disk.
 //
 // You can setup this testnet with a lifetime of 180 mins by executing the following commands:
 //
