@@ -1,7 +1,6 @@
 // Set up a Bitcoin testnet containing:
 //   one 1-node System subnet, single boundary node, and a p8s (with grafana) VM.
-// All replica nodes use the following resources: 6 vCPUs, 24 GiB of RAM, and 50 GiB disk.
-// System subnet node is: 64 vCPUs, 480 GiB of RAM, and 2 TiB disk.
+// The single system subnet node uses: 64 vCPUs, 480 GiB of RAM, and 2 TiB disk.
 //
 // Note, all canisters will be installed on a system subnet by default.
 //
