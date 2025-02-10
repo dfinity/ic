@@ -1693,7 +1693,8 @@ async fn test_minimum_icp_xdr_conversion_rate_limits_monthly_node_provider_rewar
 
 #[tokio::test]
 async fn test_manage_network_economics_change_one_deep_subfield() {
-    // Step 1: Prepare the world. We only really need a super basic Governance.
+    // Step 1: Prepare the world. All we need is a Governance with one neuron.
+    // The neuron will be used to make a ManageNetworkEconomics proposal.
 
     let controller = PrincipalId::new_user_test_id(519_572_717);
     let neuron = Neuron {
