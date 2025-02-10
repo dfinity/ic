@@ -15,11 +15,11 @@ use ic_ledger_suite_state_machine_tests::{
 use ic_state_machine_tests::{ErrorCode, StateMachine, UserError};
 use icp_ledger::{
     AccountIdBlob, AccountIdentifier, AccountIdentifierByteBuf, ArchiveOptions,
-    ArchivedBlocksRange, Block, CandidBlock, CandidOperation, CandidTransaction, FeatureFlags,
-    GetBlocksArgs, GetBlocksRes, GetBlocksResult, GetEncodedBlocksResult, IcpAllowanceArgs,
-    InitArgs, IterBlocksArgs, IterBlocksRes, LedgerCanisterInitPayload, LedgerCanisterPayload,
-    LedgerCanisterUpgradePayload, Operation, QueryBlocksResponse, QueryEncodedBlocksResponse,
-    SendArgs, TimeStamp, UpgradeArgs, DEFAULT_TRANSFER_FEE,
+    ArchivedBlocksRange, Block, BlockArg, CandidBlock, CandidOperation, CandidTransaction,
+    FeatureFlags, GetBlocksArgs, GetBlocksRes, GetBlocksResult, GetEncodedBlocksResult,
+    IcpAllowanceArgs, InitArgs, IterBlocksArgs, IterBlocksRes, LedgerCanisterInitPayload,
+    LedgerCanisterPayload, LedgerCanisterUpgradePayload, Operation, QueryBlocksResponse,
+    QueryEncodedBlocksResponse, SendArgs, TimeStamp, UpgradeArgs, DEFAULT_TRANSFER_FEE,
     MAX_BLOCKS_PER_INGRESS_REPLICATED_QUERY_REQUEST, MAX_BLOCKS_PER_REQUEST,
 };
 use icrc_ledger_types::icrc1::{
@@ -1427,6 +1427,8 @@ fn test_stable_migration_endpoints_disabled(ledger_wasm_mainnet: Vec<u8>) {
 
     let empty_arg_pb = ProtoBuf(()).into_bytes().unwrap();
 
+    let block_pb_args = ProtoBuf(BlockArg(1)).into_bytes().unwrap();
+
     ic_ledger_suite_state_machine_tests::icrc1_test_stable_migration_endpoints_disabled(
         ledger_wasm_mainnet,
         ledger_wasm_low_instruction_limits(),
@@ -1439,8 +1441,8 @@ fn test_stable_migration_endpoints_disabled(ledger_wasm_mainnet: Vec<u8>) {
             ("iter_blocks_pb", iter_blocks_pb_args),
             ("query_blocks", get_blocks_args.clone()),
             ("query_encoded_blocks", get_blocks_args),
-            ("tip_of_chain_pb", empty_arg_pb.clone()),
-            ("block_pb", empty_arg_pb),
+            ("tip_of_chain_pb", empty_arg_pb),
+            ("block_pb", block_pb_args),
         ],
     );
 }
