@@ -19,7 +19,6 @@ DEV_DEPENDENCIES = [
     # Keep sorted.
     "@crate_index//:hex",
     "@crate_index//:hex-literal",
-    "@crate_index//:rand",
     "@crate_index//:rand_chacha",
     "@crate_index//:wycheproof",
 ]
