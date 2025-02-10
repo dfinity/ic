@@ -398,7 +398,11 @@ pub fn is_low_wasm_memory_hook_condition_satisfied(
                 memory_allocation
             );
             std::cmp::min(
-                memory_allocation - memory_usage_without_wasm_memory,
+                NumBytes::new(
+                    memory_allocation
+                        .get()
+                        .saturating_sub(memory_usage_without_wasm_memory.get()),
+                ),
                 wasm_memory_limit,
             )
         },
