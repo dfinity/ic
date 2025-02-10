@@ -28,6 +28,7 @@ DEPENDENCIES = [
 rust_binary(
     name = "release-runscript",
     srcs = [
+        "src/commit_switcher.rs",
         "src/main.rs",
         "src/utils.rs",
     ],

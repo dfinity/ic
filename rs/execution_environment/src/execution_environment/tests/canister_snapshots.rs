@@ -4,7 +4,7 @@ use ic_base_types::NumBytes;
 use ic_config::subnet_config::SubnetConfig;
 use ic_cycles_account_manager::ResourceSaturation;
 use ic_error_types::{ErrorCode, RejectCode};
-use ic_management_canister_types::{
+use ic_management_canister_types_private::{
     self as ic00, CanisterChange, CanisterChangeDetails, CanisterSnapshotResponse,
     ClearChunkStoreArgs, DeleteCanisterSnapshotArgs, ListCanisterSnapshotArgs,
     LoadCanisterSnapshotArgs, Method, Payload as Ic00Payload, TakeCanisterSnapshotArgs,

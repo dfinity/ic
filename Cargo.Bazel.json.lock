@@ -1,5 +1,5 @@
 {
-  "checksum": "ac36051bb3fd1c488e3c6fdbdfc95fff29f3760abf119cb1fa2e1d829f1251f8",
+  "checksum": "3f10fe866380ffcf94872915ab98dc48eb140f9fd8fb8be016d15092561ee5f4",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -7373,7 +7373,7 @@
               "target": "hex_lit"
             },
             {
-              "id": "secp256k1 0.29.1",
+              "id": "secp256k1 0.29.0",
               "target": "secp256k1"
             },
             {
@@ -18933,7 +18933,7 @@
               "target": "ic_agent"
             },
             {
-              "id": "ic-identity-hsm 0.39.2",
+              "id": "ic-identity-hsm 0.39.3",
               "target": "ic_identity_hsm"
             },
             {
@@ -33370,14 +33370,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "ic-identity-hsm 0.39.2": {
+    "ic-identity-hsm 0.39.3": {
       "name": "ic-identity-hsm",
-      "version": "0.39.2",
+      "version": "0.39.3",
       "package_url": "https://github.com/dfinity/agent-rs",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/ic-identity-hsm/0.39.2/download",
-          "sha256": "0ebb94d7cb5be09bed47655008f0c2968a3a3253dcf680297f3e8475e4b317c4"
+          "url": "https://static.crates.io/crates/ic-identity-hsm/0.39.3/download",
+          "sha256": "e294ee038eb647cd9cce78b5961533be7f883494e6ea1faece52459bce2d29e9"
         }
       },
       "targets": [
@@ -33429,7 +33429,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.39.2"
+        "version": "0.39.3"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -38055,7 +38055,7 @@
               "target": "base64"
             },
             {
-              "id": "minreq 2.13.0",
+              "id": "minreq 2.13.2",
               "target": "minreq"
             },
             {
@@ -44133,14 +44133,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "minreq 2.13.0": {
+    "minreq 2.13.2": {
       "name": "minreq",
-      "version": "2.13.0",
+      "version": "2.13.2",
       "package_url": "https://github.com/neonmoe/minreq",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/minreq/2.13.0/download",
-          "sha256": "36a8e50e917e18a37d500d27d40b7bc7d127e71c0c94fb2d83f43b4afd308390"
+          "url": "https://static.crates.io/crates/minreq/2.13.2/download",
+          "sha256": "da0c420feb01b9fb5061f8c8f452534361dd783756dcf38ec45191ce55e7a161"
         }
       },
       "targets": [
@@ -44189,7 +44189,7 @@
               "target": "log"
             },
             {
-              "id": "minreq 2.13.0",
+              "id": "minreq 2.13.2",
               "target": "build_script_build"
             },
             {
@@ -44204,7 +44204,7 @@
           "selects": {}
         },
         "edition": "2018",
-        "version": "2.13.0"
+        "version": "2.13.2"
       },
       "build_script_attrs": {
         "compile_data_glob": [
@@ -67049,14 +67049,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "secp256k1 0.29.1": {
+    "secp256k1 0.29.0": {
       "name": "secp256k1",
-      "version": "0.29.1",
+      "version": "0.29.0",
       "package_url": "https://github.com/rust-bitcoin/rust-secp256k1/",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/secp256k1/0.29.1/download",
-          "sha256": "9465315bc9d4566e1724f0fffcbcc446268cb522e60f9a27bcded6b19c108113"
+          "url": "https://static.crates.io/crates/secp256k1/0.29.0/download",
+          "sha256": "0e0cc0f1cf93f4969faf3ea1c7d8a9faed25918d96affa959720823dfe86d4f3"
         }
       },
       "targets": [
@@ -67113,7 +67113,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.29.1"
+        "version": "0.29.0"
       },
       "license": "CC0-1.0",
       "license_ids": [

@@ -133,7 +133,6 @@ pub fn test_subnet_record() -> SubnetRecord {
         max_number_of_canisters: 0,
         ssh_readonly_access: vec![],
         ssh_backup_access: vec![],
-        ecdsa_config: None,
         chain_key_config: None,
     }
 }
