@@ -10,6 +10,7 @@ mod common;
 mod dashboard;
 mod health_status_refresher;
 pub mod metrics;
+mod nns_delegation_manager;
 mod pprof;
 mod query;
 mod read_state;
@@ -29,6 +30,8 @@ pub use common::cors_layer;
 pub use query::QueryServiceBuilder;
 pub use read_state::canister::{CanisterReadStateService, CanisterReadStateServiceBuilder};
 pub use read_state::subnet::SubnetReadStateServiceBuilder;
+use tokio::sync::watch::channel;
+use tokio::task::JoinHandle;
 
 use crate::{
     catch_up_package::CatchUpPackageService,
@@ -198,19 +201,19 @@ fn start_server_initialization(
         // Fetch the delegation from the NNS for this subnet to be
         // able to issue certificates.
         health_status.store(ReplicaHealthStatus::WaitingForRootDelegation);
-        let loaded_delegation = load_root_delegation(
-            &config,
-            &log,
-            rt_handle_clone,
-            subnet_id,
-            nns_subnet_id,
-            registry_client.as_ref(),
-            tls_config.as_ref(),
-        )
-        .await;
-        if let Some(delegation) = loaded_delegation {
-            let _ = delegation_from_nns.set(delegation);
-        }
+        //let loaded_delegation = load_root_delegation(
+        //    &config,
+        //    &log,
+        //    rt_handle_clone,
+        //    subnet_id,
+        //    nns_subnet_id,
+        //    registry_client.as_ref(),
+        //    tls_config.as_ref(),
+        //)
+        //.await;
+        //if let Some(delegation) = loaded_delegation {
+        //    let _ = delegation_from_nns.set(delegation);
+        //}
         metrics
             .health_status_transitions_total
             .with_label_values(&[
@@ -781,23 +784,89 @@ async fn collect_timer_metric(
     resp
 }
 
+pub fn start_root_delegation_manager(
+    config: Config,
+    log: ReplicaLogger,
+    rt_handle: tokio::runtime::Handle,
+    subnet_id: SubnetId,
+    nns_subnet_id: SubnetId,
+    registry_client: Arc<dyn RegistryClient>,
+    tls_config: Arc<dyn TlsConfig + Send + Sync>,
+) -> (JoinHandle<()>, Receiver<CertificateDelegation>) {
+    // On the NNS subnet. No delegation needs to be fetched.
+    if subnet_id == nns_subnet_id {
+        info!(log, "On the NNS subnet. Skipping fetching the delegation.");
+        return;
+    }
+
+    let manager = DelegationManager {
+        config,
+        log,
+        subnet_id,
+        nns_subnet_id,
+        registry_client,
+        tls_config,
+    };
+
+    let delegation = manager.fetch_delegation().await;
+
+    let (tx, rx) = channel(delegation);
+
+    (rt.spawn(manager.run()), rx)
+}
+
+const DELEGATION_UPDATE_INTERVAL: Duration = Duration::from_secs(5);
+
+async fn delegation_loop() {
+    let mut interval = tokio::time::interval(DELEGATION_UPDATE_INTERVAL);
+
+    loop {
+        let _ = interval.tick().await;
+
+        let delegation = load_root_delegation(
+            config,
+            log,
+            subnet_id,
+            nns_subnet_id,
+            registry_client,
+            tls_config,
+        )
+        .await;
+    }
+}
+
+struct DelegationManager {
+    config: Config,
+    log: ReplicaLogger,
+    subnet_id: SubnetId,
+    nns_subnet_id: SubnetId,
+    registry_client: Arc<dyn RegistryClient>,
+    tls_config: Arc<dyn TlsConfig + Send + Sync>,
+}
+
+impl DelegationManager {
+    async fn fetch(&self) -> CertificateDelegation {
+        load_root_delegation(
+            &self.config,
+            &self.log,
+            self.subnet_id,
+            self.nns_subnet_id,
+            &self.registry_client,
+            &self.tls_config,
+        )
+    }
+}
+
 // Fetches a delegation from the NNS subnet to allow this subnet to issue
 // certificates on its behalf. On the NNS subnet this method is a no-op.
 async fn load_root_delegation(
     config: &Config,
     log: &ReplicaLogger,
-    rt_handle: tokio::runtime::Handle,
     subnet_id: SubnetId,
     nns_subnet_id: SubnetId,
     registry_client: &dyn RegistryClient,
     tls_config: &(dyn TlsConfig + Send + Sync),
-) -> Option<CertificateDelegation> {
-    if subnet_id == nns_subnet_id {
-        info!(log, "On the NNS subnet. Skipping fetching the delegation.");
-        // On the NNS subnet. No delegation needs to be fetched.
-        return None;
-    }
-
+) -> CertificateDelegation {
     let mut fetching_root_delagation_attempts = 0;
 
     loop {
@@ -813,7 +882,6 @@ async fn load_root_delegation(
         match try_fetch_delegation_from_nns(
             config,
             log,
-            &rt_handle,
             &subnet_id,
             &nns_subnet_id,
             registry_client,
@@ -821,7 +889,7 @@ async fn load_root_delegation(
         )
         .await
         {
-            Ok(delegation) => return Some(delegation),
+            Ok(delegation) => return delegation,
             Err(err) => {
                 warn!(
                     log,
@@ -843,7 +911,6 @@ async fn load_root_delegation(
 async fn try_fetch_delegation_from_nns(
     config: &Config,
     log: &ReplicaLogger,
-    rt_handle: &tokio::runtime::Handle,
     subnet_id: &SubnetId,
     nns_subnet_id: &SubnetId,
     registry_client: &dyn RegistryClient,

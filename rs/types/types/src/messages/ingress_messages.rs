@@ -42,6 +42,7 @@ pub struct SignedIngressContent {
     arg: Vec<u8>,
     ingress_expiry: u64,
     nonce: Option<Vec<u8>>,
+    size: usize,
 }
 
 impl SignedIngressContent {
@@ -63,6 +64,10 @@ impl SignedIngressContent {
 
     pub fn nonce(&self) -> Option<&Vec<u8>> {
         self.nonce.as_ref()
+    }
+
+    pub fn size(&self) -> usize {
+        self.size
     }
 
     /// Checks whether the given ingress message is addressed to the subnet (rather than to a canister).
@@ -103,14 +108,24 @@ impl HasCanisterId for SignedIngressContent {
 
 impl HttpRequestContent for SignedIngressContent {
     fn id(&self) -> MessageId {
+        let Self {
+            sender,
+            canister_id,
+            method_name,
+            arg,
+            ingress_expiry,
+            nonce,
+            size: _,
+        } = self;
+
         MessageId::from(representation_independent_hash_call_or_query(
             CallOrQuery::Call,
-            self.canister_id.get().into_vec(),
-            &self.method_name,
-            self.arg.clone(),
-            self.ingress_expiry,
-            self.sender.get().into_vec(),
-            self.nonce.as_deref(),
+            canister_id.get().into_vec(),
+            method_name,
+            arg.clone(),
+            *ingress_expiry,
+            sender.get().into_vec(),
+            nonce.as_deref(),
         ))
     }
 
@@ -148,6 +163,7 @@ impl TryFrom<HttpCanisterUpdate> for SignedIngressContent {
             arg: update.arg.0,
             ingress_expiry: update.ingress_expiry,
             nonce: update.nonce.map(|n| n.0),
+            size: 0,
         })
     }
 }
