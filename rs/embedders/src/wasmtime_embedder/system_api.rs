@@ -356,7 +356,7 @@ pub fn syscalls<
     /// Check if debug print is enabled.
     fn debug_print_is_enabled(
         caller: &mut Caller<'_, StoreData>,
-        feature_flags: FeatureFlags,
+        feature_flags: &FeatureFlags,
     ) -> Result<bool, anyhow::Error> {
         match (
             feature_flags.rate_limiting_of_debug_prints,
@@ -383,7 +383,7 @@ pub fn syscalls<
         // by the log capacity and the remaining space in the log.
         // The cost is calculated as follows:
         // - the allocated bytes (x2 to account for adding new message and removing the oldest one)
-        //   - this must be in sync with `CanisterLog::add_record()` from `ic_management_canister_types`
+        //   - this must be in sync with `CanisterLog::add_record()` from `ic_management_canister_types_private`
         // - the transmitted bytes (multiplied by the cost factor) for sending the payload to the replica.
         Ok(2 * allocated_num_bytes + BYTE_TRANSMISSION_COST_FACTOR as u64 * transmitted_num_bytes)
         // LINT.ThenChange(logging_charge_bytes_rule)
@@ -612,11 +612,12 @@ pub fn syscalls<
 
     linker
         .func_wrap("ic0", "debug_print", {
+            let feature_flags = feature_flags.clone();
             move |mut caller: Caller<'_, StoreData>, offset: I, length: I| {
                 let length: u64 = length.try_into().expect("Failed to convert I to u64");
                 let mut num_bytes = 0;
                 num_bytes += logging_charge_bytes(&mut caller, length)?;
-                let debug_print_is_enabled = debug_print_is_enabled(&mut caller, feature_flags)?;
+                let debug_print_is_enabled = debug_print_is_enabled(&mut caller, &feature_flags)?;
                 if debug_print_is_enabled {
                     num_bytes += length;
                 }
@@ -1248,20 +1249,6 @@ pub fn syscalls<
         .unwrap();
 
     linker
-        .func_wrap("ic0", "replication_factor", {
-            move |mut caller: Caller<'_, StoreData>, src: I, size: I| {
-                let src: usize = src.try_into().expect("Failed to convert I to usize");
-                let size: usize = size.try_into().expect("Failed to convert I to usize");
-                charge_for_cpu_and_mem(&mut caller, overhead::REPLICATION_FACTOR, size)?;
-                with_memory_and_system_api(&mut caller, |s, memory| {
-                    s.ic0_replication_factor(src, size, memory)
-                })
-                .map_err(|e| anyhow::Error::msg(format!("ic0_replication_factor failed: {}", e)))
-            }
-        })
-        .unwrap();
-
-    linker
         .func_wrap("ic0", "cost_call", {
             move |mut caller: Caller<'_, StoreData>,
                   method_name_size: u64,
@@ -1359,16 +1346,9 @@ pub fn syscalls<
         .func_wrap("ic0", "call_with_best_effort_response", {
             move |mut caller: Caller<'_, StoreData>, timeout_seconds: u32| {
                 charge_for_cpu(&mut caller, overhead::CALL_WITH_BEST_EFFORT_RESPONSE)?;
-                if feature_flags.best_effort_responses == FlagStatus::Enabled {
-                    with_system_api(&mut caller, |system_api| {
-                        system_api.ic0_call_with_best_effort_response(timeout_seconds)
-                    })
-                } else {
-                    let err = HypervisorError::ToolchainContractViolation {
-                        error: "ic0::call_with_best_effort_response is not enabled.".to_string(),
-                    };
-                    Err(process_err(&mut caller, err))
-                }
+                with_system_api(&mut caller, |system_api| {
+                    system_api.ic0_call_with_best_effort_response(timeout_seconds)
+                })
             }
         })
         .unwrap();
@@ -1377,14 +1357,7 @@ pub fn syscalls<
         .func_wrap("ic0", "msg_deadline", {
             move |mut caller: Caller<'_, StoreData>| {
                 charge_for_cpu(&mut caller, overhead::MSG_DEADLINE)?;
-                if feature_flags.best_effort_responses == FlagStatus::Enabled {
-                    with_system_api(&mut caller, |system_api| system_api.ic0_msg_deadline())
-                } else {
-                    let err = HypervisorError::ToolchainContractViolation {
-                        error: "ic0::msg_deadline is not enabled.".to_string(),
-                    };
-                    Err(process_err(&mut caller, err))
-                }
+                with_system_api(&mut caller, |system_api| system_api.ic0_msg_deadline())
             }
         })
         .unwrap();

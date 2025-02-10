@@ -658,16 +658,6 @@ fn get_valid_system_apis_common(I: ValType) -> HashMap<String, HashMap<String, F
             )],
         ),
         (
-            "replication_factor",
-            vec![(
-                API_VERSION_IC0,
-                FunctionSignature {
-                    param_types: vec![I, I],
-                    return_type: vec![ValType::I32],
-                },
-            )],
-        ),
-        (
             "cost_call",
             vec![(
                 API_VERSION_IC0,
@@ -703,7 +693,7 @@ fn get_valid_system_apis_common(I: ValType) -> HashMap<String, HashMap<String, F
                 API_VERSION_IC0,
                 FunctionSignature {
                     param_types: vec![I, I, ValType::I32, I],
-                    return_type: vec![],
+                    return_type: vec![ValType::I32],
                 },
             )],
         ),
@@ -713,7 +703,7 @@ fn get_valid_system_apis_common(I: ValType) -> HashMap<String, HashMap<String, F
                 API_VERSION_IC0,
                 FunctionSignature {
                     param_types: vec![I, I, ValType::I32, I],
-                    return_type: vec![],
+                    return_type: vec![ValType::I32],
                 },
             )],
         ),
@@ -723,7 +713,7 @@ fn get_valid_system_apis_common(I: ValType) -> HashMap<String, HashMap<String, F
                 API_VERSION_IC0,
                 FunctionSignature {
                     param_types: vec![I, I, ValType::I32, I],
-                    return_type: vec![],
+                    return_type: vec![ValType::I32],
                 },
             )],
         ),

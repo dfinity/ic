@@ -1,5 +1,7 @@
 use ic_base_types::PrincipalIdBlobParseError;
-use ic_config::embedders::StableMemoryPageLimit;
+use ic_config::embedders::{
+    BestEffortResponsesFeature, Config as EmbeddersConfig, StableMemoryPageLimit,
+};
 use ic_config::flag_status::FlagStatus;
 use ic_cycles_account_manager::ResourceSaturation;
 use ic_error_types::RejectCode;
@@ -11,7 +13,7 @@ use ic_interfaces::execution_environment::{
     TrapCode::{self, CyclesAmountTooBigFor64Bit},
 };
 use ic_logger::{error, ReplicaLogger};
-use ic_management_canister_types::{
+use ic_management_canister_types_private::{
     EcdsaCurve, EcdsaKeyId, MasterPublicKeyId, SchnorrAlgorithm, SchnorrKeyId, VetKdCurve,
     VetKdKeyId,
 };
@@ -709,6 +711,12 @@ enum ExecutionMemoryType {
     StableMemory,
 }
 
+#[derive(Debug, Clone, Copy)]
+pub enum CostResult {
+    Success = 0,
+    UnknownCurve = 1,
+    UnknownKey = 2,
+}
 /// A struct to gather the relevant fields that correspond to a canister's
 /// memory consumption.
 struct MemoryUsage {
@@ -1050,6 +1058,9 @@ pub struct SystemApiImpl {
     #[allow(unused)]
     canister_backtrace: FlagStatus,
 
+    /// Rollout stage of the best-effort responses feature.
+    best_effort_responses: BestEffortResponsesFeature,
+
     /// The maximum sum of `<name>` lengths in exported functions called `canister_update <name>`,
     /// `canister_query <name>`, or `canister_composite_query <name>`.
     max_sum_exported_function_name_lengths: usize,
@@ -1091,9 +1102,7 @@ impl SystemApiImpl {
         canister_current_message_memory_usage: NumBytes,
         execution_parameters: ExecutionParameters,
         subnet_available_memory: SubnetAvailableMemory,
-        wasm_native_stable_memory: FlagStatus,
-        canister_backtrace: FlagStatus,
-        max_sum_exported_function_name_lengths: usize,
+        embedders_config: &EmbeddersConfig,
         stable_memory: Memory,
         wasm_memory_size: NumWasmPages,
         out_of_instructions_handler: Rc<dyn OutOfInstructionsHandler>,
@@ -1131,9 +1140,11 @@ impl SystemApiImpl {
             api_type,
             memory_usage,
             execution_parameters,
-            wasm_native_stable_memory,
-            canister_backtrace,
-            max_sum_exported_function_name_lengths,
+            wasm_native_stable_memory: embedders_config.feature_flags.wasm_native_stable_memory,
+            canister_backtrace: embedders_config.feature_flags.canister_backtrace,
+            best_effort_responses: embedders_config.feature_flags.best_effort_responses.clone(),
+            max_sum_exported_function_name_lengths: embedders_config
+                .max_sum_exported_function_name_lengths,
             stable_memory,
             sandbox_safe_system_state,
             out_of_instructions_handler,
@@ -3382,6 +3393,8 @@ impl SystemApi for SystemApiImpl {
     ///
     /// Fails and returns an error if `set_timeout()` was already called.
     fn ic0_call_with_best_effort_response(&mut self, timeout_seconds: u32) -> HypervisorResult<()> {
+        let subnet_id = &self.sandbox_safe_system_state.get_subnet_id();
+        let subnet_type = self.subnet_type();
         let result = match &mut self.api_type {
             ApiType::Start { .. }
             | ApiType::Init { .. }
@@ -3418,17 +3431,21 @@ impl SystemApi for SystemApiImpl {
                     error: "ic0.call_with_best_effort_response called when no call is under construction."
                         .to_string(),
                 }),
+
+                Some(request) if request.is_timeout_set() =>
+                    Err(HypervisorError::ToolchainContractViolation {
+                        error: "ic0_call_with_best_effort_response failed because a timeout is already set."
+                            .to_string(),
+                    }),
+
                 Some(request) => {
-                    if request.is_timeout_set() {
-                        Err(HypervisorError::ToolchainContractViolation {
-                            error: "ic0_call_with_best_effort_response failed because a timeout is already set.".to_string(),
-                        })
-                    } else {
+                    // No-op if the feature is disabled on this subnet.
+                    if self.best_effort_responses.is_enabled_on(subnet_id, subnet_type) {
                         let bounded_timeout =
                             std::cmp::min(timeout_seconds, MAX_CALL_TIMEOUT_SECONDS);
                         request.set_timeout(bounded_timeout);
-                        Ok(())
                     }
+                    Ok(())
                 }
             },
         };
@@ -3517,25 +3534,6 @@ impl SystemApi for SystemApiImpl {
         result
     }
 
-    fn ic0_replication_factor(
-        &self,
-        src: usize,
-        size: usize,
-        heap: &[u8],
-    ) -> HypervisorResult<u32> {
-        let msg_bytes = valid_subslice("ic0_replication_factor", src, size, heap)?;
-        let subnet_id = PrincipalId::try_from(msg_bytes)
-            .map_err(|e| HypervisorError::InvalidPrincipalId(PrincipalIdBlobParseError(e.0)))?;
-        let result = self
-            .sandbox_safe_system_state
-            .network_topology
-            .get_subnet_size(&subnet_id.into())
-            .map(|x| x as u32)
-            .ok_or(HypervisorError::SubnetNotFound);
-        trace_syscall!(self, ReplicationFactor, result);
-        result
-    }
-
     fn ic0_cost_call(
         &self,
         method_name_size: u64,
@@ -3595,7 +3593,7 @@ impl SystemApi for SystemApiImpl {
         curve: u32,
         dst: usize,
         heap: &mut [u8],
-    ) -> HypervisorResult<()> {
+    ) -> HypervisorResult<u32> {
         let key_bytes = valid_subslice("ic0.cost_sign_with_ecdsa heap", src, size, heap)?;
         let name = str::from_utf8(key_bytes)
             .map_err(|_| HypervisorError::ToolchainContractViolation {
@@ -3605,18 +3603,21 @@ impl SystemApi for SystemApiImpl {
                 ),
             })?
             .to_string();
-        let curve = EcdsaCurve::try_from(curve)
-            .map_err(|e| HypervisorError::ToolchainContractViolation { error: e })?;
+        let Ok(curve) = EcdsaCurve::try_from(curve) else {
+            return Ok(CostResult::UnknownCurve as u32);
+        };
         let key = MasterPublicKeyId::Ecdsa(EcdsaKeyId { curve, name });
         let topology = &self.sandbox_safe_system_state.network_topology;
-        let subnet_size = get_key_replication_factor(topology, key)?;
+        let Some(subnet_size) = get_key_replication_factor(topology, key) else {
+            return Ok(CostResult::UnknownKey as u32);
+        };
         let cost = self
             .sandbox_safe_system_state
             .cycles_account_manager
             .ecdsa_signature_fee(subnet_size);
         copy_cycles_to_heap(cost, dst, heap, "ic0_cost_sign_with_ecdsa")?;
         trace_syscall!(self, CostSignWithEcdsa, cost);
-        Ok(())
+        Ok(CostResult::Success as u32)
     }
 
     fn ic0_cost_sign_with_schnorr(
@@ -3626,7 +3627,7 @@ impl SystemApi for SystemApiImpl {
         algorithm: u32,
         dst: usize,
         heap: &mut [u8],
-    ) -> HypervisorResult<()> {
+    ) -> HypervisorResult<u32> {
         let key_bytes = valid_subslice("ic0.cost_sign_with_schnorr heap", src, size, heap)?;
         let name = str::from_utf8(key_bytes)
             .map_err(|_| HypervisorError::ToolchainContractViolation {
@@ -3636,18 +3637,21 @@ impl SystemApi for SystemApiImpl {
                 ),
             })?
             .to_string();
-        let algorithm = SchnorrAlgorithm::try_from(algorithm)
-            .map_err(|e| HypervisorError::ToolchainContractViolation { error: e })?;
+        let Ok(algorithm) = SchnorrAlgorithm::try_from(algorithm) else {
+            return Ok(CostResult::UnknownCurve as u32);
+        };
         let key = MasterPublicKeyId::Schnorr(SchnorrKeyId { algorithm, name });
         let topology = &self.sandbox_safe_system_state.network_topology;
-        let subnet_size = get_key_replication_factor(topology, key)?;
+        let Some(subnet_size) = get_key_replication_factor(topology, key) else {
+            return Ok(CostResult::UnknownKey as u32);
+        };
         let cost = self
             .sandbox_safe_system_state
             .cycles_account_manager
             .schnorr_signature_fee(subnet_size);
         copy_cycles_to_heap(cost, dst, heap, "ic0_cost_sign_with_schnorr")?;
         trace_syscall!(self, CostSignWithSchnorr, cost);
-        Ok(())
+        Ok(CostResult::Success as u32)
     }
 
     fn ic0_cost_vetkd_derive_encrypted_key(
@@ -3657,7 +3661,7 @@ impl SystemApi for SystemApiImpl {
         curve: u32,
         dst: usize,
         heap: &mut [u8],
-    ) -> HypervisorResult<()> {
+    ) -> HypervisorResult<u32> {
         let key_bytes =
             valid_subslice("ic0.cost_vetkd_derive_encrypted_key heap", src, size, heap)?;
         let name = str::from_utf8(key_bytes)
@@ -3668,18 +3672,21 @@ impl SystemApi for SystemApiImpl {
                 ),
             })?
             .to_string();
-        let curve = VetKdCurve::try_from(curve)
-            .map_err(|e| HypervisorError::ToolchainContractViolation { error: e })?;
+        let Ok(curve) = VetKdCurve::try_from(curve) else {
+            return Ok(CostResult::UnknownCurve as u32);
+        };
         let key = MasterPublicKeyId::VetKd(VetKdKeyId { curve, name });
         let topology = &self.sandbox_safe_system_state.network_topology;
-        let subnet_size = get_key_replication_factor(topology, key)?;
+        let Some(subnet_size) = get_key_replication_factor(topology, key) else {
+            return Ok(CostResult::UnknownKey as u32);
+        };
         let cost = self
             .sandbox_safe_system_state
             .cycles_account_manager
             .vetkd_fee(subnet_size);
         copy_cycles_to_heap(cost, dst, heap, "ic0_cost_vetkd_derive_encrypted_key")?;
         trace_syscall!(self, CostVetkdDeriveEncryptedKey, cost);
-        Ok(())
+        Ok(CostResult::Success as u32)
     }
 
     fn ic0_subnet_self_size(&self) -> HypervisorResult<usize> {
@@ -3747,10 +3754,7 @@ impl SystemApi for SystemApiImpl {
 
 /// Look up key in `chain_key_enabled_subnets`, then extract all subnets
 /// for that key and return the replication factor of the biggest one.
-fn get_key_replication_factor(
-    topology: &NetworkTopology,
-    key: MasterPublicKeyId,
-) -> HypervisorResult<usize> {
+fn get_key_replication_factor(topology: &NetworkTopology, key: MasterPublicKeyId) -> Option<usize> {
     let subnets_with_key = topology.chain_key_enabled_subnets(&key);
     subnets_with_key
         .iter()
@@ -3758,9 +3762,6 @@ fn get_key_replication_factor(
             topology.get_subnet_size(subnet_id).unwrap() // we got the subnet_id from the same collection
         })
         .max()
-        .ok_or(HypervisorError::ToolchainContractViolation {
-            error: format!("Public key {:?} not known.", key),
-        })
 }
 
 /// The default implementation of the `OutOfInstructionHandler` trait.
