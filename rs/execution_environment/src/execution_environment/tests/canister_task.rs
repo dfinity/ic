@@ -1738,3 +1738,72 @@ fn on_low_wasm_memory_is_executed_after_growing_stable_memory() {
         NumWasmPages::new(6)
     );
 }
+
+#[test]
+fn low_wasm_memory_hook_is_run_when_memory_limit_is_exceeded() {
+    let mut test = ExecutionTestBuilder::new().with_manual_execution().build();
+
+    let update_grow_mem_size = 10;
+    let hook_grow_mem_size = 5;
+
+    let wat: String =
+        get_wat_with_update_and_hook_mem_grow(update_grow_mem_size, hook_grow_mem_size, true);
+
+    let canister_id = test.canister_from_wat(wat.as_str()).unwrap();
+
+    // Initially wasm_memory.size = 1
+    assert_eq!(
+        test.execution_state(canister_id).wasm_memory.size,
+        NumWasmPages::new(1)
+    );
+
+    test.ingress_raw(canister_id, "grow_mem", vec![]);
+
+    // First ingress messages gets executed.
+    // wasm_memory.size = 1 + 10 = 11
+    test.execute_slice(canister_id);
+
+    assert_eq!(
+        test.execution_state(canister_id).wasm_memory.size,
+        NumWasmPages::new(11)
+    );
+
+    // We update `wasm_memory_limit` to be smaller than `used_wasm_memory`.
+    test.canister_update_wasm_memory_limit_and_wasm_memory_threshold(
+        canister_id,
+        (10 * WASM_PAGE_SIZE_IN_BYTES as u64).into(),
+        (5 * WASM_PAGE_SIZE_IN_BYTES as u64).into(),
+    )
+    .unwrap();
+
+    // The update will also satisfy condition for `low_wasm_memory` hook.
+    assert_eq!(
+        test.state()
+            .canister_states
+            .get(&canister_id)
+            .unwrap()
+            .system_state
+            .task_queue
+            .peek_hook_status(),
+        OnLowWasmMemoryHookStatus::Ready
+    );
+
+    // Low wasm memory hook is executed.
+    test.execute_slice(canister_id);
+
+    assert_eq!(
+        test.execution_state(canister_id).wasm_memory.size,
+        NumWasmPages::new(16)
+    );
+
+    assert_eq!(
+        test.state()
+            .canister_states
+            .get(&canister_id)
+            .unwrap()
+            .system_state
+            .task_queue
+            .peek_hook_status(),
+        OnLowWasmMemoryHookStatus::Executed
+    );
+}

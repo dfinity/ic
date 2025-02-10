@@ -27,7 +27,6 @@ env:
   CI_EVENT_NAME: ${{ github.event_name }}
   BRANCH_NAME: ${{ github.head_ref || github.ref_name }}
   CI_RUN_ID: ${{ github.run_id }}
-  RUSTFLAGS: "--remap-path-prefix=${{ github.workspace }}=/ic"
   BUILDEVENT_DATASET: "github-ci-dfinity"
 
 anchors:

@@ -5,18 +5,21 @@ package(default_visibility = ["//visibility:public"])
 DEPENDENCIES = [
     # Keep sorted.
     "//rs/consensus/utils",
+    "//rs/crypto",
     "//rs/interfaces",
     "//rs/interfaces/registry",
     "//rs/interfaces/state_manager",
     "//rs/monitoring/logger",
     "//rs/monitoring/metrics",
+    "//rs/phantom_newtype",
     "//rs/protobuf",
     "//rs/registry/helpers",
+    "//rs/registry/subnet_features",
     "//rs/replicated_state",
+    "//rs/types/error_types",
     "//rs/types/management_canister_types",
     "//rs/types/types",
     "@crate_index//:prometheus",
-    "@crate_index//:rayon",
     "@crate_index//:slog",
 ]
 
@@ -24,26 +27,24 @@ DEV_DEPENDENCIES = [
     # Keep sorted.
     "//rs/artifact_pool",
     "//rs/consensus/mocks",
-    "//rs/crypto/test_utils/ni-dkg",
-    "//rs/interfaces/registry/mocks",
-    "//rs/registry/subnet_features",
+    "//rs/registry/fake",
     "//rs/test_utilities",
-    "//rs/test_utilities/artifact_pool",
-    "//rs/test_utilities/consensus",
-    "//rs/test_utilities/logger",
     "//rs/test_utilities/registry",
     "//rs/test_utilities/state",
     "//rs/test_utilities/types",
+    "//rs/types/types_test_utils",
+    "@crate_index//:assert_matches",
     "@crate_index//:prost",
+    "@crate_index//:strum",
 ]
 
 rust_library(
-    name = "dkg",
+    name = "vetkd",
     srcs = glob(["src/**/*.rs"]),
     crate_features = select({
         "//conditions:default": [],
     }),
-    crate_name = "ic_consensus_dkg",
+    crate_name = "ic_consensus_vetkd",
     proc_macro_deps = [
         # Keep sorted.
         "@crate_index//:strum_macros",
@@ -53,12 +54,12 @@ rust_library(
 )
 
 rust_doc(
-    name = "consensus_dkg_doc",
-    crate = ":dkg",
+    name = "consensus_vetkd_doc",
+    crate = ":vetkd",
 )
 
 rust_test(
-    name = "consensus_dkg_test",
-    crate = ":dkg",
+    name = "consensus_vetkd_test",
+    crate = ":vetkd",
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )

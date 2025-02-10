@@ -7,7 +7,7 @@ use ic_types::{
     ComputeAllocation, Cycles, InvalidComputeAllocationError, InvalidMemoryAllocationError,
     MemoryAllocation, PrincipalId,
 };
-use num_traits::cast::ToPrimitive;
+use num_traits::{cast::ToPrimitive, SaturatingSub};
 use std::convert::TryFrom;
 
 use crate::canister_manager::CanisterManagerError;
@@ -484,16 +484,6 @@ pub(crate) fn validate_canister_settings(
         }
     }
 
-    if let Some(wasm_memory_limit) = settings.wasm_memory_limit() {
-        if let Some(wasm_memory_threshold) = settings.wasm_memory_threshold() {
-            if wasm_memory_threshold > wasm_memory_limit {
-                return Err(CanisterManagerError::InvalidSettings {
-                    message: format!("Invalid settings: 'wasm_memory_threshold' cannot be larger than 'wasm_memory_limit'. 'wasm_memory_threshold': {}, 'wasm_memory_limit': {}", wasm_memory_threshold, wasm_memory_limit),
-                });
-            }
-        }
-    }
-
     let new_memory_allocation = settings
         .memory_allocation
         .unwrap_or(canister_memory_allocation);
@@ -541,12 +531,7 @@ pub(crate) fn validate_canister_settings(
         }
     }
 
-    let allocated_bytes = if new_memory_bytes > old_memory_bytes {
-        new_memory_bytes - old_memory_bytes
-    } else {
-        NumBytes::new(0)
-    };
-
+    let allocated_bytes = new_memory_bytes.saturating_sub(&old_memory_bytes);
     let reservation_cycles = cycles_account_manager.storage_reservation_cycles(
         allocated_bytes,
         subnet_memory_saturation,
