@@ -42,7 +42,7 @@ ic-cdk-timers = { workspace = true }
 ic-crypto-getrandom-for-wasm = { path = "../../crypto/getrandom_for_wasm" }
 ic-crypto-sha2 = { path = "../../crypto/sha2/" }
 ic-ledger-core = { path = "../../ledger_suite/common/ledger_core" }
-ic-management-canister-types = { path = "../../types/management_canister_types" }
+ic-management-canister-types-private = { path = "../../types/management_canister_types" }
 ic-metrics-encoder = "1"
 ic-nervous-system-canisters = { path = "../../nervous_system/canisters" }
 ic-nervous-system-clients = { path = "../../nervous_system/clients" }

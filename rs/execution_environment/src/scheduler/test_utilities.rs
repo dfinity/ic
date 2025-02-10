@@ -25,7 +25,7 @@ use ic_interfaces::execution_environment::{
     SystemApiCallCounters, WasmExecutionOutput,
 };
 use ic_logger::{replica_logger::no_op_logger, ReplicaLogger};
-use ic_management_canister_types::{
+use ic_management_canister_types_private::{
     CanisterInstallMode, CanisterStatusType, InstallCodeArgs, MasterPublicKeyId, Method, Payload,
     IC_00,
 };

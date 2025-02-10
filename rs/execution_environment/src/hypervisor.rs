@@ -12,7 +12,7 @@ use ic_interfaces::execution_environment::{
 };
 use ic_interfaces_state_manager::StateReader;
 use ic_logger::ReplicaLogger;
-use ic_management_canister_types::LogVisibilityV2;
+use ic_management_canister_types_private::LogVisibilityV2;
 use ic_metrics::buckets::decimal_buckets_with_zero;
 use ic_metrics::{buckets::exponential_buckets, MetricsRegistry};
 use ic_registry_subnet_type::SubnetType;

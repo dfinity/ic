@@ -23,7 +23,7 @@ use ic_interfaces::execution_environment::{
     CanisterOutOfCyclesError, HypervisorError, IngressHistoryWriter, SubnetAvailableMemory,
 };
 use ic_logger::{error, fatal, info, ReplicaLogger};
-use ic_management_canister_types::{
+use ic_management_canister_types_private::{
     CanisterChangeDetails, CanisterChangeOrigin, CanisterInstallModeV2, CanisterSnapshotResponse,
     CanisterStatusResultV2, CanisterStatusType, ChunkHash, InstallChunkedCodeArgs,
     InstallCodeArgsV2, Method as Ic00Method, StoredChunksReply, UploadChunkReply,

@@ -1,7 +1,7 @@
 use assert_matches::assert_matches;
 use candid::{Decode, Encode};
 use ic_error_types::ErrorCode;
-use ic_management_canister_types::{self as ic00, EmptyBlob, Method, Payload};
+use ic_management_canister_types_private::{self as ic00, EmptyBlob, Method, Payload};
 use ic_replica_tests as utils;
 use ic_replica_tests::{assert_reply, install_universal_canister};
 use ic_replicated_state::{PageIndex, PageMap};

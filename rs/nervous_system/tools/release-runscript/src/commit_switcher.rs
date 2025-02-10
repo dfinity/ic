@@ -1,6 +1,7 @@
-use std::process::{Command, Stdio};
+use crate::utils::ic_dir;
 use anyhow::Result;
 use colored::*;
+use std::process::Command;
 
 /// Helper struct to switch branches, then switch back when dropped.
 pub(crate) struct CommitSwitcher {
@@ -29,7 +30,7 @@ impl CommitSwitcher {
 
         // stash if we have changes
         if has_changes {
-            println!("{}", format!("Stashing changes...").bright_blue());
+            println!("{}", "Stashing changes...".bright_blue());
             let stash = Command::new("git").current_dir(&ic).arg("stash").output()?;
             if !stash.status.success() {
                 return Err(

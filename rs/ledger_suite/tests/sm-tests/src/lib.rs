@@ -17,8 +17,8 @@ use ic_ledger_core::timestamp::TimeStamp;
 use ic_ledger_core::tokens::TokensType;
 use ic_ledger_core::Tokens;
 use ic_ledger_hash_of::HashOf;
-use ic_management_canister_types::CanisterSettingsArgsBuilder;
-use ic_management_canister_types::{
+use ic_management_canister_types_private::CanisterSettingsArgsBuilder;
+use ic_management_canister_types_private::{
     self as ic00, CanisterInfoRequest, CanisterInfoResponse, Method, Payload,
 };
 use ic_registry_subnet_type::SubnetType;

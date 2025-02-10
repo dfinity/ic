@@ -422,7 +422,7 @@ fn new_state_layout(log: ReplicaLogger) -> (TempDir, Time) {
         )
     });
     let fd_factory = Arc::new(TestPageAllocatorFileDescriptorImpl::new());
-    validate_checkpoint_and_remove_unverified_marker(
+    validate_and_finalize_checkpoint_and_remove_unverified_marker(
         &cp_layout,
         None,
         SubnetType::Application,
