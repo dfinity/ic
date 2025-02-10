@@ -1,7 +1,7 @@
 use candid::{Decode, Encode};
 use ic_base_types::{NumBytes, NumSeconds};
 use ic_error_types::{ErrorCode, RejectCode, UserError};
-use ic_management_canister_types::{
+use ic_management_canister_types_private::{
     self as ic00, BitcoinGetUtxosArgs, BitcoinNetwork, BoundedHttpHeaders, CanisterChange,
     CanisterHttpRequestArgs, CanisterIdRecord, CanisterStatusResultV2, CanisterStatusType,
     DerivationPath, EcdsaKeyId, EmptyBlob, FetchCanisterLogsRequest, HttpMethod, LogVisibilityV2,
@@ -173,7 +173,12 @@ fn sign_with_threshold_key_payload(method: Method, key_id: MasterPublicKeyId) ->
         .encode(),
         Method::VetKdDeriveEncryptedKey => ic00::VetKdDeriveEncryptedKeyArgs {
             derivation_id: vec![],
-            encryption_public_key: vec![],
+            encryption_public_key: [
+                // Generated via TransportSecretKey::from_seed(vec![0; 32]).unwrap().public_key()
+                178, 211, 206, 216, 102, 5, 127, 108, 175, 41, 31, 129, 99, 3, 1, 87, 24, 22, 102,
+                58, 81, 137, 170, 178, 61, 6, 208, 161, 20, 14, 134, 241, 34, 50, 176, 194, 32, 5,
+                19, 249, 66, 219, 9, 120, 165, 15, 9, 211,
+            ],
             derivation_path: DerivationPath::new(vec![]),
             key_id: into_inner_vetkd(key_id),
         }
@@ -2831,6 +2836,91 @@ fn replicated_query_can_accept_cycles() {
 }
 
 #[test]
+fn replicated_query_does_not_accept_cycles_on_trap() {
+    let mut test = ExecutionTestBuilder::new().with_manual_execution().build();
+    let initial_cycles = Cycles::new(1_000_000_000_000);
+    let a_id = test.universal_canister_with_cycles(initial_cycles).unwrap();
+    let b_id = test.universal_canister_with_cycles(initial_cycles).unwrap();
+    let transferred_cycles = Cycles::from(1_000_000u128);
+
+    // Canister B attempts to accept cycles in a replicated query. Should succeed.
+    let b_callback = wasm()
+        .accept_cycles(transferred_cycles)
+        .message_payload()
+        .append_and_reply()
+        .trap()
+        .build();
+
+    let a_payload = wasm()
+        .call_with_cycles(
+            b_id,
+            "query",
+            call_args().other_side(b_callback.clone()),
+            transferred_cycles,
+        )
+        .build();
+
+    let (message_id, _) = test.ingress_raw(a_id, "update", a_payload);
+
+    test.execute_message(a_id);
+    test.induct_messages();
+    test.execute_message(b_id);
+
+    let system_state = &mut test.canister_state_mut(b_id).system_state;
+
+    assert_eq!(1, system_state.queues().output_queues_len());
+    assert_eq!(1, system_state.queues().output_queues_message_count());
+
+    let message = system_state
+        .queues_mut()
+        .clone()
+        .pop_canister_output(&a_id)
+        .unwrap();
+
+    let reject_message = if let RequestOrResponse::Response(msg) = message {
+        assert_eq!(msg.originator, a_id);
+        assert_eq!(msg.respondent, b_id);
+        assert_eq!(msg.refund, transferred_cycles);
+        if let Payload::Reject(context) = msg.response_payload.clone() {
+            context.message().clone()
+        } else {
+            panic!("unexpected response: {:?}", msg);
+        }
+    } else {
+        panic!("unexpected message popped: {:?}", message);
+    };
+
+    test.induct_messages();
+    test.execute_message(a_id);
+
+    let ingress_state = test.ingress_state(&message_id);
+
+    if let IngressState::Completed(wasm_result) = ingress_state {
+        match wasm_result {
+            WasmResult::Reject(_) => (),
+            WasmResult::Reply(_) => panic!("expected reject"),
+        }
+    } else {
+        panic!("unexpected ingress state {:?}", ingress_state);
+    };
+
+    // Canister A does not lose `transferred_cycles` since B trapped after accepting.
+    assert_eq!(
+        test.canister_state(a_id).system_state.balance(),
+        initial_cycles
+            - test.canister_execution_cost(a_id)
+            - test.call_fee("query", &b_callback)
+            - test.reject_fee(reject_message)
+    );
+
+    // Canister B does not get any cycles.
+    assert_eq!(
+        test.canister_state(b_id).system_state.balance(),
+        initial_cycles - test.canister_execution_cost(b_id)
+    );
+}
+
+#[test]
 fn replicated_query_can_burn_cycles() {
     let mut test = ExecutionTestBuilder::new().with_manual_execution().build();
     let initial_cycles = Cycles::new(1_000_000_000_000);
@@ -2866,6 +2956,43 @@ fn replicated_query_can_burn_cycles() {
         .get(&CyclesUseCase::BurnedCycles)
         .unwrap();
     assert_eq!(burned_cycles, NominalCycles::from(cycles_to_burn));
+}
+
+#[test]
+fn replicated_query_does_not_burn_cycles_on_trap() {
+    let mut test = ExecutionTestBuilder::new().with_manual_execution().build();
+    let initial_cycles = Cycles::new(1_000_000_000_000);
+    let canister_id = test.universal_canister_with_cycles(initial_cycles).unwrap();
+    let cycles_to_burn = Cycles::new(10_000_000u128);
+
+    let payload = wasm().cycles_burn128(cycles_to_burn).reply().trap().build();
+    let (message_id, _) = test.ingress_raw(canister_id, "query", payload);
+    test.execute_message(canister_id);
+
+    let ingress_state = test.ingress_state(&message_id);
+    if let IngressState::Failed(user_error) = ingress_state {
+        assert_eq!(user_error.code(), ErrorCode::CanisterCalledTrap);
+        assert!(user_error
+            .description()
+            .contains("Canister called `ic0.trap`"),);
+    } else {
+        panic!("unexpected ingress state {:?}", ingress_state);
+    };
+
+    // Canister A only loses cycles due to executing but not `cycles_to_burn` (since it trapped)...
+    assert_eq!(
+        test.canister_state(canister_id).system_state.balance(),
+        initial_cycles - test.canister_execution_cost(canister_id)
+    );
+
+    // ...and no burned cycles are accounted for in the canister's metrics.
+    assert!(test
+        .canister_state(canister_id)
+        .system_state
+        .canister_metrics
+        .get_consumed_cycles_by_use_cases()
+        .get(&CyclesUseCase::BurnedCycles)
+        .is_none());
 }
 
 #[test]

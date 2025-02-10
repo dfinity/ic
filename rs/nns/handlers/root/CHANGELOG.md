@@ -10,5 +10,14 @@ here were moved from the adjacent `unreleased_changelog.md` file.
 
 INSERT NEW RELEASES HERE
 
+# 2025-02-03: Proposal 135064
+
+https://dashboard.internetcomputer.org/proposal/135064
+
+## Changed
+
+* The `LogVisibility` returned from `canister_status` has one more variant `allowed_viewers`,
+  consistent with the corresponding management canister API. Calling `canister_status` for a
+  canister with such a log visibility setting will no longer panic.
 
 END

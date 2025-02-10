@@ -3,8 +3,9 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-use bitcoin::{Block, BlockHash, BlockHeader, Network};
+use bitcoin::{block::Header as BlockHeader, Block, BlockHash, Network};
 use ic_metrics::MetricsRegistry;
+use static_assertions::const_assert_eq;
 use tokio::sync::mpsc::Sender;
 use tonic::Status;
 
@@ -21,12 +22,25 @@ use crate::{
 // for pagination on the replica side to work as expected.
 const MAX_RESPONSE_SIZE: usize = 2_000_000;
 
+// Lower than mainnet's response size. The main reason is large serialization time
+// for large blocks.
+const TESTNET4_MAX_RESPONSE_SIZE: usize = 1_000_000;
+
 // Max number of next block headers that can be returned in the `GetSuccessorsResponse`.
 const MAX_NEXT_BLOCK_HEADERS_LENGTH: usize = 100;
 
 // Max number of blocks that can be returned in the `GetSuccessorsResponse`.
 // We limit the number of blocks because serializing many blocks to pb can take some time.
 const MAX_BLOCKS_LENGTH: usize = 100;
+
+// The maximum number of get blocks requests that can be in-flight at any given time.
+const MAX_IN_FLIGHT_BLOCKS: usize = 100;
+
+// The maximum number of get blocks requests that can be in-flight at any given time.
+// The number of blocks outside of the main chain easily exceeds 100 currently on testnet4.
+// Setting this to 100 would prevent the adapter from making progress,
+// as it gets stuck on these blocks, whose requests timeout indefinitely.
+const TESTNET4_MAX_IN_FLIGHT_BLOCKS: usize = 1000;
 
 const BLOCK_HEADER_SIZE: usize = 80;
 
@@ -37,6 +51,14 @@ const MAX_NEXT_BYTES: usize = MAX_NEXT_BLOCK_HEADERS_LENGTH * BLOCK_HEADER_SIZE;
 // NOTE: This is a soft limit, and is only honored if there's > 1 blocks already in the response.
 // Having this as a soft limit as necessary to prevent large blocks from stalling consensus.
 const MAX_BLOCKS_BYTES: usize = MAX_RESPONSE_SIZE - MAX_NEXT_BYTES;
+
+const TESTNET4_MAX_BLOCKS_BYTES: usize = TESTNET4_MAX_RESPONSE_SIZE - MAX_NEXT_BYTES;
+
+const_assert_eq!(MAX_NEXT_BYTES + MAX_BLOCKS_BYTES, MAX_RESPONSE_SIZE);
+const_assert_eq!(
+    MAX_NEXT_BYTES + TESTNET4_MAX_BLOCKS_BYTES,
+    TESTNET4_MAX_RESPONSE_SIZE
+);
 
 // Max height for sending multiple blocks when connecting the Bitcoin mainnet.
 const MAINNET_MAX_MULTI_BLOCK_ANCHOR_HEIGHT: BlockHeight = 750_000;
@@ -52,7 +74,7 @@ pub struct GetSuccessorsRequest {
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub struct GetSuccessorsResponse {
     /// Blocks found in the block cache.
-    pub blocks: Vec<Block>,
+    pub blocks: Vec<Arc<Block>>,
     /// Next set of headers to be sent to the canister.
     pub next: Vec<BlockHeader>,
 }
@@ -96,7 +118,7 @@ impl GetSuccessorsHandler {
             .processed_block_hashes
             .observe(request.processed_block_hashes.len() as f64);
 
-        let response = {
+        let (blocks, next) = {
             let state = self.state.lock().unwrap();
             let anchor_height = state
                 .get_cached_header(&request.anchor)
@@ -108,25 +130,30 @@ impl GetSuccessorsHandler {
                 &request.anchor,
                 &request.processed_block_hashes,
                 allow_multiple_blocks,
+                self.network,
             );
             let next = get_next_headers(
                 &state,
                 &request.anchor,
                 &request.processed_block_hashes,
                 &blocks,
+                self.network,
             );
-            GetSuccessorsResponse { blocks, next }
+            (blocks, next)
+        };
+        let response_next = &next[..next.len().min(MAX_NEXT_BLOCK_HEADERS_LENGTH)];
+        let response = GetSuccessorsResponse {
+            blocks,
+            next: response_next.to_vec(),
         };
         self.metrics
             .response_blocks
             .observe(response.blocks.len() as f64);
 
-        if !response.next.is_empty() {
+        if !next.is_empty() {
             // TODO: better handling of full channel as the receivers are never closed.
             self.blockchain_manager_tx
-                .try_send(BlockchainManagerRequest::EnqueueNewBlocksToDownload(
-                    response.next.clone(),
-                ))
+                .try_send(BlockchainManagerRequest::EnqueueNewBlocksToDownload(next))
                 .ok();
         }
         // TODO: better handling of full channel as the receivers are never closed.
@@ -151,7 +178,8 @@ fn get_successor_blocks(
     anchor: &BlockHash,
     processed_block_hashes: &[BlockHash],
     allow_multiple_blocks: bool,
-) -> Vec<Block> {
+    network: Network,
+) -> Vec<Arc<Block>> {
     let seen: HashSet<BlockHash> = processed_block_hashes.iter().copied().collect();
 
     let mut successor_blocks = vec![];
@@ -162,15 +190,20 @@ fn get_successor_blocks(
         .map(|c| c.children.iter().collect())
         .unwrap_or_default();
 
+    let max_blocks_size = match network {
+        Network::Testnet4 => TESTNET4_MAX_BLOCKS_BYTES,
+        _ => MAX_BLOCKS_BYTES,
+    };
+
     // Compute the blocks by starting a breadth-first search.
     while let Some(block_hash) = queue.pop_front() {
         if !seen.contains(block_hash) {
             // Retrieve the block from the cache.
             match state.get_block(block_hash) {
                 Some(block) => {
-                    let block_size = block.size();
+                    let block_size = block.total_size();
                     if response_block_size == 0
-                        || (response_block_size + block_size <= MAX_BLOCKS_BYTES
+                        || (response_block_size + block_size <= max_blocks_size
                             && successor_blocks.len() < MAX_BLOCKS_LENGTH
                             && allow_multiple_blocks)
                     {
@@ -200,11 +233,15 @@ fn get_successor_blocks(
 }
 
 /// Get the next headers for blocks that may possibly be sent in upcoming GetSuccessor responses.
+/// This returns the first MAX_IN_FLIGHT_BLOCKS / TESTNET4_MAX_IN_FLIGHT_BLOCKS headers from the anchor in BFS fashion
+/// which are not in processed nor are they in the current response. Essentially representing the
+/// blocks that should be returned in the next response.
 fn get_next_headers(
     state: &BlockchainState,
     anchor: &BlockHash,
     processed_block_hashes: &[BlockHash],
-    blocks: &[Block],
+    blocks: &[Arc<Block>],
+    network: Network,
 ) -> Vec<BlockHeader> {
     let seen: HashSet<BlockHash> = processed_block_hashes
         .iter()
@@ -217,9 +254,14 @@ fn get_next_headers(
         .map(|c| c.children.iter().collect())
         .unwrap_or_default();
 
+    let max_in_flight_blocks = match network {
+        Network::Testnet4 => TESTNET4_MAX_IN_FLIGHT_BLOCKS,
+        _ => MAX_IN_FLIGHT_BLOCKS,
+    };
+
     let mut next_headers = vec![];
     while let Some(block_hash) = queue.pop_front() {
-        if next_headers.len() >= MAX_NEXT_BLOCK_HEADERS_LENGTH {
+        if next_headers.len() >= max_in_flight_blocks {
             break;
         }
 
@@ -237,7 +279,8 @@ fn get_next_headers(
 fn are_multiple_blocks_allowed(network: Network, anchor_height: BlockHeight) -> bool {
     match network {
         Network::Bitcoin => anchor_height <= MAINNET_MAX_MULTI_BLOCK_ANCHOR_HEIGHT,
-        Network::Testnet | Network::Signet | Network::Regtest => true,
+        Network::Testnet | Network::Signet | Network::Regtest | Network::Testnet4 => true,
+        other => unreachable!("Unsupported network: {:?}", other),
     }
 }
 
@@ -778,10 +821,5 @@ mod test {
             "Multiple blocks are allowed at {}",
             u32::MAX
         );
-    }
-
-    #[test]
-    fn response_size() {
-        assert_eq!(MAX_NEXT_BYTES + MAX_BLOCKS_BYTES, MAX_RESPONSE_SIZE);
     }
 }

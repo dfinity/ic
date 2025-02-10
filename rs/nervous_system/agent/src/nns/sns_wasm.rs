@@ -1,4 +1,5 @@
 use crate::sns::Sns;
+use crate::CallCanisters;
 use anyhow::anyhow;
 use ic_agent::Agent;
 use ic_nns_constants::SNS_WASM_CANISTER_ID;
@@ -12,8 +13,7 @@ use tokio::fs::File;
 use tokio::io::AsyncWriteExt;
 use tokio::io::BufWriter;
 use tokio::process::Command;
-
-use crate::CallCanisters;
+pub mod requests;
 
 pub async fn query_mainline_sns_upgrade_steps<C: CallCanisters>(
     agent: &C,

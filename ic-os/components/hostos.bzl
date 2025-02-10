@@ -19,6 +19,8 @@ component_files = {
     Label("hostos-scripts/monitoring/monitor-guestos.sh"): "/opt/ic/bin/monitor-guestos.sh",
     Label("hostos-scripts/monitoring/monitor-guestos.service"): "/etc/systemd/system/monitor-guestos.service",
     Label("hostos-scripts/monitoring/monitor-guestos.timer"): "/etc/systemd/system/monitor-guestos.timer",
+    Label("hostos-scripts/monitoring/custom-metrics.sh"): "/opt/ic/bin/custom-metrics.sh",
+    Label("hostos-scripts/monitoring/custom-metrics.service"): "/etc/systemd/system/custom-metrics.service",
     Label("hostos-scripts/monitoring/monitor-nvme.sh"): "/opt/ic/bin/monitor-nvme.sh",
     Label("hostos-scripts/monitoring/monitor-nvme.service"): "/etc/systemd/system/monitor-nvme.service",
     Label("hostos-scripts/monitoring/monitor-nvme.timer"): "/etc/systemd/system/monitor-nvme.timer",
@@ -85,12 +87,10 @@ component_files = {
     Label("networking/hosts"): "/etc/hosts",
 
     # ssh
-    Label("ssh/setup-ssh-keys/setup-ssh-keys.sh"): "/opt/ic/bin/setup-ssh-keys.sh",
-    Label("ssh/setup-ssh-keys/setup-ssh-keys.service"): "/etc/systemd/system/setup-ssh-keys.service",
-    Label("ssh/setup-ssh-account-keys/setup-ssh-account-keys.sh"): "/opt/ic/bin/setup-ssh-account-keys.sh",
-    Label("ssh/setup-ssh-account-keys/setup-ssh-account-keys.service"): "/etc/systemd/system/setup-ssh-account-keys.service",
-    Label("ssh/deploy-updated-ssh-account-keys/deploy-updated-ssh-account-keys.sh"): "/opt/ic/bin/deploy-updated-ssh-account-keys.sh",
-    Label("ssh/deploy-updated-ssh-account-keys/deploy-updated-ssh-account-keys.service"): "/etc/systemd/system/deploy-updated-ssh-account-keys.service",
+    Label("ssh/generate-host-ssh-keys/generate-host-ssh-keys.sh"): "/opt/ic/bin/generate-host-ssh-keys.sh",
+    Label("ssh/generate-host-ssh-keys/generate-host-ssh-keys.service"): "/etc/systemd/system/generate-host-ssh-keys.service",
+    Label("ssh/setup-ssh-user-keys/setup-ssh-user-keys.sh"): "/opt/ic/bin/setup-ssh-user-keys.sh",
+    Label("ssh/setup-ssh-user-keys/setup-ssh-user-keys.service"): "/etc/systemd/system/setup-ssh-user-keys.service",
 
     # upgrade
     Label("upgrade/manageboot/manageboot.sh"): "/opt/ic/bin/manageboot.sh",

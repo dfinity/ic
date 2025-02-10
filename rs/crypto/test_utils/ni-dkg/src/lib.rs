@@ -878,7 +878,11 @@ impl NiDkgTestEnvironment {
         let temp_crypto_builder = TempCryptoComponent::builder()
             .with_registry(Arc::clone(&self.registry) as Arc<_>)
             .with_node_id(node_id)
-            .with_keys(NodeKeysToGenerate::only_dkg_dealing_encryption_key())
+            .with_keys(NodeKeysToGenerate {
+                generate_node_signing_keys: true,
+                generate_dkg_dealing_encryption_keys: true,
+                ..NodeKeysToGenerate::none()
+            })
             .with_rng(ChaCha20Rng::from_seed(rng.gen()));
         let temp_crypto_builder = if use_remote_vault {
             temp_crypto_builder.with_remote_vault()
@@ -891,6 +895,11 @@ impl NiDkgTestEnvironment {
             .expect("Failed to retrieve node public keys")
             .dkg_dealing_encryption_public_key
             .expect("missing dkg_dealing_encryption_pk");
+        let node_signing_pubkey = temp_crypto
+            .current_node_public_keys()
+            .expect("Failed to retrieve node public keys")
+            .node_signing_public_key
+            .expect("missing dkg_dealing_encryption_pk");
         self.crypto_components.insert(node_id, temp_crypto);
 
         // Insert DKG dealing encryption public key into registry
@@ -901,6 +910,14 @@ impl NiDkgTestEnvironment {
                 Some(dkg_dealing_encryption_pubkey),
             )
             .expect("failed to add DKG dealing encryption key to registry");
+        // Insert node signing public key into registry
+        self.registry_data
+            .add(
+                &make_crypto_node_key(node_id, KeyPurpose::NodeSigning),
+                ni_dkg_config.registry_version(),
+                Some(node_signing_pubkey),
+            )
+            .expect("failed to add node signing public key to registry");
     }
 
     /// Cleans up nodes whose IDs are no longer in use

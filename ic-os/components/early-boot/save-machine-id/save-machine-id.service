@@ -1,7 +1,6 @@
 [Unit]
 Description=Save machine-id
-Requires=boot-config.mount
-After=boot-config.mount
+RequiresMountsFor=/boot/config
 
 [Install]
 WantedBy=multi-user.target

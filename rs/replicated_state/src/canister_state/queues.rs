@@ -15,7 +15,7 @@ use crate::replicated_state::MR_SYNTHETIC_REJECT_MESSAGE_MAX_LEN;
 use crate::{CanisterState, CheckpointLoadingMetrics, InputQueueType, InputSource, StateError};
 use ic_base_types::PrincipalId;
 use ic_error_types::RejectCode;
-use ic_management_canister_types::IC_00;
+use ic_management_canister_types_private::IC_00;
 use ic_protobuf::proxy::{try_from_option_field, ProxyDecodeError};
 use ic_protobuf::state::queues::v1 as pb_queues;
 use ic_protobuf::state::queues::v1::canister_queues::CanisterQueuePair;
@@ -152,6 +152,7 @@ pub struct CanisterQueues {
 
     /// Slot and memory reservation stats. Message count and size stats are
     /// maintained separately in the `MessagePool`.
+    #[validate_eq(CompareWithValidateEq)]
     queue_stats: QueueStats,
 
     /// Round-robin schedule for `pop_input()` across ingress, local subnet senders
@@ -352,7 +353,7 @@ impl From<RequestOrResponse> for CanisterInput {
 ///    whose responses have been shed.
 ///
 /// Implements the `MessageStore` trait for both inbound messages
-/// (`T = CanisterInput` items that are eiter pooled messages or compact
+/// (`T = CanisterInput` items that are either pooled messages or compact
 /// responses) and outbound messages (pooled `RequestOrResponse items`).
 #[derive(Clone, Eq, PartialEq, Debug, Default, ValidateEq)]
 struct MessageStoreImpl {
@@ -1123,7 +1124,7 @@ impl CanisterQueues {
         &mut self,
         request: Request,
         reject_context: RejectContext,
-        subnet_ids: &[PrincipalId],
+        subnet_ids: &BTreeSet<PrincipalId>,
     ) -> Result<(), StateError> {
         assert!(
             request.receiver == IC_00 || subnet_ids.contains(&request.receiver.get()),
@@ -1723,8 +1724,8 @@ fn generate_timeout_response(request: &Request) -> Response {
     }
 }
 
-/// Returns a function that determines the input queue type (local or remote) of
-/// a given sender, based on a the set of all local canisters, plus
+/// Returns a function that determines the input queue type (local or remote)
+/// of a given sender, based on the set of all local canisters, plus
 /// `own_canister_id` (since Rust's ownership rules would prevent us from
 /// mutating a canister's queues if they were still under `local_canisters`).
 fn input_queue_type_fn<'a>(
@@ -1896,7 +1897,7 @@ impl TryFrom<(pb_queues::CanisterQueues, &dyn CheckpointLoadingMetrics)> for Can
 ///
 /// Stats for the enqueued messages themselves (counts and sizes by kind,
 /// context and class) are tracked separately in `message_pool::MessageStats`.
-#[derive(Clone, Eq, PartialEq, Debug, Default)]
+#[derive(Clone, Eq, PartialEq, Debug, Default, ValidateEq)]
 struct QueueStats {
     /// Count of guaranteed response memory reservations across input and output
     /// queues. This is equivalent to the number of outstanding (inbound or outbound)

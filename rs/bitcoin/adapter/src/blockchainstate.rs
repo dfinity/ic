@@ -1,14 +1,16 @@
 //! The module is responsible for keeping track of the blockchain state.
 //!
 use crate::{common::BlockHeight, config::Config, metrics::BlockchainStateMetrics};
-use bitcoin::{blockdata::constants::genesis_block, Block, BlockHash, BlockHeader, Network};
+use bitcoin::{
+    block::Header as BlockHeader, blockdata::constants::genesis_block, Block, BlockHash, Network,
+};
+
 use ic_btc_validation::{validate_header, HeaderStore, ValidateHeaderError};
 use ic_metrics::MetricsRegistry;
-use std::collections::HashMap;
+use std::{collections::HashMap, sync::Arc};
 use thiserror::Error;
 
-/// This field contains the datatype used to store "work" of a Bitcoin blockchain
-pub type Work = bitcoin::util::uint::Uint256;
+use bitcoin::Work;
 
 /// Contains the necessary information about a tip.
 #[derive(Clone, Debug)]
@@ -92,7 +94,7 @@ pub struct BlockchainState {
     header_cache: HashMap<BlockHash, HeaderNode>,
 
     /// This field stores a hashmap containing BlockHash and the corresponding Block.
-    block_cache: HashMap<BlockHash, Block>,
+    block_cache: HashMap<BlockHash, Arc<Block>>,
 
     /// This field contains the known tips of the header cache.
     tips: Vec<Tip>,
@@ -238,7 +240,7 @@ impl BlockchainState {
             .add_header(block.header)
             .map_err(AddBlockError::Header)?;
         self.tips.sort_unstable_by(|a, b| b.work.cmp(&a.work));
-        self.block_cache.insert(block_hash, block);
+        self.block_cache.insert(block_hash, Arc::new(block));
         self.metrics
             .block_cache_size
             .set(self.get_block_cache_size() as i64);
@@ -315,10 +317,10 @@ impl BlockchainState {
         hashes
     }
 
-    /// This method takes a list of block hashes as input.
-    /// For each block hash, if the corresponding block is stored in the `block_cache`, the cached block is returned.
-    pub fn get_block(&self, block_hash: &BlockHash) -> Option<&Block> {
-        self.block_cache.get(block_hash)
+    /// This method takes a block hash
+    /// If the corresponding block is stored in the `block_cache`, the cached block is returned.
+    pub fn get_block(&self, block_hash: &BlockHash) -> Option<Arc<Block>> {
+        self.block_cache.get(block_hash).cloned()
     }
 
     /// Used when the adapter is shutdown and no longer requires holding on to blocks.
@@ -328,7 +330,9 @@ impl BlockchainState {
 
     /// Returns the current size of the block cache.
     pub fn get_block_cache_size(&self) -> usize {
-        self.block_cache.values().fold(0, |sum, b| b.size() + sum)
+        self.block_cache
+            .values()
+            .fold(0, |sum, b| b.total_size() + sum)
     }
 }
 
@@ -338,12 +342,12 @@ impl HeaderStore for BlockchainState {
             .map(|cached| (cached.header, cached.height))
     }
 
-    fn get_height(&self) -> BlockHeight {
-        self.get_active_chain_tip().height
-    }
-
     fn get_initial_hash(&self) -> BlockHash {
         self.genesis().block_hash()
+    }
+
+    fn get_height(&self) -> BlockHeight {
+        self.get_active_chain_tip().height
     }
 }
 
@@ -538,7 +542,7 @@ mod test {
         let initial_header = state.genesis();
         let mut chain = generate_headers(initial_header.block_hash(), initial_header.time, 16, &[]);
         let last_header = chain.get_mut(10).unwrap();
-        last_header.prev_blockhash = BlockHash::default();
+        last_header.prev_blockhash = BlockHash::from_raw_hash(bitcoin::hashes::Hash::all_zeros());
 
         let chain_hashes: Vec<BlockHash> = chain.iter().map(|header| header.block_hash()).collect();
         let last_hash = chain_hashes[10];
@@ -575,7 +579,8 @@ mod test {
         assert!(matches!(result, Ok(())));
 
         // Make a block 2's merkle root invalid and try to add the block to the cache.
-        block_2.header.merkle_root = TxMerkleNode::default();
+        block_2.header.merkle_root =
+            TxMerkleNode::from_raw_hash(bitcoin::hashes::Hash::all_zeros());
         // Block 2's hash will now be changed because of the merkle root change.
         let block_2_hash = block_2.block_hash();
         let result = state.add_block(block_2);
@@ -632,7 +637,7 @@ mod test {
         state.add_block(test_state.block_1.clone()).unwrap();
         state.add_block(test_state.block_2.clone()).unwrap();
 
-        let expected_cache_size = test_state.block_1.size() + test_state.block_2.size();
+        let expected_cache_size = test_state.block_1.total_size() + test_state.block_2.total_size();
         let block_cache_size = state.get_block_cache_size();
 
         assert_eq!(expected_cache_size, block_cache_size);
@@ -685,7 +690,7 @@ mod test {
 
     /// Test header store `get_header` function.
     #[test]
-    fn test_headerstore_get_header() {
+    fn test_headerstore_get_cached_header() {
         let config = ConfigBuilder::new().with_network(Network::Regtest).build();
         let mut state = BlockchainState::new(&config, &MetricsRegistry::default());
 
@@ -700,9 +705,10 @@ mod test {
             if h == 0 {
                 assert_eq!(state.get_initial_hash(), state.genesis().block_hash(),);
             } else {
+                let header_node = state.get_cached_header(&header.block_hash()).unwrap();
                 assert_eq!(
-                    state.get_header(&header.block_hash()).unwrap(),
-                    (chain[h], (h + 1) as u32),
+                    (header_node.header, header_node.height),
+                    (chain[h], (h + 1) as u32)
                 );
             }
         }
