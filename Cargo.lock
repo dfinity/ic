@@ -10332,6 +10332,7 @@ version = "0.9.0"
 dependencies = [
  "assert_matches",
  "candid",
+ "candid-utils",
  "canister-test",
  "cycles-minting-canister",
  "futures",
@@ -10393,6 +10394,7 @@ dependencies = [
  "rust_decimal_macros",
  "rustc-hash 1.1.0",
  "serde",
+ "store-canister-embedder",
  "tempfile",
  "tokio",
  "url",

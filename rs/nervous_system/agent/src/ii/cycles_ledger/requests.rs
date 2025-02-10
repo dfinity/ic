@@ -87,7 +87,7 @@ pub struct Account {
 
 impl Request for Account {
     fn method(&self) -> &'static str {
-        "0"
+        "icrc1_balance_of"
     }
 
     fn update(&self) -> bool {

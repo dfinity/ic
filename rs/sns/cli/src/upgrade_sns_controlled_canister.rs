@@ -1,6 +1,6 @@
 use crate::neuron_id_to_candid_subaccount::ParsedSnsNeuron;
 use anyhow::Result;
-use candid::{Encode, Nat};
+use candid::Nat;
 use candid_utils::{
     printing,
     validation::encode_upgrade_args_without_service,
@@ -12,11 +12,14 @@ use cycles_minting_canister::{CanisterSettingsArgs, SubnetSelection};
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_management_canister_types::{BoundedVec, CanisterInstallMode};
 use ic_nervous_system_agent::{
-    ii::cycles_ledger::{self, requests::CreateCanisterError},
+    ii::{
+        cycles_ledger::{self, requests::CreateCanisterError},
+        store::withdraw_cycles,
+    },
     management_canister::{self, delete_canister, requests::Mode, stop_canister},
     nns,
     sns::{self, governance::SubmittedProposal, root::SnsCanisters, Sns},
-    CallCanisters, CanisterInfo, Request,
+    CallCanisters, CanisterInfo,
 };
 use ic_sns_governance_api::pb::v1::{
     get_proposal_response,
@@ -544,8 +547,7 @@ pub async fn refund<C: CallCanisters>(
         CanisterId::unchecked_from_principal(store_canister_id),
         caller_principal,
     )
-    .await
-    .map_err(UpgradeSnsControlledCanisterError::Client)?;
+    .await;
     println!("✔️");
 
     print!("Deleting the store canister {} ... ", store_canister_id);
@@ -565,38 +567,6 @@ pub async fn refund<C: CallCanisters>(
     println!("✔️");
 
     Ok(amount_refunded)
-}
-
-#[derive(Clone, Eq, PartialEq, Debug)]
-pub struct WithdrawCyclesArg {
-    pub to: PrincipalId,
-}
-
-impl Request for WithdrawCyclesArg {
-    fn method(&self) -> &'static str {
-        "withdraw_cycles"
-    }
-
-    fn update(&self) -> bool {
-        true
-    }
-
-    fn payload(&self) -> Result<Vec<u8>, candid::Error> {
-        Encode!(&self.to)
-    }
-
-    type Response = Result<Nat, String>;
-}
-
-pub async fn withdraw_cycles<C: CallCanisters>(
-    agent: &C,
-    store_canister_id: CanisterId,
-    to: PrincipalId,
-) -> Result<Nat, String> {
-    agent
-        .call(store_canister_id, WithdrawCyclesArg { to })
-        .await
-        .expect("Cannot withdraw cycles")
 }
 
 fn format_full_hash(hash: &[u8]) -> String {

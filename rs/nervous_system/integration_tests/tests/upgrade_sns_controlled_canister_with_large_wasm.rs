@@ -73,6 +73,7 @@ async fn upgrade_sns_controlled_canister_with_large_wasm() {
         nns_installer.with_cycles_minting_canister();
         nns_installer.with_cycles_ledger();
         nns_installer.with_custom_registry_mutations(vec![initial_mutations]);
+        nns_installer.with_sns_frameowrk();
         nns_installer.install(&pocket_ic).await;
     }
 
@@ -247,7 +248,7 @@ async fn upgrade_sns_controlled_canister_with_large_wasm() {
     .await;
     // TODO: Consider strengthening these assertions.
     assert!(final_cycles_balance < original_cycles_balance);
-    assert!(final_cycles_balance > 0);
+    assert!(final_cycles_balance > candid::Nat::from(0_u64));
 
     // 8. Assert that store canister has been deleted.
     let err = canister_status(

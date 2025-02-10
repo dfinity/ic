@@ -329,6 +329,7 @@ pub struct NnsInstaller {
     initial_balances: Vec<(AccountIdentifier, Tokens)>,
     with_cycles_minting_canister: bool,
     with_cycles_ledger: bool,
+    with_sns_framework: bool,
 }
 
 impl NnsInstaller {
@@ -389,6 +390,11 @@ impl NnsInstaller {
         self
     }
 
+    pub fn with_sns_framework(&mut self) -> &mut Self {
+        self.with_sns_framework = true;
+        self
+    }
+
     /// Installs the NNS canister suite.
     ///
     /// Ensures that there is a whale neuron with `TEST_NEURON_1_ID`.
@@ -401,11 +407,6 @@ impl NnsInstaller {
             .mainnet_nns_canister_versions
             .expect("Please explicitly request either mainnet or tip-of-the-branch NNS version.");
 
-        let topology = pocket_ic.topology().await;
-
-        let sns_subnet_id = topology.get_sns().expect("No SNS subnet found");
-        let sns_subnet_id = SubnetId::from(PrincipalId::from(sns_subnet_id));
-
         let mut nns_init_payload_builder = NnsInitPayloadsBuilder::new();
 
         if let Some(custom_registry_mutations) = self.custom_registry_mutations {
@@ -415,13 +416,20 @@ impl NnsInstaller {
         }
 
         let maturity_equivalent_icp_e8s = 1_500_000 * E8;
-        nns_init_payload_builder
-            .with_test_neurons_fund_neurons_with_hotkeys(
-                self.neurons_fund_hotkeys,
-                maturity_equivalent_icp_e8s,
-            )
-            .with_sns_dedicated_subnets(vec![sns_subnet_id])
-            .with_sns_wasm_access_controls(true);
+        nns_init_payload_builder.with_test_neurons_fund_neurons_with_hotkeys(
+            self.neurons_fund_hotkeys,
+            maturity_equivalent_icp_e8s,
+        );
+
+        if self.with_sns_framework {
+            let topology = pocket_ic.topology().await;
+            let sns_subnet_id = topology.get_sns().expect("No SNS subnet found");
+            let sns_subnet_id = SubnetId::from(PrincipalId::from(sns_subnet_id));
+
+            nns_init_payload_builder
+                .with_sns_dedicated_subnets(vec![sns_subnet_id])
+                .with_sns_wasm_access_controls(true);
+        }
 
         for (test_user_icp_ledger_account, test_user_icp_ledger_initial_balance) in
             self.initial_balances
@@ -603,7 +611,7 @@ pub mod cycles_ledger {
     #[derive(Clone, Eq, PartialEq, Hash, Debug, CandidType)]
     struct CyclesLedgerInitArgs {
         pub index_id: Option<Principal>,
-        pub max_transactions_per_request: u64,
+        pub max_blocks_per_request: u64,
     }
 
     /// Argument taken by the Cycles Ledger canister.
@@ -614,7 +622,7 @@ pub mod cycles_ledger {
     /// (variant {
     ///     Init = record {
     ///         index_id : opt principal;
-    ///         max_transactions_per_request : nat64;
+    ///         max_blocks_per_request : nat64;
     ///     }
     /// })
     /// ```
@@ -630,7 +638,7 @@ pub mod cycles_ledger {
 
         let arg = Encode!(&CyclesLedgerArgs::Init(CyclesLedgerInitArgs {
             index_id: None,
-            max_transactions_per_request: 1000,
+            max_blocks_per_request: 1000,
         }))
         .unwrap();
 
@@ -667,7 +675,7 @@ pub mod cycles_ledger {
         let transfer_args = TransferArgs {
             memo: MEMO_MINT_CYCLES,
             amount,
-            fee: Tokens::from_e8s(10_000),
+            fee: DEFAULT_TRANSFER_FEE,
             from_subaccount: None,
             to: beneficiary_cmc_account.to_address(),
             created_at_time: None,
@@ -723,6 +731,8 @@ pub async fn install_nns_canisters(
     if let Some(custom_registry_mutations) = custom_registry_mutations {
         nns_installer.with_custom_registry_mutations(custom_registry_mutations);
     }
+
+    nns_installer.with_sns_framework();
 
     nns_installer.install(pocket_ic).await
 }

@@ -10,6 +10,7 @@ documentation.workspace = true
 [dependencies]
 assert_matches = { workspace = true }
 candid = { workspace = true }
+candid-utils = { path = "../candid_utils" }
 cycles-minting-canister = { path = "../../nns/cmc" }
 futures = { workspace = true }
 ic-base-types = { path = "../../types/base_types" }
@@ -39,6 +40,7 @@ pocket-ic = { path = "../../../packages/pocket-ic" }
 prost = { workspace = true }
 rust_decimal = "1.36.0"
 rust_decimal_macros = "1.36.0"
+store-canister-embedder = { path = "../store_canister" }
 tempfile = { workspace = true }
 tokio = { workspace = true }
 url = { workspace = true }
