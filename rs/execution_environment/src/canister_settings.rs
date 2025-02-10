@@ -7,7 +7,7 @@ use ic_types::{
     ComputeAllocation, Cycles, InvalidComputeAllocationError, InvalidMemoryAllocationError,
     MemoryAllocation, PrincipalId,
 };
-use num_traits::cast::ToPrimitive;
+use num_traits::{cast::ToPrimitive, SaturatingSub};
 use std::convert::TryFrom;
 
 use crate::canister_manager::CanisterManagerError;
@@ -531,12 +531,7 @@ pub(crate) fn validate_canister_settings(
         }
     }
 
-    let allocated_bytes = if new_memory_bytes > old_memory_bytes {
-        new_memory_bytes - old_memory_bytes
-    } else {
-        NumBytes::new(0)
-    };
-
+    let allocated_bytes = new_memory_bytes.saturating_sub(&old_memory_bytes);
     let reservation_cycles = cycles_account_manager.storage_reservation_cycles(
         allocated_bytes,
         subnet_memory_saturation,

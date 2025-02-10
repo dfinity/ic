@@ -162,6 +162,7 @@ pub mod governance_proto_builder;
 mod heap_governance_data;
 mod known_neuron_index;
 mod migrations;
+mod network_economics;
 mod neuron;
 pub mod neuron_data_validation;
 mod neuron_store;
