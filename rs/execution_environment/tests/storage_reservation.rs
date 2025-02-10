@@ -1,8 +1,8 @@
 use ic_config::execution_environment::Config as ExecutionConfig;
 use ic_config::subnet_config::SubnetConfig;
 use ic_error_types::ErrorCode;
-use ic_management_canister_types::TakeCanisterSnapshotArgs;
-use ic_management_canister_types::{self as ic00, CanisterInstallMode, EmptyBlob, Payload};
+use ic_management_canister_types_private::TakeCanisterSnapshotArgs;
+use ic_management_canister_types_private::{self as ic00, CanisterInstallMode, EmptyBlob, Payload};
 use ic_registry_subnet_type::SubnetType;
 use ic_state_machine_tests::{StateMachine, StateMachineBuilder, StateMachineConfig};
 use ic_test_utilities::universal_canister::{call_args, wasm, UNIVERSAL_CANISTER_WASM};

@@ -11,7 +11,7 @@ use crate::state::{lazy_call_ecdsa_public_key, mutate_state, read_state, TaskTyp
 use ethnum::u256;
 use ic_canister_log::log;
 use ic_ethereum_types::Address;
-use ic_management_canister_types::DerivationPath;
+use ic_management_canister_types_private::DerivationPath;
 use ic_secp256k1::RecoveryId;
 use minicbor::{Decode, Encode};
 use rlp::RlpStream;
