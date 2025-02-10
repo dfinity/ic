@@ -1,0 +1,9 @@
+type WithdrawResult = variant {
+  Ok : nat;
+  Error : text;
+};
+
+service: (authorized_principal : principal) -> {
+  withdraw_cycles : (to : principal) -> (WithdrawResult);
+  foo : () -> ();
+}

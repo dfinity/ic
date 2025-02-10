@@ -1,10 +1,13 @@
-use candid::types::{
-    subtype::{subtype_with_config, OptReport},
-    Type,
+use candid::{
+    pretty::candid::compile,
+    types::{
+        subtype::{subtype_with_config, OptReport},
+        Type,
+    },
 };
 use candid_parser::{
     parse_idl_args,
-    utils::{instantiate_candid, CandidSource},
+    utils::{instantiate_candid, merge_init_args, CandidSource},
 };
 
 fn fmt_type_vec(types: &[Type]) -> String {
@@ -77,6 +80,18 @@ impl std::fmt::Display for CandidServiceArgValidationError {
     }
 }
 
+/// Augments `candid_service` without with `candid_args`. If the service already has init args,
+/// then the exact same service is returned and `candid_args` is ignored.
+pub fn augment_candid_service(
+    candid_service: &str,
+    candid_args: &str,
+) -> Result<String, CandidServiceArgValidationError> {
+    let (env, actor) = merge_init_args(candid_service, candid_args)
+        .map_err(|err| CandidServiceArgValidationError::BadService(format!("{err:?}")))?;
+
+    Ok(compile(&env, &Some(actor)))
+}
+
 /// Checks whether `upgrade_args` is a valid argument sequence for `candid_service`.
 ///
 /// If `upgrade_args` is None, checks that `candid_service` does not require any arguments.
@@ -86,14 +101,14 @@ impl std::fmt::Display for CandidServiceArgValidationError {
 /// Returns the byte encoding of `upgrade_args` (if any; otherwise None) in the successful case.
 pub fn encode_upgrade_args(
     candid_service: String,
-    upgrade_args: Option<String>,
+    upgrade_args: &Option<String>,
 ) -> Result<Option<Vec<u8>>, CandidServiceArgValidationError> {
     let (expected_args_types, (env, _)) =
         instantiate_candid(CandidSource::Text(&candid_service))
             .map_err(|err| CandidServiceArgValidationError::BadService(format!("{err:?}")))?;
 
     let (upgrade_args, args_types) = if let Some(upgrade_args) = upgrade_args {
-        let upgrade_args = parse_idl_args(&upgrade_args)
+        let upgrade_args = parse_idl_args(upgrade_args)
             .map_err(|err| CandidServiceArgValidationError::ArgsParseError(format!("{err:?}")))?;
 
         let types = upgrade_args.get_types();
@@ -157,9 +172,9 @@ pub fn encode_upgrade_args(
 /// WARNING. Please use the [encode_upgrade_args] function instead. This function is only
 /// suitable for best-effort upgrades in which the Candid service is not available.
 pub fn encode_upgrade_args_without_service(
-    upgrade_args: String,
+    upgrade_args: &str,
 ) -> Result<Vec<u8>, CandidServiceArgValidationError> {
-    let upgrade_args = parse_idl_args(&upgrade_args)
+    let upgrade_args = parse_idl_args(upgrade_args)
         .map_err(|err| CandidServiceArgValidationError::ArgsParseError(format!("{err:?}")))?;
 
     let upgrade_args = upgrade_args.to_bytes().map_err(|err| {

@@ -1,0 +1,19 @@
+[package]
+name = "store-canister-embedder"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+ic-base-types = { path = "../../types/base_types" }
+
+[target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
+candid-utils = { path = "../candid_utils" }
+flate2 = { workspace = true }
+ic-wasm = { workspace = true }
+wasmprinter = { workspace = true }

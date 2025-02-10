@@ -137,7 +137,7 @@ fn test_candid_service_arg_validation() {
             )),
         ),
     ] {
-        let observed_result = encode_upgrade_args(candid_service.to_string(), upgrade_arg);
+        let observed_result = encode_upgrade_args(candid_service.to_string(), &upgrade_arg);
 
         match (observed_result, expected_result) {
             (Ok(_), Ok(())) => (),
