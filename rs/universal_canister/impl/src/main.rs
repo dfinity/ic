@@ -441,10 +441,6 @@ fn eval(ops_bytes: OpsBytes) {
                 }
                 std::hint::black_box(a);
             }
-            Ops::ReplicationFactor => {
-                let data = stack.pop_blob();
-                stack.push_int(api::replication_factor(&data))
-            }
             Ops::CostCall => {
                 let payload_size = stack.pop_int64();
                 let method_name_size = stack.pop_int64();
@@ -458,18 +454,36 @@ fn eval(ops_bytes: OpsBytes) {
             }
             Ops::CostSignWithEcdsa => {
                 let ecdsa_curve = stack.pop_int();
-                let data = stack.pop_blob();
-                stack.push_blob(api::cost_sign_with_ecdsa(&data, ecdsa_curve));
+                let key_name = stack.pop_blob();
+                match api::cost_sign_with_ecdsa(&key_name, ecdsa_curve) {
+                    Ok(bytes) => stack.push_blob(bytes),
+                    Err(err_code) => api::trap_with(&format!(
+                        "ic0.cost_sign_with_ecdsa failed with error code {}",
+                        err_code
+                    )),
+                }
             }
             Ops::CostSignWithSchnorr => {
                 let algorithm = stack.pop_int();
-                let data = stack.pop_blob();
-                stack.push_blob(api::cost_sign_with_schnorr(&data, algorithm));
+                let key_name = stack.pop_blob();
+                match api::cost_sign_with_schnorr(&key_name, algorithm) {
+                    Ok(bytes) => stack.push_blob(bytes),
+                    Err(err_code) => api::trap_with(&format!(
+                        "ic0.cost_sign_with_schnorr failed with error code {}",
+                        err_code
+                    )),
+                }
             }
             Ops::CostVetkdDeriveEncryptedKey => {
                 let vetkd_curve = stack.pop_int();
-                let data = stack.pop_blob();
-                stack.push_blob(api::cost_vetkd_derive_encrypted_key(&data, vetkd_curve));
+                let key_name = stack.pop_blob();
+                match api::cost_vetkd_derive_encrypted_key(&key_name, vetkd_curve) {
+                    Ok(bytes) => stack.push_blob(bytes),
+                    Err(err_code) => api::trap_with(&format!(
+                        "ic0.cost_vetkd_derive_encrypted_key failed with error code {}",
+                        err_code
+                    )),
+                }
             }
         }
     }

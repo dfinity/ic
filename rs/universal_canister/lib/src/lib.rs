@@ -658,12 +658,6 @@ impl PayloadBuilder {
         self
     }
 
-    pub fn replication_factor(mut self, data: &[u8]) -> Self {
-        self = self.push_bytes(data);
-        self.0.push(Ops::ReplicationFactor as u8);
-        self
-    }
-
     pub fn cost_call(mut self, method_name_size: u64, payload_size: u64) -> Self {
         self = self.push_int64(method_name_size);
         self = self.push_int64(payload_size);

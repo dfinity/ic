@@ -119,6 +119,5 @@ try_from_u8!(
         CostSignWithEcdsa = 89,
         CostSignWithSchnorr = 90,
         CostVetkdDeriveEncryptedKey = 91,
-        ReplicationFactor = 92,
     }
 );
