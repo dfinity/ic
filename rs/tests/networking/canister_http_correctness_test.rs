@@ -39,7 +39,7 @@ use ic_system_test_driver::{
         test_env_api::{HasTopologySnapshot, IcNodeContainer},
     },
     systest,
-    util::block_on,
+    util::{block_on, get_app_subnet_and_node},
 };
 use ic_test_utilities::cycles_account_manager::CyclesAccountManagerBuilder;
 use ic_test_utilities_types::messages::RequestBuilder;
@@ -85,15 +85,8 @@ impl<'a> Handlers<'a> {
     }
 
     async fn agent(&self) -> Agent {
-        let app_node = self
-            .env
-            .topology_snapshot()
-            .subnets()
-            .find(|s| s.subnet_type() == SubnetType::Application)
-            .expect("there is an application subnet")
-            .nodes()
-            .next()
-            .expect("there is a node on the subnet.");
+        let topology_snapshot = self.env.topology_snapshot();
+        let (_, app_node) = get_app_subnet_and_node(&topology_snapshot);
 
         app_node.build_canister_agent().await.agent
     }
@@ -1653,6 +1646,7 @@ fn assert_distinct_headers(http_response: &RemoteHttpResponse) {
 
 /// Assert that content-length header matches the body length, and that the headers are distinct.
 fn assert_http_response(
+    // http_request: &CanisterHttpRequestArgs,
     http_response: &RemoteHttpResponse,
 ) {
     assert_distinct_headers(http_response);
@@ -1786,7 +1780,7 @@ where
         .call_and_wait()
         .await
         .map_err(|agent_error| match agent_error {
-            AgentError::CertifiedReject(response) => {
+            AgentError::CertifiedReject(response) | AgentError::UncertifiedReject(response) => {
                 response
             }
             _ => panic!("Unexpected error: {:?}", agent_error),
