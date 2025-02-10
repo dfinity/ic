@@ -8,6 +8,7 @@ thread_local! {
     pub static GET_UTXOS_CLIENT_CALLS: Cell<u64> = Cell::default();
     pub static GET_UTXOS_MINTER_CALLS: Cell<u64> = Cell::default();
     pub static UPDATE_CALL_LATENCY: RefCell<BTreeMap<usize,LatencyHistogram>> = RefCell::default();
+    pub static GET_UTXOS_CALL_LATENCY: RefCell<BTreeMap<(usize, String),LatencyHistogram>> = RefCell::default();
 }
 
 pub(crate) const BUCKETS_MS: [u64; 7] = [500, 1_000, 2_000, 4_000, 8_000, 16_000, 32_000];
@@ -53,11 +54,26 @@ impl LatencyHistogram {
     }
 }
 
-pub fn observe_latency(num_utxos: usize, start_ns: u64, end_ns: u64) {
+pub fn observe_get_utxos_latency(
+    num_utxos: usize,
+    call_source: String,
+    start_ns: u64,
+    end_ns: u64,
+) {
+    let duration = Duration::from_nanos(end_ns.saturating_sub(start_ns));
+    GET_UTXOS_CALL_LATENCY.with_borrow_mut(|metrics| {
+        metrics
+            .entry((num_utxos, call_source))
+            .or_default()
+            .observe_latency(duration)
+    });
+}
+
+pub fn observe_update_call_latency(num_new_utxos: usize, start_ns: u64, end_ns: u64) {
     let duration = Duration::from_nanos(end_ns.saturating_sub(start_ns));
     UPDATE_CALL_LATENCY.with_borrow_mut(|metrics| {
         metrics
-            .entry(num_utxos)
+            .entry(num_new_utxos)
             .or_default()
             .observe_latency(duration)
     });
@@ -280,6 +296,25 @@ pub fn encode_metrics(
         for (num_new_utxos, histogram) in histograms {
             histogram_vec = histogram_vec.histogram(
                 &[("num_new_utxos", &num_new_utxos.to_string())],
+                histogram.iter(),
+                histogram.sum() as f64,
+            )?;
+        }
+        Ok(())
+    })?;
+
+    let mut histogram_vec = metrics.histogram_vec(
+        "ckbtc_minter_get_utxos_latency",
+        "The latency of ckBTC minter `get_utxos` calls in milliseconds.",
+    )?;
+
+    GET_UTXOS_CALL_LATENCY.with_borrow(|histograms| -> Result<(), Error> {
+        for ((num_utxos, call_source), histogram) in histograms {
+            histogram_vec = histogram_vec.histogram(
+                &[
+                    ("num_utxos", &num_utxos.to_string()),
+                    ("call_source", &call_source.to_string()),
+                ],
                 histogram.iter(),
                 histogram.sum() as f64,
             )?;

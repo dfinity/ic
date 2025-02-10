@@ -1,5 +1,6 @@
 //! This module contains async functions for interacting with the management canister.
 use crate::logs::P0;
+use crate::metrics::observe_get_utxos_latency;
 use crate::ECDSAPublicKey;
 use crate::{tx, CanisterRuntime};
 use candid::{CandidType, Principal};
@@ -136,12 +137,21 @@ where
     }
 }
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
 pub enum CallSource {
     /// The client initiated the call.
     Client,
     /// The minter initiated the call for internal bookkeeping.
     Minter,
+}
+
+impl fmt::Display for CallSource {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Self::Client => write!(f, "client"),
+            Self::Minter => write!(f, "minter"),
+        }
+    }
 }
 
 /// Fetches the full list of UTXOs for the specified address.
@@ -164,6 +174,9 @@ pub async fn get_utxos<R: CanisterRuntime>(
         .with(|cell| cell.set(cell.get() + 1));
         runtime.bitcoin_get_utxos(req).await
     }
+
+    // Record start time of method execution for metrics
+    let start_time = runtime.time();
 
     let mut response = bitcoin_get_utxos(
         GetUtxosRequest {
@@ -193,6 +206,8 @@ pub async fn get_utxos<R: CanisterRuntime>(
 
         utxos.append(&mut response.utxos);
     }
+
+    observe_get_utxos_latency(utxos.len(), source.to_string(), start_time, runtime.time());
 
     response.utxos = utxos;
 
