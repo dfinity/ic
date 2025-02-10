@@ -113,8 +113,7 @@ jobs:
         --privileged --cgroupns host
         -v /cache:/cache -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp
     timeout-minutes: 150
-    # always run after 'system-tests-k8s' job only on manual dispatch and schedule
-    if: ${{ always() && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') }}
+    if: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' }}
     needs: [system-tests-k8s]
     steps:
       - name: Checkout
