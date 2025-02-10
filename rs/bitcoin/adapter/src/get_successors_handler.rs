@@ -205,6 +205,12 @@ fn get_successor_blocks(
         _ => MAX_BLOCKS_BYTES,
     };
 
+    let max_blocks_length = if allow_multiple_blocks {
+        MAX_BLOCKS_LENGTH
+    } else {
+        1
+    };
+
     // Compute the blocks by starting a breadth-first search.
     while let Some(block_hash) = queue.pop_front() {
         if !seen.contains(block_hash) {
@@ -215,13 +221,16 @@ fn get_successor_blocks(
                 continue;
             };
             let block_size = block.total_size();
-            // If the response is full, we exit.
-            if !(response_block_size == 0
-                || (response_block_size + block_size <= max_blocks_size
-                    && successor_blocks.len() < MAX_BLOCKS_LENGTH
-                    && allow_multiple_blocks))
-            {
-                break;
+            // If we have at least one block in the response, and we can't fit another block, we stop.
+            if response_block_size > 0 {
+                // Bytes are full
+                if response_block_size + block_size > max_blocks_size {
+                    break;
+                }
+                // Blocks count is full
+                if successor_blocks.len() + 1 > max_blocks_length {
+                    break;
+                }
             }
             successor_blocks.push(block.clone());
             response_block_size += block_size;
