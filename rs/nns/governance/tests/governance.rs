@@ -183,7 +183,7 @@ fn check_proposal_status_after_voting_and_after_expiration_new(
         .set_economics(NetworkEconomics {
             reject_cost_e8s: 0,          // It's the default, but specify for emphasis
             neuron_minimum_stake_e8s: 0, // It's the default, but specify for emphasis
-            ..NetworkEconomics::default()
+            ..NetworkEconomics::with_default_values()
         })
         .add_neurons(neurons.into_iter().zip(0_u64..))
         .create();
@@ -573,6 +573,12 @@ fn test_single_neuron_proposal_new() {
                         ),
                     ),
             ]),
+            NNSStateChange::LatestGcNumProposals(
+                comparable::UsizeChange(
+                    0,
+                    1,
+                ),
+            ),
         ])
     );
 }
@@ -596,7 +602,7 @@ fn check_proposal_status_after_voting_and_after_expiration(
     let network_economics = NetworkEconomics {
         reject_cost_e8s: 0,          // It's the default, but specify for emphasis
         neuron_minimum_stake_e8s: 0, // It's the default, but specify for emphasis
-        ..NetworkEconomics::default()
+        ..NetworkEconomics::with_default_values()
     };
     let mut fake_driver = fake::FakeDriver::default();
 
@@ -1011,9 +1017,9 @@ async fn test_cascade_following_new() {
             &Proposal {
                 title: Some("A Reasonable Title".to_string()),
                 summary: "test".to_string(),
-                action: Some(proposal::Action::ManageNetworkEconomics(NetworkEconomics {
-                    ..Default::default()
-                })),
+                action: Some(proposal::Action::ManageNetworkEconomics(
+                    NetworkEconomics::with_default_values(),
+                )),
                 ..Default::default()
             },
         )
@@ -1098,9 +1104,9 @@ async fn test_cascade_following_new() {
                             )),
                             ProposalChange::Action(OptionChange::Different(
                                 None,
-                                Some(ActionDesc::ManageNetworkEconomics(NetworkEconomics {
-                                    ..Default::default()
-                                })),
+                                Some(ActionDesc::ManageNetworkEconomics(
+                                    NetworkEconomics::with_default_values()
+                                )),
                             )),
                         ]),
                     )),
@@ -3153,7 +3159,13 @@ fn fixture_two_neurons_second_is_bigger() -> GovernanceProto {
         },
     ];
 
-    GovernanceProtoBuilder::new().with_neurons(neurons).build()
+    let mut result = GovernanceProtoBuilder::new().with_neurons(neurons).build();
+    result
+        .economics
+        .as_mut()
+        .unwrap()
+        .max_proposals_to_keep_per_topic = 999;
+    result
 }
 
 #[tokio::test]
