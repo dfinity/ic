@@ -252,7 +252,6 @@ impl InternetComputer {
             let tnet = TNet::read_attribute(env)
                 .image_url(image_url.as_ref())
                 .image_sha(image_sha.as_ref());
-            //block_on(tnet.deploy_guestos_image()).expect("failed to deploy guestos image");
             tnet.write_attribute(env);
         }
 
