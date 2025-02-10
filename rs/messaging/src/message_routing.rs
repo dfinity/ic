@@ -628,6 +628,7 @@ pub(crate) type NodePublicKeys = BTreeMap<NodeId, Vec<u8>>;
 pub(crate) type ApiBoundaryNodes = BTreeMap<NodeId, ApiBoundaryNodeEntry>;
 
 impl BatchProcessorImpl {
+    #[allow(clippy::too_many_arguments)]
     fn new(
         state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
         certified_stream_store: Arc<dyn CertifiedStreamStore>,
