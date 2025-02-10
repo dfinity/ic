@@ -115,7 +115,7 @@ async fn main() {
         .try_get_metric::<u64>(SALT_METRIC)
         .await
         .unwrap();
-    assert_eq!(last_salt_id_upgraded, salt_id_start_month);
+    assert_eq!(last_salt_id_upgraded, salt_id_1);
     let canister_upgrade_time_2 = metrics_extractor
         .try_get_metric::<u64>(UPGRADE_METRIC)
         .await
