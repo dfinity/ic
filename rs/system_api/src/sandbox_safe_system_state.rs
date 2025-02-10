@@ -9,7 +9,7 @@ use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_interfaces::execution_environment::{HypervisorError, HypervisorResult};
 use ic_limits::{LOG_CANISTER_OPERATION_CYCLES_THRESHOLD, SMALL_APP_SUBNET_MAX_SIZE};
 use ic_logger::{info, ReplicaLogger};
-use ic_management_canister_types::{
+use ic_management_canister_types_private::{
     CanisterStatusType, CreateCanisterArgs, InstallChunkedCodeArgs, InstallCodeArgsV2,
     LoadCanisterSnapshotArgs, Method as Ic00Method, Payload,
     ProvisionalCreateCanisterWithCyclesArgs, UninstallCodeArgs, UpdateSettingsArgs, IC_00,

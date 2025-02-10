@@ -1,5 +1,5 @@
 use crate::{
-    checkpoint::validate_checkpoint_and_remove_unverified_marker,
+    checkpoint::validate_and_finalize_checkpoint_and_remove_unverified_marker,
     compute_bundled_manifest, release_lock_and_persist_metadata,
     state_sync::types::{
         FILE_GROUP_CHUNK_ID_OFFSET, MANIFEST_CHUNK_ID_OFFSET, MAX_SUPPORTED_STATE_SYNC_VERSION,
@@ -108,7 +108,7 @@ pub(crate) enum TipRequest {
     },
     /// Validate the checkpointed state is valid and identical to the execution state.
     /// Crash if diverges.
-    ValidateReplicatedState {
+    ValidateReplicatedStateAndFinalize {
         checkpoint_layout: CheckpointLayout<ReadOnly>,
         reference_state: Arc<ReplicatedState>,
         own_subnet_type: SubnetType,
@@ -189,18 +189,8 @@ pub(crate) fn spawn_tip_thread(
                                     continue;
                                 }
                                 Ok(tip) => {
-                                    if let Err(err) = tip.create_unverified_checkpoint_marker() {
-                                        sender
-                                            .send(Err(err))
-                                            .expect("Failed to return TipToCheckpoint error");
-                                        continue;
-                                    }
-
-                                    let cp_or_err = state_layout.scratchpad_to_checkpoint(
-                                        tip,
-                                        height,
-                                        Some(&mut thread_pool),
-                                    );
+                                    let cp_or_err = state_layout
+                                        .promote_scratchpad_to_unverified_checkpoint(tip, height);
                                     match cp_or_err {
                                         Err(err) => {
                                             sender
@@ -392,21 +382,23 @@ pub(crate) fn spawn_tip_thread(
                             have_latest_manifest = true;
                         }
 
-                        TipRequest::ValidateReplicatedState {
+                        TipRequest::ValidateReplicatedStateAndFinalize {
                             checkpoint_layout,
                             reference_state,
                             own_subnet_type,
                             fd_factory,
                         } => {
                             let _timer = request_timer(&metrics, "validate_replicated_state");
-                            if let Err(err) = validate_checkpoint_and_remove_unverified_marker(
-                                &checkpoint_layout,
-                                Some(reference_state.deref()),
-                                own_subnet_type,
-                                Arc::clone(&fd_factory),
-                                &metrics.checkpoint_metrics,
-                                Some(&mut thread_pool),
-                            ) {
+                            if let Err(err) =
+                                validate_and_finalize_checkpoint_and_remove_unverified_marker(
+                                    &checkpoint_layout,
+                                    Some(reference_state.deref()),
+                                    own_subnet_type,
+                                    Arc::clone(&fd_factory),
+                                    &metrics.checkpoint_metrics,
+                                    Some(&mut thread_pool),
+                                )
+                            {
                                 fatal!(
                                     &log,
                                     "Checkpoint validation for {} has failed: {:#}",
@@ -1278,9 +1270,8 @@ mod test {
             let tip = tip_handler.tip(height).unwrap();
 
             // Create a marker in the tip and promote it to a checkpoint.
-            tip.create_unverified_checkpoint_marker().unwrap();
             let checkpoint_layout = state_layout
-                .scratchpad_to_checkpoint(tip, height, None)
+                .promote_scratchpad_to_unverified_checkpoint(tip, height)
                 .unwrap();
 
             let dummy_states = Arc::new(parking_lot::RwLock::new(SharedState {

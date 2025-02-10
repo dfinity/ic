@@ -1,7 +1,6 @@
 [Unit]
 Description=Monitor and expand ic data storage logical volume
-Requires=var-lib-ic-data.mount
-After=var-lib-ic-data.mount
+RequiresMountsFor=/var/lib/ic/data
 
 [Service]
 Type=simple

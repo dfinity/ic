@@ -46,7 +46,7 @@ use ic_consensus_system_test_utils::{
 use ic_consensus_threshold_sig_system_test_utils::{
     create_new_subnet_with_keys, make_key_ids_for_all_schemes, run_chain_key_signature_test,
 };
-use ic_management_canister_types::MasterPublicKeyId;
+use ic_management_canister_types_private::MasterPublicKeyId;
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_protobuf::types::v1 as pb;
 use ic_recovery::{

@@ -97,7 +97,7 @@ pub(crate) fn make_unvalidated_checkpoint(
     Ok((cp, has_downgrade))
 }
 
-pub(crate) fn validate_checkpoint_and_remove_unverified_marker(
+pub(crate) fn validate_and_finalize_checkpoint_and_remove_unverified_marker(
     checkpoint_layout: &CheckpointLayout<ReadOnly>,
     reference_state: Option<&ReplicatedState>,
     own_subnet_type: SubnetType,
@@ -117,13 +117,13 @@ pub(crate) fn validate_checkpoint_and_remove_unverified_marker(
             checkpoint_layout,
             reference_state,
             own_subnet_type,
-            thread_pool,
+            &mut thread_pool,
             fd_factory,
             metrics,
         );
     }
     checkpoint_layout
-        .remove_unverified_checkpoint_marker()
+        .finalize_and_remove_unverified_marker(thread_pool)
         .map_err(CheckpointError::from)?;
     Ok(())
 }
@@ -146,7 +146,8 @@ pub fn load_checkpoint_and_validate_parallel(
         Some(&mut thread_pool),
         Arc::clone(&fd_factory),
     )?;
-    validate_checkpoint_and_remove_unverified_marker(
+
+    validate_and_finalize_checkpoint_and_remove_unverified_marker(
         checkpoint_layout,
         None,
         own_subnet_type,
@@ -411,7 +412,7 @@ pub fn validate_eq_checkpoint(
     checkpoint_layout: &CheckpointLayout<ReadOnly>,
     reference_state: &ReplicatedState,
     own_subnet_type: SubnetType,
-    thread_pool: Option<&mut scoped_threadpool::Pool>,
+    thread_pool: &mut Option<&mut scoped_threadpool::Pool>,
     fd_factory: Arc<dyn PageAllocatorFileDescriptor>, //
     metrics: &CheckpointMetrics, // Make optional in the loader & don't provide?
 ) {
@@ -438,7 +439,7 @@ fn validate_eq_checkpoint_internal(
     checkpoint_layout: &CheckpointLayout<ReadOnly>,
     reference_state: &ReplicatedState,
     own_subnet_type: SubnetType,
-    mut thread_pool: Option<&mut scoped_threadpool::Pool>,
+    thread_pool: &mut Option<&mut scoped_threadpool::Pool>,
     fd_factory: Arc<dyn PageAllocatorFileDescriptor>, //
     metrics: &CheckpointMetrics, // Make optional in the loader & don't provide?
 ) -> Result<(), String> {
@@ -458,7 +459,7 @@ fn validate_eq_checkpoint_internal(
         fd_factory,
     };
 
-    checkpoint_loader.validate_eq_canister_states(&mut thread_pool, canister_states)?;
+    checkpoint_loader.validate_eq_canister_states(thread_pool, canister_states)?;
     checkpoint_loader
         .load_system_metadata()
         .map_err(|err| format!("Failed to load system metadata: {}", err))?
@@ -473,7 +474,7 @@ fn validate_eq_checkpoint_internal(
     if !consensus_queue.is_empty() {
         return Err("consensus_queue is not empty".to_string());
     }
-    checkpoint_loader.validate_eq_canister_snapshots(&mut thread_pool, canister_snapshots)
+    checkpoint_loader.validate_eq_canister_snapshots(thread_pool, canister_snapshots)
 }
 
 #[derive(Default)]
