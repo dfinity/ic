@@ -4,7 +4,7 @@ use candid::{CandidType, Encode, Principal};
 use ic_base_types::PrincipalId;
 use ic_canister_log::log;
 use ic_cdk::api::call::RejectionCode;
-use ic_management_canister_types::{
+use ic_management_canister_types_private::{
     CanisterIdRecord, CanisterInstallMode, CanisterSettingsArgsBuilder, CreateCanisterArgs,
     InstallCodeArgs,
 };

@@ -4,7 +4,7 @@ mod errors;
 pub use errors::{CanisterBacktrace, CanisterOutOfCyclesError, HypervisorError, TrapCode};
 use ic_base_types::NumBytes;
 use ic_error_types::UserError;
-use ic_management_canister_types::MasterPublicKeyId;
+use ic_management_canister_types_private::MasterPublicKeyId;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_subnet_type::SubnetType;
 use ic_sys::{PageBytes, PageIndex};
@@ -1191,13 +1191,6 @@ pub trait SystemApi {
         heap: &mut [u8],
     ) -> HypervisorResult<()>;
 
-    /// Returns the replication factor of the provided subnet.
-    ///
-    /// Traps if `src`/`size` are not a valid encoding of a principal, or if
-    /// the principal is not a subnet.
-    fn ic0_replication_factor(&self, src: usize, size: usize, heap: &[u8])
-        -> HypervisorResult<u32>;
-
     /// This system call indicates the cycle cost of an inter-canister call,
     /// i.e., `ic0.call_perform`.
     ///
@@ -1254,7 +1247,7 @@ pub trait SystemApi {
         curve: u32,
         dst: usize,
         heap: &mut [u8],
-    ) -> HypervisorResult<()>;
+    ) -> HypervisorResult<u32>;
 
     /// This system call indicates the cycle cost of signing with schnorr,
     /// i.e., the management canister's `sign_with_schnorr` for the key
@@ -1271,7 +1264,7 @@ pub trait SystemApi {
         algorithm: u32,
         dst: usize,
         heap: &mut [u8],
-    ) -> HypervisorResult<()>;
+    ) -> HypervisorResult<u32>;
 
     /// This system call indicates the cycle cost of threshold key derivation,
     /// i.e., the management canister's `vetkd_derive_encrypted_key` for the key
@@ -1288,7 +1281,7 @@ pub trait SystemApi {
         curve: u32,
         dst: usize,
         heap: &mut [u8],
-    ) -> HypervisorResult<()>;
+    ) -> HypervisorResult<u32>;
 
     /// Used to look up the size of the subnet Id of the calling canister.
     fn ic0_subnet_self_size(&self) -> HypervisorResult<usize>;

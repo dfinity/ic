@@ -186,8 +186,6 @@ pub enum HypervisorError {
         bytes: NumBytes,
         limit: NumBytes,
     },
-    /// A user-specified Principal was not a valid subnet.
-    SubnetNotFound,
 }
 
 impl From<WasmInstrumentationError> for HypervisorError {
@@ -211,9 +209,6 @@ impl From<WasmEngineError> for HypervisorError {
 impl std::fmt::Display for HypervisorError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::SubnetNotFound => {
-                write!(f, "User-specified Principal was not a valid subnet.")
-            }
             Self::FunctionNotFound(table_idx, func_idx) => write!(
                 f,
                 "Canister requested to invoke a non-existent Wasm function {} from table {}",
@@ -406,10 +401,6 @@ impl AsErrorHelp for HypervisorError {
             Self::FunctionNotFound(_, _)
             | Self::ToolchainContractViolation { .. }
             | Self::InvalidPrincipalId(_) => ErrorHelp::ToolchainError,
-            Self::SubnetNotFound => ErrorHelp::UserError {
-                suggestion: "Check the provided principal (not a subnet).".to_string(),
-                doc_link: doc_ref(""),
-            },
             Self::MethodNotFound(_) => ErrorHelp::UserError {
                 suggestion: "Check that the method being called is exported by \
                 the target canister."
@@ -525,7 +516,6 @@ impl HypervisorError {
         };
 
         let code = match self {
-            Self::SubnetNotFound => E::SubnetNotFound,
             Self::FunctionNotFound(_, _) => E::CanisterFunctionNotFound,
             Self::MethodNotFound(_) => E::CanisterMethodNotFound,
             Self::ToolchainContractViolation { .. } => E::CanisterContractViolation,
@@ -567,7 +557,6 @@ impl HypervisorError {
     /// e.g. as a metric label.
     pub fn as_str(&self) -> &'static str {
         match self {
-            HypervisorError::SubnetNotFound => "SubnetNotFound",
             HypervisorError::FunctionNotFound(..) => "FunctionNotFound",
             HypervisorError::MethodNotFound(_) => "MethodNotFound",
             HypervisorError::ToolchainContractViolation { .. } => "ToolchainContractViolation",
