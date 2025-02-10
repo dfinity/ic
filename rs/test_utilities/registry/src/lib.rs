@@ -1,5 +1,6 @@
 use ic_crypto_test_utils_ni_dkg::dummy_transcript_for_tests_with_params;
 use ic_limits::INITIAL_NOTARY_DELAY;
+use ic_management_canister_types::VetKdKeyId;
 use ic_protobuf::registry::crypto::v1::AlgorithmId;
 use ic_protobuf::registry::crypto::v1::PublicKey as PublicKeyProto;
 use ic_protobuf::registry::subnet::v1::chain_key_initialization::Initialization;
@@ -107,7 +108,7 @@ pub fn insert_initial_dkg_transcript(
                     &committee,
                     version,
                     NiDkgTag::HighThresholdForKey(NiDkgMasterPublicKeyId::VetKd(
-                        vet_key_id.clone().try_into().unwrap(),
+                        VetKdKeyId::try_from(vet_key_id.clone()).unwrap(),
                     )),
                 ),
             )),
@@ -115,7 +116,9 @@ pub fn insert_initial_dkg_transcript(
         })
         .map(|(key_id, transcript)| ChainKeyInitialization {
             key_id: Some(key_id),
-            initialization: Some(Initialization::TranscriptRecord(transcript.into())),
+            initialization: Some(Initialization::TranscriptRecord(
+                InitialNiDkgTranscriptRecord::from(transcript),
+            )),
         })
         .collect::<Vec<_>>();
 

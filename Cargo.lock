@@ -13426,6 +13426,7 @@ dependencies = [
  "ic-interfaces",
  "ic-interfaces-registry",
  "ic-limits",
+ "ic-management-canister-types",
  "ic-protobuf",
  "ic-registry-client-fake",
  "ic-registry-keys",

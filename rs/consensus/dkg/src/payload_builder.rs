@@ -1,5 +1,5 @@
 use crate::{
-    utils::{self, get_vetkeys_for_subnet, tags_iter},
+    utils::{self, tags_iter, vetkd_key_ids_for_subnet},
     MAX_REMOTE_DKGS_PER_INTERVAL, MAX_REMOTE_DKG_ATTEMPTS, REMOTE_DKG_REPEATED_FAILURE_ERROR,
 };
 use ic_consensus_utils::{crypto::ConsensusCrypto, pool_reader::PoolReader};
@@ -238,7 +238,7 @@ pub(super) fn create_summary_payload(
     // Current transcripts come from next transcripts of the last_summary.
     let current_transcripts = as_next_transcripts(last_summary, &logger);
 
-    let vet_key_ids = get_vetkeys_for_subnet(
+    let vet_key_ids = vetkd_key_ids_for_subnet(
         subnet_id,
         registry_client,
         validation_context.registry_version,
@@ -522,7 +522,7 @@ pub fn get_dkg_summary_from_cup_contents(
 
     // Extract vet key ids
 
-    let vet_key_ids = get_vetkeys_for_subnet(subnet_id, registry, registry_version)
+    let vet_key_ids = vetkd_key_ids_for_subnet(subnet_id, registry, registry_version)
         .expect("Failed to get vetkeys");
 
     // Add vet key transcripts to the summary block
@@ -1294,7 +1294,7 @@ mod tests {
             let summary = make_genesis_summary(&*registry, subnet_id, None);
 
             let vet_key_ids =
-                get_vetkeys_for_subnet(subnet_id, &*registry, summary.registry_version).unwrap();
+                vetkd_key_ids_for_subnet(subnet_id, &*registry, summary.registry_version).unwrap();
 
             assert_eq!(
                 summary.registry_version,
@@ -1421,7 +1421,7 @@ mod tests {
                 assert_eq!(dkg_summary.configs.len(), 3);
 
                 let vet_key_ids =
-                    get_vetkeys_for_subnet(subnet_id, &*registry, dkg_summary.registry_version)
+                    vetkd_key_ids_for_subnet(subnet_id, &*registry, dkg_summary.registry_version)
                         .unwrap();
                 assert_eq!(vet_key_ids.len(), 1);
                 for tag in tags_iter(&vet_key_ids) {
@@ -1525,7 +1525,7 @@ mod tests {
             let dkg_summary = &summary.dkg;
 
             // The genesis summary does not have vetkeys enabled
-            let vet_key_ids = get_vetkeys_for_subnet(
+            let vet_key_ids = vetkd_key_ids_for_subnet(
                 replica_config.subnet_id,
                 &*registry,
                 dkg_block.context.registry_version,
@@ -1581,7 +1581,7 @@ mod tests {
             let dkg_summary = &summary.dkg;
 
             // At this point the summary has a registry version with a vetkey
-            let vet_key_ids = get_vetkeys_for_subnet(
+            let vet_key_ids = vetkd_key_ids_for_subnet(
                 replica_config.subnet_id,
                 &*registry,
                 dkg_block.context.registry_version,
@@ -1634,7 +1634,7 @@ mod tests {
             let summary = dkg_block.payload.as_ref().as_summary();
             let dkg_summary = &summary.dkg;
 
-            let vet_key_ids = get_vetkeys_for_subnet(
+            let vet_key_ids = vetkd_key_ids_for_subnet(
                 replica_config.subnet_id,
                 &*registry,
                 dkg_block.context.registry_version,
@@ -1686,7 +1686,7 @@ mod tests {
             let summary = dkg_block.payload.as_ref().as_summary();
             let dkg_summary = &summary.dkg;
 
-            let vet_key_ids = get_vetkeys_for_subnet(
+            let vet_key_ids = vetkd_key_ids_for_subnet(
                 replica_config.subnet_id,
                 &*registry,
                 dkg_block.context.registry_version,

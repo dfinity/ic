@@ -56,7 +56,7 @@ pub(super) fn get_dkg_dealings(
 }
 
 /// Fetch all key ids for which the subnet should hold a key
-pub(crate) fn get_vetkeys_for_subnet(
+pub(crate) fn vetkd_key_ids_for_subnet(
     subnet_id: SubnetId,
     registry_client: &dyn RegistryClient,
     registry_version: RegistryVersion,
@@ -93,6 +93,7 @@ pub(crate) fn tags_iter(
 
 #[cfg(test)]
 mod tests {
+    use crate::utils::vetkd_key_ids_for_subnet;
     use ic_interfaces_registry::RegistryValue;
     use ic_interfaces_registry_mocks::MockRegistryClient;
     use ic_management_canister_types::{
@@ -103,15 +104,13 @@ mod tests {
     use ic_test_utilities_types::ids::subnet_test_id;
     use ic_types::{crypto::threshold_sig::ni_dkg::NiDkgMasterPublicKeyId, RegistryVersion};
 
-    use crate::utils::get_vetkeys_for_subnet;
-
     /// Test that `get_enabled_vet_keys` correctly extracts the vet keys that are in the [`SubnetRecord`] of the
     /// subnet.
     #[test]
     fn test_get_vet_keys_for_subnet() {
         let mut registry = MockRegistryClient::new();
 
-        // Create a [`SubnetRecord`] with two VetKeys and a Schnorr key (which should be ignored)
+        // Create a [`SubnetRecord`] with two VetKD keys and a Schnorr key (which should be ignored)
         let subnet_record = SubnetRecordBuilder::new()
             .with_chain_key_config(ChainKeyConfig {
                 key_configs: vec![
@@ -153,7 +152,7 @@ mod tests {
 
         // Check that the two expected keys are contained in the output and no unexpected other keys
         let vetkeys =
-            get_vetkeys_for_subnet(subnet_test_id(1), &registry, RegistryVersion::default())
+            vetkd_key_ids_for_subnet(subnet_test_id(1), &registry, RegistryVersion::default())
                 .unwrap();
         assert_eq!(vetkeys.len(), 2);
         assert!(
