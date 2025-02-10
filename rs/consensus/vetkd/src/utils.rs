@@ -4,23 +4,6 @@ use ic_interfaces::{
     validation::ValidationError,
     vetkd::{InvalidVetKdPayloadReason, VetKdPayloadValidationFailure},
 };
-<<<<<<< HEAD
-use ic_interfaces_registry::RegistryClient;
-use ic_logger::{error, ReplicaLogger};
-use ic_management_canister_types::MasterPublicKeyId;
-use ic_protobuf::types::v1 as pb;
-use ic_registry_client_helpers::subnet::SubnetRegistry;
-use ic_registry_subnet_features::ChainKeyConfig;
-use ic_types::{
-    batch::slice_to_messages, consensus::idkg::VetKdKeyShare,
-    crypto::vetkd::VetKdEncryptedKeyShare, messages::CallbackId, registry::RegistryClientError,
-    NodeId, RegistryVersion, SubnetId, Time,
-};
-use std::{
-    collections::{BTreeMap, BTreeSet, HashSet},
-    time::Duration,
-};
-=======
 use ic_logger::{error, ReplicaLogger};
 use ic_protobuf::types::v1 as pb;
 use ic_types::{
@@ -28,7 +11,6 @@ use ic_types::{
     crypto::vetkd::VetKdEncryptedKeyShare, messages::CallbackId, NodeId,
 };
 use std::collections::{BTreeMap, HashSet};
->>>>>>> master
 
 pub(super) fn validation_failed_err(
     err: VetKdPayloadValidationFailure,
