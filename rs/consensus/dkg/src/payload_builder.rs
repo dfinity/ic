@@ -899,7 +899,7 @@ mod tests {
     };
     use ic_crypto_test_utils_ni_dkg::dummy_transcript_for_tests_with_params;
     use ic_logger::replica_logger::no_op_logger;
-    use ic_management_canister_types::{VetKdCurve, VetKdKeyId};
+    use ic_management_canister_types_private::{VetKdCurve, VetKdKeyId};
     use ic_test_utilities_logger::with_test_replica_logger;
     use ic_test_utilities_registry::{add_subnet_record, SubnetRecordBuilder};
     use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};

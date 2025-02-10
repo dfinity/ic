@@ -419,7 +419,7 @@ mod tests {
         p2p::consensus::{MutablePool, UnvalidatedArtifact},
     };
     use ic_interfaces_registry::RegistryClient;
-    use ic_management_canister_types::{MasterPublicKeyId, VetKdCurve, VetKdKeyId};
+    use ic_management_canister_types_private::{MasterPublicKeyId, VetKdCurve, VetKdKeyId};
     use ic_metrics::MetricsRegistry;
     use ic_registry_subnet_features::{ChainKeyConfig, KeyConfig};
     use ic_test_artifact_pool::consensus_pool::TestConsensusPool;
