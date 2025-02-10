@@ -8,7 +8,7 @@ use crate::{
     replay_helper,
     ssh_helper::SshHelper,
     util::{block_on, parse_hex_str},
-    Recovery, UploadMethod, ADMIN, CHECKPOINTS, IC_CERTIFICATIONS_PATH, IC_CHECKPOINTS_PATH,
+    DataLocation, Recovery, ADMIN, CHECKPOINTS, IC_CERTIFICATIONS_PATH, IC_CHECKPOINTS_PATH,
     IC_DATA_PATH, IC_JSON5_PATH, IC_REGISTRY_LOCAL_STORE, IC_STATE, IC_STATE_EXCLUDES,
     NEW_IC_STATE, OLD_IC_STATE, READONLY,
 };
@@ -435,19 +435,17 @@ impl Step for CopyLocalIcStateStep {
             Recovery::get_latest_checkpoint_name_and_height(&ic_checkpoints_path)?;
 
         let recovery_checkpoints_path = work_dir.join("data").join(IC_CHECKPOINTS_PATH);
+        let log = self.require_confirmation.then_some(&self.logger);
 
         let mut mkdir = Command::new("mkdir");
         mkdir.arg("-p").arg(&recovery_checkpoints_path);
-        confirm_exec_cmd(
-            &mut mkdir,
-            self.require_confirmation.then_some(&self.logger),
-        )?;
+        confirm_exec_cmd(&mut mkdir, log)?;
 
         let mut cp = Command::new("cp");
         cp.arg("-R")
             .arg(ic_checkpoints_path.join(latest_checkpoint.0.clone()))
             .arg(recovery_checkpoints_path);
-        confirm_exec_cmd(&mut cp, self.require_confirmation.then_some(&self.logger))?;
+        confirm_exec_cmd(&mut cp, log)?;
 
         Ok(())
     }
@@ -585,7 +583,7 @@ impl Step for ValidateReplayStep {
 
 pub struct UploadAndRestartStep {
     pub logger: Logger,
-    pub upload_method: UploadMethod,
+    pub upload_method: DataLocation,
     pub work_dir: PathBuf,
     pub data_src: PathBuf,
     pub require_confirmation: bool,
@@ -624,8 +622,8 @@ impl UploadAndRestartStep {
 impl Step for UploadAndRestartStep {
     fn descr(&self) -> String {
         let replica = match self.upload_method {
-            UploadMethod::Remote(ip) => &format!("replica {ip}"),
-            UploadMethod::Local => "local replica",
+            DataLocation::Remote(ip) => &format!("replica {ip}"),
+            DataLocation::Local => "local replica",
         };
         format!(
             "Stopping {replica}, uploading and replacing state from {}, set access \
@@ -662,7 +660,7 @@ impl Step for UploadAndRestartStep {
         let src = format!("{}/", self.data_src.display());
 
         // Decide: remote or local recovery
-        if let UploadMethod::Remote(node_ip) = self.upload_method {
+        if let DataLocation::Remote(node_ip) = self.upload_method {
             // For remote recoveries, we copy the source directory via rsync.
             // To improve rsync times, we copy the latest checkpoint to the
             // upload directory.

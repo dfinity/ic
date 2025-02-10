@@ -52,7 +52,7 @@ use ic_protobuf::types::v1 as pb;
 use ic_recovery::{
     app_subnet_recovery::{AppSubnetRecovery, AppSubnetRecoveryArgs, StepType},
     steps::Step,
-    util::UploadMethod,
+    util::DataLocation,
     NodeMetrics, Recovery, RecoveryArgs,
 };
 use ic_recovery::{file_sync_helper, get_node_metrics};
@@ -376,8 +376,9 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: Config) {
         replay_until_height: None,
         // If the latest CUP is corrupted we can't deploy read-only access
         pub_key: (!cfg.corrupt_cup).then_some(pub_key),
-        download_node: None,
-        upload_method: Some(UploadMethod::Remote(upload_node.get_ip_addr())),
+        download_method: None,
+        upload_method: Some(DataLocation::Remote(upload_node.get_ip_addr())),
+        wait_for_cup_node: Some(upload_node.get_ip_addr()),
         chain_key_subnet_id: cfg.chain_key.then_some(root_subnet_id),
         next_step: None,
     };
@@ -420,7 +421,8 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: Config) {
         assert_subnet_is_broken(&app_node.get_public_url(), app_can_id, msg, false, &logger);
     }
 
-    subnet_recovery.params.download_node = Some(download_node.0.get_ip_addr());
+    subnet_recovery.params.download_method =
+        Some(DataLocation::Remote(download_node.0.get_ip_addr()));
 
     for (step_type, step) in subnet_recovery {
         info!(logger, "Next step: {:?}", step_type);

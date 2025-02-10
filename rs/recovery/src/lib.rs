@@ -36,7 +36,7 @@ use std::{
 };
 use steps::*;
 use url::Url;
-use util::{block_on, parse_hex_str, UploadMethod};
+use util::{block_on, parse_hex_str, DataLocation};
 
 pub mod admin_helper;
 pub mod app_subnet_recovery;
@@ -144,7 +144,7 @@ impl Recovery {
         registry_nns_url: Url,
         registry_polling_strategy: RegistryPollingStrategy,
     ) -> RecoveryResult<Self> {
-        let ssh_confirmation = true;
+        let ssh_confirmation = !args.test_mode;
         let recovery_dir = args.dir.join(RECOVERY_DIRECTORY_NAME);
         let binary_dir = if args.use_local_binaries {
             PathBuf::from_str("/opt/ic/bin/").expect("bad file path string")
@@ -352,20 +352,25 @@ impl Recovery {
         keep_downloaded_state: bool,
         additional_excludes: Vec<&str>,
     ) -> impl Step {
-        // DownloadIcStateStep {
-        //     logger: self.logger.clone(),
-        //     try_readonly,
-        //     node_ip,
-        //     target: self.data_dir.display().to_string(),
-        //     keep_downloaded_state,
-        //     working_dir: self.work_dir.display().to_string(),
-        //     require_confirmation: self.ssh_confirmation,
-        //     key_file: self.key_file.clone(),
-        //     additional_excludes: additional_excludes
-        //         .iter()
-        //         .map(std::string::ToString::to_string)
-        //         .collect(),
-        // }
+        DownloadIcStateStep {
+            logger: self.logger.clone(),
+            try_readonly,
+            node_ip,
+            target: self.data_dir.display().to_string(),
+            keep_downloaded_state,
+            working_dir: self.work_dir.display().to_string(),
+            require_confirmation: self.ssh_confirmation,
+            key_file: self.key_file.clone(),
+            additional_excludes: additional_excludes
+                .iter()
+                .map(std::string::ToString::to_string)
+                .collect(),
+        }
+    }
+
+    /// Return a [CopyLocalIcStateStep] copying the ic_state of the current
+    /// node to the recovery data directory.
+    pub fn get_copy_local_state_step(&self) -> impl Step {
         CopyLocalIcStateStep {
             logger: self.logger.clone(),
             working_dir: self.work_dir.display().to_string(),
@@ -509,7 +514,7 @@ impl Recovery {
 
     /// Return an [UploadAndRestartStep] to upload the current recovery state to
     /// a node and restart it.
-    pub fn get_upload_and_restart_step(&self, upload_method: UploadMethod) -> impl Step {
+    pub fn get_upload_and_restart_step(&self, upload_method: DataLocation) -> impl Step {
         self.get_upload_and_restart_step_with_data_src(
             upload_method,
             self.work_dir.join(IC_STATE_DIR),
@@ -520,7 +525,7 @@ impl Recovery {
     /// a node and restart it.
     pub fn get_upload_and_restart_step_with_data_src(
         &self,
-        upload_method: UploadMethod,
+        upload_method: DataLocation,
         data_src: PathBuf,
     ) -> impl Step {
         UploadAndRestartStep {
