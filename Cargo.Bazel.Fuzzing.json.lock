@@ -1,5 +1,5 @@
 {
-  "checksum": "68ccb790390da618288579f1fed367dcc7239797ac7fde0b5e06e1e051a14a8a",
+  "checksum": "16d0eb2166458263a56ae3cc3dab0b8ac6dfb6c1d217c06d46674723608d9c0c",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -19968,6 +19968,10 @@
               "target": "ic_http_gateway"
             },
             {
+              "id": "ic-identity-hsm 0.39.2",
+              "target": "ic_identity_hsm"
+            },
+            {
               "id": "ic-metrics-encoder 1.1.1",
               "target": "ic_metrics_encoder"
             },
@@ -20552,10 +20556,6 @@
             {
               "id": "socket2 0.5.7",
               "target": "socket2"
-            },
-            {
-              "id": "spki 0.7.3",
-              "target": "spki"
             },
             {
               "id": "ssh2 0.9.4",
@@ -91433,6 +91433,7 @@
     "ic-certified-map 0.3.4",
     "ic-http-certification 3.0.2",
     "ic-http-gateway 0.1.0",
+    "ic-identity-hsm 0.39.2",
     "ic-metrics-encoder 1.1.1",
     "ic-response-verification 3.0.2",
     "ic-sha3 1.0.0",
@@ -91585,7 +91586,6 @@
     "slog-scope 4.4.0",
     "slog-term 2.9.1",
     "socket2 0.5.7",
-    "spki 0.7.3",
     "ssh2 0.9.4",
     "static_assertions 1.1.0",
     "strum 0.26.3",

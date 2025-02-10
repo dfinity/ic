@@ -53,9 +53,9 @@ impl Hsm {
             return Ok(Self::from_verifier(Arc::new(prime)));
         }
 
-        return Err(RecoveryError::InvalidPubKey(
+        Err(RecoveryError::InvalidPubKey(
             "Key stored on hsm implements an unknown algorithm".to_string(),
-        ));
+        ))
     }
 
     fn from_verifier(verifier: Arc<dyn Verifier>) -> Self {

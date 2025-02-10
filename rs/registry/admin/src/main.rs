@@ -3749,13 +3749,13 @@ async fn main() {
             Sender::SigKeys(sig_keys)
         } else if opts.use_hsm {
             make_hsm_sender(
-                &opts.hsm_slot.as_ref().expect(
+                opts.hsm_slot.as_ref().expect(
                     "HSM slot must also be provided for --use-hsm; use --hsm-slot or see --help.",
                 ),
-                &opts.hsm_key_id.as_ref().expect(
+                opts.hsm_key_id.as_ref().expect(
                     "HSM key ID must also be provided for --use-hsm; use --key-id or see --help.",
                 ),
-                &opts.hsm_pin.as_ref().expect(
+                opts.hsm_pin.as_ref().expect(
                     "HSM pin must also be provided for --use-hsm; use --pin or see --help.",
                 ),
             )

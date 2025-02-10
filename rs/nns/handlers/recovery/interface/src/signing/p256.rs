@@ -77,7 +77,7 @@ impl Prime256v1 {
 
     pub fn new(signing_key: SigningKey) -> Self {
         Self {
-            verifying_key: signing_key.verifying_key().clone(),
+            verifying_key: *signing_key.verifying_key(),
             signing_key: Some(signing_key),
         }
     }

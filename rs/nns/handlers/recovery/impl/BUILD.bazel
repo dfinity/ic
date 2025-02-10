@@ -1,8 +1,6 @@
 load("@rules_rust//cargo:defs.bzl", "cargo_build_script")
-load("@rules_rust//rust:defs.bzl", "rust_doc_test", "rust_library", "rust_test")
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 load("//bazel:canisters.bzl", "rust_canister")
-load("//bazel:defs.bzl", "rust_ic_test_suite")
-load("//bazel:prost.bzl", "generated_files_check")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -19,6 +17,8 @@ BASE_DEPENDENCIES = [
     "//rs/nervous_system/runtime",
     "//rs/nns/common",
     "//rs/nns/constants",
+    "//rs/nns/handlers/recovery/interface",
+    "//rs/nns/handlers/root/impl:root",
     "//rs/nns/handlers/root/interface",
     "//rs/protobuf",
     "//rs/registry/keys",
@@ -29,21 +29,19 @@ BASE_DEPENDENCIES = [
     "//rs/rust_canisters/on_wire",
     "//rs/types/base_types",
     "//rs/types/management_canister_types",
-    "//rs/nns/handlers/root/impl:root",
-    "//rs/nns/handlers/recovery/interface",
     "@crate_index//:build-info",
-    "@crate_index//:ic-cdk-timers",
     "@crate_index//:candid",
+    "@crate_index//:ed25519-dalek",
     "@crate_index//:ic-cdk",
+    "@crate_index//:ic-cdk-timers",
     "@crate_index//:ic-metrics-encoder",
+    "@crate_index//:itertools",
     "@crate_index//:lazy_static",
     "@crate_index//:maplit",
     "@crate_index//:prost",
+    "@crate_index//:rand",
     "@crate_index//:serde",
     "@crate_index//:serde_bytes",
-    "@crate_index//:ed25519-dalek",
-    "@crate_index//:rand",
-    "@crate_index//:itertools",
 ]
 
 # Each target declared in this file may choose either these (release-ready)
@@ -148,23 +146,23 @@ rust_canister(
 rust_test(
     name = "recovery-canister-tests",
     srcs = glob(["canister/**/*.rs"]),
+    crate_root = "canister/canister.rs",
     data = [
         ":recovery-canister",
         "//rs/pocket_ic_server:pocket-ic-server",
-        "//rs/registry/canister:registry-canister"
-    ],
-    crate_root = "canister/canister.rs",
-    proc_macro_deps = MACRO_DEPENDENCIES,
-    deps = DEPENDENCIES + DEV_DEPENDENCIES + [
-        ":build_script",
-        ":recovery",
-        "//packages/pocket-ic",
-        "//rs/registry/subnet_type"
+        "//rs/registry/canister:registry-canister",
     ],
     env = {
         "RECOVERY_WASM_PATH": "$(rootpath :recovery-canister)",
         "REGISTRY_WASM_PATH": "$(rootpath //rs/registry/canister:registry-canister)",
-        "POCKET_IC_BIN": "$(rootpath //rs/pocket_ic_server:pocket-ic-server)"
+        "POCKET_IC_BIN": "$(rootpath //rs/pocket_ic_server:pocket-ic-server)",
     },
-    version = "0.9.0"
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    version = "0.9.0",
+    deps = DEPENDENCIES + DEV_DEPENDENCIES + [
+        ":build_script",
+        ":recovery",
+        "//packages/pocket-ic",
+        "//rs/registry/subnet_type",
+    ],
 )

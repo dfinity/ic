@@ -574,7 +574,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 features = ["pem", "ring"],
             ),
             "ic-identity-hsm": crate.spec(
-                version = "^0.39.2"
+                version = "^0.39.2",
             ),
             "ic-bn-lib": crate.spec(
                 git = "https://github.com/dfinity/ic-bn-lib",

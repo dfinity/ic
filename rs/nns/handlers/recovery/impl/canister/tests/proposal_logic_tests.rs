@@ -69,6 +69,7 @@ fn place_non_halt_first_proposal() {
         RecoveryPayload::DoRecovery {
             height: 123,
             state_hash: "123".to_string(),
+            time_ns: 123,
         },
         RecoveryPayload::Unhalt,
     ];
@@ -197,6 +198,7 @@ fn place_second_proposal_recovery() {
     let new_proposal = RecoveryPayload::DoRecovery {
         height: 123,
         state_hash: "123".to_string(),
+        time_ns: 123,
     };
     let response = submit_proposal(&pic, canister, first, new_proposal.clone());
     assert!(response.is_ok());
@@ -255,6 +257,7 @@ fn second_proposal_vote_against() {
     // Place the second
     let new_proposal = RecoveryPayload::DoRecovery {
         height: 123,
+        time_ns: 123,
         state_hash: "123".to_string(),
     };
     let response = submit_proposal(&pic, canister, first, new_proposal.clone());
@@ -284,6 +287,7 @@ fn second_proposal_recovery_vote_in() {
     // Place the second
     let new_proposal = RecoveryPayload::DoRecovery {
         height: 123,
+        time_ns: 123,
         state_hash: "123".to_string(),
     };
     let response = submit_proposal(&pic, canister, first, new_proposal.clone());
@@ -315,6 +319,7 @@ fn second_proposal_recovery_vote_in_and_resubmit() {
     // Place the second
     let new_proposal = RecoveryPayload::DoRecovery {
         height: 123,
+        time_ns: 123,
         state_hash: "123".to_string(),
     };
     let response = submit_proposal(&pic, canister, first, new_proposal.clone());
@@ -330,6 +335,7 @@ fn second_proposal_recovery_vote_in_and_resubmit() {
 
     let resubmitted_proposal = RecoveryPayload::DoRecovery {
         height: 456,
+        time_ns: 123,
         state_hash: "456".to_string(),
     };
     let response = submit_proposal(&pic, canister, first, resubmitted_proposal.clone());
@@ -382,6 +388,7 @@ fn submit_first_two_second_not_voted_in_place_third() {
     // Place the second
     let new_proposal = RecoveryPayload::DoRecovery {
         height: 123,
+        time_ns: 123,
         state_hash: "123".to_string(),
     };
     let response = submit_proposal(&pic, canister, first, new_proposal.clone());
@@ -405,6 +412,7 @@ fn place_and_execute_second_proposal(
     // Place the second
     let new_proposal = RecoveryPayload::DoRecovery {
         height: 123,
+        time_ns: 123,
         state_hash: "123".to_string(),
     };
     let response = submit_proposal(&pic, canister, first, new_proposal.clone());
@@ -519,6 +527,7 @@ fn place_any_proposal_after_there_are_three() {
         RecoveryPayload::DoRecovery {
             height: 123,
             state_hash: "123".to_string(),
+            time_ns: 123,
         },
         RecoveryPayload::Unhalt,
     ];
