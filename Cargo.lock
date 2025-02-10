@@ -11919,6 +11919,7 @@ dependencies = [
  "libc",
  "maplit",
  "nix 0.24.3",
+ "num-traits",
  "phantom_newtype",
  "prometheus",
  "proptest 1.6.0",
