@@ -84,12 +84,13 @@ impl BtcService for BtcServiceImpl {
             .request_duration
             .with_label_values(&[LABEL_GET_SUCCESSOR])
             .start_timer();
+        let start = Instant::now();
         let _ = self.last_received_tx.send(Some(Instant::now()));
         let inner = request.into_inner();
         info!(self.logger, "Received GetSuccessorsRequest: {:?}", inner);
         let request = inner.try_into()?;
 
-        match BtcServiceGetSuccessorsResponse::try_from(
+        let response = match BtcServiceGetSuccessorsResponse::try_from(
             self.get_successors_handler.get_successors(request).await?,
         ) {
             Ok(res) => {
@@ -97,7 +98,9 @@ impl BtcService for BtcServiceImpl {
                 Ok(Response::new(res))
             }
             Err(err) => Err(err),
-        }
+        };
+        info!(self.logger, "get successors Request took {:?}", start.elapsed());
+        response
     }
 
     async fn send_transaction(

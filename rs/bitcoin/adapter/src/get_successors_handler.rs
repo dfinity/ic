@@ -23,7 +23,7 @@ const MAX_RESPONSE_SIZE: usize = 2_000_000;
 
 // Lower than mainnet's response size. The main reason is large serialization time
 // for large blocks.
-const TESTNET4_MAX_RESPONSE_SIZE: usize = 2_000_000;
+const TESTNET4_MAX_RESPONSE_SIZE: usize = 1_000_000;
 
 // Max number of next block headers that can be returned in the `GetSuccessorsResponse`.
 const MAX_NEXT_BLOCK_HEADERS_LENGTH: usize = 100;
