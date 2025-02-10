@@ -433,14 +433,23 @@ impl Step for CopyLocalIcStateStep {
         let ic_checkpoints_path = PathBuf::from(IC_DATA_PATH).join(IC_CHECKPOINTS_PATH);
         let latest_checkpoint =
             Recovery::get_latest_checkpoint_name_and_height(&ic_checkpoints_path)?;
+        info!(
+            self.logger,
+            "Found latest checkpoint: {latest_checkpoint:?}"
+        );
 
         let recovery_checkpoints_path = work_dir.join("data").join(IC_CHECKPOINTS_PATH);
         let log = self.require_confirmation.then_some(&self.logger);
 
+        info!(self.logger, "Creating recovery checkpoint directory");
         let mut mkdir = Command::new("mkdir");
         mkdir.arg("-p").arg(&recovery_checkpoints_path);
         confirm_exec_cmd(&mut mkdir, log)?;
 
+        info!(
+            self.logger,
+            "Moving latest checkpoint into recovery directory"
+        );
         let mut cp = Command::new("cp");
         cp.arg("-R")
             .arg(ic_checkpoints_path.join(latest_checkpoint.0.clone()))

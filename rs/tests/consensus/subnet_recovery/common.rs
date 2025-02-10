@@ -545,16 +545,6 @@ fn local_recovery(node: &IcNodeSnapshot, subnet_recovery: AppSubnetRecovery, log
     let pub_key = pub_key.trim();
     let node_ip = node.get_ip_addr();
 
-    let command = "echo test";
-    info!(logger, "Executing local test command: \n{command}");
-
-    let result = node.block_on_bash_script(&command);
-
-    match result {
-        Ok(ret) => info!(logger, "Finished local test: \n{ret}"),
-        Err(err) => panic!("Local test failed: \n{err}"),
-    }
-
     let command = format!(
         r#"/opt/ic/bin/ic-recovery \
         --nns-url {nns_url} \
@@ -562,19 +552,16 @@ fn local_recovery(node: &IcNodeSnapshot, subnet_recovery: AppSubnetRecovery, log
         app-subnet-recovery \
         --subnet-id {subnet_id} \
         --pub-key "{pub_key}" \
-        --download-node {node_ip} \
+        --download-method local \
         --upload-method local \
+        --wait-for-cup-node {node_ip} \
         --skip DownloadCertifications \
         --skip MergeCertificationPools
     "#
     );
-    // .arg("ValidateReplayOutput");
 
     info!(logger, "Executing local recovery command: \n{command}");
-
-    let result = node.block_on_bash_script(&command);
-
-    match result {
+    match node.block_on_bash_script(&command) {
         Ok(ret) => info!(logger, "Finished local recovery: \n{ret}"),
         Err(err) => panic!("Local recovery failed: \n{err}"),
     }
