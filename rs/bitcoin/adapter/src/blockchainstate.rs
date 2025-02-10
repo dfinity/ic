@@ -5,6 +5,12 @@ use bitcoin::{
     block::Header as BlockHeader, blockdata::constants::genesis_block, Block, BlockHash, Network,
 };
 
+const ONE_MB: usize = 1_024 * 1_024;
+
+/// The limit at which we should stop making additional requests for new blocks as the block cache
+/// becomes too large. Inflight `getdata` messages will remain active, but new `getdata` messages will
+/// not be created.
+const BLOCK_CACHE_THRESHOLD_BYTES: usize = 10 * ONE_MB;
 use ic_btc_validation::{validate_header, HeaderStore, ValidateHeaderError};
 use ic_metrics::MetricsRegistry;
 use std::{collections::HashMap, sync::Arc};
@@ -125,6 +131,10 @@ impl BlockchainState {
             network: config.network,
             metrics: BlockchainStateMetrics::new(metrics_registry),
         }
+    }
+    
+    pub(crate) fn is_block_cache_full(&self) -> bool {
+        self.get_block_cache_size() >= BLOCK_CACHE_THRESHOLD_BYTES
     }
 
     /// Returns the genesis header that the store is initialized with.

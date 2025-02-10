@@ -24,7 +24,7 @@ const MAX_RESPONSE_SIZE: usize = 2_000_000;
 
 // Lower than mainnet's response size. The main reason is large serialization time
 // for large blocks.
-const TESTNET4_MAX_RESPONSE_SIZE: usize = 1_000_000;
+const TESTNET4_MAX_RESPONSE_SIZE: usize = 200_000;
 
 // Max number of next block headers that can be returned in the `GetSuccessorsResponse`.
 const MAX_NEXT_BLOCK_HEADERS_LENGTH: usize = 100;
@@ -143,7 +143,7 @@ impl GetSuccessorsHandler {
             // We can safely remove everything that is in the cache then, as those blocks are no longer needed.
             // There is a chance that these blocks are above the anchor height (but they were forked below it),
             // meaning that the regular "pruning anything below anchor" will now affect them.
-            let obsolete_blocks = if blocks.is_empty() {
+            let obsolete_blocks = if blocks.is_empty() && state.is_block_cache_full() {
                 state.get_cached_blocks()
             } else {
                 vec![]

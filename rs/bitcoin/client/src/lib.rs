@@ -16,7 +16,7 @@ use ic_btc_service::{
 use ic_config::adapters::AdaptersConfig;
 use ic_http_endpoints_async_utils::ExecuteOnTokioRuntime;
 use ic_interfaces_adapter_client::{Options, RpcAdapterClient, RpcError, RpcResult};
-use ic_logger::{error, ReplicaLogger};
+use ic_logger::{error, info, ReplicaLogger};
 use ic_metrics::{histogram_vec_timer::HistogramVecTimer, MetricsRegistry};
 use std::{convert::TryFrom, path::PathBuf};
 use tokio::net::UnixStream;
@@ -36,15 +36,17 @@ struct BitcoinAdapterClientImpl {
     rt_handle: tokio::runtime::Handle,
     client: BtcServiceClient<Channel>,
     metrics: Metrics,
+    logger: ReplicaLogger,
 }
 
 impl BitcoinAdapterClientImpl {
-    fn new(metrics: Metrics, rt_handle: tokio::runtime::Handle, channel: Channel) -> Self {
+    fn new(metrics: Metrics, rt_handle: tokio::runtime::Handle, channel: Channel, logger: ReplicaLogger) -> Self {
         let client = BtcServiceClient::new(channel);
         Self {
             rt_handle,
             client,
             metrics,
+            logger,
         }
     }
 }
@@ -101,8 +103,8 @@ impl RpcAdapterClient<BitcoinAdapterRequestWrapper> for BitcoinAdapterClientImpl
 
                     let mut tonic_request = tonic::Request::new(get_successors_request);
                     tonic_request.set_timeout(opts.timeout);
-
-                    client
+                    let start = std::time::Instant::now();
+                    let response = client
                         .get_successors(tonic_request)
                         .await
                         .map(|tonic_response| {
@@ -114,7 +116,9 @@ impl RpcAdapterClient<BitcoinAdapterRequestWrapper> for BitcoinAdapterClientImpl
                                 },
                             )
                         })
-                        .map_err(convert_tonic_error)
+                        .map_err(convert_tonic_error);
+                    info!(self.logger, "get_successors took {:?}", start.elapsed());
+                    response
                 }
             };
             let mut timer = request_timer;
@@ -192,7 +196,7 @@ fn setup_bitcoin_adapter_client(
                                 ))
                             }
                         }));
-                    Box::new(BitcoinAdapterClientImpl::new(metrics, rt_handle, channel))
+                    Box::new(BitcoinAdapterClientImpl::new(metrics, rt_handle, channel, log))
                 }
                 Err(_) => {
                     error!(log, "Could not create an endpoint.");
