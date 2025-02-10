@@ -1,4 +1,6 @@
-use crate::{command_helper::confirm_exec_cmd, error::RecoveryError, RecoveryResult};
+use crate::{
+    cli::wait_for_confirmation, command_helper::exec_cmd, error::RecoveryError, RecoveryResult,
+};
 use slog::{info, warn, Logger};
 use std::{net::IpAddr, path::PathBuf, process::Command, thread, time};
 
