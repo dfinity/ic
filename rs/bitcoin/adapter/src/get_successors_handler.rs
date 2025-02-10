@@ -209,19 +209,22 @@ fn get_successor_blocks(
     while let Some(block_hash) = queue.pop_front() {
         if !seen.contains(block_hash) {
             // Retrieve the block from the cache.
-            if let Some(block) = state.get_block(block_hash) {
-                let block_size = block.total_size();
-                if response_block_size == 0
-                    || (response_block_size + block_size <= max_blocks_size
-                        && successor_blocks.len() < MAX_BLOCKS_LENGTH
-                        && allow_multiple_blocks)
-                {
-                    successor_blocks.push(block.clone());
-                    response_block_size += block_size;
-                } else {
-                    break;
-                }
+            let Some(block) = state.get_block(block_hash) else {
+                // If the block is not in the cache, we skip it and all its subtree.
+                // We don't want to return orphaned blocks to the canister.
+                continue;
+            };
+            let block_size = block.total_size();
+            // If the response is full, we exit.
+            if !(response_block_size == 0
+                || (response_block_size + block_size <= max_blocks_size
+                    && successor_blocks.len() < MAX_BLOCKS_LENGTH
+                    && allow_multiple_blocks))
+            {
+                break;
             }
+            successor_blocks.push(block.clone());
+            response_block_size += block_size;
         }
 
         queue.extend(
