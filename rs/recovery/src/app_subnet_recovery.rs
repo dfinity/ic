@@ -297,7 +297,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for AppSubnetRecovery {
             }
 
             StepType::WaitForCUP => {
-                if let Some(DataLocation::Remote(ip)) = self.params.upload_method.clone() {
+                if let Some(DataLocation::Remote(ip)) = self.params.upload_method {
                     self.params.wait_for_cup_node = Some(ip);
                 } else {
                     self.params.wait_for_cup_node = read_optional(
