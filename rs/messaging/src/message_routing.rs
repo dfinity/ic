@@ -649,8 +649,6 @@ impl BatchProcessorImpl {
         )));
         let stream_handler = Box::new(routing::stream_handler::StreamHandlerImpl::new(
             subnet_id,
-            max_stream_messages,
-            target_stream_size_bytes,
             hypervisor_config.clone(),
             metrics_registry,
             &metrics,
@@ -673,6 +671,8 @@ impl BatchProcessorImpl {
         ));
         let stream_builder = Box::new(routing::stream_builder::StreamBuilderImpl::new(
             subnet_id,
+            max_stream_messages,
+            target_stream_size_bytes,
             metrics_registry,
             &metrics,
             time_in_stream_metrics,
@@ -1507,6 +1507,8 @@ impl MessageRoutingImpl {
             hypervisor_config,
             cycles_account_manager,
             subnet_id,
+            MAX_STREAM_MESSAGES,
+            TARGET_STREAM_SIZE_BYTES,
             metrics.clone(),
             metrics_registry,
             log.clone(),
@@ -1528,6 +1530,8 @@ impl MessageRoutingImpl {
     ) -> Self {
         let stream_builder = Box::new(routing::stream_builder::StreamBuilderImpl::new(
             subnet_id,
+            MAX_STREAM_MESSAGES,
+            TARGET_STREAM_SIZE_BYTES,
             metrics_registry,
             &MessageRoutingMetrics::new(metrics_registry),
             Arc::new(Mutex::new(LatencyMetrics::new_time_in_stream(
@@ -1632,6 +1636,8 @@ impl SyncMessageRouting {
         hypervisor_config: HypervisorConfig,
         cycles_account_manager: Arc<CyclesAccountManager>,
         subnet_id: SubnetId,
+        max_stream_messages: usize,
+        target_stream_size_bytes: usize,
         metrics_registry: &MetricsRegistry,
         log: ReplicaLogger,
         registry: Arc<dyn RegistryClient>,
@@ -1647,6 +1653,8 @@ impl SyncMessageRouting {
             hypervisor_config,
             cycles_account_manager,
             subnet_id,
+            max_stream_messages,
+            target_stream_size_bytes,
             metrics,
             metrics_registry,
             log.clone(),
