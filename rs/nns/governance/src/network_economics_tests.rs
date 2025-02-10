@@ -10,15 +10,17 @@ fn test_inherit_from_recursively() {
         reject_cost_e8s: 99, // Change.
 
         neurons_fund_economics: Some(NeuronsFundEconomics {
-            neurons_fund_matched_funding_curve_coefficients: Some(NeuronsFundMatchedFundingCurveCoefficients {
-                // Deep change.
-                contribution_threshold_xdr: Some(ProtoDecimal {
-                    human_readable: Some("42".to_string()),
-                }),
+            neurons_fund_matched_funding_curve_coefficients: Some(
+                NeuronsFundMatchedFundingCurveCoefficients {
+                    // Deep change.
+                    contribution_threshold_xdr: Some(ProtoDecimal {
+                        human_readable: Some("42".to_string()),
+                    }),
 
-                one_third_participation_milestone_xdr: None,
-                ..Default::default()
-            }),
+                    one_third_participation_milestone_xdr: None,
+                    ..Default::default()
+                },
+            ),
 
             // This is equivalent to None, because 0 is ALWAYS vulnerable to
             // being overridden, even when inside Some. Therefore no change here.
@@ -57,7 +59,12 @@ fn test_inherit_from_recursively() {
             .minimum_icp_xdr_rate
             .as_mut()
             .unwrap();
-        assert_ne!(*minimum_icp_xdr_rate, Percentage { basis_points: Some(0) });
+        assert_ne!(
+            *minimum_icp_xdr_rate,
+            Percentage {
+                basis_points: Some(0)
+            }
+        );
 
         let contribution_threshold_xdr = neurons_fund_economics
             .neurons_fund_matched_funding_curve_coefficients
