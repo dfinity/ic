@@ -136,7 +136,7 @@ impl Request {
         let bytes = self.method_name.len() + self.method_payload.len();
         NumBytes::from(bytes as u64)
     }
-    
+
     /// Returns `true` if this is the request of a best-effort call
     /// (i.e. if it has a non-zero deadline).
     pub fn is_best_effort(&self) -> bool {
