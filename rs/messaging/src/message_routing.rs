@@ -1617,8 +1617,7 @@ impl MessageRouting for MessageRoutingImpl {
     }
 }
 
-/// An MessageRouting implementation that processes batches synchronously. Primarily used for
-/// testing.
+/// An MessageRouting implementation that processes batches synchronously. Used for state machine tests.
 pub struct SyncMessageRouting {
     batch_processor: Arc<Mutex<dyn BatchProcessor>>,
     state_manager: Arc<dyn StateManager<State = ReplicatedState>>,

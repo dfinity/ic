@@ -55,7 +55,7 @@ use ic_management_canister_types_private::{
     SignWithSchnorrReply, TakeCanisterSnapshotArgs, UpdateSettingsArgs, UploadChunkArgs,
     UploadChunkReply,
 };
-use ic_messaging::SyncMessageRouting;
+use ic_messaging::{SyncMessageRouting, MAX_STREAM_MESSAGES, TARGET_STREAM_SIZE_BYTES};
 use ic_metrics::MetricsRegistry;
 use ic_protobuf::{
     registry::{
@@ -908,6 +908,8 @@ pub struct StateMachineBuilder {
     subnet_size: usize,
     nns_subnet_id: Option<SubnetId>,
     subnet_id: Option<SubnetId>,
+    max_stream_messages: Option<usize>,
+    target_stream_size_bytes: Option<usize>,
     routing_table: RoutingTable,
     chain_keys_enabled_status: BTreeMap<MasterPublicKeyId, bool>,
     ecdsa_signature_fee: Option<Cycles>,
@@ -938,6 +940,8 @@ impl StateMachineBuilder {
             subnet_size: SMALL_APP_SUBNET_MAX_SIZE,
             nns_subnet_id: None,
             subnet_id: None,
+            max_stream_messages: None,
+            target_stream_size_bytes: None,
             routing_table: RoutingTable::new(),
             chain_keys_enabled_status: Default::default(),
             ecdsa_signature_fee: None,
@@ -1049,6 +1053,20 @@ impl StateMachineBuilder {
         }
     }
 
+    pub fn with_max_stream_messages(self, max_stream_messages: usize) -> Self {
+        Self {
+            max_stream_messages: Some(max_stream_messages),
+            ..self
+        }
+    }
+
+    pub fn with_target_stream_size_bytes(self, target_stream_size_bytes: usize) -> Self {
+        Self {
+            target_stream_size_bytes: Some(target_stream_size_bytes),
+            ..self
+        }
+    }
+
     pub fn with_master_ecdsa_public_key(self) -> Self {
         self.with_chain_key(MasterPublicKeyId::Ecdsa(EcdsaKeyId {
             curve: EcdsaCurve::Secp256k1,
@@ -1154,6 +1172,8 @@ impl StateMachineBuilder {
             self.subnet_type,
             self.subnet_size,
             self.subnet_id,
+            self.max_stream_messages,
+            self.target_stream_size_bytes,
             self.chain_keys_enabled_status,
             self.ecdsa_signature_fee,
             self.schnorr_signature_fee,
@@ -1480,6 +1500,8 @@ impl StateMachine {
         subnet_type: SubnetType,
         subnet_size: usize,
         subnet_id: Option<SubnetId>,
+        max_stream_messages: Option<usize>,
+        target_stream_size_bytes: Option<usize>,
         chain_keys_enabled_status: BTreeMap<MasterPublicKeyId, bool>,
         ecdsa_signature_fee: Option<Cycles>,
         schnorr_signature_fee: Option<Cycles>,
@@ -1527,6 +1549,8 @@ impl StateMachine {
         let public_key_der = threshold_sig_public_key_to_der(public_key).unwrap();
         let subnet_id =
             subnet_id.unwrap_or(PrincipalId::new_self_authenticating(&public_key_der).into());
+        let max_stream_messages = max_stream_messages.unwrap_or(MAX_STREAM_MESSAGES);
+        let target_stream_size_bytes = target_stream_size_bytes.unwrap_or(TARGET_STREAM_SIZE_BYTES);
         let registry_client = make_nodes_registry(
             subnet_id,
             subnet_type,
@@ -1639,6 +1663,8 @@ impl StateMachine {
             hypervisor_config,
             cycles_account_manager.clone(),
             subnet_id,
+            max_stream_messages,
+            target_stream_size_bytes,
             &metrics_registry,
             replica_logger.clone(),
             Arc::clone(&registry_client) as _,
