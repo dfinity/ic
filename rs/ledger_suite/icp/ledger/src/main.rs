@@ -1184,11 +1184,13 @@ fn notify_dfx_() {
 
 #[export_name = "canister_query block_pb"]
 fn block_() {
+    panic_if_not_ready();
     over(protobuf, |BlockArg(height)| BlockRes(block(height)));
 }
 
 #[export_name = "canister_query tip_of_chain_pb"]
 fn tip_of_chain_() {
+    panic_if_not_ready();
     over(protobuf, |protobuf::TipOfChainRequest {}| tip_of_chain());
 }
 
