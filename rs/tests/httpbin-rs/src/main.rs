@@ -89,12 +89,10 @@ async fn redirect_handler(Path(n): Path<u64>) -> impl IntoResponse {
 
 /// Builds the response body using the request
 async fn anything_handler(method: Method, headers: HeaderMap, body: String) -> Vec<u8> {
-    // TODO: Do not use a map? Otherwise we lose duplicate headers, making the
-    // check in the tests to never fail.
     let headers = headers
         .iter()
         .map(|h| (h.0.to_string(), h.1.to_str().unwrap().to_string()))
-        .collect::<BTreeMap<String, String>>();
+        .collect::<Vec<(String, String)>>();
 
     let body = json!({
         "method": method.to_string(),
