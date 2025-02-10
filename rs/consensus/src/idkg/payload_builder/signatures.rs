@@ -1,5 +1,5 @@
 use ic_error_types::RejectCode;
-use ic_management_canister_types::{Payload, SignWithECDSAReply, SignWithSchnorrReply};
+use ic_management_canister_types_private::{Payload, SignWithECDSAReply, SignWithSchnorrReply};
 use ic_replicated_state::metadata_state::subnet_call_context_manager::IDkgSignWithThresholdContext;
 use ic_types::{
     consensus::idkg::{self, common::CombinedSignature, IDkgMasterPublicKeyId},
@@ -170,7 +170,7 @@ mod tests {
     };
     use assert_matches::assert_matches;
     use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
-    use ic_management_canister_types::MasterPublicKeyId;
+    use ic_management_canister_types_private::MasterPublicKeyId;
     use ic_replicated_state::metadata_state::subnet_call_context_manager::SignWithThresholdContext;
     use ic_test_utilities_types::ids::subnet_test_id;
     use ic_types::{

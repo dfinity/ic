@@ -2,7 +2,7 @@ use ic_base_types::{NumBytes, NumSeconds};
 use ic_cycles_account_manager::{CyclesAccountManager, ResourceSaturation};
 use ic_error_types::{ErrorCode, UserError};
 use ic_interfaces::execution_environment::SubnetAvailableMemory;
-use ic_management_canister_types::{CanisterSettingsArgs, LogVisibilityV2};
+use ic_management_canister_types_private::{CanisterSettingsArgs, LogVisibilityV2};
 use ic_types::{
     ComputeAllocation, Cycles, InvalidComputeAllocationError, InvalidMemoryAllocationError,
     MemoryAllocation, PrincipalId,
