@@ -1,5 +1,5 @@
 use anyhow::Result;
-use kube::api::{Patch, PatchParams};
+use kube::api::{DeleteParams, Patch, PatchParams};
 use kube::{
     api::{DynamicObject, GroupVersionKind},
     Api, Client,
@@ -86,6 +86,18 @@ pub async fn create_reservation(
 
     debug!("Creating reservation response: {:?}", response);
     info!("Creating reservation {} complete", name);
+
+    Ok(())
+}
+
+pub async fn delete_reservation(name: &str) -> Result<()> {
+    info!("Deleting reservation {}", name);
+
+    let client = Client::try_default().await?;
+    let gvk = GroupVersionKind::gvk("scheduling.koordinator.sh", "v1alpha1", "Reservation");
+    let (ar, _caps) = kube::discovery::pinned_kind(&client, &gvk).await?;
+    let api = Api::<DynamicObject>::all_with(client.clone(), &ar);
+    api.delete(name, &DeleteParams::default()).await?;
 
     Ok(())
 }

@@ -29,8 +29,8 @@ use tokio;
 use tracing::*;
 
 use crate::driver::farm::{
-    Certificate, CreateVmRequest, DnsRecord, DnsRecordType, PlaynetCertificate, VMCreateResponse,
-    VmSpec,
+    Certificate, CreateVmRequest, DnsRecord, DnsRecordType, ImageLocation, PlaynetCertificate,
+    VMCreateResponse, VmSpec,
 };
 use crate::driver::resource::ImageType;
 use crate::driver::test_env::{TestEnv, TestEnvAttribute};
@@ -195,6 +195,8 @@ pub struct TNet {
     pub version: String,
     pub image_url: String,
     pub image_sha: String,
+    pub bn_image_url: Option<String>,
+    pub bn_image_sha: Option<String>,
     pub config_url: Option<String>,
     pub access_key: Option<String>,
     pub nodes: Vec<TNode>,
@@ -330,6 +332,10 @@ impl TNet {
             &Default::default(),
         )
         .await?;
+        // delete reservations
+        for node in self.nodes {
+            delete_reservation(node.name.clone().unwrap().as_str()).await?;
+        }
         Ok(())
     }
 
@@ -416,10 +422,13 @@ impl TNet {
             vm_name = vm_name,
             image_url = format!(
                 "http://server.bazel-remote.svc.cluster.local:8080/cas/{}",
-                self.image_sha
+                match vm_req.primary_image {
+                    ImageLocation::IcOsImageViaUrl { url: _, sha256 } => sha256,
+                    _ => self.image_sha.clone(),
+                }
             ),
         );
-        let _j = create_job(
+        create_job(
             &vm_name.clone(),
             "alpine:latest",
             vec!["/bin/sh", "-c"],

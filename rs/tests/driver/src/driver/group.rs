@@ -979,6 +979,7 @@ impl SystemTestGroup {
         info!(ctx.log(), "Deleting k8s tnet.");
         let env = ensure_setup_env(ctx);
         let tnet = TNet::read_attribute(&env);
+        // TODO: delete reservations
         block_on(tnet.delete()).expect("deleting tnet");
     }
 }
