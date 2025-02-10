@@ -8141,3 +8141,30 @@ fn wasm64_correct_execution_state() {
 fn wasm32_correct_execution_state() {
     check_correct_execution_state(false);
 }
+
+#[test]
+fn cost_call() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let subnet_size = test.subnet_size();
+    let canister_id = test.universal_canister().unwrap();
+    let method_name_size = 20;
+    let payload_size = 2000;
+    let payload = wasm()
+        .cost_call(method_name_size, payload_size)
+        .reply_data_append()
+        .reply()
+        .build();
+    let res = test.ingress(canister_id, "update", payload);
+    let expected_cost = test
+        .cycles_account_manager()
+        .xnet_call_performed_fee(subnet_size)
+        .get()
+        + test
+            .cycles_account_manager()
+            .xnet_call_bytes_transmitted_fee((method_name_size + payload_size).into(), subnet_size)
+            .get();
+    let Ok(WasmResult::Reply(bytes)) = res else {
+        panic!("Expected reply, got {:?}", res);
+    };
+    assert_eq!(bytes, expected_cost.to_le_bytes());
+}
