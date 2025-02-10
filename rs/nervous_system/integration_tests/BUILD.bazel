@@ -316,7 +316,7 @@ rust_test(
     srcs = [
         "tests/store_canister_integration.rs",
     ],
-        aliases = ALIASES,
+    aliases = ALIASES,
     data = DEV_DATA,
     env = DEV_ENV | {"RUST_TEST_NOCAPTURE": "1"},
     flaky = True,

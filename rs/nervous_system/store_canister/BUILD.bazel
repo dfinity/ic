@@ -1,4 +1,3 @@
-load("@rules_motoko//motoko:defs.bzl", "motoko_library")
 load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 load("//bazel:canisters.bzl", "motoko_canister")
 
@@ -19,7 +18,7 @@ rust_library(
     },
     deps = [
         "//rs/types/base_types",
-    ]
+    ],
 )
 
 rust_test(
