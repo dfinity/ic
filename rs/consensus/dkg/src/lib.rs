@@ -439,7 +439,7 @@ mod tests {
         RegistryVersion, ReplicaVersion,
     };
     use std::{collections::BTreeSet, convert::TryFrom};
-    use utils::{get_vetkeys_for_subnet, tags_iter};
+    use utils::{tags_iter, vetkd_key_ids_for_subnet};
 
     #[test]
     // In this test we test the creation of dealing payloads.
@@ -1648,7 +1648,7 @@ mod tests {
             let summary = dkg_block.payload.as_ref().as_summary();
             let dkg_summary = &summary.dkg;
 
-            let vet_key_ids = get_vetkeys_for_subnet(
+            let vet_key_ids = vetkd_key_ids_for_subnet(
                 replica_config.subnet_id,
                 &*registry,
                 dkg_summary.registry_version,
@@ -1710,7 +1710,7 @@ mod tests {
             let summary = dkg_block.payload.as_ref().as_summary();
             let dkg_summary = &summary.dkg;
 
-            let vet_key_ids = get_vetkeys_for_subnet(
+            let vet_key_ids = vetkd_key_ids_for_subnet(
                 replica_config.subnet_id,
                 &*registry,
                 dkg_summary.registry_version,
@@ -1776,7 +1776,7 @@ mod tests {
             let summary = dkg_block.payload.as_ref().as_summary();
             let dkg_summary = &summary.dkg;
 
-            let vet_key_ids = get_vetkeys_for_subnet(
+            let vet_key_ids = vetkd_key_ids_for_subnet(
                 replica_config.subnet_id,
                 &*registry,
                 dkg_summary.registry_version,
@@ -1826,7 +1826,7 @@ mod tests {
             let summary = dkg_block.payload.as_ref().as_summary();
             let dkg_summary = &summary.dkg;
 
-            let vet_key_ids = get_vetkeys_for_subnet(
+            let vet_key_ids = vetkd_key_ids_for_subnet(
                 replica_config.subnet_id,
                 &*registry,
                 dkg_summary.registry_version,
@@ -1874,7 +1874,7 @@ mod tests {
             let summary = dkg_block.payload.as_ref().as_summary();
             let dkg_summary = &summary.dkg;
 
-            let vet_key_ids = get_vetkeys_for_subnet(
+            let vet_key_ids = vetkd_key_ids_for_subnet(
                 replica_config.subnet_id,
                 &*registry,
                 dkg_summary.registry_version,
