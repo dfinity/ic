@@ -304,7 +304,6 @@ fn is_supported(api_type: SystemApiCallId, context: &str) -> bool {
         SystemApiCallId::CostHttpRequest=> vec!["*", "s"],
         SystemApiCallId::CostSignWithSchnorr=> vec!["*", "s"],
         SystemApiCallId::CostVetkdDeriveEncryptedKey => vec!["*", "s"],
-        SystemApiCallId::ReplicationFactor => vec!["*", "s"],
         SystemApiCallId::DebugPrint => vec!["*", "s"],
         SystemApiCallId::Trap => vec!["*", "s"],
         SystemApiCallId::MintCycles => vec!["U", "Ry", "Rt", "T"],
@@ -836,7 +835,6 @@ fn api_availability_test(
         SystemApiCallId::CostSignWithEcdsa => {}
         SystemApiCallId::CostSignWithSchnorr => {}
         SystemApiCallId::CostVetkdDeriveEncryptedKey => {}
-        SystemApiCallId::ReplicationFactor => {}
     }
 }
 

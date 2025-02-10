@@ -1249,20 +1249,6 @@ pub fn syscalls<
         .unwrap();
 
     linker
-        .func_wrap("ic0", "replication_factor", {
-            move |mut caller: Caller<'_, StoreData>, src: I, size: I| {
-                let src: usize = src.try_into().expect("Failed to convert I to usize");
-                let size: usize = size.try_into().expect("Failed to convert I to usize");
-                charge_for_cpu_and_mem(&mut caller, overhead::REPLICATION_FACTOR, size)?;
-                with_memory_and_system_api(&mut caller, |s, memory| {
-                    s.ic0_replication_factor(src, size, memory)
-                })
-                .map_err(|e| anyhow::Error::msg(format!("ic0_replication_factor failed: {}", e)))
-            }
-        })
-        .unwrap();
-
-    linker
         .func_wrap("ic0", "cost_call", {
             move |mut caller: Caller<'_, StoreData>,
                   method_name_size: u64,

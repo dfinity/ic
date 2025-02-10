@@ -235,8 +235,6 @@ pub enum SystemApiCallId {
     SubnetSelfSize,
     /// Tracker for `ic0.subnet_self_copy()`
     SubnetSelfCopy,
-    /// Tracker for `ic0.replication_factor()`
-    ReplicationFactor,
     /// Tracker for `ic0.stable64_grow()`
     Stable64Grow,
     /// Tracker for `ic0.stable64_read()`
