@@ -5,6 +5,7 @@ use dfn_candid::candid_one;
 use dfn_protobuf::protobuf;
 use ic_base_types::PrincipalId;
 use ic_canister_client_sender::Sender;
+use ic_nervous_system_common::ledger::compute_neuron_staking_subaccount_bytes;
 use ic_nervous_system_common_test_keys::{
     TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_KEYPAIR, TEST_NEURON_1_OWNER_PRINCIPAL, TEST_NEURON_2_ID,
     TEST_NEURON_2_OWNER_PRINCIPAL,
@@ -13,6 +14,7 @@ use ic_nns_common::pb::v1::NeuronId as NeuronIdProto;
 use ic_nns_governance::governance::INITIAL_NEURON_DISSOLVE_DELAY;
 use ic_nns_governance_api::pb::v1::{
     governance_error::ErrorType,
+    list_neurons::NeuronSubaccount,
     manage_neuron::{Command, Merge, NeuronIdOrSubaccount, Spawn},
     manage_neuron_response::{
         Command as CommandResponse, {self},
@@ -551,6 +553,9 @@ fn test_list_neurons() {
             include_neurons_readable_by_caller: false,
             include_empty_neurons_readable_by_caller: Some(false),
             include_public_neurons_in_full_neurons: None,
+            page_number: None,
+            page_size: None,
+            neuron_subaccounts: None,
         },
     );
     assert_eq!(list_neurons_response.neuron_infos.len(), 3);
@@ -565,6 +570,9 @@ fn test_list_neurons() {
             include_neurons_readable_by_caller: true,
             include_empty_neurons_readable_by_caller: Some(true),
             include_public_neurons_in_full_neurons: None,
+            page_number: None,
+            page_size: None,
+            neuron_subaccounts: None,
         },
     );
     assert_eq!(list_neurons_response.neuron_infos.len(), 2);
@@ -579,6 +587,9 @@ fn test_list_neurons() {
             include_neurons_readable_by_caller: true,
             include_empty_neurons_readable_by_caller: Some(false),
             include_public_neurons_in_full_neurons: None,
+            page_number: None,
+            page_size: None,
+            neuron_subaccounts: Some(vec![]), // Should be equivalent to None
         },
     );
     assert_eq!(list_neurons_response.neuron_infos.len(), 1);
@@ -592,8 +603,33 @@ fn test_list_neurons() {
         ListNeurons {
             neuron_ids: vec![neuron_id_3.id],
             include_neurons_readable_by_caller: true,
-            include_empty_neurons_readable_by_caller: None,
+            include_empty_neurons_readable_by_caller: Some(true),
             include_public_neurons_in_full_neurons: None,
+            page_number: None,
+            page_size: None,
+            neuron_subaccounts: Some(vec![]),
+        },
+    );
+    assert_eq!(list_neurons_response.neuron_infos.len(), 3);
+    assert_eq!(list_neurons_response.full_neurons.len(), 2);
+
+    // Step 6: Same but specify neuron 3 by subaccount.
+    // empty neurons, also specifying neuron 3 which the caller does not control.
+
+    let subaccount = compute_neuron_staking_subaccount_bytes(principal_2, 3);
+    let list_neurons_response = list_neurons(
+        &state_machine,
+        principal_1,
+        ListNeurons {
+            neuron_ids: vec![],
+            include_neurons_readable_by_caller: true,
+            include_empty_neurons_readable_by_caller: Some(true),
+            include_public_neurons_in_full_neurons: None,
+            page_number: None,
+            page_size: None,
+            neuron_subaccounts: Some(vec![NeuronSubaccount {
+                subaccount: subaccount.to_vec(),
+            }]),
         },
     );
     assert_eq!(list_neurons_response.neuron_infos.len(), 3);

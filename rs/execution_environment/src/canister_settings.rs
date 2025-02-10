@@ -2,7 +2,7 @@ use ic_base_types::{NumBytes, NumSeconds};
 use ic_cycles_account_manager::{CyclesAccountManager, ResourceSaturation};
 use ic_error_types::{ErrorCode, UserError};
 use ic_interfaces::execution_environment::SubnetAvailableMemory;
-use ic_management_canister_types::{CanisterSettingsArgs, LogVisibilityV2};
+use ic_management_canister_types_private::{CanisterSettingsArgs, LogVisibilityV2};
 use ic_types::{
     ComputeAllocation, Cycles, InvalidComputeAllocationError, InvalidMemoryAllocationError,
     MemoryAllocation, PrincipalId,
@@ -481,16 +481,6 @@ pub(crate) fn validate_canister_settings(
                     max_controllers
                 ),
             });
-        }
-    }
-
-    if let Some(wasm_memory_limit) = settings.wasm_memory_limit() {
-        if let Some(wasm_memory_threshold) = settings.wasm_memory_threshold() {
-            if wasm_memory_threshold > wasm_memory_limit {
-                return Err(CanisterManagerError::InvalidSettings {
-                    message: format!("Invalid settings: 'wasm_memory_threshold' cannot be larger than 'wasm_memory_limit'. 'wasm_memory_threshold': {}, 'wasm_memory_limit': {}", wasm_memory_threshold, wasm_memory_limit),
-                });
-            }
         }
     }
 

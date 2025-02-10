@@ -3,7 +3,7 @@ use ic_config::{
     execution_environment::Config as HypervisorConfig, flag_status::FlagStatus,
     subnet_config::SubnetConfig,
 };
-use ic_management_canister_types::{CanisterSettingsArgsBuilder, LogVisibilityV2};
+use ic_management_canister_types_private::{CanisterSettingsArgsBuilder, LogVisibilityV2};
 use ic_registry_subnet_type::SubnetType;
 use ic_state_machine_tests::{ErrorCode, StateMachine, StateMachineBuilder, StateMachineConfig};
 use ic_types::{CanisterId, Cycles, PrincipalId};
@@ -195,7 +195,7 @@ _wasm_backtrace_canister::stable_oob::outer
 }
 
 mod visibility {
-    use ic_management_canister_types::BoundedVec;
+    use ic_management_canister_types_private::BoundedVec;
 
     use super::*;
 

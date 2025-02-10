@@ -38,9 +38,5 @@ name = "rosetta_neuron_follow_test"
 path = "rosetta_neuron_follow_test.rs"
 
 [[bin]]
-name = "rosetta_neuron_voting_test"
-path = "rosetta_neuron_voting_test.rs"
-
-[[bin]]
 name = "rosetta_test"
 path = "rosetta_test.rs"

@@ -4,6 +4,7 @@ use ic_interfaces::{
     validation::ValidationError,
     vetkd::{InvalidVetKdPayloadReason, VetKdPayloadValidationFailure},
 };
+<<<<<<< HEAD
 use ic_interfaces_registry::RegistryClient;
 use ic_logger::{error, ReplicaLogger};
 use ic_management_canister_types::MasterPublicKeyId;
@@ -19,6 +20,15 @@ use std::{
     collections::{BTreeMap, BTreeSet, HashSet},
     time::Duration,
 };
+=======
+use ic_logger::{error, ReplicaLogger};
+use ic_protobuf::types::v1 as pb;
+use ic_types::{
+    batch::slice_to_messages, consensus::idkg::VetKdKeyShare,
+    crypto::vetkd::VetKdEncryptedKeyShare, messages::CallbackId, NodeId,
+};
+use std::collections::{BTreeMap, HashSet};
+>>>>>>> master
 
 pub(super) fn validation_failed_err(
     err: VetKdPayloadValidationFailure,
@@ -38,53 +48,6 @@ pub(super) fn validation_failed(err: VetKdPayloadValidationFailure) -> PayloadVa
 
 pub(super) fn invalid_artifact(reason: InvalidVetKdPayloadReason) -> PayloadValidationError {
     ValidationError::InvalidArtifact(InvalidPayloadReason::InvalidVetKdPayload(reason))
-}
-
-/// Return the [`ChainKeyConfig`] for the given subnet and registry version,
-/// if it contains any keys that require NiDKG (i.e. VetKD).
-pub(super) fn get_nidkg_chain_key_config_if_enabled(
-    subnet_id: SubnetId,
-    registry_version: RegistryVersion,
-    registry_client: &dyn RegistryClient,
-) -> Result<Option<ChainKeyConfig>, RegistryClientError> {
-    if let Some(chain_key_config) =
-        registry_client.get_chain_key_config(subnet_id, registry_version)?
-    {
-        let num_active_key_ids = chain_key_config
-            .key_configs
-            .iter()
-            // Skip keys that don't need to run NIDKG protocol
-            .filter(|key_config| !key_config.key_id.is_idkg_key())
-            .count();
-
-        if num_active_key_ids == 0 {
-            Ok(None)
-        } else {
-            Ok(Some(chain_key_config))
-        }
-    } else {
-        Ok(None)
-    }
-}
-
-/// Return the set of Key IDs requiring NiDKG in the given config,
-/// and calculate the request expiry time, if a timeout is configured
-pub(super) fn get_valid_keys_and_expiry(
-    config: ChainKeyConfig,
-    context_time: Time,
-) -> (BTreeSet<MasterPublicKeyId>, Option<Time>) {
-    let valid_keys: BTreeSet<MasterPublicKeyId> = config
-        .key_configs
-        .iter()
-        .filter(|key_config| !key_config.key_id.is_idkg_key())
-        .map(|key_config| key_config.key_id.clone())
-        .collect();
-
-    let request_expiry_time = config
-        .signature_request_timeout_ns
-        .and_then(|timeout| context_time.checked_sub(Duration::from_nanos(timeout)));
-
-    (valid_keys, request_expiry_time)
 }
 
 pub(super) fn group_shares_by_callback_id<Shares: Iterator<Item = VetKdKeyShare>>(
@@ -168,7 +131,6 @@ mod tests {
             subnet_id,
             vec![(registry_version.get(), subnet_record_builder.build())],
         );
-
         (subnet_id, registry, registry_version)
     }
 

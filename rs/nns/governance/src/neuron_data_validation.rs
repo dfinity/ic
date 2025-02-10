@@ -596,7 +596,7 @@ impl CardinalityAndRangeValidator for KnownNeuronIndexValidator {
     fn validate_cardinalities(neuron_store: &NeuronStore) -> Option<ValidationIssue> {
         let cardinality_primary_heap = neuron_store
             .heap_neurons_iter()
-            .filter(|neuron| neuron.known_neuron_data.is_some())
+            .filter(|neuron| neuron.known_neuron_data().is_some())
             .count() as u64;
         let cardinality_primary_stable = with_stable_neuron_store(|stable_neuron_store| {
             stable_neuron_store.lens().known_neuron_data
@@ -618,7 +618,7 @@ impl CardinalityAndRangeValidator for KnownNeuronIndexValidator {
         neuron: &Neuron,
     ) -> Option<ValidationIssue> {
         let neuron_id = neuron.id();
-        let known_neuron_name = match &neuron.known_neuron_data {
+        let known_neuron_name = match neuron.known_neuron_data() {
             // Most neurons aren't known neurons.
             None => return None,
             Some(known_neuron_data) => &known_neuron_data.name,

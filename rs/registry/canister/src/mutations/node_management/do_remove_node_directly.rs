@@ -10,7 +10,7 @@ use dfn_core::println;
 use ic_base_types::{NodeId, PrincipalId};
 use ic_registry_keys::{make_api_boundary_node_record_key, make_subnet_record_key};
 use ic_registry_transport::pb::v1::RegistryMutation;
-use ic_registry_transport::upsert;
+use ic_registry_transport::{delete, insert, upsert};
 use prost::Message;
 
 impl Registry {
@@ -51,8 +51,9 @@ impl Registry {
     }
 
     // Prepare mutations for removing or replacing a node in the registry.
-    // If new_node_id is Some, the old node is in-place replaced with the new node, even if the old node is in a subnet.
-    // If new_node_id is None, the old node is only removed from the registry and is not allowed to be in a subnet.
+    // * If new_node_id is Some, the old node is in-place replaced with the new node, even if the old node is
+    //   in active use (i.e., assigned to a subnet or acts as an API boundary node).
+    // * If new_node_id is None, the old node is only removed from the registry and is not allowed to be in active use.
     pub fn make_remove_or_replace_node_mutations(
         &mut self,
         payload: RemoveNodeDirectlyPayload,
@@ -121,21 +122,32 @@ impl Registry {
             );
         }
 
-        // 3. Ensure the node is not an API Boundary Node.
-        // In order to succeed, a corresponding ApiBoundaryNodeRecord should be removed first via proposal.
-        let api_bn_id = self.get_api_boundary_node_record(payload.node_id);
-        if api_bn_id.is_some() {
-            panic!(
-                "{}do_remove_node_directly: Cannot remove a node, as it has ApiBoundaryNodeRecord with record_key: {}",
-                LOG_PREFIX,
-                make_api_boundary_node_record_key(payload.node_id)
-            );
+        let mut mutations = vec![];
+
+        // 3. Check if the node is an API Boundary Node. If there is a replacement node, remove the existing node
+        //    and try to assign the new one to act as API boundary node. This will only work if the new node meets all
+        //    the requirements of an API boundary node (e.g., it is configured with a domain name).
+        if let Some(api_bn_record) = self.get_api_boundary_node_record(payload.node_id) {
+            let Some(replacement_node_id) = new_node_id else {
+                panic!(
+                    "{}do_remove_node_directly: Cannot remove this node, as it is an active API boundary node: {}",
+                    LOG_PREFIX,
+                    make_api_boundary_node_record_key(payload.node_id)
+                );
+            };
+
+            // remove the existing API boundary node record
+            let old_key = make_api_boundary_node_record_key(payload.node_id);
+            mutations.push(delete(old_key));
+
+            // create the new API boundary node record by just cloning the old one and inserting it with the new key
+            let new_key = make_api_boundary_node_record_key(replacement_node_id);
+            mutations.push(insert(new_key, api_bn_record.clone().encode_to_vec()));
         }
 
         // 4. Check if node is in a subnet, and if so, replace it in the subnet by updating the membership in the subnet record.
         let subnet_list_record = get_subnet_list_record(self);
         let is_node_in_subnet = find_subnet_for_node(self, payload.node_id, &subnet_list_record);
-        let mut mutations = vec![];
         if let Some(subnet_id) = is_node_in_subnet {
             if new_node_id.is_some() {
                 // The node is in a subnet and is being replaced with a new node.
@@ -157,10 +169,10 @@ impl Registry {
                     &mut subnet_record,
                     subnet_membership,
                 );
-                mutations = vec![upsert(
+                mutations.push(upsert(
                     make_subnet_record_key(subnet_id),
                     subnet_record.encode_to_vec(),
-                )];
+                ));
             } else {
                 panic!("{}do_remove_node_directly: Cannot remove a node that is a member of a subnet. This node is a member of Subnet: {}",
                     LOG_PREFIX,
@@ -217,7 +229,7 @@ mod tests {
         api_boundary_node::v1::ApiBoundaryNodeRecord, node_operator::v1::NodeOperatorRecord,
     };
     use ic_registry_keys::{make_node_operator_record_key, make_node_record_key};
-    use ic_registry_transport::insert;
+    use ic_registry_transport::{insert, update};
     use ic_types::ReplicaVersion;
     use prost::Message;
     use std::str::FromStr;
@@ -234,8 +246,8 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "Cannot remove a node, as it has ApiBoundaryNodeRecord")]
-    fn should_panic_if_node_is_api_boundary_node() {
+    #[should_panic(expected = "Cannot remove this node, as it is an active API boundary node")]
+    fn should_panic_if_node_is_api_boundary_node_and_no_replacement() {
         let mut registry = invariant_compliant_registry(0);
         // Add node to registry
         let (mutate_request, node_ids_and_dkg_pks) =
@@ -259,6 +271,119 @@ mod tests {
         let payload = RemoveNodeDirectlyPayload { node_id };
 
         registry.do_remove_node(payload, node_operator_id);
+    }
+
+    #[test]
+    fn should_succeed_to_replace_api_boundary_node() {
+        let mut registry = invariant_compliant_registry(0);
+        // Add node to registry
+        let (mutate_request, node_ids_and_dkg_pks) =
+            prepare_registry_with_nodes(1 /* mutation id */, 2 /* node count */);
+        registry.maybe_apply_mutation_internal(mutate_request.mutations);
+        let mut node_ids = node_ids_and_dkg_pks.keys();
+        let old_node_id = node_ids
+            .next()
+            .expect("should contain at least one node ID")
+            .to_owned();
+        let new_node_id = node_ids
+            .next()
+            .expect("should contain at least two node IDs")
+            .to_owned();
+
+        let node_operator_id = registry_add_node_operator_for_node(&mut registry, old_node_id, 0);
+
+        // turn first node into an API BN by adding the record to the registry
+        let api_bn = ApiBoundaryNodeRecord {
+            version: ReplicaVersion::default().to_string(),
+        };
+        registry.maybe_apply_mutation_internal(vec![insert(
+            make_api_boundary_node_record_key(old_node_id),
+            api_bn.encode_to_vec(),
+        )]);
+        let payload = RemoveNodeDirectlyPayload {
+            node_id: old_node_id,
+        };
+
+        registry.do_replace_node_with_another(payload, node_operator_id, new_node_id);
+
+        // Verify the removed node's API boundary node record has been removed
+        assert!(registry
+            .get(
+                make_api_boundary_node_record_key(old_node_id).as_bytes(),
+                registry.latest_version()
+            )
+            .is_none());
+
+        // Verify the replacement node has been turned into an API boundary node
+        assert!(registry
+            .get(
+                make_api_boundary_node_record_key(new_node_id).as_bytes(),
+                registry.latest_version()
+            )
+            .is_some());
+
+        // Verify the old node is removed from the registry
+        assert!(registry
+            .get(
+                make_node_record_key(old_node_id).as_bytes(),
+                registry.latest_version()
+            )
+            .is_none());
+
+        // Verify the new node is present in the registry
+        assert!(registry.get_node(new_node_id).is_some());
+
+        // Verify node operator allowance set to 1
+        let updated_operator = get_node_operator_record(&registry, node_operator_id).unwrap();
+        assert_eq!(updated_operator.node_allowance, 1);
+    }
+
+    #[test]
+    #[should_panic(
+        expected = "invariant check failed with message: domain field of the NodeRecord"
+    )]
+    fn should_panic_to_replace_api_boundary_node_if_new_node_has_no_domain() {
+        let mut registry = invariant_compliant_registry(0);
+        // Add node to registry
+        let (mutate_request, node_ids_and_dkg_pks) =
+            prepare_registry_with_nodes(1 /* mutation id */, 2 /* node count */);
+        registry.maybe_apply_mutation_internal(mutate_request.mutations);
+        let mut node_ids = node_ids_and_dkg_pks.keys();
+        let old_node_id = node_ids
+            .next()
+            .expect("should contain at least one node ID")
+            .to_owned();
+        let new_node_id = node_ids
+            .next()
+            .expect("should contain at least two node IDs")
+            .to_owned();
+
+        let node_operator_id = registry_add_node_operator_for_node(&mut registry, old_node_id, 0);
+
+        // turn first node into an API BN by adding the record to the registry
+        let api_bn = ApiBoundaryNodeRecord {
+            version: ReplicaVersion::default().to_string(),
+        };
+        registry.maybe_apply_mutation_internal(vec![insert(
+            make_api_boundary_node_record_key(old_node_id),
+            api_bn.encode_to_vec(),
+        )]);
+
+        // remove the default domain name from the replacement node such that the API boundary node invariant check fails
+        let mut node_record = registry.get_node_or_panic(new_node_id);
+        node_record.domain = None;
+        let update_node_record = update(
+            make_node_record_key(new_node_id).as_bytes(),
+            node_record.encode_to_vec(),
+        );
+        let mutations = vec![update_node_record];
+        registry.maybe_apply_mutation_internal(mutations);
+
+        let payload = RemoveNodeDirectlyPayload {
+            node_id: old_node_id,
+        };
+
+        registry.do_replace_node_with_another(payload, node_operator_id, new_node_id);
     }
 
     #[test]
@@ -440,52 +565,6 @@ mod tests {
 
         // Should fail because the DC of operator1 and operator2 does not match
         registry.do_remove_node(payload, operator2_id);
-    }
-    #[test]
-    fn should_replace_node_in_subnet() {
-        let mut registry = invariant_compliant_registry(0);
-
-        // Add nodes to the registry
-        let (mutate_request, node_ids_and_dkg_pks) = prepare_registry_with_nodes(1, 2);
-        registry.maybe_apply_mutation_internal(mutate_request.mutations);
-        let node_ids = node_ids_and_dkg_pks.keys().cloned().collect::<Vec<_>>();
-        let node_operator_id = registry_add_node_operator_for_node(&mut registry, node_ids[0], 0);
-
-        // Create a subnet with the first node
-        let subnet_id =
-            registry_create_subnet_with_nodes(&mut registry, &node_ids_and_dkg_pks, &[0]);
-
-        // Replace the node_ids[0] with node_ids[1], while node_ids[0] is in a subnet
-        let payload = RemoveNodeDirectlyPayload {
-            node_id: node_ids[0],
-        };
-
-        registry.do_replace_node_with_another(payload, node_operator_id, node_ids[1]);
-
-        // Verify the subnet record is updated with the new node
-        let expected_membership: Vec<NodeId> = vec![node_ids[1]];
-        let actual_membership: Vec<NodeId> = registry
-            .get_subnet_or_panic(subnet_id)
-            .membership
-            .iter()
-            .map(|bytes| NodeId::from(PrincipalId::try_from(bytes).unwrap()))
-            .collect();
-        assert_eq!(actual_membership, expected_membership);
-
-        // Verify the old node is removed from the registry
-        assert!(registry
-            .get(
-                make_node_record_key(node_ids[0]).as_bytes(),
-                registry.latest_version()
-            )
-            .is_none());
-
-        // Verify the new node is present in the registry
-        assert!(registry.get_node(node_ids[1]).is_some());
-
-        // Verify node operator allowance increased by 1
-        let updated_operator = get_node_operator_record(&registry, node_operator_id).unwrap();
-        assert_eq!(updated_operator.node_allowance, 1);
     }
 
     #[test]
