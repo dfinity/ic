@@ -411,6 +411,14 @@ impl TNet {
 
         // create a job to download the image and extract it
         // TODO: only download it once and copy it if it's already downloaded
+
+        let image_url = format!(
+            "http://server.bazel-remote.svc.cluster.local:8080/cas/{}",
+            match vm_req.primary_image {
+                ImageLocation::IcOsImageViaUrl { url: _, sha256 } => sha256,
+                _ => self.image_sha.clone(),
+            }
+        );
         let args = format!(
             "set -e; apk add zstd tar; \
             mkdir -p /tnet/{vm_name}; \
@@ -420,13 +428,7 @@ impl TNet {
             chmod -R 777 /tnet/{vm_name}; \
             rm -f /tnet/{vm_name}/img.tar.zst /tnet/{vm_name}/img.tar",
             vm_name = vm_name,
-            image_url = format!(
-                "http://server.bazel-remote.svc.cluster.local:8080/cas/{}",
-                match vm_req.primary_image {
-                    ImageLocation::IcOsImageViaUrl { url: _, sha256 } => sha256,
-                    _ => self.image_sha.clone(),
-                }
-            ),
+            image_url = image_url,
         );
         create_job(
             &vm_name.clone(),
