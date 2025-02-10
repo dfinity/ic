@@ -1,5 +1,5 @@
 use hex_literal::hex;
-use ic_crypto_ed25519::*;
+use ic_ed25519::*;
 use rand::Rng;
 use rand_chacha::ChaCha20Rng;
 
@@ -552,7 +552,7 @@ fn verification_follows_zip215() {
         })
         .map(|s| {
             (
-                ic_crypto_ed25519::PublicKey::deserialize_raw(&s[0]).unwrap(),
+                ic_ed25519::PublicKey::deserialize_raw(&s[0]).unwrap(),
                 s[1].clone(),
             )
         })
@@ -584,8 +584,7 @@ fn verification_follows_zip215() {
         };
 
         assert!(
-            ic_crypto_ed25519::PublicKey::batch_verify(&bmsg[..], &bsigs[..], &bkeys[..], rng)
-                .is_ok()
+            ic_ed25519::PublicKey::batch_verify(&bmsg[..], &bsigs[..], &bkeys[..], rng).is_ok()
         );
     }
 }

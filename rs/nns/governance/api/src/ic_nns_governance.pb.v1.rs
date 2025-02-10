@@ -3463,29 +3463,17 @@ pub struct ListProposalInfo {
 pub struct ListProposalInfoResponse {
     pub proposal_info: Vec<ProposalInfo>,
 }
-/// A request to list neurons. The "requested list", i.e., the list of
-/// neuron IDs to retrieve information about, is the union of the list
-/// of neurons listed in `neuron_ids` and, if `caller_neurons` is true,
-/// the list of neuron IDs of neurons for which the caller is the
-/// controller or one of the hot keys.
+
+/// The same as ListNeurons, but only used in list_neurons_pb, which is deprecated.
+/// This is temporarily split out so that the API changes to list_neurons do not have to
+/// follow both candid and protobuf standards for changes, which simplifies the API design
+/// considerably.
 ///
-/// Paging is available if the result set is larger than `MAX_LIST_NEURONS_RESULTS`,
-/// which is currently 500 neurons.  If you are unsure of the number of results in a set,
-/// you can use the `total_pages_available` field in the response to determine how many
-/// additional pages need to be queried.  It will be based on your `page_size` parameter.  
-/// When paging through results, it is good to keep in mind that newly inserted neurons
-/// could be missed if they are inserted between calls to pages, and this could result in missing
-/// a neuron in the combined responses.
-///
-/// If a user provides neuron_ids that do not exist in the request, there is no guarantee that
-/// each page will contain the exactly the page size, even if it is not the final request.  This is
-/// because neurons are retrieved by their neuron_id, and no additional checks are made on the
-/// validity of the neuron_ids provided by the user before deciding which sets of neuron_ids
-/// will be returned in the current page.
+/// This type should be removed when list_neurons_pb is finally deprecated.
 #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct ListNeurons {
+pub struct ListNeuronsProto {
     /// The neurons to get information about. The "requested list"
     /// contains all of these neuron IDs.
     #[prost(fixed64, repeated, packed = "false", tag = "1")]
@@ -3496,10 +3484,9 @@ pub struct ListNeurons {
     pub include_neurons_readable_by_caller: bool,
     /// Whether to also include empty neurons readable by the caller. This field only has an effect
     /// when `include_neurons_readable_by_caller` is true. If a neuron's id already exists in the
-    /// `neuron_ids` field, then the neuron will be included in the response regardless of the value of
-    /// this field. Since the previous behavior was to always include empty neurons readable by caller,
-    /// if this field is not provided, it defaults to true, in order to maintain backwards
-    /// compatibility. Here, being "empty" means 0 stake, 0 maturity and 0 staked maturity.
+    /// `neuron_ids` field, then the neuron will be included in the response regardless of the value
+    /// of this field. The default value is false (i.e. `None` is treated as `Some(false)`). Here,
+    /// being "empty" means 0 stake, 0 maturity and 0 staked maturity.
     #[prost(bool, optional, tag = "3")]
     pub include_empty_neurons_readable_by_caller: Option<bool>,
     /// If this is set to true, and a neuron in the "requested list" has its
@@ -3522,6 +3509,73 @@ pub struct ListNeurons {
     #[prost(uint64, optional, tag = "6")]
     pub page_size: Option<u64>,
 }
+/// A request to list neurons. The "requested list", i.e., the list of
+/// neuron IDs to retrieve information about, is the union of the list
+/// of neurons listed in `neuron_ids` and, if `caller_neurons` is true,
+/// the list of neuron IDs of neurons for which the caller is the
+/// controller or one of the hot keys.
+///
+/// Paging is available if the result set is larger than `MAX_LIST_NEURONS_RESULTS`,
+/// which is currently 500 neurons.  If you are unsure of the number of results in a set,
+/// you can use the `total_pages_available` field in the response to determine how many
+/// additional pages need to be queried.  It will be based on your `page_size` parameter.  
+/// When paging through results, it is good to keep in mind that newly inserted neurons
+/// could be missed if they are inserted between calls to pages, and this could result in missing
+/// a neuron in the combined responses.
+///
+/// If a user provides neuron_ids that do not exist in the request, there is no guarantee that
+/// each page will contain the exactly the page size, even if it is not the final request.  This is
+/// because neurons are retrieved by their neuron_id, and no additional checks are made on the
+/// validity of the neuron_ids provided by the user before deciding which sets of neuron_ids
+/// will be returned in the current page.
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct ListNeurons {
+    /// The neurons to get information about. The "requested list"
+    /// contains all of these neuron IDs.
+    pub neuron_ids: Vec<u64>,
+    /// If true, the "requested list" also contains the neuron ID of the
+    /// neurons that the calling principal is authorized to read.
+    pub include_neurons_readable_by_caller: bool,
+    /// Whether to also include empty neurons readable by the caller. This field only has an effect
+    /// when `include_neurons_readable_by_caller` is true. If a neuron's id already exists in the
+    /// `neuron_ids` field, then the neuron will be included in the response regardless of the value
+    /// of this field. The default value is false (i.e. `None` is treated as `Some(false)`). Here,
+    /// being "empty" means 0 stake, 0 maturity and 0 staked maturity.
+    pub include_empty_neurons_readable_by_caller: Option<bool>,
+    /// If this is set to true, and a neuron in the "requested list" has its
+    /// visibility set to public, then, it will (also) be included in the
+    /// full_neurons field in the response (which is of type ListNeuronsResponse).
+    /// Note that this has no effect on which neurons are in the "requested list".
+    /// In particular, this does not cause all public neurons to become part of the
+    /// requested list. In general, you probably want to set this to true, but
+    /// since this feature was added later, it is opt in to avoid confusing
+    /// existing (unmigrated) callers.
+    pub include_public_neurons_in_full_neurons: Option<bool>,
+    /// If this is set, we return the batch of neurons at a given page, using the `page_size` to
+    /// determine how many neurons are returned in each page.
+    pub page_number: Option<u64>,
+    /// If this is set, we use the page limit provided to determine how large pages will be.
+    /// This cannot be greater than MAX_LIST_NEURONS_RESULTS, which is set to 500.
+    /// If not set, this defaults to MAX_LIST_NEURONS_RESULTS.
+    pub page_size: Option<u64>,
+    /// A list of neurons by subaccounts to return in the response.  If the neurons are not
+    /// found by subaccount, no error is returned, but the page will still be returned.
+    pub neuron_subaccounts: Option<Vec<list_neurons::NeuronSubaccount>>,
+}
+
+pub mod list_neurons {
+    /// A type for the request to list neurons.
+    #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
+    #[allow(clippy::derive_partial_eq_without_eq)]
+    #[derive(Clone, Debug, PartialEq)]
+    pub struct NeuronSubaccount {
+        #[serde(with = "serde_bytes")]
+        pub subaccount: Vec<u8>,
+    }
+}
+
 /// A response to a `ListNeurons` request.
 ///
 /// The "requested list" is described in `ListNeurons`.

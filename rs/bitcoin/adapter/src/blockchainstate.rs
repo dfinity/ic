@@ -7,7 +7,7 @@ use bitcoin::{
 
 use ic_btc_validation::{validate_header, HeaderStore, ValidateHeaderError};
 use ic_metrics::MetricsRegistry;
-use std::collections::HashMap;
+use std::{collections::HashMap, sync::Arc};
 use thiserror::Error;
 
 use bitcoin::Work;
@@ -94,7 +94,7 @@ pub struct BlockchainState {
     header_cache: HashMap<BlockHash, HeaderNode>,
 
     /// This field stores a hashmap containing BlockHash and the corresponding Block.
-    block_cache: HashMap<BlockHash, Block>,
+    block_cache: HashMap<BlockHash, Arc<Block>>,
 
     /// This field contains the known tips of the header cache.
     tips: Vec<Tip>,
@@ -240,7 +240,7 @@ impl BlockchainState {
             .add_header(block.header)
             .map_err(AddBlockError::Header)?;
         self.tips.sort_unstable_by(|a, b| b.work.cmp(&a.work));
-        self.block_cache.insert(block_hash, block);
+        self.block_cache.insert(block_hash, Arc::new(block));
         self.metrics
             .block_cache_size
             .set(self.get_block_cache_size() as i64);
@@ -317,10 +317,10 @@ impl BlockchainState {
         hashes
     }
 
-    /// This method takes a list of block hashes as input.
-    /// For each block hash, if the corresponding block is stored in the `block_cache`, the cached block is returned.
-    pub fn get_block(&self, block_hash: &BlockHash) -> Option<&Block> {
-        self.block_cache.get(block_hash)
+    /// This method takes a block hash
+    /// If the corresponding block is stored in the `block_cache`, the cached block is returned.
+    pub fn get_block(&self, block_hash: &BlockHash) -> Option<Arc<Block>> {
+        self.block_cache.get(block_hash).cloned()
     }
 
     /// Used when the adapter is shutdown and no longer requires holding on to blocks.
