@@ -1764,7 +1764,10 @@ async fn test_manage_network_economics_change_one_deep_subfield() {
 
         let proposal_contribution_threshold_xdr = rust_decimal::Decimal::from(123_456_789);
 
-        assert_ne!(prior_contribution_threshold_xdr, proposal_contribution_threshold_xdr);
+        assert_ne!(
+            prior_contribution_threshold_xdr,
+            proposal_contribution_threshold_xdr
+        );
     }
     gov.make_proposal(
         &NeuronId { id: 1 },
