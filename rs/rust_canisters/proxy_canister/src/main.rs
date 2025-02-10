@@ -9,7 +9,7 @@ use candid::Principal;
 use ic_cdk::api::call::RejectionCode;
 use ic_cdk::caller;
 use ic_cdk_macros::{query, update};
-use ic_management_canister_types::{
+use ic_management_canister_types_private::{
     CanisterHttpResponsePayload, HttpHeader, Payload, TransformArgs,
 };
 use proxy_canister::{RemoteHttpRequest, RemoteHttpResponse};
@@ -157,7 +157,7 @@ fn main() {}
 #[cfg(test)]
 mod proxy_canister_test {
     use super::*;
-    use ic_management_canister_types::HttpHeader;
+    use ic_management_canister_types_private::HttpHeader;
 
     #[test]
     fn test_transform() {

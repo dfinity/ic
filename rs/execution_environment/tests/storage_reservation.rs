@@ -1,8 +1,8 @@
 use ic_config::execution_environment::Config as ExecutionConfig;
 use ic_config::subnet_config::SubnetConfig;
 use ic_error_types::ErrorCode;
-use ic_management_canister_types::TakeCanisterSnapshotArgs;
-use ic_management_canister_types::{self as ic00, CanisterInstallMode, EmptyBlob, Payload};
+use ic_management_canister_types_private::TakeCanisterSnapshotArgs;
+use ic_management_canister_types_private::{self as ic00, CanisterInstallMode, EmptyBlob, Payload};
 use ic_registry_subnet_type::SubnetType;
 use ic_state_machine_tests::{StateMachine, StateMachineBuilder, StateMachineConfig};
 use ic_test_utilities::universal_canister::{call_args, wasm, UNIVERSAL_CANISTER_WASM};
@@ -195,17 +195,29 @@ fn test_storage_reservation_triggered_in_canister_snapshot_without_enough_cycles
 
     // Take a snapshot to trigger more storage reservation. The canister does not have
     // enough cycles in its balance, so this should fail.
-    let res = env.take_canister_snapshot(TakeCanisterSnapshotArgs::new(canister_id, None));
-    match res {
-        Ok(_) => panic!("Expected an error but got Ok(_)"),
-        Err(err) => {
-            assert_eq!(err.code(), ErrorCode::InsufficientCyclesInMemoryGrow);
-            // Match on a substring of the error message. Due to a difference in instructions consumed on
-            // Mac vs Linux, we cannot match on the exact number of cycles but we only need to verify it's
-            // a non-zero amount.
-            assert!(err
-                .description()
-                .contains("due to insufficient cycles. At least 339_603_"));
-        }
-    }
+    let err = env
+        .take_canister_snapshot(TakeCanisterSnapshotArgs::new(canister_id, None))
+        .expect_err("Expected an error, but got Ok(_)");
+    err.assert_contains(
+        ErrorCode::InsufficientCyclesInMemoryGrow,
+        "Canister cannot grow memory by",
+    );
+
+    // Match on a substring of the error message. Due to a difference in instructions consumed on
+    // Mac vs Linux, we cannot match on the exact number of cycles but we only need to verify it's
+    // a non-zero amount.
+    let regex = regex::Regex::new("At least ([0-9_]+) additional cycles are required.").unwrap();
+    let cycles_needed: u128 = regex
+        .captures(err.description())
+        .expect("Number regex match failed.")
+        .get(1)
+        .expect("No match for cycles needed.")
+        .as_str()
+        .replace("_", "")
+        .parse()
+        .expect("Failed to parse regex match for cycle count.");
+    assert!(
+        cycles_needed > 0,
+        "The amount of cycles needed is {cycles_needed} which is not positive."
+    );
 }

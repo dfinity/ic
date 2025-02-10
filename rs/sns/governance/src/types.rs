@@ -45,7 +45,9 @@ use ic_canister_log::log;
 use ic_crypto_sha2::Sha256;
 use ic_icrc1_ledger::UpgradeArgs as LedgerUpgradeArgs;
 use ic_ledger_core::tokens::TOKEN_SUBDIVIDABLE_BY;
-use ic_management_canister_types::{CanisterIdRecord, CanisterInstallModeError, StoredChunksReply};
+use ic_management_canister_types_private::{
+    CanisterIdRecord, CanisterInstallModeError, StoredChunksReply,
+};
 use ic_nervous_system_common::{
     hash_to_hex_string, ledger_validation::MAX_LOGO_LENGTH, NervousSystemError,
     DEFAULT_TRANSFER_FEE, ONE_DAY_SECONDS, ONE_MONTH_SECONDS, ONE_YEAR_SECONDS,
@@ -458,6 +460,7 @@ impl NervousSystemParameters {
             max_dissolve_delay_bonus_percentage: Some(100),
             max_age_bonus_percentage: Some(25),
             maturity_modulation_disabled: Some(false),
+            automatically_advance_target_version: Some(false),
         }
     }
 
@@ -525,6 +528,9 @@ impl NervousSystemParameters {
             maturity_modulation_disabled: self
                 .maturity_modulation_disabled
                 .or(base.maturity_modulation_disabled),
+            automatically_advance_target_version: self
+                .automatically_advance_target_version
+                .or(base.automatically_advance_target_version),
         }
     }
 
@@ -1765,7 +1771,7 @@ impl UpgradeSnsControlledCanister {
             canister_upgrade_arg: self.canister_upgrade_arg.clone(),
             mode: self.mode,
             new_canister_wasm: Vec::new(),
-            chunked_canister_wasm: None,
+            chunked_canister_wasm: self.chunked_canister_wasm.clone(),
         }
     }
 }
@@ -1910,16 +1916,18 @@ impl From<ManageLedgerParameters> for LedgerUpgradeArgs {
             token_symbol,
             token_logo,
         } = manage_ledger_parameters;
-        let metadata = [("icrc1:logo", token_logo.map(MetadataValue::Text))]
-            .into_iter()
-            .filter_map(|(k, v)| v.map(|v| (k.to_string(), v)))
-            .collect();
+
+        let metadata = token_logo.map(|token_logo| {
+            let key = "icrc1:logo".to_string();
+            let value = MetadataValue::Text(token_logo);
+            vec![(key, value)]
+        });
 
         LedgerUpgradeArgs {
             transfer_fee: transfer_fee.map(|tf| tf.into()),
             token_name,
             token_symbol,
-            metadata: Some(metadata),
+            metadata,
             ..LedgerUpgradeArgs::default()
         }
     }

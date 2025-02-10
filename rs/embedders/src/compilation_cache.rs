@@ -99,6 +99,9 @@ impl CompilationCache {
                 counter,
                 ..
             } => {
+                // The file paths must not have existing files. To ensure this
+                // we add a unique counter - otherwise concurent insertions for
+                // the same Wasm would use the same file.
                 let hash = WasmHash::from(canister_module);
                 let id = counter.fetch_add(1, Ordering::SeqCst);
                 let mut bytes_path: PathBuf = dir.path().into();

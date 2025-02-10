@@ -100,7 +100,7 @@ fn weigh_entry(k: &Arc<RequestContext>, v: &CacheItem) -> u32 {
         + 58; // 2 x Principal
 
     for (k, v) in v.headers.iter() {
-        cost += k.as_str().as_bytes().len();
+        cost += k.as_str().len();
         cost += v.as_bytes().len();
     }
 

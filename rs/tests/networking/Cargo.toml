@@ -18,7 +18,7 @@ ic-agent = { workspace = true }
 ic-base-types = { path = "../../types/base_types" }
 ic-cdk = { workspace = true }
 ic-limits = { path = "../../limits" }
-ic-management-canister-types = { path = "../../types/management_canister_types" }
+ic-management-canister-types-private = { path = "../../types/management_canister_types" }
 ic-networking-subnet-update-workload = { path = "./subnet_update_workload" }
 ic-nns-governance-api = { path = "../../nns/governance/api" }
 ic-prep = { path = "../../prep" }

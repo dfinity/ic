@@ -1,5 +1,5 @@
 use ic_error_types::UserError;
-use ic_management_canister_types::QueryMethod;
+use ic_management_canister_types_private::QueryMethod;
 use ic_metrics::{
     buckets::{decimal_buckets, decimal_buckets_with_zero},
     MetricsRegistry,
@@ -552,7 +552,7 @@ struct MeasurementScopeCore<'a> {
     record_zeros: bool,
 }
 
-impl<'a> Drop for MeasurementScopeCore<'a> {
+impl Drop for MeasurementScopeCore<'_> {
     fn drop(&mut self) {
         if let Some(outer) = &self.outer {
             outer.add(self.instructions, self.slices, self.messages);

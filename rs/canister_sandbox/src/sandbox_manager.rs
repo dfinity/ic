@@ -21,7 +21,8 @@ use std::time::{Duration, Instant};
 use crate::protocol::id::{ExecId, MemoryId, WasmId};
 use crate::protocol::sbxsvc::{CreateExecutionStateSerializedSuccessReply, OpenMemoryRequest};
 use crate::protocol::structs::{
-    MemoryModifications, SandboxExecInput, SandboxExecOutput, StateModifications,
+    ExecutionStateModifications, MemoryModifications, SandboxExecInput, SandboxExecOutput,
+    StateModifications,
 };
 use crate::{controller_service::ControllerService, protocol};
 use ic_config::embedders::Config as EmbeddersConfig;
@@ -158,37 +159,44 @@ impl Execution {
 
         match wasm_result {
             Ok(_) => {
-                let state_modifications = deltas.map(
-                    |WasmStateChanges {
-                         dirty_page_indices,
-                         globals,
-                     }| {
-                        let system_state_changes = match instance_or_system_api {
-                            // Here we use `store_data_mut` instead of
-                            // `into_store_data` because the later will drop the
-                            // wasmtime Instance which can be an expensive
-                            // operation. Mutating the store instead allows us
-                            // to delay the drop until after the execution
-                            // completed message is sent back to the main
-                            // process.
-                            Ok(mut instance) => instance
-                                .store_data_mut()
-                                .system_api_mut()
-                                .expect("System api not present in the wasmtime instance")
-                                .take_system_state_changes(),
-                            Err(system_api) => system_api.into_system_state_changes(),
-                        };
-                        StateModifications::new(
-                            globals,
-                            &wasm_memory,
-                            &stable_memory,
-                            &dirty_page_indices.wasm_memory_delta,
-                            &dirty_page_indices.stable_memory_delta,
-                            system_state_changes,
-                        )
-                    },
-                );
-                if state_modifications.is_some() {
+                let state_modifications = {
+                    let system_state_modifications = match instance_or_system_api {
+                        // Here we use `store_data_mut` instead of
+                        // `into_store_data` because the later will drop the
+                        // wasmtime Instance which can be an expensive
+                        // operation. Mutating the store instead allows us
+                        // to delay the drop until after the execution
+                        // completed message is sent back to the main
+                        // process.
+                        Ok(mut instance) => instance
+                            .store_data_mut()
+                            .system_api_mut()
+                            .expect("System api not present in the wasmtime instance")
+                            .take_system_state_modifications(),
+                        Err(mut system_api) => system_api.take_system_state_modifications(),
+                    };
+
+                    let execution_state_modifications = deltas.map(
+                        |WasmStateChanges {
+                             dirty_page_indices,
+                             globals,
+                         }| {
+                            ExecutionStateModifications::new(
+                                globals,
+                                &wasm_memory,
+                                &stable_memory,
+                                &dirty_page_indices.wasm_memory_delta,
+                                &dirty_page_indices.stable_memory_delta,
+                            )
+                        },
+                    );
+
+                    StateModifications {
+                        execution_state_modifications,
+                        system_state_modifications,
+                    }
+                };
+                if state_modifications.execution_state_modifications.is_some() {
                     self.sandbox_manager
                         .add_memory(exec_input.next_wasm_memory_id, wasm_memory);
                     self.sandbox_manager
@@ -237,7 +245,7 @@ impl Execution {
                         exec_output: SandboxExecOutput {
                             slice,
                             wasm: wasm_output,
-                            state: None,
+                            state: StateModifications::default(),
                             execute_total_duration: total_timer.elapsed(),
                             execute_run_duration: run_timer.elapsed(),
                         },

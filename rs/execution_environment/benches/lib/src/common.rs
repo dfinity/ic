@@ -2,7 +2,7 @@
 /// Common System API benchmark functions, types, constants.
 ///
 use criterion::{BatchSize, Criterion};
-use ic_config::embedders::{Config as EmbeddersConfig, FeatureFlags};
+use ic_config::embedders::{BestEffortResponsesFeature, Config as EmbeddersConfig, FeatureFlags};
 use ic_config::execution_environment::{
     Config, CANISTER_GUARANTEED_CALLBACK_QUOTA, SUBNET_CALLBACK_SOFT_LIMIT,
 };
@@ -273,7 +273,7 @@ where
     ));
     let mut embedders_config = EmbeddersConfig {
         feature_flags: FeatureFlags {
-            best_effort_responses: FlagStatus::Enabled,
+            best_effort_responses: BestEffortResponsesFeature::Enabled,
             wasm64: FlagStatus::Enabled,
             ..FeatureFlags::default()
         },
@@ -281,7 +281,7 @@ where
     };
 
     // Set up larger heap, of 8GB for the Wasm64 feature.
-    embedders_config.max_wasm_memory_size = NumBytes::from(8 * 1024 * 1024 * 1024);
+    embedders_config.max_wasm64_memory_size = NumBytes::from(8 * 1024 * 1024 * 1024);
 
     let config = Config {
         embedders_config,

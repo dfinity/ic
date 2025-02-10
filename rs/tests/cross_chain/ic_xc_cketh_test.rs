@@ -18,7 +18,7 @@ use ic_ledger_suite_orchestrator::candid::{
     AddErc20Arg, Erc20Contract, InitArg, LedgerInitArg, ManagedCanisterIds, OrchestratorArg,
     UpgradeArg as LedgerSuiteOrchestratorUpgradeArg,
 };
-use ic_management_canister_types::{EcdsaKeyId, MasterPublicKeyId};
+use ic_management_canister_types_private::{EcdsaKeyId, MasterPublicKeyId};
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, ROOT_CANISTER_ID};
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::test_env_api::SubnetSnapshot;
@@ -871,7 +871,7 @@ struct LedgerCanister<'a> {
     canister: Canister<'a>,
 }
 
-impl<'a> LedgerCanister<'a> {
+impl LedgerCanister<'_> {
     fn principal(&self) -> Principal {
         self.canister.canister_id().get().0
     }
@@ -881,7 +881,7 @@ struct CkEthMinterCanister<'a> {
     canister: Canister<'a>,
 }
 
-impl<'a> CkEthMinterCanister<'a> {
+impl CkEthMinterCanister<'_> {
     async fn minter_address(&self) -> String {
         self.canister
             .update_("minter_address", candid, ())
@@ -919,7 +919,7 @@ struct LedgerSuiteOrchestratorCanister<'a> {
     canister: Canister<'a>,
 }
 
-impl<'a> LedgerSuiteOrchestratorCanister<'a> {
+impl LedgerSuiteOrchestratorCanister<'_> {
     async fn upgrade(&mut self, arg: LedgerSuiteOrchestratorUpgradeArg) {
         self.canister
             .upgrade_to_self_binary(Encode!(&OrchestratorArg::UpgradeArg(arg)).unwrap())

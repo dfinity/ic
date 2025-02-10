@@ -26,7 +26,7 @@ use ic_agent::{
 };
 use ic_base_types::{CanisterId, NumBytes};
 use ic_cdk::api::call::RejectionCode;
-use ic_management_canister_types::{
+use ic_management_canister_types_private::{
     BoundedHttpHeaders, CanisterHttpRequestArgs, HttpHeader, HttpMethod, TransformContext,
     TransformFunc,
 };
