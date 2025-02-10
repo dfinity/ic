@@ -1,7 +1,6 @@
 use assert_matches::assert_matches;
 use canister_test::Wasm;
 use ic_base_types::CanisterId;
-use ic_management_canister_types::CanisterInstallMode;
 use ic_nervous_system_agent::management_canister::canister_status;
 use ic_nervous_system_agent::pocketic_impl::{
     PocketIcAgent, PocketIcCallError::CanisterSubnetNotFound,
@@ -18,6 +17,7 @@ use ic_nervous_system_integration_tests::{
     pocket_ic_helpers::add_wasms_to_sns_wasm,
 };
 use ic_nns_constants::ROOT_CANISTER_ID;
+use ic_nns_governance::pb::v1::install_code::CanisterInstallMode;
 use ic_nns_test_utils::common::modify_wasm_bytes;
 use ic_sns_cli::neuron_id_to_candid_subaccount::ParsedSnsNeuron;
 use ic_sns_cli::upgrade_sns_controlled_canister::{
@@ -248,7 +248,7 @@ async fn upgrade_sns_controlled_canister_with_large_wasm() {
     .await;
     // TODO: Consider strengthening these assertions.
     assert!(final_cycles_balance < original_cycles_balance);
-    assert!(final_cycles_balance > candid::Nat::from(0_u64));
+    assert!(final_cycles_balance > 0_u64);
 
     // 8. Assert that store canister has been deleted.
     let err = canister_status(

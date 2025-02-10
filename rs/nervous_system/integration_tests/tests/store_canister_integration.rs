@@ -1,19 +1,13 @@
 use candid::Nat;
-use candid_utils::wasm::{InMemoryWasm, Wasm};
-use cycles_minting_canister::{CanisterSettingsArgs, SubnetSelection};
-use ic_base_types::CanisterId;
+use candid_utils::wasm::{InMemoryWasm, Wasm as CandidArgsEncoder};
+use canister_test::Wasm;
 use ic_base_types::PrincipalId;
-use ic_base_types::SubnetId;
-use ic_management_canister_types::BoundedVec;
-use ic_nervous_system_agent::ii::cycles_ledger as production_cycles_ledger;
 use ic_nervous_system_agent::ii::store::withdraw_cycles;
-use ic_nervous_system_agent::management_canister as production_management_canister;
-use ic_nervous_system_agent::management_canister::requests::Mode;
 use ic_nervous_system_agent::pocketic_impl::PocketIcAgent;
+use ic_nervous_system_integration_tests::pocket_ic_helpers::install_canister_on_subnet;
 use ic_nervous_system_integration_tests::pocket_ic_helpers::{
     cycles_ledger, load_registry_mutations, NnsInstaller,
 };
-use ic_sns_cli::upgrade_sns_controlled_canister::STORE_CANISTER_INITIAL_CYCLES_BALANCE;
 use icp_ledger::Tokens;
 use pocket_ic::PocketIcBuilder;
 use store_canister_embedder::{StoreCanisterInitArgs, STORE_CANISTER_WASM};
@@ -71,35 +65,15 @@ async fn store_canister_integration() {
 
     // 1.4. Deploy the store canister.
     let app_subnet = pocket_ic.topology().await.get_app_subnets()[0];
-    let subnet_selection = Some(SubnetSelection::Subnet {
-        subnet: SubnetId::from(PrincipalId(app_subnet)),
-    });
-    let store_canister_id = production_cycles_ledger::create_canister(
-        &pocket_ic_agent,
-        STORE_CANISTER_INITIAL_CYCLES_BALANCE,
-        subnet_selection,
-        Some(CanisterSettingsArgs {
-            controllers: Some(BoundedVec::new(vec![sender])),
-            freezing_threshold: Some(Nat::from(0_u128)),
-            reserved_cycles_limit: Some(Nat::from(0_u128)),
-            ..Default::default()
-        }),
+
+    let store_canister_id = install_canister_on_subnet(
+        &pocket_ic,
+        app_subnet,
+        store_arg.unwrap_or_default(),
+        Some(Wasm::from_bytes(store_wasm.bytes())),
+        vec![sender],
     )
-    .await
-    .map(|create_canister_success| {
-        CanisterId::unchecked_from_principal(create_canister_success.canister_id)
-    })
-    .unwrap();
-    production_management_canister::install_code(
-        &pocket_ic_agent,
-        store_canister_id,
-        Mode::Install,
-        store_wasm.bytes().to_vec(),
-        store_arg,
-        None,
-    )
-    .await
-    .unwrap();
+    .await;
 
     // 2. Run code under test.
 
@@ -142,10 +116,9 @@ async fn store_canister_integration() {
         initial_cycles_balance + amount_cycles_withdrawn.clone() - fee.clone()
     );
     assert!(amount_cycles_withdrawn > fee);
-
-    assert!(final_store_cycles_balance < Nat::from(RESERVED_CYCLES));
+    assert!(final_store_cycles_balance < RESERVED_CYCLES);
     assert!(
-        initial_store_cycles_balance.clone() - final_store_cycles_balance.clone() > Nat::from(RESERVED_CYCLES),
+        initial_store_cycles_balance.clone() - final_store_cycles_balance.clone() > RESERVED_CYCLES,
         "initial_store_cycles_balance ({}) - final_store_cycles_balance ({}) should be > RESERVED_CYCLES ({})",
         initial_store_cycles_balance, final_store_cycles_balance, RESERVED_CYCLES,
     );

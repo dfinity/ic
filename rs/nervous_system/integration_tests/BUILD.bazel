@@ -13,10 +13,12 @@ BASE_DEPENDENCIES = [
     "//rs/ledger_suite/icrc1/index-ng",
     "//rs/ledger_suite/icrc1/tokens_u64",
     "//rs/nervous_system/agent",
+    "//rs/nervous_system/candid_utils",
     "//rs/nervous_system/clients",
     "//rs/nervous_system/common",
     "//rs/nervous_system/proto",
     "//rs/nervous_system/root",
+    "//rs/nervous_system/store_canister:store_canister_embedder",
     "//rs/nns/cmc",
     "//rs/nns/common",
     "//rs/nns/governance/api",
@@ -298,6 +300,23 @@ rust_test(
         "tests/upgrade_sns_controlled_canister_with_large_wasm.rs",
     ],
     aliases = ALIASES,
+    data = DEV_DATA,
+    env = DEV_ENV | {"RUST_TEST_NOCAPTURE": "1"},
+    flaky = True,
+    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    tags = [
+        "cpu:4",
+    ],
+    deps = [":nervous_system_integration_tests"] + DEPENDENCIES_WITH_TEST_FEATURES + DEV_DEPENDENCIES,
+)
+
+rust_test(
+    name = "store_canister_integration",
+    timeout = "long",
+    srcs = [
+        "tests/store_canister_integration.rs",
+    ],
+        aliases = ALIASES,
     data = DEV_DATA,
     env = DEV_ENV | {"RUST_TEST_NOCAPTURE": "1"},
     flaky = True,
