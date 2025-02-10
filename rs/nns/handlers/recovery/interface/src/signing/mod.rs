@@ -41,6 +41,24 @@ pub fn verify_payload_naive(public_key_der: &[u8], payload: &[u8], signature: &[
     ))
 }
 
+pub fn public_der_to_pem(public_key_der: &[u8]) -> Result<String> {
+    if let Ok(verifier) = EdwardsCurve::from_public_key_der(public_key_der) {
+        return verifier.to_public_key_pem();
+    }
+
+    if let Ok(verifier) = Secp256k1::from_public_key_der(public_key_der) {
+        return verifier.to_public_key_pem();
+    }
+
+    if let Ok(verifier) = Prime256v1::from_public_key_der(public_key_der) {
+        return verifier.to_public_key_pem();
+    }
+
+    Err(RecoveryError::InvalidPubKey(
+        "Couldn't decode public key der with any known algorithm".to_string(),
+    ))
+}
+
 fn verify_payload_naive_inner(
     verifier: impl Verifier,
     payload: &[u8],

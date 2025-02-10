@@ -79,10 +79,16 @@ mod base64_serde {
 mod pub_key_serde {
     use serde::Serializer;
 
-    pub fn serialize<S>(_bytes: &Vec<u8>, serializer: S) -> core::result::Result<S::Ok, S::Error>
+    use crate::signing::public_der_to_pem;
+
+    pub fn serialize<S>(bytes: &Vec<u8>, serializer: S) -> core::result::Result<S::Ok, S::Error>
     where
         S: Serializer,
     {
-        serializer.serialize_str("Outout omitted")
+        let pem = match bytes.is_empty() {
+            true => "".to_string(),
+            false => public_der_to_pem(bytes).map_err(serde::ser::Error::custom)?,
+        };
+        serializer.serialize_str(&pem)
     }
 }
