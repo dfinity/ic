@@ -6,8 +6,6 @@ Wants=generate-ic-config.service
 # Replica & orchestrator need ic-crypto-csp service running.
 After=ic-crypto-csp.service
 Wants=ic-crypto-csp.service
-StartLimitBurst=5
-StartLimitIntervalSec=60
 
 [Service]
 UMask=026

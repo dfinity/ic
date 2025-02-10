@@ -1,4 +1,4 @@
-load("@rules_rust//rust:defs.bzl", "rust_doc", "rust_library", "rust_test", "rust_test_suite")
+load("@rules_rust//rust:defs.bzl", "rust_doc", "rust_doc_test", "rust_library", "rust_test", "rust_test_suite")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -32,32 +32,38 @@ MACRO_DEV_DEPENDENCIES = []
 ALIASES = {}
 
 rust_library(
-    name = "secp256k1",
+    name = "ic-secp256k1",
     srcs = glob(["src/**"]),
     aliases = ALIASES,
-    crate_name = "ic_crypto_secp256k1",
+    crate_name = "ic_secp256k1",
     proc_macro_deps = MACRO_DEPENDENCIES,
     version = "0.1.0",
     deps = DEPENDENCIES,
 )
 
 rust_doc(
-    name = "secp256k1_doc",
-    crate = ":secp256k1",
+    name = "doc",
+    crate = ":ic-secp256k1",
+)
+
+rust_doc_test(
+    name = "doc_test",
+    crate = ":ic-secp256k1",
+    deps = [":ic-secp256k1"] + DEPENDENCIES + DEV_DEPENDENCIES,
 )
 
 rust_test(
-    name = "secp256k1_test",
+    name = "test",
     aliases = ALIASES,
-    crate = ":secp256k1",
+    crate = ":ic-secp256k1",
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )
 
 rust_test_suite(
-    name = "secp256k1_integration",
+    name = "integration_tests",
     srcs = glob(["tests/**/*.rs"]),
     aliases = ALIASES,
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
-    deps = [":secp256k1"] + DEPENDENCIES + DEV_DEPENDENCIES,
+    deps = [":ic-secp256k1"] + DEPENDENCIES + DEV_DEPENDENCIES,
 )

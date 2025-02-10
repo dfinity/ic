@@ -332,10 +332,10 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 default_features = False,
             ),
             "canbench": crate.spec(
-                version = "^0.1.8",
+                version = "^0.1.9",
             ),
             "canbench-rs": crate.spec(
-                version = "^0.1.8",
+                version = "^0.1.9",
             ),
             "candid": crate.spec(
                 version = "^0.10.13",
@@ -778,6 +778,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             ),
             "macaddr": crate.spec(
                 version = "^1.0",
+            ),
+            "memmap2": crate.spec(
+                version = "^0.9.5",
             ),
             "mach2": crate.spec(
                 # Wasmtime depends on 0.4.2 but specifies 0.4.1.

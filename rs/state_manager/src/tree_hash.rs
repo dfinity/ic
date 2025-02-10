@@ -64,7 +64,7 @@ mod tests {
     use ic_canonical_state::{all_supported_versions, CertificationVersion};
     use ic_crypto_tree_hash::Digest;
     use ic_error_types::{ErrorCode, UserError};
-    use ic_management_canister_types::{
+    use ic_management_canister_types_private::{
         EcdsaCurve, EcdsaKeyId, MasterPublicKeyId, SchnorrAlgorithm, SchnorrKeyId,
     };
     use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
