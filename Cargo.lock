@@ -10981,7 +10981,6 @@ dependencies = [
  "canister-test",
  "cycles-minting-canister",
  "dfn_candid",
- "dfn_core",
  "dfn_http",
  "dfn_json",
  "dfn_protobuf",
