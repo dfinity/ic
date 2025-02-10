@@ -77,20 +77,20 @@ async fn main() {
     let time = SystemTime::from(Utc.with_ymd_and_hms(2024, 2, 29, 0, 0, 0).unwrap());
     pocket_ic.set_time(time).await;
     tick_n_times(&pocket_ic, TICKS).await;
-    let salt_id_end_month = metrics_extractor
+    let salt_id_0 = metrics_extractor
         .try_get_metric::<u64>(SALT_METRIC)
         .await
         .unwrap();
-    assert_eq!(salt_id_end_month, salt_id);
+    assert_eq!(salt_id_0, salt_id);
     // But on the first calendar day of next month salt should be regenerated
     let time = SystemTime::from(Utc.with_ymd_and_hms(2024, 3, 1, 0, 0, 0).unwrap());
     pocket_ic.set_time(time).await;
     tick_n_times(&pocket_ic, TICKS).await;
-    let salt_id_start_month = metrics_extractor
+    let salt_id_1 = metrics_extractor
         .try_get_metric::<u64>(SALT_METRIC)
         .await
         .unwrap();
-    assert!(salt_id_start_month > salt_id_end_month);
+    assert!(salt_id_1 > salt_id_0);
     // Now we upgrade the canister without immediate salt regeneration
     let canister_upgrade_time_1 = metrics_extractor
         .try_get_metric::<u64>(UPGRADE_METRIC)
