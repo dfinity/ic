@@ -9,6 +9,7 @@ use ic_nns_handler_recovery_interface::{
 use pocket_ic::{nonblocking::PocketIc, PocketIcBuilder};
 
 mod general;
+mod latest_adopoted_state;
 
 fn fetch_canister_wasm(env: &str) -> Vec<u8> {
     let path: PathBuf = std::env::var(env)
