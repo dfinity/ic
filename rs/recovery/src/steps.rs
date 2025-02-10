@@ -398,7 +398,7 @@ impl Step for CopyLocalIcStateStep {
     fn exec(&self) -> RecoveryResult<()> {
         let mut excludes: Vec<&str> = IC_STATE_EXCLUDES.to_vec();
 
-        // Do not copy state using rsync, we will use the state-tool instead
+        // Do not copy state using rsync, we will use the `cp` instead
         excludes.push(CHECKPOINTS);
 
         let work_dir = PathBuf::from(self.working_dir.clone());
