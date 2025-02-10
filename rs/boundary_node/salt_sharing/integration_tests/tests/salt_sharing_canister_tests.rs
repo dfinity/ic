@@ -123,7 +123,7 @@ async fn main() {
     assert!(canister_upgrade_time_2 > canister_upgrade_time_1);
     // Now we upgrade canister with an immediate salt regeneration
     let init_payload = InitArg {
-        regenerate_now: true, // do not regenerate salt immediately
+        regenerate_now: true, // regenerate salt on upgrade
         salt_generation_strategy: SaltGenerationStrategy::StartOfMonth,
         registry_polling_interval_secs: 60,
     };
