@@ -152,6 +152,10 @@ pub struct AppSubnetRecoveryArgs {
     /// If present the tool will start execution for the provided step, skipping the initial ones
     #[clap(long = "resume")]
     pub next_step: Option<StepType>,
+
+    /// Which steps to skip
+    #[clap(long)]
+    pub skip: Option<Vec<StepType>>,
 }
 
 pub struct AppSubnetRecovery {
@@ -209,6 +213,10 @@ impl RecoveryIterator<StepType, StepTypeIter> for AppSubnetRecovery {
 
     fn interactive(&self) -> bool {
         !self.recovery_args.skip_prompts
+    }
+
+    fn get_skipped_steps(&self) -> Vec<StepType> {
+        self.params.skip.clone().unwrap_or_default()
     }
 
     fn read_step_params(&mut self, step_type: StepType) {

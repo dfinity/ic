@@ -202,7 +202,7 @@ use std::{
     ffi::OsStr,
     fs,
     future::Future,
-    io::{Read, Write},
+    io::{BufRead, BufReader, Read, Write},
     net::{IpAddr, Ipv4Addr, SocketAddr, TcpStream},
     path::{Path, PathBuf},
     str::FromStr,
@@ -1470,10 +1470,41 @@ pub trait SshSession {
         channel.write_all(script.as_bytes())?;
         channel.flush()?;
         channel.send_eof()?;
-        let mut out = String::new();
-        channel.read_to_string(&mut out)?;
-        let mut err = String::new();
-        channel.stderr().read_to_string(&mut err)?;
+        
+        let stdout = BufReader::new(channel.stream(0));
+        let stderr = BufReader::new(channel.stderr());
+
+        let stdout_thread = std::thread::spawn(move || {
+            let mut stdout_lines = Vec::new();
+            for line in stdout.lines() {
+                match line {
+                    Ok(line) => {
+                        println!("stdout: {}", line);
+                        stdout_lines.push(line);
+                    }
+                    Err(e) => println!("Error reading stdout: {}", e),
+                }
+            }
+            stdout_lines.join("\n")
+        });
+
+        let stderr_thread = std::thread::spawn(move || {
+            let mut stderr_lines = Vec::new();
+            for line in stderr.lines() {
+                match line {
+                    Ok(line) => {
+                        println!("stderr: {}", line);
+                        stderr_lines.push(line);
+                    }
+                    Err(e) => println!("Error reading stderr: {}", e),
+                }
+            }
+            stderr_lines.join("\n")
+        });
+
+        let out = stdout_thread.join().expect("Failed to join stdout thread");
+        let err = stderr_thread.join().expect("Failed to join stderr thread");
+
         let exit_status = channel.exit_status()?;
         if exit_status != 0 {
             bail!("block_on_bash_script: exit_status = {exit_status:?}. Output: {out} Err: {err}");
