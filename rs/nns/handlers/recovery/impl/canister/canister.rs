@@ -30,19 +30,19 @@ fn canister_post_upgrade(arg: RecoveryInitArgs) {
 
 ic_nervous_system_common_build_metadata::define_get_build_metadata_candid_method_cdk! {}
 
-#[update(hidden = true)]
+#[update]
 async fn submit_new_recovery_proposal(
     new_recovery_proposal: NewRecoveryProposal,
 ) -> Result<(), String> {
     submit_recovery_proposal(new_recovery_proposal, caller())
 }
 
-#[update(hidden = true)]
+#[update]
 async fn vote_on_proposal(vote: VoteOnRecoveryProposal) -> Result<(), String> {
     vote_on_proposal_inner(caller(), vote)
 }
 
-#[query(hidden = true)]
+#[query]
 fn get_pending_recovery_proposals() -> Vec<RecoveryProposal> {
     get_recovery_proposals()
 }
@@ -105,3 +105,5 @@ async fn setup_node_operator_update(args: Option<RecoveryInitArgs>) {
 
 #[cfg(test)]
 mod tests;
+
+ic_cdk::export_candid!();
