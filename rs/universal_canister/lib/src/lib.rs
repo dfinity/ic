@@ -64,7 +64,7 @@ pub fn call_args() -> CallArgs {
 ///
 /// Payloads for the UC encode `Ops` representing what instructions to
 /// execute.
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub struct PayloadBuilder(Vec<u8>);
 
 impl PayloadBuilder {
