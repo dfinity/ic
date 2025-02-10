@@ -2,9 +2,15 @@
 //!
 use crate::{common::BlockHeight, config::Config, metrics::BlockchainStateMetrics};
 use bitcoin::{
-    block::Header as BlockHeader, blockdata::constants::genesis_block, Block, BlockHash, Network,
+    block::Header as BlockHeader, blockdata::constants::genesis_block, consensus::Encodable, Block, BlockHash, Network
 };
 
+const ONE_MB: usize = 1_024 * 1_024;
+
+/// The limit at which we should stop making additional requests for new blocks as the block cache
+/// becomes too large. Inflight `getdata` messages will remain active, but new `getdata` messages will
+/// not be created.
+const BLOCK_CACHE_THRESHOLD_BYTES: usize = 10 * ONE_MB;
 use ic_btc_validation::{validate_header, HeaderStore, ValidateHeaderError};
 use ic_metrics::MetricsRegistry;
 use std::{collections::HashMap, sync::Arc};
@@ -80,7 +86,12 @@ pub enum AddBlockError {
     // Used to indicate when the header causes an error while adding a block to the state.
     #[error("Block's header caused an error: {0}")]
     Header(AddHeaderError),
+
+    #[error("Serialization error for block {0}")]
+    CouldNotSerialize(BlockHash),
 }
+
+pub type SerializedBlock = Vec<u8>;
 
 /// This struct is a cache of Bitcoin blockchain.
 /// The BlockChainState caches all the Bitcoin headers, some of the Bitcoin blocks.
@@ -94,7 +105,7 @@ pub struct BlockchainState {
     header_cache: HashMap<BlockHash, HeaderNode>,
 
     /// This field stores a hashmap containing BlockHash and the corresponding Block.
-    block_cache: HashMap<BlockHash, Arc<Block>>,
+    block_cache: HashMap<BlockHash, Arc<SerializedBlock>>,
 
     /// This field contains the known tips of the header cache.
     tips: Vec<Tip>,
@@ -125,6 +136,10 @@ impl BlockchainState {
             network: config.network,
             metrics: BlockchainStateMetrics::new(metrics_registry),
         }
+    }
+    
+    pub(crate) fn is_block_cache_full(&self) -> bool {
+        self.get_block_cache_size() >= BLOCK_CACHE_THRESHOLD_BYTES
     }
 
     /// Returns the genesis header that the store is initialized with.
@@ -244,7 +259,15 @@ impl BlockchainState {
             .add_header(block.header)
             .map_err(AddBlockError::Header)?;
         self.tips.sort_unstable_by(|a, b| b.work.cmp(&a.work));
-        self.block_cache.insert(block_hash, Arc::new(block));
+
+        let mut encoded_block = vec![];
+        block
+            .consensus_encode(&mut encoded_block)
+            .map_err(
+                |_| AddBlockError::CouldNotSerialize(block_hash)
+            )?;
+
+        self.block_cache.insert(block_hash, Arc::new(encoded_block));
         self.metrics
             .block_cache_size
             .set(self.get_block_cache_size() as i64);
@@ -323,7 +346,7 @@ impl BlockchainState {
 
     /// This method takes a block hash
     /// If the corresponding block is stored in the `block_cache`, the cached block is returned.
-    pub fn get_block(&self, block_hash: &BlockHash) -> Option<Arc<Block>> {
+    pub fn get_block(&self, block_hash: &BlockHash) -> Option<Arc<SerializedBlock>> {
         self.block_cache.get(block_hash).cloned()
     }
 
@@ -336,7 +359,7 @@ impl BlockchainState {
     pub fn get_block_cache_size(&self) -> usize {
         self.block_cache
             .values()
-            .fold(0, |sum, b| b.total_size() + sum)
+            .fold(0, |sum, b| b.len() + sum)
     }
 }
 
@@ -381,13 +404,13 @@ mod test {
         let mut cached_blocks = vec![];
         for hash in &block_hashes {
             if let Some(block) = state.get_block(hash) {
-                cached_blocks.push(block);
+                cached_blocks.push((hash, block));
             }
         }
 
         assert_eq!(cached_blocks.len(), 1);
-        let block = cached_blocks.first().expect("there should be 1");
-        assert_eq!(block.block_hash(), block_1_hash);
+        let (block_hash, block) = cached_blocks.first().expect("there should be 1");
+        assert_eq!(**block_hash, block_1_hash);
     }
 
     /// Tests whether or not the `BlockchainState::add_headers(...)` function can add headers to the cache
