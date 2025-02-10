@@ -269,7 +269,12 @@ impl StreamBuilderImpl {
     }
 
     /// Implementation of `StreamBuilder::build_streams()`.
-    fn build_streams_impl(&self, mut state: ReplicatedState) -> ReplicatedState {
+    fn build_streams_impl(
+        &self,
+        mut state: ReplicatedState,
+        max_stream_messages: usize,
+        target_stream_size_bytes: usize,
+    ) -> ReplicatedState {
         /// Pops the previously peeked message.
         ///
         /// Panics:
@@ -364,8 +369,8 @@ impl StreamBuilderImpl {
                     let dst_stream_entry = streams.entry(dst_subnet_id);
                     if is_at_limit(
                         &dst_stream_entry,
-                        self.max_stream_messages,
-                        self.target_stream_size_bytes,
+                        max_stream_messages,
+                        target_stream_size_bytes,
                         self.subnet_id == dst_subnet_id,
                         destination_subnet_type,
                     ) {
@@ -579,6 +584,10 @@ impl StreamBuilderImpl {
 
 impl StreamBuilder for StreamBuilderImpl {
     fn build_streams(&self, state: ReplicatedState) -> ReplicatedState {
-        self.build_streams_impl(state)
+        self.build_streams_impl(
+            state,
+            self.max_stream_messages,
+            self.target_stream_size_bytes,
+        )
     }
 }

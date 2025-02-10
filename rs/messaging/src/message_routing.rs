@@ -121,13 +121,13 @@ pub const CRITICAL_ERROR_INDUCT_RESPONSE_FAILED: &str = "mr_induct_response_fail
 ///
 /// At most `MAX_STREAM_MESSAGES` are enqueued into a stream; but only until its
 /// `count_bytes()` is greater than or equal to `TARGET_STREAM_SIZE_BYTES`.
-const TARGET_STREAM_SIZE_BYTES: usize = 10 * 1024 * 1024;
+pub const TARGET_STREAM_SIZE_BYTES: usize = 10 * 1024 * 1024;
 
 /// Maximum number of messages in a stream.
 ///
 /// At most `MAX_STREAM_MESSAGES` are enqueued into a stream; but only until its
 /// `count_bytes()` is greater than or equal to `TARGET_STREAM_SIZE_BYTES`.
-const MAX_STREAM_MESSAGES: usize = 10_000;
+pub const MAX_STREAM_MESSAGES: usize = 10_000;
 
 /// Records the timestamp when all messages before the given index (down to the
 /// previous `MessageTime`) were first added to / learned about in a stream.
