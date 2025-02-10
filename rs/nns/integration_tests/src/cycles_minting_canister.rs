@@ -56,6 +56,8 @@ use maplit::btreemap;
 use serde_bytes::ByteBuf;
 use std::time::Duration;
 
+const CYCLES_LEDGER_FEE: u128 = 100_000_000;
+
 /// Test that the CMC's `icp_xdr_conversion_rate` can be updated via Governance
 /// proposal.
 #[test]
@@ -1358,7 +1360,7 @@ fn cmc_notify_mint_cycles() {
     .unwrap();
     assert_eq!(
         cycles_ledger_balance_of(&state_machine, main_account),
-        100_000_000_000_000
+        100_000_000_000_000 - CYCLES_LEDGER_FEE
     );
 
     // to subaccount
@@ -1375,7 +1377,7 @@ fn cmc_notify_mint_cycles() {
     .unwrap();
     assert_eq!(
         cycles_ledger_balance_of(&state_machine, subaccount_1),
-        200_000_000_000_000
+        200_000_000_000_000 - CYCLES_LEDGER_FEE
     );
 
     // insufficient amount
