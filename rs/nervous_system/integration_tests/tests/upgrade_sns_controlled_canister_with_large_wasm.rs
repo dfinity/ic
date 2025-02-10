@@ -1,7 +1,6 @@
 use assert_matches::assert_matches;
 use canister_test::Wasm;
 use ic_base_types::CanisterId;
-use ic_management_canister_types_private::CanisterInstallMode;
 use ic_nervous_system_agent::management_canister::canister_status;
 use ic_nervous_system_agent::pocketic_impl::{
     PocketIcAgent, PocketIcCallError::CanisterSubnetNotFound,
@@ -18,6 +17,7 @@ use ic_nervous_system_integration_tests::{
     pocket_ic_helpers::add_wasms_to_sns_wasm,
 };
 use ic_nns_constants::ROOT_CANISTER_ID;
+use ic_nns_governance::pb::v1::install_code::CanisterInstallMode;
 use ic_nns_test_utils::common::modify_wasm_bytes;
 use ic_sns_cli::neuron_id_to_candid_subaccount::ParsedSnsNeuron;
 use ic_sns_cli::upgrade_sns_controlled_canister::{
@@ -73,6 +73,7 @@ async fn upgrade_sns_controlled_canister_with_large_wasm() {
         nns_installer.with_cycles_minting_canister();
         nns_installer.with_cycles_ledger();
         nns_installer.with_custom_registry_mutations(vec![initial_mutations]);
+        nns_installer.with_sns_framework();
         nns_installer.install(&pocket_ic).await;
     }
 
@@ -146,7 +147,8 @@ async fn upgrade_sns_controlled_canister_with_large_wasm() {
     // so that it can host the large Wasm. To that end, the GM grants this user 10 ICP, for
     // the sake of testing, out of thin air.
     let icp = Tokens::from_tokens(10).unwrap();
-    cycles_ledger::mint_icp_and_convert_to_cycles(&pocket_ic, sender, icp).await;
+    let original_cycles_balance =
+        cycles_ledger::mint_icp_and_convert_to_cycles(&pocket_ic, sender, icp).await;
 
     let cli_arg = UpgradeSnsControlledCanisterArgs {
         sns_neuron_id: Some(ParsedSnsNeuron(sns_neuron_id)),
@@ -237,7 +239,18 @@ async fn upgrade_sns_controlled_canister_with_large_wasm() {
         .await
         .unwrap();
 
-    // 7. Assert that store canister has zero cycles left on its balance.
+    // 7. Assert that the unused cycles got back to the user Cycles Ledger account.
+    let final_cycles_balance = ic_nervous_system_agent::ii::cycles_ledger::icrc1_balance_of(
+        &pocket_ic_agent,
+        sender,
+        None,
+    )
+    .await;
+    // TODO: Consider strengthening these assertions.
+    assert!(final_cycles_balance < original_cycles_balance);
+    assert!(final_cycles_balance > 0_u64);
+
+    // 8. Assert that store canister has been deleted.
     let err = canister_status(
         &pocket_ic_agent,
         CanisterId::unchecked_from_principal(store_canister_id),

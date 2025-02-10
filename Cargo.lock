@@ -1859,7 +1859,10 @@ version = "0.9.0"
 dependencies = [
  "candid",
  "candid_parser",
+ "ic-crypto-sha2",
+ "ic-wasm",
  "pretty_assertions",
+ "thiserror 2.0.11",
 ]
 
 [[package]]
@@ -10307,6 +10310,7 @@ version = "0.9.0"
 dependencies = [
  "assert_matches",
  "candid",
+ "candid-utils",
  "canister-test",
  "cycles-minting-canister",
  "futures",
@@ -10368,6 +10372,7 @@ dependencies = [
  "rust_decimal_macros",
  "rustc-hash 1.1.0",
  "serde",
+ "store-canister-embedder",
  "tempfile",
  "tokio",
  "url",
@@ -20984,6 +20989,17 @@ dependencies = [
  "cfg-if 1.0.0",
  "futures-core",
  "pin-project-lite",
+]
+
+[[package]]
+name = "store-canister-embedder"
+version = "0.9.0"
+dependencies = [
+ "candid-utils",
+ "flate2",
+ "ic-base-types",
+ "ic-wasm",
+ "wasmprinter 0.217.0",
 ]
 
 [[package]]
