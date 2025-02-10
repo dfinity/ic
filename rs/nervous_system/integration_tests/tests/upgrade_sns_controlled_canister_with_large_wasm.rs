@@ -73,7 +73,7 @@ async fn upgrade_sns_controlled_canister_with_large_wasm() {
         nns_installer.with_cycles_minting_canister();
         nns_installer.with_cycles_ledger();
         nns_installer.with_custom_registry_mutations(vec![initial_mutations]);
-        nns_installer.with_sns_frameowrk();
+        nns_installer.with_sns_framework();
         nns_installer.install(&pocket_ic).await;
     }
 
