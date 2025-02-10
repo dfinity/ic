@@ -261,10 +261,11 @@ impl BlockchainState {
         self.tips.sort_unstable_by(|a, b| b.work.cmp(&a.work));
 
         let mut encoded_block = vec![];
-        block.consensus_encode(&mut encoded_block)
-        .map_err(
-            |_| AddBlockError::CouldNotSerialize(block_hash)
-        );
+        block
+            .consensus_encode(&mut encoded_block)
+            .map_err(
+                |_| AddBlockError::CouldNotSerialize(block_hash)
+            )?;
 
         self.block_cache.insert(block_hash, Arc::new(encoded_block));
         self.metrics
