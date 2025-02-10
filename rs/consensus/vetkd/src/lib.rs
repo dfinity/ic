@@ -444,10 +444,12 @@ mod tests {
     use ic_interfaces::validation::ValidationError;
     use ic_interfaces_state_manager::StateManagerError;
     use ic_logger::no_op_logger;
-    use ic_management_canister_types::VetKdKeyId;
+    use ic_management_canister_types_private::VetKdKeyId;
+    use ic_registry_subnet_features::ChainKeyConfig;
     use ic_registry_subnet_features::KeyConfig;
     use ic_test_utilities_registry::SubnetRecordBuilder;
     use ic_types::consensus::idkg::IDkgMessage;
+    use ic_types::subnet_id_into_protobuf;
     use ic_types::time::UNIX_EPOCH;
     use ic_types::RegistryVersion;
     use ic_types_test_utils::ids::{node_test_id, subnet_test_id};
@@ -456,7 +458,7 @@ mod tests {
     use super::*;
     use crate::test_utils::*;
 
-    const CERTIFIED_HEIGHT: u64 = 10;
+    const CERTIFIED_HEIGHT: u64 = 123;
 
     #[test]
     fn test_into_messages() {
@@ -503,24 +505,43 @@ mod tests {
         let committee = (0..4).map(|id| node_test_id(id as u64)).collect::<Vec<_>>();
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             let subnet_record_builder = SubnetRecordBuilder::from(&committee);
-            let subnet_record_builder = if let Some(config) = config {
+            let subnet_record_builder = if let Some(config) = config.clone() {
                 subnet_record_builder.with_chain_key_config(config)
             } else {
                 subnet_record_builder
             };
+            let subnet_id = subnet_test_id(0);
 
             let Dependencies {
                 crypto,
-                registry,
-                pool,
+                mut pool,
                 idkg_pool,
                 state_manager,
+                registry,
+                registry_data_provider,
                 ..
             } = dependencies_with_subnet_records_with_raw_state_manager(
                 pool_config,
-                subnet_test_id(0),
+                subnet_id,
                 vec![(1, subnet_record_builder.build())],
             );
+
+            if let Some(config) = config {
+                for key_id in config.key_ids() {
+                    registry_data_provider
+                        .add(
+                            &ic_registry_keys::make_chain_key_signing_subnet_list_key(&key_id),
+                            registry.get_latest_version().increment(),
+                            Some(
+                                ic_protobuf::registry::crypto::v1::ChainKeySigningSubnetList {
+                                    subnets: vec![subnet_id_into_protobuf(subnet_test_id(0))],
+                                },
+                            ),
+                        )
+                        .expect("Could not add chain key signing subnet list");
+                }
+                registry.update_to_latest_version();
+            }
 
             let mut state = ic_test_utilities_state::get_initial_state(0, 0);
             state
@@ -533,7 +554,7 @@ mod tests {
                 .get_mut()
                 .expect_get_state_at()
                 .returning(move |height| {
-                    if height == certified_height {
+                    if height <= certified_height {
                         Ok(ic_interfaces_state_manager::Labeled::new(
                             certified_height,
                             Arc::new(state.clone()),
@@ -542,6 +563,8 @@ mod tests {
                         Err(StateManagerError::StateRemoved(height))
                     }
                 });
+
+            pool.advance_round_normal_operation_n(CERTIFIED_HEIGHT);
 
             let mutations = shares
                 .into_iter()
@@ -554,7 +577,7 @@ mod tests {
                 pool.get_cache(),
                 crypto,
                 state_manager,
-                subnet_test_id(0),
+                subnet_id,
                 registry,
                 &MetricsRegistry::new(),
                 no_op_logger(),
@@ -837,7 +860,7 @@ mod tests {
             assert_matches!(
                 validation.unwrap_err(),
                 ValidationError::InvalidArtifact(InvalidPayloadReason::InvalidVetKdPayload(
-                    InvalidVetKdPayloadReason::IDkgContext(id)
+                    InvalidVetKdPayloadReason::UnexpectedIDkgContext(id)
                 )) if id.get() == 0
             );
 
@@ -876,7 +899,7 @@ mod tests {
             assert_matches!(
                 validation.unwrap_err(),
                 ValidationError::InvalidArtifact(InvalidPayloadReason::InvalidVetKdPayload(
-                    InvalidVetKdPayloadReason::IDkgContext(id)
+                    InvalidVetKdPayloadReason::UnexpectedIDkgContext(id)
                 )) if id.get() == 0
             );
 

@@ -1,6 +1,6 @@
 use core::{convert::From, iter::Iterator};
 use ic_interfaces::batch_payload::PastPayload;
-use ic_management_canister_types::{EcdsaKeyId, MasterPublicKeyId, VetKdKeyId};
+use ic_management_canister_types_private::{EcdsaKeyId, MasterPublicKeyId, VetKdKeyId};
 use ic_registry_subnet_features::{ChainKeyConfig, KeyConfig};
 use ic_replicated_state::metadata_state::subnet_call_context_manager::{
     EcdsaArguments, SchnorrArguments, SignWithThresholdContext, ThresholdArguments, VetKdArguments,
