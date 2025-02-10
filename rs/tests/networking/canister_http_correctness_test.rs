@@ -1653,7 +1653,6 @@ fn assert_distinct_headers(http_response: &RemoteHttpResponse) {
 
 /// Assert that content-length header matches the body length, and that the headers are distinct.
 fn assert_http_response(
-    // http_request: &CanisterHttpRequestArgs,
     http_response: &RemoteHttpResponse,
 ) {
     assert_distinct_headers(http_response);
@@ -1787,7 +1786,7 @@ where
         .call_and_wait()
         .await
         .map_err(|agent_error| match agent_error {
-            AgentError::CertifiedReject(response) | AgentError::UncertifiedReject(response) => {
+            AgentError::CertifiedReject(response) => {
                 response
             }
             _ => panic!("Unexpected error: {:?}", agent_error),
