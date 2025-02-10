@@ -39,7 +39,7 @@ use ic_interfaces::{crypto::BasicSigner, ingress_pool::IngressPoolThrottler};
 use ic_interfaces_adapter_client::NonBlockingChannel;
 use ic_interfaces_state_manager::StateReader;
 use ic_logger::ReplicaLogger;
-use ic_management_canister_types::{
+use ic_management_canister_types_private::{
     CanisterIdRecord, EcdsaCurve, EcdsaKeyId, MasterPublicKeyId, Method as Ic00Method,
     ProvisionalCreateCanisterWithCyclesArgs, SchnorrAlgorithm, SchnorrKeyId,
 };
@@ -2132,7 +2132,7 @@ pub struct QueryRequest {
 }
 
 #[derive(Clone)]
-struct PocketNodeSigner(pub ic_crypto_ed25519::PrivateKey);
+struct PocketNodeSigner(pub ic_ed25519::PrivateKey);
 
 impl BasicSigner<QueryResponseHash> for PocketNodeSigner {
     fn sign_basic(

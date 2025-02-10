@@ -45,7 +45,9 @@ use ic_canister_log::log;
 use ic_crypto_sha2::Sha256;
 use ic_icrc1_ledger::UpgradeArgs as LedgerUpgradeArgs;
 use ic_ledger_core::tokens::TOKEN_SUBDIVIDABLE_BY;
-use ic_management_canister_types::{CanisterIdRecord, CanisterInstallModeError, StoredChunksReply};
+use ic_management_canister_types_private::{
+    CanisterIdRecord, CanisterInstallModeError, StoredChunksReply,
+};
 use ic_nervous_system_common::{
     hash_to_hex_string, ledger_validation::MAX_LOGO_LENGTH, NervousSystemError,
     DEFAULT_TRANSFER_FEE, ONE_DAY_SECONDS, ONE_MONTH_SECONDS, ONE_YEAR_SECONDS,
@@ -1914,16 +1916,18 @@ impl From<ManageLedgerParameters> for LedgerUpgradeArgs {
             token_symbol,
             token_logo,
         } = manage_ledger_parameters;
-        let metadata = [("icrc1:logo", token_logo.map(MetadataValue::Text))]
-            .into_iter()
-            .filter_map(|(k, v)| v.map(|v| (k.to_string(), v)))
-            .collect();
+
+        let metadata = token_logo.map(|token_logo| {
+            let key = "icrc1:logo".to_string();
+            let value = MetadataValue::Text(token_logo);
+            vec![(key, value)]
+        });
 
         LedgerUpgradeArgs {
             transfer_fee: transfer_fee.map(|tf| tf.into()),
             token_name,
             token_symbol,
-            metadata: Some(metadata),
+            metadata,
             ..LedgerUpgradeArgs::default()
         }
     }

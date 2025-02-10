@@ -9,8 +9,8 @@ use ic_types::{
     CanisterId, ComputeAllocation, Cycles, MemoryAllocation, NumBytes, NumInstructions,
 };
 
-use ic_management_canister_types::InstallChunkedCodeArgsLegacy;
-use ic_management_canister_types::{
+use ic_management_canister_types_private::InstallChunkedCodeArgsLegacy;
+use ic_management_canister_types_private::{
     CanisterChange, CanisterChangeDetails, CanisterChangeOrigin, CanisterInstallMode,
     CanisterInstallModeV2, EmptyBlob, InstallChunkedCodeArgs, InstallCodeArgs, InstallCodeArgsV2,
     Method, Payload, UploadChunkArgs, UploadChunkReply,
