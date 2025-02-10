@@ -44,7 +44,13 @@ impl SshHelper {
     /// Execute the given command string on a remote machine using SSH.
     pub fn ssh(&self, commands: String) -> RecoveryResult<Option<String>> {
         let mut ssh = self.get_command(commands);
-        match confirm_exec_cmd(&mut ssh, self.require_confirmation.then_some(&self.logger)) {
+        info!(self.logger, "");
+        info!(self.logger, "About to execute:");
+        info!(self.logger, "{:?}", ssh);
+        if self.require_confirmation {
+            wait_for_confirmation(&self.logger);
+        }
+        match exec_cmd(&mut ssh) {
             Ok(Some(res)) => {
                 info!(self.logger, "{}", res);
                 Ok(Some(res))
