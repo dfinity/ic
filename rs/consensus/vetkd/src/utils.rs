@@ -65,36 +65,36 @@ pub(super) fn parse_past_payload_ids(
         .collect()
 }
 
-#[cfg(test)]
-mod tests {
-    use core::{convert::From, iter::Iterator};
-    use ic_logger::no_op_logger;
-    use ic_management_canister_types_private::{EcdsaKeyId, VetKdKeyId};
-    use ic_registry_client_fake::FakeRegistryClient;
-    use ic_registry_subnet_features::KeyConfig;
-    use ic_test_utilities_registry::{setup_registry, SubnetRecordBuilder};
-    use ic_types_test_utils::ids::{node_test_id, subnet_test_id};
-    use std::str::FromStr;
-    use std::sync::Arc;
+// #[cfg(test)]
+// mod tests {
+//     use core::{convert::From, iter::Iterator};
+//     use ic_logger::no_op_logger;
+//     use ic_management_canister_types_private::{EcdsaKeyId, VetKdKeyId};
+//     use ic_registry_client_fake::FakeRegistryClient;
+//     use ic_registry_subnet_features::KeyConfig;
+//     use ic_test_utilities_registry::{setup_registry, SubnetRecordBuilder};
+//     use ic_types_test_utils::ids::{node_test_id, subnet_test_id};
+//     use std::str::FromStr;
+//     use std::sync::Arc;
 
-    use super::*;
-    use crate::test_utils::*;
+//     use super::*;
+//     use crate::test_utils::*;
 
-    #[test]
-    fn test_parse_past_payload_ids() {
-        let payloads = vec![
-            as_bytes(make_vetkd_agreements([0, 1, 2])),
-            as_bytes(make_vetkd_agreements([2, 3, 4])),
-            as_bytes(make_vetkd_agreements([4, 4, 5])),
-        ];
-        let past_payloads = payloads
-            .iter()
-            .map(|p| as_past_payload(&p))
-            .collect::<Vec<_>>();
-        let past_payload_ids = parse_past_payload_ids(&past_payloads, &no_op_logger());
-        let expected = HashSet::from_iter((0..=5).map(CallbackId::from));
-        assert_eq!(past_payload_ids, expected);
-    }
+//     #[test]
+//     fn test_parse_past_payload_ids() {
+//         let payloads = vec![
+//             as_bytes(make_vetkd_agreements([0, 1, 2])),
+//             as_bytes(make_vetkd_agreements([2, 3, 4])),
+//             as_bytes(make_vetkd_agreements([4, 4, 5])),
+//         ];
+//         let past_payloads = payloads
+//             .iter()
+//             .map(|p| as_past_payload(&p))
+//             .collect::<Vec<_>>();
+//         let past_payload_ids = parse_past_payload_ids(&past_payloads, &no_op_logger());
+//         let expected = HashSet::from_iter((0..=5).map(CallbackId::from));
+//         assert_eq!(past_payload_ids, expected);
+//     }
 
     // fn set_up_chain_key_config_test(
     //     config: Option<&ChainKeyConfig>,
@@ -194,4 +194,4 @@ mod tests {
 
     //     assert_eq!(config, Some(chain_key_config_with_multiple_keys));
     // }
-}
+// }

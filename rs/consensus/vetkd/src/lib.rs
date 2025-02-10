@@ -434,7 +434,6 @@ mod tests {
     use assert_matches::assert_matches;
     use core::time::Duration;
     use core::{convert::From, iter::Iterator};
-    use ic_artifact_pool::idkg_pool::IDkgPoolImpl;
     use ic_consensus_mocks::dependencies_with_subnet_records_with_raw_state_manager;
     use ic_consensus_mocks::Dependencies;
     use ic_interfaces::consensus::InvalidPayloadReason;
