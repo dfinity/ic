@@ -709,6 +709,12 @@ enum ExecutionMemoryType {
     StableMemory,
 }
 
+#[derive(Debug, Clone, Copy)]
+pub enum CostResult {
+    Success = 0,
+    UnknownCurve = 1,
+    UnknownKey = 2,
+}
 /// A struct to gather the relevant fields that correspond to a canister's
 /// memory consumption.
 struct MemoryUsage {
@@ -3517,15 +3523,6 @@ impl SystemApi for SystemApiImpl {
         result
     }
 
-    fn ic0_replication_factor(
-        &self,
-        src: usize,
-        size: usize,
-        heap: &[u8],
-    ) -> HypervisorResult<u32> {
-        todo!()
-    }
-
     fn ic0_cost_call(
         &self,
         method_name_size: u64,
@@ -3585,7 +3582,7 @@ impl SystemApi for SystemApiImpl {
         curve: u32,
         dst: usize,
         heap: &mut [u8],
-    ) -> HypervisorResult<()> {
+    ) -> HypervisorResult<u32> {
         let key_bytes = valid_subslice("ic0.cost_sign_with_ecdsa heap", src, size, heap)?;
         let name = str::from_utf8(key_bytes)
             .map_err(|_| HypervisorError::ToolchainContractViolation {
@@ -3595,18 +3592,21 @@ impl SystemApi for SystemApiImpl {
                 ),
             })?
             .to_string();
-        let curve = EcdsaCurve::try_from(curve)
-            .map_err(|e| HypervisorError::ToolchainContractViolation { error: e })?;
+        let Ok(curve) = EcdsaCurve::try_from(curve) else {
+            return Ok(CostResult::UnknownCurve as u32);
+        };
         let key = MasterPublicKeyId::Ecdsa(EcdsaKeyId { curve, name });
         let topology = &self.sandbox_safe_system_state.network_topology;
-        let subnet_size = get_key_replication_factor(topology, key)?;
+        let Some(subnet_size) = get_key_replication_factor(topology, key) else {
+            return Ok(CostResult::UnknownKey as u32);
+        };
         let cost = self
             .sandbox_safe_system_state
             .cycles_account_manager
             .ecdsa_signature_fee(subnet_size);
         copy_cycles_to_heap(cost, dst, heap, "ic0_cost_sign_with_ecdsa")?;
         trace_syscall!(self, CostSignWithEcdsa, cost);
-        Ok(())
+        Ok(CostResult::Success as u32)
     }
 
     fn ic0_cost_sign_with_schnorr(
@@ -3616,7 +3616,7 @@ impl SystemApi for SystemApiImpl {
         algorithm: u32,
         dst: usize,
         heap: &mut [u8],
-    ) -> HypervisorResult<()> {
+    ) -> HypervisorResult<u32> {
         let key_bytes = valid_subslice("ic0.cost_sign_with_schnorr heap", src, size, heap)?;
         let name = str::from_utf8(key_bytes)
             .map_err(|_| HypervisorError::ToolchainContractViolation {
@@ -3626,18 +3626,21 @@ impl SystemApi for SystemApiImpl {
                 ),
             })?
             .to_string();
-        let algorithm = SchnorrAlgorithm::try_from(algorithm)
-            .map_err(|e| HypervisorError::ToolchainContractViolation { error: e })?;
+        let Ok(algorithm) = SchnorrAlgorithm::try_from(algorithm) else {
+            return Ok(CostResult::UnknownCurve as u32);
+        };
         let key = MasterPublicKeyId::Schnorr(SchnorrKeyId { algorithm, name });
         let topology = &self.sandbox_safe_system_state.network_topology;
-        let subnet_size = get_key_replication_factor(topology, key)?;
+        let Some(subnet_size) = get_key_replication_factor(topology, key) else {
+            return Ok(CostResult::UnknownKey as u32);
+        };
         let cost = self
             .sandbox_safe_system_state
             .cycles_account_manager
             .schnorr_signature_fee(subnet_size);
         copy_cycles_to_heap(cost, dst, heap, "ic0_cost_sign_with_schnorr")?;
         trace_syscall!(self, CostSignWithSchnorr, cost);
-        Ok(())
+        Ok(CostResult::Success as u32)
     }
 
     fn ic0_cost_vetkd_derive_encrypted_key(
@@ -3647,7 +3650,7 @@ impl SystemApi for SystemApiImpl {
         curve: u32,
         dst: usize,
         heap: &mut [u8],
-    ) -> HypervisorResult<()> {
+    ) -> HypervisorResult<u32> {
         let key_bytes =
             valid_subslice("ic0.cost_vetkd_derive_encrypted_key heap", src, size, heap)?;
         let name = str::from_utf8(key_bytes)
@@ -3658,18 +3661,21 @@ impl SystemApi for SystemApiImpl {
                 ),
             })?
             .to_string();
-        let curve = VetKdCurve::try_from(curve)
-            .map_err(|e| HypervisorError::ToolchainContractViolation { error: e })?;
+        let Ok(curve) = VetKdCurve::try_from(curve) else {
+            return Ok(CostResult::UnknownCurve as u32);
+        };
         let key = MasterPublicKeyId::VetKd(VetKdKeyId { curve, name });
         let topology = &self.sandbox_safe_system_state.network_topology;
-        let subnet_size = get_key_replication_factor(topology, key)?;
+        let Some(subnet_size) = get_key_replication_factor(topology, key) else {
+            return Ok(CostResult::UnknownKey as u32);
+        };
         let cost = self
             .sandbox_safe_system_state
             .cycles_account_manager
             .vetkd_fee(subnet_size);
         copy_cycles_to_heap(cost, dst, heap, "ic0_cost_vetkd_derive_encrypted_key")?;
         trace_syscall!(self, CostVetkdDeriveEncryptedKey, cost);
-        Ok(())
+        Ok(CostResult::Success as u32)
     }
 
     fn ic0_subnet_self_size(&self) -> HypervisorResult<usize> {
@@ -3737,10 +3743,7 @@ impl SystemApi for SystemApiImpl {
 
 /// Look up key in `chain_key_enabled_subnets`, then extract all subnets
 /// for that key and return the replication factor of the biggest one.
-fn get_key_replication_factor(
-    topology: &NetworkTopology,
-    key: MasterPublicKeyId,
-) -> HypervisorResult<usize> {
+fn get_key_replication_factor(topology: &NetworkTopology, key: MasterPublicKeyId) -> Option<usize> {
     let subnets_with_key = topology.chain_key_enabled_subnets(&key);
     subnets_with_key
         .iter()
@@ -3748,9 +3751,6 @@ fn get_key_replication_factor(
             topology.get_subnet_size(subnet_id).unwrap() // we got the subnet_id from the same collection
         })
         .max()
-        .ok_or(HypervisorError::ToolchainContractViolation {
-            error: format!("Public key {:?} not known.", key),
-        })
 }
 
 /// The default implementation of the `OutOfInstructionHandler` trait.
