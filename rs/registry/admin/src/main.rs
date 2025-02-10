@@ -376,6 +376,9 @@ enum SubCommand {
     /// Get node operators enlisted in the recovery canister
     GetRecoveryCanisterNodeOperators,
 
+    /// List the active status of the NNS
+    GetRecoveryCanisterLatestState,
+
     /// Propose to halt NNS
     RecoveryCanisterProposeHalt,
 
@@ -4980,9 +4983,8 @@ async fn main() {
         | SubCommand::RecoveryCanisterProposeHalt
         | SubCommand::RecoveryCanisterProposeUnhalt
         | SubCommand::RecoveryCanisterProposeRecovery(_)
-        | SubCommand::RecoveryCanisterVoteOnLatestProposal(_) => {
-            recovery_canister::execute(&opts).await
-        }
+        | SubCommand::RecoveryCanisterVoteOnLatestProposal(_)
+        | SubCommand::GetRecoveryCanisterLatestState => recovery_canister::execute(&opts).await,
     }
 }
 

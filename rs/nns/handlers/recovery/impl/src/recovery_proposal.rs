@@ -95,6 +95,7 @@ pub fn submit_recovery_proposal(
                     RecoveryPayload::DoRecovery {
                         height: _,
                         state_hash: _,
+                        time_ns: _,
                     }
                     | RecoveryPayload::Unhalt => {
                         proposals.push(RecoveryProposal {
@@ -133,6 +134,7 @@ pub fn submit_recovery_proposal(
                         RecoveryPayload::DoRecovery {
                             height: _,
                             state_hash: _,
+                            time_ns: _,
                         },
                         RecoveryPayload::Unhalt,
                     ) => {
@@ -151,10 +153,12 @@ pub fn submit_recovery_proposal(
                         RecoveryPayload::DoRecovery {
                             height: _,
                             state_hash: _,
+                            time_ns: _,
                         },
                         RecoveryPayload::DoRecovery {
                             height: _,
                             state_hash: _,
+                            time_ns: _,
                         },
                     ) => {
                         // Remove the second_one

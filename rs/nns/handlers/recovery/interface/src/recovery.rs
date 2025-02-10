@@ -24,7 +24,11 @@ pub enum RecoveryPayload {
     /// If adopted, the orchestrator's watching recovery canister
     /// should perform a recovery based on the provided information.
     /// This proposal maps to a proposal similar to [134629](https://dashboard.internetcomputer.org/proposal/134629).
-    DoRecovery { height: u64, state_hash: String },
+    DoRecovery {
+        height: u64,
+        state_hash: String,
+        time_ns: u64,
+    },
     /// Unhalt NNS.
     ///
     /// If adopted, the orchestrator's watching the recovery canister
@@ -156,11 +160,11 @@ fn nns_principal_id() -> PrincipalId {
         .expect("Should be a valid NNS id")
 }
 
-impl TryFrom<RecoveryProposal> for UpdateSubnetPayload {
+impl TryFrom<RecoveryPayload> for UpdateSubnetPayload {
     type Error = RecoveryError;
 
-    fn try_from(value: RecoveryProposal) -> std::result::Result<Self, Self::Error> {
-        match value.payload {
+    fn try_from(value: RecoveryPayload) -> std::result::Result<Self, Self::Error> {
+        match value {
             RecoveryPayload::Halt => Ok(Self {
                 chain_key_config: None,
                 chain_key_signing_disable: None,
@@ -231,16 +235,19 @@ impl TryFrom<RecoveryProposal> for UpdateSubnetPayload {
     }
 }
 
-impl TryFrom<RecoveryProposal> for RecoverSubnetPayload {
+impl TryFrom<RecoveryPayload> for RecoverSubnetPayload {
     type Error = RecoveryError;
 
-    fn try_from(value: RecoveryProposal) -> std::result::Result<Self, Self::Error> {
-        match value.payload {
-            RecoveryPayload::DoRecovery { height, state_hash } => Ok(Self {
+    fn try_from(value: RecoveryPayload) -> std::result::Result<Self, Self::Error> {
+        match value {
+            RecoveryPayload::DoRecovery {
+                height,
+                state_hash,
+                time_ns,
+            } => Ok(Self {
                 subnet_id: nns_principal_id(),
                 height,
-                // TODO: Migrate timestamps to nanoseconds in canister
-                time_ns: value.submission_timestamp_seconds,
+                time_ns,
                 state_hash: hex::decode(state_hash).map_err(|e| {
                     RecoveryError::PayloadSerialization(format!(
                         "Cannot deserialize state hash into a byte vector: {}",

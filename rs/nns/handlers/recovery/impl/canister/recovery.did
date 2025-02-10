@@ -13,7 +13,7 @@ type RecoveryInitArgs = record {
   initial_node_operator_records : vec SimpleNodeOperatorRecord;
 };
 type RecoveryPayload = variant {
-  DoRecovery : record { height : nat64; state_hash : text };
+  DoRecovery : record { height : nat64; state_hash : text; time_ns : nat64 };
   Halt;
   Unhalt;
 };

@@ -44,4 +44,13 @@ pub trait RecoveryCanister {
                 "No voted in proposals present at the moment".to_string(),
             ))
     }
+
+    async fn latest_adopted_state(&self) -> RecoveryPayload {
+        self.fetch_latest_adopted_proposal()
+            .await
+            .map(|proposal| proposal.payload)
+            // If there isn't any voted in proposals look
+            // at NNS as unhalted.
+            .unwrap_or(RecoveryPayload::Unhalt)
+    }
 }

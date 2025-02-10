@@ -1,3 +1,5 @@
+use std::time::SystemTime;
+
 use clap::Args;
 use ic_nns_handler_recovery_client::{
     builder::{RecoveryCanisterBuilder, SenderOpts},
@@ -12,6 +14,12 @@ use crate::{Opts, SubCommand};
 pub struct RecoveryCanisterProposeRecoveryCmd {
     height: u64,
     state_hash: String,
+    #[clap(default_value_t = now())]
+    time_ns: u64,
+}
+
+fn now() -> u64 {
+    SystemTime::UNIX_EPOCH.elapsed().unwrap().as_secs()
 }
 
 #[derive(Args)]
@@ -23,6 +31,12 @@ pub async fn execute(opts: &Opts) {
     let client = build_client(opts);
 
     let response = match &opts.subcmd {
+        SubCommand::GetRecoveryCanisterLatestState => {
+            let latest_state = client.latest_adopted_state().await;
+
+            println!("Latest state: {:?}", latest_state);
+            return;
+        }
         SubCommand::GetRecoveryCanisterNodeOperators => {
             let response = client.get_node_operators_in_nns().await.unwrap();
 
@@ -50,6 +64,7 @@ pub async fn execute(opts: &Opts) {
                 .submit_new_recovery_proposal(RecoveryPayload::DoRecovery {
                     height: cmd.height,
                     state_hash: cmd.state_hash.clone(),
+                    time_ns: cmd.time_ns,
                 })
                 .await
         }
