@@ -12,6 +12,7 @@ rust_library(
         # Keep sorted.
         "//rs/types/management_canister_types",
         "@crate_index//:candid",
+        "@crate_index//:ic-utils",
         "@crate_index//:serde",
     ],
 )
