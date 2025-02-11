@@ -96,102 +96,102 @@ pub(super) fn parse_past_payload_ids(
 //         assert_eq!(past_payload_ids, expected);
 //     }
 
-    // fn set_up_chain_key_config_test(
-    //     config: Option<&ChainKeyConfig>,
-    // ) -> (SubnetId, Arc<FakeRegistryClient>, RegistryVersion) {
-    //     let subnet_id = subnet_test_id(1);
-    //     let registry_version = RegistryVersion::from(10);
+// fn set_up_chain_key_config_test(
+//     config: Option<&ChainKeyConfig>,
+// ) -> (SubnetId, Arc<FakeRegistryClient>, RegistryVersion) {
+//     let subnet_id = subnet_test_id(1);
+//     let registry_version = RegistryVersion::from(10);
 
-    //     let subnet_record_builder = SubnetRecordBuilder::from(&[node_test_id(0)]);
-    //     let subnet_record_builder = if let Some(config) = config {
-    //         subnet_record_builder.with_chain_key_config(config.clone())
-    //     } else {
-    //         subnet_record_builder
-    //     };
+//     let subnet_record_builder = SubnetRecordBuilder::from(&[node_test_id(0)]);
+//     let subnet_record_builder = if let Some(config) = config {
+//         subnet_record_builder.with_chain_key_config(config.clone())
+//     } else {
+//         subnet_record_builder
+//     };
 
-    //     let registry = setup_registry(
-    //         subnet_id,
-    //         vec![(registry_version.get(), subnet_record_builder.build())],
-    //     );
-    //     (subnet_id, registry, registry_version)
-    // }
+//     let registry = setup_registry(
+//         subnet_id,
+//         vec![(registry_version.get(), subnet_record_builder.build())],
+//     );
+//     (subnet_id, registry, registry_version)
+// }
 
-    // #[test]
-    // fn test_get_nidkg_chain_key_config_if_disabled() {
-    //     let (subnet_id, registry, version) = set_up_chain_key_config_test(None);
+// #[test]
+// fn test_get_nidkg_chain_key_config_if_disabled() {
+//     let (subnet_id, registry, version) = set_up_chain_key_config_test(None);
 
-    //     let config = get_nidkg_chain_key_config_if_enabled(subnet_id, version, registry.as_ref())
-    //         .expect("Should successfully get the config");
+//     let config = get_nidkg_chain_key_config_if_enabled(subnet_id, version, registry.as_ref())
+//         .expect("Should successfully get the config");
 
-    //     assert!(config.is_none());
-    // }
+//     assert!(config.is_none());
+// }
 
-    // #[test]
-    // fn test_get_nidkg_chain_key_config_if_enabled_no_keys() {
-    //     let chain_key_config_with_no_keys = ChainKeyConfig::default();
-    //     let (subnet_id, registry, version) =
-    //         set_up_chain_key_config_test(Some(&chain_key_config_with_no_keys));
+// #[test]
+// fn test_get_nidkg_chain_key_config_if_enabled_no_keys() {
+//     let chain_key_config_with_no_keys = ChainKeyConfig::default();
+//     let (subnet_id, registry, version) =
+//         set_up_chain_key_config_test(Some(&chain_key_config_with_no_keys));
 
-    //     let config = get_nidkg_chain_key_config_if_enabled(subnet_id, version, registry.as_ref())
-    //         .expect("Should successfully get the config");
+//     let config = get_nidkg_chain_key_config_if_enabled(subnet_id, version, registry.as_ref())
+//         .expect("Should successfully get the config");
 
-    //     assert!(config.is_none());
-    // }
+//     assert!(config.is_none());
+// }
 
-    // #[test]
-    // fn test_get_chain_key_config_if_enabled_one_key() {
-    //     let chain_key_config_with_one_key = ChainKeyConfig {
-    //         key_configs: vec![KeyConfig {
-    //             key_id: MasterPublicKeyId::VetKd(
-    //                 VetKdKeyId::from_str("bls12_381_g2:some_key").unwrap(),
-    //             ),
-    //             pre_signatures_to_create_in_advance: 0,
-    //             max_queue_size: 3,
-    //         }],
-    //         ..ChainKeyConfig::default()
-    //     };
+// #[test]
+// fn test_get_chain_key_config_if_enabled_one_key() {
+//     let chain_key_config_with_one_key = ChainKeyConfig {
+//         key_configs: vec![KeyConfig {
+//             key_id: MasterPublicKeyId::VetKd(
+//                 VetKdKeyId::from_str("bls12_381_g2:some_key").unwrap(),
+//             ),
+//             pre_signatures_to_create_in_advance: 0,
+//             max_queue_size: 3,
+//         }],
+//         ..ChainKeyConfig::default()
+//     };
 
-    //     let (subnet_id, registry, version) =
-    //         set_up_chain_key_config_test(Some(&chain_key_config_with_one_key));
+//     let (subnet_id, registry, version) =
+//         set_up_chain_key_config_test(Some(&chain_key_config_with_one_key));
 
-    //     let config = get_nidkg_chain_key_config_if_enabled(subnet_id, version, registry.as_ref())
-    //         .expect("Should successfully get the config");
+//     let config = get_nidkg_chain_key_config_if_enabled(subnet_id, version, registry.as_ref())
+//         .expect("Should successfully get the config");
 
-    //     assert_eq!(config, Some(chain_key_config_with_one_key));
-    // }
+//     assert_eq!(config, Some(chain_key_config_with_one_key));
+// }
 
-    // #[test]
-    // fn test_get_chain_key_config_if_enabled_one_idkg_key() {
-    //     let chain_key_config_with_one_key = ChainKeyConfig {
-    //         key_configs: vec![KeyConfig {
-    //             key_id: MasterPublicKeyId::Ecdsa(
-    //                 EcdsaKeyId::from_str("Secp256k1:some_key").unwrap(),
-    //             ),
-    //             pre_signatures_to_create_in_advance: 1,
-    //             max_queue_size: 3,
-    //         }],
-    //         ..ChainKeyConfig::default()
-    //     };
+// #[test]
+// fn test_get_chain_key_config_if_enabled_one_idkg_key() {
+//     let chain_key_config_with_one_key = ChainKeyConfig {
+//         key_configs: vec![KeyConfig {
+//             key_id: MasterPublicKeyId::Ecdsa(
+//                 EcdsaKeyId::from_str("Secp256k1:some_key").unwrap(),
+//             ),
+//             pre_signatures_to_create_in_advance: 1,
+//             max_queue_size: 3,
+//         }],
+//         ..ChainKeyConfig::default()
+//     };
 
-    //     let (subnet_id, registry, version) =
-    //         set_up_chain_key_config_test(Some(&chain_key_config_with_one_key));
+//     let (subnet_id, registry, version) =
+//         set_up_chain_key_config_test(Some(&chain_key_config_with_one_key));
 
-    //     let config = get_nidkg_chain_key_config_if_enabled(subnet_id, version, registry.as_ref())
-    //         .expect("Should successfully get the config");
+//     let config = get_nidkg_chain_key_config_if_enabled(subnet_id, version, registry.as_ref())
+//         .expect("Should successfully get the config");
 
-    //     assert!(config.is_none());
-    // }
+//     assert!(config.is_none());
+// }
 
-    // #[test]
-    // fn test_get_chain_key_config_if_enabled_multiple_keys() {
-    //     let chain_key_config_with_multiple_keys = make_chain_key_config();
+// #[test]
+// fn test_get_chain_key_config_if_enabled_multiple_keys() {
+//     let chain_key_config_with_multiple_keys = make_chain_key_config();
 
-    //     let (subnet_id, registry, version) =
-    //         set_up_chain_key_config_test(Some(&chain_key_config_with_multiple_keys));
+//     let (subnet_id, registry, version) =
+//         set_up_chain_key_config_test(Some(&chain_key_config_with_multiple_keys));
 
-    //     let config = get_nidkg_chain_key_config_if_enabled(subnet_id, version, registry.as_ref())
-    //         .expect("Should successfully get the config");
+//     let config = get_nidkg_chain_key_config_if_enabled(subnet_id, version, registry.as_ref())
+//         .expect("Should successfully get the config");
 
-    //     assert_eq!(config, Some(chain_key_config_with_multiple_keys));
-    // }
+//     assert_eq!(config, Some(chain_key_config_with_multiple_keys));
+// }
 // }
