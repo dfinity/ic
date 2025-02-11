@@ -863,6 +863,35 @@ fn serialize_to_tip(
     Ok(())
 }
 
+fn serialize_wasm_binaries(
+    log: &ReplicaLogger,
+    state: &ReplicatedState,
+    tip: &CheckpointLayout<RwPolicy<TipHandler>>,
+    thread_pool: &mut scoped_threadpool::Pool,
+    metrics: &StorageMetrics,
+    lsmt_config: &LsmtConfig,
+) -> Result<(), CheckpointError> {
+    let results = parallel_map(
+        thread_pool,
+        state.canister_snapshots.iter(),
+        |canister_snapshot| {
+            serialize_wasm_binary(
+                canister_snapshot.0,
+                canister_snapshot.1,
+                tip,
+                metrics,
+                lsmt_config,
+            )
+        },
+    );
+
+    for result in results.into_iter() {
+        result?;
+    }
+
+    Ok(())
+}
+
 fn serialize_wasm_binary(
     log: &ReplicaLogger,
     canister_state: &CanisterState,

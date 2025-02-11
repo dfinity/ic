@@ -1601,22 +1601,6 @@ impl CheckpointLayout<ReadOnly> {
     /// the marker is not part the checkpoint conceptually.
     fn remove_unverified_checkpoint_marker(&self) -> Result<(), LayoutError> {
         let marker = self.unverified_checkpoint_marker();
-        if let Some(ref state_layout) = self.0.state_layout {
-            sync_and_mark_files_readonly(
-                &state_layout.log,
-                &self.raw_path(),
-                &state_layout.metrics,
-                thread_pool,
-            )
-            .map_err(|err| LayoutError::IoError {
-                path: self.raw_path().to_path_buf(),
-                message: format!(
-                    "Could not sync and mark readonly for checkpoint {}",
-                    self.height()
-                ),
-                io_err: err,
-            })?;
-        }
         if !marker.exists() {
             return Ok(());
         }
