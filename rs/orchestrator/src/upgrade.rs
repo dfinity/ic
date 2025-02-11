@@ -14,7 +14,7 @@ use ic_image_upgrader::{
 };
 use ic_interfaces_registry::RegistryClient;
 use ic_logger::{error, info, warn, ReplicaLogger};
-use ic_management_canister_types::MasterPublicKeyId;
+use ic_management_canister_types_private::MasterPublicKeyId;
 use ic_protobuf::proxy::try_from_option_field;
 use ic_registry_client_helpers::{node::NodeRegistry, subnet::SubnetRegistry};
 use ic_registry_local_store::LocalStoreImpl;
@@ -937,7 +937,7 @@ mod tests {
         generate_key_transcript, CanisterThresholdSigTestEnvironment, IDkgParticipants,
     };
     use ic_crypto_test_utils_reproducible_rng::{reproducible_rng, ReproducibleRng};
-    use ic_management_canister_types::{EcdsaCurve, EcdsaKeyId};
+    use ic_management_canister_types_private::{EcdsaCurve, EcdsaKeyId};
     use ic_metrics::MetricsRegistry;
     use ic_test_utilities_consensus::fake::{Fake, FakeContent};
     use ic_test_utilities_logger::with_test_replica_logger;

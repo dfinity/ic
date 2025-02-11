@@ -26,7 +26,7 @@ ic-crypto-sha2 = { path = "../../crypto/sha2" }
 ic-ethereum-types = { path = "../../../packages/ic-ethereum-types" }
 ic-icrc1-index-ng = { path = "../../ledger_suite/icrc1/index-ng" }
 ic-icrc1-ledger = { path = "../../ledger_suite/icrc1/ledger" }
-ic-management-canister-types = { path = "../../types/management_canister_types" }
+ic-management-canister-types-private = { path = "../../types/management_canister_types" }
 ic-metrics-encoder = "1"
 ic-stable-structures = { workspace = true }
 ic0 = "0.21.1"

@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 
 use ic_interfaces_registry::{RegistryClient, RegistryClientResult};
-use ic_management_canister_types::MasterPublicKeyId;
+use ic_management_canister_types_private::MasterPublicKeyId;
 use ic_protobuf::registry::crypto::v1::ChainKeySigningSubnetList;
 use ic_registry_keys::{
     get_master_public_key_id_from_signing_subnet_list_key, CHAIN_KEY_SIGNING_SUBNET_LIST_KEY_PREFIX,

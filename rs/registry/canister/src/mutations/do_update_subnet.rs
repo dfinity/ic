@@ -2,14 +2,13 @@ use crate::{common::LOG_PREFIX, mutations::common::has_duplicates, registry::Reg
 use candid::{CandidType, Deserialize};
 use dfn_core::println;
 use ic_base_types::{subnet_id_into_protobuf, SubnetId};
-use ic_management_canister_types::{EcdsaKeyId, MasterPublicKeyId};
+use ic_management_canister_types_private::MasterPublicKeyId;
 use ic_protobuf::registry::subnet::v1::{
     SubnetFeatures as SubnetFeaturesPb, SubnetRecord as SubnetRecordPb,
 };
 use ic_registry_keys::{make_chain_key_signing_subnet_list_key, make_subnet_record_key};
 use ic_registry_subnet_features::{
-    ChainKeyConfig as ChainKeyConfigInternal, EcdsaConfig, KeyConfig as KeyConfigInternal,
-    SubnetFeatures,
+    ChainKeyConfig as ChainKeyConfigInternal, KeyConfig as KeyConfigInternal, SubnetFeatures,
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_registry_transport::{pb::v1::RegistryMutation, upsert};
@@ -24,12 +23,6 @@ use std::collections::HashSet;
 impl Registry {
     pub fn do_update_subnet(&mut self, payload: UpdateSubnetPayload) {
         println!("{}do_update_subnet: {:?}", LOG_PREFIX, payload);
-
-        assert_eq!(
-            payload.ecdsa_key_signing_enable,
-            None,
-            "Fields ecdsa_key_signing_{{en,dis}}able are deprecated. Please use chain_key_signing_{{en,dis}}able instead.",
-        );
 
         self.validate_update_payload_chain_key_config(&payload);
         self.validate_update_sev_feature(&payload);
@@ -70,17 +63,6 @@ impl Registry {
     /// Panics if they are not.
     fn validate_update_payload_chain_key_config(&self, payload: &UpdateSubnetPayload) {
         let subnet_id = payload.subnet_id;
-
-        assert_eq!(
-            payload.ecdsa_key_signing_enable,
-            None,
-            "Fields ecdsa_key_signing_{{en,dis}}able are deprecated. Please use chain_key_signing_{{en,dis}}able instead.",
-        );
-
-        assert_eq!(
-            payload.ecdsa_config, None,
-            "Field ecdsa_config is deprecated. Please use chain_key_config instead.",
-        );
 
         let payload_chain_key_config = payload.chain_key_config.clone().map(|chain_key_config| {
             ChainKeyConfigInternal::try_from(chain_key_config).unwrap_or_else(|err| {
@@ -257,14 +239,6 @@ pub struct UpdateSubnetPayload {
     pub halt_at_cup_height: Option<bool>,
 
     pub features: Option<SubnetFeaturesPb>,
-
-    /// The following three ecdsa_* fields will soon be deprecated and replaced with chain_* fields.
-    /// This defines keys held by the subnet,
-    pub ecdsa_config: Option<EcdsaConfig>,
-    /// This enables signing for keys the subnet holds, which is not held in the SubnetRecord
-    pub ecdsa_key_signing_enable: Option<Vec<EcdsaKeyId>>,
-    /// This disables signing for keys the subnet holds, which is not held in the SubnetRecord
-    pub ecdsa_key_signing_disable: Option<Vec<EcdsaKeyId>>,
 
     pub chain_key_config: Option<ChainKeyConfig>,
     pub chain_key_signing_enable: Option<Vec<MasterPublicKeyId>>,
@@ -459,10 +433,7 @@ fn merge_subnet_record(
         is_halted,
         halt_at_cup_height,
         features,
-        ecdsa_config,
         chain_key_config,
-        ecdsa_key_signing_enable: _,
-        ecdsa_key_signing_disable: _,
         chain_key_signing_enable: _,
         chain_key_signing_disable: _,
         max_number_of_canisters,
@@ -523,7 +494,9 @@ mod tests {
         add_fake_subnet, get_invariant_compliant_subnet_record, invariant_compliant_registry,
         prepare_registry_with_nodes,
     };
-    use ic_management_canister_types::{EcdsaCurve, EcdsaKeyId, SchnorrAlgorithm, SchnorrKeyId};
+    use ic_management_canister_types_private::{
+        EcdsaCurve, EcdsaKeyId, SchnorrAlgorithm, SchnorrKeyId,
+    };
     use ic_nervous_system_common_test_keys::{TEST_USER1_PRINCIPAL, TEST_USER2_PRINCIPAL};
     use ic_protobuf::registry::subnet::v1::{
         ChainKeyConfig as ChainKeyConfigPb, KeyConfig as KeyConfigPb,
@@ -552,9 +525,6 @@ mod tests {
             is_halted: None,
             halt_at_cup_height: None,
             features: None,
-            ecdsa_config: None,
-            ecdsa_key_signing_enable: None,
-            ecdsa_key_signing_disable: None,
             max_number_of_canisters: None,
             ssh_readonly_access: None,
             ssh_backup_access: None,
@@ -595,7 +565,6 @@ mod tests {
             ssh_readonly_access: vec![],
             ssh_backup_access: vec![],
             chain_key_config: None,
-            ecdsa_config: None,
         };
 
         let key_id = EcdsaKeyId {
@@ -638,9 +607,6 @@ mod tests {
                 }
                 .into(),
             ),
-            ecdsa_config: None,
-            ecdsa_key_signing_enable: None,
-            ecdsa_key_signing_disable: None,
             max_number_of_canisters: Some(10),
             ssh_readonly_access: Some(vec!["pub_key_0".to_string()]),
             ssh_backup_access: Some(vec!["pub_key_1".to_string()]),
@@ -686,7 +652,6 @@ mod tests {
                 chain_key_config: Some(ChainKeyConfigPb::from(
                     ChainKeyConfigInternal::try_from(chain_key_config).unwrap()
                 )),
-                ecdsa_config: None, // obsolete (chain_key_config is used instead now)
                 max_number_of_canisters: 10,
                 ssh_readonly_access: vec!["pub_key_0".to_string()],
                 ssh_backup_access: vec!["pub_key_1".to_string()],
@@ -714,7 +679,6 @@ mod tests {
             max_number_of_canisters: 0,
             ssh_readonly_access: vec![],
             ssh_backup_access: vec![],
-            ecdsa_config: None,
             chain_key_config: None,
         };
 
@@ -737,9 +701,6 @@ mod tests {
             is_halted: None,
             halt_at_cup_height: Some(true),
             features: None,
-            ecdsa_config: None,
-            ecdsa_key_signing_enable: None,
-            ecdsa_key_signing_disable: None,
             max_number_of_canisters: Some(50),
             ssh_readonly_access: None,
             ssh_backup_access: None,
@@ -777,7 +738,6 @@ mod tests {
                 max_number_of_canisters: 50,
                 ssh_readonly_access: vec![],
                 ssh_backup_access: vec![],
-                ecdsa_config: None,
                 chain_key_config: None,
             }
         );

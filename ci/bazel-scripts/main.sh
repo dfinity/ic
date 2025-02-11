@@ -42,9 +42,6 @@ else
     s3_upload="True"
 fi
 
-# pass info about bazel targets to bazel-targets file
-echo "$BAZEL_TARGETS" >bazel-targets
-
 # if bazel targets is empty we don't need to run any tests
 if [ -z "${BAZEL_TARGETS:-}" ]; then
     echo "No bazel targets to build"

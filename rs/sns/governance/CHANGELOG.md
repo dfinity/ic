@@ -11,6 +11,17 @@ here were moved from the adjacent `unreleased_changelog.md` file.
 INSERT NEW RELEASES HERE
 
 
+# 2025-02-07: Proposal 135208
+
+http://dashboard.internetcomputer.org/proposals/135208
+
+## Added
+
+* Added the `query_stats` field for `get_root_canister_status` methods.
+* Fix a bug due to which SNS ledger logos were sometimes unset after changing unrelated
+  SNS ledger metadata fields.
+
+
 # 2025-02-03: Proposal 135067
 
 http://dashboard.internetcomputer.org/proposal/135067

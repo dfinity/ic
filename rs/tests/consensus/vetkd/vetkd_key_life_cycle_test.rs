@@ -20,7 +20,7 @@ use ic_consensus_system_test_utils::node::await_node_certified_height;
 use ic_consensus_threshold_sig_system_test_utils::{
     add_chain_keys_with_timeout_and_rotation_period, DKG_INTERVAL,
 };
-use ic_management_canister_types::{MasterPublicKeyId, VetKdCurve, VetKdKeyId};
+use ic_management_canister_types_private::{MasterPublicKeyId, VetKdCurve, VetKdKeyId};
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::{
