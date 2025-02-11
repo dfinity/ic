@@ -1,5 +1,5 @@
 use crate::core::Run;
-use anyhow::{anyhow, Context, Error};
+use anyhow::Error;
 use arc_swap::ArcSwapOption;
 use async_trait::async_trait;
 use candid::Principal;
@@ -80,27 +80,40 @@ impl SharedSaltFetcher {
 impl Run for Arc<SharedSaltFetcher> {
     async fn run(&mut self) -> Result<(), Error> {
         loop {
-            let response = self
+            let query_response = match self
                 .agent
                 .execute_query(&self.canister_id, "get_salt", Encode!().unwrap())
                 .await
-                .map_err(|e| anyhow!("failed to fetch salt from the canister: {e:#}"))?
-                .ok_or_else(|| anyhow!("got empty response from the canister"))?;
+            {
+                Ok(response) => match response {
+                    Some(response) => response,
+                    None => {
+                        warn!("SharedSaltFetcher: got empty response from the canister");
+                        continue;
+                    }
+                },
+                Err(err) => {
+                    warn!("SharedSaltFetcher: failed to get salt from the canister: {err:#}");
+                    continue;
+                }
+            };
 
-            let response = Decode!(&response, GetSaltResponse)
-                .context("failed to decode candid response")?
-                .map_err(|e| anyhow!("failed to get salt: {e:?}"));
+            let salt_response = match Decode!(&query_response, GetSaltResponse) {
+                Ok(response) => response,
+                Err(err) => {
+                    warn!("SharedSaltFetcher: failed to decode candid response: {err:?}");
+                    continue;
+                }
+            };
 
-            self.metrics
-                .fetches
-                .with_label_values(&[if response.is_ok() {
-                    "success"
-                } else {
-                    "failure"
-                }])
-                .inc();
+            let status = if salt_response.is_ok() {
+                "success"
+            } else {
+                "failure"
+            };
+            self.metrics.fetches.with_label_values(&[status]).inc();
 
-            match response {
+            match salt_response {
                 Ok(resp) => {
                     // Overwrite salt used for hashing sensitive data
                     self.anonymization_salt.store(Some(Arc::new(resp.salt)));
@@ -114,7 +127,7 @@ impl Run for Arc<SharedSaltFetcher> {
                     );
                 }
                 Err(err) => {
-                    warn!("SharedSaltFetcher: unable to fetch: {err:#}");
+                    warn!("SharedSaltFetcher: get_salt failed: {err:?}");
                 }
             }
 

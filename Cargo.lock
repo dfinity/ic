@@ -14153,6 +14153,7 @@ dependencies = [
  "rate-limits-api",
  "regex",
  "registry-canister",
+ "salt-sharing-api",
  "slog",
  "tokio",
  "wat",
