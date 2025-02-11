@@ -630,7 +630,7 @@ mod tests {
                 validation.unwrap_err(),
                 ValidationError::InvalidArtifact(InvalidPayloadReason::InvalidVetKdPayload(
                     InvalidVetKdPayloadReason::MismatchedAgreement { expected, received }
-                )) if expected == None
+                )) if expected.is_none()
                    && received == Some(VetKdAgreement::Reject(VetKdErrorCode::TimedOut))
             );
         })
@@ -717,7 +717,7 @@ mod tests {
             let height = certified_height.increment();
             let context = ValidationContext {
                 registry_version: RegistryVersion::new(10),
-                certified_height: certified_height,
+                certified_height,
                 time: UNIX_EPOCH,
             };
             let payload = builder.build_payload(height, NumBytes::from(1024), &[], &context);
@@ -751,7 +751,7 @@ mod tests {
                 &[],
                 &ValidationContext {
                     registry_version: RegistryVersion::new(10),
-                    certified_height: certified_height,
+                    certified_height,
                     time: UNIX_EPOCH,
                 },
             );
@@ -795,14 +795,11 @@ mod tests {
     fn test_build_empty_payload_if_all_contexts_answered() {
         let config = make_chain_key_config();
         let contexts = make_contexts(&config);
-        let payloads = vec![
+        let payloads = [
             as_bytes(make_vetkd_agreements([0, 1, 2])),
             as_bytes(make_vetkd_agreements([2, 3, 4])),
         ];
-        let past_payloads = payloads
-            .iter()
-            .map(|p| as_past_payload(&p))
-            .collect::<Vec<_>>();
+        let past_payloads = payloads.iter().map(as_past_payload).collect::<Vec<_>>();
         let shares = make_shares(&contexts);
         let certified_height = Height::new(CERTIFIED_HEIGHT);
         let height = certified_height.increment();
@@ -988,7 +985,7 @@ mod tests {
                 ValidationError::InvalidArtifact(InvalidPayloadReason::InvalidVetKdPayload(
                     InvalidVetKdPayloadReason::MismatchedAgreement { expected, received }
                 )) if expected == Some(VetKdAgreement::Reject(VetKdErrorCode::InvalidKey))
-                   && received == None
+                   && received.is_none()
             );
         })
     }
@@ -1057,7 +1054,7 @@ mod tests {
                 ValidationError::InvalidArtifact(InvalidPayloadReason::InvalidVetKdPayload(
                     InvalidVetKdPayloadReason::MismatchedAgreement { expected, received }
                 )) if expected == Some(VetKdAgreement::Reject(VetKdErrorCode::TimedOut))
-                   && received == None
+                   && received.is_none()
             );
         })
     }
