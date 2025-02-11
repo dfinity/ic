@@ -186,7 +186,7 @@ jobs:
         with:
           BAZEL_COMMAND: "build"
           BAZEL_TARGETS: "//rs/..."
-          BAZEL_EXTRA_ARGS: "--keep_going --config=fuzzing --build_tag_filters=libfuzzer --repository_cache="
+          BAZEL_EXTRA_ARGS: "--keep_going --config=fuzzing --build_tag_filters=libfuzzer"
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
       - name: Upload bazel-bep
         # runs only if previous step succeeded or failed;
@@ -221,7 +221,7 @@ jobs:
         with:
           BAZEL_COMMAND: "build"
           BAZEL_TARGETS: "//rs/..."
-          BAZEL_EXTRA_ARGS: "--keep_going --config=afl --repository_cache="
+          BAZEL_EXTRA_ARGS: "--keep_going --config=afl"
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
       - name: Upload bazel-bep
         # runs only if previous step succeeded or failed;
