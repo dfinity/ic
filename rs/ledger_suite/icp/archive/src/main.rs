@@ -63,7 +63,7 @@ impl Storable for ArchiveNodeState {
     const BOUND: Bound = Bound::Unbounded;
 }
 
-const DEFAULT_MAX_MEMORY_SIZE: usize = 1024 * 1024 * 1024;
+const MAX_BLOCKS_MEMORY_SIZE: u64 = 10 * 1024 * 1024 * 1024;
 
 const STATE_MEMORY_ID: MemoryId = MemoryId::new(0);
 const BLOCK_LOG_INDEX_MEMORY_ID: MemoryId = MemoryId::new(1);
@@ -114,11 +114,6 @@ fn with_memory_manager<R>(f: impl FnOnce(&MemoryManager<DefaultMemoryImpl>) -> R
     MEMORY_MANAGER.with(|cell| f(&cell.borrow()))
 }
 
-/// A helper function to access the block list.
-fn with_blocks<R>(f: impl FnOnce(&BlockLog) -> R) -> R {
-    BLOCKS.with(|cell| f(&cell.borrow()))
-}
-
 impl ArchiveNodeState {
     pub fn new(
         archive_main_canister_id: ic_base_types::CanisterId,
@@ -126,7 +121,7 @@ impl ArchiveNodeState {
         max_memory_size_bytes: Option<usize>,
     ) -> Self {
         Self {
-            max_memory_size_bytes: max_memory_size_bytes.unwrap_or(DEFAULT_MAX_MEMORY_SIZE),
+            max_memory_size_bytes: max_memory_size_bytes.unwrap_or(MAX_BLOCKS_MEMORY_SIZE as usize),
             block_height_offset,
             blocks: Vec::new(),
             total_block_size: 0,
@@ -149,7 +144,7 @@ fn append_blocks(blocks: Vec<EncodedBlock>) {
         blocks_len(),
         blocks.len()
     ));
-    if archive_state.total_block_size > archive_state.max_memory_size_bytes {
+    if stable_blocks_size() > MAX_BLOCKS_MEMORY_SIZE {
         ic_cdk::trap("No space left");
     }
     for block in blocks {
@@ -162,11 +157,15 @@ fn append_blocks(blocks: Vec<EncodedBlock>) {
 }
 
 fn blocks_len() -> u64 {
-    with_blocks(|blocks| blocks.len())
+    BLOCKS.with_borrow(|blocks| blocks.len())
+}
+
+fn stable_blocks_size() -> u64 {
+    BLOCKS.with_borrow(|blocks| blocks.data_size_bytes() + blocks.index_size_bytes())
 }
 
 fn append_block(block: &EncodedBlock) {
-    with_blocks(|blocks| match blocks.append(&block.0) {
+    BLOCKS.with_borrow_mut(|blocks| match blocks.append(&block.0) {
         Ok(_) => {}
         Err(e) => ic_cdk::trap(&format!(
             "Could not append block to stable block log: {:?}",
@@ -176,21 +175,17 @@ fn append_block(block: &EncodedBlock) {
 }
 
 fn get_block_stable(index: u64) -> Option<EncodedBlock> {
-    with_blocks(|blocks| blocks.get(index).map(EncodedBlock::from_vec))
+    BLOCKS.with_borrow(|blocks| blocks.get(index).map(EncodedBlock::from_vec))
 }
 
 // Return the number of bytes the canister can still accommodate
 fn remaining_capacity() -> usize {
-    let archive_state = get_archive_state();
-    let remaining_capacity = archive_state
-        .max_memory_size_bytes
-        .checked_sub(archive_state.total_block_size)
-        .unwrap();
+    let remaining_capacity = MAX_BLOCKS_MEMORY_SIZE - stable_blocks_size();
     print(format!(
         "[archive node] remaining_capacity: {} bytes",
         remaining_capacity
     ));
-    remaining_capacity
+    remaining_capacity as usize
 }
 
 fn init(
@@ -202,7 +197,7 @@ fn init(
         None => {
             print(format!(
                 "[archive node] init(): using default maximum memory size: {} bytes and height offset {}",
-                DEFAULT_MAX_MEMORY_SIZE,
+                MAX_BLOCKS_MEMORY_SIZE,
                 block_height_offset
             ));
         }
@@ -295,7 +290,7 @@ fn get_blocks_() {
         }
         let mut blocks = vec![];
         for index in requested_range {
-            blocks.push(get_block_stable(index as u64).unwrap());
+            blocks.push(get_block_stable(index).unwrap());
         }
         GetBlocksRes(Ok(blocks))
     });
