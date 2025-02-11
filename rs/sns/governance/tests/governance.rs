@@ -2891,8 +2891,23 @@ async fn test_mint_tokens() {
 }
 
 #[tokio::test]
-async fn test_refresh_cached_upgrade_steps() {
-    let mut canister_fixture = GovernanceCanisterFixtureBuilder::new().create();
+async fn test_refresh_cached_upgrade_steps_auto() {
+    let automatically_advance_target_version = true;
+    test_refresh_cached_upgrade_steps(automatically_advance_target_version);
+}
+
+async fn test_refresh_cached_upgrade_steps_no_auto() {
+    let automatically_advance_target_version = false;
+    test_refresh_cached_upgrade_steps(automatically_advance_target_version);
+}
+
+async fn test_refresh_cached_upgrade_steps(automatically_advance_target_version: bool) {
+    let mut canister_fixture = GovernanceCanisterFixtureBuilder::new()
+        .set_nervous_system_parameters(NervousSystemParameters {
+            automatically_advance_target_version: Some(automatically_advance_target_version),
+            ..Default::default()
+        })
+        .create();
 
     let v1 = Version::default();
     let v2 = Version {
@@ -3033,14 +3048,7 @@ async fn test_refresh_cached_upgrade_steps() {
     // Check that after the initialization, only one refresh has been recorded
     // in the upgrade journal (because the 2nd one is identical to the 1st).
     {
-        let upgrade_journal = canister_fixture
-            .governance
-            .proto
-            .upgrade_journal
-            .clone()
-            .unwrap();
-        assert_eq!(
-            upgrade_journal.entries,
+        let expected_upgrade_journal_entries = if automatically_advance_target_version {
             vec![
                 UpgradeJournalEntry {
                     timestamp_seconds: Some(DEFAULT_TEST_START_TIMESTAMP_SECONDS),
@@ -3048,7 +3056,17 @@ async fn test_refresh_cached_upgrade_steps() {
                         upgrade_journal_entry::UpgradeStepsReset {
                             human_readable: Some("Initializing the cache".to_string()),
                             upgrade_steps: Some(Versions { versions: vec![v1] }),
-                        }
+                        },
+                    )),
+                },
+                UpgradeJournalEntry {
+                    timestamp_seconds: Some(DEFAULT_TEST_START_TIMESTAMP_SECONDS),
+                    event: Some(upgrade_journal_entry::Event::TargetVersionSet(
+                        upgrade_journal_entry::TargetVersionSet {
+                            old_target_version: None,
+                            new_target_version: Some(v3),
+                            is_advanced_automatically: Some(true),
+                        },
                     )),
                 },
                 UpgradeJournalEntry {
@@ -3058,13 +3076,46 @@ async fn test_refresh_cached_upgrade_steps() {
                     event: Some(upgrade_journal_entry::Event::UpgradeStepsRefreshed(
                         upgrade_journal_entry::UpgradeStepsRefreshed {
                             upgrade_steps: Some(Versions {
-                                versions: expected_upgrade_steps
+                                versions: expected_upgrade_steps,
                             }),
-                        }
+                        },
                     )),
                 },
             ]
-        );
+        } else {
+            vec![
+                UpgradeJournalEntry {
+                    timestamp_seconds: Some(DEFAULT_TEST_START_TIMESTAMP_SECONDS),
+                    event: Some(upgrade_journal_entry::Event::UpgradeStepsReset(
+                        upgrade_journal_entry::UpgradeStepsReset {
+                            human_readable: Some("Initializing the cache".to_string()),
+                            upgrade_steps: Some(Versions { versions: vec![v1] }),
+                        },
+                    )),
+                },
+                UpgradeJournalEntry {
+                    // we advanced time by one second after the first refresh
+                    timestamp_seconds: Some(DEFAULT_TEST_START_TIMESTAMP_SECONDS),
+                    // the event contains the upgrade steps
+                    event: Some(upgrade_journal_entry::Event::UpgradeStepsRefreshed(
+                        upgrade_journal_entry::UpgradeStepsRefreshed {
+                            upgrade_steps: Some(Versions {
+                                versions: expected_upgrade_steps,
+                            }),
+                        },
+                    )),
+                },
+            ]
+        };
+
+        let upgrade_journal = canister_fixture
+            .governance
+            .proto
+            .upgrade_journal
+            .clone()
+            .unwrap();
+
+        assert_eq!(upgrade_journal.entries, expected_upgrade_journal_entries);
     }
 }
 
