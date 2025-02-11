@@ -4,9 +4,12 @@ pub type Response = Result<Payload, String>;
 
 #[derive(Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub enum Payload {
+    NoPayload,
+
     HostOSVsockVersion(HostOSVsockVersion),
     HostOSVersion(String),
-    NoPayload,
+    Mode,
+    UpgradeVMData { nonce: Vec<u8> },
 }
 
 impl fmt::Display for Payload {
@@ -50,6 +53,7 @@ pub enum Command {
     Notify(NotifyData),
     GetVsockProtocol,
     GetHostOSVersion,
+    GetMode,
 }
 
 impl fmt::Display for Command {
