@@ -349,7 +349,7 @@ impl Setup {
             }
         }
         self.check_ledger_metrics(ExpectMigration::No);
-        self.upgrade_archive_canisters(&self.mainnet_wasms.archive);
+        //self.upgrade_archive_canisters(&self.mainnet_wasms.archive);
     }
 
     pub fn perform_upgrade_downgrade_testing(

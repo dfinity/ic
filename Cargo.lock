@@ -15352,6 +15352,7 @@ dependencies = [
  "ic-ledger-test-utils",
  "ic-metrics-encoder",
  "ic-nns-constants",
+ "ic-stable-structures",
  "icp-ledger",
  "lazy_static",
  "pocket-ic",
