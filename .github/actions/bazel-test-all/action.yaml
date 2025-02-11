@@ -29,6 +29,11 @@ runs:
         run: |
           set +e # manual error handling to ensure we can run some post-build commands
 
+          # freshly deployed k8s machines require ownership correctly set
+          if [ -e /cache ]; then
+            sudo chown -RL 1001:1001 /cache
+          fi
+
           if [ -n "$SSH_PRIVATE_KEY_BACKUP_POD" ]; then
             # The following adds the SSH private key to the ssh-agent such that CI can SSH into the backup pod.
             test -z "${SSH_AUTH_SOCK:-}" && { eval "$(ssh-agent -s)"; ssh-add - <<< "${SSH_PRIVATE_KEY_BACKUP_POD}"; }
