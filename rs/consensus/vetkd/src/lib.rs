@@ -799,7 +799,10 @@ mod tests {
             as_bytes(make_vetkd_agreements([0, 1, 2])),
             as_bytes(make_vetkd_agreements([2, 3, 4])),
         ];
-        let past_payloads = payloads.iter().map(|bytes| as_past_payload(byte.sas_slice())).collect::<Vec<_>>();
+        let past_payloads = payloads
+            .iter()
+            .map(|bytes| as_past_payload(bytes))
+            .collect::<Vec<_>>();
         let shares = make_shares(&contexts);
         let certified_height = Height::new(CERTIFIED_HEIGHT);
         let height = certified_height.increment();
