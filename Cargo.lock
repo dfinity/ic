@@ -4297,17 +4297,17 @@ dependencies = [
 
 [[package]]
 name = "evm_rpc_types"
-version = "1.2.0"
+version = "1.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "29ed9ee7b89726f4a343208e9a89e9ad22fe7b4518b0d722973cc83274e7bf7f"
+checksum = "fa134314bce7c35b9214710572fb7305edc7f4223c5bd03b5857ed08bbb05897"
 dependencies = [
  "candid",
  "hex",
- "ic-cdk 0.16.0",
+ "ic-cdk 0.17.1",
  "num-bigint 0.4.6",
  "serde",
  "strum",
- "thiserror 1.0.69",
+ "thiserror 2.0.11",
  "url",
 ]
 
