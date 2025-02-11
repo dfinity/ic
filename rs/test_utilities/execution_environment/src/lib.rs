@@ -1,5 +1,6 @@
 use ic_base_types::{NumBytes, NumSeconds, PrincipalId, SubnetId};
 use ic_config::embedders::{BestEffortResponsesFeature, MeteringType, StableMemoryPageLimit};
+use ic_config::subnet_config::CyclesAccountManagerConfig;
 use ic_config::{
     embedders::{Config as EmbeddersConfig, WASM_MAX_SIZE},
     execution_environment::Config,
@@ -1747,6 +1748,7 @@ pub struct ExecutionTestBuilder {
     canister_snapshot_baseline_instructions: NumInstructions,
     replica_version: ReplicaVersion,
     precompiled_universal_canister: bool,
+    cycles_account_manager_config: Option<CyclesAccountManagerConfig>,
 }
 
 impl Default for ExecutionTestBuilder {
@@ -1790,6 +1792,7 @@ impl Default for ExecutionTestBuilder {
                 .canister_snapshot_baseline_instructions,
             replica_version: ReplicaVersion::default(),
             precompiled_universal_canister: true,
+            cycles_account_manager_config: None,
         }
     }
 }
@@ -2183,6 +2186,19 @@ impl ExecutionTestBuilder {
         self
     }
 
+    /// Note: This fails if the provided CyclesAccountManagerConfig has a different subnet size than self.
+    pub fn with_cycles_account_manager_config(mut self, cfg: CyclesAccountManagerConfig) -> Self {
+        if SubnetConfig::new(self.subnet_type)
+            .cycles_account_manager_config
+            .reference_subnet_size
+            != cfg.reference_subnet_size
+        {
+            panic!("ExecutionTestBuilder subnet_type is inconsistent with the provided CyclesAccountManagerConfig");
+        }
+        self.cycles_account_manager_config = Some(cfg);
+        self
+    }
+
     pub fn build(self) -> ExecutionTest {
         let own_range = CanisterIdRange {
             start: CanisterId::from(CANISTER_IDS_PER_SUBNET),
@@ -2228,7 +2244,9 @@ impl ExecutionTestBuilder {
 
         let metrics_registry = MetricsRegistry::new();
 
-        let mut config = SubnetConfig::new(self.subnet_type).cycles_account_manager_config;
+        let mut config = self
+            .cycles_account_manager_config
+            .unwrap_or_else(|| SubnetConfig::new(self.subnet_type).cycles_account_manager_config);
         if let Some(ecdsa_signature_fee) = self.ecdsa_signature_fee {
             config.ecdsa_signature_fee = ecdsa_signature_fee;
         }

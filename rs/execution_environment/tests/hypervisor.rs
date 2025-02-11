@@ -2,6 +2,7 @@ use assert_matches::assert_matches;
 use candid::{Decode, Encode};
 use ic_base_types::{NumSeconds, PrincipalId};
 use ic_config::embedders::BestEffortResponsesFeature;
+use ic_config::subnet_config::CyclesAccountManagerConfig;
 use ic_config::subnet_config::SchedulerConfig;
 use ic_cycles_account_manager::ResourceSaturation;
 use ic_embedders::wasm_utils::instrumentation::instruction_to_cost;
@@ -8159,4 +8160,64 @@ fn invoke_cost_call() {
         panic!("Expected reply, got {:?}", res);
     };
     assert_eq!(bytes, expected_cost.to_le_bytes());
+}
+
+#[test]
+fn cost_call_accurate() {
+    let cfg = call_only_cost_config();
+    let mut test = ExecutionTestBuilder::new()
+        .with_cycles_account_manager_config(cfg)
+        .build();
+    let subnet_size = test.subnet_size();
+    let canister_id = test.universal_canister().unwrap();
+    let other = test.universal_canister().unwrap();
+    let method_name_size = "update".len() as u64;
+    let other_size_code = wasm().caller().append_and_reply();
+    let payload_size = other_size_code.clone().build().len() as u64;
+    let expected_cost = test
+        .cycles_account_manager()
+        .xnet_call_performed_fee(subnet_size)
+        .get()
+        + test
+            .cycles_account_manager()
+            .xnet_call_bytes_transmitted_fee((method_name_size + payload_size).into(), subnet_size)
+            .get();
+    // the caller canister should:
+    // - check its cycles balance and add it to the reply data
+    // - call the other universal canister
+    // - check its new cycles balance and add it to the reply data
+    // - reply
+    let payload = wasm()
+        .cycles_balance()
+        .int64_to_blob()
+        .reply_data_append()
+        .call_simple(other, "update", call_args().other_side(other_size_code))
+        .cycles_balance()
+        .int64_to_blob()
+        .reply_data_append()
+        .reply()
+        .build();
+    let res = test.ingress(canister_id, "update", payload);
+    let Ok(WasmResult::Reply(bytes)) = res else {
+        panic!("Expected reply, got {:?}", res);
+    };
+    let cycles_before_call = u64::from_le_bytes(bytes[0..8].try_into().unwrap());
+    let cycles_after_call = u64::from_le_bytes(bytes[8..16].try_into().unwrap());
+    // let other_cycles_after_call = test.cycles_account_manager()
+    println!(
+        "cycles before call {:?}, cycles after call {:?}, difference {:?}, expected cost {:?}",
+        cycles_before_call,
+        cycles_after_call,
+        cycles_before_call - cycles_after_call,
+        expected_cost as u64
+    );
+    assert_eq!(cycles_before_call - cycles_after_call, expected_cost as u64);
+}
+
+fn call_only_cost_config() -> CyclesAccountManagerConfig {
+    let real_cfg = CyclesAccountManagerConfig::application_subnet();
+    let mut cfg = CyclesAccountManagerConfig::zero_cost(real_cfg.reference_subnet_size);
+    cfg.xnet_call_fee = real_cfg.xnet_call_fee;
+    cfg.xnet_byte_transmission_fee = real_cfg.xnet_byte_transmission_fee;
+    cfg
 }
