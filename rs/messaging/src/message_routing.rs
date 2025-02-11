@@ -628,8 +628,43 @@ pub(crate) type NodePublicKeys = BTreeMap<NodeId, Vec<u8>>;
 pub(crate) type ApiBoundaryNodes = BTreeMap<NodeId, ApiBoundaryNodeEntry>;
 
 impl BatchProcessorImpl {
-    #[allow(clippy::too_many_arguments)]
     fn new(
+        state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
+        certified_stream_store: Arc<dyn CertifiedStreamStore>,
+        ingress_history_writer: Arc<dyn IngressHistoryWriter<State = ReplicatedState> + 'static>,
+        scheduler: Box<dyn Scheduler<State = ReplicatedState>>,
+        hypervisor_config: HypervisorConfig,
+        cycles_account_manager: Arc<CyclesAccountManager>,
+        subnet_id: SubnetId,
+        metrics: MessageRoutingMetrics,
+        metrics_registry: &MetricsRegistry,
+        log: ReplicaLogger,
+        registry: Arc<dyn RegistryClient>,
+        malicious_flags: MaliciousFlags,
+    ) -> BatchProcessorImpl {
+        Self::with_stream_limits_for_testing(
+            state_manager,
+            certified_stream_store,
+            ingress_history_writer,
+            scheduler,
+            hypervisor_config,
+            cycles_account_manager,
+            subnet_id,
+            // Do NOT replace these constants. Stream limits must remain constant on mainnet,
+            // otherwise the payload builder might mistakenly identify subnets as dishonest.
+            // Changes must be carefully considered.
+            MAX_STREAM_MESSAGES,
+            TARGET_STREAM_SIZE_BYTES,
+            metrics,
+            metrics_registry,
+            log,
+            registry,
+            malicious_flags,
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn with_stream_limits_for_testing(
         state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
         certified_stream_store: Arc<dyn CertifiedStreamStore>,
         ingress_history_writer: Arc<dyn IngressHistoryWriter<State = ReplicatedState> + 'static>,
@@ -1508,8 +1543,6 @@ impl MessageRoutingImpl {
             hypervisor_config,
             cycles_account_manager,
             subnet_id,
-            MAX_STREAM_MESSAGES,
-            TARGET_STREAM_SIZE_BYTES,
             metrics.clone(),
             metrics_registry,
             log.clone(),
@@ -1645,7 +1678,7 @@ impl SyncMessageRouting {
     ) -> Self {
         let metrics = MessageRoutingMetrics::new(metrics_registry);
 
-        let batch_processor = BatchProcessorImpl::new(
+        let batch_processor = BatchProcessorImpl::with_stream_limits_for_testing(
             state_manager.clone(),
             certified_stream_store,
             ingress_history_writer,
