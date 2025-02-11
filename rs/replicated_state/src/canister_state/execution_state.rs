@@ -817,6 +817,12 @@ impl WasmExecutionMode {
             WasmExecutionMode::Wasm32
         }
     }
+    pub fn as_str(&self) -> &str {
+        match self {
+            WasmExecutionMode::Wasm32 => "wasm32",
+            WasmExecutionMode::Wasm64 => "wasm64",
+        }
+    }
 }
 
 #[cfg(test)]
