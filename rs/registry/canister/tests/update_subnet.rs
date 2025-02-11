@@ -2,7 +2,7 @@ use assert_matches::assert_matches;
 use candid::Encode;
 use dfn_candid::candid;
 use ic_base_types::{subnet_id_try_from_protobuf, PrincipalId, SubnetId};
-use ic_management_canister_types::{
+use ic_management_canister_types_private::{
     EcdsaCurve, EcdsaKeyId, MasterPublicKeyId, SchnorrAlgorithm, SchnorrKeyId,
 };
 use ic_nns_test_utils::registry::TEST_ID;
@@ -67,9 +67,6 @@ fn test_the_anonymous_user_cannot_update_a_subnets_configuration() {
             is_halted: None,
             halt_at_cup_height: None,
             features: None,
-            ecdsa_config: None,
-            ecdsa_key_signing_enable: None,
-            ecdsa_key_signing_disable: None,
             max_number_of_canisters: Some(10),
             ssh_readonly_access: Some(vec!["pub_key_0".to_string()]),
             ssh_backup_access: Some(vec!["pub_key_1".to_string()]),
@@ -151,7 +148,6 @@ fn test_a_canister_other_than_the_governance_canister_cannot_update_a_subnets_co
             max_number_of_canisters: 0,
             ssh_readonly_access: vec![],
             ssh_backup_access: vec![],
-            ecdsa_config: None,
             chain_key_config: None,
         };
 
@@ -194,9 +190,6 @@ fn test_a_canister_other_than_the_governance_canister_cannot_update_a_subnets_co
             is_halted: None,
             halt_at_cup_height: None,
             features: None,
-            ecdsa_config: None,
-            ecdsa_key_signing_enable: None,
-            ecdsa_key_signing_disable: None,
             max_number_of_canisters: Some(100),
             ssh_readonly_access: None,
             ssh_backup_access: None,
@@ -277,7 +270,6 @@ fn test_the_governance_canister_can_update_a_subnets_configuration() {
                             max_number_of_canisters: 0,
                             ssh_readonly_access: vec![],
                             ssh_backup_access: vec![],
-                            ecdsa_config: None,
                             chain_key_config: None,
                         }
                         .encode_to_vec(),
@@ -312,9 +304,6 @@ fn test_the_governance_canister_can_update_a_subnets_configuration() {
             is_halted: Some(true),
             halt_at_cup_height: Some(true),
             features: None,
-            ecdsa_config: None,
-            ecdsa_key_signing_enable: None,
-            ecdsa_key_signing_disable: None,
             max_number_of_canisters: Some(42),
             ssh_readonly_access: Some(vec!["pub_key_0".to_string()]),
             ssh_backup_access: Some(vec!["pub_key_1".to_string()]),
@@ -371,7 +360,6 @@ fn test_the_governance_canister_can_update_a_subnets_configuration() {
                 max_number_of_canisters: 42,
                 ssh_readonly_access: vec!["pub_key_0".to_string()],
                 ssh_backup_access: vec!["pub_key_1".to_string()],
-                ecdsa_config: None,
                 chain_key_config: None,
             }
         );
@@ -402,7 +390,7 @@ fn test_subnets_configuration_chain_key_fields_are_updated_correctly(key_id: Mas
     let enable_before_adding_reject_msg = format!(
         "Canister rejected with \
         message: IC0503: Error from Canister rwlgt-iiaaa-aaaaa-aaaaa-cai: Canister \
-        called `ic0.trap` with message: Panicked at '[Registry] Proposal attempts to enable \
+        called `ic0.trap` with message: 'Panicked at '[Registry] Proposal attempts to enable \
         signing for chain key '{}' on Subnet \
         'bn3el-jdvcs-a3syn-gyqwo-umlu3-avgud-vq6yl-hunln-3jejb-226vq-mae', but the \
         subnet does not hold the given key. A proposal to add that key to the subnet \
@@ -413,7 +401,7 @@ fn test_subnets_configuration_chain_key_fields_are_updated_correctly(key_id: Mas
     let no_chain_key_config_reject_msg = format!(
         "Canister rejected with message: \
         IC0503: Error from Canister rwlgt-iiaaa-aaaaa-aaaaa-cai: Canister called \
-        `ic0.trap` with message: Panicked at '[Registry] Proposal attempts to enable signing \
+        `ic0.trap` with message: 'Panicked at '[Registry] Proposal attempts to enable signing \
         for chain key '{}' \
         on Subnet 'bn3el-jdvcs-a3syn-gyqwo-umlu3-avgud-vq6yl-hunln-3jejb-226vq-mae', \
         but the subnet does not hold the given key. A proposal to add that key to the subnet \
@@ -447,7 +435,6 @@ fn test_subnets_configuration_chain_key_fields_are_updated_correctly(key_id: Mas
             max_number_of_canisters: 0,
             ssh_readonly_access: vec![],
             ssh_backup_access: vec![],
-            ecdsa_config: None,
             chain_key_config: None,
         };
 
@@ -590,7 +577,6 @@ fn test_subnets_configuration_chain_key_fields_are_updated_correctly(key_id: Mas
                 subnet_record_1,
                 SubnetRecord {
                     chain_key_config: Some(expected_chain_key_config_pb),
-                    ecdsa_config: None, // obsolete (chain_key_config is used instead now)
                     ..initial_subnet_record
                 }
             );
@@ -661,9 +647,6 @@ fn empty_update_subnet_payload(subnet_id: SubnetId) -> UpdateSubnetPayload {
         max_number_of_canisters: None,
         ssh_readonly_access: None,
         ssh_backup_access: None,
-        ecdsa_config: None,
-        ecdsa_key_signing_enable: None,
-        ecdsa_key_signing_disable: None,
         chain_key_config: None,
         chain_key_signing_enable: None,
         chain_key_signing_disable: None,

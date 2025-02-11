@@ -1,14 +1,14 @@
 use assert_matches::assert_matches;
 use candid::{Decode, Encode};
 use ic_base_types::{NumSeconds, PrincipalId};
-use ic_config::flag_status::FlagStatus;
+use ic_config::embedders::BestEffortResponsesFeature;
 use ic_config::subnet_config::SchedulerConfig;
 use ic_cycles_account_manager::ResourceSaturation;
 use ic_embedders::wasm_utils::instrumentation::instruction_to_cost;
 use ic_embedders::wasm_utils::instrumentation::WasmMemoryType;
 use ic_error_types::{ErrorCode, RejectCode};
 use ic_interfaces::execution_environment::{HypervisorError, SubnetAvailableMemory};
-use ic_management_canister_types::{
+use ic_management_canister_types_private::{
     CanisterChange, CanisterHttpResponsePayload, CanisterStatusType, CanisterUpgradeOptions,
 };
 use ic_nns_constants::CYCLES_MINTING_CANISTER_ID;
@@ -1670,7 +1670,10 @@ fn ic0_msg_caller_size_works_in_heartbeat() {
         .unwrap();
     assert_eq!(
         WasmResult::Reply(
-            (ic_management_canister_types::IC_00.get().to_vec().len() as u32)
+            (ic_management_canister_types_private::IC_00
+                .get()
+                .to_vec()
+                .len() as u32)
                 .to_le_bytes()
                 .to_vec()
         ),
@@ -1687,7 +1690,10 @@ fn ic0_msg_caller_copy_works_in_heartbeat() {
             wasm()
                 .msg_caller_copy(
                     0,
-                    ic_management_canister_types::IC_00.get().to_vec().len() as u32,
+                    ic_management_canister_types_private::IC_00
+                        .get()
+                        .to_vec()
+                        .len() as u32,
                 )
                 .set_global_data_from_stack()
                 .build(),
@@ -1705,7 +1711,7 @@ fn ic0_msg_caller_copy_works_in_heartbeat() {
         )
         .unwrap();
     assert_eq!(
-        WasmResult::Reply(ic_management_canister_types::IC_00.get().to_vec()),
+        WasmResult::Reply(ic_management_canister_types_private::IC_00.get().to_vec()),
         result
     );
 }
@@ -1736,7 +1742,10 @@ fn ic0_msg_caller_size_works_in_global_timer() {
         .unwrap();
     assert_eq!(
         WasmResult::Reply(
-            (ic_management_canister_types::IC_00.get().to_vec().len() as u32)
+            (ic_management_canister_types_private::IC_00
+                .get()
+                .to_vec()
+                .len() as u32)
                 .to_le_bytes()
                 .to_vec()
         ),
@@ -1753,7 +1762,10 @@ fn ic0_msg_caller_copy_works_in_global_timer() {
             wasm()
                 .msg_caller_copy(
                     0,
-                    ic_management_canister_types::IC_00.get().to_vec().len() as u32,
+                    ic_management_canister_types_private::IC_00
+                        .get()
+                        .to_vec()
+                        .len() as u32,
                 )
                 .set_global_data_from_stack()
                 .build(),
@@ -1771,7 +1783,7 @@ fn ic0_msg_caller_copy_works_in_global_timer() {
         )
         .unwrap();
     assert_eq!(
-        WasmResult::Reply(ic_management_canister_types::IC_00.get().to_vec()),
+        WasmResult::Reply(ic_management_canister_types_private::IC_00.get().to_vec()),
         result
     );
 }
@@ -2552,7 +2564,7 @@ fn ic0_trap_works() {
         ErrorCode::CanisterCalledTrap,
         &format!(
             "Error from Canister {canister_id}: Canister called `ic0.trap` \
-        with message: Hi!"
+        with message: 'Hi!'"
         ),
     );
 }
@@ -4870,7 +4882,7 @@ fn cycles_are_refunded_if_callee_is_reinstalled() {
         WasmResult::Reject(reject_message) => reject_message,
     };
     assert!(
-        reject_message.contains("Canister called `ic0.trap` with message: panicked at")
+        reject_message.contains("Canister called `ic0.trap` with message: 'panicked at")
             && reject_message.contains("get_callback: 1 out of bounds"),
         "Unexpected error message: {}",
         reject_message
@@ -5581,7 +5593,7 @@ fn cycles_correct_if_update_fails() {
 #[test]
 fn call_with_best_effort_response_succeeds() {
     let mut test = ExecutionTestBuilder::new()
-        .with_best_effort_responses(FlagStatus::Enabled)
+        .with_best_effort_responses(BestEffortResponsesFeature::Enabled)
         .build();
 
     let canister_id = test.universal_canister().unwrap();
@@ -5605,7 +5617,7 @@ fn call_with_best_effort_response_succeeds() {
 #[test]
 fn call_with_best_effort_response_fails_when_timeout_is_set() {
     let mut test = ExecutionTestBuilder::new()
-        .with_best_effort_responses(FlagStatus::Enabled)
+        .with_best_effort_responses(BestEffortResponsesFeature::Enabled)
         .build();
 
     let canister_id = test.universal_canister().unwrap();
@@ -5634,7 +5646,7 @@ fn call_with_best_effort_response_test_helper(
     timeout_seconds: u32,
 ) -> CoarseTime {
     let mut test = ExecutionTestBuilder::new()
-        .with_best_effort_responses(FlagStatus::Enabled)
+        .with_best_effort_responses(BestEffortResponsesFeature::Enabled)
         .with_manual_execution()
         .with_time(Time::from_secs_since_unix_epoch(start_time_seconds as u64).unwrap())
         .build();
@@ -5698,7 +5710,7 @@ fn ic0_msg_deadline_while_executing_ingress_message() {
     let start_time_seconds = 100;
 
     let mut test = ExecutionTestBuilder::new()
-        .with_best_effort_responses(FlagStatus::Enabled)
+        .with_best_effort_responses(BestEffortResponsesFeature::Enabled)
         .with_time(Time::from_secs_since_unix_epoch(start_time_seconds as u64).unwrap())
         .build();
 
@@ -5720,7 +5732,7 @@ fn ic0_msg_deadline_when_deadline_is_not_set() {
     let start_time_seconds = 100;
 
     let mut test = ExecutionTestBuilder::new()
-        .with_best_effort_responses(FlagStatus::Enabled)
+        .with_best_effort_responses(BestEffortResponsesFeature::Enabled)
         .with_time(Time::from_secs_since_unix_epoch(start_time_seconds as u64).unwrap())
         .build();
 
@@ -5758,7 +5770,7 @@ fn ic0_msg_deadline_when_deadline_is_set() {
     let timeout_seconds = 200;
 
     let mut test = ExecutionTestBuilder::new()
-        .with_best_effort_responses(FlagStatus::Enabled)
+        .with_best_effort_responses(BestEffortResponsesFeature::Enabled)
         .with_time(Time::from_secs_since_unix_epoch(start_time_seconds as u64).unwrap())
         .build();
 

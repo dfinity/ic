@@ -4,7 +4,7 @@ use std::str::FromStr;
 use ic_base_types::{CanisterId, PrincipalId, SubnetId};
 use ic_btc_interface::NetworkInRequest as BitcoinNetwork;
 use ic_error_types::UserError;
-use ic_management_canister_types::{
+use ic_management_canister_types_private::{
     BitcoinGetBalanceArgs, BitcoinGetBlockHeadersArgs, BitcoinGetCurrentFeePercentilesArgs,
     BitcoinGetUtxosArgs, BitcoinSendTransactionArgs, CanisterIdRecord, CanisterInfoRequest,
     ClearChunkStoreArgs, ComputeInitialIDkgDealingsArgs, DeleteCanisterSnapshotArgs,
@@ -422,7 +422,7 @@ mod tests {
     use assert_matches::assert_matches;
     use candid::Encode;
     use ic_base_types::RegistryVersion;
-    use ic_management_canister_types::{
+    use ic_management_canister_types_private::{
         DerivationPath, EcdsaCurve, EcdsaKeyId, SchnorrAlgorithm, SchnorrKeyId, SignWithECDSAArgs,
         VetKdCurve, VetKdKeyId,
     };
@@ -558,7 +558,7 @@ mod tests {
             key_id,
             derivation_path: DerivationPath::new(vec![ByteBuf::from(vec![0; 10])]),
             derivation_id: vec![1; 32],
-            encryption_public_key: vec![1; 32],
+            encryption_public_key: [1; 48],
         };
         Encode!(&args).unwrap()
     }

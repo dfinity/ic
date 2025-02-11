@@ -8,7 +8,6 @@
 use crate::chain_key::{InitialChainKeyConfigInternal, KeyConfigRequestInternal};
 use crate::{
     common::LOG_PREFIX,
-    mutations::do_create_subnet::EcdsaInitialConfig,
     registry::{Registry, Version},
 };
 use candid::{CandidType, Deserialize, Encode};
@@ -16,7 +15,7 @@ use dfn_core::api::{call, CanisterId};
 #[cfg(target_arch = "wasm32")]
 use dfn_core::println;
 use ic_base_types::{NodeId, PrincipalId, RegistryVersion, SubnetId};
-use ic_management_canister_types::{
+use ic_management_canister_types_private::{
     MasterPublicKeyId, SetupInitialDKGArgs, SetupInitialDKGResponse,
 };
 use ic_protobuf::registry::subnet::v1::{ChainKeyConfig as ChainKeyConfigPb, RegistryStoreUri};
@@ -225,11 +224,6 @@ impl Registry {
     /// This is similar to validation in do_create_subnet except for constraints to avoid requesting
     /// keys from the subnet.
     fn validate_recover_subnet_payload(&self, payload: &RecoverSubnetPayload) {
-        assert_eq!(
-            payload.ecdsa_config, None,
-            "Field ecdsa_config is deprecated. Please use chain_key_config instead.",
-        );
-
         let Some(initial_chain_key_config) = &payload.chain_key_config else {
             return; // Nothing to do.
         };
@@ -270,9 +264,6 @@ pub struct RecoverSubnetPayload {
     /// A uri from which data to replace the registry local store should be
     /// downloaded
     pub registry_store_uri: Option<(String, String, u64)>,
-
-    /// Obsolete. Please use `chain_key_config` instead.
-    pub ecdsa_config: Option<EcdsaInitialConfig>,
 
     /// Chain key configuration must be specified if keys will be recovered to this subnet.
     /// Any keys that this subnet could sign for will immediately be available to sign with.
@@ -498,7 +489,7 @@ mod test {
         registry::Registry,
     };
     use ic_base_types::SubnetId;
-    use ic_management_canister_types::{EcdsaCurve, EcdsaKeyId};
+    use ic_management_canister_types_private::{EcdsaCurve, EcdsaKeyId};
     use ic_protobuf::registry::subnet::v1::{ChainKeyConfig as ChainKeyConfigPb, SubnetRecord};
     use ic_registry_subnet_features::{ChainKeyConfig, DEFAULT_ECDSA_MAX_QUEUE_SIZE};
     use ic_registry_transport::{delete, upsert};
@@ -512,7 +503,6 @@ mod test {
             state_hash: vec![],
             replacement_nodes: None,
             registry_store_uri: None,
-            ecdsa_config: None,
             chain_key_config: None,
         }
     }

@@ -5,7 +5,7 @@ use dfn_core::api::{call, CanisterId};
 #[cfg(target_arch = "wasm32")]
 use dfn_core::println;
 use ic_base_types::{NodeId, PrincipalId, RegistryVersion, SubnetId};
-use ic_management_canister_types::{
+use ic_management_canister_types_private::{
     EcdsaKeyId, MasterPublicKeyId, SetupInitialDKGArgs, SetupInitialDKGResponse,
 };
 use ic_protobuf::registry::{
@@ -179,11 +179,6 @@ impl Registry {
     /// Ensures that a valid `subnet_id` is specified for `KeyConfigRequest`s.
     /// Ensures that master public keys (a) exist and (b) are present on the requested subnet.
     fn validate_create_subnet_payload(&self, payload: &CreateSubnetPayload) {
-        assert_eq!(
-            payload.ecdsa_config, None,
-            "Field ecdsa_config is deprecated. Please use chain_key_config instead.",
-        );
-
         // Verify that all Nodes exist
         payload.node_ids.iter().for_each(|node_id| {
             match self.get(
@@ -284,9 +279,6 @@ pub struct CreateSubnetPayload {
     pub max_number_of_canisters: u64,
     pub ssh_readonly_access: Vec<String>,
     pub ssh_backup_access: Vec<String>,
-
-    // Obsolete. Please use `chain_key_config` instead.
-    pub ecdsa_config: Option<EcdsaInitialConfig>,
 
     pub chain_key_config: Option<InitialChainKeyConfig>,
 
@@ -524,7 +516,6 @@ impl From<CreateSubnetPayload> for SubnetRecord {
                         .expect("Invalid InitialChainKeyConfig")
                 })
                 .map(ChainKeyConfigPb::from),
-            ecdsa_config: None, // obsolete (chain_key_config is used instead now)
         }
     }
 }
@@ -536,7 +527,7 @@ mod test {
         add_fake_subnet, get_invariant_compliant_subnet_record, invariant_compliant_registry,
         prepare_registry_with_nodes,
     };
-    use ic_management_canister_types::EcdsaCurve;
+    use ic_management_canister_types_private::EcdsaCurve;
     use ic_nervous_system_common_test_keys::{TEST_USER1_PRINCIPAL, TEST_USER2_PRINCIPAL};
     use ic_registry_subnet_features::{ChainKeyConfig, DEFAULT_ECDSA_MAX_QUEUE_SIZE};
     use ic_types::ReplicaVersion;

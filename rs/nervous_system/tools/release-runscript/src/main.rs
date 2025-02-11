@@ -1,7 +1,9 @@
+mod commit_switcher;
 mod utils;
 use anyhow::{bail, Result};
 use clap::{Parser, Subcommand};
 use colored::*;
+use commit_switcher::CommitSwitcher;
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
 use url::Url;
@@ -35,6 +37,8 @@ struct CreateProposalTexts {
 
 #[derive(Debug, Parser)]
 struct SubmitProposals {
+    #[arg(long)]
+    commit: String,
     #[arg(long, num_args = 0..,)]
     nns_proposal_text_paths: Vec<PathBuf>,
     #[arg(long, num_args = 0..,)]
@@ -43,6 +47,8 @@ struct SubmitProposals {
 
 #[derive(Debug, Parser)]
 struct CreateForumPost {
+    #[arg(long)]
+    commit: String,
     #[arg(long, num_args = 0..,)]
     nns_proposal_text_paths: Vec<PathBuf>,
     #[arg(long, num_args = 0..,)]
@@ -54,6 +60,8 @@ struct CreateForumPost {
 }
 #[derive(Debug, Parser)]
 struct ScheduleVote {
+    #[arg(long)]
+    commit: String,
     #[arg(long, num_args = 0..,)]
     nns_proposal_ids: Vec<String>,
     #[arg(long, num_args = 0..,)]
@@ -61,7 +69,14 @@ struct ScheduleVote {
 }
 
 #[derive(Debug, Parser)]
-struct UpdateChangelog;
+struct UpdateChangelog {
+    #[arg(long)]
+    commit: String,
+    #[arg(long, num_args = 0..,)]
+    nns_proposal_ids: Vec<String>,
+    #[arg(long, num_args = 0..,)]
+    sns_proposal_ids: Vec<String>,
+}
 
 #[derive(Debug, Subcommand)]
 enum Step {
@@ -101,6 +116,10 @@ fn main() -> Result<()> {
             bail!("{}", e);
         }
     };
+
+    ensure_coreutils_setup()?;
+    ensure_code_setup()?;
+    ensure_gh_setup()?;
 
     print_header();
 
@@ -279,7 +298,7 @@ fn run_create_proposal_texts(cmd: CreateProposalTexts) -> Result<()> {
                 .output()
                 .expect("Failed to run NNS proposal text script")
         } else {
-            let upgrade_arg = input_with_default("Upgrade arg for CMC?", "'()'")?;
+            let upgrade_arg = input_with_default("Upgrade arg for CMC?", "()")?;
             Command::new(script)
                 .arg(canister)
                 .arg(&commit)
@@ -325,28 +344,28 @@ fn run_create_proposal_texts(cmd: CreateProposalTexts) -> Result<()> {
         sns_proposal_text_paths.push(file_path);
     }
 
-    for proposal_text_path in &nns_proposal_text_paths {
-        println!(
-            "Viewing NNS proposal with vscode: {}",
-            proposal_text_path.display()
-        );
-        let mut cmd = Command::new("code");
-        cmd.arg(proposal_text_path);
-        cmd.current_dir(&ic);
-        cmd.output()
-            .expect("Failed to view NNS proposal with vscode");
-    }
+    loop {
+        let proposals_with_todos = nns_proposal_text_paths
+            .iter()
+            .chain(sns_proposal_text_paths.iter())
+            .filter(|path| path.exists())
+            .filter(|path| std::fs::read_to_string(path).unwrap().contains("TODO"))
+            .collect::<Vec<_>>();
 
-    for proposal_text_path in &sns_proposal_text_paths {
-        println!(
-            "Viewing SNS proposal with vscode: {}",
-            proposal_text_path.display()
-        );
-        let mut cmd = Command::new("code");
-        cmd.arg(proposal_text_path);
-        cmd.current_dir(&ic);
-        cmd.output()
-            .expect("Failed to view SNS proposal with vscode");
+        if proposals_with_todos.is_empty() {
+            break;
+        }
+
+        println!("The following proposals have TODOs. Please review them and remove the TODOs before submitting.");
+        for proposal_text_path in &proposals_with_todos {
+            println!("  - {}", proposal_text_path.display());
+            let mut cmd = Command::new("code");
+            cmd.arg(proposal_text_path);
+            cmd.current_dir(&ic);
+            cmd.output()
+                .expect("Failed to view NNS proposal with vscode");
+        }
+        press_enter_to_continue()?;
     }
 
     use std::fmt::Write;
@@ -369,6 +388,7 @@ SNS proposal texts: {}",
     )?;
 
     run_submit_proposals(SubmitProposals {
+        commit,
         nns_proposal_text_paths,
         sns_proposal_text_paths,
     })
@@ -376,6 +396,7 @@ SNS proposal texts: {}",
 
 fn run_submit_proposals(cmd: SubmitProposals) -> Result<()> {
     let SubmitProposals {
+        commit,
         nns_proposal_text_paths,
         sns_proposal_text_paths,
     } = cmd;
@@ -480,6 +501,7 @@ fn run_submit_proposals(cmd: SubmitProposals) -> Result<()> {
     )?;
 
     run_create_forum_post(CreateForumPost {
+        commit,
         nns_proposal_text_paths,
         nns_proposal_ids,
         sns_proposal_text_paths,
@@ -489,6 +511,7 @@ fn run_submit_proposals(cmd: SubmitProposals) -> Result<()> {
 
 fn run_create_forum_post(cmd: CreateForumPost) -> Result<()> {
     let CreateForumPost {
+        commit,
         nns_proposal_text_paths,
         nns_proposal_ids,
         sns_proposal_text_paths,
@@ -597,6 +620,7 @@ fn run_create_forum_post(cmd: CreateForumPost) -> Result<()> {
 
     // Continue to the next automated step.
     run_schedule_vote(ScheduleVote {
+        commit,
         nns_proposal_ids,
         sns_proposal_ids,
     })
@@ -604,6 +628,7 @@ fn run_create_forum_post(cmd: CreateForumPost) -> Result<()> {
 
 fn run_schedule_vote(cmd: ScheduleVote) -> Result<()> {
     let ScheduleVote {
+        commit,
         nns_proposal_ids,
         sns_proposal_ids,
     } = cmd;
@@ -667,28 +692,98 @@ Calendar Event Setup:
    - If people don't respond, ping @trusted-neurons in #eng-release channel",
     )?;
 
-    run_update_changelog(UpdateChangelog)
+    run_update_changelog(UpdateChangelog {
+        commit,
+        nns_proposal_ids,
+        sns_proposal_ids,
+    })
 }
 
-fn run_update_changelog(_: UpdateChangelog) -> Result<()> {
+fn run_update_changelog(cmd: UpdateChangelog) -> Result<()> {
+    let UpdateChangelog {
+        commit,
+        nns_proposal_ids,
+        sns_proposal_ids,
+    } = cmd;
+
+    let ic = ic_dir();
+
+    use std::fmt::Write;
     print_step(
         8,
         "Update Changelog",
-        "Update CHANGELOG.md file(s) for each proposal:
-
-1. For each proposal ID:
-   ```bash
-   PROPOSAL_IDS=...
-
-   for PROPOSAL_ID in $PROPOSAL_IDS do
-       ./testnet/tools/nns-tools/add-release-to-changelog.sh \\
-           $PROPOSAL_ID
-   done
-   ```
-
-2. Best Practice:
-   - Combine this change with mainnet-canisters.json update in the same PR",
+        &format!(
+            "Now I'm going to update the changelog for the released canisters. This applies to the following proposals:
+NNS: {}
+SNS: {}",
+            nns_proposal_ids.iter().fold(String::new(), |mut acc, id| {
+                let _ = write!(acc, "\n  - {}", id);
+                acc
+            }),
+            sns_proposal_ids.iter().fold(String::new(), |mut acc, id| {
+                let _ = write!(acc, "\n  - {}", id);
+                acc
+            }),
+        ),
     )?;
+
+    {
+        // switch to the commit being released
+        let _commit_switcher = CommitSwitcher::switch(commit)?;
+
+        // update the changelog for each proposal
+        for proposal_id in nns_proposal_ids.iter().chain(sns_proposal_ids.iter()) {
+            println!("Updating changelog for proposal {}", proposal_id);
+            let script = ic.join("testnet/tools/nns-tools/add-release-to-changelog.sh");
+            let output = Command::new(script)
+                .arg(proposal_id)
+                .current_dir(&ic)
+                .output()?;
+
+            if !output.status.success() {
+                println!("{}", String::from_utf8_lossy(&output.stderr));
+                println!("Failed to update changelog for proposal {}", proposal_id);
+            }
+        }
+
+        println!("Changelogs updated. Now I'm going to create a branch, commit, push it, then create a PR using `gh`.");
+        press_enter_to_continue()?;
+
+        // Create branch with today's date
+        let today = chrono::Local::now().format("%Y-%m-%d").to_string();
+        let branch_name = format!("changelog-update-{}", today);
+        commit_all_into_branch(&branch_name)?;
+
+        // Create PR
+        let title = format!(
+            "chore(nervous-system): Update changelog for release {}",
+            today
+        );
+        let body = &format!(
+            "Update CHANGELOG.md for today's release.
+
+## NNS {}
+
+## SNS {}",
+            nns_proposal_ids.iter().fold(String::new(), |mut acc, id| {
+                let _ = write!(
+                    acc,
+                    "\n  - [{id}](https://dashboard.internetcomputer.org/proposal/{id})",
+                );
+                acc
+            }),
+            sns_proposal_ids.iter().fold(String::new(), |mut acc, id| {
+                let _ = write!(
+                    acc,
+                    "\n  - [{id}](https://dashboard.internetcomputer.org/proposal/{id})",
+                );
+                acc
+            }),
+        );
+        let pr_url = create_pr(&title, body)?;
+        open_webpage(&pr_url)?;
+        println!("PR created. Please share it with the team. It can be merged before the proposals are executed.");
+    }
 
     println!("{}", "\nRelease process complete!".bright_green().bold());
     println!("Please verify that all steps were completed successfully.");
