@@ -2,9 +2,11 @@ use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::Arc;
 
-use ic_replicated_state::canister_state::execution_state::WasmBinary;
-use ic_replicated_state::page_map::PageAllocatorFileDescriptor;
-use ic_replicated_state::{ExportedFunctions, Global, Memory, NumWasmPages, PageMap};
+use ic_replicated_state::{
+    canister_state::execution_state::WasmBinary,
+    canister_state::execution_state::WasmExecutionMode, page_map::PageAllocatorFileDescriptor,
+    ExportedFunctions, Global, Memory, NumWasmPages, PageMap,
+};
 use ic_system_api::sandbox_safe_system_state::{SandboxSafeSystemState, SystemStateModifications};
 use ic_system_api::{ApiType, DefaultOutOfInstructionsHandler};
 use ic_types::methods::{FuncRef, WasmMethod};
@@ -256,11 +258,11 @@ impl WasmExecutor for WasmExecutorImpl {
             }),
             None => None,
         };
-        let system_api = match instance_or_system_api {
+        let mut system_api = match instance_or_system_api {
             Ok(instance) => instance.into_store_data().system_api.unwrap(),
             Err(system_api) => system_api,
         };
-        let system_state_modifications = system_api.into_system_state_modifications();
+        let system_state_modifications = system_api.take_system_state_modifications();
 
         (
             compilation_result,
@@ -321,7 +323,7 @@ impl WasmExecutor for WasmExecutorImpl {
             metadata: wasm_metadata,
             last_executed_round: ExecutionRound::from(0),
             next_scheduled_method: NextScheduledMethod::default(),
-            is_wasm64: serialized_module.is_wasm64(),
+            wasm_execution_mode: WasmExecutionMode::from_is_wasm64(serialized_module.is_wasm64()),
         };
 
         Ok((
@@ -630,9 +632,7 @@ pub fn process(
         canister_current_message_memory_usage,
         execution_parameters.clone(),
         subnet_available_memory,
-        embedder.config().feature_flags.wasm_native_stable_memory,
-        embedder.config().feature_flags.canister_backtrace,
-        embedder.config().max_sum_exported_function_name_lengths,
+        embedder.config(),
         stable_memory.clone(),
         wasm_memory.size,
         out_of_instructions_handler,

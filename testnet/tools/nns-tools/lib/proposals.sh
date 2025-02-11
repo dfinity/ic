@@ -174,6 +174,10 @@ __Source code__: [$NEXT_COMMIT][new-commit]
 
 ## Features & Fixes
 
+TODO: Review this section. In particular, make sure that it matches the "New
+Commits" section, and does not contain anything extraneous from previous
+proposals. If it seems alright, simply delete this TODO.
+
 $FEATURES_AND_FIXES
 
 
@@ -319,6 +323,10 @@ __Source code__: [$NEXT_COMMIT][new-commit]
 [new-commit]: https://github.com/dfinity/ic/tree/$NEXT_COMMIT
 
 ## Features & Fixes
+
+TODO: Review this section. In particular, make sure that it matches the "New
+Commits" section, and does not contain anything extraneous from previous
+proposals. If it seems alright, simply delete this TODO.
 
 $FEATURES_AND_FIXES
 

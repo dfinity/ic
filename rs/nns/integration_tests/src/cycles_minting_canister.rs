@@ -14,7 +14,7 @@ use dfn_protobuf::protobuf;
 use ic_canister_client_sender::Sender;
 use ic_ledger_core::tokens::{CheckedAdd, CheckedSub};
 // TODO(EXC-1687): remove temporary alias `Ic00CanisterSettingsArgs`.
-use ic_management_canister_types::{
+use ic_management_canister_types_private::{
     CanisterIdRecord, CanisterInfoResponse, CanisterSettingsArgs as Ic00CanisterSettingsArgs,
     CanisterSettingsArgsBuilder, CanisterStatusResultV2,
 };
@@ -99,8 +99,8 @@ async fn set_icp_xdr_conversion_rate(
     assert_eq!(
         wait_for_final_state(&nns.governance, proposal_id)
             .await
-            .status(),
-        ProposalStatus::Executed
+            .status,
+        ProposalStatus::Executed as i32
     );
 
     let response: IcpXdrConversionRateCertifiedResponse = nns
@@ -1205,8 +1205,8 @@ async fn update_subnet_type(nns: &NnsCanisters<'_>, payload: UpdateSubnetTypeArg
     assert_eq!(
         wait_for_final_state(&nns.governance, proposal_id)
             .await
-            .status(),
-        ProposalStatus::Executed
+            .status,
+        ProposalStatus::Executed as i32
     );
 }
 
@@ -1258,8 +1258,8 @@ async fn change_subnet_type_assignment(
     assert_eq!(
         wait_for_final_state(&nns.governance, proposal_id)
             .await
-            .status(),
-        ProposalStatus::Executed
+            .status,
+        ProposalStatus::Executed as i32
     );
 }
 
@@ -1423,10 +1423,32 @@ fn cmc_notify_mint_cycles() {
     else {
         panic!("notify rejected")
     };
-    assert_matches!(
-        Decode!(&res, Result<NotifyMintCyclesSuccess, NotifyError>).unwrap(),
-        Err(NotifyError::InvalidTransaction(_))
-    );
+    let result = Decode!(&res, Result<NotifyMintCyclesSuccess, NotifyError>).unwrap();
+    if IS_AUTOMATIC_REFUND_ENABLED {
+        let reason = match &result {
+            Err(NotifyError::Refunded {
+                reason,
+                block_index: _,
+            }) => reason,
+            _ => panic!("{:?}", result),
+        };
+
+        let reason = reason.to_lowercase();
+        for key_word in ["memo", "transfer", "correspond", "offer"] {
+            assert!(
+                reason.contains(key_word),
+                "{} not in reason of {:?}",
+                key_word,
+                result
+            );
+        }
+    } else {
+        // Legacy behavior.
+        match result {
+            Err(NotifyError::InvalidTransaction(_)) => (), // ok
+            _ => panic!("{:?}", result),
+        }
+    }
 
     // double notify
     let transfer_args = TransferArgs {

@@ -10,7 +10,7 @@ use ic_ledger_suite_orchestrator::candid::{
     AddErc20Arg, Erc20Contract, InitArg, LedgerInitArg, ManagedCanisterIds, OrchestratorArg,
     UpgradeArg,
 };
-use ic_management_canister_types::CanisterInstallMode;
+use ic_management_canister_types_private::CanisterInstallMode;
 use ic_nervous_system_clients::canister_status::CanisterStatusResult;
 use ic_nervous_system_common_test_keys::{TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_KEYPAIR};
 use ic_nervous_system_root::change_canister::ChangeCanisterRequest;
@@ -233,7 +233,7 @@ async fn install_nns_controlled_canister<'a>(
     .await;
 
     let proposal_result = vote_and_execute_proposal(governance_canister, proposal_id).await;
-    assert_eq!(proposal_result.status(), ProposalStatus::Executed);
+    assert_eq!(proposal_result.status, ProposalStatus::Executed as i32);
     info!(
         logger,
         "Installed WASM to {} via NNS proposal",
@@ -285,7 +285,7 @@ async fn upgrade_ledger_suite_orchestrator_by_nns_proposal(
     .await;
 
     let proposal_result = vote_and_execute_proposal(governance_canister, proposal_id).await;
-    assert_eq!(proposal_result.status(), ProposalStatus::Executed);
+    assert_eq!(proposal_result.status, ProposalStatus::Executed as i32);
     info!(
         logger,
         "Upgrade ledger suite orchestrator {:?} via NNS proposal", upgrade_arg

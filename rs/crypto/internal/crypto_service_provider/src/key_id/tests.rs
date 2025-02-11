@@ -159,7 +159,7 @@ mod stability_tests {
         ];
 
         for test in &tests {
-            assert_matches!(KeyId::try_from(test.input), Ok(actual) if actual == test.expected_key_id())
+            assert_matches!(KeyId::from(test.input), actual if actual == test.expected_key_id())
         }
     }
 
@@ -197,7 +197,7 @@ mod stability_tests {
         ];
 
         for test in &tests {
-            assert_matches!(KeyId::try_from(&test.input), Ok(actual) if actual == test.expected_key_id())
+            assert_matches!(KeyId::from(&test.input), actual if actual == test.expected_key_id())
         }
     }
 
@@ -339,7 +339,7 @@ t7Ica9iKR8XXVy+W5eyW52YYPbGzXZ0FgxPcOMk3Tm2qx/zJJ7pkN+rJeIEgQHEj
         }];
 
         for test in &tests {
-            assert_matches!(KeyId::try_from(&test.input), Ok(key_id) if key_id == test.expected_key_id());
+            assert_matches!(KeyId::from(&test.input), key_id if key_id == test.expected_key_id());
         }
     }
 

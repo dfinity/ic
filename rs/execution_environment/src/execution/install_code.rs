@@ -10,7 +10,7 @@ use ic_interfaces::execution_environment::{
     HypervisorError, HypervisorResult, SubnetAvailableMemoryError, WasmExecutionOutput,
 };
 use ic_logger::{error, fatal, info, warn};
-use ic_management_canister_types::{
+use ic_management_canister_types_private::{
     CanisterChangeDetails, CanisterChangeOrigin, CanisterInstallModeV2,
 };
 use ic_replicated_state::canister_state::system_state::ReservationError;
@@ -33,7 +33,7 @@ use crate::{
     execution_environment::{log_dirty_pages, RoundContext},
     CompilationCostHandling, RoundLimits,
 };
-use ic_cycles_account_manager::WasmExecutionMode;
+use ic_replicated_state::canister_state::execution_state::WasmExecutionMode;
 
 #[cfg(test)]
 mod tests;

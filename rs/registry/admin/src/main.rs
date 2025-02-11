@@ -21,7 +21,7 @@ use ic_crypto_utils_threshold_sig_der::{
 };
 use ic_http_utils::file_downloader::{check_file_hash, FileDownloader};
 use ic_interfaces_registry::{RegistryClient, RegistryDataProvider};
-use ic_management_canister_types::CanisterInstallMode;
+use ic_management_canister_types_private::CanisterInstallMode;
 use ic_nervous_system_clients::{
     canister_id_record::CanisterIdRecord, canister_status::CanisterStatusResult,
 };
@@ -3246,7 +3246,7 @@ async fn propose_to_create_service_nervous_system(
     ));
     let title = cmd.title();
     let summary = cmd.summary.clone().unwrap();
-    let url = parse_proposal_url(cmd.proposal_url.clone());
+    let url = parse_proposal_url(&cmd.proposal_url);
     let proposal = MakeProposalRequest {
         title: Some(title.clone()),
         summary,
@@ -5767,7 +5767,7 @@ async fn propose_to_add_or_remove_node_provider(
     let response = canister_client
         .submit_add_or_remove_node_provider_proposal(
             payload,
-            parse_proposal_url(cmd.proposal_url),
+            parse_proposal_url(&cmd.proposal_url),
             title,
             summary,
         )
@@ -6354,12 +6354,14 @@ fn print_proposal<T: Serialize + Debug, Command: ProposalMetadata + ProposalTitl
         struct Proposal<T> {
             title: String,
             summary: String,
+            url: String,
             payload: T,
         }
 
         let serialized = serde_json::to_string_pretty(&Proposal {
             title: cmd.title(),
             summary: cmd.summary(),
+            url: cmd.url(),
             payload,
         })
         .expect("Serialization for the cmd to JSON failed.");
@@ -6367,6 +6369,7 @@ fn print_proposal<T: Serialize + Debug, Command: ProposalMetadata + ProposalTitl
     } else {
         println!("Title: {}\n", cmd.title());
         println!("Summary: {}\n", cmd.summary());
+        println!("URL: {}\n", cmd.url());
         println!("Payload: {:#?}", payload);
     }
 }

@@ -1,7 +1,7 @@
 use candid::{CandidType, Deserialize};
 use ic_base_types::{CanisterId, NodeId, PrincipalId, SubnetId};
 use ic_cdk::call;
-use ic_management_canister_types::CanisterInstallMode;
+use ic_management_canister_types_private::CanisterInstallMode;
 use ic_nervous_system_clients::{
     canister_id_record::CanisterIdRecord,
     canister_status::CanisterStatusResultFromManagementCanister,

@@ -32,7 +32,6 @@ async-trait = { workspace = true }
 bytes = { workspace = true }
 candid = { workspace = true }
 cycles-minting-canister = { path = "../cmc" }
-dfn_http_metrics = { path = "../../rust_canisters/dfn_http_metrics" }
 dyn-clone = "1.0.14"
 futures = { workspace = true }
 ic-base-types = { path = "../../types/base_types" }
@@ -43,7 +42,7 @@ ic-cdk-timers = { workspace = true }
 ic-crypto-getrandom-for-wasm = { path = "../../crypto/getrandom_for_wasm" }
 ic-crypto-sha2 = { path = "../../crypto/sha2/" }
 ic-ledger-core = { path = "../../ledger_suite/common/ledger_core" }
-ic-management-canister-types = { path = "../../types/management_canister_types" }
+ic-management-canister-types-private = { path = "../../types/management_canister_types" }
 ic-metrics-encoder = "1"
 ic-nervous-system-canisters = { path = "../../nervous_system/canisters" }
 ic-nervous-system-clients = { path = "../../nervous_system/clients" }

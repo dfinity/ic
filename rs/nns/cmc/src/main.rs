@@ -17,7 +17,7 @@ use ic_crypto_tree_hash::{
 };
 use ic_ledger_core::{block::BlockType, tokens::CheckedSub};
 // TODO(EXC-1687): remove temporary aliases `Ic00CanisterSettingsArgs` and `Ic00CanisterSettingsArgsBuilder`.
-use ic_management_canister_types::{
+use ic_management_canister_types_private::{
     BoundedVec, CanisterIdRecord, CanisterSettingsArgs as Ic00CanisterSettingsArgs,
     CanisterSettingsArgsBuilder as Ic00CanisterSettingsArgsBuilder, CreateCanisterArgs, Method,
     IC_00,
@@ -1885,8 +1885,9 @@ async fn issue_automatic_refund_if_memo_not_offerred(
                 })
             }
 
-            // There is no (known) way to reach this case, since we already
-            // verified that memo is in MEANINGFUL_MEMOS.
+            // There is no (known) way to reach this case, since a check
+            // earlier in this function ensures by this point, memo is not one
+            // of the special meaningful values.
             NotifiedCreateCanister(_) | NotifiedMint(_) | NotifiedTopUp(_) => {
                 Err(NotifyError::InvalidTransaction(format!(
                     "Block has already been processed: {:?}",

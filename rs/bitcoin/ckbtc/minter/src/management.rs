@@ -15,7 +15,7 @@ use ic_cdk::api::{
     call::RejectionCode,
     management_canister::bitcoin::{BitcoinNetwork, UtxoFilter},
 };
-use ic_management_canister_types::{
+use ic_management_canister_types_private::{
     DerivationPath, ECDSAPublicKeyArgs, ECDSAPublicKeyResponse, EcdsaCurve, EcdsaKeyId,
 };
 use serde::de::DeserializeOwned;
