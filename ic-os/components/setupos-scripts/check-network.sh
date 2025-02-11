@@ -39,18 +39,18 @@ function eval_command_with_retries() {
 
     if [ ${exit_code} -ne 0 ]; then
         local ip6_output=$(ip -6 addr show)
-        local ip6_route_output=$(ip -6 route show)
         local dns_servers=$(grep 'nameserver' /etc/resolv.conf)
+        local network_settings=$(get_config_value '.network_settings')
 
         log_and_halt_installation_on_error "${exit_code}" "${error_message}
 Output of 'ip -6 addr show':
 ${ip6_output}
 
-Output of 'ip -6 route show':
-${ip6_route_output}
-
 Configured DNS servers:
-${dns_servers}"
+${dns_servers}
+
+Config network settings:
+${network_settings}"
     fi
 
     echo "${result}"
