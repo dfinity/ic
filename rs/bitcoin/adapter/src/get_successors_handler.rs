@@ -222,17 +222,13 @@ fn get_successor_blocks(
             };
             let block_size = block.total_size();
             // If we have at least one block in the response, and we can't fit another block, we stop.
-            if response_block_size > 0 {
-                // Bytes are full
-                if response_block_size + block_size > max_blocks_size {
-                    break;
-                }
-                // Blocks count is full
-                if successor_blocks.len() + 1 > max_blocks_length {
-                    break;
-                }
+            if response_block_size > 0
+                && (response_block_size + block_size > max_blocks_size
+                    || successor_blocks.len() + 1 > max_blocks_length)
+            {
+                break;
             }
-            successor_blocks.push(block.clone());
+            successor_blocks.push(block);
             response_block_size += block_size;
         }
 
