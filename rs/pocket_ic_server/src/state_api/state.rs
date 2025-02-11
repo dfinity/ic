@@ -18,7 +18,7 @@ use axum::{
 use axum_server::tls_rustls::RustlsConfig;
 use axum_server::Handle;
 use base64;
-use fqdn::FQDN;
+use fqdn::{fqdn, FQDN};
 use futures::future::Shared;
 use http::{
     header::{
@@ -32,7 +32,7 @@ use ic_bn_lib::http::proxy::proxy;
 use ic_bn_lib::http::Client;
 use ic_http_endpoints_public::cors_layer;
 use ic_http_gateway::{CanisterRequest, HttpGatewayClient, HttpGatewayRequestArgs};
-use ic_types::{canister_http::CanisterHttpRequestId, CanisterId, PrincipalId, SubnetId};
+use ic_types::{canister_http::CanisterHttpRequestId, CanisterId, NodeId, PrincipalId, SubnetId};
 use itertools::Itertools;
 use pocket_ic::common::rest::{
     CanisterHttpRequest, HttpGatewayBackend, HttpGatewayConfig, HttpGatewayDetails,
@@ -256,6 +256,8 @@ pub enum PocketIcError {
     InvalidRejectCode(u64),
     SettingTimeIntoPast((u64, u64)),
     Forbidden(String),
+    BlockmakerNotFound(NodeId),
+    BlockmakerContainedInFailed(NodeId),
 }
 
 impl std::fmt::Debug for OpOut {
@@ -284,6 +286,12 @@ impl std::fmt::Debug for OpOut {
             }
             OpOut::Error(PocketIcError::SubnetNotFound(sid)) => {
                 write!(f, "SubnetNotFound({})", sid)
+            }
+            OpOut::Error(PocketIcError::BlockmakerNotFound(nid)) => {
+                write!(f, "BlockmakerNotFound({})", nid)
+            }
+            OpOut::Error(PocketIcError::BlockmakerContainedInFailed(nid)) => {
+                write!(f, "BlockmakerContainedInFailed({})", nid)
             }
             OpOut::Error(PocketIcError::RequestRoutingError(msg)) => {
                 write!(f, "RequestRoutingError({:?})", msg)
@@ -795,7 +803,7 @@ impl ApiState {
         let ip_addr = http_gateway_config
             .ip_addr
             .clone()
-            .unwrap_or("[::1]".to_string());
+            .unwrap_or("127.0.0.1".to_string());
         let port = http_gateway_config.port.unwrap_or_default();
         let addr = format!("{}:{}", ip_addr, port);
         let listener = std::net::TcpListener::bind(&addr)
@@ -829,9 +837,8 @@ impl ApiState {
             .clone()
             .unwrap_or(vec!["localhost".to_string()])
             .iter()
-            .map(|d| FQDN::from_str(d))
-            .collect::<Result<Vec<_>, _>>()
-            .map_err(|e| e.to_string())?;
+            .map(|d| fqdn!(d))
+            .collect();
         spawn(async move {
             let http_gateway_client = ic_http_gateway::HttpGatewayClientBuilder::new()
                 .with_agent(agent)

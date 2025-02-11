@@ -7,10 +7,16 @@ use bitcoin::{
 
 use ic_btc_validation::{validate_header, HeaderStore, ValidateHeaderError};
 use ic_metrics::MetricsRegistry;
-use std::collections::HashMap;
+use std::{collections::HashMap, sync::Arc};
 use thiserror::Error;
 
 use bitcoin::Work;
+
+/// The limit at which we should stop making additional requests for new blocks as the block cache
+/// becomes too large. Inflight `getdata` messages will remain active, but new `getdata` messages will
+/// not be created.
+const BLOCK_CACHE_THRESHOLD_BYTES: usize = 10 * ONE_MB;
+const ONE_MB: usize = 1_024 * 1_024;
 
 /// Contains the necessary information about a tip.
 #[derive(Clone, Debug)]
@@ -94,7 +100,7 @@ pub struct BlockchainState {
     header_cache: HashMap<BlockHash, HeaderNode>,
 
     /// This field stores a hashmap containing BlockHash and the corresponding Block.
-    block_cache: HashMap<BlockHash, Block>,
+    block_cache: HashMap<BlockHash, Arc<Block>>,
 
     /// This field contains the known tips of the header cache.
     tips: Vec<Tip>,
@@ -135,6 +141,11 @@ impl BlockchainState {
     /// Returns the header for the given block hash.
     pub fn get_cached_header(&self, hash: &BlockHash) -> Option<&HeaderNode> {
         self.header_cache.get(hash)
+    }
+
+    /// Returns the hashes of all cached blocks.
+    pub(crate) fn get_cached_blocks(&self) -> Vec<BlockHash> {
+        self.block_cache.keys().copied().collect()
     }
 
     /// Processes the `headers` message received from Bitcoin nodes by adding them to the state.
@@ -240,7 +251,7 @@ impl BlockchainState {
             .add_header(block.header)
             .map_err(AddBlockError::Header)?;
         self.tips.sort_unstable_by(|a, b| b.work.cmp(&a.work));
-        self.block_cache.insert(block_hash, block);
+        self.block_cache.insert(block_hash, Arc::new(block));
         self.metrics
             .block_cache_size
             .set(self.get_block_cache_size() as i64);
@@ -317,15 +328,19 @@ impl BlockchainState {
         hashes
     }
 
-    /// This method takes a list of block hashes as input.
-    /// For each block hash, if the corresponding block is stored in the `block_cache`, the cached block is returned.
-    pub fn get_block(&self, block_hash: &BlockHash) -> Option<&Block> {
-        self.block_cache.get(block_hash)
+    /// This method takes a block hash
+    /// If the corresponding block is stored in the `block_cache`, the cached block is returned.
+    pub fn get_block(&self, block_hash: &BlockHash) -> Option<Arc<Block>> {
+        self.block_cache.get(block_hash).cloned()
     }
 
     /// Used when the adapter is shutdown and no longer requires holding on to blocks.
     pub fn clear_blocks(&mut self) {
         self.block_cache = HashMap::new();
+    }
+
+    pub(crate) fn is_block_cache_full(&self) -> bool {
+        self.get_block_cache_size() >= BLOCK_CACHE_THRESHOLD_BYTES
     }
 
     /// Returns the current size of the block cache.

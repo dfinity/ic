@@ -12,7 +12,7 @@ use ic_interfaces::execution_environment::{
 };
 use ic_interfaces_state_manager::StateReader;
 use ic_logger::ReplicaLogger;
-use ic_management_canister_types::LogVisibilityV2;
+use ic_management_canister_types_private::LogVisibilityV2;
 use ic_metrics::buckets::decimal_buckets_with_zero;
 use ic_metrics::{buckets::exponential_buckets, MetricsRegistry};
 use ic_registry_subnet_type::SubnetType;
@@ -489,7 +489,7 @@ impl Hypervisor {
             request_metadata,
             api_type.caller(),
             api_type.call_context_id(),
-            execution_state.is_wasm64,
+            execution_state.wasm_execution_mode.is_wasm64(),
         );
         let api_type_str = api_type.as_str();
         let (compilation_result, mut execution_result) = Arc::clone(&self.wasm_executor).execute(

@@ -1,9 +1,6 @@
 use assert_matches::assert_matches;
 use ic_base_types::NumSeconds;
-use ic_config::{
-    flag_status::FlagStatus,
-    state_manager::{lsmt_config_default, Config, LsmtConfig},
-};
+use ic_config::state_manager::{lsmt_config_default, Config, LsmtConfig};
 use ic_interfaces::{
     certification::{InvalidCertificationReason, Verifier, VerifierError},
     p2p::state_sync::{Chunk, ChunkId, Chunkable},
@@ -686,22 +683,11 @@ where
 }
 
 pub fn lsmt_with_sharding() -> LsmtConfig {
-    LsmtConfig {
-        lsmt_status: FlagStatus::Enabled,
-        shard_num_pages: 1,
-    }
+    LsmtConfig { shard_num_pages: 1 }
 }
 
 pub fn lsmt_without_sharding() -> LsmtConfig {
     LsmtConfig {
-        lsmt_status: FlagStatus::Enabled,
-        shard_num_pages: u64::MAX,
-    }
-}
-
-pub fn lsmt_disabled() -> LsmtConfig {
-    LsmtConfig {
-        lsmt_status: FlagStatus::Disabled,
         shard_num_pages: u64::MAX,
     }
 }

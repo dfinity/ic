@@ -195,7 +195,6 @@ pub struct CheckpointMetrics {
     replicated_state_altered_after_checkpoint: IntCounter,
     tip_handler_request_duration: HistogramVec,
     page_map_flushes: IntCounter,
-    page_map_flush_skips: IntCounter,
     num_page_maps_by_load_status: IntGaugeVec,
     log: ReplicaLogger,
 }
@@ -243,11 +242,6 @@ impl CheckpointMetrics {
             "state_manager_page_map_flushes",
             "Amount of sent FlushPageMap requests.",
         );
-        let page_map_flush_skips = metrics_registry.int_counter(
-            "state_manager_page_map_flush_skips",
-            "Amount of FlushPageMap requests that were skipped.",
-        );
-
         let num_page_maps_by_load_status = metrics_registry.int_gauge_vec(
             "state_manager_num_page_maps_by_load_status",
             "How many PageMaps are loaded or not at the end of checkpoint interval.",
@@ -261,7 +255,6 @@ impl CheckpointMetrics {
             replicated_state_altered_after_checkpoint,
             tip_handler_request_duration,
             page_map_flushes,
-            page_map_flush_skips,
             num_page_maps_by_load_status,
             log: replica_logger,
         }
@@ -825,7 +818,6 @@ pub struct StateManagerImpl {
     fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
     malicious_flags: MaliciousFlags,
     latest_height_update_time: Arc<Mutex<Instant>>,
-    lsmt_status: FlagStatus,
 }
 
 #[cfg(debug_assertions)]
@@ -917,7 +909,6 @@ fn initialize_tip(
         .send(TipRequest::ResetTipAndMerge {
             checkpoint_layout,
             pagemaptypes: PageMapType::list_all_including_snapshots(&snapshot.state),
-            is_initializing_tip: true,
         })
         .unwrap();
     ReplicatedState::clone(&snapshot.state)
@@ -1732,7 +1723,6 @@ impl StateManagerImpl {
             fd_factory,
             malicious_flags,
             latest_height_update_time: Arc::new(Mutex::new(Instant::now())),
-            lsmt_status: config.lsmt_config.lsmt_status,
         }
     }
     /// Returns the Page Allocator file descriptor factory. This will then be
@@ -2494,7 +2484,6 @@ impl StateManagerImpl {
     ) -> CreateCheckpointResult {
         self.observe_num_loaded_pagemaps(&state);
         struct PreviousCheckpointInfo {
-            dirty_pages: DirtyPages,
             base_manifest: Manifest,
             base_height: Height,
             checkpoint_layout: CheckpointLayout<ReadOnly>,
@@ -2532,14 +2521,7 @@ impl StateManagerImpl {
                 })
                 .and_then(|(base_manifest, base_height)| {
                     if let Ok(checkpoint_layout) = self.state_layout.checkpoint_verified(base_height) {
-                        // If `lsmt_status` is enabled, then `dirty_pages` is not needed, as each file is either completely
-                        // new, or identical (same inode) to before.
-                        let dirty_pages = match self.lsmt_status {
-                            FlagStatus::Enabled => Vec::new(),
-                            FlagStatus::Disabled => get_dirty_pages(&state),
-                        };
                         Some(PreviousCheckpointInfo {
-                            dirty_pages,
                             base_manifest,
                             base_height,
                             checkpoint_layout,
@@ -2584,7 +2566,6 @@ impl StateManagerImpl {
                 height,
                 &self.tip_channel,
                 &self.metrics.checkpoint_metrics,
-                self.lsmt_status,
             )
         };
         let (cp_layout, has_downgrade) = match result {
@@ -2668,7 +2649,7 @@ impl StateManagerImpl {
         }
 
         self.tip_channel
-            .send(TipRequest::ValidateReplicatedState {
+            .send(TipRequest::ValidateReplicatedStateAndFinalize {
                 checkpoint_layout: cp_layout.clone(),
                 reference_state: Arc::clone(&state),
                 own_subnet_type: self.own_subnet_type,
@@ -2689,7 +2670,6 @@ impl StateManagerImpl {
                 .start_timer();
             previous_checkpoint_info.map(
                 |PreviousCheckpointInfo {
-                     dirty_pages,
                      checkpoint_layout,
                      base_manifest,
                      base_height,
@@ -2698,9 +2678,7 @@ impl StateManagerImpl {
                         base_manifest,
                         base_height,
                         target_height: height,
-                        dirty_memory_pages: dirty_pages,
                         base_checkpoint: checkpoint_layout,
-                        lsmt_status: self.lsmt_status,
                     }
                 },
             )
@@ -2713,20 +2691,10 @@ impl StateManagerImpl {
                 .make_checkpoint_step_duration
                 .with_label_values(&["create_checkpoint_result"])
                 .start_timer();
-            // With lsmt, we do not need the defrag.
-            // Without lsmt, the ResetTipAndMerge happens earlier in make_unvalidated_checkpoint.
-            let tip_requests = if self.lsmt_status == FlagStatus::Enabled {
-                vec![TipRequest::ResetTipAndMerge {
-                    checkpoint_layout: cp_layout.clone(),
-                    pagemaptypes: PageMapType::list_all_including_snapshots(&state),
-                    is_initializing_tip: false,
-                }]
-            } else {
-                vec![TipRequest::DefragTip {
-                    height,
-                    page_map_types: PageMapType::list_all_without_snapshots(&state),
-                }]
-            };
+            let tip_requests = vec![TipRequest::ResetTipAndMerge {
+                checkpoint_layout: cp_layout.clone(),
+                pagemaptypes: PageMapType::list_all_including_snapshots(&state),
+            }];
 
             CreateCheckpointResult {
                 tip_requests,
@@ -3449,29 +3417,18 @@ impl StateManager for StateManagerImpl {
                 state
             }
             CertificationScope::Metadata => {
-                match self.lsmt_status {
-                    FlagStatus::Enabled => {
-                        // We want to balance writing too many overlay files with having too many unflushed pages at
-                        // checkpoint time, when we always flush all remaining pages while blocking. As a compromise,
-                        // we flush all pages `NUM_ROUNDS_BEFORE_CHECKPOINT_TO_WRITE_OVERLAY` rounds before each
-                        // checkpoint, giving us roughly that many seconds to write these overlay files in the background.
-                        if let Some(batch_summary) = batch_summary {
-                            if batch_summary
-                                .next_checkpoint_height
-                                .get()
-                                .saturating_sub(height.get())
-                                == NUM_ROUNDS_BEFORE_CHECKPOINT_TO_WRITE_OVERLAY
-                            {
-                                self.flush_canister_snapshots_and_page_maps(&mut state, height);
-                            }
-                        }
-                    }
-                    FlagStatus::Disabled => {
-                        if self.tip_channel.is_empty() {
-                            self.flush_canister_snapshots_and_page_maps(&mut state, height);
-                        } else {
-                            self.metrics.checkpoint_metrics.page_map_flush_skips.inc();
-                        }
+                // We want to balance writing too many overlay files with having too many unflushed pages at
+                // checkpoint time, when we always flush all remaining pages while blocking. As a compromise,
+                // we flush all pages `NUM_ROUNDS_BEFORE_CHECKPOINT_TO_WRITE_OVERLAY` rounds before each
+                // checkpoint, giving us roughly that many seconds to write these overlay files in the background.
+                if let Some(batch_summary) = batch_summary {
+                    if batch_summary
+                        .next_checkpoint_height
+                        .get()
+                        .saturating_sub(height.get())
+                        == NUM_ROUNDS_BEFORE_CHECKPOINT_TO_WRITE_OVERLAY
+                    {
+                        self.flush_canister_snapshots_and_page_maps(&mut state, height);
                     }
                 }
 

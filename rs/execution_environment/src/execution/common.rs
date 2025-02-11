@@ -12,7 +12,7 @@ use ic_interfaces::execution_environment::{
     HypervisorError, HypervisorResult, SubnetAvailableMemory, WasmExecutionOutput,
 };
 use ic_logger::{error, fatal, warn, ReplicaLogger};
-use ic_management_canister_types::CanisterStatusType;
+use ic_management_canister_types_private::CanisterStatusType;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
     CallContext, CallContextAction, CallOrigin, CanisterState, ExecutionState, NetworkTopology,
@@ -538,7 +538,8 @@ pub(crate) fn finish_call_with_error(
     log: &ReplicaLogger,
 ) -> ExecuteMessageResult {
     let response = match call_or_task {
-        CanisterCallOrTask::Call(CanisterCall::Request(request)) => {
+        CanisterCallOrTask::Update(CanisterCall::Request(request))
+        | CanisterCallOrTask::Query(CanisterCall::Request(request)) => {
             let response = Response {
                 originator: request.sender,
                 respondent: canister.canister_id(),
@@ -549,7 +550,8 @@ pub(crate) fn finish_call_with_error(
             };
             ExecutionResponse::Request(response)
         }
-        CanisterCallOrTask::Call(CanisterCall::Ingress(ingress)) => {
+        CanisterCallOrTask::Update(CanisterCall::Ingress(ingress))
+        | CanisterCallOrTask::Query(CanisterCall::Ingress(ingress)) => {
             let status = IngressStatus::Known {
                 receiver: canister.canister_id().get(),
                 user_id: ingress.source,

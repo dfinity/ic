@@ -1,6 +1,5 @@
 use crossbeam_channel::{unbounded, Sender};
 use ic_base_types::{subnet_id_try_from_protobuf, CanisterId, SnapshotId};
-use ic_config::flag_status::FlagStatus;
 use ic_logger::error;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::canister_snapshots::{
@@ -9,8 +8,9 @@ use ic_replicated_state::canister_snapshots::{
 use ic_replicated_state::canister_state::system_state::wasm_chunk_store::WasmChunkStore;
 use ic_replicated_state::page_map::{storage::validate, PageAllocatorFileDescriptor};
 use ic_replicated_state::{
-    canister_state::execution_state::WasmBinary, page_map::PageMap, CanisterMetrics, CanisterState,
-    ExecutionState, ReplicatedState, SchedulerState, SystemState,
+    canister_state::execution_state::WasmBinary,
+    canister_state::execution_state::WasmExecutionMode, page_map::PageMap, CanisterMetrics,
+    CanisterState, ExecutionState, ReplicatedState, SchedulerState, SystemState,
 };
 use ic_replicated_state::{CheckpointLoadingMetrics, Memory};
 use ic_state_layout::{
@@ -27,7 +27,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use crate::{
-    CheckpointError, CheckpointMetrics, HasDowngrade, PageMapType, TipRequest,
+    CheckpointError, CheckpointMetrics, HasDowngrade, TipRequest,
     CRITICAL_ERROR_CHECKPOINT_SOFT_INVARIANT_BROKEN,
     CRITICAL_ERROR_REPLICATED_STATE_ALTERED_AFTER_CHECKPOINT, NUMBER_OF_CHECKPOINT_THREADS,
 };
@@ -56,7 +56,6 @@ pub(crate) fn make_unvalidated_checkpoint(
     height: Height,
     tip_channel: &Sender<TipRequest>,
     metrics: &CheckpointMetrics,
-    lsmt_storage: FlagStatus,
 ) -> Result<(CheckpointLayout<ReadOnly>, HasDowngrade), CheckpointError> {
     tip_channel
         .send(TipRequest::FilterTipCanisters {
@@ -79,35 +78,13 @@ pub(crate) fn make_unvalidated_checkpoint(
             })
             .unwrap();
         let (cp, has_downgrade) = recv.recv().unwrap()?;
-        // With lsmt storage, ResetTipAndMerge happens later (after manifest).
-        if lsmt_storage == FlagStatus::Disabled {
-            tip_channel
-                .send(TipRequest::ResetTipAndMerge {
-                    checkpoint_layout: cp.clone(),
-                    pagemaptypes: PageMapType::list_all_including_snapshots(state),
-                    is_initializing_tip: false,
-                })
-                .unwrap();
-        }
         (cp, has_downgrade)
     };
-
-    if lsmt_storage == FlagStatus::Disabled {
-        // Wait for reset_tip_to so that we don't reflink in parallel with other operations.
-        let _timer = metrics
-            .make_checkpoint_step_duration
-            .with_label_values(&["wait_for_reflinking"])
-            .start_timer();
-        #[allow(clippy::disallowed_methods)]
-        let (send, recv) = unbounded();
-        tip_channel.send(TipRequest::Wait { sender: send }).unwrap();
-        recv.recv().unwrap();
-    }
 
     Ok((cp, has_downgrade))
 }
 
-pub(crate) fn validate_checkpoint_and_remove_unverified_marker(
+pub(crate) fn validate_and_finalize_checkpoint_and_remove_unverified_marker(
     checkpoint_layout: &CheckpointLayout<ReadOnly>,
     reference_state: Option<&ReplicatedState>,
     own_subnet_type: SubnetType,
@@ -133,7 +110,7 @@ pub(crate) fn validate_checkpoint_and_remove_unverified_marker(
         );
     }
     checkpoint_layout
-        .remove_unverified_checkpoint_marker(thread_pool)
+        .finalize_and_remove_unverified_marker(thread_pool)
         .map_err(CheckpointError::from)?;
     Ok(())
 }
@@ -156,7 +133,8 @@ pub fn load_checkpoint_and_validate_parallel(
         Some(&mut thread_pool),
         Arc::clone(&fd_factory),
     )?;
-    validate_checkpoint_and_remove_unverified_marker(
+
+    validate_and_finalize_checkpoint_and_remove_unverified_marker(
         checkpoint_layout,
         None,
         own_subnet_type,
@@ -448,7 +426,7 @@ fn validate_eq_checkpoint_internal(
     checkpoint_layout: &CheckpointLayout<ReadOnly>,
     reference_state: &ReplicatedState,
     own_subnet_type: SubnetType,
-    mut thread_pool: &mut Option<&mut scoped_threadpool::Pool>,
+    thread_pool: &mut Option<&mut scoped_threadpool::Pool>,
     fd_factory: Arc<dyn PageAllocatorFileDescriptor>, //
     metrics: &CheckpointMetrics, // Make optional in the loader & don't provide?
 ) -> Result<(), String> {
@@ -468,7 +446,7 @@ fn validate_eq_checkpoint_internal(
         fd_factory,
     };
 
-    checkpoint_loader.validate_eq_canister_states(&mut thread_pool, canister_states)?;
+    checkpoint_loader.validate_eq_canister_states(thread_pool, canister_states)?;
     checkpoint_loader
         .load_system_metadata()
         .map_err(|err| format!("Failed to load system metadata: {}", err))?
@@ -483,7 +461,7 @@ fn validate_eq_checkpoint_internal(
     if !consensus_queue.is_empty() {
         return Err("consensus_queue is not empty".to_string());
     }
-    checkpoint_loader.validate_eq_canister_snapshots(&mut thread_pool, canister_snapshots)
+    checkpoint_loader.validate_eq_canister_snapshots(thread_pool, canister_snapshots)
 }
 
 #[derive(Default)]
@@ -576,7 +554,9 @@ pub fn load_canister_state(
                 metadata: execution_state_bits.metadata,
                 last_executed_round: execution_state_bits.last_executed_round,
                 next_scheduled_method: execution_state_bits.next_scheduled_method,
-                is_wasm64: execution_state_bits.is_wasm64,
+                wasm_execution_mode: WasmExecutionMode::from_is_wasm64(
+                    execution_state_bits.is_wasm64,
+                ),
             })
         }
         None => None,

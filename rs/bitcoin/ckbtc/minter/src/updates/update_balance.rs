@@ -159,12 +159,12 @@ pub async fn update_balance<R: CanisterRuntime>(
         .map_err(UpdateBalanceError::TemporarilyUnavailable)?;
 
     init_ecdsa_public_key().await;
-    let _guard = balance_update_guard(args.owner.unwrap_or(caller))?;
 
     let caller_account = Account {
         owner: args.owner.unwrap_or(caller),
         subaccount: args.subaccount,
     };
+    let _guard = balance_update_guard(caller_account)?;
 
     let address = state::read_state(|s| {
         get_btc_address::account_to_p2wpkh_address_from_state(s, &caller_account)
@@ -187,8 +187,8 @@ pub async fn update_balance<R: CanisterRuntime>(
     let (processable_utxos, suspended_utxos) =
         state::read_state(|s| s.processable_utxos_for_account(utxos, &caller_account, &now));
 
-    // Remove pending finalized transactions for the affected principal.
-    state::mutate_state(|s| s.finalized_utxos.remove(&caller_account.owner));
+    // Remove pending finalized transactions for the affected account.
+    state::mutate_state(|s| s.finalized_utxos.remove(&caller_account));
 
     let satoshis_to_mint = processable_utxos.iter().map(|u| u.value).sum::<u64>();
 
@@ -243,7 +243,7 @@ pub async fn update_balance<R: CanisterRuntime>(
     }
 
     let token_name = match btc_network {
-        ic_management_canister_types::BitcoinNetwork::Mainnet => "ckBTC",
+        ic_management_canister_types_private::BitcoinNetwork::Mainnet => "ckBTC",
         _ => "ckTESTBTC",
     };
 

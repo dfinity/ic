@@ -1,10 +1,7 @@
 use bitcoin::{consensus::encode::deserialize, Address, Amount, Block, BlockHash};
 use bitcoincore_rpc::{bitcoincore_rpc_json::CreateRawTransactionInput, Auth, Client, RpcApi};
 use bitcoind::{BitcoinD, Conf, P2P};
-use ic_btc_adapter::{
-    config::{Config, IncomingSource},
-    start_server,
-};
+use ic_btc_adapter::{start_server, Config, IncomingSource};
 use ic_btc_adapter_client::setup_bitcoin_adapter_clients;
 use ic_btc_interface::Network;
 use ic_btc_replica_types::{
@@ -833,19 +830,19 @@ fn test_receives_blocks_from_forks() {
         .get_new_address(None, None)
         .unwrap()
         .assume_checked();
-    client1.generate_to_address(25, &address1).unwrap();
+    client1.generate_to_address(10, &address1).unwrap();
 
-    wait_for_blocks(&client1, 25);
-    wait_for_blocks(&client2, 25);
+    wait_for_blocks(&client1, 10);
+    wait_for_blocks(&client2, 10);
 
     let address2 = client2
         .get_new_address(None, None)
         .unwrap()
         .assume_checked();
-    client2.generate_to_address(25, &address2).unwrap();
+    client2.generate_to_address(10, &address2).unwrap();
 
-    wait_for_blocks(&client1, 50);
-    wait_for_blocks(&client2, 50);
+    wait_for_blocks(&client1, 20);
+    wait_for_blocks(&client2, 20);
 
     // Disconnect the nodes to create a fork
     client1
@@ -855,15 +852,15 @@ fn test_receives_blocks_from_forks() {
     wait_for_connection(&client1, 1);
     wait_for_connection(&client2, 1);
 
-    client1.generate_to_address(10, &address1).unwrap();
-    client2.generate_to_address(15, &address2).unwrap();
+    client1.generate_to_address(3, &address1).unwrap();
+    client2.generate_to_address(6, &address2).unwrap();
 
-    wait_for_blocks(&client1, 60);
-    wait_for_blocks(&client2, 65);
+    wait_for_blocks(&client1, 23);
+    wait_for_blocks(&client2, 26);
 
     let anchor = client1.get_block_hash(0).unwrap()[..].to_vec();
-    let blocks = sync_blocks(&adapter_client, &mut vec![], anchor, 75, 200);
-    assert_eq!(blocks.len(), 75);
+    let blocks = sync_blocks(&adapter_client, &mut vec![], anchor, 29, 201);
+    assert_eq!(blocks.len(), 29);
 }
 
 /// Checks that the adapter returns blocks in BFS order.
