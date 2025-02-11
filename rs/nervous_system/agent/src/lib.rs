@@ -2,6 +2,7 @@ use candid::{CandidType, Principal};
 use serde::de::DeserializeOwned;
 use std::collections::BTreeSet;
 use std::fmt::Display;
+use std::time::Duration;
 
 pub mod agent_impl;
 pub mod ledger;
@@ -51,4 +52,15 @@ pub trait CallCanisters: sealed::Sealed {
         &self,
         canister_id: impl Into<Principal> + Send,
     ) -> impl std::future::Future<Output = Result<CanisterInfo, Self::Error>> + Send;
+
+    fn is_canister_stopped_error(&self, err: &Self::Error) -> bool;
+}
+
+// This trait is used to abstract the ability to progress the network state
+// since various scenarios may require waiting for certain action to happen
+// after some period of time, e.g. NNS proposal to become adopted or SNS swap to become open.
+//
+// @rvem: I don't really like the name, but I didn't manage to come up with a better one for now.
+pub trait ProgressNetwork: sealed::Sealed {
+    fn progress(&self, duration: Duration) -> impl std::future::Future<Output = ()>;
 }

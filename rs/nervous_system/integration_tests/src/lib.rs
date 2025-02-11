@@ -12,6 +12,7 @@
 //! crate.
 
 pub mod create_service_nervous_system_builder;
+pub mod nervous_system_agent_helpers;
 pub mod pocket_ic_helpers;
 
 use std::time::Instant;

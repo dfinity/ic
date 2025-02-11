@@ -1,4 +1,4 @@
-use crate::CallCanisters;
+use crate::{CallCanisters, ProgressNetwork};
 use crate::{CanisterInfo, Request};
 use candid::Principal;
 use ic_agent::Agent;
@@ -138,5 +138,15 @@ impl CallCanisters for Agent {
 
     fn caller(&self) -> Result<Principal, Self::Error> {
         self.get_principal().map_err(Self::Error::Identity)
+    }
+
+    fn is_canister_stopped_error(&self, _err: &Self::Error) -> bool {
+        todo!("Not implemented yet");
+    }
+}
+
+impl ProgressNetwork for Agent {
+    async fn progress(&self, duration: std::time::Duration) {
+        tokio::time::sleep(duration).await;
     }
 }
