@@ -7,35 +7,34 @@ use std::time::Duration;
 thread_local! {
     pub static GET_UTXOS_CLIENT_CALLS: Cell<u64> = Cell::default();
     pub static GET_UTXOS_MINTER_CALLS: Cell<u64> = Cell::default();
-    pub static UPDATE_CALL_LATENCY: RefCell<BTreeMap<usize,Histogram<8>>> = RefCell::default();
-    pub static GET_UTXOS_CALL_LATENCY: RefCell<BTreeMap<(usize, String),Histogram<8>>> = RefCell::default();
+    pub static UPDATE_CALL_LATENCY: RefCell<BTreeMap<usize,LatencyHistogram>> = RefCell::default();
+    pub static GET_UTXOS_CALL_LATENCY: RefCell<BTreeMap<(usize, String),LatencyHistogram>> = RefCell::default();
+    pub static GET_UTXOS_RESULT_SIZE: RefCell<BTreeMap<String,NumUtxosHistogram>> = RefCell::default();
 }
 
-pub(crate) const BUCKETS_MS: [u64; 8] = [500, 1_000, 2_000, 4_000, 8_000, 16_000, 32_000, u64::MAX];
-pub(crate) const BUCKETS_UTXOS: [u64; 8] = [1, 4, 16, 64, 256, 1024, 4096, u64::MAX];
+pub const BUCKETS_MS: [u64; 8] = [500, 1_000, 2_000, 4_000, 8_000, 16_000, 32_000, u64::MAX];
+pub const BUCKETS_UTXOS: [u64; 8] = [1, 4, 16, 64, 256, 1024, 4096, u64::MAX];
 
 pub struct NumUtxosHistogram(Histogram<8>);
 
 impl Default for NumUtxosHistogram {
     fn default() -> Self {
-        Self {
-            0: Histogram::new(&BUCKETS_UTXOS),
-        }
+        Self(Histogram::new(&BUCKETS_UTXOS))
     }
 }
 
-pub type LatencyHistogram = Histogram<8>;
+pub struct LatencyHistogram(Histogram<8>);
 
 impl Default for LatencyHistogram {
     fn default() -> Self {
-        Histogram::new(&BUCKETS_MS)
+        Self(Histogram::new(&BUCKETS_MS))
     }
 }
 
 impl LatencyHistogram {
     pub fn observe_latency(&mut self, start_ns: u64, end_ns: u64) {
         let duration = Duration::from_nanos(end_ns.saturating_sub(start_ns));
-        self.observe_value(duration.as_millis() as u64)
+        self.0.observe_value(duration.as_millis() as u64)
     }
 }
 
@@ -56,7 +55,7 @@ impl<const NUM_BUCKETS: usize> Histogram<NUM_BUCKETS> {
     }
 
     pub fn observe_value(&mut self, value: u64) {
-        let bucket_index = self.bucket_upper_bounds[..self.bucket_counts.len() - 1]
+        let bucket_index = self.bucket_upper_bounds[..self.bucket_counts.len() - 1] // skip the last (infinity) bucket
             .iter()
             .enumerate()
             .find_map(|(bucket_index, bucket_upper_bound)| {
@@ -74,7 +73,7 @@ impl<const NUM_BUCKETS: usize> Histogram<NUM_BUCKETS> {
     /// Returns an iterator over the histogram buckets as tuples containing the bucket upper bound
     /// (inclusive), and the count of observed values within the bucket.
     pub(crate) fn iter(&self) -> impl Iterator<Item = (f64, f64)> + '_ {
-        self.bucket_upper_bounds[..self.bucket_counts.len() - 1]
+        self.bucket_upper_bounds[..self.bucket_counts.len() - 1] // skip the last (infinity) bucket
             .iter()
             .map(|bucket| *bucket as f64)
             .chain(std::iter::once(f64::INFINITY))
@@ -89,6 +88,7 @@ impl<const NUM_BUCKETS: usize> Histogram<NUM_BUCKETS> {
 }
 
 pub fn observe_get_utxos_latency(
+    num_utxos: usize,
     num_pages: usize,
     call_source: String,
     start_ns: u64,
@@ -96,9 +96,16 @@ pub fn observe_get_utxos_latency(
 ) {
     GET_UTXOS_CALL_LATENCY.with_borrow_mut(|metrics| {
         metrics
-            .entry((num_pages, call_source))
+            .entry((num_pages, call_source.clone()))
             .or_default()
             .observe_latency(start_ns, end_ns);
+    });
+    GET_UTXOS_RESULT_SIZE.with_borrow_mut(|metrics| {
+        metrics
+            .entry(call_source)
+            .or_default()
+            .0
+            .observe_value(num_utxos as u64);
     });
 }
 
@@ -328,8 +335,8 @@ pub fn encode_metrics(
         for (num_new_utxos, histogram) in histograms {
             histogram_vec = histogram_vec.histogram(
                 &[("num_new_utxos", &num_new_utxos.to_string())],
-                histogram.iter(),
-                histogram.sum() as f64,
+                histogram.0.iter(),
+                histogram.0.sum() as f64,
             )?;
         }
         Ok(())
@@ -347,8 +354,24 @@ pub fn encode_metrics(
                     ("num_pages", &num_pages.to_string()),
                     ("call_source", &call_source.to_string()),
                 ],
-                histogram.iter(),
-                histogram.sum() as f64,
+                histogram.0.iter(),
+                histogram.0.sum() as f64,
+            )?;
+        }
+        Ok(())
+    })?;
+
+    let mut histogram_vec = metrics.histogram_vec(
+        "ckbtc_minter_get_utxos_result_size",
+        "The number of UTXOs in the result of the ckBTC minter `get_utxos` call.",
+    )?;
+
+    GET_UTXOS_RESULT_SIZE.with_borrow(|histograms| -> Result<(), Error> {
+        for (call_source, histogram) in histograms {
+            histogram_vec = histogram_vec.histogram(
+                &[("call_source", &call_source.to_string())],
+                histogram.0.iter(),
+                histogram.0.sum() as f64,
             )?;
         }
         Ok(())

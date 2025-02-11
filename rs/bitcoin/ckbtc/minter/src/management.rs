@@ -190,6 +190,7 @@ pub async fn get_utxos<R: CanisterRuntime>(
     .await?;
 
     let mut utxos = std::mem::take(&mut response.utxos);
+    let mut num_pages: usize = 1;
 
     // Continue fetching until there are no more pages.
     while let Some(page) = response.next_page {
@@ -205,9 +206,16 @@ pub async fn get_utxos<R: CanisterRuntime>(
         .await?;
 
         utxos.append(&mut response.utxos);
+        num_pages += 1;
     }
 
-    observe_get_utxos_latency(utxos.len(), source.to_string(), start_time, runtime.time());
+    observe_get_utxos_latency(
+        utxos.len(),
+        num_pages,
+        source.to_string(),
+        start_time,
+        runtime.time(),
+    );
 
     response.utxos = utxos;
 
