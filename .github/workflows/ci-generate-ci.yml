@@ -47,7 +47,6 @@ jobs:
 
           if [ -n "$(git status --porcelain)" ]; then
             git config user.name ${{ github.actor }}
-            git config user.email "<>"
             git add .
             git commit -m "IDX GitHub Automation"
             git push
