@@ -15,7 +15,7 @@ thread_local! {
 pub const BUCKETS_MS: [u64; 8] = [500, 1_000, 2_000, 4_000, 8_000, 16_000, 32_000, u64::MAX];
 pub const BUCKETS_UTXOS: [u64; 8] = [1, 4, 16, 64, 256, 1024, 4096, u64::MAX];
 
-pub struct NumUtxosHistogram(Histogram<8>);
+pub struct NumUtxosHistogram(pub Histogram<8>);
 
 impl Default for NumUtxosHistogram {
     fn default() -> Self {
@@ -23,7 +23,7 @@ impl Default for NumUtxosHistogram {
     }
 }
 
-pub struct LatencyHistogram(Histogram<8>);
+pub struct LatencyHistogram(pub Histogram<8>);
 
 impl Default for LatencyHistogram {
     fn default() -> Self {
@@ -55,7 +55,8 @@ impl<const NUM_BUCKETS: usize> Histogram<NUM_BUCKETS> {
     }
 
     pub fn observe_value(&mut self, value: u64) {
-        let bucket_index = self.bucket_upper_bounds[..self.bucket_counts.len() - 1] // skip the last (infinity) bucket
+        let bucket_index = self
+            .bucket_upper_bounds
             .iter()
             .enumerate()
             .find_map(|(bucket_index, bucket_upper_bound)| {
@@ -65,24 +66,26 @@ impl<const NUM_BUCKETS: usize> Histogram<NUM_BUCKETS> {
                     None
                 }
             })
-            .unwrap_or(self.bucket_upper_bounds.len() - 1); // infinity bucket
+            .unwrap();
         self.bucket_counts[bucket_index] += 1;
         self.value_sum += value;
     }
 
     /// Returns an iterator over the histogram buckets as tuples containing the bucket upper bound
     /// (inclusive), and the count of observed values within the bucket.
-    pub(crate) fn iter(&self) -> impl Iterator<Item = (f64, f64)> + '_ {
+    pub fn iter(&self) -> impl Iterator<Item = (f64, f64)> + '_ {
         self.bucket_upper_bounds[..self.bucket_counts.len() - 1] // skip the last (infinity) bucket
             .iter()
-            .map(|bucket| *bucket as f64)
-            .chain(std::iter::once(f64::INFINITY))
+            .map(|bucket| match bucket {
+                &u64::MAX => f64::INFINITY,
+                _ => *bucket as f64,
+            })
             .zip(self.bucket_counts.iter().cloned())
             .map(|(k, v)| (k, v as f64))
     }
 
     /// Returns the sum of all observed latencies in milliseconds.
-    pub(crate) fn sum(&self) -> u64 {
+    pub fn sum(&self) -> u64 {
         self.value_sum
     }
 }

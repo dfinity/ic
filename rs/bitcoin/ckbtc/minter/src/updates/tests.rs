@@ -1,4 +1,5 @@
 mod update_balance {
+    use crate::metrics::Histogram;
     use crate::metrics::LatencyHistogram;
     use crate::state::{audit, eventlog::EventType, mutate_state, read_state, SuspendedReason};
     use crate::test_fixtures::{
@@ -293,11 +294,12 @@ mod update_balance {
         assert_eq!(histogram.sum(), 250);
     }
 
-    fn get_latency_histogram(num_new_utxos: usize) -> LatencyHistogram {
+    fn get_latency_histogram(num_new_utxos: usize) -> Histogram<8> {
         crate::metrics::UPDATE_CALL_LATENCY.with_borrow(|histograms| {
-            *histograms
+            let &LatencyHistogram(histogram) = histograms
                 .get(&num_new_utxos)
-                .expect("No histogram for given number of new UTXOs")
+                .expect("No histogram for given number of new UTXOs");
+            histogram
         })
     }
 
