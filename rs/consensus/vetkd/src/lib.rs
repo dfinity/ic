@@ -401,7 +401,7 @@ impl IntoMessages<Vec<ConsensusResponse>> for VetKdPayloadBuilderImpl {
                                 ),
                                 VetKdErrorCode::InvalidKey => RejectContext::new(
                                     RejectCode::CanisterError,
-                                    "Invalid key_id in VetKD request",
+                                    "Invalid or disabled key_id in VetKD request",
                                 ),
                             })
                         }
@@ -432,12 +432,11 @@ fn reject_if_invalid(
 #[cfg(test)]
 mod tests {
     use assert_matches::assert_matches;
-    use core::time::Duration;
-    use core::{convert::From, iter::Iterator};
-    use ic_consensus_mocks::dependencies_with_subnet_records_with_raw_state_manager;
-    use ic_consensus_mocks::Dependencies;
-    use ic_interfaces::consensus::InvalidPayloadReason;
-    use ic_interfaces::consensus::PayloadValidationFailure;
+    use core::{convert::From, iter::Iterator, time::Duration};
+    use ic_consensus_mocks::{
+        dependencies_with_subnet_records_with_raw_state_manager, Dependencies,
+    };
+    use ic_interfaces::consensus::{InvalidPayloadReason, PayloadValidationFailure};
     use ic_interfaces::idkg::IDkgChangeAction;
     use ic_interfaces::p2p::consensus::MutablePool;
     use ic_interfaces::validation::ValidationError;
@@ -449,6 +448,7 @@ mod tests {
     use ic_test_utilities_registry::SubnetRecordBuilder;
     use ic_types::consensus::idkg::IDkgMessage;
     use ic_types::subnet_id_into_protobuf;
+    use ic_types::time::current_time;
     use ic_types::time::UNIX_EPOCH;
     use ic_types::RegistryVersion;
     use ic_types_test_utils::ids::{node_test_id, subnet_test_id};
@@ -476,7 +476,7 @@ mod tests {
                     };
                     context.assert_contains(
                         RejectCode::CanisterError,
-                        "Invalid key_id in VetKD request",
+                        "Invalid or disabled key_id in VetKD request",
                     );
                 }
                 VetKdAgreement::Reject(VetKdErrorCode::TimedOut) => {
@@ -497,6 +497,16 @@ mod tests {
 
     fn test_payload_builder<T>(
         config: Option<ChainKeyConfig>,
+        contexts: BTreeMap<CallbackId, SignWithThresholdContext>,
+        shares: Vec<IDkgMessage>,
+        run: impl FnOnce(VetKdPayloadBuilderImpl) -> T,
+    ) -> T {
+        test_payload_builder_ext(config, true, contexts, shares, run)
+    }
+
+    fn test_payload_builder_ext<T>(
+        config: Option<ChainKeyConfig>,
+        keys_enabled: bool,
         contexts: BTreeMap<CallbackId, SignWithThresholdContext>,
         shares: Vec<IDkgMessage>,
         run: impl FnOnce(VetKdPayloadBuilderImpl) -> T,
@@ -526,20 +536,22 @@ mod tests {
             );
 
             if let Some(config) = config {
-                for key_id in config.key_ids() {
-                    registry_data_provider
-                        .add(
-                            &ic_registry_keys::make_chain_key_signing_subnet_list_key(&key_id),
-                            registry.get_latest_version().increment(),
-                            Some(
-                                ic_protobuf::registry::crypto::v1::ChainKeySigningSubnetList {
-                                    subnets: vec![subnet_id_into_protobuf(subnet_test_id(0))],
-                                },
-                            ),
-                        )
-                        .expect("Could not add chain key signing subnet list");
+                if keys_enabled {
+                    for key_id in config.key_ids() {
+                        registry_data_provider
+                            .add(
+                                &ic_registry_keys::make_chain_key_signing_subnet_list_key(&key_id),
+                                registry.get_latest_version().increment(),
+                                Some(
+                                    ic_protobuf::registry::crypto::v1::ChainKeySigningSubnetList {
+                                        subnets: vec![subnet_id_into_protobuf(subnet_test_id(0))],
+                                    },
+                                ),
+                            )
+                            .expect("Could not add chain key signing subnet list");
+                    }
+                    registry.update_to_latest_version();
                 }
-                registry.update_to_latest_version();
             }
 
             let mut state = ic_test_utilities_state::get_initial_state(0, 0);
@@ -994,6 +1006,75 @@ mod tests {
     }
 
     #[test]
+    fn test_reject_disabled_keys() {
+        let config = make_chain_key_config();
+        let contexts = make_contexts(&config);
+        let shares = make_shares(&contexts);
+        let certified_height = Height::new(CERTIFIED_HEIGHT);
+        let height = certified_height.increment();
+        let context = ValidationContext {
+            registry_version: RegistryVersion::new(10),
+            certified_height,
+            time: UNIX_EPOCH,
+        };
+        let proposal_context = ProposalContext {
+            proposer: node_test_id(0),
+            validation_context: &context,
+        };
+        test_payload_builder_ext(Some(config), false, contexts.clone(), shares, |builder| {
+            let serialized_payload =
+                builder.build_payload(height, NumBytes::from(1024), &[], &context);
+            let payload = bytes_to_vetkd_payload(&serialized_payload).unwrap();
+            assert_eq!(payload.vetkd_agreements.len(), 2);
+            for (id, context) in contexts {
+                match context.key_id() {
+                    MasterPublicKeyId::Ecdsa(_) | MasterPublicKeyId::Schnorr(_) => {
+                        assert!(!payload.vetkd_agreements.contains_key(&id));
+                    }
+                    MasterPublicKeyId::VetKd(_) => {
+                        assert_matches!(
+                            payload.vetkd_agreements.get(&id).unwrap(),
+                            VetKdAgreement::Reject(VetKdErrorCode::InvalidKey)
+                        );
+                    }
+                }
+            }
+
+            let validation =
+                builder.validate_payload(height, &proposal_context, &serialized_payload, &[]);
+            assert!(validation.is_ok());
+
+            // payload with different rejects for the same contexts should be rejected
+            let payload = as_bytes(make_vetkd_agreements_with_payload(
+                &[1, 2],
+                VetKdAgreement::Reject(VetKdErrorCode::TimedOut),
+            ));
+            let validation = builder.validate_payload(height, &proposal_context, &payload, &[]);
+            assert_matches!(
+                validation.unwrap_err(),
+                ValidationError::InvalidArtifact(InvalidPayloadReason::InvalidVetKdPayload(
+                    InvalidVetKdPayloadReason::MismatchedAgreement { expected, received }
+                )) if expected == Some(VetKdAgreement::Reject(VetKdErrorCode::InvalidKey))
+                   && received == Some(VetKdAgreement::Reject(VetKdErrorCode::TimedOut))
+            );
+
+            // payload with success responses for the same contexts should be rejected
+            let payload = as_bytes(make_vetkd_agreements_with_payload(
+                &[1, 2],
+                VetKdAgreement::Success(vec![1, 1, 1]),
+            ));
+            let validation = builder.validate_payload(height, &proposal_context, &payload, &[]);
+            assert_matches!(
+                validation.unwrap_err(),
+                ValidationError::InvalidArtifact(InvalidPayloadReason::InvalidVetKdPayload(
+                    InvalidVetKdPayloadReason::MismatchedAgreement { expected, received }
+                )) if expected == Some(VetKdAgreement::Reject(VetKdErrorCode::InvalidKey))
+                   && received.is_none()
+            );
+        })
+    }
+
+    #[test]
     fn test_reject_timed_out_contexts() {
         let config = make_chain_key_config();
         let contexts = make_contexts(&config);
@@ -1059,6 +1140,71 @@ mod tests {
                 )) if expected == Some(VetKdAgreement::Reject(VetKdErrorCode::TimedOut))
                    && received.is_none()
             );
+        })
+    }
+
+    #[test]
+    fn test_get_enabled_keys_and_expiry_if_disabled() {
+        test_payload_builder(None, BTreeMap::new(), vec![], |builder| {
+            let height = Height::from(CERTIFIED_HEIGHT + 1);
+            let res = builder
+                .get_enabled_keys_and_expiry(height, UNIX_EPOCH)
+                .unwrap_err();
+            assert_matches!(
+                res,
+                ValidationError::InvalidArtifact(InvalidPayloadReason::InvalidVetKdPayload(
+                    InvalidVetKdPayloadReason::Disabled
+                ))
+            )
+        })
+    }
+
+    #[test]
+    fn test_get_enabled_keys_and_expiry_if_enabled_no_keys() {
+        test_payload_builder(
+            Some(ChainKeyConfig::default()),
+            BTreeMap::new(),
+            vec![],
+            |builder| {
+                let height = Height::from(CERTIFIED_HEIGHT + 1);
+                let (keys, expiry) = builder
+                    .get_enabled_keys_and_expiry(height, UNIX_EPOCH)
+                    .unwrap();
+                assert!(keys.is_empty());
+                assert!(expiry.is_none());
+            },
+        )
+    }
+
+    #[test]
+    fn test_get_enabled_keys_and_expiry_if_enabled_multiple_keys() {
+        let config = make_chain_key_config();
+        let timeout = Duration::from_nanos(config.signature_request_timeout_ns.unwrap());
+        let now = current_time();
+        test_payload_builder(Some(config), BTreeMap::new(), vec![], |builder| {
+            let height = Height::from(CERTIFIED_HEIGHT + 1);
+            let (keys, expiry) = builder.get_enabled_keys_and_expiry(height, now).unwrap();
+            assert_eq!(keys.len(), 2);
+            assert!(keys.contains(&MasterPublicKeyId::VetKd(
+                VetKdKeyId::from_str("bls12_381_g2:some_key").unwrap()
+            )));
+            assert!(keys.contains(&MasterPublicKeyId::VetKd(
+                VetKdKeyId::from_str("bls12_381_g2:some_other_key").unwrap()
+            )));
+            assert_matches!(expiry, Some(time) if time == now.saturating_sub(timeout));
+        })
+    }
+
+    #[test]
+    fn test_get_enabled_keys_and_expiry_if_disabled_multiple_keys() {
+        let config = make_chain_key_config();
+        let timeout = Duration::from_nanos(config.signature_request_timeout_ns.unwrap());
+        let now = current_time();
+        test_payload_builder_ext(Some(config), false, BTreeMap::new(), vec![], |builder| {
+            let height = Height::from(CERTIFIED_HEIGHT + 1);
+            let (keys, expiry) = builder.get_enabled_keys_and_expiry(height, now).unwrap();
+            assert!(keys.is_empty());
+            assert_matches!(expiry, Some(time) if time == now.saturating_sub(timeout));
         })
     }
 }
