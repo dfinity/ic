@@ -89,7 +89,7 @@ stream_awk_program='
   END { if (stream_url != null) print stream_url > url_out }'
 
 bazel_args=(
-    ${BAZEL_STARTUP_ARGS}
+    --output_base=/var/tmp/bazel-output # Output base wiped after run
     ${BAZEL_COMMAND}
     --color=yes
     ${BAZEL_CI_CONFIG}
