@@ -457,7 +457,21 @@ mod tests {
     use super::*;
     use crate::test_utils::*;
 
-    const CERTIFIED_HEIGHT: u64 = 123;
+    /// The height of the payload to be tested
+    const HEIGHT: Height = Height::new(124);
+
+    /// The certified state height to be referenced
+    const CERTIFIED_HEIGHT: Height = Height::new(123);
+
+    /// The validation context to be used during tests
+    const VALIDATION_CONTEXT: ValidationContext = ValidationContext {
+        registry_version: RegistryVersion::new(10),
+        certified_height: CERTIFIED_HEIGHT,
+        time: UNIX_EPOCH,
+    };
+
+    /// The maximum payload size during tests
+    const MAX_SIZE: NumBytes = NumBytes::new(1024);
 
     #[test]
     fn test_into_messages() {
@@ -495,6 +509,8 @@ mod tests {
         }
     }
 
+    /// Run the given function for a payload builder that was setup using the given
+    /// config, request contexts, and message shares.
     fn test_payload_builder<T>(
         config: Option<ChainKeyConfig>,
         contexts: BTreeMap<CallbackId, SignWithThresholdContext>,
@@ -513,6 +529,7 @@ mod tests {
     ) -> T {
         let committee = (0..4).map(|id| node_test_id(id as u64)).collect::<Vec<_>>();
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            // Add the config to registry
             let subnet_record_builder = SubnetRecordBuilder::from(&committee);
             let subnet_record_builder = if let Some(config) = config.clone() {
                 subnet_record_builder.with_chain_key_config(config)
@@ -535,6 +552,7 @@ mod tests {
                 vec![(1, subnet_record_builder.build())],
             );
 
+            // Enable the configured keys
             if let Some(config) = config {
                 if keys_enabled {
                     for key_id in config.key_ids() {
@@ -554,20 +572,21 @@ mod tests {
                 }
             }
 
+            // Setup the state manager expectation
             let mut state = ic_test_utilities_state::get_initial_state(0, 0);
             state
                 .metadata
                 .subnet_call_context_manager
                 .sign_with_threshold_contexts = contexts;
 
-            let certified_height = Height::new(CERTIFIED_HEIGHT);
+            // We will not return states above the certified height
             state_manager
                 .get_mut()
                 .expect_get_state_at()
                 .returning(move |height| {
-                    if height <= certified_height {
+                    if height <= CERTIFIED_HEIGHT {
                         Ok(ic_interfaces_state_manager::Labeled::new(
-                            certified_height,
+                            CERTIFIED_HEIGHT,
                             Arc::new(state.clone()),
                         ))
                     } else {
@@ -575,8 +594,9 @@ mod tests {
                     }
                 });
 
-            pool.advance_round_normal_operation_n(CERTIFIED_HEIGHT);
+            pool.advance_round_normal_operation_n(CERTIFIED_HEIGHT.get());
 
+            // Add the message shares
             let mutations = shares
                 .into_iter()
                 .map(IDkgChangeAction::AddToValidated)
@@ -594,6 +614,7 @@ mod tests {
                 no_op_logger(),
             );
 
+            // Run the test
             run(payload_builder)
         })
     }
@@ -604,27 +625,20 @@ mod tests {
         let config = make_chain_key_config();
         let contexts = make_contexts(&config);
         let shares = make_shares(&contexts);
-        let certified_height = Height::new(CERTIFIED_HEIGHT);
-        let height = certified_height.increment();
-        let context = ValidationContext {
-            registry_version: RegistryVersion::new(10),
-            certified_height,
-            time: UNIX_EPOCH,
-        };
         let proposal_context = ProposalContext {
             proposer: node_test_id(0),
-            validation_context: &context,
+            validation_context: &VALIDATION_CONTEXT,
         };
         test_payload_builder(Some(config), contexts, shares, |builder| {
-            let payload = builder.build_payload(height, NumBytes::from(1024), &[], &context);
+            let payload = builder.build_payload(HEIGHT, MAX_SIZE, &[], &VALIDATION_CONTEXT);
 
             // TODO validate payload manually
 
-            let validation = builder.validate_payload(height, &proposal_context, &payload, &[]);
+            let validation = builder.validate_payload(HEIGHT, &proposal_context, &payload, &[]);
             assert!(validation.is_ok());
 
             // payload that can't be deserialized should be invalid
-            let validation = builder.validate_payload(height, &proposal_context, &[1, 2, 3], &[]);
+            let validation = builder.validate_payload(HEIGHT, &proposal_context, &[1, 2, 3], &[]);
             assert_matches!(
                 validation.unwrap_err(),
                 ValidationError::InvalidArtifact(InvalidPayloadReason::InvalidVetKdPayload(
@@ -637,7 +651,7 @@ mod tests {
                 &[1, 2],
                 VetKdAgreement::Reject(VetKdErrorCode::TimedOut),
             ));
-            let validation = builder.validate_payload(height, &proposal_context, &payload, &[]);
+            let validation = builder.validate_payload(HEIGHT, &proposal_context, &payload, &[]);
             assert_matches!(
                 validation.unwrap_err(),
                 ValidationError::InvalidArtifact(InvalidPayloadReason::InvalidVetKdPayload(
@@ -650,24 +664,18 @@ mod tests {
 
     #[test]
     fn test_build_empty_payloads_when_feature_disabled() {
-        let certified_height = Height::new(CERTIFIED_HEIGHT);
-        let height = certified_height.increment();
-        let context = ValidationContext {
-            registry_version: RegistryVersion::new(10),
-            certified_height,
-            time: UNIX_EPOCH,
-        };
+        // No chain key config is passed
         test_payload_builder(None, BTreeMap::new(), vec![], |builder| {
-            let payload = builder.build_payload(height, NumBytes::from(1024), &[], &context);
+            let payload = builder.build_payload(HEIGHT, MAX_SIZE, &[], &VALIDATION_CONTEXT);
             assert!(payload.is_empty());
 
             // Non-empty payloads should be rejected
             let payload = as_bytes(make_vetkd_agreements([0, 1, 2]));
             let validation = builder.validate_payload(
-                height,
+                HEIGHT,
                 &ProposalContext {
                     proposer: node_test_id(0),
-                    validation_context: &context,
+                    validation_context: &VALIDATION_CONTEXT,
                 },
                 &payload,
                 &[],
@@ -686,22 +694,19 @@ mod tests {
         let config = make_chain_key_config();
         let contexts = make_contexts(&config);
         let shares = make_shares(&contexts);
-        let certified_height = Height::new(CERTIFIED_HEIGHT);
-        let height = certified_height.increment();
         let context = ValidationContext {
-            registry_version: RegistryVersion::new(10),
             // There is no state for this certified height yet
-            certified_height: certified_height.increment(),
-            time: UNIX_EPOCH,
+            certified_height: CERTIFIED_HEIGHT.increment(),
+            ..VALIDATION_CONTEXT
         };
         test_payload_builder(Some(config), contexts, shares, |builder| {
-            let payload = builder.build_payload(height, NumBytes::from(1024), &[], &context);
+            let payload = builder.build_payload(HEIGHT, MAX_SIZE, &[], &context);
             assert!(payload.is_empty());
 
             // Non-empty payload validation should be fail if we don't have the state
             let payload = as_bytes(make_vetkd_agreements([0, 1, 2]));
             let validation = builder.validate_payload(
-                height,
+                HEIGHT,
                 &ProposalContext {
                     proposer: node_test_id(0),
                     validation_context: &context,
@@ -724,23 +729,16 @@ mod tests {
     fn test_build_empty_payload_if_pool_is_empty() {
         let config = make_chain_key_config();
         let contexts = make_contexts(&config);
-        let certified_height = Height::new(CERTIFIED_HEIGHT);
         test_payload_builder(Some(config), contexts, vec![], |builder| {
-            let height = certified_height.increment();
-            let context = ValidationContext {
-                registry_version: RegistryVersion::new(10),
-                certified_height,
-                time: UNIX_EPOCH,
-            };
-            let payload = builder.build_payload(height, NumBytes::from(1024), &[], &context);
+            let payload = builder.build_payload(HEIGHT, MAX_SIZE, &[], &VALIDATION_CONTEXT);
             assert!(payload.is_empty());
 
             // Empty payloads should always be valid
             let validation = builder.validate_payload(
-                height,
+                HEIGHT,
                 &ProposalContext {
                     proposer: node_test_id(0),
-                    validation_context: &context,
+                    validation_context: &VALIDATION_CONTEXT,
                 },
                 &payload,
                 &[],
@@ -755,18 +753,9 @@ mod tests {
         let config = make_chain_key_config();
         let contexts = make_contexts(&config);
         let shares = make_shares(&contexts);
-        let certified_height = Height::new(CERTIFIED_HEIGHT);
         test_payload_builder(Some(config), contexts, shares, |builder| {
-            let payload = builder.build_payload(
-                certified_height.increment(),
-                NumBytes::from(0),
-                &[],
-                &ValidationContext {
-                    registry_version: RegistryVersion::new(10),
-                    certified_height,
-                    time: UNIX_EPOCH,
-                },
-            );
+            let payload =
+                builder.build_payload(HEIGHT, NumBytes::from(0), &[], &VALIDATION_CONTEXT);
             assert!(payload.is_empty());
         })
     }
@@ -777,24 +766,20 @@ mod tests {
         let config = make_chain_key_config();
         let contexts = make_contexts(&config);
         let shares = make_shares(&contexts);
-        let certified_height = Height::new(CERTIFIED_HEIGHT);
-        let height = certified_height.increment();
-        let context = ValidationContext {
-            registry_version: RegistryVersion::new(10),
-            certified_height,
-            time: UNIX_EPOCH,
-        };
         test_payload_builder(Some(config), contexts, shares, |builder| {
-            let payload = builder.build_payload(height, NumBytes::from(50), &[], &context);
+            // Use a small maximum size
+            let payload =
+                builder.build_payload(HEIGHT, NumBytes::from(50), &[], &VALIDATION_CONTEXT);
             let payload_deserialized = bytes_to_vetkd_payload(&payload).unwrap();
             assert_eq!(payload_deserialized.vetkd_agreements.len(), 1);
+
             // TODO validate agreement is success
 
             let validation = builder.validate_payload(
-                height,
+                HEIGHT,
                 &ProposalContext {
                     proposer: node_test_id(0),
-                    validation_context: &context,
+                    validation_context: &VALIDATION_CONTEXT,
                 },
                 &payload,
                 &[],
@@ -816,25 +801,18 @@ mod tests {
             .map(|bytes| as_past_payload(bytes))
             .collect::<Vec<_>>();
         let shares = make_shares(&contexts);
-        let certified_height = Height::new(CERTIFIED_HEIGHT);
-        let height = certified_height.increment();
-        let context = ValidationContext {
-            registry_version: RegistryVersion::new(10),
-            certified_height,
-            time: UNIX_EPOCH,
-        };
         test_payload_builder(Some(config), contexts, shares, |builder| {
             let payload =
-                builder.build_payload(height, NumBytes::from(1024), &past_payloads, &context);
+                builder.build_payload(HEIGHT, MAX_SIZE, &past_payloads, &VALIDATION_CONTEXT);
             assert!(payload.is_empty());
 
             // Payload with agreements that are already part of past payloads should be rejected
             let payload = as_bytes(make_vetkd_agreements([0, 1, 2]));
             let validation = builder.validate_payload(
-                height,
+                HEIGHT,
                 &ProposalContext {
                     proposer: node_test_id(0),
-                    validation_context: &context,
+                    validation_context: &VALIDATION_CONTEXT,
                 },
                 &payload,
                 &past_payloads,
@@ -853,21 +831,14 @@ mod tests {
         let config = make_chain_key_config();
         let contexts = make_contexts(&config);
         let shares = make_shares(&contexts);
-        let certified_height = Height::new(CERTIFIED_HEIGHT);
-        let height = certified_height.increment();
-        let context = ValidationContext {
-            registry_version: RegistryVersion::new(10),
-            certified_height,
-            time: UNIX_EPOCH,
-        };
         let proposal_context = ProposalContext {
             proposer: node_test_id(0),
-            validation_context: &context,
+            validation_context: &VALIDATION_CONTEXT,
         };
         test_payload_builder(Some(config), contexts, shares, |builder| {
             // Payload with agreements for IDKG contexts should be rejected
             let payload = as_bytes(make_vetkd_agreements([0, 1, 2]));
-            let validation = builder.validate_payload(height, &proposal_context, &payload, &[]);
+            let validation = builder.validate_payload(HEIGHT, &proposal_context, &payload, &[]);
             assert_matches!(
                 validation.unwrap_err(),
                 ValidationError::InvalidArtifact(InvalidPayloadReason::InvalidVetKdPayload(
@@ -877,46 +848,7 @@ mod tests {
 
             // Payload with agreements for unknown contexts should be rejected
             let payload = as_bytes(make_vetkd_agreements([3, 4, 5]));
-            let validation = builder.validate_payload(height, &proposal_context, &payload, &[]);
-            assert_matches!(
-                validation.unwrap_err(),
-                ValidationError::InvalidArtifact(InvalidPayloadReason::InvalidVetKdPayload(
-                    InvalidVetKdPayloadReason::MissingContext(id)
-                )) if id.get() == 3
-            );
-        })
-    }
-
-    #[test]
-    fn test_reject_payloads_with_mismatched_agreement() {
-        let config = make_chain_key_config();
-        let contexts = make_contexts(&config);
-        let shares = make_shares(&contexts);
-        let certified_height = Height::new(CERTIFIED_HEIGHT);
-        let height = certified_height.increment();
-        let context = ValidationContext {
-            registry_version: RegistryVersion::new(10),
-            certified_height,
-            time: UNIX_EPOCH,
-        };
-        let proposal_context = ProposalContext {
-            proposer: node_test_id(0),
-            validation_context: &context,
-        };
-        test_payload_builder(Some(config), contexts, shares, |builder| {
-            // Payload with agreements for IDKG contexts should be rejected
-            let payload = as_bytes(make_vetkd_agreements([0, 1, 2]));
-            let validation = builder.validate_payload(height, &proposal_context, &payload, &[]);
-            assert_matches!(
-                validation.unwrap_err(),
-                ValidationError::InvalidArtifact(InvalidPayloadReason::InvalidVetKdPayload(
-                    InvalidVetKdPayloadReason::UnexpectedIDkgContext(id)
-                )) if id.get() == 0
-            );
-
-            // Payload with agreements for unknown contexts should be rejected
-            let payload = as_bytes(make_vetkd_agreements([3, 4, 5]));
-            let validation = builder.validate_payload(height, &proposal_context, &payload, &[]);
+            let validation = builder.validate_payload(HEIGHT, &proposal_context, &payload, &[]);
             assert_matches!(
                 validation.unwrap_err(),
                 ValidationError::InvalidArtifact(InvalidPayloadReason::InvalidVetKdPayload(
@@ -941,20 +873,13 @@ mod tests {
         // Create contexts for a different config
         let contexts = make_contexts(&make_chain_key_config());
         let shares = make_shares(&contexts);
-        let certified_height = Height::new(CERTIFIED_HEIGHT);
-        let height = certified_height.increment();
-        let context = ValidationContext {
-            registry_version: RegistryVersion::new(10),
-            certified_height,
-            time: UNIX_EPOCH,
-        };
         let proposal_context = ProposalContext {
             proposer: node_test_id(0),
-            validation_context: &context,
+            validation_context: &VALIDATION_CONTEXT,
         };
         test_payload_builder(Some(config), contexts.clone(), shares, |builder| {
             let serialized_payload =
-                builder.build_payload(height, NumBytes::from(1024), &[], &context);
+                builder.build_payload(HEIGHT, MAX_SIZE, &[], &VALIDATION_CONTEXT);
             let payload = bytes_to_vetkd_payload(&serialized_payload).unwrap();
             assert_eq!(payload.vetkd_agreements.len(), 2);
             for (id, context) in contexts {
@@ -972,7 +897,7 @@ mod tests {
             }
 
             let validation =
-                builder.validate_payload(height, &proposal_context, &serialized_payload, &[]);
+                builder.validate_payload(HEIGHT, &proposal_context, &serialized_payload, &[]);
             assert!(validation.is_ok());
 
             // payload with different rejects for the same contexts should be rejected
@@ -980,7 +905,7 @@ mod tests {
                 &[1, 2],
                 VetKdAgreement::Reject(VetKdErrorCode::TimedOut),
             ));
-            let validation = builder.validate_payload(height, &proposal_context, &payload, &[]);
+            let validation = builder.validate_payload(HEIGHT, &proposal_context, &payload, &[]);
             assert_matches!(
                 validation.unwrap_err(),
                 ValidationError::InvalidArtifact(InvalidPayloadReason::InvalidVetKdPayload(
@@ -994,7 +919,7 @@ mod tests {
                 &[1, 2],
                 VetKdAgreement::Success(vec![1, 1, 1]),
             ));
-            let validation = builder.validate_payload(height, &proposal_context, &payload, &[]);
+            let validation = builder.validate_payload(HEIGHT, &proposal_context, &payload, &[]);
             assert_matches!(
                 validation.unwrap_err(),
                 ValidationError::InvalidArtifact(InvalidPayloadReason::InvalidVetKdPayload(
@@ -1010,20 +935,13 @@ mod tests {
         let config = make_chain_key_config();
         let contexts = make_contexts(&config);
         let shares = make_shares(&contexts);
-        let certified_height = Height::new(CERTIFIED_HEIGHT);
-        let height = certified_height.increment();
-        let context = ValidationContext {
-            registry_version: RegistryVersion::new(10),
-            certified_height,
-            time: UNIX_EPOCH,
-        };
         let proposal_context = ProposalContext {
             proposer: node_test_id(0),
-            validation_context: &context,
+            validation_context: &VALIDATION_CONTEXT,
         };
         test_payload_builder_ext(Some(config), false, contexts.clone(), shares, |builder| {
             let serialized_payload =
-                builder.build_payload(height, NumBytes::from(1024), &[], &context);
+                builder.build_payload(HEIGHT, MAX_SIZE, &[], &VALIDATION_CONTEXT);
             let payload = bytes_to_vetkd_payload(&serialized_payload).unwrap();
             assert_eq!(payload.vetkd_agreements.len(), 2);
             for (id, context) in contexts {
@@ -1041,7 +959,7 @@ mod tests {
             }
 
             let validation =
-                builder.validate_payload(height, &proposal_context, &serialized_payload, &[]);
+                builder.validate_payload(HEIGHT, &proposal_context, &serialized_payload, &[]);
             assert!(validation.is_ok());
 
             // payload with different rejects for the same contexts should be rejected
@@ -1049,7 +967,7 @@ mod tests {
                 &[1, 2],
                 VetKdAgreement::Reject(VetKdErrorCode::TimedOut),
             ));
-            let validation = builder.validate_payload(height, &proposal_context, &payload, &[]);
+            let validation = builder.validate_payload(HEIGHT, &proposal_context, &payload, &[]);
             assert_matches!(
                 validation.unwrap_err(),
                 ValidationError::InvalidArtifact(InvalidPayloadReason::InvalidVetKdPayload(
@@ -1063,7 +981,7 @@ mod tests {
                 &[1, 2],
                 VetKdAgreement::Success(vec![1, 1, 1]),
             ));
-            let validation = builder.validate_payload(height, &proposal_context, &payload, &[]);
+            let validation = builder.validate_payload(HEIGHT, &proposal_context, &payload, &[]);
             assert_matches!(
                 validation.unwrap_err(),
                 ValidationError::InvalidArtifact(InvalidPayloadReason::InvalidVetKdPayload(
@@ -1079,20 +997,16 @@ mod tests {
         let config = make_chain_key_config();
         let contexts = make_contexts(&config);
         let shares = make_shares(&contexts);
-        let certified_height = Height::new(CERTIFIED_HEIGHT);
-        let height = certified_height.increment();
         let context = ValidationContext {
-            registry_version: RegistryVersion::new(10),
-            certified_height,
             time: UNIX_EPOCH.checked_add(Duration::from_secs(2)).unwrap(),
+            ..VALIDATION_CONTEXT
         };
         let proposal_context = ProposalContext {
             proposer: node_test_id(0),
             validation_context: &context,
         };
         test_payload_builder(Some(config), contexts.clone(), shares, |builder| {
-            let serialized_payload =
-                builder.build_payload(height, NumBytes::from(1024), &[], &context);
+            let serialized_payload = builder.build_payload(HEIGHT, MAX_SIZE, &[], &context);
             let payload = bytes_to_vetkd_payload(&serialized_payload).unwrap();
             assert_eq!(payload.vetkd_agreements.len(), 2);
             for (id, context) in contexts {
@@ -1110,7 +1024,7 @@ mod tests {
             }
 
             let validation =
-                builder.validate_payload(height, &proposal_context, &serialized_payload, &[]);
+                builder.validate_payload(HEIGHT, &proposal_context, &serialized_payload, &[]);
             assert!(validation.is_ok());
 
             // payload with different rejects for the same contexts should be rejected
@@ -1118,7 +1032,7 @@ mod tests {
                 &[1, 2],
                 VetKdAgreement::Reject(VetKdErrorCode::InvalidKey),
             ));
-            let validation = builder.validate_payload(height, &proposal_context, &payload, &[]);
+            let validation = builder.validate_payload(HEIGHT, &proposal_context, &payload, &[]);
             assert_matches!(
                 validation.unwrap_err(),
                 ValidationError::InvalidArtifact(InvalidPayloadReason::InvalidVetKdPayload(
@@ -1132,7 +1046,7 @@ mod tests {
                 &[1, 2],
                 VetKdAgreement::Success(vec![1, 1, 1]),
             ));
-            let validation = builder.validate_payload(height, &proposal_context, &payload, &[]);
+            let validation = builder.validate_payload(HEIGHT, &proposal_context, &payload, &[]);
             assert_matches!(
                 validation.unwrap_err(),
                 ValidationError::InvalidArtifact(InvalidPayloadReason::InvalidVetKdPayload(
@@ -1146,9 +1060,8 @@ mod tests {
     #[test]
     fn test_get_enabled_keys_and_expiry_if_disabled() {
         test_payload_builder(None, BTreeMap::new(), vec![], |builder| {
-            let height = Height::from(CERTIFIED_HEIGHT + 1);
             let res = builder
-                .get_enabled_keys_and_expiry(height, UNIX_EPOCH)
+                .get_enabled_keys_and_expiry(HEIGHT, UNIX_EPOCH)
                 .unwrap_err();
             assert_matches!(
                 res,
@@ -1166,9 +1079,8 @@ mod tests {
             BTreeMap::new(),
             vec![],
             |builder| {
-                let height = Height::from(CERTIFIED_HEIGHT + 1);
                 let (keys, expiry) = builder
-                    .get_enabled_keys_and_expiry(height, UNIX_EPOCH)
+                    .get_enabled_keys_and_expiry(HEIGHT, UNIX_EPOCH)
                     .unwrap();
                 assert!(keys.is_empty());
                 assert!(expiry.is_none());
@@ -1182,8 +1094,7 @@ mod tests {
         let timeout = Duration::from_nanos(config.signature_request_timeout_ns.unwrap());
         let now = current_time();
         test_payload_builder(Some(config), BTreeMap::new(), vec![], |builder| {
-            let height = Height::from(CERTIFIED_HEIGHT + 1);
-            let (keys, expiry) = builder.get_enabled_keys_and_expiry(height, now).unwrap();
+            let (keys, expiry) = builder.get_enabled_keys_and_expiry(HEIGHT, now).unwrap();
             assert_eq!(keys.len(), 2);
             assert!(keys.contains(&MasterPublicKeyId::VetKd(
                 VetKdKeyId::from_str("bls12_381_g2:some_key").unwrap()
@@ -1201,8 +1112,7 @@ mod tests {
         let timeout = Duration::from_nanos(config.signature_request_timeout_ns.unwrap());
         let now = current_time();
         test_payload_builder_ext(Some(config), false, BTreeMap::new(), vec![], |builder| {
-            let height = Height::from(CERTIFIED_HEIGHT + 1);
-            let (keys, expiry) = builder.get_enabled_keys_and_expiry(height, now).unwrap();
+            let (keys, expiry) = builder.get_enabled_keys_and_expiry(HEIGHT, now).unwrap();
             assert!(keys.is_empty());
             assert_matches!(expiry, Some(time) if time == now.saturating_sub(timeout));
         })
