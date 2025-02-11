@@ -11,7 +11,7 @@ use crate::{
     CanisterId, CountBytes, PrincipalId, SubnetId, Time, UserId,
 };
 use ic_error_types::{ErrorCode, UserError};
-use ic_management_canister_types::{
+use ic_management_canister_types_private::{
     CanisterIdRecord, CanisterInfoRequest, ClearChunkStoreArgs, DeleteCanisterSnapshotArgs,
     InstallChunkedCodeArgs, InstallCodeArgsV2, ListCanisterSnapshotArgs, LoadCanisterSnapshotArgs,
     Method, Payload, StoredChunksArgs, TakeCanisterSnapshotArgs, UpdateSettingsArgs,
@@ -42,7 +42,6 @@ pub struct SignedIngressContent {
     arg: Vec<u8>,
     ingress_expiry: u64,
     nonce: Option<Vec<u8>>,
-    size: usize,
 }
 
 impl SignedIngressContent {
@@ -64,10 +63,6 @@ impl SignedIngressContent {
 
     pub fn nonce(&self) -> Option<&Vec<u8>> {
         self.nonce.as_ref()
-    }
-
-    pub fn size(&self) -> usize {
-        self.size
     }
 
     /// Checks whether the given ingress message is addressed to the subnet (rather than to a canister).
@@ -108,24 +103,14 @@ impl HasCanisterId for SignedIngressContent {
 
 impl HttpRequestContent for SignedIngressContent {
     fn id(&self) -> MessageId {
-        let Self {
-            sender,
-            canister_id,
-            method_name,
-            arg,
-            ingress_expiry,
-            nonce,
-            size: _,
-        } = self;
-
         MessageId::from(representation_independent_hash_call_or_query(
             CallOrQuery::Call,
-            canister_id.get().into_vec(),
-            method_name,
-            arg.clone(),
-            *ingress_expiry,
-            sender.get().into_vec(),
-            nonce.as_deref(),
+            self.canister_id.get().into_vec(),
+            &self.method_name,
+            self.arg.clone(),
+            self.ingress_expiry,
+            self.sender.get().into_vec(),
+            self.nonce.as_deref(),
         ))
     }
 
@@ -163,7 +148,6 @@ impl TryFrom<HttpCanisterUpdate> for SignedIngressContent {
             arg: update.arg.0,
             ingress_expiry: update.ingress_expiry,
             nonce: update.nonce.map(|n| n.0),
-            size: 0,
         })
     }
 }
@@ -610,7 +594,7 @@ mod test {
     };
     use crate::{CanisterId, SubnetId, UserId};
     use ic_base_types::PrincipalId;
-    use ic_management_canister_types::IC_00;
+    use ic_management_canister_types_private::IC_00;
     use std::convert::From;
 
     #[test]
