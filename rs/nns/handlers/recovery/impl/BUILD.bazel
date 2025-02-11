@@ -85,8 +85,6 @@ DEV_DEPENDENCIES = [
     ],
 })
 
-MACRO_DEV_DEPENDENCIES = []
-
 LIB_SRCS = glob(
     ["src/**"],
     exclude = [
