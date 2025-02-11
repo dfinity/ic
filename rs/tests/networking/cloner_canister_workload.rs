@@ -36,20 +36,20 @@ use ic_system_test_driver::{
 use slog::info;
 use std::time::Duration;
 
-const TEST_TIMEOUT: Duration = Duration::from_secs(4 * 60 * 60); // 4 hours
+const TEST_TIMEOUT: Duration = Duration::from_secs(10 * 60 * 60); // 10 hours
 
 /// Time to keep the testnet alive once all canisters are installed
-const TESTNET_LIFETIME_AFTER_SETUP: Duration = Duration::from_secs(60 * 60); // 1 hour
+const TESTNET_LIFETIME_AFTER_SETUP: Duration = Duration::from_secs(10 * 60 * 60); // 10 hour
 
 const COUNTER_CANISTER_WAT: &str = "rs/tests/counter.wat";
 
-const SUBNET_SIZE: usize = 13;
+const SUBNET_SIZE: usize = 4; // 4-node subnet
 const INITIAL_NOTARY_DELAY: Duration = Duration::from_millis(200);
 
 // 100,000 canisters, with 500 batches, will take ~25 minutes to set up.
 // Yields 280-310ms commit and certify times.
 // We need minimum 350+ms, so we should probably push this to 150,000 canisters.
-const NUMBER_OF_CANISTERS_TO_INSTALL: u64 = 200_000;
+const NUMBER_OF_CANISTERS_TO_INSTALL: u64 = 100_000; //100k canisters
 const CANISTERS_INSTALLED_PER_CLONER_CANISTER: u64 = 500;
 const AMOUNT_OF_CLONER_CANISTERS: u64 =
     NUMBER_OF_CANISTERS_TO_INSTALL / CANISTERS_INSTALLED_PER_CLONER_CANISTER;
