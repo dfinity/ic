@@ -9,6 +9,18 @@ PATH="/sbin:/bin:/usr/sbin:/usr/bin"
 source /opt/ic/bin/config.sh
 source /opt/ic/bin/functions.sh
 
+function check_generate_network_config() {
+    if [ "$(systemctl is-failed generate-network-config.service)" = "failed" ]; then
+        local service_logs=$(systemctl status generate-network-config.service)
+        local log_message="ERROR in generate-network-config.service
+
+        Logs:${service_logs}
+
+        For more detailed logs, run `$ journalctl -u generate-network-config`"
+        log_and_halt_installation_on_error "1" "${log_message}"
+    fi
+}
+
 function read_config_variables() {
     ipv6_prefix=$(get_config_value '.network_settings.ipv6_config.Deterministic.prefix')
     ipv6_gateway=$(get_config_value '.network_settings.ipv6_config.Deterministic.gateway')
@@ -209,6 +221,7 @@ function query_nns_nodes() {
 main() {
     log_start "$(basename $0)"
     if kernel_cmdline_bool_default_true ic.setupos.check_network; then
+        check_generate_network_config
         read_config_variables
         get_network_settings
         print_network_settings
