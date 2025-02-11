@@ -30,7 +30,7 @@ use tokio::{
             error::{TryRecvError, TrySendError},
             Receiver, Sender,
         },
-        OnceCell,
+        watch, OnceCell,
     },
 };
 use tonic::{transport::Channel, Code};
@@ -63,7 +63,7 @@ pub struct CanisterHttpAdapterClientImpl {
     query_service: QueryExecutionService,
     metrics: Metrics,
     subnet_type: SubnetType,
-    delegation_from_nns: Arc<OnceCell<CertificateDelegation>>,
+    delegation_from_nns: watch::Receiver<Option<CertificateDelegation>>,
 }
 
 impl CanisterHttpAdapterClientImpl {
@@ -74,7 +74,7 @@ impl CanisterHttpAdapterClientImpl {
         inflight_requests: usize,
         metrics_registry: MetricsRegistry,
         subnet_type: SubnetType,
-        delegation_from_nns: Arc<OnceCell<CertificateDelegation>>,
+        delegation_from_nns: watch::Receiver<Option<CertificateDelegation>>,
     ) -> Self {
         let (tx, rx) = channel(inflight_requests);
         let metrics = Metrics::new(&metrics_registry);
@@ -122,7 +122,7 @@ impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
         let query_handler = self.query_service.clone();
         let metrics = self.metrics.clone();
         let subnet_type = self.subnet_type;
-        let delegation_from_nns = self.delegation_from_nns.get().cloned();
+        let delegation_from_nns = self.delegation_from_nns.borrow().clone();
 
         // Spawn an async task that sends the canister http request to the adapter and awaits the response.
         // After receiving the response from the adapter an optional transform is applied by doing an upcall to execution.

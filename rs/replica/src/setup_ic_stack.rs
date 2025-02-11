@@ -9,6 +9,7 @@ use ic_consensus::certification::VerifierImpl;
 use ic_crypto::CryptoComponent;
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_execution_environment::ExecutionServices;
+use ic_http_endpoints_public::start_root_delegation_manager;
 use ic_http_endpoints_xnet::XNetEndpoint;
 use ic_https_outcalls_adapter_client::setup_canister_http_client;
 use ic_interfaces::{
@@ -131,8 +132,6 @@ pub fn construct_ic_stack(
         registry.get_latest_version(),
         registry.as_ref(),
     );
-
-    let delegation_from_nns = Arc::new(OnceCell::new());
 
     // ---------- THE PERSISTED CONSENSUS ARTIFACT POOL DEPS FOLLOW ----------
     // This is the first object that is required for the creation of the IC stack. Initializing the
@@ -280,6 +279,17 @@ pub fn construct_ic_stack(
         config.bitcoin_payload_builder_config,
         log.clone(),
     ));
+
+    let (_, nns_delegation_watcher) = start_root_delegation_manager(
+        config.http_handler.clone(),
+        log.clone(),
+        rt_handle_http.clone(),
+        subnet_id,
+        root_subnet_id,
+        registry.clone(),
+        Arc::clone(&crypto) as Arc<_>,
+    );
+
     // ---------- HTTPS OUTCALLS PAYLOAD BUILDER DEPS FOLLOW ----------
     let canister_http_adapter_client = setup_canister_http_client(
         rt_handle_main.clone(),
@@ -289,7 +299,7 @@ pub fn construct_ic_stack(
         max_canister_http_requests_in_flight,
         log.clone(),
         subnet_type,
-        delegation_from_nns.clone(),
+        nns_delegation_watcher.clone(),
     );
     // ---------- CONSENSUS AND P2P DEPS FOLLOW ----------
     let state_sync = StateSync::new(state_manager.clone(), log.clone());
@@ -325,6 +335,7 @@ pub fn construct_ic_stack(
         config.nns_registry_replicator.poll_delay_duration_ms,
         max_certified_height_tx,
     );
+
     // ---------- PUBLIC ENDPOINT DEPS FOLLOW ----------
     ic_http_endpoints_public::start_server(
         rt_handle_http.clone(),
@@ -346,7 +357,7 @@ pub fn construct_ic_stack(
         consensus_pool_cache,
         subnet_type,
         config.malicious_behaviour.malicious_flags,
-        delegation_from_nns,
+        nns_delegation_watcher.clone(),
         Arc::new(Pprof),
         tracing_handle,
         max_certified_height_rx,

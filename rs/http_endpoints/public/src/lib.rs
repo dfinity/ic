@@ -10,7 +10,6 @@ mod common;
 mod dashboard;
 mod health_status_refresher;
 pub mod metrics;
-mod nns_delegation_manager;
 mod pprof;
 mod query;
 mod read_state;
@@ -164,19 +163,12 @@ struct HttpHandler {
 // Crates a detached tokio blocking task that initializes the server (reading
 // required state, etc).
 fn start_server_initialization(
-    config: Config,
     log: ReplicaLogger,
     metrics: HttpHandlerMetrics,
-    subnet_id: SubnetId,
-    nns_subnet_id: SubnetId,
-    registry_client: Arc<dyn RegistryClient>,
     state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
-    delegation_from_nns: Arc<OnceCell<CertificateDelegation>>,
     health_status: Arc<AtomicCell<ReplicaHealthStatus>>,
     rt_handle: tokio::runtime::Handle,
-    tls_config: Arc<dyn TlsConfig + Send + Sync>,
 ) {
-    let rt_handle_clone = rt_handle.clone();
     rt_handle.spawn(async move {
         info!(log, "Initializing HTTP server...");
         // Sleep one second between retries, only log every 10th round.
@@ -201,19 +193,6 @@ fn start_server_initialization(
         // Fetch the delegation from the NNS for this subnet to be
         // able to issue certificates.
         health_status.store(ReplicaHealthStatus::WaitingForRootDelegation);
-        //let loaded_delegation = load_root_delegation(
-        //    &config,
-        //    &log,
-        //    rt_handle_clone,
-        //    subnet_id,
-        //    nns_subnet_id,
-        //    registry_client.as_ref(),
-        //    tls_config.as_ref(),
-        //)
-        //.await;
-        //if let Some(delegation) = loaded_delegation {
-        //    let _ = delegation_from_nns.set(delegation);
-        //}
         metrics
             .health_status_transitions_total
             .with_label_values(&[
@@ -298,7 +277,7 @@ pub fn start_server(
     consensus_pool_cache: Arc<dyn ConsensusPoolCache>,
     subnet_type: SubnetType,
     malicious_flags: MaliciousFlags,
-    delegation_from_nns: Arc<OnceCell<CertificateDelegation>>,
+    delegation_from_nns: watch::Receiver<Option<CertificateDelegation>>,
     pprof_collector: Arc<dyn PprofCollector>,
     tracing_handle: ReloadHandles,
     certified_height_watcher: watch::Receiver<Height>,
@@ -404,17 +383,11 @@ pub fn start_server(
     );
 
     start_server_initialization(
-        config.clone(),
         log.clone(),
         metrics.clone(),
-        subnet_id,
-        nns_subnet_id,
-        registry_client.clone(),
         state_reader,
-        Arc::clone(&delegation_from_nns),
         Arc::clone(&health_status),
         rt_handle.clone(),
-        tls_config.clone(),
     );
 
     let http_handler = HttpHandler {
@@ -792,13 +765,10 @@ pub fn start_root_delegation_manager(
     nns_subnet_id: SubnetId,
     registry_client: Arc<dyn RegistryClient>,
     tls_config: Arc<dyn TlsConfig + Send + Sync>,
-) -> (JoinHandle<()>, Receiver<CertificateDelegation>) {
-    // On the NNS subnet. No delegation needs to be fetched.
-    if subnet_id == nns_subnet_id {
-        info!(log, "On the NNS subnet. Skipping fetching the delegation.");
-        return;
-    }
-
+) -> (
+    JoinHandle<()>,
+    watch::Receiver<Option<CertificateDelegation>>,
+) {
     let manager = DelegationManager {
         config,
         log,
@@ -808,32 +778,14 @@ pub fn start_root_delegation_manager(
         tls_config,
     };
 
-    let delegation = manager.fetch_delegation().await;
+    let delegation = rt_handle.block_on(manager.fetch());
 
     let (tx, rx) = channel(delegation);
 
-    (rt.spawn(manager.run()), rx)
+    (rt_handle.spawn(manager.run(tx)), rx)
 }
 
 const DELEGATION_UPDATE_INTERVAL: Duration = Duration::from_secs(5);
-
-async fn delegation_loop() {
-    let mut interval = tokio::time::interval(DELEGATION_UPDATE_INTERVAL);
-
-    loop {
-        let _ = interval.tick().await;
-
-        let delegation = load_root_delegation(
-            config,
-            log,
-            subnet_id,
-            nns_subnet_id,
-            registry_client,
-            tls_config,
-        )
-        .await;
-    }
-}
 
 struct DelegationManager {
     config: Config,
@@ -845,15 +797,28 @@ struct DelegationManager {
 }
 
 impl DelegationManager {
-    async fn fetch(&self) -> CertificateDelegation {
+    async fn fetch(&self) -> Option<CertificateDelegation> {
         load_root_delegation(
             &self.config,
             &self.log,
             self.subnet_id,
             self.nns_subnet_id,
-            &self.registry_client,
-            &self.tls_config,
+            self.registry_client.as_ref(),
+            self.tls_config.as_ref(),
         )
+        .await
+    }
+
+    async fn run(self, sender: watch::Sender<Option<CertificateDelegation>>) {
+        let mut interval = tokio::time::interval(DELEGATION_UPDATE_INTERVAL);
+
+        loop {
+            let _ = interval.tick().await;
+
+            let delegation = self.fetch().await;
+
+            sender.send(delegation).expect("FIXME");
+        }
     }
 }
 
@@ -866,7 +831,13 @@ async fn load_root_delegation(
     nns_subnet_id: SubnetId,
     registry_client: &dyn RegistryClient,
     tls_config: &(dyn TlsConfig + Send + Sync),
-) -> CertificateDelegation {
+) -> Option<CertificateDelegation> {
+    // On the NNS subnet. No delegation needs to be fetched.
+    if subnet_id == nns_subnet_id {
+        info!(log, "On the NNS subnet. Skipping fetching the delegation.");
+        return None;
+    }
+
     let mut fetching_root_delagation_attempts = 0;
 
     loop {
@@ -889,7 +860,7 @@ async fn load_root_delegation(
         )
         .await
         {
-            Ok(delegation) => return delegation,
+            Ok(delegation) => return Some(delegation),
             Err(err) => {
                 warn!(
                     log,
@@ -993,7 +964,7 @@ async fn try_fetch_delegation_from_nns(
     let log_clone = log.clone();
 
     // Spawn a task to poll the connection, driving the HTTP state
-    rt_handle.spawn(async move {
+    tokio::spawn(async move {
         if let Err(err) = connection.await {
             warn!(log_clone, "Polling connection failed: {:?}.", err);
         }
