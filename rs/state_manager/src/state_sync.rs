@@ -124,11 +124,7 @@ impl StateSync {
                 if metadata.root_hash().map(|v| v.get_ref()) == Some(&msg_id.hash) {
                     let manifest = metadata.manifest()?;
                     let meta_manifest = metadata.meta_manifest()?;
-                    let checkpoint_root = self
-                        .state_manager
-                        .state_layout
-                        .checkpoint_verified(*height)
-                        .ok()?;
+                    let checkpoint_root = metadata.checkpoint_layout.as_ref()?;
                     let state_sync_file_group = match &metadata.state_sync_file_group {
                         Some(value) => value.clone(),
                         None => {
@@ -190,11 +186,7 @@ impl StateSync {
                     let metadata = states.states_metadata.get(&h)?;
                     let manifest = metadata.manifest()?;
                     let meta_manifest = metadata.meta_manifest()?;
-                    let checkpoint_root = self
-                        .state_manager
-                        .state_layout
-                        .checkpoint_verified(h)
-                        .ok()?;
+                    let checkpoint_root = metadata.checkpoint_layout.as_ref()?;
                     let msg = StateSyncMessage {
                         height: h,
                         root_hash: metadata.root_hash()?.clone(),
