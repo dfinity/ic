@@ -166,7 +166,6 @@ impl GetSuccessorsHandler {
                 .try_send(BlockchainManagerRequest::EnqueueNewBlocksToDownload(next))
                 .ok();
         }
-        obsolete_blocks.extend(request.processed_block_hashes);
         // TODO: better handling of full channel as the receivers are never closed.
         self.blockchain_manager_tx
             .try_send(BlockchainManagerRequest::PruneBlocks(
