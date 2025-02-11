@@ -179,13 +179,13 @@ fn get_block_stable(index: u64) -> Option<EncodedBlock> {
 }
 
 // Return the number of bytes the canister can still accommodate
-fn remaining_capacity() -> usize {
+fn remaining_capacity() -> u64 {
     let remaining_capacity = MAX_BLOCKS_MEMORY_SIZE - stable_blocks_size();
     print(format!(
         "[archive node] remaining_capacity: {} bytes",
         remaining_capacity
     ));
-    remaining_capacity as usize
+    remaining_capacity
 }
 
 fn init(
