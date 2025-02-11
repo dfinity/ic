@@ -46,7 +46,8 @@ jobs:
           python $CI_PROJECT_DIR/.github/scripts/generate-ci.py
 
           if [ -n "$(git status --porcelain)" ]; then
-            git config user.name ${{ github.actor }}
+            git config --global user.name "IDX GitHub Automation"
+            git config --global user.email <>
             git add .
             git commit -m "IDX GitHub Automation"
             git push
