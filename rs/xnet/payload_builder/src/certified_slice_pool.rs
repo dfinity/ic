@@ -375,7 +375,7 @@ impl Payload {
     ///
     /// Returns `Err(InvalidPayload)` if `self.messages` is malformed.
     #[allow(clippy::assertions_on_constants)]
-    pub fn take_prefix(
+    pub fn take_prefix<const MAX_STREAM_MESSAGES: usize>(
         mut self,
         message_limit: Option<usize>,
         byte_limit: Option<usize>,
@@ -392,7 +392,7 @@ impl Payload {
         let max_message_limit = {
             let messages_begin =
                 self.messages_begin().unwrap_or(self.header.begin()).get() as usize;
-            let max_message_index = max_message_index(self.header.begin()).get() as usize;
+            let max_message_index = max_message_index::<MAX_STREAM_MESSAGES>(self.header.begin()).get() as usize;
             // The use of `saturating_sub()` allows decreasing `max_message_index` since for this
             // case we could have `max_message_index < messages_begin`. This will result in empty
             // prefixes until `stream_begin` (and thus `max_message_index`) has progressed enough
@@ -785,7 +785,7 @@ impl UnpackedStreamSlice {
     ///
     /// Returns `Err(InvalidPayload)` or `Err(WitnessPruningFailed)` if
     /// `self.payload` is malformed.
-    pub fn take_prefix(
+    pub fn take_prefix<const MAX_STREAM_MESSAGES: usize>(
         mut self,
         msg_limit: Option<usize>,
         mut byte_limit: Option<usize>,
@@ -799,7 +799,7 @@ impl UnpackedStreamSlice {
             byte_limit = Some(byte_limit_ - certification_count_bytes);
         }
 
-        match self.payload.take_prefix(msg_limit, byte_limit)? {
+        match self.payload.take_prefix::<MAX_STREAM_MESSAGES>(msg_limit, byte_limit)? {
             (None, None) => unreachable!("slice with no messages or signals"),
 
             // Nothing taken, put back the payload.
@@ -1128,14 +1128,14 @@ impl CertifiedSlicePool {
     /// the pooled slice if malformed. Returns `Err(TakeBeforeSliceBegin)` and
     /// drops the pooled slice if `begin`'s `message_index` is before the
     /// first pooled message.
-    pub fn take_slice(
+    pub fn take_slice<const MAX_STREAM_MESSAGES: usize>(
         &mut self,
         subnet_id: SubnetId,
         begin: Option<&ExpectedIndices>,
         msg_limit: Option<usize>,
         byte_limit: Option<usize>,
     ) -> CertifiedSliceResult<Option<(CertifiedStreamSlice, usize)>> {
-        match self.take_slice_impl(subnet_id, begin, msg_limit, byte_limit) {
+        match self.take_slice_impl::<MAX_STREAM_MESSAGES>(subnet_id, begin, msg_limit, byte_limit) {
             Ok(Some(slice)) => {
                 let slice_count_bytes = slice.count_bytes();
                 debug_assert!(slice_count_bytes <= byte_limit.unwrap_or(usize::MAX));
@@ -1168,7 +1168,7 @@ impl CertifiedSlicePool {
     /// `self.payload` is malformed. Returns `Err(TakeBeforeSliceBegin)` if
     /// `begin`'s `message_index` is before the pooled slice's messages begin
     /// index.
-    fn take_slice_impl(
+    fn take_slice_impl<const MAX_STREAM_MESSAGES: usize>(
         &mut self,
         subnet_id: SubnetId,
         begin: Option<&ExpectedIndices>,
@@ -1208,7 +1208,7 @@ impl CertifiedSlicePool {
             .observe_take_messages_gced(original_message_count - prefix_message_count);
         let signals_end = slice.payload.header.signals_end();
 
-        let (prefix, slice) = slice.take_prefix(msg_limit, byte_limit)?;
+        let (prefix, slice) = slice.take_prefix::<MAX_STREAM_MESSAGES>(msg_limit, byte_limit)?;
 
         // Put back the rest of the slice, if any.
         if let Some(slice) = slice {

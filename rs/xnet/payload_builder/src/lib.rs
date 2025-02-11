@@ -23,6 +23,7 @@ use ic_interfaces::messaging::{
     InvalidXNetPayload, XNetPayloadBuilder, XNetPayloadValidationError,
     XNetPayloadValidationFailure,
 };
+use ic_messaging::MAX_STREAM_MESSAGES;
 use ic_interfaces::validation::ValidationError;
 use ic_interfaces_certified_stream_store::CertifiedStreamStore;
 use ic_interfaces_registry::RegistryClient;
@@ -223,10 +224,6 @@ impl XNetPayloadBuilderMetrics {
             .observe(since.elapsed().as_secs_f64());
     }
 }
-
-// TODO(MR-636): Consider making this an argument to allow for testing without generating so many
-// messages; or else at least unify this constant and `MAX_STREAM_MESSAGES` in the stream builder.
-pub const MAX_STREAM_MESSAGES: usize = 10_000;
 
 /// Implementation of `XNetPayloadBuilder` that uses a `StateManager`,
 /// `RegistryClient` and `XNetClient` to build and validate `XNetPayloads`.
@@ -713,7 +710,7 @@ impl XNetPayloadBuilderImpl {
             }
 
             // Ensure the signal limit is respected.
-            let max_message_index = max_message_index(slice.header().begin());
+            let max_message_index = max_message_index::<MAX_STREAM_MESSAGES>(slice.header().begin());
             if messages.end() > max_message_index {
                 warn!(
                     self.log,
@@ -929,7 +926,7 @@ pub fn get_msg_limit(subnet_id: SubnetId, state: &ReplicatedState) -> Option<usi
 /// `stream_begin` is the `begin` in the `StreamHeader` contained in the (same) stream slice.
 ///  It reflects the status on the remote subnet as far as we know at present. Up to this index
 ///  signals can be gc'ed in the reverse stream.
-pub fn max_message_index(stream_begin: StreamIndex) -> StreamIndex {
+pub fn max_message_index<const MAX_STREAM_MESSAGES: usize>(stream_begin: StreamIndex) -> StreamIndex {
     stream_begin + (MAX_STREAM_MESSAGES as u64).into()
 }
 
@@ -1453,7 +1450,7 @@ impl XNetSlicePool for XNetSlicePoolImpl {
         byte_limit: Option<usize>,
     ) -> Result<Option<(CertifiedStreamSlice, usize)>, CertifiedSliceError> {
         let mut slice_pool = self.slice_pool.lock().unwrap();
-        slice_pool.take_slice(subnet_id, begin, msg_limit, byte_limit)
+        slice_pool.take_slice::<MAX_STREAM_MESSAGES>(subnet_id, begin, msg_limit, byte_limit)
     }
 
     fn observe_pool_size_bytes(&self) {
