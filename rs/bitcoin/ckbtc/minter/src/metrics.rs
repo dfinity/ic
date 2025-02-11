@@ -7,75 +7,107 @@ use std::time::Duration;
 thread_local! {
     pub static GET_UTXOS_CLIENT_CALLS: Cell<u64> = Cell::default();
     pub static GET_UTXOS_MINTER_CALLS: Cell<u64> = Cell::default();
-    pub static UPDATE_CALL_LATENCY: RefCell<BTreeMap<usize,LatencyHistogram>> = RefCell::default();
-    pub static GET_UTXOS_CALL_LATENCY: RefCell<BTreeMap<(usize, String),LatencyHistogram>> = RefCell::default();
+    pub static UPDATE_CALL_LATENCY: RefCell<BTreeMap<usize,Histogram<8>>> = RefCell::default();
+    pub static GET_UTXOS_CALL_LATENCY: RefCell<BTreeMap<(usize, String),Histogram<8>>> = RefCell::default();
 }
 
-pub(crate) const BUCKETS_MS: [u64; 7] = [500, 1_000, 2_000, 4_000, 8_000, 16_000, 32_000];
+pub(crate) const BUCKETS_MS: [u64; 8] = [500, 1_000, 2_000, 4_000, 8_000, 16_000, 32_000, u64::MAX];
+pub(crate) const BUCKETS_UTXOS: [u64; 8] = [1, 4, 16, 64, 256, 1024, 4096, u64::MAX];
 
-#[derive(Default, Clone, Copy)]
-pub struct LatencyHistogram {
-    latency_buckets: [u64; BUCKETS_MS.len() + 1],
-    latency_sum: u64,
+pub struct NumUtxosHistogram(Histogram<8>);
+
+impl Default for NumUtxosHistogram {
+    fn default() -> Self {
+        Self {
+            0: Histogram::new(&BUCKETS_UTXOS),
+        }
+    }
+}
+
+pub type LatencyHistogram = Histogram<8>;
+
+impl Default for LatencyHistogram {
+    fn default() -> Self {
+        Histogram::new(&BUCKETS_MS)
+    }
 }
 
 impl LatencyHistogram {
-    pub fn observe_latency(&mut self, latency: Duration) {
-        let latency_ms = latency.as_millis() as u64;
-        let bucket_index = BUCKETS_MS
+    pub fn observe_latency(&mut self, start_ns: u64, end_ns: u64) {
+        let duration = Duration::from_nanos(end_ns.saturating_sub(start_ns));
+        self.observe_value(duration.as_millis() as u64)
+    }
+}
+
+#[derive(Clone, Copy)]
+pub struct Histogram<const NUM_BUCKETS: usize> {
+    bucket_upper_bounds: &'static [u64; NUM_BUCKETS],
+    bucket_counts: [u64; NUM_BUCKETS],
+    value_sum: u64,
+}
+
+impl<const NUM_BUCKETS: usize> Histogram<NUM_BUCKETS> {
+    pub fn new(bucket_upper_bounds: &'static [u64; NUM_BUCKETS]) -> Self {
+        Histogram {
+            bucket_upper_bounds,
+            bucket_counts: [0; NUM_BUCKETS],
+            value_sum: 0,
+        }
+    }
+
+    pub fn observe_value(&mut self, value: u64) {
+        let bucket_index = self.bucket_upper_bounds[..self.bucket_counts.len() - 1]
             .iter()
             .enumerate()
             .find_map(|(bucket_index, bucket_upper_bound)| {
-                if latency_ms <= *bucket_upper_bound {
+                if value <= *bucket_upper_bound {
                     Some(bucket_index)
                 } else {
                     None
                 }
             })
-            .unwrap_or(self.latency_buckets.len() - 1); // infinity bucket
-        self.latency_buckets[bucket_index] += 1;
-        self.latency_sum += latency_ms;
+            .unwrap_or(self.bucket_upper_bounds.len() - 1); // infinity bucket
+        self.bucket_counts[bucket_index] += 1;
+        self.value_sum += value;
     }
 
     /// Returns an iterator over the histogram buckets as tuples containing the bucket upper bound
     /// (inclusive), and the count of observed values within the bucket.
     pub(crate) fn iter(&self) -> impl Iterator<Item = (f64, f64)> + '_ {
-        BUCKETS_MS
+        self.bucket_upper_bounds[..self.bucket_counts.len() - 1]
             .iter()
             .map(|bucket| *bucket as f64)
             .chain(std::iter::once(f64::INFINITY))
-            .zip(self.latency_buckets.iter().cloned())
+            .zip(self.bucket_counts.iter().cloned())
             .map(|(k, v)| (k, v as f64))
     }
 
     /// Returns the sum of all observed latencies in milliseconds.
     pub(crate) fn sum(&self) -> u64 {
-        self.latency_sum
+        self.value_sum
     }
 }
 
 pub fn observe_get_utxos_latency(
-    num_utxos: usize,
+    num_pages: usize,
     call_source: String,
     start_ns: u64,
     end_ns: u64,
 ) {
-    let duration = Duration::from_nanos(end_ns.saturating_sub(start_ns));
     GET_UTXOS_CALL_LATENCY.with_borrow_mut(|metrics| {
         metrics
-            .entry((num_utxos, call_source))
+            .entry((num_pages, call_source))
             .or_default()
-            .observe_latency(duration)
+            .observe_latency(start_ns, end_ns);
     });
 }
 
 pub fn observe_update_call_latency(num_new_utxos: usize, start_ns: u64, end_ns: u64) {
-    let duration = Duration::from_nanos(end_ns.saturating_sub(start_ns));
     UPDATE_CALL_LATENCY.with_borrow_mut(|metrics| {
         metrics
             .entry(num_new_utxos)
             .or_default()
-            .observe_latency(duration)
+            .observe_latency(start_ns, end_ns);
     });
 }
 
@@ -309,10 +341,10 @@ pub fn encode_metrics(
     )?;
 
     GET_UTXOS_CALL_LATENCY.with_borrow(|histograms| -> Result<(), Error> {
-        for ((num_utxos, call_source), histogram) in histograms {
+        for ((num_pages, call_source), histogram) in histograms {
             histogram_vec = histogram_vec.histogram(
                 &[
-                    ("num_utxos", &num_utxos.to_string()),
+                    ("num_pages", &num_pages.to_string()),
                     ("call_source", &call_source.to_string()),
                 ],
                 histogram.iter(),
