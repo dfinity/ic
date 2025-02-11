@@ -423,7 +423,6 @@ impl Hypervisor {
             }
         };
         update_round_limits(round_limits, &slice);
-        println!("canister state changes: {:?}", canister_state_changes);
         apply_canister_state_changes(
             canister_state_changes,
             &mut execution_state,
