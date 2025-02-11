@@ -6851,6 +6851,16 @@ impl Governance {
 
     /// Return `true` if rewards should be distributed, `false` otherwise
     fn should_distribute_rewards(&self) -> bool {
+        // This is to mitigate the issue caused by neuron migration. While this early return is in
+        // place, the rewards distribution will pause, which allows the reverse neuron migration to
+        // complete. Before the reverse migration runs, those 2 values are 377K/0. After the reverse
+        // migration is complete, they should be about 284K/92K. The values in the below condition
+        // is chosen to account for any potential changes in the number of neurons in the system.
+        if self.neuron_store.stable_neuron_store_len() > 274_000
+            && self.neuron_store.heap_neuron_store_len() < 82_000
+        {
+            return false;
+        }
         let latest_distribution_nominal_end_timestamp_seconds =
             self.latest_reward_event().day_after_genesis * REWARD_DISTRIBUTION_PERIOD_SECONDS
                 + self.heap_data.genesis_timestamp_seconds;
