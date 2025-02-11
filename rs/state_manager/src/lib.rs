@@ -3530,6 +3530,15 @@ impl StateManager for StateManagerImpl {
             oldest_checkpoint_to_keep,
             &BTreeSet::new(),
         );
+        let elapsed = start.elapsed().as_secs_f64();
+        if elapsed > 0.5 {
+            info!(
+                self.log,
+                "remove_states_below {} took too long {:.2} seconds to complete",
+                requested_height,
+                elapsed
+            );
+        }
     }
 
     /// Variant of `remove_states_below()` that only removes states committed with
