@@ -12,11 +12,16 @@ source /opt/ic/bin/functions.sh
 function check_generate_network_config() {
     if [ "$(systemctl is-failed generate-network-config.service)" = "failed" ]; then
         local service_logs=$(systemctl status generate-network-config.service)
+        local network_settings=$(get_config_value '.network_settings')
         local log_message="ERROR in generate-network-config.service
 
-        Logs:${service_logs}
+generate-network-config.service logs:
+${service_logs}
 
-        For more detailed logs, run `$ journalctl -u generate-network-config`"
+Config network settings:
+${network_settings}
+
+For more detailed generate-network-config.service logs, run \`\$ journalctl -u generate-network-config\`"
         log_and_halt_installation_on_error "1" "${log_message}"
     fi
 }
