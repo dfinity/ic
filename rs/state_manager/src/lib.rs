@@ -2620,7 +2620,7 @@ impl StateManagerImpl {
         }
         let state = Arc::new(state);
         self.tip_channel
-            .send(TipRequest::ValidateReplicatedState {
+            .send(TipRequest::ValidateReplicatedStateAndFinalize {
                 checkpoint_layout: cp_layout.clone(),
                 reference_state: Arc::clone(&state),
                 own_subnet_type: self.own_subnet_type,

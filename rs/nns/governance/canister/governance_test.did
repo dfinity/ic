@@ -440,6 +440,11 @@ type ListNeurons = record {
   include_neurons_readable_by_caller : bool;
   page_number: opt nat64;
   page_size: opt nat64;
+  neuron_subaccounts: opt vec NeuronSubaccount;
+};
+
+type NeuronSubaccount = record {
+  subaccount : blob;
 };
 
 type ListNeuronsResponse = record {

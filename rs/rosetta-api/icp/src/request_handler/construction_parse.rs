@@ -97,7 +97,9 @@ impl RosettaRequestHandler {
                 RequestType::StakeMaturity { neuron_index } => {
                     stake_maturity(&mut requests, arg, from, neuron_index)?
                 }
-                RequestType::ListNeurons => list_neurons(&mut requests, arg, from)?,
+                RequestType::ListNeurons { page_number } => {
+                    list_neurons(&mut requests, arg, from, Some(page_number))?
+                }
                 RequestType::NeuronInfo {
                     neuron_index,
                     controller,
@@ -550,8 +552,12 @@ fn list_neurons(
     requests: &mut Vec<Request>,
     _arg: Blob,
     from: AccountIdentifier,
+    page_number: Option<u64>,
 ) -> Result<(), ApiError> {
-    requests.push(Request::ListNeurons(ListNeurons { account: from }));
+    requests.push(Request::ListNeurons(ListNeurons {
+        account: from,
+        page_number,
+    }));
     Ok(())
 }
 

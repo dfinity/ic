@@ -1279,7 +1279,7 @@ dependencies = [
  "bitcoin_hashes 0.14.0",
  "hex-conservative",
  "hex_lit",
- "secp256k1 0.29.1",
+ "secp256k1 0.29.0",
  "serde",
 ]
 
@@ -1785,9 +1785,9 @@ dependencies = [
 
 [[package]]
 name = "canbench"
-version = "0.1.8"
+version = "0.1.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cb548f9e006ad29b160d37e07435c499af7d2741918e18d95ddc87dfe97a0b8d"
+checksum = "c3eba78c84aa78e67f27c5c5a7d6c3d33cc301f95886171748e8f6ed8a31b258"
 dependencies = [
  "canbench-rs",
  "candid",
@@ -1807,9 +1807,9 @@ dependencies = [
 
 [[package]]
 name = "canbench-rs"
-version = "0.1.8"
+version = "0.1.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "497d900e11ab1891dd9743dd45dbeaada540ce323aa1adc7fc0ce1da2c6e86ff"
+checksum = "588701e2d05679b79603acca6a6f8b78fe0d21f5f7a9c06fe689f769ae797008"
 dependencies = [
  "canbench-rs-macros",
  "candid",
@@ -1819,9 +1819,9 @@ dependencies = [
 
 [[package]]
 name = "canbench-rs-macros"
-version = "0.1.8"
+version = "0.1.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5a5509bcfe6eeb86f057d46fbf20a2ba6b6bf9a1099b053a8f491cd7a909dfa6"
+checksum = "e05fe21a7dfc85c3be8e40edbbcb3fe23b4c070fac4741eff18129f1d0f11aa9"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -3334,6 +3334,7 @@ dependencies = [
  "mach2",
  "maplit",
  "maxminddb",
+ "memmap2 0.9.5",
  "metrics-proxy",
  "minicbor",
  "minicbor-derive",
@@ -5612,9 +5613,9 @@ dependencies = [
 
 [[package]]
 name = "ic-identity-hsm"
-version = "0.39.2"
+version = "0.39.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0ebb94d7cb5be09bed47655008f0c2968a3a3253dcf680297f3e8475e4b317c4"
+checksum = "e294ee038eb647cd9cce78b5961533be7f883494e6ea1faece52459bce2d29e9"
 dependencies = [
  "hex",
  "ic-agent",
@@ -7177,6 +7178,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "memmap2"
+version = "0.9.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fd3f7eed9d3848f8b98834af67102b720745c4ec028fcd0aa0239277e7de374f"
+dependencies = [
+ "libc",
+]
+
+[[package]]
 name = "memoffset"
 version = "0.6.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7305,9 +7315,9 @@ dependencies = [
 
 [[package]]
 name = "minreq"
-version = "2.13.0"
+version = "2.13.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "36a8e50e917e18a37d500d27d40b7bc7d127e71c0c94fb2d83f43b4afd308390"
+checksum = "da0c420feb01b9fb5061f8c8f452534361dd783756dcf38ec45191ce55e7a161"
 dependencies = [
  "log",
  "serde",
@@ -10510,9 +10520,9 @@ dependencies = [
 
 [[package]]
 name = "secp256k1"
-version = "0.29.1"
+version = "0.29.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9465315bc9d4566e1724f0fffcbcc446268cb522e60f9a27bcded6b19c108113"
+checksum = "0e0cc0f1cf93f4969faf3ea1c7d8a9faed25918d96affa959720823dfe86d4f3"
 dependencies = [
  "bitcoin_hashes 0.14.0",
  "rand 0.8.5",
@@ -11450,7 +11460,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9e0e9bc48b3852f36a84f8d0da275d50cb3c2b88b59b9ec35fdd8b7fa239e37d"
 dependencies = [
  "debugid",
- "memmap2",
+ "memmap2 0.5.10",
  "stable_deref_trait",
  "uuid",
 ]

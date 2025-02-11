@@ -6,7 +6,7 @@ use crate::crypto::ExtendedDerivationPath;
 use crate::{Height, Randomness};
 #[cfg(test)]
 use ic_exhaustive_derive::ExhaustiveSet;
-use ic_management_canister_types::SchnorrKeyId;
+use ic_management_canister_types_private::SchnorrKeyId;
 use ic_protobuf::proxy::{try_from_option_field, ProxyDecodeError};
 use ic_protobuf::types::v1 as pb;
 use serde::{Deserialize, Serialize};

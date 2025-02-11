@@ -118,7 +118,7 @@ impl GetSuccessorsHandler {
             .processed_block_hashes
             .observe(request.processed_block_hashes.len() as f64);
 
-        let (blocks, next, mut obsolete_blocks) = {
+        let (blocks, next, obsolete_blocks) = {
             let state = self.state.lock().unwrap();
             let anchor_height = state
                 .get_cached_header(&request.anchor)
@@ -142,12 +142,13 @@ impl GetSuccessorsHandler {
             // If no blocks are returned, this means that nothing that is in the cache could be reached from the anchor.
             // We can safely remove everything that is in the cache then, as those blocks are no longer needed.
             // There is a chance that these blocks are above the anchor height (but they were forked below it),
-            // meaning that the regular "pruning anything below anchor" will now affect them.
-            let obsolete_blocks = if blocks.is_empty() {
-                state.get_cached_blocks()
-            } else {
-                vec![]
-            };
+            // meaning that the regular "pruning anything below anchor" will not affect them.
+            // There is also a chance that they are reachable from the anchor, just not through the cache.
+            // Meaning that we still need to download some other blocks first. (hence we need to free the cache).
+            let mut obsolete_blocks = request.processed_block_hashes;
+            if blocks.is_empty() && state.is_block_cache_full() {
+                obsolete_blocks.extend(state.get_cached_blocks())
+            }
             (blocks, next, obsolete_blocks)
         };
         let response_next = &next[..next.len().min(MAX_NEXT_BLOCK_HEADERS_LENGTH)];
@@ -205,23 +206,31 @@ fn get_successor_blocks(
         _ => MAX_BLOCKS_BYTES,
     };
 
+    let max_blocks_length = if allow_multiple_blocks {
+        MAX_BLOCKS_LENGTH
+    } else {
+        1
+    };
+
     // Compute the blocks by starting a breadth-first search.
     while let Some(block_hash) = queue.pop_front() {
         if !seen.contains(block_hash) {
             // Retrieve the block from the cache.
-            if let Some(block) = state.get_block(block_hash) {
-                let block_size = block.total_size();
-                if response_block_size == 0
-                    || (response_block_size + block_size <= max_blocks_size
-                        && successor_blocks.len() < MAX_BLOCKS_LENGTH
-                        && allow_multiple_blocks)
-                {
-                    successor_blocks.push(block.clone());
-                    response_block_size += block_size;
-                } else {
-                    break;
-                }
+            let Some(block) = state.get_block(block_hash) else {
+                // If the block is not in the cache, we skip it and all its subtree.
+                // We don't want to return orphaned blocks to the canister.
+                continue;
+            };
+            let block_size = block.total_size();
+            // If we have at least one block in the response, and we can't fit another block, we stop.
+            if response_block_size > 0
+                && (response_block_size + block_size > max_blocks_size
+                    || successor_blocks.len() + 1 > max_blocks_length)
+            {
+                break;
             }
+            successor_blocks.push(block);
+            response_block_size += block_size;
         }
 
         queue.extend(

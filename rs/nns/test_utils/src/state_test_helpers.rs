@@ -11,7 +11,7 @@ use cycles_minting_canister::{
 use dfn_http::types::{HttpRequest, HttpResponse};
 use dfn_protobuf::ToProto;
 use ic_base_types::{CanisterId, PrincipalId, SubnetId};
-use ic_management_canister_types::{
+use ic_management_canister_types_private::{
     CanisterInstallMode, CanisterSettingsArgs, CanisterSettingsArgsBuilder, CanisterStatusResultV2,
     UpdateSettingsArgs,
 };
@@ -1619,6 +1619,7 @@ pub fn list_neurons_by_principal(
             include_public_neurons_in_full_neurons: None,
             page_number: None,
             page_size: None,
+            neuron_subaccounts: None,
         },
     )
 }

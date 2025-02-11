@@ -9,6 +9,7 @@ members = [
     "packages/ic-ed25519",
     "packages/ic-ethereum-types",
     "packages/ic-metrics-assert",
+    "packages/ic-secp256k1",
     "packages/ic-sha3",
     "packages/ic-ledger-hash-of",
     "packages/ic-signature-verification",
@@ -81,7 +82,6 @@ members = [
     "rs/crypto/internal/crypto_lib/multi_sig/bls12_381",
     "rs/crypto/internal/crypto_lib/seed",
     "rs/crypto/internal/crypto_lib/sha2",
-    "rs/crypto/secp256k1",
     "rs/crypto/secrets_containers",
     "rs/crypto/internal/crypto_lib/threshold_sig/bls12_381",
     "rs/crypto/internal/crypto_lib/threshold_sig/canister_threshold_sig",
@@ -607,6 +607,7 @@ libflate = "2.1.0"
 libnss = "0.5.0"
 local-ip-address = "0.5.6"
 macaddr = "1.0"
+memmap2 = "0.9.5"
 minicbor = { version = "0.19.1", features = ["alloc", "derive"] }
 minicbor-derive = "0.13.0"
 mockall = "0.13.0"

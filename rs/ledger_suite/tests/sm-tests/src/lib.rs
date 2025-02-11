@@ -17,8 +17,8 @@ use ic_ledger_core::timestamp::TimeStamp;
 use ic_ledger_core::tokens::TokensType;
 use ic_ledger_core::Tokens;
 use ic_ledger_hash_of::HashOf;
-use ic_management_canister_types::CanisterSettingsArgsBuilder;
-use ic_management_canister_types::{
+use ic_management_canister_types_private::CanisterSettingsArgsBuilder;
+use ic_management_canister_types_private::{
     self as ic00, CanisterInfoRequest, CanisterInfoResponse, Method, Payload,
 };
 use ic_registry_subnet_type::SubnetType;
@@ -2800,7 +2800,7 @@ pub fn icrc1_test_stable_migration_endpoints_disabled<T>(
         if expect_error {
             result
                 .unwrap_err()
-                .assert_contains(ErrorCode::CanisterCalledTrap, "The Ledger is not ready.");
+                .assert_contains(ErrorCode::CanisterCalledTrap, "The Ledger is not ready");
         } else {
             assert!(result.is_ok());
         }

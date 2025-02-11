@@ -5,13 +5,13 @@ use dfn_core::api::{call, CanisterId};
 #[cfg(target_arch = "wasm32")]
 use dfn_core::println;
 use ic_base_types::{NodeId, PrincipalId, RegistryVersion, SubnetId};
-use ic_management_canister_types::{
+use ic_management_canister_types_private::{
     EcdsaKeyId, MasterPublicKeyId, SetupInitialDKGArgs, SetupInitialDKGResponse,
 };
 use ic_protobuf::registry::{
     node::v1::NodeRecord,
     subnet::v1::{
-        CatchUpPackageContents, ChainKeyConfig as ChainKeyConfigPb, EcdsaConfig as EcdsaConfigPb,
+        CatchUpPackageContents, ChainKeyConfig as ChainKeyConfigPb,
         SubnetFeatures as SubnetFeaturesPb, SubnetRecord,
     },
 };
@@ -19,9 +19,7 @@ use ic_registry_keys::{
     make_catch_up_package_contents_key, make_crypto_threshold_signing_pubkey_key,
     make_node_record_key, make_subnet_list_record_key, make_subnet_record_key,
 };
-use ic_registry_subnet_features::{
-    EcdsaConfig, KeyConfig as KeyConfigInternal, SubnetFeatures, DEFAULT_ECDSA_MAX_QUEUE_SIZE,
-};
+use ic_registry_subnet_features::{KeyConfig as KeyConfigInternal, SubnetFeatures};
 use ic_registry_subnet_type::SubnetType;
 use ic_registry_transport::pb::v1::{registry_mutation, RegistryMutation, RegistryValue};
 use on_wire::bytes;
@@ -84,17 +82,7 @@ impl Registry {
 
         // 2b. Invoke compute_initial_i_dkg_dealings on ic_00
 
-        // TODO[NNS1-3022]: Stop reading `payload.ecdsa_config` and mutating `payload`.
-
-        // Legacy ECDSA data is used only if there is nothing in `payload.chain_key_config`.
-        // Even if legacy ECDSA data is used, it is converted to `InitialChainKeyConfig` here.
-        let initial_chain_key_config_from_legacy_source =
-            payload.ecdsa_config.clone().map(|ecdsa_initial_config| {
-                InitialChainKeyConfigInternal::try_from(ecdsa_initial_config)
-                    .expect("Invalid EcdsaInitialConfig")
-            });
-
-        let initial_chain_key_config_from_new_source =
+        let initial_chain_key_config =
             payload
                 .chain_key_config
                 .clone()
@@ -103,17 +91,12 @@ impl Registry {
                         .expect("Invalid InitialChainKeyConfig")
                 });
 
-        let initial_chain_key_config = initial_chain_key_config_from_new_source
-            .or(initial_chain_key_config_from_legacy_source);
-
         let receiver_nodes = payload.node_ids.clone();
         let chain_key_initializations = self
             .get_all_initial_i_dkg_dealings_from_ic00(&initial_chain_key_config, receiver_nodes)
             .await;
 
-        // `payload` needs to be canonicalized, ensuring `ecdsa_config: None`.
         let payload = CreateSubnetPayload {
-            ecdsa_config: None,
             chain_key_config: initial_chain_key_config.map(InitialChainKeyConfig::from),
             ..payload
         };
@@ -190,10 +173,9 @@ impl Registry {
     }
 
     /// Validates runtime payload values that aren't checked by invariants.
+    /// Ensures that the obsolete ECDSA keys are not specified.
     /// Ensures all nodes for new subnet a) exist and b) are not in another subnet.
     /// Ensure all nodes for new subnet are not already assigned as ApiBoundaryNode.
-    /// Ensures that ECDSA keys are not specified using both the (deprecated) `ecdsa_config` and
-    ///  the new `chain_key_config` fields.
     /// Ensures that a valid `subnet_id` is specified for `KeyConfigRequest`s.
     /// Ensures that master public keys (a) exist and (b) are present on the requested subnet.
     fn validate_create_subnet_payload(&self, payload: &CreateSubnetPayload) {
@@ -246,42 +228,22 @@ impl Registry {
             }
         });
 
+        let Some(initial_chain_key_config) = &payload.chain_key_config else {
+            return; // Nothing to do.
+        };
+
         let prevalidated_initial_chain_key_config =
-            match (&payload.ecdsa_config, &payload.chain_key_config) {
-                (Some(_), Some(_)) => {
-                    panic!(
-                        "Deprecated field ecdsa_config cannot be specified with chain_key_config."
-                    );
-                }
-                (Some(ecdsa_initial_config), None) => {
-                    let initial_chain_key_config_from_legacy_source =
-                        InitialChainKeyConfigInternal::try_from(ecdsa_initial_config.clone())
-                            .unwrap_or_else(|err| {
-                                panic!(
-                            "{}Cannot prevalidate ChainKeyConfig derived from EcdsaInitialConfig: \
-                            {}", LOG_PREFIX, err
-                        );
-                            });
-                    Some(initial_chain_key_config_from_legacy_source)
-                }
-                (None, Some(initial_chain_key_config)) => {
-                    let initial_chain_key_config_from_new_source =
-                        InitialChainKeyConfigInternal::try_from(initial_chain_key_config.clone())
-                            .unwrap_or_else(|err| {
-                                panic!("{}Cannot prevalidate ChainKeyConfig: {}", LOG_PREFIX, err);
-                            });
-                    Some(initial_chain_key_config_from_new_source)
-                }
-                (None, None) => None,
-            };
-        if let Some(prevalidated_initial_chain_key_config) = prevalidated_initial_chain_key_config {
-            let own_subnet_id = None;
-            self.validate_initial_chain_key_config(
-                &prevalidated_initial_chain_key_config,
-                own_subnet_id,
-            )
-            .unwrap_or_else(|err| panic!("{}Cannot validate ChainKeyConfig: {}", LOG_PREFIX, err));
-        }
+            InitialChainKeyConfigInternal::try_from(initial_chain_key_config.clone())
+                .unwrap_or_else(|err| {
+                    panic!("{}Cannot prevalidate ChainKeyConfig: {}", LOG_PREFIX, err);
+                });
+
+        let own_subnet_id = None;
+        self.validate_initial_chain_key_config(
+            &prevalidated_initial_chain_key_config,
+            own_subnet_id,
+        )
+        .unwrap_or_else(|err| panic!("{}Cannot validate ChainKeyConfig: {}", LOG_PREFIX, err));
     }
 }
 
@@ -317,11 +279,6 @@ pub struct CreateSubnetPayload {
     pub max_number_of_canisters: u64,
     pub ssh_readonly_access: Vec<String>,
     pub ssh_backup_access: Vec<String>,
-
-    // Deprecated. Please use `chain_key_config` instead.
-    //
-    // TODO[NNS1-3022]: Make this field obsolete.
-    pub ecdsa_config: Option<EcdsaInitialConfig>,
 
     pub chain_key_config: Option<InitialChainKeyConfig>,
 
@@ -507,56 +464,6 @@ impl TryFrom<KeyConfigRequest> for KeyConfigRequestInternal {
     }
 }
 
-// TODO[NNS1-3022]: Remove this code.
-impl TryFrom<EcdsaInitialConfig> for InitialChainKeyConfigInternal {
-    type Error = String;
-
-    fn try_from(src: EcdsaInitialConfig) -> Result<Self, Self::Error> {
-        let EcdsaInitialConfig {
-            quadruples_to_create_in_advance,
-            keys,
-            max_queue_size,
-            signature_request_timeout_ns,
-            idkg_key_rotation_period_ms,
-        } = src;
-        let pre_signatures_to_create_in_advance = quadruples_to_create_in_advance;
-        let max_queue_size = max_queue_size.unwrap_or(DEFAULT_ECDSA_MAX_QUEUE_SIZE);
-
-        let mut errors = vec![];
-        let key_configs = keys
-            .into_iter()
-            .filter_map(|EcdsaKeyRequest { key_id, subnet_id }| {
-                let Some(subnet_id) = subnet_id else {
-                    errors.push(format!(
-                        "EcdsaKeyRequest.subnet_id must be set (.key_id = {:?})",
-                        key_id
-                    ));
-                    return None;
-                };
-                Some(KeyConfigRequestInternal {
-                    key_config: KeyConfigInternal {
-                        key_id: MasterPublicKeyId::Ecdsa(key_id),
-                        pre_signatures_to_create_in_advance,
-                        max_queue_size,
-                    },
-                    subnet_id,
-                })
-            })
-            .collect();
-
-        if !errors.is_empty() {
-            let errors = errors.join(", ");
-            return Err(format!("Invalid EcdsaInitialConfig: {}", errors));
-        }
-
-        Ok(Self {
-            key_configs,
-            signature_request_timeout_ns,
-            idkg_key_rotation_period_ms,
-        })
-    }
-}
-
 #[derive(Clone, Eq, PartialEq, Debug, Default, CandidType, Deserialize, Serialize)]
 pub struct EcdsaInitialConfig {
     pub quadruples_to_create_in_advance: u32,
@@ -571,38 +478,6 @@ pub struct EcdsaInitialConfig {
 pub struct EcdsaKeyRequest {
     pub key_id: EcdsaKeyId,
     pub subnet_id: Option<PrincipalId>,
-}
-
-impl From<EcdsaInitialConfig> for EcdsaConfigPb {
-    fn from(val: EcdsaInitialConfig) -> Self {
-        Self {
-            quadruples_to_create_in_advance: val.quadruples_to_create_in_advance,
-            key_ids: val
-                .keys
-                .iter()
-                .map(|val| (&val.key_id).into())
-                .collect::<Vec<_>>(),
-            max_queue_size: val.max_queue_size.unwrap_or(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
-            signature_request_timeout_ns: val.signature_request_timeout_ns,
-            idkg_key_rotation_period_ms: val.idkg_key_rotation_period_ms,
-        }
-    }
-}
-
-impl From<EcdsaInitialConfig> for EcdsaConfig {
-    fn from(val: EcdsaInitialConfig) -> Self {
-        Self {
-            quadruples_to_create_in_advance: val.quadruples_to_create_in_advance,
-            key_ids: val
-                .keys
-                .iter()
-                .map(|val| val.key_id.clone())
-                .collect::<Vec<_>>(),
-            max_queue_size: val.max_queue_size,
-            signature_request_timeout_ns: val.signature_request_timeout_ns,
-            idkg_key_rotation_period_ms: val.idkg_key_rotation_period_ms,
-        }
-    }
 }
 
 impl From<CreateSubnetPayload> for SubnetRecord {
@@ -641,7 +516,6 @@ impl From<CreateSubnetPayload> for SubnetRecord {
                         .expect("Invalid InitialChainKeyConfig")
                 })
                 .map(ChainKeyConfigPb::from),
-            ecdsa_config: None, // obsolete (chain_key_config is used instead now)
         }
     }
 }
@@ -653,9 +527,9 @@ mod test {
         add_fake_subnet, get_invariant_compliant_subnet_record, invariant_compliant_registry,
         prepare_registry_with_nodes,
     };
-    use ic_management_canister_types::EcdsaCurve;
+    use ic_management_canister_types_private::EcdsaCurve;
     use ic_nervous_system_common_test_keys::{TEST_USER1_PRINCIPAL, TEST_USER2_PRINCIPAL};
-    use ic_registry_subnet_features::ChainKeyConfig;
+    use ic_registry_subnet_features::{ChainKeyConfig, DEFAULT_ECDSA_MAX_QUEUE_SIZE};
     use ic_types::ReplicaVersion;
 
     // Note: this can only be unit-tested b/c it fails before we hit inter-canister calls
@@ -668,16 +542,18 @@ mod test {
         let mut registry = invariant_compliant_registry(0);
         let payload = CreateSubnetPayload {
             replica_version_id: ReplicaVersion::default().into(),
-            ecdsa_config: Some(EcdsaInitialConfig {
-                quadruples_to_create_in_advance: 1,
-                keys: vec![EcdsaKeyRequest {
-                    key_id: EcdsaKeyId {
-                        curve: EcdsaCurve::Secp256k1,
-                        name: "fake_key_id".to_string(),
-                    },
+            chain_key_config: Some(InitialChainKeyConfig {
+                key_configs: vec![KeyConfigRequest {
+                    key_config: Some(KeyConfig {
+                        key_id: Some(MasterPublicKeyId::Ecdsa(EcdsaKeyId {
+                            curve: EcdsaCurve::Secp256k1,
+                            name: "fake_key_id".to_string(),
+                        })),
+                        pre_signatures_to_create_in_advance: Some(1),
+                        max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
+                    }),
                     subnet_id: Some(*TEST_USER2_PRINCIPAL),
                 }],
-                max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
                 signature_request_timeout_ns: None,
                 idkg_key_rotation_period_ms: None,
             }),
@@ -688,7 +564,7 @@ mod test {
     }
 
     #[test]
-    #[should_panic(expected = "EcdsaKeyRequest.subnet_id must be set")]
+    #[should_panic(expected = "KeyConfigRequest.subnet_id must be specified")]
     fn should_panic_if_ecdsa_keys_subnet_not_specified() {
         // Set up a subnet that has the key but fail to specify subnet_id in request
         let key_id = EcdsaKeyId {
@@ -706,14 +582,16 @@ mod test {
 
         let mut subnet_record: SubnetRecord =
             get_invariant_compliant_subnet_record(node_ids_and_dkg_pks.keys().copied().collect());
-        let ecdsa_config = EcdsaConfig {
-            quadruples_to_create_in_advance: 1,
-            key_ids: vec![key_id.clone()],
-            max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
+
+        let chain_key_config = ChainKeyConfig {
+            key_configs: vec![KeyConfigInternal {
+                key_id: MasterPublicKeyId::Ecdsa(key_id.clone()),
+                pre_signatures_to_create_in_advance: 1,
+                max_queue_size: DEFAULT_ECDSA_MAX_QUEUE_SIZE,
+            }],
             signature_request_timeout_ns: None,
             idkg_key_rotation_period_ms: None,
         };
-        let chain_key_config = ChainKeyConfig::from(ecdsa_config);
         subnet_record.chain_key_config = Some(ChainKeyConfigPb::from(chain_key_config));
 
         let fake_subnet_mutation = add_fake_subnet(
@@ -727,13 +605,15 @@ mod test {
         // Make a request for the key from a subnet that does not have the key
         let payload = CreateSubnetPayload {
             replica_version_id: ReplicaVersion::default().into(),
-            ecdsa_config: Some(EcdsaInitialConfig {
-                quadruples_to_create_in_advance: 1,
-                keys: vec![EcdsaKeyRequest {
-                    key_id,
+            chain_key_config: Some(InitialChainKeyConfig {
+                key_configs: vec![KeyConfigRequest {
+                    key_config: Some(KeyConfig {
+                        key_id: Some(MasterPublicKeyId::Ecdsa(key_id)),
+                        pre_signatures_to_create_in_advance: Some(1),
+                        max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
+                    }),
                     subnet_id: None,
                 }],
-                max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
                 signature_request_timeout_ns: None,
                 idkg_key_rotation_period_ms: None,
             }),
@@ -764,14 +644,16 @@ mod test {
 
         let mut subnet_record: SubnetRecord =
             get_invariant_compliant_subnet_record(node_ids_and_dkg_pks.keys().copied().collect());
-        let ecdsa_config = EcdsaConfig {
-            quadruples_to_create_in_advance: 1,
-            key_ids: vec![key_id.clone()],
-            max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
+
+        let chain_key_config = ChainKeyConfig {
+            key_configs: vec![KeyConfigInternal {
+                key_id: MasterPublicKeyId::Ecdsa(key_id.clone()),
+                pre_signatures_to_create_in_advance: 1,
+                max_queue_size: DEFAULT_ECDSA_MAX_QUEUE_SIZE,
+            }],
             signature_request_timeout_ns: None,
             idkg_key_rotation_period_ms: None,
         };
-        let chain_key_config = ChainKeyConfig::from(ecdsa_config);
         subnet_record.chain_key_config = Some(ChainKeyConfigPb::from(chain_key_config));
 
         let fake_subnet_mutation = add_fake_subnet(
@@ -785,13 +667,15 @@ mod test {
         // Make a request for the key from a subnet that does not have the key
         let payload = CreateSubnetPayload {
             replica_version_id: ReplicaVersion::default().into(),
-            ecdsa_config: Some(EcdsaInitialConfig {
-                quadruples_to_create_in_advance: 1,
-                keys: vec![EcdsaKeyRequest {
-                    key_id,
+            chain_key_config: Some(InitialChainKeyConfig {
+                key_configs: vec![KeyConfigRequest {
+                    key_config: Some(KeyConfig {
+                        key_id: Some(MasterPublicKeyId::Ecdsa(key_id)),
+                        pre_signatures_to_create_in_advance: Some(1),
+                        max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
+                    }),
                     subnet_id: Some(*TEST_USER2_PRINCIPAL),
                 }],
-                max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
                 signature_request_timeout_ns: None,
                 idkg_key_rotation_period_ms: None,
             }),
@@ -820,14 +704,17 @@ mod test {
         let mut subnet_list_record = registry.get_subnet_list_record();
         let mut subnet_record: SubnetRecord =
             get_invariant_compliant_subnet_record(node_ids_and_dkg_pks.keys().copied().collect());
-        let ecdsa_config = EcdsaConfig {
-            quadruples_to_create_in_advance: 1,
-            key_ids: vec![key_id.clone()],
-            max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
+
+        let chain_key_config = ChainKeyConfig {
+            key_configs: vec![KeyConfigInternal {
+                key_id: MasterPublicKeyId::Ecdsa(key_id.clone()),
+                pre_signatures_to_create_in_advance: 1,
+                max_queue_size: DEFAULT_ECDSA_MAX_QUEUE_SIZE,
+            }],
             signature_request_timeout_ns: None,
             idkg_key_rotation_period_ms: None,
         };
-        let chain_key_config = ChainKeyConfig::from(ecdsa_config);
+
         let chain_key_config_pb = ChainKeyConfigPb::from(chain_key_config);
         subnet_record.chain_key_config = Some(chain_key_config_pb);
 
@@ -840,63 +727,23 @@ mod test {
         registry.maybe_apply_mutation_internal(fake_subnet_mutation);
 
         // Step 2: Try to create another subnet with duplicate keys, which should panic.
-        let key_request = EcdsaKeyRequest {
-            key_id,
+        let key_config_request = KeyConfigRequest {
+            key_config: Some(KeyConfig {
+                key_id: Some(MasterPublicKeyId::Ecdsa(key_id)),
+                pre_signatures_to_create_in_advance: Some(1),
+                max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
+            }),
             subnet_id: Some(*TEST_USER1_PRINCIPAL),
         };
         let payload = CreateSubnetPayload {
             replica_version_id: ReplicaVersion::default().into(),
-            ecdsa_config: Some(EcdsaInitialConfig {
-                quadruples_to_create_in_advance: 1,
-                keys: vec![key_request; 2],
-                max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
+            chain_key_config: Some(InitialChainKeyConfig {
+                key_configs: vec![key_config_request; 2],
                 signature_request_timeout_ns: None,
                 idkg_key_rotation_period_ms: None,
             }),
             ..Default::default()
         };
-        futures::executor::block_on(registry.do_create_subnet(payload));
-    }
-
-    // TODO[NNS1-3022]: Replace this test with one that checks that `subnet_record.ecdsa_config`
-    // TODO[NNS1-3022]: cannot be set.
-    #[test]
-    #[should_panic(
-        expected = "Deprecated field ecdsa_config cannot be specified with chain_key_config."
-    )]
-    fn test_disallow_legacy_and_chain_key_ecdsa_config_specification_together() {
-        let key_id = EcdsaKeyId {
-            curve: EcdsaCurve::Secp256k1,
-            name: "fake_key_id".to_string(),
-        };
-        let mut registry = invariant_compliant_registry(0);
-
-        // Make a request for the key from a subnet that does not have the key.
-        let payload = CreateSubnetPayload {
-            replica_version_id: ReplicaVersion::default().into(),
-            ecdsa_config: Some(EcdsaInitialConfig {
-                quadruples_to_create_in_advance: 1,
-                keys: vec![EcdsaKeyRequest {
-                    key_id: key_id.clone(),
-                    subnet_id: Some(*TEST_USER2_PRINCIPAL),
-                }],
-                max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
-                ..Default::default()
-            }),
-            chain_key_config: Some(InitialChainKeyConfig {
-                key_configs: vec![KeyConfigRequest {
-                    key_config: Some(KeyConfig {
-                        key_id: Some(MasterPublicKeyId::Ecdsa(key_id)),
-                        pre_signatures_to_create_in_advance: Some(1),
-                        max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
-                    }),
-                    subnet_id: Some(*TEST_USER2_PRINCIPAL),
-                }],
-                ..Default::default()
-            }),
-            ..Default::default()
-        };
-
         futures::executor::block_on(registry.do_create_subnet(payload));
     }
 }

@@ -508,16 +508,16 @@ pub fn build_unconfirmed_change(s: &CkBtcMinterState) -> String {
 
 pub fn build_update_balance_principals(s: &CkBtcMinterState) -> String {
     with_utf8_buffer(|buf| {
-        for p in &s.update_balance_principals {
-            writeln!(buf, "<li>{}</li>", p).unwrap();
+        for account in &s.update_balance_accounts {
+            writeln!(buf, "<li>{}</li>", account).unwrap();
         }
     })
 }
 
 pub fn build_retrieve_btc_principals(s: &CkBtcMinterState) -> String {
     with_utf8_buffer(|buf| {
-        for p in &s.retrieve_btc_principals {
-            writeln!(buf, "<li>{}</li>", p).unwrap();
+        for account in &s.retrieve_btc_accounts {
+            writeln!(buf, "<li>{}</li>", account).unwrap();
         }
     })
 }

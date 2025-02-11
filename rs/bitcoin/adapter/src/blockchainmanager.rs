@@ -42,13 +42,6 @@ const MAX_UNSOLICITED_HEADERS: usize = 20;
 /// to a peer at a time.
 const INV_PER_GET_DATA_REQUEST: u32 = 8;
 
-const ONE_MB: usize = 1_024 * 1_024;
-
-/// The limit at which we should stop making additional requests for new blocks as the block cache
-/// becomes too large. Inflight `getdata` messages will remain active, but new `getdata` messages will
-/// not be created.
-const BLOCK_CACHE_THRESHOLD_BYTES: usize = 10 * ONE_MB;
-
 /// Block locators. Consists of starting hashes and a stop hash.
 type Locators = (Vec<BlockHash>, BlockHash);
 
@@ -546,16 +539,11 @@ impl BlockchainManager {
             return;
         }
 
-        let block_cache_size = self.blockchain.lock().unwrap().get_block_cache_size();
+        let is_cache_full = self.blockchain.lock().unwrap().is_block_cache_full();
 
-        if block_cache_size >= BLOCK_CACHE_THRESHOLD_BYTES {
-            debug!(
-                self.logger,
-                "Cache Size: {}, Max Size: {}", block_cache_size, BLOCK_CACHE_THRESHOLD_BYTES
-            );
+        if is_cache_full {
+            debug!(self.logger, "Cache full");
         }
-
-        let is_cache_full = block_cache_size >= BLOCK_CACHE_THRESHOLD_BYTES;
 
         // Count the number of requests per peer.
         let mut requests_per_peer: HashMap<SocketAddr, u32> =
@@ -1313,7 +1301,7 @@ pub mod test {
                 blockchain.add_block(block).expect("failed to add block");
             }
 
-            assert!(blockchain.get_block_cache_size() >= BLOCK_CACHE_THRESHOLD_BYTES);
+            assert!(blockchain.is_block_cache_full());
         }
 
         let block_1_hash = large_blockchain_headers
