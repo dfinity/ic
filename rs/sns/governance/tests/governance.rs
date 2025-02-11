@@ -2893,12 +2893,13 @@ async fn test_mint_tokens() {
 #[tokio::test]
 async fn test_refresh_cached_upgrade_steps_auto() {
     let automatically_advance_target_version = true;
-    test_refresh_cached_upgrade_steps(automatically_advance_target_version);
+    test_refresh_cached_upgrade_steps(automatically_advance_target_version).await;
 }
 
+#[tokio::test]
 async fn test_refresh_cached_upgrade_steps_no_auto() {
     let automatically_advance_target_version = false;
-    test_refresh_cached_upgrade_steps(automatically_advance_target_version);
+    test_refresh_cached_upgrade_steps(automatically_advance_target_version).await;
 }
 
 async fn test_refresh_cached_upgrade_steps(automatically_advance_target_version: bool) {
