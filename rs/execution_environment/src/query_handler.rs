@@ -316,7 +316,7 @@ fn fetch_canister_logs(
         )
     })?;
 
-    match log_visibility {
+    match canister.log_visibility() {
         LogVisibilityV2::Public => Ok(()),
         LogVisibilityV2::Controllers if canister.controllers().contains(&sender) => Ok(()),
         LogVisibilityV2::AllowedViewers(principals) if principals.get().contains(&sender) => Ok(()),
