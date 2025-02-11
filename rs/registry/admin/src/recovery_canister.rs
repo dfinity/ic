@@ -106,10 +106,10 @@ pub fn build_client(opts: &Opts) -> RecoveryCanisterImpl {
         SenderOpts::Anonymous
     };
 
-    builder.with_sender(sender);
+    builder = builder.with_sender(sender);
 
     if !opts.nns_urls.is_empty() {
-        builder.with_url(opts.nns_urls.first().unwrap().as_str());
+        builder = builder.with_url(opts.nns_urls.first().unwrap().as_str());
     }
 
     builder.build().unwrap()

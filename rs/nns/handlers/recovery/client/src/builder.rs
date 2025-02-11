@@ -46,17 +46,17 @@ impl Default for RecoveryCanisterBuilder {
 }
 
 impl RecoveryCanisterBuilder {
-    pub fn with_url(&mut self, url: &str) -> &mut Self {
+    pub fn with_url(mut self, url: &str) -> Self {
         self.url = url.to_string();
         self
     }
 
-    pub fn with_canister_id(&mut self, canister_id: &str) -> &mut Self {
+    pub fn with_canister_id(mut self, canister_id: &str) -> Self {
         self.canister_id = canister_id.to_string();
         self
     }
 
-    pub fn with_sender(&mut self, sender: SenderOpts) -> &mut Self {
+    pub fn with_sender(mut self, sender: SenderOpts) -> Self {
         self.sender = sender;
         self
     }
