@@ -289,11 +289,9 @@ def icos_build(
 
     # -------------------- Assemble disk partitions ---------------
 
-    # Build a list of custom partitions with a function, to allow "injecting" build steps at this point
-    if "custom_partitions" not in image_deps:
-        custom_partitions = []
-    else:
-        custom_partitions = image_deps["custom_partitions"]()
+    # Build a list of custom partitions using a callable that accepts the build variant.
+    # If not provided, default to an empty list.
+    custom_partitions = image_deps.get("custom_partitions", lambda mode: [])(mode)
 
     # -------------------- Assemble disk image --------------------
 
