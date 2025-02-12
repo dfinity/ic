@@ -1,5 +1,12 @@
 """
-A macro to build multiple versions of the ICOS image (i.e., dev vs prod)
+A macro to build multiple versions of the ICOS image (i.e., dev vs prod).
+
+This macro defines the overall build process for ICOS images, including:
+  - Version management.
+  - Building bootloader, container, and filesystem images.
+  - Injecting variant-specific extra partitions via a custom mechanism.
+  - Assembling the final disk image and upload targets.
+  - Additional developer and test utilities.
 """
 
 load("@bazel_skylib//rules:copy_file.bzl", "copy_file")
@@ -289,7 +296,7 @@ def icos_build(
 
     # -------------------- Assemble disk partitions ---------------
 
-    # Build a list of custom partitions with a function, to allow "injecting" build steps at this point
+    # Build a list of custom partitions to allow "injecting" variant-specific partition logic.
     custom_partitions = image_deps.get("custom_partitions", lambda mode: [])(mode)
 
     # -------------------- Assemble disk image --------------------
