@@ -713,7 +713,9 @@ enum ExecutionMemoryType {
 }
 
 #[derive(Debug, Clone, Copy)]
-pub enum CostResult {
+/// Some cost API endpoints can fail in various ways. A return value of this
+/// type must be used by the caller to determine success or failure.
+pub enum CostReturnCode {
     Success = 0,
     UnknownCurve = 1,
     UnknownKey = 2,
@@ -3599,12 +3601,12 @@ impl SystemApi for SystemApiImpl {
             })?
             .to_string();
         let Ok(curve) = EcdsaCurve::try_from(curve) else {
-            return Ok(CostResult::UnknownCurve as u32);
+            return Ok(CostReturnCode::UnknownCurve as u32);
         };
         let key = MasterPublicKeyId::Ecdsa(EcdsaKeyId { curve, name });
         let topology = &self.sandbox_safe_system_state.network_topology;
         let Some(subnet_size) = get_key_replication_factor(topology, key) else {
-            return Ok(CostResult::UnknownKey as u32);
+            return Ok(CostReturnCode::UnknownKey as u32);
         };
         let cost = self
             .sandbox_safe_system_state
@@ -3612,7 +3614,7 @@ impl SystemApi for SystemApiImpl {
             .ecdsa_signature_fee(subnet_size);
         copy_cycles_to_heap(cost, dst, heap, "ic0_cost_sign_with_ecdsa")?;
         trace_syscall!(self, CostSignWithEcdsa, cost);
-        Ok(CostResult::Success as u32)
+        Ok(CostReturnCode::Success as u32)
     }
 
     fn ic0_cost_sign_with_schnorr(
@@ -3633,12 +3635,12 @@ impl SystemApi for SystemApiImpl {
             })?
             .to_string();
         let Ok(algorithm) = SchnorrAlgorithm::try_from(algorithm) else {
-            return Ok(CostResult::UnknownCurve as u32);
+            return Ok(CostReturnCode::UnknownCurve as u32);
         };
         let key = MasterPublicKeyId::Schnorr(SchnorrKeyId { algorithm, name });
         let topology = &self.sandbox_safe_system_state.network_topology;
         let Some(subnet_size) = get_key_replication_factor(topology, key) else {
-            return Ok(CostResult::UnknownKey as u32);
+            return Ok(CostReturnCode::UnknownKey as u32);
         };
         let cost = self
             .sandbox_safe_system_state
@@ -3646,7 +3648,7 @@ impl SystemApi for SystemApiImpl {
             .schnorr_signature_fee(subnet_size);
         copy_cycles_to_heap(cost, dst, heap, "ic0_cost_sign_with_schnorr")?;
         trace_syscall!(self, CostSignWithSchnorr, cost);
-        Ok(CostResult::Success as u32)
+        Ok(CostReturnCode::Success as u32)
     }
 
     fn ic0_cost_vetkd_derive_encrypted_key(
@@ -3668,12 +3670,12 @@ impl SystemApi for SystemApiImpl {
             })?
             .to_string();
         let Ok(curve) = VetKdCurve::try_from(curve) else {
-            return Ok(CostResult::UnknownCurve as u32);
+            return Ok(CostReturnCode::UnknownCurve as u32);
         };
         let key = MasterPublicKeyId::VetKd(VetKdKeyId { curve, name });
         let topology = &self.sandbox_safe_system_state.network_topology;
         let Some(subnet_size) = get_key_replication_factor(topology, key) else {
-            return Ok(CostResult::UnknownKey as u32);
+            return Ok(CostReturnCode::UnknownKey as u32);
         };
         let cost = self
             .sandbox_safe_system_state
@@ -3681,7 +3683,7 @@ impl SystemApi for SystemApiImpl {
             .vetkd_fee(subnet_size);
         copy_cycles_to_heap(cost, dst, heap, "ic0_cost_vetkd_derive_encrypted_key")?;
         trace_syscall!(self, CostVetkdDeriveEncryptedKey, cost);
-        Ok(CostResult::Success as u32)
+        Ok(CostReturnCode::Success as u32)
     }
 
     fn ic0_subnet_self_size(&self) -> HypervisorResult<usize> {
