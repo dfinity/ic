@@ -356,12 +356,19 @@ impl SystemStateModifications {
 
         // Get a clone of the request metadata of outgoing requests (they are all equivalent)
         // and their number. This will be used for call tree metrics.
+        let best_effort_request_count = self
+            .requests
+            .iter()
+            .filter(|req| req.is_best_effort())
+            .count() as u64;
         let request_stats = RequestMetadataStats {
             metadata: self
                 .requests
                 .first()
                 .map_or_else(Default::default, |request| request.metadata.clone()),
-            count: self.requests.len() as u64,
+            best_effort_request_count,
+            guaranteed_response_request_count: self.requests.len() as u64
+                - best_effort_request_count,
         };
 
         // Push outgoing messages.
@@ -1359,7 +1366,8 @@ impl SandboxSafeSystemState {
 /// This is used for call tree metrics.
 pub struct RequestMetadataStats {
     pub metadata: RequestMetadata,
-    pub count: u64,
+    pub best_effort_request_count: u64,
+    pub guaranteed_response_request_count: u64,
 }
 
 #[cfg(test)]

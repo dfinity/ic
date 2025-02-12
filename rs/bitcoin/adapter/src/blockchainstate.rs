@@ -12,6 +12,12 @@ use thiserror::Error;
 
 use bitcoin::Work;
 
+/// The limit at which we should stop making additional requests for new blocks as the block cache
+/// becomes too large. Inflight `getdata` messages will remain active, but new `getdata` messages will
+/// not be created.
+const BLOCK_CACHE_THRESHOLD_BYTES: usize = 10 * ONE_MB;
+const ONE_MB: usize = 1_024 * 1_024;
+
 /// Contains the necessary information about a tip.
 #[derive(Clone, Debug)]
 pub struct Tip {
@@ -135,6 +141,11 @@ impl BlockchainState {
     /// Returns the header for the given block hash.
     pub fn get_cached_header(&self, hash: &BlockHash) -> Option<&HeaderNode> {
         self.header_cache.get(hash)
+    }
+
+    /// Returns the hashes of all cached blocks.
+    pub(crate) fn get_cached_blocks(&self) -> Vec<BlockHash> {
+        self.block_cache.keys().copied().collect()
     }
 
     /// Processes the `headers` message received from Bitcoin nodes by adding them to the state.
@@ -326,6 +337,10 @@ impl BlockchainState {
     /// Used when the adapter is shutdown and no longer requires holding on to blocks.
     pub fn clear_blocks(&mut self) {
         self.block_cache = HashMap::new();
+    }
+
+    pub(crate) fn is_block_cache_full(&self) -> bool {
+        self.get_block_cache_size() >= BLOCK_CACHE_THRESHOLD_BYTES
     }
 
     /// Returns the current size of the block cache.
