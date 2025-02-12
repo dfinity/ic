@@ -307,7 +307,9 @@ fn get_blocks_() {
                 requested_range.start, requested_range.end, local_blocks_range.start, local_blocks_range.end)));
         }
         let mut blocks = vec![];
-        for index in requested_range {
+        let offset_requested_range =
+            requested_range.start - from_offset..requested_range.end - from_offset;
+        for index in offset_requested_range {
             blocks.push(get_block_stable(index).unwrap());
         }
         GetBlocksRes(Ok(blocks))
