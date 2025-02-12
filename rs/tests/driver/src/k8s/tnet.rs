@@ -397,8 +397,7 @@ impl TNet {
             }
         );
 
-        // TODO: handle reservation failures & add retry logic
-        create_reservation(
+        let node = create_reservation(
             vm_name.clone(),
             vm_name.clone(),
             self.unique_name.clone().expect("missing unique name"),
@@ -441,6 +440,7 @@ impl TNet {
                 "tnet.internetcomputer.org/name".to_string(),
                 self.unique_name.clone().expect("missing unique name"),
             )]),
+            Some(node.clone()),
         )
         .await?;
 
@@ -555,6 +555,7 @@ spec:
             self.owner_reference(),
             self.access_key.clone(),
             vm_type.clone(),
+            Some(node),
         )
         .await?;
 

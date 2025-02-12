@@ -1,4 +1,9 @@
+use std::time::Duration;
+
+use anyhow::anyhow;
 use anyhow::Result;
+use backon::ConstantBuilder;
+use backon::Retryable;
 use kube::api::{DeleteParams, Patch, PatchParams};
 use kube::{
     api::{DynamicObject, GroupVersionKind},
@@ -57,7 +62,7 @@ pub async fn create_reservation(
     tnet_name: String,
     ttl: Option<String>,
     requests: Option<(String, String)>,
-) -> Result<()> {
+) -> Result<String> {
     let client = Client::try_default().await?;
     let gvk = GroupVersionKind::gvk("scheduling.koordinator.sh", "v1alpha1", "Reservation");
     let (ar, _caps) = kube::discovery::pinned_kind(&client, &gvk).await?;
@@ -82,11 +87,26 @@ pub async fn create_reservation(
             &Patch::Apply(data),
         )
         .await?;
-
     debug!("Creating reservation response: {:?}", response);
     info!("Creating reservation {} complete", name);
 
-    Ok(())
+    let node_name = (|| async {
+        let r: DynamicObject = api.get(&name).await?;
+        r.data
+            .get("status")
+            .and_then(|status| status.get("nodeName"))
+            .and_then(|node_name| node_name.as_str())
+            .map(String::from)
+            .ok_or_else(|| anyhow!("Node name not found"))
+    })
+    .retry(
+        &ConstantBuilder::default()
+            .with_max_times(10)
+            .with_delay(Duration::from_secs(1)),
+    )
+    .await?;
+
+    Ok(node_name)
 }
 
 pub async fn delete_reservation(name: &str) -> Result<()> {

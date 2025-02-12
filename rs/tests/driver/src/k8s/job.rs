@@ -19,6 +19,7 @@ pub async fn create_job(
     hostpath: Option<&str>,
     owner: OwnerReference,
     labels: Option<Vec<(String, String)>>,
+    node_name: Option<String>,
 ) -> Result<Job> {
     let client = Client::try_default().await?;
     let api = Api::namespaced(client, "tnets");
@@ -73,6 +74,14 @@ pub async fn create_job(
         containers: vec![ctr],
         restart_policy: Some("OnFailure".to_string()),
         scheduler_name: Some("koord-scheduler".to_string()),
+        node_selector: node_name.map_or(None, |node_name| {
+            Some(
+                [("kubernetes.io/hostname".to_string(), node_name)]
+                    .iter()
+                    .cloned()
+                    .collect(),
+            )
+        }),
         volumes,
         ..Default::default()
     };
