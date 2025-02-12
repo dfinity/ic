@@ -1924,7 +1924,58 @@ async fn test_manage_network_economics_reject_invalid() {
 }
 
 #[tokio::test]
-async fn test_manage_network_economics_revalidate_at_execution_time() {
+async fn test_manage_network_economics_revalidate_at_execution_time_set_minimum_icp_xdr_rate_first()
+{
+    let new_network_economics = test_manage_network_economics_revalidate_at_execution_time(
+        |set_minimum_icp_xdr_rate_proposal_id, set_maximum_icp_xdr_rate_proposal_id| {
+            (
+                set_minimum_icp_xdr_rate_proposal_id,
+                set_maximum_icp_xdr_rate_proposal_id,
+            )
+        },
+    )
+    .await;
+
+    let mut expected_network_economics = NetworkEconomics::with_default_values();
+    expected_network_economics
+        .neurons_fund_economics
+        .as_mut()
+        .unwrap()
+        .minimum_icp_xdr_rate = Some(Percentage {
+        basis_points: Some(500_000),
+    });
+
+    assert_eq!(new_network_economics, expected_network_economics);
+}
+
+#[tokio::test]
+async fn test_manage_network_economics_revalidate_at_execution_time_set_maximum_icp_xdr_rate_first()
+{
+    let new_network_economics = test_manage_network_economics_revalidate_at_execution_time(
+        |set_minimum_icp_xdr_rate_proposal_id, set_maximum_icp_xdr_rate_proposal_id| {
+            (
+                set_maximum_icp_xdr_rate_proposal_id,
+                set_minimum_icp_xdr_rate_proposal_id,
+            )
+        },
+    )
+    .await;
+
+    let mut expected_network_economics = NetworkEconomics::with_default_values();
+    expected_network_economics
+        .neurons_fund_economics
+        .as_mut()
+        .unwrap()
+        .maximum_icp_xdr_rate = Some(Percentage {
+        basis_points: Some(499_000),
+    });
+
+    assert_eq!(new_network_economics, expected_network_economics);
+}
+
+async fn test_manage_network_economics_revalidate_at_execution_time(
+    order_of_execution: impl Fn(ProposalId, ProposalId) -> (ProposalId, ProposalId),
+) -> NetworkEconomics {
     // Step 1: Prepare the world. We only really need a super basic Governance.
 
     let controller = PrincipalId::new_user_test_id(519_572_717);
@@ -2017,7 +2068,9 @@ async fn test_manage_network_economics_revalidate_at_execution_time() {
 
     // Step 2.2: Vote in the two proposals. This unleashes the chaos: the first
     // one works, but that causes the second one to fail.
-    for proposal_id in [set_min_proposal_id, set_max_proposal_id] {
+    let (first_proposal_id, second_proposal_id) =
+        order_of_execution(set_min_proposal_id, set_max_proposal_id);
+    for proposal_id in [first_proposal_id, second_proposal_id] {
         let result = gov
             .manage_neuron(
                 &controller,
@@ -2046,47 +2099,43 @@ async fn test_manage_network_economics_revalidate_at_execution_time() {
 
     // Step 3.1: Only the frist proposal executed successfully.
 
-    let set_min_proposal = gov
-        .get_proposal_info(&controller, set_min_proposal_id)
+    let first_proposal = gov
+        .get_proposal_info(&controller, first_proposal_id)
         .unwrap();
     assert_ne!(
-        set_min_proposal.decided_timestamp_seconds, 0,
+        first_proposal.decided_timestamp_seconds, 0,
         "{:#?}",
-        set_min_proposal,
+        first_proposal,
     );
     assert_ne!(
-        set_min_proposal.executed_timestamp_seconds, 0,
+        first_proposal.executed_timestamp_seconds, 0,
         "{:#?}",
-        set_min_proposal,
+        first_proposal,
     );
-    assert_eq!(
-        set_min_proposal.failure_reason, None,
-        "{:#?}",
-        set_min_proposal,
-    );
+    assert_eq!(first_proposal.failure_reason, None, "{:#?}", first_proposal,);
 
-    let set_max_proposal = gov
-        .get_proposal_info(&controller, set_max_proposal_id)
+    let second_proposal = gov
+        .get_proposal_info(&controller, second_proposal_id)
         .unwrap();
     // Yes, it was decided, like the other proposal.
     assert_ne!(
-        set_max_proposal.decided_timestamp_seconds, 0,
+        second_proposal.decided_timestamp_seconds, 0,
         "{:#?}",
-        set_max_proposal,
+        second_proposal,
     );
     // Sadly, though, it failed, unlike the other proposal.
     assert_ne!(
-        set_max_proposal.failed_timestamp_seconds, 0,
+        second_proposal.failed_timestamp_seconds, 0,
         "{:#?}",
-        set_max_proposal,
+        second_proposal,
     );
     // And the reason it failed was...
-    let failure_reason = set_max_proposal.failure_reason.clone().unwrap();
+    let failure_reason = second_proposal.failure_reason.clone().unwrap();
     assert_eq!(
         ErrorType::try_from(failure_reason.error_type),
         Ok(ErrorType::InvalidProposal),
         "{:#?}",
-        set_max_proposal,
+        second_proposal,
     );
     let message = failure_reason.error_message.to_lowercase();
     for key_word in [
@@ -2098,20 +2147,11 @@ async fn test_manage_network_economics_revalidate_at_execution_time() {
         "greater",
         "minimum_icp_xdr_rate",
     ] {
-        assert!(message.contains(key_word), "{:#?}", set_max_proposal,);
+        assert!(message.contains(key_word), "{:#?}", second_proposal);
     }
 
-    // Step 3.2: Only the first proposal that got executed had an effect, not
-    // the second one.
-    let mut expected_network_economics = NetworkEconomics::with_default_values();
-    expected_network_economics
-        .neurons_fund_economics
-        .as_mut()
-        .unwrap()
-        .minimum_icp_xdr_rate = Some(Percentage {
-        basis_points: Some(new_min),
-    });
-    assert_eq!(gov.heap_data.economics, Some(expected_network_economics));
+    // Step 3.2: Let the caller inspect the resulting NetworkEconomics.
+    gov.heap_data.economics.unwrap()
 }
 
 #[tokio::test]
