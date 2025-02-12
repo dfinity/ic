@@ -716,13 +716,46 @@ impl InstallCodeHelper {
         } = canister_state_changes;
 
         // Apply system state changes always.
-        if let Err(err) = system_state_modifications.apply_changes(
-            original.time,
-            &mut self.canister.system_state,
-            round.network_topology,
-            round.hypervisor.subnet_id(),
-            round.log,
-        ) {
+        // The result will be checked later after we've checked the wasm execution result so that we
+        // don't miss logging in case there was an error from Wasm execution.
+        let result_of_applying_system_state_modifications = system_state_modifications
+            .apply_changes(
+                original.time,
+                &mut self.canister.system_state,
+                round.network_topology,
+                round.hypervisor.subnet_id(),
+                round.log,
+            );
+
+        match output.wasm_result {
+            Ok(None) => {}
+            Ok(Some(_response)) => {
+                debug_assert!(false);
+                round.counters.invalid_system_call_error.inc();
+                fatal!(round.log, "[EXC-BUG] System methods cannot use msg_reply.");
+            }
+            Err(err) => {
+                if let HypervisorError::SliceOverrun {
+                    instructions,
+                    limit,
+                } = &err
+                {
+                    info!(
+                        round.log,
+                        "Canister {} overrun a slice in install_code: {} / {}",
+                        self.canister.canister_id(),
+                        instructions,
+                        limit
+                    );
+                }
+                return (
+                    instructions_consumed,
+                    Err((self.canister.canister_id(), err).into()),
+                );
+            }
+        };
+
+        if let Err(err) = result_of_applying_system_state_modifications {
             debug_assert_eq!(err, HypervisorError::OutOfMemory);
             match &err {
                 HypervisorError::WasmEngineError(err) => {
@@ -752,34 +785,6 @@ impl InstallCodeHelper {
                 Err((self.canister.canister_id(), err).into()),
             );
         }
-
-        match output.wasm_result {
-            Ok(None) => {}
-            Ok(Some(_response)) => {
-                debug_assert!(false);
-                round.counters.invalid_system_call_error.inc();
-                fatal!(round.log, "[EXC-BUG] System methods cannot use msg_reply.");
-            }
-            Err(err) => {
-                if let HypervisorError::SliceOverrun {
-                    instructions,
-                    limit,
-                } = &err
-                {
-                    info!(
-                        round.log,
-                        "Canister {} overrun a slice in install_code: {} / {}",
-                        self.canister.canister_id(),
-                        instructions,
-                        limit
-                    );
-                }
-                return (
-                    instructions_consumed,
-                    Err((self.canister.canister_id(), err).into()),
-                );
-            }
-        };
 
         if let Some(ExecutionStateChanges {
             globals,
