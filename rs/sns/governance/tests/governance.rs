@@ -2906,7 +2906,7 @@ async fn test_refresh_cached_upgrade_steps(automatically_advance_target_version:
     let mut canister_fixture = GovernanceCanisterFixtureBuilder::new()
         .set_nervous_system_parameters(NervousSystemParameters {
             automatically_advance_target_version: Some(automatically_advance_target_version),
-            ..Default::default()
+            ..NervousSystemParameters::with_default_values()
         })
         .create();
 

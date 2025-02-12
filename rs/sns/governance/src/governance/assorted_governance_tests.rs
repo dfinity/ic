@@ -2615,9 +2615,9 @@ fn test_check_upgrade_fails_and_sets_deployed_version_if_deployed_version_missin
         Box::new(DoNothingLedger {}),
         Box::new(FakeCmc::new()),
     );
-    governance.proto.parameters.as_mut().map(|parameters| {
+    if let Some(parameters) = governance.proto.parameters.as_mut() {
         parameters.automatically_advance_target_version = Some(automatically_advance_target_version)
-    });
+    };
 
     let expected_running_version_before_upgrade = Some(running_version.clone().into());
     let expected_running_version_after_upgrade = Some(next_version.clone().into());
