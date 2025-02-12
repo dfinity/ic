@@ -39,8 +39,6 @@ const LEDGER_CANISTER_ID_MEMORY_ID: MemoryId = MemoryId::new(3);
 const BLOCK_LOG_INDEX_MEMORY_ID: MemoryId = MemoryId::new(4);
 const BLOCK_LOG_DATA_MEMORY_ID: MemoryId = MemoryId::new(5);
 
-type VM = VirtualMemory<DefaultMemoryImpl>;
-
 thread_local! {
     /// Static memory manager to manage the memory available for stable structures.
     static MEMORY_MANAGER: RefCell<MemoryManager<DefaultMemoryImpl>> = RefCell::new(MemoryManager::init(DefaultMemoryImpl::default()));
@@ -53,22 +51,22 @@ thread_local! {
     static LAST_UPGRADE_TIMESTAMP: RefCell<u64> = const { RefCell::new(0) };
 
     // Max memory size
-    static MAX_MEMORY_SIZE_BYTES: RefCell<StableCell<u64, VM>> =
+    static MAX_MEMORY_SIZE_BYTES: RefCell<StableCell<u64, VirtualMemory<DefaultMemoryImpl>>> =
         MEMORY_MANAGER.with(|memory_manager|  RefCell::new(StableCell::init(memory_manager.borrow().get(MAX_MEMORY_SIZE_BYTES_MEMORY_ID), 0)
         .expect("failed to initialize stable cell")));
 
     // Block height offset
-    static BLOCK_HEIGHT_OFFSET: RefCell<StableCell<u64, VM>> =
+    static BLOCK_HEIGHT_OFFSET: RefCell<StableCell<u64, VirtualMemory<DefaultMemoryImpl>>> =
         MEMORY_MANAGER.with(|memory_manager|  RefCell::new(StableCell::init(memory_manager.borrow().get(BLOCK_HEIGHT_OFFSET_MEMORY_ID), 0)
         .expect("failed to initialize stable cell")));
 
     // Total block size.
-    static TOTAL_BLOCK_SIZE: RefCell<StableCell<u64, VM>> =
+    static TOTAL_BLOCK_SIZE: RefCell<StableCell<u64, VirtualMemory<DefaultMemoryImpl>>> =
         MEMORY_MANAGER.with(|memory_manager|  RefCell::new(StableCell::init(memory_manager.borrow().get(TOTAL_BLOCK_SIZE_MEMORY_ID), 0)
         .expect("failed to initialize stable cell")));
 
     // Ledger canister id.
-    static LEDGER_CANISTER_ID: RefCell<StableCell<Vec<u8>, VM>> =
+    static LEDGER_CANISTER_ID: RefCell<StableCell<Vec<u8>, VirtualMemory<DefaultMemoryImpl>>> =
         MEMORY_MANAGER.with(|memory_manager|  RefCell::new(StableCell::init(memory_manager.borrow().get(LEDGER_CANISTER_ID_MEMORY_ID), vec![])
         .expect("failed to initialize stable cell")));
 
@@ -165,14 +163,14 @@ fn append_blocks(blocks: Vec<EncodedBlock>) {
         blocks_len(),
         blocks.len()
     ));
-    let mut block_size_with_new = total_block_size();
+    let mut block_size_new = total_block_size();
     for block in &blocks {
-        block_size_with_new += block.size_bytes() as u64;
+        block_size_new += block.size_bytes() as u64;
     }
-    if block_size_with_new > max_memory_size_bytes() {
+    if block_size_new > max_memory_size_bytes() {
         ic_cdk::trap("No space left");
     }
-    set_total_block_size(block_size_with_new);
+    set_total_block_size(block_size_new);
     for block in blocks {
         append_block(&block);
     }
@@ -349,8 +347,6 @@ fn post_upgrade() {
         for block in &state.blocks {
             append_block(block);
         }
-
-        set_max_memory_size_bytes(state.max_memory_size_bytes as u64);
 
         set_block_height_offset(state.block_height_offset);
         set_max_memory_size_bytes(state.max_memory_size_bytes as u64);
