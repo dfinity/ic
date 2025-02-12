@@ -359,7 +359,7 @@ impl SystemStateModifications {
         let best_effort_request_count = self
             .requests
             .iter()
-            .filter(|req| req.deadline != NO_DEADLINE)
+            .filter(|req| req.is_best_effort())
             .count() as u64;
         let request_stats = RequestMetadataStats {
             metadata: self
