@@ -20,12 +20,12 @@ use std::{
     collections::{HashMap, HashSet},
     net::SocketAddr,
     sync::{Arc, Mutex},
-    time::Instant,
+    time::{Duration, Instant},
 };
 use thiserror::Error;
 
 /// This constant is the maximum number of seconds to wait until we get response to the getdata request sent by us.
-const GETDATA_REQUEST_TIMEOUT_SECS: u64 = 30;
+const GETDATA_REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
 
 /// This constant is the maximum number of seconds to wait until we get response to the getdata request sent by us.
 const GETHEADERS_REQUEST_TIMEOUT_SECS: u64 = 30;
@@ -139,6 +139,8 @@ pub struct BlockchainManager {
 
     /// This field stores the map of which bitcoin nodes sent which "inv" messages.
     peer_info: HashMap<SocketAddr, PeerInfo>,
+    /// This field is used to keep track of the next peer to send a "getdata" request to.
+    round_robin_offset: usize,
 
     /// This HashMap stores the information related to each getdata request
     /// sent by the BlockChainManager. An entry is removed from this hashmap when
@@ -185,6 +187,7 @@ impl BlockchainManager {
         BlockchainManager {
             blockchain,
             peer_info,
+            round_robin_offset: 0,
             getdata_request_info,
             getheaders_requests: HashMap::new(),
             catchup_headers: HashSet::new(),
@@ -519,7 +522,7 @@ impl BlockchainManager {
         for (block_hash, request) in self.getdata_request_info.iter_mut() {
             match request.sent_at {
                 Some(sent_at) => {
-                    if sent_at.elapsed().as_secs() > GETDATA_REQUEST_TIMEOUT_SECS {
+                    if sent_at.elapsed() > GETDATA_REQUEST_TIMEOUT {
                         retry_queue.insert(*block_hash);
                         timed_out_peers.insert(request.socket);
                     }
@@ -529,6 +532,12 @@ impl BlockchainManager {
                     timed_out_peers.insert(request.socket);
                 }
             }
+        }
+
+        // If a request timed out, there is no point in storing it in getdata_request_info
+        // Not removing it can actually lead to the adapter stalling, thinking all of its peers are busy.
+        for block_hash in &retry_queue {
+            self.getdata_request_info.remove(block_hash);
         }
 
         // If a request timed out, there is no point in storing it in getdata_request_info
@@ -557,21 +566,17 @@ impl BlockchainManager {
             *counter = counter.saturating_add(1);
         }
 
-        let mut peer_info: Vec<_> = self.peer_info.values_mut().collect();
-        peer_info.sort_by(|a, b| {
-            // 0 if peer didn't time out, 1 if it did
-            let a_timed_out = timed_out_peers.contains(&a.socket) as u8;
-            let b_timed_out = timed_out_peers.contains(&b.socket) as u8;
-
-            let requests_sent_to_a = requests_per_peer.get(&a.socket).unwrap_or(&0);
-            let requests_sent_to_b = requests_per_peer.get(&b.socket).unwrap_or(&0);
-
-            // Sort first by whether the peer is timed out, then by requests_in_flight
-            (a_timed_out, requests_sent_to_a).cmp(&(b_timed_out, requests_sent_to_b))
-        });
+        // Rotate the peer_info vector to ensure that we are not always sending requests to the same peer.
+        let mut peers: Vec<_> = self.peer_info.values().collect();
+        let len = peers.len();
+        if len == 0 {
+            return;
+        }
+        peers.rotate_left(self.round_robin_offset % len);
+        self.round_robin_offset = (self.round_robin_offset + 1) % len;
 
         // For each peer, select a random subset of the inventory and send a "getdata" request for it.
-        for peer in peer_info {
+        for peer in peers {
             // Calculate number of inventory that can be sent in 'getdata' request to the peer.
             let requests_sent_to_peer = requests_per_peer.get(&peer.socket).unwrap_or(&0);
             let num_requests_to_be_sent =
@@ -589,11 +594,6 @@ impl BlockchainManager {
             }
 
             if selected_inventory.is_empty() {
-                // Technically peers are ordered on the number of availble requests they have, so
-                // if for example the first peer has an empty inventory, that means that all subsequent
-                // peers will have an empty inventory as well.
-                // However, breaking here is a bit hard to read and an "optimization hack", which doesn't
-                // bring a lot of value. Explicitly trying all peers instead is clearer.
                 continue;
             }
 
@@ -1186,12 +1186,7 @@ pub mod test {
             .get(&block_1_hash)
             .expect("missing request info for block hash 1");
         assert!(
-            request
-                .sent_at
-                .expect("should be some instant")
-                .elapsed()
-                .as_secs()
-                < GETDATA_REQUEST_TIMEOUT_SECS
+            request.sent_at.expect("should be some instant").elapsed() < GETDATA_REQUEST_TIMEOUT
         );
         let getdata_command = channel
             .pop_back()
@@ -1245,12 +1240,7 @@ pub mod test {
             .get(&block_1_hash)
             .expect("missing request info for block hash 1");
         assert!(
-            request
-                .sent_at
-                .expect("should be some instant")
-                .elapsed()
-                .as_secs()
-                < GETDATA_REQUEST_TIMEOUT_SECS
+            request.sent_at.expect("should be some instant").elapsed() < GETDATA_REQUEST_TIMEOUT
         );
         assert_eq!(request.socket, addr2);
         let getdata_command = channel
