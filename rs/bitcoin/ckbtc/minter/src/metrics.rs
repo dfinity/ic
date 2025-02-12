@@ -74,11 +74,15 @@ impl<const NUM_BUCKETS: usize> Histogram<NUM_BUCKETS> {
     /// Returns an iterator over the histogram buckets as tuples containing the bucket upper bound
     /// (inclusive), and the count of observed values within the bucket.
     pub fn iter(&self) -> impl Iterator<Item = (f64, f64)> + '_ {
-        self.bucket_upper_bounds[..self.bucket_counts.len() - 1] // skip the last (infinity) bucket
+        self.bucket_upper_bounds
             .iter()
-            .map(|bucket| match bucket {
-                &u64::MAX => f64::INFINITY,
-                _ => *bucket as f64,
+            .enumerate()
+            .map(|(bucket_index, bucket_upper_bound)| {
+                if bucket_index == (NUM_BUCKETS - 1) {
+                    f64::INFINITY
+                } else {
+                    *bucket_upper_bound as f64
+                }
             })
             .zip(self.bucket_counts.iter().cloned())
             .map(|(k, v)| (k, v as f64))
