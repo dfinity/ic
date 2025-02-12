@@ -2004,10 +2004,33 @@ async fn test_manage_network_economics_revalidate_at_execution_time_set_maximum_
     assert_ne!(minimum_icp_xdr_rate, NEW_MINIMUM_ICP_XDR_RATE);
 }
 
+/// Two proposals are created:
+///
+///     1. Sets minimum_icp_xdr_rate to NEW_MINIMUM_ICP_XDR_RATE.
+///
+///     2. Sets maximum_icp_xdr_rate to NEW_MAXIMUM_ICP_XDR_RATE.
+///
+/// order_of_execution controls which gets voted in first.
+///
+/// Asserts that
+///
+///     1. The first proposal is marked as successfully executed.
+///
+///     2. The second proposal is marked as attempted to execute, but was
+///        unsuccessful.
+///
+/// Returns the resulting NetworkEconomics.
 async fn test_manage_network_economics_revalidate_at_execution_time(
-    order_of_execution: impl Fn(ProposalId, ProposalId) -> (ProposalId, ProposalId),
+    order_of_execution: impl Fn(
+        /* set_min_proposal_id */ ProposalId,
+        /* set_max_proposal_id */ ProposalId,
+    ) -> (ProposalId, ProposalId),
 ) -> NetworkEconomics {
-    // Step 1: Prepare the world. We only really need a super basic Governance.
+    // Step 1: Prepare the world.
+
+    // Step 1.1: Create a governance with two neurons:
+    //     1. proposer - Has little voting power.
+    //     2. decider - Hot lots of VP.
 
     let controller = PrincipalId::new_user_test_id(519_572_717);
     let proposer_neuron = Neuron {
@@ -2041,11 +2064,7 @@ async fn test_manage_network_economics_revalidate_at_execution_time(
         driver.get_fake_cmc(),
     );
 
-    // Step 2: Call the code under test. Make a ManageNetworkEconomics proposal.
-    // It gets executed immediately, since there is only one neuron.
-
-    // Step 2.1: Make two proposals. Both look good at the outset, but they are
-    // incompatible with one another.
+    // Step 1.2: Make a couple of proposals.
 
     let set_min_proposal_id = gov
         .make_proposal(
@@ -2091,8 +2110,8 @@ async fn test_manage_network_economics_revalidate_at_execution_time(
         .await
         .unwrap();
 
-    // Step 2.2: Vote in the two proposals. This unleashes the chaos: the first
-    // one works, but that causes the second one to fail.
+    // Step 2: Call the code under test. Vote in the proposals.
+
     let (first_proposal_id, second_proposal_id) =
         order_of_execution(set_min_proposal_id, set_max_proposal_id);
     for proposal_id in [first_proposal_id, second_proposal_id] {
