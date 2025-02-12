@@ -1840,11 +1840,12 @@ async fn test_manage_network_economics_reject_invalid() {
     // Step 2: Call the code under test. Make a ManageNetworkEconomics proposal.
     // It gets executed immediately, since there is only one neuron.
 
-    let too_small = 7_u64;
-    // Assert that too_small is a problemmatic value if it were to be used a
-    // proposal (this is foreshadowing, in case you didn't notice).
+    let too_small_for_full_participation_milestone_xdr = 7_u64;
+    // Assert that too_small_for_full_participation_milestone_xdr is a
+    // problemmatic value if it were to be used a proposal (this is
+    // foreshadowing, in case you didn't notice).
     {
-        let min = NetworkEconomics::with_default_values()
+        let one_third_participation_milestone_xdr = NetworkEconomics::with_default_values()
             .neurons_fund_economics
             .unwrap()
             .neurons_fund_matched_funding_curve_coefficients
@@ -1852,12 +1853,16 @@ async fn test_manage_network_economics_reject_invalid() {
             .one_third_participation_milestone_xdr
             .unwrap()
             .human_readable;
-        let min = rust_decimal::Decimal::try_from(min.as_deref().unwrap()).unwrap();
+        let one_third_participation_milestone_xdr = rust_decimal::Decimal::try_from(
+            one_third_participation_milestone_xdr.as_deref().unwrap(),
+        )
+        .unwrap();
         assert!(
-            rust_decimal::Decimal::from(too_small) < min,
+            rust_decimal::Decimal::from(too_small_for_full_participation_milestone_xdr)
+                < one_third_participation_milestone_xdr,
             "{} vs. {}",
-            too_small,
-            min
+            too_small_for_full_participation_milestone_xdr,
+            one_third_participation_milestone_xdr
         );
     }
 
@@ -1865,7 +1870,10 @@ async fn test_manage_network_economics_reject_invalid() {
         neurons_fund_matched_funding_curve_coefficients: Some(
             NeuronsFundMatchedFundingCurveCoefficients {
                 full_participation_milestone_xdr: Some(Decimal {
-                    human_readable: Some(format!("{}", too_small)),
+                    human_readable: Some(format!(
+                        "{}",
+                        too_small_for_full_participation_milestone_xdr
+                    )),
                 }),
                 ..Default::default()
             },
