@@ -517,27 +517,18 @@ impl BlockchainManager {
 
     fn sync_blocks(&mut self, channel: &mut impl Channel) {
         // Timeout requests so they may be retried again.
-        let mut timed_out_peers = HashSet::new();
         let mut retry_queue: LinkedHashSet<BlockHash> = LinkedHashSet::new();
         for (block_hash, request) in self.getdata_request_info.iter_mut() {
             match request.sent_at {
                 Some(sent_at) => {
                     if sent_at.elapsed() > GETDATA_REQUEST_TIMEOUT {
                         retry_queue.insert(*block_hash);
-                        timed_out_peers.insert(request.socket);
                     }
                 }
                 None => {
                     retry_queue.insert(*block_hash);
-                    timed_out_peers.insert(request.socket);
                 }
             }
-        }
-
-        // If a request timed out, there is no point in storing it in getdata_request_info
-        // Not removing it can actually lead to the adapter stalling, thinking all of its peers are busy.
-        for block_hash in &retry_queue {
-            self.getdata_request_info.remove(block_hash);
         }
 
         // If a request timed out, there is no point in storing it in getdata_request_info
