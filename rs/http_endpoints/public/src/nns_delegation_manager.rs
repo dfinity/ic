@@ -13,22 +13,22 @@ use crate::load_root_delegation;
 
 const DELEGATION_UPDATE_INTERVAL: Duration = Duration::from_secs(15 * 60);
 
-struct Metrics {
+struct DelegationManagerMetrics {
     updates: IntCounter,
     update_duration: Histogram,
     delegation_size: Histogram,
 }
 
-impl Metrics {
+impl DelegationManagerMetrics {
     fn new(metrics_registry: &MetricsRegistry) -> Self {
         Self {
             updates: metrics_registry.int_counter(
                 "nns_delegation_manager_updates",
-                "How many times have we fetched the nns delegation",
+                "How many times has the nns delegation been updated",
             ),
             update_duration: metrics_registry.histogram(
                 "nns_delegation_manager_update_duration",
-                "How long it took to fetch the nns delegation, in seconds",
+                "How long it took to update the nns delegation, in seconds",
                 // (1ms, 2ms, 5ms, ..., 10s, 20s, 50s)
                 decimal_buckets(-3, 1),
             ),
@@ -49,7 +49,7 @@ struct DelegationManager {
     nns_subnet_id: SubnetId,
     registry_client: Arc<dyn RegistryClient>,
     tls_config: Arc<dyn TlsConfig + Send + Sync>,
-    metrics: Metrics,
+    metrics: DelegationManagerMetrics,
 }
 
 /// Spawns a task which periodically fetches the nns delegation.
@@ -73,7 +73,7 @@ pub fn start_nns_delegation_manager(
         nns_subnet_id,
         registry_client,
         tls_config,
-        metrics: Metrics::new(metrics_registry),
+        metrics: DelegationManagerMetrics::new(metrics_registry),
     };
 
     let delegation = rt_handle.block_on(manager.fetch());
