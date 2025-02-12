@@ -562,6 +562,8 @@ mod tests {
             rsp.send_response(Err(QueryExecutionError::CertifiedStateUnavailable));
         });
 
+        let (_, rx) = watch::channel(None);
+
         let mut client = CanisterHttpAdapterClientImpl::new(
             tokio::runtime::Handle::current(),
             mock_grpc_channel,
@@ -569,7 +571,7 @@ mod tests {
             100,
             MetricsRegistry::default(),
             SubnetType::Application,
-            Arc::new(OnceCell::new()),
+            rx,
         );
 
         assert_eq!(client.try_receive(), Err(TryReceiveError::Empty));
@@ -615,6 +617,8 @@ mod tests {
             rsp.send_response(Err(QueryExecutionError::CertifiedStateUnavailable));
         });
 
+        let (_, rx) = watch::channel(None);
+
         let mut client = CanisterHttpAdapterClientImpl::new(
             tokio::runtime::Handle::current(),
             mock_grpc_channel,
@@ -622,7 +626,7 @@ mod tests {
             100,
             MetricsRegistry::default(),
             SubnetType::Application,
-            Arc::new(OnceCell::new()),
+            rx,
         );
 
         assert_eq!(
@@ -676,6 +680,8 @@ mod tests {
             )));
         });
 
+        let (_, rx) = watch::channel(None);
+
         let mut client = CanisterHttpAdapterClientImpl::new(
             tokio::runtime::Handle::current(),
             mock_grpc_channel,
@@ -683,7 +689,7 @@ mod tests {
             100,
             MetricsRegistry::default(),
             SubnetType::Application,
-            Arc::new(OnceCell::new()),
+            rx,
         );
 
         assert_eq!(
@@ -735,6 +741,8 @@ mod tests {
             rsp.send_response(Err(QueryExecutionError::CertifiedStateUnavailable));
         });
 
+        let (_, rx) = watch::channel(None);
+
         let mut client = CanisterHttpAdapterClientImpl::new(
             tokio::runtime::Handle::current(),
             mock_grpc_channel,
@@ -742,7 +750,7 @@ mod tests {
             100,
             MetricsRegistry::default(),
             SubnetType::Application,
-            Arc::new(OnceCell::new()),
+            rx,
         );
 
         assert_eq!(
@@ -821,6 +829,8 @@ mod tests {
             )));
         });
 
+        let (_, rx) = watch::channel(None);
+
         let mut client = CanisterHttpAdapterClientImpl::new(
             tokio::runtime::Handle::current(),
             mock_grpc_channel,
@@ -828,7 +838,7 @@ mod tests {
             100,
             MetricsRegistry::default(),
             SubnetType::Application,
-            Arc::new(OnceCell::new()),
+            rx,
         );
 
         // Specify a transform_method name such that the client calls the anonymous query handler.
@@ -894,6 +904,8 @@ mod tests {
             rsp.send_response(Err(QueryExecutionError::CertifiedStateUnavailable));
         });
 
+        let (_, rx) = watch::channel(None);
+
         let mut client = CanisterHttpAdapterClientImpl::new(
             tokio::runtime::Handle::current(),
             mock_grpc_channel,
@@ -901,7 +913,7 @@ mod tests {
             100,
             MetricsRegistry::default(),
             SubnetType::Application,
-            Arc::new(OnceCell::new()),
+            rx,
         );
 
         // Specify a transform_method name such that the client calls the anonymous query handler.
@@ -948,6 +960,8 @@ mod tests {
             rsp.send_response(Err(QueryExecutionError::CertifiedStateUnavailable));
         });
 
+        let (_, rx) = watch::channel(None);
+
         // Create a client with a capacity of 2.
         let mut client = CanisterHttpAdapterClientImpl::new(
             tokio::runtime::Handle::current(),
@@ -956,7 +970,7 @@ mod tests {
             2,
             MetricsRegistry::default(),
             SubnetType::Application,
-            Arc::new(OnceCell::new()),
+            rx,
         );
 
         assert_eq!(client.try_receive(), Err(TryReceiveError::Empty));
