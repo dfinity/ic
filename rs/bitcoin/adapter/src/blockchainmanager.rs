@@ -87,7 +87,7 @@ pub enum ReceivedBlockMessageError {
 /// This struct stores the information regarding a peer with respect to synchronizing the blockchain.
 /// This information is useful to keep track of the commands that have been sent to the peer,
 /// and how much blockchain state has already been synced with the peer.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 struct PeerInfo {
     /// This field stores the socket address of the Bitcoin node (peer)
     socket: SocketAddr,
@@ -561,16 +561,17 @@ impl BlockchainManager {
         }
 
         // Rotate the peer_info vector to ensure that we are not always sending requests to the same peer.
-        let mut peer_info: Vec<_> = self.peer_info.values_mut().collect();
-        if peer_info.is_empty() {
+        let mut peers: Vec<_> = self.peer_info.values().collect();
+        let len = peers.len();
+        if len == 0 {
             return;
         }
-        let offset = self.round_robin_offset % peer_info.len();
-        peer_info.rotate_left(offset);
-        self.round_robin_offset += 1;
+        let offset = self.round_robin_offset % len;
+        peers.rotate_left(offset);
+        self.round_robin_offset = (self.round_robin_offset + 1) % len;
 
         // For each peer, select a random subset of the inventory and send a "getdata" request for it.
-        for peer in peer_info {
+        for peer in peers {
             // Calculate number of inventory that can be sent in 'getdata' request to the peer.
             let requests_sent_to_peer = requests_per_peer.get(&peer.socket).unwrap_or(&0);
             let num_requests_to_be_sent =
