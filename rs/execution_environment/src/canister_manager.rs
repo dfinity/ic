@@ -1750,6 +1750,9 @@ impl CanisterManager {
             .wasm_chunk_store
             .insert_chunk(self.config.wasm_chunk_store_max_size, chunk)
             .expect("Error: Insert chunk cannot fail after checking `can_insert_chunk`");
+
+        canister.update_on_low_wasm_memory_hook_condition();
+
         Ok(UploadChunkResult {
             reply: UploadChunkReply {
                 hash: hash.to_vec(),
@@ -1768,6 +1771,7 @@ impl CanisterManager {
             validate_controller(canister, &sender)?
         }
         canister.system_state.wasm_chunk_store = WasmChunkStore::new(Arc::clone(&self.fd_factory));
+        canister.update_on_low_wasm_memory_hook_condition();
         Ok(())
     }
 
@@ -2056,6 +2060,8 @@ impl CanisterManager {
             .heap_delta_estimate
             .saturating_add(&new_snapshot.heap_delta());
 
+        canister.update_on_low_wasm_memory_hook_condition();
+
         let snapshot_id =
             SnapshotId::from((canister.canister_id(), canister.new_local_snapshot_id()));
         state
@@ -2283,9 +2289,12 @@ impl CanisterManager {
                 snapshot.taken_at_timestamp().as_nanos_since_unix_epoch(),
             ),
         );
+
         state
             .canister_snapshots
             .add_restore_operation(canister_id, snapshot_id);
+
+        new_canister.update_on_low_wasm_memory_hook_condition();
 
         if self.config.rate_limiting_of_heap_delta == FlagStatus::Enabled {
             new_canister.scheduler_state.heap_delta_debit = new_canister
@@ -2379,6 +2388,9 @@ impl CanisterManager {
                 .canister_snapshots
                 .compute_memory_usage_by_canister(canister.canister_id()),
         );
+
+        canister.update_on_low_wasm_memory_hook_condition();
+
         round_limits.subnet_available_memory.increment(
             old_snapshot_size,
             NumBytes::from(0),
