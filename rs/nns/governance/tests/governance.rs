@@ -1884,7 +1884,8 @@ async fn test_manage_network_economics_reject_invalid() {
                 action: Some(proposal::Action::ManageNetworkEconomics(NetworkEconomics {
                     neurons_fund_economics,
 
-                    // Do not touch other fields.
+                    // The proposal will not touch other fields, regardless of
+                    // whether we mention them explicitly or not.
                     reject_cost_e8s: 0,
                     ..Default::default()
                 })),
