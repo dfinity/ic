@@ -16,11 +16,8 @@ use ic_types::{
     canister_http::{CanisterHttpRequest, CanisterHttpResponse},
     messages::CertificateDelegation,
 };
-use std::{convert::TryFrom, sync::Arc};
-use tokio::{
-    net::UnixStream,
-    sync::{watch, OnceCell},
-};
+use std::convert::TryFrom;
+use tokio::{net::UnixStream, sync::watch};
 use tonic::transport::{Endpoint, Uri};
 use tower::service_fn;
 

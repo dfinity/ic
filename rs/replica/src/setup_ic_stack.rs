@@ -281,6 +281,7 @@ pub fn construct_ic_stack(
     ));
 
     let (_, nns_delegation_watcher) = start_nns_delegation_manager(
+        metrics_registry,
         config.http_handler.clone(),
         log.clone(),
         rt_handle_http.clone(),

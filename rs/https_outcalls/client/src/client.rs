@@ -21,7 +21,7 @@ use ic_types::{
     messages::{CertificateDelegation, Query, QuerySource, Request},
     CanisterId, NumBytes,
 };
-use std::{sync::Arc, time::Instant};
+use std::time::Instant;
 use tokio::{
     runtime::Handle,
     sync::{
@@ -30,7 +30,7 @@ use tokio::{
             error::{TryRecvError, TrySendError},
             Receiver, Sender,
         },
-        watch, OnceCell,
+        watch,
     },
 };
 use tonic::{transport::Channel, Code};
