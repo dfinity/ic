@@ -3545,6 +3545,44 @@ mod tests {
     use strum::IntoEnumIterator;
 
     #[test]
+    fn ecdsa_from_u32_exhaustive() {
+        // If this test fails, make sure this trait impl covers all variants:
+        // `impl TryFrom<u32> for EcdsaCurve`
+        for curve in EcdsaCurve::iter() {
+            match curve {
+                EcdsaCurve::Secp256k1 => assert_eq!(EcdsaCurve::try_from(0).unwrap(), curve),
+            }
+        }
+    }
+
+    #[test]
+    fn schnorr_from_u32_exhaustive() {
+        // If this test fails, make sure this trait impl covers all variants:
+        // `impl TryFrom<u32> for SchnorrAlgorithm`
+        for algorithm in SchnorrAlgorithm::iter() {
+            match algorithm {
+                SchnorrAlgorithm::Bip340Secp256k1 => {
+                    assert_eq!(SchnorrAlgorithm::try_from(0).unwrap(), algorithm)
+                }
+                SchnorrAlgorithm::Ed25519 => {
+                    assert_eq!(SchnorrAlgorithm::try_from(1).unwrap(), algorithm)
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn vetkd_from_u32_exhaustive() {
+        // If this test fails, make sure this trait impl covers all variants:
+        // `impl TryFrom<u32> for VetKdCurve`
+        for curve in VetKdCurve::iter() {
+            match curve {
+                VetKdCurve::Bls12_381_G2 => assert_eq!(VetKdCurve::try_from(0).unwrap(), curve),
+            }
+        }
+    }
+
+    #[test]
     fn canister_install_mode_round_trip() {
         fn canister_install_mode_round_trip_aux(mode: CanisterInstallMode) {
             let pb_mode = CanisterInstallModeProto::from(&mode);
