@@ -21,6 +21,7 @@ ic-interfaces-certified-stream-store = { path = "../../interfaces/certified_stre
 ic-interfaces-registry = { path = "../../interfaces/registry" }
 ic-interfaces-state-manager = { path = "../../interfaces/state_manager" }
 ic-logger = { path = "../../monitoring/logger" }
+ic-messaging = { path = "../../messaging" }
 ic-metrics = { path = "../../monitoring/metrics" }
 ic-protobuf = { path = "../../protobuf" }
 ic-registry-client-helpers = { path = "../../registry/helpers" }

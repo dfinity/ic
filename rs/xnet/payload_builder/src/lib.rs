@@ -29,6 +29,7 @@ use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::{StateManager, StateManagerError};
 use ic_limits::SYSTEM_SUBNET_STREAM_MSG_LIMIT;
 use ic_logger::{error, info, log, warn, ReplicaLogger};
+use ic_messaging::MAX_STREAM_MESSAGES;
 use ic_metrics::buckets::{decimal_buckets, decimal_buckets_with_zero};
 use ic_metrics::MetricsRegistry;
 use ic_protobuf::messaging::xnet::v1 as pb;
@@ -223,10 +224,6 @@ impl XNetPayloadBuilderMetrics {
             .observe(since.elapsed().as_secs_f64());
     }
 }
-
-// TODO(MR-636): Consider making this an argument to allow for testing without generating so many
-// messages; or else at least unify this constant and `MAX_STREAM_MESSAGES` in the stream builder.
-pub const MAX_STREAM_MESSAGES: usize = 10_000;
 
 /// Implementation of `XNetPayloadBuilder` that uses a `StateManager`,
 /// `RegistryClient` and `XNetClient` to build and validate `XNetPayloads`.
