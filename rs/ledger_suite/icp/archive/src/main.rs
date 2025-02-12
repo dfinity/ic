@@ -79,7 +79,7 @@ thread_local! {
 }
 
 fn max_memory_size_bytes() -> u64 {
-    if let Some(max_memory_size_bytes) = MAX_MEMORY_SIZE_BYTES_CACHE.with(|m| m.borrow().clone()) {
+    if let Some(max_memory_size_bytes) = MAX_MEMORY_SIZE_BYTES_CACHE.with(|m| *m.borrow()) {
         return max_memory_size_bytes;
     }
     let max_memory_size_bytes = MAX_MEMORY_SIZE_BYTES.with(|cell| *cell.borrow().get());
@@ -95,7 +95,7 @@ fn set_max_memory_size_bytes(max_memory_size_bytes: u64) {
 }
 
 fn block_height_offset() -> u64 {
-    if let Some(block_height_offset) = BLOCK_HEIGHT_OFFSET_CACHE.with(|b| b.borrow().clone()) {
+    if let Some(block_height_offset) = BLOCK_HEIGHT_OFFSET_CACHE.with(|b| *b.borrow()) {
         return block_height_offset;
     }
     let block_height_offset = BLOCK_HEIGHT_OFFSET.with(|cell| *cell.borrow().get());
@@ -111,7 +111,7 @@ fn set_block_height_offset(block_height_offset: u64) {
 }
 
 fn total_block_size() -> u64 {
-    if let Some(total_block_size) = TOTAL_BLOCK_SIZE_CACHE.with(|b| b.borrow().clone()) {
+    if let Some(total_block_size) = TOTAL_BLOCK_SIZE_CACHE.with(|b| *b.borrow()) {
         return total_block_size;
     }
     let total_block_size = TOTAL_BLOCK_SIZE.with(|cell| *cell.borrow().get());
@@ -127,7 +127,7 @@ fn set_total_block_size(total_block_size: u64) {
 }
 
 fn ledger_canister_id() -> CanisterId {
-    if let Some(ledger_canister_id) = LEDGER_CANISTER_ID_CACHE.with(|l| l.borrow().clone()) {
+    if let Some(ledger_canister_id) = LEDGER_CANISTER_ID_CACHE.with(|l| *l.borrow()) {
         return ledger_canister_id;
     }
     let id_bytes = LEDGER_CANISTER_ID.with(|cell| cell.borrow().get().clone());
