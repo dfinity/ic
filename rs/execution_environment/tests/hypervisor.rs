@@ -15,6 +15,8 @@ use ic_management_canister_types_private::EcdsaKeyId;
 use ic_management_canister_types_private::MasterPublicKeyId;
 use ic_management_canister_types_private::SchnorrAlgorithm;
 use ic_management_canister_types_private::SchnorrKeyId;
+use ic_management_canister_types_private::VetKdCurve;
+use ic_management_canister_types_private::VetKdKeyId;
 use ic_management_canister_types_private::{
     CanisterChange, CanisterHttpResponsePayload, CanisterStatusType, CanisterUpgradeOptions,
 };
@@ -8372,7 +8374,7 @@ fn invoke_cost_sign_with_schnorr() {
     let res = test.ingress(canister_id, "update", payload);
     let expected_cost = test
         .cycles_account_manager()
-        .ecdsa_signature_fee(subnet_size);
+        .schnorr_signature_fee(subnet_size);
     let Ok(WasmResult::Reply(bytes)) = res else {
         panic!("Expected reply, got {:?}", res);
     };
@@ -8429,5 +8431,83 @@ fn cost_sign_with_schnorr_fails_bad_key_name() {
     err.assert_contains(
         ErrorCode::CanisterCalledTrap,
         "ic0.cost_sign_with_schnorr failed with error code 2",
+    );
+}
+
+#[test]
+fn invoke_cost_vetkd_derive_encrypted_key() {
+    let key_name = String::from("testkey");
+    let curve_variant = 0;
+    let mut test = ExecutionTestBuilder::new()
+        .with_chain_key(MasterPublicKeyId::VetKd(VetKdKeyId {
+            curve: VetKdCurve::try_from(curve_variant).unwrap(),
+            name: key_name.clone(),
+        }))
+        .build();
+    let subnet_size = test.subnet_size();
+    let canister_id = test.universal_canister().unwrap();
+    let payload = wasm()
+        .cost_vetkd_derive_encrypted_key(key_name.as_bytes(), curve_variant)
+        .reply_data_append()
+        .reply()
+        .build();
+    let res = test.ingress(canister_id, "update", payload);
+    let expected_cost = test.cycles_account_manager().vetkd_fee(subnet_size);
+    let Ok(WasmResult::Reply(bytes)) = res else {
+        panic!("Expected reply, got {:?}", res);
+    };
+    let actual_cost = Cycles::from(&bytes);
+    assert_eq!(actual_cost, expected_cost,);
+}
+
+#[test]
+fn cost_vetkd_derive_encrypted_key_fails_bad_curve() {
+    let key_name = String::from("testkey");
+    let curve_variant = 0;
+    let mut test = ExecutionTestBuilder::new()
+        .with_chain_key(MasterPublicKeyId::VetKd(VetKdKeyId {
+            curve: VetKdCurve::try_from(curve_variant).unwrap(),
+            name: key_name.clone(),
+        }))
+        .build();
+    let canister_id = test.universal_canister().unwrap();
+    let payload = wasm()
+        .cost_vetkd_derive_encrypted_key(key_name.as_bytes(), curve_variant + 10)
+        .reply_data_append()
+        .reply()
+        .build();
+    let res = test.ingress(canister_id, "update", payload);
+    let Err(err) = res else {
+        panic!("Expected Err, got Ok");
+    };
+    err.assert_contains(
+        ErrorCode::CanisterCalledTrap,
+        "ic0.cost_vetkd_derive_encrypted_key failed with error code 1",
+    );
+}
+
+#[test]
+fn cost_vetkd_derive_encrypted_key_fails_bad_key_name() {
+    let key_name = String::from("testkey");
+    let curve_variant = 0;
+    let mut test = ExecutionTestBuilder::new()
+        .with_chain_key(MasterPublicKeyId::VetKd(VetKdKeyId {
+            curve: VetKdCurve::try_from(curve_variant).unwrap(),
+            name: key_name.clone(),
+        }))
+        .build();
+    let canister_id = test.universal_canister().unwrap();
+    let payload = wasm()
+        .cost_vetkd_derive_encrypted_key(String::from("yesn't").as_bytes(), curve_variant)
+        .reply_data_append()
+        .reply()
+        .build();
+    let res = test.ingress(canister_id, "update", payload);
+    let Err(err) = res else {
+        panic!("Expected Err, got Ok");
+    };
+    err.assert_contains(
+        ErrorCode::CanisterCalledTrap,
+        "ic0.cost_vetkd_derive_encrypted_key failed with error code 2",
     );
 }
