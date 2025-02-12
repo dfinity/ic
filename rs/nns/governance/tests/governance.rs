@@ -1923,6 +1923,13 @@ async fn test_manage_network_economics_reject_invalid() {
     );
 }
 
+// These values are individually compatible with
+// NetworkEconomics::with_default_values, but they are not compatible with
+// each other. This means that separate proposals can be made to set these
+// values, but when the second one is executed, it fails.
+const NEW_MINIMUM_ICP_XDR_RATE: u64 = 500_000;
+const NEW_MAXIMUM_ICP_XDR_RATE: u64 = 499_000;
+
 #[tokio::test]
 async fn test_manage_network_economics_revalidate_at_execution_time_set_minimum_icp_xdr_rate_first()
 {
@@ -1942,7 +1949,7 @@ async fn test_manage_network_economics_revalidate_at_execution_time_set_minimum_
         .as_mut()
         .unwrap()
         .minimum_icp_xdr_rate = Some(Percentage {
-        basis_points: Some(500_000),
+        basis_points: Some(NEW_MINIMUM_ICP_XDR_RATE),
     });
 
     assert_eq!(new_network_economics, expected_network_economics);
@@ -1967,7 +1974,7 @@ async fn test_manage_network_economics_revalidate_at_execution_time_set_maximum_
         .as_mut()
         .unwrap()
         .maximum_icp_xdr_rate = Some(Percentage {
-        basis_points: Some(499_000),
+        basis_points: Some(NEW_MAXIMUM_ICP_XDR_RATE),
     });
 
     assert_eq!(new_network_economics, expected_network_economics);
@@ -2016,12 +2023,6 @@ async fn test_manage_network_economics_revalidate_at_execution_time(
     // Step 2.1: Make two proposals. Both look good at the outset, but they are
     // incompatible with one another.
 
-    // These values are individually compatible with the original parameters.
-    // This means that proposals can be made, but when the second one is
-    // executed, it fails.
-    let new_min = 500_000;
-    let new_max = 499_000;
-
     let set_min_proposal_id = gov
         .make_proposal(
             &NeuronId { id: 1 },
@@ -2033,7 +2034,7 @@ async fn test_manage_network_economics_revalidate_at_execution_time(
                 action: Some(proposal::Action::ManageNetworkEconomics(NetworkEconomics {
                     neurons_fund_economics: Some(NeuronsFundEconomics {
                         minimum_icp_xdr_rate: Some(Percentage {
-                            basis_points: Some(new_min),
+                            basis_points: Some(NEW_MINIMUM_ICP_XDR_RATE),
                         }),
                         ..Default::default()
                     }),
@@ -2055,7 +2056,7 @@ async fn test_manage_network_economics_revalidate_at_execution_time(
                 action: Some(proposal::Action::ManageNetworkEconomics(NetworkEconomics {
                     neurons_fund_economics: Some(NeuronsFundEconomics {
                         maximum_icp_xdr_rate: Some(Percentage {
-                            basis_points: Some(new_max),
+                            basis_points: Some(NEW_MAXIMUM_ICP_XDR_RATE),
                         }),
                         ..Default::default()
                     }),
