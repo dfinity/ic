@@ -139,6 +139,8 @@ pub struct BlockchainManager {
 
     /// This field stores the map of which bitcoin nodes sent which "inv" messages.
     peer_info: HashMap<SocketAddr, PeerInfo>,
+    /// This field is used to keep track of the next peer to send a "getdata" request to.
+    round_robin_offset: usize,
 
     /// This HashMap stores the information related to each getdata request
     /// sent by the BlockChainManager. An entry is removed from this hashmap when
@@ -185,6 +187,7 @@ impl BlockchainManager {
         BlockchainManager {
             blockchain,
             peer_info,
+            round_robin_offset: 0,
             getdata_request_info,
             getheaders_requests: HashMap::new(),
             catchup_headers: HashSet::new(),
@@ -557,18 +560,14 @@ impl BlockchainManager {
             *counter = counter.saturating_add(1);
         }
 
+        // Rotate the peer_info vector to ensure that we are not always sending requests to the same peer.
         let mut peer_info: Vec<_> = self.peer_info.values_mut().collect();
-        peer_info.sort_by(|a, b| {
-            // 0 if peer didn't time out, 1 if it did
-            let a_timed_out = timed_out_peers.contains(&a.socket) as u8;
-            let b_timed_out = timed_out_peers.contains(&b.socket) as u8;
-
-            let requests_sent_to_a = requests_per_peer.get(&a.socket).unwrap_or(&0);
-            let requests_sent_to_b = requests_per_peer.get(&b.socket).unwrap_or(&0);
-
-            // Sort first by whether the peer is timed out, then by requests_in_flight
-            (a_timed_out, requests_sent_to_a).cmp(&(b_timed_out, requests_sent_to_b))
-        });
+        if peer_info.is_empty() {
+            return;
+        }
+        let offset = self.round_robin_offset % peer_info.len();
+        peer_info.rotate_left(offset);
+        self.round_robin_offset += 1;
 
         // For each peer, select a random subset of the inventory and send a "getdata" request for it.
         for peer in peer_info {
