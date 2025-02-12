@@ -23,7 +23,10 @@ use ic_nns_test_utils::{
 };
 use ic_sns_governance::{
     governance::Governance,
-    neuron::{NeuronState, DEFAULT_VOTING_POWER_PERCENTAGE_MULTIPLIER},
+    types::{test_helpers::NativeEnvironment, Environment},
+};
+use ic_sns_governance_api::{
+    neuron::NeuronState,
     pb::v1::{
         governance::{self, SnsMetadata},
         governance_error::ErrorType,
@@ -36,13 +39,12 @@ use ic_sns_governance::{
         manage_neuron_response::Command as CommandResponse,
         neuron::DissolveState::{self, DissolveDelaySeconds},
         proposal::Action,
-        Account as AccountProto, Ballot, Empty, Governance as GovernanceProto, GovernanceError,
+        Account as AccountApi, Ballot, Empty, Governance as GovernanceProto, GovernanceError,
         ListNeurons, ListNeuronsResponse, ManageNeuron, ManageNeuronResponse, Motion,
         NervousSystemParameters, Neuron, NeuronId, NeuronPermission, NeuronPermissionList,
         NeuronPermissionType, Proposal, ProposalData, ProposalId, ProposalRewardStatus,
         RewardEvent, Vote, VotingRewardsParameters, WaitForQuietState,
     },
-    types::{test_helpers::NativeEnvironment, Environment},
 };
 use ic_sns_test_utils::{
     icrc1,
@@ -149,7 +151,7 @@ fn test_list_neurons_of_principal() {
             neuron_claimer_permissions: Some(NeuronPermissionList {
                 permissions: NeuronPermissionType::all(),
             }),
-            ..NervousSystemParameters::with_default_values()
+            ..NervousSystemParameters::default()
         };
 
         let alloc = Tokens::from_tokens(1000).unwrap();
@@ -201,7 +203,7 @@ fn test_claim_neuron_with_default_permissions() {
 
         let expected = vec![NeuronPermission::new(
             &user.get_principal_id(),
-            NervousSystemParameters::with_default_values()
+            NervousSystemParameters::default()
                 .neuron_claimer_permissions
                 .unwrap()
                 .permissions,
@@ -222,7 +224,7 @@ fn test_canister_can_claim_and_manage_neuron() {
         let universal_canister = set_up_universal_canister(&runtime).await;
         let principal_id = universal_canister.canister_id().get();
 
-        let mut params = NervousSystemParameters::with_default_values();
+        let mut params = NervousSystemParameters::default();
         params.neuron_claimer_permissions = Some(NeuronPermissionList {
             permissions: NeuronPermissionType::all(),
         });
@@ -335,7 +337,7 @@ fn test_claim_neuron_happy() {
             neuron_claimer_permissions: Some(NeuronPermissionList {
                 permissions: NeuronPermissionType::all(),
             }),
-            ..NervousSystemParameters::with_default_values()
+            ..NervousSystemParameters::default()
         };
 
         let sns_init_payload = SnsTestsInitPayloadBuilder::new()
@@ -425,7 +427,7 @@ fn test_claim_neuron_happy() {
         assert_eq!(neuron.cached_neuron_stake_e8s, TOKEN_SUBDIVIDABLE_BY);
         assert_eq!(
             neuron.voting_power_percentage_multiplier,
-            DEFAULT_VOTING_POWER_PERCENTAGE_MULTIPLIER
+            ic_sns_governance::neuron::DEFAULT_VOTING_POWER_PERCENTAGE_MULTIPLIER
         );
 
         Ok(())
@@ -445,7 +447,7 @@ fn test_claim_neuron_fails_when_max_number_of_neurons_is_reached() {
                 permissions: NeuronPermissionType::all(),
             }),
             max_number_of_neurons: Some(1),
-            ..NervousSystemParameters::with_default_values()
+            ..NervousSystemParameters::default()
         };
 
         let sns_init_payload = SnsTestsInitPayloadBuilder::new()
@@ -552,7 +554,7 @@ fn test_refresh_neuron() {
             neuron_claimer_permissions: Some(NeuronPermissionList {
                 permissions: NeuronPermissionType::all(),
             }),
-            ..NervousSystemParameters::with_default_values()
+            ..NervousSystemParameters::default()
         };
 
         let sns_init_payload = SnsTestsInitPayloadBuilder::new()
@@ -669,7 +671,7 @@ fn test_neuron_action_is_not_authorized() {
                 permissions: NeuronPermissionType::all(),
             }),
             voting_rewards_parameters: Some(VOTING_REWARDS_PARAMETERS),
-            ..NervousSystemParameters::with_default_values()
+            ..NervousSystemParameters::default()
         };
 
         let sns_init_payload = SnsTestsInitPayloadBuilder::new()
@@ -728,7 +730,7 @@ fn get_sns_canisters_now_seconds() -> i64 {
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap()
         .as_secs() as i64
-        + (NervousSystemParameters::with_default_values()
+        + (NervousSystemParameters::default()
             .initial_voting_period_seconds
             .unwrap() as i64)
         + 1
@@ -781,7 +783,7 @@ fn test_disburse_maturity_succeeds_to_self() {
         let in_progress = &neuron.disburse_maturity_in_progress[0];
         let target_account = in_progress.account_to_disburse_to.as_ref().unwrap().clone();
         assert_eq!(in_progress.amount_e8s, earned_maturity_e8s);
-        assert_eq!(target_account, AccountProto::from(account_identifier));
+        assert_eq!(target_account, AccountApi::from(account_identifier));
         let now = get_sns_canisters_now_seconds();
         let ts = in_progress.timestamp_of_disbursement_seconds as i64;
         let d_age = now - ts;
@@ -826,7 +828,7 @@ fn test_disburse_maturity_succeeds_to_other_account() {
                     subaccount: subaccount.to_vec(),
                     command: Some(Command::DisburseMaturity(DisburseMaturity {
                         percentage_to_disburse: 50,
-                        to_account: Some(AccountProto {
+                        to_account: Some(AccountApi {
                             owner: Some(maturity_receiver.get_principal_id()),
                             subaccount: None,
                         }),
@@ -858,7 +860,7 @@ fn test_disburse_maturity_succeeds_to_other_account() {
         assert_eq!(in_progress.amount_e8s, response.amount_disbursed_e8s);
         assert_eq!(
             target_account,
-            AccountProto::from(Account {
+            AccountApi::from(Account {
                 owner: maturity_receiver.get_principal_id().0,
                 subaccount: None
             })
@@ -901,7 +903,7 @@ fn test_disburse_maturity_fails_if_no_maturity() {
             neuron_claimer_permissions: Some(NeuronPermissionList {
                 permissions: NeuronPermissionType::all(),
             }),
-            ..NervousSystemParameters::with_default_values()
+            ..NervousSystemParameters::default()
         };
 
         let sns_init_payload = SnsTestsInitPayloadBuilder::new()
@@ -977,7 +979,7 @@ async fn create_sns_canisters_with_staked_neuron_and_maturity<'a>(
             round_duration_seconds: Some(10),
             ..VOTING_REWARDS_PARAMETERS
         }),
-        ..NervousSystemParameters::with_default_values()
+        ..NervousSystemParameters::default()
     };
 
     let sns_init_payload = SnsTestsInitPayloadBuilder::new()
@@ -1259,7 +1261,7 @@ async fn zero_total_reward_shares() {
         swap_canister_id: Some(PrincipalId::new(29, swap_canister_id)),
         parameters: Some(NervousSystemParameters {
             voting_rewards_parameters: Some(VOTING_REWARDS_PARAMETERS),
-            ..NervousSystemParameters::with_default_values()
+            ..NervousSystemParameters::default()
         }),
         mode: governance::Mode::Normal as i32,
 
@@ -1376,7 +1378,7 @@ async fn couple_of_neurons_who_voted_get_rewards() {
 
     let nervous_system_parameters = NervousSystemParameters {
         voting_rewards_parameters: Some(VOTING_REWARDS_PARAMETERS),
-        ..NervousSystemParameters::with_default_values()
+        ..NervousSystemParameters::default()
     };
 
     let environment = NativeEnvironment::default();
@@ -1653,7 +1655,7 @@ fn test_one_user_cannot_claim_other_users_neuron() {
             neuron_claimer_permissions: Some(NeuronPermissionList {
                 permissions: NeuronPermissionType::all(),
             }),
-            ..NervousSystemParameters::with_default_values()
+            ..NervousSystemParameters::default()
         };
 
         let sns_init_payload = SnsTestsInitPayloadBuilder::new()
@@ -1788,7 +1790,7 @@ fn test_neuron_add_all_permissions_to_self() {
                 permissions: NeuronPermissionType::all(),
             }),
             // ManagePrincipals will be granted to the claimer automatically
-            ..NervousSystemParameters::with_default_values()
+            ..NervousSystemParameters::default()
         };
 
         let sns_init_payload = SnsTestsInitPayloadBuilder::new()
@@ -1810,7 +1812,7 @@ fn test_neuron_add_all_permissions_to_self() {
         );
         assert_eq!(
             neuron.permissions[0].permission_type.len(),
-            NervousSystemParameters::with_default_values()
+            NervousSystemParameters::default()
                 .neuron_claimer_permissions
                 .unwrap()
                 .permissions
@@ -1861,7 +1863,7 @@ fn test_neuron_add_multiple_permissions_and_principals() {
                 permissions: NeuronPermissionType::all(),
             }),
             // ManagePrincipals will be granted to the claimer automatically
-            ..NervousSystemParameters::with_default_values()
+            ..NervousSystemParameters::default()
         };
 
         let sns_init_payload = SnsTestsInitPayloadBuilder::new()
@@ -1945,7 +1947,7 @@ fn test_neuron_add_non_grantable_permission_fails() {
                 permissions: vec![],
             }),
             // ManagePrincipals will be granted to the claimer automatically
-            ..NervousSystemParameters::with_default_values()
+            ..NervousSystemParameters::default()
         };
 
         let sns_init_payload = SnsTestsInitPayloadBuilder::new()
@@ -2017,7 +2019,7 @@ fn test_exceeding_max_principals_for_neuron_fails() {
             }),
             max_number_of_principals_per_neuron: Some(5_u64),
             // ManagePrincipals will be granted to the claimer automatically
-            ..NervousSystemParameters::with_default_values()
+            ..NervousSystemParameters::default()
         };
 
         let sns_init_payload = SnsTestsInitPayloadBuilder::new()
@@ -2110,7 +2112,7 @@ fn test_add_neuron_permission_missing_principal_id_fails() {
                 permissions: NeuronPermissionType::all(),
             }),
             // ManagePrincipals will be granted to the claimer automatically
-            ..NervousSystemParameters::with_default_values()
+            ..NervousSystemParameters::default()
         };
 
         let sns_init_payload = SnsTestsInitPayloadBuilder::new()
@@ -2176,7 +2178,7 @@ fn test_neuron_remove_all_permissions_of_self() {
             neuron_claimer_permissions: Some(NeuronPermissionList {
                 permissions: NeuronPermissionType::all(),
             }),
-            ..NervousSystemParameters::with_default_values()
+            ..NervousSystemParameters::default()
         };
 
         let sns_init_payload = SnsTestsInitPayloadBuilder::new()
@@ -2232,7 +2234,7 @@ fn test_neuron_remove_some_permissions() {
             neuron_claimer_permissions: Some(NeuronPermissionList {
                 permissions: NeuronPermissionType::all(),
             }),
-            ..NervousSystemParameters::with_default_values()
+            ..NervousSystemParameters::default()
         };
 
         let sns_init_payload = SnsTestsInitPayloadBuilder::new()
@@ -2301,7 +2303,7 @@ fn test_neuron_remove_permissions_of_wrong_principal() {
             neuron_claimer_permissions: Some(NeuronPermissionList {
                 permissions: NeuronPermissionType::all(),
             }),
-            ..NervousSystemParameters::with_default_values()
+            ..NervousSystemParameters::default()
         };
 
         let sns_init_payload = SnsTestsInitPayloadBuilder::new()
@@ -2374,7 +2376,7 @@ fn test_neuron_remove_permissions_of_different_principal() {
                 permissions: NeuronPermissionType::all(),
             }),
             // ManagePrincipals will be granted to the claimer automatically
-            ..NervousSystemParameters::with_default_values()
+            ..NervousSystemParameters::default()
         };
 
         let sns_init_payload = SnsTestsInitPayloadBuilder::new()
@@ -2460,7 +2462,7 @@ fn test_remove_neuron_permission_missing_principal_id_fails() {
                 permissions: NeuronPermissionType::all(),
             }),
             // ManagePrincipals will be granted to the claimer automatically
-            ..NervousSystemParameters::with_default_values()
+            ..NervousSystemParameters::default()
         };
 
         let sns_init_payload = SnsTestsInitPayloadBuilder::new()
@@ -2524,7 +2526,7 @@ fn test_remove_neuron_permission_when_neuron_missing_permission_type_fails() {
                 permissions: NeuronPermissionType::all(),
             }),
             // ManagePrincipals and Vote will be granted to the claimer automatically
-            ..NervousSystemParameters::with_default_values()
+            ..NervousSystemParameters::default()
         };
 
         let sns_init_payload = SnsTestsInitPayloadBuilder::new()
@@ -2603,7 +2605,7 @@ fn test_disburse_neuron_to_self_succeeds() {
             neuron_claimer_permissions: Some(NeuronPermissionList {
                 permissions: NeuronPermissionType::all(),
             }),
-            ..NervousSystemParameters::with_default_values()
+            ..NervousSystemParameters::default()
         };
 
         let sns_init_payload = SnsTestsInitPayloadBuilder::new()
@@ -2718,7 +2720,7 @@ fn test_disburse_neuron_to_different_account_succeeds() {
             neuron_claimer_permissions: Some(NeuronPermissionList {
                 permissions: NeuronPermissionType::all(),
             }),
-            ..NervousSystemParameters::with_default_values()
+            ..NervousSystemParameters::default()
         };
 
         let sns_init_payload = SnsTestsInitPayloadBuilder::new()
@@ -2819,7 +2821,7 @@ fn test_disburse_neuron_burns_neuron_fees() {
             neuron_claimer_permissions: Some(NeuronPermissionList {
                 permissions: NeuronPermissionType::all(),
             }),
-            ..NervousSystemParameters::with_default_values()
+            ..NervousSystemParameters::default()
         };
 
         let sns_init_payload = SnsTestsInitPayloadBuilder::new()
@@ -2944,7 +2946,7 @@ fn test_split_neuron_succeeds() {
             neuron_claimer_permissions: Some(NeuronPermissionList {
                 permissions: NeuronPermissionType::all(),
             }),
-            ..NervousSystemParameters::with_default_values()
+            ..NervousSystemParameters::default()
         };
 
         let sns_init_payload = SnsTestsInitPayloadBuilder::new()
@@ -3031,7 +3033,7 @@ fn test_split_neuron_inheritance() {
             neuron_claimer_permissions: Some(NeuronPermissionList {
                 permissions: NeuronPermissionType::all(),
             }),
-            ..NervousSystemParameters::with_default_values()
+            ..NervousSystemParameters::default()
         };
 
         let sns_init_payload = SnsTestsInitPayloadBuilder::new()
@@ -3126,7 +3128,7 @@ fn test_split_neuron_child_amount_is_above_min_stake() {
             neuron_claimer_permissions: Some(NeuronPermissionList {
                 permissions: NeuronPermissionType::all(),
             }),
-            ..NervousSystemParameters::with_default_values()
+            ..NervousSystemParameters::default()
         };
 
         let sns_init_payload = SnsTestsInitPayloadBuilder::new()
@@ -3214,7 +3216,7 @@ fn test_split_neuron_parent_amount_is_above_min_stake() {
             neuron_claimer_permissions: Some(NeuronPermissionList {
                 permissions: NeuronPermissionType::all(),
             }),
-            ..NervousSystemParameters::with_default_values()
+            ..NervousSystemParameters::default()
         };
 
         let sns_init_payload = SnsTestsInitPayloadBuilder::new()
@@ -3302,7 +3304,7 @@ fn test_neuron_voting_power_multiplier_with_ballots() {
             neuron_claimer_permissions: Some(NeuronPermissionList {
                 permissions: NeuronPermissionType::all(),
             }),
-            ..NervousSystemParameters::with_default_values()
+            ..NervousSystemParameters::default()
         };
 
         let dissolve_delay_seconds = *params

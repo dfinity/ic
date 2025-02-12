@@ -6,7 +6,7 @@ use ic_nervous_system_common_test_keys::{
     TEST_USER1_KEYPAIR, TEST_USER2_KEYPAIR, TEST_USER3_KEYPAIR, TEST_USER4_KEYPAIR,
     TEST_USER5_KEYPAIR,
 };
-use ic_sns_governance::pb::v1::{
+use ic_sns_governance_api::pb::v1::{
     proposal::Action, Motion, NervousSystemParameters, NeuronPermissionList, NeuronPermissionType,
     Proposal,
 };
@@ -23,7 +23,7 @@ fn test_init_with_sys_params() {
         let system_params = NervousSystemParameters {
             transaction_fee_e8s: Some(100_000),
             reject_cost_e8s: Some(0),
-            ..NervousSystemParameters::with_default_values()
+            ..NervousSystemParameters::default()
         };
 
         let sns_init_payload = SnsTestsInitPayloadBuilder::new()
@@ -75,7 +75,7 @@ fn test_existing_proposals_unaffected_by_sns_parameter_changes() {
                 }),
                 initial_voting_period_seconds: Some(initial_initial_voting_period_seconds),
                 wait_for_quiet_deadline_increase_seconds: Some(ONE_DAY_SECONDS / 8),
-                ..NervousSystemParameters::with_default_values()
+                ..NervousSystemParameters::default()
             };
 
             let sns_init_payload = SnsTestsInitPayloadBuilder::new()
@@ -90,7 +90,7 @@ fn test_existing_proposals_unaffected_by_sns_parameter_changes() {
             let sns_canisters = SnsCanisters::set_up(&runtime, sns_init_payload).await; // slow
 
             // Create neurons.
-            let transaction_fee_e8s = system_params.transaction_fee_e8s();
+            let transaction_fee_e8s = system_params.transaction_fee_e8s.unwrap();
             let stake_amount =
                 Tokens::from_e8s(user_1_tokens.get_e8s() - transaction_fee_e8s).get_tokens();
             let user_1_neuron_id = sns_canisters

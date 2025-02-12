@@ -303,12 +303,7 @@ impl VotingRewardsParameters {
     }
 
     pub fn with_default_values() -> Self {
-        Self {
-            round_duration_seconds: Some(ic_nervous_system_common::ONE_DAY_SECONDS),
-            reward_rate_transition_duration_seconds: Some(0),
-            initial_reward_rate_basis_points: Some(0),
-            final_reward_rate_basis_points: Some(0),
-        }
+        Self::from(ic_sns_governance_api::pb::v1::VotingRewardsParameters::with_default_values())
     }
 
     /// Any empty fields of `self` are overwritten with the corresponding fields of `base`.

@@ -18,7 +18,7 @@ use ic_nns_test_utils::state_test_helpers::{
     sns_wait_for_proposal_execution, update,
 };
 use ic_protobuf::types::v1::CanisterInstallMode as CanisterInstallModeProto;
-use ic_sns_governance::pb::v1::{
+use ic_sns_governance_api::pb::v1::{
     governance_error::ErrorType, proposal::Action, NervousSystemParameters, NeuronId,
     NeuronPermissionList, NeuronPermissionType, Proposal, UpgradeSnsControlledCanister,
 };
@@ -60,7 +60,7 @@ fn setup_sns(
         neuron_claimer_permissions: Some(NeuronPermissionList {
             permissions: NeuronPermissionType::all(),
         }),
-        ..NervousSystemParameters::with_default_values()
+        ..NervousSystemParameters::default()
     };
 
     let sns_init_payload = SnsTestsInitPayloadBuilder::new()
@@ -194,7 +194,7 @@ fn test_upgrade_canister_proposal_reinstall() {
             neuron_claimer_permissions: Some(NeuronPermissionList {
                 permissions: NeuronPermissionType::all(),
             }),
-            ..NervousSystemParameters::with_default_values()
+            ..NervousSystemParameters::default()
         };
 
         let sns_init_payload = SnsTestsInitPayloadBuilder::new()
@@ -342,7 +342,7 @@ fn test_upgrade_canister_proposal_execution_fail() {
             neuron_claimer_permissions: Some(NeuronPermissionList {
                 permissions: NeuronPermissionType::all(),
             }),
-            ..NervousSystemParameters::with_default_values()
+            ..NervousSystemParameters::default()
         };
 
         let mut sns_init_payload = SnsTestsInitPayloadBuilder::new()
@@ -607,7 +607,7 @@ fn test_upgrade_after_state_shrink() {
             neuron_grantable_permissions: Some(NeuronPermissionList {
                 permissions: NeuronPermissionType::all(),
             }),
-            ..NervousSystemParameters::with_default_values()
+            ..NervousSystemParameters::default()
         };
 
         let sns_init_payload = SnsTestsInitPayloadBuilder::new()
@@ -699,7 +699,7 @@ fn test_upgrade_after_state_shrink() {
 fn test_install_canisters_in_any_order() {
     state_machine_test_on_sns_subnet(|runtime| async move {
         let mut sns_init_payload = SnsTestsInitPayloadBuilder::new()
-            .with_nervous_system_parameters(NervousSystemParameters::with_default_values())
+            .with_nervous_system_parameters(NervousSystemParameters::default())
             .build();
 
         // Initialize the SNS canisters but do not install any canister code

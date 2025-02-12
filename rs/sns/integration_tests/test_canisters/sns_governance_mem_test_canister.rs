@@ -306,7 +306,7 @@ fn populate_canister_state() {
     );
 
     // Generate initial Governance data
-    let nervous_system_parameters = NervousSystemParameters::with_default_values();
+    let nervous_system_parameters = NervousSystemParameters::default();
 
     let mut proto = GovernanceProto {
         neurons: Default::default(),

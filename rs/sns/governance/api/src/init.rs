@@ -14,7 +14,7 @@ impl GovernanceCanisterInitPayloadBuilder {
     pub fn new() -> Self {
         Self {
             proto: Governance {
-                parameters: Some(NervousSystemParameters::with_default_values()),
+                parameters: Some(NervousSystemParameters::default()),
                 mode: Mode::PreInitializationSwap as i32,
                 sns_metadata: Some(SnsMetadata {
                     logo: Some("data:image/png;base64,aGVsbG8gZnJvbSBkZmluaXR5IQ==".to_string()),
@@ -51,7 +51,7 @@ impl GovernanceCanisterInitPayloadBuilder {
     }
 
     pub fn with_mode(&mut self, mode: Mode) -> &mut Self {
-        self.proto.set_mode(mode);
+        self.proto.mode = mode as i32;
         self
     }
 

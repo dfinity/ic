@@ -7,21 +7,21 @@ use ic_nervous_system_common_test_keys::{
     TEST_USER1_KEYPAIR, TEST_USER2_KEYPAIR, TEST_USER3_KEYPAIR, TEST_USER4_KEYPAIR,
 };
 use ic_sns_governance::{
-    pb::v1::{
-        get_proposal_response::Result::{Error, Proposal as ResponseProposal},
-        governance_error::ErrorType::{self, PreconditionFailed},
-        manage_neuron_response::Command,
-        proposal::Action,
-        Ballot, GetProposal, GetProposalResponse, ListProposals, ListProposalsResponse,
-        ManageNeuronResponse, Motion, NervousSystemParameters, NeuronId, NeuronPermissionList,
-        NeuronPermissionType, Proposal, ProposalData, ProposalDecisionStatus, ProposalId,
-        ProposalRewardStatus, RewardEvent, Vote, VotingRewardsParameters,
-    },
     proposal::{
         PROPOSAL_MOTION_TEXT_BYTES_MAX, PROPOSAL_SUMMARY_BYTES_MAX, PROPOSAL_TITLE_BYTES_MAX,
         PROPOSAL_URL_CHAR_MAX,
     },
     reward,
+};
+use ic_sns_governance_api::pb::v1::{
+    get_proposal_response::Result::{Error, Proposal as ResponseProposal},
+    governance_error::ErrorType::{self, PreconditionFailed},
+    manage_neuron_response::Command,
+    proposal::Action,
+    Ballot, GetProposal, GetProposalResponse, ListProposals, ListProposalsResponse,
+    ManageNeuronResponse, Motion, NervousSystemParameters, NeuronId, NeuronPermissionList,
+    NeuronPermissionType, Proposal, ProposalData, ProposalDecisionStatus, ProposalId,
+    ProposalRewardStatus, RewardEvent, Vote, VotingRewardsParameters,
 };
 use ic_sns_test_utils::{
     itest_helpers::{
@@ -60,7 +60,7 @@ fn test_motion_proposal_execution() {
                 neuron_claimer_permissions: Some(NeuronPermissionList {
                     permissions: NeuronPermissionType::all(),
                 }),
-                ..NervousSystemParameters::with_default_values()
+                ..NervousSystemParameters::default()
             };
 
             let sns_init_payload = SnsTestsInitPayloadBuilder::new()
@@ -146,7 +146,7 @@ fn test_manage_nervous_system_parameters_proposal_execution() {
                 neuron_claimer_permissions: Some(NeuronPermissionList {
                     permissions: NeuronPermissionType::all(),
                 }),
-                ..NervousSystemParameters::with_default_values()
+                ..NervousSystemParameters::default()
             };
 
             let sns_init_payload = SnsTestsInitPayloadBuilder::new()
@@ -246,7 +246,7 @@ fn test_voting_with_three_neurons_with_the_same_stake() {
                 neuron_claimer_permissions: Some(NeuronPermissionList {
                     permissions: NeuronPermissionType::all(),
                 }),
-                ..NervousSystemParameters::with_default_values()
+                ..NervousSystemParameters::default()
             };
 
             let sns_init_payload = SnsTestsInitPayloadBuilder::new()
@@ -499,7 +499,7 @@ fn test_list_proposals_determinism() {
             neuron_claimer_permissions: Some(NeuronPermissionList {
                 permissions: NeuronPermissionType::all(),
             }),
-            ..NervousSystemParameters::with_default_values()
+            ..NervousSystemParameters::default()
         };
 
         let sns_init_payload = SnsTestsInitPayloadBuilder::new()
@@ -613,7 +613,7 @@ fn test_proposal_format_validation() {
             neuron_claimer_permissions: Some(NeuronPermissionList {
                 permissions: NeuronPermissionType::all(),
             }),
-            ..NervousSystemParameters::with_default_values()
+            ..NervousSystemParameters::default()
         };
 
         let sns_init_payload = SnsTestsInitPayloadBuilder::new()
@@ -720,7 +720,7 @@ fn test_neuron_configuration_needed_for_proposals() {
             neuron_minimum_dissolve_delay_to_vote_seconds: Some(
                 neuron_minimum_dissolve_delay_to_vote_seconds,
             ),
-            ..NervousSystemParameters::with_default_values()
+            ..NervousSystemParameters::default()
         };
 
         let sns_init_payload = SnsTestsInitPayloadBuilder::new()
@@ -832,7 +832,7 @@ fn test_ballots_set_for_multiple_neurons() {
             neuron_claimer_permissions: Some(NeuronPermissionList {
                 permissions: NeuronPermissionType::all(),
             }),
-            ..NervousSystemParameters::with_default_values()
+            ..NervousSystemParameters::default()
         };
 
         let users = vec![
@@ -923,7 +923,7 @@ fn test_vote_on_non_existent_proposal() {
             neuron_claimer_permissions: Some(NeuronPermissionList {
                 permissions: NeuronPermissionType::all(),
             }),
-            ..NervousSystemParameters::with_default_values()
+            ..NervousSystemParameters::default()
         };
 
         let sns_init_payload = SnsTestsInitPayloadBuilder::new()
@@ -971,7 +971,7 @@ fn test_ineligible_neuron_voting_fails() {
             neuron_claimer_permissions: Some(NeuronPermissionList {
                 permissions: NeuronPermissionType::all(),
             }),
-            ..NervousSystemParameters::with_default_values()
+            ..NervousSystemParameters::default()
         };
 
         let sns_init_payload = SnsTestsInitPayloadBuilder::new()
@@ -1027,7 +1027,7 @@ fn test_repeated_voting_fails() {
             neuron_claimer_permissions: Some(NeuronPermissionList {
                 permissions: NeuronPermissionType::all(),
             }),
-            ..NervousSystemParameters::with_default_values()
+            ..NervousSystemParameters::default()
         };
 
         let sns_init_payload = SnsTestsInitPayloadBuilder::new()
@@ -1129,7 +1129,7 @@ fn test_following_and_voting() {
             neuron_claimer_permissions: Some(NeuronPermissionList {
                 permissions: NeuronPermissionType::all(),
             }),
-            ..NervousSystemParameters::with_default_values()
+            ..NervousSystemParameters::default()
         };
 
         let sns_init_payload = SnsTestsInitPayloadBuilder::new()
@@ -1256,7 +1256,7 @@ fn test_following_and_voting_from_non_proposer() {
             neuron_claimer_permissions: Some(NeuronPermissionList {
                 permissions: NeuronPermissionType::all(),
             }),
-            ..NervousSystemParameters::with_default_values()
+            ..NervousSystemParameters::default()
         };
 
         let sns_init_payload = SnsTestsInitPayloadBuilder::new()
@@ -1348,7 +1348,7 @@ fn test_following_multiple_neurons_reach_majority() {
             neuron_claimer_permissions: Some(NeuronPermissionList {
                 permissions: NeuronPermissionType::all(),
             }),
-            ..NervousSystemParameters::with_default_values()
+            ..NervousSystemParameters::default()
         };
 
         let sns_init_payload = SnsTestsInitPayloadBuilder::new()
@@ -1457,7 +1457,7 @@ fn test_proposal_rejection() {
             neuron_claimer_permissions: Some(NeuronPermissionList {
                 permissions: NeuronPermissionType::all(),
             }),
-            ..NervousSystemParameters::with_default_values()
+            ..NervousSystemParameters::default()
         };
 
         let sns_init_payload = SnsTestsInitPayloadBuilder::new()
@@ -1579,7 +1579,7 @@ fn test_proposal_garbage_collection() {
                 permissions: NeuronPermissionType::all(),
             }),
             max_proposals_to_keep_per_action: Some(1),
-            ..NervousSystemParameters::with_default_values()
+            ..NervousSystemParameters::default()
         };
 
         let sns_init_payload = SnsTestsInitPayloadBuilder::new()
@@ -1693,7 +1693,7 @@ fn test_change_voting_rewards_round_duration() {
             }),
             initial_voting_period_seconds: Some(initial_voting_period_seconds),
             wait_for_quiet_deadline_increase_seconds: Some(initial_voting_period_seconds / 4), // The default of one day is too short
-            ..NervousSystemParameters::with_default_values()
+            ..NervousSystemParameters::default()
         };
 
         let genesis_timestamp_seconds = std::time::SystemTime::now()
@@ -1989,7 +1989,7 @@ fn test_intermittent_proposal_submission() {
             }),
             initial_voting_period_seconds: Some(initial_voting_period_seconds),
             wait_for_quiet_deadline_increase_seconds: Some(initial_voting_period_seconds / 4), // The default of one day is too short
-            ..NervousSystemParameters::with_default_values()
+            ..NervousSystemParameters::default()
         };
 
         let sns_init_payload = SnsTestsInitPayloadBuilder::new()

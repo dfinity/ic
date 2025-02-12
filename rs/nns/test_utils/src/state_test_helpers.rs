@@ -56,8 +56,8 @@ use ic_nns_handler_root::init::RootCanisterInitPayload;
 use ic_registry_transport::pb::v1::{
     RegistryGetChangesSinceRequest, RegistryGetChangesSinceResponse,
 };
-use ic_sns_governance::pb::v1::{
-    self as sns_pb, manage_neuron_response::Command as SnsCommandResponse, GetModeResponse,
+use ic_sns_governance_api::pb::v1::{
+    self as sns_pb_api, manage_neuron_response::Command as SnsCommandResponse, GetModeResponse,
 };
 use ic_sns_swap::pb::v1::{GetAutoFinalizationStatusRequest, GetAutoFinalizationStatusResponse};
 use ic_sns_wasm::{
@@ -1795,22 +1795,22 @@ pub fn sns_claim_staked_neuron(
     sender: PrincipalId,
     nonce: u64,
     dissolve_delay: Option<u32>,
-) -> sns_pb::NeuronId {
+) -> sns_pb_api::NeuronId {
     // Find the neuron staked
     let to_subaccount = compute_neuron_staking_subaccount(sender, nonce);
 
     // Claim the neuron on the governance canister.
-    let claim_response: sns_pb::ManageNeuronResponse = update_with_sender(
+    let claim_response: sns_pb_api::ManageNeuronResponse = update_with_sender(
         machine,
         governance_canister_id,
         "manage_neuron",
-        sns_pb::ManageNeuron {
+        sns_pb_api::ManageNeuron {
             subaccount: to_subaccount.to_vec(),
-            command: Some(sns_pb::manage_neuron::Command::ClaimOrRefresh(
-                sns_pb::manage_neuron::ClaimOrRefresh {
+            command: Some(sns_pb_api::manage_neuron::Command::ClaimOrRefresh(
+                sns_pb_api::manage_neuron::ClaimOrRefresh {
                     by: Some(
-                        sns_pb::manage_neuron::claim_or_refresh::By::MemoAndController(
-                            sns_pb::manage_neuron::claim_or_refresh::MemoAndController {
+                        sns_pb_api::manage_neuron::claim_or_refresh::By::MemoAndController(
+                            sns_pb_api::manage_neuron::claim_or_refresh::MemoAndController {
                                 memo: nonce,
                                 controller: None,
                             },
@@ -1862,13 +1862,13 @@ pub fn sns_increase_dissolve_delay(
     subaccount: &[u8],
     dissolve_delay: u32,
 ) {
-    let payload = sns_pb::ManageNeuron {
+    let payload = sns_pb_api::ManageNeuron {
         subaccount: subaccount.to_vec(),
-        command: Some(sns_pb::manage_neuron::Command::Configure(
-            sns_pb::manage_neuron::Configure {
+        command: Some(sns_pb_api::manage_neuron::Command::Configure(
+            sns_pb_api::manage_neuron::Configure {
                 operation: Some(
-                    sns_pb::manage_neuron::configure::Operation::IncreaseDissolveDelay(
-                        sns_pb::manage_neuron::IncreaseDissolveDelay {
+                    sns_pb_api::manage_neuron::configure::Operation::IncreaseDissolveDelay(
+                        sns_pb_api::manage_neuron::IncreaseDissolveDelay {
                             additional_dissolve_delay_seconds: dissolve_delay,
                         },
                     ),
@@ -1876,7 +1876,7 @@ pub fn sns_increase_dissolve_delay(
             },
         )),
     };
-    let increase_response: sns_pb::ManageNeuronResponse = update_with_sender(
+    let increase_response: sns_pb_api::ManageNeuronResponse = update_with_sender(
         machine,
         governance_canister_id,
         "manage_neuron",
@@ -1905,18 +1905,18 @@ pub fn sns_make_proposal(
     sns_governance_canister_id: CanisterId,
     sender: PrincipalId,
     // subaccount: &[u8],
-    neuron_id: sns_pb::NeuronId,
-    proposal: sns_pb::Proposal,
-) -> Result<sns_pb::ProposalId, sns_pb::GovernanceError> {
+    neuron_id: sns_pb_api::NeuronId,
+    proposal: sns_pb_api::Proposal,
+) -> Result<sns_pb_api::ProposalId, sns_pb_api::GovernanceError> {
     let sub_account = neuron_id.subaccount().unwrap();
 
-    let manage_neuron_response: sns_pb::ManageNeuronResponse = update_with_sender(
+    let manage_neuron_response: sns_pb_api::ManageNeuronResponse = update_with_sender(
         machine,
         sns_governance_canister_id,
         "manage_neuron",
-        sns_pb::ManageNeuron {
+        sns_pb_api::ManageNeuron {
             subaccount: sub_account.to_vec(),
-            command: Some(sns_pb::manage_neuron::Command::MakeProposal(proposal)),
+            command: Some(sns_pb_api::manage_neuron::Command::MakeProposal(proposal)),
         },
         sender,
     )
@@ -1940,11 +1940,12 @@ pub fn sns_governance_get_mode(
         state_machine,
         sns_governance_canister_id,
         "get_mode",
-        Encode!(&sns_pb::GetMode {}).unwrap(),
+        Encode!(&sns_pb_api::GetMode {}).unwrap(),
     )
     .map_err(|e| format!("Error calling get_mode: {}", e))?;
 
-    let GetModeResponse { mode } = Decode!(&get_mode_response, sns_pb::GetModeResponse).unwrap();
+    let GetModeResponse { mode } =
+        Decode!(&get_mode_response, sns_pb_api::GetModeResponse).unwrap();
 
     Ok(mode.unwrap())
 }
@@ -1973,13 +1974,13 @@ pub fn sns_swap_get_auto_finalization_status(
 pub fn sns_get_proposal(
     machine: &StateMachine,
     governance_canister_id: CanisterId,
-    proposal_id: sns_pb::ProposalId,
-) -> Result<sns_pb::ProposalData, String> {
+    proposal_id: sns_pb_api::ProposalId,
+) -> Result<sns_pb_api::ProposalData, String> {
     let get_proposal_response = query(
         machine,
         governance_canister_id,
         "get_proposal",
-        Encode!(&sns_pb::GetProposal {
+        Encode!(&sns_pb_api::GetProposal {
             proposal_id: Some(proposal_id),
         })
         .unwrap(),
@@ -1987,15 +1988,15 @@ pub fn sns_get_proposal(
     .map_err(|e| format!("Error calling get_proposal: {}", e))?;
 
     let get_proposal_response =
-        Decode!(&get_proposal_response, sns_pb::GetProposalResponse).unwrap();
+        Decode!(&get_proposal_response, sns_pb_api::GetProposalResponse).unwrap();
     match get_proposal_response
         .result
         .expect("Empty get_proposal_response")
     {
-        sns_pb::get_proposal_response::Result::Error(e) => {
+        sns_pb_api::get_proposal_response::Result::Error(e) => {
             panic!("get_proposal error: {}", e);
         }
-        sns_pb::get_proposal_response::Result::Proposal(proposal) => Ok(proposal),
+        sns_pb_api::get_proposal_response::Result::Proposal(proposal) => Ok(proposal),
     }
 }
 
@@ -2004,7 +2005,7 @@ pub fn sns_get_proposal(
 pub fn sns_wait_for_proposal_execution(
     machine: &StateMachine,
     governance: CanisterId,
-    proposal_id: sns_pb::ProposalId,
+    proposal_id: sns_pb_api::ProposalId,
 ) {
     // We create some blocks until the proposal has finished executing (machine.tick())
     let mut attempt_count = 0;
@@ -2032,7 +2033,7 @@ pub fn sns_wait_for_proposal_execution(
 pub fn sns_wait_for_proposal_executed_or_failed(
     machine: &StateMachine,
     governance: CanisterId,
-    proposal_id: sns_pb::ProposalId,
+    proposal_id: sns_pb_api::ProposalId,
 ) {
     // We create some blocks until the proposal has finished executing (machine.tick())
     let mut attempt_count = 0;

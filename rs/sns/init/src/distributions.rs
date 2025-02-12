@@ -15,9 +15,10 @@ use ic_nervous_system_common::{
     ONE_MONTH_SECONDS,
 };
 use ic_sns_governance::{
-    governance::TREASURY_SUBACCOUNT_NONCE,
-    neuron::DEFAULT_VOTING_POWER_PERCENTAGE_MULTIPLIER,
-    pb::v1::{neuron::DissolveState, NervousSystemParameters, Neuron, NeuronId, NeuronPermission},
+    governance::TREASURY_SUBACCOUNT_NONCE, neuron::DEFAULT_VOTING_POWER_PERCENTAGE_MULTIPLIER,
+};
+use ic_sns_governance_api::pb::v1::{
+    neuron::DissolveState, NervousSystemParameters, Neuron, NeuronId, NeuronPermission,
 };
 use ic_sns_swap::swap::{NEURON_BASKET_MEMO_RANGE_START, SALE_NEURON_MEMO_RANGE_END};
 use icrc_ledger_types::icrc1::account::Account;
@@ -612,9 +613,10 @@ mod test {
         TEST_NEURON_1_OWNER_PRINCIPAL, TEST_NEURON_2_OWNER_PRINCIPAL, TEST_NEURON_3_OWNER_PRINCIPAL,
     };
     use ic_sns_governance::{
-        governance::TREASURY_SUBACCOUNT_NONCE,
-        neuron::DEFAULT_VOTING_POWER_PERCENTAGE_MULTIPLIER,
-        pb::v1::{neuron::DissolveState, NervousSystemParameters, NeuronId, NeuronPermission},
+        governance::TREASURY_SUBACCOUNT_NONCE, neuron::DEFAULT_VOTING_POWER_PERCENTAGE_MULTIPLIER,
+    };
+    use ic_sns_governance_api::pb::v1::{
+        neuron::DissolveState, NervousSystemParameters, NeuronId, NeuronPermission,
     };
     use ic_sns_swap::swap::NEURON_BASKET_MEMO_RANGE_START;
     use icrc_ledger_types::icrc1::account::Account;
@@ -831,7 +833,7 @@ mod test {
             }),
         };
 
-        let parameters = NervousSystemParameters::with_default_values();
+        let parameters = NervousSystemParameters::default();
 
         let initial_neurons = initial_token_distribution
             .get_initial_neurons(&parameters)
@@ -946,7 +948,7 @@ mod test {
         };
 
         // A basic valid NervousSystemParameter
-        let nervous_system_parameters = NervousSystemParameters::with_default_values();
+        let nervous_system_parameters = NervousSystemParameters::default();
 
         // Validate that the initial version is valid
         assert!(initial_token_distribution
@@ -1174,7 +1176,7 @@ mod test {
         };
 
         // A basic valid NervousSystemParameter
-        let nervous_system_parameters = NervousSystemParameters::with_default_values();
+        let nervous_system_parameters = NervousSystemParameters::default();
 
         // Validate that the initial version is valid
         initial_token_distribution
@@ -1224,7 +1226,7 @@ mod test {
         };
 
         // A basic valid NervousSystemParameter
-        let nervous_system_parameters = NervousSystemParameters::with_default_values();
+        let nervous_system_parameters = NervousSystemParameters::default();
 
         // Validate that the initial version is valid
         assert!(initial_token_distribution
@@ -1283,7 +1285,7 @@ mod test {
         };
 
         // A basic valid NervousSystemParameter
-        let nervous_system_parameters = NervousSystemParameters::with_default_values();
+        let nervous_system_parameters = NervousSystemParameters::default();
 
         // Validate that the initial version is valid
         assert!(initial_token_distribution
@@ -1435,7 +1437,7 @@ mod test {
         };
 
         // A basic valid NervousSystemParameter
-        let nervous_system_parameters = NervousSystemParameters::with_default_values();
+        let nervous_system_parameters = NervousSystemParameters::default();
 
         // Validate that the initial version is valid
         initial_token_distribution

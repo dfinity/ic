@@ -1,5 +1,5 @@
 use dfn_candid::candid_one;
-use ic_sns_governance::pb::v1::{
+use ic_sns_governance_api::pb::v1::{
     GetSnsInitializationParametersRequest, GetSnsInitializationParametersResponse,
 };
 use ic_sns_init::{pb::v1::SnsInitPayload, SnsCanisterIds};

@@ -32,6 +32,7 @@ ic-nns-constants = { path = "../../nns/constants" }
 ic-nns-governance = { path = "../../nns/governance" }
 ic-nns-test-utils = { path = "../../nns/test_utils/" }
 ic-sns-governance = { path = "../governance", features = ["test"] }
+ic-sns-governance-api = { path = "../governance/api" }
 ic-sns-init = { path = "../init" }
 ic-sns-root = { path = "../root" }
 ic-sns-swap = { path = "../swap" }

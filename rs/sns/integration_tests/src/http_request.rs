@@ -1,7 +1,7 @@
 use canister_test::Canister;
 use dfn_candid::candid_one;
 use ic_canisters_http_types::{HttpRequest, HttpResponse};
-use ic_sns_governance::pb::v1::{
+use ic_sns_governance_api::pb::v1::{
     NervousSystemParameters, NeuronPermissionList, NeuronPermissionType,
 };
 use ic_sns_test_utils::itest_helpers::{
@@ -50,7 +50,7 @@ fn test_http_request_decoding_quota() {
             neuron_claimer_permissions: Some(NeuronPermissionList {
                 permissions: NeuronPermissionType::all(),
             }),
-            ..NervousSystemParameters::with_default_values()
+            ..NervousSystemParameters::default()
         };
 
         let sns_init_payload = SnsTestsInitPayloadBuilder::new()

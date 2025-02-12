@@ -9,7 +9,7 @@ use ic_nns_test_utils::state_test_helpers::{
     create_canister, sns_claim_staked_neuron, sns_get_proposal, sns_make_proposal,
     sns_stake_neuron, sns_wait_for_proposal_executed_or_failed, sns_wait_for_proposal_execution,
 };
-use ic_sns_governance::pb::v1::{
+use ic_sns_governance_api::pb::v1::{
     proposal::Action, LogVisibility, ManageDappCanisterSettings, NervousSystemParameters,
     NeuronPermissionList, NeuronPermissionType, Proposal,
 };
@@ -39,7 +39,7 @@ fn test_manage_dapp_canister_settings_successful() {
         neuron_claimer_permissions: Some(NeuronPermissionList {
             permissions: NeuronPermissionType::all(),
         }),
-        ..NervousSystemParameters::with_default_values()
+        ..NervousSystemParameters::default()
     };
 
     // Step 1.2: Set up the SNS canisters.
@@ -176,7 +176,7 @@ fn test_manage_dapp_canister_settings_failure() {
         neuron_claimer_permissions: Some(NeuronPermissionList {
             permissions: NeuronPermissionType::all(),
         }),
-        ..NervousSystemParameters::with_default_values()
+        ..NervousSystemParameters::default()
     };
 
     // Step 1.2: Set up the SNS canisters.

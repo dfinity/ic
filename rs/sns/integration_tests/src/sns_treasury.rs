@@ -17,16 +17,12 @@ use ic_nns_test_utils::{
         sns_wait_for_proposal_execution,
     },
 };
-use ic_sns_governance::{
-    governance::TREASURY_SUBACCOUNT_NONCE,
-    pb::v1::{
-        governance_error::ErrorType as SnsErrorType, proposal::Action,
-        transfer_sns_treasury_funds::TransferFrom, GovernanceError as SnsGovernanceError,
-        MintSnsTokens, Motion, NervousSystemParameters, NeuronId as SnsNeuronId,
-        NeuronPermissionList, NeuronPermissionType, Proposal, ProposalData,
-        TransferSnsTreasuryFunds, Vote,
-    },
-    types::E8S_PER_TOKEN,
+use ic_sns_governance::{governance::TREASURY_SUBACCOUNT_NONCE, types::E8S_PER_TOKEN};
+use ic_sns_governance_api::pb::v1::{
+    governance_error::ErrorType as SnsErrorType, proposal::Action,
+    transfer_sns_treasury_funds::TransferFrom, GovernanceError as SnsGovernanceError,
+    MintSnsTokens, Motion, NervousSystemParameters, NeuronId as SnsNeuronId, NeuronPermissionList,
+    NeuronPermissionType, Proposal, ProposalData, TransferSnsTreasuryFunds, Vote,
 };
 use ic_sns_swap::pb::v1::{Init as SwapInit, NeuronBasketConstructionParameters};
 use ic_sns_test_utils::{
@@ -160,7 +156,7 @@ fn new_treasury_scenario(
         neuron_claimer_permissions: Some(NeuronPermissionList {
             permissions: NeuronPermissionType::all(),
         }),
-        ..NervousSystemParameters::with_default_values()
+        ..NervousSystemParameters::default()
     };
 
     let mut sns_init_payload = SnsTestsInitPayloadBuilder::new()

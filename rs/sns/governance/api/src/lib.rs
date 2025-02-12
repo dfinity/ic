@@ -1,3 +1,6 @@
+pub mod init;
+pub mod nervous_system_parameters;
+pub mod neuron;
 pub mod pb;
 mod types;
 

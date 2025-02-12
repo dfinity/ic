@@ -31,7 +31,7 @@ use ic_nns_test_utils::{
         sns_swap_get_auto_finalization_status,
     },
 };
-use ic_sns_governance::pb::v1::{
+use ic_sns_governance_api::pb::v1::{
     governance::Mode::{Normal, PreInitializationSwap},
     ListNeurons,
 };

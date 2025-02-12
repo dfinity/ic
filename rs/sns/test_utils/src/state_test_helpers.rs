@@ -19,8 +19,8 @@ use ic_nns_test_utils::{
     },
     state_test_helpers::set_controllers,
 };
-use ic_sns_governance::pb::v1::{
-    governance::Version,
+use ic_sns_governance_api::pb::v1::governance::Version;
+use ic_sns_governance_api::pb::v1::{
     manage_neuron::{self, RegisterVote},
     ListNeurons, ListNeuronsResponse, ManageNeuron, ManageNeuronResponse, NervousSystemParameters,
     NeuronId, ProposalId, Vote,

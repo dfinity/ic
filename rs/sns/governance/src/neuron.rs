@@ -560,8 +560,7 @@ impl Neuron {
     /// that are adopted (then the fees are returned and not owed anymore) or
     /// by transferring funds to the neuron's account and then refreshing the stake.
     pub fn stake_e8s(&self) -> u64 {
-        self.cached_neuron_stake_e8s
-            .saturating_sub(self.neuron_fees_e8s)
+        ic_sns_governance_api::pb::v1::Neuron::from(self.clone()).stake_e8s()
     }
 
     /// Returns the current stake of this Neuron as used as an input

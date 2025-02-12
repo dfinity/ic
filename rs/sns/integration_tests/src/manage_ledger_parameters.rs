@@ -11,7 +11,7 @@ use ic_nns_test_utils::{
         sns_wait_for_proposal_execution, update,
     },
 };
-use ic_sns_governance::pb::v1::{
+use ic_sns_governance_api::pb::v1::{
     proposal::Action, ManageLedgerParameters, NervousSystemParameters, NeuronId,
     NeuronPermissionList, NeuronPermissionType, Proposal,
 };
@@ -238,7 +238,7 @@ fn set_up_sns_for_mlp(
         neuron_claimer_permissions: Some(NeuronPermissionList {
             permissions: NeuronPermissionType::all(),
         }),
-        ..NervousSystemParameters::with_default_values()
+        ..NervousSystemParameters::default()
     };
 
     let sns_init_payload = SnsTestsInitPayloadBuilder::new()

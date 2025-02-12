@@ -10,6 +10,7 @@ use candid::Nat;
 use futures::FutureExt;
 use ic_base_types::PrincipalId;
 use ic_management_canister_types_private::ChunkHash;
+use ic_nervous_system_common::{ONE_DAY_SECONDS, ONE_MONTH_SECONDS};
 use ic_nervous_system_common_test_keys::TEST_USER1_PRINCIPAL;
 use ic_nervous_system_proto::pb::v1::Principals;
 use lazy_static::lazy_static;
@@ -983,13 +984,14 @@ fn test_nervous_system_parameters_wont_validate_without_voting_rewards_parameter
 
 #[test]
 fn test_nervous_system_parameters_wont_validate_without_the_required_claimer_permissions() {
-    for permission_to_omit in NervousSystemParameters::REQUIRED_NEURON_CLAIMER_PERMISSIONS {
+    for permission_to_omit in NervousSystemParametersApi::REQUIRED_NEURON_CLAIMER_PERMISSIONS {
         let mut parameters = NervousSystemParameters::with_default_values();
         parameters.neuron_claimer_permissions = Some(
-            NervousSystemParameters::REQUIRED_NEURON_CLAIMER_PERMISSIONS
+            NervousSystemParametersApi::REQUIRED_NEURON_CLAIMER_PERMISSIONS
                 .iter()
                 .filter(|p| *p != permission_to_omit)
                 .cloned()
+                .map(NeuronPermissionType::from)
                 .collect::<Vec<_>>()
                 .into(),
         );

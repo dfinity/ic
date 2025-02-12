@@ -16,7 +16,7 @@ use ic_nns_constants::{
     LEDGER_CANISTER_ID as ICP_LEDGER_CANISTER_ID, LIFELINE_CANISTER_ID, NNS_UI_CANISTER_ID,
     REGISTRY_CANISTER_ID, ROOT_CANISTER_ID, SNS_WASM_CANISTER_ID,
 };
-use ic_sns_governance::{
+use ic_sns_governance_api::{
     init::GovernanceCanisterInitPayloadBuilder,
     pb::v1::{
         governance::{SnsMetadata, Version},
@@ -382,7 +382,7 @@ impl SnsInitPayload {
     /// acts like `SnsInitPayload::default()` except that it will provide default "real" values
     /// for default-able parameters.
     pub fn with_default_values() -> Self {
-        let nervous_system_parameters_default = NervousSystemParameters::with_default_values();
+        let nervous_system_parameters_default = NervousSystemParameters::default();
         let voting_rewards_parameters = nervous_system_parameters_default
             .voting_rewards_parameters
             .as_ref()
@@ -555,14 +555,14 @@ impl SnsInitPayload {
         sns_canister_ids: &SnsCanisterIds,
         deployed_version: Option<Version>,
     ) -> Result<Governance, String> {
-        let mut governance = GovernanceCanisterInitPayloadBuilder::new().build();
+        let parameters = self.get_nervous_system_parameters();
+        let mut governance = GovernanceCanisterInitPayloadBuilder::new()
+            .with_parameters(parameters.clone())
+            .build();
         governance.ledger_canister_id = Some(sns_canister_ids.ledger);
         governance.root_canister_id = Some(sns_canister_ids.root);
         governance.swap_canister_id = Some(sns_canister_ids.swap);
         governance.deployed_version = deployed_version;
-
-        let parameters = self.get_nervous_system_parameters();
-        governance.parameters = Some(parameters.clone());
 
         governance.sns_metadata = Some(self.get_sns_metadata());
 
@@ -743,7 +743,7 @@ impl SnsInitPayload {
     /// Returns a complete NervousSystemParameter struct with its corresponding SnsInitPayload
     /// fields filled out.
     fn get_nervous_system_parameters(&self) -> NervousSystemParameters {
-        let nervous_system_parameters = NervousSystemParameters::with_default_values();
+        let nervous_system_parameters = NervousSystemParameters::default();
         let all_permissions = NeuronPermissionList {
             permissions: NeuronPermissionType::all(),
         };
@@ -1075,7 +1075,7 @@ impl SnsInitPayload {
 
     fn validate_neuron_minimum_dissolve_delay_to_vote_seconds(&self) -> Result<(), String> {
         // As this is not currently configurable, pull the default value from
-        let max_dissolve_delay_seconds = *NervousSystemParameters::with_default_values()
+        let max_dissolve_delay_seconds = *NervousSystemParameters::default()
             .max_dissolve_delay_seconds
             .as_ref()
             .unwrap();
@@ -1161,18 +1161,18 @@ impl SnsInitPayload {
             .as_ref()
             .ok_or_else(|| "Error: logo must be specified".to_string())?;
 
-        SnsMetadata::validate_logo(logo)
+        ic_sns_governance::pb::v1::governance::SnsMetadata::validate_logo(logo)
     }
 
     fn validate_url(&self) -> Result<(), String> {
         let url = self.url.as_ref().ok_or("Error: url must be specified")?;
-        SnsMetadata::validate_url(url)?;
+        ic_sns_governance::pb::v1::governance::SnsMetadata::validate_url(url)?;
         Ok(())
     }
 
     fn validate_name(&self) -> Result<(), String> {
         let name = self.name.as_ref().ok_or("Error: name must be specified")?;
-        SnsMetadata::validate_name(name)?;
+        ic_sns_governance::pb::v1::governance::SnsMetadata::validate_name(name)?;
         Ok(())
     }
 
@@ -1181,7 +1181,7 @@ impl SnsInitPayload {
             .description
             .as_ref()
             .ok_or("Error: description must be specified")?;
-        SnsMetadata::validate_description(description)?;
+        ic_sns_governance::pb::v1::governance::SnsMetadata::validate_description(description)?;
         Ok(())
     }
 
@@ -1190,11 +1190,11 @@ impl SnsInitPayload {
             .initial_reward_rate_basis_points
             .ok_or("Error: initial_reward_rate_basis_points must be specified")?;
         if initial_reward_rate_basis_points
-            > VotingRewardsParameters::INITIAL_REWARD_RATE_BASIS_POINTS_CEILING
+            > ic_sns_governance::pb::v1::VotingRewardsParameters::INITIAL_REWARD_RATE_BASIS_POINTS_CEILING
         {
             Err(format!(
                 "Error: initial_reward_rate_basis_points must be less than or equal to {}",
-                VotingRewardsParameters::INITIAL_REWARD_RATE_BASIS_POINTS_CEILING
+                ic_sns_governance::pb::v1::VotingRewardsParameters::INITIAL_REWARD_RATE_BASIS_POINTS_CEILING
             ))
         } else {
             Ok(())
@@ -1247,11 +1247,11 @@ impl SnsInitPayload {
             .ok_or("Error: max_dissolve_delay_bonus_percentage must be specified")?;
 
         if max_dissolve_delay_bonus_percentage
-            > NervousSystemParameters::MAX_DISSOLVE_DELAY_BONUS_PERCENTAGE_CEILING
+            > ic_sns_governance::pb::v1::NervousSystemParameters::MAX_DISSOLVE_DELAY_BONUS_PERCENTAGE_CEILING
         {
             Err(format!(
                 "max_dissolve_delay_bonus_percentage must be less than {}",
-                NervousSystemParameters::MAX_DISSOLVE_DELAY_BONUS_PERCENTAGE_CEILING
+                ic_sns_governance::pb::v1::NervousSystemParameters::MAX_DISSOLVE_DELAY_BONUS_PERCENTAGE_CEILING
             ))
         } else {
             Ok(())
@@ -1262,10 +1262,12 @@ impl SnsInitPayload {
         let max_age_bonus_percentage = self
             .max_age_bonus_percentage
             .ok_or("Error: max_age_bonus_percentage must be specified")?;
-        if max_age_bonus_percentage > NervousSystemParameters::MAX_AGE_BONUS_PERCENTAGE_CEILING {
+        if max_age_bonus_percentage
+            > ic_sns_governance::pb::v1::NervousSystemParameters::MAX_AGE_BONUS_PERCENTAGE_CEILING
+        {
             Err(format!(
                 "max_age_bonus_percentage must be less than {}",
-                NervousSystemParameters::MAX_AGE_BONUS_PERCENTAGE_CEILING
+                ic_sns_governance::pb::v1::NervousSystemParameters::MAX_AGE_BONUS_PERCENTAGE_CEILING
             ))
         } else {
             Ok(())
@@ -1278,18 +1280,18 @@ impl SnsInitPayload {
             .ok_or("Error: initial_voting_period_seconds must be specified")?;
 
         if initial_voting_period_seconds
-            < NervousSystemParameters::INITIAL_VOTING_PERIOD_SECONDS_FLOOR
+            < ic_sns_governance::pb::v1::NervousSystemParameters::INITIAL_VOTING_PERIOD_SECONDS_FLOOR
         {
             Err(format!(
                 "NervousSystemParameters.initial_voting_period_seconds must be greater than {}",
-                NervousSystemParameters::INITIAL_VOTING_PERIOD_SECONDS_FLOOR
+                ic_sns_governance::pb::v1::NervousSystemParameters::INITIAL_VOTING_PERIOD_SECONDS_FLOOR
             ))
         } else if initial_voting_period_seconds
-            > NervousSystemParameters::INITIAL_VOTING_PERIOD_SECONDS_CEILING
+            > ic_sns_governance::pb::v1::NervousSystemParameters::INITIAL_VOTING_PERIOD_SECONDS_CEILING
         {
             Err(format!(
                 "NervousSystemParameters.initial_voting_period_seconds must be less than {}",
-                NervousSystemParameters::INITIAL_VOTING_PERIOD_SECONDS_CEILING
+                ic_sns_governance::pb::v1::NervousSystemParameters::INITIAL_VOTING_PERIOD_SECONDS_CEILING
             ))
         } else {
             Ok(())
@@ -1305,18 +1307,18 @@ impl SnsInitPayload {
             .ok_or("Error: initial_voting_period_seconds must be specified")?;
 
         if wait_for_quiet_deadline_increase_seconds
-            < NervousSystemParameters::WAIT_FOR_QUIET_DEADLINE_INCREASE_SECONDS_FLOOR
+            < ic_sns_governance::pb::v1::NervousSystemParameters::WAIT_FOR_QUIET_DEADLINE_INCREASE_SECONDS_FLOOR
         {
             Err(format!(
                 "NervousSystemParameters.wait_for_quiet_deadline_increase_seconds must be greater than or equal to {}",
-                NervousSystemParameters::WAIT_FOR_QUIET_DEADLINE_INCREASE_SECONDS_FLOOR
+                ic_sns_governance::pb::v1::NervousSystemParameters::WAIT_FOR_QUIET_DEADLINE_INCREASE_SECONDS_FLOOR
             ))
         } else if wait_for_quiet_deadline_increase_seconds
-            > NervousSystemParameters::WAIT_FOR_QUIET_DEADLINE_INCREASE_SECONDS_CEILING
+            > ic_sns_governance::pb::v1::NervousSystemParameters::WAIT_FOR_QUIET_DEADLINE_INCREASE_SECONDS_CEILING
         {
             Err(format!(
                 "NervousSystemParameters.wait_for_quiet_deadline_increase_seconds must be less than or equal to {}",
-                NervousSystemParameters::WAIT_FOR_QUIET_DEADLINE_INCREASE_SECONDS_CEILING
+                ic_sns_governance::pb::v1::NervousSystemParameters::WAIT_FOR_QUIET_DEADLINE_INCREASE_SECONDS_CEILING
             ))
         // If `wait_for_quiet_deadline_increase_seconds > initial_voting_period_seconds / 2`, any flip (including an initial `yes` vote)
         // will always cause the deadline to be increased. That seems like unreasonable behavior, so we prevent that from being
@@ -2884,7 +2886,12 @@ initial_token_distribution: !FractionalDeveloperVotingPower
             };
 
         // Assert that the Governance canister would accept this init payload
-        assert!(ValidGovernanceProto::try_from(governance.clone()).is_ok());
+        assert!(
+            ValidGovernanceProto::try_from(ic_sns_governance::pb::v1::Governance::from(
+                governance.clone()
+            ))
+            .is_ok()
+        );
 
         // For each neuron, assert that its account exists on the Ledger
         for neuron in governance.neurons.values() {

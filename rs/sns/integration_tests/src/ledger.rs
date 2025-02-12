@@ -6,23 +6,22 @@ use ic_crypto_sha2::Sha256;
 use ic_ledger_core::{tokens::TOKEN_SUBDIVIDABLE_BY, Tokens};
 use ic_nervous_system_common::DEFAULT_TRANSFER_FEE;
 use ic_nervous_system_common_test_keys::TEST_USER1_KEYPAIR;
-use ic_sns_governance::pb::v1::manage_neuron_response::Command as CommandResponse;
-use icrc_ledger_types::icrc1::{
-    account::Account,
-    transfer::{Memo, TransferArg},
-};
-
-use ic_sns_governance::pb::v1::{
+use ic_sns_governance_api::pb::v1::{
     manage_neuron::{
         claim_or_refresh::{By, MemoAndController},
         ClaimOrRefresh, Command, Disburse,
     },
+    manage_neuron_response::Command as CommandResponse,
     Account as AccountProto, ManageNeuron, ManageNeuronResponse, NervousSystemParameters,
     NeuronPermissionList, NeuronPermissionType,
 };
 use ic_sns_test_utils::{
     icrc1,
     itest_helpers::{local_test_on_sns_subnet, SnsCanisters, SnsTestsInitPayloadBuilder},
+};
+use icrc_ledger_types::icrc1::{
+    account::Account,
+    transfer::{Memo, TransferArg},
 };
 
 // This tests the whole neuron lifecycle in integration with the ledger. Namely
@@ -40,7 +39,7 @@ fn test_stake_and_disburse_neuron_with_notification() {
                 neuron_claimer_permissions: Some(NeuronPermissionList {
                     permissions: NeuronPermissionType::all(),
                 }),
-                ..NervousSystemParameters::with_default_values()
+                ..NervousSystemParameters::default()
             };
 
             let sns_init_payload = SnsTestsInitPayloadBuilder::new()

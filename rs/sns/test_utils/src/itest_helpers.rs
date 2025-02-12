@@ -21,11 +21,11 @@ use ic_nns_constants::{
     GOVERNANCE_CANISTER_ID as NNS_GOVERNANCE_CANISTER_ID,
     LEDGER_CANISTER_ID as ICP_LEDGER_CANISTER_ID,
 };
-use ic_sns_governance::{
-    governance::TimeWarp,
+use ic_sns_governance::governance::TimeWarp;
+use ic_sns_governance_api::{
     init::GovernanceCanisterInitPayloadBuilder,
     pb::v1::{
-        self as sns_governance_pb, get_neuron_response, get_proposal_response,
+        self as sns_governance_pb_api, get_neuron_response, get_proposal_response,
         manage_neuron::{
             claim_or_refresh::{By, MemoAndController},
             configure::Operation,
@@ -158,9 +158,11 @@ impl SnsTestsInitPayloadBuilder {
             retrieve_blocks_from_ledger_interval_seconds: None,
         }));
 
+        let params = NervousSystemParameters::default();
         let mut governance = GovernanceCanisterInitPayloadBuilder::new();
+        governance.with_parameters(params);
         // Existing tests expect this.
-        governance.with_mode(sns_governance_pb::governance::Mode::Normal);
+        governance.with_mode(sns_governance_pb_api::governance::Mode::Normal);
 
         SnsTestsInitPayloadBuilder {
             root: SnsRootCanister::default(),
@@ -171,7 +173,10 @@ impl SnsTestsInitPayloadBuilder {
         }
     }
 
-    pub fn with_governance_mode(&mut self, mode: sns_governance_pb::governance::Mode) -> &mut Self {
+    pub fn with_governance_mode(
+        &mut self,
+        mode: sns_governance_pb_api::governance::Mode,
+    ) -> &mut Self {
         self.governance.with_mode(mode);
         self
     }

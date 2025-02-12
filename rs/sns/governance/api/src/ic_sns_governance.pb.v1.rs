@@ -340,6 +340,7 @@ pub mod transfer_sns_treasury_funds {
         Hash,
         PartialOrd,
         Ord,
+        ::prost::Enumeration,
     )]
     #[repr(i32)]
     pub enum TransferFrom {
@@ -971,7 +972,7 @@ pub mod valuation {
 /// on the subnet).
 ///
 /// Required invariant: the canister code assumes that all system parameters are always set.
-#[derive(Default, candid::CandidType, candid::Deserialize, Debug, Clone, PartialEq)]
+#[derive(candid::CandidType, candid::Deserialize, Debug, Clone, PartialEq)]
 pub struct NervousSystemParameters {
     /// The number of e8s (10E-8 of a token) that a rejected
     /// proposal costs the proposer.
@@ -2383,6 +2384,7 @@ pub struct Account {
 #[derive(
     candid::CandidType,
     candid::Deserialize,
+    strum_macros::EnumIter,
     Debug,
     clap::ValueEnum,
     Clone,

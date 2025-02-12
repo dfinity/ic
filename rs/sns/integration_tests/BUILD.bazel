@@ -25,6 +25,7 @@ BASE_DEPENDENCIES = [
     "//rs/rust_canisters/dfn_candid",
     "//rs/rust_canisters/dfn_core",
     "//rs/sns/governance:governance",
+    "//rs/sns/governance/api",
     "//rs/sns/root",
     "//rs/sns/swap",
     "//rs/state_machine_tests",

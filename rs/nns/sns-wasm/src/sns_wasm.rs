@@ -32,7 +32,7 @@ use ic_nns_handler_root_interface::{
     client::NnsRootCanisterClient, ChangeCanisterControllersRequest,
     ChangeCanisterControllersResult,
 };
-use ic_sns_governance::pb::v1::governance::Version;
+use ic_sns_governance_api::pb::v1::governance::Version;
 use ic_sns_init::{pb::v1::SnsInitPayload, SnsCanisterInitPayloads};
 use ic_sns_root::GetSnsCanistersSummaryResponse;
 use ic_types::{Cycles, SubnetId};

@@ -3,11 +3,11 @@ use ic_canister_client_sender::Sender;
 use ic_ledger_core::Tokens;
 use ic_nervous_system_common::ONE_YEAR_SECONDS;
 use ic_nervous_system_common_test_keys::TEST_USER1_KEYPAIR;
-use ic_sns_governance::pb::v1::{
+use ic_sns_governance_api::pb::v1::{
     nervous_system_function::{FunctionType, GenericNervousSystemFunction},
     proposal::Action,
     ExecuteGenericNervousSystemFunction, NervousSystemFunction, NervousSystemParameters,
-    NeuronPermissionList, NeuronPermissionType, Proposal, ProposalDecisionStatus, ProposalId,
+    NeuronPermissionList, NeuronPermissionType, Proposal, ProposalId,
 };
 use ic_sns_test_utils::itest_helpers::{
     install_rust_canister_with_memory_allocation, local_test_on_sns_subnet, SnsCanisters,
@@ -21,7 +21,6 @@ async fn assert_proposal_executed(sns_canisters: &SnsCanisters<'_>, proposal_id:
     assert!(proposal_data.executed_timestamp_seconds > 0);
     assert_eq!(proposal_data.failure_reason, None);
     assert_eq!(proposal_data.failed_timestamp_seconds, 0);
-    assert_eq!(proposal_data.status(), ProposalDecisionStatus::Executed);
 }
 
 /// Tests that you can add a NervousSystemFunction, that it can then validate and execute
@@ -39,7 +38,7 @@ fn test_add_remove_and_execute_nervous_system_functions() {
             neuron_claimer_permissions: Some(NeuronPermissionList {
                 permissions: NeuronPermissionType::all(),
             }),
-            ..NervousSystemParameters::with_default_values()
+            ..NervousSystemParameters::default()
         };
 
         let sns_init_payload = SnsTestsInitPayloadBuilder::new()

@@ -15,7 +15,9 @@ bytes = { workspace = true }
 candid = { workspace = true }
 clap = { workspace = true }
 comparable = { version = "0.5", features = ["derive"] }
+hex = { workspace = true }
 ic-base-types = { path = "../../../types/base_types" }
+ic-nervous-system-common = { path = "../../../nervous_system/common" }
 ic-nervous-system-proto = { path = "../../../nervous_system/proto" }
 ic-nns-common = { path = "../../../nns/common" }
 ic-protobuf = { path = "../../../protobuf" }
@@ -28,3 +30,5 @@ serde = { workspace = true }
 serde_bytes = { workspace = true }
 strum = { workspace = true }
 strum_macros = { workspace = true }
+ledger_core = { path = "../../../ledger_suite/common/ledger_core" }
+icrc-ledger-types = { path = "../../../packages/icrc-ledger-types" }
