@@ -22,6 +22,8 @@ DEPENDENCIES = [
     "//rs/nns/common",
     "//rs/nns/constants",
     "//rs/nns/governance/api",
+    "//rs/nns/handlers/recovery/client",
+    "//rs/nns/handlers/recovery/interface",
     "//rs/nns/handlers/root/impl:root",
     "//rs/nns/init",
     "//rs/nns/sns-wasm",

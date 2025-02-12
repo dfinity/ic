@@ -3299,6 +3299,7 @@ dependencies = [
  "ic-certified-map",
  "ic-http-certification",
  "ic-http-gateway",
+ "ic-identity-hsm",
  "ic-metrics-encoder",
  "ic-response-verification",
  "ic-sha3",

@@ -1,0 +1,47 @@
+type Ballot = variant { No; Yes; Undecided };
+type NewRecoveryProposal = record {
+  security_metadata : SecurityMetadata;
+  payload : RecoveryPayload;
+};
+type NodeOperatorBallot = record {
+  "principal" : principal;
+  ballot : Ballot;
+  nodes_tied_to_ballot : vec principal;
+  security_metadata : SecurityMetadata;
+};
+type RecoveryInitArgs = record {
+  initial_node_operator_records : vec SimpleNodeOperatorRecord;
+};
+type RecoveryPayload = variant {
+  DoRecovery : record { height : nat64; state_hash : text; time_ns : nat64 };
+  Halt;
+  Unhalt;
+};
+type RecoveryProposal = record {
+  submission_timestamp_seconds : nat64;
+  proposer : principal;
+  security_metadata : SecurityMetadata;
+  payload : RecoveryPayload;
+  node_operator_ballots : vec NodeOperatorBallot;
+};
+type Result = variant { Ok; Err : text };
+type SecurityMetadata = record {
+  signature : blob;
+  pub_key_der : blob;
+  payload : blob;
+};
+type SimpleNodeOperatorRecord = record {
+  operator_id : principal;
+  nodes : vec principal;
+};
+type VoteOnRecoveryProposal = record {
+  ballot : Ballot;
+  security_metadata : SecurityMetadata;
+};
+service : (RecoveryInitArgs) -> {
+  get_build_metadata : () -> (text) query;
+  get_current_nns_node_operators : () -> (vec SimpleNodeOperatorRecord) query;
+  get_pending_recovery_proposals : () -> (vec RecoveryProposal) query;
+  submit_new_recovery_proposal : (NewRecoveryProposal) -> (Result);
+  vote_on_proposal : (VoteOnRecoveryProposal) -> (Result);
+}

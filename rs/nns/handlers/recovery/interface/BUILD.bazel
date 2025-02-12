@@ -1,0 +1,32 @@
+load("@rules_rust//rust:defs.bzl", "rust_library")
+
+package(default_visibility = ["//visibility:public"])
+
+DEPENDENCIES = [
+    # Keep sorted.
+    "//packages/ic-ed25519",
+    "//packages/ic-secp256k1",
+    "//rs/registry/canister",
+    "//rs/types/base_types",
+    "@crate_index//:base64",
+    "@crate_index//:candid",
+    "@crate_index//:ed25519-dalek",
+    "@crate_index//:hex",
+    "@crate_index//:k256",
+    "@crate_index//:p256",
+    "@crate_index//:serde",
+]
+
+MACRO_DEPENDENCIES = []
+
+ALIASES = {}
+
+rust_library(
+    name = "interface",
+    srcs = glob(["src/**/*.rs"]),
+    aliases = ALIASES,
+    crate_name = "ic_nns_handler_recovery_interface",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    version = "0.1.0",
+    deps = DEPENDENCIES,
+)

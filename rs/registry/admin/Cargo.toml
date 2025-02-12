@@ -68,6 +68,8 @@ strum_macros = { workspace = true }
 tempfile = { workspace = true }
 tokio = { workspace = true }
 url = { workspace = true }
+ic-nns-handler-recovery-client.path = "../../nns/handlers/recovery/client"
+ic-nns-handler-recovery-interface.path = "../../nns/handlers/recovery/interface"
 
 [dev-dependencies]
 assert_matches = { workspace = true }

@@ -126,6 +126,7 @@ use itertools::izip;
 use maplit::hashmap;
 use prost::Message;
 use recover_subnet::ProposeToUpdateRecoveryCupCmd;
+use recovery_canister::{RecoveryCanisterBallot, RecoveryCanisterProposeRecoveryCmd};
 use registry_canister::mutations::{
     complete_canister_migration::CompleteCanisterMigrationPayload,
     do_add_api_boundary_nodes::AddApiBoundaryNodesPayload,
@@ -181,6 +182,7 @@ extern crate chrono;
 mod create_subnet;
 mod helpers;
 mod recover_subnet;
+mod recovery_canister;
 mod types;
 mod update_subnet;
 
@@ -367,6 +369,27 @@ enum SubCommand {
 
     /// Get the SSH key access lists for unassigned nodes
     GetUnassignedNodes,
+
+    /// Get proposals from recovery canister
+    GetRecoveryCanisterProposals,
+
+    /// Get node operators enlisted in the recovery canister
+    GetRecoveryCanisterNodeOperators,
+
+    /// List the active status of the NNS
+    GetRecoveryCanisterLatestState,
+
+    /// Propose to halt NNS
+    RecoveryCanisterProposeHalt,
+
+    /// Propose to unhalt NNS
+    RecoveryCanisterProposeUnhalt,
+
+    /// Propose to do recovery
+    RecoveryCanisterProposeRecovery(RecoveryCanisterProposeRecoveryCmd),
+
+    /// Submit a vote to the latest recovery canister proposal
+    RecoveryCanisterVoteOnLatestProposal(RecoveryCanisterBallot),
 
     /// Propose to add an API Boundary Node
     ProposeToAddApiBoundaryNodes(ProposeToAddApiBoundaryNodesCmd),
@@ -3709,6 +3732,10 @@ async fn main() {
             SubCommand::ProposeToUpdateXdrIcpConversionRate(_) => (),
             SubCommand::SubmitRootProposalToUpgradeGovernanceCanister(_) => (),
             SubCommand::VoteOnRootProposalToUpgradeGovernanceCanister(_) => (),
+            SubCommand::RecoveryCanisterProposeHalt => (),
+            SubCommand::RecoveryCanisterProposeUnhalt => (),
+            SubCommand::RecoveryCanisterProposeRecovery(_) => (),
+            SubCommand::RecoveryCanisterVoteOnLatestProposal(_) => (),
             _ => panic!(
                 "Specifying a secret key or HSM is only supported for \
                      methods that interact with NNS handlers."
@@ -3716,19 +3743,19 @@ async fn main() {
         }
 
         if opts.secret_key_pem.is_some() {
-            let secret_key_path = opts.secret_key_pem.unwrap();
+            let secret_key_path = opts.secret_key_pem.as_ref().unwrap();
             let contents = read_to_string(secret_key_path).expect("Could not read key file");
             let sig_keys = SigKeys::from_pem(&contents).expect("Failed to parse pem file");
             Sender::SigKeys(sig_keys)
         } else if opts.use_hsm {
             make_hsm_sender(
-                &opts.hsm_slot.expect(
+                opts.hsm_slot.as_ref().expect(
                     "HSM slot must also be provided for --use-hsm; use --hsm-slot or see --help.",
                 ),
-                &opts.hsm_key_id.expect(
+                opts.hsm_key_id.as_ref().expect(
                     "HSM key ID must also be provided for --use-hsm; use --key-id or see --help.",
                 ),
-                &opts.hsm_pin.expect(
+                opts.hsm_pin.as_ref().expect(
                     "HSM pin must also be provided for --use-hsm; use --pin or see --help.",
                 ),
             )
@@ -4951,6 +4978,13 @@ async fn main() {
             );
             propose_action_from_command(cmd, canister_client, proposer).await;
         }
+        SubCommand::GetRecoveryCanisterProposals
+        | SubCommand::GetRecoveryCanisterNodeOperators
+        | SubCommand::RecoveryCanisterProposeHalt
+        | SubCommand::RecoveryCanisterProposeUnhalt
+        | SubCommand::RecoveryCanisterProposeRecovery(_)
+        | SubCommand::RecoveryCanisterVoteOnLatestProposal(_)
+        | SubCommand::GetRecoveryCanisterLatestState => recovery_canister::execute(&opts).await,
     }
 }
 
