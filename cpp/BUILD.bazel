@@ -1,3 +1,5 @@
+load("//publish:defs.bzl", "release_strip_binary")
+
 package(default_visibility = ["//visibility:public"])
 
 cc_binary(
@@ -17,9 +19,14 @@ cc_binary(
     deps = ["@libsystemd"],
 )
 
+release_strip_binary(
+    name = "infogetty_stripped",
+    binary = "infogetty_bin",
+)
+
 genrule(
     name = "infogetty_cleaned",
-    srcs = ["infogetty_bin"],
+    srcs = ["infogetty_stripped"],
     outs = ["infogetty"],
     cmd = "objcopy -R .comment -R .note -R .note.gnu.build-id $< $@",
     executable = True,
