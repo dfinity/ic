@@ -3,10 +3,11 @@ use std::env;
 use ic_base_types::PrincipalId;
 use ic_ledger_core::tokens::Tokens;
 use ic_nns_common::pb::v1::ProposalId;
+use ic_nns_constants::{GOVERNANCE_CANISTER_ID};
 use ic_nns_test_utils::{
     nns_canister_upgrade::NnsCanisterUpgrade,
     state_test_helpers::{
-        adopt_proposal, nns_create_neuron_with_stake, nns_create_super_powerful_neuron, nns_get_monthly_node_provider_rewards, nns_get_network_economics_parameters, nns_propose_upgrade_nns_canister, nns_update_node_operator_config, nns_wait_for_proposal_execution, wait_for_canister_upgrade_to_succeed
+        adopt_proposal, nns_create_neuron_with_stake, nns_create_super_powerful_neuron, nns_get_monthly_node_provider_rewards, nns_get_network_economics_parameters, nns_propose_upgrade_nns_canister, nns_update_node_operator_config, nns_wait_for_proposal_execution, wait_for_canister_upgrade_to_succeed, install_code,
     },
 };
 use ic_nns_test_utils_golden_nns_state::new_state_machine_with_golden_nns_state_or_panic;
@@ -27,6 +28,7 @@ fn test_proposal_with_golden_nns_state() {
     // Phase I. Upgrade NNS Governance to a test-only version (using a super powerful neuron) that
     // allows adopting any proposal by calling adopt_proposal.
 
+    /*
     let neuron_controller = PrincipalId::new_self_authenticating(&[1, 2, 3, 4]);
     let proposer_neuron_id =
         nns_create_super_powerful_neuron(&state_machine, neuron_controller);
@@ -41,6 +43,13 @@ fn test_proposal_with_golden_nns_state() {
         nns_canister_upgrade.wasm_content.clone(),
         nns_canister_upgrade.module_arg.clone(),
         true,
+    );
+    */
+    install_code(
+        &state_machine,
+        GOVERNANCE_CANISTER_ID.into(),
+        &nns_canister_upgrade.wasm_content,
+        &nns_canister_upgrade.module_arg,
     );
 
     // Step 3: Verify result(s): In a short while, the canister should be running the new code.
@@ -87,7 +96,7 @@ fn test_proposal_with_golden_nns_state() {
     nns_update_node_operator_config(
         &state_machine,
         &UpdateNodeOperatorConfigPayload {
-            node_operator_id: Some(PrincipalId::from_str("redpf-rrb5x-sa2it-zhbh7-…y-tgxmj-g5y7p-ezjtj-5qe").unwrap()),
+            node_operator_id: Some(PrincipalId::from_str("redpf-rrb5x-sa2it-zhbh7-q2fsp-bqlwz-4mf4y-tgxmj-g5y7p-ezjtj-5qe").unwrap()),
             rewardable_nodes: btreemap! {
                 "type1".to_string() => 28,
             },

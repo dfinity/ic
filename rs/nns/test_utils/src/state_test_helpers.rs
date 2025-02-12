@@ -1,3 +1,7 @@
+use ic_management_canister_types_private::{
+    CanisterInstallMode::Install, CreateCanisterArgs, InstallCodeArgs,
+};
+
 use crate::common::{
     build_cmc_wasm, build_genesis_token_wasm, build_governance_wasm_with_features,
     build_ledger_wasm, build_lifeline_wasm, build_registry_wasm, build_root_wasm,
@@ -1194,6 +1198,29 @@ fn slice_to_hex(slice: &[u8]) -> String {
         .map(|b| format!("{:02X}", *b))
         .collect::<Vec<String>>()
         .join("")
+}
+
+pub fn install_code(
+    state_machine: &StateMachine,
+    installee: PrincipalId,
+    wasm: &Vec<u8>,
+    arg: &Vec<u8>,
+) {
+    let _: Result<(), _> = update_with_sender(
+        state_machine,
+        CanisterId::ic_00(),
+        "install_code",
+        InstallCodeArgs {
+            mode: CanisterInstallMode::Upgrade,
+            canister_id: installee,
+            wasm_module: wasm.clone(),
+            arg: arg.clone(),
+            sender_canister_version: None,
+            compute_allocation: None,
+            memory_allocation: None,
+        },
+        ROOT_CANISTER_ID.into(),
+    );
 }
 
 pub fn wait_for_canister_upgrade_to_succeed(
