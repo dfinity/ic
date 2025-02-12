@@ -13,6 +13,8 @@ use ic_interfaces::execution_environment::{HypervisorError, SubnetAvailableMemor
 use ic_management_canister_types_private::EcdsaCurve;
 use ic_management_canister_types_private::EcdsaKeyId;
 use ic_management_canister_types_private::MasterPublicKeyId;
+use ic_management_canister_types_private::SchnorrAlgorithm;
+use ic_management_canister_types_private::SchnorrKeyId;
 use ic_management_canister_types_private::{
     CanisterChange, CanisterHttpResponsePayload, CanisterStatusType, CanisterUpgradeOptions,
 };
@@ -8347,5 +8349,85 @@ fn cost_sign_with_ecdsa_fails_bad_key_name() {
     err.assert_contains(
         ErrorCode::CanisterCalledTrap,
         "ic0.cost_sign_with_ecdsa failed with error code 2",
+    );
+}
+
+#[test]
+fn invoke_cost_sign_with_schnorr() {
+    let key_name = String::from("testkey");
+    let algorithm_variant = 0;
+    let mut test = ExecutionTestBuilder::new()
+        .with_chain_key(MasterPublicKeyId::Schnorr(SchnorrKeyId {
+            algorithm: SchnorrAlgorithm::try_from(algorithm_variant).unwrap(),
+            name: key_name.clone(),
+        }))
+        .build();
+    let subnet_size = test.subnet_size();
+    let canister_id = test.universal_canister().unwrap();
+    let payload = wasm()
+        .cost_sign_with_schnorr(key_name.as_bytes(), algorithm_variant)
+        .reply_data_append()
+        .reply()
+        .build();
+    let res = test.ingress(canister_id, "update", payload);
+    let expected_cost = test
+        .cycles_account_manager()
+        .ecdsa_signature_fee(subnet_size);
+    let Ok(WasmResult::Reply(bytes)) = res else {
+        panic!("Expected reply, got {:?}", res);
+    };
+    let actual_cost = Cycles::from(&bytes);
+    assert_eq!(actual_cost, expected_cost,);
+}
+
+#[test]
+fn cost_sign_with_schnorr_fails_bad_curve() {
+    let key_name = String::from("testkey");
+    let algorithm_variant = 0;
+    let mut test = ExecutionTestBuilder::new()
+        .with_chain_key(MasterPublicKeyId::Schnorr(SchnorrKeyId {
+            algorithm: SchnorrAlgorithm::try_from(algorithm_variant).unwrap(),
+            name: key_name.clone(),
+        }))
+        .build();
+    let canister_id = test.universal_canister().unwrap();
+    let payload = wasm()
+        .cost_sign_with_schnorr(key_name.as_bytes(), algorithm_variant + 10)
+        .reply_data_append()
+        .reply()
+        .build();
+    let res = test.ingress(canister_id, "update", payload);
+    let Err(err) = res else {
+        panic!("Expected Err, got Ok");
+    };
+    err.assert_contains(
+        ErrorCode::CanisterCalledTrap,
+        "ic0.cost_sign_with_schnorr failed with error code 1",
+    );
+}
+
+#[test]
+fn cost_sign_with_schnorr_fails_bad_key_name() {
+    let key_name = String::from("testkey");
+    let algorithm_variant = 0;
+    let mut test = ExecutionTestBuilder::new()
+        .with_chain_key(MasterPublicKeyId::Schnorr(SchnorrKeyId {
+            algorithm: SchnorrAlgorithm::try_from(algorithm_variant).unwrap(),
+            name: key_name.clone(),
+        }))
+        .build();
+    let canister_id = test.universal_canister().unwrap();
+    let payload = wasm()
+        .cost_sign_with_schnorr(String::from("yesn't").as_bytes(), algorithm_variant)
+        .reply_data_append()
+        .reply()
+        .build();
+    let res = test.ingress(canister_id, "update", payload);
+    let Err(err) = res else {
+        panic!("Expected Err, got Ok");
+    };
+    err.assert_contains(
+        ErrorCode::CanisterCalledTrap,
+        "ic0.cost_sign_with_schnorr failed with error code 2",
     );
 }
