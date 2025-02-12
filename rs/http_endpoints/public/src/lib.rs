@@ -280,6 +280,7 @@ pub fn start_server(
     tracing_handle: ReloadHandles,
     certified_height_watcher: watch::Receiver<Height>,
     completed_execution_messages_rx: Receiver<(MessageId, Height)>,
+    cancellation_token: CancellationToken,
 ) {
     info!(log, "Starting HTTP server...");
     let tcp_listener = start_tcp_listener(config.listen_addr, &rt_handle);
@@ -312,7 +313,7 @@ pub fn start_server(
         metrics.clone(),
         certified_height_watcher,
         completed_execution_messages_rx,
-        CancellationToken::new(),
+        cancellation_token,
     );
 
     let call_router =

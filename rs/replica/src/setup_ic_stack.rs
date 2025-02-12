@@ -41,6 +41,7 @@ use tokio::sync::{
     mpsc::{channel, UnboundedSender},
     watch,
 };
+use tokio_util::sync::CancellationToken;
 
 /// The buffer size for the channel that [`IngressHistoryWriterImpl`] uses to send
 /// the message id and height of messages that complete execution.
@@ -280,6 +281,8 @@ pub fn construct_ic_stack(
         log.clone(),
     ));
 
+    let cancellation_token = CancellationToken::new();
+
     let (_, nns_delegation_watcher) = start_nns_delegation_manager(
         metrics_registry,
         config.http_handler.clone(),
@@ -290,6 +293,7 @@ pub fn construct_ic_stack(
         root_subnet_id,
         registry.clone(),
         Arc::clone(&crypto) as Arc<_>,
+        cancellation_token.child_token(),
     );
 
     // ---------- HTTPS OUTCALLS PAYLOAD BUILDER DEPS FOLLOW ----------
@@ -364,6 +368,7 @@ pub fn construct_ic_stack(
         tracing_handle,
         max_certified_height_rx,
         finalized_ingress_height_rx,
+        cancellation_token.child_token(),
     );
 
     Ok((

@@ -7,7 +7,8 @@ use ic_logger::ReplicaLogger;
 use ic_metrics::{buckets::decimal_buckets, MetricsRegistry};
 use ic_types::{messages::CertificateDelegation, SubnetId};
 use prometheus::{Histogram, IntCounter};
-use tokio::{sync::watch, task::JoinHandle};
+use tokio::{select, sync::watch, task::JoinHandle};
+use tokio_util::sync::CancellationToken;
 
 use crate::load_root_delegation;
 
@@ -23,6 +24,7 @@ pub fn start_nns_delegation_manager(
     nns_subnet_id: SubnetId,
     registry_client: Arc<dyn RegistryClient>,
     tls_config: Arc<dyn TlsConfig + Send + Sync>,
+    cancellation_token: CancellationToken,
 ) -> (
     JoinHandle<()>,
     watch::Receiver<Option<CertificateDelegation>>,
@@ -41,7 +43,7 @@ pub fn start_nns_delegation_manager(
 
     let (tx, rx) = watch::channel(delegation);
 
-    (rt_handle.spawn(manager.run(tx)), rx)
+    (rt_handle.spawn(manager.run(tx, cancellation_token)), rx)
 }
 
 struct DelegationManagerMetrics {
@@ -109,16 +111,36 @@ impl DelegationManager {
         delegation
     }
 
-    async fn run(self, sender: watch::Sender<Option<CertificateDelegation>>) {
+    async fn run(
+        self,
+        sender: watch::Sender<Option<CertificateDelegation>>,
+        cancellation_token: CancellationToken,
+    ) {
         let mut interval = tokio::time::interval(DELEGATION_UPDATE_INTERVAL);
 
         loop {
-            let _ = interval.tick().await;
+            select! {
+                // stop the event loop if the token has been cancelled
+                _ = cancellation_token.cancelled() => {
+                    break;
+                }
 
-            let delegation = self.fetch().await;
+                // fetch the delegation if enough time has passed
+                _ = interval.tick() => {
+                    let mut delegation = self.fetch().await;
 
-            // FIXME(kpop): what to do when we fail, i.e., all receivers are dropped
-            let _ = sender.send(delegation);
+                    sender.send_if_modified(
+                        move |old_delegation: &mut Option<CertificateDelegation>| {
+                            if &delegation != old_delegation {
+                                std::mem::swap(old_delegation, &mut delegation);
+                                true
+                            } else {
+                                false
+                            }
+                        },
+                    );
+                }
+            }
         }
     }
 }
