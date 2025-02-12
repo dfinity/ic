@@ -8,7 +8,7 @@ def _release_nostrip_transition(_settings, _attr):
     return {
         "//command_line_option:compilation_mode": "opt",
         "//command_line_option:strip": "never",
-        "@rules_rust//:extra_rustc_flags": ["-Cdebug-assertions=off"],
+        "@rules_rust//:extra_rustc_flags": ["-Cdebug-assertions=off", "-Cstrip=none"],
     }
 
 release_nostrip_transition = transition(
