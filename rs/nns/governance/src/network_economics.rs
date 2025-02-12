@@ -54,12 +54,13 @@ impl NetworkEconomics {
     ///             max_proposals_to_keep_per_topic being set to 0.
     ///
     ///         ii. valid, according to their types. See their respective
-    ///             validate methods.
+    ///             validate methods: [NeuronsFundEconomics::validate],
+    ///             [VotingPowerEconomics::validate].
     ///
     /// If Err is returned, it will be a nonempty Vec of defects.
     ///
     // Other fields are allowed to be 0, but this would never occur in practice
-    // for the same reason that in practice, we we would observe that
+    // for the same reason that in practice, we would not observe that
     // max_proposals_to_keep_per_topic is set to 0.
     //
     // It is redundant that Vec<String> is wrapped in Result. We do this for
