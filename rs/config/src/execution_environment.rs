@@ -317,10 +317,6 @@ pub struct Config {
     ///   - let `halfway_to_max = (memory_usage + 4GiB) / 2`
     ///   - use the maximum of `default_wasm_memory_limit` and `halfway_to_max`.
     pub default_wasm_memory_limit: NumBytes,
-
-    // TODO(EXC-1678): remove after release.
-    /// Feature flag to enable/disable allowed viewers for canister log visibility.
-    pub allowed_viewers_feature: FlagStatus,
 }
 
 impl Default for Config {
@@ -398,7 +394,6 @@ impl Default for Config {
             dirty_page_logging: FlagStatus::Disabled,
             max_canister_http_requests_in_flight: MAX_CANISTER_HTTP_REQUESTS_IN_FLIGHT,
             default_wasm_memory_limit: DEFAULT_WASM_MEMORY_LIMIT,
-            allowed_viewers_feature: FlagStatus::Enabled,
         }
     }
 }
