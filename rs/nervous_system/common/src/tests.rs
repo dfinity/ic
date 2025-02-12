@@ -4,6 +4,15 @@ use crate::{hash_to_hex_string, ledger::compute_neuron_staking_subaccount_bytes}
 use ic_base_types::PrincipalId;
 use ic_crypto_sha2::Sha256;
 
+// In NNS, 1 "month" is defined as exactly 1/12th of a year. However, it is
+// maybe non-obvious that the number of seconds in 1 year is dividible by 12,
+// particularly since 1 "year" is defined as exactly 365.25 days. Therefore, the
+// "point" here is to make sure that there is no remainder that throws off the
+// definition of ONE_MONTH_SECONDS.
+const _: () = {
+    assert!(ONE_MONTH_SECONDS * 12 == ONE_YEAR_SECONDS);
+};
+
 #[test]
 fn test_wide_range_of_u64_values() {
     assert!(WIDE_RANGE_OF_U64_VALUES.contains(&0));

@@ -117,7 +117,7 @@ jobs:
           popd
 
           git config --global user.name "IDX GitHub Automation"
-          git config --global user.email "idx@dfinity.org"
+          git config --global user.email "<>"
           git add .
           git commit -m "Updating container image to ${IMAGE_SHA}" -m "Image tag: ${IMAGE_TAG}"
           git push

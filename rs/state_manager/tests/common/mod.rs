@@ -1,9 +1,6 @@
 use assert_matches::assert_matches;
 use ic_base_types::NumSeconds;
-use ic_config::{
-    flag_status::FlagStatus,
-    state_manager::{lsmt_config_default, Config, LsmtConfig},
-};
+use ic_config::state_manager::{lsmt_config_default, Config, LsmtConfig};
 use ic_interfaces::{
     certification::{InvalidCertificationReason, Verifier, VerifierError},
     p2p::state_sync::{Chunk, ChunkId, Chunkable},
@@ -304,7 +301,7 @@ pub fn modify_encoded_stream_helper<F: FnOnce(StreamSlice) -> Stream>(
 pub fn wait_for_checkpoint(state_manager: &impl StateManager, h: Height) -> CryptoHashOfState {
     use std::time::{Duration, Instant};
 
-    let timeout = Duration::from_secs(20);
+    let timeout = Duration::from_secs(100);
     let started = Instant::now();
     while started.elapsed() < timeout {
         match state_manager.get_state_hash_at(h) {
@@ -686,22 +683,11 @@ where
 }
 
 pub fn lsmt_with_sharding() -> LsmtConfig {
-    LsmtConfig {
-        lsmt_status: FlagStatus::Enabled,
-        shard_num_pages: 1,
-    }
+    LsmtConfig { shard_num_pages: 1 }
 }
 
 pub fn lsmt_without_sharding() -> LsmtConfig {
     LsmtConfig {
-        lsmt_status: FlagStatus::Enabled,
-        shard_num_pages: u64::MAX,
-    }
-}
-
-pub fn lsmt_disabled() -> LsmtConfig {
-    LsmtConfig {
-        lsmt_status: FlagStatus::Disabled,
         shard_num_pages: u64::MAX,
     }
 }

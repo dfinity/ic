@@ -9,7 +9,7 @@ documentation.workspace = true
 [dependencies]
 anyhow = { workspace = true }
 canister-test = { path = "../../../rust_canisters/canister_test" }
-ic-management-canister-types = { path = "../../../types/management_canister_types" }
+ic-management-canister-types-private = { path = "../../../types/management_canister_types" }
 ic-nns-constants = { path = "../../../nns/constants" }
 ic-registry-subnet-type = { path = "../../../registry/subnet_type" }
 ic-system-test-driver = { path = "../../driver" }

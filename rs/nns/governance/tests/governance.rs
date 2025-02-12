@@ -32,7 +32,7 @@ use ic_nervous_system_common_test_keys::{
     TEST_NEURON_1_OWNER_PRINCIPAL, TEST_NEURON_2_OWNER_PRINCIPAL,
 };
 use ic_nervous_system_common_test_utils::{LedgerReply, SpyLedger};
-use ic_nervous_system_proto::pb::v1::{Duration, GlobalTimeOfDay, Image};
+use ic_nervous_system_proto::pb::v1::{Decimal, Duration, GlobalTimeOfDay, Image};
 use ic_neurons_fund::{
     NeuronsFundParticipationLimits, PolynomialMatchingFunction, SerializableFunction,
 };
@@ -84,8 +84,9 @@ use ic_nns_governance::{
         GovernanceChange, GovernanceError, IdealMatchedParticipationFunction, InstallCode,
         KnownNeuron, KnownNeuronData, ListProposalInfo, ManageNeuron, MonthlyNodeProviderRewards,
         Motion, NetworkEconomics, Neuron, NeuronChange, NeuronType, NeuronsFundData,
-        NeuronsFundParticipation, NeuronsFundSnapshot, NnsFunction, NodeProvider, Proposal,
-        ProposalChange, ProposalData, ProposalDataChange,
+        NeuronsFundEconomics, NeuronsFundMatchedFundingCurveCoefficients, NeuronsFundParticipation,
+        NeuronsFundSnapshot, NnsFunction, NodeProvider, Proposal, ProposalChange, ProposalData,
+        ProposalDataChange,
         ProposalRewardStatus::{self, AcceptVotes, ReadyToSettle},
         ProposalStatus::{self, Rejected},
         RewardEvent, RewardNodeProvider, RewardNodeProviders,
@@ -1688,6 +1689,120 @@ async fn test_minimum_icp_xdr_conversion_rate_limits_monthly_node_provider_rewar
     )
     .unwrap();
     assert_eq!(actual_node_provider_reward, expected_node_provider_reward);
+}
+
+#[tokio::test]
+async fn test_manage_network_economics_change_one_deep_subfield() {
+    // Step 1: Prepare the world. All we need is a Governance with one neuron.
+    // The neuron will be used to make a ManageNetworkEconomics proposal.
+
+    let controller = PrincipalId::new_user_test_id(519_572_717);
+    let neuron = Neuron {
+        id: Some(NeuronId { id: 1 }),
+        controller: Some(controller),
+        account: vec![42_u8; 32],
+        dissolve_state: NOTDISSOLVING_MIN_DISSOLVE_DELAY_TO_VOTE,
+        cached_neuron_stake_e8s: 100 * E8,
+        ..Default::default()
+    };
+
+    let driver = fake::FakeDriver::default();
+    let mut gov = Governance::new(
+        GovernanceProto {
+            economics: Some(NetworkEconomics::with_default_values()),
+            neurons: btreemap! { 1 => neuron },
+            ..Default::default()
+        },
+        driver.get_fake_env(),
+        driver.get_fake_ledger(),
+        driver.get_fake_cmc(),
+    );
+
+    // Step 2: Call the code under test. Make a ManageNetworkEconomics proposal.
+    // It gets executed immediately, since there is only one neuron.
+
+    let neurons_fund_economics = Some(NeuronsFundEconomics {
+        neurons_fund_matched_funding_curve_coefficients: Some(
+            NeuronsFundMatchedFundingCurveCoefficients {
+                // This is the ONLY field that should be touched.
+                contribution_threshold_xdr: Some(Decimal {
+                    human_readable: Some("123456789".to_string()),
+                }),
+
+                // Do not touch other fields.
+                one_third_participation_milestone_xdr: None,
+                ..Default::default()
+            },
+        ),
+
+        // Do not touch other fields.
+        minimum_icp_xdr_rate: None,
+        ..Default::default()
+    });
+
+    // Assert that the proposal contains a different value for contribution_threshold_xdr.
+    {
+        let prior_contribution_threshold_xdr = gov
+            .heap_data
+            .economics
+            .as_ref()
+            .unwrap()
+            .neurons_fund_economics
+            .as_ref()
+            .unwrap()
+            .neurons_fund_matched_funding_curve_coefficients
+            .as_ref()
+            .unwrap()
+            .contribution_threshold_xdr
+            .as_ref()
+            .unwrap()
+            .human_readable
+            .as_deref()
+            .unwrap();
+        let prior_contribution_threshold_xdr =
+            rust_decimal::Decimal::try_from(prior_contribution_threshold_xdr).unwrap();
+
+        let proposal_contribution_threshold_xdr = rust_decimal::Decimal::from(123_456_789);
+
+        assert_ne!(
+            prior_contribution_threshold_xdr,
+            proposal_contribution_threshold_xdr
+        );
+    }
+    gov.make_proposal(
+        &NeuronId { id: 1 },
+        &controller,
+        &Proposal {
+            title: Some("Change start_reducing_voting_power_after_seconds to 42.".to_string()),
+            summary: "Best proposal of all time. Of all time.".to_string(),
+            url: "https://forum.dfinity.org".to_string(),
+            action: Some(proposal::Action::ManageNetworkEconomics(NetworkEconomics {
+                neurons_fund_economics,
+
+                // Do not touch other fields.
+                reject_cost_e8s: 0,
+                ..Default::default()
+            })),
+        },
+    )
+    .await
+    .unwrap();
+
+    // Step 3: Verify results.
+
+    let mut expected_network_economics = NetworkEconomics::with_default_values();
+    expected_network_economics
+        .neurons_fund_economics
+        .as_mut()
+        .unwrap()
+        .neurons_fund_matched_funding_curve_coefficients
+        .as_mut()
+        .unwrap()
+        .contribution_threshold_xdr = Some(Decimal {
+        human_readable: Some("123456789".to_string()),
+    });
+
+    assert_eq!(gov.heap_data.economics, Some(expected_network_economics));
 }
 
 #[tokio::test]
@@ -10610,6 +10725,7 @@ fn test_include_public_neurons_in_full_neurons() {
 
             page_number: None,
             page_size: None,
+            neuron_subaccounts: None,
         },
         caller,
     );
@@ -14674,6 +14790,7 @@ fn test_neuron_info_private_enforcement() {
                         include_public_neurons_in_full_neurons: None,
                         page_number: None,
                         page_size: None,
+                        neuron_subaccounts: None,
                     },
                     requester,
                 )

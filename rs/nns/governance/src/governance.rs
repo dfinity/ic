@@ -11,11 +11,11 @@ use crate::{
         reassemble_governance_proto, split_governance_proto, HeapGovernanceData, XdrConversionRate,
     },
     migrations::maybe_run_migrations,
+    network_economics::InheritFrom,
     neuron::{DissolveStateAndAge, Neuron, NeuronBuilder, Visibility},
     neuron_data_validation::{NeuronDataValidationSummary, NeuronDataValidator},
     neuron_store::{
-        backfill_some_voting_power_refreshed_timestamps, metrics::NeuronSubsetMetrics,
-        prune_some_following, NeuronMetrics, NeuronStore,
+        metrics::NeuronSubsetMetrics, prune_some_following, NeuronMetrics, NeuronStore,
     },
     neurons_fund::{
         NeuronsFund, NeuronsFundNeuronPortion, NeuronsFundSnapshot,
@@ -57,7 +57,6 @@ use crate::{
             InstallCode, KnownNeuron, ListKnownNeuronsResponse, ListProposalInfo, ManageNeuron,
             MonthlyNodeProviderRewards, Motion, NetworkEconomics, NeuronState,
             NeuronsFundAuditInfo, NeuronsFundData,
-            NeuronsFundEconomics as NeuronsFundNetworkEconomicsPb,
             NeuronsFundParticipation as NeuronsFundParticipationPb,
             NeuronsFundSnapshot as NeuronsFundSnapshotPb, NnsFunction, NodeProvider, Proposal,
             ProposalData, ProposalRewardStatus, ProposalStatus, RestoreAgingSummary, RewardEvent,
@@ -78,13 +77,11 @@ use ic_base_types::{CanisterId, PrincipalId};
 use ic_cdk::println;
 #[cfg(target_arch = "wasm32")]
 use ic_cdk::spawn;
-use ic_crypto_sha2::Sha256;
 use ic_nervous_system_common::{
     cmc::CMC, ledger, ledger::IcpLedger, NervousSystemError, ONE_DAY_SECONDS, ONE_MONTH_SECONDS,
     ONE_YEAR_SECONDS,
 };
 use ic_nervous_system_governance::maturity_modulation::apply_maturity_modulation;
-use ic_nervous_system_linear_map::LinearMap;
 use ic_nervous_system_proto::pb::v1::{GlobalTimeOfDay, Principals};
 use ic_nns_common::{
     pb::v1::{NeuronId, ProposalId},
@@ -113,9 +110,7 @@ use ic_sns_wasm::pb::v1::{
     DeployNewSnsRequest, DeployNewSnsResponse, ListDeployedSnsesRequest, ListDeployedSnsesResponse,
 };
 use ic_stable_structures::{storable::Bound, Storable};
-use icp_ledger::{
-    AccountIdentifier, Subaccount, Tokens, DEFAULT_TRANSFER_FEE, TOKEN_SUBDIVIDABLE_BY,
-};
+use icp_ledger::{AccountIdentifier, Subaccount, Tokens, TOKEN_SUBDIVIDABLE_BY};
 use itertools::Itertools;
 use maplit::hashmap;
 use registry_canister::{
@@ -132,7 +127,6 @@ use std::{
     future::Future,
     ops::RangeInclusive,
     string::ToString,
-    time::Duration,
 };
 
 mod ledger_helper;
@@ -225,9 +219,6 @@ pub const MAX_LIST_NEURONS_RESULTS: usize = 500;
 
 const MAX_LIST_NODE_PROVIDER_REWARDS_RESULTS: usize = 24;
 
-/// The number of e8s per ICP;
-const E8S_PER_ICP: u64 = TOKEN_SUBDIVIDABLE_BY;
-
 /// The max number of unsettled proposals -- that is proposals for which ballots
 /// are still stored.
 pub const MAX_NUMBER_OF_PROPOSALS_WITH_BALLOTS: usize = 200;
@@ -271,141 +262,6 @@ const VALID_MATURITY_MODULATION_BASIS_POINTS_RANGE: RangeInclusive<i32> = -500..
 /// `CreateServiceNervousSystem` proposal execution also needs to be evaluated (currently, each
 /// neuron takes ~120K instructions to draw/refund maturity, so the total is ~600M).
 pub const MAX_NEURONS_FUND_PARTICIPANTS: u64 = 5_000;
-
-impl NetworkEconomics {
-    /// The multiplier applied to minimum_icp_xdr_rate to convert the XDR unit to basis_points
-    pub const ICP_XDR_RATE_TO_BASIS_POINT_MULTIPLIER: u64 = 100;
-
-    // The default values for network economics (until we initialize it).
-    // Can't implement Default since it conflicts with Prost's.
-    pub fn with_default_values() -> Self {
-        Self {
-            reject_cost_e8s: E8S_PER_ICP,                               // 1 ICP
-            neuron_management_fee_per_proposal_e8s: 1_000_000,          // 0.01 ICP
-            neuron_minimum_stake_e8s: E8S_PER_ICP,                      // 1 ICP
-            neuron_spawn_dissolve_delay_seconds: ONE_DAY_SECONDS * 7,   // 7 days
-            maximum_node_provider_rewards_e8s: 1_000_000 * 100_000_000, // 1M ICP
-            minimum_icp_xdr_rate: 100,                                  // 1 XDR
-            transaction_fee_e8s: DEFAULT_TRANSFER_FEE.get_e8s(),
-            max_proposals_to_keep_per_topic: 100,
-            neurons_fund_economics: Some(NeuronsFundNetworkEconomicsPb::with_default_values()),
-            voting_power_economics: Some(VotingPowerEconomics::with_default_values()),
-        }
-    }
-
-    /// Returns a modified copy of self where fields containing the default
-    /// value are replaced with the value from defaults. In particular, 0 and
-    /// None are replaced.
-    fn inherit_from(&self, defaults: &Self) -> Self {
-        /// Returns ours if it is the default (for its type). Otherwise, returns default.
-        fn inherit_from<T>(ours: T, default: T) -> T
-        where
-            T: Default + PartialEq,
-        {
-            if ours == T::default() {
-                return default;
-            }
-
-            ours
-        }
-
-        Self {
-            reject_cost_e8s: inherit_from(self.reject_cost_e8s, defaults.reject_cost_e8s),
-            neuron_minimum_stake_e8s: inherit_from(
-                self.neuron_minimum_stake_e8s,
-                defaults.neuron_minimum_stake_e8s,
-            ),
-            neuron_management_fee_per_proposal_e8s: inherit_from(
-                self.neuron_management_fee_per_proposal_e8s,
-                defaults.neuron_management_fee_per_proposal_e8s,
-            ),
-            minimum_icp_xdr_rate: inherit_from(
-                self.minimum_icp_xdr_rate,
-                defaults.minimum_icp_xdr_rate,
-            ),
-            neuron_spawn_dissolve_delay_seconds: inherit_from(
-                self.neuron_spawn_dissolve_delay_seconds,
-                defaults.neuron_spawn_dissolve_delay_seconds,
-            ),
-            maximum_node_provider_rewards_e8s: inherit_from(
-                self.maximum_node_provider_rewards_e8s,
-                defaults.maximum_node_provider_rewards_e8s,
-            ),
-            transaction_fee_e8s: inherit_from(
-                self.transaction_fee_e8s,
-                defaults.transaction_fee_e8s,
-            ),
-            max_proposals_to_keep_per_topic: inherit_from(
-                self.max_proposals_to_keep_per_topic,
-                defaults.max_proposals_to_keep_per_topic,
-            ),
-
-            // TODO(NNS1-3499): Ideally, we would recurse into T, because
-            // otherwise, you have to set a bundle of parameters all at once. In
-            // other words, the current implementation does not support setting
-            // individual subfields, a la carte.
-            neurons_fund_economics: inherit_from(
-                self.neurons_fund_economics.as_ref(),
-                defaults.neurons_fund_economics.as_ref(),
-            )
-            .cloned(),
-            voting_power_economics: inherit_from(
-                self.voting_power_economics.as_ref(),
-                defaults.voting_power_economics.as_ref(),
-            )
-            .cloned(),
-        }
-    }
-}
-
-impl VotingPowerEconomics {
-    pub const DEFAULT: Self = Self {
-        start_reducing_voting_power_after_seconds: Some(
-            Self::DEFAULT_START_REDUCING_VOTING_POWER_AFTER_SECONDS,
-        ),
-        clear_following_after_seconds: Some(Self::DEFAULT_CLEAR_FOLLOWING_AFTER_SECONDS),
-    };
-
-    pub const DEFAULT_START_REDUCING_VOTING_POWER_AFTER_SECONDS: u64 = 6 * ONE_MONTH_SECONDS;
-    pub const DEFAULT_CLEAR_FOLLOWING_AFTER_SECONDS: u64 = ONE_MONTH_SECONDS;
-
-    pub fn with_default_values() -> Self {
-        Self::DEFAULT
-    }
-
-    pub fn deciding_voting_power_adjustment_factor(
-        &self,
-        time_since_last_voting_power_refreshed: Duration,
-    ) -> Decimal {
-        self.deciding_voting_power_adjustment_factor_function()
-            .apply(time_since_last_voting_power_refreshed.as_secs())
-            .clamp(Decimal::from(0), Decimal::from(1))
-    }
-
-    fn deciding_voting_power_adjustment_factor_function(&self) -> LinearMap {
-        let from_range = {
-            let begin = self.get_start_reducing_voting_power_after_seconds();
-            let end = begin + self.get_clear_following_after_seconds();
-
-            begin..end
-        };
-
-        #[allow(clippy::reversed_empty_ranges)]
-        let to_range = 1..0;
-
-        LinearMap::new(from_range, to_range)
-    }
-
-    pub fn get_start_reducing_voting_power_after_seconds(&self) -> u64 {
-        self.start_reducing_voting_power_after_seconds
-            .unwrap_or(Self::DEFAULT_START_REDUCING_VOTING_POWER_AFTER_SECONDS)
-    }
-
-    pub fn get_clear_following_after_seconds(&self) -> u64 {
-        self.clear_following_after_seconds
-            .unwrap_or(Self::DEFAULT_CLEAR_FOLLOWING_AFTER_SECONDS)
-    }
-}
 
 impl GovernanceError {
     pub fn new(error_type: ErrorType) -> Self {
@@ -1855,7 +1711,7 @@ impl Governance {
             env.seed_rng(rng_seed);
         }
 
-        let mut governance = Self {
+        Self {
             heap_data: heap_governance_proto,
             neuron_store: NeuronStore::new_restored((heap_neurons, topic_followee_map)),
             env,
@@ -1867,10 +1723,7 @@ impl Governance {
             neuron_data_validator: NeuronDataValidator::new(),
             minting_node_provider_rewards: false,
             neuron_rate_limits: NeuronRateLimits::default(),
-        };
-        // TODO: Remove after the backfill has been run once.
-        governance.backfill_install_code_hashes();
-        governance
+        }
     }
 
     /// After calling this method, the proto and neuron_store (the heap neurons at least)
@@ -2230,6 +2083,7 @@ impl Governance {
             include_public_neurons_in_full_neurons,
             page_number,
             page_size,
+            neuron_subaccounts,
         } = list_neurons;
 
         let page_number = page_number.unwrap_or(0);
@@ -2265,10 +2119,27 @@ impl Governance {
             BTreeSet::new()
         };
 
+        let mut neurons_by_subaccount: BTreeSet<NeuronId> = neuron_subaccounts
+            .as_ref()
+            .map(|subaccounts| {
+                subaccounts
+                    .iter()
+                    .flat_map(|neuron_subaccount| {
+                        Self::bytes_to_subaccount(&neuron_subaccount.subaccount)
+                            .ok()
+                            .and_then(|subaccount| {
+                                self.neuron_store.get_neuron_id_for_subaccount(subaccount)
+                            })
+                    })
+                    .collect()
+            })
+            .unwrap_or_default();
+
         // Concatenate (explicit and implicit)-ly included neurons.
         let mut requested_neuron_ids: BTreeSet<NeuronId> =
             neuron_ids.iter().map(|id| NeuronId { id: *id }).collect();
         requested_neuron_ids.append(&mut implicitly_requested_neuron_ids);
+        requested_neuron_ids.append(&mut neurons_by_subaccount);
 
         // These will be assembled into the final result.
         let mut neuron_infos = hashmap![];
@@ -5980,46 +5851,6 @@ impl Governance {
             begin,
             carry_on,
         )
-    }
-
-    pub fn backfill_some_voting_power_refreshed_timestamps(
-        &mut self,
-        begin: std::ops::Bound<NeuronId>,
-        carry_on: impl FnMut() -> bool,
-    ) -> std::ops::Bound<NeuronId> {
-        backfill_some_voting_power_refreshed_timestamps(&mut self.neuron_store, begin, carry_on)
-    }
-
-    pub fn backfill_install_code_hashes(&mut self) {
-        for proposal in self.heap_data.proposals.values_mut() {
-            let Some(proposal) = proposal.proposal.as_mut() else {
-                continue;
-            };
-            let Some(Action::InstallCode(install_code)) = proposal.action.as_mut() else {
-                continue;
-            };
-            if install_code.wasm_module_hash.is_none() {
-                if let Some(wasm_module) = install_code.wasm_module.as_ref() {
-                    install_code.wasm_module_hash = Some(Sha256::hash(wasm_module).to_vec());
-                }
-            }
-            if install_code.arg_hash.is_none() {
-                let arg_hash = match install_code.arg.as_ref() {
-                    Some(arg) => {
-                        // We could calculate the hash of an empty arg, but it would be confusing for the
-                        // proposal reviewers, since the arg_hash is the only thing they can see, and it would
-                        // not be obvious that the arg is empty.
-                        if arg.is_empty() {
-                            Some(vec![])
-                        } else {
-                            Some(Sha256::hash(arg).to_vec())
-                        }
-                    }
-                    None => Some(vec![]),
-                };
-                install_code.arg_hash = arg_hash;
-            }
-        }
     }
 
     /// Creates a new neuron or refreshes the stake of an existing
