@@ -121,14 +121,12 @@ pub async fn wait_for_job_completion(name: &str) -> Result<()> {
     let client = Client::try_default().await?;
     let api: Api<Job> = Api::namespaced(client, "tnets");
 
-    let _job_status = (|| async {
+    let job_status = (|| async {
         let job = api.get(name).await?;
         let status = job.status.clone().unwrap_or_default();
         if status.succeeded.is_some() {
             return Ok(status);
         }
-        println!("Job {} not yet completed", name);
-        info!("Job {} not yet completed", name);
         Err(anyhow!("Job {} not yet completed", name))
     })
     .retry(
@@ -137,6 +135,7 @@ pub async fn wait_for_job_completion(name: &str) -> Result<()> {
             .with_delay(std::time::Duration::from_secs(3)),
     )
     .await?;
+    debug!("Job {} status: {:?}", name, job_status);
 
     Ok(())
 }

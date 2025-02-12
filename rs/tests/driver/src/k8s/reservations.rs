@@ -75,7 +75,6 @@ pub async fn create_reservation(
     debug!("YAML: {}", yaml);
 
     let data: DynamicObject = serde_yaml::from_str(&yaml)?;
-    //data.metadata.owner_references = vec![owner].into();
     let response = api
         .patch(
             &name,
