@@ -25,8 +25,11 @@ impl GovernanceProtoBuilder {
             ..Default::default()
         };
 
+        // Make economics valid. Ideally, we'd use
+        // NetworkEconomics::with_default_values(), but many tests rely on
+        // NetworkEconomics::default() (not the same!).
         let economics = governance_proto.economics.as_mut().unwrap();
-        economics.max_proposals_to_keep_per_topic = 1;
+        economics.max_proposals_to_keep_per_topic = 100;
         economics.neurons_fund_economics = Some(NeuronsFundEconomics::with_default_values());
         economics.voting_power_economics = Some(VotingPowerEconomics::with_default_values());
 
