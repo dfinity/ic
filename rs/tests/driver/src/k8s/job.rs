@@ -74,13 +74,11 @@ pub async fn create_job(
         containers: vec![ctr],
         restart_policy: Some("OnFailure".to_string()),
         scheduler_name: Some("koord-scheduler".to_string()),
-        node_selector: node_name.map_or(None, |node_name| {
-            Some(
-                [("kubernetes.io/hostname".to_string(), node_name)]
-                    .iter()
-                    .cloned()
-                    .collect(),
-            )
+        node_selector: node_name.map(|node_name| {
+            [("kubernetes.io/hostname".to_string(), node_name)]
+                .iter()
+                .cloned()
+                .collect()
         }),
         volumes,
         ..Default::default()
