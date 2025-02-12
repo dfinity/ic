@@ -566,8 +566,7 @@ impl BlockchainManager {
         if len == 0 {
             return;
         }
-        let offset = self.round_robin_offset % len;
-        peers.rotate_left(offset);
+        peers.rotate_left(self.round_robin_offset % len);
         self.round_robin_offset = (self.round_robin_offset + 1) % len;
 
         // For each peer, select a random subset of the inventory and send a "getdata" request for it.
