@@ -1526,7 +1526,8 @@ pub fn nns_update_node_operator_config(
     payload: &UpdateNodeOperatorConfigPayload,
 ) {
     let result = state_machine
-        .execute_ingress(
+        .execute_ingress_as(
+            GOVERNANCE_CANISTER_ID.into(),
             REGISTRY_CANISTER_ID,
             "update_node_operator_config",
             Encode!(payload).unwrap(),

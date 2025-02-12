@@ -73,17 +73,33 @@ fn test_proposal_with_golden_nns_state() {
         */
     }
 
-    // Data from https://dfinity.slack.com/archives/C06QP9UD2MU/p1739328213531539?thread_ts=1739291275.829969&cid=C06QP9UD2MU
+    // Data from https://dfinity.enterprise.slack.com/docs/T43F9UHS5/F08CRU7R0HL
     nns_update_node_operator_config(
         &state_machine,
         &UpdateNodeOperatorConfigPayload {
-            node_provider_id: Some(PrincipalId::from_str("wdnqm-clqti-im5yf-iapio-avjom-kyppl-xuiza-oaz6z-smmts-52wyg-5ae").unwrap()),
             node_operator_id: Some(PrincipalId::from_str("3nu7r-l6i5c-jlmhi-fmmhm-4wcw4-ndlwb-yovrx-o3wxh-suzew-hvbbo-7qe").unwrap()),
             rewardable_nodes: btreemap! {
-                "type1".to_string() => 111,
-                "type3.1".to_string() => 222,
-                "type2".to_string() => 222,
-                "type3.1".to_string() => 222,
+                "type1".to_string() => 28,
+            },
+            ..Default::default()
+        },
+    );
+    nns_update_node_operator_config(
+        &state_machine,
+        &UpdateNodeOperatorConfigPayload {
+            node_operator_id: Some(PrincipalId::from_str("redpf-rrb5x-sa2it-zhbh7-…y-tgxmj-g5y7p-ezjtj-5qe").unwrap()),
+            rewardable_nodes: btreemap! {
+                "type1".to_string() => 28,
+            },
+            ..Default::default()
+        },
+    );
+    nns_update_node_operator_config(
+        &state_machine,
+        &UpdateNodeOperatorConfigPayload {
+            node_operator_id: Some(PrincipalId::from_str("bmlhw-kinr6-7cyv5-3o3v6-ic6tw-pnzk3-jycod-6d7sw-owaft-3b6k3-kqe").unwrap()),
+            rewardable_nodes: btreemap! {
+                "type1".to_string() => 14,
             },
             ..Default::default()
         },
