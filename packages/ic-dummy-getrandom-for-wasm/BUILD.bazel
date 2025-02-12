@@ -3,7 +3,7 @@ load("@rules_rust//rust:defs.bzl", "rust_library")
 package(default_visibility = ["//visibility:public"])
 
 rust_library(
-    name = "getrandom_for_wasm",
+    name = "ic-dummy-getrandom-for-wasm",
     srcs = glob(["src/**"]),
     crate_name = "ic-dummy-getrandom-for-wasm",
     version = "0.1.0",
