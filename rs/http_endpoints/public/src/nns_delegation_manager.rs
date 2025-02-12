@@ -3,7 +3,7 @@ use std::{sync::Arc, time::Duration};
 use ic_config::http_handler::Config;
 use ic_crypto_tls_interfaces::TlsConfig;
 use ic_interfaces_registry::RegistryClient;
-use ic_logger::ReplicaLogger;
+use ic_logger::{info, ReplicaLogger};
 use ic_metrics::{buckets::decimal_buckets, MetricsRegistry};
 use ic_types::{messages::CertificateDelegation, SubnetId};
 use prometheus::{Histogram, IntCounter};
@@ -37,6 +37,7 @@ pub fn start_nns_delegation_manager(
         registry_client,
         tls_config,
         metrics: DelegationManagerMetrics::new(metrics_registry),
+        rt_handle: rt_handle.clone(),
     };
 
     let delegation = rt_handle.block_on(manager.fetch());
@@ -83,6 +84,7 @@ struct DelegationManager {
     registry_client: Arc<dyn RegistryClient>,
     tls_config: Arc<dyn TlsConfig + Send + Sync>,
     metrics: DelegationManagerMetrics,
+    rt_handle: tokio::runtime::Handle,
 }
 
 impl DelegationManager {
@@ -92,6 +94,7 @@ impl DelegationManager {
         let delegation = load_root_delegation(
             &self.config,
             &self.log,
+            &self.rt_handle,
             self.subnet_id,
             self.nns_subnet_id,
             self.registry_client.as_ref(),
@@ -122,6 +125,8 @@ impl DelegationManager {
             select! {
                 // stop the event loop if the token has been cancelled
                 _ = cancellation_token.cancelled() => {
+                    info!(self.log, "Delegation manager task has been cancelled");
+
                     break;
                 }
 

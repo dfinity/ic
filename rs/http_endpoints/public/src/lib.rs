@@ -762,6 +762,7 @@ async fn collect_timer_metric(
 pub(crate) async fn load_root_delegation(
     config: &Config,
     log: &ReplicaLogger,
+    rt_handle: &tokio::runtime::Handle,
     subnet_id: SubnetId,
     nns_subnet_id: SubnetId,
     registry_client: &dyn RegistryClient,
@@ -788,6 +789,7 @@ pub(crate) async fn load_root_delegation(
         match try_fetch_delegation_from_nns(
             config,
             log,
+            rt_handle,
             &subnet_id,
             &nns_subnet_id,
             registry_client,
@@ -817,6 +819,7 @@ pub(crate) async fn load_root_delegation(
 async fn try_fetch_delegation_from_nns(
     config: &Config,
     log: &ReplicaLogger,
+    rt_handle: &tokio::runtime::Handle,
     subnet_id: &SubnetId,
     nns_subnet_id: &SubnetId,
     registry_client: &dyn RegistryClient,
@@ -899,7 +902,7 @@ async fn try_fetch_delegation_from_nns(
     let log_clone = log.clone();
 
     // Spawn a task to poll the connection, driving the HTTP state
-    tokio::spawn(async move {
+    rt_handle.spawn(async move {
         if let Err(err) = connection.await {
             warn!(log_clone, "Polling connection failed: {:?}.", err);
         }
