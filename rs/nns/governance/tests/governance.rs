@@ -2043,8 +2043,8 @@ async fn test_manage_network_economics_revalidate_at_execution_time(
     };
     let decider_neuron = Neuron {
         id: Some(NeuronId { id: 2 }),
-        account: vec![57_u8; 32],         // This is purely for realism.
-        cached_neuron_stake_e8s: E8 * E8, // So voting power.
+        account: vec![57_u8; 32],
+        cached_neuron_stake_e8s: E8 * E8, // Powerful!
         ..proposer_neuron.clone()
     };
 
