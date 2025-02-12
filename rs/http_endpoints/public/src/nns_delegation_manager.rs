@@ -13,6 +13,37 @@ use crate::load_root_delegation;
 
 const DELEGATION_UPDATE_INTERVAL: Duration = Duration::from_secs(15 * 60);
 
+/// Spawns a task which periodically fetches the nns delegation.
+pub fn start_nns_delegation_manager(
+    metrics_registry: &MetricsRegistry,
+    config: Config,
+    log: ReplicaLogger,
+    rt_handle: tokio::runtime::Handle,
+    subnet_id: SubnetId,
+    nns_subnet_id: SubnetId,
+    registry_client: Arc<dyn RegistryClient>,
+    tls_config: Arc<dyn TlsConfig + Send + Sync>,
+) -> (
+    JoinHandle<()>,
+    watch::Receiver<Option<CertificateDelegation>>,
+) {
+    let manager = DelegationManager {
+        config,
+        log,
+        subnet_id,
+        nns_subnet_id,
+        registry_client,
+        tls_config,
+        metrics: DelegationManagerMetrics::new(metrics_registry),
+    };
+
+    let delegation = rt_handle.block_on(manager.fetch());
+
+    let (tx, rx) = watch::channel(delegation);
+
+    (rt_handle.spawn(manager.run(tx)), rx)
+}
+
 struct DelegationManagerMetrics {
     updates: IntCounter,
     update_duration: Histogram,
@@ -50,37 +81,6 @@ struct DelegationManager {
     registry_client: Arc<dyn RegistryClient>,
     tls_config: Arc<dyn TlsConfig + Send + Sync>,
     metrics: DelegationManagerMetrics,
-}
-
-/// Spawns a task which periodically fetches the nns delegation.
-pub fn start_nns_delegation_manager(
-    metrics_registry: &MetricsRegistry,
-    config: Config,
-    log: ReplicaLogger,
-    rt_handle: tokio::runtime::Handle,
-    subnet_id: SubnetId,
-    nns_subnet_id: SubnetId,
-    registry_client: Arc<dyn RegistryClient>,
-    tls_config: Arc<dyn TlsConfig + Send + Sync>,
-) -> (
-    JoinHandle<()>,
-    watch::Receiver<Option<CertificateDelegation>>,
-) {
-    let manager = DelegationManager {
-        config,
-        log,
-        subnet_id,
-        nns_subnet_id,
-        registry_client,
-        tls_config,
-        metrics: DelegationManagerMetrics::new(metrics_registry),
-    };
-
-    let delegation = rt_handle.block_on(manager.fetch());
-
-    let (tx, rx) = watch::channel(delegation);
-
-    (rt_handle.spawn(manager.run(tx)), rx)
 }
 
 impl DelegationManager {
