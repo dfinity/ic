@@ -14,6 +14,7 @@ use ic_management_canister_types_private::{
 };
 use ic_nns_constants::CYCLES_MINTING_CANISTER_ID;
 use ic_registry_subnet_type::SubnetType;
+use ic_replicated_state::canister_state::execution_state::WasmExecutionMode;
 use ic_replicated_state::canister_state::{NextExecution, WASM_PAGE_SIZE_IN_BYTES};
 use ic_replicated_state::testing::CanisterQueuesTesting;
 use ic_replicated_state::testing::SystemStateTesting;
@@ -8154,12 +8155,21 @@ fn invoke_cost_call() {
         .reply_data_append()
         .reply()
         .build();
-    let res = test.ingress(canister_id, "update", payload);
-    let expected_cost = test.call_fee(method_name, &argument).get();
+    let res = test.ingress(canister_id, "update", payload.clone());
+    let expected_cost = test.cycles_account_manager().xnet_call_total_fee(
+        (method_name.len() as u64 + argument.len() as u64).into(),
+        WasmExecutionMode::Wasm32,
+    );
     let Ok(WasmResult::Reply(bytes)) = res else {
         panic!("Expected reply, got {:?}", res);
     };
-    assert_eq!(bytes, expected_cost.to_le_bytes());
+    let actual_cost = Cycles::from(&bytes);
+    assert_eq!(
+        actual_cost,
+        expected_cost,
+        "{}",
+        format!("difference {:?}", actual_cost - expected_cost)
+    );
 }
 
 #[test]
@@ -8168,20 +8178,15 @@ fn cost_call_accurate() {
     let mut test = ExecutionTestBuilder::new()
         .with_cycles_account_manager_config(cfg)
         .build();
-    let subnet_size = test.subnet_size();
     let canister_id = test.universal_canister().unwrap();
     let other = test.universal_canister().unwrap();
     let method_name_size = "update".len() as u64;
     let other_size_code = wasm().caller().append_and_reply();
     let payload_size = other_size_code.clone().build().len() as u64;
-    let expected_cost = test
-        .cycles_account_manager()
-        .xnet_call_performed_fee(subnet_size)
-        .get()
-        + test
-            .cycles_account_manager()
-            .xnet_call_bytes_transmitted_fee((method_name_size + payload_size).into(), subnet_size)
-            .get();
+    let expected_cost = test.cycles_account_manager().xnet_call_total_fee(
+        (method_name_size + payload_size).into(),
+        WasmExecutionMode::Wasm32,
+    );
     // the caller canister should:
     // - check its cycles balance and add it to the reply data
     // - call the other universal canister
@@ -8203,21 +8208,19 @@ fn cost_call_accurate() {
     };
     let cycles_before_call = u64::from_le_bytes(bytes[0..8].try_into().unwrap());
     let cycles_after_call = u64::from_le_bytes(bytes[8..16].try_into().unwrap());
-    // let other_cycles_after_call = test.cycles_account_manager()
-    println!(
-        "cycles before call {:?}, cycles after call {:?}, difference {:?}, expected cost {:?}",
-        cycles_before_call,
-        cycles_after_call,
+    assert_eq!(
         cycles_before_call - cycles_after_call,
-        expected_cost as u64
+        expected_cost.get() as u64
     );
-    assert_eq!(cycles_before_call - cycles_after_call, expected_cost as u64);
 }
 
+/// Returns a config in which only message execution cost and xnet costs are
+/// non-zero.
 fn call_only_cost_config() -> CyclesAccountManagerConfig {
     let real_cfg = CyclesAccountManagerConfig::application_subnet();
     let mut cfg = CyclesAccountManagerConfig::zero_cost(real_cfg.reference_subnet_size);
     cfg.xnet_call_fee = real_cfg.xnet_call_fee;
     cfg.xnet_byte_transmission_fee = real_cfg.xnet_byte_transmission_fee;
+    cfg.update_message_execution_fee = real_cfg.update_message_execution_fee;
     cfg
 }
