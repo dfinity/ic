@@ -79,8 +79,8 @@ alias(
         deps = [
             # Keep sorted.
             ":ckbtc_minter_lib",
+            "//packages/ic-dummy-getrandom-for-wasm",
             "//packages/icrc-ledger-types:icrc_ledger_types",
-            "//rs/crypto/getrandom_for_wasm",
             "//rs/rust_canisters/canister_log",
             "//rs/rust_canisters/http_types",
             "@crate_index//:candid",
