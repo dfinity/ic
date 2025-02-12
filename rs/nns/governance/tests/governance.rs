@@ -1953,6 +1953,18 @@ async fn test_manage_network_economics_revalidate_at_execution_time_set_minimum_
     });
 
     assert_eq!(new_network_economics, expected_network_economics);
+
+    let maximum_icp_xdr_rate = new_network_economics
+        .neurons_fund_economics
+        .as_ref()
+        .unwrap()
+        .maximum_icp_xdr_rate
+        .as_ref()
+        .unwrap()
+        .basis_points
+        .clone()
+        .unwrap();
+    assert_ne!(maximum_icp_xdr_rate, NEW_MAXIMUM_ICP_XDR_RATE);
 }
 
 #[tokio::test]
@@ -1978,6 +1990,18 @@ async fn test_manage_network_economics_revalidate_at_execution_time_set_maximum_
     });
 
     assert_eq!(new_network_economics, expected_network_economics);
+
+    let minimum_icp_xdr_rate = new_network_economics
+        .neurons_fund_economics
+        .as_ref()
+        .unwrap()
+        .minimum_icp_xdr_rate
+        .as_ref()
+        .unwrap()
+        .basis_points
+        .clone()
+        .unwrap();
+    assert_ne!(minimum_icp_xdr_rate, NEW_MINIMUM_ICP_XDR_RATE);
 }
 
 async fn test_manage_network_economics_revalidate_at_execution_time(
