@@ -514,23 +514,26 @@ impl BlockchainManager {
 
     fn sync_blocks(&mut self, channel: &mut impl Channel) {
         // Timeout requests so they may be retried again.
+        let mut timed_out_peers = HashSet::new();
         let mut retry_queue: LinkedHashSet<BlockHash> = LinkedHashSet::new();
         for (block_hash, request) in self.getdata_request_info.iter_mut() {
             match request.sent_at {
                 Some(sent_at) => {
                     if sent_at.elapsed().as_secs() > GETDATA_REQUEST_TIMEOUT_SECS {
                         retry_queue.insert(*block_hash);
+                        timed_out_peers.insert(request.socket);
                     }
                 }
                 None => {
                     retry_queue.insert(*block_hash);
+                    timed_out_peers.insert(request.socket);
                 }
             }
         }
 
         // If a request timed out, there is no point in storing it in getdata_request_info
         // Not removing it can actually lead to the adapter stalling, thinking all of its peers are busy.
-        for block_hash in retry_queue.iter() {
+        for block_hash in &retry_queue {
             self.getdata_request_info.remove(block_hash);
         }
 
@@ -543,6 +546,7 @@ impl BlockchainManager {
 
         if is_cache_full {
             debug!(self.logger, "Cache full");
+            return;
         }
 
         // Count the number of requests per peer.
@@ -555,9 +559,15 @@ impl BlockchainManager {
 
         let mut peer_info: Vec<_> = self.peer_info.values_mut().collect();
         peer_info.sort_by(|a, b| {
+            // 0 if peer didn't time out, 1 if it did
+            let a_timed_out = timed_out_peers.contains(&a.socket) as u8;
+            let b_timed_out = timed_out_peers.contains(&b.socket) as u8;
+
             let requests_sent_to_a = requests_per_peer.get(&a.socket).unwrap_or(&0);
             let requests_sent_to_b = requests_per_peer.get(&b.socket).unwrap_or(&0);
-            requests_sent_to_a.cmp(requests_sent_to_b)
+
+            // Sort first by whether the peer is timed out, then by requests_in_flight
+            (a_timed_out, requests_sent_to_a).cmp(&(b_timed_out, requests_sent_to_b))
         });
 
         // For each peer, select a random subset of the inventory and send a "getdata" request for it.
@@ -570,11 +580,7 @@ impl BlockchainManager {
             // Randomly sample some inventory to be requested from the peer.
             let mut selected_inventory = vec![];
             for _ in 0..num_requests_to_be_sent {
-                match get_next_block_hash_to_sync(
-                    is_cache_full,
-                    &mut retry_queue,
-                    &mut self.block_sync_queue,
-                ) {
+                match get_next_block_hash_to_sync(&mut retry_queue, &mut self.block_sync_queue) {
                     Some(hash) => {
                         selected_inventory.push(hash);
                     }
@@ -756,18 +762,10 @@ impl BlockchainManager {
 // Prioritzes new blocks that are in the sync queue over the ones in the retry queue, as
 // blocks in the retry queue are most likely not part of the main chain. See more in CON-1464.
 fn get_next_block_hash_to_sync(
-    is_cache_full: bool,
     retry_queue: &mut LinkedHashSet<BlockHash>,
     sync_queue: &mut LinkedHashSet<BlockHash>,
 ) -> Option<BlockHash> {
-    if is_cache_full {
-        return None;
-    }
-
-    if !sync_queue.is_empty() {
-        return sync_queue.pop_front();
-    }
-    retry_queue.pop_front()
+    sync_queue.pop_front().or_else(|| retry_queue.pop_front())
 }
 
 #[cfg(test)]
@@ -1603,41 +1601,11 @@ pub mod test {
             .front()
             .copied()
             .expect("Sync queue queue should have 2 items.");
-        let result = get_next_block_hash_to_sync(false, &mut retry_queue, &mut sync_queue);
+        let result = get_next_block_hash_to_sync(&mut retry_queue, &mut sync_queue);
         // The result is part of sync queue, and now sync queue only has one item
         assert!(matches!(result, Some(block_hash) if block_hash == first_hash));
         assert_eq!(retry_queue.len(), 1);
         assert_eq!(sync_queue.len(), 1);
-
-        // Try with `is_cache_full` set to true. None of the queues should call getdata.
-        let _first_hash = sync_queue
-            .front()
-            .copied()
-            .expect("Sync queue should have 1 item.");
-        let result = get_next_block_hash_to_sync(true, &mut retry_queue, &mut sync_queue);
-        // The queues have not changed, the result should be None.
-        assert!(result.is_none());
-        assert_eq!(retry_queue.len(), 1);
-        assert_eq!(sync_queue.len(), 1);
-    }
-
-    /// Tests if the cache is full and the retry queue is empty, then no blocks are returned.
-    #[test]
-    fn test_get_next_block_hash_to_sync_full_cache_and_empty_retry_queue() {
-        let genesis_block = genesis_block(Network::Regtest);
-        let headers = generate_headers(
-            genesis_block.block_hash(),
-            genesis_block.header.time,
-            1,
-            &[],
-        );
-        let mut retry_queue = LinkedHashSet::new();
-        let mut sync_queue: LinkedHashSet<BlockHash> =
-            headers.iter().map(|h| h.block_hash()).collect();
-        let result = get_next_block_hash_to_sync(true, &mut retry_queue, &mut sync_queue);
-        assert!(result.is_none());
-        assert_eq!(sync_queue.len(), 1);
-        assert_eq!(retry_queue.len(), 0);
     }
 
     /// Tests that the sync queue is used last only if the cache is not full and the retry queue
@@ -1658,7 +1626,7 @@ pub mod test {
             .front()
             .copied()
             .expect("Sync queue should have 1 item.");
-        let result = get_next_block_hash_to_sync(false, &mut retry_queue, &mut sync_queue);
+        let result = get_next_block_hash_to_sync(&mut retry_queue, &mut sync_queue);
         assert!(matches!(result, Some(block_hash) if block_hash == first_hash));
         assert_eq!(sync_queue.len(), 0);
         assert_eq!(retry_queue.len(), 0);
