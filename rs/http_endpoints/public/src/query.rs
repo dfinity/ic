@@ -40,7 +40,7 @@ use std::{
     convert::{Infallible, TryFrom},
     sync::Mutex,
 };
-use tokio::sync::{watch, OnceCell};
+use tokio::sync::watch;
 use tower::{util::BoxCloneService, ServiceBuilder, ServiceExt};
 
 #[derive(Clone)]

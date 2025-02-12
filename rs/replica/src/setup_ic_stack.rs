@@ -39,7 +39,7 @@ use ic_xnet_payload_builder::XNetPayloadBuilderImpl;
 use std::sync::{Arc, RwLock};
 use tokio::sync::{
     mpsc::{channel, UnboundedSender},
-    watch, OnceCell,
+    watch,
 };
 
 /// The buffer size for the channel that [`IngressHistoryWriterImpl`] uses to send
@@ -357,7 +357,7 @@ pub fn construct_ic_stack(
         consensus_pool_cache,
         subnet_type,
         config.malicious_behaviour.malicious_flags,
-        nns_delegation_watcher.clone(),
+        nns_delegation_watcher,
         Arc::new(Pprof),
         tracing_handle,
         max_certified_height_rx,

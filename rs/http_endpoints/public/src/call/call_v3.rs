@@ -40,7 +40,7 @@ use ic_types::{
 };
 use serde_cbor::Value as CBOR;
 use std::{collections::BTreeMap, convert::Infallible, sync::Arc, time::Duration};
-use tokio::sync::{watch, OnceCell};
+use tokio::sync::watch;
 use tokio_util::time::FutureExt;
 use tower::{util::BoxCloneService, ServiceBuilder};
 

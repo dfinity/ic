@@ -112,10 +112,8 @@ use tempfile::NamedTempFile;
 use tokio::{
     io::{AsyncRead, AsyncWrite},
     net::TcpStream,
-    sync::{
-        mpsc::{Receiver, UnboundedSender},
-        watch, OnceCell,
-    },
+    sync::mpsc::{Receiver, UnboundedSender},
+    sync::watch,
     time::{sleep, timeout, Instant},
 };
 use tokio_rustls::TlsConnector;
