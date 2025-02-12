@@ -8155,7 +8155,7 @@ fn invoke_cost_call() {
         .reply_data_append()
         .reply()
         .build();
-    let res = test.ingress(canister_id, "update", payload.clone());
+    let res = test.ingress(canister_id, "update", payload);
     let expected_cost = test.cycles_account_manager().xnet_call_total_fee(
         (method_name.len() as u64 + argument.len() as u64).into(),
         WasmExecutionMode::Wasm32,
@@ -8164,12 +8164,7 @@ fn invoke_cost_call() {
         panic!("Expected reply, got {:?}", res);
     };
     let actual_cost = Cycles::from(&bytes);
-    assert_eq!(
-        actual_cost,
-        expected_cost,
-        "{}",
-        format!("difference {:?}", actual_cost - expected_cost)
-    );
+    assert_eq!(actual_cost, expected_cost,);
 }
 
 #[test]
@@ -8223,4 +8218,50 @@ fn call_only_cost_config() -> CyclesAccountManagerConfig {
     cfg.xnet_byte_transmission_fee = real_cfg.xnet_byte_transmission_fee;
     cfg.update_message_execution_fee = real_cfg.update_message_execution_fee;
     cfg
+}
+
+#[test]
+fn invoke_cost_create_canister() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let subnet_size = test.subnet_size();
+    let canister_id = test.universal_canister().unwrap();
+    let payload = wasm()
+        .cost_create_canister()
+        .reply_data_append()
+        .reply()
+        .build();
+    let res = test.ingress(canister_id, "update", payload);
+    let expected_cost = test
+        .cycles_account_manager()
+        .canister_creation_fee(subnet_size);
+    let Ok(WasmResult::Reply(bytes)) = res else {
+        panic!("Expected reply, got {:?}", res);
+    };
+    let actual_cost = Cycles::from(&bytes);
+    assert_eq!(actual_cost, expected_cost,);
+}
+
+#[test]
+fn invoke_cost_http_request() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let subnet_size = test.subnet_size();
+    let canister_id = test.universal_canister().unwrap();
+    let request_size = 1000;
+    let max_res_bytes = 1_800_000;
+    let payload = wasm()
+        .cost_http_request(request_size, max_res_bytes)
+        .reply_data_append()
+        .reply()
+        .build();
+    let res = test.ingress(canister_id, "update", payload);
+    let expected_cost = test.cycles_account_manager().http_request_fee(
+        request_size.into(),
+        Some(max_res_bytes.into()),
+        subnet_size,
+    );
+    let Ok(WasmResult::Reply(bytes)) = res else {
+        panic!("Expected reply, got {:?}", res);
+    };
+    let actual_cost = Cycles::from(&bytes);
+    assert_eq!(actual_cost, expected_cost,);
 }
