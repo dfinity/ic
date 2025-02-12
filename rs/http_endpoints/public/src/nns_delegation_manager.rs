@@ -122,3 +122,93 @@ impl DelegationManager {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use std::sync::Arc;
+
+    use ic_crypto_temp_crypto::{NodeKeysToGenerate, TempCryptoComponent};
+    use ic_logger::no_op_logger;
+    use ic_metrics::MetricsRegistry;
+    use ic_registry_client_helpers::node::{ConnectionEndpoint, NodeRecord};
+    use ic_registry_keys::make_node_record_key;
+    use ic_test_utilities_registry::{setup_registry_non_final, SubnetRecordBuilder};
+    use ic_types::{messages::CertificateDelegation, NodeId};
+
+    use super::start_nns_delegation_manager;
+
+    const NNS_SUBNET_ID: SubnetId = ic_test_utilities_types::ids::SUBNET_1;
+    const NON_NNS_SUBNET_ID: SubnetId = ic_test_utilities_types::ids::SUBNET_2;
+    const NNS_NODE_ID: NodeId = ic_test_utilities_types::ids::NODE_1;
+
+    /// Sets up all the dependencies and starts the delegation manager loop.
+    fn set_up(
+        subnet_id: SubnetId,
+        rt_handle: tokio::runtime::Handle,
+    ) -> watch::Receiver<Option<CertificateDelegation>> {
+        let (data_provider, registry_client) = setup_registry_non_final(
+            NNS_SUBNET_ID,
+            vec![(
+                1,
+                SubnetRecordBuilder::new()
+                    .with_committee(&[NNS_NODE_ID])
+                    .build(),
+            )],
+        );
+
+        let node_record = NodeRecord {
+            http: Some(ConnectionEndpoint {
+                ip_addr: String::from("127.0.0.1"),
+                port: 8080,
+            }),
+            ..Default::default()
+        };
+
+        data_provider
+            .add(
+                &make_node_record_key(NNS_NODE_ID),
+                1.into(),
+                Some(node_record),
+            )
+            .unwrap();
+        registry_client.update_to_latest_version();
+
+        let server_crypto = TempCryptoComponent::builder()
+            .with_node_id(NNS_NODE_ID)
+            .with_keys(NodeKeysToGenerate::only_tls_key_and_cert())
+            .build();
+
+        let (_, rx) = start_nns_delegation_manager(
+            &MetricsRegistry::new(),
+            Config::default(),
+            no_op_logger(),
+            rt_handle,
+            subnet_id,
+            NNS_SUBNET_ID,
+            registry_client,
+            Arc::new(server_crypto),
+        );
+
+        rx
+    }
+
+    #[test]
+    fn nns_test() {
+        let rt = tokio::runtime::Runtime::new().unwrap();
+
+        let rx = set_up(NNS_SUBNET_ID, rt.handle().clone());
+
+        assert!(rx.borrow().is_none());
+    }
+
+    #[test]
+    fn non_nns_test() {
+        let rt = tokio::runtime::Runtime::new().unwrap();
+
+        let rx = set_up(NON_NNS_SUBNET_ID, rt.handle().clone());
+
+        assert!(rx.borrow().is_some());
+    }
+}

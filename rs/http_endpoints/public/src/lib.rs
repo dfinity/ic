@@ -796,6 +796,7 @@ pub(crate) async fn load_root_delegation(
         {
             Ok(delegation) => return Some(delegation),
             Err(err) => {
+                panic!("{}", err);
                 warn!(
                     log,
                     "Fetching delegation from nns subnet failed. Retrying again in {} seconds...\n\
