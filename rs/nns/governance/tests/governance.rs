@@ -2008,6 +2008,9 @@ async fn test_manage_network_economics_revalidate_at_execution_time_set_maximum_
 ///
 ///     2. Sets maximum_icp_xdr_rate to NEW_MAXIMUM_ICP_XDR_RATE.
 ///
+/// Unlike many tests, these proposals do NOT get decided immediately. This
+/// shows that they can EXIST (and be voted on) concurrently.
+///
 /// order_of_execution controls which gets voted in first.
 ///
 /// Asserts that
@@ -2027,8 +2030,17 @@ async fn test_manage_network_economics_revalidate_at_execution_time(
     // Step 1: Prepare the world.
 
     // Step 1.1: Create a governance with two neurons:
-    //     1. proposer - Has little voting power.
-    //     2. decider - Hot lots of VP.
+    //
+    //     1. proposer - Has little voting power. This is used to MAKE a couple
+    //        of proposals without them being decided immediately.
+    //
+    //     2. decider - Hot lots of VP. This does NOT vote until AFTER BOTH
+    //        proposals have been created. This votes in favor of both
+    //        proposals. This causes the proposals to attempt execution.
+    //        However, only the first one is executed SUCCESSFULLY. The second
+    //        one fails, because the proposals are not compatible with one
+    //        another (despite being able to EXIST and be voted on
+    //        concurrently).
 
     let controller = PrincipalId::new_user_test_id(519_572_717);
     let proposer_neuron = Neuron {
