@@ -18,6 +18,7 @@ use ic_management_canister_types_private::{
     VetKdKeyId,
 };
 use ic_registry_subnet_type::SubnetType;
+use ic_replicated_state::canister_state::execution_state::WasmExecutionMode;
 use ic_replicated_state::{
     canister_state::WASM_PAGE_SIZE_IN_BYTES, memory_required_to_push_request, Memory,
     NetworkTopology, NumWasmPages, PageIndex,
@@ -3541,18 +3542,12 @@ impl SystemApi for SystemApiImpl {
         dst: usize,
         heap: &mut [u8],
     ) -> HypervisorResult<()> {
-        let subnet_size = self.sandbox_safe_system_state.subnet_size;
+        let execution_mode =
+            WasmExecutionMode::from_is_wasm64(self.sandbox_safe_system_state.is_wasm64_execution);
         let cost = self
             .sandbox_safe_system_state
             .cycles_account_manager
-            .xnet_call_performed_fee(subnet_size)
-            + self
-                .sandbox_safe_system_state
-                .cycles_account_manager
-                .xnet_call_bytes_transmitted_fee(
-                    (method_name_size + payload_size).into(),
-                    subnet_size,
-                );
+            .xnet_call_total_fee((method_name_size + payload_size).into(), execution_mode);
         copy_cycles_to_heap(cost, dst, heap, "ic0_cost_call")?;
         trace_syscall!(self, CostCall, cost);
         Ok(())
