@@ -16,6 +16,15 @@ use std::{sync::Arc, time::Duration};
 use tokio::time::sleep;
 use tracing::warn;
 
+fn nonce() -> Vec<u8> {
+    SystemTime::now()
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .unwrap()
+        .as_nanos()
+        .to_le_bytes()
+        .to_vec()
+}
+
 struct Metrics {
     last_successful_fetch: IntGauge,
     fetches: IntCounterVec,
@@ -82,7 +91,13 @@ impl Run for Arc<SharedSaltFetcher> {
         loop {
             let query_response = match self
                 .agent
-                .execute_query(&self.canister_id, "get_salt", Encode!().unwrap())
+                .execute_update(
+                    &self.canister_id,
+                    &self.canister_id,
+                    "get_salt",
+                    Encode!().unwrap(),
+                    nonce(),
+                )
                 .await
             {
                 Ok(response) => match response {
