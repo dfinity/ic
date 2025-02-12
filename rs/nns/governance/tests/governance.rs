@@ -3253,11 +3253,15 @@ fn fixture_two_neurons_second_is_bigger() -> GovernanceProto {
     ];
 
     let mut result = GovernanceProtoBuilder::new().with_neurons(neurons).build();
+
+    // Make NetworkEconomics slightly less invalid.
+    // (This is a rework of an old test.)
     result
         .economics
         .as_mut()
         .unwrap()
-        .max_proposals_to_keep_per_topic = 999;
+        .max_proposals_to_keep_per_topic = 100;
+
     result
 }
 
