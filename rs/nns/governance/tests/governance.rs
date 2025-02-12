@@ -1962,7 +1962,6 @@ async fn test_manage_network_economics_revalidate_at_execution_time_set_minimum_
         .as_ref()
         .unwrap()
         .basis_points
-        .clone()
         .unwrap();
     assert_ne!(maximum_icp_xdr_rate, NEW_MAXIMUM_ICP_XDR_RATE);
 }
@@ -1999,7 +1998,6 @@ async fn test_manage_network_economics_revalidate_at_execution_time_set_maximum_
         .as_ref()
         .unwrap()
         .basis_points
-        .clone()
         .unwrap();
     assert_ne!(minimum_icp_xdr_rate, NEW_MINIMUM_ICP_XDR_RATE);
 }
