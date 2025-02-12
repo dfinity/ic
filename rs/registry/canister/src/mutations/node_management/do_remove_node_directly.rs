@@ -31,6 +31,7 @@ impl Registry {
         );
     }
 
+    #[cfg(test)]
     pub fn do_replace_node_with_another(
         &mut self,
         payload: RemoveNodeDirectlyPayload,
@@ -182,7 +183,7 @@ impl Registry {
         }
 
         // 5. Retrieve the NO record and increment its node allowance by 1
-        let mut new_node_operator_record = get_node_operator_record(self, node_operator_id)
+        let mut updated_node_operator_record = get_node_operator_record(self, node_operator_id)
             .map_err(|err| {
                 format!(
                     "{}do_remove_node_directly: Aborting node removal: {}",
@@ -190,7 +191,7 @@ impl Registry {
                 )
             })
             .unwrap();
-        new_node_operator_record.node_allowance += 1;
+        updated_node_operator_record.node_allowance += 1;
 
         // 6. Finally, generate the following mutations:
         //   * Delete the node record
@@ -200,7 +201,7 @@ impl Registry {
         // mutation to update node operator value
         mutations.push(make_update_node_operator_mutation(
             node_operator_id,
-            &new_node_operator_record,
+            &updated_node_operator_record,
         ));
 
         mutations
@@ -407,17 +408,19 @@ mod tests {
             make_node_operator_record_key(node_operator_id),
             node_operator_record.encode_to_vec(),
         )]);
-        let op_record_orig = get_node_operator_record(&registry, node_operator_id).unwrap();
-        let op_record_expected = NodeOperatorRecord {
-            node_allowance: op_record_orig.node_allowance + 1,
-            ..op_record_orig
+        let original_node_operator_record =
+            get_node_operator_record(&registry, node_operator_id).unwrap();
+        let expected_node_operator_record = NodeOperatorRecord {
+            node_allowance: original_node_operator_record.node_allowance + 1,
+            ..original_node_operator_record
         };
 
         let payload = RemoveNodeDirectlyPayload { node_id };
 
         registry.do_remove_node(payload, node_operator_id);
-        let op_record_new = get_node_operator_record(&registry, node_operator_id).unwrap();
-        assert_eq!(op_record_expected, op_record_new);
+        let actual_node_operator_record =
+            get_node_operator_record(&registry, node_operator_id).unwrap();
+        assert_eq!(expected_node_operator_record, actual_node_operator_record);
     }
 
     #[test]
@@ -518,35 +521,33 @@ mod tests {
             .next()
             .expect("should contain at least one node ID")
             .to_owned();
-        let op1_record_orig =
+        let original_operator_record_1 =
             get_node_operator_record(&registry, operator1_id).expect("failed to get node operator");
-        let op2_record_orig =
+        let original_operator_record_2 =
             get_node_operator_record(&registry, operator2_id).expect("failed to get node operator");
-        println!("op1_record_orig: {:#?}", op1_record_orig);
-        println!("op2_record_orig: {:#?}", op2_record_orig);
 
         let payload = RemoveNodeDirectlyPayload { node_id };
 
         // Should succeed because both operator1 and operator2 are under the same provider
         registry.do_remove_node(payload, operator2_id);
 
-        let op1_record_expected = NodeOperatorRecord {
-            node_allowance: op1_record_orig.node_allowance + 1,
-            ..op1_record_orig
+        let expected_operator_record_1 = NodeOperatorRecord {
+            node_allowance: original_operator_record_1.node_allowance + 1,
+            ..original_operator_record_1
         };
-        let op2_record_expected = NodeOperatorRecord {
-            node_allowance: op2_record_orig.node_allowance,
-            ..op2_record_orig
+        let expected_operator_record_2 = NodeOperatorRecord {
+            node_allowance: original_operator_record_2.node_allowance,
+            ..original_operator_record_2
         };
-        let op1_record_new =
+        let actual_operator_record_1 =
             get_node_operator_record(&registry, operator1_id).expect("failed to get node operator");
-        println!("node_operator_1_record: {:#?}", op1_record_new);
-        let op2_record_new =
+        println!("node_operator_1_record: {:#?}", actual_operator_record_1);
+        let actual_operator_record_2 =
             get_node_operator_record(&registry, operator2_id).expect("failed to get node operator");
-        println!("node_operator_2_record: {:#?}", op2_record_new);
+        println!("node_operator_2_record: {:#?}", actual_operator_record_2);
 
-        assert_eq!(op1_record_new, op1_record_expected);
-        assert_eq!(op2_record_new, op2_record_expected);
+        assert_eq!(actual_operator_record_1, expected_operator_record_1);
+        assert_eq!(actual_operator_record_2, expected_operator_record_2);
     }
 
     #[test]
