@@ -30,6 +30,15 @@ impl NetworkEconomics {
         }
     }
 
+    pub fn apply_changes_and_validate(
+        &self,
+        changes: &NetworkEconomics,
+    ) -> Result<Self, Vec<String>> {
+        let result = changes.inherit_from(self);
+        result.validate()?;
+        Ok(result)
+    }
+
     /// This verifies the following:
     ///
     ///     1. max_proposals_to_keep_per_topic > 0. The problem with 0 is that
@@ -55,7 +64,7 @@ impl NetworkEconomics {
     //
     // It is redundant that Vec<String> is wrapped in Result. We do this for
     // consistency with other validate methods.
-    pub(crate) fn validate(&self) -> Result<(), Vec<String>> {
+    fn validate(&self) -> Result<(), Vec<String>> {
         let mut defects = vec![];
 
         if self.max_proposals_to_keep_per_topic == 0 {
@@ -353,7 +362,7 @@ impl VotingPowerEconomics {
 // implementations of this, because the hand-crafted implementations below are
 // pretty dang (if not completely) repetitive. OTOH, it would be a lot of work,
 // and it is not clear that we would use it many times.
-pub(crate) trait InheritFrom {
+trait InheritFrom {
     /// Returns a modified copy of self where fields containing 0 are replaced
     /// with the value from base.
     fn inherit_from(&self, base: &Self) -> Self;

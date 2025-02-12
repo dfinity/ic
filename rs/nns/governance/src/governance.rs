@@ -11,7 +11,6 @@ use crate::{
         reassemble_governance_proto, split_governance_proto, HeapGovernanceData, XdrConversionRate,
     },
     migrations::maybe_run_migrations,
-    network_economics::InheritFrom,
     neuron::{DissolveStateAndAge, Neuron, NeuronBuilder, Visibility},
     neuron_data_validation::{NeuronDataValidationSummary, NeuronDataValidator},
     neuron_store::{
@@ -4530,41 +4529,20 @@ impl Governance {
         // ensures that we do NOT forget to call
         // self.set_proposal_execution_status (e.g. when we return early). let
         let mut main = || -> Result<(), GovernanceError> {
-            let default_network_economics = NetworkEconomics::with_default_values();
+            let new_network_economics = self
+                .economics()
+                .apply_changes_and_validate(&proposed_network_economics)
+                .map_err(|defects| {
+                    GovernanceError::new_with_message(
+                        ErrorType::InvalidProposal,
+                        format!(
+                            "The resulting NetworkEconomics is invalid for the following reason(s):\
+                             \n  - {}",
+                            defects.join("\n  - "),
+                        ),
+                    )
+                })?;
 
-            let original_network_economics = self
-                .heap_data
-                .economics
-                .as_ref()
-                // It does not seem possible for this to occur in practice, but
-                // if it did, it is probably better to make due, rather than
-                // give up.
-                .unwrap_or_else(|| {
-                    println!(
-                        "{}ERROR: No NetworkEconomics. Using default for the purposes \
-                         of executing a ManageNetworkEconomics proposal.",
-                        LOG_PREFIX
-                    );
-
-                    &default_network_economics
-                });
-
-            // Merge (and validate) proposed_network_economics into original.
-            let new_network_economics =
-                proposed_network_economics.inherit_from(original_network_economics);
-            new_network_economics.validate().map_err(|defects| {
-                GovernanceError::new_with_message(
-                    ErrorType::InvalidProposal,
-                    format!(
-                        "The resulting NetworkEconomics is invalid for the following reason(s):\
-                         \n  - {}\n\nresulting NeworkEconomics:\n{:#?}",
-                        defects.join("\n  - "),
-                        new_network_economics,
-                    ),
-                )
-            })?;
-
-            // Looks good. Therefore, commit.
             println!(
                 "{}INFO: Committing new NetworkEconomics:\n{:#?}",
                 LOG_PREFIX, new_network_economics,
@@ -4941,22 +4919,24 @@ impl Governance {
         // not the resulting NetworkEconomics.)
         proposed_network_economics: &NetworkEconomics,
     ) -> Result<(), GovernanceError> {
-        let new_network_economics = proposed_network_economics.inherit_from(self.economics());
-
         // It maybe does not make sense to be able to set transaction_fee_e8s
         // via proposal. What we probably want instead is to fetch this value
         // from ledger.
 
-        new_network_economics.validate().map_err(|defects| {
-            let message = format!(
-                "The resulting settings would not be valid for the \
+        self.economics()
+            .apply_changes_and_validate(proposed_network_economics)
+            .map_err(|defects| {
+                let message = format!(
+                    "The resulting settings would not be valid for the \
                      following reason(s):\n\
                      - {}",
-                defects.join("\n  - "),
-            );
+                    defects.join("\n  - "),
+                );
 
-            GovernanceError::new_with_message(ErrorType::InvalidProposal, message)
-        })
+                GovernanceError::new_with_message(ErrorType::InvalidProposal, message)
+            })?;
+
+        Ok(())
     }
 
     pub(crate) fn economics(&self) -> &NetworkEconomics {
