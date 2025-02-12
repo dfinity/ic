@@ -182,7 +182,7 @@ impl Registry {
         }
 
         // 5. Retrieve the NO record and increment its node allowance by 1
-        let mut new_node_operator_record = get_node_operator_record(self, caller_id)
+        let mut new_node_operator_record = get_node_operator_record(self, node_operator_id)
             .map_err(|err| {
                 format!(
                     "{}do_remove_node_directly: Aborting node removal: {}",
@@ -231,6 +231,7 @@ mod tests {
     use ic_registry_keys::{make_node_operator_record_key, make_node_record_key};
     use ic_registry_transport::{insert, update};
     use ic_types::ReplicaVersion;
+    use maplit::btreemap;
     use prost::Message;
     use std::str::FromStr;
 
@@ -406,9 +407,17 @@ mod tests {
             make_node_operator_record_key(node_operator_id),
             node_operator_record.encode_to_vec(),
         )]);
+        let op_record_orig = get_node_operator_record(&registry, node_operator_id).unwrap();
+        let op_record_expected = NodeOperatorRecord {
+            node_allowance: op_record_orig.node_allowance + 1,
+            ..op_record_orig
+        };
+
         let payload = RemoveNodeDirectlyPayload { node_id };
 
         registry.do_remove_node(payload, node_operator_id);
+        let op_record_new = get_node_operator_record(&registry, node_operator_id).unwrap();
+        assert_eq!(op_record_expected, op_record_new);
     }
 
     #[test]
@@ -475,6 +484,7 @@ mod tests {
             node_provider_principal_id: PrincipalId::new_user_test_id(3000).to_vec(),
             dc_id: "dc1".to_string(),
             node_allowance: 1,
+            rewardable_nodes: btreemap! { "type0".to_string() => 0, "type1".to_string() => 28 },
             ..Default::default()
         };
         let operator_record_2 = NodeOperatorRecord {
@@ -482,6 +492,7 @@ mod tests {
             node_provider_principal_id: PrincipalId::new_user_test_id(3000).to_vec(),
             dc_id: "dc1".to_string(),
             node_allowance: 1,
+            rewardable_nodes: btreemap! { "type1.1".to_string() => 28 },
             ..Default::default()
         };
         registry.maybe_apply_mutation_internal(vec![
@@ -507,11 +518,35 @@ mod tests {
             .next()
             .expect("should contain at least one node ID")
             .to_owned();
+        let op1_record_orig =
+            get_node_operator_record(&registry, operator1_id).expect("failed to get node operator");
+        let op2_record_orig =
+            get_node_operator_record(&registry, operator2_id).expect("failed to get node operator");
+        println!("op1_record_orig: {:#?}", op1_record_orig);
+        println!("op2_record_orig: {:#?}", op2_record_orig);
 
         let payload = RemoveNodeDirectlyPayload { node_id };
 
         // Should succeed because both operator1 and operator2 are under the same provider
         registry.do_remove_node(payload, operator2_id);
+
+        let op1_record_expected = NodeOperatorRecord {
+            node_allowance: op1_record_orig.node_allowance + 1,
+            ..op1_record_orig
+        };
+        let op2_record_expected = NodeOperatorRecord {
+            node_allowance: op2_record_orig.node_allowance,
+            ..op2_record_orig
+        };
+        let op1_record_new =
+            get_node_operator_record(&registry, operator1_id).expect("failed to get node operator");
+        println!("node_operator_1_record: {:#?}", op1_record_new);
+        let op2_record_new =
+            get_node_operator_record(&registry, operator2_id).expect("failed to get node operator");
+        println!("node_operator_2_record: {:#?}", op2_record_new);
+
+        assert_eq!(op1_record_new, op1_record_expected);
+        assert_eq!(op2_record_new, op2_record_expected);
     }
 
     #[test]
