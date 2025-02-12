@@ -20,12 +20,12 @@ use std::{
     collections::{HashMap, HashSet},
     net::SocketAddr,
     sync::{Arc, Mutex},
-    time::Instant,
+    time::{Duration, Instant},
 };
 use thiserror::Error;
 
 /// This constant is the maximum number of seconds to wait until we get response to the getdata request sent by us.
-const GETDATA_REQUEST_TIMEOUT_SECS: u64 = 30;
+const GETDATA_REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
 
 /// This constant is the maximum number of seconds to wait until we get response to the getdata request sent by us.
 const GETHEADERS_REQUEST_TIMEOUT_SECS: u64 = 30;
@@ -87,7 +87,7 @@ pub enum ReceivedBlockMessageError {
 /// This struct stores the information regarding a peer with respect to synchronizing the blockchain.
 /// This information is useful to keep track of the commands that have been sent to the peer,
 /// and how much blockchain state has already been synced with the peer.
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 struct PeerInfo {
     /// This field stores the socket address of the Bitcoin node (peer)
     socket: SocketAddr,
@@ -517,19 +517,16 @@ impl BlockchainManager {
 
     fn sync_blocks(&mut self, channel: &mut impl Channel) {
         // Timeout requests so they may be retried again.
-        let mut timed_out_peers = HashSet::new();
         let mut retry_queue: LinkedHashSet<BlockHash> = LinkedHashSet::new();
         for (block_hash, request) in self.getdata_request_info.iter_mut() {
             match request.sent_at {
                 Some(sent_at) => {
-                    if sent_at.elapsed().as_secs() > GETDATA_REQUEST_TIMEOUT_SECS {
+                    if sent_at.elapsed() > GETDATA_REQUEST_TIMEOUT {
                         retry_queue.insert(*block_hash);
-                        timed_out_peers.insert(request.socket);
                     }
                 }
                 None => {
                     retry_queue.insert(*block_hash);
-                    timed_out_peers.insert(request.socket);
                 }
             }
         }
@@ -1180,12 +1177,7 @@ pub mod test {
             .get(&block_1_hash)
             .expect("missing request info for block hash 1");
         assert!(
-            request
-                .sent_at
-                .expect("should be some instant")
-                .elapsed()
-                .as_secs()
-                < GETDATA_REQUEST_TIMEOUT_SECS
+            request.sent_at.expect("should be some instant").elapsed() < GETDATA_REQUEST_TIMEOUT
         );
         let getdata_command = channel
             .pop_back()
@@ -1239,12 +1231,7 @@ pub mod test {
             .get(&block_1_hash)
             .expect("missing request info for block hash 1");
         assert!(
-            request
-                .sent_at
-                .expect("should be some instant")
-                .elapsed()
-                .as_secs()
-                < GETDATA_REQUEST_TIMEOUT_SECS
+            request.sent_at.expect("should be some instant").elapsed() < GETDATA_REQUEST_TIMEOUT
         );
         assert_eq!(request.socket, addr2);
         let getdata_command = channel
