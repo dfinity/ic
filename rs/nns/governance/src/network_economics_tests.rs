@@ -6,9 +6,6 @@ use pretty_assertions::assert_eq;
 fn test_inherit_from_recursively() {
     let base = NetworkEconomics::with_default_values();
 
-    // This is tangential to the main point of this test.
-    assert_eq!(base.validate(), Ok(()));
-
     let changes = NetworkEconomics {
         reject_cost_e8s: 99, // Change.
 
@@ -84,4 +81,9 @@ fn test_inherit_from_recursively() {
     }
 
     assert_eq!(observed_network_economics, expected_network_economics);
+}
+
+#[test]
+fn test_network_economics_with_default_values_is_valid() {
+    assert_eq!(NetworkEconomics::with_default_values().validate(), Ok(()));
 }
