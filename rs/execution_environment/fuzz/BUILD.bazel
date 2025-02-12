@@ -37,7 +37,6 @@ rust_fuzz_test_binary(
     srcs = [
         "fuzz_targets/execute_subnet_message_update_settings.rs",
     ],
-    allow_main = True,  # To allow the fuzzer to export it's own main fn
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = [
         # Keep sorted.
@@ -65,7 +64,6 @@ rust_fuzz_test_binary(
     srcs = [
         "fuzz_targets/execute_system_api_call.rs",
     ],
-    allow_main = True,  # To allow the fuzzer to export it's own main fn
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = SYSTEM_API_FUZZ_DEPENDENCIES + [":fuzzer_sandbox"],
 )

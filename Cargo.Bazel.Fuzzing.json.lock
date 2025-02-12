@@ -1,5 +1,5 @@
 {
-  "checksum": "9fe333f7bcb42c8778624ad255e6695f1e1ff372cd8dd2da53437a949d1cc3e8",
+  "checksum": "96835a579b795c5dbf42f3cb95e207ef0896fe21cff35ca0440c0da9fceae062",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -11278,7 +11278,13 @@
       "repository": {
         "Http": {
           "url": "https://static.crates.io/crates/cc/1.1.37/download",
-          "sha256": "40545c26d092346d8a8dab71ee48e7685a7a9cba76e634790c215b41a4a7b4cf"
+          "sha256": "40545c26d092346d8a8dab71ee48e7685a7a9cba76e634790c215b41a4a7b4cf",
+          "patch_args": [
+            "-p1"
+          ],
+          "patches": [
+            "@@//bazel:cc_rs.patch"
+          ]
         }
       },
       "targets": [
@@ -40622,6 +40628,13 @@
         "compile_data_glob": [
           "**"
         ],
+        "crate_features": {
+          "common": [
+            "default",
+            "link_libfuzzer"
+          ],
+          "selects": {}
+        },
         "deps": {
           "common": [
             {
@@ -41218,6 +41231,12 @@
         "compile_data_glob": [
           "**"
         ],
+        "data": {
+          "common": [
+            "@@_main~_repo_rules~openssl//:gen_dir"
+          ],
+          "selects": {}
+        },
         "data_glob": [
           "**"
         ],
@@ -41401,7 +41420,8 @@
         ],
         "crate_features": {
           "common": [
-            "libc"
+            "libc",
+            "static"
           ],
           "selects": {}
         },
@@ -48297,6 +48317,12 @@
         "compile_data_glob": [
           "**"
         ],
+        "data": {
+          "common": [
+            "@@_main~_repo_rules~openssl//:gen_dir"
+          ],
+          "selects": {}
+        },
         "data_glob": [
           "**"
         ],
@@ -48315,6 +48341,15 @@
               "target": "vcpkg"
             }
           ],
+          "selects": {}
+        },
+        "build_script_env": {
+          "common": {
+            "OPENSSL_INCLUDE_DIR": "$(location @@_main~_repo_rules~openssl//:gen_dir)/include",
+            "OPENSSL_LIB_DIR": "$(location @@_main~_repo_rules~openssl//:gen_dir)/lib64",
+            "OPENSSL_NO_VENDOR": "1",
+            "OPENSSL_STATIC": "1"
+          },
           "selects": {}
         },
         "links": "openssl"
