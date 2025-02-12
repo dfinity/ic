@@ -1,5 +1,5 @@
 {
-  "checksum": "3f10fe866380ffcf94872915ab98dc48eb140f9fd8fb8be016d15092561ee5f4",
+  "checksum": "bd22392882fadcfd03491a7a1dbab61c8ae01e2b9a709f6f9b4b5970a2ee7ceb",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -19631,7 +19631,7 @@
               "target": "ethnum"
             },
             {
-              "id": "evm_rpc_types 1.2.0",
+              "id": "evm_rpc_types 1.3.0",
               "target": "evm_rpc_types"
             },
             {
@@ -20430,7 +20430,7 @@
               "target": "textplots"
             },
             {
-              "id": "thiserror 2.0.3",
+              "id": "thiserror 2.0.11",
               "target": "thiserror"
             },
             {
@@ -24495,14 +24495,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "evm_rpc_types 1.2.0": {
+    "evm_rpc_types 1.3.0": {
       "name": "evm_rpc_types",
-      "version": "1.2.0",
+      "version": "1.3.0",
       "package_url": "https://github.com/internet-computer-protocol/evm-rpc-canister",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/evm_rpc_types/1.2.0/download",
-          "sha256": "29ed9ee7b89726f4a343208e9a89e9ad22fe7b4518b0d722973cc83274e7bf7f"
+          "url": "https://static.crates.io/crates/evm_rpc_types/1.3.0/download",
+          "sha256": "fa134314bce7c35b9214710572fb7305edc7f4223c5bd03b5857ed08bbb05897"
         }
       },
       "targets": [
@@ -24535,7 +24535,7 @@
               "target": "hex"
             },
             {
-              "id": "ic-cdk 0.16.0",
+              "id": "ic-cdk 0.17.1",
               "target": "ic_cdk"
             },
             {
@@ -24551,7 +24551,7 @@
               "target": "strum"
             },
             {
-              "id": "thiserror 1.0.68",
+              "id": "thiserror 2.0.11",
               "target": "thiserror"
             },
             {
@@ -24562,7 +24562,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "1.2.0"
+        "version": "1.3.0"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -31664,7 +31664,7 @@
               "target": "stop_token"
             },
             {
-              "id": "thiserror 2.0.3",
+              "id": "thiserror 2.0.11",
               "target": "thiserror"
             },
             {
@@ -31905,7 +31905,7 @@
               "target": "systemstat"
             },
             {
-              "id": "thiserror 2.0.3",
+              "id": "thiserror 2.0.11",
               "target": "thiserror"
             },
             {
@@ -32135,7 +32135,7 @@
               "target": "hex"
             },
             {
-              "id": "ic-cdk 0.17.0",
+              "id": "ic-cdk 0.17.1",
               "target": "ic_cdk"
             },
             {
@@ -32167,7 +32167,7 @@
               "target": "sha2"
             },
             {
-              "id": "thiserror 2.0.3",
+              "id": "thiserror 2.0.11",
               "target": "thiserror"
             }
           ],
@@ -32381,14 +32381,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "ic-cdk 0.17.0": {
+    "ic-cdk 0.17.1": {
       "name": "ic-cdk",
-      "version": "0.17.0",
+      "version": "0.17.1",
       "package_url": "https://github.com/dfinity/cdk-rs",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/ic-cdk/0.17.0/download",
-          "sha256": "b2abdf9341da9f9f6b451a40609cb69645a05a8e9eb7784c16209f16f2c0f76f"
+          "url": "https://static.crates.io/crates/ic-cdk/0.17.1/download",
+          "sha256": "122efbcb0af5280d408a75a57b7dc6e9d92893bf6ed9cc98fe4dcff51f18b67c"
         }
       },
       "targets": [
@@ -32435,13 +32435,13 @@
         "proc_macro_deps": {
           "common": [
             {
-              "id": "ic-cdk-macros 0.17.0",
+              "id": "ic-cdk-macros 0.17.1",
               "target": "ic_cdk_macros"
             }
           ],
           "selects": {}
         },
-        "version": "0.17.0"
+        "version": "0.17.1"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -32500,7 +32500,7 @@
               "target": "serde_bytes"
             },
             {
-              "id": "thiserror 2.0.3",
+              "id": "thiserror 2.0.11",
               "target": "thiserror"
             }
           ],
@@ -32725,14 +32725,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "ic-cdk-macros 0.17.0": {
+    "ic-cdk-macros 0.17.1": {
       "name": "ic-cdk-macros",
-      "version": "0.17.0",
+      "version": "0.17.1",
       "package_url": "https://github.com/dfinity/cdk-rs",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/ic-cdk-macros/0.17.0/download",
-          "sha256": "b8df41980e95dead28735ab0f748c75477b0c5eab37a09a5641c78ec406a1db0"
+          "url": "https://static.crates.io/crates/ic-cdk-macros/0.17.1/download",
+          "sha256": "c792bf0d1621c893ccf2bcdeac4ee70121103a03030a1827031a6b3c60488944"
         }
       },
       "targets": [
@@ -32784,7 +32784,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.17.0"
+        "version": "0.17.1"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -32898,7 +32898,7 @@
               "target": "futures"
             },
             {
-              "id": "ic-cdk 0.17.0",
+              "id": "ic-cdk 0.17.1",
               "target": "ic_cdk"
             },
             {
@@ -33422,7 +33422,7 @@
               "target": "simple_asn1"
             },
             {
-              "id": "thiserror 2.0.3",
+              "id": "thiserror 2.0.11",
               "target": "thiserror"
             }
           ],
@@ -33934,7 +33934,7 @@
               "target": "sha2"
             },
             {
-              "id": "thiserror 2.0.3",
+              "id": "thiserror 2.0.11",
               "target": "thiserror"
             }
           ],
@@ -65201,7 +65201,7 @@
               "target": "serde_json"
             },
             {
-              "id": "thiserror 2.0.3",
+              "id": "thiserror 2.0.11",
               "target": "thiserror"
             },
             {
@@ -75011,14 +75011,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "thiserror 2.0.3": {
+    "thiserror 2.0.11": {
       "name": "thiserror",
-      "version": "2.0.3",
+      "version": "2.0.11",
       "package_url": "https://github.com/dtolnay/thiserror",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/thiserror/2.0.3/download",
-          "sha256": "c006c85c7651b3cf2ada4584faa36773bd07bac24acfb39f3c431b36d7e667aa"
+          "url": "https://static.crates.io/crates/thiserror/2.0.11/download",
+          "sha256": "d452f284b73e6d76dd36758a0c8684b1d5be31f92b89d07fd5822175732206fc"
         }
       },
       "targets": [
@@ -75062,7 +75062,7 @@
         "deps": {
           "common": [
             {
-              "id": "thiserror 2.0.3",
+              "id": "thiserror 2.0.11",
               "target": "build_script_build"
             }
           ],
@@ -75072,13 +75072,13 @@
         "proc_macro_deps": {
           "common": [
             {
-              "id": "thiserror-impl 2.0.3",
+              "id": "thiserror-impl 2.0.11",
               "target": "thiserror_impl"
             }
           ],
           "selects": {}
         },
-        "version": "2.0.3"
+        "version": "2.0.11"
       },
       "build_script_attrs": {
         "compile_data_glob": [
@@ -75151,14 +75151,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "thiserror-impl 2.0.3": {
+    "thiserror-impl 2.0.11": {
       "name": "thiserror-impl",
-      "version": "2.0.3",
+      "version": "2.0.11",
       "package_url": "https://github.com/dtolnay/thiserror",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/thiserror-impl/2.0.3/download",
-          "sha256": "f077553d607adc1caf65430528a576c757a71ed73944b66ebb58ef2bbd243568"
+          "url": "https://static.crates.io/crates/thiserror-impl/2.0.11/download",
+          "sha256": "26afc1baea8a989337eeb52b6e72a039780ce45c3edfcc9c5b9d112feeb173c2"
         }
       },
       "targets": [
@@ -75198,7 +75198,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "2.0.3"
+        "version": "2.0.11"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -91299,7 +91299,7 @@
     "escargot 0.5.7",
     "ethers-core 2.0.8",
     "ethnum 1.3.2",
-    "evm_rpc_types 1.2.0",
+    "evm_rpc_types 1.3.0",
     "exec 0.3.1",
     "eyre 0.6.8",
     "ff 0.12.1",
@@ -91508,7 +91508,7 @@
     "test-strategy 0.3.1",
     "tester 0.7.0",
     "textplots 0.8.4",
-    "thiserror 2.0.3",
+    "thiserror 2.0.11",
     "thousands 0.2.0",
     "threadpool 1.8.1",
     "tikv-jemalloc-ctl 0.5.4",
