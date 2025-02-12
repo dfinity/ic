@@ -9,7 +9,7 @@ use ic_consensus::certification::VerifierImpl;
 use ic_crypto::CryptoComponent;
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_execution_environment::ExecutionServices;
-use ic_http_endpoints_public::start_root_delegation_manager;
+use ic_http_endpoints_public::start_nns_delegation_manager;
 use ic_http_endpoints_xnet::XNetEndpoint;
 use ic_https_outcalls_adapter_client::setup_canister_http_client;
 use ic_interfaces::{
@@ -280,7 +280,7 @@ pub fn construct_ic_stack(
         log.clone(),
     ));
 
-    let (_, nns_delegation_watcher) = start_root_delegation_manager(
+    let (_, nns_delegation_watcher) = start_nns_delegation_manager(
         config.http_handler.clone(),
         log.clone(),
         rt_handle_http.clone(),

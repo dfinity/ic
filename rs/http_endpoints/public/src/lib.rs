@@ -10,6 +10,7 @@ mod common;
 mod dashboard;
 mod health_status_refresher;
 pub mod metrics;
+mod nns_delegation_manager;
 mod pprof;
 mod query;
 mod read_state;
@@ -26,11 +27,10 @@ cfg_if::cfg_if! {
 
 pub use call::{call_v2, call_v3, IngressValidatorBuilder, IngressWatcher, IngressWatcherHandle};
 pub use common::cors_layer;
+pub use nns_delegation_manager::start_nns_delegation_manager;
 pub use query::QueryServiceBuilder;
 pub use read_state::canister::{CanisterReadStateService, CanisterReadStateServiceBuilder};
 pub use read_state::subnet::SubnetReadStateServiceBuilder;
-use tokio::sync::watch::channel;
-use tokio::task::JoinHandle;
 
 use crate::{
     catch_up_package::CatchUpPackageService,
@@ -755,74 +755,10 @@ async fn collect_timer_metric(
     resp
 }
 
-pub fn start_root_delegation_manager(
-    config: Config,
-    log: ReplicaLogger,
-    rt_handle: tokio::runtime::Handle,
-    subnet_id: SubnetId,
-    nns_subnet_id: SubnetId,
-    registry_client: Arc<dyn RegistryClient>,
-    tls_config: Arc<dyn TlsConfig + Send + Sync>,
-) -> (
-    JoinHandle<()>,
-    watch::Receiver<Option<CertificateDelegation>>,
-) {
-    let manager = DelegationManager {
-        config,
-        log,
-        subnet_id,
-        nns_subnet_id,
-        registry_client,
-        tls_config,
-    };
-
-    let delegation = rt_handle.block_on(manager.fetch());
-
-    let (tx, rx) = channel(delegation);
-
-    (rt_handle.spawn(manager.run(tx)), rx)
-}
-
-const DELEGATION_UPDATE_INTERVAL: Duration = Duration::from_secs(5);
-
-struct DelegationManager {
-    config: Config,
-    log: ReplicaLogger,
-    subnet_id: SubnetId,
-    nns_subnet_id: SubnetId,
-    registry_client: Arc<dyn RegistryClient>,
-    tls_config: Arc<dyn TlsConfig + Send + Sync>,
-}
-
-impl DelegationManager {
-    async fn fetch(&self) -> Option<CertificateDelegation> {
-        load_root_delegation(
-            &self.config,
-            &self.log,
-            self.subnet_id,
-            self.nns_subnet_id,
-            self.registry_client.as_ref(),
-            self.tls_config.as_ref(),
-        )
-        .await
-    }
-
-    async fn run(self, sender: watch::Sender<Option<CertificateDelegation>>) {
-        let mut interval = tokio::time::interval(DELEGATION_UPDATE_INTERVAL);
-
-        loop {
-            let _ = interval.tick().await;
-
-            let delegation = self.fetch().await;
-
-            sender.send(delegation).expect("FIXME");
-        }
-    }
-}
-
-// Fetches a delegation from the NNS subnet to allow this subnet to issue
-// certificates on its behalf. On the NNS subnet this method is a no-op.
-async fn load_root_delegation(
+/// Fetches a delegation from the NNS subnet to allow this subnet to issue
+/// certificates on its behalf. On the NNS subnet this method is a no-op.
+// TODO(kpop): move this to nns_delegation_manager.rs
+pub(crate) async fn load_root_delegation(
     config: &Config,
     log: &ReplicaLogger,
     subnet_id: SubnetId,
