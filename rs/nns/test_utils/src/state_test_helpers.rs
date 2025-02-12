@@ -76,6 +76,7 @@ use icrc_ledger_types::icrc1::{
 };
 use num_traits::ToPrimitive;
 use prost::Message;
+use registry_canister::mutations::do_update_node_operator_config::UpdateNodeOperatorConfigPayload;
 use serde::Serialize;
 use std::{convert::TryInto, env, time::Duration};
 
@@ -1518,6 +1519,26 @@ pub fn nns_get_monthly_node_provider_rewards(
     };
 
     Decode!(&result, Result<RewardNodeProviders, GovernanceError>).unwrap()
+}
+
+pub fn nns_update_node_operator_config(
+    state_machine: &StateMachine,
+    payload: &UpdateNodeOperatorConfigPayload,
+) {
+    let result = state_machine
+        .execute_ingress(
+            REGISTRY_CANISTER_ID,
+            "update_node_operator_config",
+            Encode!(payload).unwrap(),
+        )
+        .unwrap();
+
+    match result {
+        WasmResult::Reply(result) => result,
+        WasmResult::Reject(s) => {
+            panic!("Call to update_node_operator_config failed: {:#?}", s)
+        }
+    };
 }
 
 /// Return the most recent monthly Node Provider rewards

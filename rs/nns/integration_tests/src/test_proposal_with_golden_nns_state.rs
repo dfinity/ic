@@ -6,12 +6,13 @@ use ic_nns_common::pb::v1::ProposalId;
 use ic_nns_test_utils::{
     nns_canister_upgrade::NnsCanisterUpgrade,
     state_test_helpers::{
-        adopt_proposal, nns_create_neuron_with_stake, nns_create_super_powerful_neuron,
-        nns_get_network_economics_parameters, nns_propose_upgrade_nns_canister,
-        nns_wait_for_proposal_execution, wait_for_canister_upgrade_to_succeed,
+        adopt_proposal, nns_create_neuron_with_stake, nns_create_super_powerful_neuron, nns_get_monthly_node_provider_rewards, nns_get_network_economics_parameters, nns_propose_upgrade_nns_canister, nns_update_node_operator_config, nns_wait_for_proposal_execution, wait_for_canister_upgrade_to_succeed
     },
 };
 use ic_nns_test_utils_golden_nns_state::new_state_machine_with_golden_nns_state_or_panic;
+use maplit::btreemap;
+use registry_canister::mutations::do_update_node_operator_config::UpdateNodeOperatorConfigPayload;
+use std::str::FromStr;
 
 #[test]
 fn test_proposal_with_golden_nns_state() {
@@ -66,6 +67,7 @@ fn test_proposal_with_golden_nns_state() {
             Tokens::from_e8s(network_economics.neuron_minimum_stake_e8s),
         );
 
+        /*
         let proposal_id = if let Ok(proposal_id) = env::var("NNS_PROPOSAL_ID_TO_ADOPT") {
             let id = proposal_id
                 .parse::<u64>()
@@ -73,35 +75,36 @@ fn test_proposal_with_golden_nns_state() {
 
             ProposalId { id }
         } else {
-            nns_canister_upgrade.modify_wasm_but_preserve_behavior();
-
-            nns_propose_upgrade_nns_canister(
-                &state_machine,
-                neuron_controller,
-                proposer_neuron_id,
-                nns_canister_upgrade.canister_id,
-                nns_canister_upgrade.wasm_content.clone(),
-                nns_canister_upgrade.module_arg.clone(),
-                true,
-            )
+            // TODO replace with Sasa's proposal
         };
 
-        adopt_proposal(&state_machine, proposal_id).unwrap();
+        // adopt_proposal(&state_machine, proposal_id).unwrap();
 
         nns_wait_for_proposal_execution(&state_machine, proposal_id.id);
+        */
     }
 
-    // Phase III. Smoke test.
-    //
-    // Example use case for manual experimentation. Say we want to observe how the network economics
-    // are being changed as a result of adopting the corresponding NNS proposal. The diff would be
-    // pretty printed by the following (failing) assertion.
-    //
-    // The reason this assertion passes in CI is because we did not have `NNS_PROPOSAL_ID_TO_ADOPT`
-    // defined, which is an environment variable for manual experimentation. Thus, the proposal was
-    // an upgrade proposal, and the network economics are expected to be unchanged. This, however,
-    // allows avoiding bit rot in the example code (which would likely happen if it were commented
-    // out).
-    let new_network_economics = nns_get_network_economics_parameters(&state_machine);
-    assert_eq!(new_network_economics, network_economics);
+    // Data from https://dfinity.slack.com/archives/C06QP9UD2MU/p1739328213531539?thread_ts=1739291275.829969&cid=C06QP9UD2MU
+    nns_update_node_operator_config(
+        &state_machine,
+        &UpdateNodeOperatorConfigPayload {
+            node_provider_id: Some(PrincipalId::from_str("wdnqm-clqti-im5yf-iapio-avjom-kyppl-xuiza-oaz6z-smmts-52wyg-5ae").unwrap()),
+            node_operator_id: Some(PrincipalId::from_str("3nu7r-l6i5c-jlmhi-fmmhm-4wcw4-ndlwb-yovrx-o3wxh-suzew-hvbbo-7qe").unwrap()),
+            rewardable_nodes: btreemap! {
+                "type1".to_string() => 111,
+                "type3.1".to_string() => 222,
+                "type2".to_string() => 222,
+                "type3.1".to_string() => 222,
+            },
+            ..Default::default()
+        },
+    );
+
+    // Phase III. Assert that things are as expected.
+    let nns_get_monthly_node_provider_rewards = nns_get_monthly_node_provider_rewards(
+        &state_machine,
+    ).unwrap();
+    println!("nns_get_monthly_node_provider_rewards = {:#?}", nns_get_monthly_node_provider_rewards);
+
+    panic!("see stuff printed above!");
 }
