@@ -3077,7 +3077,7 @@ fn large_wasm64_memory_allocation_test() {
 
     let mut config = ic_config::embedders::Config::default();
     config.feature_flags.wasm64 = FlagStatus::Enabled;
-    let max_heap_size_in_pages = config.max_wasm_memory_size.get() / WASM_PAGE_SIZE as u64;
+    let max_heap_size_in_pages = config.max_wasm64_memory_size.get() / WASM_PAGE_SIZE as u64;
     let wat = format!(
         r#"
     (module
