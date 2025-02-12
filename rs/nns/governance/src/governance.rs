@@ -4525,34 +4525,35 @@ impl Governance {
         proposal_id: u64,
         proposed_network_economics: NetworkEconomics,
     ) {
-        // This does all the "real work". This may look a little strange, but it
-        // ensures that we do NOT forget to call
-        // self.set_proposal_execution_status (e.g. when we return early). let
-        let mut main = || -> Result<(), GovernanceError> {
-            let new_network_economics = self
-                .economics()
-                .apply_changes_and_validate(&proposed_network_economics)
-                .map_err(|defects| {
-                    GovernanceError::new_with_message(
-                        ErrorType::InvalidProposal,
-                        format!(
-                            "The resulting NetworkEconomics is invalid for the following reason(s):\
-                             \n  - {}",
-                            defects.join("\n  - "),
-                        ),
-                    )
-                })?;
-
-            println!(
-                "{}INFO: Committing new NetworkEconomics:\n{:#?}",
-                LOG_PREFIX, new_network_economics,
-            );
-            self.heap_data.economics = Some(new_network_economics);
-            Ok(())
-        };
-
-        let result = main();
+        let result = self.perform_manage_network_economics_impl(proposed_network_economics);
         self.set_proposal_execution_status(proposal_id, result);
+    }
+
+    /// Only call this from perform_manage_network_economics.
+    fn perform_manage_network_economics_impl(
+        &mut self,
+        proposed_network_economics: NetworkEconomics,
+    ) -> Result<(), GovernanceError> {
+        let new_network_economics = self
+            .economics()
+            .apply_changes_and_validate(&proposed_network_economics)
+            .map_err(|defects| {
+                GovernanceError::new_with_message(
+                    ErrorType::InvalidProposal,
+                    format!(
+                        "The resulting NetworkEconomics is invalid for the following reason(s):\
+                         \n  - {}",
+                        defects.join("\n  - "),
+                    ),
+                )
+            })?;
+
+        println!(
+            "{}INFO: Committing new NetworkEconomics:\n{:#?}",
+            LOG_PREFIX, new_network_economics,
+        );
+        self.heap_data.economics = Some(new_network_economics);
+        Ok(())
     }
 
     async fn perform_install_code(&mut self, proposal_id: u64, install_code: InstallCode) {
