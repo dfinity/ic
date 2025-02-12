@@ -301,7 +301,7 @@ mod test {
 
     use std::sync::{Arc, Mutex};
 
-    use bitcoin::{Block, Network};
+    use bitcoin::{consensus::Decodable, Block, Network};
     use ic_metrics::MetricsRegistry;
     use tokio::sync::mpsc::channel;
 
@@ -309,6 +309,10 @@ mod test {
     use ic_btc_adapter_test_utils::{
         generate_headers, generate_large_block_blockchain, headers_to_hashes,
     };
+
+    fn decode_block(serialized_block: &Arc<SerializedBlock>) -> Block {
+        Block::consensus_decode(&mut (*serialized_block).as_slice()).unwrap()
+    }
 
     /// This tests ensures that `BlockchainManager::get_successors(...)` will return relevant blocks
     /// with the next headers of many forks and enqueue missing block hashes.
@@ -382,9 +386,9 @@ mod test {
 
         // Check that blocks contain block 1.
         assert_eq!(response.blocks.len(), 1);
-        // assert!(
-        //     matches!(response.blocks.first(), Some(block) if block.block_hash() == side_block_1.block_hash())
-        // );
+        assert!(
+            matches!(response.blocks.first(), Some(block) if decode_block(block).block_hash() == side_block_1.block_hash())
+        );
 
         assert_eq!(response.next.len(), 6);
 
@@ -530,15 +534,15 @@ mod test {
         };
         let response = handler.get_successors(request).await.unwrap();
         assert_eq!(response.blocks.len(), 3);
-        // assert!(
-        //     matches!(response.blocks.first(), Some(block) if block.block_hash() == main_block_1.block_hash())
-        // );
-        // assert!(
-        //     matches!(response.blocks.get(1), Some(block) if block.block_hash() == side_block_1.block_hash())
-        // );
-        // assert!(
-        //     matches!(response.blocks.get(2), Some(block) if block.block_hash() == main_block_2.block_hash())
-        // );
+        assert!(
+            matches!(response.blocks.first(), Some(block) if decode_block(block).block_hash() == main_block_1.block_hash())
+        );
+        assert!(
+            matches!(response.blocks.get(1), Some(block) if decode_block(block).block_hash() == side_block_1.block_hash())
+        );
+        assert!(
+            matches!(response.blocks.get(2), Some(block) if decode_block(block).block_hash() == main_block_2.block_hash())
+        );
     }
 
     /// This tests ensures that `get_successor` returns no more than MAX_BLOCKS_LENGTH blocks.
@@ -644,21 +648,21 @@ mod test {
             processed_block_hashes: vec![],
         };
         let response = handler.get_successors(request).await.unwrap();
-        // assert_eq!(
-        //     response.blocks.len(),
-        //     1,
-        //     "main_chain = {:#?}, side_chain = {:#?}, blocks = {:#?}",
-        //     headers_to_hashes(&main_chain),
-        //     headers_to_hashes(&side_chain),
-        //     response
-        //         .blocks
-        //         .iter()
-        //         .map(|b| b.block_hash())
-        //         .collect::<Vec<BlockHash>>()
-        // );
-        // assert!(
-        //     matches!(response.blocks.first(), Some(block) if block.block_hash() == side_block_1.block_hash())
-        // );
+        assert_eq!(
+            response.blocks.len(),
+            1,
+            "main_chain = {:#?}, side_chain = {:#?}, blocks = {:#?}",
+            headers_to_hashes(&main_chain),
+            headers_to_hashes(&side_chain),
+            response
+                .blocks
+                .iter()
+                .map(|b| decode_block(b).block_hash())
+                .collect::<Vec<BlockHash>>()
+        );
+        assert!(
+            matches!(response.blocks.first(), Some(block) if decode_block(block).block_hash() == side_block_1.block_hash())
+        );
         assert_eq!(
             response.next.len(),
             2,
@@ -725,13 +729,13 @@ mod test {
         // There are 2 blocks in the chain: {large, small}.
         // Only the large block should be returned in this response.
         assert_eq!(response.blocks.len(), 1);
-        // assert!(
-        //     matches!(response.blocks.first(), Some(block) if block.block_hash() == large_block.block_hash() && block.txdata.len() == large_block.txdata.len())
-        // );
-        // // The smaller block's header should be in the next field.
-        // assert!(
-        //     matches!(response.next.first(), Some(header) if header.block_hash() == additional_headers[0].block_hash())
-        // );
+        assert!(
+            matches!(response.blocks.first(), Some(block) if decode_block(block).block_hash() == large_block.block_hash() && decode_block(block).txdata.len() == large_block.txdata.len())
+        );
+        // The smaller block's header should be in the next field.
+        assert!(
+            matches!(response.next.first(), Some(header) if header.block_hash() == additional_headers[0].block_hash())
+        );
     }
 
     /// This test ensures that `BlockchainManager::get_successors(...)` sends blocks up to the cap limit.

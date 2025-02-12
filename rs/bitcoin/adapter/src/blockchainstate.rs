@@ -257,8 +257,6 @@ impl BlockchainState {
             .map_err(AddBlockError::Header)?;
         self.tips.sort_unstable_by(|a, b| b.work.cmp(&a.work));
 
-        //TODO(mihailjianu): check if this returns an error if it's returned;/
-        // maybe move this to a function.
         let mut serialized_block = vec![];
         block
             .consensus_encode(&mut serialized_block)
