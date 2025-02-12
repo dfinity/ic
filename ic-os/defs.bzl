@@ -323,12 +323,7 @@ def icos_build(
     disk_image_no_tar(
         name = "disk.img",
         layout = image_deps["partition_table"],
-        partitions = [
-            "//ic-os/bootloader:partition-esp.tzst",
-            ":partition-grub.tzst",
-            ":partition-boot.tzst",
-            ":partition-root.tzst",
-        ] + custom_partitions,
+        partitions = partitions,
         expanded_size = image_deps.get("expanded_size", default = None),
         tags = ["manual", "no-cache"],
         target_compatible_with = [
