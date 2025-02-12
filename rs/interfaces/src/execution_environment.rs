@@ -1177,8 +1177,12 @@ pub trait SystemApi {
         heap: &mut [u8],
     ) -> HypervisorResult<()>;
 
-    /// This system call indicates the cycle cost of an inter-canister call,
-    /// i.e., `ic0.call_perform`.
+    /// This system call returns the amount of cycles that a canister needs to
+    /// be above the freezing threshold in order to successfully make an
+    /// inter-canister call. This includes the base cost for an inter-canister
+    /// call, the cost for each byte transmitted in the request, the cost for
+    /// the transmission of the largest possible response, and the cost for
+    /// executing the largest possible response callback.
     ///
     /// The cost is determined by the byte length of the method name and the
     /// length of the encoded payload.
