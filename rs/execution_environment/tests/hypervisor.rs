@@ -7,7 +7,6 @@ use ic_config::subnet_config::SchedulerConfig;
 use ic_cycles_account_manager::ResourceSaturation;
 use ic_embedders::wasm_utils::instrumentation::instruction_to_cost;
 use ic_embedders::wasm_utils::instrumentation::WasmMemoryType;
-use ic_error_types::UserError;
 use ic_error_types::{ErrorCode, RejectCode};
 use ic_interfaces::execution_environment::{HypervisorError, SubnetAvailableMemory};
 use ic_management_canister_types_private::EcdsaCurve;
