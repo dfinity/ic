@@ -1,6 +1,5 @@
 [Unit]
 Description=SetupOS install process
-After=generate-network-config.service
 After=systemd-networkd-wait-online.service
 Wants=systemd-networkd-wait-online.service
 
