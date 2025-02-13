@@ -6005,7 +6005,6 @@ dependencies = [
 name = "ic-boundary"
 version = "0.9.0"
 dependencies = [
- "anonymization-client",
  "anyhow",
  "arc-swap",
  "async-scoped",
@@ -6069,6 +6068,7 @@ dependencies = [
  "reqwest 0.12.12",
  "rustls 0.23.21",
  "rustls-pemfile 2.2.0",
+ "salt-sharing-api",
  "serde",
  "serde_bytes",
  "serde_cbor",
@@ -14140,6 +14140,7 @@ dependencies = [
  "rate-limits-api",
  "regex",
  "registry-canister",
+ "salt-sharing-api",
  "slog",
  "tokio",
  "wat",
