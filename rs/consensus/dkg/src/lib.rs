@@ -9,7 +9,7 @@ use ic_interfaces::{
     dkg::{ChangeAction, DkgPool, Mutations},
     p2p::consensus::{Bouncer, BouncerFactory, BouncerValue, PoolMutationsProducer},
 };
-use ic_logger::{error, info, ReplicaLogger};
+use ic_logger::{error, info, warn, ReplicaLogger};
 use ic_metrics::{
     buckets::{decimal_buckets, linear_buckets},
     MetricsRegistry,
@@ -260,7 +260,8 @@ impl DkgImpl {
                 .into()
             }
             Err(err) => {
-                error!(
+                warn!(
+                    every_n_seconds => 30,
                     self.logger,
                     "Couldn't verify the signature of a DKG dealing: {}", err
                 );
