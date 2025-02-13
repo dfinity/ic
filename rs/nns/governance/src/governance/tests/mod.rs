@@ -1480,6 +1480,17 @@ fn test_validate_execute_nns_function() {
 }
 
 #[test]
+fn test_canister_and_function_no_unreachable() {
+    use strum::IntoEnumIterator;
+
+    for nns_function in NnsFunction::iter() {
+        // This will return either `Ok(_)` for nns functions that are still used, or `Err(_)` for
+        // obsolete ones. The test just makes sure that it doesn't panic.
+        let _ = nns_function.canister_and_function();
+    }
+}
+
+#[test]
 fn test_deciding_voting_power_adjustment_factor() {
     let voting_power_economics = VotingPowerEconomics {
         start_reducing_voting_power_after_seconds: Some(60),
