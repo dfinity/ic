@@ -1,4 +1,4 @@
-use candid::candid_method;
+use candid::{candid_method, Decode};
 use dfn_candid::candid_one;
 use dfn_core::api::{caller, print, stable_memory_size_in_pages};
 use dfn_core::{over_init, stable, BytesS};
@@ -86,6 +86,13 @@ fn max_memory_size_bytes() -> u64 {
 }
 
 fn set_max_memory_size_bytes(max_memory_size_bytes: u64) {
+    if max_memory_size_bytes < total_block_size() {
+        ic_cdk::trap(&format!(
+            "Cannot set max_memory_size_bytes to {}, because it is lower than total_block_size {}.",
+            max_memory_size_bytes,
+            total_block_size()
+        ));
+    }
     assert!(MAX_MEMORY_SIZE_BYTES
         .with(|cell| cell.borrow_mut().set(max_memory_size_bytes))
         .is_ok());
@@ -334,10 +341,18 @@ fn get_blocks_candid_() {
 
 #[export_name = "canister_post_upgrade"]
 fn post_upgrade() {
-    over_init(|_: BytesS| {
+    over_init(|args: BytesS| {
         set_last_upgrade_timestamp(dfn_core::api::time_nanos());
-
+        let arg_max_memory_size_bytes = match Decode!(&args.0, Option<u64>) {
+            Ok(max_memory_size_bytes) => max_memory_size_bytes,
+            Err(e) => {
+                ic_cdk::trap(&format!("Unable to decode archive upgrade argument: {}", e));
+            }
+        };
         if memory_manager_installed() {
+            if let Some(max_memory_size_bytes) = arg_max_memory_size_bytes {
+                set_max_memory_size_bytes(max_memory_size_bytes);
+            }
             print("Archive state already migrated to stable structures, exiting post_upgrade.");
             return;
         }
@@ -351,7 +366,11 @@ fn post_upgrade() {
         }
 
         set_block_height_offset(state.block_height_offset);
-        set_max_memory_size_bytes(state.max_memory_size_bytes as u64);
+        if let Some(max_memory_size_bytes) = arg_max_memory_size_bytes {
+            set_max_memory_size_bytes(max_memory_size_bytes);
+        } else {
+            set_max_memory_size_bytes(state.max_memory_size_bytes as u64);
+        }
         set_total_block_size(state.total_block_size as u64);
         set_ledger_canister_id(state.ledger_canister_id);
     });

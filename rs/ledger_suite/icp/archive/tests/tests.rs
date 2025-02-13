@@ -15,6 +15,8 @@ const GENESIS_IN_NANOS_SINCE_UNIX_EPOCH: u64 = 1_620_328_630_000_000_000;
 struct Setup {
     pocket_ic: pocket_ic::PocketIc,
     archive_canister_id: CanisterId,
+    archive_wasm: Vec<u8>,
+    canister_id: CanisterId,
 }
 
 impl Setup {
@@ -31,7 +33,7 @@ impl Setup {
         let max_transactions_per_response = 10u64;
         pocket_ic.install_canister(
             Principal::from(canister_id),
-            archive_wasm,
+            archive_wasm.clone(),
             Encode!(
                 &canister_id,
                 &node_block_height_offset,
@@ -44,6 +46,8 @@ impl Setup {
         Setup {
             pocket_ic,
             archive_canister_id: canister_id,
+            archive_wasm,
+            canister_id,
         }
     }
 
@@ -71,6 +75,28 @@ impl Setup {
                 Encode!(&encoded_blocks).expect("should encode vec![encoded_block]"),
             )
             .expect("failed to send append_blocks request");
+    }
+
+    fn upgrade(&self, upgrade_arg_max_capacity: Option<u64>, expected_error: Option<String>) {
+        match self.pocket_ic.upgrade_canister(
+            Principal::from(self.canister_id),
+            self.archive_wasm.clone(),
+            Encode!(&upgrade_arg_max_capacity).expect("should encode archive init args"),
+            None,
+        ) {
+            Ok(_) => {
+                if expected_error.is_some() {
+                    panic!("Upgrade should fail!");
+                }
+            }
+            Err(e) => {
+                if let Some(error_msg) = expected_error {
+                    assert!(e.reject_message.contains(&error_msg));
+                } else {
+                    panic!("Upgrade should succeed!");
+                }
+            }
+        };
     }
 }
 
@@ -177,4 +203,26 @@ fn large_http_request() {
         )
         .unwrap_err();
     assert!(err.reject_message.contains("Deserialization Failed"));
+}
+
+#[test]
+fn should_update_max_capacity_with_upgrade_arg() {
+    let encoded_block = valid_encoded_block();
+    let encoded_block_size = encoded_block.size_bytes() as u64;
+    let setup = Setup::new(encoded_block_size + 7);
+    setup.append_block(encoded_block.clone());
+    setup.assert_remaining_capacity(7);
+    setup.upgrade(None, None);
+    setup.assert_remaining_capacity(7);
+    setup.upgrade(Some(2 * encoded_block_size + 7), None);
+    setup.assert_remaining_capacity(encoded_block_size as usize + 7);
+    setup.append_block(encoded_block);
+    setup.assert_remaining_capacity(7);
+    setup.upgrade(
+        Some(encoded_block_size),
+        Some("Cannot set max_memory_size_bytes to".to_string()),
+    );
+    setup.assert_remaining_capacity(7);
+    setup.upgrade(Some(2 * encoded_block_size), None);
+    setup.assert_remaining_capacity(0);
 }
