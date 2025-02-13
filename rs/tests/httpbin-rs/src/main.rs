@@ -1,5 +1,4 @@
 use std::{
-    collections::BTreeMap,
     io::Write,
     net::{Ipv6Addr, SocketAddr},
     path::PathBuf,

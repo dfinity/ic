@@ -12,14 +12,15 @@ use ic_management_canister_types_private::{
 
 #[derive(Clone, Debug, CandidType, Deserialize)]
 pub struct RemoteHttpRequest {
-    pub request: CanisterHttpRequestArgs,
+    pub request: UnvalidatedCanisterHttpRequestArgs,
     pub cycles: u64,
 }
 
 /// We create a custom type instead of reusing [`ic_management_canister_types_private::CanisterHttpRequestArgs`]
 /// as we don't want the body to be deserialized as a bounded vec.
+/// This allows us to test sending headers that are longer than the default limit and test.
 #[derive(Clone, PartialEq, Debug, CandidType, Deserialize)]
-pub struct CanisterHttpRequestArgs {
+pub struct UnvalidatedCanisterHttpRequestArgs {
     pub url: String,
     pub max_response_bytes: Option<u64>,
     pub headers: Vec<HttpHeader>,
@@ -27,12 +28,12 @@ pub struct CanisterHttpRequestArgs {
     pub method: HttpMethod,
     pub transform: Option<TransformContext>,
 }
-impl Payload<'_> for CanisterHttpRequestArgs {}
+impl Payload<'_> for UnvalidatedCanisterHttpRequestArgs {}
 
-impl From<CanisterHttpRequestArgs>
+impl From<UnvalidatedCanisterHttpRequestArgs>
     for ic_management_canister_types_private::CanisterHttpRequestArgs
 {
-    fn from(args: CanisterHttpRequestArgs) -> Self {
+    fn from(args: UnvalidatedCanisterHttpRequestArgs) -> Self {
         Self {
             url: args.url,
             max_response_bytes: args.max_response_bytes,

@@ -45,7 +45,7 @@ use ic_types::{
     canister_http::{CanisterHttpRequestContext, MAX_CANISTER_HTTP_REQUEST_BYTES},
     time::UNIX_EPOCH,
 };
-use proxy_canister::{CanisterHttpRequestArgs, RemoteHttpRequest, RemoteHttpResponse};
+use proxy_canister::{RemoteHttpRequest, RemoteHttpResponse, UnvalidatedCanisterHttpRequestArgs};
 use serde_json::Value;
 use std::{collections::HashSet, convert::TryFrom};
 
@@ -156,7 +156,7 @@ pub fn test_enforce_https(env: TestEnv) {
     let response = block_on(submit_outcall(
         &handlers,
         RemoteHttpRequest {
-            request: CanisterHttpRequestArgs {
+            request: UnvalidatedCanisterHttpRequestArgs {
                 url: format!("http://[{webserver_ipv6}]:20443"),
                 headers: vec![],
                 method: HttpMethod::GET,
@@ -192,7 +192,7 @@ pub fn test_transform_function_is_executed(env: TestEnv) {
     let response = block_on(submit_outcall(
         &handlers,
         RemoteHttpRequest {
-            request: CanisterHttpRequestArgs {
+            request: UnvalidatedCanisterHttpRequestArgs {
                 url: format!("https://[{webserver_ipv6}]:20443"),
                 headers: vec![],
                 method: HttpMethod::GET,
@@ -234,7 +234,7 @@ pub fn test_non_existent_transform_function(env: TestEnv) {
     let response = block_on(submit_outcall(
         &handlers,
         RemoteHttpRequest {
-            request: CanisterHttpRequestArgs {
+            request: UnvalidatedCanisterHttpRequestArgs {
                 url: format!("https://[{webserver_ipv6}]:20443"),
                 headers: vec![],
                 method: HttpMethod::GET,
@@ -268,7 +268,7 @@ pub fn test_composite_transform_function_is_executed(env: TestEnv) {
     let response = block_on(submit_outcall(
         &handlers,
         RemoteHttpRequest {
-            request: CanisterHttpRequestArgs {
+            request: UnvalidatedCanisterHttpRequestArgs {
                 url: format!("https://[{webserver_ipv6}]:20443"),
                 headers: vec![],
                 method: HttpMethod::GET,
@@ -302,7 +302,7 @@ pub fn test_no_cycles_attached(env: TestEnv) {
     let response = block_on(submit_outcall(
         &handlers,
         RemoteHttpRequest {
-            request: CanisterHttpRequestArgs {
+            request: UnvalidatedCanisterHttpRequestArgs {
                 url: format!("http://[{webserver_ipv6}]:20443"),
                 headers: vec![],
                 method: HttpMethod::GET,
@@ -352,7 +352,7 @@ pub fn test_max_possible_request_size(env: TestEnv) {
     let response = block_on(submit_outcall(
         &handlers,
         RemoteHttpRequest {
-            request: CanisterHttpRequestArgs {
+            request: UnvalidatedCanisterHttpRequestArgs {
                 url: format!("https://[{webserver_ipv6}]:20443/request_size"),
                 headers,
                 method: HttpMethod::POST,
@@ -396,7 +396,7 @@ pub fn test_max_possible_request_size_exceeded(env: TestEnv) {
     let response = block_on(submit_outcall(
         &handlers,
         RemoteHttpRequest {
-            request: CanisterHttpRequestArgs {
+            request: UnvalidatedCanisterHttpRequestArgs {
                 url: format!("https://[{webserver_ipv6}]:20443/request_size"),
                 headers,
                 method: HttpMethod::POST,
@@ -427,7 +427,7 @@ pub fn test_2mb_response_cycle_for_rejection_path(env: TestEnv) {
     let handlers = Handlers::new(&env);
     let webserver_ipv6 = get_universal_vm_address(&env);
 
-    let request = CanisterHttpRequestArgs {
+    let request = UnvalidatedCanisterHttpRequestArgs {
         url: format!("https://[{webserver_ipv6}]:20443"),
         headers: vec![],
         method: HttpMethod::GET,
@@ -470,7 +470,7 @@ pub fn test_4096_max_response_cycle_case_1(env: TestEnv) {
     let handlers = Handlers::new(&env);
     let webserver_ipv6 = get_universal_vm_address(&env);
 
-    let request = CanisterHttpRequestArgs {
+    let request = UnvalidatedCanisterHttpRequestArgs {
         url: format!("https://[{webserver_ipv6}]:20443"),
         headers: vec![],
         method: HttpMethod::GET,
@@ -507,7 +507,7 @@ pub fn test_4096_max_response_cycle_case_2(env: TestEnv) {
     let handlers = Handlers::new(&env);
     let webserver_ipv6 = get_universal_vm_address(&env);
 
-    let request = CanisterHttpRequestArgs {
+    let request = UnvalidatedCanisterHttpRequestArgs {
         url: format!("https://[{webserver_ipv6}]:20443"),
         headers: vec![],
         method: HttpMethod::GET,
@@ -552,7 +552,7 @@ pub fn test_max_response_limit_too_large(env: TestEnv) {
     let response = block_on(submit_outcall(
         &handlers,
         RemoteHttpRequest {
-            request: CanisterHttpRequestArgs {
+            request: UnvalidatedCanisterHttpRequestArgs {
                 url: format!("https://[{webserver_ipv6}]:20443"),
                 headers: vec![],
                 method: HttpMethod::GET,
@@ -586,7 +586,7 @@ pub fn test_transform_that_bloats_response_above_2mb_limit(env: TestEnv) {
     let response = block_on(submit_outcall(
         &handlers,
         RemoteHttpRequest {
-            request: CanisterHttpRequestArgs {
+            request: UnvalidatedCanisterHttpRequestArgs {
                 url: format!("https://[{webserver_ipv6}]:20443"),
                 headers: vec![],
                 method: HttpMethod::GET,
@@ -620,7 +620,7 @@ pub fn test_non_existing_transform_function(env: TestEnv) {
     let response = block_on(submit_outcall(
         &handlers,
         RemoteHttpRequest {
-            request: CanisterHttpRequestArgs {
+            request: UnvalidatedCanisterHttpRequestArgs {
                 url: format!("https://[{webserver_ipv6}]:20443"),
                 headers: vec![],
                 method: HttpMethod::GET,
@@ -654,7 +654,7 @@ pub fn test_post_request(env: TestEnv) {
     let response = block_on(submit_outcall(
         &handlers,
         RemoteHttpRequest {
-            request: CanisterHttpRequestArgs {
+            request: UnvalidatedCanisterHttpRequestArgs {
                 url: format!("https://[{webserver_ipv6}]:20443/post"),
                 headers: vec![HttpHeader {
                     name: "content-type".to_string(),
@@ -685,7 +685,7 @@ pub fn test_http_endpoint_response_is_too_large(env: TestEnv) {
     let response = block_on(submit_outcall(
         &handlers,
         RemoteHttpRequest {
-            request: CanisterHttpRequestArgs {
+            request: UnvalidatedCanisterHttpRequestArgs {
                 url: format!("https://[{webserver_ipv6}]:20443/bytes/100000"),
                 headers: vec![],
                 method: HttpMethod::GET,
@@ -719,7 +719,7 @@ pub fn test_http_endpoint_with_delayed_response_is_rejected(env: TestEnv) {
     let response = block_on(submit_outcall(
         &handlers,
         RemoteHttpRequest {
-            request: CanisterHttpRequestArgs {
+            request: UnvalidatedCanisterHttpRequestArgs {
                 url: format!("https://[{webserver_ipv6}]:20443/delay/40"),
                 headers: vec![],
                 method: HttpMethod::GET,
@@ -754,7 +754,7 @@ pub fn test_that_redirects_are_not_followed(env: TestEnv) {
     let response = block_on(submit_outcall(
         &handlers,
         RemoteHttpRequest {
-            request: CanisterHttpRequestArgs {
+            request: UnvalidatedCanisterHttpRequestArgs {
                 url: format!("https://[{webserver_ipv6}]:20443/redirect/10"),
                 headers: vec![],
                 method: HttpMethod::GET,
@@ -783,7 +783,7 @@ pub fn test_http_calls_to_ic_fails(env: TestEnv) {
     let response = block_on(submit_outcall(
         &handlers,
         RemoteHttpRequest {
-            request: CanisterHttpRequestArgs {
+            request: UnvalidatedCanisterHttpRequestArgs {
                 url: format!("https://[{}]:9090", webserver_ipv6),
                 headers: vec![],
                 method: HttpMethod::GET,
@@ -821,7 +821,7 @@ fn test_invalid_domain_name(env: TestEnv) {
     let response = block_on(submit_outcall(
         &handlers,
         RemoteHttpRequest {
-            request: CanisterHttpRequestArgs {
+            request: UnvalidatedCanisterHttpRequestArgs {
                 url: "https://xwWPqqbNqxxHmLXdguF4DN9xGq22nczV.com".to_string(),
                 headers: vec![],
                 method: HttpMethod::GET,
@@ -854,7 +854,7 @@ fn test_invalid_ip(env: TestEnv) {
     let response = block_on(submit_outcall(
         &handlers,
         RemoteHttpRequest {
-            request: CanisterHttpRequestArgs {
+            request: UnvalidatedCanisterHttpRequestArgs {
                 url: "https://240.0.0.0".to_string(),
                 headers: vec![],
                 method: HttpMethod::GET,
@@ -894,7 +894,7 @@ fn test_get_hello_world_call(env: TestEnv) {
 
     let max_response_bytes = 666;
 
-    let request = CanisterHttpRequestArgs {
+    let request = UnvalidatedCanisterHttpRequestArgs {
         url,
         headers: vec![],
         method: HttpMethod::GET,
@@ -935,7 +935,7 @@ fn test_post_call(env: TestEnv) {
     ];
     let max_response_bytes = Some(666);
 
-    let request = CanisterHttpRequestArgs {
+    let request = UnvalidatedCanisterHttpRequestArgs {
         url,
         headers,
         method: HttpMethod::POST,
@@ -983,7 +983,7 @@ fn test_head_call(env: TestEnv) {
     ];
     let max_response_bytes = Some(666);
 
-    let request = CanisterHttpRequestArgs {
+    let request = UnvalidatedCanisterHttpRequestArgs {
         url,
         headers,
         method: HttpMethod::HEAD,
@@ -1036,7 +1036,7 @@ fn test_small_maximum_possible_response_size_only_headers(env: TestEnv) {
     let response = block_on(submit_outcall(
         &handlers,
         RemoteHttpRequest {
-            request: CanisterHttpRequestArgs {
+            request: UnvalidatedCanisterHttpRequestArgs {
                 url,
                 headers: vec![],
                 method: HttpMethod::GET,
@@ -1074,7 +1074,7 @@ fn test_small_maximum_possible_response_size_exceeded_only_headers(env: TestEnv)
     let response = block_on(submit_outcall(
         &handlers,
         RemoteHttpRequest {
-            request: CanisterHttpRequestArgs {
+            request: UnvalidatedCanisterHttpRequestArgs {
                 url,
                 headers: vec![],
                 method: HttpMethod::GET,
@@ -1107,7 +1107,7 @@ fn test_non_ascii_url_is_rejected(env: TestEnv) {
 
     let max_response_bytes = 666;
 
-    let request = CanisterHttpRequestArgs {
+    let request = UnvalidatedCanisterHttpRequestArgs {
         url,
         headers: vec![],
         method: HttpMethod::GET,
@@ -1145,7 +1145,7 @@ fn test_max_url_length(env: TestEnv) {
     let url = format!("{}{}", base_url, expected_body);
     assert_eq!(url.len(), MAX_CANISTER_HTTP_URL_SIZE);
 
-    let request = CanisterHttpRequestArgs {
+    let request = UnvalidatedCanisterHttpRequestArgs {
         url,
         headers: vec![],
         method: HttpMethod::GET,
@@ -1179,7 +1179,7 @@ fn test_max_url_length_exceeded(env: TestEnv) {
 
     let url = format!("{}{}", base_url, expected_body);
 
-    let request = CanisterHttpRequestArgs {
+    let request = UnvalidatedCanisterHttpRequestArgs {
         url,
         headers: vec![],
         method: HttpMethod::GET,
@@ -1217,7 +1217,7 @@ fn test_large_maximum_response_size(env: TestEnv) {
 
     let url = format!("{}{}", base_url, expected_body);
 
-    let request = CanisterHttpRequestArgs {
+    let request = UnvalidatedCanisterHttpRequestArgs {
         url,
         headers: vec![],
         method: HttpMethod::GET,
@@ -1264,7 +1264,7 @@ fn test_maximum_possible_value_of_max_response_bytes(env: TestEnv) {
     let response = block_on(submit_outcall(
         &handlers,
         RemoteHttpRequest {
-            request: CanisterHttpRequestArgs {
+            request: UnvalidatedCanisterHttpRequestArgs {
                 url,
                 headers: vec![],
                 method: HttpMethod::GET,
@@ -1304,7 +1304,7 @@ fn test_maximum_possible_value_of_max_response_bytes_exceeded(env: TestEnv) {
     let response = block_on(submit_outcall(
         &handlers,
         RemoteHttpRequest {
-            request: CanisterHttpRequestArgs {
+            request: UnvalidatedCanisterHttpRequestArgs {
                 url,
                 headers: vec![],
                 method: HttpMethod::GET,
@@ -1347,7 +1347,7 @@ fn reference_transform_function_exposed_by_different_canister(env: TestEnv) {
         "create_proxy_canister() should create a new proxy canister with a new canister id."
     );
 
-    let request = CanisterHttpRequestArgs {
+    let request = UnvalidatedCanisterHttpRequestArgs {
         url,
         headers: vec![],
         method: HttpMethod::GET,
@@ -1393,7 +1393,7 @@ fn test_max_number_of_response_headers(env: TestEnv) {
     let response = block_on(submit_outcall(
         &handlers,
         RemoteHttpRequest {
-            request: CanisterHttpRequestArgs {
+            request: UnvalidatedCanisterHttpRequestArgs {
                 url,
                 headers: vec![],
                 method: HttpMethod::GET,
@@ -1431,7 +1431,7 @@ fn test_max_number_of_response_headers_exceeded(env: TestEnv) {
     let response = block_on(submit_outcall(
         &handlers,
         RemoteHttpRequest {
-            request: CanisterHttpRequestArgs {
+            request: UnvalidatedCanisterHttpRequestArgs {
                 url,
                 headers: vec![],
                 method: HttpMethod::GET,
@@ -1463,7 +1463,7 @@ fn test_max_number_of_request_headers(env: TestEnv) {
         .collect();
 
     let request = RemoteHttpRequest {
-        request: CanisterHttpRequestArgs {
+        request: UnvalidatedCanisterHttpRequestArgs {
             url: format!("https://[{webserver_ipv6}]:20443/anything"),
             headers,
             method: HttpMethod::POST,
@@ -1535,7 +1535,7 @@ fn check_caller_id_on_transform_function(env: TestEnv) {
         webserver_ipv6, "ascii", "hello_world"
     );
 
-    let request = CanisterHttpRequestArgs {
+    let request = UnvalidatedCanisterHttpRequestArgs {
         url,
         headers: vec![],
         method: HttpMethod::GET,
@@ -1626,7 +1626,7 @@ fn assert_http_response(
 /// 3. Request method must match the method in the response.
 /// 4. Request body must match the body in the response.
 fn assert_http_json_response(
-    request: &CanisterHttpRequestArgs,
+    request: &UnvalidatedCanisterHttpRequestArgs,
     http_response: &RemoteHttpResponse,
 ) {
     let request_headers = request
@@ -1755,7 +1755,7 @@ where
 /// Pricing function of canister http requests.
 fn expected_cycle_cost(
     proxy_canister: CanisterId,
-    request: CanisterHttpRequestArgs,
+    request: UnvalidatedCanisterHttpRequestArgs,
     subnet_size: usize,
 ) -> u64 {
     let cm = CyclesAccountManagerBuilder::new().build();
