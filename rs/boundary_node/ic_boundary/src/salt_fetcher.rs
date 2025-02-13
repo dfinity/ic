@@ -16,6 +16,9 @@ use std::{sync::Arc, time::Duration};
 use tokio::time::sleep;
 use tracing::warn;
 
+const SERVICE: &str = "AnonymizationSaltFetcher";
+const METRIC_PREFIX: &str = "anonymization_salt";
+
 fn nonce() -> Vec<u8> {
     SystemTime::now()
         .duration_since(SystemTime::UNIX_EPOCH)
@@ -35,21 +38,21 @@ impl Metrics {
     fn new(registry: &Registry) -> Self {
         Self {
             last_successful_fetch: register_int_gauge_with_registry!(
-                format!("salt_sharing_last_successful_fetch"),
+                format!("{METRIC_PREFIX}_last_successful_fetch"),
                 format!("The Unix timestamp of the last successful salt fetch"),
                 registry
             )
             .unwrap(),
 
             last_salt_id: register_int_gauge_with_registry!(
-                format!("salt_sharing_last_salt_id"),
+                format!("{METRIC_PREFIX}_last_salt_id"),
                 format!("ID of the latest fetched salt"),
                 registry,
             )
             .unwrap(),
 
             fetches: register_int_counter_vec_with_registry!(
-                format!("salt_sharing_fetches"),
+                format!("{METRIC_PREFIX}_fetches"),
                 format!("Count of salt fetches and their outcome"),
                 &["result"],
                 registry
@@ -59,7 +62,7 @@ impl Metrics {
     }
 }
 
-pub struct SharedSaltFetcher {
+pub struct AnonymizationSaltFetcher {
     agent: Agent,
     canister_id: CanisterId,
     polling_interval: Duration,
@@ -67,7 +70,7 @@ pub struct SharedSaltFetcher {
     metrics: Metrics,
 }
 
-impl SharedSaltFetcher {
+impl AnonymizationSaltFetcher {
     pub fn new(
         agent: Agent,
         canister_id: Principal,
@@ -86,7 +89,7 @@ impl SharedSaltFetcher {
 }
 
 #[async_trait]
-impl Run for Arc<SharedSaltFetcher> {
+impl Run for Arc<AnonymizationSaltFetcher> {
     async fn run(&mut self) -> Result<(), Error> {
         loop {
             let query_response = match self
@@ -103,12 +106,12 @@ impl Run for Arc<SharedSaltFetcher> {
                 Ok(response) => match response {
                     Some(response) => response,
                     None => {
-                        warn!("SharedSaltFetcher: got empty response from the canister");
+                        warn!("{SERVICE}: got empty response from the canister");
                         continue;
                     }
                 },
                 Err(err) => {
-                    warn!("SharedSaltFetcher: failed to get salt from the canister: {err:#}");
+                    warn!("{SERVICE}: failed to get salt from the canister: {err:#}");
                     continue;
                 }
             };
@@ -116,7 +119,7 @@ impl Run for Arc<SharedSaltFetcher> {
             let salt_response = match Decode!(&query_response, GetSaltResponse) {
                 Ok(response) => response,
                 Err(err) => {
-                    warn!("SharedSaltFetcher: failed to decode candid response: {err:?}");
+                    warn!("{SERVICE}: failed to decode candid response: {err:?}");
                     continue;
                 }
             };
@@ -142,7 +145,7 @@ impl Run for Arc<SharedSaltFetcher> {
                     );
                 }
                 Err(err) => {
-                    warn!("SharedSaltFetcher: get_salt failed: {err:?}");
+                    warn!("{SERVICE}: get_salt failed: {err:?}");
                 }
             }
 

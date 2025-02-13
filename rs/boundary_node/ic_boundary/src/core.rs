@@ -67,7 +67,7 @@ use crate::{
     rate_limiting::{generic, RateLimit},
     retry::{retry_request, RetryParams},
     routes::{self, ErrorCause, Health, Lookup, Proxy, ProxyRouter, RootKey},
-    salt_fetcher::SharedSaltFetcher,
+    salt_fetcher::AnonymizationSaltFetcher,
     snapshot::{
         generate_stub_snapshot, generate_stub_subnet, RegistrySnapshot, SnapshotPersister,
         Snapshotter,
@@ -447,7 +447,7 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
         .obs_log_anonymization_canister_id
         .and_then(|canister_id| {
             agent.as_ref().map(|agent| {
-                Arc::new(SharedSaltFetcher::new(
+                Arc::new(AnonymizationSaltFetcher::new(
                     agent.clone(),
                     canister_id,
                     cli.obs.obs_log_anonymization_poll_interval,

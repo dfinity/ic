@@ -242,8 +242,8 @@ pub struct Observability {
     #[clap(env, long)]
     pub obs_log_anonymization_canister_id: Option<Principal>,
 
-    /// How frequently to poll for shared salt from the canister
-    #[clap(env, long, default_value = "30s", value_parser = parse_duration)]
+    /// Frequency to poll the canister for the anonymization salt
+    #[clap(env, long, default_value = "60s", value_parser = parse_duration)]
     pub obs_log_anonymization_poll_interval: Duration,
 }
 
