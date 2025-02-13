@@ -14,11 +14,11 @@ echo "GIT_TREE_STATUS $git_tree_status"
 echo "HOME ${HOME}"
 
 # Used as farm metadata
-test -n "${CI_JOB_NAME:-}" && echo "CI_JOB_NAME ${CI_JOB_NAME}"
+test -n "${CI_JOB_NAME:-}" && echo "STABLE_FARM_JOB_NAME ${CI_JOB_NAME}"
 if [[ -n "${USER:-}" ]]; then
-    echo "USER ${USER}"
+    echo "STABLE_FARM_USER ${USER}"
 elif [[ -n "${HOSTUSER:-}" ]]; then
-    echo "USER ${HOSTUSER}"
+    echo "STABLE_FARM_USER ${HOSTUSER}"
 fi
 
 # Generate a file that changes every time bazel runs. It can be used as dependency for targets we want to always rebuild.
