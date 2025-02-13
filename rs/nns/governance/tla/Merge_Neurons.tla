@@ -1,5 +1,5 @@
 ---- MODULE Merge_Neurons ----
-EXTENDS TLC, Sequences, Integers, FiniteSets, Variants
+EXTENDS TLC, Sequences, Integers, FiniteSets, FiniteSetsExt, Variants
 
 CONSTANTS
     Minting_Account_Id,
@@ -23,7 +23,7 @@ Increase_Stake(neuron, neuron_id, amount) == [neuron EXCEPT ![neuron_id].cached_
 \* @type: ($neurons, $neuronId, Int) => $neurons;
 Update_Fees(neuron, neuron_id, fees_amount) == [neuron EXCEPT
     ![neuron_id].cached_stake = @ - fees_amount,
-    ![neuron_id].fees = @ - fees_amount ]
+    ![neuron_id].fees = Max({@ - fees_amount, 0})]
 \* @type: ($neurons, $neuronId, Int) => $neurons;
 Decrease_Maturity(neuron, neuron_id, amount) == [neuron EXCEPT ![neuron_id].maturity = @ - amount]
 \* @type: ($neurons, $neuronId, Int) => $neurons;
