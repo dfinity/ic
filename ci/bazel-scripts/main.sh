@@ -11,19 +11,20 @@ ic_version_rc_only="0000000000000000000000000000000000000000"
 release_build="false"
 s3_upload="False"
 
-protected_branches=("master" "rc--*" "hotfix-*" "master-private")
+# CI will publish artifacts for each commit pushed to the following branches:
+release_branches=("master" "rc--*" "hotfix-*" "master-private")
 
-# if we are on a protected branch or targeting a rc branch we set ic_version to the commit_sha and upload to s3
-for pattern in "${protected_branches[@]}"; do
+# if we are on a releasable branch or targeting a rc branch we set ic_version to the commit_sha and upload to s3
+for pattern in "${release_branches[@]}"; do
     if [[ "$BRANCH_NAME" == $pattern ]]; then
-        IS_PROTECTED_BRANCH="true"
+        IS_RELEASE_BRANCH="true"
         break
     fi
 done
 
 # if we are on a protected branch or targeting a rc branch we set release build, ic_version to the commit_sha and
 # upload to s3
-if [[ "${IS_PROTECTED_BRANCH:-}" == "true" ]] || [[ "${CI_PULL_REQUEST_TARGET_BRANCH_NAME:-}" == "rc--"* ]]; then
+if [[ "${IS_RELEASE_BRANCH:-}" == "true" ]] || [[ "${CI_PULL_REQUEST_TARGET_BRANCH_NAME:-}" == "rc--"* ]]; then
     ic_version_rc_only="${CI_COMMIT_SHA}"
     s3_upload="True"
     release_build="true"
