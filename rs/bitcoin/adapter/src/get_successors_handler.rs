@@ -787,9 +787,9 @@ mod test {
         // Six blocks in the chain. First 5 are small blocks and the last block is large.
         // Should return the first 5 blocks as the total size is below the cap.
         assert_eq!(response.blocks.len(), 5);
-        // assert!(
-        //     matches!(response.blocks.last(), Some(block) if block.block_hash() == main_chain.last().unwrap().block_hash())
-        // );
+        assert!(
+            matches!(response.blocks.last(), Some(block) if decode_block(block).block_hash() == main_chain.last().unwrap().block_hash())
+        );
 
         // The next field should contain the large block header as it is too large for the request.
         assert_eq!(response.next.len(), 1);

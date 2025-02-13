@@ -87,8 +87,8 @@ pub enum AddBlockError {
     #[error("Block's header caused an error: {0}")]
     Header(AddHeaderError),
     /// Used to indicate that the block could not be serialized.
-    #[error("Serialization error for block {0}")]
-    CouldNotSerialize(BlockHash),
+    #[error("Serialization error for block {0} with error {1}")]
+    CouldNotSerialize(BlockHash, String),
 }
 
 pub type SerializedBlock = Vec<u8>;
@@ -260,7 +260,7 @@ impl BlockchainState {
         let mut serialized_block = vec![];
         block
             .consensus_encode(&mut serialized_block)
-            .map_err(|_| AddBlockError::CouldNotSerialize(block_hash))?;
+            .map_err(|e| AddBlockError::CouldNotSerialize(block_hash, e.to_string()))?;
 
         self.block_cache
             .insert(block_hash, Arc::new(serialized_block));
@@ -358,7 +358,7 @@ impl BlockchainState {
 
     /// Returns the current size of the block cache.
     pub fn get_block_cache_size(&self) -> usize {
-        self.block_cache.values().fold(0, |sum, b| b.len() + sum)
+        self.block_cache.values().map(|block| block.len()).sum()
     }
 }
 
