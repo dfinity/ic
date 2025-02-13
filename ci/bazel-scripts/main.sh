@@ -60,10 +60,6 @@ if [ -n "${CLOUD_CREDENTIALS_CONTENT+x}" ]; then
     unset CLOUD_CREDENTIALS_CONTENT
 fi
 
-if [ -n "${GITHUB_OUTPUT:-}" ]; then
-    echo "upload_artifacts=true" >>"$GITHUB_OUTPUT"
-fi
-
 if [ -z "${KUBECONFIG:-}" ] && [ ! -z "${KUBECONFIG_TNET_CREATOR_LN1:-}" ]; then
     export KUBECONFIG=$(mktemp -t kubeconfig-XXXXXX)
     echo $KUBECONFIG_TNET_CREATOR_LN1 >$KUBECONFIG
@@ -88,21 +84,28 @@ stream_awk_program='
   # Finally, record the URL
   END { if (stream_url != null) print stream_url > url_out }'
 
+bazel_args=(
+    --output_base=/var/tmp/bazel-output # Output base wiped after run
+    ${BAZEL_COMMAND}
+    ${BAZEL_TARGETS}
+    --color=yes
+    --build_metadata=BUILDBUDDY_LINKS="[CI Job](${CI_JOB_URL})"
+    --ic_version="${CI_COMMIT_SHA}"
+    --ic_version_rc_only="${ic_version_rc_only}"
+    --release_build="${release_build}"
+    --s3_upload="${s3_upload:-"False"}"
+)
+
+# Unless explicitly provided, we set a default --repository_cache to a volume mounted inside our runners
+# Only for Linux builds since there `/cache` is mounted to host local storage.
+if [[ ! " ${bazel_args[*]} " =~ [[:space:]]--repository_cache[[:space:]] ]] && [[ "$(uname)" == "Linux" ]]; then
+    echo "setting default repository cache"
+    bazel_args+=(--repository_cache=/cache/bazel)
+fi
+
 # shellcheck disable=SC2086
 # ${BAZEL_...} variables are expected to contain several arguments. We have `set -f` set above to disable globbing (and therefore only allow splitting)"
-bazel \
-    ${BAZEL_STARTUP_ARGS} \
-    ${BAZEL_COMMAND} \
-    --color=yes \
-    ${BAZEL_CI_CONFIG} \
-    --build_metadata=BUILDBUDDY_LINKS="[CI Job](${CI_JOB_URL})" \
-    --ic_version="${CI_COMMIT_SHA}" \
-    --ic_version_rc_only="${ic_version_rc_only}" \
-    --release_build="${release_build}" \
-    --s3_upload="${s3_upload:-"False"}" \
-    ${BAZEL_EXTRA_ARGS:-} \
-    ${BAZEL_TARGETS} \
-    2>&1 | awk -v url_out="$url_out" "$stream_awk_program"
+bazel "${bazel_args[@]}" 2>&1 | awk -v url_out="$url_out" "$stream_awk_program"
 
 # Write the bes link & summary
 echo "Build results uploaded to $(<"$url_out")"
