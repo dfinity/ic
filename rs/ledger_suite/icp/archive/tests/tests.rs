@@ -51,7 +51,7 @@ impl Setup {
         }
     }
 
-    fn assert_remaining_capacity(&self, remaining_capacity: usize) {
+    fn assert_remaining_capacity(&self, remaining_capacity: u64) {
         let result = self
             .pocket_ic
             .update_call(
@@ -61,7 +61,7 @@ impl Setup {
                 Encode!(&()).expect("should encode empty args"),
             )
             .expect("failed to send remaining_capacity request");
-        let res = Decode!(&result, usize).expect("failed to decode usize");
+        let res = Decode!(&result, u64).expect("failed to decode usize");
         assert_eq!(res, remaining_capacity);
     }
 
@@ -121,7 +121,7 @@ fn valid_encoded_block() -> EncodedBlock {
 fn should_return_initial_remaining_capacity_correctly() {
     let archive_memory_size = valid_encoded_block().size_bytes() as u64 + 1u64;
     let setup = Setup::new(archive_memory_size);
-    setup.assert_remaining_capacity(archive_memory_size as usize);
+    setup.assert_remaining_capacity(archive_memory_size);
 }
 
 #[test]
@@ -138,9 +138,9 @@ fn should_return_remaining_capacity_correctly_after_appending_block() {
     let archive_memory_size = valid_encoded_block().size_bytes() as u64 + 1u64;
     let setup = Setup::new(archive_memory_size);
     let encoded_block = valid_encoded_block();
-    let encoded_block_size = encoded_block.size_bytes();
+    let encoded_block_size = encoded_block.size_bytes() as u64;
     setup.append_block(encoded_block);
-    setup.assert_remaining_capacity(archive_memory_size as usize - encoded_block_size);
+    setup.assert_remaining_capacity(archive_memory_size - encoded_block_size);
 }
 
 #[test]
@@ -215,7 +215,7 @@ fn should_update_max_capacity_with_upgrade_arg() {
     setup.upgrade(None, None);
     setup.assert_remaining_capacity(7);
     setup.upgrade(Some(2 * encoded_block_size + 7), None);
-    setup.assert_remaining_capacity(encoded_block_size as usize + 7);
+    setup.assert_remaining_capacity(encoded_block_size + 7);
     setup.append_block(encoded_block);
     setup.assert_remaining_capacity(7);
     setup.upgrade(
@@ -225,4 +225,6 @@ fn should_update_max_capacity_with_upgrade_arg() {
     setup.assert_remaining_capacity(7);
     setup.upgrade(Some(2 * encoded_block_size), None);
     setup.assert_remaining_capacity(0);
+    setup.upgrade(Some(u64::MAX), None);
+    setup.assert_remaining_capacity(u64::MAX - 2 * encoded_block_size);
 }

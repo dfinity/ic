@@ -365,14 +365,14 @@ fn post_upgrade() {
             append_block(block);
         }
 
+        set_ledger_canister_id(state.ledger_canister_id);
+        set_total_block_size(state.total_block_size as u64);
         set_block_height_offset(state.block_height_offset);
         if let Some(max_memory_size_bytes) = arg_max_memory_size_bytes {
             set_max_memory_size_bytes(max_memory_size_bytes);
         } else {
             set_max_memory_size_bytes(state.max_memory_size_bytes as u64);
         }
-        set_total_block_size(state.total_block_size as u64);
-        set_ledger_canister_id(state.ledger_canister_id);
     });
 }
 
