@@ -282,7 +282,6 @@ impl InternetComputer {
         info!(env.logger(), "{topology_snapshot}");
         // Emit a json log event, to be consumed by log post-processing tools.
         topology_snapshot.emit_log_event(&env.logger());
-        std::thread::sleep(Duration::from_secs(30));
         setup_and_start_vms(&init_ic, self, env, &farm, &group_name)?;
         Ok(())
     }
