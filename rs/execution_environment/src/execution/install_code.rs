@@ -684,14 +684,10 @@ impl InstallCodeHelper {
     pub fn handle_wasm_execution(
         &mut self,
         canister_state_changes: CanisterStateChanges,
-        mut output: WasmExecutionOutput,
+        output: WasmExecutionOutput,
         original: &OriginalContext,
         round: &RoundContext,
     ) -> (NumInstructions, Result<(), CanisterManagerError>) {
-        self.canister
-            .system_state
-            .canister_log
-            .append(&mut output.canister_log);
         self.steps.push(InstallCodeStep::HandleWasmExecution {
             canister_state_changes: canister_state_changes.clone(),
             output: output.clone(),
@@ -713,6 +709,24 @@ impl InstallCodeHelper {
             .wasm_result
             .clone()
             .map_or(true, |result| result.is_none()));
+
+        let CanisterStateChanges {
+            execution_state_changes,
+            system_state_modifications,
+        } = canister_state_changes;
+
+        // Apply system state changes always.
+        // The result will be checked later after we've checked the wasm execution result so that we
+        // don't miss logging in case there was an error from Wasm execution.
+        let result_of_applying_system_state_modifications = system_state_modifications
+            .apply_changes(
+                original.time,
+                &mut self.canister.system_state,
+                round.network_topology,
+                round.hypervisor.subnet_id(),
+                round.log,
+            );
+
         match output.wasm_result {
             Ok(None) => {}
             Ok(Some(_response)) => {
@@ -736,23 +750,12 @@ impl InstallCodeHelper {
                 }
                 return (
                     instructions_consumed,
-                    Err((self.canister().canister_id(), err).into()),
+                    Err((self.canister.canister_id(), err).into()),
                 );
             }
         };
 
-        let CanisterStateChanges {
-            execution_state_changes,
-            system_state_modifications,
-        } = canister_state_changes;
-
-        if let Err(err) = system_state_modifications.apply_changes(
-            original.time,
-            &mut self.canister.system_state,
-            round.network_topology,
-            round.hypervisor.subnet_id(),
-            round.log,
-        ) {
+        if let Err(err) = result_of_applying_system_state_modifications {
             debug_assert_eq!(err, HypervisorError::OutOfMemory);
             match &err {
                 HypervisorError::WasmEngineError(err) => {

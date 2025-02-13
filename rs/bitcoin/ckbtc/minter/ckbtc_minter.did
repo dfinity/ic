@@ -399,6 +399,10 @@ type EventType = variant {
         utxo : Utxo;
         account : Account;
     };
+    checked_utxo_mint_unknown : record {
+        utxo : Utxo;
+        account : Account;
+    };
     ignored_utxo : record { utxo: Utxo; };
     suspended_utxo : record { utxo: Utxo; account: Account; reason: SuspendedReason };
     retrieve_btc_kyt_failed : record {
