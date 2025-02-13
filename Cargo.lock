@@ -10093,7 +10093,6 @@ version = "0.9.0"
 dependencies = [
  "async-trait",
  "candid",
- "dfn_core",
  "ic-base-types",
  "ic-ledger-core",
  "ic-nervous-system-common",
@@ -10213,6 +10212,7 @@ dependencies = [
  "async-trait",
  "dfn_core",
  "futures",
+ "ic-base-types",
  "ic-nervous-system-common",
  "ic-wasm",
  "icp-ledger",
@@ -10435,7 +10435,7 @@ name = "ic-nervous-system-root"
 version = "0.9.0"
 dependencies = [
  "candid",
- "dfn_core",
+ "ic-base-types",
  "ic-cdk 0.16.0",
  "ic-crypto-sha2",
  "ic-management-canister-types-private",
