@@ -19,6 +19,8 @@ component_files = {
     Label("hostos-scripts/monitoring/monitor-guestos.sh"): "/opt/ic/bin/monitor-guestos.sh",
     Label("hostos-scripts/monitoring/monitor-guestos.service"): "/etc/systemd/system/monitor-guestos.service",
     Label("hostos-scripts/monitoring/monitor-guestos.timer"): "/etc/systemd/system/monitor-guestos.timer",
+    Label("hostos-scripts/monitoring/custom-metrics.sh"): "/opt/ic/bin/custom-metrics.sh",
+    Label("hostos-scripts/monitoring/custom-metrics.service"): "/etc/systemd/system/custom-metrics.service",
     Label("hostos-scripts/monitoring/monitor-nvme.sh"): "/opt/ic/bin/monitor-nvme.sh",
     Label("hostos-scripts/monitoring/monitor-nvme.service"): "/etc/systemd/system/monitor-nvme.service",
     Label("hostos-scripts/monitoring/monitor-nvme.timer"): "/etc/systemd/system/monitor-nvme.timer",

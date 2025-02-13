@@ -253,7 +253,10 @@ fn should_create_state_machine_with_golden_nns_state() {
     setup.perform_upgrade_downgrade_testing(true);
 
     // Downgrade all the canisters to the mainnet version
-    setup.downgrade_to_mainnet();
+    // For breaking changes, e.g., if mainnet is running a version with balances and allowances in
+    // stable structures, but master also has blocks in stable structures, `ledger_is_downgradable`
+    // should be set to `false`, otherwise `true`.
+    setup.downgrade_to_mainnet(true);
 
     // Verify ledger balance and allowance state
     // As before, the allowance check needs to be skipped for the mainnet version of the ledger.
@@ -315,14 +318,20 @@ impl Setup {
         self.upgrade_archive_canisters(&self.master_wasms.archive);
     }
 
-    pub fn downgrade_to_mainnet(&self) {
+    pub fn downgrade_to_mainnet(&self, ledger_is_downgradable: bool) {
         println!("Downgrading to mainnet version");
         self.upgrade_index(&self.mainnet_wasms.index);
-        match self.upgrade_ledger(&self.mainnet_wasms.ledger) {
-            Ok(_) => {
+        match (
+            ledger_is_downgradable,
+            self.upgrade_ledger(&self.mainnet_wasms.ledger),
+        ) {
+            (false, Ok(_)) => {
                 panic!("should fail to downgrade ledger to mainnet version");
             }
-            Err(err) => {
+            (true, Ok(_)) => {
+                // The ledger was downgraded successfully, which is what was expected to happen
+            }
+            (false, Err(err)) => {
                 // The ledger will still be running the master version, while the other canisters
                 // will be downgraded to the mainnet version. This is not an ideal situation, nor
                 // is it expected to happen in practice, but for the moment let's run the test to
@@ -330,6 +339,12 @@ impl Setup {
                 err.assert_contains(
                     ErrorCode::CanisterCalledTrap,
                     "Trying to downgrade from incompatible version",
+                );
+            }
+            (true, Err(err)) => {
+                panic!(
+                    "should successfully downgrade ledger to mainnet version: {}",
+                    err
                 );
             }
         }

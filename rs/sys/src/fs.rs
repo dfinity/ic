@@ -583,82 +583,6 @@ pub fn copy_file_range_all(
     Ok(())
 }
 
-/// Reads and then writes a chunk of size `size` starting at `offset` in the file at `path`.
-/// This defragments the file partially on some COW capable file systems
-#[cfg(target_family = "unix")]
-pub fn defrag_file_partially(path: &Path, offset: u64, size: usize) -> std::io::Result<()> {
-    use std::os::unix::prelude::FileExt;
-
-    let mut content = vec![0; size];
-    let f = std::fs::OpenOptions::new()
-        .write(true)
-        .read(true)
-        .create(false)
-        .open(path)?;
-    f.read_exact_at(&mut content[..], offset)?;
-    f.write_all_at(&content, offset)?;
-    Ok(())
-}
-
-/// Write a slice of slices to a file
-/// Replacement for std::io::Write::write_all_vectored as long as it's nightly rust only
-pub fn write_all_vectored(file: &mut fs::File, bufs: &[&[u8]]) -> std::io::Result<()> {
-    use io::ErrorKind;
-    use io::IoSlice;
-
-    let mut slices: Vec<IoSlice> = bufs.iter().map(|s| IoSlice::new(s)).collect();
-    let mut front = 0;
-    // Guarantee that bufs is empty if it contains no data,
-    // to avoid calling write_vectored if there is no data to be written.
-    while front < slices.len() && slices[front].is_empty() {
-        front += 1;
-    }
-    while front < slices.len() {
-        match file.write_vectored(&slices[front..]) {
-            Ok(0) => {
-                return Err(io::Error::new(
-                    ErrorKind::WriteZero,
-                    "failed to write whole buffer",
-                ));
-            }
-            Ok(n) => {
-                // drop n bytes from the front of the data
-                advance_slices(&mut slices, &mut front, n, bufs);
-            }
-            Err(ref e) if e.kind() == ErrorKind::Interrupted => {}
-            Err(e) => return Err(e),
-        }
-    }
-    Ok(())
-}
-
-/// Advance a slice of IoSlices by `drop`. Will increment `front` to
-/// point past fully used slices, and modify slices if we point to the
-/// middle of a slice
-fn advance_slices<'a>(
-    slices: &mut [io::IoSlice<'a>],
-    front: &mut usize,
-    drop: usize,
-    bufs: &'a [&'a [u8]],
-) {
-    let mut written = drop;
-    while written > 0 && *front < slices.len() {
-        let first_len = slices[*front].len();
-        if written >= first_len {
-            // drop the first slice
-            written -= first_len;
-            *front += 1;
-        } else {
-            // drop only part of the first slice
-            let new_data_len = first_len - written;
-            let new_data: &[u8] = &bufs[*front][(bufs[*front].len() - new_data_len)..];
-            let new_slice = io::IoSlice::new(new_data);
-            slices[*front] = new_slice;
-            written = 0;
-        }
-    }
-}
-
 /// Error indicating that a call to clone_file has failed.
 #[derive(Debug)]
 pub enum FileCloneError {
@@ -795,8 +719,6 @@ fn clone_file_impl(_src: &Path, _dst: &Path) -> Result<(), FileCloneError> {
 
 #[cfg(test)]
 mod tests {
-    use super::advance_slices;
-    use super::io::IoSlice;
     use super::write_atomically_using_tmp_file;
 
     #[test]
@@ -849,43 +771,6 @@ mod tests {
             std::fs::read(&dst).expect("failed to read destination file"),
             b"original contents".to_vec()
         );
-    }
-
-    #[test]
-    fn test_advance_slices() {
-        let slice_size = 4096;
-        let num_slices = 5;
-        let data = vec![vec![1u8; slice_size]; num_slices];
-        let bufs: &[&[u8]] = &data.iter().map(|v| v.as_slice()).collect::<Vec<&[u8]>>();
-        let mut slices: Vec<IoSlice> = bufs.iter().map(|s| IoSlice::new(s)).collect();
-        let mut front = 0;
-
-        // advance two full slices
-        advance_slices(&mut slices, &mut front, 2 * slice_size, bufs);
-        assert_eq!(2, front);
-        for i in front..num_slices {
-            assert_eq!(*slices[i], *bufs[i]);
-        }
-
-        // advance 1.5 slices
-        advance_slices(&mut slices, &mut front, slice_size + slice_size / 2, bufs);
-        assert_eq!(3, front);
-        assert_eq!(*slices[front], bufs[front][slice_size / 2..]);
-        for i in (front + 1)..num_slices {
-            assert_eq!(*slices[i], *bufs[i]);
-        }
-
-        // advance 1/4 slice
-        advance_slices(&mut slices, &mut front, slice_size / 4, bufs);
-        assert_eq!(3, front);
-        assert_eq!(*slices[front], bufs[front][3 * slice_size / 4..]);
-        for i in (front + 1)..num_slices {
-            assert_eq!(*slices[i], *bufs[i]);
-        }
-
-        // advance the remaining 1.25 slices
-        advance_slices(&mut slices, &mut front, slice_size + slice_size / 4, bufs);
-        assert_eq!(5, front);
     }
 
     #[cfg(target_family = "unix")]
