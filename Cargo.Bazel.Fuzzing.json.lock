@@ -1,5 +1,5 @@
 {
-  "checksum": "9fe333f7bcb42c8778624ad255e6695f1e1ff372cd8dd2da53437a949d1cc3e8",
+  "checksum": "268c5954bded3fa82d5db22a85fb55e3c3cebc1e32ea33f6501afb5f9449d924",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -13415,7 +13415,7 @@
         "Git": {
           "remote": "https://github.com/dfinity/cloudflare-rs.git",
           "commitish": {
-            "Rev": "0b1805bf11ed526445712559e6f18d3b8e024b06"
+            "Rev": "8b011d170d9d61eaad77bb9645371f6219285104"
           },
           "strip_prefix": "cloudflare"
         }
