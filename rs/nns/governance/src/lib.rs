@@ -162,6 +162,7 @@ pub mod governance_proto_builder;
 mod heap_governance_data;
 mod known_neuron_index;
 mod migrations;
+mod network_economics;
 mod neuron;
 pub mod neuron_data_validation;
 mod neuron_store;
@@ -195,16 +196,16 @@ pub const DEFAULT_VOTING_POWER_REFRESHED_TIMESTAMP_SECONDS: u64 = 1725148800;
 // leave this here indefinitely, but it will just be clutter after a modest
 // amount of time.
 thread_local! {
-
+    // TODO(NNS1-3601): Delete these (assuming all goes well, ofc) in mid March.
+    // There is already a draft PR for this.
     static IS_VOTING_POWER_ADJUSTMENT_ENABLED: Cell<bool> = const { Cell::new(true) };
-
     static IS_PRUNE_FOLLOWING_ENABLED: Cell<bool> = const { Cell::new(true) };
 
     static ALLOW_ACTIVE_NEURONS_IN_STABLE_MEMORY: Cell<bool> = const { Cell::new(true) };
 
     static USE_STABLE_MEMORY_FOLLOWING_INDEX: Cell<bool> = const { Cell::new(true) };
 
-    static MIGRATE_ACTIVE_NEURONS_TO_STABLE_MEMORY: Cell<bool> = const { Cell::new(cfg!(feature = "test")) };
+    static MIGRATE_ACTIVE_NEURONS_TO_STABLE_MEMORY: Cell<bool> = const { Cell::new(true) };
 }
 
 thread_local! {

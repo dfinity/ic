@@ -1,6 +1,6 @@
 use ic_base_types::NumSeconds;
 use ic_btc_replica_types::BitcoinAdapterRequestWrapper;
-use ic_management_canister_types::{
+use ic_management_canister_types_private::{
     CanisterStatusType, EcdsaCurve, EcdsaKeyId, LogVisibilityV2, MasterPublicKeyId,
     SchnorrAlgorithm, SchnorrKeyId,
 };

@@ -1,5 +1,5 @@
 use ic_error_types::RejectCode;
-use ic_management_canister_types::{Payload, SignWithECDSAReply, SignWithSchnorrReply};
+use ic_management_canister_types_private::{Payload, SignWithECDSAReply, SignWithSchnorrReply};
 use ic_replicated_state::metadata_state::subnet_call_context_manager::IDkgSignWithThresholdContext;
 use ic_types::{
     consensus::idkg::{self, common::CombinedSignature, IDkgMasterPublicKeyId},
@@ -163,14 +163,14 @@ pub(crate) fn update_signature_agreements(
 mod tests {
     use crate::idkg::test_utils::{
         create_available_pre_signature, empty_idkg_payload_with_key_ids, empty_response,
-        fake_ecdsa_idkg_master_public_key_id, fake_master_public_key_ids_for_all_algorithms,
+        fake_ecdsa_idkg_master_public_key_id, fake_master_public_key_ids_for_all_idkg_algorithms,
         fake_signature_request_context, fake_signature_request_context_from_id,
         fake_signature_request_context_with_pre_sig, fake_vetkd_master_public_key_id,
         into_idkg_contexts, request_id, set_up_idkg_payload, TestThresholdSignatureBuilder,
     };
     use assert_matches::assert_matches;
     use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
-    use ic_management_canister_types::MasterPublicKeyId;
+    use ic_management_canister_types_private::MasterPublicKeyId;
     use ic_replicated_state::metadata_state::subnet_call_context_manager::SignWithThresholdContext;
     use ic_test_utilities_types::ids::subnet_test_id;
     use ic_types::{
@@ -258,7 +258,7 @@ mod tests {
 
     #[test]
     fn test_update_signature_agreements_success_all_algorithms() {
-        for key_id in fake_master_public_key_ids_for_all_algorithms() {
+        for key_id in fake_master_public_key_ids_for_all_idkg_algorithms() {
             println!("Running test for key ID {key_id}");
             test_update_signature_agreements_success(key_id);
         }
@@ -278,11 +278,11 @@ mod tests {
 
         let contexts = BTreeMap::from([
             // insert request without completed signature
-            fake_signature_request_context_from_id(key_id.clone(), pre_sig_ids[0], ids[0]),
+            fake_signature_request_context_from_id(key_id.clone().into(), pre_sig_ids[0], ids[0]),
             // insert request to be completed
-            fake_signature_request_context_from_id(key_id.clone(), pre_sig_ids[1], ids[1]),
+            fake_signature_request_context_from_id(key_id.clone().into(), pre_sig_ids[1], ids[1]),
             // insert request that was already completed
-            fake_signature_request_context_from_id(key_id.clone(), pre_sig_ids[2], ids[2]),
+            fake_signature_request_context_from_id(key_id.clone().into(), pre_sig_ids[2], ids[2]),
             // insert request without a matched pre-signature
             fake_signature_request_context_with_pre_sig(ids[3], key_id.clone(), None),
             // insert request matched to a non-existent pre-signature
@@ -383,7 +383,11 @@ mod tests {
 
         let contexts = BTreeMap::from([
             // insert ecdsa request to be completed
-            fake_signature_request_context_from_id(ecdsa_key_id.clone(), pre_sig_ids[0], ids[0]),
+            fake_signature_request_context_from_id(
+                ecdsa_key_id.clone().into(),
+                pre_sig_ids[0],
+                ids[0],
+            ),
             // insert vet kd request to be ignored
             (
                 ids[1].callback_id,

@@ -13,7 +13,7 @@ use ic_protobuf::registry::{
 };
 use ic_registry_nns_data_provider::registry::RegistryCanister;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
-use ic_registry_subnet_features::{ChainKeyConfig, EcdsaConfig, SubnetFeatures};
+use ic_registry_subnet_features::{ChainKeyConfig, SubnetFeatures};
 use ic_registry_subnet_type::SubnetType;
 use ic_types::{PrincipalId, SubnetId};
 use indexmap::IndexMap;
@@ -74,7 +74,6 @@ pub(crate) struct SubnetRecord {
     pub max_number_of_canisters: u64,
     pub ssh_readonly_access: Vec<String>,
     pub ssh_backup_access: Vec<String>,
-    pub ecdsa_config: Option<EcdsaConfig>,
     pub chain_key_config: Option<ChainKeyConfig>,
 }
 
@@ -124,10 +123,6 @@ impl From<&SubnetRecordProto> for SubnetRecord {
             max_number_of_canisters: value.max_number_of_canisters,
             ssh_readonly_access: value.ssh_readonly_access.clone(),
             ssh_backup_access: value.ssh_backup_access.clone(),
-            ecdsa_config: value
-                .ecdsa_config
-                .as_ref()
-                .map(|c| c.clone().try_into().unwrap()),
             chain_key_config: value
                 .chain_key_config
                 .as_ref()
