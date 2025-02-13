@@ -11,7 +11,6 @@ use crate::{
         reassemble_governance_proto, split_governance_proto, HeapGovernanceData, XdrConversionRate,
     },
     migrations::maybe_run_migrations,
-    network_economics::InheritFrom,
     neuron::{DissolveStateAndAge, Neuron, NeuronBuilder, Visibility},
     neuron_data_validation::{NeuronDataValidationSummary, NeuronDataValidator},
     neuron_store::{
@@ -4356,8 +4355,7 @@ impl Governance {
                 }
             }
             Action::ManageNetworkEconomics(network_economics) => {
-                self.perform_manage_network_economics(network_economics);
-                self.set_proposal_execution_status(pid, Ok(()));
+                self.perform_manage_network_economics(pid, network_economics);
             }
             // A motion is not executed, just recorded for posterity.
             Action::Motion(_) => {
@@ -4522,20 +4520,40 @@ impl Governance {
         );
     }
 
-    fn perform_manage_network_economics(&mut self, new_network_economics: NetworkEconomics) {
-        let Some(original_network_economics) = &self.heap_data.economics else {
-            // This wouldn't happen in production, but if it does, we try to do
-            // the best we can, because doing nothing seems more catastrophic.
-            println!(
-                "{}ERROR: NetworkEconomics was not set. Setting to proposed NetworkEconomics:\n{:#?}",
-                LOG_PREFIX, new_network_economics,
-            );
-            self.heap_data.economics = Some(new_network_economics);
-            return;
-        };
+    fn perform_manage_network_economics(
+        &mut self,
+        proposal_id: u64,
+        proposed_network_economics: NetworkEconomics,
+    ) {
+        let result = self.perform_manage_network_economics_impl(proposed_network_economics);
+        self.set_proposal_execution_status(proposal_id, result);
+    }
 
-        self.heap_data.economics =
-            Some(new_network_economics.inherit_from(original_network_economics));
+    /// Only call this from perform_manage_network_economics.
+    fn perform_manage_network_economics_impl(
+        &mut self,
+        proposed_network_economics: NetworkEconomics,
+    ) -> Result<(), GovernanceError> {
+        let new_network_economics = self
+            .economics()
+            .apply_changes_and_validate(&proposed_network_economics)
+            .map_err(|defects| {
+                GovernanceError::new_with_message(
+                    ErrorType::InvalidProposal,
+                    format!(
+                        "The resulting NetworkEconomics is invalid for the following reason(s):\
+                         \n  - {}",
+                        defects.join("\n  - "),
+                    ),
+                )
+            })?;
+
+        println!(
+            "{}INFO: Committing new NetworkEconomics:\n{:#?}",
+            LOG_PREFIX, new_network_economics,
+        );
+        self.heap_data.economics = Some(new_network_economics);
+        Ok(())
     }
 
     async fn perform_install_code(&mut self, proposal_id: u64, install_code: InstallCode) {
@@ -4883,6 +4901,45 @@ impl Governance {
         Ok(())
     }
 
+    /// This verifies the following:
+    ///
+    ///     1. When the changes are applied, the resulting NetworkEconomics is
+    ///        valid. See NetworkEconomics::validate.
+    ///
+    /// Since self.heap_data.economics can be different when a proposal is
+    /// executed (compared to when it is created), this should be performed both
+    /// at proposal creation time AND execution time.
+    ///
+    /// Note that it is not considered "invalid" when the "modified" result is
+    /// the same as the original (i.e. setting F to V even though the current
+    /// value of F is ALREADY V). This is because such a proposal is not
+    /// actually harmful to the system; just maybe confusing to users.
+    fn validate_manage_network_economics(
+        &self,
+        // (Note that this is the value associated with ManageNetworkEconomics,
+        // not the resulting NetworkEconomics.)
+        proposed_network_economics: &NetworkEconomics,
+    ) -> Result<(), GovernanceError> {
+        // It maybe does not make sense to be able to set transaction_fee_e8s
+        // via proposal. What we probably want instead is to fetch this value
+        // from ledger.
+
+        self.economics()
+            .apply_changes_and_validate(proposed_network_economics)
+            .map_err(|defects| {
+                let message = format!(
+                    "The resulting settings would not be valid for the \
+                     following reason(s):\n\
+                     - {}",
+                    defects.join("\n  - "),
+                );
+
+                GovernanceError::new_with_message(ErrorType::InvalidProposal, message)
+            })?;
+
+        Ok(())
+    }
+
     pub(crate) fn economics(&self) -> &NetworkEconomics {
         self.heap_data
             .economics
@@ -4960,8 +5017,11 @@ impl Governance {
             Action::ManageNeuron(manage_neuron) => {
                 self.validate_manage_neuron_proposal(manage_neuron)
             }
-            Action::ManageNetworkEconomics(_)
-            | Action::ApproveGenesisKyc(_)
+            Action::ManageNetworkEconomics(network_economics) => {
+                self.validate_manage_network_economics(network_economics)
+            }
+
+            Action::ApproveGenesisKyc(_)
             | Action::AddOrRemoveNodeProvider(_)
             | Action::RewardNodeProvider(_)
             | Action::RewardNodeProviders(_)

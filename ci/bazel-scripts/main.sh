@@ -89,7 +89,7 @@ stream_awk_program='
   END { if (stream_url != null) print stream_url > url_out }'
 
 bazel_args=(
-    ${BAZEL_STARTUP_ARGS}
+    --output_base=/var/tmp/bazel-output # Output base wiped after run
     ${BAZEL_COMMAND}
     --color=yes
     ${BAZEL_CI_CONFIG}
@@ -102,9 +102,9 @@ bazel_args=(
     ${BAZEL_TARGETS}
 )
 
-# Unless explicitly provided, we set a default --repository_cache to a volume mounted
-# inside our runners
-if [[ ! " ${bazel_args[*]} " =~ [[:space:]]--repository_cache[[:space:]] ]]; then
+# Unless explicitly provided, we set a default --repository_cache to a volume mounted inside our runners
+# Only for Linux builds since there `/cache` is mounted to host local storage.
+if [[ ! " ${bazel_args[*]} " =~ [[:space:]]--repository_cache[[:space:]] ]] && [[ "$(uname)" == "Linux" ]]; then
     echo "setting default repository cache"
     bazel_args+=(--repository_cache=/cache/bazel)
 fi
