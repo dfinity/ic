@@ -24,8 +24,8 @@ DEV_DEPENDENCIES = [
     # Keep sorted.
     "//rs/artifact_pool",
     "//rs/consensus/mocks",
-    "//rs/crypto/test_utils/ni-dkg",
     "//rs/crypto/temp_crypto",
+    "//rs/crypto/test_utils/ni-dkg",
     "//rs/interfaces/registry/mocks",
     "//rs/registry/keys",
     "//rs/registry/subnet_features",
