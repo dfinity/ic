@@ -422,17 +422,40 @@ impl NnsFunction {
         )
     }
 
-    fn is_obsolete(&self) -> bool {
-        matches!(
-            self,
-            NnsFunction::UpdateAllowedPrincipals
-                | NnsFunction::UpdateApiBoundaryNodesVersion
-                | NnsFunction::UpdateUnassignedNodesConfig
-                | NnsFunction::UpdateElectedHostosVersions
-                | NnsFunction::UpdateNodesHostosVersion
-                | NnsFunction::BlessReplicaVersion
-                | NnsFunction::RetireReplicaVersion
-        )
+    /// Checks if the function is obsolete and returns an error message if it is.
+    fn check_obsolete(&self) -> Result<(), String> {
+        let format_obsolete_message = |replacement: &str| -> String {
+            format!(
+                "{} is obsolete. Use {} instead.",
+                self.as_str_name(),
+                replacement,
+            )
+        };
+        match self {
+            NnsFunction::BlessReplicaVersion
+            | NnsFunction::RetireReplicaVersion
+            | NnsFunction::UpdateElectedHostosVersions => Err(format_obsolete_message(
+                Self::ReviseElectedHostosVersions.as_str_name(),
+            )),
+            NnsFunction::UpdateApiBoundaryNodesVersion => Err(format_obsolete_message(
+                Self::DeployGuestosToSomeApiBoundaryNodes.as_str_name(),
+            )),
+            NnsFunction::UpdateNodesHostosVersion => Err(format_obsolete_message(
+                Self::DeployHostosToSomeNodes.as_str_name(),
+            )),
+            NnsFunction::UpdateUnassignedNodesConfig => Err(format_obsolete_message(&format!(
+                "{}/{}",
+                Self::DeployGuestosToAllUnassignedNodes.as_str_name(),
+                Self::UpdateSshReadonlyAccessForAllUnassignedNodes.as_str_name()
+            ))),
+            NnsFunction::UpdateAllowedPrincipals => Err(
+                "NNS_FUNCTION_UPDATE_ALLOWED_PRINCIPALS is only used for the old SNS \
+                initialization mechanism, which is now obsolete. Use \
+                CREATE_SERVICE_NERVOUS_SYSTEM instead."
+                    .to_string(),
+            ),
+            _ => Ok(()),
+        }
     }
 
     pub fn canister_and_function(&self) -> Result<(CanisterId, &str), GovernanceError> {
@@ -466,24 +489,6 @@ impl NnsFunction {
             NnsFunction::DeployGuestosToAllSubnetNodes => {
                 (REGISTRY_CANISTER_ID, "deploy_guestos_to_all_subnet_nodes")
             }
-            NnsFunction::UpdateElectedHostosVersions => {
-                return Err(GovernanceError::new_with_message(
-                    ErrorType::InvalidProposal,
-                    format!(
-                        "{:?} is an obsolete NnsFunction. Use ReviseElectedHostosVersions instead",
-                        self
-                    ),
-                ));
-            }
-            NnsFunction::UpdateNodesHostosVersion => {
-                return Err(GovernanceError::new_with_message(
-                    ErrorType::InvalidProposal,
-                    format!(
-                        "{:?} is an obsolete NnsFunction. Use DeployHostosToSomeNodes instead",
-                        self
-                    ),
-                ));
-            }
             NnsFunction::ReviseElectedHostosVersions => {
                 (REGISTRY_CANISTER_ID, "revise_elected_hostos_versions")
             }
@@ -513,9 +518,6 @@ impl NnsFunction {
             NnsFunction::AddOrRemoveDataCenters => {
                 (REGISTRY_CANISTER_ID, "add_or_remove_data_centers")
             }
-            NnsFunction::UpdateUnassignedNodesConfig => {
-                (REGISTRY_CANISTER_ID, "update_unassigned_nodes_config")
-            }
             NnsFunction::RemoveNodeOperators => (REGISTRY_CANISTER_ID, "remove_node_operators"),
             NnsFunction::RerouteCanisterRanges => (REGISTRY_CANISTER_ID, "reroute_canister_ranges"),
             NnsFunction::PrepareCanisterMigration => {
@@ -536,30 +538,9 @@ impl NnsFunction {
                 (SNS_WASM_CANISTER_ID, "insert_upgrade_path_entries")
             }
             NnsFunction::BitcoinSetConfig => (ROOT_CANISTER_ID, "call_canister"),
-            NnsFunction::BlessReplicaVersion
-            | NnsFunction::RetireReplicaVersion
-            | NnsFunction::UpdateAllowedPrincipals => {
-                return Err(GovernanceError::new_with_message(
-                    ErrorType::InvalidProposal,
-                    format!(
-                        "{:?} is an obsolete NnsFunction. Use ReviseElectedGuestosVersions instead",
-                        self
-                    ),
-                ));
-            }
             NnsFunction::AddApiBoundaryNodes => (REGISTRY_CANISTER_ID, "add_api_boundary_nodes"),
             NnsFunction::RemoveApiBoundaryNodes => {
                 (REGISTRY_CANISTER_ID, "remove_api_boundary_nodes")
-            }
-            NnsFunction::UpdateApiBoundaryNodesVersion => {
-                return Err(GovernanceError::new_with_message(
-                    ErrorType::InvalidProposal,
-                    format!(
-                        "{:?} is an obsolete NnsFunction. Use DeployGuestosToSomeApiBoundaryNodes \
-                        instead",
-                        self
-                    ),
-                ));
             }
             NnsFunction::DeployGuestosToSomeApiBoundaryNodes => (
                 REGISTRY_CANISTER_ID,
@@ -575,6 +556,22 @@ impl NnsFunction {
             ),
             NnsFunction::SubnetRentalRequest => {
                 (SUBNET_RENTAL_CANISTER_ID, "execute_rental_request_proposal")
+            }
+            NnsFunction::BlessReplicaVersion
+            | NnsFunction::RetireReplicaVersion
+            | NnsFunction::UpdateElectedHostosVersions
+            | NnsFunction::UpdateAllowedPrincipals
+            | NnsFunction::UpdateApiBoundaryNodesVersion
+            | NnsFunction::UpdateUnassignedNodesConfig
+            | NnsFunction::UpdateNodesHostosVersion => {
+                let error_message = match self.check_obsolete() {
+                    Err(error_message) => error_message,
+                    Ok(_) => unreachable!("Obsolete NnsFunction not handled"),
+                };
+                return Err(GovernanceError::new_with_message(
+                    ErrorType::InvalidProposal,
+                    error_message,
+                ));
             }
         };
         Ok((canister_id, method))
@@ -5059,6 +5056,15 @@ impl Governance {
             GovernanceError::new_with_message(ErrorType::InvalidProposal, error_message)
         };
 
+        nns_function
+            .check_obsolete()
+            .map_err(|obsolete_error_message| {
+                invalid_proposal_error(format!(
+                    "Proposal is obsolete because {}",
+                    obsolete_error_message,
+                ))
+            })?;
+
         if !nns_function.can_have_large_payload()
             && update.payload.len() > PROPOSAL_EXECUTE_NNS_FUNCTION_PAYLOAD_BYTES_MAX
         {
@@ -5066,13 +5072,6 @@ impl Governance {
                 "The maximum NNS function payload size in a proposal action is {} bytes, this payload is: {} bytes",
                 PROPOSAL_EXECUTE_NNS_FUNCTION_PAYLOAD_BYTES_MAX,
                 update.payload.len(),
-            )));
-        }
-
-        if nns_function.is_obsolete() {
-            return Err(invalid_proposal_error(format!(
-                "{} proposal is obsolete",
-                nns_function.as_str_name()
             )));
         }
 
