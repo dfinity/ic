@@ -6,8 +6,9 @@
 //! otherwise errors out.
 //!
 use candid::{CandidType, Deserialize};
-use ic_management_canister_types_private::{HttpHeader, HttpMethod, Payload, TransformContext};
-// use ic_management_canister_types_private::CanisterHttpRequestArgs;
+use ic_management_canister_types_private::{
+    BoundedHttpHeaders, HttpHeader, HttpMethod, Payload, TransformContext,
+};
 
 #[derive(Clone, Debug, CandidType, Deserialize)]
 pub struct RemoteHttpRequest {
@@ -22,12 +23,26 @@ pub struct CanisterHttpRequestArgs {
     pub url: String,
     pub max_response_bytes: Option<u64>,
     pub headers: Vec<HttpHeader>,
-    #[serde(deserialize_with = "ic_utils::deserialize::deserialize_option_blob")]
     pub body: Option<Vec<u8>>,
     pub method: HttpMethod,
     pub transform: Option<TransformContext>,
 }
 impl Payload<'_> for CanisterHttpRequestArgs {}
+
+impl From<CanisterHttpRequestArgs>
+    for ic_management_canister_types_private::CanisterHttpRequestArgs
+{
+    fn from(args: CanisterHttpRequestArgs) -> Self {
+        Self {
+            url: args.url,
+            max_response_bytes: args.max_response_bytes,
+            headers: BoundedHttpHeaders::new(args.headers),
+            body: args.body,
+            method: args.method,
+            transform: args.transform,
+        }
+    }
+}
 
 #[derive(Clone, Debug, CandidType, Deserialize)]
 pub struct RemoteHttpResponse {
