@@ -7621,7 +7621,6 @@ dependencies = [
  "hex",
  "ic-crypto-internal-bls12-381-type",
  "ic-crypto-test-utils-reproducible-rng",
- "ic-sha3 1.0.0",
  "rand 0.8.5",
  "rand_chacha 0.3.1",
 ]
