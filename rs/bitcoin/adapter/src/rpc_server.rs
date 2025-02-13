@@ -12,7 +12,7 @@ use ic_btc_service::{
     BtcServiceSendTransactionRequest, BtcServiceSendTransactionResponse,
 };
 use ic_http_endpoints_async_utils::{incoming_from_nth_systemd_socket, incoming_from_path};
-use ic_logger::{debug, ReplicaLogger};
+use ic_logger::{debug, info, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use std::convert::{TryFrom, TryInto};
 use std::sync::{Arc, Mutex};
@@ -56,11 +56,8 @@ impl TryFrom<GetSuccessorsResponse> for BtcServiceGetSuccessorsResponse {
     type Error = Status;
     fn try_from(response: GetSuccessorsResponse) -> Result<Self, Self::Error> {
         let mut blocks = vec![];
-        for block in response.blocks.iter() {
-            let mut encoded_block = vec![];
-            block
-                .consensus_encode(&mut encoded_block)
-                .map_err(|_| Status::unknown("Failed to encode block!"))?;
+        for block in response.blocks.into_iter() {
+            let encoded_block = (*block).clone();
             blocks.push(encoded_block);
         }
 
@@ -87,20 +84,22 @@ impl BtcService for BtcServiceImpl {
             .request_duration
             .with_label_values(&[LABEL_GET_SUCCESSOR])
             .start_timer();
+        let start = Instant::now();
         let _ = self.last_received_tx.send(Some(Instant::now()));
         let inner = request.into_inner();
-        debug!(self.logger, "Received GetSuccessorsRequest: {:?}", inner);
-        let request = inner.try_into()?;
+        let request: GetSuccessorsRequest  = inner.try_into()?;
+        info!(self.logger, "Converted GetSuccessorsRequest length: {:?}", request.processed_block_hashes.len());
 
-        match BtcServiceGetSuccessorsResponse::try_from(
+        let response = match BtcServiceGetSuccessorsResponse::try_from(
             self.get_successors_handler.get_successors(request).await?,
         ) {
             Ok(res) => {
-                debug!(self.logger, "Sending GetSuccessorsResponse: {:?}", res);
                 Ok(Response::new(res))
             }
             Err(err) => Err(err),
-        }
+        };
+        info!(self.logger, "get successors Request took {:?}", start.elapsed());
+        response
     }
 
     async fn send_transaction(
