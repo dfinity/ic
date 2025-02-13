@@ -216,10 +216,16 @@ impl From<upgrade_journal_entry::TargetVersionReset> for upgrade_journal_entry::
     }
 }
 
+pub fn serialize_journal_entries(journal: &UpgradeJournal) -> Result<String, String> {
+    let journal = ic_sns_governance_api::pb::v1::UpgradeJournal::from(journal.clone());
+    serde_json::to_string(&journal.entries)
+        .map_err(|err| format!("{err:?}"))
+}
+
 pub fn serve_journal(journal: &UpgradeJournal) -> ic_canisters_http_types::HttpResponse {
     use ic_canisters_http_types::HttpResponseBuilder;
-    let journal = ic_sns_governance_api::pb::v1::UpgradeJournal::from(journal.clone());
-    match serde_json::to_string(&journal.entries) {
+
+    match serialize_journal_entries(&journal) {
         Err(err) => {
             HttpResponseBuilder::server_error(format!("Failed to encode journal: {}", err)).build()
         }
