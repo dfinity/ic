@@ -1,5 +1,5 @@
 {
-  "checksum": "eb1d508c9e67f3a1704150ecf1cf4bc9e3a834fb70ccb4f1a15a6d1d7bb4adc5",
+  "checksum": "3668cfa08fd1363087154ab8bad6e293b15dc47e953b4287ce36b51419127029",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -19796,6 +19796,10 @@
               "target": "ic_http_gateway"
             },
             {
+              "id": "ic-management-canister-types 0.1.0",
+              "target": "ic_management_canister_types"
+            },
+            {
               "id": "ic-metrics-encoder 1.1.1",
               "target": "ic_metrics_encoder"
             },
@@ -33436,6 +33440,61 @@
         "Apache-2.0"
       ],
       "license_file": null
+    },
+    "ic-management-canister-types 0.1.0": {
+      "name": "ic-management-canister-types",
+      "version": "0.1.0",
+      "package_url": "https://github.com/dfinity/cdk-rs",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/ic-management-canister-types/0.1.0/download",
+          "sha256": "eadff40906491c8c61a3c886cce4ee02f48a4798684d8a10e4a14891a217a284"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "ic_management_canister_types",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "ic_management_canister_types",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "candid 0.10.13",
+              "target": "candid"
+            },
+            {
+              "id": "serde 1.0.217",
+              "target": "serde"
+            },
+            {
+              "id": "serde_bytes 0.11.15",
+              "target": "serde_bytes"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.1.0"
+      },
+      "license": "Apache-2.0",
+      "license_ids": [
+        "Apache-2.0"
+      ],
+      "license_file": "LICENSE"
     },
     "ic-metrics-encoder 1.1.1": {
       "name": "ic-metrics-encoder",
@@ -91493,6 +91552,7 @@
     "ic-certified-map 0.3.4",
     "ic-http-certification 3.0.2",
     "ic-http-gateway 0.1.0",
+    "ic-management-canister-types 0.1.0",
     "ic-metrics-encoder 1.1.1",
     "ic-response-verification 3.0.2",
     "ic-sha3 1.0.0",
