@@ -3232,8 +3232,8 @@ dependencies = [
  "futures",
  "ic-base-types",
  "ic-certified-map",
- "ic-crypto-getrandom-for-wasm",
  "ic-crypto-tree-hash",
+ "ic-dummy-getrandom-for-wasm",
  "ic-ledger-core",
  "ic-management-canister-types-private",
  "ic-metrics-encoder",
@@ -6948,8 +6948,8 @@ dependencies = [
  "ic-cdk 0.17.1",
  "ic-cdk-macros 0.9.0",
  "ic-config",
- "ic-crypto-getrandom-for-wasm",
  "ic-crypto-sha2",
+ "ic-dummy-getrandom-for-wasm",
  "ic-icrc1",
  "ic-icrc1-ledger",
  "ic-ledger-core",
@@ -7415,13 +7415,6 @@ dependencies = [
  "ic-registry-client-fake",
  "ic-registry-proto-data-provider",
  "ic-types",
-]
-
-[[package]]
-name = "ic-crypto-getrandom-for-wasm"
-version = "0.9.0"
-dependencies = [
- "getrandom 0.2.15",
 ]
 
 [[package]]
@@ -8559,6 +8552,14 @@ dependencies = [
  "tokio",
  "tower 0.5.2",
  "wasmparser 0.217.1",
+]
+
+[[package]]
+name = "ic-dummy-getrandom-for-wasm"
+version = "0.1.0"
+dependencies = [
+ "getrandom 0.2.15",
+ "rand 0.8.5",
 ]
 
 [[package]]
@@ -10610,8 +10611,8 @@ dependencies = [
  "ic-cdk-macros 0.9.0",
  "ic-cdk-timers",
  "ic-config",
- "ic-crypto-getrandom-for-wasm",
  "ic-crypto-sha2",
+ "ic-dummy-getrandom-for-wasm",
  "ic-ledger-core",
  "ic-management-canister-types-private",
  "ic-metrics-encoder",
@@ -10741,8 +10742,8 @@ dependencies = [
  "hex",
  "hex-literal",
  "ic-base-types",
- "ic-crypto-getrandom-for-wasm",
  "ic-crypto-sha2",
+ "ic-dummy-getrandom-for-wasm",
  "ic-nervous-system-common",
  "ic-nervous-system-common-build-metadata",
  "ic-nns-common",
