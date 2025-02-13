@@ -73,3 +73,4 @@ runs:
           MERGE_BASE_SHA: ${{ github.event.pull_request.base.sha }}
           SSH_PRIVATE_KEY_BACKUP_POD: ${{ inputs.SSH_PRIVATE_KEY_BACKUP_POD }}
           GPG_PASSPHRASE: ${{ inputs.GPG_PASSPHRASE }}
+          IS_PROTECTED_BRANCH: ${{ github.ref_protected }}

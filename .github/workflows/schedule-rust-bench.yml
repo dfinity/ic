@@ -49,3 +49,4 @@ jobs:
           CI_JOB_URL: "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
           RUST_BACKTRACE: "full"
           TARGETS: ${{ matrix.targets }}
+          IS_PROTECTED_BRANCH: ${{ github.ref_protected }}

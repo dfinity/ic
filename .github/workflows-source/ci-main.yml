@@ -262,6 +262,7 @@ jobs:
           MERGE_BASE_SHA: ${{ github.event.pull_request.base.sha }}
           BRANCH_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           RUN_ON_DIFF_ONLY: ${{ github.event_name == 'pull_request' && !contains(github.event.pull_request.labels.*.name, 'CI_ALL_BAZEL_TARGETS') }}
+          IS_PROTECTED_BRANCH: ${{ github.ref_protected }}
       - name: Upload build-ic.tar
         uses: actions/upload-artifact@v4
         with:
