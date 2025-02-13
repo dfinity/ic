@@ -19,6 +19,8 @@ pub struct DerivationPath {
     delta: Scalar,
 }
 
+const DERIVATION_PATH_DOMAIN_SEP: &[u8; 44] = b"ic-crypto-vetkd-bls12-381-g2-derivation-path";
+
 impl DerivationPath {
     /// Create a new derivation path
     pub fn new<U: AsRef<[u8]>>(canister_id: &[u8], extra_paths: &[U]) -> Self {
@@ -35,8 +37,7 @@ impl DerivationPath {
             combined_inputs.extend_from_slice(input.as_ref());
         }
 
-        let dst = b"ic-crypto-vetkd-bls12-381-g2-derivation-path";
-        let delta = Scalar::hash(dst, &combined_inputs);
+        let delta = Scalar::hash(DERIVATION_PATH_DOMAIN_SEP, &combined_inputs);
 
         Self { delta }
     }
