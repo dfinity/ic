@@ -159,13 +159,14 @@ pub struct FeatureFlags {
 
 impl Default for FeatureFlags {
     fn default() -> Self {
-        use ic_types::PrincipalId;
-        use std::str::FromStr;
-        let subnet_id = |id_str: &str| SubnetId::new(PrincipalId::from_str(id_str).unwrap());
+        // TODO(MR-649): Comment out for stage 1b -- rollout to specific subnets.
+        // use ic_types::PrincipalId;
+        // use std::str::FromStr;
+        // let subnet_id = |id_str: &str| SubnetId::new(PrincipalId::from_str(id_str).unwrap());
         let enabled_subnets = vec![
-            subnet_id("eq6en-6jqla-fbu5s-daskr-h6hx2-376n5-iqabl-qgrng-gfqmv-n3yjr-mqe"),
-            subnet_id("2fq7c-slacv-26cgz-vzbx2-2jrcs-5edph-i5s2j-tck77-c3rlz-iobzx-mqe"),
-            subnet_id("4zbus-z2bmt-ilreg-xakz4-6tyre-hsqj4-slb4g-zjwqo-snjcc-iqphi-3qe"),
+            // subnet_id("eq6en-6jqla-fbu5s-daskr-h6hx2-376n5-iqabl-qgrng-gfqmv-n3yjr-mqe"),
+            // subnet_id("2fq7c-slacv-26cgz-vzbx2-2jrcs-5edph-i5s2j-tck77-c3rlz-iobzx-mqe"),
+            // subnet_id("4zbus-z2bmt-ilreg-xakz4-6tyre-hsqj4-slb4g-zjwqo-snjcc-iqphi-3qe"),
         ];
 
         Self {
@@ -338,40 +339,5 @@ impl Config {
 impl Default for Config {
     fn default() -> Self {
         Self::new()
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use ic_types::PrincipalId;
-
-    const SUBNET_1: SubnetId = SubnetId::new(PrincipalId::new(1, [1; 29]));
-    const SUBNET_2: SubnetId = SubnetId::new(PrincipalId::new(1, [2; 29]));
-
-    #[test]
-    fn test_best_effort_responses_feature_specific_subnets() {
-        let best_effort_responses = BestEffortResponsesFeature::SpecificSubnets(vec![SUBNET_1]);
-
-        assert!(best_effort_responses.is_enabled_on(&SUBNET_1, SubnetType::Application));
-        assert!(best_effort_responses.is_enabled_on(&SUBNET_1, SubnetType::System));
-        assert!(!best_effort_responses.is_enabled_on(&SUBNET_2, SubnetType::Application));
-        assert!(!best_effort_responses.is_enabled_on(&SUBNET_2, SubnetType::System));
-    }
-
-    #[test]
-    fn test_best_effort_responses_feature_application_subnets_only() {
-        let best_effort_responses = BestEffortResponsesFeature::ApplicationSubnetsOnly;
-
-        assert!(best_effort_responses.is_enabled_on(&SUBNET_1, SubnetType::Application));
-        assert!(!best_effort_responses.is_enabled_on(&SUBNET_1, SubnetType::System));
-    }
-
-    #[test]
-    fn test_best_effort_responses_feature_enabled() {
-        let best_effort_responses = BestEffortResponsesFeature::Enabled;
-
-        assert!(best_effort_responses.is_enabled_on(&SUBNET_1, SubnetType::Application));
-        assert!(best_effort_responses.is_enabled_on(&SUBNET_1, SubnetType::System));
     }
 }
