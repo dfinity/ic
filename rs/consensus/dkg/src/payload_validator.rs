@@ -285,7 +285,7 @@ fn validate_dealings_payload(
         }
 
         // Verify the signature.
-        crypto.verify(message, last_summary.registry_version)?;
+        crypto.verify(message, config.registry_version())?;
 
         // Verify the dealing.
         crypto.verify_dealing(config, message.signature.signer, &message.content.dealing)?;
