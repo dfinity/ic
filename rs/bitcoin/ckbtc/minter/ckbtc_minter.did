@@ -34,6 +34,7 @@ type DefiniteCanisterSettings = record {
 type LogVisibility = variant {
     controllers;
     public;
+    allowed_viewers : vec principal;
 };
 
 type RetrieveBtcArgs = record {
