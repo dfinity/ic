@@ -18,7 +18,7 @@ use ic_interfaces::execution_environment::{
     CanisterOutOfCyclesError, HypervisorError, WasmExecutionOutput,
 };
 use ic_logger::{info, ReplicaLogger};
-use ic_management_canister_types::IC_00;
+use ic_management_canister_types_private::IC_00;
 use ic_replicated_state::{
     canister_state::execution_state::WasmExecutionMode, num_bytes_try_from, CallContextAction,
     CallOrigin, CanisterState,
@@ -52,7 +52,7 @@ pub fn execute_call_or_task(
     log_dirty_pages: FlagStatus,
     deallocation_sender: &DeallocationSender,
 ) -> ExecuteMessageResult {
-    let (mut clean_canister, prepaid_execution_cycles, resuming_aborted) =
+    let (clean_canister, prepaid_execution_cycles, resuming_aborted) =
         match prepaid_execution_cycles {
             Some(prepaid_execution_cycles) => (clean_canister, prepaid_execution_cycles, true),
             None => {
@@ -151,31 +151,13 @@ pub fn execute_call_or_task(
     let helper = match CallOrTaskHelper::new(&clean_canister, &original, deallocation_sender) {
         Ok(helper) => helper,
         Err(err) => {
-            if err.code() == ErrorCode::CanisterWasmMemoryLimitExceeded
-                && original.call_or_task == CanisterCallOrTask::Task(CanisterTask::OnLowWasmMemory)
-            {
-                //`OnLowWasmMemoryHook` is taken from task_queue (i.e. `OnLowWasmMemoryHookStatus` is `Executed`),
-                // but its was not executed due to error `WasmMemoryLimitExceeded`. To ensure that the hook is executed
-                // when the error is resolved we need to set `OnLowWasmMemoryHookStatus` to `Ready`. Because of
-                // the way `OnLowWasmMemoryHookStatus::update` is implemented we first need to remove it from the
-                // task_queue (which calls `OnLowWasmMemoryHookStatus::update(false)`) followed with `enqueue`
-                // (which calls `OnLowWasmMemoryHookStatus::update(true)`) to ensure desired behavior.
-                clean_canister
-                    .system_state
-                    .task_queue
-                    .remove(ic_replicated_state::ExecutionTask::OnLowWasmMemory);
-                clean_canister
-                    .system_state
-                    .task_queue
-                    .enqueue(ic_replicated_state::ExecutionTask::OnLowWasmMemory);
-            }
             return finish_err(
                 clean_canister,
                 original.execution_parameters.instruction_limits.message(),
                 err,
                 original,
                 round,
-            );
+            )
         }
     };
 
@@ -371,7 +353,7 @@ impl CallOrTaskHelper {
         validate_message(&canister, &original.method)?;
 
         match original.call_or_task {
-            CanisterCallOrTask::Update(_) | CanisterCallOrTask::Task(_) => {
+            CanisterCallOrTask::Update(_) => {
                 let wasm_memory_usage = canister
                     .execution_state
                     .as_ref()
@@ -390,6 +372,9 @@ impl CallOrTaskHelper {
                     }
                 }
             }
+            // TODO(RUN-957): Enforce the `wasm_memory_limit` in heartbeat and timer after
+            // canister logging ships.
+            CanisterCallOrTask::Task(_) => (),
             CanisterCallOrTask::Query(_) => {
                 if let WasmMethod::CompositeQuery(_) = &original.method {
                     let user_error = UserError::new(

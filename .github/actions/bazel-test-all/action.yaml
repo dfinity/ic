@@ -13,9 +13,6 @@ inputs:
   BAZEL_EXTRA_ARGS:
     required: false
     default: ''
-  BAZEL_STARTUP_ARGS:
-    required: false
-    default: '--output_base=/var/tmp/bazel-output/'
   BUILDEVENT_APIKEY:
     required: false
   SSH_PRIVATE_KEY_BACKUP_POD:
@@ -32,6 +29,11 @@ runs:
         run: |
           set +e # manual error handling to ensure we can run some post-build commands
 
+          # freshly deployed k8s machines require ownership correctly set
+          if [ -e /cache ]; then
+            sudo chown -RL 1001:1001 /cache
+          fi
+
           if [ -n "$SSH_PRIVATE_KEY_BACKUP_POD" ]; then
             # The following adds the SSH private key to the ssh-agent such that CI can SSH into the backup pod.
             test -z "${SSH_AUTH_SOCK:-}" && { eval "$(ssh-agent -s)"; ssh-add - <<< "${SSH_PRIVATE_KEY_BACKUP_POD}"; }
@@ -41,15 +43,10 @@ runs:
             echo -e "Host *\nUser github-runner\n" > ~/.ssh/config
           fi
 
-          # unset honeycomb api key but use it latter for exporter
+          # unset honeycomb api key but use it later for exporter
           # TODO: remove exporter when users can use superset
-          KEY=${BUILDEVENT_APIKEY:-""}
-          unset BUILDEVENT_APIKEY
-
-          ${GITHUB_WORKSPACE}/ci/bazel-scripts/main.sh
+          env -u BUILDEVENT_APIKEY ${GITHUB_WORKSPACE}/ci/bazel-scripts/main.sh
           BAZEL_EXIT_CODE="$?"
-
-          export BUILDEVENT_APIKEY="$KEY"
 
           if [ -n "$BUILDEVENT_APIKEY" ] && [ -f ./bazel-bep.pb ]; then
               # avoid output unless an error occurs during bes export. This ensures
@@ -77,7 +74,6 @@ runs:
           BAZEL_TARGETS: ${{ inputs.BAZEL_TARGETS }}
           BAZEL_CI_CONFIG: ${{ inputs.BAZEL_CI_CONFIG }}
           BAZEL_EXTRA_ARGS: ${{ inputs.BAZEL_EXTRA_ARGS }}
-          BAZEL_STARTUP_ARGS: ${{ inputs.BAZEL_STARTUP_ARGS }}
           BRANCH_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           BUILDEVENT_APIKEY: ${{ inputs.BUILDEVENT_APIKEY }}
           CI_EVENT_NAME: ${{ github.event_name }}

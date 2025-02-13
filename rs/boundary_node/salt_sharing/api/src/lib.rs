@@ -1,4 +1,5 @@
-use candid::{CandidType, Deserialize};
+use candid::{CandidType, Principal};
+use serde::{Deserialize, Serialize};
 
 pub type GetSaltResponse = Result<SaltResponse, GetSaltError>;
 
@@ -20,9 +21,17 @@ pub struct SaltResponse {
     pub salt_id: u64,
 }
 
-#[derive(CandidType, Deserialize, Debug, Clone)]
+#[derive(CandidType, Deserialize, Debug, Clone, PartialEq)]
 pub enum GetSaltError {
     SaltNotInitialized,
     Unauthorized,
     Internal(String),
 }
+
+#[derive(CandidType, Serialize, Deserialize, Clone, PartialEq, Debug, Eq)]
+pub struct ApiBoundaryNodeIdRecord {
+    pub id: Option<Principal>,
+}
+
+#[derive(CandidType, Deserialize, Clone, Copy, PartialEq, Eq)]
+pub struct GetApiBoundaryNodeIdsRequest {}

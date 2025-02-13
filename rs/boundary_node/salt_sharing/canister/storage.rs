@@ -1,3 +1,4 @@
+use candid::Principal;
 use ic_stable_structures::{
     memory_manager::{MemoryId, MemoryManager, VirtualMemory},
     storable::Bound,
@@ -5,7 +6,7 @@ use ic_stable_structures::{
 };
 use serde::{Deserialize, Serialize};
 use serde_cbor::{from_slice, to_vec};
-use std::{borrow::Cow, cell::RefCell};
+use std::{borrow::Cow, cell::RefCell, collections::HashSet};
 
 pub type Timestamp = u64;
 pub const SALT_SIZE: usize = 64;
@@ -46,4 +47,7 @@ thread_local! {
     pub static SALT: RefCell<StableMap<(), StorableSalt>> = RefCell::new(
         StableMap::init(MEMORY_MANAGER.with(|m| m.borrow().get(MEMORY_ID_SALT)))
     );
+
+    // Authorized principals allowed to retrieve the salt from the canister.
+    pub static API_BOUNDARY_NODE_PRINCIPALS: RefCell<HashSet<Principal>> = RefCell::new(HashSet::new());
 }

@@ -1,5 +1,7 @@
 use ic_base_types::PrincipalIdBlobParseError;
-use ic_config::embedders::StableMemoryPageLimit;
+use ic_config::embedders::{
+    BestEffortResponsesFeature, Config as EmbeddersConfig, StableMemoryPageLimit,
+};
 use ic_config::flag_status::FlagStatus;
 use ic_cycles_account_manager::ResourceSaturation;
 use ic_error_types::RejectCode;
@@ -1045,6 +1047,9 @@ pub struct SystemApiImpl {
     #[allow(unused)]
     canister_backtrace: FlagStatus,
 
+    /// Rollout stage of the best-effort responses feature.
+    best_effort_responses: BestEffortResponsesFeature,
+
     /// The maximum sum of `<name>` lengths in exported functions called `canister_update <name>`,
     /// `canister_query <name>`, or `canister_composite_query <name>`.
     max_sum_exported_function_name_lengths: usize,
@@ -1086,9 +1091,7 @@ impl SystemApiImpl {
         canister_current_message_memory_usage: NumBytes,
         execution_parameters: ExecutionParameters,
         subnet_available_memory: SubnetAvailableMemory,
-        wasm_native_stable_memory: FlagStatus,
-        canister_backtrace: FlagStatus,
-        max_sum_exported_function_name_lengths: usize,
+        embedders_config: &EmbeddersConfig,
         stable_memory: Memory,
         wasm_memory_size: NumWasmPages,
         out_of_instructions_handler: Rc<dyn OutOfInstructionsHandler>,
@@ -1126,9 +1129,11 @@ impl SystemApiImpl {
             api_type,
             memory_usage,
             execution_parameters,
-            wasm_native_stable_memory,
-            canister_backtrace,
-            max_sum_exported_function_name_lengths,
+            wasm_native_stable_memory: embedders_config.feature_flags.wasm_native_stable_memory,
+            canister_backtrace: embedders_config.feature_flags.canister_backtrace,
+            best_effort_responses: embedders_config.feature_flags.best_effort_responses.clone(),
+            max_sum_exported_function_name_lengths: embedders_config
+                .max_sum_exported_function_name_lengths,
             stable_memory,
             sandbox_safe_system_state,
             out_of_instructions_handler,
@@ -3491,6 +3496,8 @@ impl SystemApi for SystemApiImpl {
     ///
     /// Fails and returns an error if `set_timeout()` was already called.
     fn ic0_call_with_best_effort_response(&mut self, timeout_seconds: u32) -> HypervisorResult<()> {
+        let subnet_id = &self.sandbox_safe_system_state.get_subnet_id();
+        let subnet_type = self.subnet_type();
         let result = match &mut self.api_type {
             ApiType::Start { .. }
             | ApiType::Init { .. }
@@ -3527,17 +3534,21 @@ impl SystemApi for SystemApiImpl {
                     error: "ic0.call_with_best_effort_response called when no call is under construction."
                         .to_string(),
                 }),
+
+                Some(request) if request.is_timeout_set() =>
+                    Err(HypervisorError::ToolchainContractViolation {
+                        error: "ic0_call_with_best_effort_response failed because a timeout is already set."
+                            .to_string(),
+                    }),
+
                 Some(request) => {
-                    if request.is_timeout_set() {
-                        Err(HypervisorError::ToolchainContractViolation {
-                            error: "ic0_call_with_best_effort_response failed because a timeout is already set.".to_string(),
-                        })
-                    } else {
+                    // No-op if the feature is disabled on this subnet.
+                    if self.best_effort_responses.is_enabled_on(subnet_id, subnet_type) {
                         let bounded_timeout =
                             std::cmp::min(timeout_seconds, MAX_CALL_TIMEOUT_SECONDS);
                         request.set_timeout(bounded_timeout);
-                        Ok(())
                     }
+                    Ok(())
                 }
             },
         };

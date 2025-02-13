@@ -5,6 +5,7 @@ package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
     # Keep sorted.
+    "//packages/ic-ed25519",
     "//rs/boundary_node/anonymization/client",
     "//rs/boundary_node/rate_limits/api:rate_limits_api",
     "//rs/canister_client",
@@ -12,7 +13,6 @@ DEPENDENCIES = [
     "//rs/certification/test-utils",
     "//rs/config",
     "//rs/crypto",
-    "//rs/crypto/ed25519",
     "//rs/crypto/tree_hash",
     "//rs/crypto/utils/basic_sig",
     "//rs/crypto/utils/threshold_sig_der",
