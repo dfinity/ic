@@ -73,6 +73,9 @@ system_test(
     name = "create_subnet_pre_master_test",
     env = NNS_CANISTER_ENV | UNIVERSAL_CANISTER_ENV,
     flaky = True,
+    tags = [
+        "k8s",
+    ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS + UNIVERSAL_CANISTER_RUNTIME_DEPS,
     deps = [
