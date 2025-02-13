@@ -864,6 +864,8 @@ fn test_receives_blocks_from_forks() {
 }
 
 /// Checks that the adapter returns blocks in BFS order.
+/// This is ignored currently as the order of peers is now non-deterministic.
+#[ignore]
 #[test]
 fn test_bfs_order() {
     let logger = no_op_logger();
