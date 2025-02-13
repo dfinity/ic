@@ -10,8 +10,7 @@ use ic_nns_constants::{GOVERNANCE_CANISTER_ID, SNS_WASM_CANISTER_ID};
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
     sns_wasm::{self, create_modified_sns_wasm, ensure_sns_wasm_gzipped},
-    state_test_helpers,
-    state_test_helpers::{query, set_controllers, setup_nns_canisters, update, update_with_sender},
+    state_test_helpers::{self, query, set_controllers, setup_nns_canisters, sns_wait_for_upgrade_completion, update, update_with_sender},
 };
 use ic_sns_governance::{
     pb::v1::{
@@ -1058,12 +1057,6 @@ fn test_custom_upgrade_path_for_sns() {
         ..SnsInitPayload::with_valid_values_for_testing_post_execution()
     };
 
-    let airdrop_sns_neuron_id = sns_governance_pb::NeuronId {
-        id: compute_neuron_staking_subaccount(user, /* memo */ 0)
-            .0
-            .to_vec(),
-    };
-
     let response = sns_wasm::deploy_new_sns(
         &machine,
         GOVERNANCE_CANISTER_ID,
@@ -1122,8 +1115,8 @@ fn test_custom_upgrade_path_for_sns() {
             next_version: Some(custom_two.clone().into()),
         },
         SnsUpgrade {
-            current_version: Some(custom_two.into()),
-            next_version: Some(normal_three.into()),
+            current_version: Some(custom_two.clone().into()),
+            next_version: Some(normal_three.clone().into()),
         },
     ];
     sns_wasm::insert_upgrade_path_entries_via_proposal(
@@ -1160,48 +1153,26 @@ fn test_custom_upgrade_path_for_sns() {
         next_version_custom_response.next_version.unwrap().into()
     );
 
-    // Make a proposal to upgrade (that is auto-executed) with the neuron for our user.
-    let proposal_id = state_test_helpers::sns_make_proposal(
-        &machine,
-        sns_governance_canister_id,
-        user,
-        airdrop_sns_neuron_id,
-        Proposal {
-            title: "Upgrade Canister.".into(),
-            action: Some(Action::UpgradeSnsToNextVersion(UpgradeSnsToNextVersion {})),
-            ..Default::default()
-        },
-    )
-    .unwrap();
-
     // Check that the right canister upgraded, and the other canister did not upgrade
     sns_wait_for_pending_upgrade(&machine, sns_governance_canister_id);
 
-    // Wait for proposal execution
-    state_test_helpers::sns_wait_for_proposal_execution(
-        &machine,
-        sns_governance_canister_id,
-        proposal_id,
-    );
+    let mut running_version_response = None;
 
-    // The pending upgrade should be cleared after proposal execution
-    let running_version_response = Decode!(
-        &query(
+    for (label, expected_version) in [
+        ("custom_one", custom_one),
+        ("custom_two", custom_two),
+        ("normal_three", normal_three),
+    ] {
+        println!("Awaiting version {label} ...");
+        running_version_response = Some(sns_wait_for_upgrade_completion(
             &machine,
             sns_governance_canister_id,
-            "get_running_sns_version",
-            Encode!(&GetRunningSnsVersionRequest {}).unwrap(),
-        )
-        .unwrap(),
-        GetRunningSnsVersionResponse
-    )
-    .unwrap();
+            expected_version,
+        ));
+    }
 
-    assert!(running_version_response.pending_version.is_none());
-    assert_eq!(
-        running_version_response.deployed_version.unwrap(),
-        custom_one
-    );
+    // The pending upgrade should be cleared after upgrade completion.
+    assert_eq!(running_version_response.unwrap().pending_version, None);
 }
 
 #[test]

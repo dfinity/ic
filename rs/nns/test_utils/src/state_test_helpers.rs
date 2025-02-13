@@ -55,7 +55,7 @@ use ic_registry_transport::pb::v1::{
     RegistryGetChangesSinceRequest, RegistryGetChangesSinceResponse,
 };
 use ic_sns_governance::pb::v1::{
-    self as sns_pb, manage_neuron_response::Command as SnsCommandResponse, GetModeResponse,
+    self as sns_pb, governance, manage_neuron_response::Command as SnsCommandResponse, GetModeResponse, GetRunningSnsVersionRequest, GetRunningSnsVersionResponse
 };
 use ic_sns_swap::pb::v1::{GetAutoFinalizationStatusRequest, GetAutoFinalizationStatusResponse};
 use ic_sns_wasm::{
@@ -2019,6 +2019,50 @@ pub fn sns_wait_for_proposal_executed_or_failed(
         }
         machine.advance_time(Duration::from_millis(100));
     }
+}
+
+pub fn sns_wait_for_upgrade_completion(
+    machine: &StateMachine,
+    governance: CanisterId,
+    expected_version: governance::Version,
+) -> GetRunningSnsVersionResponse {
+    const MAX_ATTEMPTS: usize = 150;
+    let mut running_version_response = None;
+    let mut errors = vec![];
+
+    for _attempt_count in 0..MAX_ATTEMPTS {
+        machine.tick();
+
+        let response = query(
+            &machine,
+            governance,
+            "get_running_sns_version",
+            Encode!(&GetRunningSnsVersionRequest {}).unwrap(),
+        );
+
+        match response {
+            Ok(response) => {
+                let response = Decode!(&response, GetRunningSnsVersionResponse).unwrap();
+                if let Some(deployed_version) = &response.deployed_version {
+                    if deployed_version == &expected_version {
+                        return response;
+                    }
+                }
+                running_version_response = Some(response);
+            }
+            Err(err) => {
+                errors.push(err);
+            }
+        }
+
+        machine.advance_time(Duration::from_millis(1000));
+    }
+    
+    panic!(
+        "Expected {:?} not observed after {} attempts; last running version: {:?} \
+         errors = {:?}",
+        expected_version, MAX_ATTEMPTS, running_version_response, errors,
+    );
 }
 
 pub fn sns_get_icp_treasury_account_balance(
