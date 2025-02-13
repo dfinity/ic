@@ -1594,7 +1594,7 @@ fn notify_top_up(
 
     // Transfer ICP to CMC.
     // Declare that the purpose of this transfer is to fund a canister top up operation.
-    let memo = vec![0x54, 0x50, 0x55, 0x50, 0, 0, 0, 0];
+    let memo = vec![0x54_u8, 0x50, 0x55, 0x50, 0, 0, 0, 0];
     // Equivalently, you can use u64::to_le_bytes.
     assert_eq!(memo, Vec::<u8>::from(0x50555054_u64.to_le_bytes()));
     let memo = Some(icrc_ledger_types::icrc1::transfer::Memo(
