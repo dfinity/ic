@@ -28,7 +28,7 @@ ic-cdk = { workspace = true }
 ic-cdk-macros = { workspace = true }
 ic-cdk-timers = { workspace = true }
 ic-ethereum-types = { path = "../../../../packages/ic-ethereum-types" }
-ic-management-canister-types = { path = "../../../types/management_canister_types" }
+ic-management-canister-types-private = { path = "../../../types/management_canister_types" }
 ic-metrics-encoder = "1"
 ic-secp256k1 = { path = "../../../../packages/ic-secp256k1" }
 ic-sha3 = { workspace = true }

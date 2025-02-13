@@ -1,6 +1,6 @@
 use canister_test::Project;
 use ic_base_types::CanisterId;
-use ic_management_canister_types::{CanisterInstallMode, CanisterStatusType};
+use ic_management_canister_types_private::{CanisterInstallMode, CanisterStatusType};
 use ic_nervous_system_clients::canister_id_record::CanisterIdRecord;
 use ic_nervous_system_common_test_keys::{
     TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_PRINCIPAL, TEST_NEURON_2_ID,

@@ -1,6 +1,6 @@
 use candid::{CandidType, Nat};
 // TODO(EXC-1687): remove temporary alias `Ic00CanisterSettingsArgs`.
-use ic_management_canister_types::{
+use ic_management_canister_types_private::{
     BoundedControllers, CanisterSettingsArgs as Ic00CanisterSettingsArgs, LogVisibilityV2,
 };
 use ic_nns_common::types::UpdateIcpXdrConversionRatePayload;
