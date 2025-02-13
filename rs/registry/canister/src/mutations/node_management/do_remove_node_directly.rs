@@ -149,7 +149,7 @@ impl Registry {
         // 4. Check if node is in a subnet, and if so, replace it in the subnet by updating the membership in the subnet record.
         let subnet_list_record = get_subnet_list_record(self);
         let is_node_in_subnet = find_subnet_for_node(self, payload.node_id, &subnet_list_record);
-        // Disabled until the Consensus team is ready to support direct replacement of nodes that are active in a subnet.
+        // Disabled until the direct replacement of nodes that are active in a subnet is possible.
         let replacements_of_nodes_in_subnets_enabled = false;
         if let Some(subnet_id) = is_node_in_subnet {
             if new_node_id.is_some() && replacements_of_nodes_in_subnets_enabled {
@@ -628,7 +628,7 @@ mod tests {
         registry.do_remove_node(payload, node_operator_id);
     }
 
-    // This test is disabled until the Consensus team is ready to support direct replacement of nodes that are active in a subnet.
+    // This test is disabled until it becomes possible to directly replace nodes that are active in a subnet.
     #[ignore]
     #[test]
     fn should_replace_node_in_subnet_and_update_allowance() {
