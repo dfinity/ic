@@ -31,7 +31,7 @@ const SUBNET_MEMORY_CAPACITY: NumBytes = NumBytes::new(TIB);
 /// Guaranteed response message memory usage is calculated as the total size of
 /// enqueued guaranteed responses; plus the maximum allowed response size per
 /// reserved guaranteed response slot.
-const SUBNET_GUARANTEED_RESPONSE_MESSAGE_MEMORY_CAPACITY: NumBytes = NumBytes::new(15 * GIB);
+const SUBNET_GUARANTEED_RESPONSE_MESSAGE_MEMORY_CAPACITY: NumBytes = NumBytes::new(25 * GIB);
 
 /// The limit on how much memory may be used by all guaranteed response messages
 /// on a given subnet at the end of a round.
