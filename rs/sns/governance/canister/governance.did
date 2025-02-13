@@ -96,6 +96,7 @@ type ClaimedSwapNeurons = record {
 type Command = variant {
   Split : Split;
   Follow : Follow;
+  FollowTopic : TopicFollowing;
   DisburseMaturity : DisburseMaturity;
   ClaimOrRefresh : ClaimOrRefresh;
   Configure : Configure;
@@ -211,6 +212,11 @@ type Follow = record {
   function_id : nat64;
   followees : vec NeuronId;
 };
+
+type TopicFollowing = record {
+  topic : opt Topic;
+  followees : opt vec NeuronId;
+}
 
 type Followees = record {
   followees : vec NeuronId;
@@ -501,6 +507,7 @@ type Neuron = record {
   vesting_period_seconds : opt nat64;
   disburse_maturity_in_progress : vec DisburseMaturityInProgress;
   followees : vec record { nat64; Followees };
+  topics_following : opt vec TopicFollowing
   neuron_fees_e8s : nat64;
 };
 
@@ -606,6 +613,7 @@ type ProposalData = record {
   minimum_yes_proportion_of_exercised : opt Percentage;
   is_eligible_for_rewards : bool;
   executed_timestamp_seconds : nat64;
+  topic : opt Topic;
 };
 
 type ProposalId = record {
