@@ -29,6 +29,9 @@ on the process that this file is part of, see
 
 ## Removed
 
+* Neuron migration (`migrate_active_neurons_to_stable_memory`) is rolled back due to issues with
+  reward distribution.
+
 ## Fixed
 
 ## Security
