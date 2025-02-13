@@ -1071,6 +1071,7 @@ fn notify_create_canister(
     };
 
     let block_index = send_transfer(state_machine, &transfer_args).expect("transfer failed");
+
     #[allow(deprecated)]
     let notify_args = NotifyCreateCanister {
         block_index,
@@ -1574,6 +1575,7 @@ fn notify_top_up(
     canister_id: CanisterId,
     amount: Tokens,
 ) -> Result<Cycles, NotifyError> {
+    /*
     let transfer_args = TransferArgs {
         memo: MEMO_TOP_UP_CANISTER,
         amount,
@@ -1588,6 +1590,51 @@ fn notify_top_up(
     };
 
     let block_index = send_transfer(state_machine, &transfer_args).expect("transfer failed");
+    */
+
+    // Transfer ICP to CMC.
+    let purpose_is_top_up = icrc_ledger_types::icrc1::transfer::Memo(
+        serde_bytes::ByteBuf::from(0x50555054_u64.to_le_bytes())
+    );
+    let request = icrc_ledger_types::icrc1::transfer::TransferArg {  // DO NOT MERGE
+        // Declare that this transfer will be used to top up a canister.
+        memo: Some(purpose_is_top_up),
+
+        to: Account {
+            owner: CYCLES_MINTING_CANISTER_ID.get().into(),
+            subaccount: Some(Subaccount::from(&canister_id.get()).0),
+        },
+        amount: amount.into(),
+
+        fee: Some(Tokens::from_e8s(10_000).into()),
+        from_subaccount: None,
+        created_at_time: None,
+    };
+    let transfer_result = state_machine
+        .execute_ingress_as(
+            *TEST_USER1_PRINCIPAL, // caller
+            LEDGER_CANISTER_ID,    // callee
+            "icrc1_transfer",
+            Encode!(&request).unwrap(),
+        )
+        .unwrap();
+    let block_index = match transfer_result {
+        WasmResult::Reply(ok) => {
+            use num_traits::cast::ToPrimitive;
+            Decode!(
+                &ok,
+                Result<Nat, icrc_ledger_types::icrc1::transfer::TransferError>
+            )
+            .unwrap()
+            .unwrap()
+            .0
+            .to_u64()
+            .unwrap()
+        }
+
+        _ => panic!("{:#?}", transfer_result),
+    };
+
     let notify_args = NotifyTopUp {
         block_index,
         canister_id,

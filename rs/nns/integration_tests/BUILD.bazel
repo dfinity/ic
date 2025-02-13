@@ -34,6 +34,7 @@ BASE_DEPENDENCIES = [
     "@crate_index//:ic-cdk-timers",
     "@crate_index//:ic-stable-structures",
     "@crate_index//:lazy_static",
+    "@crate_index//:num-traits",
     "@crate_index//:prometheus-parse",
     "@crate_index//:prost",
     "@crate_index//:strum",
