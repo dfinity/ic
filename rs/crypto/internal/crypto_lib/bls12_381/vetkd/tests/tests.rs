@@ -147,7 +147,7 @@ fn encrypted_key_share_creation_is_stable() {
         let node_sk = poly.evaluate_at(&Scalar::from_node_index(node_idx as u32));
         let eks =
             EncryptedKeyShare::create(&mut rng, &master_pk, &node_sk, &tpk, &derivation_path, &did);
-        assert_eq!(*expected_eks, hex::encode(&eks.serialize()));
+        assert_eq!(*expected_eks, hex::encode(eks.serialize()));
     }
 }
 
