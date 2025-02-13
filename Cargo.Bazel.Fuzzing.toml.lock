@@ -3299,6 +3299,7 @@ dependencies = [
  "ic-certified-map",
  "ic-http-certification",
  "ic-http-gateway",
+ "ic-management-canister-types",
  "ic-metrics-encoder",
  "ic-response-verification",
  "ic-sha3",
@@ -5633,6 +5634,17 @@ dependencies = [
  "sha2 0.10.8",
  "simple_asn1",
  "thiserror 2.0.3",
+]
+
+[[package]]
+name = "ic-management-canister-types"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "eadff40906491c8c61a3c886cce4ee02f48a4798684d8a10e4a14891a217a284"
+dependencies = [
+ "candid",
+ "serde",
+ "serde_bytes",
 ]
 
 [[package]]
