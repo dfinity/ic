@@ -245,12 +245,8 @@ jobs:
       - name: Run qualification for version ${{ matrix.version }} from the tip of the branch
         uses: ./.github/actions/bazel-test-all/
         with:
-          BAZEL_COMMAND: >-
-            test
-
-
-              --config=ci --config=systest --keep_going
-              --test_timeout=7200 --test_env=OLD_VERSION=${{ matrix.version }}
+          BAZEL_COMMAND: |
+            test --config=ci --config=systest --keep_going --test_timeout=7200 --test_env=OLD_VERSION=${{ matrix.version }}
           BAZEL_TARGETS: "//rs/tests/dre:guest_os_qualification"
           BUILDEVENT_APIKEY: ${{ secrets.HONEYCOMB_TOKEN }}
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
