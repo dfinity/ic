@@ -23,6 +23,7 @@ CONSTANTS
     Disburse_Neuron_Process_Ids,
     Disburse_To_Neuron_Process_Ids,
     Merge_Neurons_Process_Ids,
+    Refresh_Neuron_Process_Ids,
     Spawn_Neuron_Process_Ids,
     Spawn_Neurons_Process_Ids,
     Split_Neuron_Process_Ids
@@ -70,6 +71,7 @@ Claim == INSTANCE Claim_Neuron
 Disburse == INSTANCE Disburse_Neuron
 Disburse_To == INSTANCE Disburse_To_Neuron
 Merge == INSTANCE Merge_Neurons
+Refresh == INSTANCE Refresh_Neuron
 Spawn == INSTANCE Spawn_Neuron
 Spawn_Neurons == INSTANCE Spawn_Neurons
 Split == INSTANCE Split_Neuron
@@ -216,6 +218,7 @@ Init == (* Global variables *)
         /\ neuron_id = [self \in Claim_Neuron_Process_Ids |-> 0]
            @@ [self \in Disburse_Neuron_Process_Ids |-> 0]
            @@ [self \in Spawn_Neurons_Process_Ids |-> 0]
+           @@ [self \in Refresh_Neuron_Process_Ids |-> 0]
         /\ fees_amount = [self \in Merge_Neurons_Process_Ids |-> 0]
            @@ [self \in Disburse_Neuron_Process_Ids |-> 0]
         /\ pc = [self \in Split_Neuron_Process_Ids |-> "SplitNeuron1"]
@@ -225,6 +228,7 @@ Init == (* Global variables *)
             @@ [self \in Disburse_To_Neuron_Process_Ids |-> "DisburseToNeuron"]
             @@ [self \in Disburse_Neuron_Process_Ids |-> "DisburseNeuron1"]
             @@ [self \in Claim_Neuron_Process_Ids |-> "ClaimNeuron1"]
+            @@ [self \in Refresh_Neuron_Process_Ids |-> "RefreshNeuron1"]
         /\ Ledger_Init
 
 Change_Neuron_Fee ==
@@ -252,6 +256,7 @@ Next ==
     \/ Disburse!Next /\ UNCHANGED <<env_vars, source_neuron_id, target_neuron_id, amount_to_target, account, child_account_id, child_neuron_id, parent_neuron_id, ready_to_spawn_ids, sn_parent_neuron_id, sn_amount, sn_child_neuron_id, sn_child_account_id>>
     \/ Disburse_To!Next /\ UNCHANGED <<env_vars, source_neuron_id, target_neuron_id, to_account, account, fees_amount, amount_to_target, neuron_id, account, ready_to_spawn_ids, sn_parent_neuron_id, sn_amount, sn_child_neuron_id, sn_child_account_id>>
     \/ Merge!Next /\ UNCHANGED <<env_vars, neuron_id, disburse_amount, to_account, account, disburse_amount, to_account, child_account_id, child_neuron_id, parent_neuron_id, ready_to_spawn_ids, sn_parent_neuron_id, sn_amount, sn_child_neuron_id, sn_child_account_id>>
+    \/ Refresh!Next /\ UNCHANGED << env_vars, source_neuron_id, target_neuron_id, fees_amount, amount_to_target, account, disburse_amount, to_account, child_account_id, child_neuron_id, parent_neuron_id, ready_to_spawn_ids, sn_parent_neuron_id, sn_amount, sn_child_neuron_id, sn_child_account_id >>
     \/ Spawn!Next /\ UNCHANGED pc /\ UNCHANGED <<env_vars, neuron_id, source_neuron_id, target_neuron_id, fees_amount, amount_to_target, disburse_amount, to_account, account, child_account_id, child_neuron_id, parent_neuron_id, ready_to_spawn_ids, sn_parent_neuron_id, sn_amount, sn_child_neuron_id, sn_child_account_id>>
     \/ Spawn_Neurons!Next /\ UNCHANGED <<env_vars, source_neuron_id, target_neuron_id, fees_amount, amount_to_target, disburse_amount, to_account, account, child_account_id, child_neuron_id, parent_neuron_id, sn_parent_neuron_id, sn_amount, sn_child_neuron_id, sn_child_account_id>>
     \/ Split!Next /\ UNCHANGED << env_vars, neuron_id, source_neuron_id, target_neuron_id, fees_amount, amount_to_target, account, disburse_amount, to_account, ready_to_spawn_ids, child_account_id, child_neuron_id, parent_neuron_id >>

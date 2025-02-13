@@ -19,9 +19,7 @@ CONSTANTS
     \* @type: Set($account);
     Account_Ids,
     \* @type: Set($account);
-    Governance_Account_Ids,
-    \* @type: Set($neuronId);
-    Neuron_Ids
+    Governance_Account_Ids
 
 CONSTANTS
     \* @type: Set($proc);
@@ -55,10 +53,6 @@ VARIABLES
     \* it's the easiest to just add it to all the other models
     \* @type: Bool;
     spawning_neurons
-
-\* Not used in this model. Consider removing (TODO).
-\* @type: Set($neuronId) => $neuronId;
-FRESH_NEURON_ID(existing_neurons) == CHOOSE nid \in (Neuron_Ids \ existing_neurons): TRUE
 
 MOD == INSTANCE Refresh_Neuron
 
