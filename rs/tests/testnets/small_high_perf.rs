@@ -41,6 +41,7 @@ use ic_consensus_system_test_utils::rw_message::install_nns_with_customizations_
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::{
     boundary_node::BoundaryNode,
+    farm::HostFeature,
     group::SystemTestGroup,
     ic::{AmountOfMemoryKiB, ImageSizeGiB, InternetComputer, NrOfVCPUs, Subnet, VmResources},
     prometheus_vm::{HasPrometheus, PrometheusVm},
@@ -70,6 +71,9 @@ pub fn setup(env: TestEnv) {
                     memory_kibibytes: Some(AmountOfMemoryKiB::new(512_142_680)),
                     boot_image_minimal_size_gibibytes: Some(ImageSizeGiB::new(500)),
                 })
+                .with_required_host_features(vec![HostFeature::Host(
+                    "se1-dll02.se1.dfinity.network".to_string(),
+                )])
                 .add_nodes(1),
         )
         .setup_and_start(&env)
