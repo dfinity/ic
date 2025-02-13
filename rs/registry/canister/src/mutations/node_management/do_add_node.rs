@@ -769,6 +769,8 @@ mod tests {
         assert!(e.contains("do_add_node: There is already another node with the same IPv4 address"));
     }
 
+    // This test is disabled until the Consensus team is ready to support direct replacement of nodes that are active in a subnet.
+    #[ignore]
     #[test]
     fn should_add_node_and_replace_existing_node_in_subnet() {
         // This test verifies that adding a new node replaces an existing node in a subnet
