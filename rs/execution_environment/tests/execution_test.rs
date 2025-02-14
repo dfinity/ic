@@ -28,6 +28,8 @@ use std::{convert::TryInto, str::FromStr, sync::Arc, time::Duration};
 
 /// One megabyte for better readability.
 const MIB: u64 = 1024 * 1024;
+/// One gigabyte for better readability.
+const GIB: u64 = 1024 * MIB;
 
 /// One billion for better cycles readability.
 const B: u128 = 1e9 as u128;
@@ -2896,7 +2898,7 @@ fn no_critical_error_on_empty_data_segment() {
 
 #[test]
 fn failed_stable_memory_grow_cost_and_time_single_canister() {
-    const NUM_WASM_PAGES: u64 = 116 * 1024 * MIB / 65_536;
+    let num_wasm_pages = 116 * GIB / WASM_PAGE_SIZE_IN_BYTES;
 
     let env = StateMachineBuilder::new()
         .with_subnet_type(SubnetType::Application)
@@ -2910,7 +2912,7 @@ fn failed_stable_memory_grow_cost_and_time_single_canister() {
         canister_id,
         "update",
         wasm()
-            .stable64_grow(NUM_WASM_PAGES)
+            .stable64_grow(num_wasm_pages)
             .stable64_write(0, &[42])
             .trap()
             .build(),
@@ -2919,21 +2921,22 @@ fn failed_stable_memory_grow_cost_and_time_single_canister() {
     let cycles_m = (initial_balance - env.cycle_balance(canister_id)) / 1000 / 1000;
     assert!(
         elapsed_ms < 10_000,
-        "Test timed out after {elapsed_ms} ms and {cycles_m} Mcycles"
+        "Test timed out after {elapsed_ms} ms and {cycles_m} M cycles"
     );
+    assert!(cycles_m > 5);
 }
 
 #[test]
 fn failed_stable_memory_grow_cost_and_time_multiple_canisters() {
-    const NUM_WASM_PAGES: u64 = 116 * 1024 * MIB / 65_536;
-    const NUM_CANISTERS: u64 = 128;
+    let num_wasm_pages = 116 * GIB / WASM_PAGE_SIZE_IN_BYTES;
+    let num_canisters = 128;
 
     let env = StateMachineBuilder::new()
         .with_subnet_type(SubnetType::Application)
         .build();
 
     let mut canister_ids = vec![];
-    for _ in 0..NUM_CANISTERS {
+    for _ in 0..num_canisters {
         let canister_id = create_universal_canister_with_cycles(&env, None, INITIAL_CYCLES_BALANCE);
         canister_ids.push(canister_id);
     }
@@ -2949,7 +2952,7 @@ fn failed_stable_memory_grow_cost_and_time_multiple_canisters() {
             *canister_id,
             "update",
             wasm()
-                .stable64_grow(NUM_WASM_PAGES)
+                .stable64_grow(num_wasm_pages)
                 .stable64_write(0, &[42])
                 .trap()
                 .build(),
@@ -2965,6 +2968,7 @@ fn failed_stable_memory_grow_cost_and_time_multiple_canisters() {
     let cycles_m = (total_initial_balance - total_balance) / 1000 / 1000;
     assert!(
         elapsed_ms < 10_000,
-        "Test timed out after {elapsed_ms} ms and {cycles_m} Mcycles"
+        "Test timed out after {elapsed_ms} ms and {cycles_m} M cycles"
     );
+    assert!(cycles_m > 800);
 }
