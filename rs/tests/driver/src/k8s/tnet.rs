@@ -417,8 +417,7 @@ impl TNet {
             "set -e; \
             mkdir -p /tnet/{vm_name}; \
             wget -O /tnet/{vm_name}/img.tar.zst {image_url}; \
-            unzstd -d /tnet/{vm_name}/img.tar.zst; \
-            tar -xvf /tnet/{vm_name}/img.tar -C /tnet/{vm_name}; \
+            tar -x --zstd -vf /tnet/{vm_name}/img.tar.zst -C /tnet/{vm_name}; \
             chmod -R 777 /tnet/{vm_name}; \
             rm -f /tnet/{vm_name}/img.tar.zst /tnet/{vm_name}/img.tar",
             vm_name = vm_name,
