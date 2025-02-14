@@ -258,13 +258,11 @@ mod tests {
 
         registry_client.update_to_latest_version();
 
-        let canister_id_ranges = vec![(canister_test_id(0), canister_test_id(10))];
-
         let (_certificate, _root_pk, cbor) =
             CertificateBuilder::new(CertificateData::CustomTree(LabeledTree::SubTree(flatmap![
                 Label::from("subnet") => LabeledTree::SubTree(flatmap![
                     Label::from(NON_NNS_SUBNET_ID.get_ref().to_vec()) => LabeledTree::SubTree(flatmap![
-                        Label::from("canister_ranges") => LabeledTree::Leaf(serialize_to_cbor(&canister_id_ranges)),
+                        Label::from("canister_ranges") => LabeledTree::Leaf(serialize_to_cbor(&vec![(canister_test_id(0), canister_test_id(10))])),
                         Label::from("public_key") => LabeledTree::Leaf(public_key_to_der(&non_nns_public_key.into_bytes()).unwrap()),
                     ])
                 ]),
@@ -273,13 +271,12 @@ mod tests {
             .with_root_of_trust(nns_public_key, nns_secret_key)
             .build();
 
-        let mocked_response = HttpReadStateResponse {
-            certificate: Blob(cbor),
-        };
-
         rt_handle.spawn(async move {
-            let c = mocked_response.clone();
-            let router = axum::routing::any(move || async { Cbor(c).into_response() });
+            let http_response = HttpReadStateResponse {
+                certificate: Blob(cbor),
+            };
+
+            let router = axum::routing::any(move || async { Cbor(http_response).into_response() });
 
             axum_server::bind_rustls(addr, generate_self_signed_cert().await)
                 .serve(router.into_make_service())
@@ -379,6 +376,7 @@ mod tests {
             .expect("Should have returned a valid certificate");
         let tree = LabeledTree::try_from(parsed_delegation.tree)
             .expect("Should return a valid state tree");
+        // Verify that the state tree has the a subtree corresponding to the requested subnet
         match lookup_path(&tree, &[b"subnet", NON_NNS_SUBNET_ID.get_ref().as_ref()]) {
             Some(LabeledTree::SubTree(..)) => (),
             _ => panic!("Didn't find the subnet path in the state tree"),
