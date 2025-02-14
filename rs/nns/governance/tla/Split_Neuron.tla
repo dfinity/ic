@@ -1,5 +1,5 @@
 ------------ MODULE Split_Neuron ------------
-EXTENDS TLC, Sequences, Naturals, FiniteSets, Variants
+EXTENDS TLC, Sequences, Naturals, FiniteSets, Variants, FiniteSetsExt
 
 CONSTANT
     FRESH_NEURON_ID(_)
@@ -68,7 +68,7 @@ process ( Split_Neuron \in Split_Neuron_Process_Ids )
         \* Need to make sure there is an element of Split_Neuron_Account_Ids for each
         \* member of Split_Neuron_Process_Ids
         with(nid \in DOMAIN(neuron) \ locks;
-             amt \in (MIN_STAKE+TRANSACTION_FEE)..neuron[nid].cached_stake;
+             amt \in Max({MIN_STAKE+TRANSACTION_FEE, 1})..neuron[nid].cached_stake;
              fresh_account_id \in Governance_Account_Ids \ {neuron[n].account : n \in DOMAIN(neuron)};
             ) {
             sn_parent_neuron_id := nid;
@@ -117,7 +117,7 @@ process ( Split_Neuron \in Split_Neuron_Process_Ids )
 
 }
 *)
-\* BEGIN TRANSLATION (chksum(pcal) = "49714083" /\ chksum(tla) = "1f5b129d")
+\* BEGIN TRANSLATION (chksum(pcal) = "8975482d" /\ chksum(tla) = "846a9ad0")
 VARIABLES pc, neuron, neuron_id_by_account, locks, governance_to_ledger, 
           ledger_to_governance, spawning_neurons, sn_parent_neuron_id, 
           sn_amount, sn_child_neuron_id, sn_child_account_id
@@ -146,7 +146,7 @@ SplitNeuron1(self) == /\ pc[self] = "SplitNeuron1"
                       /\ \/ /\ pc' = [pc EXCEPT ![self] = "Done"]
                             /\ UNCHANGED <<neuron, neuron_id_by_account, locks, governance_to_ledger, sn_parent_neuron_id, sn_amount, sn_child_neuron_id, sn_child_account_id>>
                          \/ /\ \E nid \in DOMAIN(neuron) \ locks:
-                                 \E amt \in (MIN_STAKE+TRANSACTION_FEE)..neuron[nid].cached_stake:
+                                 \E amt \in Max({MIN_STAKE+TRANSACTION_FEE, 1})..neuron[nid].cached_stake:
                                    \E fresh_account_id \in Governance_Account_Ids \ {neuron[n].account : n \in DOMAIN(neuron)}:
                                      /\ sn_parent_neuron_id' = [sn_parent_neuron_id EXCEPT ![self] = nid]
                                      /\ sn_amount' = [sn_amount EXCEPT ![self] = amt]
