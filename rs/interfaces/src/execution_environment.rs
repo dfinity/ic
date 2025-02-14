@@ -161,11 +161,11 @@ pub enum SystemApiCallId {
     CostCall,
     /// Tracker for `ic0.cost_create_canister()`
     CostCreateCanister,
-    /// Tracker for `ic0.cost_sign_with_ecdsa()`
-    CostHttpRequest,
-    /// Tracker for `ic0.cost_sign_with_schnorr()`
-    CostSignWithEcdsa,
     /// Tracker for `ic0.cost_http_request()`
+    CostHttpRequest,
+    /// Tracker for `ic0.cost_sign_with_ecdsa()`
+    CostSignWithEcdsa,
+    /// Tracker for `ic0.cost_sign_with_schnorr()`
     CostSignWithSchnorr,
     /// Tracker for `ic0.cost_vetkd_derive_encrypted_key()`
     CostVetkdDeriveEncryptedKey,
