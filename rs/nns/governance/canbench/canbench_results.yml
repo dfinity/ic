@@ -1,25 +1,25 @@
 benches:
   add_neuron_active_maximum:
     total:
-      instructions: 114744092
-      heap_increase: 0
+      instructions: 42752810
+      heap_increase: 1
       stable_memory_increase: 0
     scopes: {}
   add_neuron_active_typical:
     total:
-      instructions: 8660928
+      instructions: 2170672
       heap_increase: 0
       stable_memory_increase: 0
     scopes: {}
   add_neuron_inactive_maximum:
     total:
-      instructions: 114744206
-      heap_increase: 0
+      instructions: 112624946
+      heap_increase: 1
       stable_memory_increase: 0
     scopes: {}
   add_neuron_inactive_typical:
     total:
-      instructions: 8661042
+      instructions: 8497607
       heap_increase: 0
       stable_memory_increase: 0
     scopes: {}
@@ -163,7 +163,7 @@ benches:
     scopes: {}
   range_neurons_performance:
     total:
-      instructions: 84752408
+      instructions: 56514456
       heap_increase: 0
       stable_memory_increase: 0
     scopes: {}
@@ -179,4 +179,4 @@ benches:
       heap_increase: 0
       stable_memory_increase: 0
     scopes: {}
-version: 0.1.9
+version: 0.1.8
