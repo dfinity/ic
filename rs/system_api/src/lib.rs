@@ -3548,7 +3548,7 @@ impl SystemApi for SystemApiImpl {
             WasmExecutionMode::from_is_wasm64(self.sandbox_safe_system_state.is_wasm64_execution);
         let cost = self
             .sandbox_safe_system_state
-            .cycles_account_manager
+            .get_cycles_account_manager()
             .xnet_call_total_fee((method_name_size + payload_size).into(), execution_mode);
         copy_cycles_to_heap(cost, dst, heap, "ic0_cost_call")?;
         trace_syscall!(self, CostCall, cost);
@@ -3559,7 +3559,7 @@ impl SystemApi for SystemApiImpl {
         let subnet_size = self.sandbox_safe_system_state.subnet_size;
         let cost = self
             .sandbox_safe_system_state
-            .cycles_account_manager
+            .get_cycles_account_manager()
             .canister_creation_fee(subnet_size);
         copy_cycles_to_heap(cost, dst, heap, "ic0_cost_create_canister")?;
         trace_syscall!(self, CostCreateCanister, cost);
@@ -3576,7 +3576,7 @@ impl SystemApi for SystemApiImpl {
         let subnet_size = self.sandbox_safe_system_state.subnet_size;
         let cost = self
             .sandbox_safe_system_state
-            .cycles_account_manager
+            .get_cycles_account_manager()
             .http_request_fee(request_size.into(), Some(max_res_bytes.into()), subnet_size);
         copy_cycles_to_heap(cost, dst, heap, "ic0_cost_http_request")?;
         trace_syscall!(self, CostHttpRequest, cost);
@@ -3604,13 +3604,15 @@ impl SystemApi for SystemApiImpl {
             return Ok(CostReturnCode::UnknownCurve as u32);
         };
         let key = MasterPublicKeyId::Ecdsa(EcdsaKeyId { curve, name });
-        let topology = &self.sandbox_safe_system_state.network_topology;
-        let Some(subnet_size) = get_key_replication_factor(topology, key) else {
+        let Some(subnet_size) = self
+            .sandbox_safe_system_state
+            .get_key_replication_factor(key)
+        else {
             return Ok(CostReturnCode::UnknownKey as u32);
         };
         let cost = self
             .sandbox_safe_system_state
-            .cycles_account_manager
+            .get_cycles_account_manager()
             .ecdsa_signature_fee(subnet_size);
         copy_cycles_to_heap(cost, dst, heap, "ic0_cost_sign_with_ecdsa")?;
         trace_syscall!(self, CostSignWithEcdsa, cost);
@@ -3638,13 +3640,15 @@ impl SystemApi for SystemApiImpl {
             return Ok(CostReturnCode::UnknownCurve as u32);
         };
         let key = MasterPublicKeyId::Schnorr(SchnorrKeyId { algorithm, name });
-        let topology = &self.sandbox_safe_system_state.network_topology;
-        let Some(subnet_size) = get_key_replication_factor(topology, key) else {
+        let Some(subnet_size) = self
+            .sandbox_safe_system_state
+            .get_key_replication_factor(key)
+        else {
             return Ok(CostReturnCode::UnknownKey as u32);
         };
         let cost = self
             .sandbox_safe_system_state
-            .cycles_account_manager
+            .get_cycles_account_manager()
             .schnorr_signature_fee(subnet_size);
         copy_cycles_to_heap(cost, dst, heap, "ic0_cost_sign_with_schnorr")?;
         trace_syscall!(self, CostSignWithSchnorr, cost);
@@ -3673,13 +3677,15 @@ impl SystemApi for SystemApiImpl {
             return Ok(CostReturnCode::UnknownCurve as u32);
         };
         let key = MasterPublicKeyId::VetKd(VetKdKeyId { curve, name });
-        let topology = &self.sandbox_safe_system_state.network_topology;
-        let Some(subnet_size) = get_key_replication_factor(topology, key) else {
+        let Some(subnet_size) = self
+            .sandbox_safe_system_state
+            .get_key_replication_factor(key)
+        else {
             return Ok(CostReturnCode::UnknownKey as u32);
         };
         let cost = self
             .sandbox_safe_system_state
-            .cycles_account_manager
+            .get_cycles_account_manager()
             .vetkd_fee(subnet_size);
         copy_cycles_to_heap(cost, dst, heap, "ic0_cost_vetkd_derive_encrypted_key")?;
         trace_syscall!(self, CostVetkdDeriveEncryptedKey, cost);
@@ -3747,18 +3753,6 @@ impl SystemApi for SystemApiImpl {
 
         result
     }
-}
-
-/// Look up key in `chain_key_enabled_subnets`, then extract all subnets
-/// for that key and return the replication factor of the biggest one.
-fn get_key_replication_factor(topology: &NetworkTopology, key: MasterPublicKeyId) -> Option<usize> {
-    let subnets_with_key = topology.chain_key_enabled_subnets(&key);
-    subnets_with_key
-        .iter()
-        .map(|subnet_id| {
-            topology.get_subnet_size(subnet_id).unwrap() // we got the subnet_id from the same collection
-        })
-        .max()
 }
 
 /// The default implementation of the `OutOfInstructionHandler` trait.

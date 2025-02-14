@@ -11,7 +11,7 @@ use ic_limits::{LOG_CANISTER_OPERATION_CYCLES_THRESHOLD, SMALL_APP_SUBNET_MAX_SI
 use ic_logger::{info, ReplicaLogger};
 use ic_management_canister_types_private::{
     CanisterStatusType, CreateCanisterArgs, InstallChunkedCodeArgs, InstallCodeArgsV2,
-    LoadCanisterSnapshotArgs, Method as Ic00Method, Payload,
+    LoadCanisterSnapshotArgs, MasterPublicKeyId, Method as Ic00Method, Payload,
     ProvisionalCreateCanisterWithCyclesArgs, UninstallCodeArgs, UpdateSettingsArgs, IC_00,
 };
 use ic_nns_constants::CYCLES_MINTING_CANISTER_ID;
@@ -585,7 +585,7 @@ pub struct SandboxSafeSystemState {
     reserved_balance_limit: Option<Cycles>,
     call_context_balance: Option<Cycles>,
     call_context_deadline: Option<CoarseTime>,
-    pub(super) cycles_account_manager: CyclesAccountManager,
+    cycles_account_manager: CyclesAccountManager,
     // None indicates that we are in a context where the canister cannot
     // register callbacks (e.g. running the `start` method when installing a
     // canister.)
@@ -602,7 +602,7 @@ pub struct SandboxSafeSystemState {
     pub(super) request_metadata: RequestMetadata,
     caller: Option<PrincipalId>,
     pub is_wasm64_execution: bool,
-    pub(super) network_topology: NetworkTopology,
+    network_topology: NetworkTopology,
 }
 
 impl SandboxSafeSystemState {
@@ -1360,6 +1360,22 @@ impl SandboxSafeSystemState {
 
     pub fn get_subnet_id(&self) -> SubnetId {
         self.cycles_account_manager.get_subnet_id()
+    }
+
+    pub fn get_cycles_account_manager(&self) -> &CyclesAccountManager {
+        &self.cycles_account_manager
+    }
+
+    /// Look up key in `chain_key_enabled_subnets`, then extract all subnets
+    /// for that key and return the replication factor of the biggest one.
+    pub fn get_key_replication_factor(&self, key: MasterPublicKeyId) -> Option<usize> {
+        let subnets_with_key = self.network_topology.chain_key_enabled_subnets(&key);
+        subnets_with_key
+            .iter()
+            .map(|subnet_id| {
+                self.network_topology.get_subnet_size(subnet_id).unwrap() // we got the subnet_id from the same collection
+            })
+            .max()
     }
 }
 
