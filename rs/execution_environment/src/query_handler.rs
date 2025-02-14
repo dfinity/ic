@@ -119,11 +119,11 @@ struct HttpQueryHandlerMetrics {
 }
 
 impl HttpQueryHandlerMetrics {
-    pub fn new(metrics_registry: &MetricsRegistry) -> Self {
+    pub fn new(metrics_registry: &MetricsRegistry, namespace: &str) -> Self {
         Self {
             height_diff_during_query_scheduling: metrics_registry.histogram(
-                "execution_query_height_diff_during_query_scheduling",
-                "The height difference between the latest certified height before query scheduling and state height used for execution",
+                format!("{}_query_height_diff_during_query_scheduling", namespace),
+                "The height difference between the latest certified height before query scheduling and state height used for execution".to_string(),
                 vec![0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 20.0, 50.0, 100.0],
             ),
         }
@@ -349,12 +349,13 @@ impl HttpQueryHandler {
         query_scheduler: QueryScheduler,
         state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
         metrics_registry: &MetricsRegistry,
+        namespace: &str,
     ) -> QueryExecutionService {
         BoxCloneService::new(Self {
             internal,
             state_reader,
             query_scheduler,
-            metrics: Arc::new(HttpQueryHandlerMetrics::new(metrics_registry)),
+            metrics: Arc::new(HttpQueryHandlerMetrics::new(metrics_registry, namespace)),
         })
     }
 }
