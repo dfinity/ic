@@ -12274,6 +12274,7 @@ dependencies = [
  "icp-ledger",
  "icrc-ledger-client",
  "icrc-ledger-types",
+ "itertools 0.12.1",
  "lazy_static",
  "maplit",
  "num-traits",
