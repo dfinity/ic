@@ -339,6 +339,7 @@ impl Upgrade {
             info!(self.logger, "All CUP registry records applied.");
             return Ok(());
         }
+        // TODO: Consider the case where the `min_record_version` is greater than `latest_version + 1`
 
         info!(self.logger, "Stopping replica.");
         if let Err(e) = self.stop_replica() {
