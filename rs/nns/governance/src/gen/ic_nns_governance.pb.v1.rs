@@ -4623,6 +4623,7 @@ impl Vote {
     candid::Deserialize,
     serde::Serialize,
     comparable::Comparable,
+    strum_macros::EnumIter,
     Clone,
     Copy,
     Debug,

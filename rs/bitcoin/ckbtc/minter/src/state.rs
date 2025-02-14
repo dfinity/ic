@@ -249,20 +249,8 @@ pub enum UtxoCheckStatus {
     Clean,
     /// The UTXO in question is tainted.
     Tainted,
-}
-
-impl UtxoCheckStatus {
-    pub fn from_clean_flag(clean: bool) -> Self {
-        if clean {
-            Self::Clean
-        } else {
-            Self::Tainted
-        }
-    }
-
-    pub fn is_clean(self) -> bool {
-        self == Self::Clean
-    }
+    /// The UTXO is clean but minting failed.
+    CleanButMintUnknown,
 }
 
 /// Relevant data for a checked UTXO. The UUID and `kyt_provider` are kept for
@@ -1062,6 +1050,24 @@ impl CkBtcMinterState {
         }
     }
 
+    /// Marks the given UTXO as successfully checked but minting failed.
+    fn mark_utxo_checked_mint_unknown(&mut self, utxo: Utxo, account: &Account) {
+        // It should have already been removed from suspended_utxos
+        debug_assert_eq!(
+            self.suspended_utxos.contains_utxo(&utxo, account),
+            (None, None),
+            "BUG: UTXO was still suspended and cannot be marked as mint unknown"
+        );
+        self.checked_utxos.insert(
+            utxo,
+            CheckedUtxo {
+                uuid: None,
+                status: UtxoCheckStatus::CleanButMintUnknown,
+                kyt_provider: None,
+            },
+        );
+    }
+
     /// Marks the given UTXO as successfully checked.
     fn mark_utxo_checked_v2(&mut self, utxo: Utxo, account: &Account) {
         self.suspended_utxos.remove(account, &utxo);
@@ -1275,6 +1281,16 @@ impl CkBtcMinterState {
         self.suspended_utxos.iter().filter_map(|(u, r)| match r {
             SuspendedReason::ValueTooSmall => None,
             SuspendedReason::Quarantined => Some(u),
+        })
+    }
+
+    pub fn mint_status_unknown_utxos(&self) -> impl Iterator<Item = &Utxo> {
+        self.checked_utxos.iter().filter_map(|(utxo, checked)| {
+            if checked.status == UtxoCheckStatus::CleanButMintUnknown {
+                Some(utxo)
+            } else {
+                None
+            }
         })
     }
 }
