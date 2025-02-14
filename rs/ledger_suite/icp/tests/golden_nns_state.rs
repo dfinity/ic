@@ -256,7 +256,7 @@ fn should_create_state_machine_with_golden_nns_state() {
     // For breaking changes, e.g., if mainnet is running a version with balances and allowances in
     // stable structures, but master also has blocks in stable structures, `ledger_is_downgradable`
     // should be set to `false`, otherwise `true`.
-    setup.downgrade_to_mainnet(true);
+    setup.downgrade_to_mainnet(true, false);
 
     // Verify ledger balance and allowance state
     // As before, the allowance check needs to be skipped for the mainnet version of the ledger.
@@ -315,10 +315,14 @@ impl Setup {
             wait_ledger_ready(&self.state_machine, LEDGER_CANISTER_ID, 100);
         }
         self.check_ledger_metrics(expect_migration);
-        self.upgrade_archive_canisters(&self.master_wasms.archive);
+        self.upgrade_archive_canisters(&self.master_wasms.archive, true);
     }
 
-    pub fn downgrade_to_mainnet(&self, ledger_is_downgradable: bool) {
+    pub fn downgrade_to_mainnet(
+        &self,
+        ledger_is_downgradable: bool,
+        archive_is_downgradable: bool,
+    ) {
         println!("Downgrading to mainnet version");
         self.upgrade_index(&self.mainnet_wasms.index);
         match (
@@ -349,7 +353,7 @@ impl Setup {
             }
         }
         self.check_ledger_metrics(ExpectMigration::No);
-        //self.upgrade_archive_canisters(&self.mainnet_wasms.archive);
+        self.upgrade_archive_canisters(&self.mainnet_wasms.archive, archive_is_downgradable);
     }
 
     pub fn perform_upgrade_downgrade_testing(
@@ -409,21 +413,40 @@ impl Setup {
         .expect("failed to decode archives response")
     }
 
-    fn upgrade_archive(&self, archive_canister_id: CanisterId, wasm_bytes: Vec<u8>) {
-        self.state_machine
+    fn upgrade_archive(
+        &self,
+        archive_canister_id: CanisterId,
+        wasm_bytes: Vec<u8>,
+        archive_is_upgradable: bool,
+    ) {
+        match self
+            .state_machine
             .upgrade_canister(archive_canister_id, wasm_bytes, vec![])
-            .unwrap_or_else(|e| {
-                panic!(
-                    "should successfully upgrade archive '{}' to new local version: {}",
-                    archive_canister_id, e
-                )
-            });
+        {
+            Ok(_) => {
+                if !archive_is_upgradable {
+                    panic!("upgrade should fail")
+                }
+            }
+            Err(e) => {
+                if archive_is_upgradable {
+                    panic!(
+                        "should successfully upgrade archive '{}' to new local version: {}",
+                        archive_canister_id, e
+                    )
+                }
+            }
+        }
     }
 
-    fn upgrade_archive_canisters(&self, wasm: &Wasm) {
+    fn upgrade_archive_canisters(&self, wasm: &Wasm, archive_is_upgradable: bool) {
         let archives = self.list_archives().archives;
         for archive_info in &archives {
-            self.upgrade_archive(archive_info.canister_id, wasm.clone().bytes());
+            self.upgrade_archive(
+                archive_info.canister_id,
+                wasm.clone().bytes(),
+                archive_is_upgradable,
+            );
         }
     }
 
