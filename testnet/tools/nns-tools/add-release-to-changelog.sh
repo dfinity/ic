@@ -7,7 +7,7 @@ source "$NNS_TOOLS_DIR/lib/include.sh"
 help() {
     print_green "
 Usage: $0 <PROPOSAL_ID>
-    PROPOSAL_ID: The ID of a recently executed Governance backend canister upgrade proposal.
+    PROPOSAL_ID: The ID of a recently proposed Governance backend canister upgrade proposal.
 
     Moves the pending new changelog entry from unreleased_changelog.md to CHANGELOG.md.
 
@@ -44,19 +44,13 @@ if [[ "${LEN}" -ne 1 ]]; then
 fi
 PROPOSAL_INFO=$(echo "${PROPOSAL_INFO}" | jq '.[0]')
 
-# Assert was executed.
-EXECUTED_TIMESTAMP_SECONDS=$(echo "${PROPOSAL_INFO}" | jq '.executed_timestamp_seconds | tonumber')
-if [[ "${EXECUTED_TIMESTAMP_SECONDS}" -eq 0 ]]; then
-    print_red "💀 Proposal ${PROPOSAL_ID} exists, but was not successfully executed." >&2
+# Get proposal creation timestamp.
+# It's under proposal_creation_timestamp_seconds on SNS, and proposal_timestamp_seconds on NNS
+PROPOSED_TIMESTAMP_SECONDS=$(echo "${PROPOSAL_INFO}" | jq '.proposal_creation_timestamp_seconds // .proposal_timestamp_seconds | tonumber')
+if [[ "${PROPOSED_TIMESTAMP_SECONDS}" -eq 0 ]]; then
+    print_red "💀 Proposal ${PROPOSAL_ID} exists, but had no proposal_creation_timestamp_seconds." >&2
     exit 1
 fi
-SECONDS_AGO=$(($(date +%s) - "${EXECUTED_TIMESTAMP_SECONDS}"))
-EXECUTED_ON=$(
-    date --utc \
-        --date=@"${EXECUTED_TIMESTAMP_SECONDS}" \
-        --iso-8601
-)
-print_cyan "🗳️  Proposal ${PROPOSAL_ID} was executed ${SECONDS_AGO} seconds ago." >&2
 
 # Extract which canister was upgraded, and to what commit.
 TITLE=$(echo "${PROPOSAL_INFO}" | jq -r '.proposal[0].title[0]')
@@ -81,10 +75,16 @@ else
     print_red "(In particular, unable to determine which canister and commit.)" >&2
     exit 1
 fi
+SECONDS_AGO=$(($(date +%s) - "${PROPOSED_TIMESTAMP_SECONDS}"))
+PROPOSED_ON=$(
+    date --utc \
+        --date=@"${PROPOSED_TIMESTAMP_SECONDS}" \
+        --iso-8601
+)
+print_cyan "🏃 ${GOVERNANCE_TYPE} ${CANISTER_NAME} proposal was submitted ${SECONDS_AGO} seconds ago." >&2
 
 # Fail if the proposal's commit is not checked out.
 if [[ $(git rev-parse HEAD) != $DESTINATION_COMMIT_ID* ]]; then
-    echo >&2
     print_red "💀 You currently have $(git rev-parse HEAD)" >&2
     print_red "checked out, but this command only supports being run when" >&2
     print_red "the proposal's commit (${DESTINATION_COMMIT_ID}) is checked out." >&2
@@ -102,8 +102,7 @@ cd "${CANISTER_CODE_PATH}"
 
 # Assert that there is a CHANGELOG.md file.
 if [[ ! -e CHANGELOG.md ]]; then
-    echo >&2
-    print_red "💀 ${CANISTER_NAME} has no CHANGELOG.md file." >&2
+    print_red "💀 ${GOVERNANCE_TYPE} ${CANISTER_NAME} has no CHANGELOG.md file." >&2
     exit 1
 fi
 # TODO: Also verify that unreleased_changelog.md exists.
@@ -116,11 +115,10 @@ NEW_FEATURES_AND_FIXES=$(
         | filter_out_empty_markdown_sections
 )
 if [[ -z "${NEW_FEATURES_AND_FIXES}" ]]; then
-    echo >&2
-    print_red "💀 The ${CANISTER_NAME} canister has no information in its unreleased_changelog.md." >&2
+    print_red "💀 ${GOVERNANCE_TYPE} ${CANISTER_NAME}'s unreleased_changelog.md is EMPTY." >&2
     exit 1
 fi
-NEW_ENTRY="# ${EXECUTED_ON}: Proposal ${PROPOSAL_ID}
+NEW_ENTRY="# ${PROPOSED_ON}: Proposal ${PROPOSAL_ID}
 
 http://dashboard.internetcomputer.org/proposals/${PROPOSAL_ID}
 
@@ -161,7 +159,6 @@ echo -n "${UNRELEASED_CHANGELOG_INTRODUCTION}
 """ \
     >unreleased_changelog.md
 
-echo >&2
 print_green '🎉 Success! Added new entry to CHANGELOG.md.' >&2
 print_cyan '💡 Run `git diff` to see the changes. If you are pleased, commit,' >&2
 print_cyan 'push, request review, and merge them into master, per usual.' >&2

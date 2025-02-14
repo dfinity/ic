@@ -1,14 +1,14 @@
 use assert_matches::assert_matches;
 use candid::{Decode, Encode};
 use ic_base_types::{NumSeconds, PrincipalId};
-use ic_config::flag_status::FlagStatus;
+use ic_config::embedders::BestEffortResponsesFeature;
 use ic_config::subnet_config::SchedulerConfig;
 use ic_cycles_account_manager::ResourceSaturation;
 use ic_embedders::wasm_utils::instrumentation::instruction_to_cost;
 use ic_embedders::wasm_utils::instrumentation::WasmMemoryType;
 use ic_error_types::{ErrorCode, RejectCode};
 use ic_interfaces::execution_environment::{HypervisorError, SubnetAvailableMemory};
-use ic_management_canister_types::{
+use ic_management_canister_types_private::{
     CanisterChange, CanisterHttpResponsePayload, CanisterStatusType, CanisterUpgradeOptions,
 };
 use ic_nns_constants::CYCLES_MINTING_CANISTER_ID;
@@ -992,9 +992,9 @@ fn ic0_canister_version_returns_correct_value() {
     );
 
     let result = test.ingress(canister_id, "update", ctr.clone()).unwrap();
-    // Update increases the `canister_version` only AFTER the execution,
-    // so the result is plus 0, as no update has been finished yet.
-    let expected_ctr: u64 = 1;
+    // Canister version is 2 since both a replicated query and an update
+    // call will bump the canister version.
+    let expected_ctr: u64 = 2;
     assert_eq!(
         result,
         WasmResult::Reply(expected_ctr.to_le_bytes().to_vec())
@@ -1005,7 +1005,7 @@ fn ic0_canister_version_returns_correct_value() {
         .unwrap();
     let result = test.ingress(canister_id, "update", ctr.clone()).unwrap();
     // Plus 1 for the previous ingress message.
-    let expected_ctr: u64 = 2 + 1;
+    let expected_ctr: u64 = 3 + 1;
     assert_eq!(
         result,
         WasmResult::Reply(expected_ctr.to_le_bytes().to_vec())
@@ -1017,7 +1017,7 @@ fn ic0_canister_version_returns_correct_value() {
         .unwrap();
     let result = test.ingress(canister_id, "update", ctr.clone()).unwrap();
     // Plus 2 for the previous ingress messages.
-    let expected_ctr: u64 = 4 + 2;
+    let expected_ctr: u64 = 5 + 2;
     assert_eq!(
         result,
         WasmResult::Reply(expected_ctr.to_le_bytes().to_vec())
@@ -1034,7 +1034,7 @@ fn ic0_canister_version_returns_correct_value() {
     .unwrap();
     let result = test.ingress(canister_id, "update", ctr.clone()).unwrap();
     // Plus 3 for the previous ingress messages.
-    let expected_ctr: u64 = 6 + 3;
+    let expected_ctr: u64 = 7 + 3;
     assert_eq!(
         result,
         WasmResult::Reply(expected_ctr.to_le_bytes().to_vec())
@@ -1045,7 +1045,7 @@ fn ic0_canister_version_returns_correct_value() {
         .unwrap();
     let result = test.ingress(canister_id, "update", ctr.clone()).unwrap();
     // Plus 4 for the previous ingress messages.
-    let expected_ctr: u64 = 7 + 4;
+    let expected_ctr: u64 = 8 + 4;
     assert_eq!(
         result,
         WasmResult::Reply(expected_ctr.to_le_bytes().to_vec())
@@ -1055,7 +1055,7 @@ fn ic0_canister_version_returns_correct_value() {
         .unwrap();
     let result = test.ingress(canister_id, "update", ctr.clone()).unwrap();
     // Plus 5 for the previous ingress messages.
-    let expected_ctr: u64 = 8 + 5;
+    let expected_ctr: u64 = 9 + 5;
     assert_eq!(
         result,
         WasmResult::Reply(expected_ctr.to_le_bytes().to_vec())
@@ -1065,7 +1065,7 @@ fn ic0_canister_version_returns_correct_value() {
         .unwrap();
     let result = test.ingress(canister_id, "update", ctr.clone()).unwrap();
     // Plus 6 for the previous ingress messages.
-    let expected_ctr: u64 = 9 + 6;
+    let expected_ctr: u64 = 10 + 6;
     assert_eq!(
         result,
         WasmResult::Reply(expected_ctr.to_le_bytes().to_vec())
@@ -1075,7 +1075,7 @@ fn ic0_canister_version_returns_correct_value() {
         .unwrap_err();
     let result = test.ingress(canister_id, "update", ctr.clone()).unwrap();
     // Plus 7 for the previous ingress messages.
-    let expected_ctr: u64 = 9 + 7;
+    let expected_ctr: u64 = 10 + 7;
     assert_eq!(
         result,
         WasmResult::Reply(expected_ctr.to_le_bytes().to_vec())
@@ -1091,7 +1091,7 @@ fn ic0_canister_version_returns_correct_value() {
         .expect("The start canister should not fail.");
     let result = test.ingress(canister_id, "update", ctr.clone()).unwrap();
     // Plus 8 for the previous (successful) ingress messages.
-    let expected_ctr: u64 = 12 + 8;
+    let expected_ctr: u64 = 13 + 8;
     assert_eq!(
         result,
         WasmResult::Reply(expected_ctr.to_le_bytes().to_vec())
@@ -1101,7 +1101,7 @@ fn ic0_canister_version_returns_correct_value() {
         .unwrap();
     let result = test.ingress(canister_id, "update", ctr.clone()).unwrap();
     // Plus 9 for the previous ingress messages.
-    let expected_ctr: u64 = 13 + 9;
+    let expected_ctr: u64 = 14 + 9;
     assert_eq!(
         result,
         WasmResult::Reply(expected_ctr.to_le_bytes().to_vec())
@@ -1111,7 +1111,7 @@ fn ic0_canister_version_returns_correct_value() {
         .expect_err("Uninstall code should fail as the controller has changed.");
     let result = test.ingress(canister_id, "update", ctr).unwrap();
     // Plus 10 for the previous ingress messages.
-    let expected_ctr: u64 = 13 + 10;
+    let expected_ctr: u64 = 14 + 10;
     assert_eq!(
         result,
         WasmResult::Reply(expected_ctr.to_le_bytes().to_vec())
@@ -1119,7 +1119,7 @@ fn ic0_canister_version_returns_correct_value() {
 }
 
 #[test]
-fn ic0_canister_version_does_not_change_on_trap_or_queries() {
+fn ic0_canister_version_does_not_change_on_trap_or_non_replicated_queries() {
     let mut test = ExecutionTestBuilder::new().build();
     let canister_id = test.universal_canister().unwrap();
     let trap = wasm().trap().build();
@@ -1132,7 +1132,7 @@ fn ic0_canister_version_does_not_change_on_trap_or_queries() {
         let result = test
             .non_replicated_query(canister_id, "query", ctr.clone())
             .unwrap();
-        // Neither the trap nor the query should change the version.
+        // Neither the trap nor the non replicated query should change the version.
         let expected_ctr: u64 = 1;
         assert_eq!(
             result,
@@ -1670,7 +1670,10 @@ fn ic0_msg_caller_size_works_in_heartbeat() {
         .unwrap();
     assert_eq!(
         WasmResult::Reply(
-            (ic_management_canister_types::IC_00.get().to_vec().len() as u32)
+            (ic_management_canister_types_private::IC_00
+                .get()
+                .to_vec()
+                .len() as u32)
                 .to_le_bytes()
                 .to_vec()
         ),
@@ -1687,7 +1690,10 @@ fn ic0_msg_caller_copy_works_in_heartbeat() {
             wasm()
                 .msg_caller_copy(
                     0,
-                    ic_management_canister_types::IC_00.get().to_vec().len() as u32,
+                    ic_management_canister_types_private::IC_00
+                        .get()
+                        .to_vec()
+                        .len() as u32,
                 )
                 .set_global_data_from_stack()
                 .build(),
@@ -1705,7 +1711,7 @@ fn ic0_msg_caller_copy_works_in_heartbeat() {
         )
         .unwrap();
     assert_eq!(
-        WasmResult::Reply(ic_management_canister_types::IC_00.get().to_vec()),
+        WasmResult::Reply(ic_management_canister_types_private::IC_00.get().to_vec()),
         result
     );
 }
@@ -1736,7 +1742,10 @@ fn ic0_msg_caller_size_works_in_global_timer() {
         .unwrap();
     assert_eq!(
         WasmResult::Reply(
-            (ic_management_canister_types::IC_00.get().to_vec().len() as u32)
+            (ic_management_canister_types_private::IC_00
+                .get()
+                .to_vec()
+                .len() as u32)
                 .to_le_bytes()
                 .to_vec()
         ),
@@ -1753,7 +1762,10 @@ fn ic0_msg_caller_copy_works_in_global_timer() {
             wasm()
                 .msg_caller_copy(
                     0,
-                    ic_management_canister_types::IC_00.get().to_vec().len() as u32,
+                    ic_management_canister_types_private::IC_00
+                        .get()
+                        .to_vec()
+                        .len() as u32,
                 )
                 .set_global_data_from_stack()
                 .build(),
@@ -1771,7 +1783,7 @@ fn ic0_msg_caller_copy_works_in_global_timer() {
         )
         .unwrap();
     assert_eq!(
-        WasmResult::Reply(ic_management_canister_types::IC_00.get().to_vec()),
+        WasmResult::Reply(ic_management_canister_types_private::IC_00.get().to_vec()),
         result
     );
 }
@@ -2004,6 +2016,69 @@ fn ic0_canister_self_copy_works() {
     let canister_id = test.canister_from_wat(wat).unwrap();
     let result = test.ingress(canister_id, "test", vec![]).unwrap();
     assert_eq!(WasmResult::Reply(canister_id.get().into_vec()), result);
+}
+
+#[test]
+fn ic0_subnet_self_size_works() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let wat = r#"
+        (module
+            (import "ic0" "subnet_self_size"
+                (func $subnet_self_size (result i32))
+            )
+            (import "ic0" "msg_reply" (func $msg_reply))
+            (import "ic0" "msg_reply_data_append"
+            (func $msg_reply_data_append (param i32 i32)))
+            (func (export "canister_update test")
+                ;; heap[0] = $subnet_self_size()
+                (i32.store (i32.const 0) (call $subnet_self_size))
+                ;; return heap[0-4]
+                (call $msg_reply_data_append (i32.const 0) (i32.const 4))
+                (call $msg_reply)
+            )
+            (memory 1 1)
+        )"#;
+    let canister_id = test.canister_from_wat(wat).unwrap();
+    let result = test.ingress(canister_id, "test", vec![]).unwrap();
+    assert_eq!(
+        WasmResult::Reply(vec![
+            test.get_own_subnet_id().get().as_slice().len() as u8,
+            0,
+            0,
+            0
+        ]),
+        result
+    );
+}
+
+#[test]
+fn ic0_subnet_self_copy_works() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let wat = r#"
+        (module
+            (import "ic0" "subnet_self_copy"
+                (func $subnet_self_copy (param i32 i32 i32))
+            )
+            (import "ic0" "msg_reply" (func $msg_reply))
+            (import "ic0" "msg_reply_data_append"
+            (func $msg_reply_data_append (param i32 i32)))
+            (func (export "canister_update test")
+                ;; heap[0..4] = subnet_id_bytes[0..4]
+                (call $subnet_self_copy (i32.const 0) (i32.const 0) (i32.const 4))
+                ;; heap[4..10] = subnet_id_bytes[4..8]
+                (call $subnet_self_copy (i32.const 4) (i32.const 4) (i32.const 6))
+                ;; return heap[0..10]
+                (call $msg_reply_data_append (i32.const 0) (i32.const 10))
+                (call $msg_reply)
+            )
+            (memory 1 1)
+        )"#;
+    let canister_id = test.canister_from_wat(wat).unwrap();
+    let result = test.ingress(canister_id, "test", vec![]).unwrap();
+    assert_eq!(
+        WasmResult::Reply(test.get_own_subnet_id().get().into_vec()),
+        result
+    );
 }
 
 #[test]
@@ -2489,7 +2564,7 @@ fn ic0_trap_works() {
         ErrorCode::CanisterCalledTrap,
         &format!(
             "Error from Canister {canister_id}: Canister called `ic0.trap` \
-        with message: Hi!"
+        with message: 'Hi!'"
         ),
     );
 }
@@ -4807,7 +4882,7 @@ fn cycles_are_refunded_if_callee_is_reinstalled() {
         WasmResult::Reject(reject_message) => reject_message,
     };
     assert!(
-        reject_message.contains("Canister called `ic0.trap` with message: panicked at")
+        reject_message.contains("Canister called `ic0.trap` with message: 'panicked at")
             && reject_message.contains("get_callback: 1 out of bounds"),
         "Unexpected error message: {}",
         reject_message
@@ -5518,7 +5593,7 @@ fn cycles_correct_if_update_fails() {
 #[test]
 fn call_with_best_effort_response_succeeds() {
     let mut test = ExecutionTestBuilder::new()
-        .with_best_effort_responses(FlagStatus::Enabled)
+        .with_best_effort_responses(BestEffortResponsesFeature::Enabled)
         .build();
 
     let canister_id = test.universal_canister().unwrap();
@@ -5542,7 +5617,7 @@ fn call_with_best_effort_response_succeeds() {
 #[test]
 fn call_with_best_effort_response_fails_when_timeout_is_set() {
     let mut test = ExecutionTestBuilder::new()
-        .with_best_effort_responses(FlagStatus::Enabled)
+        .with_best_effort_responses(BestEffortResponsesFeature::Enabled)
         .build();
 
     let canister_id = test.universal_canister().unwrap();
@@ -5571,7 +5646,7 @@ fn call_with_best_effort_response_test_helper(
     timeout_seconds: u32,
 ) -> CoarseTime {
     let mut test = ExecutionTestBuilder::new()
-        .with_best_effort_responses(FlagStatus::Enabled)
+        .with_best_effort_responses(BestEffortResponsesFeature::Enabled)
         .with_manual_execution()
         .with_time(Time::from_secs_since_unix_epoch(start_time_seconds as u64).unwrap())
         .build();
@@ -5635,7 +5710,7 @@ fn ic0_msg_deadline_while_executing_ingress_message() {
     let start_time_seconds = 100;
 
     let mut test = ExecutionTestBuilder::new()
-        .with_best_effort_responses(FlagStatus::Enabled)
+        .with_best_effort_responses(BestEffortResponsesFeature::Enabled)
         .with_time(Time::from_secs_since_unix_epoch(start_time_seconds as u64).unwrap())
         .build();
 
@@ -5657,7 +5732,7 @@ fn ic0_msg_deadline_when_deadline_is_not_set() {
     let start_time_seconds = 100;
 
     let mut test = ExecutionTestBuilder::new()
-        .with_best_effort_responses(FlagStatus::Enabled)
+        .with_best_effort_responses(BestEffortResponsesFeature::Enabled)
         .with_time(Time::from_secs_since_unix_epoch(start_time_seconds as u64).unwrap())
         .build();
 
@@ -5695,7 +5770,7 @@ fn ic0_msg_deadline_when_deadline_is_set() {
     let timeout_seconds = 200;
 
     let mut test = ExecutionTestBuilder::new()
-        .with_best_effort_responses(FlagStatus::Enabled)
+        .with_best_effort_responses(BestEffortResponsesFeature::Enabled)
         .with_time(Time::from_secs_since_unix_epoch(start_time_seconds as u64).unwrap())
         .build();
 
@@ -7586,9 +7661,7 @@ fn declaring_too_many_tables_fails() {
 // produces a reply from `bytes`.
 fn use_wasm_memory_and_reply(bytes: u64) -> Vec<u8> {
     wasm()
-        .stable64_grow(
-            (bytes + WASM_PAGE_SIZE_IN_BYTES as u64 - 1) / WASM_PAGE_SIZE_IN_BYTES as u64,
-        )
+        .stable64_grow(bytes.div_ceil(WASM_PAGE_SIZE_IN_BYTES as u64))
         .stable64_read(0, bytes)
         .blob_length()
         .reply_int()
@@ -8055,7 +8128,8 @@ fn check_correct_execution_state(is_wasm64: bool) {
     let result = test.ingress(canister_id, "test", vec![]);
     assert_empty_reply(result);
     let execution_state = test.execution_state(canister_id);
-    assert_eq!(execution_state.is_wasm64, is_wasm64);
+    let bool_wasm_exec_mode: bool = execution_state.wasm_execution_mode.is_wasm64();
+    assert_eq!(bool_wasm_exec_mode, is_wasm64);
 }
 
 #[test]

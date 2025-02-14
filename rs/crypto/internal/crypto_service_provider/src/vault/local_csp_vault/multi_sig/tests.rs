@@ -29,9 +29,7 @@ fn should_generate_committee_signing_key_pair_and_store_keys() {
         .expect("Failure generating key pair with pop");
 
     assert_matches!(pk, CspPublicKey::MultiBls12_381(_));
-    assert!(csp_vault
-        .sks_contains(KeyId::try_from(&pk).unwrap())
-        .is_ok());
+    assert!(csp_vault.sks_contains(KeyId::from(&pk)).is_ok());
     assert_eq!(
         csp_vault
             .current_node_public_keys()
@@ -182,7 +180,7 @@ fn should_multi_sign_and_verify_with_generated_key() {
     let (csp_pub_key, csp_pop) = csp_vault
         .gen_committee_signing_key_pair()
         .expect("failed to generate keys");
-    let key_id = KeyId::try_from(&csp_pub_key).unwrap();
+    let key_id = KeyId::from(&csp_pub_key);
 
     let msg_len: usize = rng.gen_range(0..1024);
     let msg: Vec<u8> = (0..msg_len).map(|_| rng.gen::<u8>()).collect();
@@ -213,7 +211,7 @@ fn should_fail_to_multi_sign_with_unsupported_algorithm_id() {
     let (csp_pub_key, _csp_pop) = csp_vault
         .gen_committee_signing_key_pair()
         .expect("failed to generate keys");
-    let key_id = KeyId::try_from(&csp_pub_key).unwrap();
+    let key_id = KeyId::from(&csp_pub_key);
 
     let msg = vec![31; 41];
 
@@ -242,7 +240,7 @@ fn should_fail_to_multi_sign_if_secret_key_in_store_has_wrong_type() {
     let result = csp_vault.multi_sign(
         AlgorithmId::MultiBls12_381,
         msg,
-        KeyId::try_from(&wrong_csp_pub_key).unwrap(),
+        KeyId::from(&wrong_csp_pub_key),
     );
 
     assert_eq!(

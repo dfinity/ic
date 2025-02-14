@@ -1,3 +1,6 @@
+// TODO: Jira ticket NNS1-3556
+#![allow(static_mut_refs)]
+
 //! This is a special-purpose canister to create a large Governance proto and
 //! serialize it to stable memory in a format that is compatible with the real
 //! governance canister.
@@ -9,6 +12,7 @@
 use dfn_core::println;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_nervous_system_common::dfn_core_stable_mem_utils::BufferedStableMemWriter;
+use ic_sns_governance::pb::v1::Topic;
 use ic_sns_governance::{
     governance::HEAP_SIZE_SOFT_LIMIT_IN_WASM32_PAGES,
     pb::v1::{
@@ -163,6 +167,7 @@ fn generate_generic_nervous_system_functions(
             name: "GenericNervousSystemFunction".to_string(),
             function_type: Some(FunctionType::GenericNervousSystemFunction(
                 GenericNervousSystemFunction {
+                    topic: Some(i32::from(Topic::DaoCommunitySettings)),
                     target_canister_id: Some(CanisterId::from_u64(id).get()),
                     target_method_name: Some("test_method".to_string()),
                     validator_canister_id: Some(CanisterId::from_u64(id).get()),

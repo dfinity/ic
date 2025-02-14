@@ -9,13 +9,9 @@ on the process that this file is part of, see
 
 ## Added
 
-Enable upgrading SNS-controlled canisters using chunked WASMs. This is implemented as an extension
-of the existing `UpgradeSnsControllerCanister` proposal type with new field `chunked_canister_wasm`.
-This field can be used for specifying an upgrade of an SNS-controlled *target* canister using
-a potentially large WASM module (over 2 MiB) uploaded to some *store* canister, which:
-* must be installed on the same subnet as target.
-* must have SNS Root as one of its controllers.
-* must have enough cycles for performing the upgrade.
+The concept of topics has now been introduced to the SNS. This means that when custom function is being submitted, a topic can be specified for that function to be categorized under. This can be used for organizing the following page, and could be used for more in the future.
+
+A `list_topics` API has been added, which returns a list of topics and all the functions categorized in those topics. 
 
 ## Changed
 

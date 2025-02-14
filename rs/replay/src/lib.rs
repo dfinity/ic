@@ -240,10 +240,12 @@ fn cmd_get_recovery_cup(
     let low_threshold_transcript = summary
         .dkg
         .current_transcript(&NiDkgTag::LowThreshold)
+        .expect("No current low threshold transcript available")
         .clone();
     let high_threshold_transcript = summary
         .dkg
         .current_transcript(&NiDkgTag::HighThreshold)
+        .expect("No current high threshold transcript available")
         .clone();
     let initial_ni_dkg_transcript_low_threshold =
         Some(InitialNiDkgTranscriptRecord::from(low_threshold_transcript));

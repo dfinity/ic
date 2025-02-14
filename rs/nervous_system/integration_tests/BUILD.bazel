@@ -6,6 +6,7 @@ package(default_visibility = ["//visibility:public"])
 # See rs/nervous_system/feature_test.md
 BASE_DEPENDENCIES = [
     # Keep sorted.
+    "//rs/interfaces/registry",
     "//rs/ledger_suite/common/ledger_core",
     "//rs/ledger_suite/icp:icp_ledger",
     "//rs/ledger_suite/icrc1",
@@ -16,10 +17,14 @@ BASE_DEPENDENCIES = [
     "//rs/nervous_system/common",
     "//rs/nervous_system/proto",
     "//rs/nervous_system/root",
+    "//rs/nns/cmc",
     "//rs/nns/common",
     "//rs/nns/governance/api",
     "//rs/nns/sns-wasm",
+    "//rs/registry/proto_data_provider",
+    "//rs/sns/cli",
     "//rs/sns/governance",
+    "//rs/sns/governance/api",
     "//rs/sns/init",
     "//rs/sns/root",
     "//rs/sns/swap",
@@ -33,7 +38,9 @@ BASE_DEPENDENCIES = [
     "@crate_index//:lazy_static",
     "@crate_index//:prost",
     "@crate_index//:rust_decimal",
+    "@crate_index//:tempfile",
     "@crate_index//:tokio",
+    "@crate_index//:url",
 ] + select({
     "@rules_rust//rust/platform:wasm32-unknown-unknown": [],
     "//conditions:default": [

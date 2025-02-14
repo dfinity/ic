@@ -80,7 +80,6 @@ type CreateSubnetPayload = record {
   gossip_pfn_evaluation_period_ms : nat32;
   max_ingress_messages_per_block : nat64;
   max_number_of_canisters : nat64;
-  ecdsa_config : opt EcdsaInitialConfig;
   chain_key_config : opt InitialChainKeyConfig;
   gossip_max_artifact_streams_per_peer : nat32;
   replica_version_id : text;
@@ -255,7 +254,6 @@ type RecoverSubnetPayload = record {
   replacement_nodes : opt vec principal;
   subnet_id : principal;
   registry_store_uri : opt record { text; text; nat64 };
-  ecdsa_config : opt EcdsaInitialConfig;
   chain_key_config : opt InitialChainKeyConfig;
   state_hash : blob;
   time_ns : nat64;
@@ -273,6 +271,11 @@ type RemoveNodeDirectlyPayload = record { node_id : principal };
 
 type RemoveNodeOperatorsPayload = record {
   node_operators_to_remove : vec blob;
+  node_operator_principals_to_remove : opt NodeOperatorPrincipals;
+};
+
+type NodeOperatorPrincipals = record {
+  principals : vec principal;
 };
 
 type RemoveNodesPayload = record { node_ids : vec principal };
@@ -418,9 +421,6 @@ type UpdateSubnetPayload = record {
   chain_key_config : opt ChainKeyConfig;
   chain_key_signing_enable : opt vec MasterPublicKeyId;
   chain_key_signing_disable : opt vec MasterPublicKeyId;
-  ecdsa_config : opt EcdsaConfig;
-  ecdsa_key_signing_enable : opt vec EcdsaKeyId;
-  ecdsa_key_signing_disable : opt vec EcdsaKeyId;
 };
 
 type ChainKeyConfig = record {

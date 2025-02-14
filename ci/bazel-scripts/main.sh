@@ -42,9 +42,6 @@ else
     s3_upload="True"
 fi
 
-# pass info about bazel targets to bazel-targets file
-echo "$BAZEL_TARGETS" >bazel-targets
-
 # if bazel targets is empty we don't need to run any tests
 if [ -z "${BAZEL_TARGETS:-}" ]; then
     echo "No bazel targets to build"
@@ -58,12 +55,9 @@ AWS_CREDS="${HOME}/.aws/credentials"
 mkdir -p "$(dirname "${AWS_CREDS}")"
 
 # add aws credentials file if it's set
-if [ -n "${AWS_SHARED_CREDENTIALS_CONTENT+x}" ]; then
-    echo "$AWS_SHARED_CREDENTIALS_CONTENT" >"$AWS_CREDS"
-fi
-
-if [ -n "${GITHUB_OUTPUT:-}" ]; then
-    echo "upload_artifacts=true" >>"$GITHUB_OUTPUT"
+if [ -n "${CLOUD_CREDENTIALS_CONTENT+x}" ]; then
+    echo "$CLOUD_CREDENTIALS_CONTENT" >"$AWS_CREDS"
+    unset CLOUD_CREDENTIALS_CONTENT
 fi
 
 if [ -z "${KUBECONFIG:-}" ] && [ ! -z "${KUBECONFIG_TNET_CREATOR_LN1:-}" ]; then
@@ -90,21 +84,28 @@ stream_awk_program='
   # Finally, record the URL
   END { if (stream_url != null) print stream_url > url_out }'
 
+bazel_args=(
+    --output_base=/var/tmp/bazel-output # Output base wiped after run
+    ${BAZEL_COMMAND}
+    ${BAZEL_TARGETS}
+    --color=yes
+    --build_metadata=BUILDBUDDY_LINKS="[CI Job](${CI_JOB_URL})"
+    --ic_version="${CI_COMMIT_SHA}"
+    --ic_version_rc_only="${ic_version_rc_only}"
+    --release_build="${release_build}"
+    --s3_upload="${s3_upload:-"False"}"
+)
+
+# Unless explicitly provided, we set a default --repository_cache to a volume mounted inside our runners
+# Only for Linux builds since there `/cache` is mounted to host local storage.
+if [[ ! " ${bazel_args[*]} " =~ [[:space:]]--repository_cache[[:space:]] ]] && [[ "$(uname)" == "Linux" ]]; then
+    echo "setting default repository cache"
+    bazel_args+=(--repository_cache=/cache/bazel)
+fi
+
 # shellcheck disable=SC2086
 # ${BAZEL_...} variables are expected to contain several arguments. We have `set -f` set above to disable globbing (and therefore only allow splitting)"
-buildevents cmd "${CI_RUN_ID}" "${CI_JOB_NAME}" "${CI_JOB_NAME}-bazel-cmd" -- bazel \
-    ${BAZEL_STARTUP_ARGS} \
-    ${BAZEL_COMMAND} \
-    --color=yes \
-    ${BAZEL_CI_CONFIG} \
-    --build_metadata=BUILDBUDDY_LINKS="[CI Job](${CI_JOB_URL})" \
-    --ic_version="${CI_COMMIT_SHA}" \
-    --ic_version_rc_only="${ic_version_rc_only}" \
-    --release_build="${release_build}" \
-    --s3_upload="${s3_upload:-"False"}" \
-    ${BAZEL_EXTRA_ARGS:-} \
-    ${BAZEL_TARGETS} \
-    2>&1 | awk -v url_out="$url_out" "$stream_awk_program"
+bazel "${bazel_args[@]}" 2>&1 | awk -v url_out="$url_out" "$stream_awk_program"
 
 # Write the bes link & summary
 echo "Build results uploaded to $(<"$url_out")"

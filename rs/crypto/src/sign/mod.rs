@@ -1,7 +1,5 @@
 use super::*;
 
-use crate::sign::basic_sig::BasicSigVerifierInternal;
-use crate::sign::basic_sig::BasicSignerInternal;
 use crate::sign::multi_sig::MultiSigVerifierInternal;
 use crate::sign::multi_sig::MultiSignerInternal;
 use crate::sign::threshold_sig::{ThresholdSigVerifierInternal, ThresholdSignerInternal};
@@ -37,7 +35,9 @@ use ic_types::{NodeId, RegistryVersion, SubnetId};
 use std::collections::{BTreeMap, BTreeSet};
 use std::convert::TryFrom;
 
-pub use threshold_sig::ThresholdSigDataStoreImpl;
+pub(crate) use basic_sig::{BasicSigVerifierInternal, BasicSignerInternal};
+pub(crate) use threshold_sig::lazily_calculated_public_key_from_store;
+pub use threshold_sig::{ThresholdSigDataStore, ThresholdSigDataStoreImpl};
 
 mod basic_sig;
 mod canister_threshold_sig;

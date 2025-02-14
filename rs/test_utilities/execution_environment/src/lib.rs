@@ -1,5 +1,5 @@
 use ic_base_types::{NumBytes, NumSeconds, PrincipalId, SubnetId};
-use ic_config::embedders::{MeteringType, StableMemoryPageLimit};
+use ic_config::embedders::{BestEffortResponsesFeature, MeteringType, StableMemoryPageLimit};
 use ic_config::{
     embedders::{Config as EmbeddersConfig, WASM_MAX_SIZE},
     execution_environment::Config,
@@ -8,7 +8,6 @@ use ic_config::{
     subnet_config::SubnetConfig,
 };
 use ic_cycles_account_manager::CyclesAccountManager;
-use ic_cycles_account_manager::WasmExecutionMode;
 use ic_embedders::{
     wasm_utils::{compile, decoding::decode_wasm},
     WasmtimeEmbedder,
@@ -27,7 +26,7 @@ use ic_interfaces::execution_environment::{
 use ic_interfaces_state_manager::Labeled;
 use ic_limits::SMALL_APP_SUBNET_MAX_SIZE;
 use ic_logger::{replica_logger::no_op_logger, ReplicaLogger};
-use ic_management_canister_types::{
+use ic_management_canister_types_private::{
     CanisterIdRecord, CanisterInstallMode, CanisterInstallModeV2, CanisterSettingsArgs,
     CanisterSettingsArgsBuilder, CanisterStatusType, CanisterUpgradeOptions, EmptyBlob,
     InstallCodeArgs, InstallCodeArgsV2, LogVisibilityV2, MasterPublicKeyId, Method, Payload,
@@ -41,7 +40,9 @@ use ic_registry_routing_table::{
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
-    canister_state::{execution_state::SandboxMemory, NextExecution},
+    canister_state::{
+        execution_state::SandboxMemory, execution_state::WasmExecutionMode, NextExecution,
+    },
     page_map::{
         test_utils::base_only_storage_layout, PageMap, TestPageAllocatorFileDescriptorImpl,
         PAGE_SIZE,
@@ -287,7 +288,7 @@ impl ExecutionTest {
         if let Some(state) = self.state.as_ref() {
             if let Some(canister) = state.canister_state(&canister_id).as_ref() {
                 if let Some(execution_state) = canister.execution_state.as_ref() {
-                    return execution_state.is_wasm64.into();
+                    return execution_state.wasm_execution_mode;
                 }
             }
         }
@@ -1711,6 +1712,10 @@ impl ExecutionTest {
     pub fn query_stats_set_epoch_for_testing(&mut self, epoch: QueryStatsEpoch) {
         self.query_handler.query_stats_set_epoch_for_testing(epoch);
     }
+
+    pub fn get_own_subnet_id(&self) -> SubnetId {
+        self.cycles_account_manager.get_subnet_id()
+    }
 }
 
 /// A builder for `ExecutionTest`.
@@ -2115,6 +2120,13 @@ impl ExecutionTestBuilder {
         self
     }
 
+    pub fn with_max_wasm64_memory_size(mut self, wasm_memory_size: NumBytes) -> Self {
+        self.execution_config
+            .embedders_config
+            .max_wasm64_memory_size = wasm_memory_size;
+        self
+    }
+
     pub fn with_metering_type(mut self, metering_type: MeteringType) -> Self {
         self.execution_config.embedders_config.metering_type = metering_type;
         self
@@ -2128,11 +2140,11 @@ impl ExecutionTestBuilder {
         self
     }
 
-    pub fn with_best_effort_responses(mut self, status: FlagStatus) -> Self {
+    pub fn with_best_effort_responses(mut self, stage: BestEffortResponsesFeature) -> Self {
         self.execution_config
             .embedders_config
             .feature_flags
-            .best_effort_responses = status;
+            .best_effort_responses = stage;
         self
     }
 

@@ -1,3 +1,6 @@
+// TODO: Jira ticket NNS1-3556
+#![allow(static_mut_refs)]
+
 //! This is a special-purpose canister to create a large Governance proto and
 //! serialize it to stable memory in a format that is compatible with the real
 //! governance canister.
@@ -314,7 +317,9 @@ fn allocate_neuron(id: u64) -> Neuron {
         neuron_type: None,
         visibility: None,
         voting_power_refreshed_timestamp_seconds: None,
-        // These are ignored, because they are derived.
+        // These are ignored when passed to the Governance canister, because
+        // they are derived. Normally, they are populated by Neuron::into_api
+        // (when the Governance canister returns a (full) neuron).
         deciding_voting_power: None,
         potential_voting_power: None,
     }

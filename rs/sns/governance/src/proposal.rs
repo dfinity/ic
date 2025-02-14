@@ -23,7 +23,7 @@ use crate::{
         LogVisibility, ManageDappCanisterSettings, ManageLedgerParameters, ManageSnsMetadata,
         MintSnsTokens, Motion, NervousSystemFunction, NervousSystemParameters, Proposal,
         ProposalData, ProposalDecisionStatus, ProposalId, ProposalRewardStatus,
-        RegisterDappCanisters, SnsVersion, Tally, TransferSnsTreasuryFunds,
+        RegisterDappCanisters, SnsVersion, Tally, Topic as TopicPb, TransferSnsTreasuryFunds,
         UpgradeSnsControlledCanister, UpgradeSnsToNextVersion, Valuation as ValuationPb, Vote,
     },
     sns_upgrade::{get_proposal_id_that_added_wasm, get_upgrade_params, UpgradeSnsParams},
@@ -42,6 +42,7 @@ use ic_nervous_system_proto::pb::v1::Percentage;
 use ic_nervous_system_timestamp::format_timestamp_for_humans;
 use ic_protobuf::types::v1::CanisterInstallMode;
 use ic_sns_governance_api::format_full_hash;
+use ic_sns_governance_api::pb::v1 as pb_api;
 use ic_sns_governance_proposals_amount_total_limit::{
     // TODO(NNS1-2982): Uncomment. mint_sns_tokens_7_day_total_upper_bound_tokens,
     transfer_sns_treasury_funds_7_day_total_upper_bound_tokens,
@@ -100,7 +101,7 @@ impl Proposal {
     pub(crate) fn allowed_when_resources_are_low(&self) -> bool {
         self.action
             .as_ref()
-            .map_or(false, |a| a.allowed_when_resources_are_low())
+            .is_some_and(|a| a.allowed_when_resources_are_low())
     }
 
     /// Returns a clone of self, except that "large blob fields" are replaced
@@ -1225,6 +1226,8 @@ async fn validate_and_render_upgrade_sns_to_next_version(
 #[derive(Debug)]
 pub(crate) struct ValidGenericNervousSystemFunction {
     pub id: u64,
+    #[allow(dead_code)]
+    pub topic: Option<pb_api::topics::Topic>,
     pub target_canister_id: CanisterId,
     pub target_method: String,
     pub validator_canister_id: CanisterId,
@@ -1300,6 +1303,7 @@ impl TryFrom<&NervousSystemFunction> for ValidGenericNervousSystemFunction {
                 target_method_name,
                 validator_canister_id,
                 validator_method_name,
+                topic,
             })) => {
                 // Validate the target_canister_id field.
                 let target_canister_id =
@@ -1323,6 +1327,37 @@ impl TryFrom<&NervousSystemFunction> for ValidGenericNervousSystemFunction {
                     defects.push("validator_method_name was empty.".to_string());
                 }
 
+                let topic = topic.map(|topic| -> Result<pb_api::topics::Topic, String> {
+                    let topic = TopicPb::try_from(topic).map_err(|e| format!("{:?}", e))?;
+                    let topic = pb_api::topics::Topic::try_from(topic)?;
+                    Ok(topic)
+                });
+                let topic = match topic {
+                    None => None,
+                    Some(Ok(topic)) => Some(topic),
+                    Some(Err(e)) => {
+                        defects.push(format!("topic field is not valid: {:?}", e));
+                        None
+                    }
+                };
+
+                // TODO(NNS1-3625): Remove this once proposal criticality is determined by the topic
+                match topic {
+                    Some(pb_api::topics::Topic::CriticalDappOperations) => {
+                        defects.push(
+                            "CriticalDappOperations is not yet supported for custom functions"
+                                .to_string(),
+                        );
+                    }
+                    Some(pb_api::topics::Topic::TreasuryAssetManagement) => {
+                        defects.push(
+                            "CriticalDappOperations is not yet supported for custom functions"
+                                .to_string(),
+                        );
+                    }
+                    _ => {}
+                }
+
                 if !defects.is_empty() {
                     return Err(format!(
                         "ExecuteNervousSystemFunction was invalid for the following reason(s):\n{}",
@@ -1332,6 +1367,7 @@ impl TryFrom<&NervousSystemFunction> for ValidGenericNervousSystemFunction {
 
                 Ok(ValidGenericNervousSystemFunction {
                     id: *id,
+                    topic,
                     target_canister_id: target_canister_id.unwrap(),
                     target_method: target_method_name.as_ref().unwrap().clone(),
                     validator_canister_id: validator_canister_id.unwrap(),
@@ -2580,7 +2616,7 @@ mod tests {
     use futures::FutureExt;
     use ic_base_types::{NumBytes, PrincipalId};
     use ic_crypto_sha2::Sha256;
-    use ic_management_canister_types::{CanisterIdRecord, ChunkHash, StoredChunksReply};
+    use ic_management_canister_types_private::{CanisterIdRecord, ChunkHash, StoredChunksReply};
     use ic_nervous_system_clients::canister_status::{CanisterStatusResultV2, CanisterStatusType};
     use ic_nervous_system_common_test_keys::TEST_USER1_PRINCIPAL;
     use ic_nns_constants::SNS_WASM_CANISTER_ID;
@@ -3225,6 +3261,7 @@ Upgrade argument with 8 bytes and SHA256 `0a141e28323c4650`."#
             description: None,
             function_type: Some(FunctionType::GenericNervousSystemFunction(
                 GenericNervousSystemFunction {
+                    topic: Some(i32::from(TopicPb::DaoCommunitySettings)),
                     target_canister_id: Some(CanisterId::from_u64(1).get()),
                     target_method_name: Some("test_method".to_string()),
                     validator_canister_id: Some(CanisterId::from_u64(1).get()),
@@ -3422,6 +3459,7 @@ Upgrade argument with 8 bytes and SHA256 `0a141e28323c4650`."#
             description: None,
             function_type: Some(FunctionType::GenericNervousSystemFunction(
                 GenericNervousSystemFunction {
+                    topic: Some(i32::from(TopicPb::DaoCommunitySettings)),
                     target_canister_id: Some(CanisterId::from_u64(1).get()),
                     target_method_name: Some("test_method".to_string()),
                     validator_canister_id: Some(CanisterId::from_u64(1).get()),
@@ -3468,6 +3506,7 @@ Upgrade argument with 8 bytes and SHA256 `0a141e28323c4650`."#
                 description: None,
                 function_type: Some(FunctionType::GenericNervousSystemFunction(
                     GenericNervousSystemFunction {
+                        topic: Some(i32::from(TopicPb::DaoCommunitySettings)),
                         target_canister_id: Some(CanisterId::from_u64(i as u64).get()),
                         target_method_name: Some("test_method".to_string()),
                         validator_canister_id: Some(CanisterId::from_u64(i as u64).get()),
@@ -3484,6 +3523,7 @@ Upgrade argument with 8 bytes and SHA256 `0a141e28323c4650`."#
             description: None,
             function_type: Some(FunctionType::GenericNervousSystemFunction(
                 GenericNervousSystemFunction {
+                    topic: Some(i32::from(TopicPb::DaoCommunitySettings)),
                     target_canister_id: Some(CanisterId::from(u64::MAX).get()),
                     target_method_name: Some("test_method".to_string()),
                     validator_canister_id: Some(CanisterId::from_u64(u64::MAX).get()),
@@ -3926,6 +3966,7 @@ Version {
             description: None,
             function_type: Some(FunctionType::GenericNervousSystemFunction(
                 GenericNervousSystemFunction {
+                    topic: Some(i32::from(TopicPb::DaoCommunitySettings)),
                     target_canister_id: Some(CanisterId::from(2).get()),
                     target_method_name: Some("test_method".to_string()),
                     validator_canister_id: Some(CanisterId::from(1).get()),
@@ -3947,6 +3988,7 @@ Version {
             description: None,
             function_type: Some(FunctionType::GenericNervousSystemFunction(
                 GenericNervousSystemFunction {
+                    topic: Some(i32::from(TopicPb::DaoCommunitySettings)),
                     target_canister_id: Some(CanisterId::ic_00().get()),
                     target_method_name: Some("test_method".to_string()),
                     validator_canister_id: Some(CanisterId::from(1).get()),
@@ -3966,6 +4008,7 @@ Version {
             description: None,
             function_type: Some(FunctionType::GenericNervousSystemFunction(
                 GenericNervousSystemFunction {
+                    topic: Some(i32::from(TopicPb::DaoCommunitySettings)),
                     target_canister_id: Some(CanisterId::from(1).get()),
                     target_method_name: Some("test_method".to_string()),
                     validator_canister_id: Some(CanisterId::ic_00().get()),
@@ -4914,6 +4957,7 @@ Version {
             description: None,
             function_type: Some(FunctionType::GenericNervousSystemFunction(
                 GenericNervousSystemFunction {
+                    topic: Some(i32::from(TopicPb::DaoCommunitySettings)),
                     target_canister_id: Some(canister_id.get()),
                     target_method_name: Some("test_method".to_string()),
                     validator_canister_id: Some(canister_id.get()),
@@ -4969,6 +5013,9 @@ NervousSystemFunction {
                 ),
                 validator_method_name: Some(
                     "test_validator_method",
+                ),
+                topic: Some(
+                    DaoCommunitySettings,
                 ),
             },
         ),

@@ -1,6 +1,6 @@
 load("//bazel:defs.bzl", "gzip_compress")
 load("//ci/src/artifacts:upload.bzl", "upload_artifacts")
-load("//publish:defs.bzl", "release_nostrip_binary", "release_strip_binary", "release_strip_binary_test")
+load("//publish:defs.bzl", "checksum_rule", "release_nostrip_binary", "release_strip_binary", "release_strip_binary_test")
 
 package(default_visibility = ["//rs:ic-os-pkg"])
 
@@ -117,6 +117,11 @@ TEST_BINARIES = [
 filegroup(
     name = "binaries",
     srcs = [name + ".gz" for name in ALL_BINARIES],
+)
+
+checksum_rule(
+    name = "compute_checksums",
+    inputs = [":binaries"],
 )
 
 upload_artifacts(

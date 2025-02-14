@@ -50,7 +50,7 @@ use tokio::sync::oneshot;
 use tower::{util::BoxCloneService, Service};
 
 pub(crate) use self::query_scheduler::{QueryScheduler, QuerySchedulerFlag};
-use ic_management_canister_types::{
+use ic_management_canister_types_private::{
     FetchCanisterLogsRequest, FetchCanisterLogsResponse, LogVisibilityV2, Payload, QueryMethod,
 };
 
@@ -210,7 +210,6 @@ impl InternalHttpQueryHandler {
                         query.source(),
                         state.get_ref(),
                         FetchCanisterLogsRequest::decode(&query.method_payload)?,
-                        self.config.allowed_viewers_feature,
                     );
                     self.metrics.observe_subnet_query_message(
                         QueryMethod::FetchCanisterLogs,
@@ -258,7 +257,6 @@ impl InternalHttpQueryHandler {
         // instruction limit for the whole composite query tree imposes a much lower
         // implicit bound anyway.
         let subnet_available_callbacks = self.config.subnet_callback_soft_limit as i64;
-        let max_canister_memory_size = self.config.max_canister_memory_size;
 
         let mut context = query_context::QueryContext::new(
             &self.log,
@@ -273,7 +271,8 @@ impl InternalHttpQueryHandler {
             subnet_available_memory,
             subnet_available_callbacks,
             self.config.canister_guaranteed_callback_quota as u64,
-            max_canister_memory_size,
+            self.config.max_canister_memory_size_wasm32,
+            self.config.max_canister_memory_size_wasm64,
             self.max_instructions_per_query,
             self.config.max_query_call_graph_depth,
             self.config.max_query_call_graph_instructions,
@@ -308,7 +307,6 @@ fn fetch_canister_logs(
     sender: PrincipalId,
     state: &ReplicatedState,
     args: FetchCanisterLogsRequest,
-    allowed_viewers_feature: FlagStatus,
 ) -> Result<WasmResult, UserError> {
     let canister_id = args.get_canister_id();
     let canister = state.canister_state(&canister_id).ok_or_else(|| {
@@ -318,14 +316,7 @@ fn fetch_canister_logs(
         )
     })?;
 
-    let log_visibility = match canister.log_visibility() {
-        // If the feature is disabled override `AllowedViewers` with default value.
-        LogVisibilityV2::AllowedViewers(_) if allowed_viewers_feature == FlagStatus::Disabled => {
-            &LogVisibilityV2::default()
-        }
-        other => other,
-    };
-    match log_visibility {
+    match canister.log_visibility() {
         LogVisibilityV2::Public => Ok(()),
         LogVisibilityV2::Controllers if canister.controllers().contains(&sender) => Ok(()),
         LogVisibilityV2::AllowedViewers(principals) if principals.get().contains(&sender) => Ok(()),

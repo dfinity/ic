@@ -9,7 +9,7 @@ use ic_interfaces::execution_environment::{
 };
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::StateReader;
-use ic_management_canister_types::{
+use ic_management_canister_types_private::{
     CanisterIdRecord, CanisterInstallMode, InstallCodeArgs, Method, Payload,
     ProvisionalCreateCanisterWithCyclesArgs, IC_00,
 };
@@ -753,7 +753,7 @@ pub struct UniversalCanisterWithStateMachine<'a> {
     canister_id: CanisterId,
 }
 
-impl<'a> UniversalCanisterWithStateMachine<'a> {
+impl UniversalCanisterWithStateMachine<'_> {
     pub fn canister_id(&self) -> CanisterId {
         self.canister_id
     }

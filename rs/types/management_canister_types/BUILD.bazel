@@ -66,7 +66,7 @@ rust_library(
         "//bazel:fuzzing_code_enabled": ["fuzzing_code"],
         "//conditions:default": [],
     }),
-    crate_name = "ic_management_canister_types",
+    crate_name = "ic_management_canister_types_private",
     proc_macro_deps = [
         # Keep sorted.
         "@crate_index//:strum_macros",

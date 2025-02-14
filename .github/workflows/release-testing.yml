@@ -15,7 +15,6 @@ env:
   CI_PROJECT_DIR: ${{ github.workspace }}
   BRANCH_NAME: ${{ github.event.workflow_run.head_branch || github.ref_name }}
   CI_RUN_ID: ${{ github.run_id }}
-  RUSTFLAGS: "--remap-path-prefix=${CI_PROJECT_DIR}=/ic"
   BUILDEVENT_DATASET: "github-ci-dfinity"
 jobs:
   ci-main:
@@ -28,7 +27,7 @@ jobs:
       group: zh1
       labels: dind-large
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:4fd13b47285e783c3a6f35aadd9559d097c0de162a1cf221ead66ab1598d5d45
+      image: ghcr.io/dfinity/ic-build@sha256:2e8185171700872d48fdfb4b08e175fca5be27b3fbbc4d7bed681ec8486f8b1d
       options: >-
         -e NODE_NAME --privileged --cgroupns host -v /cache:/cache -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp
     timeout-minutes: 180 # 3 hours
@@ -37,21 +36,20 @@ jobs:
         uses: actions/checkout@v4
         with:
           ref: ${{ github.event.workflow_run.head_branch }}
-      - name: Login to Dockerhub
+      - name: Before script
+        id: before-script
         shell: bash
-        run: ./ci/scripts/docker-login.sh
-        env:
-          DOCKER_HUB_USER: ${{ vars.DOCKER_HUB_USER }}
-          DOCKER_HUB_PASSWORD_RO: ${{ secrets.DOCKER_HUB_PASSWORD_RO }}
+        run: |
+          [ -n "${NODE_NAME:-}" ] && echo "Node: $NODE_NAME"
       - name: Run Bazel System Test Nightly
         id: bazel-test-all
         uses: ./.github/actions/bazel-test-all/
         with:
-          BAZEL_COMMAND: "test"
-          BAZEL_TARGETS: "//rs/tests/..."
-          BAZEL_CI_CONFIG: "--config=ci --repository_cache=/cache/bazel"
-          BAZEL_EXTRA_ARGS: "--keep_going --test_tag_filters=system_test_nightly"
-          BUILDEVENT_APIKEY: ${{ secrets.HONEYCOMB_API_TOKEN }}
+          BAZEL_COMMAND: >-
+            test --config=ci --keep_going --test_tag_filters=system_test_nightly
+          BAZEL_TARGETS: //rs/tests/...
+          BUILDEVENT_APIKEY: ${{ secrets.HONEYCOMB_TOKEN }}
+          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
       - name: Upload bazel-bep
         # runs only if previous step succeeded or failed;
         # we avoid collecting artifacts of jobs that were cancelled
@@ -63,7 +61,7 @@ jobs:
           if-no-files-found: ignore
           compression-level: 9
           path: |
-            bazel-bep.pb
+            bazel-bep.pb.gpg
             profile.json
   bazel-system-test-staging:
     name: Bazel System Test Staging
@@ -71,7 +69,7 @@ jobs:
       group: zh1
       labels: dind-large
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:4fd13b47285e783c3a6f35aadd9559d097c0de162a1cf221ead66ab1598d5d45
+      image: ghcr.io/dfinity/ic-build@sha256:2e8185171700872d48fdfb4b08e175fca5be27b3fbbc4d7bed681ec8486f8b1d
       options: >-
         -e NODE_NAME --privileged --cgroupns host -v /cache:/cache -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp
     timeout-minutes: 180 # 3 hours
@@ -80,21 +78,20 @@ jobs:
         uses: actions/checkout@v4
         with:
           ref: ${{ github.event.workflow_run.head_branch }}
-      - name: Login to Dockerhub
+      - name: Before script
+        id: before-script
         shell: bash
-        run: ./ci/scripts/docker-login.sh
-        env:
-          DOCKER_HUB_USER: ${{ vars.DOCKER_HUB_USER }}
-          DOCKER_HUB_PASSWORD_RO: ${{ secrets.DOCKER_HUB_PASSWORD_RO }}
+        run: |
+          [ -n "${NODE_NAME:-}" ] && echo "Node: $NODE_NAME"
       - name: Run Bazel System Test Staging
         id: bazel-test-all
         uses: ./.github/actions/bazel-test-all/
         with:
-          BAZEL_COMMAND: "test"
-          BAZEL_TARGETS: "//rs/tests/..."
-          BAZEL_CI_CONFIG: "--config=ci --repository_cache=/cache/bazel"
-          BAZEL_EXTRA_ARGS: "--keep_going --test_tag_filters=system_test_staging"
-          BUILDEVENT_APIKEY: ${{ secrets.HONEYCOMB_API_TOKEN }}
+          BAZEL_COMMAND: >-
+            test --config=ci --keep_going --test_tag_filters=system_test_staging
+          BAZEL_TARGETS: //rs/tests/...
+          BUILDEVENT_APIKEY: ${{ secrets.HONEYCOMB_TOKEN }}
+          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
       - name: Upload bazel-bep
         # runs only if previous step succeeded or failed;
         # we avoid collecting artifacts of jobs that were cancelled
@@ -106,7 +103,7 @@ jobs:
           if-no-files-found: ignore
           compression-level: 9
           path: |
-            bazel-bep.pb
+            bazel-bep.pb.gpg
             profile.json
   bazel-system-test-hotfix:
     name: Bazel System Test Hotfix
@@ -114,7 +111,7 @@ jobs:
       group: zh1
       labels: dind-large
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:4fd13b47285e783c3a6f35aadd9559d097c0de162a1cf221ead66ab1598d5d45
+      image: ghcr.io/dfinity/ic-build@sha256:2e8185171700872d48fdfb4b08e175fca5be27b3fbbc4d7bed681ec8486f8b1d
       options: >-
         -e NODE_NAME --privileged --cgroupns host -v /cache:/cache -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp
     timeout-minutes: 90
@@ -123,21 +120,20 @@ jobs:
         uses: actions/checkout@v4
         with:
           ref: ${{ github.event.workflow_run.head_branch }}
-      - name: Login to Dockerhub
+      - name: Before script
+        id: before-script
         shell: bash
-        run: ./ci/scripts/docker-login.sh
-        env:
-          DOCKER_HUB_USER: ${{ vars.DOCKER_HUB_USER }}
-          DOCKER_HUB_PASSWORD_RO: ${{ secrets.DOCKER_HUB_PASSWORD_RO }}
+        run: |
+          [ -n "${NODE_NAME:-}" ] && echo "Node: $NODE_NAME"
       - name: Run Bazel Test All
         id: bazel-test-all
         uses: ./.github/actions/bazel-test-all/
         with:
-          BAZEL_COMMAND: "test"
-          BAZEL_TARGETS: "//rs/tests/..."
-          BAZEL_CI_CONFIG: "--config=ci --repository_cache=/cache/bazel"
-          BAZEL_EXTRA_ARGS: "--keep_going --test_tag_filters=system_test_hotfix"
-          BUILDEVENT_APIKEY: ${{ secrets.HONEYCOMB_API_TOKEN }}
+          BAZEL_COMMAND: >-
+            test --config=ci --keep_going --test_tag_filters=system_test_hotfix
+          BAZEL_TARGETS: //rs/tests/...
+          BUILDEVENT_APIKEY: ${{ secrets.HONEYCOMB_TOKEN }}
+          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
       - name: Upload bazel-bep
         # runs only if previous step succeeded or failed;
         # we avoid collecting artifacts of jobs that were cancelled
@@ -149,7 +145,7 @@ jobs:
           if-no-files-found: ignore
           compression-level: 9
           path: |
-            bazel-bep.pb
+            bazel-bep.pb.gpg
             profile.json
   dependency-scan-release-cut:
     name: Dependency Scan for Release
@@ -157,7 +153,7 @@ jobs:
       group: zh1
       labels: dind-large
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:4fd13b47285e783c3a6f35aadd9559d097c0de162a1cf221ead66ab1598d5d45
+      image: ghcr.io/dfinity/ic-build@sha256:2e8185171700872d48fdfb4b08e175fca5be27b3fbbc4d7bed681ec8486f8b1d
       options: >-
         -e NODE_NAME --privileged --cgroupns host -v /cache:/cache -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp
     timeout-minutes: 60
@@ -175,12 +171,11 @@ jobs:
         uses: actions/checkout@v4
         with:
           ref: ${{ github.event.workflow_run.head_branch }}
-      - name: Login to Dockerhub
+      - name: Before script
+        id: before-script
         shell: bash
-        run: ./ci/scripts/docker-login.sh
-        env:
-          DOCKER_HUB_USER: ${{ vars.DOCKER_HUB_USER }}
-          DOCKER_HUB_PASSWORD_RO: ${{ secrets.DOCKER_HUB_PASSWORD_RO }}
+        run: |
+          [ -n "${NODE_NAME:-}" ] && echo "Node: $NODE_NAME"
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
@@ -205,7 +200,7 @@ jobs:
       group: zh1
       labels: dind-large
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:4fd13b47285e783c3a6f35aadd9559d097c0de162a1cf221ead66ab1598d5d45
+      image: ghcr.io/dfinity/ic-build@sha256:2e8185171700872d48fdfb4b08e175fca5be27b3fbbc4d7bed681ec8486f8b1d
       options: >-
         -e NODE_NAME --privileged --cgroupns host -v /cache:/cache -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp
     timeout-minutes: 180 # 3 hours
@@ -233,7 +228,7 @@ jobs:
       group: zh1
       labels: dind-large
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:4fd13b47285e783c3a6f35aadd9559d097c0de162a1cf221ead66ab1598d5d45
+      image: ghcr.io/dfinity/ic-build@sha256:2e8185171700872d48fdfb4b08e175fca5be27b3fbbc4d7bed681ec8486f8b1d
       options: >-
         -e NODE_NAME --privileged --cgroupns host -v /cache:/cache -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp
     timeout-minutes: 180 # 3 hours
@@ -242,20 +237,19 @@ jobs:
         uses: actions/checkout@v4
         with:
           ref: ${{ github.event.workflow_run.head_branch }}
-      - name: Login to Dockerhub
+      - name: Before script
+        id: before-script
         shell: bash
-        run: ./ci/scripts/docker-login.sh
-        env:
-          DOCKER_HUB_USER: ${{ vars.DOCKER_HUB_USER }}
-          DOCKER_HUB_PASSWORD_RO: ${{ secrets.DOCKER_HUB_PASSWORD_RO }}
+        run: |
+          [ -n "${NODE_NAME:-}" ] && echo "Node: $NODE_NAME"
       - name: Run qualification for version ${{ matrix.version }} from the tip of the branch
         uses: ./.github/actions/bazel-test-all/
         with:
-          BAZEL_COMMAND: "test"
+          BAZEL_COMMAND: |
+            test --config=ci --config=systest --keep_going --test_timeout=7200 --test_env=OLD_VERSION=${{ matrix.version }}
           BAZEL_TARGETS: "//rs/tests/dre:guest_os_qualification"
-          BAZEL_CI_CONFIG: "--config=systest --repository_cache=/cache/bazel"
-          BAZEL_EXTRA_ARGS: "--keep_going --test_timeout=7200 --test_env=OLD_VERSION=${{ matrix.version }}"
-          BUILDEVENT_APIKEY: ${{ secrets.HONEYCOMB_API_TOKEN }}
+          BUILDEVENT_APIKEY: ${{ secrets.HONEYCOMB_TOKEN }}
+          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
       - # runs only if previous step succeeded or failed;
         # we avoid collecting artifacts of jobs that were cancelled
         if: success() || failure()
@@ -266,6 +260,6 @@ jobs:
           if-no-files-found: ignore
           compression-level: 9
           path: |
-            bazel-bep.pb
+            bazel-bep.pb.gpg
             profile.json
           name: ${{ github.job }}-${{ matrix.version }}-bep
