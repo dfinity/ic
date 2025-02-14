@@ -77,7 +77,7 @@ ic-crypto-test-utils-local-csp-vault = { path = "../../../crypto/test_utils/loca
 ic-crypto-test-utils-metrics = { path = "../../../crypto/test_utils/metrics" }
 ic-crypto-test-utils-reproducible-rng = { path = "../../../crypto/test_utils/reproducible_rng" }
 ic-crypto-utils-basic-sig = { path = "../../utils/basic_sig" }
-ic-management-canister-types = { path = "../../../types/management_canister_types" }
+ic-management-canister-types-private = { path = "../../../types/management_canister_types" }
 ic-test-utilities-compare-dirs = { path = "../../../test_utilities/compare_dirs" }
 ic-test-utilities-in-memory-logger = { path = "../../../test_utilities/in_memory_logger" }
 ic-test-utilities-time = { path = "../../../test_utilities/time" }

@@ -128,6 +128,20 @@ pub fn build_dashboard(account_to_utxos_start: u64) -> Vec<u8> {
                     </thead>
                     <tbody>{}</tbody>
                 </table>
+                <h3>Mint status unknown utxos</h3>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Txid</th>
+                            <th>Vout</th>
+                            <th>Height</th>
+                            <th>Value (BTC)</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {}
+                    </tbody>
+                </table>
                 <h3>Quarantined utxos</h3>
                 <table>
                     <thead>
@@ -182,6 +196,7 @@ pub fn build_dashboard(account_to_utxos_start: u64) -> Vec<u8> {
         build_submitted_transactions(s),
         build_finalized_requests(s),
         build_unconfirmed_change(s),
+        build_mint_unknown_utxos(s),
         build_quarantined_utxos(s),
         build_ignored_utxos(s),
         build_account_to_utxos_table(s, account_to_utxos_start, DEFAULT_PAGE_SIZE),
@@ -439,6 +454,27 @@ pub fn build_finalized_requests(s: &CkBtcMinterState) -> String {
     })
 }
 
+pub fn build_mint_unknown_utxos(s: &CkBtcMinterState) -> String {
+    with_utf8_buffer(|buf| {
+        for utxo in s.mint_status_unknown_utxos() {
+            writeln!(
+                buf,
+                "<tr>
+                    <td>{}</td>
+                    <td>{}</td>
+                    <td>{}</td>
+                    <td>{}</td>
+                </tr>",
+                txid_link(s, &utxo.outpoint.txid),
+                utxo.outpoint.vout,
+                utxo.height,
+                DisplayAmount(utxo.value)
+            )
+            .unwrap()
+        }
+    })
+}
+
 pub fn build_quarantined_utxos(s: &CkBtcMinterState) -> String {
     with_utf8_buffer(|buf| {
         for utxo in s.quarantined_utxos() {
@@ -508,16 +544,16 @@ pub fn build_unconfirmed_change(s: &CkBtcMinterState) -> String {
 
 pub fn build_update_balance_principals(s: &CkBtcMinterState) -> String {
     with_utf8_buffer(|buf| {
-        for p in &s.update_balance_principals {
-            writeln!(buf, "<li>{}</li>", p).unwrap();
+        for account in &s.update_balance_accounts {
+            writeln!(buf, "<li>{}</li>", account).unwrap();
         }
     })
 }
 
 pub fn build_retrieve_btc_principals(s: &CkBtcMinterState) -> String {
     with_utf8_buffer(|buf| {
-        for p in &s.retrieve_btc_principals {
-            writeln!(buf, "<li>{}</li>", p).unwrap();
+        for account in &s.retrieve_btc_accounts {
+            writeln!(buf, "<li>{}</li>", account).unwrap();
         }
     })
 }
