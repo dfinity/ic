@@ -651,7 +651,10 @@ impl PocketIc {
 
     /// Get the controllers of a canister.
     #[instrument(ret, skip(self), fields(instance_id=self.pocket_ic.instance_id, canister_id = %canister_id.to_string()))]
-    pub fn try_get_controllers(&self, canister_id: CanisterId) -> Result<Vec<Principal>, (StatusCode, String)> {
+    pub fn try_get_controllers(
+        &self,
+        canister_id: CanisterId,
+    ) -> Result<Vec<Principal>, (StatusCode, String)> {
         let runtime = self.runtime.clone();
         runtime.block_on(async { self.pocket_ic.try_get_controllers(canister_id).await })
     }
