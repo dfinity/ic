@@ -4214,6 +4214,19 @@ pub struct ProposalVotingStateMachine {
     #[prost(map = "uint64, enumeration(Vote)", tag = "5")]
     pub recent_neuron_ballots_to_record: ::std::collections::HashMap<u64, i32>,
 }
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    serde::Serialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct RewardsDistributionInProgress {
+    #[prost(map = "uint64, uint64", tag = "1")]
+    pub neuron_ids_to_e8_amounts: ::std::collections::HashMap<u64, u64>,
+}
 /// Proposal types are organized into topics. Neurons can automatically
 /// vote based on following other neurons, and these follow
 /// relationships are defined per topic.

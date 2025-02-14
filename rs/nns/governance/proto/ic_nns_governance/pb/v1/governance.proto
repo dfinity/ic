@@ -2717,3 +2717,7 @@ message ProposalVotingStateMachine {
   repeated ic_nns_common.pb.v1.NeuronId followers_to_check = 4;
   map<uint64, Vote> recent_neuron_ballots_to_record = 5;
 }
+
+message RewardsDistributionInProgress {
+  map<uint64, uint64> neuron_ids_to_e8_amounts = 1;
+}
