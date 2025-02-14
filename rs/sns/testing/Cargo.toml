@@ -10,6 +10,7 @@ edition.workspace = true
 name = "sns"
 path = "src/main.rs"
 
+
 [[bin]]
 name = "sns-testing-canister"
 path = "canister/canister.rs"
@@ -18,11 +19,15 @@ path = "canister/canister.rs"
 path = "src/lib.rs"
 
 [dependencies]
+anyhow = { workspace = true }
 candid = { workspace = true }
 canister-test = { path = "../../rust_canisters/canister_test" }
 clap = { workspace = true }
+dfx-core ={ workspace = true }
 futures = { workspace = true }
+ic-agent = { workspace = true }
 ic-base-types = { path = "../../types/base_types" }
+ic-canister-client-sender = { path = "../../canister_client/sender" }
 ic-cdk = { workspace = true }
 ic-management-canister-types = { workspace = true }
 ic-management-canister-types-private = { path = "../../types/management_canister_types" }
@@ -40,9 +45,13 @@ ic-sns-cli = { path = "../cli" }
 ic-sns-governance-api = { path = "../../sns/governance/api" }
 ic-sns-swap = { path = "../swap" }
 icp-ledger = { path = "../../ledger_suite/icp" }
+k256 = { workspace = true }
 pocket-ic = { path = "../../../packages/pocket-ic" }
 reqwest = { workspace = true }
 serde = { workspace = true }
+rand = { workspace = true }
+rand_chacha = { workspace = true }
+slog ={ workspace = true }
 tempfile = { workspace = true }
 tokio = { workspace = true }
 url = { workspace = true }

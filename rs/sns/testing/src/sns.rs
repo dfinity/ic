@@ -1,23 +1,20 @@
-use std::{fs::File, io::Write};
-
 use candid::{CandidType, Encode};
 use canister_test::Wasm;
 use ic_base_types::{CanisterId, PrincipalId};
+use ic_management_canister_types_private::CanisterInstallMode;
 use ic_nervous_system_agent::{
     pocketic_impl::PocketIcAgent,
     sns::{swap::SwapCanister, Sns},
     CallCanisters, ProgressNetwork,
 };
 use ic_nervous_system_clients::canister_status::CanisterStatusType;
-use ic_nervous_system_common_test_keys::TEST_NEURON_1_ID;
 use ic_nervous_system_integration_tests::{
     create_service_nervous_system_builder::CreateServiceNervousSystemBuilder,
     nervous_system_agent_helpers::{
         await_with_timeout,
-        cycles_ledger::convert_icp_to_cycles,
         nns::{governance::propose_to_deploy_sns_and_wait, ledger::transfer},
         sns::{
-            governance::{get_caller_neuron, wait_for_proposal_execution},
+            governance::{get_caller_neuron, propose_and_wait},
             swap::{await_swap_lifecycle, participate_in_swap},
         },
     },
@@ -37,18 +34,14 @@ use ic_nns_governance_api::pb::v1::create_service_nervous_system::{
 };
 
 use ic_nns_test_utils::common::modify_wasm_bytes;
-use ic_sns_cli::{
-    neuron_id_to_candid_subaccount::ParsedSnsNeuron,
-    upgrade_sns_controlled_canister::{
-        self, UpgradeSnsControlledCanisterArgs, UpgradeSnsControlledCanisterInfo,
-    },
+use ic_sns_governance_api::pb::v1::{
+    manage_neuron::Follow, proposal::Action, Proposal, UpgradeSnsControlledCanister,
 };
-use ic_sns_governance_api::pb::v1::manage_neuron::Follow;
 use ic_sns_swap::pb::v1::Lifecycle;
 use icp_ledger::{AccountIdentifier, Memo, Tokens, TransferArgs, DEFAULT_TRANSFER_FEE};
 use pocket_ic::nonblocking::PocketIc;
-use tempfile::TempDir;
-use url::Url;
+
+use crate::utils::NNS_NEURON_ID;
 
 // As per https://internetcomputer.org/docs/current/developer-docs/defi/rosetta/icp_rosetta/construction_api/staking/#dissolve-delay
 const MINIMUM_DISSOLVE_DELAY_TO_VOTE: u32 = 15778800;
@@ -85,27 +78,18 @@ pub async fn install_test_canister(pocket_ic: &PocketIc, args: TestCanisterInitA
 pub async fn create_sns_pocket_ic(
     pocket_ic: &PocketIc,
     dev_participant_id: PrincipalId,
+    treasury_principal_id: PrincipalId,
     dapp_canister_ids: Vec<CanisterId>,
 ) -> Sns {
     let dev_participant = PocketIcAgent::new(pocket_ic, dev_participant_id);
 
-    let swap_treasury_id = PrincipalId::new_user_test_id(322);
-    mint_icp(
-        pocket_ic,
-        swap_treasury_id.into(),
-        Tokens::from_tokens(10_000_000_u64).unwrap(),
-        None,
-    )
-    .await;
-    let swap_treasury_agent = PocketIcAgent::new(pocket_ic, swap_treasury_id);
+    let swap_treasury_agent = PocketIcAgent::new(pocket_ic, treasury_principal_id);
     let swap_partipants_agents = (1..20)
         .map(|i| PocketIcAgent::new(pocket_ic, PrincipalId::new_user_test_id(1000 + i as u64)))
         .collect();
     create_sns(
         &dev_participant,
-        NeuronId {
-            id: TEST_NEURON_1_ID,
-        },
+        NNS_NEURON_ID,
         &dev_participant,
         &swap_treasury_agent,
         swap_partipants_agents,
@@ -335,43 +319,74 @@ pub async fn upgrade_sns_controlled_test_canister<C: CallCanisters + ProgressNet
     let test_canister_wasm =
         Wasm::from_location_specified_by_env_var("sns_testing_canister", features).unwrap();
     let modified_test_canister_wasm = modify_wasm_bytes(&test_canister_wasm.bytes(), 42);
-    let temp_dir = TempDir::new().unwrap();
-    let new_wasm_path = temp_dir.path().join("new_test_canister.wasm");
-    {
-        let mut new_wasm_file = File::create(&new_wasm_path).unwrap();
-        new_wasm_file
-            .write_all(&modified_test_canister_wasm)
-            .unwrap();
-        new_wasm_file.flush().unwrap();
-    }
 
-    let icp = Tokens::from_tokens(10).unwrap();
-    convert_icp_to_cycles(dev_participant_agent, icp).await;
+    // TODO: @rvem: It's impossible to use 'upgrade_sns_controlled_canister::exec' function to upgrade the canister
+    // using the ic-agent backend on the network run by PocketIC because pocket-ic-server currently doesn't support
+    // calls to the management canister ('aaaaa-aa'), hence for now the upgrade is done using a single 'manage_neuron'
+    // call to the governance canister.
+    // let temp_dir = TempDir::new().unwrap();
+    // let new_wasm_path = temp_dir.path().join("new_test_canister.wasm");
+    // {
+    //     let mut new_wasm_file = File::create(&new_wasm_path).unwrap();
+    //     new_wasm_file
+    //         .write_all(&modified_test_canister_wasm)
+    //         .unwrap();
+    //     new_wasm_file.flush().unwrap();
+    // }
+
+    // let icp = Tokens::from_tokens(10).unwrap();
+    // convert_icp_to_cycles(dev_participant_agent, icp).await;
+
+    // let neuron_id = get_caller_neuron(dev_participant_agent, sns.governance)
+    //     .await
+    //     .unwrap();
+    // let candid_arg = (candid::IDLArgs {
+    //     args: vec![candid::IDLValue::try_from_candid_type(&upgrade_arg).unwrap()],
+    // })
+    // .to_string();
+    // let upgrade_args = UpgradeSnsControlledCanisterArgs {
+    //     sns_neuron_id: Some(ParsedSnsNeuron(neuron_id)),
+    //     target_canister_id: canister_id,
+    //     wasm_path: new_wasm_path,
+    //     candid_arg: Some(candid_arg),
+    //     proposal_url: Url::try_from("https://github.com/dfinity/ic").unwrap(),
+    //     summary: "Upgrade Test canister".to_string(),
+    // };
+    // let UpgradeSnsControlledCanisterInfo { proposal_id, .. } =
+    //     upgrade_sns_controlled_canister::exec(upgrade_args, dev_participant_agent)
+    //         .await
+    //         .expect("Failed to upgrade the canister");
+    // let proposal_id = proposal_id.unwrap();
 
     let neuron_id = get_caller_neuron(dev_participant_agent, sns.governance)
         .await
         .unwrap();
-    let candid_arg = (candid::IDLArgs {
-        args: vec![candid::IDLValue::try_from_candid_type(&upgrade_arg).unwrap()],
-    })
-    .to_string();
-    let upgrade_args = UpgradeSnsControlledCanisterArgs {
-        sns_neuron_id: Some(ParsedSnsNeuron(neuron_id)),
-        target_canister_id: canister_id,
-        wasm_path: new_wasm_path,
-        candid_arg: Some(candid_arg),
-        proposal_url: Url::try_from("https://github.com/dfinity/ic").unwrap(),
-        summary: "Upgrade Test canister".to_string(),
-    };
-    let UpgradeSnsControlledCanisterInfo { proposal_id, .. } =
-        upgrade_sns_controlled_canister::exec(upgrade_args, dev_participant_agent)
-            .await
-            .expect("Failed to upgrade the canister");
-    let proposal_id = proposal_id.unwrap();
+    let _ = propose_and_wait(
+        dev_participant_agent,
+        neuron_id,
+        sns.governance,
+        Proposal {
+            title: "Upgrade SNS controlled canister.".to_string(),
+            summary: "".to_string(),
+            url: "".to_string(),
+            action: Some(Action::UpgradeSnsControlledCanister(
+                UpgradeSnsControlledCanister {
+                    canister_id: Some(canister_id.get()),
+                    new_canister_wasm: modified_test_canister_wasm,
+                    canister_upgrade_arg: Some(Encode!(&upgrade_arg).unwrap()),
+                    mode: Some(CanisterInstallMode::Upgrade as i32),
+                    chunked_canister_wasm: None,
+                },
+            )),
+        },
+    )
+    .await
+    .unwrap();
 
-    wait_for_proposal_execution(dev_participant_agent, sns.governance, proposal_id)
-        .await
-        .expect("Failed to execute the proposal");
+    // wait_for_proposal_execution(dev_participant_agent, sns.governance, proposal_id)
+    //     .await
+    //     .expect("Failed to execute the proposal");
+
     // Wait for the canister to become available
     await_with_timeout(
         dev_participant_agent,
@@ -382,7 +397,6 @@ pub async fn upgrade_sns_controlled_test_canister<C: CallCanisters + ProgressNet
                 .get_sns_controlled_canister_status(agent, canister_id)
                 .await
                 .map(|result| result.status);
-            println!("Canister status: {:?}", canister_status);
             canister_status
                 .map(|status| status == CanisterStatusType::Running)
                 .unwrap_or_default()
