@@ -29,11 +29,12 @@ use tokio;
 use tracing::*;
 
 use crate::driver::farm::{
-    Certificate, CreateVmRequest, DnsRecord, DnsRecordType, ImageLocation, PlaynetCertificate,
-    VMCreateResponse, VmSpec,
+    Certificate, CreateVmRequest, DnsRecord, DnsRecordType, PlaynetCertificate, VMCreateResponse,
+    VmSpec,
 };
 use crate::driver::resource::ImageType;
 use crate::driver::test_env::{TestEnv, TestEnvAttribute};
+use crate::driver::test_env_api::get_ic_os_img_url;
 use crate::k8s::config::*;
 use crate::k8s::datavolume::*;
 use crate::k8s::job::*;
@@ -410,16 +411,10 @@ impl TNet {
         .await?;
 
         // create a job to download the image and extract it
-        let image_url = format!(
-            "http://server.bazel-remote.svc.cluster.local:8080/cas/{}",
-            match vm_req.primary_image {
-                ImageLocation::IcOsImageViaUrl { url: _, sha256 } => sha256,
-                _ => self.image_sha.clone(),
-            }
-        );
+        let image_url = get_ic_os_img_url().expect("missing image url");
         // TODO: only download it once and copy it if it's already downloaded
         let args = format!(
-            "set -e; apk add zstd tar; \
+            "set -e; \
             mkdir -p /tnet/{vm_name}; \
             wget -O /tnet/{vm_name}/img.tar.zst {image_url}; \
             unzstd -d /tnet/{vm_name}/img.tar.zst; \
@@ -431,7 +426,7 @@ impl TNet {
         );
         create_job(
             &vm_name.clone(),
-            "alpine:latest",
+            "dfinity/util:0.1",
             vec!["/bin/sh", "-c"],
             vec![&args],
             "/srv/tnet".into(),
