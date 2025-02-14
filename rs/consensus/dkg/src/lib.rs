@@ -5,9 +5,10 @@
 use ic_consensus_utils::{bouncer_metrics::BouncerMetrics, crypto::ConsensusCrypto};
 use ic_interfaces::{
     consensus_pool::ConsensusPoolCache,
-    crypto::ErrorReproducibility,
+    crypto::{ErrorReproducibility, NiDkgAlgorithm},
     dkg::{ChangeAction, DkgPool, Mutations},
     p2p::consensus::{Bouncer, BouncerFactory, BouncerValue, PoolMutationsProducer},
+    validation::ValidationResult,
 };
 use ic_logger::{error, info, ReplicaLogger};
 use ic_metrics::{
@@ -22,6 +23,7 @@ use ic_types::{
     },
     Height, NodeId, ReplicaVersion,
 };
+use payload_validator::PayloadValidationError;
 use prometheus::Histogram;
 use rayon::prelude::*;
 use std::{
@@ -129,28 +131,27 @@ impl DkgImpl {
             }
         }
 
-        let content =
-            match ic_interfaces::crypto::NiDkgAlgorithm::create_dealing(&*self.crypto, config) {
-                Ok(dealing) => DealingContent::new(dealing, config.dkg_id().clone()),
-                Err(err) => {
-                    match config.dkg_id().target_subnet {
-                        NiDkgTargetSubnet::Local => error!(
-                            self.logger,
-                            "Couldn't create a DKG dealing at height {:?}: {:?}",
-                            config.dkg_id().start_block_height,
-                            err
-                        ),
-                        // NOTE: In rare cases, we might hit this case.
-                        NiDkgTargetSubnet::Remote(_) => info!(
-                            self.logger,
-                            "Waiting for Remote DKG dealing at height {:?}: {:?}",
-                            config.dkg_id().start_block_height,
-                            err
-                        ),
-                    };
-                    return None;
-                }
-            };
+        let content = match NiDkgAlgorithm::create_dealing(&*self.crypto, config) {
+            Ok(dealing) => DealingContent::new(dealing, config.dkg_id().clone()),
+            Err(err) => {
+                match config.dkg_id().target_subnet {
+                    NiDkgTargetSubnet::Local => error!(
+                        self.logger,
+                        "Couldn't create a DKG dealing at height {:?}: {:?}",
+                        config.dkg_id().start_block_height,
+                        err
+                    ),
+                    // NOTE: In rare cases, we might hit this case.
+                    NiDkgTargetSubnet::Remote(_) => info!(
+                        self.logger,
+                        "Waiting for Remote DKG dealing at height {:?}: {:?}",
+                        config.dkg_id().start_block_height,
+                        err
+                    ),
+                };
+                return None;
+            }
+        };
 
         match self
             .crypto
@@ -249,47 +250,59 @@ impl DkgImpl {
             return Mutations::from(ChangeAction::RemoveFromUnvalidated((*message).clone()));
         }
 
-        // Verify the signature and reject if it's invalid, or skip, if there was an error.
-        match self.crypto.verify(message, config.registry_version()) {
-            Ok(()) => (),
-            Err(err) if err.is_reproducible() => {
-                return get_handle_invalid_change_action(
-                    message,
-                    format!("Invalid signature: {}", err),
-                )
-                .into()
-            }
-            Err(err) => {
-                error!(
-                    self.logger,
-                    "Couldn't verify the signature of a DKG dealing: {}", err
-                );
-
-                return Mutations::new();
-            }
-        }
-
         // Verify the dealing and move to validated if it was successful,
         // reject, if it was rejected, or skip, if there was an error.
-        match ic_interfaces::crypto::NiDkgAlgorithm::verify_dealing(
-            &*self.crypto,
-            config,
-            *dealer_id,
-            &message.content.dealing,
-        ) {
+        match crypto_validate_dealing(&*self.crypto, config, message) {
             Ok(()) => ChangeAction::MoveToValidated((*message).clone()).into(),
-            Err(err) if err.is_reproducible() => get_handle_invalid_change_action(
+            Err(PayloadValidationError::InvalidArtifact(err)) => get_handle_invalid_change_action(
                 message,
-                format!("Dealing verification failed: {}", err),
+                format!("Dealing verification failed: {:?}", err),
             )
             .into(),
-            Err(err) => {
-                error!(self.logger, "Couldn't verify a DKG dealing: {}", err);
-
+            Err(PayloadValidationError::ValidationFailed(err)) => {
+                error!(
+                    self.logger,
+                    "Couldn't verify a DKG dealing from the pool: {:?}", err
+                );
                 Mutations::new()
             }
         }
     }
+}
+
+pub(crate) fn crypto_validate_dealing(
+    crypto: &dyn ConsensusCrypto,
+    config: &NiDkgConfig,
+    message: &Message,
+) -> ValidationResult<PayloadValidationError> {
+    crypto
+        .verify(message, config.registry_version())
+        .map_err(|err| {
+            if err.is_reproducible() {
+                PayloadValidationError::InvalidArtifact(InvalidDkgPayloadReason::CryptoError(err))
+            } else {
+                PayloadValidationError::ValidationFailed(DkgPayloadValidationFailure::CryptoError(
+                    err,
+                ))
+            }
+        })?;
+    NiDkgAlgorithm::verify_dealing(
+        crypto,
+        config,
+        message.signature.signer,
+        &message.content.dealing,
+    )
+    .map_err(|err| {
+        if err.is_reproducible() {
+            PayloadValidationError::InvalidArtifact(InvalidDkgPayloadReason::DkgVerifyDealingError(
+                err,
+            ))
+        } else {
+            PayloadValidationError::ValidationFailed(
+                DkgPayloadValidationFailure::DkgVerifyDealingError(err),
+            )
+        }
+    })
 }
 
 fn contains_dkg_messages(dkg_pool: &dyn DkgPool, config: &NiDkgConfig, replica_id: NodeId) -> bool {
