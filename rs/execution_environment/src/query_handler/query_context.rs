@@ -32,8 +32,8 @@ use ic_types::{
     batch::QueryStats,
     ingress::WasmResult,
     messages::{
-        CallContextId, CallbackId, Payload, Query, QuerySource, RejectContext, Request,
-        RequestOrResponse, Response, NO_DEADLINE,
+        CallContextId, CallbackId, Payload, Query, RejectContext, Request, RequestOrResponse,
+        Response, NO_DEADLINE,
     },
     methods::{FuncRef, WasmClosure, WasmMethod},
     CanisterId, Cycles, NumInstructions, NumMessages, NumSlices, PrincipalId, SubnetId, Time,
@@ -202,10 +202,7 @@ impl<'a> QueryContext<'a> {
     ) -> Result<WasmResult, UserError> {
         let canister_id = query.receiver;
         let old_canister = self.state.get_ref().get_active_canister(&canister_id)?;
-        let call_origin = match query.source {
-            QuerySource::User { user_id, .. } => CallOrigin::Query(user_id),
-            QuerySource::Anonymous => CallOrigin::Query(query.source().into()),
-        };
+        let call_origin = CallOrigin::Query(query.source().into());
 
         let method = match wasm_query_method(old_canister, query.method_name.to_string()) {
             Ok(method) => method,
