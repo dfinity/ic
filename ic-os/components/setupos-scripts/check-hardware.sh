@@ -250,27 +250,6 @@ function verify_disks() {
 }
 
 ###############################################################################
-# Drive Health Verification
-###############################################################################
-
-function verify_drive_health() {
-    echo "* Verifying NVMe drive health..."
-
-    local drives=($(get_large_drives))
-    for drive in "${drives[@]}"; do
-        echo "* Checking drive /dev/${drive} health..."
-        local nvme_output=$(nvme smart-log /dev/${drive})
-        log_and_halt_installation_on_error "${?}" "Failed to run nvme smart-log on /dev/${drive}."
-
-        local critical_warning=$(echo "${nvme_output}" | grep -i "critical_warning" | awk '{print $3}')
-        if [ "${critical_warning}" != "0" ]; then
-            log_and_halt_installation_on_error "1" "Drive /dev/${drive} reports a critical warning (value: ${critical_warning})."
-        fi
-        echo "Drive /dev/${drive} health is OK."
-    done
-}
-
-###############################################################################
 # Deployment Path Verification
 ###############################################################################
 
@@ -300,7 +279,6 @@ main() {
         verify_cpu
         verify_memory
         verify_disks
-        verify_drive_health
         verify_deployment_path
     else
         echo "* Hardware checks skipped by request via kernel command line"
