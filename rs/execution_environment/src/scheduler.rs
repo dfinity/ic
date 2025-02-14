@@ -234,7 +234,7 @@ impl SchedulerImpl {
 
             // Break when round limits are reached or found a canister
             // that has a long install code message in progress.
-            if round_limits.reached() || ongoing_long_install_code {
+            if round_limits.instructions_reached() || ongoing_long_install_code {
                 break;
             }
         }
@@ -302,7 +302,7 @@ impl SchedulerImpl {
                     break;
                 }
 
-                if round_limits.reached() {
+                if round_limits.instructions_reached() {
                     break;
                 }
             }
@@ -450,7 +450,7 @@ impl SchedulerImpl {
 
                 // TODO(EXC-1517): Improve inner loop preparation.
                 let mut subnet_round_limits = scheduler_round_limits.subnet_round_limits();
-                if !subnet_round_limits.reached() {
+                if !subnet_round_limits.instructions_reached() {
                     state = self.drain_subnet_queues(
                         state,
                         csprng,
@@ -566,7 +566,7 @@ impl SchedulerImpl {
                     .inc();
             }
 
-            if round_limits.reached() {
+            if round_limits.instructions_reached() {
                 self.metrics
                     .inner_round_loop_consumed_max_instructions
                     .inc();
@@ -685,7 +685,7 @@ impl SchedulerImpl {
 
         // If there are no more instructions left, then skip execution and
         // return unchanged canisters.
-        if round_limits.reached() {
+        if round_limits.instructions_reached() {
             return (
                 canisters_by_thread.into_iter().flatten().collect(),
                 BTreeSet::new(),
@@ -1785,7 +1785,9 @@ fn execute_canisters_on_thread(
     for (rank, mut canister) in canisters_to_execute.into_iter().enumerate() {
         // If no more instructions are left or if heap delta is already too
         // large, then skip execution of the canister and keep its old state.
-        if round_limits.reached() || total_heap_delta >= config.max_heap_delta_per_iteration {
+        if round_limits.instructions_reached()
+            || total_heap_delta >= config.max_heap_delta_per_iteration
+        {
             canisters.push(canister);
             continue;
         }
@@ -1804,7 +1806,7 @@ fn execute_canisters_on_thread(
                 NextExecution::StartNew | NextExecution::ContinueLong => {}
             }
 
-            if round_limits.reached() {
+            if round_limits.instructions_reached() {
                 canister
                     .system_state
                     .canister_metrics
@@ -1956,6 +1958,7 @@ fn observe_replicated_state_metrics(
     let mut queues_response_bytes = 0;
     let mut queues_memory_reservations = 0;
     let mut queues_oversized_requests_extra_bytes = 0;
+    let mut queues_best_effort_message_bytes = 0;
     let mut canisters_not_in_routing_table = 0;
     let mut canisters_with_old_open_call_contexts = 0;
     let mut old_call_contexts_count = 0;
@@ -2009,6 +2012,7 @@ fn observe_replicated_state_metrics(
         queues_response_bytes += queues.guaranteed_responses_size_bytes();
         queues_memory_reservations += queues.guaranteed_response_memory_reservations();
         queues_oversized_requests_extra_bytes += queues.oversized_guaranteed_requests_extra_bytes();
+        queues_best_effort_message_bytes += queues.best_effort_message_memory_usage();
         if !canister_id_ranges.contains(&canister.canister_id()) {
             canisters_not_in_routing_table += 1;
         }
@@ -2112,6 +2116,7 @@ fn observe_replicated_state_metrics(
     metrics.observe_queues_response_bytes(queues_response_bytes);
     metrics.observe_queues_memory_reservations(queues_memory_reservations);
     metrics.observe_oversized_requests_extra_bytes(queues_oversized_requests_extra_bytes);
+    metrics.observe_queues_best_effort_message_bytes(queues_best_effort_message_bytes);
 
     metrics
         .ingress_history_length

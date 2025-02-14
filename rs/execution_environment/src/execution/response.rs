@@ -362,10 +362,6 @@ impl ResponseHelper {
     ) -> Result<ExecuteMessageResult, (Self, HypervisorError, NumInstructions)> {
         self.canister
             .system_state
-            .canister_log
-            .append(&mut output.canister_log);
-        self.canister
-            .system_state
             .apply_ingress_induction_cycles_debit(
                 self.canister.canister_id(),
                 round.log,
@@ -448,11 +444,6 @@ impl ResponseHelper {
         round_limits: &mut RoundLimits,
         call_tree_metrics: &dyn CallTreeMetrics,
     ) -> ExecuteMessageResult {
-        self.canister
-            .system_state
-            .canister_log
-            .append(&mut output.canister_log);
-
         // The ingress induction debit can interfere with cycles changes that happened concurrently
         // during the cleanup callback execution. If the balance of the canister is not enough to
         // cover the debit + the amount of removed cycles during execution, the canister might end

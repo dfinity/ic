@@ -443,6 +443,36 @@ fn global_timer_can_be_reactivated_in_canister_global_timer_method() {
 }
 
 #[test]
+fn wasm64_task_metrics_are_observable() {
+    let env = StateMachine::new();
+    let wasm64_wat = r#"
+        (module
+            (import "ic0" "msg_reply" (func $ic0_msg_reply))
+            (func $test (export "canister_update test")
+                (call $ic0_msg_reply)
+            )
+            (memory i64 1)
+        )"#;
+
+    let canister_id = env.install_canister_wat(wasm64_wat, vec![], None);
+    let result = env.execute_ingress(canister_id, "test", vec![]).unwrap();
+
+    assert_eq!(result, WasmResult::Reply(vec![]));
+
+    // Check if the metric reports a Wasm64 update.
+    let executed_messages = fetch_int_counter_vec(
+        env.metrics_registry(),
+        "sandboxed_execution_executed_message_slices_total",
+    );
+    let update_msg = btreemap! {
+        "api_type".into() => "update".into(),
+        "status".into() => "Success".into(),
+        "wasm_execution_mode".into() => "wasm64".into(),
+    };
+    assert_eq!(1, executed_messages[&update_msg]);
+}
+
+#[test]
 fn system_task_metrics_are_observable() {
     let env = StateMachine::new();
     let canister_id = env
@@ -476,6 +506,7 @@ fn system_task_metrics_are_observable() {
     let heartbeat_no_response = btreemap! {
         "api_type".into() => "heartbeat".into(),
         "status".into() => "NoResponse".into(),
+        "wasm_execution_mode".into() => "wasm32".into(),
     };
     // Includes install code, tick prior the update and 5 ticks
     assert_eq!(7, executed_messages[&heartbeat_no_response]);
@@ -483,6 +514,7 @@ fn system_task_metrics_are_observable() {
     let global_timer_no_response = btreemap! {
         "api_type".into() => "global timer".into(),
         "status".into() => "NoResponse".into(),
+        "wasm_execution_mode".into() => "wasm32".into(),
     };
     // Includes just 5 ticks, as the timer is activated after the update
     assert_eq!(5, executed_messages[&global_timer_no_response]);
@@ -521,12 +553,14 @@ fn global_timer_is_not_set_if_execution_traps() {
     let global_timer_called_trap = btreemap! {
         "api_type".into() => "global timer".into(),
         "status".into() => "CalledTrap".into(),
+        "wasm_execution_mode".into() => "wasm32".into(),
     };
     assert_eq!(1, executed_messages[&global_timer_called_trap]);
 
     let heartbeat_no_response = btreemap! {
         "api_type".into() => "heartbeat".into(),
         "status".into() => "NoResponse".into(),
+        "wasm_execution_mode".into() => "wasm32".into(),
     };
     // Includes install code, tick prior the update and 5 ticks
     assert_eq!(7, executed_messages[&heartbeat_no_response]);
