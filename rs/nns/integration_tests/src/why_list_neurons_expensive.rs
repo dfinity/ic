@@ -103,7 +103,7 @@ fn test_why_list_neurons_expensive() {
     // Have ic-wasm instrument the governance WASM for profiling.
     let mut instrumented_governance_wasm =
         walrus::Module::from_buffer(&decompress_gz(&governance_wasm_gz))
-            .expect("walrus cannot cope with our WASM.");
+            .expect("The Walrus library cannot cope with our WASM.");
     ic_wasm::instrumentation::instrument(
         &mut instrumented_governance_wasm,
         ic_wasm::instrumentation::Config {
