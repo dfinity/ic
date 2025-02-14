@@ -192,8 +192,6 @@ pub fn decode_certified_deltas(
             "certified response has an empty hash tree".to_string(),
         )
     })?;
-    println!("HASH TREE {hash_tree:?}");
-    println!("CERTIFICATE {:?}", &certified_response.certificate);
     let mixed_hash_tree = MixedHashTree::try_from(hash_tree).map_err(|err| {
         CertificationError::DeserError(format!(
             "failed to deserialize MixedHashTree from {}: {:?}",

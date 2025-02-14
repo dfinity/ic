@@ -1227,6 +1227,15 @@ pub struct CatchUpPackage {
     pub signer: ::core::option::Option<NiDkgId>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
+pub struct RegistryRecord {
+    #[prost(string, tag = "1")]
+    pub key: ::prost::alloc::string::String,
+    #[prost(uint64, tag = "2")]
+    pub version: u64,
+    #[prost(message, optional, tag = "3")]
+    pub value: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CatchUpPackageShare {
     #[prost(string, tag = "1")]
     pub version: ::prost::alloc::string::String,
@@ -1244,8 +1253,6 @@ pub struct CatchUpPackageShare {
     pub signer: ::core::option::Option<NodeId>,
     #[prost(uint64, optional, tag = "8")]
     pub oldest_registry_version_in_use_by_replicated_state: ::core::option::Option<u64>,
-    #[prost(bool, tag = "9")]
-    pub np_signed: bool,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CatchUpContent {
@@ -1263,6 +1270,8 @@ pub struct CatchUpContent {
     pub oldest_registry_version_in_use_by_replicated_state: ::core::option::Option<u64>,
     #[prost(bool, tag = "7")]
     pub np_signed: bool,
+    #[prost(message, repeated, tag = "8")]
+    pub registry_records: ::prost::alloc::vec::Vec<RegistryRecord>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Block {

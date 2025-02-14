@@ -127,6 +127,7 @@ pub fn test(env: TestEnv) {
         subnet_id: topo_snapshot.root_subnet_id(),
         upgrade_version: Some(working_version),
         replay_until_height: None,
+        include_registry_versions_from: None,
         upgrade_image_url: get_ic_os_update_img_test_url().ok(),
         upgrade_image_hash: get_ic_os_update_img_test_sha256().ok(),
         download_node: Some(download_node.get_ip_addr()),

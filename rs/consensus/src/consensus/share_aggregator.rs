@@ -367,6 +367,7 @@ mod tests {
                         state_hash,
                         oldest_registry_version_in_use_by_replicated_state,
                         false,
+                        vec![],
                     ))
                         .into(),
                     signature: ThresholdSignatureShare::fake(node_id),

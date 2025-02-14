@@ -1456,6 +1456,7 @@ mod tests {
                     CryptoHashOf::from(CryptoHash(vec![])),
                     None,
                     false,
+                    vec![],
                 ))
                 .into_message(),
             );
@@ -2273,6 +2274,7 @@ mod tests {
                 CryptoHashOf::from(CryptoHash(vec![])),
                 None,
                 false,
+                vec![],
             ));
             let notarization = Notarization::fake(NotarizationContent {
                 version: ReplicaVersion::default(),

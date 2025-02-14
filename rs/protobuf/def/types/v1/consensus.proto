@@ -10,6 +10,7 @@ import "types/v1/artifact.proto";
 import "types/v1/dkg.proto";
 import "types/v1/idkg.proto";
 import "types/v1/types.proto";
+import "google/protobuf/wrappers.proto";
 
 message CertificationMessage {
   oneof msg {
@@ -29,6 +30,12 @@ message CatchUpPackage {
   NiDkgId signer = 3;
 }
 
+message RegistryRecord {
+  string key = 1;
+  uint64 version = 2;
+  google.protobuf.BytesValue value = 3;
+}
+
 message CatchUpPackageShare {
   string version = 1;
   RandomBeacon random_beacon = 2;
@@ -38,7 +45,6 @@ message CatchUpPackageShare {
   bytes signature = 6;
   NodeId signer = 7;
   optional uint64 oldest_registry_version_in_use_by_replicated_state = 8;
-  bool np_signed = 9;
 }
 
 message CatchUpContent {
@@ -49,6 +55,7 @@ message CatchUpContent {
   bytes random_beacon_hash = 5;
   optional uint64 oldest_registry_version_in_use_by_replicated_state = 6;
   bool np_signed = 7;
+  repeated RegistryRecord registry_records = 8;
 }
 
 message Block {

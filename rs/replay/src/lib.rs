@@ -19,11 +19,12 @@ use crate::{
     ingress::*,
     player::{Player, ReplayResult},
 };
+use core::time::Duration;
 use ic_canister_client::{Agent, Sender};
 use ic_config::{Config, ConfigSource};
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_protobuf::{registry::subnet::v1::InitialNiDkgTranscriptRecord, types::v1 as pb};
-use ic_types::ReplicaVersion;
+use ic_types::{consensus::RegistryRecord, time::current_time, ReplicaVersion};
 use prost::Message;
 use std::{cell::RefCell, convert::TryFrom, rc::Rc};
 
@@ -278,12 +279,26 @@ fn cmd_get_recovery_cup(
     .ok_or_else(|| "couldn't create a registry CUP".to_string())?;
     cup.content.np_signed = true;
 
+    if let Some(version) = cmd.include_registry_versions_from {
+        let records = player
+            .get_changes_since(version, current_time() + Duration::from_secs(60))
+            .unwrap_or_else(|err| panic!("Error in get_certified_changes_since: {}", err));
+        for record in records {
+            cup.content.registry_records.push(RegistryRecord {
+                key: record.key,
+                version: record.version,
+                value: record.value,
+            })
+        }
+    }
+
     println!(
-        "height: {}, time: {}, state_hash: {:?}, np_signed: {}",
+        "height: {}, time: {}, state_hash: {:?}, np_signed: {}, registry_records: {:?}",
         cup.height(),
         cup.content.block.as_ref().context.time,
         cup.content.state_hash,
         cup.content.np_signed
+        cup.content.registry_records,
     );
 
     let mut file =

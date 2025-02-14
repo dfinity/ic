@@ -91,6 +91,8 @@ pub struct GetRecoveryCupCmd {
     pub registry_store_uri: Option<String>,
     /// Registry store SHA256 hash
     pub registry_store_sha256: Option<String>,
+    /// Include registry versions
+    pub include_registry_versions_from: Option<u64>,
 }
 
 #[derive(Clone, Parser)]

@@ -2077,6 +2077,7 @@ pub mod test {
                         state_hash.clone(),
                         None,
                         false,
+                        vec![],
                     )),
                     signature: ThresholdSignatureShare::fake(node_test_id(0)),
                 }
@@ -2198,6 +2199,7 @@ pub mod test {
                         state_hash.clone(),
                         oldest_registry_version,
                         false,
+                        vec![],
                     )),
                     signature: ThresholdSignatureShare::fake(node_test_id(0)),
                 }

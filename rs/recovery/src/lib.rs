@@ -804,7 +804,11 @@ impl Recovery {
     }
 
     /// Return an [GetRecoveryCUPStep] to get the recovery CUP using ic-replay
-    pub fn get_recovery_cup_step(&self, subnet_id: SubnetId) -> RecoveryResult<impl Step> {
+    pub fn get_recovery_cup_step(
+        &self,
+        subnet_id: SubnetId,
+        include_registry_versions_from: Option<u64>,
+    ) -> RecoveryResult<impl Step> {
         let state_params = self.get_replay_output()?;
         let recovery_height = Recovery::get_recovery_height(state_params.height);
         Ok(GetRecoveryCUPStep {
@@ -814,6 +818,7 @@ impl Recovery {
             state_hash: state_params.hash,
             work_dir: self.work_dir.clone(),
             recovery_height,
+            include_registry_versions_from,
         })
     }
 

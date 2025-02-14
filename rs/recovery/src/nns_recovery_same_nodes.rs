@@ -54,6 +54,11 @@ pub struct NNSRecoverySameNodesArgs {
     /// The replay will stop at this height and make a checkpoint.
     pub replay_until_height: Option<u64>,
 
+    #[clap(long)]
+    /// Registry versions to be included into the CUP,
+    /// starting with the given lowest version (inclusive).
+    pub include_registry_versions_from: Option<u64>,
+
     /// URL of the upgrade image
     #[clap(long)]
     pub upgrade_image_url: Option<Url>,
@@ -160,6 +165,15 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoverySameNodes {
                 }
             }
 
+            StepType::GetRecoveryCUP => {
+                if self.params.include_registry_versions_from.is_none() {
+                    self.params.include_registry_versions_from = read_optional(
+                        &self.logger,
+                        "Include registry versions into the CUP from (inclusive): ",
+                    );
+                }
+            }
+
             StepType::WaitForCUP => {
                 if self.params.upload_method.is_none() {
                     self.params.upload_method = read_optional_upload_method(
@@ -256,9 +270,10 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoverySameNodes {
                 self.recovery.get_copy_ic_state(self.new_state_dir.clone()),
             )),
 
-            StepType::GetRecoveryCUP => Ok(Box::new(
-                self.recovery.get_recovery_cup_step(self.params.subnet_id)?,
-            )),
+            StepType::GetRecoveryCUP => Ok(Box::new(self.recovery.get_recovery_cup_step(
+                self.params.subnet_id,
+                self.params.include_registry_versions_from,
+            )?)),
 
             StepType::UploadCUPandRegistry => {
                 Ok(Box::new(self.recovery.get_upload_cup_and_tar_step(

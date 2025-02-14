@@ -1015,6 +1015,7 @@ mod tests {
                 CryptoHashOf::from(CryptoHash(Vec::new())),
                 None,
                 false,
+                vec![],
             ),
             signature: ThresholdSignature::fake(),
         }

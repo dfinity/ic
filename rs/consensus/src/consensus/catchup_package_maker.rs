@@ -234,6 +234,7 @@ impl CatchUpPackageMaker {
                     state_hash,
                     registry_version,
                     false,
+                    vec![],
                 );
                 let share_content = CatchUpShareContent::from(&content);
                 if let Some(dkg_id) = active_high_threshold_nidkg_id(pool.as_cache(), height) {

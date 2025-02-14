@@ -781,6 +781,7 @@ pub struct GetRecoveryCUPStep {
     pub recovery_height: Height,
     pub result: PathBuf,
     pub work_dir: PathBuf,
+    pub include_registry_versions_from: Option<u64>,
 }
 
 impl Step for GetRecoveryCUPStep {
@@ -807,6 +808,7 @@ impl Step for GetRecoveryCUPStep {
                 registry_store_uri: None,
                 registry_store_sha256: None,
                 output_file: self.work_dir.join("cup.proto"),
+                include_registry_versions_from: self.include_registry_versions_from,
             })),
             None,
             self.result.clone(),

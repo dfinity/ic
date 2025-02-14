@@ -179,6 +179,7 @@ pub fn make_genesis(summary: dkg::Summary) -> CatchUpPackage {
             Id::from(CryptoHash(Vec::new())),
             None,
             false,
+            vec![],
         ),
         signature: ThresholdSignature {
             signer: high_dkg_id,

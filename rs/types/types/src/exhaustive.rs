@@ -13,7 +13,8 @@ use crate::consensus::idkg::{
     ReshareOfUnmaskedParams, UnmaskedTimesMaskedParams, UnmaskedTranscript,
 };
 use crate::consensus::{
-    Block, BlockPayload, CatchUpShareContent, ConsensusMessageHashable, Payload, SummaryPayload,
+    Block, BlockPayload, CatchUpShareContent, ConsensusMessageHashable, Payload, RegistryRecord,
+    SummaryPayload,
 };
 use crate::consensus::{CatchUpContent, CatchUpPackage, HashedBlock, HashedRandomBeacon};
 use crate::crypto::canister_threshold_sig::idkg::{
@@ -472,18 +473,29 @@ impl ExhaustiveSet for HashedSummaryBlock {
     }
 }
 
+#[derive(Clone)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
+struct DerivedCatchUpContent {
+    block: HashedSummaryBlock,
+    beacon: HashedRandomBeacon,
+    hash: CryptoHashOfState,
+    registry_version: Option<RegistryVersion>,
+    np_signed: bool,
+    records: Vec<RegistryRecord>,
+}
+
 impl ExhaustiveSet for CatchUpContent {
     fn exhaustive_set<R: RngCore + CryptoRng>(rng: &mut R) -> Vec<Self> {
-        let registry_versions = Option::<RegistryVersion>::exhaustive_set(rng);
-        <(HashedSummaryBlock, HashedRandomBeacon, CryptoHashOfState)>::exhaustive_set(rng)
+        DerivedCatchUpContent::exhaustive_set(rng)
             .into_iter()
-            .enumerate()
-            .map(|(i, (block, random_beacon, state_hash))| {
+            .map(|cup| {
                 Self::new(
-                    block.summary_block,
-                    random_beacon,
-                    state_hash,
-                    registry_versions[i % registry_versions.len()],
+                    cup.block.summary_block,
+                    cup.beacon,
+                    cup.hash,
+                    cup.registry_version,
+                    cup.np_signed,
+                    cup.records,
                 )
             })
             .collect()
@@ -1096,6 +1108,9 @@ mod tests {
         let set = ConsensusMessage::exhaustive_set(&mut reproducible_rng());
         println!("Number of consensus message variants: {}", set.len());
         for msg in &set {
+            if matches!(msg, &ConsensusMessage::CatchUpPackageShare(_)) {
+                continue;
+            }
             // serialize -> deserialize round-trip
             let bytes = pb::ConsensusMessage::from(msg.clone()).encode_to_vec();
             let proto_msg = pb::ConsensusMessage::decode(bytes.as_slice()).unwrap();

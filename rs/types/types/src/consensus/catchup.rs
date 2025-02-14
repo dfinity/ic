@@ -9,6 +9,8 @@ use crate::{
     node_id_into_protobuf, node_id_try_from_option, CryptoHashOfState, Height, RegistryVersion,
     ReplicaVersion,
 };
+#[cfg(test)]
+use ic_exhaustive_derive::ExhaustiveSet;
 use ic_protobuf::{
     proxy::{try_from_option_field, ProxyDecodeError},
     types::v1 as pb,
@@ -20,6 +22,46 @@ use std::convert::TryFrom;
 
 /// [`CatchUpContent`] contains all necessary data to bootstrap a subnet's participant.
 pub type CatchUpContent = CatchUpContentT<HashedBlock>;
+
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Deserialize, Serialize)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
+pub struct RegistryRecord {
+    /// The key of the record.
+    pub key: String,
+    /// The version at which this record was added to the database. I.e., at
+    /// this `version` the `key` was updated in the database.
+    pub version: RegistryVersion,
+    /// The value of this record. `None` means the value was deleted at
+    /// `version`.
+    pub value: Option<Vec<u8>>,
+}
+
+impl From<&RegistryRecord> for pb::RegistryRecord {
+    fn from(content: &RegistryRecord) -> Self {
+        Self {
+            key: content.key.clone(),
+            version: content.version.get(),
+            value: content.value.clone(),
+        }
+    }
+}
+
+impl TryFrom<pb::RegistryRecord> for RegistryRecord {
+    type Error = ProxyDecodeError;
+
+    fn try_from(content: pb::RegistryRecord) -> Result<RegistryRecord, Self::Error> {
+        let pb::RegistryRecord {
+            key,
+            version,
+            value,
+        } = content;
+        Ok(Self {
+            key,
+            version: RegistryVersion::new(version),
+            value,
+        })
+    }
+}
 
 /// A generic struct shared between [`CatchUpContent`] and [`CatchUpShareContent`].
 /// Consists of objects all occurring at a specific height which we will refer to
@@ -40,6 +82,8 @@ pub struct CatchUpContentT<T> {
     pub oldest_registry_version_in_use_by_replicated_state: Option<RegistryVersion>,
 
     pub np_signed: bool,
+
+    pub registry_records: Vec<RegistryRecord>,
 }
 
 impl CatchUpContent {
@@ -50,6 +94,7 @@ impl CatchUpContent {
         state_hash: CryptoHashOfState,
         oldest_registry_version_in_use_by_replicated_state: Option<RegistryVersion>,
         np_signed: bool,
+        registry_records: Vec<RegistryRecord>,
     ) -> Self {
         Self {
             version: block.version().clone(),
@@ -58,6 +103,7 @@ impl CatchUpContent {
             state_hash,
             oldest_registry_version_in_use_by_replicated_state,
             np_signed,
+            registry_records,
         }
     }
 
@@ -86,6 +132,7 @@ impl CatchUpContent {
             oldest_registry_version_in_use_by_replicated_state: share
                 .oldest_registry_version_in_use_by_replicated_state,
             np_signed: share.np_signed,
+            registry_records: share.registry_records,
         }
     }
 
@@ -106,6 +153,11 @@ impl CatchUpContent {
 
 impl From<&CatchUpContent> for pb::CatchUpContent {
     fn from(content: &CatchUpContent) -> Self {
+        let registry_records = content
+            .registry_records
+            .iter()
+            .map(pb::RegistryRecord::from)
+            .collect();
         Self {
             block: Some(pb::Block::from(content.block.as_ref())),
             random_beacon: Some(pb::RandomBeacon::from(content.random_beacon.as_ref())),
@@ -116,6 +168,7 @@ impl From<&CatchUpContent> for pb::CatchUpContent {
                 .oldest_registry_version_in_use_by_replicated_state
                 .map(|v| v.get()),
             np_signed: content.np_signed,
+            registry_records,
         }
     }
 }
@@ -128,6 +181,12 @@ impl TryFrom<pb::CatchUpContent> for CatchUpContent {
 
         let random_beacon =
             try_from_option_field(content.random_beacon, "CatchUpContent::random_beacon")?;
+
+        let registry_records = content
+            .registry_records
+            .into_iter()
+            .map(|record| RegistryRecord::try_from(record))
+            .collect::<Result<_, _>>()?;
 
         Ok(Self::new(
             HashedBlock {
@@ -143,6 +202,7 @@ impl TryFrom<pb::CatchUpContent> for CatchUpContent {
                 .oldest_registry_version_in_use_by_replicated_state
                 .map(RegistryVersion::from),
             content.np_signed,
+            registry_records,
         ))
     }
 }
@@ -263,6 +323,7 @@ impl From<&CatchUpContent> for CatchUpShareContent {
             oldest_registry_version_in_use_by_replicated_state: content
                 .oldest_registry_version_in_use_by_replicated_state,
             np_signed: content.np_signed,
+            registry_records: content.registry_records.clone(),
         }
     }
 }
@@ -284,7 +345,6 @@ impl From<&CatchUpPackageShare> for pb::CatchUpPackageShare {
                 .content
                 .oldest_registry_version_in_use_by_replicated_state
                 .map(|v| v.get()),
-            np_signed: cup_share.content.np_signed,
         }
     }
 }
@@ -307,7 +367,8 @@ impl TryFrom<pb::CatchUpPackageShare> for CatchUpPackageShare {
                 oldest_registry_version_in_use_by_replicated_state: cup_share
                     .oldest_registry_version_in_use_by_replicated_state
                     .map(RegistryVersion::from),
-                np_signed: cup_share.np_signed,
+                np_signed: false,
+                registry_records: vec![],
             },
             signature: ThresholdSignatureShare {
                 signature: ThresholdSigShareOf::new(ThresholdSigShare(cup_share.signature)),
