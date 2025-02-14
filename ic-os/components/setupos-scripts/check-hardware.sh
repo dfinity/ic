@@ -34,7 +34,7 @@ GEN2_MINIMUM_CPU_THREADS=64
 GEN2_MINIMUM_DISK_SIZE=6400000000000
 GEN2_MINIMUM_AGGREGATE_DISK_SIZE=32000000000000
 
-# All nodes have the same memory requirement: 512 GB
+# Memory requirement for all nodes: 510 GB (just under the 512 GB publicly-listed requirement)
 MINIMUM_MEMORY_SIZE=547608330240
 
 ###############################################################################
