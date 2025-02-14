@@ -1,13 +1,14 @@
 use std::{sync::Arc, time::Duration};
 
+use futures::FutureExt;
 use ic_config::http_handler::Config;
 use ic_crypto_tls_interfaces::TlsConfig;
 use ic_interfaces_registry::RegistryClient;
-use ic_logger::{info, ReplicaLogger};
+use ic_logger::ReplicaLogger;
 use ic_metrics::{buckets::decimal_buckets, MetricsRegistry};
 use ic_types::{messages::CertificateDelegation, SubnetId};
 use prometheus::{Histogram, IntCounter};
-use tokio::{select, sync::watch, task::JoinHandle};
+use tokio::{sync::watch, task::JoinHandle};
 use tokio_util::sync::CancellationToken;
 
 use crate::load_root_delegation;
@@ -40,11 +41,18 @@ pub fn start_nns_delegation_manager(
         rt_handle: rt_handle.clone(),
     };
 
+    // Fetch the initial delegation in a blocking fashion
     let delegation = rt_handle.block_on(manager.fetch());
 
     let (tx, rx) = watch::channel(delegation);
+    let join_handle = rt_handle.spawn(async move {
+        cancellation_token
+            .run_until_cancelled(manager.run(tx))
+            .map(|_| ())
+            .await
+    });
 
-    (rt_handle.spawn(manager.run(tx, cancellation_token)), rx)
+    (join_handle, rx)
 }
 
 struct DelegationManagerMetrics {
@@ -114,38 +122,23 @@ impl DelegationManager {
         delegation
     }
 
-    async fn run(
-        self,
-        sender: watch::Sender<Option<CertificateDelegation>>,
-        cancellation_token: CancellationToken,
-    ) {
+    async fn run(self, sender: watch::Sender<Option<CertificateDelegation>>) {
         let mut interval = tokio::time::interval(DELEGATION_UPDATE_INTERVAL);
 
         loop {
-            select! {
-                // stop the event loop if the token has been cancelled
-                _ = cancellation_token.cancelled() => {
-                    info!(self.log, "Delegation manager task has been cancelled");
+            // fetch the delegation if enough time has passed
+            let _ = interval.tick().await;
 
-                    break;
+            let mut delegation = self.fetch().await;
+
+            sender.send_if_modified(move |old_delegation: &mut Option<CertificateDelegation>| {
+                if &delegation != old_delegation {
+                    std::mem::swap(old_delegation, &mut delegation);
+                    true
+                } else {
+                    false
                 }
-
-                // fetch the delegation if enough time has passed
-                _ = interval.tick() => {
-                    let mut delegation = self.fetch().await;
-
-                    sender.send_if_modified(
-                        move |old_delegation: &mut Option<CertificateDelegation>| {
-                            if &delegation != old_delegation {
-                                std::mem::swap(old_delegation, &mut delegation);
-                                true
-                            } else {
-                                false
-                            }
-                        },
-                    );
-                }
-            }
+            });
         }
     }
 }
