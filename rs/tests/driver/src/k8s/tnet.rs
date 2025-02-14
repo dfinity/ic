@@ -29,12 +29,11 @@ use tokio;
 use tracing::*;
 
 use crate::driver::farm::{
-    Certificate, CreateVmRequest, DnsRecord, DnsRecordType, PlaynetCertificate, VMCreateResponse,
-    VmSpec,
+    Certificate, CreateVmRequest, DnsRecord, DnsRecordType, ImageLocation, PlaynetCertificate,
+    VMCreateResponse, VmSpec,
 };
 use crate::driver::resource::ImageType;
 use crate::driver::test_env::{TestEnv, TestEnvAttribute};
-use crate::driver::test_env_api::get_ic_os_img_url;
 use crate::k8s::config::*;
 use crate::k8s::datavolume::*;
 use crate::k8s::job::*;
