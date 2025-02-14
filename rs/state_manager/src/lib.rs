@@ -2796,18 +2796,13 @@ fn flush_canister_snapshots_and_page_maps(
         }
     }
 
-    if !pagemaps.is_empty() || !snapshot_operations.is_empty() {
-        tip_channel
-            .send(TipRequest::FlushPageMapDelta {
-                height,
-                pagemaps,
-                snapshot_operations,
-            })
-            .unwrap();
-        // We flush further when the tip_channel queue is not empty. Meaning we're blind
-        // to a request being processed, so we send Noop to signal for the busy Tip Thread.
-        tip_channel.send(TipRequest::Noop).unwrap();
-    }
+    tip_channel
+        .send(TipRequest::FlushPageMapDelta {
+            height,
+            pagemaps,
+            snapshot_operations,
+        })
+        .unwrap();
 }
 
 fn initial_state(own_subnet_id: SubnetId, own_subnet_type: SubnetType) -> Labeled<ReplicatedState> {

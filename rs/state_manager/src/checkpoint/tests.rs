@@ -126,6 +126,13 @@ fn can_make_a_checkpoint() {
             INITIAL_CYCLES,
             NumSeconds::from(100_000),
         ));
+        tip_channel
+            .send(TipRequest::FlushPageMapDelta {
+                height: Height::new(42),
+                pagemaps: Vec::new(),
+                snapshot_operations: Vec::new(),
+            })
+            .unwrap();
 
         let _state = make_checkpoint_and_get_state(&state, HEIGHT, &tip_channel, &log);
 
@@ -191,6 +198,13 @@ fn scratchpad_dir_is_deleted_if_checkpointing_failed() {
             NumSeconds::from(100_000),
         ));
 
+        tip_channel
+            .send(TipRequest::FlushPageMapDelta {
+                height: Height::new(42),
+                pagemaps: Vec::new(),
+                snapshot_operations: Vec::new(),
+            })
+            .unwrap();
         mark_readonly(&checkpoints_dir).unwrap();
 
         // Scratchpad directory is "tmp/scatchpad_{hex(height)}"
@@ -333,6 +347,13 @@ fn can_recover_an_empty_state() {
         const HEIGHT: Height = Height::new(42);
         let own_subnet_type = SubnetType::Application;
 
+        tip_channel
+            .send(TipRequest::FlushPageMapDelta {
+                height: HEIGHT,
+                pagemaps: Vec::new(),
+                snapshot_operations: Vec::new(),
+            })
+            .unwrap();
         let _state = make_checkpoint_and_get_state(
             &ReplicatedState::new(subnet_test_id(1), own_subnet_type),
             HEIGHT,
@@ -443,6 +464,13 @@ fn can_recover_a_stopping_canister() {
         let own_subnet_type = SubnetType::Application;
         let mut state = ReplicatedState::new(subnet_test_id(1), own_subnet_type);
         state.put_canister_state(canister_state);
+        tip_channel
+            .send(TipRequest::FlushPageMapDelta {
+                height: HEIGHT,
+                pagemaps: Vec::new(),
+                snapshot_operations: Vec::new(),
+            })
+            .unwrap();
         let _state = make_checkpoint_and_get_state(&state, HEIGHT, &tip_channel, &log);
 
         let recovered_state = load_checkpoint(
@@ -501,6 +529,13 @@ fn can_recover_a_stopped_canister() {
 
         let own_subnet_type = SubnetType::Application;
         let mut state = ReplicatedState::new(subnet_test_id(1), own_subnet_type);
+        tip_channel
+            .send(TipRequest::FlushPageMapDelta {
+                height: HEIGHT,
+                pagemaps: Vec::new(),
+                snapshot_operations: Vec::new(),
+            })
+            .unwrap();
         state.put_canister_state(canister_state);
         let _state = make_checkpoint_and_get_state(&state, HEIGHT, &tip_channel, &log);
 
@@ -552,6 +587,13 @@ fn can_recover_a_running_canister() {
             scheduler_state: Default::default(),
         };
 
+        tip_channel
+            .send(TipRequest::FlushPageMapDelta {
+                height: Height::new(42),
+                pagemaps: Vec::new(),
+                snapshot_operations: Vec::new(),
+            })
+            .unwrap();
         let own_subnet_type = SubnetType::Application;
         let mut state = ReplicatedState::new(subnet_test_id(1), own_subnet_type);
         state.put_canister_state(canister_state);
