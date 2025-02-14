@@ -374,6 +374,7 @@ mod tests {
             NNS_SUBNET_ID,
             registry_client,
             Arc::new(tls_config),
+            CancellationToken::new(),
         );
 
         assert!(rx.borrow().is_none());
@@ -393,6 +394,7 @@ mod tests {
             NNS_SUBNET_ID,
             registry_client,
             Arc::new(tls_config),
+            CancellationToken::new(),
         );
 
         let delegation = rx
