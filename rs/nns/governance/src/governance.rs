@@ -144,6 +144,7 @@ pub mod tla_macros;
 #[cfg(feature = "tla")]
 pub mod tla;
 
+use crate::reward::distribution::RewardsDistribution;
 use crate::storage::with_voting_state_machines_mut;
 #[cfg(feature = "tla")]
 pub use tla::{
@@ -6793,14 +6794,14 @@ impl Governance {
             .clone()
             .last()
             .map(|day| {
-                crate::reward::rewards_pool_to_distribute_in_supply_fraction_for_one_day(day)
+                crate::reward::calculation::rewards_pool_to_distribute_in_supply_fraction_for_one_day(day)
             })
             .unwrap_or(0.0);
         let latest_round_available_e8s_equivalent_float =
             (supply.get_e8s() as f64) * latest_day_fraction;
 
         let fraction: f64 = days
-            .map(crate::reward::rewards_pool_to_distribute_in_supply_fraction_for_one_day)
+            .map(crate::reward::calculation::rewards_pool_to_distribute_in_supply_fraction_for_one_day)
             .sum();
 
         let rolling_over_from_previous_reward_event_e8s_equivalent =
@@ -6872,40 +6873,27 @@ impl Governance {
                 LOG_PREFIX, total_voting_rights,
             );
         } else {
+            let mut reward_distribution = RewardsDistribution::new();
             for (neuron_id, used_voting_rights) in voters_to_used_voting_right {
-                let maybe_reward = self.with_neuron_mut(&neuron_id, |neuron| {
-                    // Note that " as u64" rounds toward zero; this is the desired
-                    // behavior here. Also note that `total_voting_rights` has
-                    // to be positive because (1) voters_to_used_voting_right
-                    // is non-empty (otherwise we wouldn't be here in the
-                    // first place) and (2) the voting power of all ballots is
-                    // positive (non-zero).
+                if self.neuron_store.contains(neuron_id) {
                     let reward = (used_voting_rights * total_available_e8s_equivalent_float
                         / total_voting_rights) as u64;
-                    // If the neuron has auto-stake-maturity on, add the new maturity to the
-                    // staked maturity, otherwise add it to the un-staked maturity.
-                    if neuron.auto_stake_maturity.unwrap_or(false) {
-                        neuron.staked_maturity_e8s_equivalent =
-                            Some(neuron.staked_maturity_e8s_equivalent.unwrap_or(0) + reward);
-                    } else {
-                        neuron.maturity_e8s_equivalent += reward;
-                    }
-                    reward
-                });
-                match maybe_reward {
-                    Ok(reward) => {
-                        actually_distributed_e8s_equivalent += reward;
-                    }
-                    Err(e) => println!(
+
+                    reward_distribution.add_reward(neuron_id, reward);
+
+                    actually_distributed_e8s_equivalent += reward;
+                } else {
+                    println!(
                         "{}Cannot find neuron {}, despite having voted with power {} \
                             in the considered reward period. The reward that should have been \
                             distributed to this neuron is simply skipped, so the total amount \
                             of distributed reward for this period will be lower than the maximum \
-                            allowed. Underlying error: {:?}.",
-                        LOG_PREFIX, neuron_id.id, used_voting_rights, e
-                    ),
+                            allowed.",
+                        LOG_PREFIX, neuron_id.id, used_voting_rights
+                    );
                 }
             }
+            self.schedule_pending_rewards_distribution(day_after_genesis, reward_distribution);
         }
 
         // Mark the proposals that we just considered as "rewarded". More

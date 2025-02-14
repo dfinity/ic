@@ -1,0 +1,7 @@
+[package]
+name = "ic-nervous-system-common-time-helpers"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+ic-cdk = { workspace = true }

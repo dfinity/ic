@@ -28,6 +28,7 @@ use ic_nns_governance::{
     is_prune_following_enabled,
     neuron_data_validation::NeuronDataValidationSummary,
     pb::v1::{self as gov_pb, Governance as InternalGovernanceProto},
+    reward::distribution::run_distribute_rewards_timer_interval,
     storage::{grow_upgrades_memory_to, validate_stable_storage, with_upgrades_memory},
     timer_tasks::schedule_tasks,
 };
@@ -83,6 +84,11 @@ fn schedule_timers() {
     schedule_neuron_data_validation();
     schedule_vote_processing();
     schedule_tasks();
+
+    // This timer cancels itself when there is no work to do, and is restarted by
+    // distribute_rewards. It is called here so that reward distribution is resumed
+    // after an upgrade.
+    run_distribute_rewards_timer_interval()
 }
 
 const PRUNE_FOLLOWING_INTERVAL: Duration = Duration::from_secs(10);
