@@ -1041,7 +1041,7 @@ impl<'a> QueryContext<'a> {
     /// Returns true if the total number of instructions executed by queries and
     /// response callbacks exceeds the limit in `round_limits`.
     pub fn instruction_limit_reached(&self) -> bool {
-        self.round_limits.reached()
+        self.round_limits.instructions_reached()
     }
 
     /// Return whether the time limit for this query context has been reached.
