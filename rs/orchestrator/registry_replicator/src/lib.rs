@@ -41,7 +41,10 @@ use ic_metrics::MetricsRegistry;
 use ic_registry_client::client::RegistryClientImpl;
 use ic_registry_local_store::{Changelog, ChangelogEntry, KeyMutation, LocalStore, LocalStoreImpl};
 use ic_registry_nns_data_provider::registry::RegistryCanister;
-use ic_types::{crypto::threshold_sig::ThresholdSigPublicKey, NodeId, RegistryVersion};
+use ic_types::{
+    consensus::RegistryRecord, crypto::threshold_sig::ThresholdSigPublicKey, NodeId,
+    RegistryVersion,
+};
 use metrics::RegistryreplicatorMetrics;
 use std::{
     io::{Error, ErrorKind},
@@ -400,6 +403,38 @@ impl RegistryReplicator {
     pub fn stop_polling_and_set_local_registry_data(&self, source_registry: &dyn LocalStore) {
         self.stop_polling();
         self.set_local_registry_data(source_registry);
+    }
+
+    pub fn stop_polling_and_apply_registry_records(&self, mut records: Vec<RegistryRecord>) {
+        self.stop_polling();
+
+        let latest_version = self.registry_client.get_latest_version();
+
+        records.sort_by_key(|record| record.version);
+        let changelog = records
+            .iter()
+            .filter(|record| record.version > latest_version)
+            .fold(Changelog::default(), |mut cl, r| {
+                let rel_version = (r.version - latest_version).get();
+                if cl.len() < rel_version as usize {
+                    cl.push(ChangelogEntry::default());
+                }
+                cl.last_mut().unwrap().push(KeyMutation {
+                    key: r.key.clone(),
+                    value: r.value.clone(),
+                });
+                cl
+            });
+
+        changelog
+            .into_iter()
+            .enumerate()
+            .try_for_each(|(i, cle)| {
+                let v = latest_version + RegistryVersion::from(i as u64 + 1);
+                println!("Writing data of registry version {}", v);
+                self.local_store.store(v, cle)
+            })
+            .expect("Writing to the file system failed: Stop.");
     }
 
     pub fn stop_polling(&self) {

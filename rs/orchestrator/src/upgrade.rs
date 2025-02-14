@@ -258,6 +258,8 @@ impl Upgrade {
                 latest_cup.height(),
             );
 
+            self.apply_registry_updates(&latest_cup)?;
+
             self.download_registry_and_restart_if_nns_subnet_recovery(
                 subnet_id,
                 latest_registry_version,
@@ -321,6 +323,36 @@ impl Upgrade {
         self.prepare_upgrade_if_scheduled(subnet_id).await?;
 
         Ok(Some(subnet_id))
+    }
+
+    fn apply_registry_updates(&self, cup: &CatchUpPackage) -> OrchestratorResult<()> {
+        let Some(max_record_version) = cup
+            .content
+            .registry_records
+            .iter()
+            .map(|record| record.version)
+            .max()
+        else {
+            return Ok(());
+        };
+        if max_record_version <= self.registry.get_latest_version() {
+            info!(self.logger, "All CUP registry records applied.");
+            return Ok(());
+        }
+
+        info!(self.logger, "Stopping replica.");
+        if let Err(e) = self.stop_replica() {
+            // Even though we fail to stop the replica, we should still
+            // apply the registry records, so we simply issue a warning.
+            warn!(self.logger, "Failed to stop replica with error {:?}", e);
+        }
+
+        info!(self.logger, "Applying CUP registry records.");
+        self.registry_replicator
+            .stop_polling_and_apply_registry_records(cup.content.registry_records.clone());
+
+        reexec_current_process(&self.logger);
+        Ok(())
     }
 
     // Special case for when we are doing bootstrap subnet recovery for

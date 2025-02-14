@@ -185,7 +185,7 @@ impl TryFrom<pb::CatchUpContent> for CatchUpContent {
         let registry_records = content
             .registry_records
             .into_iter()
-            .map(|record| RegistryRecord::try_from(record))
+            .map(RegistryRecord::try_from)
             .collect::<Result<_, _>>()?;
 
         Ok(Self::new(

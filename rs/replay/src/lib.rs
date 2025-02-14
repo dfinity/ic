@@ -297,7 +297,7 @@ fn cmd_get_recovery_cup(
         cup.height(),
         cup.content.block.as_ref().context.time,
         cup.content.state_hash,
-        cup.content.np_signed
+        cup.content.np_signed,
         cup.content.registry_records,
     );
 
