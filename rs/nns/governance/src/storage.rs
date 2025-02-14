@@ -31,6 +31,18 @@ const NODE_PROVIDER_REWARDS_LOG_DATA_MEMORY_ID: MemoryId = MemoryId::new(15);
 
 const VOTING_STATE_MACHINES_MEMORY_ID: MemoryId = MemoryId::new(16);
 
+// Used by ic-wasm instrument for profiling data, which can be used to generate
+// flame graphs.
+const IC_WASM_INSTRUMENT_MEMORY_ID_U8: u8 = 17; // Because MemoryId does not let you convert back.
+const IC_WASM_INSTRUMENT_MEMORY_ID: MemoryId = MemoryId::new(IC_WASM_INSTRUMENT_MEMORY_ID_U8);
+// This is the value used by an example in the documentation. Specifically,
+// https://github.com/dfinity/ic-wasm?tab=readme-ov-file#instrument-experimental
+// I see no explanation for why that example used this value, but if it's in an
+// example, it probably isn't a terrible choice. One good thing about this is
+// that it is a multiple of the standard MemoryManager bucket size (128). A page
+// of stable memory is 64 KiB. Thus, this is equivalent to 256 MiB.
+const IC_WASM_INSTRUMENT_MEMORY_SIZE_PAGES: u64 = 4096 /* DO NOT MERGE */ * 8;
+
 pub mod neuron_indexes;
 pub mod neurons;
 
@@ -137,6 +149,108 @@ impl State {
     }
 }
 
+/// Returns (start_page_index, size_pages) of stable memory that ic-wasm instrument can use.
+///
+/// If the memory has already been allocated, makes no changes.
+///
+/// Once this has been released, it can be deleted. At the same time, forgetting
+/// to delete this is also fine.
+pub fn allocate_ic_wasm_instrument_memory_once() {
+    let instrument_memory = MEMORY_MANAGER
+        .with(|memory_manager| memory_manager.borrow().get(IC_WASM_INSTRUMENT_MEMORY_ID));
+
+    let grow_pages = IC_WASM_INSTRUMENT_MEMORY_SIZE_PAGES.saturating_sub(instrument_memory.size());
+    if grow_pages < 1 {
+        println!(
+            "ic-wasm instrument memory has already been alocated. grow_pages = {}",
+            grow_pages /* DO NOT MERGE */
+        );
+        return;
+    }
+
+    let grow_failed = instrument_memory.grow(grow_pages) < 0;
+    if grow_failed {
+        println!("Unable to allocate enough space for ic-wasm instrument.");
+    }
+
+    let (start_address, page_limit) = where_ic_wasm_instrument_memory();
+    println!("Finished allocating ic-wasm instrument memory:");
+    println!("  start_address = {}", start_address);
+    println!("  page_limit = {}", page_limit);
+}
+
+// The implementation of this follows the diagram here:
+// https://docs.rs/ic-stable-structures/0.6.5/ic_stable_structures/memory_manager/struct.MemoryManager.html#v1-layout
+pub fn where_ic_wasm_instrument_memory() -> (u64, u64) {
+    // Read the first page of stable memory. This is the area reserved by
+    // MemoryManager for its own use. Most of this area is not actually used.
+    let mut buffer = [0_u8; ic_cdk::api::stable::WASM_PAGE_SIZE_IN_BYTES as usize];
+    DefaultMemoryImpl::default().read(0, &mut buffer);
+
+    // Inspect header to make sure stable memory is being managed by MemoryManager.
+    assert_eq!(String::from_utf8(buffer[0..3].to_vec()).unwrap(), "MGR");
+    assert_eq!(buffer[3], 1);
+
+    // let allocated_buckets = buffer[4..6]
+
+    // Read bucket size. This is usually 128 pages (where a page is 64 KiB).
+    let bucket_size_pages = {
+        type Array = [u8; 2];
+        let array = Array::try_from(&buffer[6..8]).expect("Unable to convert from slice to u16.");
+        u16::from_le_bytes(array) as u64
+    };
+
+    // Scan bucket allocations, that is, who owns each bucket.
+
+    // This is copied from ic_stable_structures, which does not make this
+    // public. Notice that this is equal to 2^15 = 32 Ki.
+    const MAX_NUM_BUCKETS: u64 = 32_768;
+
+    let bucket_allocations_offset =
+        3 // Magic
+        + 1 // Layout version
+        + 2 // Number of allocated buckets
+        + 2 // Bucket size (in pages) = N
+        + 32 // Reserved space
+        + 8 * 255 // Sizes of memories 0 - 254 (in pages)
+    ;
+
+    let mut first_ic_wasm_instrument_bucket_number = None;
+    let mut ic_wasm_instrument_size_buckets = 0;
+    for bucket_number in 1..=MAX_NUM_BUCKETS {
+        let i = (bucket_allocations_offset + bucket_number - 1) as usize;
+        let belongs_to_ic_wasm_instrument = buffer[i] == IC_WASM_INSTRUMENT_MEMORY_ID_U8;
+
+        if belongs_to_ic_wasm_instrument {
+            if first_ic_wasm_instrument_bucket_number.is_none() {
+                first_ic_wasm_instrument_bucket_number = Some(bucket_number);
+            }
+            ic_wasm_instrument_size_buckets += 1;
+            continue;
+        }
+
+        if first_ic_wasm_instrument_bucket_number.is_some() {
+            // Found the first bucket that does not belong to the ic-wasm
+            // instrument Memory after a bucket that does belong to ic-wasm
+            // instrument. There could be more after this, but we ignore those.
+            // Also, if MemoryManager does not fragment our buckets, that
+            // wouldn't happen in practice. Therefore, we stop searching now.
+            break;
+        }
+
+        // Haven't found any ic-wasm instrument buckets (yet).
+    }
+
+    let Some(first_ic_wasm_instrument_bucket_number) = first_ic_wasm_instrument_bucket_number
+    else {
+        return (0, 0);
+    };
+
+    let start_page = 1 + bucket_size_pages * (first_ic_wasm_instrument_bucket_number - 1);
+    let size_pages = ic_wasm_instrument_size_buckets * bucket_size_pages;
+    (start_page, size_pages)
+}
+
 pub fn with_upgrades_memory<R>(f: impl FnOnce(&VM) -> R) -> R {
     STATE.with(|state| {
         let upgrades_memory = &state.borrow().upgrades_memory;
@@ -169,7 +283,7 @@ pub(crate) fn with_stable_neuron_store_mut<R>(
     })
 }
 
-pub(crate) fn with_stable_neuron_indexes<R>(
+pub /* DO NOT MERGE (crate */ fn with_stable_neuron_indexes<R>(
     f: impl FnOnce(&neuron_indexes::StableNeuronIndexes<VM>) -> R,
 ) -> R {
     STATE.with(|state| {

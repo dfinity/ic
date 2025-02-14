@@ -236,6 +236,7 @@ rust_canister(
     srcs = ["canister/canister.rs"],
     aliases = ALIASES,
     compile_data = ["canister/governance.did"],
+    keep_name_section = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     service_file = ":canister/governance.did",
     visibility = ["//visibility:public"],

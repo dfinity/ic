@@ -1,5 +1,5 @@
 {
-  "checksum": "17de1def1da665950e9706970f1d7a252f0741fefc1f3525dabfa2d8461227cf",
+  "checksum": "4af13c4b3641fd070cb2005708bf4c4f3f1022ea57bdae8780dccba8380cd53d",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -1779,7 +1779,7 @@
               "target": "http"
             },
             {
-              "id": "indexmap 2.2.6",
+              "id": "indexmap 2.7.1",
               "target": "indexmap"
             },
             {
@@ -19832,7 +19832,7 @@
               "target": "ic_verify_bls_signature"
             },
             {
-              "id": "ic-wasm 0.8.4",
+              "id": "ic-wasm 0.9.5",
               "target": "ic_wasm"
             },
             {
@@ -19864,7 +19864,7 @@
               "target": "idna"
             },
             {
-              "id": "indexmap 2.2.6",
+              "id": "indexmap 2.7.1",
               "target": "indexmap"
             },
             {
@@ -20576,6 +20576,10 @@
             {
               "id": "walkdir 2.3.3",
               "target": "walkdir"
+            },
+            {
+              "id": "walrus 0.22.0",
+              "target": "walrus"
             },
             {
               "id": "warp 0.3.7",
@@ -27516,7 +27520,7 @@
         "deps": {
           "common": [
             {
-              "id": "indexmap 2.2.6",
+              "id": "indexmap 2.7.1",
               "target": "indexmap"
             }
           ],
@@ -27848,7 +27852,7 @@
               "target": "http"
             },
             {
-              "id": "indexmap 2.2.6",
+              "id": "indexmap 2.7.1",
               "target": "indexmap"
             },
             {
@@ -27935,7 +27939,7 @@
               "target": "http"
             },
             {
-              "id": "indexmap 2.2.6",
+              "id": "indexmap 2.7.1",
               "target": "indexmap"
             },
             {
@@ -28226,7 +28230,8 @@
         ],
         "crate_features": {
           "common": [
-            "default-hasher"
+            "default-hasher",
+            "serde"
           ],
           "selects": {}
         },
@@ -28235,6 +28240,10 @@
             {
               "id": "foldhash 0.1.4",
               "target": "foldhash"
+            },
+            {
+              "id": "serde 1.0.217",
+              "target": "serde"
             }
           ],
           "selects": {}
@@ -28588,54 +28597,6 @@
         "MIT"
       ],
       "license_file": "LICENSE"
-    },
-    "heck 0.3.3": {
-      "name": "heck",
-      "version": "0.3.3",
-      "package_url": "https://github.com/withoutboats/heck",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/heck/0.3.3/download",
-          "sha256": "6d621efb26863f0e9924c6ac577e8275e5e6b77455db64ffa6c65c904e9e132c"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "heck",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "heck",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "unicode-segmentation 1.10.1",
-              "target": "unicode_segmentation"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2018",
-        "version": "0.3.3"
-      },
-      "license": "MIT OR Apache-2.0",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "license_file": "LICENSE-APACHE"
     },
     "heck 0.4.1": {
       "name": "heck",
@@ -34276,14 +34237,14 @@
       ],
       "license_file": null
     },
-    "ic-wasm 0.8.4": {
+    "ic-wasm 0.9.5": {
       "name": "ic-wasm",
-      "version": "0.8.4",
+      "version": "0.9.5",
       "package_url": "https://github.com/dfinity/ic-wasm",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/ic-wasm/0.8.4/download",
-          "sha256": "45bc33855672981ae4a2f4e77c1a77d1bdc0756fb1b36ad0dbe47df77a955e2d"
+          "url": "https://static.crates.io/crates/ic-wasm/0.9.5/download",
+          "sha256": "adf6b69fa1b319ce3ffb65564bc16c15d1b0d91a679d8a9ae6e69c2a71f09ec6"
         }
       },
       "targets": [
@@ -34361,14 +34322,18 @@
               "target": "thiserror"
             },
             {
-              "id": "walrus 0.21.1",
+              "id": "walrus 0.22.0",
               "target": "walrus"
+            },
+            {
+              "id": "wasmparser 0.223.1",
+              "target": "wasmparser"
             }
           ],
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.8.4"
+        "version": "0.9.5"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -36290,14 +36255,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "indexmap 2.2.6": {
+    "indexmap 2.7.1": {
       "name": "indexmap",
-      "version": "2.2.6",
+      "version": "2.7.1",
       "package_url": "https://github.com/indexmap-rs/indexmap",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/indexmap/2.2.6/download",
-          "sha256": "168fb715dda47215e360912c096649d23d58bf392ac62f73919e831745e40f26"
+          "url": "https://static.crates.io/crates/indexmap/2.7.1/download",
+          "sha256": "8c9c992b02b5b4c94ea26e32fe5bccb7aa7d9f390ab5c1221ff895bc7ea8b652"
         }
       },
       "targets": [
@@ -36334,7 +36299,7 @@
               "target": "equivalent"
             },
             {
-              "id": "hashbrown 0.14.5",
+              "id": "hashbrown 0.15.2",
               "target": "hashbrown"
             },
             {
@@ -36345,7 +36310,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "2.2.6"
+        "version": "2.7.1"
       },
       "license": "Apache-2.0 OR MIT",
       "license_ids": [
@@ -36509,7 +36474,7 @@
               "target": "ahash"
             },
             {
-              "id": "indexmap 2.2.6",
+              "id": "indexmap 2.7.1",
               "target": "indexmap"
             },
             {
@@ -36627,7 +36592,7 @@
               "target": "env_logger"
             },
             {
-              "id": "indexmap 2.2.6",
+              "id": "indexmap 2.7.1",
               "target": "indexmap"
             },
             {
@@ -47434,7 +47399,7 @@
               "target": "hashbrown"
             },
             {
-              "id": "indexmap 2.2.6",
+              "id": "indexmap 2.7.1",
               "target": "indexmap"
             },
             {
@@ -48389,7 +48354,7 @@
               "target": "futures_sink"
             },
             {
-              "id": "indexmap 2.2.6",
+              "id": "indexmap 2.7.1",
               "target": "indexmap"
             },
             {
@@ -66398,7 +66363,7 @@
               "target": "dyn_clone"
             },
             {
-              "id": "indexmap 2.2.6",
+              "id": "indexmap 2.7.1",
               "target": "indexmap",
               "alias": "indexmap2"
             },
@@ -69233,7 +69198,7 @@
         "deps": {
           "common": [
             {
-              "id": "indexmap 2.2.6",
+              "id": "indexmap 2.7.1",
               "target": "indexmap"
             },
             {
@@ -78058,7 +78023,7 @@
         "deps": {
           "common": [
             {
-              "id": "indexmap 2.2.6",
+              "id": "indexmap 2.7.1",
               "target": "indexmap"
             },
             {
@@ -78122,7 +78087,7 @@
         "deps": {
           "common": [
             {
-              "id": "indexmap 2.2.6",
+              "id": "indexmap 2.7.1",
               "target": "indexmap"
             },
             {
@@ -78567,7 +78532,7 @@
               "target": "hdrhistogram"
             },
             {
-              "id": "indexmap 2.2.6",
+              "id": "indexmap 2.7.1",
               "target": "indexmap"
             },
             {
@@ -82236,14 +82201,14 @@
       ],
       "license_file": "LICENSE-MIT"
     },
-    "walrus 0.21.1": {
+    "walrus 0.22.0": {
       "name": "walrus",
-      "version": "0.21.1",
+      "version": "0.22.0",
       "package_url": "https://github.com/rustwasm/walrus",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/walrus/0.21.1/download",
-          "sha256": "467611cafbc8a84834b77d2b4bb191fd2f5769752def8340407e924390c6883b"
+          "url": "https://static.crates.io/crates/walrus/0.22.0/download",
+          "sha256": "d68aa3c7b80be75c8458fc087453e5a31a226cfffede2e9b932393b2ea1c624a"
         }
       },
       "targets": [
@@ -82302,13 +82267,13 @@
         "proc_macro_deps": {
           "common": [
             {
-              "id": "walrus-macro 0.19.0",
+              "id": "walrus-macro 0.22.0",
               "target": "walrus_macro"
             }
           ],
           "selects": {}
         },
-        "version": "0.21.1"
+        "version": "0.22.0"
       },
       "license": "MIT/Apache-2.0",
       "license_ids": [
@@ -82317,14 +82282,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "walrus-macro 0.19.0": {
+    "walrus-macro 0.22.0": {
       "name": "walrus-macro",
-      "version": "0.19.0",
+      "version": "0.22.0",
       "package_url": "https://github.com/rustwasm/walrus/tree/crates/macro",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/walrus-macro/0.19.0/download",
-          "sha256": "0a6e5bd22c71e77d60140b0bd5be56155a37e5bd14e24f5f87298040d0cc40d7"
+          "url": "https://static.crates.io/crates/walrus-macro/0.22.0/download",
+          "sha256": "439ad39ff894c43c9649fa724cdde9a6fc50b855d517ef071a93e5df82fe51d3"
         }
       },
       "targets": [
@@ -82349,7 +82314,7 @@
         "deps": {
           "common": [
             {
-              "id": "heck 0.3.3",
+              "id": "heck 0.5.0",
               "target": "heck"
             },
             {
@@ -82361,14 +82326,14 @@
               "target": "quote"
             },
             {
-              "id": "syn 1.0.109",
+              "id": "syn 2.0.87",
               "target": "syn"
             }
           ],
           "selects": {}
         },
         "edition": "2018",
-        "version": "0.19.0"
+        "version": "0.22.0"
       },
       "license": "MIT/Apache-2.0",
       "license_ids": [
@@ -83269,7 +83234,7 @@
               "target": "flagset"
             },
             {
-              "id": "indexmap 2.2.6",
+              "id": "indexmap 2.7.1",
               "target": "indexmap"
             },
             {
@@ -83396,7 +83361,7 @@
               "target": "bitflags"
             },
             {
-              "id": "indexmap 2.2.6",
+              "id": "indexmap 2.7.1",
               "target": "indexmap"
             },
             {
@@ -83468,7 +83433,7 @@
               "target": "hashbrown"
             },
             {
-              "id": "indexmap 2.2.6",
+              "id": "indexmap 2.7.1",
               "target": "indexmap"
             },
             {
@@ -83545,7 +83510,7 @@
               "target": "hashbrown"
             },
             {
-              "id": "indexmap 2.2.6",
+              "id": "indexmap 2.7.1",
               "target": "indexmap"
             },
             {
@@ -83644,6 +83609,107 @@
         },
         "edition": "2021",
         "version": "0.221.2"
+      },
+      "build_script_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "data_glob": [
+          "**"
+        ]
+      },
+      "license": "Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": null
+    },
+    "wasmparser 0.223.1": {
+      "name": "wasmparser",
+      "version": "0.223.1",
+      "package_url": "https://github.com/bytecodealliance/wasm-tools/tree/main/crates/wasmparser",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/wasmparser/0.223.1/download",
+          "sha256": "664b980991ed9a8c834eb528a8979ab1109edcf52dc05dd5751e2cc3fb31035d"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "wasmparser",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        },
+        {
+          "BuildScript": {
+            "crate_name": "build_script_build",
+            "crate_root": "build.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "wasmparser",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "component-model",
+            "default",
+            "features",
+            "hash-collections",
+            "serde",
+            "simd",
+            "std",
+            "validate"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "bitflags 2.6.0",
+              "target": "bitflags"
+            },
+            {
+              "id": "hashbrown 0.15.2",
+              "target": "hashbrown"
+            },
+            {
+              "id": "indexmap 2.7.1",
+              "target": "indexmap"
+            },
+            {
+              "id": "semver 1.0.22",
+              "target": "semver"
+            },
+            {
+              "id": "serde 1.0.217",
+              "target": "serde"
+            },
+            {
+              "id": "wasmparser 0.223.1",
+              "target": "build_script_build"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.223.1"
       },
       "build_script_attrs": {
         "compile_data_glob": [
@@ -83856,7 +83922,7 @@
               "target": "hashbrown"
             },
             {
-              "id": "indexmap 2.2.6",
+              "id": "indexmap 2.7.1",
               "target": "indexmap"
             },
             {
@@ -84561,7 +84627,7 @@
               "target": "gimli"
             },
             {
-              "id": "indexmap 2.2.6",
+              "id": "indexmap 2.7.1",
               "target": "indexmap"
             },
             {
@@ -85069,7 +85135,7 @@
               "target": "heck"
             },
             {
-              "id": "indexmap 2.2.6",
+              "id": "indexmap 2.7.1",
               "target": "indexmap"
             },
             {
@@ -88655,7 +88721,7 @@
               "target": "id_arena"
             },
             {
-              "id": "indexmap 2.2.6",
+              "id": "indexmap 2.7.1",
               "target": "indexmap"
             },
             {
@@ -90350,7 +90416,7 @@
   },
   "binary_crates": [
     "canbench 0.1.9",
-    "ic-wasm 0.8.4",
+    "ic-wasm 0.9.5",
     "metrics-proxy 0.1.0"
   ],
   "workspace_members": {
@@ -91467,7 +91533,7 @@
     "ic-transport-types 0.39.2",
     "ic-utils 0.39.0",
     "ic-verify-bls-signature 0.6.0",
-    "ic-wasm 0.8.4",
+    "ic-wasm 0.9.5",
     "ic-xrc-types 1.2.0",
     "ic0 0.18.11",
     "ic_bls12_381 0.10.0",
@@ -91475,7 +91541,7 @@
     "icrc1-test-env 0.1.1",
     "icrc1-test-suite 0.1.1",
     "idna 1.0.3",
-    "indexmap 2.2.6",
+    "indexmap 2.7.1",
     "indicatif 0.17.5",
     "indoc 1.0.9",
     "inferno 0.12.0",
@@ -91661,6 +91727,7 @@
     "uuid 1.11.0",
     "vsock 0.4.0",
     "walkdir 2.3.3",
+    "walrus 0.22.0",
     "warp 0.3.7",
     "wasm-bindgen 0.2.95",
     "wasm-encoder 0.217.0",

@@ -25,7 +25,11 @@ use ic_nns_governance::{
     is_prune_following_enabled,
     neuron_data_validation::NeuronDataValidationSummary,
     pb::v1::{self as gov_pb, Governance as InternalGovernanceProto},
-    storage::{grow_upgrades_memory_to, validate_stable_storage, with_upgrades_memory},
+    storage::{
+        allocate_ic_wasm_instrument_memory_once, grow_upgrades_memory_to, validate_stable_storage,
+        where_ic_wasm_instrument_memory as where_ic_wasm_instrument_memory_native,
+        with_upgrades_memory,
+    },
 };
 #[cfg(feature = "test")]
 use ic_nns_governance_api::test_api::TimeWarp;
@@ -473,6 +477,8 @@ fn panic_with_probability(probability: f64, message: &str) {
 fn canister_init() {
     ic_cdk::setup();
 
+    allocate_ic_wasm_instrument_memory_once();
+
     match ApiGovernanceProto::decode(&arg_data_raw()[..]) {
         Err(err) => {
             println!(
@@ -525,6 +531,12 @@ fn canister_pre_upgrade() {
 fn canister_post_upgrade() {
     println!("{}Executing post upgrade", LOG_PREFIX);
 
+    // This primes some caches in Candid. I do not expect this to help us very much, tbh.
+    use candid::CandidType;
+    ListNeuronsResponse::ty();
+
+    allocate_ic_wasm_instrument_memory_once();
+
     let restored_state = with_upgrades_memory(|memory| {
         let result: Result<InternalGovernanceProto, _> = load_protobuf(memory);
         result
@@ -555,6 +567,11 @@ fn canister_post_upgrade() {
     ));
 
     validate_stable_storage();
+}
+
+#[query]
+fn where_ic_wasm_instrument_memory() -> (u64, u64) {
+    where_ic_wasm_instrument_memory_native()
 }
 
 #[cfg(feature = "test")]
@@ -632,6 +649,67 @@ async fn claim_or_refresh_neuron_from_account(
 }
 
 ic_nervous_system_common_build_metadata::define_get_build_metadata_candid_method_cdk! {}
+
+/// A principal P is associated with a neuron N iff P is the controller of N, or P is a hotkey of N (or both).
+use std::collections::HashMap;
+#[update]
+fn principal_id_to_neuron_count() -> Vec<(
+    PrincipalId,
+    (
+        /* heap_neuron_count */ u64,
+        /* stable_memory_neuron_count */ u64,
+    ),
+)> {
+    use ic_nns_governance::storage::with_stable_neuron_indexes;
+
+    let mut result = HashMap::<PrincipalId, (u64, u64)>::new();
+
+    with_stable_neuron_indexes(|neuron_indexes| {
+        for ((principal_id, neuron_id), ()) in neuron_indexes
+            .principal()
+            .principal_and_neuron_id_set
+            .iter()
+        {
+            let principal_id = PrincipalId::from(principal_id);
+            let counts = result.entry(principal_id).or_default();
+
+            // Select count that needs to be increment, based on whether the
+            // neuron is in heap vs. stable memory.
+            let is_in_heap = governance()
+                .neuron_store
+                .active_neurons_range(neuron_id..)
+                .next()
+                .unwrap()
+                .id()
+                == neuron_id;
+            let count = if is_in_heap {
+                &mut counts.0
+            } else {
+                &mut counts.1
+            };
+
+            *count += 1;
+        }
+    });
+
+    let mut result = result.into_iter().collect::<Vec<_>>();
+    result.sort_by_key(|(_principal_id, (a, b))| a + b);
+    result.reverse();
+
+    // Decimate tail down to 1k elements. (Thus, result will end up with 2k).
+    let tail = result.split_off(1000);
+    let mut random = rand::rngs::StdRng::seed_from_u64(42);
+    use rand::seq::IteratorRandom;
+    let mut new_tail = vec![(PrincipalId::new_user_test_id(0), (0, 0)); 1000];
+    tail.into_iter()
+        .choose_multiple_fill(&mut random, &mut new_tail);
+    let mut tail = new_tail;
+    tail.sort_by_key(|(_principal_id, (a, b))| a + b);
+    tail.reverse();
+    result.append(&mut tail);
+
+    result
+}
 
 #[update]
 fn claim_gtc_neurons(
@@ -753,7 +831,7 @@ fn list_proposals(req: ListProposalInfo) -> ListProposalInfoResponse {
     GOVERNANCE.with_borrow(|governance| governance.list_proposals(&caller(), &req.into()))
 }
 
-#[query]
+#[update]
 fn list_neurons(req: ListNeurons) -> ListNeuronsResponse {
     debug_log("list_neurons");
     governance().list_neurons(&req, caller())
@@ -856,10 +934,11 @@ fn get_network_economics_parameters() -> NetworkEconomics {
     NetworkEconomics::from(response)
 }
 
-#[heartbeat]
+/* DO NOT MERGE #[heartbeat]
 async fn heartbeat() {
     governance_mut().run_periodic_tasks().await
 }
+*/
 
 // Protobuf interface.
 
