@@ -94,34 +94,6 @@ fn test_why_list_neurons_expensive() {
     println!("  page_limit = {}", page_limit);
     println!("");
 
-    // Grab a sample of principals that have "associated" neurons. More
-    // precisely, these principals either control or are a hotkey of some
-    // (nonzero number of) neurons. These will later be used as callers of the
-    // list_neurons method.
-    let principal_id_to_neuron_count = state_machine
-        .execute_ingress(
-            GOVERNANCE_CANISTER_ID,
-            "principal_id_to_neuron_count",
-            Encode!().unwrap(),
-        )
-        .unwrap();
-    let principal_id_to_neuron_count = match principal_id_to_neuron_count {
-        ic_types::ingress::WasmResult::Reply(ok) => ok,
-        doh => panic!("{:?}", doh),
-    };
-    let principal_id_to_neuron_count = Decode!(
-        &principal_id_to_neuron_count,
-        Vec<(PrincipalId, (u64, u64))>
-    )
-    .unwrap();
-    println!("");
-    println!("principal_id_to_neuron_count:");
-    println!(
-        "{}",
-        clamp_debug_len(&principal_id_to_neuron_count, 1 << 10)
-    );
-    println!("");
-
     // DO NOT MERGE: This is a hack that makes us use a only around half of the
     // stable memory that was allocated for tracing/profiling.
     let page_limit = page_limit / 2;
@@ -167,6 +139,34 @@ fn test_why_list_neurons_expensive() {
     println!("");
     println!("Done installing governance WITH ic-wasm profiling ENABLED.");
     println!("Ready for fine-grained performance measurement 👍");
+    println!("");
+
+    // Grab a sample of principals that have "associated" neurons. More
+    // precisely, these principals either control or are a hotkey of some
+    // (nonzero number of) neurons. These will later be used as callers of the
+    // list_neurons method.
+    let principal_id_to_neuron_count = state_machine
+        .execute_ingress(
+            GOVERNANCE_CANISTER_ID,
+            "principal_id_to_neuron_count",
+            Encode!().unwrap(),
+        )
+        .unwrap();
+    let principal_id_to_neuron_count = match principal_id_to_neuron_count {
+        ic_types::ingress::WasmResult::Reply(ok) => ok,
+        doh => panic!("{:?}", doh),
+    };
+    let principal_id_to_neuron_count = Decode!(
+        &principal_id_to_neuron_count,
+        Vec<(PrincipalId, (u64, u64))>
+    )
+    .unwrap();
+    println!("");
+    println!("principal_id_to_neuron_count:");
+    println!(
+        "{}",
+        clamp_debug_len(&principal_id_to_neuron_count, 1 << 10)
+    );
     println!("");
 
     // Measure a variety of list_neuron calls.
