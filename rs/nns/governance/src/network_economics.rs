@@ -3,11 +3,9 @@ use crate::pb::v1::{
     VotingPowerEconomics,
 };
 use ic_nervous_system_common::{E8, ONE_DAY_SECONDS, ONE_MONTH_SECONDS};
-use ic_nervous_system_linear_map::LinearMap;
 use ic_nervous_system_proto::pb::v1::{Decimal as DecimalProto, Percentage};
 use icp_ledger::DEFAULT_TRANSFER_FEE;
 use rust_decimal::Decimal;
-use std::time::Duration;
 
 impl NetworkEconomics {
     /// The multiplier applied to minimum_icp_xdr_rate to convert the XDR unit to basis_points
@@ -295,25 +293,15 @@ impl VotingPowerEconomics {
     /// Between these two points, the decrease is linear.
     pub fn deciding_voting_power_adjustment_factor(
         &self,
-        time_since_last_voting_power_refreshed: Duration,
-    ) -> Decimal {
-        self.deciding_voting_power_adjustment_factor_function()
-            .apply(time_since_last_voting_power_refreshed.as_secs())
-            .clamp(Decimal::from(0), Decimal::from(1))
-    }
-
-    fn deciding_voting_power_adjustment_factor_function(&self) -> LinearMap {
-        let from_range = {
-            let begin = self.get_start_reducing_voting_power_after_seconds();
-            let end = begin + self.get_clear_following_after_seconds();
-
-            begin..end
-        };
-
-        #[allow(clippy::reversed_empty_ranges)]
-        let to_range = 1..0;
-
-        LinearMap::new(from_range, to_range)
+        time_since_last_voting_power_refreshed_seconds: u64,
+    ) -> f64 {
+        let voting_power_reduced_seconds = time_since_last_voting_power_refreshed_seconds
+            .saturating_sub(self.get_start_reducing_voting_power_after_seconds())
+            as f64;
+        let reduction_factor =
+            voting_power_reduced_seconds / (self.get_clear_following_after_seconds() as f64);
+        // E.g. 10% reduction factor -> x90% adjustment factor
+        (1.0 - reduction_factor).clamp(0.0, 1.0)
     }
 
     pub fn get_start_reducing_voting_power_after_seconds(&self) -> u64 {

@@ -24,11 +24,7 @@ use ic_nervous_system_common::ONE_DAY_SECONDS;
 use ic_nns_common::pb::v1::{NeuronId, ProposalId};
 use ic_nns_governance_api::pb::v1::{self as api, NeuronInfo};
 use icp_ledger::Subaccount;
-use rust_decimal::{Decimal, RoundingStrategy};
-use std::{
-    collections::{BTreeSet, HashMap},
-    time::Duration,
-};
+use std::collections::{BTreeSet, HashMap};
 
 // It might make sense for Private to be the default; however, the default of
 // pb::Visibility is Unspecified. Therefore, instead of doing things such as
@@ -302,35 +298,22 @@ impl Neuron {
     ) -> u64 {
         // Main inputs to main calculation.
 
-        let adjustment_factor: Decimal = if is_voting_power_adjustment_enabled() {
-            let time_since_last_refreshed = Duration::from_secs(
-                now_seconds.saturating_sub(self.voting_power_refreshed_timestamp_seconds),
-            );
+        let adjustment_factor: f64 = if is_voting_power_adjustment_enabled() {
+            let seconds_since_last_refreshed =
+                now_seconds.saturating_sub(self.voting_power_refreshed_timestamp_seconds);
 
             voting_power_economics
-                .deciding_voting_power_adjustment_factor(time_since_last_refreshed)
+                .deciding_voting_power_adjustment_factor(seconds_since_last_refreshed)
         } else {
-            Decimal::from(1)
+            1.0
         };
 
         let potential_voting_power = self.potential_voting_power(now_seconds);
 
         // Main calculation.
-        let result = adjustment_factor * Decimal::from(potential_voting_power);
+        let result = adjustment_factor * (potential_voting_power as f64);
 
-        // Convert (back) to u64. The particular type of rounding used here does
-        // not matter to us very much, because we are not for example
-        // apportioning (where rounding down is best), nor anything like that.
-        let result = result.round_dp_with_strategy(0, RoundingStrategy::MidpointNearestEven);
-        u64::try_from(result).unwrap_or_else(|err| {
-            // Log and fall back to potential voting power. Assuming
-            // adjustment_factor is in [0, 1], I see no way this can happen.
-            println!(
-                "{}ERROR: Unable to convert deciding voting power {} * {} back to u64: {:?}",
-                LOG_PREFIX, adjustment_factor, potential_voting_power, err,
-            );
-            potential_voting_power
-        })
+        result as u64
     }
 
     /// Return the voting power of this neuron.

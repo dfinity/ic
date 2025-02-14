@@ -22,7 +22,7 @@ use ic_sns_init::pb::v1::SnsInitPayload;
 use ic_sns_init::pb::v1::{self as sns_init_pb};
 use lazy_static::lazy_static;
 use maplit::{btreemap, hashmap};
-use std::{convert::TryFrom, time::Duration};
+use std::convert::TryFrom;
 
 mod list_neurons;
 mod neurons_fund;
@@ -1498,32 +1498,43 @@ fn test_deciding_voting_power_adjustment_factor() {
     };
 
     let deciding_voting_power = |seconds_since_refresh| {
-        let time_since_refresh = Duration::from_secs(seconds_since_refresh);
-        voting_power_economics.deciding_voting_power_adjustment_factor(time_since_refresh)
+        voting_power_economics.deciding_voting_power_adjustment_factor(seconds_since_refresh)
     };
 
     // 100% at first.
     for seconds_since_refresh in 0..=60 {
-        assert_eq!(
-            deciding_voting_power(seconds_since_refresh),
-            Decimal::from(1),
-        );
+        assert_eq!(deciding_voting_power(seconds_since_refresh), 1.0);
     }
 
     // Slowly ramp down.
     for seconds_since_refresh in 60..=90 {
-        let expected_value = Decimal::from(90 - seconds_since_refresh) / Decimal::from(30);
+        let observed_value = deciding_voting_power(seconds_since_refresh);
+        let expected_value = (90.0 - seconds_since_refresh as f64) / 30.0;
+        let relative_difference = (expected_value - observed_value) / expected_value;
 
-        assert_eq!(deciding_voting_power(seconds_since_refresh), expected_value);
+        // Assert that observed is close to expected.
+        if expected_value.abs() < 1e-9 {
+            assert!(
+                (expected_value - observed_value).abs() < 1e-1,
+                "{} vs {}",
+                expected_value,
+                observed_value,
+            );
+        } else {
+            assert!(
+                relative_difference.abs() < 1e-9,
+                "{} vs {} (differ by {}%)",
+                expected_value,
+                observed_value,
+                100.0 * relative_difference,
+            );
+        }
     }
-    assert_eq!(deciding_voting_power(75), Decimal::try_from(0.5).unwrap());
+    assert_eq!(deciding_voting_power(75), 0.5);
 
     // Stuck at 0% after a "very" long time.
     for seconds_since_refresh in 90..200 {
-        assert_eq!(
-            deciding_voting_power(seconds_since_refresh),
-            Decimal::from(0),
-        );
+        assert_eq!(deciding_voting_power(seconds_since_refresh), 0.0);
     }
 }
 
