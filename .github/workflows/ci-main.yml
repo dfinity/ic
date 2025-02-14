@@ -94,7 +94,7 @@ jobs:
         id: bazel-test-all
         uses: ./.github/actions/bazel-test-all/
         with:
-          BAZEL_COMMAND: test --config=ci ${{ env.BAZEL_EXTRA_ARGS }}
+          BAZEL_COMMAND: test ${{ env.BAZEL_EXTRA_ARGS }}
           BAZEL_TARGETS: //...
           BUILDEVENT_APIKEY: ${{ secrets.HONEYCOMB_TOKEN }}
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
@@ -139,7 +139,7 @@ jobs:
           CLOUD_CREDENTIALS_CONTENT: ${{ secrets.CLOUD_CREDENTIALS_CONTENT }}
         with:
           BAZEL_COMMAND: >-
-            test --config=ci --config=macos_ci --test_tag_filters=test_macos
+            test --config=macos_ci --test_tag_filters=test_macos
           BAZEL_TARGETS: //rs/... //publish/binaries/...
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
       - name: Upload bazel-bep
@@ -180,7 +180,7 @@ jobs:
         uses: ./.github/actions/bazel-test-all/
         with:
           BAZEL_COMMAND: >-
-            build --config=ci --keep_going --config=fuzzing --build_tag_filters=libfuzzer
+            build --keep_going --config=fuzzing --build_tag_filters=libfuzzer
           BAZEL_TARGETS: //rs/...
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
       - name: Upload bazel-bep
@@ -214,7 +214,7 @@ jobs:
         id: bazel-build-fuzzers-afl
         uses: ./.github/actions/bazel-test-all/
         with:
-          BAZEL_COMMAND: build --config=ci --keep_going --config=afl
+          BAZEL_COMMAND: build --keep_going --config=afl
           BAZEL_TARGETS: //rs/...
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
       - name: Upload bazel-bep
@@ -297,7 +297,7 @@ jobs:
           "$CI_PROJECT_DIR"/ci/scripts/run-build-ic.sh
           rm -rf "/cache/job/${CI_JOB_NAME}/${CI_RUN_ID}"
         env:
-          BAZEL_COMMAND: build --config=ci
+          BAZEL_COMMAND: build
           BAZEL_TARGETS: //...
           MERGE_BASE_SHA: ${{ github.event.pull_request.base.sha }}
           BRANCH_HEAD_SHA: ${{ github.event.pull_request.head.sha }}

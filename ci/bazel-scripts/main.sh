@@ -88,6 +88,7 @@ bazel_args=(
     --output_base=/var/tmp/bazel-output # Output base wiped after run
     ${BAZEL_COMMAND}
     ${BAZEL_TARGETS}
+    --config=ci # this script is meant to be run on CI, so we default to CI config
     --color=yes
     --build_metadata=BUILDBUDDY_LINKS="[CI Job](${CI_JOB_URL})"
     --ic_version="${CI_COMMIT_SHA}"

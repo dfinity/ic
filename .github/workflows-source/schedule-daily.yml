@@ -72,7 +72,7 @@ jobs:
 
           # Run bare metal installation test
           # shellcheck disable=SC2046,SC2086
-          bazel --output_base=/var/tmp/bazel-output run ${BAZEL_CI_CONFIG} \
+          bazel --output_base=/var/tmp/bazel-output run --config=ci \
             //ic-os/setupos/envs/dev:launch_bare_metal -- \
               --config_path "$(realpath  ./ic-os/dev-tools/bare_metal_deployment/zh2-dll01.yaml)" \
               --csv_filename "$(realpath file1)" \
@@ -84,7 +84,7 @@ jobs:
 
           # Run bare metal node performance benchmarks
           # shellcheck disable=SC2046,SC2086
-          bazel --output_base=/var/tmp/bazel-output run ${BAZEL_CI_CONFIG} \
+          bazel --output_base=/var/tmp/bazel-output run --config=ci \
             //ic-os/setupos/envs/dev:launch_bare_metal -- \
               --config_path "$(realpath  ./ic-os/dev-tools/bare_metal_deployment/zh2-dll01.yaml)" \
               --csv_filename "$(realpath file1)" \
@@ -95,7 +95,6 @@ jobs:
               --benchmark
           bazel clean
         env:
-          BAZEL_CI_CONFIG: "--config=ci"
           ZH2_DLL01_CSV_SECRETS: "${{ secrets.ZH2_DLL01_CSV_SECRETS }}"
           ZH2_FILE_SHARE_KEY: "${{ secrets.ZH2_FILE_SHARE_KEY }}"
 
@@ -111,8 +110,7 @@ jobs:
         uses: ./.github/actions/bazel-test-all/
         with:
           BAZEL_COMMAND: >-
-            test
-              --config=ci --keep_going
+            test --keep_going
               --test_tag_filters=fi_tests_nightly --test_env=SSH_AUTH_SOCK --test_timeout=43200
           BAZEL_TARGETS: //rs/ledger_suite/...
           BUILDEVENT_APIKEY: ${{ secrets.HONEYCOMB_TOKEN }}
@@ -132,8 +130,7 @@ jobs:
         uses: ./.github/actions/bazel-test-all/
         with:
           BAZEL_COMMAND: >-
-            test
-              --config=ci --keep_going
+            test --keep_going
               --test_tag_filters=nns_tests_nightly --test_env=SSH_AUTH_SOCK --test_env=NNS_CANISTER_UPGRADE_SEQUENCE=all
           BAZEL_TARGETS: //rs/nns/...
           BUILDEVENT_APIKEY: ${{ secrets.HONEYCOMB_TOKEN }}
@@ -159,9 +156,7 @@ jobs:
         with:
           # note: there's just one performance cluster, so the job can't be parallelized
           BAZEL_COMMAND: >-
-            test
-              --config=ci
-              --test_tag_filters=system_test_benchmark --//bazel:enable_upload_perf_systest_results=True --keep_going --jobs 1
+            test --test_tag_filters=system_test_benchmark --//bazel:enable_upload_perf_systest_results=True --keep_going --jobs 1
           BAZEL_TARGETS: ${{ env.BENCHMARK_TARGETS }}
           BUILDEVENT_APIKEY: ${{ secrets.HONEYCOMB_TOKEN }}
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
