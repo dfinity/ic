@@ -20,8 +20,8 @@ use ic_management_canister_types_private::{
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::canister_state::execution_state::WasmExecutionMode;
 use ic_replicated_state::{
-    canister_state::WASM_PAGE_SIZE_IN_BYTES, memory_required_to_push_request, Memory,
-    NetworkTopology, NumWasmPages, PageIndex,
+    canister_state::WASM_PAGE_SIZE_IN_BYTES, memory_required_to_push_request, Memory, NumWasmPages,
+    PageIndex,
 };
 use ic_sys::PageBytes;
 use ic_types::{

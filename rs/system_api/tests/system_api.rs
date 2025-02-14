@@ -85,14 +85,14 @@ fn assert_api_not_supported<T>(res: HypervisorResult<T>) {
 }
 
 fn assert_api_availability<T, F>(
-    mut f: F,
+    f: F,
     api_type: ApiType,
     system_state: &SystemState,
     cycles_account_manager: CyclesAccountManager,
     api_type_enum: SystemApiCallId,
     context: &str,
 ) where
-    F: FnMut(SystemApiImpl) -> HypervisorResult<T>,
+    F: Fn(SystemApiImpl) -> HypervisorResult<T>,
 {
     #[allow(unused_mut)]
     let mut api = get_system_api(api_type, system_state, cycles_account_manager);

@@ -757,15 +757,15 @@ impl CyclesAccountManager {
         reveal_top_up: bool,
     ) -> Result<Vec<(CyclesUseCase, Cycles)>, CanisterOutOfCyclesError> {
         // The total amount charged consists of:
-        //   - the fee to do the xnet call (request + response)
-        //   - the fee to send the request (by size)
-        //   - the fee for the largest possible response
+        // the fee to do the xnet call (request + response),
+        // the fee to send the request (by size),
+        // the fee for the largest possible response,
         let transmission_fee = self.xnet_total_transmission_fee(
             request.payload_size_bytes(),
             subnet_size,
             prepayment_for_response_transmission,
         );
-        //   - the fee for executing the largest allowed response when it eventually arrives.
+        // and the fee for executing the largest allowed response when it eventually arrives.
         let fee = transmission_fee + prepayment_for_response_execution;
 
         self.withdraw_with_threshold(
