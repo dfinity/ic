@@ -34,6 +34,7 @@ locales
 lshw
 lvm2
 net-tools
+nvme-cli
 parted
 python-is-python3
 sudo
