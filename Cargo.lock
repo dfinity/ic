@@ -3232,8 +3232,8 @@ dependencies = [
  "futures",
  "ic-base-types",
  "ic-certified-map",
- "ic-crypto-getrandom-for-wasm",
  "ic-crypto-tree-hash",
+ "ic-dummy-getrandom-for-wasm",
  "ic-ledger-core",
  "ic-management-canister-types-private",
  "ic-metrics-encoder",
@@ -6907,8 +6907,8 @@ dependencies = [
  "ic-cdk 0.17.1",
  "ic-cdk-macros 0.17.1",
  "ic-config",
- "ic-crypto-getrandom-for-wasm",
  "ic-crypto-sha2",
+ "ic-dummy-getrandom-for-wasm",
  "ic-icrc1",
  "ic-icrc1-ledger",
  "ic-ledger-core",
@@ -7376,13 +7376,6 @@ dependencies = [
  "ic-registry-client-fake",
  "ic-registry-proto-data-provider",
  "ic-types",
-]
-
-[[package]]
-name = "ic-crypto-getrandom-for-wasm"
-version = "0.9.0"
-dependencies = [
- "getrandom 0.2.15",
 ]
 
 [[package]]
@@ -8522,8 +8515,15 @@ dependencies = [
 ]
 
 [[package]]
-name = "ic-ed25519"
+name = "ic-dummy-getrandom-for-wasm"
 version = "0.1.0"
+dependencies = [
+ "getrandom 0.2.15",
+]
+
+[[package]]
+name = "ic-ed25519"
+version = "0.2.0"
 dependencies = [
  "curve25519-dalek",
  "ed25519-dalek",
@@ -10570,8 +10570,8 @@ dependencies = [
  "ic-cdk-macros 0.17.1",
  "ic-cdk-timers",
  "ic-config",
- "ic-crypto-getrandom-for-wasm",
  "ic-crypto-sha2",
+ "ic-dummy-getrandom-for-wasm",
  "ic-ledger-core",
  "ic-management-canister-types-private",
  "ic-metrics-encoder",
@@ -10701,8 +10701,8 @@ dependencies = [
  "hex",
  "hex-literal",
  "ic-base-types",
- "ic-crypto-getrandom-for-wasm",
  "ic-crypto-sha2",
+ "ic-dummy-getrandom-for-wasm",
  "ic-nervous-system-common",
  "ic-nervous-system-common-build-metadata",
  "ic-nns-common",
@@ -13132,6 +13132,7 @@ dependencies = [
  "rosetta-core",
  "rsa",
  "rust_decimal",
+ "schemars",
  "serde",
  "serde_bytes",
  "serde_cbor",
@@ -15078,6 +15079,7 @@ checksum = "19501afb943ae5806548bc3ebd7f3374153ca057a38f480ef30adfde5ef09755"
 dependencies = [
  "base64 0.22.1",
  "chrono",
+ "schemars",
  "serde",
  "serde-value",
  "serde_json",
@@ -15110,20 +15112,21 @@ dependencies = [
 
 [[package]]
 name = "kube"
-version = "0.93.1"
+version = "0.94.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0365920075af1a2d23619c1ca801c492f2400157de42627f041a061716e76416"
+checksum = "52ace78a62b361077505f2950bd48aa3e46596fb15350c9c993de15ddfa3cac5"
 dependencies = [
  "k8s-openapi",
  "kube-client",
  "kube-core",
+ "kube-derive",
 ]
 
 [[package]]
 name = "kube-client"
-version = "0.93.1"
+version = "0.94.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d81336eb3a5b10a40c97a5a97ad66622e92bad942ce05ee789edd730aa4f8603"
+checksum = "18ec0fcafd3add30b413b096a61d69b0a37f94d3f95b6f505a57ea3d27cec2a7"
 dependencies = [
  "base64 0.22.1",
  "bytes",
@@ -15159,17 +15162,32 @@ dependencies = [
 
 [[package]]
 name = "kube-core"
-version = "0.93.1"
+version = "0.94.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cce373a74d787d439063cdefab0f3672860bd7bac01a38e39019177e764a0fe6"
+checksum = "a50c095f051dada37740d883b6d47ad0430e95082140718073b773c8a70f231c"
 dependencies = [
  "chrono",
  "form_urlencoded",
  "http 1.2.0",
  "k8s-openapi",
+ "schemars",
  "serde",
+ "serde-value",
  "serde_json",
  "thiserror 1.0.69",
+]
+
+[[package]]
+name = "kube-derive"
+version = "0.94.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7871f02c3c848b63fee3d2f2645bb4a3c0b68ee147badcddf1b0cf8fb5db87ad"
+dependencies = [
+ "darling 0.20.10",
+ "proc-macro2",
+ "quote",
+ "serde_json",
+ "syn 2.0.98",
 ]
 
 [[package]]

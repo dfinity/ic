@@ -1412,6 +1412,12 @@ pub fn validate_and_render_add_generic_nervous_system_function(
         return Err("Reached maximum number of allowed GenericNervousSystemFunctions".to_string());
     }
 
+    // This isn't done in ValidGenericNervousSystemFunction::try_from because it's only invalid for new functions, not
+    // for existing functions
+    if validated_function.topic.is_none() {
+        return Err("NervousSystemFunction must have a topic".to_string());
+    }
+
     Ok(format!(
         r"Proposal to add new NervousSystemFunction:
 

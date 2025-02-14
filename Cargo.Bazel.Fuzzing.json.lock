@@ -1,5 +1,5 @@
 {
-  "checksum": "b760da94824ca83d74433495da294cd44fac4a9e5caa81dd5f0a706fe669665c",
+  "checksum": "be38a68562dfb675fa266ff5ae304bf1c3c7d0c78a2d716a9891b5e6d0c038e6",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -1779,7 +1779,7 @@
               "target": "indexmap"
             },
             {
-              "id": "schemars 0.8.16",
+              "id": "schemars 0.8.21",
               "target": "schemars"
             },
             {
@@ -19137,7 +19137,7 @@
               "target": "ring"
             },
             {
-              "id": "schemars 0.8.16",
+              "id": "schemars 0.8.21",
               "target": "schemars"
             },
             {
@@ -19803,7 +19803,7 @@
               "target": "ethnum"
             },
             {
-              "id": "evm_rpc_types 1.3.0",
+              "id": "evm_rpc_types 1.2.0",
               "target": "evm_rpc_types"
             },
             {
@@ -19935,7 +19935,7 @@
               "target": "ic_cbor"
             },
             {
-              "id": "ic-cdk 0.17.1",
+              "id": "ic-cdk 0.16.0",
               "target": "ic_cdk"
             },
             {
@@ -20088,7 +20088,7 @@
               "target": "k8s_openapi"
             },
             {
-              "id": "kube 0.93.1",
+              "id": "kube 0.94.2",
               "target": "kube"
             },
             {
@@ -20450,7 +20450,7 @@
               "target": "rusty_fork"
             },
             {
-              "id": "schemars 0.8.16",
+              "id": "schemars 0.8.21",
               "target": "schemars"
             },
             {
@@ -20606,7 +20606,7 @@
               "target": "textplots"
             },
             {
-              "id": "thiserror 2.0.11",
+              "id": "thiserror 2.0.3",
               "target": "thiserror"
             },
             {
@@ -20844,7 +20844,7 @@
               "target": "educe"
             },
             {
-              "id": "ic-cdk-macros 0.17.1",
+              "id": "ic-cdk-macros 0.9.0",
               "target": "ic_cdk_macros"
             },
             {
@@ -24648,14 +24648,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "evm_rpc_types 1.3.0": {
+    "evm_rpc_types 1.2.0": {
       "name": "evm_rpc_types",
-      "version": "1.3.0",
+      "version": "1.2.0",
       "package_url": "https://github.com/internet-computer-protocol/evm-rpc-canister",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/evm_rpc_types/1.3.0/download",
-          "sha256": "fa134314bce7c35b9214710572fb7305edc7f4223c5bd03b5857ed08bbb05897"
+          "url": "https://static.crates.io/crates/evm_rpc_types/1.2.0/download",
+          "sha256": "29ed9ee7b89726f4a343208e9a89e9ad22fe7b4518b0d722973cc83274e7bf7f"
         }
       },
       "targets": [
@@ -24688,7 +24688,7 @@
               "target": "hex"
             },
             {
-              "id": "ic-cdk 0.17.1",
+              "id": "ic-cdk 0.16.0",
               "target": "ic_cdk"
             },
             {
@@ -24704,7 +24704,7 @@
               "target": "strum"
             },
             {
-              "id": "thiserror 2.0.11",
+              "id": "thiserror 1.0.68",
               "target": "thiserror"
             },
             {
@@ -24715,7 +24715,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "1.3.0"
+        "version": "1.2.0"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -31813,7 +31813,7 @@
               "target": "stop_token"
             },
             {
-              "id": "thiserror 2.0.11",
+              "id": "thiserror 2.0.3",
               "target": "thiserror"
             },
             {
@@ -32054,7 +32054,7 @@
               "target": "systemstat"
             },
             {
-              "id": "thiserror 2.0.11",
+              "id": "thiserror 2.0.3",
               "target": "thiserror"
             },
             {
@@ -32284,7 +32284,7 @@
               "target": "hex"
             },
             {
-              "id": "ic-cdk 0.17.1",
+              "id": "ic-cdk 0.17.0",
               "target": "ic_cdk"
             },
             {
@@ -32316,7 +32316,7 @@
               "target": "sha2"
             },
             {
-              "id": "thiserror 2.0.11",
+              "id": "thiserror 2.0.3",
               "target": "thiserror"
             }
           ],
@@ -32462,14 +32462,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "ic-cdk 0.17.1": {
+    "ic-cdk 0.16.0": {
       "name": "ic-cdk",
-      "version": "0.17.1",
+      "version": "0.16.0",
       "package_url": "https://github.com/dfinity/cdk-rs",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/ic-cdk/0.17.1/download",
-          "sha256": "122efbcb0af5280d408a75a57b7dc6e9d92893bf6ed9cc98fe4dcff51f18b67c"
+          "url": "https://static.crates.io/crates/ic-cdk/0.16.0/download",
+          "sha256": "dd8ecacd682fa05a985253592963306cb9799622d7b1cce4b1edb89c6ec85be1"
         }
       },
       "targets": [
@@ -32516,13 +32516,81 @@
         "proc_macro_deps": {
           "common": [
             {
-              "id": "ic-cdk-macros 0.17.1",
+              "id": "ic-cdk-macros 0.16.0",
               "target": "ic_cdk_macros"
             }
           ],
           "selects": {}
         },
-        "version": "0.17.1"
+        "version": "0.16.0"
+      },
+      "license": "Apache-2.0",
+      "license_ids": [
+        "Apache-2.0"
+      ],
+      "license_file": "LICENSE"
+    },
+    "ic-cdk 0.17.0": {
+      "name": "ic-cdk",
+      "version": "0.17.0",
+      "package_url": "https://github.com/dfinity/cdk-rs",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/ic-cdk/0.17.0/download",
+          "sha256": "b2abdf9341da9f9f6b451a40609cb69645a05a8e9eb7784c16209f16f2c0f76f"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "ic_cdk",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "ic_cdk",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "candid 0.10.13",
+              "target": "candid"
+            },
+            {
+              "id": "ic0 0.23.0",
+              "target": "ic0"
+            },
+            {
+              "id": "serde 1.0.217",
+              "target": "serde"
+            },
+            {
+              "id": "serde_bytes 0.11.15",
+              "target": "serde_bytes"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "proc_macro_deps": {
+          "common": [
+            {
+              "id": "ic-cdk-macros 0.17.0",
+              "target": "ic_cdk_macros"
+            }
+          ],
+          "selects": {}
+        },
+        "version": "0.17.0"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -32581,7 +32649,7 @@
               "target": "serde_bytes"
             },
             {
-              "id": "thiserror 2.0.11",
+              "id": "thiserror 2.0.3",
               "target": "thiserror"
             }
           ],
@@ -32672,14 +32740,81 @@
       ],
       "license_file": "LICENSE"
     },
-    "ic-cdk-macros 0.17.1": {
+    "ic-cdk-macros 0.9.0": {
       "name": "ic-cdk-macros",
-      "version": "0.17.1",
+      "version": "0.9.0",
       "package_url": "https://github.com/dfinity/cdk-rs",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/ic-cdk-macros/0.17.1/download",
-          "sha256": "c792bf0d1621c893ccf2bcdeac4ee70121103a03030a1827031a6b3c60488944"
+          "url": "https://static.crates.io/crates/ic-cdk-macros/0.9.0/download",
+          "sha256": "2fde5ca6ef1e69825c68916ff1bf7256b8f7ed69ac5ea3f1756f6e57f1503e27"
+        }
+      },
+      "targets": [
+        {
+          "ProcMacro": {
+            "crate_name": "ic_cdk_macros",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "ic_cdk_macros",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "candid 0.10.13",
+              "target": "candid"
+            },
+            {
+              "id": "proc-macro2 1.0.89",
+              "target": "proc_macro2"
+            },
+            {
+              "id": "quote 1.0.37",
+              "target": "quote"
+            },
+            {
+              "id": "serde 1.0.217",
+              "target": "serde"
+            },
+            {
+              "id": "serde_tokenstream 0.1.7",
+              "target": "serde_tokenstream"
+            },
+            {
+              "id": "syn 1.0.109",
+              "target": "syn"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.9.0"
+      },
+      "license": "Apache-2.0",
+      "license_ids": [
+        "Apache-2.0"
+      ],
+      "license_file": "LICENSE"
+    },
+    "ic-cdk-macros 0.16.0": {
+      "name": "ic-cdk-macros",
+      "version": "0.16.0",
+      "package_url": "https://github.com/dfinity/cdk-rs",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/ic-cdk-macros/0.16.0/download",
+          "sha256": "0d4d857135deef20cc7ea8f3869a30cd9cfeb1392b3a81043790b2cd82adc3e0"
         }
       },
       "targets": [
@@ -32731,7 +32866,74 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.17.1"
+        "version": "0.16.0"
+      },
+      "license": "Apache-2.0",
+      "license_ids": [
+        "Apache-2.0"
+      ],
+      "license_file": "LICENSE"
+    },
+    "ic-cdk-macros 0.17.0": {
+      "name": "ic-cdk-macros",
+      "version": "0.17.0",
+      "package_url": "https://github.com/dfinity/cdk-rs",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/ic-cdk-macros/0.17.0/download",
+          "sha256": "b8df41980e95dead28735ab0f748c75477b0c5eab37a09a5641c78ec406a1db0"
+        }
+      },
+      "targets": [
+        {
+          "ProcMacro": {
+            "crate_name": "ic_cdk_macros",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "ic_cdk_macros",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "candid 0.10.13",
+              "target": "candid"
+            },
+            {
+              "id": "proc-macro2 1.0.89",
+              "target": "proc_macro2"
+            },
+            {
+              "id": "quote 1.0.37",
+              "target": "quote"
+            },
+            {
+              "id": "serde 1.0.217",
+              "target": "serde"
+            },
+            {
+              "id": "serde_tokenstream 0.2.1",
+              "target": "serde_tokenstream"
+            },
+            {
+              "id": "syn 2.0.87",
+              "target": "syn"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.17.0"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -32845,7 +33047,7 @@
               "target": "futures"
             },
             {
-              "id": "ic-cdk 0.17.1",
+              "id": "ic-cdk 0.17.0",
               "target": "ic_cdk"
             },
             {
@@ -33369,7 +33571,7 @@
               "target": "simple_asn1"
             },
             {
-              "id": "thiserror 2.0.11",
+              "id": "thiserror 2.0.3",
               "target": "thiserror"
             }
           ],
@@ -33957,7 +34159,7 @@
               "target": "sha2"
             },
             {
-              "id": "thiserror 2.0.11",
+              "id": "thiserror 2.0.3",
               "target": "thiserror"
             }
           ],
@@ -34055,7 +34257,7 @@
               "target": "strum"
             },
             {
-              "id": "thiserror 2.0.11",
+              "id": "thiserror 2.0.3",
               "target": "thiserror"
             },
             {
@@ -38330,7 +38532,8 @@
         ],
         "crate_features": {
           "common": [
-            "v1_24"
+            "schemars",
+            "v1_28"
           ],
           "selects": {}
         },
@@ -38347,6 +38550,10 @@
             {
               "id": "k8s-openapi 0.22.0",
               "target": "build_script_build"
+            },
+            {
+              "id": "schemars 0.8.21",
+              "target": "schemars"
             },
             {
               "id": "serde 1.0.217",
@@ -38653,14 +38860,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "kube 0.93.1": {
+    "kube 0.94.2": {
       "name": "kube",
-      "version": "0.93.1",
+      "version": "0.94.2",
       "package_url": "https://github.com/kube-rs/kube",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/kube/0.93.1/download",
-          "sha256": "0365920075af1a2d23619c1ca801c492f2400157de42627f041a061716e76416"
+          "url": "https://static.crates.io/crates/kube/0.94.2/download",
+          "sha256": "52ace78a62b361077505f2950bd48aa3e46596fb15350c9c993de15ddfa3cac5"
         }
       },
       "targets": [
@@ -38687,7 +38894,9 @@
             "client",
             "config",
             "default",
+            "derive",
             "kube-client",
+            "kube-derive",
             "rustls-tls"
           ],
           "selects": {}
@@ -38699,18 +38908,27 @@
               "target": "k8s_openapi"
             },
             {
-              "id": "kube-client 0.93.1",
+              "id": "kube-client 0.94.2",
               "target": "kube_client"
             },
             {
-              "id": "kube-core 0.93.1",
+              "id": "kube-core 0.94.2",
               "target": "kube_core"
             }
           ],
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.93.1"
+        "proc_macro_deps": {
+          "common": [
+            {
+              "id": "kube-derive 0.94.2",
+              "target": "kube_derive"
+            }
+          ],
+          "selects": {}
+        },
+        "version": "0.94.2"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -38718,14 +38936,14 @@
       ],
       "license_file": null
     },
-    "kube-client 0.93.1": {
+    "kube-client 0.94.2": {
       "name": "kube-client",
-      "version": "0.93.1",
+      "version": "0.94.2",
       "package_url": "https://github.com/kube-rs/kube",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/kube-client/0.93.1/download",
-          "sha256": "d81336eb3a5b10a40c97a5a97ad66622e92bad942ce05ee789edd730aa4f8603"
+          "url": "https://static.crates.io/crates/kube-client/0.94.2/download",
+          "sha256": "18ec0fcafd3add30b413b096a61d69b0a37f94d3f95b6f505a57ea3d27cec2a7"
         }
       },
       "targets": [
@@ -38841,7 +39059,7 @@
               "target": "k8s_openapi"
             },
             {
-              "id": "kube-core 0.93.1",
+              "id": "kube-core 0.94.2",
               "target": "kube_core"
             },
             {
@@ -38900,7 +39118,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.93.1"
+        "version": "0.94.2"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -38908,14 +39126,14 @@
       ],
       "license_file": null
     },
-    "kube-core 0.93.1": {
+    "kube-core 0.94.2": {
       "name": "kube-core",
-      "version": "0.93.1",
+      "version": "0.94.2",
       "package_url": "https://github.com/kube-rs/kube",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/kube-core/0.93.1/download",
-          "sha256": "cce373a74d787d439063cdefab0f3672860bd7bac01a38e39019177e764a0fe6"
+          "url": "https://static.crates.io/crates/kube-core/0.94.2/download",
+          "sha256": "a50c095f051dada37740d883b6d47ad0430e95082140718073b773c8a70f231c"
         }
       },
       "targets": [
@@ -38937,6 +39155,13 @@
         "compile_data_glob": [
           "**"
         ],
+        "crate_features": {
+          "common": [
+            "schema",
+            "schemars"
+          ],
+          "selects": {}
+        },
         "deps": {
           "common": [
             {
@@ -38956,8 +39181,16 @@
               "target": "k8s_openapi"
             },
             {
+              "id": "schemars 0.8.21",
+              "target": "schemars"
+            },
+            {
               "id": "serde 1.0.217",
               "target": "serde"
+            },
+            {
+              "id": "serde-value 0.7.0",
+              "target": "serde_value"
             },
             {
               "id": "serde_json 1.0.132",
@@ -38971,7 +39204,70 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.93.1"
+        "version": "0.94.2"
+      },
+      "license": "Apache-2.0",
+      "license_ids": [
+        "Apache-2.0"
+      ],
+      "license_file": null
+    },
+    "kube-derive 0.94.2": {
+      "name": "kube-derive",
+      "version": "0.94.2",
+      "package_url": "https://github.com/kube-rs/kube",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/kube-derive/0.94.2/download",
+          "sha256": "7871f02c3c848b63fee3d2f2645bb4a3c0b68ee147badcddf1b0cf8fb5db87ad"
+        }
+      },
+      "targets": [
+        {
+          "ProcMacro": {
+            "crate_name": "kube_derive",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "kube_derive",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "darling 0.20.10",
+              "target": "darling"
+            },
+            {
+              "id": "proc-macro2 1.0.89",
+              "target": "proc_macro2"
+            },
+            {
+              "id": "quote 1.0.37",
+              "target": "quote"
+            },
+            {
+              "id": "serde_json 1.0.132",
+              "target": "serde_json"
+            },
+            {
+              "id": "syn 2.0.87",
+              "target": "syn"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.94.2"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -52657,7 +52953,7 @@
               "target": "reqwest"
             },
             {
-              "id": "schemars 0.8.16",
+              "id": "schemars 0.8.21",
               "target": "schemars"
             },
             {
@@ -65179,7 +65475,7 @@
               "target": "serde_json"
             },
             {
-              "id": "thiserror 2.0.11",
+              "id": "thiserror 2.0.3",
               "target": "thiserror"
             },
             {
@@ -66259,14 +66555,14 @@
       ],
       "license_file": "LICENSE.md"
     },
-    "schemars 0.8.16": {
+    "schemars 0.8.21": {
       "name": "schemars",
-      "version": "0.8.16",
+      "version": "0.8.21",
       "package_url": "https://github.com/GREsau/schemars",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/schemars/0.8.16/download",
-          "sha256": "45a28f4c49489add4ce10783f7911893516f15afe45d015608d41faca6bc4d29"
+          "url": "https://static.crates.io/crates/schemars/0.8.21/download",
+          "sha256": "09c024468a378b7e36765cd36702b7a90cc3cba11654f6685c8f233408e89e92"
         }
       },
       "targets": [
@@ -66322,7 +66618,7 @@
               "alias": "indexmap2"
             },
             {
-              "id": "schemars 0.8.16",
+              "id": "schemars 0.8.21",
               "target": "build_script_build"
             },
             {
@@ -66340,13 +66636,13 @@
         "proc_macro_deps": {
           "common": [
             {
-              "id": "schemars_derive 0.8.16",
+              "id": "schemars_derive 0.8.21",
               "target": "schemars_derive"
             }
           ],
           "selects": {}
         },
-        "version": "0.8.16"
+        "version": "0.8.21"
       },
       "build_script_attrs": {
         "compile_data_glob": [
@@ -66362,14 +66658,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "schemars_derive 0.8.16": {
+    "schemars_derive 0.8.21": {
       "name": "schemars_derive",
-      "version": "0.8.16",
+      "version": "0.8.21",
       "package_url": "https://github.com/GREsau/schemars",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/schemars_derive/0.8.16/download",
-          "sha256": "c767fd6fa65d9ccf9cf026122c1b555f2ef9a4f0cea69da4d7dbc3e258d30967"
+          "url": "https://static.crates.io/crates/schemars_derive/0.8.21/download",
+          "sha256": "b1eee588578aff73f856ab961cd2f79e36bc45d7ded33a7562adba4667aecc0e"
         }
       },
       "targets": [
@@ -66402,18 +66698,18 @@
               "target": "quote"
             },
             {
-              "id": "serde_derive_internals 0.26.0",
+              "id": "serde_derive_internals 0.29.1",
               "target": "serde_derive_internals"
             },
             {
-              "id": "syn 1.0.109",
+              "id": "syn 2.0.87",
               "target": "syn"
             }
           ],
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.8.16"
+        "version": "0.8.21"
       },
       "license": "MIT",
       "license_ids": [
@@ -68263,14 +68559,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "serde_derive_internals 0.26.0": {
+    "serde_derive_internals 0.29.1": {
       "name": "serde_derive_internals",
-      "version": "0.26.0",
+      "version": "0.29.1",
       "package_url": "https://github.com/serde-rs/serde",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/serde_derive_internals/0.26.0/download",
-          "sha256": "85bf8229e7920a9f636479437026331ce11aa132b4dde37d121944a44d6e5f3c"
+          "url": "https://static.crates.io/crates/serde_derive_internals/0.29.1/download",
+          "sha256": "18d26a20a969b9e3fdf2fc2d9f21eda6c40e2de84c9408bb5d3b05d499aae711"
         }
       },
       "targets": [
@@ -68303,14 +68599,14 @@
               "target": "quote"
             },
             {
-              "id": "syn 1.0.109",
+              "id": "syn 2.0.87",
               "target": "syn"
             }
           ],
           "selects": {}
         },
         "edition": "2015",
-        "version": "0.26.0"
+        "version": "0.29.1"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -74989,14 +75285,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "thiserror 2.0.11": {
+    "thiserror 2.0.3": {
       "name": "thiserror",
-      "version": "2.0.11",
+      "version": "2.0.3",
       "package_url": "https://github.com/dtolnay/thiserror",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/thiserror/2.0.11/download",
-          "sha256": "d452f284b73e6d76dd36758a0c8684b1d5be31f92b89d07fd5822175732206fc"
+          "url": "https://static.crates.io/crates/thiserror/2.0.3/download",
+          "sha256": "c006c85c7651b3cf2ada4584faa36773bd07bac24acfb39f3c431b36d7e667aa"
         }
       },
       "targets": [
@@ -75040,7 +75336,7 @@
         "deps": {
           "common": [
             {
-              "id": "thiserror 2.0.11",
+              "id": "thiserror 2.0.3",
               "target": "build_script_build"
             }
           ],
@@ -75050,13 +75346,13 @@
         "proc_macro_deps": {
           "common": [
             {
-              "id": "thiserror-impl 2.0.11",
+              "id": "thiserror-impl 2.0.3",
               "target": "thiserror_impl"
             }
           ],
           "selects": {}
         },
-        "version": "2.0.11"
+        "version": "2.0.3"
       },
       "build_script_attrs": {
         "compile_data_glob": [
@@ -75129,14 +75425,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "thiserror-impl 2.0.11": {
+    "thiserror-impl 2.0.3": {
       "name": "thiserror-impl",
-      "version": "2.0.11",
+      "version": "2.0.3",
       "package_url": "https://github.com/dtolnay/thiserror",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/thiserror-impl/2.0.11/download",
-          "sha256": "26afc1baea8a989337eeb52b6e72a039780ce45c3edfcc9c5b9d112feeb173c2"
+          "url": "https://static.crates.io/crates/thiserror-impl/2.0.3/download",
+          "sha256": "f077553d607adc1caf65430528a576c757a71ed73944b66ebb58ef2bbd243568"
         }
       },
       "targets": [
@@ -75176,7 +75472,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "2.0.11"
+        "version": "2.0.3"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -91300,7 +91596,7 @@
     "escargot 0.5.8",
     "ethers-core 2.0.10",
     "ethnum 1.4.0",
-    "evm_rpc_types 1.3.0",
+    "evm_rpc_types 1.2.0",
     "exec 0.3.1",
     "eyre 0.6.8",
     "ff 0.12.1",
@@ -91333,9 +91629,9 @@
     "ic-canister-log 0.2.0",
     "ic-canister-sig-creation 1.1.0",
     "ic-cbor 3.0.2",
-    "ic-cdk 0.17.1",
+    "ic-cdk 0.16.0",
     "ic-cdk 0.18.0-alpha.1",
-    "ic-cdk-macros 0.17.1",
+    "ic-cdk-macros 0.9.0",
     "ic-cdk-macros 0.18.0-alpha.1",
     "ic-cdk-timers 0.11.0",
     "ic-certificate-verification 3.0.2",
@@ -91374,7 +91670,7 @@
     "json5 0.4.1",
     "k256 0.13.4",
     "k8s-openapi 0.22.0",
-    "kube 0.93.1",
+    "kube 0.94.2",
     "lazy_static 1.4.0",
     "leb128 0.2.5",
     "libc 0.2.158",
@@ -91469,7 +91765,7 @@
     "rustls-pemfile 2.2.0",
     "rustversion 1.0.14",
     "rusty-fork 0.3.0",
-    "schemars 0.8.16",
+    "schemars 0.8.21",
     "scoped_threadpool 0.1.9",
     "scopeguard 1.2.0",
     "scraper 0.17.1",
@@ -91510,7 +91806,7 @@
     "test-strategy 0.3.1",
     "tester 0.7.0",
     "textplots 0.8.4",
-    "thiserror 2.0.11",
+    "thiserror 2.0.3",
     "thousands 0.2.0",
     "threadpool 1.8.1",
     "tikv-jemalloc-ctl 0.5.4",
