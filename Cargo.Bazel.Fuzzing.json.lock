@@ -1,5 +1,5 @@
 {
-  "checksum": "014347ed676868fa1f5da05cc21d6bdf8cca1621a3b9683496a53bc9b2e7ecdf",
+  "checksum": "be38a68562dfb675fa266ff5ae304bf1c3c7d0c78a2d716a9891b5e6d0c038e6",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -1779,7 +1779,7 @@
               "target": "indexmap"
             },
             {
-              "id": "schemars 0.8.16",
+              "id": "schemars 0.8.21",
               "target": "schemars"
             },
             {
@@ -19137,7 +19137,7 @@
               "target": "ring"
             },
             {
-              "id": "schemars 0.8.16",
+              "id": "schemars 0.8.21",
               "target": "schemars"
             },
             {
@@ -20088,7 +20088,7 @@
               "target": "k8s_openapi"
             },
             {
-              "id": "kube 0.93.1",
+              "id": "kube 0.94.2",
               "target": "kube"
             },
             {
@@ -20450,7 +20450,7 @@
               "target": "rusty_fork"
             },
             {
-              "id": "schemars 0.8.16",
+              "id": "schemars 0.8.21",
               "target": "schemars"
             },
             {
@@ -38532,7 +38532,8 @@
         ],
         "crate_features": {
           "common": [
-            "v1_24"
+            "schemars",
+            "v1_28"
           ],
           "selects": {}
         },
@@ -38549,6 +38550,10 @@
             {
               "id": "k8s-openapi 0.22.0",
               "target": "build_script_build"
+            },
+            {
+              "id": "schemars 0.8.21",
+              "target": "schemars"
             },
             {
               "id": "serde 1.0.217",
@@ -38855,14 +38860,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "kube 0.93.1": {
+    "kube 0.94.2": {
       "name": "kube",
-      "version": "0.93.1",
+      "version": "0.94.2",
       "package_url": "https://github.com/kube-rs/kube",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/kube/0.93.1/download",
-          "sha256": "0365920075af1a2d23619c1ca801c492f2400157de42627f041a061716e76416"
+          "url": "https://static.crates.io/crates/kube/0.94.2/download",
+          "sha256": "52ace78a62b361077505f2950bd48aa3e46596fb15350c9c993de15ddfa3cac5"
         }
       },
       "targets": [
@@ -38889,7 +38894,9 @@
             "client",
             "config",
             "default",
+            "derive",
             "kube-client",
+            "kube-derive",
             "rustls-tls"
           ],
           "selects": {}
@@ -38901,18 +38908,27 @@
               "target": "k8s_openapi"
             },
             {
-              "id": "kube-client 0.93.1",
+              "id": "kube-client 0.94.2",
               "target": "kube_client"
             },
             {
-              "id": "kube-core 0.93.1",
+              "id": "kube-core 0.94.2",
               "target": "kube_core"
             }
           ],
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.93.1"
+        "proc_macro_deps": {
+          "common": [
+            {
+              "id": "kube-derive 0.94.2",
+              "target": "kube_derive"
+            }
+          ],
+          "selects": {}
+        },
+        "version": "0.94.2"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -38920,14 +38936,14 @@
       ],
       "license_file": null
     },
-    "kube-client 0.93.1": {
+    "kube-client 0.94.2": {
       "name": "kube-client",
-      "version": "0.93.1",
+      "version": "0.94.2",
       "package_url": "https://github.com/kube-rs/kube",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/kube-client/0.93.1/download",
-          "sha256": "d81336eb3a5b10a40c97a5a97ad66622e92bad942ce05ee789edd730aa4f8603"
+          "url": "https://static.crates.io/crates/kube-client/0.94.2/download",
+          "sha256": "18ec0fcafd3add30b413b096a61d69b0a37f94d3f95b6f505a57ea3d27cec2a7"
         }
       },
       "targets": [
@@ -39043,7 +39059,7 @@
               "target": "k8s_openapi"
             },
             {
-              "id": "kube-core 0.93.1",
+              "id": "kube-core 0.94.2",
               "target": "kube_core"
             },
             {
@@ -39102,7 +39118,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.93.1"
+        "version": "0.94.2"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -39110,14 +39126,14 @@
       ],
       "license_file": null
     },
-    "kube-core 0.93.1": {
+    "kube-core 0.94.2": {
       "name": "kube-core",
-      "version": "0.93.1",
+      "version": "0.94.2",
       "package_url": "https://github.com/kube-rs/kube",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/kube-core/0.93.1/download",
-          "sha256": "cce373a74d787d439063cdefab0f3672860bd7bac01a38e39019177e764a0fe6"
+          "url": "https://static.crates.io/crates/kube-core/0.94.2/download",
+          "sha256": "a50c095f051dada37740d883b6d47ad0430e95082140718073b773c8a70f231c"
         }
       },
       "targets": [
@@ -39139,6 +39155,13 @@
         "compile_data_glob": [
           "**"
         ],
+        "crate_features": {
+          "common": [
+            "schema",
+            "schemars"
+          ],
+          "selects": {}
+        },
         "deps": {
           "common": [
             {
@@ -39158,8 +39181,16 @@
               "target": "k8s_openapi"
             },
             {
+              "id": "schemars 0.8.21",
+              "target": "schemars"
+            },
+            {
               "id": "serde 1.0.217",
               "target": "serde"
+            },
+            {
+              "id": "serde-value 0.7.0",
+              "target": "serde_value"
             },
             {
               "id": "serde_json 1.0.132",
@@ -39173,7 +39204,70 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.93.1"
+        "version": "0.94.2"
+      },
+      "license": "Apache-2.0",
+      "license_ids": [
+        "Apache-2.0"
+      ],
+      "license_file": null
+    },
+    "kube-derive 0.94.2": {
+      "name": "kube-derive",
+      "version": "0.94.2",
+      "package_url": "https://github.com/kube-rs/kube",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/kube-derive/0.94.2/download",
+          "sha256": "7871f02c3c848b63fee3d2f2645bb4a3c0b68ee147badcddf1b0cf8fb5db87ad"
+        }
+      },
+      "targets": [
+        {
+          "ProcMacro": {
+            "crate_name": "kube_derive",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "kube_derive",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "darling 0.20.10",
+              "target": "darling"
+            },
+            {
+              "id": "proc-macro2 1.0.89",
+              "target": "proc_macro2"
+            },
+            {
+              "id": "quote 1.0.37",
+              "target": "quote"
+            },
+            {
+              "id": "serde_json 1.0.132",
+              "target": "serde_json"
+            },
+            {
+              "id": "syn 2.0.87",
+              "target": "syn"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.94.2"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -52859,7 +52953,7 @@
               "target": "reqwest"
             },
             {
-              "id": "schemars 0.8.16",
+              "id": "schemars 0.8.21",
               "target": "schemars"
             },
             {
@@ -66461,14 +66555,14 @@
       ],
       "license_file": "LICENSE.md"
     },
-    "schemars 0.8.16": {
+    "schemars 0.8.21": {
       "name": "schemars",
-      "version": "0.8.16",
+      "version": "0.8.21",
       "package_url": "https://github.com/GREsau/schemars",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/schemars/0.8.16/download",
-          "sha256": "45a28f4c49489add4ce10783f7911893516f15afe45d015608d41faca6bc4d29"
+          "url": "https://static.crates.io/crates/schemars/0.8.21/download",
+          "sha256": "09c024468a378b7e36765cd36702b7a90cc3cba11654f6685c8f233408e89e92"
         }
       },
       "targets": [
@@ -66524,7 +66618,7 @@
               "alias": "indexmap2"
             },
             {
-              "id": "schemars 0.8.16",
+              "id": "schemars 0.8.21",
               "target": "build_script_build"
             },
             {
@@ -66542,13 +66636,13 @@
         "proc_macro_deps": {
           "common": [
             {
-              "id": "schemars_derive 0.8.16",
+              "id": "schemars_derive 0.8.21",
               "target": "schemars_derive"
             }
           ],
           "selects": {}
         },
-        "version": "0.8.16"
+        "version": "0.8.21"
       },
       "build_script_attrs": {
         "compile_data_glob": [
@@ -66564,14 +66658,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "schemars_derive 0.8.16": {
+    "schemars_derive 0.8.21": {
       "name": "schemars_derive",
-      "version": "0.8.16",
+      "version": "0.8.21",
       "package_url": "https://github.com/GREsau/schemars",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/schemars_derive/0.8.16/download",
-          "sha256": "c767fd6fa65d9ccf9cf026122c1b555f2ef9a4f0cea69da4d7dbc3e258d30967"
+          "url": "https://static.crates.io/crates/schemars_derive/0.8.21/download",
+          "sha256": "b1eee588578aff73f856ab961cd2f79e36bc45d7ded33a7562adba4667aecc0e"
         }
       },
       "targets": [
@@ -66604,18 +66698,18 @@
               "target": "quote"
             },
             {
-              "id": "serde_derive_internals 0.26.0",
+              "id": "serde_derive_internals 0.29.1",
               "target": "serde_derive_internals"
             },
             {
-              "id": "syn 1.0.109",
+              "id": "syn 2.0.87",
               "target": "syn"
             }
           ],
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.8.16"
+        "version": "0.8.21"
       },
       "license": "MIT",
       "license_ids": [
@@ -68465,14 +68559,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "serde_derive_internals 0.26.0": {
+    "serde_derive_internals 0.29.1": {
       "name": "serde_derive_internals",
-      "version": "0.26.0",
+      "version": "0.29.1",
       "package_url": "https://github.com/serde-rs/serde",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/serde_derive_internals/0.26.0/download",
-          "sha256": "85bf8229e7920a9f636479437026331ce11aa132b4dde37d121944a44d6e5f3c"
+          "url": "https://static.crates.io/crates/serde_derive_internals/0.29.1/download",
+          "sha256": "18d26a20a969b9e3fdf2fc2d9f21eda6c40e2de84c9408bb5d3b05d499aae711"
         }
       },
       "targets": [
@@ -68505,14 +68599,14 @@
               "target": "quote"
             },
             {
-              "id": "syn 1.0.109",
+              "id": "syn 2.0.87",
               "target": "syn"
             }
           ],
           "selects": {}
         },
         "edition": "2015",
-        "version": "0.26.0"
+        "version": "0.29.1"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -91576,7 +91670,7 @@
     "json5 0.4.1",
     "k256 0.13.4",
     "k8s-openapi 0.22.0",
-    "kube 0.93.1",
+    "kube 0.94.2",
     "lazy_static 1.4.0",
     "leb128 0.2.5",
     "libc 0.2.158",
@@ -91671,7 +91765,7 @@
     "rustls-pemfile 2.2.0",
     "rustversion 1.0.14",
     "rusty-fork 0.3.0",
-    "schemars 0.8.16",
+    "schemars 0.8.21",
     "scoped_threadpool 0.1.9",
     "scopeguard 1.2.0",
     "scraper 0.17.1",
