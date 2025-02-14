@@ -574,6 +574,13 @@ fn where_ic_wasm_instrument_memory() -> (u64, u64) {
     where_ic_wasm_instrument_memory_native()
 }
 
+#[update]
+fn compute_cached_metrics() -> ic_nns_governance::pb::v1::governance::GovernanceCachedMetrics {
+    let now = 1739475786;
+    let supply = 52_999_930_284_109_598.into();
+    governance_mut().compute_cached_metrics(now, supply)
+}
+
 #[cfg(feature = "test")]
 #[update(hidden = true)]
 fn set_time_warp(new_time_warp: TimeWarp) {
@@ -650,6 +657,7 @@ async fn claim_or_refresh_neuron_from_account(
 
 ic_nervous_system_common_build_metadata::define_get_build_metadata_candid_method_cdk! {}
 
+/*
 /// A principal P is associated with a neuron N iff P is the controller of N, or P is a hotkey of N (or both).
 use std::collections::HashMap;
 #[update]
@@ -710,6 +718,7 @@ fn principal_id_to_neuron_count() -> Vec<(
 
     result
 }
+*/
 
 #[update]
 fn claim_gtc_neurons(

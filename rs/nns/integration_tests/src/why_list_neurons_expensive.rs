@@ -1,27 +1,55 @@
+#![allow(unused)]
+
 use anyhow::bail;
 use candid::{Decode, Encode};
 use flate2::read::GzDecoder;
 use ic_base_types::PrincipalId;
 use ic_cdk::api::stable::WASM_PAGE_SIZE_IN_BYTES;
+use ic_management_canister_types_private::{CanisterInstallMode, CanisterSettingsArgsBuilder};
 use ic_nervous_system_string::clamp_debug_len;
-use ic_nns_constants::GOVERNANCE_CANISTER_ID;
+use ic_nervous_system_common::{
+    E8,
+    ONE_DAY_SECONDS,
+    ONE_MONTH_SECONDS,
+};
+use ic_nns_common::pb::v1::NeuronId;
+use ic_nns_constants::{GOVERNANCE_CANISTER_ID, GOVERNANCE_CANISTER_INDEX_IN_NNS_SUBNET, ROOT_CANISTER_ID};
 use ic_nns_governance_api::pb::v1::ListNeurons;
+use ic_nns_governance::pb::v1::{
+    Governance as GovernanceProto,
+    NetworkEconomics,
+    Neuron,
+    governance::GovernanceCachedMetrics,
+    neuron::DissolveState,
+};
 use ic_nns_test_utils::state_test_helpers::{
     list_neurons, primitive_get_profiling, unwrap_wasm_result, IcWasmTraceEvent,
-    IcWasmTraceEventType, PrimitiveIcWasmTraceEvent,
+    IcWasmTraceEventType, PrimitiveIcWasmTraceEvent, state_machine_builder_for_nns_tests, create_canister_id_at_position,
 };
 use ic_nns_test_utils_golden_nns_state::new_state_machine_with_golden_nns_state_or_panic;
-#[allow(unused)]
+use ic_state_machine_tests::StateMachine;
+use ic_types::ingress::WasmResult;
+use maplit::btreemap;
 use pretty_assertions::assert_eq;
+use prost::Message; // Needed for encode_to_vec.
+use rand::{
+    Rng,
+    SeedableRng,
+    rngs::StdRng,
+    seq::SliceRandom,
+};
 use std::{
-    collections::BTreeMap,
+    collections::{BTreeMap, HashMap},
     io::Read, // For flate2.
+    ops::Range,
     path::PathBuf,
     str::FromStr,
 };
 // TODO: Figure out how to implement read_custom_sections using the walrus
 // library so that we are not using two WASM libraries.
 use wasmparser::{Parser, Payload};
+
+const NOW: u64 = 1739475786;
 
 fn decompress_gz(buffer: &[u8]) -> Vec<u8> {
     let mut result = vec![];
@@ -51,10 +79,81 @@ fn read_custom_section(wasm_bytes: &[u8], query_name: &str) -> Vec<u8> {
     custom_section_data.unwrap()
 }
 
+/// Suitable for GovernanceProto's neurons field.
+///
+/// Most have not kept up with refreshing their voting power.
+///
+/// Some are inactive.
+fn gen_neurons() -> BTreeMap<u64, Neuron> {
+    let mut random = StdRng::seed_from_u64(42);
+
+    let mut random_order_of_magnitude = |random: &mut StdRng, range: Range<i32>| {
+        // Convert to float.
+        let start = range.start as f64;
+        let end = range.end as f64;
+        let range = start..end;
+
+        let result = 10.0_f64.powf(random.gen_range(range));
+
+        // Convert (back) to integer.
+        result as u64
+    };
+
+    let mut result = btreemap! {};
+
+    for icp in [0, 1, 10, 100] {
+        let created_timestamp_seconds = NOW - random_order_of_magnitude(&mut random, 0..8);
+        let cached_neuron_stake_e8s = E8 * icp;
+
+        for (aging_since_timestamp_seconds, dissolve_state) in [
+            (u64::MAX, DissolveState::WhenDissolvedTimestampSeconds(NOW - ONE_DAY_SECONDS * 7)),
+            (u64::MAX, DissolveState::WhenDissolvedTimestampSeconds(NOW - ONE_DAY_SECONDS * 30)),
+            (u64::MAX, DissolveState::WhenDissolvedTimestampSeconds(NOW - ONE_DAY_SECONDS * 100)),
+            (u64::MAX, DissolveState::WhenDissolvedTimestampSeconds(NOW - ONE_DAY_SECONDS * 200)),
+            (NOW - ONE_DAY_SECONDS * 7, DissolveState::DissolveDelaySeconds(30 * ONE_DAY_SECONDS)),
+        ] {
+            let dissolve_state = Some(dissolve_state);
+
+            for months in [5, 7, 10, 12, 24, 36] {
+                let id = random.gen::<u64>();
+                let voting_power_refreshed_timestamp_seconds = Some(NOW - ONE_MONTH_SECONDS * months);
+
+                result.insert(id, Neuron {
+                    id: Some(NeuronId { id }),
+                    controller: Some(PrincipalId::new_user_test_id(random.gen())),
+                    cached_neuron_stake_e8s,
+                    account: vec![random.gen::<u8>(); 32],
+                    created_timestamp_seconds,
+                    aging_since_timestamp_seconds,
+                    dissolve_state,
+                    voting_power_refreshed_timestamp_seconds,
+
+                    ..Default::default()
+                });
+            }
+        }
+    }
+
+    println!("\n\n\n neuron count: {} \n\n\n", result.len());
+    result
+}
+
 #[test]
 fn test_why_list_neurons_expensive() {
     // Load golden nns state into a StateMachine.
-    let state_machine = new_state_machine_with_golden_nns_state_or_panic();
+    // let state_machine = new_state_machine_with_golden_nns_state_or_panic();
+
+    let state_machine = StateMachine::new();
+    let governance_id = create_canister_id_at_position(
+        &state_machine,
+        GOVERNANCE_CANISTER_INDEX_IN_NNS_SUBNET,
+        Some(
+            CanisterSettingsArgsBuilder::new()
+                .with_controllers(vec![ROOT_CANISTER_ID.get()])
+                .build(),
+        ),
+    );
+    assert_eq!(governance_id, GOVERNANCE_CANISTER_ID.into());
 
     // Install governance WASM built from working copy. The main thing this does
     // is allocate some stable memory that will be used to store profiling data
@@ -68,12 +167,27 @@ fn test_why_list_neurons_expensive() {
     )
     .bytes();
     state_machine
+        .install_wasm_in_mode(
+            GOVERNANCE_CANISTER_ID,
+            CanisterInstallMode::Install,
+            governance_wasm_gz.clone(),
+            GovernanceProto {
+                economics: Some(NetworkEconomics::with_default_values()),
+                neurons: gen_neurons(),
+                ..Default::default()
+            }
+            .encode_to_vec()
+        )
+        .unwrap();
+    /*
+    state_machine
         .upgrade_canister(
             GOVERNANCE_CANISTER_ID,
             governance_wasm_gz.clone(),
             vec![], // args
         )
         .unwrap();
+    */
     let (start_page, page_limit) = Decode!(
         &unwrap_wasm_result(state_machine.query(
             GOVERNANCE_CANISTER_ID,
@@ -131,6 +245,55 @@ fn test_why_list_neurons_expensive() {
     println!("Ready for fine-grained performance measurement 👍");
     println!("");
 
+    // Call code being measured.
+    println!("Measuring compute_cached_metrics...");
+    let result = state_machine
+        .execute_ingress(
+            GOVERNANCE_CANISTER_ID,
+            "compute_cached_metrics",
+            Encode!().unwrap(),
+        )
+        .unwrap();
+    match result {
+        WasmResult::Reply(ok) => {
+            let _governance_cached_metrics = Decode!(&ok, GovernanceCachedMetrics).unwrap();
+            // println!("\n\nGOVERNANCE CACHED METRICS:\n{:#?}\n\n", governance_cached_metrics);
+        }
+        _ => panic!("{:#?}", result),
+    }
+    println!("Done measuring 👍");
+
+    // Fetch measurement.
+    println!("Fetching measurment...");
+    let profiling = primitive_get_profiling(&state_machine, GOVERNANCE_CANISTER_ID);
+    println!("Measurement fetched 👍");
+
+    // Visualize.
+    println!("Generating visualization of measurement...");
+    let title = format!(
+        "Why Metrics Slow",
+    );
+    let destination = format!(
+        "why_metrics_slow.svg",
+    );
+    // I guess this is so that bars are labeled with names, not opaque IDs.
+    // See https://sourcegraph.com/github.com/dfinity/ic-repl@746bea25ddd4cc98709f6b9eaa283f32a21ac30d/-/blob/src/helper.rs?L504
+    let name_custom_section_payload = Decode!(
+        &read_custom_section(&instrumented_governance_wasm, "icp:public name"),
+        BTreeMap<u16, String>
+    )
+    .unwrap();
+    let _cost = render_profiling(
+        profiling,
+        &name_custom_section_payload,
+        &title,
+        PathBuf::from(destination.clone()),
+    )
+    .unwrap();
+    println!("Flame graph stored to {} 👍", destination);
+    println!();
+
+    /*
     // Grab a sample of principals that have "associated" neurons. More
     // precisely, these principals either control or are a hotkey of some
     // (nonzero number of) neurons. These will later be used as callers of the
@@ -232,6 +395,7 @@ fn test_why_list_neurons_expensive() {
             unwrap_cost(cost),
         );
     }
+    */
 }
 
 fn unwrap_cost(cost: CostValue) -> u64 {
