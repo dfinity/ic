@@ -56,19 +56,10 @@ def icos_build(
 
     # -------------------- Version management --------------------
 
-    copy_file(
-        name = "copy_version_txt",
-        src = ic_version,
-        out = "version.txt",
-        allow_symlink = True,
-        visibility = visibility,
-        tags = ["manual"],
-    )
-
     if upgrades:
         native.genrule(
             name = "test_version_txt",
-            srcs = [":copy_version_txt"],
+            srcs = [ic_version],
             outs = ["version-test.txt"],
             cmd = "sed -e 's/.*/&-test/' < $< > $@",
             tags = ["manual"],
@@ -160,7 +151,7 @@ def icos_build(
         strip_paths = PARTITION_ROOT_STRIP_PATHS,
         extra_files = {
             k: v
-            for k, v in (image_deps["rootfs"].items() + [(":version.txt", "/opt/ic/share/version.txt:0644")])
+            for k, v in (image_deps["rootfs"].items() + [(ic_version, "/opt/ic/share/version.txt:0644")])
         },
         target_compatible_with = [
             "@platforms//os:linux",
@@ -191,7 +182,7 @@ def icos_build(
             k: v
             for k, v in (
                 image_deps["bootfs"].items() + [
-                    (":version.txt", "/version.txt:0644"),
+                    (ic_version, "/version.txt:0644"),
                     (":extra_boot_args", "/extra_boot_args:0644"),
                 ]
             )
@@ -349,7 +340,7 @@ def icos_build(
             target_compatible_with = [
                 "@platforms//os:linux",
             ],
-            version_file = ":version.txt",
+            version_file = ic_version,
         )
 
         zstd_compress(
@@ -479,14 +470,14 @@ EOF
             "//rs/ic_os/dev_test_tools/launch-single-vm:launch-single-vm",
             "//ic-os/components:hostos-scripts/build-bootstrap-config-image.sh",
             ":disk-img.tar.zst",
-            ":version.txt",
+            ic_version,
             "//bazel:upload_systest_dep",
         ],
         env = {
             "BIN": "$(location //rs/ic_os/dev_test_tools/launch-single-vm:launch-single-vm)",
             "UPLOAD_SYSTEST_DEP": "$(location //bazel:upload_systest_dep)",
             "SCRIPT": "$(location //ic-os/components:hostos-scripts/build-bootstrap-config-image.sh)",
-            "VERSION_FILE": "$(location :version.txt)",
+            "VERSION_FILE": "$(location {})".format(ic_version),
             "DISK_IMG": "$(location :disk-img.tar.zst)",
         },
         testonly = True,
