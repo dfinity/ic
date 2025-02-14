@@ -115,16 +115,6 @@ fn test_why_list_neurons_expensive() {
     .unwrap();
     let instrumented_governance_wasm = instrumented_governance_wasm.emit_wasm();
 
-    // Read some metadata from the profiling-enabled governance WASM. This
-    // metadata will later be used to visualize where instructions are consumed.
-    // This is based on
-    // https://sourcegraph.com/github.com/dfinity/ic-repl@746bea25ddd4cc98709f6b9eaa283f32a21ac30d/-/blob/src/helper.rs?L504
-    let name_custom_section_payload = Decode!(
-        &read_custom_section(&instrumented_governance_wasm, "icp:public name"),
-        BTreeMap<u16, String>
-    )
-    .unwrap();
-
     // Install the profiling-enabled governance WASM.
     println!("");
     println!("Installing governance WITH ic-wasm profiling ENABLED...");
@@ -132,7 +122,7 @@ fn test_why_list_neurons_expensive() {
     state_machine
         .upgrade_canister(
             GOVERNANCE_CANISTER_ID,
-            instrumented_governance_wasm,
+            instrumented_governance_wasm.clone(),
             vec![], // args
         )
         .unwrap();
@@ -218,6 +208,13 @@ fn test_why_list_neurons_expensive() {
             "list_neurons_no_width_{:0>4}_heap_neurons_{:0>4}_stable_memory_neurons_{}.svg",
             heap_neuron_count, stable_memory_neuron_count, caller,
         );
+        // I guess this is so that bars are labeled with names, not opaque IDs.
+        // See https://sourcegraph.com/github.com/dfinity/ic-repl@746bea25ddd4cc98709f6b9eaa283f32a21ac30d/-/blob/src/helper.rs?L504
+        let name_custom_section_payload = Decode!(
+            &read_custom_section(&instrumented_governance_wasm, "icp:public name"),
+            BTreeMap<u16, String>
+        )
+        .unwrap();
         let cost = render_profiling( // DO NOT MERGE
             profiling,
             &name_custom_section_payload,
