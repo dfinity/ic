@@ -41,7 +41,7 @@ const IC_WASM_INSTRUMENT_MEMORY_ID: MemoryId = MemoryId::new(IC_WASM_INSTRUMENT_
 // example, it probably isn't a terrible choice. One good thing about this is
 // that it is a multiple of the standard MemoryManager bucket size (128). A page
 // of stable memory is 64 KiB. Thus, this is equivalent to 256 MiB.
-const IC_WASM_INSTRUMENT_MEMORY_SIZE_PAGES: u64 = 4096 /* DO NOT MERGE */ * 8;
+const IC_WASM_INSTRUMENT_MEMORY_SIZE_PAGES: u64 = 4096 /* DO NOT MERGE */ * 512;
 
 pub mod neuron_indexes;
 pub mod neurons;
