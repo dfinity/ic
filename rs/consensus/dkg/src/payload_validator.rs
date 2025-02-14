@@ -278,12 +278,6 @@ fn validate_dealings_payload(
             return Err(InvalidDkgPayloadReason::MissingDkgConfigForDealing.into());
         };
 
-        let dealer_id = message.signature.signer;
-        // If the dealer is not in the set of dealers, reject.
-        if !config.dealers().get().contains(&dealer_id) {
-            return Err(InvalidDkgPayloadReason::InvalidDealer(dealer_id).into());
-        }
-
         // Verify the signature and dealing.
         crypto_validate_dealing(crypto, config, message)?;
     }

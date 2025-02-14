@@ -231,15 +231,6 @@ impl DkgImpl {
             return Mutations::new();
         }
 
-        // If the dealing comes from a non-dealer, reject it.
-        if !config.dealers().get().contains(dealer_id) {
-            return get_handle_invalid_change_action(
-                message,
-                format!("Replica with Id={:?} is not a dealer.", dealer_id),
-            )
-            .into();
-        }
-
         // If we already have a dealing from this dealer, we simply remove the
         // message from the pool. Multiple distinguishable valid dealings can be
         // created by an honest node because dkg dealings are not deterministic,
@@ -276,11 +267,15 @@ pub(crate) fn crypto_validate_dealing(
     config: &NiDkgConfig,
     message: &Message,
 ) -> ValidationResult<PayloadValidationError> {
+    let dealer = message.signature.signer;
+    if !config.dealers().get().contains(&dealer) {
+        return Err(InvalidDkgPayloadReason::InvalidDealer(dealer).into());
+    }
     crypto.verify(message, config.registry_version())?;
     ic_interfaces::crypto::NiDkgAlgorithm::verify_dealing(
         crypto,
         config,
-        message.signature.signer,
+        dealer,
         &message.content.dealing,
     )?;
     Ok(())
@@ -1082,7 +1077,7 @@ mod tests {
                     assert_eq!(
                         reason,
                         &format!(
-                            "Replica with Id={:?} is not a dealer.",
+                            "Dealing verification failed: InvalidDealer({:?})",
                             invalid_dealing_message.signature.signer
                         )
                     );
