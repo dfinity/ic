@@ -295,11 +295,14 @@ impl VotingPowerEconomics {
     /// Between these two points, the decrease is linear.
     pub fn deciding_voting_power_adjustment_factor(
         &self,
-        time_since_last_voting_power_refreshed: Duration,
-    ) -> Decimal {
-        self.deciding_voting_power_adjustment_factor_function()
-            .apply(time_since_last_voting_power_refreshed.as_secs())
-            .clamp(Decimal::from(0), Decimal::from(1))
+        time_since_last_voting_power_refreshed_seconds: u64,
+    ) -> f64 {
+        let voting_power_reduced_seconds = time_since_last_voting_power_refreshed_seconds
+            .saturating_sub(self.get_start_reducing_voting_power_after_seconds()) as f64;
+        let reduction_factor = voting_power_reduced_seconds / (self.get_clear_following_after_seconds() as f64);
+        // E.g. 10% reduction factor -> x90% adjustment factor
+        (1.0 - reduction_factor)
+            .clamp(0.0, 1.0)
     }
 
     fn deciding_voting_power_adjustment_factor_function(&self) -> LinearMap {
