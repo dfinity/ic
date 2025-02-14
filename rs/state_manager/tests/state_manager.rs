@@ -30,6 +30,7 @@ use ic_state_layout::{CheckpointLayout, ReadOnly, StateLayout, SYSTEM_METADATA_F
 use ic_state_machine_tests::{StateMachine, StateMachineBuilder};
 use ic_state_manager::manifest::{build_meta_manifest, manifest_from_path, validate_manifest};
 use ic_state_manager::{
+    checkpoint::{DirtyPageMap, PageMapType},
     state_sync::{
         types::{
             StateSyncMessage, DEFAULT_CHUNK_SIZE, FILE_GROUP_CHUNK_ID_OFFSET,
@@ -37,7 +38,7 @@ use ic_state_manager::{
         },
         StateSync,
     },
-    DirtyPageMap, PageMapType, StateManagerImpl, NUM_ROUNDS_BEFORE_CHECKPOINT_TO_WRITE_OVERLAY,
+    StateManagerImpl, NUM_ROUNDS_BEFORE_CHECKPOINT_TO_WRITE_OVERLAY,
 };
 use ic_sys::PAGE_SIZE;
 use ic_test_utilities_consensus::fake::FakeVerifier;
@@ -4009,7 +4010,7 @@ fn can_short_circuit_state_sync() {
 #[test]
 fn can_get_dirty_pages() {
     use ic_replicated_state::page_map::PageIndex;
-    use ic_state_manager::get_dirty_pages;
+    use ic_state_manager::checkpoint::get_dirty_pages;
 
     fn update_state(state: &mut ReplicatedState, canister_id: CanisterId) {
         let canister_state = state.canister_state_mut(&canister_id).unwrap();
