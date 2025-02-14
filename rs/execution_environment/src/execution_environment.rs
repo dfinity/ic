@@ -268,8 +268,8 @@ pub struct RoundLimits {
 }
 
 impl RoundLimits {
-    /// Returns true if any of the round limits is reached.
-    pub fn reached(&self) -> bool {
+    /// Returns true if the instructions limit has been reached.
+    pub fn instructions_reached(&self) -> bool {
         self.instructions <= RoundInstructions::from(0)
     }
 }

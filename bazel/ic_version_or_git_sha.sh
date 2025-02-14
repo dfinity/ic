@@ -17,9 +17,6 @@ while read -r k v; do
         COMMIT_SHA)
             VERSION="$v"
             ;;
-        GIT_TREE_STATUS)
-            GIT_TREE_STATUS="$v"
-            ;;
         BUILD_TIMESTAMP)
             BUILD_TIMESTAMP="$v"
             ;;
