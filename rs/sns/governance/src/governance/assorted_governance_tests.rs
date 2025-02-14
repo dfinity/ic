@@ -3517,6 +3517,35 @@ fn test_cant_add_generic_nervous_system_functions_to_critical_topics() {
     }
 }
 
+#[test]
+fn test_cant_add_generic_nervous_system_function_without_topic() {
+    let id = 1000;
+    let valid = NervousSystemFunction {
+        id,
+        name: "a".to_string(),
+        description: None,
+        function_type: Some(FunctionType::GenericNervousSystemFunction(
+            GenericNervousSystemFunction {
+                topic: None, // No topic specified
+                target_canister_id: Some(CanisterId::from(200).get()),
+                target_method_name: Some("test_method".to_string()),
+                validator_canister_id: Some(CanisterId::from(100).get()),
+                validator_method_name: Some("test_validator_method".to_string()),
+            },
+        )),
+    };
+
+    match crate::proposal::validate_and_render_add_generic_nervous_system_function(&Default::default(), &valid, &Default::default()) {
+        Ok(_) => panic!(
+            "Should not be able to add generic nervous system functions without a topic, but was able to add it."
+        ),
+        Err(err) => assert_eq!(
+            err,
+            "NervousSystemFunction must have a topic",
+        ),
+    }
+}
+
 fn default_governance_with_proto(governance_proto: GovernanceProto) -> Governance {
     Governance::new(
         governance_proto
