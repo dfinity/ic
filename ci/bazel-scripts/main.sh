@@ -60,10 +60,6 @@ if [ -n "${CLOUD_CREDENTIALS_CONTENT+x}" ]; then
     unset CLOUD_CREDENTIALS_CONTENT
 fi
 
-if [ -n "${GITHUB_OUTPUT:-}" ]; then
-    echo "upload_artifacts=true" >>"$GITHUB_OUTPUT"
-fi
-
 if [ -z "${KUBECONFIG:-}" ] && [ ! -z "${KUBECONFIG_TNET_CREATOR_LN1:-}" ]; then
     export KUBECONFIG=$(mktemp -t kubeconfig-XXXXXX)
     echo $KUBECONFIG_TNET_CREATOR_LN1 >$KUBECONFIG
@@ -91,15 +87,13 @@ stream_awk_program='
 bazel_args=(
     --output_base=/var/tmp/bazel-output # Output base wiped after run
     ${BAZEL_COMMAND}
+    ${BAZEL_TARGETS}
     --color=yes
-    ${BAZEL_CI_CONFIG}
     --build_metadata=BUILDBUDDY_LINKS="[CI Job](${CI_JOB_URL})"
     --ic_version="${CI_COMMIT_SHA}"
     --ic_version_rc_only="${ic_version_rc_only}"
     --release_build="${release_build}"
     --s3_upload="${s3_upload:-"False"}"
-    ${BAZEL_EXTRA_ARGS:-}
-    ${BAZEL_TARGETS}
 )
 
 # Unless explicitly provided, we set a default --repository_cache to a volume mounted inside our runners

@@ -2182,7 +2182,7 @@ dependencies = [
 [[package]]
 name = "cloudflare"
 version = "0.12.0"
-source = "git+https://github.com/dfinity/cloudflare-rs.git?rev=0b1805bf11ed526445712559e6f18d3b8e024b06#0b1805bf11ed526445712559e6f18d3b8e024b06"
+source = "git+https://github.com/dfinity/cloudflare-rs.git?rev=8b011d170d9d61eaad77bb9645371f6219285104#8b011d170d9d61eaad77bb9645371f6219285104"
 dependencies = [
  "chrono",
  "http 0.2.12",
@@ -3233,7 +3233,7 @@ dependencies = [
  "ciborium",
  "cidr",
  "clap 4.5.20",
- "cloudflare 0.12.0 (git+https://github.com/dfinity/cloudflare-rs.git?rev=0b1805bf11ed526445712559e6f18d3b8e024b06)",
+ "cloudflare 0.12.0 (git+https://github.com/dfinity/cloudflare-rs.git?rev=8b011d170d9d61eaad77bb9645371f6219285104)",
  "colored",
  "comparable",
  "console 0.11.3",
@@ -3299,6 +3299,7 @@ dependencies = [
  "ic-certified-map",
  "ic-http-certification",
  "ic-http-gateway",
+ "ic-management-canister-types",
  "ic-metrics-encoder",
  "ic-response-verification",
  "ic-sha3",
@@ -5633,6 +5634,17 @@ dependencies = [
  "sha2 0.10.8",
  "simple_asn1",
  "thiserror 2.0.3",
+]
+
+[[package]]
+name = "ic-management-canister-types"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "eadff40906491c8c61a3c886cce4ee02f48a4798684d8a10e4a14891a217a284"
+dependencies = [
+ "candid",
+ "serde",
+ "serde_bytes",
 ]
 
 [[package]]

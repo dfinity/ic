@@ -87,12 +87,16 @@ system_test_nns(
         UNIVERSAL_VM_RUNTIME_DEPS +
         CANISTER_HTTP_RUNTIME_DEPS + PROXY_CANISTER_RUNTIME_DEPS,
     deps = CANISTER_HTTP_BASE_DEPS + [
+        "//rs/registry/subnet_type",
         "//rs/rust_canisters/canister_test",
         "//rs/test_utilities",
         "//rs/test_utilities/types",
         "//rs/types/base_types",
         "//rs/types/types",
         "@crate_index//:assert_matches",
+        "@crate_index//:ic-agent",
+        "@crate_index//:serde",
+        "@crate_index//:serde_json",
         "@crate_index//:tokio",
     ],
 )

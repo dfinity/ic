@@ -77,6 +77,7 @@ pub struct SystemStateModifications {
     pub(super) new_global_timer: Option<CanisterTimer>,
     pub(super) canister_log: CanisterLog,
     pub on_low_wasm_memory_hook_condition_check_result: Option<bool>,
+    pub(super) should_bump_canister_version: bool,
 }
 
 impl Default for SystemStateModifications {
@@ -93,6 +94,7 @@ impl Default for SystemStateModifications {
             new_global_timer: None,
             canister_log: Default::default(),
             on_low_wasm_memory_hook_condition_check_result: None,
+            should_bump_canister_version: false,
         }
     }
 }
@@ -304,7 +306,7 @@ impl SystemStateModifications {
     /// Verify that the changes to the system state are sound and apply them to
     /// the system state if they are.
     pub fn apply_changes(
-        self,
+        mut self,
         time: Time,
         system_state: &mut SystemState,
         network_topology: &NetworkTopology,
@@ -486,6 +488,14 @@ impl SystemStateModifications {
         // Update canister global timer
         if let Some(new_global_timer) = self.new_global_timer {
             system_state.global_timer = new_global_timer;
+        }
+
+        // Append canister log.
+        system_state.canister_log.append(&mut self.canister_log);
+
+        // Bump the canister version after all changes have been applied.
+        if self.should_bump_canister_version {
+            system_state.canister_version += 1;
         }
 
         Ok(request_stats)
