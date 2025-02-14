@@ -5,7 +5,6 @@
 use ic_consensus_utils::{bouncer_metrics::BouncerMetrics, crypto::ConsensusCrypto};
 use ic_interfaces::{
     consensus_pool::ConsensusPoolCache,
-    crypto::{ErrorReproducibility, NiDkgAlgorithm},
     dkg::{ChangeAction, DkgPool, Mutations},
     p2p::consensus::{Bouncer, BouncerFactory, BouncerValue, PoolMutationsProducer},
     validation::ValidationResult,
@@ -131,27 +130,28 @@ impl DkgImpl {
             }
         }
 
-        let content = match NiDkgAlgorithm::create_dealing(&*self.crypto, config) {
-            Ok(dealing) => DealingContent::new(dealing, config.dkg_id().clone()),
-            Err(err) => {
-                match config.dkg_id().target_subnet {
-                    NiDkgTargetSubnet::Local => error!(
-                        self.logger,
-                        "Couldn't create a DKG dealing at height {:?}: {:?}",
-                        config.dkg_id().start_block_height,
-                        err
-                    ),
-                    // NOTE: In rare cases, we might hit this case.
-                    NiDkgTargetSubnet::Remote(_) => info!(
-                        self.logger,
-                        "Waiting for Remote DKG dealing at height {:?}: {:?}",
-                        config.dkg_id().start_block_height,
-                        err
-                    ),
-                };
-                return None;
-            }
-        };
+        let content =
+            match ic_interfaces::crypto::NiDkgAlgorithm::create_dealing(&*self.crypto, config) {
+                Ok(dealing) => DealingContent::new(dealing, config.dkg_id().clone()),
+                Err(err) => {
+                    match config.dkg_id().target_subnet {
+                        NiDkgTargetSubnet::Local => error!(
+                            self.logger,
+                            "Couldn't create a DKG dealing at height {:?}: {:?}",
+                            config.dkg_id().start_block_height,
+                            err
+                        ),
+                        // NOTE: In rare cases, we might hit this case.
+                        NiDkgTargetSubnet::Remote(_) => info!(
+                            self.logger,
+                            "Waiting for Remote DKG dealing at height {:?}: {:?}",
+                            config.dkg_id().start_block_height,
+                            err
+                        ),
+                    };
+                    return None;
+                }
+            };
 
         match self
             .crypto
@@ -270,39 +270,20 @@ impl DkgImpl {
     }
 }
 
+/// Validate the signature and dealing of the given message against its config
 pub(crate) fn crypto_validate_dealing(
     crypto: &dyn ConsensusCrypto,
     config: &NiDkgConfig,
     message: &Message,
 ) -> ValidationResult<PayloadValidationError> {
-    crypto
-        .verify(message, config.registry_version())
-        .map_err(|err| {
-            if err.is_reproducible() {
-                PayloadValidationError::InvalidArtifact(InvalidDkgPayloadReason::CryptoError(err))
-            } else {
-                PayloadValidationError::ValidationFailed(DkgPayloadValidationFailure::CryptoError(
-                    err,
-                ))
-            }
-        })?;
-    NiDkgAlgorithm::verify_dealing(
+    crypto.verify(message, config.registry_version())?;
+    ic_interfaces::crypto::NiDkgAlgorithm::verify_dealing(
         crypto,
         config,
         message.signature.signer,
         &message.content.dealing,
-    )
-    .map_err(|err| {
-        if err.is_reproducible() {
-            PayloadValidationError::InvalidArtifact(InvalidDkgPayloadReason::DkgVerifyDealingError(
-                err,
-            ))
-        } else {
-            PayloadValidationError::ValidationFailed(
-                DkgPayloadValidationFailure::DkgVerifyDealingError(err),
-            )
-        }
-    })
+    )?;
+    Ok(())
 }
 
 fn contains_dkg_messages(dkg_pool: &dyn DkgPool, config: &NiDkgConfig, replica_id: NodeId) -> bool {
