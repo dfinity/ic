@@ -36,6 +36,7 @@ CALLSERVICE_FUZZER_DEPENDENCIES = [
     "@crate_index//:mockall",
     "@crate_index//:prost",
     "@crate_index//:tokio",
+    "@crate_index//:tokio-util",
     "@crate_index//:tower",
     "@crate_index//:tower-test",
     "@crate_index//:tracing-subscriber",
