@@ -217,19 +217,24 @@ fn should_update_max_capacity_with_upgrade_arg() {
     let setup = Setup::new(encoded_block_size + 7);
     setup.append_block(encoded_block.clone());
     setup.assert_remaining_capacity(7);
+
     setup.upgrade(None, None);
     setup.assert_remaining_capacity(7);
+
     setup.upgrade(Some(2 * encoded_block_size + 7), None);
     setup.assert_remaining_capacity(encoded_block_size + 7);
     setup.append_block(encoded_block);
     setup.assert_remaining_capacity(7);
+
     setup.upgrade(
         Some(encoded_block_size),
         Some("Cannot set max_memory_size_bytes to".to_string()),
     );
     setup.assert_remaining_capacity(7);
+
     setup.upgrade(Some(2 * encoded_block_size), None);
     setup.assert_remaining_capacity(0);
+
     setup.upgrade(Some(u64::MAX), None);
     setup.assert_remaining_capacity(u64::MAX - 2 * encoded_block_size);
 }
