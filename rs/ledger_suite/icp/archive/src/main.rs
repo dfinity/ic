@@ -171,16 +171,14 @@ fn append_blocks(blocks: Vec<EncodedBlock>) {
         blocks.len()
     ));
     let mut block_size_new = total_block_size();
-    for block in &blocks {
+    for block in blocks {
         block_size_new += block.size_bytes() as u64;
+        append_block(&block);
     }
     if block_size_new > max_memory_size_bytes() {
         ic_cdk::trap("No space left");
     }
     set_total_block_size(block_size_new);
-    for block in blocks {
-        append_block(&block);
-    }
     print(format!(
         "[archive node] append_blocks(): done. archive size: {} blocks",
         blocks_len()
