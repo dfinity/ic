@@ -78,10 +78,15 @@ impl Setup {
     }
 
     fn upgrade(&self, upgrade_arg_max_capacity: Option<u64>, expected_error: Option<String>) {
+        let upgrade_arg = if let Some(upgrade_arg_max_capacity) = upgrade_arg_max_capacity {
+            Encode!(&upgrade_arg_max_capacity).expect("should encode archive upgrade args")
+        } else {
+            vec![]
+        };
         match self.pocket_ic.upgrade_canister(
             Principal::from(self.canister_id),
             self.archive_wasm.clone(),
-            Encode!(&upgrade_arg_max_capacity).expect("should encode archive init args"),
+            upgrade_arg,
             None,
         ) {
             Ok(_) => {

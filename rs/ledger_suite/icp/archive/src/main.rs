@@ -343,14 +343,25 @@ fn get_blocks_candid_() {
 fn post_upgrade() {
     over_init(|args: BytesS| {
         set_last_upgrade_timestamp(dfn_core::api::time_nanos());
-        let arg_max_memory_size_bytes = match Decode!(&args.0, Option<u64>) {
-            Ok(max_memory_size_bytes) => max_memory_size_bytes,
-            Err(e) => {
-                ic_cdk::trap(&format!("Unable to decode archive upgrade argument: {}", e));
+
+        let arg_max_memory_size_bytes = if args.0.is_empty() {
+            print("Upgrading archive without an upgrate argument.");
+            None
+        } else {
+            match Decode!(&args.0, u64) {
+                Ok(max_memory_size_bytes) => Some(max_memory_size_bytes),
+                Err(e) => {
+                    ic_cdk::trap(&format!("Unable to decode archive upgrade argument: {}", e));
+                }
             }
         };
+
         if memory_manager_installed() {
             if let Some(max_memory_size_bytes) = arg_max_memory_size_bytes {
+                print(format!(
+                    "Changing the max_memory_size_bytes to {}",
+                    max_memory_size_bytes
+                ));
                 set_max_memory_size_bytes(max_memory_size_bytes);
             }
             print("Archive state already migrated to stable structures, exiting post_upgrade.");
@@ -369,6 +380,10 @@ fn post_upgrade() {
         set_total_block_size(state.total_block_size as u64);
         set_block_height_offset(state.block_height_offset);
         if let Some(max_memory_size_bytes) = arg_max_memory_size_bytes {
+            print(format!(
+                "Changing the max_memory_size_bytes to {}",
+                max_memory_size_bytes
+            ));
             set_max_memory_size_bytes(max_memory_size_bytes);
         } else {
             set_max_memory_size_bytes(state.max_memory_size_bytes as u64);
