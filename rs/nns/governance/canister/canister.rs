@@ -477,6 +477,8 @@ fn panic_with_probability(probability: f64, message: &str) {
 fn canister_init() {
     ic_cdk::setup();
 
+    allocate_ic_wasm_instrument_memory_once();
+
     match ApiGovernanceProto::decode(&arg_data_raw()[..]) {
         Err(err) => {
             println!(
