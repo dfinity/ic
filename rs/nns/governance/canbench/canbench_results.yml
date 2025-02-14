@@ -151,13 +151,13 @@ benches:
     scopes: {}
   neuron_metrics_calculation_heap:
     total:
-      instructions: 937000
+      instructions: 863000
       heap_increase: 0
       stable_memory_increase: 0
     scopes: {}
   neuron_metrics_calculation_stable:
     total:
-      instructions: 2540000
+      instructions: 2460000
       heap_increase: 0
       stable_memory_increase: 0
     scopes: {}
