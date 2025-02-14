@@ -184,7 +184,7 @@ pub fn allocate_ic_wasm_instrument_memory_once() {
 pub fn where_ic_wasm_instrument_memory() -> (u64, u64) {
     // Read the first page of stable memory. This is the area reserved by
     // MemoryManager for its own use. Most of this area is not actually used.
-    let mut buffer = [0_u8; ic_cdk::api::stable::WASM_PAGE_SIZE_IN_BYTES];
+    let mut buffer = [0_u8; ic_cdk::api::stable::WASM_PAGE_SIZE_IN_BYTES as usize];
     DefaultMemoryImpl::default().read(0, &mut buffer);
 
     // Inspect header to make sure stable memory is being managed by MemoryManager.

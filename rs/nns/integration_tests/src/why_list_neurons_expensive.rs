@@ -190,6 +190,9 @@ fn test_why_list_neurons_expensive() {
                 include_public_neurons_in_full_neurons: Some(false),
                 include_empty_neurons_readable_by_caller: Some(true),
                 neuron_ids: vec![],
+                neuron_subaccounts: None,
+                page_number: None,
+                page_size: None,
             },
         );
         /*
