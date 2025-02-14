@@ -411,7 +411,13 @@ impl TNet {
         .await?;
 
         // create a job to download the image and extract it
-        let image_url = get_ic_os_img_url().expect("missing image url");
+        let image_url = format!(
+            "http://server.bazel-remote.svc.cluster.local:8080/cas/{}",
+            match vm_req.primary_image {
+                ImageLocation::IcOsImageViaUrl { url: _, sha256 } => sha256,
+                _ => self.image_sha.clone(),
+            }
+        );
         // TODO: only download it once and copy it if it's already downloaded
         let args = format!(
             "set -e; \
