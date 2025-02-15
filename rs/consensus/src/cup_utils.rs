@@ -127,6 +127,8 @@ pub fn make_registry_cup_from_cup_contents(
             HashedRandomBeacon::new(crypto_hash, random_beacon),
             Id::from(CryptoHash(cup_contents.state_hash)),
             /* oldest_registry_version_in_use_by_replicated_state */ None,
+            false,
+            vec![],
         ),
         signature: ThresholdSignature {
             signer: high_dkg_id,

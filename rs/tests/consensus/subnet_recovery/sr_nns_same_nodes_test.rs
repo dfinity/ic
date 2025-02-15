@@ -25,7 +25,9 @@ use ic_consensus_system_test_utils::{
     },
     set_sandbox_env_vars,
 };
-use ic_recovery::nns_recovery_same_nodes::{NNSRecoverySameNodes, NNSRecoverySameNodesArgs};
+use ic_recovery::nns_recovery_same_nodes::{
+    NNSRecoverySameNodes, NNSRecoverySameNodesArgs, StepType,
+};
 use ic_recovery::{get_node_metrics, util::UploadMethod, RecoveryArgs};
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::constants::SSH_USERNAME;
@@ -39,8 +41,8 @@ use ic_types::{Height, ReplicaVersion};
 use slog::info;
 use std::convert::TryFrom;
 
-const DKG_INTERVAL: u64 = 9;
-const SUBNET_SIZE: usize = 3;
+const DKG_INTERVAL: u64 = 29;
+const SUBNET_SIZE: usize = 4;
 
 pub fn setup(env: TestEnv) {
     InternetComputer::new()
@@ -125,6 +127,7 @@ pub fn test(env: TestEnv) {
         subnet_id: topo_snapshot.root_subnet_id(),
         upgrade_version: Some(working_version),
         replay_until_height: None,
+        include_registry_versions_from: Some(0),
         upgrade_image_url: get_ic_os_update_img_test_url().ok(),
         upgrade_image_hash: get_ic_os_update_img_test_sha256().ok(),
         download_node: Some(download_node.get_ip_addr()),
@@ -194,6 +197,11 @@ pub fn test(env: TestEnv) {
     // go over all steps of the NNS recovery
     for (step_type, step) in subnet_recovery {
         info!(logger, "Next step: {:?}", step_type);
+
+        if matches!(step_type, StepType::StopReplica) {
+            info!(logger, "Skipping stop replica step");
+            continue;
+        }
 
         info!(logger, "{}", step.descr());
         step.exec()
