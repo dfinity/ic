@@ -1,5 +1,5 @@
 use candid::{Decode, Encode};
-use canister_test::Wasm;
+use canister_test::{Wasm, WasmResult};
 use ic_base_types::CanisterId;
 use ic_ledger_core::block::BlockType;
 use ic_ledger_core::Tokens;
@@ -26,6 +26,8 @@ use ic_state_machine_tests::{ErrorCode, StateMachine, UserError};
 use icp_ledger::{
     AccountIdentifier, Archives, Block, FeatureFlags, LedgerCanisterPayload, UpgradeArgs,
 };
+use std::collections::BTreeMap;
+use std::str::FromStr;
 use std::time::Instant;
 
 /// The number of instructions that can be executed in a single canister upgrade as per
@@ -282,6 +284,8 @@ enum ExpectMigration {
     No,
 }
 
+const LARGE_ARCHIVE_CAPACITY: u64 = 10 * 1024 * 1024 * 1024;
+
 impl Setup {
     pub fn new() -> Self {
         let state_machine = new_state_machine_with_golden_nns_state_or_panic();
@@ -315,7 +319,11 @@ impl Setup {
             wait_ledger_ready(&self.state_machine, LEDGER_CANISTER_ID, 100);
         }
         self.check_ledger_metrics(expect_migration);
-        self.upgrade_archive_canisters(&self.master_wasms.archive, true);
+        let upgrade_args = BTreeMap::from([(
+            CanisterId::from_str("q4eej-kyaaa-aaaaa-aaaha-cai").unwrap(),
+            2 * LARGE_ARCHIVE_CAPACITY,
+        )]);
+        self.upgrade_archive_canisters(&self.master_wasms.archive, true, upgrade_args);
     }
 
     pub fn downgrade_to_mainnet(
@@ -353,7 +361,11 @@ impl Setup {
             }
         }
         self.check_ledger_metrics(ExpectMigration::No);
-        self.upgrade_archive_canisters(&self.mainnet_wasms.archive, archive_is_downgradable);
+        self.upgrade_archive_canisters(
+            &self.mainnet_wasms.archive,
+            archive_is_downgradable,
+            BTreeMap::new(),
+        );
     }
 
     pub fn perform_upgrade_downgrade_testing(
@@ -413,15 +425,41 @@ impl Setup {
         .expect("failed to decode archives response")
     }
 
+    fn get_remaining_capacity(&self, archive_canister_id: CanisterId) -> u64 {
+        let wasm_result = self
+            .state_machine
+            .execute_ingress(
+                archive_canister_id,
+                "remaining_capacity",
+                Encode!(&()).expect("should encode empty args"),
+            )
+            .unwrap();
+        match wasm_result {
+            WasmResult::Reply(bytes) => Decode!(&bytes, u64).expect("failed to decode usize"),
+            WasmResult::Reject(reason) => panic!("failed to query remaining_capacity: {reason}"),
+        }
+    }
+
     fn upgrade_archive(
         &self,
         archive_canister_id: CanisterId,
         wasm_bytes: Vec<u8>,
         archive_is_upgradable: bool,
+        upgrade_arg_max_capacity: Option<u64>,
     ) {
+        let (upgrade_arg, expect_large_capacity) =
+            if let Some(upgrade_arg_max_capacity) = upgrade_arg_max_capacity {
+                (
+                    Encode!(&upgrade_arg_max_capacity).expect("should encode archive upgrade args"),
+                    archive_is_upgradable,
+                )
+            } else {
+                (vec![], false)
+            };
+        let initial_capacity = self.get_remaining_capacity(archive_canister_id);
         match self
             .state_machine
-            .upgrade_canister(archive_canister_id, wasm_bytes, vec![])
+            .upgrade_canister(archive_canister_id, wasm_bytes, upgrade_arg)
         {
             Ok(_) => {
                 if !archive_is_upgradable {
@@ -437,15 +475,29 @@ impl Setup {
                 }
             }
         }
+        let final_capacity = self.get_remaining_capacity(archive_canister_id);
+        if expect_large_capacity {
+            // We increased the total capacity to 2 * LARGE_ARCHIVE_CAPACITY,
+            // so the remaining capacity should be larger than LARGE_ARCHIVE_CAPACITY.
+            assert!(final_capacity > LARGE_ARCHIVE_CAPACITY);
+        } else {
+            assert_eq!(initial_capacity, final_capacity);
+        }
     }
 
-    fn upgrade_archive_canisters(&self, wasm: &Wasm, archive_is_upgradable: bool) {
+    fn upgrade_archive_canisters(
+        &self,
+        wasm: &Wasm,
+        archive_is_upgradable: bool,
+        upgrade_arg: BTreeMap<CanisterId, u64>,
+    ) {
         let archives = self.list_archives().archives;
         for archive_info in &archives {
             self.upgrade_archive(
                 archive_info.canister_id,
                 wasm.clone().bytes(),
                 archive_is_upgradable,
+                upgrade_arg.get(&archive_info.canister_id).cloned(),
             );
         }
     }
