@@ -23,7 +23,7 @@ done
 
 # if we are on a protected branch or targeting a rc branch we set release build, ic_version to the commit_sha and
 # upload to s3
-if [[ "${IS_PROTECTED_BRANCH:-}" == "true" ]] || [[ "${CI_PULL_REQUEST_TARGET_BRANCH_NAME:-}" == "rc--"* ]]; then
+if [[ "${IS_PROTECTED_BRANCH:-}" == "true" ]]; then
     ic_version_rc_only="${CI_COMMIT_SHA}"
     s3_upload="True"
     release_build="true"
