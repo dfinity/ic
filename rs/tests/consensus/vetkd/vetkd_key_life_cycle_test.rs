@@ -18,7 +18,7 @@ use anyhow::Result;
 use canister_test::Canister;
 use ic_consensus_system_test_utils::node::await_node_certified_height;
 use ic_consensus_threshold_sig_system_test_utils::{
-    add_chain_keys_with_timeout_and_rotation_period, DKG_INTERVAL,
+    add_chain_keys_with_timeout_and_rotation_period, enable_chain_key_signing, DKG_INTERVAL,
 };
 use ic_management_canister_types_private::{MasterPublicKeyId, VetKdCurve, VetKdKeyId};
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
@@ -55,6 +55,16 @@ fn setup(env: TestEnv) {
             .nodes()
             .for_each(|node| node.await_status_is_healthy().unwrap())
     });
+
+    let nns_node = env
+        .topology_snapshot()
+        .root_subnet()
+        .nodes()
+        .next()
+        .unwrap();
+    NnsInstallationBuilder::new()
+        .install(&nns_node, &env)
+        .expect("Could not install NNS canisters.");
 }
 
 fn test(env: TestEnv) {
@@ -63,18 +73,13 @@ fn test(env: TestEnv) {
 
     let nns_subnet = topology_snapshot.root_subnet();
     let nns_node = nns_subnet.nodes().next().unwrap();
+    let nns_agent = nns_node.build_default_agent();
 
-    info!(log, "Installing nns canisters.");
-    NnsInstallationBuilder::new()
-        .install(&nns_node, &env)
-        .expect("Could not install NNS canisters.");
-
-    // TODO(CON-1420): Install message canister to fetch keys
     // TODO: Since installing these canisters takes some time, we should actually
     // take the hight at this moment as the base for the test and then wait relative to that.
 
     // Wait one DKG
-    await_node_certified_height(&nns_node, Height::from(DKG_INTERVAL + 1), log.clone());
+    // await_node_certified_height(&nns_node, Height::from(DKG_INTERVAL + 1), log.clone());
 
     let nns_runtime = runtime_from_url(nns_node.get_public_url(), nns_node.effective_canister_id());
     let governance = Canister::new(&nns_runtime, GOVERNANCE_CANISTER_ID);
@@ -84,16 +89,18 @@ fn test(env: TestEnv) {
     })];
 
     block_on(async {
-        //enable_chain_key_signing(&governance, nns_subnet.subnet_id, key_ids.clone(), &log).await;
-        add_chain_keys_with_timeout_and_rotation_period(
-            &governance,
-            nns_subnet.subnet_id,
-            key_ids.clone(),
-            None,
-            None,
-            &log,
-        )
-        .await;
+        enable_chain_key_signing(&governance, nns_subnet.subnet_id, key_ids.clone(), &log).await;
+        // add_chain_keys_with_timeout_and_rotation_period(
+        //     &governance,
+        //     nns_subnet.subnet_id,
+        //     key_ids.clone(),
+        //     None,
+        //     None,
+        //     &log,
+        // )
+        // .await;
+
+        let msg_can = MessageCanister::new(&nns_agent, nns_node.effective_canister_id()).await;
     });
 
     // Wait two DKGs
