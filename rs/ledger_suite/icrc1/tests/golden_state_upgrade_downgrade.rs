@@ -966,7 +966,6 @@ fn should_upgrade_icrc_sns_canisters_with_golden_state() {
         SONIC_LEDGER_SUITE,
         TRAX_LEDGER_SUITE,
         WATERNEURON_LEDGER_SUITE,
-        DOLR_AI_LEDGER_SUITE,
         YUKU_LEDGER_SUITE,
     ] {
         canister_configs.push(LedgerSuiteConfig::new(
