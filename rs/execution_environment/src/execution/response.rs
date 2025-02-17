@@ -29,11 +29,10 @@ use ic_utils_thread::deallocator_thread::DeallocationSender;
 use ic_wasm_types::WasmEngineError::FailedToApplySystemChanges;
 
 use crate::execution::common::{
-    self, action_to_response, apply_canister_state_changes, update_round_limits,
+    self, action_to_response, apply_canister_state_changes, log_dirty_pages, update_round_limits,
 };
 use crate::execution_environment::{
-    log_dirty_pages, ExecuteMessageResult, ExecutionResponse, PausedExecution, RoundContext,
-    RoundLimits,
+    ExecuteMessageResult, ExecutionResponse, PausedExecution, RoundContext, RoundLimits,
 };
 use crate::metrics::CallTreeMetrics;
 use ic_config::flag_status::FlagStatus;

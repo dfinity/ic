@@ -8,23 +8,20 @@ name: System Tests K8s
 
 on:
   schedule:
-    - cron: "0 1 * * *" # Run at 1 AM
-    - cron: "0 3 * * *" # Run at 3 AM
-    - cron: "0 5 * * *" # Run at 5 AM
-    - cron: "0 7 * * *" # Run at 7 AM
+    - cron: "0 * * * *"
   pull_request:
     paths:
-      - '.github/workflows/system-tests-k8s.yml'
+      - ".github/workflows/system-tests-k8s.yml"
   workflow_dispatch:
     inputs:
       targets:
-        description: 'System Tests / Bazel Targets'
+        description: "System Tests / Bazel Targets"
         required: false
-        default: '//rs/tests/nns:node_removal_from_registry_test'
+        default: "//rs/tests/nns:node_removal_from_registry_test"
       jobs:
-        description: 'Concurrent Bazel Test Jobs'
+        description: "Concurrent Bazel Test Jobs"
         required: false
-        default: '10'
+        default: "10"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -114,8 +111,9 @@ jobs:
         --privileged --cgroupns host
         -v /cache:/cache -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp
     timeout-minutes: 150
-    # always run after 'system-tests-k8s' job only on manual dispatch and schedule
-    if: ${{ always() && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') }}
+    #if: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' }}
+    # Disabling until we have data confirming stability of non-hourly system tests
+    if: ${{ false }}
     needs: [system-tests-k8s]
     steps:
       - name: Checkout
