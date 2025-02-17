@@ -3,11 +3,11 @@
 
 use crate::execution::common::{
     action_to_response, apply_canister_state_changes, finish_call_with_error,
-    ingress_status_with_processing_state, update_round_limits, validate_message,
+    ingress_status_with_processing_state, log_dirty_pages, update_round_limits, validate_message,
     wasm_result_to_query_response,
 };
 use crate::execution_environment::{
-    log_dirty_pages, ExecuteMessageResult, PausedExecution, RoundContext, RoundLimits,
+    ExecuteMessageResult, PausedExecution, RoundContext, RoundLimits,
 };
 use crate::metrics::CallTreeMetrics;
 use ic_base_types::CanisterId;

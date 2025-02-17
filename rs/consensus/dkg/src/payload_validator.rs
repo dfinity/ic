@@ -1,4 +1,4 @@
-use crate::{payload_builder, utils, PayloadCreationError};
+use crate::{crypto_validate_dealing, payload_builder, utils, PayloadCreationError};
 use ic_consensus_utils::{crypto::ConsensusCrypto, pool_reader::PoolReader};
 use ic_interfaces::{
     dkg::DkgPool,
@@ -278,17 +278,8 @@ fn validate_dealings_payload(
             return Err(InvalidDkgPayloadReason::MissingDkgConfigForDealing.into());
         };
 
-        let dealer_id = message.signature.signer;
-        // If the dealer is not in the set of dealers, reject.
-        if !config.dealers().get().contains(&dealer_id) {
-            return Err(InvalidDkgPayloadReason::InvalidDealer(dealer_id).into());
-        }
-
-        // Verify the signature.
-        crypto.verify(message, config.registry_version())?;
-
-        // Verify the dealing.
-        crypto.verify_dealing(config, message.signature.signer, &message.content.dealing)?;
+        // Verify the signature and dealing.
+        crypto_validate_dealing(crypto, config, message)?;
     }
 
     Ok(())
