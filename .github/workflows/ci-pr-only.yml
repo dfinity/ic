@@ -54,6 +54,8 @@ jobs:
       options: >-
         -e NODE_NAME
     if: ${{ github.event_name != 'merge_group' }}
+    permissions:
+      pull-requests: write
     env:
       CI_EVENT_NAME: ${{ github.event_name }}
     steps:
@@ -86,8 +88,6 @@ jobs:
         id: lock-generate
         if: steps.filter.outputs.lock-generate == 'true'
         run: ./ci/scripts/lock-generate.sh
-        permissions:
-          pull-requests: write
   dependencies-check:
     name: Dependency Scan for PR
     runs-on:
