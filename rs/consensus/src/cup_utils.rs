@@ -161,13 +161,16 @@ pub fn make_registry_cup(
     subnet_id: SubnetId,
     logger: &ReplicaLogger,
 ) -> Option<CatchUpPackage> {
-    let Ok(versioned_record) = registry.get_cup_contents(subnet_id, registry.get_latest_version())
-    else {
-        warn!(
-            logger,
-            "Failed to retrieve registry CUP contents from the registry {:?}", e,
-        );
-        return None;
+    let versioned_record = match registry.get_cup_contents(subnet_id, registry.get_latest_version())
+    {
+        Ok(versioned_record) => versioned_record,
+        Err(e) => {
+            warn!(
+                logger,
+                "Failed to retrieve versioned record from the registry {:?}", e,
+            );
+            return None;
+        }
     };
 
     let Some(cup_contents) = versioned_record.value else {
