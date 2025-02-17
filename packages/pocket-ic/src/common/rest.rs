@@ -310,7 +310,9 @@ impl From<RawCanisterId> for Principal {
     }
 }
 
-#[derive(Clone, Serialize, Deserialize, Debug, JsonSchema, PartialEq, Eq, Hash)]
+#[derive(
+    Clone, Serialize, Deserialize, Debug, JsonSchema, PartialEq, Eq, Hash, Ord, PartialOrd,
+)]
 pub struct RawSubnetId {
     #[serde(deserialize_with = "base64::deserialize")]
     #[serde(serialize_with = "base64::serialize")]

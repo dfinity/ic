@@ -10888,6 +10888,7 @@ dependencies = [
  "ic-nns-governance-init",
  "ic-nns-gtc",
  "ic-nns-handler-root",
+ "ic-nns-init",
  "ic-nns-test-utils",
  "ic-nns-test-utils-golden-nns-state",
  "ic-nns-test-utils-macros",
@@ -10926,6 +10927,7 @@ dependencies = [
  "serde_bytes",
  "serde_cbor",
  "strum",
+ "tempfile",
  "tokio",
  "wat",
  "xrc-mock",
@@ -16527,6 +16529,26 @@ name = "no-std-compat"
 version = "0.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b93853da6d84c2e3c7d730d6473e8817692dd89be387eb01b94d7f108ecb5b8c"
+
+[[package]]
+name = "node-metrics-collector-canister"
+version = "0.9.0"
+dependencies = [
+ "anyhow",
+ "build-info-build",
+ "candid",
+ "futures",
+ "ic-base-types",
+ "ic-cdk 0.16.0",
+ "ic-cdk-macros 0.9.0",
+ "ic-cdk-timers",
+ "ic-management-canister-types",
+ "ic-nns-common",
+ "ic-protobuf",
+ "ic-registry-keys",
+ "ic-stable-structures",
+ "serde",
+]
 
 [[package]]
 name = "node-system-tests"
