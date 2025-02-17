@@ -19,6 +19,7 @@ use ic_types::{
 use std::collections::{BTreeMap, HashSet};
 
 // TODO: Document
+#[allow(clippy::type_complexity)]
 pub fn get_vetkey_public_keys(
     block: &Block,
     pool: &PoolReader<'_>,
