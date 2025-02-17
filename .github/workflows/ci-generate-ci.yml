@@ -12,6 +12,9 @@ on:
 env:
   CI_PROJECT_DIR: ${{ github.workspace }}
 
+permissions:
+  pull-request: write
+
 jobs:
   generate-ci:
     name: Generate CI
@@ -42,8 +45,6 @@ jobs:
           python-version: "3.12"
       - name: Run Generate CI
         id: generate-ci
-        permissions:
-          pull-request: write
         run: |
           python $CI_PROJECT_DIR/.github/scripts/generate-ci.py
 
