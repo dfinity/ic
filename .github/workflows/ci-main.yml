@@ -18,6 +18,7 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
   cancel-in-progress: true
 permissions:
+  contents: read
   pull-requests: read
 env:
   CI_COMMIT_SHA: ${{ github.sha }}
