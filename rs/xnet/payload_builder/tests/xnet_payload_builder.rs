@@ -259,6 +259,20 @@ fn out_stream(in_stream: &Stream, messages_begin: StreamIndex) -> Stream {
 }
 
 proptest! {
+    #![proptest_config(ProptestConfig::with_cases(10))]
+
+    /// Bla.
+    #[test]
+    fn get_xnet_payload_respects_signal_limit(
+        (stream, from, msg_count) in arb_stream_slice(MAX_STREAM_MESSAGES / 2, 3 * MAX_STREAM_MESSAGES / 2, 0, 0),
+    ) {
+        with_test_replica_logger(|log| {
+
+        }
+    }
+}
+
+proptest! {
     /// Tests payload building with various alignments of expected indices to
     /// slice: just before the pooled slice, within the pooled slice, just
     /// after the pooled slice.
