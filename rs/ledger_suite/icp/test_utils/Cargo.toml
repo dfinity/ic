@@ -15,6 +15,7 @@ ic-icp-index = { path = "../index" }
 ic-ledger-core = { path = "../../common/ledger_core" }
 ic-nns-constants = { path = "../../../nns/constants" }
 ic-state-machine-tests = { path = "../../../state_machine_tests" }
+ic-management-canister-types = { workspace = true }
 icp-ledger = { path = ".." }
 icrc-ledger-types = { path = "../../../../packages/icrc-ledger-types" }
 on_wire = { path = "../../../rust_canisters/on_wire" }

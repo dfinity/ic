@@ -9796,6 +9796,7 @@ dependencies = [
  "ic-base-types",
  "ic-icp-index",
  "ic-ledger-core",
+ "ic-management-canister-types",
  "ic-nns-constants",
  "ic-state-machine-tests",
  "icp-ledger",
@@ -9874,6 +9875,17 @@ dependencies = [
  "strum_macros",
  "tempfile",
  "tokio",
+]
+
+[[package]]
+name = "ic-management-canister-types"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "eadff40906491c8c61a3c886cce4ee02f48a4798684d8a10e4a14891a217a284"
+dependencies = [
+ "candid",
+ "serde",
+ "serde_bytes",
 ]
 
 [[package]]
@@ -10041,6 +10053,7 @@ dependencies = [
  "cycles-minting-canister",
  "ic-agent",
  "ic-base-types",
+ "ic-management-canister-types",
  "ic-nervous-system-clients",
  "ic-nns-common",
  "ic-nns-constants",
@@ -10281,6 +10294,7 @@ dependencies = [
  "ic-icrc1-tokens-u64",
  "ic-interfaces-registry",
  "ic-ledger-core",
+ "ic-management-canister-types",
  "ic-management-canister-types-private",
  "ic-nervous-system-agent",
  "ic-nervous-system-clients",
@@ -10956,6 +10970,7 @@ dependencies = [
  "ic-crypto-test-utils-ni-dkg",
  "ic-crypto-test-utils-reproducible-rng",
  "ic-crypto-utils-ni-dkg",
+ "ic-icp-index",
  "ic-icrc1",
  "ic-management-canister-types-private",
  "ic-nervous-system-clients",
@@ -11968,6 +11983,7 @@ dependencies = [
  "ic-ledger-hash-of",
  "ic-ledger-test-utils",
  "ic-limits",
+ "ic-management-canister-types",
  "ic-nns-common",
  "ic-nns-constants",
  "ic-nns-governance-api",
@@ -12597,6 +12613,31 @@ dependencies = [
  "num-traits",
  "on_wire",
  "prost 0.13.5",
+ "tokio",
+]
+
+[[package]]
+name = "ic-sns-testing"
+version = "0.9.0"
+dependencies = [
+ "candid",
+ "canister-test",
+ "clap 4.5.29",
+ "futures",
+ "ic-base-types",
+ "ic-cdk 0.17.1",
+ "ic-management-canister-types",
+ "ic-management-canister-types-private",
+ "ic-nervous-system-agent",
+ "ic-nervous-system-integration-tests",
+ "ic-nns-common",
+ "ic-nns-constants",
+ "ic-nns-test-utils",
+ "ic-sns-governance-api",
+ "ic-sns-swap",
+ "pocket-ic",
+ "reqwest 0.12.12",
+ "serde",
  "tokio",
 ]
 
@@ -17747,6 +17788,7 @@ dependencies = [
  "ic-cdk 0.17.1",
  "ic-certification 3.0.3",
  "ic-error-types",
+ "ic-management-canister-types",
  "ic-transport-types",
  "k256 0.13.4",
  "lazy_static",
@@ -18769,6 +18811,7 @@ dependencies = [
  "canister-test",
  "ic-base-types",
  "ic-crypto-sha2",
+ "ic-management-canister-types",
  "ic-nervous-system-integration-tests",
  "ic-nns-constants",
  "ic-nns-test-utils",

@@ -10,6 +10,7 @@ DEPENDENCIES = [
     "//rs/types/base_types",
     "@crate_index//:assert_matches",
     "@crate_index//:candid",
+    "@crate_index//:ic-management-canister-types",
     "@crate_index//:serde",
     "@crate_index//:tokio",
 ] + select({

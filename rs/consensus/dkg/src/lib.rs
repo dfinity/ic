@@ -42,7 +42,7 @@ mod utils;
 
 pub use {
     dkg_key_manager::DkgKeyManager,
-    payload_builder::{create_payload, make_genesis_summary, PayloadCreationError},
+    payload_builder::{create_payload, get_dkg_summary_from_cup_contents, PayloadCreationError},
 };
 
 // The maximal number of DKGs for other subnets we want to run in one interval.
