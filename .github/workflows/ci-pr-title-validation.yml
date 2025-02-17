@@ -7,6 +7,9 @@ on:
 # Copied & adapted (job name, version label) from
 # https://github.com/ytanikin/pr-conventional-commits?tab=readme-ov-file#usage-with-labeling-where-label-is-just-a-task-type
 
+permssions:
+  pull-requests: read
+
 jobs:
   validate-pr-title:
     name: PR Conventional Commit Validation
