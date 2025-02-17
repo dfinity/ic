@@ -1,9 +1,9 @@
+use crate::MAX_SIGNALS;
 use assert_matches::assert_matches;
 use ic_canonical_state::LabelLike;
 use ic_crypto_tree_hash::{flat_map::FlatMap, Label, LabeledTree};
 use ic_interfaces_certified_stream_store::DecodeStreamError;
 use ic_interfaces_certified_stream_store_mocks::MockCertifiedStreamStore;
-use ic_messaging::MAX_STREAM_MESSAGES;
 use ic_metrics::MetricsRegistry;
 use ic_protobuf::{messaging::xnet::v1, proxy::ProtoProxy};
 use ic_test_utilities_logger::with_test_replica_logger;
@@ -1127,7 +1127,7 @@ proptest! {
     // It is therefore using a reduced number of cases to keep the load within reasonable bounds.
     #[test]
     fn pool_take_slice_respects_signal_limit(
-        (stream, from, msg_count) in arb_stream_slice(MAX_STREAM_MESSAGES, 2 * MAX_STREAM_MESSAGES, 0, 0),
+        (stream, from, msg_count) in arb_stream_slice(MAX_SIGNALS, 2 * MAX_SIGNALS, 0, 0),
     ) {
         with_test_replica_logger(|log| {
             // Stream position matching slice begin.

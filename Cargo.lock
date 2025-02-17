@@ -14033,7 +14033,6 @@ dependencies = [
  "ic-interfaces-state-manager-mocks",
  "ic-limits",
  "ic-logger",
- "ic-messaging",
  "ic-metrics",
  "ic-protobuf",
  "ic-registry-client-fake",

@@ -12,6 +12,7 @@ http-body-util = { workspace = true }
 hyper = { workspace = true }
 hyper-util = { workspace = true }
 ic-base-types = { path = "../../types/base_types" }
+ic-config = { path = "../../config" }
 ic-canonical-state = { path = "../../canonical_state" }
 ic-limits = { path = "../../limits" }
 ic-crypto-tls-interfaces = { path = "../../crypto/tls_interfaces" }
@@ -21,7 +22,6 @@ ic-interfaces-certified-stream-store = { path = "../../interfaces/certified_stre
 ic-interfaces-registry = { path = "../../interfaces/registry" }
 ic-interfaces-state-manager = { path = "../../interfaces/state_manager" }
 ic-logger = { path = "../../monitoring/logger" }
-ic-messaging = { path = "../../messaging" }
 ic-metrics = { path = "../../monitoring/metrics" }
 ic-protobuf = { path = "../../protobuf" }
 ic-registry-client-helpers = { path = "../../registry/helpers" }
@@ -40,7 +40,6 @@ tokio = { workspace = true }
 [dev-dependencies]
 assert_matches = { workspace = true }
 axum = { workspace = true }
-ic-config = { path = "../../config" }
 ic-crypto-tls-interfaces-mocks = { path = "../../crypto/tls_interfaces/mocks" }
 ic-interfaces-certified-stream-store-mocks = { path = "../../interfaces/certified_stream_store/mocks" }
 ic-interfaces-state-manager-mocks = { path = "../../interfaces/state_manager/mocks" }

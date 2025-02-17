@@ -908,8 +908,8 @@ pub struct StateMachineBuilder {
     subnet_size: usize,
     nns_subnet_id: Option<SubnetId>,
     subnet_id: Option<SubnetId>,
-    max_stream_messages: Option<usize>,
-    target_stream_size_bytes: Option<usize>,
+    max_stream_messages: usize,
+    target_stream_size_bytes: usize,
     routing_table: RoutingTable,
     chain_keys_enabled_status: BTreeMap<MasterPublicKeyId, bool>,
     ecdsa_signature_fee: Option<Cycles>,
@@ -940,8 +940,8 @@ impl StateMachineBuilder {
             subnet_size: SMALL_APP_SUBNET_MAX_SIZE,
             nns_subnet_id: None,
             subnet_id: None,
-            max_stream_messages: None,
-            target_stream_size_bytes: None,
+            max_stream_messages: MAX_STREAM_MESSAGES,
+            target_stream_size_bytes: TARGET_STREAM_SIZE_BYTES,
             routing_table: RoutingTable::new(),
             chain_keys_enabled_status: Default::default(),
             ecdsa_signature_fee: None,
@@ -1055,14 +1055,14 @@ impl StateMachineBuilder {
 
     pub fn with_max_stream_messages(self, max_stream_messages: usize) -> Self {
         Self {
-            max_stream_messages: Some(max_stream_messages),
+            max_stream_messages,
             ..self
         }
     }
 
     pub fn with_target_stream_size_bytes(self, target_stream_size_bytes: usize) -> Self {
         Self {
-            target_stream_size_bytes: Some(target_stream_size_bytes),
+            target_stream_size_bytes,
             ..self
         }
     }
@@ -1500,8 +1500,8 @@ impl StateMachine {
         subnet_type: SubnetType,
         subnet_size: usize,
         subnet_id: Option<SubnetId>,
-        max_stream_messages: Option<usize>,
-        target_stream_size_bytes: Option<usize>,
+        max_stream_messages: usize,
+        target_stream_size_bytes: usize,
         chain_keys_enabled_status: BTreeMap<MasterPublicKeyId, bool>,
         ecdsa_signature_fee: Option<Cycles>,
         schnorr_signature_fee: Option<Cycles>,
@@ -1549,8 +1549,6 @@ impl StateMachine {
         let public_key_der = threshold_sig_public_key_to_der(public_key).unwrap();
         let subnet_id =
             subnet_id.unwrap_or(PrincipalId::new_self_authenticating(&public_key_der).into());
-        let max_stream_messages = max_stream_messages.unwrap_or(MAX_STREAM_MESSAGES);
-        let target_stream_size_bytes = target_stream_size_bytes.unwrap_or(TARGET_STREAM_SIZE_BYTES);
         let registry_client = make_nodes_registry(
             subnet_id,
             subnet_type,

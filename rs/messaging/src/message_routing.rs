@@ -4,6 +4,7 @@ use crate::{
 };
 use ic_config::embedders::BestEffortResponsesFeature;
 use ic_config::execution_environment::{BitcoinConfig, Config as HypervisorConfig};
+use ic_config::message_routing::{MAX_STREAM_MESSAGES, TARGET_STREAM_SIZE_BYTES};
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_interfaces::{crypto::ErrorReproducibility, execution_environment::ChainKeySettings};
 use ic_interfaces::{
@@ -116,18 +117,6 @@ const CRITICAL_ERROR_NO_CANISTER_ALLOCATION_RANGE: &str = "mr_empty_canister_all
 const CRITICAL_ERROR_FAILED_TO_READ_REGISTRY: &str = "mr_failed_to_read_registry_error";
 pub const CRITICAL_ERROR_NON_INCREASING_BATCH_TIME: &str = "mr_non_increasing_batch_time";
 pub const CRITICAL_ERROR_INDUCT_RESPONSE_FAILED: &str = "mr_induct_response_failed";
-
-/// Desired byte size of an outgoing stream.
-///
-/// At most `MAX_STREAM_MESSAGES` are enqueued into a stream; but only until its
-/// `count_bytes()` is greater than or equal to `TARGET_STREAM_SIZE_BYTES`.
-pub const TARGET_STREAM_SIZE_BYTES: usize = 10 * 1024 * 1024;
-
-/// Maximum number of messages in a stream.
-///
-/// At most `MAX_STREAM_MESSAGES` are enqueued into a stream; but only until its
-/// `count_bytes()` is greater than or equal to `TARGET_STREAM_SIZE_BYTES`.
-pub const MAX_STREAM_MESSAGES: usize = 10_000;
 
 /// Records the timestamp when all messages before the given index (down to the
 /// previous `MessageTime`) were first added to / learned about in a stream.
