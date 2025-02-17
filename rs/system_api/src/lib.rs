@@ -3663,7 +3663,10 @@ impl SystemApi for SystemApiImpl {
         let cost = self
             .sandbox_safe_system_state
             .get_cycles_account_manager()
-            .xnet_call_total_fee((method_name_size + payload_size).into(), execution_mode);
+            .xnet_call_total_fee(
+                (method_name_size.saturating_add(payload_size)).into(),
+                execution_mode,
+            );
         copy_cycles_to_heap(cost, dst, heap, "ic0_cost_call")?;
         trace_syscall!(self, CostCall, cost);
         Ok(())
