@@ -126,6 +126,39 @@ system_test_nns(
 )
 
 system_test_nns(
+    name = "salt_sharing_canister_test",
+    env = {
+        "SALT_SHARING_CANISTER_WASM_PATH": "$(rootpath //rs/boundary_node/salt_sharing:salt_sharing_canister)",
+    },
+    proc_macro_deps = [],
+    tags = [
+        "k8s",
+    ],
+    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
+    runtime_deps = GUESTOS_RUNTIME_DEPS + [
+        "//rs/boundary_node/salt_sharing:salt_sharing_canister",
+    ],
+    deps = [
+        # Keep sorted.
+        "//rs/boundary_node/salt_sharing/api:salt_sharing_api",
+        "//rs/nns/constants",
+        "//rs/nns/test_utils",
+        "//rs/registry/subnet_type",
+        "//rs/rust_canisters/canister_test",
+        "//rs/tests/boundary_nodes/utils",
+        "//rs/tests/driver:ic-system-test-driver",
+        "//rs/types/base_types",
+        "//rs/types/types",
+        "@crate_index//:anyhow",
+        "@crate_index//:candid",
+        "@crate_index//:ic-agent",
+        "@crate_index//:slog",
+        "@crate_index//:tokio",
+        "@crate_index//:wat",
+    ],
+)
+
+system_test_nns(
     name = "rate_limit_canister_test",
     env = {
         "RATE_LIMIT_CANISTER_WASM_PATH": "$(rootpath //rs/boundary_node/rate_limits:rate_limit_canister)",
