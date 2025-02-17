@@ -42,17 +42,13 @@ use ic_metrics::{buckets::decimal_buckets, MetricsRegistry};
 use ic_protobuf::proxy::{ProtoProxy, ProxyDecodeError};
 use ic_protobuf::{messaging::xnet::v1, state::v1 as pb};
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::{
-    canister_snapshots::SnapshotOperation, page_map::PageAllocatorFileDescriptor,
-};
+use ic_replicated_state::page_map::PageAllocatorFileDescriptor;
 use ic_replicated_state::{
     canister_state::execution_state::SandboxMemory,
     page_map::{PersistenceError, StorageMetrics},
-    PageIndex, PageMap, ReplicatedState,
+    PageMap, ReplicatedState,
 };
-use ic_state_layout::{
-    error::LayoutError, AccessPolicy, CheckpointLayout, PageMapLayout, ReadOnly, StateLayout,
-};
+use ic_state_layout::{error::LayoutError, CheckpointLayout, ReadOnly, StateLayout};
 use ic_types::{
     batch::BatchSummary,
     consensus::certification::Certification,
@@ -60,8 +56,7 @@ use ic_types::{
     malicious_flags::MaliciousFlags,
     state_sync::CURRENT_STATE_SYNC_VERSION,
     xnet::{CertifiedStreamSlice, StreamIndex, StreamSlice},
-    CanisterId, CryptoHashOfPartialState, CryptoHashOfState, Height, RegistryVersion, SnapshotId,
-    SubnetId,
+    CryptoHashOfPartialState, CryptoHashOfState, Height, RegistryVersion, SubnetId,
 };
 use ic_utils_thread::{deallocator_thread::DeallocatorThread, JoinOnDrop};
 use prometheus::{Histogram, HistogramVec, IntCounter, IntCounterVec, IntGauge, IntGaugeVec};
@@ -195,7 +190,6 @@ pub struct CheckpointMetrics {
     load_checkpoint_soft_invariant_broken: IntCounter,
     replicated_state_altered_after_checkpoint: IntCounter,
     tip_handler_request_duration: HistogramVec,
-    page_map_flushes: IntCounter,
     num_page_maps_by_load_status: IntGaugeVec,
     log: ReplicaLogger,
 }
@@ -239,10 +233,6 @@ impl CheckpointMetrics {
             &["request"],
         );
 
-        let page_map_flushes = metrics_registry.int_counter(
-            "state_manager_page_map_flushes",
-            "Amount of sent FlushPageMap requests.",
-        );
         let num_page_maps_by_load_status = metrics_registry.int_gauge_vec(
             "state_manager_num_page_maps_by_load_status",
             "How many PageMaps are loaded or not at the end of checkpoint interval.",
@@ -255,7 +245,6 @@ impl CheckpointMetrics {
             load_checkpoint_soft_invariant_broken,
             replicated_state_altered_after_checkpoint,
             tip_handler_request_duration,
-            page_map_flushes,
             num_page_maps_by_load_status,
             log: replica_logger,
         }
@@ -1865,21 +1854,6 @@ impl StateManagerImpl {
         }
     }
 
-    /// Flushes to disk all the canister heap deltas accumulated in memory
-    /// during execution from the last flush.
-    fn flush_canister_snapshots_and_page_maps(
-        &self,
-        tip_state: &mut ReplicatedState,
-        height: Height,
-    ) {
-        flush_canister_snapshots_and_page_maps(
-            tip_state,
-            height,
-            &self.tip_channel,
-            &self.metrics.checkpoint_metrics,
-        );
-    }
-
     fn find_checkpoint_by_root_hash(
         &self,
         root_hash: &CryptoHashOfState,
@@ -3097,7 +3071,6 @@ impl StateManager for StateManagerImpl {
 
         let state = match scope {
             CertificationScope::Full => {
-                self.flush_canister_snapshots_and_page_maps(&mut state, height);
                 let CreateCheckpointResult {
                     state,
                     state_metadata,
@@ -3122,7 +3095,11 @@ impl StateManager for StateManagerImpl {
                         .saturating_sub(height.get())
                         == NUM_ROUNDS_BEFORE_CHECKPOINT_TO_WRITE_OVERLAY
                     {
-                        self.flush_canister_snapshots_and_page_maps(&mut state, height);
+                        flush_canister_snapshots_and_page_maps(
+                            &mut state,
+                            height,
+                            &self.tip_channel,
+                        );
                     }
                 }
 

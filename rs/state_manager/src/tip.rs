@@ -216,7 +216,7 @@ pub(crate) fn spawn_tip_thread(
                             snapshot_operations,
                         } => {
                             let _timer = request_timer(&metrics, "flush_unflushed_delta");
-                            debug_assert!(tip_state.tip_folder_state.page_maps_height < height);
+                            debug_assert!(tip_state.tip_folder_state.page_maps_height <= height);
                             tip_state.tip_folder_state.page_maps_height = height;
                             let layout = &tip_handler.tip(height).unwrap_or_else(|err| {
                                 fatal!(

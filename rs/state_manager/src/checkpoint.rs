@@ -61,6 +61,13 @@ pub(crate) fn make_unvalidated_checkpoint(
     {
         let _timer = metrics
             .make_checkpoint_step_duration
+            .with_label_values(&["flush_page_map_deltas"])
+            .start_timer();
+        flush_canister_snapshots_and_page_maps(state, height, tip_channel);
+    }
+    {
+        let _timer = metrics
+            .make_checkpoint_step_duration
             .with_label_values(&["strip_page_map_deltas"])
             .start_timer();
         strip_page_map_deltas(state, fd_factory);
@@ -339,13 +346,11 @@ fn strip_page_map_deltas(
 
 /// Flushes to disk all the canister heap deltas accumulated in memory
 /// during execution from the last flush.
-pub fn flush_canister_snapshots_and_page_maps(
+pub(crate) fn flush_canister_snapshots_and_page_maps(
     tip_state: &mut ReplicatedState,
     height: Height,
     tip_channel: &Sender<TipRequest>,
-    metrics: &CheckpointMetrics,
 ) {
-    metrics.page_map_flushes.inc();
     let mut pagemaps = Vec::new();
 
     let mut add_to_pagemaps_and_strip = |entry, page_map: &mut PageMap| {

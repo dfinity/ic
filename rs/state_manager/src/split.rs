@@ -202,12 +202,7 @@ fn write_checkpoint(
     let new_height = old_height.increment();
 
     // We need to flush to handle the deletion of canister snapshots.
-    flush_canister_snapshots_and_page_maps(
-        state,
-        new_height,
-        &tip_channel,
-        &metrics.checkpoint_metrics,
-    );
+    flush_canister_snapshots_and_page_maps(state, new_height, &tip_channel);
 
     let (cp_layout, _has_downgrade) = make_unvalidated_checkpoint(
         state,
