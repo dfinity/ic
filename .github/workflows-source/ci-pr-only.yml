@@ -101,6 +101,8 @@ jobs:
         id: lock-generate
         if: steps.filter.outputs.lock-generate == 'true'
         run: ./ci/scripts/lock-generate.sh
+        permissions:
+          pull-request: write
 
   dependencies-check:
     name: Dependency Scan for PR
