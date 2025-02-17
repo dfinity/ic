@@ -3,7 +3,7 @@ use cycles_minting::{make_user_ed25519, TestAgent, UserHandle};
 use cycles_minting_canister::{SubnetFilter, SubnetSelection, CREATE_CANISTER_REFUND_FEE};
 use dfn_candid::candid_one;
 use ic_canister_client::{HttpClient, Sender};
-use ic_management_canister_types::{CanisterIdRecord, CanisterStatusResultV2};
+use ic_management_canister_types_private::{CanisterIdRecord, CanisterStatusResultV2};
 use ic_nervous_system_common_test_keys::{TEST_USER1_KEYPAIR, TEST_USER1_PRINCIPAL};
 use ic_nns_constants::{CYCLES_MINTING_CANISTER_ID, LEDGER_CANISTER_ID};
 use ic_registry_subnet_type::SubnetType;

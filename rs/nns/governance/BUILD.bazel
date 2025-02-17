@@ -41,7 +41,7 @@ filegroup(
 # See rs/nervous_system/feature_test.md
 DEPENDENCIES = [
     # Keep sorted.
-    "//rs/crypto/getrandom_for_wasm",
+    "//packages/ic-dummy-getrandom-for-wasm",
     "//rs/crypto/sha2",
     "//rs/ledger_suite/common/ledger_core",
     "//rs/ledger_suite/icp:icp_ledger",
@@ -219,6 +219,7 @@ rust_canbench(
     name = "governance-canbench",
     srcs = ["canbench/main.rs"],
     add_test = True,
+    noise_threshold = 5.0,
     # For some reason, the NNS Governance benchmarks are sensitive to the optimization level.
     # We would like to figure out why and fix it, but for now, we are reducing the optimization
     # level so that tests against the optimization level can be added.

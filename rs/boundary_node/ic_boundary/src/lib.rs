@@ -12,6 +12,7 @@ mod persist;
 mod rate_limiting;
 mod retry;
 mod routes;
+mod salt_fetcher;
 mod snapshot;
 #[cfg(any(test, feature = "bench"))]
 pub mod test_utils;

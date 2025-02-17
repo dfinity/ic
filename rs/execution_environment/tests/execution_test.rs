@@ -3,10 +3,11 @@ use candid::Encode;
 use canister_test::CanisterInstallMode;
 use ic_base_types::PrincipalId;
 use ic_config::{
+    embedders::BestEffortResponsesFeature,
     execution_environment::{Config as HypervisorConfig, DEFAULT_WASM_MEMORY_LIMIT},
     subnet_config::{CyclesAccountManagerConfig, SubnetConfig},
 };
-use ic_management_canister_types::{
+use ic_management_canister_types_private::{
     CanisterIdRecord, CanisterSettingsArgs, CanisterSettingsArgsBuilder, CanisterStatusResultV2,
     CreateCanisterArgs, DerivationPath, EcdsaKeyId, EmptyBlob, MasterPublicKeyId, Method, Payload,
     SignWithECDSAArgs, TakeCanisterSnapshotArgs, UpdateSettingsArgs, IC_00,
@@ -27,6 +28,8 @@ use std::{convert::TryInto, str::FromStr, sync::Arc, time::Duration};
 
 /// One megabyte for better readability.
 const MIB: u64 = 1024 * 1024;
+/// One gigabyte for better readability.
+const GIB: u64 = 1024 * MIB;
 
 /// One billion for better cycles readability.
 const B: u128 = 1e9 as u128;
@@ -1375,7 +1378,7 @@ fn max_canister_memory_size_is_different_between_wasm32_vs_wasm64() {
             r#"
             (module
                 (import "ic0" "msg_reply" (func $msg_reply))
-                {}    
+                {}
                 (func $update
                     {}
                     {}
@@ -2182,8 +2185,7 @@ fn helper_best_effort_responses(
 ) {
     let subnet_config = SubnetConfig::new(SubnetType::Application);
     let mut embedders_config = ic_config::embedders::Config::default();
-    embedders_config.feature_flags.best_effort_responses =
-        ic_config::flag_status::FlagStatus::Enabled;
+    embedders_config.feature_flags.best_effort_responses = BestEffortResponsesFeature::Enabled;
 
     let env = StateMachineBuilder::new()
         .with_time(Time::from_secs_since_unix_epoch(start_time_seconds as u64).unwrap())
@@ -2892,4 +2894,81 @@ fn no_critical_error_on_empty_data_segment() {
         ErrorCode::CanisterInvalidWasm,
         "Wasm module has invalid data segment of 0 bytes at 1.",
     );
+}
+
+#[test]
+fn failed_stable_memory_grow_cost_and_time_single_canister() {
+    let num_wasm_pages = 116 * GIB / WASM_PAGE_SIZE_IN_BYTES;
+
+    let env = StateMachineBuilder::new()
+        .with_subnet_type(SubnetType::Application)
+        .build();
+
+    let canister_id = create_universal_canister_with_cycles(&env, None, INITIAL_CYCLES_BALANCE);
+
+    let timer = std::time::Instant::now();
+    let initial_balance = env.cycle_balance(canister_id);
+    let _res = env.execute_ingress(
+        canister_id,
+        "update",
+        wasm()
+            .stable64_grow(num_wasm_pages)
+            .stable64_write(0, &[42])
+            .trap()
+            .build(),
+    );
+    let elapsed_ms = timer.elapsed().as_millis();
+    let cycles_m = (initial_balance - env.cycle_balance(canister_id)) / 1000 / 1000;
+    assert!(
+        elapsed_ms < 10_000,
+        "Test timed out after {elapsed_ms} ms and {cycles_m} M cycles"
+    );
+    assert!(cycles_m > 5);
+}
+
+#[test]
+fn failed_stable_memory_grow_cost_and_time_multiple_canisters() {
+    let num_wasm_pages = 116 * GIB / WASM_PAGE_SIZE_IN_BYTES;
+    let num_canisters = 128;
+
+    let env = StateMachineBuilder::new()
+        .with_subnet_type(SubnetType::Application)
+        .build();
+
+    let mut canister_ids = vec![];
+    for _ in 0..num_canisters {
+        let canister_id = create_universal_canister_with_cycles(&env, None, INITIAL_CYCLES_BALANCE);
+        canister_ids.push(canister_id);
+    }
+
+    let timer = std::time::Instant::now();
+    let mut total_initial_balance = 0;
+    let mut payload = ic_state_machine_tests::PayloadBuilder::new();
+    for canister_id in &canister_ids {
+        let balance = env.cycle_balance(*canister_id);
+        total_initial_balance += balance;
+        payload = payload.ingress(
+            PrincipalId::new_anonymous(),
+            *canister_id,
+            "update",
+            wasm()
+                .stable64_grow(num_wasm_pages)
+                .stable64_write(0, &[42])
+                .trap()
+                .build(),
+        );
+    }
+    env.execute_payload(payload);
+    let elapsed_ms = timer.elapsed().as_millis();
+    let mut total_balance = 0;
+    for canister_id in &canister_ids {
+        let balance = env.cycle_balance(*canister_id);
+        total_balance += balance;
+    }
+    let cycles_m = (total_initial_balance - total_balance) / 1000 / 1000;
+    assert!(
+        elapsed_ms < 10_000,
+        "Test timed out after {elapsed_ms} ms and {cycles_m} M cycles"
+    );
+    assert!(cycles_m > 800);
 }
