@@ -16,18 +16,39 @@ pub struct RootCanister {
     pub canister_id: PrincipalId,
 }
 
-#[allow(clippy::large_enum_variant)]
-#[derive(Debug, thiserror::Error)]
-pub enum ListSnsCanistersError<E> {
-    #[error("SNS root canister did not return canister IDs for all canisters - this should never happen")]
-    SnsRootDidNotReturnAllCanisterIds(ListSnsCanistersResponse),
-    #[error("Failed to call SNS root canister")]
-    CallFailed(#[from] E),
-}
-
 pub struct SnsCanisters {
     pub sns: Sns,
     pub dapps: Vec<PrincipalId>,
+}
+
+impl TryFrom<ListSnsCanistersResponse> for SnsCanisters {
+    type Error = String;
+
+    fn try_from(src: ListSnsCanistersResponse) -> Result<Self, Self::Error> {
+        let ListSnsCanistersResponse {
+            root: Some(sns_root_canister_id),
+            governance: Some(sns_governance_canister_id),
+            ledger: Some(sns_ledger_canister_id),
+            swap: Some(swap_canister_id),
+            index: Some(index_canister_id),
+            archives,
+            dapps,
+        } = src
+        else {
+            return Err(format!("Some SNS canisters were missing: {:?}", src));
+        };
+
+        let sns = Sns {
+            root: RootCanister::new(sns_root_canister_id),
+            governance: GovernanceCanister::new(sns_governance_canister_id),
+            ledger: LedgerCanister::new(sns_ledger_canister_id),
+            swap: SwapCanister::new(swap_canister_id),
+            index: IndexCanister::new(index_canister_id),
+            archive: archives.into_iter().map(ArchiveCanister::new).collect(),
+        };
+
+        Ok(Self { sns, dapps })
+    }
 }
 
 impl RootCanister {
@@ -53,34 +74,11 @@ impl RootCanister {
     pub async fn list_sns_canisters<C: CallCanisters>(
         &self,
         agent: &C,
-    ) -> Result<SnsCanisters, ListSnsCanistersError<C::Error>> {
+    ) -> Result<ListSnsCanistersResponse, C::Error> {
         let response = agent
             .call(self.canister_id, ListSnsCanistersRequest {})
             .await?;
-        let ListSnsCanistersResponse {
-            root: Some(sns_root_canister_id),
-            governance: Some(sns_governance_canister_id),
-            ledger: Some(sns_ledger_canister_id),
-            swap: Some(swap_canister_id),
-            index: Some(index_canister_id),
-            archives,
-            dapps,
-        } = response
-        else {
-            return Err(ListSnsCanistersError::SnsRootDidNotReturnAllCanisterIds(
-                response,
-            ));
-        };
 
-        let sns = Sns {
-            root: RootCanister::new(sns_root_canister_id),
-            governance: GovernanceCanister::new(sns_governance_canister_id),
-            ledger: LedgerCanister::new(sns_ledger_canister_id),
-            swap: SwapCanister::new(swap_canister_id),
-            index: IndexCanister::new(index_canister_id),
-            archive: archives.into_iter().map(ArchiveCanister::new).collect(),
-        };
-
-        Ok(SnsCanisters { sns, dapps })
+        Ok(response)
     }
 }

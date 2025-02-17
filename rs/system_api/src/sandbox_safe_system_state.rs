@@ -9,7 +9,7 @@ use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_interfaces::execution_environment::{HypervisorError, HypervisorResult};
 use ic_limits::{LOG_CANISTER_OPERATION_CYCLES_THRESHOLD, SMALL_APP_SUBNET_MAX_SIZE};
 use ic_logger::{info, ReplicaLogger};
-use ic_management_canister_types::{
+use ic_management_canister_types_private::{
     CanisterStatusType, CreateCanisterArgs, InstallChunkedCodeArgs, InstallCodeArgsV2,
     LoadCanisterSnapshotArgs, Method as Ic00Method, Payload,
     ProvisionalCreateCanisterWithCyclesArgs, UninstallCodeArgs, UpdateSettingsArgs, IC_00,
@@ -77,6 +77,7 @@ pub struct SystemStateModifications {
     pub(super) new_global_timer: Option<CanisterTimer>,
     pub(super) canister_log: CanisterLog,
     pub on_low_wasm_memory_hook_condition_check_result: Option<bool>,
+    pub(super) should_bump_canister_version: bool,
 }
 
 impl Default for SystemStateModifications {
@@ -93,6 +94,7 @@ impl Default for SystemStateModifications {
             new_global_timer: None,
             canister_log: Default::default(),
             on_low_wasm_memory_hook_condition_check_result: None,
+            should_bump_canister_version: false,
         }
     }
 }
@@ -151,7 +153,7 @@ impl SystemStateModifications {
 
     fn reject_subnet_message_routing(
         system_state: &mut SystemState,
-        subnet_ids: &[PrincipalId],
+        subnet_ids: &BTreeSet<PrincipalId>,
         msg: Request,
         err: ResolveDestinationError,
         logger: &ReplicaLogger,
@@ -178,7 +180,7 @@ impl SystemStateModifications {
 
     fn reject_subnet_message_user_error(
         system_state: &mut SystemState,
-        subnet_ids: &[PrincipalId],
+        subnet_ids: &BTreeSet<PrincipalId>,
         msg: Request,
         err: UserError,
         logger: &ReplicaLogger,
@@ -304,7 +306,7 @@ impl SystemStateModifications {
     /// Verify that the changes to the system state are sound and apply them to
     /// the system state if they are.
     pub fn apply_changes(
-        self,
+        mut self,
         time: Time,
         system_state: &mut SystemState,
         network_topology: &NetworkTopology,
@@ -356,18 +358,25 @@ impl SystemStateModifications {
 
         // Get a clone of the request metadata of outgoing requests (they are all equivalent)
         // and their number. This will be used for call tree metrics.
+        let best_effort_request_count = self
+            .requests
+            .iter()
+            .filter(|req| req.is_best_effort())
+            .count() as u64;
         let request_stats = RequestMetadataStats {
             metadata: self
                 .requests
                 .first()
                 .map_or_else(Default::default, |request| request.metadata.clone()),
-            count: self.requests.len() as u64,
+            best_effort_request_count,
+            guaranteed_response_request_count: self.requests.len() as u64
+                - best_effort_request_count,
         };
 
         // Push outgoing messages.
         let mut callback_changes = BTreeMap::new();
         let nns_subnet_id = network_topology.nns_subnet_id;
-        let subnet_ids: Vec<PrincipalId> =
+        let subnet_ids: BTreeSet<PrincipalId> =
             network_topology.subnets.keys().map(|s| s.get()).collect();
         for mut msg in self.requests {
             if msg.receiver == IC_00 {
@@ -479,6 +488,14 @@ impl SystemStateModifications {
         // Update canister global timer
         if let Some(new_global_timer) = self.new_global_timer {
             system_state.global_timer = new_global_timer;
+        }
+
+        // Append canister log.
+        system_state.canister_log.append(&mut self.canister_log);
+
+        // Bump the canister version after all changes have been applied.
+        if self.should_bump_canister_version {
+            system_state.canister_version += 1;
         }
 
         Ok(request_stats)
@@ -1346,6 +1363,10 @@ impl SandboxSafeSystemState {
             false
         }
     }
+
+    pub fn get_subnet_id(&self) -> SubnetId {
+        self.cycles_account_manager.get_subnet_id()
+    }
 }
 
 /// Holds the metadata and the number of downstream requests. Requests created during the same
@@ -1355,7 +1376,8 @@ impl SandboxSafeSystemState {
 /// This is used for call tree metrics.
 pub struct RequestMetadataStats {
     pub metadata: RequestMetadata,
-    pub count: u64,
+    pub best_effort_request_count: u64,
+    pub guaranteed_response_request_count: u64,
 }
 
 #[cfg(test)]

@@ -19,12 +19,13 @@ base64 = { workspace = true }
 candid = { workspace = true }
 candid-utils = { path = "../../nervous_system/candid_utils" }
 clap = { workspace = true }
+dfx-core = { workspace = true }
 futures = { workspace = true }
 hex = { workspace = true }
 ic-agent = { workspace = true }
 ic-base-types = { path = "../../types/base_types" }
 ic-crypto-sha2 = { path = "../../crypto/sha2" }
-ic-management-canister-types = { path = "../../types/management_canister_types" }
+ic-management-canister-types-private = { path = "../../types/management_canister_types" }
 ic-nervous-system-agent = { path = "../../nervous_system/agent" }
 ic-nervous-system-common = { path = "../../nervous_system/common" }
 ic-nervous-system-common-test-keys = { path = "../../nervous_system/common/test_keys" }
@@ -49,6 +50,7 @@ serde_yaml = { workspace = true }
 tempfile = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
+url = { workspace = true }
 
 [dev-dependencies]
 lazy_static = { workspace = true }

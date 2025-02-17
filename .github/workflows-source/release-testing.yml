@@ -18,7 +18,6 @@ env:
   CI_PROJECT_DIR: ${{ github.workspace }}
   BRANCH_NAME: ${{ github.event.workflow_run.head_branch || github.ref_name }}
   CI_RUN_ID: ${{ github.run_id }}
-  RUSTFLAGS: "--remap-path-prefix=${CI_PROJECT_DIR}=/ic"
   BUILDEVENT_DATASET: "github-ci-dfinity"
 
 anchors:
@@ -58,7 +57,7 @@ anchors:
       if-no-files-found: ignore
       compression-level: 9
       path: |
-        bazel-bep.pb
+        bazel-bep.pb.gpg
         profile.json
 
 jobs:
@@ -77,11 +76,11 @@ jobs:
         id: bazel-test-all
         uses: ./.github/actions/bazel-test-all/
         with:
-          BAZEL_COMMAND: "test"
-          BAZEL_TARGETS: "//rs/tests/..."
-          BAZEL_CI_CONFIG: "--config=ci --repository_cache=/cache/bazel"
-          BAZEL_EXTRA_ARGS: "--keep_going --test_tag_filters=system_test_nightly"
-          BUILDEVENT_APIKEY: ${{ secrets.HONEYCOMB_API_TOKEN }}
+          BAZEL_COMMAND: >-
+            test --config=ci --keep_going --test_tag_filters=system_test_nightly
+          BAZEL_TARGETS: //rs/tests/...
+          BUILDEVENT_APIKEY: ${{ secrets.HONEYCOMB_TOKEN }}
+          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
       - <<: *bazel-bep
 
   bazel-system-test-staging:
@@ -94,11 +93,11 @@ jobs:
         id: bazel-test-all
         uses: ./.github/actions/bazel-test-all/
         with:
-          BAZEL_COMMAND: "test"
-          BAZEL_TARGETS: "//rs/tests/..."
-          BAZEL_CI_CONFIG: "--config=ci --repository_cache=/cache/bazel"
-          BAZEL_EXTRA_ARGS: "--keep_going --test_tag_filters=system_test_staging"
-          BUILDEVENT_APIKEY: ${{ secrets.HONEYCOMB_API_TOKEN }}
+          BAZEL_COMMAND: >-
+            test --config=ci --keep_going --test_tag_filters=system_test_staging
+          BAZEL_TARGETS: //rs/tests/...
+          BUILDEVENT_APIKEY: ${{ secrets.HONEYCOMB_TOKEN }}
+          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
       - <<: *bazel-bep
 
   bazel-system-test-hotfix:
@@ -112,11 +111,11 @@ jobs:
         id: bazel-test-all
         uses: ./.github/actions/bazel-test-all/
         with:
-          BAZEL_COMMAND: "test"
-          BAZEL_TARGETS: "//rs/tests/..."
-          BAZEL_CI_CONFIG: "--config=ci --repository_cache=/cache/bazel"
-          BAZEL_EXTRA_ARGS: "--keep_going --test_tag_filters=system_test_hotfix"
-          BUILDEVENT_APIKEY: ${{ secrets.HONEYCOMB_API_TOKEN }}
+          BAZEL_COMMAND: >-
+            test --config=ci --keep_going --test_tag_filters=system_test_hotfix
+          BAZEL_TARGETS: //rs/tests/...
+          BUILDEVENT_APIKEY: ${{ secrets.HONEYCOMB_TOKEN }}
+          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
       - <<: *bazel-bep
 
   dependency-scan-release-cut:
@@ -185,11 +184,11 @@ jobs:
       - name: Run qualification for version ${{ matrix.version }} from the tip of the branch
         uses: ./.github/actions/bazel-test-all/
         with:
-          BAZEL_COMMAND: "test"
+          BAZEL_COMMAND: |
+            test --config=ci --config=systest --keep_going --test_timeout=7200 --test_env=OLD_VERSION=${{ matrix.version }}
           BAZEL_TARGETS: "//rs/tests/dre:guest_os_qualification"
-          BAZEL_CI_CONFIG: "--config=systest --repository_cache=/cache/bazel"
-          BAZEL_EXTRA_ARGS: "--keep_going --test_timeout=7200 --test_env=OLD_VERSION=${{ matrix.version }}"
-          BUILDEVENT_APIKEY: ${{ secrets.HONEYCOMB_API_TOKEN }}
+          BUILDEVENT_APIKEY: ${{ secrets.HONEYCOMB_TOKEN }}
+          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
       - <<: *bazel-bep
         name: Upload bazel bep for version ${{ matrix.version }}
         with:

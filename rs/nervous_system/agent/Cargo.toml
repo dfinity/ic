@@ -23,7 +23,9 @@ pocket-ic = { path = "../../../packages/pocket-ic" }
 registry-canister = { path = "../../registry/canister" }
 ic-sns-root = { path = "../../sns/root" }
 ic-sns-swap = { path = "../../sns/swap" }
+itertools = { workspace = true }
 serde = { workspace = true }
+serde_cbor = { workspace = true }
 tempfile = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
