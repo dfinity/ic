@@ -16,7 +16,6 @@ tls = []
 
 [dependencies]
 anyhow = { workspace = true }
-anonymization-client = { path = "../anonymization/client" }
 arc-swap = "1.7.1"
 async-scoped = { version = "0.9", features = ["use-tokio"] }
 async-trait = { workspace = true }
@@ -72,6 +71,7 @@ prometheus = { workspace = true }
 rand = { workspace = true }
 ratelimit = "0.9.1"
 rate-limits-api = { path = "../rate_limits/api" }
+salt-sharing-api = { path = "../salt_sharing/api" }
 rcgen = { workspace = true }
 regex = { workspace = true }
 reqwest = { workspace = true }

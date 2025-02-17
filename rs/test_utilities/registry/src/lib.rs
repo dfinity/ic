@@ -1,6 +1,6 @@
 use ic_crypto_test_utils_ni_dkg::dummy_transcript_for_tests_with_params;
 use ic_limits::INITIAL_NOTARY_DELAY;
-use ic_management_canister_types::VetKdKeyId;
+use ic_management_canister_types_private::VetKdKeyId;
 use ic_protobuf::registry::crypto::v1::AlgorithmId;
 use ic_protobuf::registry::crypto::v1::PublicKey as PublicKeyProto;
 use ic_protobuf::registry::subnet::v1::chain_key_initialization::Initialization;

@@ -46,12 +46,22 @@ pub fn make_registry_cup_from_cup_contents(
             return None;
         }
     };
-    let dkg_summary = get_dkg_summary_from_cup_contents(
+    let dkg_summary = match get_dkg_summary_from_cup_contents(
         cup_contents.clone(),
         subnet_id,
         registry,
         registry_version,
-    );
+    ) {
+        Ok(summary) => summary,
+        Err(err) => {
+            warn!(
+                logger,
+                "Failed constructing NiDKG summary block from CUP contents: {}.", err
+            );
+
+            return None;
+        }
+    };
     let cup_height = Height::new(cup_contents.height);
 
     let idkg_summary = match bootstrap_idkg_summary(

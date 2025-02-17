@@ -271,6 +271,12 @@ pub fn encode_metrics(
         "Total number of suspended UTXOs due to being marked as tainted.",
     )?;
 
+    metrics.encode_gauge(
+        "ckbtc_minter_mint_status_unknown_utxos_count",
+        state::read_state(|s| s.mint_status_unknown_utxos().count()) as f64,
+        "Total number of UTXOs with unknown mint status.",
+    )?;
+
     let mut histogram_vec = metrics.histogram_vec(
         "ckbtc_minter_update_calls_latency",
         "The latency of ckBTC minter `update_balance` calls in milliseconds.",

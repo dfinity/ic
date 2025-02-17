@@ -11,6 +11,32 @@ here were moved from the adjacent `unreleased_changelog.md` file.
 INSERT NEW RELEASES HERE
 
 
+# 2025-02-15: Proposal 135315
+
+http://dashboard.internetcomputer.org/proposals/135315
+
+## Added
+
+The concept of topics has now been introduced to the SNS. This means that when custom function is added via an `AddGenericNervousSystemFunction` proposal, a topic can be specified for that custom function. This can be used for organizing the following page, and could be used for more in the future.
+
+A `list_topics` API has been added, which returns a list of topics and all the functions categorized in those topics. 
+
+## Changed
+
+The new `topic` field is required when submitting an `AddGenericNervousSystemFunction` proposal.
+
+
+# 2025-02-07: Proposal 135208
+
+http://dashboard.internetcomputer.org/proposals/135208
+
+## Added
+
+* Added the `query_stats` field for `get_root_canister_status` methods.
+* Fix a bug due to which SNS ledger logos were sometimes unset after changing unrelated
+  SNS ledger metadata fields.
+
+
 # 2025-02-03: Proposal 135067
 
 http://dashboard.internetcomputer.org/proposal/135067

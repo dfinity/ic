@@ -2,7 +2,7 @@ use crate::PayloadCreationError;
 use ic_consensus_utils::pool_reader::PoolReader;
 use ic_interfaces_registry::RegistryClient;
 use ic_logger::{warn, ReplicaLogger};
-use ic_management_canister_types::MasterPublicKeyId;
+use ic_management_canister_types_private::MasterPublicKeyId;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_types::{
     consensus::Block,
@@ -176,7 +176,7 @@ mod tests {
     use crate::utils::vetkd_key_ids_for_subnet;
     use ic_interfaces_registry::RegistryValue;
     use ic_interfaces_registry_mocks::MockRegistryClient;
-    use ic_management_canister_types::{
+    use ic_management_canister_types_private::{
         MasterPublicKeyId, SchnorrAlgorithm, SchnorrKeyId, VetKdCurve, VetKdKeyId,
     };
     use ic_registry_subnet_features::{ChainKeyConfig, KeyConfig};

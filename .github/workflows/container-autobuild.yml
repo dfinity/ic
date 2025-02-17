@@ -78,7 +78,7 @@ jobs:
         if: ${{ steps.check.outputs.build == 'true' }}
 
       - name: Login to GHCR
-        uses: docker/login-action@5f4866a30a54f16a52d2ecb4a3898e9e424939cf # v3
+        uses: docker/login-action@9780b0c442fbb1117ed29e0efdff1e18412f7567 # v3.3.0
         if: ${{ steps.check.outputs.build == 'true' }}
         with:
           registry: ghcr.io
@@ -117,7 +117,7 @@ jobs:
           popd
 
           git config --global user.name "IDX GitHub Automation"
-          git config --global user.email "idx@dfinity.org"
+          git config --global user.email "<>"
           git add .
           git commit -m "Updating container image to ${IMAGE_SHA}" -m "Image tag: ${IMAGE_TAG}"
           git push

@@ -38,7 +38,7 @@ mod tla_stuff {
         pub static TLA_TRACES_LKEY: std::cell::RefCell<Vec<UpdateTrace>>;
     }
 
-    pub static TLA_TRACES_MUTEX: RwLock<Vec<UpdateTrace>> = RwLock::new(Vec::new());
+    pub static TLA_TRACES_MUTEX: Option<RwLock<Vec<UpdateTrace>>> = Some(RwLock::new(Vec::new()));
 
     pub fn tla_get_globals(c: &StructCanister) -> GlobalState {
         let mut state = GlobalState::new();
@@ -158,7 +158,7 @@ fn struct_test() {
         let canister = &mut *addr_of_mut!(GLOBAL);
         tokio_test::block_on(canister.my_method());
     }
-    let trace = &TLA_TRACES_MUTEX.read().unwrap()[0];
+    let trace = &TLA_TRACES_MUTEX.as_ref().unwrap().read().unwrap()[0];
     assert_eq!(
         trace.constants.to_map().get("MAX_COUNTER"),
         Some(&2_u64.to_string())

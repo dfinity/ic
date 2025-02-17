@@ -41,7 +41,7 @@ filegroup(
 # See rs/nervous_system/feature_test.md
 DEPENDENCIES = [
     # Keep sorted.
-    "//rs/crypto/getrandom_for_wasm",
+    "//packages/ic-dummy-getrandom-for-wasm",
     "//rs/crypto/sha2",
     "//rs/ledger_suite/common/ledger_core",
     "//rs/ledger_suite/icp:icp_ledger",

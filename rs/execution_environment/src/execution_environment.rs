@@ -32,7 +32,7 @@ use ic_interfaces::execution_environment::{
 };
 use ic_limits::{LOG_CANISTER_OPERATION_CYCLES_THRESHOLD, SMALL_APP_SUBNET_MAX_SIZE};
 use ic_logger::{error, info, warn, ReplicaLogger};
-use ic_management_canister_types::{
+use ic_management_canister_types_private::{
     CanisterChangeOrigin, CanisterHttpRequestArgs, CanisterIdRecord, CanisterInfoRequest,
     CanisterInfoResponse, CanisterStatusType, ClearChunkStoreArgs, ComputeInitialIDkgDealingsArgs,
     CreateCanisterArgs, DeleteCanisterSnapshotArgs, ECDSAPublicKeyArgs, ECDSAPublicKeyResponse,
@@ -203,21 +203,6 @@ pub fn as_num_instructions(a: RoundInstructions) -> NumInstructions {
     NumInstructions::from(u64::try_from(a.get()).unwrap_or(0))
 }
 
-/// Helper method for logging dirty pages.
-pub fn log_dirty_pages(
-    log: &ReplicaLogger,
-    canister_id: &CanisterId,
-    method_name: &str,
-    dirty_pages: usize,
-    instructions: NumInstructions,
-) {
-    let output_message = format!(
-        "Executed {canister_id}::{method_name}: dirty_4kb_pages = {dirty_pages}, instructions = {instructions}"
-    );
-    info!(log, "{}", output_message.as_str());
-    eprintln!("{output_message}");
-}
-
 /// Contains limits (or budget) for various resources that affect duration of
 /// a round such as
 /// - executed instructions,
@@ -268,8 +253,8 @@ pub struct RoundLimits {
 }
 
 impl RoundLimits {
-    /// Returns true if any of the round limits is reached.
-    pub fn reached(&self) -> bool {
+    /// Returns true if the instructions limit has been reached.
+    pub fn instructions_reached(&self) -> bool {
         self.instructions <= RoundInstructions::from(0)
     }
 }
