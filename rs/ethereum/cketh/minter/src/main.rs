@@ -890,7 +890,7 @@ fn get_events(arg: GetEventsArg) -> GetEventsResult {
 fn http_request(req: HttpRequest) -> HttpResponse {
     use ic_metrics_encoder::MetricsEncoder;
 
-    if ic_cdk::api::data_certificate().is_none() {
+    if ic_cdk::api::in_replicated_execution() {
         ic_cdk::trap("update call rejected");
     }
 

@@ -761,6 +761,11 @@ fn should_upgrade_icrc_ck_u256_canisters_with_golden_state() {
 #[test]
 fn should_upgrade_icrc_sns_canisters_with_golden_state() {
     // SNS canisters
+    const ALICE_LEDGER_SUITE: (&str, &str, &str) = (
+        "oj6if-riaaa-aaaaq-aaeha-cai",
+        "mtcaz-pyaaa-aaaaq-aaeia-cai",
+        "Alice",
+    );
     const BOOMDAO_LEDGER_SUITE: (&str, &str, &str) = (
         "vtrom-gqaaa-aaaaq-aabia-cai",
         "v5tde-5aaaa-aaaaq-aabja-cai",
@@ -771,11 +776,6 @@ fn should_upgrade_icrc_sns_canisters_with_golden_state() {
         "ux4b6-7qaaa-aaaaq-aaboa-cai",
         "Catalyze",
     );
-    const CYCLES_TRANSFER_STATION_LEDGER_SUITE: (&str, &str, &str) = (
-        "itgqj-7qaaa-aaaaq-aadoa-cai",
-        "i5e5b-eaaaa-aaaaq-aadpa-cai",
-        "CyclesTransferStation",
-    );
     const DECIDEAI_LEDGER_SUITE: (&str, &str, &str) = (
         "xsi2v-cyaaa-aaaaq-aabfq-cai",
         "xaonm-oiaaa-aaaaq-aabgq-cai",
@@ -785,6 +785,11 @@ fn should_upgrade_icrc_sns_canisters_with_golden_state() {
         "np5km-uyaaa-aaaaq-aadrq-cai",
         "n535v-yiaaa-aaaaq-aadsq-cai",
         "DOGMI",
+    );
+    const DOLR_AI_LEDGER_SUITE: (&str, &str, &str) = (
+        "6rdgd-kyaaa-aaaaq-aaavq-cai",
+        "6dfr2-giaaa-aaaaq-aaawq-cai",
+        "YRAL",
     );
     const DRAGGINZ_LEDGER_SUITE: (&str, &str, &str) = (
         "zfcdd-tqaaa-aaaaq-aaaga-cai",
@@ -800,6 +805,16 @@ fn should_upgrade_icrc_sns_canisters_with_golden_state() {
         "bliq2-niaaa-aaaaq-aac4q-cai",
         "bfk5s-wyaaa-aaaaq-aac5q-cai",
         "EstateDAO",
+    );
+    const FOMOWELL_LEDGER_SUITE: (&str, &str, &str) = (
+        "o4zzi-qaaaa-aaaaq-aaeeq-cai",
+        "os3ua-lqaaa-aaaaq-aaefq-cai",
+        "FomoWell",
+    );
+    const FUEL_EV_LEDGER_SUITE: (&str, &str, &str) = (
+        "nfjys-2iaaa-aaaaq-aaena-cai",
+        "nxppl-wyaaa-aaaaq-aaeoa-cai",
+        "FuelEV",
     );
     const GOLDDAO_LEDGER_SUITE: (&str, &str, &str) = (
         "tyyy3-4aaaa-aaaaq-aab7a-cai",
@@ -841,6 +856,11 @@ fn should_upgrade_icrc_sns_canisters_with_golden_state() {
         "7vojr-tyaaa-aaaaq-aaatq-cai",
         "Kinic",
     );
+    const KONG_SWAP_LEDGER_SUITE: (&str, &str, &str) = (
+        "o7oak-iyaaa-aaaaq-aadzq-cai",
+        "onixt-eiaaa-aaaaq-aad2q-cai",
+        "KongSwap",
+    );
     const MOTOKO_LEDGER_SUITE: (&str, &str, &str) = (
         "k45jy-aiaaa-aaaaq-aadcq-cai",
         "ks7eq-3yaaa-aaaaq-aaddq-cai",
@@ -850,6 +870,11 @@ fn should_upgrade_icrc_sns_canisters_with_golden_state() {
         "f54if-eqaaa-aaaaq-aacea-cai",
         "ft6fn-7aaaa-aaaaq-aacfa-cai",
         "Neutrinite",
+    );
+    const NFID_WALLET_LEDGER_SUITE: (&str, &str, &str) = (
+        "mih44-vaaaa-aaaaq-aaekq-cai",
+        "mgfru-oqaaa-aaaaq-aaelq-cai",
+        "NFID Wallet",
     );
     const NUANCE_LEDGER_SUITE: (&str, &str, &str) = (
         "rxdbk-dyaaa-aaaaq-aabtq-cai",
@@ -896,11 +921,6 @@ fn should_upgrade_icrc_sns_canisters_with_golden_state() {
         "iidmm-fiaaa-aaaaq-aadmq-cai",
         "WaterNeuron",
     );
-    const YRAL_LEDGER_SUITE: (&str, &str, &str) = (
-        "6rdgd-kyaaa-aaaaq-aaavq-cai",
-        "6dfr2-giaaa-aaaaq-aaawq-cai",
-        "YRAL",
-    );
     const YUKU_LEDGER_SUITE: (&str, &str, &str) = (
         "atbfz-diaaa-aaaaq-aacyq-cai",
         "a5dir-yyaaa-aaaaq-aaczq-cai",
@@ -915,14 +935,17 @@ fn should_upgrade_icrc_sns_canisters_with_golden_state() {
         true,
     )];
     for canister_id_and_name in vec![
+        ALICE_LEDGER_SUITE,
         BOOMDAO_LEDGER_SUITE,
         CATALYZE_LEDGER_SUITE,
-        CYCLES_TRANSFER_STATION_LEDGER_SUITE,
         DECIDEAI_LEDGER_SUITE,
         DOGMI_LEDGER_SUITE,
+        DOLR_AI_LEDGER_SUITE,
         DRAGGINZ_LEDGER_SUITE,
         ELNAAI_LEDGER_SUITE,
         ESTATEDAO_LEDGER_SUITE,
+        FOMOWELL_LEDGER_SUITE,
+        FUEL_EV_LEDGER_SUITE,
         GOLDDAO_LEDGER_SUITE,
         ICGHOST_LEDGER_SUITE,
         ICLIGHTHOUSE_LEDGER_SUITE,
@@ -931,8 +954,10 @@ fn should_upgrade_icrc_sns_canisters_with_golden_state() {
         ICPSWAP_LEDGER_SUITE,
         ICVC_LEDGER_SUITE,
         KINIC_LEDGER_SUITE,
+        KONG_SWAP_LEDGER_SUITE,
         MOTOKO_LEDGER_SUITE,
         NEUTRINITE_LEDGER_SUITE,
+        NFID_WALLET_LEDGER_SUITE,
         NUANCE_LEDGER_SUITE,
         OPENFPL_LEDGER_SUITE,
         ORIGYN_LEDGER_SUITE,
@@ -941,7 +966,6 @@ fn should_upgrade_icrc_sns_canisters_with_golden_state() {
         SONIC_LEDGER_SUITE,
         TRAX_LEDGER_SUITE,
         WATERNEURON_LEDGER_SUITE,
-        YRAL_LEDGER_SUITE,
         YUKU_LEDGER_SUITE,
     ] {
         canister_configs.push(LedgerSuiteConfig::new(

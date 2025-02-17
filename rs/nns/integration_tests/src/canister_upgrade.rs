@@ -32,7 +32,6 @@ fn test_upgrade_canister(canister_id: CanisterId, canister_wasm: Wasm) {
         canister_id,
         modified_wasm.clone(),
         vec![],
-        true,
     );
 
     let controller_canister_id = if canister_id == ROOT_CANISTER_ID {
