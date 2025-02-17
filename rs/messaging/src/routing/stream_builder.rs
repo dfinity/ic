@@ -161,7 +161,7 @@ pub(crate) trait StreamBuilder: Send {
     fn build_streams(&self, state: ReplicatedState) -> ReplicatedState;
 }
 
-/// Builds streams according to the specified limits.
+/// Routes messages from canister output queues into streams, up to the specified limits.
 ///
 /// At most `max_stream_messages` are enqueued into a stream; but only until its
 /// `count_bytes()` is greater than or equal to `target_stream_size_bytes`.
