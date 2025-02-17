@@ -58,10 +58,6 @@ use crate::{
         InstanceId, MockCanisterHttpResponse, RawEffectivePrincipal, RawMessageId, SubnetId,
         SubnetKind, SubnetSpec, Topology,
     },
-    management_canister::{
-        CanisterId, CanisterInstallMode, CanisterLogRecord, CanisterSettings, CanisterStatusResult,
-        Snapshot,
-    },
     nonblocking::PocketIc as PocketIcAsync,
 };
 use candid::{
@@ -69,7 +65,11 @@ use candid::{
     utils::{ArgumentDecoder, ArgumentEncoder},
     Principal,
 };
+use ic_management_canister_types::{
+    CanisterId, CanisterInstallMode, CanisterSettings, CanisterStatusResult, Snapshot,
+};
 use ic_transport_types::SubnetMetrics;
+use management_canister::CanisterLogRecord;
 use reqwest::Url;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
