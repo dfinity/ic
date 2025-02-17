@@ -8,7 +8,7 @@ on:
 # https://github.com/ytanikin/pr-conventional-commits?tab=readme-ov-file#usage-with-labeling-where-label-is-just-a-task-type
 
 permissions:
-  pull-requests: read
+  pull-requests: write
 
 jobs:
   validate-pr-title:
