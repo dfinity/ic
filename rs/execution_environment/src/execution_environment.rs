@@ -511,6 +511,8 @@ impl ExecutionEnvironment {
     ) -> (ReplicatedState, Option<NumInstructions>) {
         let since = Instant::now(); // Start logging execution time.
 
+        let canister_id_rec = msg.effective_canister_id();
+
         let mut msg = match msg {
             CanisterMessage::Response(response) => {
                 let context = state
@@ -1572,6 +1574,12 @@ impl ExecutionEnvironment {
             }
         };
 
+        if let Some(canister_id) = canister_id_rec {
+            println!("Here: {}", canister_id);
+            if let Some(canister_state) = state.canister_state_mut(&canister_id) {
+                canister_state.update_on_low_wasm_memory_hook_condition();
+            }
+        }
         // Note that some branches above have early returns:
         //   - `InstallCode`
         //   - `InstallChunkedCode`
@@ -3121,7 +3129,6 @@ impl ExecutionEnvironment {
                         Err(err.into())
                     }
                 };
-                canister.update_on_low_wasm_memory_hook_condition();
                 state.put_canister_state(canister);
                 let refund = message.take_cycles();
                 // The message can be removed because a response was produced.

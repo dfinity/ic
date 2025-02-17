@@ -645,7 +645,6 @@ impl CanisterManager {
         }
         // Change of `wasm_memory_limit` or `new_wasm_memory_threshold` or `memory_allocation`,
         // can influence the satisfaction of the condition for `low_wasm_memory` hook.
-        canister.update_on_low_wasm_memory_hook_condition();
     }
 
     /// Tries to apply the requested settings on the canister identified by
@@ -875,10 +874,7 @@ impl CanisterManager {
                 message: _,
                 instructions_used,
                 result,
-            } => {
-                canister.update_on_low_wasm_memory_hook_condition();
-                (result, instructions_used, Some(canister))
-            }
+            } => (result, instructions_used, Some(canister)),
             DtsInstallCodeResult::Paused {
                 canister: _,
                 paused_execution,
