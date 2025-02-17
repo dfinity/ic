@@ -1,3 +1,10 @@
+// ========================================================================= //
+// Types associated with the IC management canister that are not specified,
+// but nevertheless useful for PocketIC.
+//
+// TODO: These should be moved to a separate module in the public crate
+// ic-management-canister-types
+
 use candid::{CandidType, Deserialize, Principal};
 
 pub type CanisterId = Principal;
@@ -7,13 +14,6 @@ pub type SubnetId = Principal;
 pub struct CanisterIdRecord {
     pub canister_id: CanisterId,
 }
-
-// ========================================================================= //
-// Types associated with the IC management canister that are not specified,
-// but nevertheless useful for PocketIC.
-//
-// TODO: These should be moved to a separate module in the public crate
-// ic-management-canister-types
 
 use ic_management_canister_types::{EcdsaKeyId, SchnorrKeyId};
 use serde::Serialize;
