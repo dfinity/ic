@@ -919,7 +919,7 @@ where
             // Accept all remaining cycles and fund the canisters
             Self::fund_canisters(canister_api, &sns_canisters).await,
             // Remove self as the controller
-            Self::remove_self_as_controller(canister_api, &sns_canisters).await,
+            Self::remove_sns_w_as_controller(canister_api, &sns_canisters).await,
         ])
         // At this point, all the dapp canisters are still controlled by NNS Root and can
         // be restored.
@@ -1026,28 +1026,29 @@ where
                     vec![this_canister_id, canisters.root.unwrap()],
                 )
                 .await
-                .map_err(|e| {
-                    format!(
-                        "Unable to set Root as Governance canister controller: {}",
-                        e
-                    )
+                .map_err(|err| {
+                    format!("Unable to set SNS-W and Root as Governance canister controller: {}", err)
                 }),
-            // Set root as controller of Ledger.
+            // Set Root as controller of Ledger.
             canister_api
                 .set_controllers(
                     CanisterId::unchecked_from_principal(canisters.ledger.unwrap()),
                     vec![this_canister_id, canisters.root.unwrap()],
                 )
                 .await
-                .map_err(|e| format!("Unable to set Root as Ledger canister controller: {}", e)),
-            // Set root as controller of Index.
+                .map_err(|err| {
+                    format!("Unable to set SNS-W and Root as Ledger canister controller: {}", err)
+                }),
+            // Set Root as controller of Index.
             canister_api
                 .set_controllers(
                     CanisterId::unchecked_from_principal(canisters.index.unwrap()),
                     vec![this_canister_id, canisters.root.unwrap()],
                 )
                 .await
-                .map_err(|e| format!("Unable to set Root as Index canister controller: {}", e)),
+                .map_err(|err| {
+                    format!("Unable to set SNS-W and Root as Index canister controller: {}", err)
+                }),
             // Set Governance as controller of Root.
             canister_api
                 .set_controllers(
@@ -1055,29 +1056,18 @@ where
                     vec![this_canister_id, canisters.governance.unwrap()],
                 )
                 .await
-                .map_err(|e| {
-                    format!(
-                        "Unable to set Governance as Root canister controller: {}",
-                        e
-                    )
+                .map_err(|err| {
+                    format!("Unable to set SNS-W and Governance as Root canister controller: {}", err)
                 }),
-            // Set SNS Root and NNS Root as controllers of Swap.
+            // Set Root as the controller of Swap.
             canister_api
                 .set_controllers(
                     CanisterId::unchecked_from_principal(canisters.swap.unwrap()),
-                    vec![
-                        this_canister_id,
-                        canisters.root.unwrap(),
-                        ROOT_CANISTER_ID.get(),
-                    ],
+                    vec![this_canister_id, canisters.root.unwrap()],
                 )
                 .await
-                .map_err(|e| {
-                    format!(
-                        "Unable to set SNS Root and NNS Root and Swap canister (itself) \
-                         as Swap canister controller: {}",
-                        e
-                    )
+                .map_err(|err| {
+                    format!("Unable to set SNS-W and Root as Swap canister controller: {}", err)
                 }),
         ];
 
@@ -1085,56 +1075,61 @@ where
     }
 
     /// Remove the SNS wasm canister as the controller of the canisters
-    async fn remove_self_as_controller(
+    async fn remove_sns_w_as_controller(
         canister_api: &impl CanisterApi,
         canisters: &SnsCanisterIds,
     ) -> Result<(), String> {
         let set_controllers_results = vec![
-            // Removing self, leaving SNS Root.
+            // Removing SNS-W, leaving SNS Root.
             canister_api
                 .set_controllers(
                     CanisterId::unchecked_from_principal(canisters.governance.unwrap()),
                     vec![canisters.root.unwrap()],
                 )
                 .await
-                .map_err(|e| {
-                    format!(
-                        "Unable to remove SNS-WASM as Governance's controller: {}",
-                        e
-                    )
+                .map_err(|err| {
+                    format!("Unable to remove SNS-W as Governance's controller: {}", err)
                 }),
-            // Removing self, leaving SNS Root.
+            // Removing SNS-W, leaving SNS Root.
             canister_api
                 .set_controllers(
                     CanisterId::unchecked_from_principal(canisters.ledger.unwrap()),
                     vec![canisters.root.unwrap()],
                 )
                 .await
-                .map_err(|e| format!("Unable to remove SNS-WASM as Ledger's controller: {}", e)),
-            // Removing self, leaving SNS Governance.
+                .map_err(|err| {
+                    format!("Unable to remove SNS-W as Ledger's controller: {}", err)
+                }),
+            // Removing SNS-W, leaving SNS Governance.
             canister_api
                 .set_controllers(
                     CanisterId::unchecked_from_principal(canisters.root.unwrap()),
                     vec![canisters.governance.unwrap()],
                 )
                 .await
-                .map_err(|e| format!("Unable to remove SNS-WASM as Root's controller: {}", e)),
-            // Removing self, leaving SNS Root and NNS Root.
+                .map_err(|err| {
+                    format!("Unable to remove SNS-W as Root's controller: {}", err)
+                }),
+            // Removing SNS-W, leaving SNS Root and NNS Root.
             canister_api
                 .set_controllers(
                     CanisterId::unchecked_from_principal(canisters.swap.unwrap()),
-                    vec![canisters.root.unwrap(), ROOT_CANISTER_ID.get()],
+                    vec![canisters.root.unwrap()],
                 )
                 .await
-                .map_err(|e| format!("Unable to remove SNS-WASM as Swap's controller: {}", e)),
-            // Removing self, leaving root.
+                .map_err(|err| {
+                    format!("Unable to remove SNS-W as Swap's controller: {}", err)
+                }),
+            // Removing SNS-W, leaving Root.
             canister_api
                 .set_controllers(
                     CanisterId::unchecked_from_principal(canisters.index.unwrap()),
                     vec![canisters.root.unwrap()],
                 )
                 .await
-                .map_err(|e| format!("Unable to remove SNS-WASM as Ledger's controller: {}", e)),
+                .map_err(|err| {
+                    format!("Unable to remove SNS-W as Index's controller: {}", err)
+                }),
         ];
 
         join_errors_or_ok(set_controllers_results)
@@ -3629,7 +3624,7 @@ mod test {
                 (root_id, vec![this_id.get(), governance_id.get()]),
                 (
                     swap_id,
-                    vec![this_id.get(), root_id.get(), ROOT_CANISTER_ID.get()],
+                    vec![this_id.get(), root_id.get()],
                 ),
             ],
             vec![],
@@ -3712,7 +3707,7 @@ mod test {
                 (root_id, vec![this_id.get(), governance_id.get()]),
                 (
                     swap_id,
-                    vec![this_id.get(), root_id.get(), ROOT_CANISTER_ID.get()],
+                    vec![this_id.get(), root_id.get()],
                 ),
             ],
             vec![
@@ -3809,12 +3804,12 @@ mod test {
                 (root_id, vec![this_id.get(), governance_id.get()]),
                 (
                     swap_id,
-                    vec![this_id.get(), root_id.get(), ROOT_CANISTER_ID.get()],
+                    vec![this_id.get(), root_id.get()],
                 ),
                 (governance_id, vec![root_id.get()]),
                 (ledger_id, vec![root_id.get()]),
                 (root_id, vec![governance_id.get()]),
-                (swap_id, vec![root_id.get(), ROOT_CANISTER_ID.get()]),
+                (swap_id, vec![root_id.get()]),
                 (index_id, vec![root_id.get()]),
             ],
             vec![],
@@ -3923,7 +3918,7 @@ mod test {
                 (root_id, vec![this_id.get(), governance_id.get()]),
                 (
                     swap_id,
-                    vec![this_id.get(), root_id.get(), ROOT_CANISTER_ID.get()],
+                    vec![this_id.get(), root_id.get()],
                 ),
                 (governance_id, vec![root_id.get()]),
                 (ledger_id, vec![root_id.get()]),
@@ -4092,12 +4087,12 @@ mod test {
                 (root_id, vec![this_id.get(), governance_id.get()]),
                 (
                     swap_id,
-                    vec![this_id.get(), root_id.get(), ROOT_CANISTER_ID.get()],
+                    vec![this_id.get(), root_id.get()],
                 ),
                 (governance_id, vec![root_id.get()]),
                 (ledger_id, vec![root_id.get()]),
                 (root_id, vec![governance_id.get()]),
-                (swap_id, vec![root_id.get(), ROOT_CANISTER_ID.get()]),
+                (swap_id, vec![root_id.get()]),
                 (index_id, vec![root_id.get()]),
             ],
             vec![],
@@ -4676,7 +4671,7 @@ mod test {
                 (root_id, vec![this_id.get(), governance_id.get()]),
                 (
                     swap_id,
-                    vec![this_id.get(), root_id.get(), ROOT_CANISTER_ID.get()],
+                    vec![this_id.get(), root_id.get()],
                 ),
                 (governance_id, vec![root_id.get()]),
                 (ledger_id, vec![root_id.get()]),
@@ -5058,11 +5053,11 @@ mod test {
                 (ledger_id, vec![this_id.get(), root_id.get()]),
                 (index_id, vec![this_id.get(), root_id.get()]),
                 (root_id, vec![this_id.get(), governance_id.get()]),
-                (swap_id, vec![this_id.get(), root_id.get(), ROOT_CANISTER_ID.get()]),
+                (swap_id, vec![this_id.get(), root_id.get()]),
                 (governance_id, vec![root_id.get()]),
                 (ledger_id, vec![root_id.get()]),
                 (root_id, vec![governance_id.get()]),
-                (swap_id, vec![root_id.get(), ROOT_CANISTER_ID.get()]),
+                (swap_id, vec![root_id.get()]),
                 (index_id, vec![root_id.get()]),
             ],
             vec![
