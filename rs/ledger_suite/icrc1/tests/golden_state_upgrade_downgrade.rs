@@ -935,6 +935,7 @@ fn should_upgrade_icrc_sns_canisters_with_golden_state() {
         true,
     )];
     for canister_id_and_name in vec![
+        ALICE_LEDGER_SUITE,
         BOOMDAO_LEDGER_SUITE,
         CATALYZE_LEDGER_SUITE,
         DECIDEAI_LEDGER_SUITE,
