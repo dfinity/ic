@@ -475,7 +475,7 @@ mod tests {
 
     #[test]
     fn test_into_messages() {
-        let agreements = make_vetkd_agreements([0, 1, 2]);
+        let agreements = make_vetkd_agreements(0, 1, 2);
         let payload = as_bytes(agreements.clone());
         let messages = VetKdPayloadBuilderImpl::into_messages(&payload);
         for i in 0..3 {
@@ -670,7 +670,7 @@ mod tests {
             assert!(payload.is_empty());
 
             // Non-empty payloads should be rejected
-            let payload = as_bytes(make_vetkd_agreements([0, 1, 2]));
+            let payload = as_bytes(make_vetkd_agreements(0, 1, 2));
             let validation = builder.validate_payload(
                 HEIGHT,
                 &ProposalContext {
@@ -704,7 +704,7 @@ mod tests {
             assert!(payload.is_empty());
 
             // Non-empty payload validation should be fail if we don't have the state
-            let payload = as_bytes(make_vetkd_agreements([0, 1, 2]));
+            let payload = as_bytes(make_vetkd_agreements(0, 1, 2));
             let validation = builder.validate_payload(
                 HEIGHT,
                 &ProposalContext {
@@ -793,8 +793,8 @@ mod tests {
         let config = make_chain_key_config();
         let contexts = make_contexts(&config);
         let payloads = [
-            as_bytes(make_vetkd_agreements([0, 1, 2])),
-            as_bytes(make_vetkd_agreements([2, 3, 4])),
+            as_bytes(make_vetkd_agreements(0, 1, 2)),
+            as_bytes(make_vetkd_agreements(2, 3, 4)),
         ];
         let past_payloads = payloads
             .iter()
@@ -807,7 +807,7 @@ mod tests {
             assert!(payload.is_empty());
 
             // Payload with agreements that are already part of past payloads should be rejected
-            let payload = as_bytes(make_vetkd_agreements([0, 1, 2]));
+            let payload = as_bytes(make_vetkd_agreements(0, 1, 2));
             let validation = builder.validate_payload(
                 HEIGHT,
                 &ProposalContext {
@@ -837,7 +837,7 @@ mod tests {
         };
         test_payload_builder(Some(config), contexts, shares, |builder| {
             // Payload with agreements for IDKG contexts should be rejected
-            let payload = as_bytes(make_vetkd_agreements([0, 1, 2]));
+            let payload = as_bytes(make_vetkd_agreements(0, 1, 2));
             let validation = builder.validate_payload(HEIGHT, &proposal_context, &payload, &[]);
             assert_matches!(
                 validation.unwrap_err(),
@@ -847,7 +847,7 @@ mod tests {
             );
 
             // Payload with agreements for unknown contexts should be rejected
-            let payload = as_bytes(make_vetkd_agreements([3, 4, 5]));
+            let payload = as_bytes(make_vetkd_agreements(3, 4, 5));
             let validation = builder.validate_payload(HEIGHT, &proposal_context, &payload, &[]);
             assert_matches!(
                 validation.unwrap_err(),
