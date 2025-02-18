@@ -25,9 +25,6 @@ function log_and_halt_installation_on_error() {
     return "${exit_code}"
 }
 
-function log_start() { :; }
-function log_end() { :; }
-
 # ------------------------------------------------------------------------------
 # Unit tests for check-network.sh
 # ------------------------------------------------------------------------------
