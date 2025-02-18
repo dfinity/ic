@@ -343,7 +343,7 @@ fn post_upgrade() {
         set_last_upgrade_timestamp(dfn_core::api::time_nanos());
 
         let arg_max_memory_size_bytes = if args.0.is_empty() {
-            print("Upgrading archive without an upgrate argument.");
+            print("Upgrading archive without an upgrade argument.");
             None
         } else {
             match Decode!(&args.0, u64) {
