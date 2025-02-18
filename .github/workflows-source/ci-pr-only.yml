@@ -69,6 +69,8 @@ jobs:
     name: Lock Generate
     <<: *dind-small-setup
     <<: *skip-merge-group
+    permissions:
+      pull-requests: write
     env:
       CI_EVENT_NAME: ${{ github.event_name }}
     steps:
@@ -149,6 +151,9 @@ jobs:
     <<: *dind-large-setup
     <<: *skip-merge-group
     if: contains(github.event.pull_request.labels.*.name, 'CI_COVERAGE')
+    permissions:
+      contents: read
+      pull-requests: read
     steps:
       - <<: *checkout
       - name: Run Bazel Test Coverage
