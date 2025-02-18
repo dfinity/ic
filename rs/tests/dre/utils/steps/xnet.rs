@@ -33,16 +33,13 @@ impl Step for XNet {
         env: ic_system_test_driver::driver::test_env::TestEnv,
         rt: tokio::runtime::Handle,
     ) -> anyhow::Result<()> {
-        // Only guaranteed response calls, for now.
-        // TODO(MR-638): Drop `.with_call_timeouts(&[None])` once best-effort calls are
-        // supported on mainnet.
+        // Both guaranteed response and best-effort calls.
         let config = Config::new(
             self.subnets,
             self.nodes_per_subnet,
             self.runtime,
             self.request_rate,
-        )
-        .with_call_timeouts(&[None]);
+        );
 
         let mut subnets = env
             .topology_snapshot()
