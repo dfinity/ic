@@ -1,6 +1,6 @@
 load("//bazel:defs.bzl", "gzip_compress")
 load("//ci/src/artifacts:upload.bzl", "upload_artifacts")
-load("//publish:defs.bzl", "release_nostrip_binary", "release_strip_binary", "release_strip_binary_test")
+load("//publish:defs.bzl", "checksum_rule", "release_nostrip_binary", "release_strip_binary", "release_strip_binary_test")
 
 package(default_visibility = ["//rs:ic-os-pkg"])
 
@@ -119,6 +119,11 @@ filegroup(
     srcs = [name + ".gz" for name in ALL_BINARIES],
 )
 
+checksum_rule(
+    name = "compute_checksums",
+    inputs = [":binaries"],
+)
+
 upload_artifacts(
     name = "upload",
     testonly = True,
@@ -132,18 +137,6 @@ upload_artifacts(
         "@platforms//os:osx": "darwin",
         "//conditions:default": "unknown",
     }),
-)
-
-# https://dfinity.atlassian.net/browse/IDX-2599
-# various places in the source code, and possibly other repositories reference
-# the legacy upload path. Unwinding it without a will involve an unpredictable amount of time.
-upload_artifacts(
-    name = "legacy_upload",
-    testonly = True,
-    inputs = [":binaries"],
-    remote_subdir = "release",
-    target_compatible_with = ["@platforms//os:linux"],
-    visibility = ["//testnet/tools:__pkg__"],
 )
 
 BINS_TO_TEST = [":" + name for name in ALL_BINARIES]

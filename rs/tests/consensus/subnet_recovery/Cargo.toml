@@ -15,7 +15,7 @@ ic-agent = { workspace = true }
 ic-base-types = { path = "../../../types/base_types" }
 ic-canister-client = { path = "../../../canister_client" }
 ic_consensus_threshold_sig_system_test_utils = { path = "../tecdsa/utils" }
-ic-management-canister-types = { path = "../../../types/management_canister_types" }
+ic-management-canister-types-private = { path = "../../../types/management_canister_types" }
 ic-nns-constants = { path = "../../../nns/constants" }
 ic-protobuf = { path = "../../../protobuf" }
 ic-recovery = { path = "../../../recovery" }
@@ -55,6 +55,10 @@ name = "ic-systest-subnet-recovery-app-no-upgrade"
 path = "sr_app_no_upgrade_test.rs"
 
 [[bin]]
+name = "ic-systest-subnet-recovery-app-no-upgrade-local"
+path = "sr_app_no_upgrade_local_test.rs"
+
+[[bin]]
 name = "ic-systest-subnet-recovery-app-same-nodes-enable-tecdsa"
 path = "sr_app_same_nodes_enable_tecdsa_test.rs"
 
@@ -81,5 +85,3 @@ path = "sr_app_no_upgrade_with_tecdsa_test.rs"
 [[bin]]
 name = "ic-systest-subnet-recovery-app-large-with-tecdsa"
 path = "sr_app_large_with_tecdsa_test.rs"
-
-

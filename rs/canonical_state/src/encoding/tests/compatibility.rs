@@ -11,7 +11,7 @@
 use crate::{all_supported_versions, encoding::*, CertificationVersion};
 use assert_matches::assert_matches;
 use ic_error_types::RejectCode;
-use ic_management_canister_types::{
+use ic_management_canister_types_private::{
     EcdsaCurve, EcdsaKeyId, MasterPublicKeyId, SchnorrAlgorithm, SchnorrKeyId,
 };
 use ic_registry_subnet_type::SubnetType;

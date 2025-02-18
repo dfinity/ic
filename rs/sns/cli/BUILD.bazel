@@ -17,7 +17,7 @@ DEPENDENCIES = [
     "//rs/nns/constants",
     "//rs/nns/governance/api",
     "//rs/nns/sns-wasm",
-    "//rs/sns/governance",
+    "//rs/sns/governance/api",
     "//rs/sns/init",
     "//rs/sns/root",
     "//rs/types/base_types",
@@ -26,6 +26,7 @@ DEPENDENCIES = [
     "@crate_index//:base64",
     "@crate_index//:candid",
     "@crate_index//:clap",
+    "@crate_index//:dfx-core",
     "@crate_index//:futures",
     "@crate_index//:hex",
     "@crate_index//:ic-agent",
@@ -40,6 +41,7 @@ DEPENDENCIES = [
     "@crate_index//:tempfile",
     "@crate_index//:thiserror",
     "@crate_index//:tokio",
+    "@crate_index//:url",
 ]
 
 MACRO_DEPENDENCIES = []
