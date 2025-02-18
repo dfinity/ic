@@ -13,7 +13,6 @@ use ic_interfaces::{
     batch_payload::{BatchPayloadBuilder, IntoMessages, PastPayload, ProposalContext},
     consensus::PayloadValidationError,
     consensus_pool::ConsensusPoolCache,
-    crypto::VetKdProtocol,
     idkg::IDkgPool,
     vetkd::{InvalidVetKdPayloadReason, VetKdPayloadValidationFailure},
 };
@@ -216,11 +215,7 @@ impl VetKdPayloadBuilderImpl {
                     encryption_public_key: ctxt_args.encryption_public_key.clone(),
                 };
                 let key_id = context.key_id();
-                match VetKdProtocol::combine_encrypted_key_shares(
-                    self.crypto.as_ref(),
-                    shares,
-                    &args,
-                ) {
+                match self.crypto.combine_encrypted_key_shares(shares, &args) {
                     Ok(key) => {
                         self.metrics
                             .payload_metrics_inc("vetkd_agreement_completed", &key_id);
@@ -348,8 +343,9 @@ impl VetKdPayloadBuilderImpl {
         let encrypted_key = VetKdEncryptedKey {
             encrypted_key: reply.encrypted_key,
         };
-        VetKdProtocol::verify_encrypted_key(self.crypto.as_ref(), &encrypted_key, &args).map_err(
-            |err| {
+        self.crypto
+            .verify_encrypted_key(&encrypted_key, &args)
+            .map_err(|err| {
                 if err.is_reproducible() {
                     warn!(self.log, "Invalid VetKD payload: {err:?}");
                     invalid_artifact(InvalidVetKdPayloadReason::VetKdKeyVerificationError(err))
@@ -359,8 +355,7 @@ impl VetKdPayloadBuilderImpl {
                         err,
                     ))
                 }
-            },
-        )
+            })
     }
 }
 
