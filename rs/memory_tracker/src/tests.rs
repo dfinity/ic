@@ -751,6 +751,7 @@ mod random_ops {
 
     thread_local! {
         static TRACKER: RefCell<Option<SigsegvMemoryTracker>> = const { RefCell::new(None) };
+        static PREV_SIGSEGV: RefCell<MaybeUninit<libc::sigaction>> = const { RefCell::new(MaybeUninit::uninit()) };
     }
 
     fn with_registered_handler_setup<F, G>(
@@ -777,8 +778,6 @@ mod random_ops {
         final_tracker_checks(handler.take_tracker().unwrap());
     }
 
-    static mut PREV_SIGSEGV: MaybeUninit<libc::sigaction> = MaybeUninit::uninit();
-
     struct RegisteredHandler();
 
     impl RegisteredHandler {
@@ -798,9 +797,7 @@ mod random_ops {
             if libc::sigaction(
                 libc::SIGSEGV,
                 &handler,
-                // TODO: EXC-1841
-                #[allow(static_mut_refs)]
-                PREV_SIGSEGV.as_mut_ptr(),
+                PREV_SIGSEGV.with_borrow_mut(|p| p.as_mut_ptr()),
             ) != 0
             {
                 panic!(
@@ -818,9 +815,7 @@ mod random_ops {
                 unsafe {
                     if libc::sigaction(
                         libc::SIGSEGV,
-                        // TODO: EXC-1841
-                        #[allow(static_mut_refs)]
-                        PREV_SIGSEGV.as_ptr(),
+                        PREV_SIGSEGV.with_borrow(|p| p.as_ptr()),
                         std::ptr::null_mut(),
                     ) != 0
                     {
@@ -858,9 +853,7 @@ mod random_ops {
 
             unsafe {
                 if !handled {
-                    // TODO: EXC-1841
-                    #[allow(static_mut_refs)]
-                    let previous = *PREV_SIGSEGV.as_ptr();
+                    let previous = *PREV_SIGSEGV.with_borrow(|p| p.as_ptr());
                     if previous.sa_flags & libc::SA_SIGINFO != 0 {
                         mem::transmute::<
                             usize,
