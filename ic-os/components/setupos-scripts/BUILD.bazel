@@ -82,7 +82,7 @@ sh_test(
         "$(execpath check-hardware.sh)",
     ],
     data = [
-        "check-network.sh",
         "check-hardware.sh",
+        "check-network.sh",
     ],
 )

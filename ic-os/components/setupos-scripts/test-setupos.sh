@@ -43,7 +43,7 @@ function test_validate_domain_name() {
 
     echo "Running test: test_validate_domain_name_invalid"
     domain_name="example."
-    if ! ( validate_domain_name ); then
+    if ! (validate_domain_name); then
         echo "  PASS: domain $domain_name validation failed as expected"
     else
         echo "  FAIL: domain $domain_name validation was expected to fail but didn't"
@@ -51,7 +51,7 @@ function test_validate_domain_name() {
     fi
 
     domain_name="&BadDOMAIN.com"
-    if ! ( validate_domain_name ); then
+    if ! (validate_domain_name); then
         echo "  PASS: domain $domain_name validation failed as expected"
     else
         echo "  FAIL: domain $domain_name validation was expected to fail but didn't"
@@ -123,7 +123,7 @@ function test_verify_cpu_gen1_failure() {
     nproc() { echo 64; }
     HARDWARE_GENERATION="1"
 
-    if ! ( verify_cpu ); then
+    if ! (verify_cpu); then
         echo "  PASS: verify_cpu for Gen1 failed as expected"
     else
         echo "  FAIL: verify_cpu for Gen1 passed unexpectedly"
@@ -155,7 +155,7 @@ function test_verify_cpu_gen2_failure() {
     nproc() { echo 64; }
     HARDWARE_GENERATION="2"
 
-    if ! ( verify_cpu ); then
+    if ! (verify_cpu); then
         echo "  PASS: verify_cpu for Gen2 failed as expected"
     else
         echo "  FAIL: verify_cpu for Gen2 passed unexpectedly"
@@ -186,7 +186,7 @@ function test_verify_memory_failure() {
         fi
         return 1
     }
-    if ! ( verify_memory ); then
+    if ! (verify_memory); then
         echo "  PASS: verify_memory failed as expected with insufficient memory"
     else
         echo "  FAIL: verify_memory passed unexpectedly with insufficient memory"
@@ -215,7 +215,7 @@ function test_verify_deployment_path_warning() {
 for script in "${CHECK_NETWORK_SCRIPT}" "${CHECK_HARDWARE_SCRIPT}"; do
     if [[ -f "${script}" ]]; then
         tmpfile=$(mktemp)
-        sed '/^main$/d' "${script}" > "${tmpfile}"
+        sed '/^main$/d' "${script}" >"${tmpfile}"
         source "${tmpfile}"
         rm "${tmpfile}"
     fi
