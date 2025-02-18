@@ -6,6 +6,7 @@ on:
 
 # Copied & adapted (job name, version label) from
 # https://github.com/ytanikin/pr-conventional-commits?tab=readme-ov-file#usage-with-labeling-where-label-is-just-a-task-type
+# validates the title and adds a tag based on the PR type
 
 permissions:
   pull-requests: write
