@@ -619,6 +619,22 @@ mod tests {
         })
     }
 
+    fn build_and_validate(
+        builder: &VetKdPayloadBuilderImpl,
+        max_size: NumBytes,
+        past_payloads: &[PastPayload],
+        context: &ValidationContext,
+    ) -> Vec<u8> {
+        let payload = builder.build_payload(HEIGHT, max_size, past_payloads, context);
+        let context = ProposalContext {
+            proposer: node_test_id(0),
+            validation_context: &context,
+        };
+        let validation = builder.validate_payload(HEIGHT, &context, &payload, past_payloads);
+        assert!(validation.is_ok());
+        payload
+    }
+
     #[test]
     #[should_panic(expected = "not yet implemented")]
     fn test_build_payload() {
@@ -630,12 +646,9 @@ mod tests {
             validation_context: &VALIDATION_CONTEXT,
         };
         test_payload_builder(Some(config), contexts, shares, |builder| {
-            let payload = builder.build_payload(HEIGHT, MAX_SIZE, &[], &VALIDATION_CONTEXT);
+            let _payload = build_and_validate(&builder, MAX_SIZE, &[], &VALIDATION_CONTEXT);
 
             // TODO validate payload manually
-
-            let validation = builder.validate_payload(HEIGHT, &proposal_context, &payload, &[]);
-            assert!(validation.is_ok());
 
             // payload that can't be deserialized should be invalid
             let validation = builder.validate_payload(HEIGHT, &proposal_context, &[1, 2, 3], &[]);
@@ -670,17 +683,13 @@ mod tests {
     fn test_build_empty_payloads_when_feature_disabled() {
         // No chain key config is passed
         test_payload_builder(None, BTreeMap::new(), vec![], |builder| {
-            let payload = builder.build_payload(HEIGHT, MAX_SIZE, &[], &VALIDATION_CONTEXT);
+            let payload = build_and_validate(&builder, MAX_SIZE, &[], &VALIDATION_CONTEXT);
             assert!(payload.is_empty());
 
             let proposal_context = ProposalContext {
                 proposer: node_test_id(0),
                 validation_context: &VALIDATION_CONTEXT,
             };
-
-            // Empty payloads should always be valid
-            let validation = builder.validate_payload(HEIGHT, &proposal_context, &payload, &[]);
-            assert!(validation.is_ok());
 
             // Non-empty payloads should be rejected
             let payload = as_bytes(make_vetkd_agreements(0, 1, 2));
@@ -705,17 +714,13 @@ mod tests {
             ..VALIDATION_CONTEXT
         };
         test_payload_builder(Some(config), contexts, shares, |builder| {
-            let payload = builder.build_payload(HEIGHT, MAX_SIZE, &[], &context);
+            let payload = build_and_validate(&builder, MAX_SIZE, &[], &context);
             assert!(payload.is_empty());
 
             let proposal_context = ProposalContext {
                 proposer: node_test_id(0),
                 validation_context: &context,
             };
-
-            // Empty payloads should always be valid
-            let validation = builder.validate_payload(HEIGHT, &proposal_context, &payload, &[]);
-            assert!(validation.is_ok());
 
             // Non-empty payload validation should be fail if we don't have the state
             let payload = as_bytes(make_vetkd_agreements(0, 1, 2));
@@ -736,20 +741,8 @@ mod tests {
         let config = make_chain_key_config();
         let contexts = make_contexts(&config);
         test_payload_builder(Some(config), contexts, vec![], |builder| {
-            let payload = builder.build_payload(HEIGHT, MAX_SIZE, &[], &VALIDATION_CONTEXT);
+            let payload = build_and_validate(&builder, MAX_SIZE, &[], &VALIDATION_CONTEXT);
             assert!(payload.is_empty());
-
-            // Empty payloads should always be valid
-            let validation = builder.validate_payload(
-                HEIGHT,
-                &ProposalContext {
-                    proposer: node_test_id(0),
-                    validation_context: &VALIDATION_CONTEXT,
-                },
-                &payload,
-                &[],
-            );
-            assert!(validation.is_ok());
         })
     }
 
@@ -760,21 +753,8 @@ mod tests {
         let contexts = make_contexts(&config);
         let shares = make_shares(&contexts);
         test_payload_builder(Some(config), contexts, shares, |builder| {
-            let payload =
-                builder.build_payload(HEIGHT, NumBytes::from(0), &[], &VALIDATION_CONTEXT);
+            let payload = build_and_validate(&builder, NumBytes::from(0), &[], &VALIDATION_CONTEXT);
             assert!(payload.is_empty());
-
-            // Empty payloads should always be valid
-            let validation = builder.validate_payload(
-                HEIGHT,
-                &ProposalContext {
-                    proposer: node_test_id(0),
-                    validation_context: &VALIDATION_CONTEXT,
-                },
-                &payload,
-                &[],
-            );
-            assert!(validation.is_ok());
         })
     }
 
@@ -787,22 +767,11 @@ mod tests {
         test_payload_builder(Some(config), contexts, shares, |builder| {
             // Use a small maximum size
             let payload =
-                builder.build_payload(HEIGHT, NumBytes::from(50), &[], &VALIDATION_CONTEXT);
+                build_and_validate(&builder, NumBytes::from(50), &[], &VALIDATION_CONTEXT);
             let payload_deserialized = bytes_to_vetkd_payload(&payload).unwrap();
             assert_eq!(payload_deserialized.vetkd_agreements.len(), 1);
 
             // TODO validate agreement is success
-
-            let validation = builder.validate_payload(
-                HEIGHT,
-                &ProposalContext {
-                    proposer: node_test_id(0),
-                    validation_context: &VALIDATION_CONTEXT,
-                },
-                &payload,
-                &[],
-            );
-            assert!(validation.is_ok());
         })
     }
 
@@ -821,7 +790,7 @@ mod tests {
         let shares = make_shares(&contexts);
         test_payload_builder(Some(config), contexts, shares, |builder| {
             let payload =
-                builder.build_payload(HEIGHT, MAX_SIZE, &past_payloads, &VALIDATION_CONTEXT);
+                build_and_validate(&builder, MAX_SIZE, &past_payloads, &VALIDATION_CONTEXT);
             assert!(payload.is_empty());
 
             // Payload with agreements that are already part of past payloads should be rejected
@@ -888,203 +857,113 @@ mod tests {
             }],
             ..ChainKeyConfig::default()
         };
-        // Create contexts for a different config
-        let contexts = make_contexts(&make_chain_key_config());
-        let shares = make_shares(&contexts);
-        let proposal_context = ProposalContext {
-            proposer: node_test_id(0),
-            validation_context: &VALIDATION_CONTEXT,
-        };
-        test_payload_builder(Some(config), contexts.clone(), shares, |builder| {
-            let serialized_payload =
-                builder.build_payload(HEIGHT, MAX_SIZE, &[], &VALIDATION_CONTEXT);
-            let payload = bytes_to_vetkd_payload(&serialized_payload).unwrap();
-            assert_eq!(payload.vetkd_agreements.len(), 2);
-            for (id, context) in contexts {
-                match context.key_id() {
-                    MasterPublicKeyId::Ecdsa(_) | MasterPublicKeyId::Schnorr(_) => {
-                        assert!(!payload.vetkd_agreements.contains_key(&id));
-                    }
-                    MasterPublicKeyId::VetKd(_) => {
-                        assert_matches!(
-                            payload.vetkd_agreements.get(&id).unwrap(),
-                            VetKdAgreement::Reject(VetKdErrorCode::InvalidKey)
-                        );
-                    }
-                }
-            }
-
-            let validation =
-                builder.validate_payload(HEIGHT, &proposal_context, &serialized_payload, &[]);
-            assert!(validation.is_ok());
-
-            // payload with different rejects for the same contexts should be rejected
-            let payload = as_bytes(make_vetkd_agreements_with_payload(
-                &[1, 2],
-                VetKdAgreement::Reject(VetKdErrorCode::TimedOut),
-            ));
-            let validation = builder.validate_payload(HEIGHT, &proposal_context, &payload, &[]);
-            assert_matches!(
-                validation.unwrap_err(),
-                ValidationError::InvalidArtifact(InvalidPayloadReason::InvalidVetKdPayload(
-                    InvalidVetKdPayloadReason::MismatchedAgreement { expected, received }
-                )) if expected == Some(VetKdAgreement::Reject(VetKdErrorCode::InvalidKey))
-                   && received == Some(VetKdAgreement::Reject(VetKdErrorCode::TimedOut))
-            );
-
-            // payload with success responses for the same contexts should be rejected
-            let payload = as_bytes(make_vetkd_agreements_with_payload(
-                &[1, 2],
-                VetKdAgreement::Success(vec![1, 1, 1]),
-            ));
-            let validation = builder.validate_payload(HEIGHT, &proposal_context, &payload, &[]);
-            assert_matches!(
-                validation.unwrap_err(),
-                ValidationError::InvalidArtifact(InvalidPayloadReason::InvalidVetKdPayload(
-                    InvalidVetKdPayloadReason::MismatchedAgreement { expected, received }
-                )) if expected == Some(VetKdAgreement::Reject(VetKdErrorCode::InvalidKey))
-                   && received.is_none()
-            );
-
-            // Empty payloads should always be valid
-            let validation = builder.validate_payload(HEIGHT, &proposal_context, &[], &[]);
-            assert!(validation.is_ok());
-        })
+        reject_invalid_contexts_test(
+            config,
+            true,
+            VALIDATION_CONTEXT,
+            VetKdErrorCode::InvalidKey,
+            VetKdErrorCode::TimedOut,
+        );
     }
 
     #[test]
     fn test_reject_disabled_keys() {
         let config = make_chain_key_config();
-        let contexts = make_contexts(&config);
-        let shares = make_shares(&contexts);
-        let proposal_context = ProposalContext {
-            proposer: node_test_id(0),
-            validation_context: &VALIDATION_CONTEXT,
-        };
-        test_payload_builder_ext(Some(config), false, contexts.clone(), shares, |builder| {
-            let serialized_payload =
-                builder.build_payload(HEIGHT, MAX_SIZE, &[], &VALIDATION_CONTEXT);
-            let payload = bytes_to_vetkd_payload(&serialized_payload).unwrap();
-            assert_eq!(payload.vetkd_agreements.len(), 2);
-            for (id, context) in contexts {
-                match context.key_id() {
-                    MasterPublicKeyId::Ecdsa(_) | MasterPublicKeyId::Schnorr(_) => {
-                        assert!(!payload.vetkd_agreements.contains_key(&id));
-                    }
-                    MasterPublicKeyId::VetKd(_) => {
-                        assert_matches!(
-                            payload.vetkd_agreements.get(&id).unwrap(),
-                            VetKdAgreement::Reject(VetKdErrorCode::InvalidKey)
-                        );
-                    }
-                }
-            }
-
-            let validation =
-                builder.validate_payload(HEIGHT, &proposal_context, &serialized_payload, &[]);
-            assert!(validation.is_ok());
-
-            // payload with different rejects for the same contexts should be rejected
-            let payload = as_bytes(make_vetkd_agreements_with_payload(
-                &[1, 2],
-                VetKdAgreement::Reject(VetKdErrorCode::TimedOut),
-            ));
-            let validation = builder.validate_payload(HEIGHT, &proposal_context, &payload, &[]);
-            assert_matches!(
-                validation.unwrap_err(),
-                ValidationError::InvalidArtifact(InvalidPayloadReason::InvalidVetKdPayload(
-                    InvalidVetKdPayloadReason::MismatchedAgreement { expected, received }
-                )) if expected == Some(VetKdAgreement::Reject(VetKdErrorCode::InvalidKey))
-                   && received == Some(VetKdAgreement::Reject(VetKdErrorCode::TimedOut))
-            );
-
-            // payload with success responses for the same contexts should be rejected
-            let payload = as_bytes(make_vetkd_agreements_with_payload(
-                &[1, 2],
-                VetKdAgreement::Success(vec![1, 1, 1]),
-            ));
-            let validation = builder.validate_payload(HEIGHT, &proposal_context, &payload, &[]);
-            assert_matches!(
-                validation.unwrap_err(),
-                ValidationError::InvalidArtifact(InvalidPayloadReason::InvalidVetKdPayload(
-                    InvalidVetKdPayloadReason::MismatchedAgreement { expected, received }
-                )) if expected == Some(VetKdAgreement::Reject(VetKdErrorCode::InvalidKey))
-                   && received.is_none()
-            );
-
-            // Empty payloads should always be valid
-            let validation = builder.validate_payload(HEIGHT, &proposal_context, &[], &[]);
-            assert!(validation.is_ok());
-        })
+        reject_invalid_contexts_test(
+            config,
+            false,
+            VALIDATION_CONTEXT,
+            VetKdErrorCode::InvalidKey,
+            VetKdErrorCode::TimedOut,
+        );
     }
 
     #[test]
     fn test_reject_timed_out_contexts() {
         let config = make_chain_key_config();
-        let contexts = make_contexts(&config);
-        let shares = make_shares(&contexts);
         let context = ValidationContext {
             time: UNIX_EPOCH.checked_add(Duration::from_secs(2)).unwrap(),
             ..VALIDATION_CONTEXT
         };
+        reject_invalid_contexts_test(
+            config,
+            true,
+            context,
+            VetKdErrorCode::TimedOut,
+            VetKdErrorCode::InvalidKey,
+        );
+    }
+
+    fn reject_invalid_contexts_test(
+        config: ChainKeyConfig,
+        enabled_keys: bool,
+        validation_context: ValidationContext,
+        expected_error: VetKdErrorCode,
+        rejected_error: VetKdErrorCode,
+    ) {
+        let contexts = make_contexts(&make_chain_key_config());
+        let shares = make_shares(&contexts);
         let proposal_context = ProposalContext {
             proposer: node_test_id(0),
-            validation_context: &context,
+            validation_context: &validation_context,
         };
-        test_payload_builder(Some(config), contexts.clone(), shares, |builder| {
-            let serialized_payload = builder.build_payload(HEIGHT, MAX_SIZE, &[], &context);
-            let payload = bytes_to_vetkd_payload(&serialized_payload).unwrap();
-            assert_eq!(payload.vetkd_agreements.len(), 2);
-            for (id, context) in contexts {
-                match context.key_id() {
-                    MasterPublicKeyId::Ecdsa(_) | MasterPublicKeyId::Schnorr(_) => {
-                        assert!(!payload.vetkd_agreements.contains_key(&id));
-                    }
-                    MasterPublicKeyId::VetKd(_) => {
-                        assert_matches!(
-                            payload.vetkd_agreements.get(&id).unwrap(),
-                            VetKdAgreement::Reject(VetKdErrorCode::TimedOut)
-                        );
+        test_payload_builder_ext(
+            Some(config),
+            enabled_keys,
+            contexts.clone(),
+            shares,
+            |builder| {
+                let serialized_payload =
+                    build_and_validate(&builder, MAX_SIZE, &[], &validation_context);
+                let payload = bytes_to_vetkd_payload(&serialized_payload).unwrap();
+                assert_eq!(payload.vetkd_agreements.len(), 2);
+                for (id, context) in contexts {
+                    match context.key_id() {
+                        MasterPublicKeyId::Ecdsa(_) | MasterPublicKeyId::Schnorr(_) => {
+                            assert!(!payload.vetkd_agreements.contains_key(&id));
+                        }
+                        MasterPublicKeyId::VetKd(_) => {
+                            assert_eq!(
+                                payload.vetkd_agreements.get(&id).unwrap(),
+                                &VetKdAgreement::Reject(expected_error)
+                            );
+                        }
                     }
                 }
-            }
 
-            let validation =
-                builder.validate_payload(HEIGHT, &proposal_context, &serialized_payload, &[]);
-            assert!(validation.is_ok());
+                // payload with different rejects for the same contexts should be rejected
+                let payload = as_bytes(make_vetkd_agreements_with_payload(
+                    &[1, 2],
+                    VetKdAgreement::Reject(rejected_error),
+                ));
+                let validation = builder.validate_payload(HEIGHT, &proposal_context, &payload, &[]);
+                assert_matches!(
+                    validation.unwrap_err(),
+                    ValidationError::InvalidArtifact(InvalidPayloadReason::InvalidVetKdPayload(
+                        InvalidVetKdPayloadReason::MismatchedAgreement { expected, received }
+                    )) if expected == Some(VetKdAgreement::Reject(expected_error))
+                       && received == Some(VetKdAgreement::Reject(rejected_error))
+                );
 
-            // payload with different rejects for the same contexts should be rejected
-            let payload = as_bytes(make_vetkd_agreements_with_payload(
-                &[1, 2],
-                VetKdAgreement::Reject(VetKdErrorCode::InvalidKey),
-            ));
-            let validation = builder.validate_payload(HEIGHT, &proposal_context, &payload, &[]);
-            assert_matches!(
-                validation.unwrap_err(),
-                ValidationError::InvalidArtifact(InvalidPayloadReason::InvalidVetKdPayload(
-                    InvalidVetKdPayloadReason::MismatchedAgreement { expected, received }
-                )) if expected == Some(VetKdAgreement::Reject(VetKdErrorCode::TimedOut))
-                   && received == Some(VetKdAgreement::Reject(VetKdErrorCode::InvalidKey))
-            );
+                // payload with success responses for the same contexts should be rejected
+                let payload = as_bytes(make_vetkd_agreements_with_payload(
+                    &[1, 2],
+                    VetKdAgreement::Success(vec![1, 1, 1]),
+                ));
+                let validation = builder.validate_payload(HEIGHT, &proposal_context, &payload, &[]);
+                assert_matches!(
+                    validation.unwrap_err(),
+                    ValidationError::InvalidArtifact(InvalidPayloadReason::InvalidVetKdPayload(
+                        InvalidVetKdPayloadReason::MismatchedAgreement { expected, received }
+                    )) if expected == Some(VetKdAgreement::Reject(expected_error))
+                       && received.is_none()
+                );
 
-            // payload with success responses for the same contexts should be rejected
-            let payload = as_bytes(make_vetkd_agreements_with_payload(
-                &[1, 2],
-                VetKdAgreement::Success(vec![1, 1, 1]),
-            ));
-            let validation = builder.validate_payload(HEIGHT, &proposal_context, &payload, &[]);
-            assert_matches!(
-                validation.unwrap_err(),
-                ValidationError::InvalidArtifact(InvalidPayloadReason::InvalidVetKdPayload(
-                    InvalidVetKdPayloadReason::MismatchedAgreement { expected, received }
-                )) if expected == Some(VetKdAgreement::Reject(VetKdErrorCode::TimedOut))
-                   && received.is_none()
-            );
-
-            // Empty payloads should always be valid
-            let validation = builder.validate_payload(HEIGHT, &proposal_context, &[], &[]);
-            assert!(validation.is_ok());
-        })
+                // Empty payloads should always be valid
+                let validation = builder.validate_payload(HEIGHT, &proposal_context, &[], &[]);
+                assert!(validation.is_ok());
+            },
+        )
     }
 
     #[test]
