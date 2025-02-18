@@ -874,7 +874,12 @@ impl CanisterManager {
                 message: _,
                 instructions_used,
                 result,
-            } => (result, instructions_used, Some(canister)),
+            } => {
+                // This is requeired since IC0::InstallCode and IC0::InstallChunkedCode
+                // are the only two management canister execution types that use DTS.
+                canister.update_on_low_wasm_memory_hook_condition();
+                (result, instructions_used, Some(canister))
+            }
             DtsInstallCodeResult::Paused {
                 canister: _,
                 paused_execution,

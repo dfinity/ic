@@ -1575,7 +1575,6 @@ impl ExecutionEnvironment {
         };
 
         if let Some(canister_id) = canister_id_rec {
-            println!("Here: {}", canister_id);
             if let Some(canister_state) = state.canister_state_mut(&canister_id) {
                 canister_state.update_on_low_wasm_memory_hook_condition();
             }
@@ -3129,6 +3128,9 @@ impl ExecutionEnvironment {
                         Err(err.into())
                     }
                 };
+                // This is requeired since IC0::InstallCode and IC0::InstallChunkedCode
+                // are the only two management canister execution types that use DTS.
+                canister.update_on_low_wasm_memory_hook_condition();
                 state.put_canister_state(canister);
                 let refund = message.take_cycles();
                 // The message can be removed because a response was produced.
