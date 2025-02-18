@@ -192,9 +192,12 @@ impl VetKdPayloadBuilderImpl {
                 continue;
             }
 
-            let candidate = if let Some(reject) =
-                reject_if_invalid(&valid_keys, context, request_expiry_time, &self.metrics)
-            {
+            let candidate = if let Some(reject) = reject_if_invalid(
+                &valid_keys,
+                context,
+                request_expiry_time,
+                Some(&self.metrics),
+            ) {
                 reject
             } else {
                 let Some(shares) = grouped_shares.get(callback_id) else {
@@ -221,12 +224,10 @@ impl VetKdPayloadBuilderImpl {
                     Ok(key) => {
                         self.metrics
                             .payload_metrics_inc("vetkd_agreement_completed", &key_id);
-                        VetKdAgreement::Success(
-                            VetKdDeriveEncryptedKeyResult {
-                                encrypted_key: key.encrypted_key,
-                            }
-                            .encode(),
-                        )
+                        let result = VetKdDeriveEncryptedKeyResult {
+                            encrypted_key: key.encrypted_key,
+                        };
+                        VetKdAgreement::Success(result.encode())
                     }
                     Err(VetKdKeyShareCombinationError::UnsatisfiedReconstructionThreshold {
                         ..
@@ -286,7 +287,7 @@ impl VetKdPayloadBuilderImpl {
             }
 
             let expected_reject =
-                reject_if_invalid(&valid_keys, context, request_expiry_time, &self.metrics);
+                reject_if_invalid(&valid_keys, context, request_expiry_time, None);
 
             match agreement {
                 VetKdAgreement::Success(data) => {
@@ -482,14 +483,18 @@ fn reject_if_invalid(
     valid_keys: &BTreeSet<MasterPublicKeyId>,
     context: &SignWithThresholdContext,
     request_expiry_time: Option<Time>,
-    metrics: &VetKdPayloadBuilderMetrics,
+    metrics: Option<&VetKdPayloadBuilderMetrics>,
 ) -> Option<VetKdAgreement> {
     let key_id = context.key_id();
     if !valid_keys.contains(&key_id) {
-        metrics.payload_errors_inc("invalid_key_id", &key_id);
+        if let Some(metrics) = metrics {
+            metrics.payload_errors_inc("invalid_key_id", &key_id);
+        }
         Some(VetKdAgreement::Reject(VetKdErrorCode::InvalidKey))
     } else if request_expiry_time.is_some_and(|expiry| context.batch_time < expiry) {
-        metrics.payload_errors_inc("expired_request", &key_id);
+        if let Some(metrics) = metrics {
+            metrics.payload_errors_inc("expired_request", &key_id);
+        }
         Some(VetKdAgreement::Reject(VetKdErrorCode::TimedOut))
     } else {
         None
