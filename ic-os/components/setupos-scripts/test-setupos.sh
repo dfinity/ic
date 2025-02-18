@@ -113,6 +113,24 @@ function test_verify_cpu_gen1() {
     echo "  PASS: verify_cpu for Gen1 passed"
 }
 
+function test_verify_cpu_gen1_failure() {
+    echo "Running test: test_verify_cpu_gen1_failure"
+    FAKE_CPU_JSON='[
+      {"id": "cpu:0", "product": "Invalid CPU", "capabilities": {"sev": "false"}},
+      {"id": "cpu:1", "product": "Invalid CPU", "capabilities": {"sev": "false"}}
+    ]'
+    get_cpu_info_json() { echo "$FAKE_CPU_JSON"; }
+    nproc() { echo 64; }
+    HARDWARE_GENERATION="1"
+
+    if ! ( verify_cpu ); then
+        echo "  PASS: verify_cpu for Gen1 failed as expected"
+    else
+        echo "  FAIL: verify_cpu for Gen1 passed unexpectedly"
+        exit 1
+    fi
+}
+
 function test_verify_cpu_gen2() {
     echo "Running test: test_verify_cpu_gen2"
     FAKE_CPU_JSON='[
@@ -168,6 +186,7 @@ echo "Running check-hardware.sh unit tests..."
 test_detect_hardware_generation_gen1
 test_detect_hardware_generation_gen2
 test_verify_cpu_gen1
+test_verify_cpu_gen1_failure
 test_verify_cpu_gen2
 test_verify_memory_success
 echo
