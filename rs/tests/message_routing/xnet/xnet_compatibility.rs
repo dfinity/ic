@@ -163,8 +163,7 @@ pub async fn test_async(env: TestEnv) {
         // with error thresholds.
         75.0,
         60,
-    )
-    .with_call_timeouts(&call_timeouts);
+    );
 
     let mainnet_version = read_dependency_to_string("mainnet_nns_subnet_revision.txt").unwrap();
 
