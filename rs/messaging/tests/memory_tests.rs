@@ -55,11 +55,11 @@ prop_compose! {
 }
 
 #[test_strategy::proptest(ProptestConfig::with_cases(3))]
-fn check_guaranteed_response_message_memory_limits_are_respected(
+fn check_message_memory_limits_are_respected(
     #[strategy(proptest::collection::vec(any::<u64>().no_shrink(), 3))] seeds: Vec<u64>,
     #[strategy(arb_canister_config(MAX_PAYLOAD_BYTES, 5))] config: CanisterConfig,
 ) {
-    if let Err((err_msg, nfo)) = check_guaranteed_response_message_memory_limits_are_respected_impl(
+    if let Err((err_msg, nfo)) = check_message_memory_limits_are_respected_impl(
         30,  // chatter_phase_round_count
         300, // shutdown_phase_max_rounds
         seeds.as_slice(),
@@ -86,17 +86,17 @@ fn check_guaranteed_response_message_memory_limits_are_respected(
 /// 'chatter' has been turned off to conclude all calls (or else return `Err(_)` if any call fails
 /// to do so).
 ///
-/// During all these phases, a check ensures that guaranteed response message memory never exceeds
-/// the limit specified in the `FixtureConfig` used to generate the fixture used in this test.
-fn check_guaranteed_response_message_memory_limits_are_respected_impl(
+/// During all these phases, a check ensures that neither guaranteed response nor best-effort message
+/// memory usage exceed the limits imposed on the respective subnets.
+fn check_message_memory_limits_are_respected_impl(
     chatter_phase_round_count: usize,
     shutdown_phase_max_rounds: usize,
     seeds: &[u64],
     mut config: CanisterConfig,
 ) -> Result<(), (String, DebugInfo)> {
-    // The amount of memory available for guaranteed response message memory on `local_env`.
+    // Limit imposed on both guaranteed response and best-effort message memory on `local_env`.
     const LOCAL_MESSAGE_MEMORY_CAPACITY: u64 = 100 * MB;
-    // The amount of memory available for guaranteed response message memory on `remote_env`.
+    // Limit imposed on both guaranteed response and best-effort message memory on `remote_env`.
     const REMOTE_MESSAGE_MEMORY_CAPACITY: u64 = 50 * MB;
 
     let fixture = Fixture::new(FixtureConfig {
@@ -121,7 +121,7 @@ fn check_guaranteed_response_message_memory_limits_are_respected_impl(
         fixture.tick();
 
         // Check message memory limits are respected.
-        fixture.expect_guaranteed_response_message_memory_taken_at_most(
+        fixture.expect_message_memory_taken_at_most(
             "Chatter",
             LOCAL_MESSAGE_MEMORY_CAPACITY,
             REMOTE_MESSAGE_MEMORY_CAPACITY,
@@ -137,7 +137,7 @@ fn check_guaranteed_response_message_memory_limits_are_respected_impl(
             fixture.tick();
 
             // Check message memory limits are respected.
-            fixture.expect_guaranteed_response_message_memory_taken_at_most(
+            fixture.expect_message_memory_taken_at_most(
                 "Shutdown",
                 LOCAL_MESSAGE_MEMORY_CAPACITY,
                 REMOTE_MESSAGE_MEMORY_CAPACITY,
@@ -147,7 +147,7 @@ fn check_guaranteed_response_message_memory_limits_are_respected_impl(
 
     // Tick until all calls have concluded; or else fail the test.
     fixture.tick_to_conclusion(shutdown_phase_max_rounds, |fixture| {
-        fixture.expect_guaranteed_response_message_memory_taken_at_most(
+        fixture.expect_message_memory_taken_at_most(
             "Wrap up",
             LOCAL_MESSAGE_MEMORY_CAPACITY,
             REMOTE_MESSAGE_MEMORY_CAPACITY,
@@ -364,6 +364,7 @@ impl FixtureConfig {
             },
             HypervisorConfig {
                 subnet_message_memory_capacity: subnet_message_memory_capacity.into(),
+                best_effort_message_memory_capacity: subnet_message_memory_capacity.into(),
                 embedders_config: EmbeddersConfig {
                     feature_flags: FeatureFlags {
                         best_effort_responses: BestEffortResponsesFeature::Enabled,
@@ -563,7 +564,7 @@ impl Fixture {
         self.get_env(canister).get_latest_state()
     }
 
-    /// Returns the number of bytes taken by guaranteed response memory (`local_env`, `remote_env`).
+    /// Returns the bytes consumed by guaranteed response messages: `(local_env, remote_env)`.
     pub fn guaranteed_response_message_memory_taken(&self) -> (NumBytes, NumBytes) {
         (
             self.local_env
@@ -575,9 +576,21 @@ impl Fixture {
         )
     }
 
-    /// Checks the local and remote guaranteed response message memory taken and compares it to an
-    /// upper limit.
-    pub fn expect_guaranteed_response_message_memory_taken_at_most(
+    /// Returns the bytes consumed by best-effort messages: `(local_env, remote_env)`.
+    pub fn best_effort_message_memory_taken(&self) -> (NumBytes, NumBytes) {
+        (
+            self.local_env
+                .get_latest_state()
+                .best_effort_message_memory_taken(),
+            self.remote_env
+                .get_latest_state()
+                .best_effort_message_memory_taken(),
+        )
+    }
+
+    /// Tests the local and remote guaranteed response and best-effort message
+    /// memory usage against the provided upper limits.
+    pub fn expect_message_memory_taken_at_most(
         &self,
         label: impl std::fmt::Display,
         local_memory_upper_limit: u64,
@@ -585,11 +598,32 @@ impl Fixture {
     ) -> Result<(), (String, DebugInfo)> {
         let (local_memory, remote_memory) = self.guaranteed_response_message_memory_taken();
         if local_memory > local_memory_upper_limit.into() {
-            return self.failed_with_reason(format!("{}: local memory exceeds limit", label));
+            return self.failed_with_reason(format!(
+                "{}: local guaranteed response message memory exceeds limit",
+                label
+            ));
         }
         if remote_memory > remote_memory_upper_limit.into() {
-            return self.failed_with_reason(format!("{}: remote memory exceeds limit", label));
+            return self.failed_with_reason(format!(
+                "{}: remote guaranteed response message memory exceeds limit",
+                label
+            ));
         }
+
+        let (local_memory, remote_memory) = self.best_effort_message_memory_taken();
+        if local_memory > local_memory_upper_limit.into() {
+            return self.failed_with_reason(format!(
+                "{}: local best-effort message memory exceeds limit",
+                label
+            ));
+        }
+        if remote_memory > remote_memory_upper_limit.into() {
+            return self.failed_with_reason(format!(
+                "{}: remote best-effort message memory exceeds limit",
+                label
+            ));
+        }
+
         Ok(())
     }
 
@@ -687,7 +721,7 @@ impl Fixture {
                 self.tick();
 
                 // After the fact, all memory is freed and back to 0.
-                return self.expect_guaranteed_response_message_memory_taken_at_most(
+                return self.expect_message_memory_taken_at_most(
                     "Message memory used despite no open call contexts",
                     0,
                     0,
