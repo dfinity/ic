@@ -83,5 +83,4 @@ sh_test(
     data = [
         "check-network.sh",
     ],
-    tags = ["manual"],
 )
