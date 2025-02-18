@@ -878,7 +878,7 @@ where
             })?;
 
         // Set up the expected control graph of the SNS while retaining control of the dapps.
-        Self::add_controllers(canister_api, &sns_canisters)
+        Self::add_sns_w_and_root_controllers(canister_api, &sns_canisters)
             .await
             .map_err(|message| {
                 DeployError::Reversible(ReversibleDeployError {
@@ -1008,22 +1008,23 @@ where
         join_errors_or_ok(results)
     }
 
-    /// Sets the controllers of the SNS canisters so that Root controls Governance + Ledger, and
-    /// Governance controls Root.
+    /// Sets the controllers of the SNS framework canisters to SNS Root and SNS-W, with
+    /// the exception of SNS Root itself, for which this function sets SNS Governance and SNS-W
+    /// as controllers.
     ///
-    /// WARNING: This function should be kept in sync with `remove_self_as_controller`.
-    async fn add_controllers(
+    /// WARNING: This function should be kept in sync with `remove_sns_w_as_controller`.
+    async fn add_sns_w_and_root_controllers(
         canister_api: &impl CanisterApi,
         canisters: &SnsCanisterIds,
     ) -> Result<(), String> {
-        let this_canister_id = canister_api.local_canister_id().get();
+        let sns_w_canister_id = canister_api.local_canister_id().get();
 
         let set_controllers_results = vec![
             // Set Root as controller of Governance.
             canister_api
                 .set_controllers(
                     CanisterId::unchecked_from_principal(canisters.governance.unwrap()),
-                    vec![this_canister_id, canisters.root.unwrap()],
+                    vec![sns_w_canister_id, canisters.root.unwrap()],
                 )
                 .await
                 .map_err(|err| {
@@ -1036,7 +1037,7 @@ where
             canister_api
                 .set_controllers(
                     CanisterId::unchecked_from_principal(canisters.ledger.unwrap()),
-                    vec![this_canister_id, canisters.root.unwrap()],
+                    vec![sns_w_canister_id, canisters.root.unwrap()],
                 )
                 .await
                 .map_err(|err| {
@@ -1049,7 +1050,7 @@ where
             canister_api
                 .set_controllers(
                     CanisterId::unchecked_from_principal(canisters.index.unwrap()),
-                    vec![this_canister_id, canisters.root.unwrap()],
+                    vec![sns_w_canister_id, canisters.root.unwrap()],
                 )
                 .await
                 .map_err(|err| {
@@ -1062,7 +1063,7 @@ where
             canister_api
                 .set_controllers(
                     CanisterId::unchecked_from_principal(canisters.root.unwrap()),
-                    vec![this_canister_id, canisters.governance.unwrap()],
+                    vec![sns_w_canister_id, canisters.governance.unwrap()],
                 )
                 .await
                 .map_err(|err| {
@@ -1075,7 +1076,7 @@ where
             canister_api
                 .set_controllers(
                     CanisterId::unchecked_from_principal(canisters.swap.unwrap()),
-                    vec![this_canister_id, canisters.root.unwrap()],
+                    vec![sns_w_canister_id, canisters.root.unwrap()],
                 )
                 .await
                 .map_err(|err| {
@@ -1089,7 +1090,7 @@ where
         join_errors_or_ok(set_controllers_results)
     }
 
-    /// Remove the SNS wasm canister as the controller of the canisters
+    /// Remove the SNS-W canister as the controller of the SNS framework canisters.
     async fn remove_sns_w_as_controller(
         canister_api: &impl CanisterApi,
         canisters: &SnsCanisterIds,
@@ -3587,7 +3588,7 @@ mod test {
     }
 
     #[tokio::test]
-    async fn fail_add_controllers() {
+    async fn fail_add_sns_w_and_root_controllers() {
         let canister_api = new_canister_api();
         canister_api
             .errors_on_set_controller
@@ -3661,7 +3662,7 @@ mod test {
     }
 
     #[tokio::test]
-    async fn fail_add_controllers_with_dapp_canisters() {
+    async fn fail_add_sns_w_and_root_controllers_with_dapp_canisters() {
         let mut canister_api = new_canister_api();
         canister_api.cycles_found_in_request = Arc::new(Mutex::new(0));
         canister_api
@@ -3750,7 +3751,7 @@ mod test {
     }
 
     #[tokio::test]
-    async fn fail_remove_self_as_controllers() {
+    async fn fail_remove_sns_w_as_controllers() {
         let canister_api = new_canister_api();
         let mut errors = vec![
             None,
@@ -3844,7 +3845,7 @@ mod test {
     }
 
     #[tokio::test]
-    async fn fail_remove_self_as_controllers_with_dapp_canisters() {
+    async fn fail_remove_sns_w_as_controllers_with_dapp_canisters() {
         let mut canister_api = new_canister_api();
         canister_api
             .errors_on_set_controller
