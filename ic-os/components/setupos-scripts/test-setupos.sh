@@ -6,8 +6,7 @@ CHECK_NETWORK_SCRIPT="${1:-./check-network.sh}"
 CHECK_HARDWARE_SCRIPT="${2:-./check-hardware.sh}"
 
 # ------------------------------------------------------------------------------
-# Override "source" so that sourcing /opt/ic/bin/config.sh and /opt/ic/bin/functions.sh
-# does not fail in our test environment.
+# Override "source" for test environment.
 # ------------------------------------------------------------------------------
 function source() {
     if [[ "$1" == "/opt/ic/bin/config.sh" || "$1" == "/opt/ic/bin/functions.sh" ]]; then
@@ -18,7 +17,7 @@ function source() {
 }
 
 # ------------------------------------------------------------------------------
-# Mocked out functions
+# Mocked Functions
 # ------------------------------------------------------------------------------
 
 function log_and_halt_installation_on_error() {
@@ -26,13 +25,8 @@ function log_and_halt_installation_on_error() {
     return "${exit_code}"
 }
 
-function log_start() {
-    local script="${1}"
-}
-
-function log_end() {
-    local script="${1}"
-}
+function log_start() { :; }
+function log_end() { :; }
 
 # ------------------------------------------------------------------------------
 # Unit tests for check-network.sh
@@ -41,8 +35,6 @@ function log_end() {
 function test_validate_domain_name() {
     echo "Running test: test_validate_domain_name_valid"
     domain_name="example.com"
-    # If domain_name is valid, validate_domain_name should never call
-    # log_and_halt_installation_on_error, so it should exit 0.
     if validate_domain_name; then
         echo "  PASS: valid domain: $domain_name"
     else
@@ -58,6 +50,7 @@ function test_validate_domain_name() {
         echo "  FAIL: domain $domain_name validation was expected to fail but didn't"
         exit 1
     fi
+
     domain_name="&BadDOMAIN.com"
     if ! validate_domain_name; then
         echo "  PASS: domain $domain_name validation failed as expected"
@@ -81,10 +74,10 @@ function test_detect_hardware_generation_gen1() {
     HARDWARE_GENERATION=""
     detect_hardware_generation
     if [[ "$HARDWARE_GENERATION" == "1" ]]; then
-      echo "  PASS: Gen1 hardware detected"
+        echo "  PASS: Gen1 hardware detected"
     else
-      echo "  FAIL: Gen1 hardware not detected as expected"
-      exit 1
+        echo "  FAIL: Gen1 hardware not detected as expected"
+        exit 1
     fi
 }
 
@@ -98,10 +91,10 @@ function test_detect_hardware_generation_gen2() {
     HARDWARE_GENERATION=""
     detect_hardware_generation
     if [[ "$HARDWARE_GENERATION" == "2" ]]; then
-      echo "  PASS: Gen2 hardware detected"
+        echo "  PASS: Gen2 hardware detected"
     else
-      echo "  FAIL: Gen2 hardware not detected as expected"
-      exit 1
+        echo "  FAIL: Gen2 hardware not detected as expected"
+        exit 1
     fi
 }
 
@@ -118,7 +111,6 @@ function test_verify_cpu_gen1() {
     echo "  PASS: verify_cpu for Gen1 passed"
 }
 
-# Test verify_cpu for Gen2.
 function test_verify_cpu_gen2() {
     echo "Running test: test_verify_cpu_gen2"
     FAKE_CPU_JSON='[
@@ -132,15 +124,14 @@ function test_verify_cpu_gen2() {
     echo "  PASS: verify_cpu for Gen2 passed"
 }
 
-# Test memory verification by simulating a memory JSON with sufficient size.
 function test_verify_memory_success() {
     echo "Running test: test_verify_memory_success"
     function lshw() {
-      if [[ "$*" == *"-class memory"* ]]; then
-         echo '[{"id": "memory", "size": 600000000000}]'
-         return 0
-      fi
-      return 1
+        if [[ "$*" == *"-class memory"* ]]; then
+            echo '[{"id": "memory", "size": 600000000000}]'
+            return 0
+        fi
+        return 1
     }
     verify_memory
     echo "  PASS: verify_memory passed with sufficient memory"
@@ -149,18 +140,14 @@ function test_verify_memory_success() {
 # ------------------------------------------------------------------------------
 # Load scripts WITHOUT executing main() function.
 # ------------------------------------------------------------------------------
-if [[ -f "${CHECK_NETWORK_SCRIPT}" ]]; then
-    tmpfile=$(mktemp)
-    sed '/^main$/d' "${CHECK_NETWORK_SCRIPT}" > "${tmpfile}"
-    source "${tmpfile}"
-    rm "${tmpfile}"
-fi
-if [[ -f "${CHECK_HARDWARE_SCRIPT}" ]]; then
-    tmpfile=$(mktemp)
-    sed '/^main$/d' "${CHECK_HARDWARE_SCRIPT}" > "${tmpfile}"
-    source "${tmpfile}"
-    rm "${tmpfile}"
-fi
+for script in "${CHECK_NETWORK_SCRIPT}" "${CHECK_HARDWARE_SCRIPT}"; do
+    if [[ -f "${script}" ]]; then
+        tmpfile=$(mktemp)
+        sed '/^main$/d' "${script}" > "${tmpfile}"
+        source "${tmpfile}"
+        rm "${tmpfile}"
+    fi
+done
 
 # ------------------------------------------------------------------------------
 # Run all tests
