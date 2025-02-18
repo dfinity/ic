@@ -120,7 +120,7 @@ if [[ -z "${NEW_FEATURES_AND_FIXES}" ]]; then
 fi
 NEW_ENTRY="# ${PROPOSED_ON}: Proposal ${PROPOSAL_ID}
 
-http://dashboard.internetcomputer.org/proposals/${PROPOSAL_ID}
+http://dashboard.internetcomputer.org/proposal/${PROPOSAL_ID}
 
 ${NEW_FEATURES_AND_FIXES}
 "
