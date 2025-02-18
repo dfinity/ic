@@ -19144,6 +19144,7 @@ dependencies = [
  "ic-nervous-system-common-test-keys",
  "ic-nns-common",
  "ic-nns-constants",
+ "itertools 0.12.1",
  "rgb",
  "serde",
  "serde_json",

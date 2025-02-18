@@ -1,11 +1,13 @@
+mod commands;
 mod commit_switcher;
 mod utils;
+
 use anyhow::{bail, Result};
 use clap::{Parser, Subcommand};
 use colored::*;
+use commands::{run_script, run_script_in_current_process};
 use commit_switcher::CommitSwitcher;
 use std::path::PathBuf;
-use std::process::{Command, Stdio};
 use url::Url;
 use utils::*;
 
@@ -143,10 +145,7 @@ fn run_pick_commit() -> Result<()> {
     let cmd_path = ic.join("testnet/tools/nns-tools/cmd.sh");
 
     // Run the command with the required argument.
-    let output = Command::new(cmd_path)
-        .arg("latest_commit_with_prebuilt_artifacts")
-        .current_dir(&ic)
-        .output()?;
+    let output = run_script(cmd_path, &["latest_commit_with_prebuilt_artifacts"], &ic)?;
 
     let commit = if output.status.success() {
         let commit = String::from_utf8_lossy(&output.stdout).trim().to_string();
@@ -295,20 +294,11 @@ fn run_create_proposal_texts(cmd: CreateProposalTexts) -> Result<()> {
             let script = ic.join("testnet/tools/nns-tools/prepare-nns-upgrade-proposal-text.sh");
             // cycles minting requires an upgrade arg, usually '()'
             let output = if canister != "cycles-minting" {
-                Command::new(script)
-                    .arg(canister)
-                    .arg(&commit)
-                    .current_dir(&ic)
-                    .output()
+                run_script(script, &[canister, &commit], &ic)
                     .expect("Failed to run NNS proposal text script")
             } else {
                 let upgrade_arg = input_with_default("Upgrade arg for CMC?", "()")?;
-                Command::new(script)
-                    .arg(canister)
-                    .arg(&commit)
-                    .arg(upgrade_arg)
-                    .current_dir(&ic)
-                    .output()
+                run_script(script, &[canister, &commit, &upgrade_arg], &ic)
                     .expect("Failed to run NNS proposal text script")
             };
             if !output.status.success() {
@@ -332,12 +322,7 @@ fn run_create_proposal_texts(cmd: CreateProposalTexts) -> Result<()> {
             // The SNS script is expected to write directly to the file provided as an argument.
             let file_path = proposals_dir.join(format!("sns-{}.md", canister));
             let file_path_str = file_path.to_str().expect("Invalid file path");
-            let output = Command::new(script)
-                .arg(canister)
-                .arg(&commit)
-                .arg(file_path_str)
-                .current_dir(&ic)
-                .output()
+            let output = run_script(script, &[canister, &commit, file_path_str], &ic)
                 .expect("Failed to run SNS proposal text script");
             if !output.status.success() {
                 bail!(
@@ -365,7 +350,7 @@ fn run_create_proposal_texts(cmd: CreateProposalTexts) -> Result<()> {
         println!("The following proposals have TODOs. Please review them and remove the TODOs before submitting.");
         for proposal_text_path in &proposals_with_todos {
             println!("  - {}", proposal_text_path.display());
-            let mut cmd = Command::new("code");
+            let mut cmd = std::process::Command::new("code");
             cmd.arg(proposal_text_path);
             cmd.current_dir(&ic);
             cmd.output()
@@ -432,15 +417,15 @@ fn run_submit_proposals(cmd: SubmitProposals) -> Result<()> {
     for proposal_path in &nns_proposal_text_paths {
         println!("Submitting NNS proposal: {}", proposal_path.display());
         let script = ic.join("testnet/tools/nns-tools/submit-mainnet-nns-upgrade-proposal.sh");
-        let output = Command::new(script)
-            .arg(proposal_path.to_str().expect("Invalid proposal path"))
-            .arg(&neuron_id)
-            .current_dir(&ic)
-            .stdin(Stdio::inherit())
-            .stdout(Stdio::inherit())
-            .stderr(Stdio::inherit())
-            .output()
-            .expect("Failed to run submit-mainnet-nns-upgrade-proposal.sh");
+        let output = run_script_in_current_process(
+            script,
+            &[
+                proposal_path.to_str().expect("Invalid proposal path"),
+                &neuron_id,
+            ],
+            &ic,
+        )
+        .expect("Failed to run submit-mainnet-nns-upgrade-proposal.sh");
         if !output.status.success() {
             bail!(
                 "Submission failed for {}: {}",
@@ -457,15 +442,15 @@ fn run_submit_proposals(cmd: SubmitProposals) -> Result<()> {
     for proposal_path in &sns_proposal_text_paths {
         println!("Submitting SNS proposal: {}", proposal_path.display());
         let script = ic.join("testnet/tools/nns-tools/submit-mainnet-publish-sns-wasm-proposal.sh");
-        let output = Command::new(script)
-            .arg(proposal_path.to_str().expect("Invalid proposal path"))
-            .arg(&neuron_id)
-            .current_dir(&ic)
-            .stdin(Stdio::inherit())
-            .stdout(Stdio::inherit())
-            .stderr(Stdio::inherit())
-            .output()
-            .expect("Failed to run submit-mainnet-publish-sns-wasm-proposal.sh");
+        let output = run_script_in_current_process(
+            script,
+            &[
+                proposal_path.to_str().expect("Invalid proposal path"),
+                &neuron_id,
+            ],
+            &ic,
+        )
+        .expect("Failed to run submit-mainnet-publish-sns-wasm-proposal.sh");
         if !output.status.success() {
             bail!(
                 "Submission failed for {}: {}",
@@ -528,18 +513,15 @@ fn run_create_forum_post(cmd: CreateForumPost) -> Result<()> {
     // --- Generate NNS forum post ---
     {
         let script = ic.join("testnet/tools/nns-tools/cmd.sh");
-        let output = Command::new(script)
-            .arg("generate_forum_post_nns_upgrades")
-            .args(nns_proposal_text_paths)
-            .output()
-            .expect("Failed to run generate_forum_post_nns_upgrades");
+        let mut args = vec!["generate_forum_post_nns_upgrades"];
+        let path_strs: Vec<&str> = nns_proposal_text_paths
+            .iter()
+            .map(|p| p.to_str().unwrap())
+            .collect();
+        args.extend(path_strs.iter());
 
-        if !output.status.success() {
-            bail!(
-                "Failed to generate NNS forum post: {}",
-                String::from_utf8_lossy(&output.stderr)
-            );
-        }
+        let output =
+            run_script(script, &args, &ic).expect("Failed to run generate_forum_post_nns_upgrades");
 
         copy(&output.stdout)?;
 
@@ -574,18 +556,15 @@ fn run_create_forum_post(cmd: CreateForumPost) -> Result<()> {
     // --- Generate SNS forum post ---
     {
         let script = ic.join("testnet/tools/nns-tools/cmd.sh");
-        let output = Command::new(script)
-            .arg("generate_forum_post_sns_wasm_publish")
-            .args(sns_proposal_text_paths)
-            .output()
-            .expect("Failed to run generate_forum_post_sns_wasm_publish");
+        let mut args = vec!["generate_forum_post_sns_wasm_publish"];
+        let path_strs: Vec<&str> = sns_proposal_text_paths
+            .iter()
+            .map(|p| p.to_str().unwrap())
+            .collect();
+        args.extend(path_strs.iter());
 
-        if !output.status.success() {
-            bail!(
-                "Failed to generate SNS forum post: {}",
-                String::from_utf8_lossy(&output.stderr)
-            );
-        }
+        let output = run_script(script, &args, &ic)
+            .expect("Failed to run generate_forum_post_sns_wasm_publish");
 
         copy(&output.stdout)?;
 
@@ -740,10 +719,7 @@ SNS: {}",
         for proposal_id in nns_proposal_ids.iter().chain(sns_proposal_ids.iter()) {
             println!("Updating changelog for proposal {}", proposal_id);
             let script = ic.join("testnet/tools/nns-tools/add-release-to-changelog.sh");
-            let output = Command::new(script)
-                .arg(proposal_id)
-                .current_dir(&ic)
-                .output()?;
+            let output = run_script(script, &[proposal_id], &ic)?;
 
             if !output.status.success() {
                 println!("{}", String::from_utf8_lossy(&output.stderr));
