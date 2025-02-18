@@ -35,7 +35,7 @@ use ic_types::{
     messages::{Blob, Certificate, CertificateDelegation, Query},
     CanisterId, NumInstructions, PrincipalId, SubnetId,
 };
-use prometheus::Histogram;
+use prometheus::{histogram_opts, labels, Histogram};
 use serde::Serialize;
 use std::convert::Infallible;
 use std::str::FromStr;
@@ -121,10 +121,13 @@ struct HttpQueryHandlerMetrics {
 impl HttpQueryHandlerMetrics {
     pub fn new(metrics_registry: &MetricsRegistry, namespace: &str) -> Self {
         Self {
-            height_diff_during_query_scheduling: metrics_registry.histogram(
-                format!("{}_query_height_diff_during_query_scheduling", namespace),
-                "The height difference between the latest certified height before query scheduling and state height used for execution".to_string(),
-                vec![0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 20.0, 50.0, 100.0],
+            height_diff_during_query_scheduling: metrics_registry.register(
+                Histogram::with_opts(histogram_opts!(
+                    "execution_query_height_diff_during_query_scheduling",
+                    "The height difference between the latest certified height before query scheduling and state height used for execution",
+                    vec![0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 20.0, 50.0, 100.0],
+                    labels! {"query_type".to_string() => namespace.to_string()}
+                )).unwrap(),
             ),
         }
     }

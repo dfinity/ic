@@ -177,14 +177,14 @@ impl ExecutionServices {
             query_scheduler.clone(),
             Arc::clone(&state_reader),
             metrics_registry,
-            "execution",
+            "regular",
         );
         let https_outcalls_service = HttpQueryHandler::new_service(
             Arc::clone(&sync_query_handler) as Arc<_>,
             query_scheduler.clone(),
             Arc::clone(&state_reader),
             metrics_registry,
-            "https_outcalls",
+            "https_outcall",
         );
         let ingress_filter = IngressFilterServiceImpl::new_service(
             query_scheduler.clone(),
