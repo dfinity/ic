@@ -628,7 +628,7 @@ mod tests {
         let payload = builder.build_payload(HEIGHT, max_size, past_payloads, context);
         let context = ProposalContext {
             proposer: node_test_id(0),
-            validation_context: &context,
+            validation_context: context,
         };
         let validation = builder.validate_payload(HEIGHT, &context, &payload, past_payloads);
         assert!(validation.is_ok());
@@ -882,7 +882,7 @@ mod tests {
     fn test_reject_timed_out_contexts() {
         let config = make_chain_key_config();
         let context = ValidationContext {
-            time: UNIX_EPOCH.checked_add(Duration::from_secs(2)).unwrap(),
+            time: UNIX_EPOCH + Duration::from_secs(2),
             ..VALIDATION_CONTEXT
         };
         reject_invalid_contexts_test(
