@@ -59,7 +59,7 @@ struct TipState {
 }
 
 /// A single pagemap to truncate and/or flush.
-pub struct PageMapToFlush {
+pub(crate) struct PageMapToFlush {
     pub page_map_type: PageMapType,
     pub truncate: bool,
     pub page_map: Option<PageMap>,

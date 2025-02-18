@@ -12,7 +12,7 @@ use ic_replicated_state::{
     page_map::PageMap,
     CanisterMetrics, CanisterState, ExecutionState, ReplicatedState, SchedulerState, SystemState,
 };
-use ic_replicated_state::{CheckpointLoadingMetrics, Memory, PageIndex};
+use ic_replicated_state::{CheckpointLoadingMetrics, Memory};
 use ic_state_layout::{
     error::LayoutError, AccessPolicy, CanisterLayout, CanisterSnapshotBits, CanisterStateBits,
     CheckpointLayout, PageMapLayout, ReadOnly, SnapshotLayout,
@@ -178,7 +178,7 @@ pub fn load_checkpoint_and_validate_parallel(
 /// to enable all relevant state manager features, e.g. incremental
 /// manifest computations
 #[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug)]
-pub enum PageMapType {
+pub(crate) enum PageMapType {
     WasmMemory(CanisterId),
     StableMemory(CanisterId),
     WasmChunkStore(CanisterId),
@@ -189,7 +189,7 @@ pub enum PageMapType {
 
 impl PageMapType {
     /// List all PageMaps contained in `state`, ignoring PageMaps that are in snapshots.
-    pub(crate) fn list_all_without_snapshots(state: &ReplicatedState) -> Vec<PageMapType> {
+    fn list_all_without_snapshots(state: &ReplicatedState) -> Vec<PageMapType> {
         let mut result = vec![];
         for (id, canister) in &state.canister_states {
             result.push(Self::WasmChunkStore(id.to_owned()));
@@ -262,32 +262,6 @@ impl PageMapType {
                 .map(|snap| snap.chunk_store().page_map()),
         }
     }
-}
-
-#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug)]
-pub struct DirtyPageMap {
-    pub height: Height,
-    pub page_type: PageMapType,
-    pub page_delta_indices: Vec<PageIndex>,
-}
-
-pub type DirtyPages = Vec<DirtyPageMap>;
-
-/// Get dirty pages of all PageMaps backed by a checkpoint
-/// file.
-pub fn get_dirty_pages(state: &ReplicatedState) -> DirtyPages {
-    PageMapType::list_all_without_snapshots(state) // Snapshots don't have dirty pages for the manifest computation.
-        .into_iter()
-        .filter_map(|entry| {
-            let page_map = entry.get(state)?;
-            let height = page_map.base_height?;
-            Some(DirtyPageMap {
-                height,
-                page_type: entry,
-                page_delta_indices: page_map.get_page_delta_indices(),
-            })
-        })
-        .collect()
 }
 
 /// Strips away the deltas from all page maps of the replicated state.
