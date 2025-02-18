@@ -139,6 +139,18 @@ upload_artifacts(
     }),
 )
 
+# https://dfinity.atlassian.net/browse/IDX-2599
+# various places in the source code, and possibly other repositories reference
+# the legacy upload path. Unwinding it without a will involve an unpredictable amount of time.
+upload_artifacts(
+    name = "legacy_upload",
+    testonly = True,
+    inputs = [":binaries"],
+    remote_subdir = "release",
+    target_compatible_with = ["@platforms//os:linux"],
+    visibility = ["//testnet/tools:__pkg__"],
+)
+
 BINS_TO_TEST = [":" + name for name in ALL_BINARIES]
 
 sh_test(
