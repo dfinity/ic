@@ -21,8 +21,10 @@ function source() {
 # ------------------------------------------------------------------------------
 
 function log_and_halt_installation_on_error() {
-    local exit_code="$1"
-    return "${exit_code}"
+    if [ "$1" != "0" ]; then
+        echo "ERROR encountered: $2"
+        exit 1
+    fi
 }
 
 # ------------------------------------------------------------------------------
@@ -41,7 +43,7 @@ function test_validate_domain_name() {
 
     echo "Running test: test_validate_domain_name_invalid"
     domain_name="example."
-    if ! validate_domain_name; then
+    if ! ( validate_domain_name ); then
         echo "  PASS: domain $domain_name validation failed as expected"
     else
         echo "  FAIL: domain $domain_name validation was expected to fail but didn't"
@@ -49,7 +51,7 @@ function test_validate_domain_name() {
     fi
 
     domain_name="&BadDOMAIN.com"
-    if ! validate_domain_name; then
+    if ! ( validate_domain_name ); then
         echo "  PASS: domain $domain_name validation failed as expected"
     else
         echo "  FAIL: domain $domain_name validation was expected to fail but didn't"
@@ -69,6 +71,7 @@ function test_detect_hardware_generation_gen1() {
     ]'
     function get_cpu_info_json() { echo "$FAKE_CPU_JSON"; }
     HARDWARE_GENERATION=""
+
     detect_hardware_generation
     if [[ "$HARDWARE_GENERATION" == "1" ]]; then
         echo "  PASS: Gen1 hardware detected"
@@ -86,6 +89,7 @@ function test_detect_hardware_generation_gen2() {
     ]'
     function get_cpu_info_json() { echo "$FAKE_CPU_JSON"; }
     HARDWARE_GENERATION=""
+
     detect_hardware_generation
     if [[ "$HARDWARE_GENERATION" == "2" ]]; then
         echo "  PASS: Gen2 hardware detected"
@@ -104,6 +108,7 @@ function test_verify_cpu_gen1() {
     function get_cpu_info_json() { echo "$FAKE_CPU_JSON"; }
     function nproc() { echo 64; }
     HARDWARE_GENERATION="1"
+
     verify_cpu
     echo "  PASS: verify_cpu for Gen1 passed"
 }
@@ -117,6 +122,7 @@ function test_verify_cpu_gen2() {
     function get_cpu_info_json() { echo "$FAKE_CPU_JSON"; }
     function nproc() { echo 70; }
     HARDWARE_GENERATION="2"
+
     verify_cpu
     echo "  PASS: verify_cpu for Gen2 passed"
 }
