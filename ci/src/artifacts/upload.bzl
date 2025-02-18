@@ -34,7 +34,6 @@ def _upload_artifact_impl(ctx):
         outputs = [checksum],
     )
 
-    fileurl = []
     allinputs = ctx.files.inputs + [checksum] if s3_upload else [checksum]
     for f in allinputs:
         filename = ctx.label.name + "_" + f.basename
@@ -54,25 +53,12 @@ def _upload_artifact_impl(ctx):
             outputs = [url],
             tools = [ctx.file._rclone],
         )
-        fileurl.extend([url])
+        out.append(url)
 
-    urls = ctx.actions.declare_file(ctx.label.name + ".urls")
-    ctx.actions.run_shell(
-        command = "cat " + " ".join([url.path for url in fileurl]) + " >" + urls.path,
-        inputs = fileurl,
-        outputs = [urls],
-    )
-    out.append(urls)
-    out.extend(fileurl)
-
-    executable = ctx.actions.declare_file(ctx.label.name + ".bin")
-    ctx.actions.write(output = executable, content = "#!/bin/sh\necho;exec cat " + urls.short_path, is_executable = True)
-
-    return [DefaultInfo(files = depset(out), runfiles = ctx.runfiles(files = out), executable = executable)]
+    return [DefaultInfo(files = depset(out), runfiles = ctx.runfiles(files = out))]
 
 _upload_artifacts = rule(
     implementation = _upload_artifact_impl,
-    executable = True,
     attrs = {
         "inputs": attr.label_list(allow_files = True),
         "remote_subdir": attr.string(mandatory = True),

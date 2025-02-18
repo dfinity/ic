@@ -54,7 +54,6 @@ AWS_PROFILE=cf "$RCLONE" \
     --stats-one-line \
     --checksum \
     --immutable \
-    --s3-upload-cutoff=5G \
     copy \
     "$f" \
     "public-s3-cf:dfinity-download-public/ic/${VERSION}/$REMOTE_SUBDIR/"
