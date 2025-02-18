@@ -76,9 +76,9 @@ mod tests {
     #[test]
     fn test_parse_past_payload_ids() {
         let payloads = [
-            as_bytes(make_vetkd_agreements([0, 1, 2])),
-            as_bytes(make_vetkd_agreements([2, 3, 4])),
-            as_bytes(make_vetkd_agreements([4, 4, 5])),
+            as_bytes(make_vetkd_agreements(0, 1, 2)),
+            as_bytes(make_vetkd_agreements(2, 3, 4)),
+            as_bytes(make_vetkd_agreements(4, 4, 5)),
         ];
         let past_payloads = payloads
             .iter()

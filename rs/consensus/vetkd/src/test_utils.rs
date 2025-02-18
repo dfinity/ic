@@ -27,20 +27,24 @@ use std::{collections::BTreeMap, sync::Arc};
 use strum::EnumCount;
 
 /// Create a map of agreements with all possible types
-pub(super) fn make_vetkd_agreements(ids: [u64; 3]) -> BTreeMap<CallbackId, VetKdAgreement> {
+pub(super) fn make_vetkd_agreements(
+    id1: u64,
+    id2: u64,
+    id3: u64,
+) -> BTreeMap<CallbackId, VetKdAgreement> {
     assert_eq!(VetKdAgreement::COUNT, 2);
     assert_eq!(VetKdErrorCode::COUNT, 2);
     BTreeMap::from([
         (
-            CallbackId::from(ids[0]),
+            CallbackId::from(id1),
             VetKdAgreement::Success(vec![1, 2, 3, 4]),
         ),
         (
-            CallbackId::from(ids[1]),
+            CallbackId::from(id2),
             VetKdAgreement::Reject(VetKdErrorCode::TimedOut),
         ),
         (
-            CallbackId::from(ids[2]),
+            CallbackId::from(id3),
             VetKdAgreement::Reject(VetKdErrorCode::InvalidKey),
         ),
     ])
