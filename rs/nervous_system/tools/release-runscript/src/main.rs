@@ -257,7 +257,7 @@ fn run_create_proposal_texts(cmd: CreateProposalTexts) -> Result<()> {
         sns_canisters,
     } = cmd;
 
-    // Create proposals directory under ic_dir/proposals/release-{ISO_DATE}
+    // Create proposals directory under ic_dir/../proposals/release-{ISO_DATE}
     let ic = ic_dir();
     let today = chrono::Local::now().format("%Y-%m-%d").to_string();
     let proposals_dir = ic
@@ -275,73 +275,79 @@ fn run_create_proposal_texts(cmd: CreateProposalTexts) -> Result<()> {
 
     let proposals_dir = proposals_dir.canonicalize()?;
 
-    println!(
-        "Creating proposal texts for {} NNS canisters and {} SNS canisters at commit {}",
-        nns_canisters.len(),
-        sns_canisters.len(),
-        commit
-    );
-
     let mut nns_proposal_text_paths = Vec::new();
     let mut sns_proposal_text_paths = Vec::new();
 
-    // For each NNS canister, run the prepare-nns-upgrade-proposal-text.sh script and write its output to a file.
-    for canister in &nns_canisters {
-        println!("Creating proposal text for NNS canister: {}", canister);
-        let script = ic.join("testnet/tools/nns-tools/prepare-nns-upgrade-proposal-text.sh");
-        // cycles minting requires an upgrade arg, usually '()'
-        let output = if canister != "cycles-minting" {
-            Command::new(script)
-                .arg(canister)
-                .arg(&commit)
-                .current_dir(&ic)
-                .output()
-                .expect("Failed to run NNS proposal text script")
-        } else {
-            let upgrade_arg = input_with_default("Upgrade arg for CMC?", "()")?;
-            Command::new(script)
-                .arg(canister)
-                .arg(&commit)
-                .arg(upgrade_arg)
-                .current_dir(&ic)
-                .output()
-                .expect("Failed to run NNS proposal text script")
-        };
-        if !output.status.success() {
-            bail!(
+    {
+        // Switch to the commit being released while we generate the proposal texts
+        let _commit_switcher = CommitSwitcher::switch(commit.clone())?;
+
+        println!(
+            "Creating proposal texts for {} NNS canisters and {} SNS canisters at commit {}",
+            nns_canisters.len(),
+            sns_canisters.len(),
+            commit
+        );
+
+        // For each NNS canister, run the prepare-nns-upgrade-proposal-text.sh script and write its output to a file.
+        for canister in &nns_canisters {
+            println!("Creating proposal text for NNS canister: {}", canister);
+            let script = ic.join("testnet/tools/nns-tools/prepare-nns-upgrade-proposal-text.sh");
+            // cycles minting requires an upgrade arg, usually '()'
+            let output = if canister != "cycles-minting" {
+                Command::new(script)
+                    .arg(canister)
+                    .arg(&commit)
+                    .current_dir(&ic)
+                    .output()
+                    .expect("Failed to run NNS proposal text script")
+            } else {
+                let upgrade_arg = input_with_default("Upgrade arg for CMC?", "()")?;
+                Command::new(script)
+                    .arg(canister)
+                    .arg(&commit)
+                    .arg(upgrade_arg)
+                    .current_dir(&ic)
+                    .output()
+                    .expect("Failed to run NNS proposal text script")
+            };
+            if !output.status.success() {
+                bail!(
                 "Failed to create proposal text for NNS canister {} due to error: stdout: {}, stderr: {}",
                 canister,
                 String::from_utf8_lossy(&output.stdout),
                 String::from_utf8_lossy(&output.stderr)
             );
+            }
+            let file_path = proposals_dir.join(format!("nns-{}.md", canister));
+            std::fs::write(&file_path, output.stdout).expect("Failed to write NNS proposal file");
+            nns_proposal_text_paths.push(file_path);
         }
-        let file_path = proposals_dir.join(format!("nns-{}.md", canister));
-        std::fs::write(&file_path, output.stdout).expect("Failed to write NNS proposal file");
-        nns_proposal_text_paths.push(file_path);
-    }
 
-    // For each SNS canister, run the prepare-publish-sns-wasm-proposal-text.sh script.
-    for canister in &sns_canisters {
-        println!("Creating proposal text for SNS canister: {}", canister);
-        let script = ic.join("testnet/tools/nns-tools/prepare-publish-sns-wasm-proposal-text.sh");
-        // The SNS script is expected to write directly to the file provided as an argument.
-        let file_path = proposals_dir.join(format!("sns-{}.md", canister));
-        let file_path_str = file_path.to_str().expect("Invalid file path");
-        let output = Command::new(script)
-            .arg(canister)
-            .arg(&commit)
-            .arg(file_path_str)
-            .current_dir(&ic)
-            .output()
-            .expect("Failed to run SNS proposal text script");
-        if !output.status.success() {
-            bail!(
-                "Failed to create proposal text for SNS canister {} due to error: {}",
-                canister,
-                String::from_utf8_lossy(&output.stderr)
-            );
+        // For each SNS canister, run the prepare-publish-sns-wasm-proposal-text.sh script.
+        for canister in &sns_canisters {
+            println!("Creating proposal text for SNS canister: {}", canister);
+            let script =
+                ic.join("testnet/tools/nns-tools/prepare-publish-sns-wasm-proposal-text.sh");
+            // The SNS script is expected to write directly to the file provided as an argument.
+            let file_path = proposals_dir.join(format!("sns-{}.md", canister));
+            let file_path_str = file_path.to_str().expect("Invalid file path");
+            let output = Command::new(script)
+                .arg(canister)
+                .arg(&commit)
+                .arg(file_path_str)
+                .current_dir(&ic)
+                .output()
+                .expect("Failed to run SNS proposal text script");
+            if !output.status.success() {
+                bail!(
+                    "Failed to create proposal text for SNS canister {} due to error: {}",
+                    canister,
+                    String::from_utf8_lossy(&output.stderr)
+                );
+            }
+            sns_proposal_text_paths.push(file_path);
         }
-        sns_proposal_text_paths.push(file_path);
     }
 
     loop {
@@ -375,17 +381,16 @@ fn run_create_proposal_texts(cmd: CreateProposalTexts) -> Result<()> {
         &format!("I created proposal texts for each canister to be upgraded in the following directory: {}.
 NNS proposal texts: {}
 SNS proposal texts: {}",
-            proposals_dir.display(),
-            nns_proposal_text_paths.iter().fold(String::new(), |mut acc, path| {
-                let _ = write!(acc, "\n  - {}", path.display());
-                acc
-            }),
-            sns_proposal_text_paths.iter().fold(String::new(), |mut acc, path| {
-                let _ = write!(acc, "\n  - {}", path.display());
-                acc
-            })
-        )
-    )?;
+        proposals_dir.display(),
+        nns_proposal_text_paths.iter().fold(String::new(), |mut acc, path| {
+            let _ = write!(acc, "\n  - {}", path.display());
+            acc
+        }),
+        sns_proposal_text_paths.iter().fold(String::new(), |mut acc, path| {
+            let _ = write!(acc, "\n  - {}", path.display());
+            acc
+        })
+    ))?;
 
     run_submit_proposals(SubmitProposals {
         commit,
