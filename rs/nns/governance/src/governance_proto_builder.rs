@@ -1,6 +1,7 @@
 use crate::pb::v1::{
     Governance as GovernancePb, NetworkEconomics as NetworkEconomicsPb, Neuron as NeuronPb,
-    ProposalData as ProposalPb, RewardEvent as RewardEventPb,
+    NeuronsFundEconomics, ProposalData as ProposalPb, RewardEvent as RewardEventPb,
+    VotingPowerEconomics,
 };
 
 pub struct GovernanceProtoBuilder {
@@ -16,13 +17,22 @@ impl Default for GovernanceProtoBuilder {
 impl GovernanceProtoBuilder {
     /// Minimaly valid Governance proto.
     pub fn new() -> Self {
-        let governance_proto = GovernancePb {
+        let mut governance_proto = GovernancePb {
             wait_for_quiet_threshold_seconds: 1,
             short_voting_period_seconds: 30,
             neuron_management_voting_period_seconds: Some(30),
             economics: Some(NetworkEconomicsPb::default()),
             ..Default::default()
         };
+
+        // Make economics valid. Ideally, we'd use
+        // NetworkEconomics::with_default_values(), but many tests rely on
+        // NetworkEconomics::default() (not the same!).
+        let economics = governance_proto.economics.as_mut().unwrap();
+        economics.max_proposals_to_keep_per_topic = 100;
+        economics.neurons_fund_economics = Some(NeuronsFundEconomics::with_default_values());
+        economics.voting_power_economics = Some(VotingPowerEconomics::with_default_values());
+
         Self { governance_proto }
     }
 
