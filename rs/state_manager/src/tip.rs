@@ -76,7 +76,7 @@ pub(crate) enum TipRequest {
         sender: Sender<Result<(CheckpointLayout<ReadOnly>, HasDowngrade), LayoutError>>,
     },
     /// Filter canisters in tip. Remove ones not present in the set.
-    /// State: tip_folder_state.has_filtered_canistes = true
+    /// State: tip_folder_state.has_filtered_canisters = true
     FilterTipCanisters {
         height: Height,
         ids: BTreeSet<CanisterId>,
