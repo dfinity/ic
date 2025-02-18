@@ -659,6 +659,10 @@ mod tests {
                 )) if expected.is_none()
                    && received == Some(VetKdAgreement::Reject(VetKdErrorCode::TimedOut))
             );
+
+            // Empty payloads should always be valid
+            let validation = builder.validate_payload(HEIGHT, &proposal_context, &[], &[]);
+            assert!(validation.is_ok());
         })
     }
 
@@ -669,17 +673,18 @@ mod tests {
             let payload = builder.build_payload(HEIGHT, MAX_SIZE, &[], &VALIDATION_CONTEXT);
             assert!(payload.is_empty());
 
+            let proposal_context = ProposalContext {
+                proposer: node_test_id(0),
+                validation_context: &VALIDATION_CONTEXT,
+            };
+
+            // Empty payloads should always be valid
+            let validation = builder.validate_payload(HEIGHT, &proposal_context, &payload, &[]);
+            assert!(validation.is_ok());
+
             // Non-empty payloads should be rejected
             let payload = as_bytes(make_vetkd_agreements(0, 1, 2));
-            let validation = builder.validate_payload(
-                HEIGHT,
-                &ProposalContext {
-                    proposer: node_test_id(0),
-                    validation_context: &VALIDATION_CONTEXT,
-                },
-                &payload,
-                &[],
-            );
+            let validation = builder.validate_payload(HEIGHT, &proposal_context, &payload, &[]);
             assert_matches!(
                 validation.unwrap_err(),
                 ValidationError::InvalidArtifact(InvalidPayloadReason::InvalidVetKdPayload(
@@ -703,17 +708,18 @@ mod tests {
             let payload = builder.build_payload(HEIGHT, MAX_SIZE, &[], &context);
             assert!(payload.is_empty());
 
+            let proposal_context = ProposalContext {
+                proposer: node_test_id(0),
+                validation_context: &context,
+            };
+
+            // Empty payloads should always be valid
+            let validation = builder.validate_payload(HEIGHT, &proposal_context, &payload, &[]);
+            assert!(validation.is_ok());
+
             // Non-empty payload validation should be fail if we don't have the state
             let payload = as_bytes(make_vetkd_agreements(0, 1, 2));
-            let validation = builder.validate_payload(
-                HEIGHT,
-                &ProposalContext {
-                    proposer: node_test_id(0),
-                    validation_context: &context,
-                },
-                &payload,
-                &[],
-            );
+            let validation = builder.validate_payload(HEIGHT, &proposal_context, &payload, &[]);
             assert_matches!(
                 validation.unwrap_err(),
                 ValidationError::ValidationFailed(
@@ -757,6 +763,18 @@ mod tests {
             let payload =
                 builder.build_payload(HEIGHT, NumBytes::from(0), &[], &VALIDATION_CONTEXT);
             assert!(payload.is_empty());
+
+            // Empty payloads should always be valid
+            let validation = builder.validate_payload(
+                HEIGHT,
+                &ProposalContext {
+                    proposer: node_test_id(0),
+                    validation_context: &VALIDATION_CONTEXT,
+                },
+                &payload,
+                &[],
+            );
+            assert!(validation.is_ok());
         })
     }
 
@@ -927,6 +945,10 @@ mod tests {
                 )) if expected == Some(VetKdAgreement::Reject(VetKdErrorCode::InvalidKey))
                    && received.is_none()
             );
+
+            // Empty payloads should always be valid
+            let validation = builder.validate_payload(HEIGHT, &proposal_context, &[], &[]);
+            assert!(validation.is_ok());
         })
     }
 
@@ -989,6 +1011,10 @@ mod tests {
                 )) if expected == Some(VetKdAgreement::Reject(VetKdErrorCode::InvalidKey))
                    && received.is_none()
             );
+
+            // Empty payloads should always be valid
+            let validation = builder.validate_payload(HEIGHT, &proposal_context, &[], &[]);
+            assert!(validation.is_ok());
         })
     }
 
@@ -1054,6 +1080,10 @@ mod tests {
                 )) if expected == Some(VetKdAgreement::Reject(VetKdErrorCode::TimedOut))
                    && received.is_none()
             );
+
+            // Empty payloads should always be valid
+            let validation = builder.validate_payload(HEIGHT, &proposal_context, &[], &[]);
+            assert!(validation.is_ok());
         })
     }
 
