@@ -25,7 +25,7 @@ REPOS_TO_SCAN = [
                 owner=Team.NNS_TEAM,
             )
         ],
-        "18.17.1",
+        "18.20.5",
     ),
     Repository(
         "internet-identity",

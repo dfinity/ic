@@ -380,7 +380,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             ),
             "cloudflare": crate.spec(
                 git = "https://github.com/dfinity/cloudflare-rs.git",
-                rev = "0b1805bf11ed526445712559e6f18d3b8e024b06",
+                rev = "8b011d170d9d61eaad77bb9645371f6219285104",
                 default_features = False,
                 features = [
                     "rustls-tls",
@@ -465,7 +465,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 features = ["serde"],
             ),
             "evm_rpc_types": crate.spec(
-                version = "^1.2.0",
+                version = "^1.3.0",
             ),
             "exec": crate.spec(
                 version = "^0.3.1",
@@ -591,13 +591,13 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "3.0.2",
             ),
             "ic-cdk": crate.spec(
-                version = "^0.16.0",
+                version = "^0.17.0",
             ),
             "ic-cdk-timers": crate.spec(
                 version = "^0.11.0",
             ),
             "ic-cdk-macros": crate.spec(
-                version = "^0.9.0",
+                version = "^0.17.0",
             ),
             "ic-cdk-macros-next": crate.spec(
                 package = "ic-cdk-macros",
@@ -626,6 +626,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             ),
             "ic-metrics-encoder": crate.spec(
                 version = "^1.1.1",
+            ),
+            "ic-management-canister-types": crate.spec(
+                version = "0.1.0",
             ),
             "ic_principal": crate.spec(
                 version = "^0.1.1",
@@ -732,11 +735,16 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "k8s-openapi": crate.spec(
                 version = "^0.22.0",
                 features = [
-                    "v1_24",
+                    "v1_28",
+                    "schemars",
                 ],
             ),
             "kube": crate.spec(
-                version = "^0.93.1",
+                version = "^0.94.0",
+                features = [
+                    "client",
+                    "derive",
+                ],
             ),
             "lazy_static": crate.spec(
                 version = "^1.4.0",
@@ -1123,7 +1131,10 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.3.0",
             ),
             "schemars": crate.spec(
-                version = "^0.8.16",
+                version = "^0.8.21",
+                features = [
+                    "derive",
+                ],
             ),
             "scoped_threadpool": crate.spec(
                 version = "^0.1.9",
