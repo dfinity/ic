@@ -79,8 +79,10 @@ sh_test(
     srcs = ["test-setupos.sh"],
     args = [
         "$(execpath check-network.sh)",
+        "$(execpath check-hardware.sh)",
     ],
     data = [
         "check-network.sh",
+        "check-hardware.sh",
     ],
 )
