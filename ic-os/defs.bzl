@@ -1,5 +1,12 @@
 """
-A macro to build multiple versions of the ICOS image (i.e., dev vs prod)
+A macro to build multiple versions of the ICOS image (i.e., dev vs prod).
+
+This macro defines the overall build process for ICOS images, including:
+  - Version management.
+  - Building bootloader, container, and filesystem images.
+  - Injecting variant-specific extra partitions via a custom mechanism.
+  - Assembling the final disk image and upload targets.
+  - Additional developer and test utilities.
 """
 
 load("@bazel_skylib//rules:copy_file.bzl", "copy_file")
@@ -289,23 +296,22 @@ def icos_build(
 
     # -------------------- Assemble disk partitions ---------------
 
-    # Build a list of custom partitions with a function, to allow "injecting" build steps at this point
-    if "custom_partitions" not in image_deps:
-        custom_partitions = []
-    else:
-        custom_partitions = image_deps["custom_partitions"]()
+    # Build a list of custom partitions to allow "injecting" variant-specific partition logic.
+    custom_partitions = image_deps.get("custom_partitions", lambda mode: [])(mode)
+
+    partitions = [
+        "//ic-os/bootloader:partition-esp.tzst",
+        ":partition-grub.tzst",
+        ":partition-boot.tzst",
+        ":partition-root.tzst",
+    ] + custom_partitions
 
     # -------------------- Assemble disk image --------------------
 
     disk_image(
         name = "disk-img.tar",
         layout = image_deps["partition_table"],
-        partitions = [
-            "//ic-os/bootloader:partition-esp.tzst",
-            ":partition-grub.tzst",
-            ":partition-boot.tzst",
-            ":partition-root.tzst",
-        ] + custom_partitions,
+        partitions = partitions,
         expanded_size = image_deps.get("expanded_size", default = None),
         tags = ["manual", "no-cache"],
         target_compatible_with = [
@@ -317,12 +323,7 @@ def icos_build(
     disk_image_no_tar(
         name = "disk.img",
         layout = image_deps["partition_table"],
-        partitions = [
-            "//ic-os/bootloader:partition-esp.tzst",
-            ":partition-grub.tzst",
-            ":partition-boot.tzst",
-            ":partition-root.tzst",
-        ] + custom_partitions,
+        partitions = partitions,
         expanded_size = image_deps.get("expanded_size", default = None),
         tags = ["manual", "no-cache"],
         target_compatible_with = [

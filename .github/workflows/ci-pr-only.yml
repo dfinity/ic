@@ -54,6 +54,8 @@ jobs:
       options: >-
         -e NODE_NAME
     if: ${{ github.event_name != 'merge_group' }}
+    permissions:
+      pull-requests: write
     env:
       CI_EVENT_NAME: ${{ github.event_name }}
     steps:
@@ -143,6 +145,9 @@ jobs:
       options: >-
         -e NODE_NAME
     if: contains(github.event.pull_request.labels.*.name, 'CI_COVERAGE')
+    permissions:
+      contents: read
+      pull-requests: read
     steps:
       - name: Checkout
         uses: actions/checkout@v4
