@@ -145,6 +145,24 @@ function test_verify_cpu_gen2() {
     echo "  PASS: verify_cpu for Gen2 passed"
 }
 
+function test_verify_cpu_gen2_failure() {
+    echo "Running test: test_verify_cpu_gen2_failure"
+    FAKE_CPU_JSON='[
+      {"id": "cpu:0", "product": "AMD EPYC 7313", "capabilities": {"sev_snp": "false"}},
+      {"id": "cpu:1", "product": "AMD EPYC 7313", "capabilities": {"sev_snp": "false"}}
+    ]'
+    get_cpu_info_json() { echo "$FAKE_CPU_JSON"; }
+    nproc() { echo 64; }
+    HARDWARE_GENERATION="2"
+
+    if ! ( verify_cpu ); then
+        echo "  PASS: verify_cpu for Gen2 failed as expected"
+    else
+        echo "  FAIL: verify_cpu for Gen2 passed unexpectedly"
+        exit 1
+    fi
+}
+
 function test_verify_memory_success() {
     echo "Running test: test_verify_memory_success"
     function lshw() {
@@ -156,6 +174,39 @@ function test_verify_memory_success() {
     }
     verify_memory
     echo "  PASS: verify_memory passed with sufficient memory"
+}
+
+function test_verify_memory_failure() {
+    echo "Running test: test_verify_memory_failure"
+    function lshw() {
+        if [[ "$*" == *"-class memory"* ]]; then
+            # Return insufficient memory size
+            echo '[{"id": "memory", "size": 100000000000}]'
+            return 0
+        fi
+        return 1
+    }
+    if ! ( verify_memory ); then
+        echo "  PASS: verify_memory failed as expected with insufficient memory"
+    else
+        echo "  FAIL: verify_memory passed unexpectedly with insufficient memory"
+        exit 1
+    fi
+}
+
+function test_verify_deployment_path_warning() {
+    echo "Running test: test_verify_deployment_path_warning"
+    HARDWARE_GENERATION="2"
+    function sleep() {
+        echo "Sleep skipped for test"
+    }
+    output=$(verify_deployment_path 2>&1)
+    if [[ "$output" == *"WARNING: Gen2 hardware detected"* ]]; then
+        echo "  PASS: verify_deployment_path warned as expected"
+    else
+        echo "  FAIL: verify_deployment_path did not warn as expected"
+        exit 1
+    fi
 }
 
 # ------------------------------------------------------------------------------
@@ -188,9 +239,12 @@ test_detect_hardware_generation_gen2
 test_verify_cpu_gen1
 test_verify_cpu_gen1_failure
 test_verify_cpu_gen2
+test_verify_cpu_gen2_failure
 test_verify_memory_success
+test_verify_memory_failure
+test_verify_deployment_path_warning
 echo
-echo "PASSED check-network unit tests"
+echo "PASSED check-hardware unit tests"
 echo
 
 echo
