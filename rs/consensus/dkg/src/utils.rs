@@ -18,7 +18,9 @@ use ic_types::{
 };
 use std::collections::{BTreeMap, HashSet};
 
-// TODO: Document
+/// Returns the [`MasterPublicKey`]s and also the [`NiDkgId`]s of the `next_transcript`
+/// (or, if unavialable, of the `current_transcript`) corresponding to the [`MasterPublicKeyId`]s
+/// active on the subnet.
 #[allow(clippy::type_complexity)]
 pub fn get_vetkey_public_keys(
     block: &Block,
@@ -68,7 +70,7 @@ pub fn get_vetkey_public_keys(
                         logger,
                         "Failed to get public key for key id {}: {:?}", key_id, err
                     );
-                    return None;
+                    None
                 }
                 Ok(pubkey) => Some((key_id, pubkey, transcript.dkg_id.clone())),
             },
@@ -243,4 +245,6 @@ mod tests {
             matches!(&vetkeys[1], NiDkgMasterPublicKeyId::VetKd(key) if key.name == "second_vet_kd_key")
         );
     }
+
+    // TODO: Unit test for `get_vetkey_public_keys`. (Currently its covered through a system test)
 }
