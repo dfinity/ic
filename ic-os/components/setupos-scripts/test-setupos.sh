@@ -64,41 +64,35 @@ function test_validate_domain_name() {
 }
 
 # ------------------------------------------------------------------------------
-# Unit tests for check-hardware.sh
+# Parameterized unit test for check-hardware.sh
 # ------------------------------------------------------------------------------
 
-function test_detect_hardware_generation_gen1() {
-    echo "Running test: test_detect_hardware_generation_gen1"
-    FAKE_CPU_JSON='[
-      {"id": "cpu:0", "product": "AMD EPYC 7302", "capabilities": {"sev": "true"}},
-      {"id": "cpu:1", "product": "AMD EPYC 7302", "capabilities": {"sev": "true"}}
+function test_detect_hardware_generation() {
+    # Gen1 test
+    test_detect_hardware_generation_helper "1" '[
+    {"id": "cpu:0", "product": "AMD EPYC 7302", "capabilities": {"sev": "true"}},
+    {"id": "cpu:1", "product": "AMD EPYC 7302", "capabilities": {"sev": "true"}}
     ]'
-    function get_cpu_info_json() { echo "$FAKE_CPU_JSON"; }
-    HARDWARE_GENERATION=""
-
-    detect_hardware_generation
-    if [[ "$HARDWARE_GENERATION" == "1" ]]; then
-        echo "  PASS: Gen1 hardware detected"
-    else
-        echo "  FAIL: Gen1 hardware not detected as expected"
-        exit 1
-    fi
+    # Gen2 test
+    test_detect_hardware_generation_helper "2" '[
+    {"id": "cpu:0", "product": "AMD EPYC 7313", "capabilities": {"sev_snp": "true"}},
+    {"id": "cpu:1", "product": "AMD EPYC 7313", "capabilities": {"sev_snp": "true"}}
+    ]'
 }
 
-function test_detect_hardware_generation_gen2() {
-    echo "Running test: test_detect_hardware_generation_gen2"
-    FAKE_CPU_JSON='[
-      {"id": "cpu:0", "product": "AMD EPYC 7313", "capabilities": {"sev_snp": "true"}},
-      {"id": "cpu:1", "product": "AMD EPYC 7313", "capabilities": {"sev_snp": "true"}}
-    ]'
+function test_detect_hardware_generation_helper() {
+    local expected_hardware_generation="$1"
+    local FAKE_CPU_JSON="$2"
+    echo "Running test: test_detect_hardware_generation for Gen${expected_hardware_generation}"
+
     function get_cpu_info_json() { echo "$FAKE_CPU_JSON"; }
     HARDWARE_GENERATION=""
 
     detect_hardware_generation
-    if [[ "$HARDWARE_GENERATION" == "2" ]]; then
-        echo "  PASS: Gen2 hardware detected"
+    if [[ "$HARDWARE_GENERATION" == "${expected_hardware_generation}" ]]; then
+        echo "  PASS: Gen${expected_hardware_generation} hardware detected"
     else
-        echo "  FAIL: Gen2 hardware not detected as expected"
+        echo "  FAIL: Gen${expected_hardware_generation} hardware not detected as expected"
         exit 1
     fi
 }
@@ -184,7 +178,6 @@ function test_verify_memory_failure() {
     echo "Running test: test_verify_memory_failure"
     function lshw() {
         if [[ "$*" == *"-class memory"* ]]; then
-            # Return insufficient memory size
             echo '[{"id": "memory", "size": 100000000000}]'
             return 0
         fi
@@ -238,8 +231,7 @@ echo
 
 echo
 echo "Running check-hardware.sh unit tests..."
-test_detect_hardware_generation_gen1
-test_detect_hardware_generation_gen2
+test_detect_hardware_generation
 test_verify_cpu_gen1
 test_verify_cpu_gen1_failure
 test_verify_cpu_gen2
