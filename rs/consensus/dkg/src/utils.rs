@@ -5,7 +5,7 @@ use ic_logger::{warn, ReplicaLogger};
 use ic_management_canister_types_private::MasterPublicKeyId;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_types::{
-    consensus::Block,
+    consensus::{dkg::Summary, Block},
     crypto::{
         canister_threshold_sig::MasterPublicKey,
         threshold_sig::{
@@ -23,8 +23,7 @@ use std::collections::{BTreeMap, HashSet};
 /// active on the subnet.
 #[allow(clippy::type_complexity)]
 pub fn get_vetkey_public_keys(
-    block: &Block,
-    pool: &PoolReader<'_>,
+    summary: &Summary,
     logger: &ReplicaLogger,
 ) -> Result<
     (
@@ -33,15 +32,6 @@ pub fn get_vetkey_public_keys(
     ),
     String,
 > {
-    // Get the latest summary block
-    let Some(summary) = pool.dkg_summary_block_for_finalized_height(block.height) else {
-        return Err(format!(
-            "Failed to find dkg summary block for height {}",
-            block.height
-        ));
-    };
-    let summary = &summary.payload.as_ref().as_summary().dkg;
-
     // Get all next transcripts
     // If there is a current transcript, but no next transcript, use that one instead.
     let mut transcripts = summary

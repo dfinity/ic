@@ -6,7 +6,7 @@ Goal:: Test whether the local DKG mechanism for vetkeys works
 
 Runbook::
 . Setup::
-    . System subnet comprising N nodes, necessary NNS canisters
+. System subnet comprising N nodes, necessary NNS canisters
 . Wait one DKG interval
 . Enable vetkey on subnet
 . Wait two DKG intervals, check subnet health
@@ -89,9 +89,7 @@ fn test(env: TestEnv) {
         for key_id in &key_ids {
             let key = get_public_key_with_logger(key_id, &msg_can, &log)
                 .await
-                .expect(
-                    "Should successfully retrieve the public key",
-                );
+                .expect("Should successfully retrieve the public key");
 
             let key: [u8; 96] = key
                 .try_into()
