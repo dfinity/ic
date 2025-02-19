@@ -147,33 +147,35 @@ function test_verify_cpu_helper() {
     fi
 }
 
-function test_verify_memory_success() {
-    echo "Running test: test_verify_memory_success"
-    function lshw() {
-        if [[ "$*" == *"-class memory"* ]]; then
-            echo '[{"id": "memory", "size": 600000000000}]'
-            return 0
-        fi
-        return 1
-    }
-    verify_memory
-    echo "  PASS: verify_memory passed with sufficient memory"
+function test_verify_memory() {
+    # Sufficient memory case:
+    test_verify_memory_helper 600000000000 0
+    # Insufficient memory case:
+    test_verify_memory_helper 100000000000 1
 }
 
-function test_verify_memory_failure() {
-    echo "Running test: test_verify_memory_failure"
+function test_verify_memory_helper() {
+    local memory_size="$1"
+    local expected_result="$2"
+    echo "Running test: test_verify_memory with memory size: $memory_size"
     function lshw() {
         if [[ "$*" == *"-class memory"* ]]; then
-            echo '[{"id": "memory", "size": 100000000000}]'
+            echo "[{\"id\": \"memory\", \"size\": $memory_size}]"
             return 0
         fi
         return 1
     }
-    if ! (verify_memory); then
-        echo "  PASS: verify_memory failed as expected with insufficient memory"
+
+    if [ "$expected_result" -eq 0 ]; then
+         verify_memory
+         echo "  PASS: verify_memory passed with sufficient memory"
     else
-        echo "  FAIL: verify_memory passed unexpectedly with insufficient memory"
-        exit 1
+         if ! ( verify_memory ); then
+             echo "  PASS: verify_memory failed as expected with insufficient memory"
+         else
+             echo "  FAIL: verify_memory passed unexpectedly with insufficient memory"
+             exit 1
+         fi
     fi
 }
 
@@ -207,7 +209,6 @@ done
 # ------------------------------------------------------------------------------
 # Run all tests
 # ------------------------------------------------------------------------------
-
 echo
 echo "Running check-network.sh unit tests..."
 test_validate_domain_name
@@ -219,8 +220,7 @@ echo
 echo "Running check-hardware.sh unit tests..."
 test_detect_hardware_generation
 test_verify_cpu
-test_verify_memory_success
-test_verify_memory_failure
+test_verify_memory
 test_verify_deployment_path_warning
 echo
 echo "PASSED check-hardware unit tests"
