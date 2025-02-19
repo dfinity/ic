@@ -5859,7 +5859,6 @@ dependencies = [
  "ic-interfaces",
  "ic-limits",
  "ic-logger",
- "ic-management-canister-types-private",
  "ic-metrics",
  "ic-protobuf",
  "ic-sys",
