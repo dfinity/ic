@@ -36,6 +36,10 @@ function transfer_log_state() {
     ls -lZ "/mnt/var_new/lib/filebeat"
 }
 
+function retrieve_data_disk_encryption_key() {
+    /opt/ic/bin/vsock_guest --
+}
+
 VAR_PARTITION="$1"
 OLD_VAR_PARTITION="$2"
 
@@ -49,18 +53,23 @@ TYPE=$(blkid -o value --match-tag TYPE "${VAR_PARTITION}")
 # on having a clean slate here after first boot of an upgrade.
 if [ "${TYPE}" == "crypto_LUKS" ]; then
     echo "Found LUKS header in partition ${VAR_PARTITION} for /var."
+    # TODO: use SEV derived key instead of /boot/config/store.keyfile
     cryptsetup luksOpen "${VAR_PARTITION}" var_crypt --key-file /boot/config/store.keyfile
 else
     echo "No LUKS header found in partition ${VAR_PARTITION} for /var. Setting it up on first boot."
     # Set minimal iteration count -- we already use a random key with
     # maximal entropy, pbkdf doesn't gain anything (besides slowing
     # down boot by a couple seconds which needlessly annoys for testing).
+    # TODO: use SEV derived key instead of /boot/config/store.keyfile
     cryptsetup luksFormat --type luks2 --pbkdf pbkdf2 --pbkdf-force-iterations 1000 "${VAR_PARTITION}" /boot/config/store.keyfile
     cryptsetup luksOpen "${VAR_PARTITION}" var_crypt --key-file /boot/config/store.keyfile
     echo "Populating /var filesystem in ${VAR_PARTITION} on first boot."
     mkfs.ext4 -F /dev/mapper/var_crypt -d /var
     # Fix root inode (mkfs fails to set correct security context).
     echo "ea_set / security.selinux system_u:object_r:var_t:s0\\000" | debugfs -w /dev/mapper/var_crypt
+
+    echo "Retrieving data disk encryption key"
+    retrieve_data_disk_encryption_key
 
     echo "Attempting to save logs from previous system instance at ${OLD_VAR_PARTITION}"
     # Try to open the old encrypted /var partition, but allow for failure.

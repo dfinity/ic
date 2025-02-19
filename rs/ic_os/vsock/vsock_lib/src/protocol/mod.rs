@@ -1,4 +1,4 @@
-mod structures;
+pub(crate) mod structures;
 mod utils;
 
 pub use structures::*;

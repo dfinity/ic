@@ -10,6 +10,7 @@ pub enum Payload {
     HostOSVersion(String),
     Mode,
     UpgradeVMData { nonce: Vec<u8> },
+    NewVmData { attestation_report: Vec<u8> },
 }
 
 impl fmt::Display for Payload {
@@ -53,7 +54,18 @@ pub enum Command {
     Notify(NotifyData),
     GetVsockProtocol,
     GetHostOSVersion,
-    GetMode,
+    PrepareUpgrade {
+        nonce: Vec<u8>,
+    },
+    SendToOldVM {
+        message: Vec<u8>,
+    },
+    SendToNewVM {
+        message: Vec<u8>,
+    },
+    GetDataKeyEncryptionKey {
+        attestation_report: Vec<u8>,
+    },
 }
 
 impl fmt::Display for Command {

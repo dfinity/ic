@@ -5,18 +5,6 @@ use sha2::Digest;
 use std::fs::{File, OpenOptions};
 use std::io::{Read, Write};
 
-pub fn dispatch(command: &Command) -> Response {
-    use Command::*;
-    match command {
-        AttachHSM => attach_hsm(),
-        DetachHSM => detach_hsm(),
-        Upgrade(upgrade_data) => upgrade_hostos(upgrade_data),
-        Notify(notify_data) => notify(notify_data),
-        GetVsockProtocol => get_hostos_vsock_version(),
-        GetHostOSVersion => get_hostos_version(),
-    }
-}
-
 // get_hostos_version
 const HOSTOS_VERSION_FILE_PATH: &str = "/opt/ic/share/version.txt";
 
@@ -30,7 +18,7 @@ const VSOCK_VERSION: HostOSVsockVersion = HostOSVsockVersion {
     patch: 0,
 };
 
-fn get_hostos_version() -> Response {
+pub(crate) fn get_hostos_version() -> Response {
     let version = std::fs::read_to_string(HOSTOS_VERSION_FILE_PATH)
         .map_err(|_| "Could not read hostOS version".to_string())?;
     let version = version.trim().to_string();
@@ -39,11 +27,11 @@ fn get_hostos_version() -> Response {
 }
 
 // HostOSVsockVersion command used for backwards compatibility
-fn get_hostos_vsock_version() -> Response {
+pub(crate) fn get_hostos_vsock_version() -> Response {
     Ok(Payload::HostOSVsockVersion(VSOCK_VERSION))
 }
 
-fn notify(notify_data: &NotifyData) -> Response {
+pub(crate) fn notify(notify_data: &NotifyData) -> Response {
     let mut terminal_device_file =
         OpenOptions::new()
             .write(true)
@@ -146,7 +134,7 @@ fn run_upgrade() -> Response {
     handle_command_output(command_output)
 }
 
-fn upgrade_hostos(upgrade_data: &UpgradeData) -> Response {
+pub(crate) fn upgrade_hostos(upgrade_data: &UpgradeData) -> Response {
     // Attempt to re-use any previously downloaded upgrades, so long as the
     // hash matches.
     if verify_hash(&upgrade_data.target_hash).is_err() {

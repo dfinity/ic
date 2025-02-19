@@ -1,5 +1,11 @@
-use crate::host::agent::dispatch;
-use crate::protocol::{parse_request, Request, Response};
+use crate::host::agent::{get_hostos_version, get_hostos_vsock_version, notify, upgrade_hostos};
+use crate::host::guest_upgrade::GuestUpgradeService;
+use crate::host::hsm::{attach_hsm, detach_hsm};
+use crate::protocol::Command::{
+    AttachHSM, DetachHSM, GetDataKeyEncryptionKey, GetHostOSVersion, GetVsockProtocol, Notify,
+    Upgrade,
+};
+use crate::protocol::{parse_request, Command, Request, Response};
 use std::io::{Error, ErrorKind, Read, Result, Write};
 use vsock::{VsockAddr, VsockListener, VsockStream, VMADDR_CID_ANY};
 
@@ -11,13 +17,16 @@ pub fn run_server() -> Result<()> {
 
     println!("Listening for vsock connection.\n");
 
-    for stream in vsock_listener.incoming() {
-        let mut stream: VsockStream = stream?;
-        stream.set_write_timeout(Some(std::time::Duration::from_secs(5)))?;
-        stream.set_read_timeout(Some(std::time::Duration::from_secs(5)))?;
+    let server = Server::default();
+    std::thread::scope(|s| {
+        for stream in vsock_listener.incoming() {
+            let mut stream: VsockStream = stream?;
+            stream.set_write_timeout(Some(std::time::Duration::from_secs(5)))?;
+            stream.set_read_timeout(Some(std::time::Duration::from_secs(5)))?;
 
-        std::thread::spawn(move || -> Result<()> { process_connection(&mut stream) });
-    }
+            s.spawn(|| server.process_connection(&mut stream));
+        }
+    });
 
     Ok(())
 }
@@ -27,24 +36,47 @@ fn create_vsock_listener() -> Result<VsockListener> {
     VsockListener::bind(&addr)
 }
 
-fn process_connection(stream: &mut VsockStream) -> Result<()> {
-    let request = match get_request(stream) {
-        Ok(request) => request,
-        Err(err) => {
+#[derive(Default)]
+struct Server {
+    guest_upgrade_service: GuestUpgradeService,
+}
+
+impl Server {
+    fn process_connection(&self, stream: &mut VsockStream) -> Result<()> {
+        let request = match get_request(stream) {
+            Ok(request) => request,
+            Err(err) => {
+                send_response(stream, &Err(err.to_string()))?;
+                return Err(err);
+            }
+        };
+        println!("Received vsock request: {}", request);
+
+        if let Err(err) = verify_sender_cid(stream, request.guest_cid) {
             send_response(stream, &Err(err.to_string()))?;
             return Err(err);
+        };
+
+        let response: Response = self.dispatch(&request.command);
+
+        send_response(stream, &response)
+    }
+
+    fn dispatch(&self, command: &Command) -> Response {
+        use crate::protocol::structures::Command::*;
+        match command {
+            AttachHSM => attach_hsm(),
+            DetachHSM => detach_hsm(),
+            Upgrade(upgrade_data) => upgrade_hostos(upgrade_data),
+            Notify(notify_data) => notify(notify_data),
+            GetVsockProtocol => get_hostos_vsock_version(),
+            GetHostOSVersion => get_hostos_version(),
+            PrepareUpgrade { nonce } => self.guest_upgrade_service.init_upgrade(nonce),
+            GetDataKeyEncryptionKey { attestation_report } => self
+                .guest_upgrade_service
+                .get_data_key_encryption_key(attestation_report),
         }
-    };
-    println!("Received vsock request: {}", request);
-
-    if let Err(err) = verify_sender_cid(stream, request.guest_cid) {
-        send_response(stream, &Err(err.to_string()))?;
-        return Err(err);
-    };
-
-    let response: Response = dispatch(&request.command);
-
-    send_response(stream, &response)
+    }
 }
 
 fn get_request(stream: &mut VsockStream) -> Result<Request> {

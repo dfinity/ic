@@ -321,6 +321,7 @@ case "${ACTION}" in
         # Ignore termination signals from the following reboot, so that
         # the script exits without error.
         trap -- '' SIGTERM
+        # START GUESTOS UPGRADER VM
         reboot
         ;;
     confirm)
