@@ -34,7 +34,7 @@ const LOOK_AHEAD: u64 = 10;
 /// In order to have a bound on the validated consensus pool, we don't validate
 /// artifacts with a height greater than the given value above the next pending CUP.
 /// The only exception to this are CUPs, which have no upper bound on the height.
-const ACCEPTABLE_VALIDATION_CUP_GAP: u64 = 70;
+const ACCEPTABLE_VALIDATION_CUP_GAP: u64 = 490;
 
 /// The actual bouncer computation utilizing cached BlockSets instead of
 /// having to read from the pool every time when it is called.
