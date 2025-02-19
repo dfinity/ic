@@ -18,7 +18,8 @@ use ic_crypto_temp_crypto::{NodeKeysToGenerate, TempCryptoComponent, TempCryptoC
 use ic_crypto_test_utils_ni_dkg::{initial_dkg_transcript, InitialNiDkgConfig};
 use ic_interfaces_registry::RegistryClient;
 use ic_management_canister_types_private::{
-    EcdsaCurve, EcdsaKeyId, MasterPublicKeyId, SchnorrAlgorithm, SchnorrKeyId,
+    EcdsaCurve, EcdsaKeyId, MasterPublicKeyId, SchnorrAlgorithm, SchnorrKeyId, VetKdCurve,
+    VetKdKeyId,
 };
 use ic_protobuf::registry::subnet::v1::{CatchUpPackageContents, InitialNiDkgTranscriptRecord};
 use ic_registry_client_fake::FakeRegistryClient;
@@ -64,7 +65,7 @@ pub fn setup_subnet<R: Rng + CryptoRng>(
     let subnet_record = SubnetRecordBuilder::from(node_ids)
         .with_dkg_interval_length(19)
         .with_chain_key_config(ChainKeyConfig {
-            key_configs: test_threshold_key_ids()
+            key_configs: test_master_public_key_ids()
                 .iter()
                 .map(|key_id| KeyConfig {
                     key_id: key_id.clone(),
@@ -181,7 +182,7 @@ pub fn setup_subnet<R: Rng + CryptoRng>(
         .expect("Could not add node record.");
 
     // Add threshold signing subnet to registry
-    for key_id in test_threshold_key_ids() {
+    for key_id in test_master_public_key_ids() {
         data_provider
             .add(
                 &ic_registry_keys::make_chain_key_signing_subnet_list_key(&key_id),
@@ -213,7 +214,7 @@ pub fn setup_subnet<R: Rng + CryptoRng>(
     (registry_client, cup, cryptos)
 }
 
-pub(crate) fn test_threshold_key_ids() -> Vec<MasterPublicKeyId> {
+pub(crate) fn test_master_public_key_ids() -> Vec<MasterPublicKeyId> {
     vec![
         MasterPublicKeyId::Ecdsa(EcdsaKeyId {
             curve: EcdsaCurve::Secp256k1,
@@ -226,6 +227,10 @@ pub(crate) fn test_threshold_key_ids() -> Vec<MasterPublicKeyId> {
         MasterPublicKeyId::Schnorr(SchnorrKeyId {
             algorithm: SchnorrAlgorithm::Bip340Secp256k1,
             name: "bip340_test_key".to_string(),
+        }),
+        MasterPublicKeyId::VetKd(VetKdKeyId {
+            curve: VetKdCurve::Bls12_381_G2,
+            name: "vetkd_test_key".to_string(),
         }),
     ]
 }
