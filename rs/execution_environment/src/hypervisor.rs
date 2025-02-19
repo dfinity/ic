@@ -131,7 +131,7 @@ impl HypervisorMetrics {
             code_section_size: metrics_registry.histogram(
                 "hypervisor_code_section_size",
                 "Size of the code section in bytes for a canister Wasm. Only Wasms that successfully compile are counted (which implies the code sections are below the current limit).",
-                linear_buckets(1024.0 * 1024.0, 1024.0 * 1204.0, 10), // 1MiB, 2MiB, ..., 10 MiB. Current limit is 10 MiB.
+                linear_buckets(1024.0 * 1024.0, 1024.0 * 1204.0, 11), // 1MiB, 2MiB, ..., 11 MiB. Current limit is 11 MiB.
             ),
         }
     }
