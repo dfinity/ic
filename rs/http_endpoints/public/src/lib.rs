@@ -195,32 +195,33 @@ fn start_server_initialization(
             sleep(Duration::from_secs(1)).await;
         }
         info!(log, "Certified state is now available.");
+
         // Fetch the delegation from the NNS for this subnet to be
         // able to issue certificates.
         health_status.store(ReplicaHealthStatus::WaitingForRootDelegation);
-        {
-            let _timer = metrics.nns_delegation_metrics.update_duration.start_timer();
-            let loaded_delegation = load_root_delegation(
-                &config,
-                &log,
-                rt_handle_clone,
-                subnet_id,
-                nns_subnet_id,
-                registry_client.as_ref(),
-                tls_config.as_ref(),
-            )
-            .await;
-            metrics.nns_delegation_metrics.delegation_size.observe(
-                loaded_delegation
-                    .as_ref()
-                    .map(|delegation| delegation.certificate.len() as f64)
-                    .unwrap_or_default(),
-            );
 
-            if let Some(delegation) = loaded_delegation {
-                let _ = delegation_from_nns.set(delegation);
-            }
+        let delegation_timer = metrics.nns_delegation_metrics.update_duration.start_timer();
+        let loaded_delegation = load_root_delegation(
+            &config,
+            &log,
+            rt_handle_clone,
+            subnet_id,
+            nns_subnet_id,
+            registry_client.as_ref(),
+            tls_config.as_ref(),
+        )
+        .await;
+        delegation_timer.observe_duration();
+
+        if let Some(delegation) = loaded_delegation {
+            metrics
+                .nns_delegation_metrics
+                .delegation_size
+                .observe(delegation.certificate.len() as f64);
+
+            let _ = delegation_from_nns.set(delegation);
         }
+
         metrics
             .health_status_transitions_total
             .with_label_values(&[
