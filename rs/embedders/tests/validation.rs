@@ -104,6 +104,7 @@ fn can_validate_valid_export_section() {
         Ok(WasmValidationDetails {
             largest_function_instruction_count: NumInstructions::new(1),
             max_complexity: Complexity(1),
+            code_section_size: NumBytes::from(3),
             ..Default::default()
         })
     );
@@ -431,6 +432,7 @@ fn can_validate_many_exported_functions() {
         Ok(WasmValidationDetails {
             largest_function_instruction_count: NumInstructions::new(1),
             max_complexity: Complexity(1),
+            code_section_size: NumBytes::from(3),
             ..Default::default()
         })
     );
@@ -467,6 +469,7 @@ fn can_validate_large_sum_exported_function_name_lengths() {
         Ok(WasmValidationDetails {
             largest_function_instruction_count: NumInstructions::new(1),
             max_complexity: Complexity(1),
+            code_section_size: NumBytes::from(3),
             ..Default::default()
         })
     );
@@ -510,6 +513,7 @@ fn can_validate_canister_query_update_method_name_with_whitespace() {
         Ok(WasmValidationDetails {
             largest_function_instruction_count: NumInstructions::new(1),
             max_complexity: Complexity(1),
+            code_section_size: NumBytes::from(3),
             ..Default::default()
         })
     );
