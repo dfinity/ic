@@ -643,8 +643,6 @@ impl CanisterManager {
         if let Some(wasm_memory_limit) = settings.wasm_memory_limit() {
             canister.system_state.wasm_memory_limit = Some(wasm_memory_limit);
         }
-        // Change of `wasm_memory_limit` or `new_wasm_memory_threshold` or `memory_allocation`,
-        // can influence the satisfaction of the condition for `low_wasm_memory` hook.
     }
 
     /// Tries to apply the requested settings on the canister identified by
@@ -875,8 +873,6 @@ impl CanisterManager {
                 instructions_used,
                 result,
             } => {
-                // This is requeired since IC0::InstallCode and IC0::InstallChunkedCode
-                // are the only two management canister execution types that use DTS.
                 canister.update_on_low_wasm_memory_hook_condition();
                 (result, instructions_used, Some(canister))
             }
