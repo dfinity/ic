@@ -1580,8 +1580,6 @@ impl ExecutionEnvironment {
         // Note that some branches above have early returns:
         //   - `InstallCode`
         //   - `InstallChunkedCode`
-        //   - `TakeCanisterSnapshot`
-        //   - `LoadCanisterSnapshot`
         //   - `SignWithECDSA`
         // If you modify code below, please also update
         // these cases.
