@@ -270,7 +270,7 @@ fn run_create_proposal_texts(cmd: CreateProposalTexts) -> Result<()> {
         println!("Removing existing proposals/ directory");
         std::fs::remove_dir_all(&proposals_dir)?;
     }
-    std::fs::create_dir_all(&proposals_dir).expect("Failed to create proposals directory");
+    std::fs::create_dir_all(&proposals_dir)?;
 
     let proposals_dir = proposals_dir.canonicalize()?;
 
@@ -294,12 +294,10 @@ fn run_create_proposal_texts(cmd: CreateProposalTexts) -> Result<()> {
             let script = ic.join("testnet/tools/nns-tools/prepare-nns-upgrade-proposal-text.sh");
             // cycles minting requires an upgrade arg, usually '()'
             let output = if canister != "cycles-minting" {
-                run_script(script, &[canister, &commit], &ic)
-                    .expect("Failed to run NNS proposal text script")
+                run_script(script, &[canister, &commit], &ic)?
             } else {
                 let upgrade_arg = input_with_default("Upgrade arg for CMC?", "()")?;
-                run_script(script, &[canister, &commit, &upgrade_arg], &ic)
-                    .expect("Failed to run NNS proposal text script")
+                run_script(script, &[canister, &commit, &upgrade_arg], &ic)?
             };
             if !output.status.success() {
                 bail!(
@@ -310,7 +308,7 @@ fn run_create_proposal_texts(cmd: CreateProposalTexts) -> Result<()> {
             );
             }
             let file_path = proposals_dir.join(format!("nns-{}.md", canister));
-            std::fs::write(&file_path, output.stdout).expect("Failed to write NNS proposal file");
+            std::fs::write(&file_path, output.stdout)?;
             nns_proposal_text_paths.push(file_path);
         }
 
@@ -322,8 +320,7 @@ fn run_create_proposal_texts(cmd: CreateProposalTexts) -> Result<()> {
             // The SNS script is expected to write directly to the file provided as an argument.
             let file_path = proposals_dir.join(format!("sns-{}.md", canister));
             let file_path_str = file_path.to_str().expect("Invalid file path");
-            let output = run_script(script, &[canister, &commit, file_path_str], &ic)
-                .expect("Failed to run SNS proposal text script");
+            let output = run_script(script, &[canister, &commit, file_path_str], &ic)?;
             if !output.status.success() {
                 bail!(
                     "Failed to create proposal text for SNS canister {} due to error: {}",
@@ -353,8 +350,7 @@ fn run_create_proposal_texts(cmd: CreateProposalTexts) -> Result<()> {
             let mut cmd = std::process::Command::new("code");
             cmd.arg(proposal_text_path);
             cmd.current_dir(&ic);
-            cmd.output()
-                .expect("Failed to view NNS proposal with vscode");
+            cmd.output()?;
         }
         press_enter_to_continue()?;
     }
@@ -424,8 +420,7 @@ fn run_submit_proposals(cmd: SubmitProposals) -> Result<()> {
                 &neuron_id,
             ],
             &ic,
-        )
-        .expect("Failed to run submit-mainnet-nns-upgrade-proposal.sh");
+        )?;
         if !output.status.success() {
             bail!(
                 "Submission failed for {}: {}",
@@ -449,8 +444,7 @@ fn run_submit_proposals(cmd: SubmitProposals) -> Result<()> {
                 &neuron_id,
             ],
             &ic,
-        )
-        .expect("Failed to run submit-mainnet-publish-sns-wasm-proposal.sh");
+        )?;
         if !output.status.success() {
             bail!(
                 "Submission failed for {}: {}",
@@ -520,8 +514,7 @@ fn run_create_forum_post(cmd: CreateForumPost) -> Result<()> {
             .collect();
         args.extend(path_strs.iter());
 
-        let output =
-            run_script(script, &args, &ic).expect("Failed to run generate_forum_post_nns_upgrades");
+        let output = run_script(script, &args, &ic)?;
 
         copy(&output.stdout)?;
 
@@ -563,8 +556,7 @@ fn run_create_forum_post(cmd: CreateForumPost) -> Result<()> {
             .collect();
         args.extend(path_strs.iter());
 
-        let output = run_script(script, &args, &ic)
-            .expect("Failed to run generate_forum_post_sns_wasm_publish");
+        let output = run_script(script, &args, &ic)?;
 
         copy(&output.stdout)?;
 
