@@ -137,10 +137,15 @@ impl CliArgs {
         let network = match self.network.to_network_name() {
             Some(network) => network,
             None => {
-                eprintln!(
-                    "No network specified. Defaulting to the local network. To connect to the mainnet IC instead, try passing `--network=ic`"
-                );
-                "local".to_string()
+                // TODO[SDK-1962]: Stop reading the environment variable.
+                if let Ok(network) = std::env::var("DFX_NETWORK") {
+                    network
+                } else {
+                    eprintln!(
+                        "No network specified. Defaulting to the local network. To connect to the mainnet IC instead, try passing `--network=ic`"
+                    );
+                    "local".to_string()
+                }
             }
         };
 
