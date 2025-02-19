@@ -13,7 +13,7 @@ INSERT NEW RELEASES HERE
 
 # 2025-02-15: Proposal 135315
 
-http://dashboard.internetcomputer.org/proposals/135315
+http://dashboard.internetcomputer.org/proposal/135315
 
 ## Added
 
@@ -28,7 +28,7 @@ The new `topic` field is required when submitting an `AddGenericNervousSystemFun
 
 # 2025-02-07: Proposal 135208
 
-http://dashboard.internetcomputer.org/proposals/135208
+http://dashboard.internetcomputer.org/proposal/135208
 
 ## Added
 
@@ -89,7 +89,7 @@ a potentially large WASM module (over 2 MiB) uploaded to some *store* canister, 
 
 # 2025-01-20: Proposal 134906
 
-http://dashboard.internetcomputer.org/proposals/134906
+http://dashboard.internetcomputer.org/proposal/134906
 
 ## Added
 

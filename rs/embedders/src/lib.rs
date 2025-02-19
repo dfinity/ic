@@ -56,6 +56,8 @@ pub struct CompilationResult {
     pub compilation_time: Duration,
     /// The maximum function complexity found in the canister's wasm module.
     pub max_complexity: u64,
+    /// The size of this Wasm module's code section.
+    pub code_section_size: NumBytes,
 }
 
 impl CompilationResult {
@@ -64,6 +66,7 @@ impl CompilationResult {
             largest_function_instruction_count: NumInstructions::new(0),
             compilation_time: Duration::from_millis(1),
             max_complexity: 0,
+            code_section_size: NumBytes::from(0),
         }
     }
 }
