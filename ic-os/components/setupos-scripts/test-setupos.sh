@@ -32,31 +32,35 @@ function log_and_halt_installation_on_error() {
 # ------------------------------------------------------------------------------
 
 function test_validate_domain_name() {
-    echo "Running test: test_validate_domain_name_valid"
-    domain_name="example.com"
-    if validate_domain_name; then
-        echo "  PASS: domain validation: $domain_name"
-    else
-        echo "  FAIL: failed domain validation, while the domain is valid: $domain_name"
-        exit 1
-    fi
+    declare -A test_cases=(
+        ["example.com"]=0
+        ["node1.example.com"]=0
+        ["example-.com"]=1
+        ["example."]=1
+        ["&BadDOMAIN.com"]=1
+    )
 
-    echo "Running test: test_validate_domain_name_invalid"
-    domain_name="example."
-    if ! (validate_domain_name); then
-        echo "  PASS: domain $domain_name validation failed as expected"
-    else
-        echo "  FAIL: failed domain validation, while the domain is valid: $domain_name"
-        exit 1
-    fi
+    for domain in "${!test_cases[@]}"; do
+        expected="${test_cases[$domain]}"
+        echo "Running test for domain: $domain"
+        domain_name="$domain"
 
-    domain_name="&BadDOMAIN.com"
-    if ! (validate_domain_name); then
-        echo "  PASS: domain $domain_name validation failed as expected"
-    else
-        echo "  FAIL: failed domain validation, while the domain is valid: $domain_name"
-        exit 1
-    fi
+        if ( validate_domain_name ); then
+            if [[ "$expected" -eq 0 ]]; then
+                echo "  PASS: valid domain: $domain"
+            else
+                echo "  FAIL: domain ($domain) validation was expected to fail but didn't"
+                exit 1
+            fi
+        else
+            if [[ "$expected" -eq 1 ]]; then
+                echo "  PASS: domain ($domain) validation failed as expected"
+            else
+                echo "  FAIL: invalid domain ($domain) was incorrectly marked as valid"
+                exit 1
+            fi
+        fi
+    done
 }
 
 # ------------------------------------------------------------------------------
