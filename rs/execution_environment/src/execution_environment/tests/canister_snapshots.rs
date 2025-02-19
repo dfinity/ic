@@ -14,8 +14,8 @@ use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
     canister_snapshots::SnapshotOperation,
     canister_state::{
-        execution_state::WasmBinary, execution_state::WasmExecutionMode,
-        system_state::CyclesUseCase,
+        execution_state::{WasmBinary, WasmExecutionMode},
+        system_state::{CyclesUseCase, OnLowWasmMemoryHookStatus},
     },
     CanisterState, ExecutionState, SchedulerState,
 };
@@ -1622,7 +1622,7 @@ fn helper_load_canister_snapshot_succeeds(
     assert_eq!(expected_unflushed_changes, unflushed_changes);
 }
 
-/*#[test]
+#[test]
 fn load_canister_snapshot_updates_hook_condition() {
     const CYCLES: Cycles = Cycles::new(1_000_000_000_000);
     let own_subnet = subnet_test_id(1);
@@ -1643,7 +1643,7 @@ fn load_canister_snapshot_updates_hook_condition() {
             settings: CanisterSettingsArgsBuilder::new()
                 .with_wasm_memory_limit(100_000_000)
                 .with_memory_allocation(9_000_000)
-                .with_wasm_memory_threshold(8_000_000)
+                .with_wasm_memory_threshold(1_000_000)
                 .build(),
             sender_canister_version: None,
         }
@@ -1651,30 +1651,24 @@ fn load_canister_snapshot_updates_hook_condition() {
     )
     .unwrap();
 
-    let prior = test
-        .canister_state_mut(canister_id)
-        .system_state
-        .task_queue
-        .peek_hook_status();
-
-    let prior_usage = test.canister_state_mut(canister_id).memory_usage();
-
-    helper_load_canister_snapshot_succeeds(&mut test, canister_id, 2);
-
-    println!(
-        "Prior: {}, after: {}",
-        prior_usage,
-        test.canister_state_mut(canister_id).memory_usage()
-    );
-
-    assert_ne!(
-        prior,
+    assert_eq!(
         test.canister_state_mut(canister_id)
             .system_state
             .task_queue
-            .peek_hook_status()
+            .peek_hook_status(),
+        OnLowWasmMemoryHookStatus::ConditionNotSatisfied
     );
-}*/
+
+    helper_load_canister_snapshot_succeeds(&mut test, canister_id, 2);
+
+    assert_eq!(
+        test.canister_state_mut(canister_id)
+            .system_state
+            .task_queue
+            .peek_hook_status(),
+        OnLowWasmMemoryHookStatus::Ready
+    );
+}
 
 #[test]
 fn snapshot_is_deleted_with_canister_delete() {
