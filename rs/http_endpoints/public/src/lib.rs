@@ -1468,7 +1468,9 @@ mod tests {
     }
 
     /// Sets up all the dependencies.
-    fn set_up(rt_handle: tokio::runtime::Handle) -> (Arc<FakeRegistryClient>, MockTlsConfig) {
+    fn set_up_nns_delegation_dependencies(
+        rt_handle: tokio::runtime::Handle,
+    ) -> (Arc<FakeRegistryClient>, MockTlsConfig) {
         let registry_version = 1;
 
         let data_provider = Arc::new(ProtoRegistryDataProvider::new());
@@ -1615,7 +1617,7 @@ mod tests {
     #[tokio::test]
     async fn load_root_delegation_on_nns_should_return_none_test() {
         let rt_handle = tokio::runtime::Handle::current();
-        let (registry_client, tls_config) = set_up(rt_handle.clone());
+        let (registry_client, tls_config) = set_up_nns_delegation_dependencies(rt_handle.clone());
 
         let delegation = load_root_delegation(
             &Config::default(),
@@ -1634,7 +1636,7 @@ mod tests {
     #[tokio::test]
     async fn load_root_delegation_on_non_nns_should_return_some_test() {
         let rt_handle = tokio::runtime::Handle::current();
-        let (registry_client, tls_config) = set_up(rt_handle.clone());
+        let (registry_client, tls_config) = set_up_nns_delegation_dependencies(rt_handle.clone());
 
         let delegation = load_root_delegation(
             &Config::default(),
@@ -1649,9 +1651,9 @@ mod tests {
 
         let delegation = delegation.expect("Should return Some delegation on non NNS subnet");
         let parsed_delegation: Certificate = serde_cbor::from_slice(&delegation.certificate)
-            .expect("Should have returned a valid certificate");
+            .expect("Should return a certificate which can be deserialized");
         let tree = LabeledTree::try_from(parsed_delegation.tree)
-            .expect("Should return a valid state tree");
+            .expect("The deserialized delegation should contain a correct tree");
         // Verify that the state tree has the a subtree corresponding to the requested subnet
         match lookup_path(&tree, &[b"subnet", NON_NNS_SUBNET_ID.get_ref().as_ref()]) {
             Some(LabeledTree::SubTree(..)) => (),
