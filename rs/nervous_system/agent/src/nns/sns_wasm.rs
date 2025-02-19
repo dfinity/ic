@@ -9,7 +9,9 @@ use ic_sns_wasm::pb::v1::{
     GetDeployedSnsByProposalIdRequest, GetDeployedSnsByProposalIdResponse, GetWasmRequest,
     GetWasmResponse, ListDeployedSnsesRequest, ListUpgradeStepsRequest, ListUpgradeStepsResponse,
 };
-use ic_sns_wasm::pb::v1::{GetNextSnsVersionRequest, SnsVersion};
+use ic_sns_wasm::pb::v1::{
+    GetNextSnsVersionRequest, GetSnsSubnetIdsRequest, GetSnsSubnetIdsResponse, SnsVersion,
+};
 use std::path::{Path, PathBuf};
 use tempfile::tempdir;
 use tokio::fs::File;
@@ -68,6 +70,14 @@ pub async fn list_deployed_snses<C: CallCanisters>(agent: &C) -> Result<Vec<Sns>
         .filter_map(|deployed_sns| crate::sns::Sns::try_from(deployed_sns).ok())
         .collect::<Vec<_>>();
     Ok(snses)
+}
+
+pub async fn get_sns_subnet_ids<C: CallCanisters>(
+    agent: &C,
+) -> Result<GetSnsSubnetIdsResponse, C::Error> {
+    agent
+        .call(SNS_WASM_CANISTER_ID, GetSnsSubnetIdsRequest {})
+        .await
 }
 
 pub async fn get_git_version_for_sns_hash(

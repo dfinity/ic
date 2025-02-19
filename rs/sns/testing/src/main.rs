@@ -9,7 +9,8 @@ use ic_sns_cli::utils::{dfx_interface, get_agent};
 use ic_sns_testing::nns_dapp::bootstrap_nns;
 use ic_sns_testing::sns::{create_sns, upgrade_sns_controlled_test_canister, TestCanisterInitArgs};
 use ic_sns_testing::utils::{
-    build_ephemeral_agent, get_identity_principal, get_nns_neuron_hotkeys, NNS_NEURON_ID,
+    build_ephemeral_agent, get_identity_principal, get_nns_neuron_hotkeys, validate_network,
+    validate_target_canister, NNS_NEURON_ID,
 };
 use icp_ledger::Tokens;
 use k256::elliptic_curve::SecretKey;
@@ -100,6 +101,41 @@ async fn run_basic_scenario(opts: RunBasicScenarioOpts) {
         .await
         .unwrap();
 
+    let network_validation_errors = validate_network(dev_agent).await;
+    let target_canister_validation_errors =
+        validate_target_canister(dev_agent, opts.test_canister_id).await;
+
+    if !network_validation_errors.is_empty() {
+        eprintln!("SNS-testing failed to validate the target network:");
+        for error in &network_validation_errors {
+            eprintln!("{}", error);
+        }
+    }
+    if !target_canister_validation_errors.is_empty() {
+        eprintln!("SNS-testing failed to validate the test canister:");
+        for error in &target_canister_validation_errors {
+            eprintln!("{}", error);
+        }
+    }
+    if !network_validation_errors.is_empty() || !target_canister_validation_errors.is_empty() {
+        return;
+    }
+
+    match get_nns_neuron_hotkeys(dev_agent, NNS_NEURON_ID).await {
+        Ok(nns_neuron_hotkeys) => {
+            assert!(
+                nns_neuron_hotkeys.contains(&dev_agent.caller().unwrap().into()),
+                "Developer identity is not a hotkey for NNS neuron"
+            );
+        }
+        Err(err) => {
+            panic!(
+                "Failed to get NNS neuron {} hotkeys: {}",
+                NNS_NEURON_ID.id, err
+            );
+        }
+    }
+
     let seed = 322_u64;
     let mut rng = ChaChaRng::seed_from_u64(seed);
 
@@ -109,15 +145,6 @@ async fn run_basic_scenario(opts: RunBasicScenarioOpts) {
             .map(|k| async { build_ephemeral_agent(k, &network.clone()).await.unwrap() }),
     )
     .await;
-
-    let nns_neuron_hotkeys = get_nns_neuron_hotkeys(dev_agent, NNS_NEURON_ID)
-        .await
-        .unwrap();
-
-    assert!(
-        nns_neuron_hotkeys.contains(&dev_agent.caller().unwrap().into()),
-        "Developer identity is not a hotkey for NNS neuron"
-    );
 
     println!("Creating SNS...");
     let sns = create_sns(
