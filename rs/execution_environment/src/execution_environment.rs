@@ -510,7 +510,6 @@ impl ExecutionEnvironment {
         round_limits: &mut RoundLimits,
     ) -> (ReplicatedState, Option<NumInstructions>) {
         let since = Instant::now(); // Start logging execution time.
-
         let effetive_canister_id = msg.effective_canister_id();
 
         let mut msg = match msg {
@@ -588,8 +587,6 @@ impl ExecutionEnvironment {
                 return (state, Some(NumInstructions::from(0)));
             }
         }
-
-        let mut instructions_used_result = Some(NumInstructions::from(0));
 
         let result: ExecuteSubnetMessageResult = match method {
             Ok(Ic00Method::InstallCode) => {
@@ -1509,11 +1506,19 @@ impl ExecutionEnvironment {
                         registry_settings.subnet_size,
                         round_limits,
                     );
-                    instructions_used_result = Some(instructions_used);
-                    ExecuteSubnetMessageResult::Finished {
+                    let msg_result = ExecuteSubnetMessageResult::Finished {
                         response: result,
                         refund: msg.take_cycles(),
+                    };
+
+                    if let Some(canister_id) = effetive_canister_id {
+                        if let Some(canister_state) = state.canister_state_mut(&canister_id) {
+                            canister_state.update_on_low_wasm_memory_hook_condition();
+                        }
                     }
+
+                    let state = self.finish_subnet_message_execution(state, msg, msg_result, since);
+                    return (state, Some(instructions_used));
                 }
             },
 
@@ -1533,11 +1538,19 @@ impl ExecutionEnvironment {
                         round_limits,
                         origin,
                     );
-                    instructions_used_result = Some(instructions_used);
-                    ExecuteSubnetMessageResult::Finished {
+                    let msg_result = ExecuteSubnetMessageResult::Finished {
                         response: result,
                         refund: msg.take_cycles(),
+                    };
+
+                    if let Some(canister_id) = effetive_canister_id {
+                        if let Some(canister_state) = state.canister_state_mut(&canister_id) {
+                            canister_state.update_on_low_wasm_memory_hook_condition();
+                        }
                     }
+
+                    let state = self.finish_subnet_message_execution(state, msg, msg_result, since);
+                    return (state, Some(instructions_used));
                 }
             },
 
@@ -1580,11 +1593,13 @@ impl ExecutionEnvironment {
         // Note that some branches above have early returns:
         //   - `InstallCode`
         //   - `InstallChunkedCode`
+        //   - `TakeCanisterSnapshot`
+        //   - `LoadCanisterSnapshot`
         //   - `SignWithECDSA`
         // If you modify code below, please also update
         // these cases.
         let state = self.finish_subnet_message_execution(state, msg, result, since);
-        (state, instructions_used_result)
+        (state, Some(NumInstructions::from(0)))
     }
 
     /// Observes a subnet message metrics and outputs the given subnet response.
