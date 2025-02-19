@@ -17,6 +17,7 @@ DEPENDENCIES = [
     "@crate_index//:colored",
     "@crate_index//:futures",
     "@crate_index//:ic-agent",
+    "@crate_index//:itertools",
     "@crate_index//:rgb",
     "@crate_index//:serde",
     "@crate_index//:serde_json",
@@ -28,6 +29,7 @@ DEPENDENCIES = [
 rust_binary(
     name = "release-runscript",
     srcs = [
+        "src/commands.rs",
         "src/commit_switcher.rs",
         "src/main.rs",
         "src/utils.rs",

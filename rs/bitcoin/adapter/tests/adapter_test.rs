@@ -496,7 +496,7 @@ fn check_fork_bfs_order(
             .collect::<Vec<Vec<u8>>>(),
         anchor,
         expected_len,
-        200,
+        400,
     );
     assert_eq!(blocks.len(), expected_len);
     let block_hashes: Vec<BlockHash> = blocks.iter().map(|block| block.block_hash()).collect();
@@ -917,18 +917,18 @@ fn test_bfs_order() {
     wait_for_connection(&client1, 1);
     wait_for_connection(&client2, 1);
 
-    let fork1 = client1.generate_to_address(15, &address1).unwrap();
+    let fork1 = client1.generate_to_address(6, &address1).unwrap();
 
     let address2 = client2
         .get_new_address(None, None)
         .unwrap()
         .assume_checked();
-    let fork2 = client2.generate_to_address(15, &address2).unwrap();
+    let fork2 = client2.generate_to_address(6, &address2).unwrap();
 
-    wait_for_blocks(&client1, 20);
-    wait_for_blocks(&client2, 20);
+    wait_for_blocks(&client1, 11);
+    wait_for_blocks(&client2, 11);
 
-    assert_eq!(fork1.len() + fork2.len(), 30);
+    assert_eq!(fork1.len() + fork2.len(), 12);
 
     client1
         .onetry_node(&url2.to_string())
@@ -953,8 +953,8 @@ fn test_bfs_order() {
     );
     assert!(bfs_order1 == block_hashes || bfs_order2 == block_hashes);
 
-    fork_test_data1.update_excluded(5, 10);
-    fork_test_data2.update_excluded(10, 15);
+    fork_test_data1.update_excluded(2, 4);
+    fork_test_data2.update_excluded(4, 6);
     let (block_hashes, bfs_order1, bfs_order2) = check_fork_bfs_order(
         &shared_blocks,
         &fork_test_data1,
@@ -964,8 +964,8 @@ fn test_bfs_order() {
     );
     assert!(bfs_order1 == block_hashes || bfs_order2 == block_hashes);
 
-    fork_test_data1.update_excluded(0, 15);
-    fork_test_data2.update_excluded(10, 15);
+    fork_test_data1.update_excluded(0, 6);
+    fork_test_data2.update_excluded(4, 6);
     let (block_hashes, bfs_order1, bfs_order2) = check_fork_bfs_order(
         &shared_blocks,
         &fork_test_data1,

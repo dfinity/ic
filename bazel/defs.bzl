@@ -380,3 +380,23 @@ symlink_dirs = rule(
         "targets": attr.label_keyed_string_dict(allow_files = True),
     },
 )
+
+def _write_info_file_var_impl(ctx):
+    """Helper rule that creates a file with the content of the provided var from the info file."""
+
+    output = ctx.actions.declare_file(ctx.label.name)
+    ctx.actions.run_shell(
+        command = """
+            grep <{info_file} -e '{varname}' \\
+                    | cut -d' ' -f2 > {out}""".format(varname = ctx.attr.varname, info_file = ctx.info_file.path, out = output.path),
+        inputs = [ctx.info_file],
+        outputs = [output],
+    )
+    return [DefaultInfo(files = depset([output]))]
+
+write_info_file_var = rule(
+    implementation = _write_info_file_var_impl,
+    attrs = {
+        "varname": attr.string(mandatory = True),
+    },
+)

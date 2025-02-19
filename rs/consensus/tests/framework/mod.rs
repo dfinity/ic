@@ -7,6 +7,7 @@ pub mod malicious;
 mod runner;
 mod types;
 
+use ic_consensus_dkg::get_dkg_summary_from_cup_contents;
 pub use runner::ConsensusRunner;
 pub use types::{
     ComponentModifier, ConsensusDependencies, ConsensusDriver, ConsensusInstance,
@@ -22,6 +23,7 @@ use ic_management_canister_types_private::{
 use ic_protobuf::registry::subnet::v1::{CatchUpPackageContents, InitialNiDkgTranscriptRecord};
 use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_client_helpers::crypto::CryptoRegistry;
+use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_registry_subnet_features::{ChainKeyConfig, KeyConfig};
 use ic_test_utilities_consensus::make_genesis;
@@ -195,9 +197,18 @@ pub fn setup_subnet<R: Rng + CryptoRng>(
     registry_client.reload();
     registry_client.update_to_latest_version();
 
-    let summary =
-        ic_consensus_dkg::make_genesis_summary(&*registry_client, subnet_id, Option::from(version))
-            .with_current_transcripts(ni_transcripts);
+    let cup_contents = registry_client
+        .get_cup_contents(subnet_id, registry_client.get_latest_version())
+        .expect("Failed to retreive the DKG transcripts from registry");
+    let summary = get_dkg_summary_from_cup_contents(
+        cup_contents.value.expect("Missing CUP contents"),
+        subnet_id,
+        &*registry_client,
+        version,
+    )
+    .expect("Failed to get DKG summary from CUP contents")
+    .with_current_transcripts(ni_transcripts);
+
     let cup = make_genesis(summary);
     (registry_client, cup, cryptos)
 }

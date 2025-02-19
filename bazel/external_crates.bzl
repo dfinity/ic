@@ -465,7 +465,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 features = ["serde"],
             ),
             "evm_rpc_types": crate.spec(
-                version = "^1.2.0",
+                version = "^1.3.0",
             ),
             "exec": crate.spec(
                 version = "^0.3.1",
@@ -588,16 +588,16 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 rev = "7f9e931954637526295269155881207f6c832d6d",
             ),
             "ic-cbor": crate.spec(
-                version = "3.0.2",
+                version = "3.0.3",
             ),
             "ic-cdk": crate.spec(
-                version = "^0.16.0",
+                version = "^0.17.0",
             ),
             "ic-cdk-timers": crate.spec(
                 version = "^0.11.0",
             ),
             "ic-cdk-macros": crate.spec(
-                version = "^0.9.0",
+                version = "^0.17.0",
             ),
             "ic-cdk-macros-next": crate.spec(
                 package = "ic-cdk-macros",
@@ -613,16 +613,16 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.3.1",
             ),
             "ic-certification": crate.spec(
-                version = "3.0.2",
+                version = "3.0.3",
             ),
             "ic-certificate-verification": crate.spec(
-                version = "3.0.2",
+                version = "3.0.3",
             ),
             "ic-http-certification": crate.spec(
-                version = "3.0.2",
+                version = "3.0.3",
             ),
             "ic-http-gateway": crate.spec(
-                version = "0.1.0",
+                version = "0.2.0",
             ),
             "ic-metrics-encoder": crate.spec(
                 version = "^1.1.1",
@@ -635,7 +635,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 default_features = False,
             ),
             "ic-response-verification": crate.spec(
-                version = "3.0.2",
+                version = "3.0.3",
             ),
             "ic-sha3": crate.spec(
                 version = "^1.0.0",
@@ -735,11 +735,16 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "k8s-openapi": crate.spec(
                 version = "^0.22.0",
                 features = [
-                    "v1_24",
+                    "v1_28",
+                    "schemars",
                 ],
             ),
             "kube": crate.spec(
-                version = "^0.93.1",
+                version = "^0.94.0",
+                features = [
+                    "client",
+                    "derive",
+                ],
             ),
             "lazy_static": crate.spec(
                 version = "^1.4.0",
@@ -1126,7 +1131,10 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.3.0",
             ),
             "schemars": crate.spec(
-                version = "^0.8.16",
+                version = "^0.8.21",
+                features = [
+                    "derive",
+                ],
             ),
             "scoped_threadpool": crate.spec(
                 version = "^0.1.9",

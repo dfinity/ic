@@ -13,7 +13,7 @@ use ic_interfaces::execution_environment::{
 use ic_interfaces_state_manager::StateReader;
 use ic_logger::ReplicaLogger;
 use ic_management_canister_types_private::LogVisibilityV2;
-use ic_metrics::buckets::decimal_buckets_with_zero;
+use ic_metrics::buckets::{decimal_buckets_with_zero, linear_buckets};
 use ic_metrics::{buckets::exponential_buckets, MetricsRegistry};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{page_map::allocated_pages_count, ExecutionState, SystemState};
@@ -51,6 +51,7 @@ pub struct HypervisorMetrics {
     mprotect_count: HistogramVec,
     copy_page_count: HistogramVec,
     compilation_cache_size: IntGaugeVec,
+    code_section_size: Histogram,
 }
 
 impl HypervisorMetrics {
@@ -127,6 +128,11 @@ impl HypervisorMetrics {
             ),
             compilation_cache_size: metrics_registry.int_gauge_vec("hypervisor_compilation_cache_size", "Bytes in memory and on disk used by the compilation cache.", &["location"],
             ),
+            code_section_size: metrics_registry.histogram(
+                "hypervisor_code_section_size",
+                "Size of the code section in bytes for a canister Wasm. Only Wasms that successfully compile are counted (which implies the code sections are below the current limit).",
+                linear_buckets(1024.0 * 1024.0, 1024.0 * 1204.0, 11), // 1MiB, 2MiB, ..., 11 MiB. Current limit is 11 MiB.
+            ),
         }
     }
 
@@ -197,11 +203,14 @@ impl HypervisorMetrics {
             largest_function_instruction_count,
             compilation_time,
             max_complexity,
+            code_section_size,
         } = compilation_result;
         self.largest_function_instruction_count
             .observe(largest_function_instruction_count.get() as f64);
         self.compile.observe(compilation_time.as_secs_f64());
         self.max_complexity.observe(*max_complexity as f64);
+        self.code_section_size
+            .observe(code_section_size.get() as f64);
         self.compilation_cache_size
             .with_label_values(&["memory"])
             .set(cache_memory_size as i64);
