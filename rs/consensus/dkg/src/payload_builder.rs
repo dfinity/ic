@@ -36,7 +36,6 @@ use ic_types::{
 use std::{
     collections::{BTreeMap, BTreeSet},
     sync::{Arc, RwLock},
-    time::Duration,
 };
 
 /// Errors which could occur when creating a Dkg payload.
@@ -464,7 +463,7 @@ pub fn get_dkg_summary_from_cup_contents(
     subnet_id: SubnetId,
     registry: &dyn RegistryClient,
     registry_version: RegistryVersion,
-) -> Summary {
+) -> Result<Summary, String> {
     // If we're in a NNS subnet recovery case with failover nodes, we extract the registry of the
     // NNS we're recovering.
     let registry_version_of_original_registry = cup_contents
@@ -478,55 +477,51 @@ pub fn get_dkg_summary_from_cup_contents(
         NiDkgTag::LowThreshold,
         cup_contents
             .initial_ni_dkg_transcript_low_threshold
+            .ok_or("Missing initial low-threshold DKG transcript".to_string())
             .map(|dkg_transcript_record| {
-                initial_ni_dkg_transcript_from_registry_record(dkg_transcript_record)
-                    .expect("Decoding initial low-threshold DKG transcript failed.")
-            })
-            .expect("Missing initial low-threshold DKG transcript"),
+                initial_ni_dkg_transcript_from_registry_record(dkg_transcript_record).map_err(
+                    |err| format!("Decoding initial low-threshold DKG transcript failed: {err}"),
+                )
+            })??,
     );
     transcripts.insert(
         NiDkgTag::HighThreshold,
         cup_contents
             .initial_ni_dkg_transcript_high_threshold
+            .ok_or("Missing initial high-threshold DKG transcript".to_string())
             .map(|dkg_transcript_record| {
-                initial_ni_dkg_transcript_from_registry_record(dkg_transcript_record)
-                    .expect("Decoding initial high-threshold DKG transcript failed.")
-            })
-            .expect("Missing initial high-threshold DKG transcript"),
+                initial_ni_dkg_transcript_from_registry_record(dkg_transcript_record).map_err(
+                    |err| format!("Decoding initial high-threshold DKG transcript failed: {err}"),
+                )
+            })??,
     );
 
     // Get the transcripts for vetkeys from the `chain_key_initializations`
-    let mut vet_key_transcripts = cup_contents
-        .chain_key_initializations
-        .into_iter()
-        .filter_map(|init| {
-            let key_id = init.key_id.expect("Initialization without a key id");
-            let init = init.initialization.expect("Empty initialization");
-
-            // IDkg initializations are handled in a different place. This is to include NiDkgTranscripts into the Summary only
-            let Initialization::TranscriptRecord(record) = init else {
-                return None;
-            };
-
-            let key_id = NiDkgMasterPublicKeyId::try_from(key_id)
-                .expect("IDkg key combined with NiDkg initialization");
-
-            let transcript =
-                initial_ni_dkg_transcript_from_registry_record(record).unwrap_or_else(|_| {
-                    panic!("Decoding high-threshold DKG for key-id {} failed.", key_id)
-                });
-
-            Some((NiDkgTag::HighThresholdForKey(key_id), transcript))
-        })
-        .collect::<BTreeMap<_, _>>();
+    for init in cup_contents.chain_key_initializations.into_iter() {
+        let key_id = init
+            .key_id
+            .ok_or("Initialization without a key id".to_string())?;
+        let init = init
+            .initialization
+            .ok_or("Empty initialization".to_string())?;
+        // IDkg initializations are handled in a different place. This is to include NiDkgTranscripts into the Summary only
+        let Initialization::TranscriptRecord(record) = init else {
+            continue;
+        };
+        let key_id = NiDkgMasterPublicKeyId::try_from(key_id)
+            .map_err(|err| format!("IDkg key combined with NiDkg initialization: {err}"))?;
+        let transcript = initial_ni_dkg_transcript_from_registry_record(record).map_err(|err| {
+            format!(
+                "Decoding high-threshold DKG for key-id {} failed: {}",
+                key_id, err
+            )
+        })?;
+        transcripts.insert(NiDkgTag::HighThresholdForKey(key_id), transcript);
+    }
 
     // Extract vet key ids
-
     let vet_key_ids = vetkd_key_ids_for_subnet(subnet_id, registry, registry_version)
-        .expect("Failed to get vetkeys");
-
-    // Add vet key transcripts to the summary block
-    transcripts.append(&mut vet_key_transcripts);
+        .map_err(|err| format!("Failed to get vetKD key IDs: {err:?}"))?;
 
     // If we're in a NNS subnet recovery with failover nodes, we set the transcript versions to the
     // registry version of the recovered NNS, otherwise the oldest registry version used in a CUP is
@@ -538,7 +533,7 @@ pub fn get_dkg_summary_from_cup_contents(
     }
 
     let committee = get_node_list(subnet_id, registry, registry_version)
-        .expect("Could not retrieve committee list");
+        .map_err(|err| format!("Could not retrieve committee list: {err:?}"))?;
 
     let height = Height::from(cup_contents.height);
     let configs = get_configs_for_local_transcripts(
@@ -552,13 +547,16 @@ pub fn get_dkg_summary_from_cup_contents(
         registry_version_of_original_registry.unwrap_or(registry_version),
         &vet_key_ids,
     )
-    .expect("Couldn't generate configs for the genesis summary");
+    .map_err(|err| format!("Couldn't generate configs for the genesis summary: {err:?}"))?;
+
     // For the first 2 intervals we use the length value contained in the
     // genesis subnet record.
-    let interval_length = get_dkg_interval_length(registry, registry_version, subnet_id)
-        .expect("Could not retrieve the interval length for the genesis summary.");
+    let interval_length =
+        get_dkg_interval_length(registry, registry_version, subnet_id).map_err(|err| {
+            format!("Could not retrieve the interval length for the genesis summary: {err:?}")
+        })?;
     let next_interval_length = interval_length;
-    Summary::new(
+    Ok(Summary::new(
         configs,
         transcripts,
         BTreeMap::new(), // next transcripts
@@ -570,7 +568,7 @@ pub fn get_dkg_summary_from_cup_contents(
         next_interval_length,
         height,
         BTreeMap::new(), // initial_dkg_attempts
-    )
+    ))
 }
 
 /// Creates DKG configs for the local subnet for the next DKG intervals.
@@ -853,41 +851,6 @@ fn do_create_remote_dkg_config(
     })
 }
 
-/// Generates the summary for the genesis block.
-pub fn make_genesis_summary(
-    registry: &dyn RegistryClient,
-    subnet_id: SubnetId,
-    registry_version_to_put_in_summary: Option<RegistryVersion>,
-) -> Summary {
-    let max_backoff = Duration::from_secs(32);
-    let mut backoff = Duration::from_secs(1);
-    loop {
-        match registry.get_cup_contents(subnet_id, registry.get_latest_version()) {
-            // Here the `registry_version` corresponds to the registry version at which the
-            // initial CUP contents were inserted.
-            Ok(versioned_record) => {
-                let registry_version = versioned_record.version;
-                let summary_registry_version =
-                    registry_version_to_put_in_summary.unwrap_or(registry_version);
-                let cup_contents = versioned_record.value.expect("Missing CUP contents");
-                return get_dkg_summary_from_cup_contents(
-                    cup_contents,
-                    subnet_id,
-                    registry,
-                    summary_registry_version,
-                );
-            }
-            _ => {
-                if backoff > max_backoff {
-                    panic!("Retrieving the Dkg transcripts from registry timed out.")
-                }
-                std::thread::sleep(backoff);
-                backoff *= 2;
-            }
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use crate::tests::test_vet_key_config;
@@ -900,6 +863,7 @@ mod tests {
     use ic_crypto_test_utils_ni_dkg::dummy_transcript_for_tests_with_params;
     use ic_logger::replica_logger::no_op_logger;
     use ic_management_canister_types_private::{VetKdCurve, VetKdKeyId};
+    use ic_registry_client_helpers::subnet::SubnetRegistry;
     use ic_test_utilities_logger::with_test_replica_logger;
     use ic_test_utilities_registry::{add_subnet_record, SubnetRecordBuilder};
     use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
@@ -1209,7 +1173,16 @@ mod tests {
                         .build(),
                 )],
             );
-            let mut genesis_summary = make_genesis_summary(&*registry, subnet_id, None);
+            let cup_contents = registry
+                .get_cup_contents(subnet_id, registry.get_latest_version())
+                .expect("Failed to retreive the DKG transcripts from registry");
+            let mut genesis_summary = get_dkg_summary_from_cup_contents(
+                cup_contents.value.expect("Missing CUP contents"),
+                subnet_id,
+                &*registry,
+                cup_contents.version,
+            )
+            .expect("Failed to get DKG summary from CUP contents");
 
             // Let's ensure we have no summaries for the whole DKG interval.
             for _ in 0..dkg_interval_len {
@@ -1273,7 +1246,7 @@ mod tests {
     /// Creates a summary from registry and tests that all fields of the summary
     /// contain the expected contents.
     #[test]
-    fn test_make_genesis_summary() {
+    fn test_get_dkg_summary_from_cup_contents() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             let nodes: Vec<_> = (7..14).map(node_test_id).collect();
             let initial_registry_version = 145;
@@ -1291,7 +1264,16 @@ mod tests {
                 )],
             );
 
-            let summary = make_genesis_summary(&*registry, subnet_id, None);
+            let cup_contents = registry
+                .get_cup_contents(subnet_id, registry.get_latest_version())
+                .expect("Failed to retreive the DKG transcripts from registry");
+            let summary = get_dkg_summary_from_cup_contents(
+                cup_contents.value.expect("Missing CUP contents"),
+                subnet_id,
+                &*registry,
+                cup_contents.version,
+            )
+            .expect("Failed to get DKG summary from CUP contents");
 
             let vet_key_ids =
                 vetkd_key_ids_for_subnet(subnet_id, &*registry, summary.registry_version).unwrap();
@@ -1380,7 +1362,16 @@ mod tests {
                         .build(),
                 )],
             );
-            let genesis_summary = make_genesis_summary(&*registry, subnet_id, None);
+            let cup_contents = registry
+                .get_cup_contents(subnet_id, registry.get_latest_version())
+                .expect("Failed to retreive the DKG transcripts from registry");
+            let genesis_summary = get_dkg_summary_from_cup_contents(
+                cup_contents.value.expect("Missing CUP contents"),
+                subnet_id,
+                &*registry,
+                cup_contents.version,
+            )
+            .expect("Failed to get DKG summary from CUP contents");
             let block = pool.get_cache().finalized_block();
             // This first block is expected to contain the genesis summary.
             if block.payload.as_ref().is_summary() {

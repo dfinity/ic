@@ -495,7 +495,6 @@ pub fn wasm_execution_error(
             allocated_message_bytes: NumBytes::from(0),
             instance_stats: InstanceStats::default(),
             system_api_call_counters: SystemApiCallCounters::default(),
-            canister_log: Default::default(),
         },
         CanisterStateChanges {
             execution_state_changes: None,
@@ -624,7 +623,6 @@ pub fn process(
 ) {
     let canister_id = sandbox_safe_system_state.canister_id();
     let modification_tracking = api_type.modification_tracking();
-    let timestamp_nanos = api_type.time().as_nanos_since_unix_epoch();
     let system_api = SystemApiImpl::new(
         api_type,
         sandbox_safe_system_state,
@@ -664,7 +662,6 @@ pub fn process(
                     allocated_message_bytes: NumBytes::from(0),
                     instance_stats: InstanceStats::default(),
                     system_api_call_counters: SystemApiCallCounters::default(),
-                    canister_log: Default::default(),
                 },
                 None,
                 Err(system_api.unwrap()), // should be safe because we've passed Some(api) to new_instance
@@ -686,7 +683,6 @@ pub fn process(
     //unwrap should not fail, because we have passed Some(system_api) to the instance above
     let system_api = instance.store_data_mut().system_api_mut().unwrap();
     let system_api_call_counters = system_api.call_counters();
-    let mut canister_log = system_api.take_canister_log();
     let slice_instruction_limit = system_api.slice_instruction_limit();
     // Capping at the limit to preserve the existing behaviour. It should be
     // possible to remove capping after ensuring that all callers can handle
@@ -723,7 +719,6 @@ pub fn process(
                         allocated_message_bytes: NumBytes::from(0),
                         instance_stats,
                         system_api_call_counters,
-                        canister_log,
                     },
                     None,
                     Ok(instance),
@@ -809,32 +804,7 @@ pub fn process(
                 ModificationTracking::Ignore => None,
             }
         }
-        Err(err) => {
-            if let Some(log_message) = match err {
-                HypervisorError::Trapped {
-                    trap_code,
-                    backtrace,
-                } => match backtrace {
-                    Some(bt) => Some(format!("[TRAP]: {}\n{}", trap_code, bt)),
-                    None => Some(format!("[TRAP]: {}", trap_code)),
-                },
-                HypervisorError::CalledTrap { message, backtrace } => {
-                    let message = if message.is_empty() {
-                        "(no message)"
-                    } else {
-                        &message
-                    };
-                    match backtrace {
-                        Some(bt) => Some(format!("[TRAP]: {}\n{}", message, bt)),
-                        None => Some(format!("[TRAP]: {}", message)),
-                    }
-                }
-                _ => None,
-            } {
-                canister_log.add_record(timestamp_nanos, log_message.into_bytes());
-            }
-            None
-        }
+        Err(_) => None,
     };
 
     // If the dirty page optimization slicing has been performed, we know the dirty page copying
@@ -858,7 +828,6 @@ pub fn process(
             allocated_message_bytes,
             instance_stats,
             system_api_call_counters,
-            canister_log,
         },
         wasm_state_changes,
         Ok(instance),
