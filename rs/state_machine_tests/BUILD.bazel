@@ -13,6 +13,7 @@ DEPENDENCIES = [
     "//rs/config",
     "//rs/consensus",
     "//rs/consensus/utils",
+    "//rs/consensus/vetkd",
     "//rs/crypto/interfaces/sig_verification",
     "//rs/crypto/test_utils/ni-dkg",
     "//rs/crypto/tree_hash",

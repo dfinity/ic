@@ -534,6 +534,8 @@ fn start_consensus(
         metrics_registry,
         log.clone(),
     ));
+
+    let vetkd_payload_builder = Arc::new(VetKdPayloadBuilderImpl::new());
     // ------------------------------------------------------------------------
 
     let replica_config = ReplicaConfig { node_id, subnet_id };
@@ -556,6 +558,7 @@ fn start_consensus(
         self_validating_payload_builder,
         https_outcalls_payload_builder,
         Arc::from(query_stats_payload_builder),
+        vetkd_payload_builder,
         Arc::clone(&artifact_pools.dkg_pool) as Arc<_>,
         Arc::clone(&artifact_pools.idkg_pool) as Arc<_>,
         Arc::clone(&dkg_key_manager) as Arc<_>,

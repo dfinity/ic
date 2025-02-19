@@ -19,6 +19,7 @@ ic-btc-consensus = { path = "../bitcoin/consensus" }
 ic-config = { path = "../config" }
 ic-consensus = { path = "../consensus" }
 ic-consensus-utils = { path = "../consensus/utils" }
+ic-consensus-vetkd = { path = "../consensus/vetkd" }
 ic-limits = { path = "../limits" }
 ic-crypto-iccsa = { path = "../crypto/iccsa" }
 ic-crypto-interfaces-sig-verification = { path = "../crypto/interfaces/sig_verification" }

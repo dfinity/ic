@@ -49,6 +49,7 @@ impl PayloadBuilderImpl {
         self_validating_payload_builder: Arc<dyn SelfValidatingPayloadBuilder>,
         canister_http_payload_builder: Arc<dyn BatchPayloadBuilder>,
         query_stats_payload_builder: Arc<dyn BatchPayloadBuilder>,
+        vetkd_payload_builder: Arc<dyn BatchPayloadBuilder>,
         metrics: MetricsRegistry,
         logger: ReplicaLogger,
     ) -> Self {
@@ -58,6 +59,7 @@ impl PayloadBuilderImpl {
             BatchPayloadSectionBuilder::XNet(xnet_payload_builder),
             BatchPayloadSectionBuilder::CanisterHttp(canister_http_payload_builder),
             BatchPayloadSectionBuilder::QueryStats(query_stats_payload_builder),
+            BatchPayloadSectionBuilder::VetKd(vetkd_payload_builder),
         ];
 
         Self {
@@ -272,6 +274,7 @@ pub(crate) mod test {
         let canister_http_payload_builder =
             FakeCanisterHttpPayloadBuilder::new().with_responses(canister_http_responses);
         let query_stats_payload_builder = MockBatchPayloadBuilder::new().expect_noop();
+        let vetkd_payload_builder = MockBatchPayloadBuilder::new().expect_noop();
 
         PayloadBuilderImpl::new(
             subnet_test_id(0),
@@ -282,6 +285,7 @@ pub(crate) mod test {
             Arc::new(self_validating_payload_builder),
             Arc::new(canister_http_payload_builder),
             Arc::new(query_stats_payload_builder),
+            Arc::new(vetkd_payload_builder),
             MetricsRegistry::new(),
             no_op_logger(),
         )

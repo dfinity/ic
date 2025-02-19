@@ -37,7 +37,6 @@ use std::sync::Arc;
 /// It is advised to call the validation function after building the payload to be 100% sure.
 // [build_payload]: (BatchPayloadSectionBuilder::build_payload)
 // [validate_payload]: (BatchPayloadSectionBuilder::validate_payload)
-#[allow(dead_code)]
 pub(crate) enum BatchPayloadSectionBuilder {
     Ingress(Arc<dyn IngressSelector>),
     XNet(Arc<dyn XNetPayloadBuilder>),
