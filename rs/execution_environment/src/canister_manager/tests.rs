@@ -8146,19 +8146,17 @@ fn helper_update_settings_updates_hook_status(
         initial_memory_state.hook_status
     );
 
-    let mut updated_settings = CanisterSettingsArgsBuilder::new();
+    let mut settings = CanisterSettingsArgsBuilder::new();
 
     if updated_memory_state.wasm_memory_threshold != initial_memory_state.wasm_memory_threshold {
         if let Some(updated_wasm_memory_threshold) = updated_memory_state.wasm_memory_threshold {
-            updated_settings =
-                updated_settings.with_wasm_memory_threshold(updated_wasm_memory_threshold.get());
+            settings = settings.with_wasm_memory_threshold(updated_wasm_memory_threshold.get());
         }
     }
 
     if updated_memory_state.wasm_memory_limit != initial_memory_state.wasm_memory_limit {
         if let Some(updated_wasm_memory_limit) = updated_memory_state.wasm_memory_limit {
-            updated_settings =
-                updated_settings.with_wasm_memory_limit(updated_wasm_memory_limit.get());
+            settings = settings.with_wasm_memory_limit(updated_wasm_memory_limit.get());
         }
     }
 
@@ -8166,14 +8164,13 @@ fn helper_update_settings_updates_hook_status(
         if let Some(MemoryAllocation::Reserved(updated_memory_allocation)) =
             updated_memory_state.memory_allocation
         {
-            updated_settings =
-                updated_settings.with_memory_allocation(updated_memory_allocation.get());
+            settings = settings.with_memory_allocation(updated_memory_allocation.get());
         }
     }
 
     let payload = UpdateSettingsArgs {
         canister_id: canister_id.get(),
-        settings: updated_settings.build(),
+        settings: settings.build(),
         sender_canister_version: None,
     }
     .encode();
