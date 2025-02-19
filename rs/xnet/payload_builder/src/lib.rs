@@ -541,7 +541,7 @@ impl XNetPayloadBuilderImpl {
         }
 
         if !reject_signals.is_empty() {
-            // A stream can never have more than `MAX_STREAM_MESSAGES` signals by design,
+            // A stream can never have more than `MAX_SIGNALS` signals by design,
             // since we stop pulling messages after reaching this limit. Any subnet with
             // more than this number of signals can therefore be classified as dishonest.
             // The factor of 2 allows for wiggle room in increasing this constant without
@@ -552,7 +552,7 @@ impl XNetPayloadBuilderImpl {
             // messages have been GC-ed). Meaning we can never have signals going back
             // farther than the maximum number of messages in a stream.
             let signals_begin = reject_signals.front().unwrap();
-            if signals_end.get() - signals_begin.index.get() > 2 * MAX_STREAM_MESSAGES as u64 {
+            if signals_end.get() - signals_begin.index.get() > 2 * MAX_SIGNALS as u64 {
                 warn!(
                     self.log,
                     "Too old reject signal in stream from {}: signals_begin {}, signals_end {}",
