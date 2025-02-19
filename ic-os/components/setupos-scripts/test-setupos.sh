@@ -190,7 +190,6 @@ function test_verify_memory_helper() {
 function test_verify_deployment_path_warning() {
     echo "Running test: test_verify_deployment_path_warning"
     HARDWARE_GENERATION="2"
-    # Override sleep to prevent delays in test context
     function sleep() {
         echo "Sleep skipped for test"
     }
