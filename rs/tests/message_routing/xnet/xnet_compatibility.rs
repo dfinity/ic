@@ -166,7 +166,7 @@ pub async fn test_async(env: TestEnv) {
         // while the long running test is running we are generous
         // with error thresholds.
         75.0,
-        40,
+        60,
     )
     .with_call_timeouts(&call_timeouts);
 

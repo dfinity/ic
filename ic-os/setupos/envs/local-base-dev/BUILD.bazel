@@ -9,7 +9,6 @@ load("//ic-os/setupos:defs.bzl", "image_deps")
 icos_build(
     name = "local-base-dev",
     build_local_base_image = True,
-    ic_version = "//bazel:rc_only_version.txt",
     image_deps_func = image_deps,
     tags = [
         "manual",

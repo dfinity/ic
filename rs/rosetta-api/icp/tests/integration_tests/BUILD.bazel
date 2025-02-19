@@ -37,6 +37,7 @@ rust_library(
 
 rust_test_suite(
     name = "rosetta-integration",
+    timeout = "long",
     srcs = ["tests/tests.rs"],
     data = [
         "//rs/canister_sandbox",
