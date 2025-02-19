@@ -205,3 +205,33 @@ impl HttpHandlerMetrics {
         }
     }
 }
+
+#[derive(Clone)]
+pub(crate) struct DelegationManagerMetrics {
+    pub(crate) update_duration: Histogram,
+    pub(crate) delegation_size: Histogram,
+    pub(crate) updates: IntCounter,
+}
+
+impl DelegationManagerMetrics {
+    pub(crate) fn new(metrics_registry: &MetricsRegistry) -> Self {
+        Self {
+            updates: metrics_registry.int_counter(
+                "nns_delegation_manager_updates",
+                "How many times has the nns delegation been updated",
+            ),
+            update_duration: metrics_registry.histogram(
+                "nns_delegation_manager_update_duration",
+                "How long it took to update the nns delegation, in seconds",
+                // (1ms, 2ms, 5ms, ..., 10s, 20s, 50s)
+                decimal_buckets(-3, 1),
+            ),
+            delegation_size: metrics_registry.histogram(
+                "nns_delegation_manager_delegation_size",
+                "How big is the delegation, in bytes",
+                // (1, 2, 5, ..., 1MB, 2MB, 5MB)
+                decimal_buckets(0, 6),
+            ),
+        }
+    }
+}

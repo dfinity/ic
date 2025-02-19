@@ -3456,3 +3456,78 @@ fn reshare_chain_key_api_is_disabled() {
         "reshare_chain_key API is not yet implemented.",
     )
 }
+
+#[test]
+fn cannot_accept_cycles_after_replying() {
+    let mut test = ExecutionTestBuilder::new()
+        .with_manual_execution()
+        .with_subnet_type(SubnetType::System)
+        .build();
+    let initial_cycles = Cycles::new(1_000_000_000_000);
+    let a_id = test.universal_canister_with_cycles(initial_cycles).unwrap();
+    let b_id = test.universal_canister_with_cycles(initial_cycles).unwrap();
+    let c_id = test.universal_canister_with_cycles(initial_cycles).unwrap();
+    let d_id = test.universal_canister_with_cycles(initial_cycles).unwrap();
+    let transferred_cycles = Cycles::from(1_000_000u128);
+
+    // Canister C and D simply reply with the payload they were called with.
+    let c_callback = wasm().message_payload().append_and_reply().build();
+    let d_callback = wasm().message_payload().append_and_reply().build();
+
+    // Canister B accepts half of the cycles when receiving a call, then calls C and D,
+    // then replies to A and finally tries to accept the remaining cycles after replying.
+    // It should not be able to accept any more cycles after replying.
+    let b_callback = wasm()
+        .accept_cycles(transferred_cycles / 2u64)
+        .message_payload()
+        .append_and_reply()
+        .call_simple(
+            c_id,
+            "update",
+            call_args()
+                .other_side(c_callback)
+                .on_reply(wasm().accept_cycles(transferred_cycles / 2u64).build()),
+        )
+        .call_simple(d_id, "update", call_args().other_side(d_callback))
+        .build();
+
+    let a_payload = wasm()
+        .call_with_cycles(
+            b_id,
+            "update",
+            call_args()
+                .other_side(b_callback)
+                .on_reply(wasm().msg_cycles_refunded().reply_int64().build()),
+            transferred_cycles,
+        )
+        .build();
+
+    let _ = test.ingress_raw(a_id, "update", a_payload);
+
+    test.execute_message(a_id);
+    test.induct_messages();
+    test.execute_message(b_id);
+    test.induct_messages();
+    // B replied to A and called C and D.
+    test.execute_message(a_id);
+    test.execute_message(c_id);
+    test.induct_messages();
+    // C replied to B, try to accept more cycles. Should not be able to.
+    test.execute_message(b_id);
+
+    // Execute remaining messages.
+    test.execute_all();
+
+    // Canister A loses `transferred_cycles / 2` since B accepted half of them before replying.
+    // The remaining was refunded as part of the reply delivered to A.
+    assert_eq!(
+        test.canister_state(a_id).system_state.balance(),
+        initial_cycles - (transferred_cycles / 2u64)
+    );
+
+    // Canister B gets half of transferred_cycles that it accepted before replying.
+    assert_eq!(
+        test.canister_state(b_id).system_state.balance(),
+        initial_cycles + (transferred_cycles / 2u64)
+    );
+}

@@ -184,6 +184,26 @@ system_test_nns(
 )
 
 system_test_nns(
+    name = "sr_app_no_upgrade_local_test",
+    extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on long_test.
+    flaky = True,
+    tags = [
+        "experimental_system_test_colocation",
+        "k8s",
+        "long_test",  # since it takes longer than 5 minutes.
+        "subnet_recovery",
+    ],
+    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
+    uses_guestos_dev_test = True,
+    runtime_deps = GUESTOS_RUNTIME_DEPS + SUBNET_RECOVERY_RUNTIME_DEPS,
+    deps = [
+        ":common",
+        "//rs/tests/driver:ic-system-test-driver",
+        "@crate_index//:anyhow",
+    ],
+)
+
+system_test_nns(
     name = "sr_app_no_upgrade_enable_tecdsa_test",
     flaky = True,
     tags = [

@@ -3,6 +3,7 @@
 
 use std::path::{Path, PathBuf};
 
+use crate::execution::common::log_dirty_pages;
 use ic_base_types::{CanisterId, NumBytes, PrincipalId};
 use ic_config::flag_status::FlagStatus;
 use ic_embedders::wasm_executor::{CanisterStateChanges, ExecutionStateChanges};
@@ -30,7 +31,7 @@ use crate::{
         CanisterManagerError, CanisterMgrConfig, DtsInstallCodeResult, InstallCodeResult,
     },
     canister_settings::{validate_canister_settings, CanisterSettings},
-    execution_environment::{log_dirty_pages, RoundContext},
+    execution_environment::RoundContext,
     CompilationCostHandling, RoundLimits,
 };
 use ic_replicated_state::canister_state::execution_state::WasmExecutionMode;

@@ -1,4 +1,4 @@
-use crate::pb::v1::NervousSystemFunction;
+use crate::pb::v1::{self as pb, NervousSystemFunction};
 use crate::types::native_action_ids;
 use crate::{governance::Governance, pb::v1::nervous_system_function::FunctionType};
 use ic_sns_governance_api::pb::v1::topics::Topic;
@@ -198,5 +198,13 @@ impl Governance {
             topics,
             uncategorized_functions,
         }
+    }
+}
+
+impl pb::Topic {
+    pub fn is_critical(&self) -> bool {
+        topic_descriptions()
+            .iter()
+            .any(|topic| pb::Topic::from(topic.topic) == *self && topic.is_critical)
     }
 }

@@ -11,7 +11,7 @@ use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_interfaces::execution_environment::{
     HypervisorError, HypervisorResult, SubnetAvailableMemory, WasmExecutionOutput,
 };
-use ic_logger::{error, fatal, warn, ReplicaLogger};
+use ic_logger::{error, fatal, info, warn, ReplicaLogger};
 use ic_management_canister_types_private::CanisterStatusType;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
@@ -582,6 +582,21 @@ pub(crate) fn finish_call_with_error(
         heap_delta: NumBytes::from(0),
         call_duration: Some(Duration::from_secs(0)),
     }
+}
+
+/// Helper method for logging dirty pages.
+pub fn log_dirty_pages(
+    log: &ReplicaLogger,
+    canister_id: &CanisterId,
+    method_name: &str,
+    dirty_pages: usize,
+    instructions: NumInstructions,
+) {
+    let output_message = format!(
+        "Executed {canister_id}::{method_name}: dirty_4kb_pages = {dirty_pages}, instructions = {instructions}"
+    );
+    info!(log, "{}", output_message.as_str());
+    eprintln!("{output_message}");
 }
 
 #[cfg(test)]
