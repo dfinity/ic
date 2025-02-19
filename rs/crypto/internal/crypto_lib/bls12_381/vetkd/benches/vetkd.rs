@@ -14,7 +14,7 @@ fn vetkd_bench(c: &mut Criterion) {
         TransportPublicKey::deserialize(&(G1Affine::generator() * tsk).to_affine().serialize())
             .unwrap();
 
-    let derivation_path = DerivationPath::new(&[1, 2, 3, 4], &[&[1, 2, 3]]);
+    let derivation_path = DerivationPath::new(&[1, 2, 3, 4], &[1, 2, 3]);
     let did = rng.gen::<[u8; 32]>();
 
     for threshold in [9, 19] {

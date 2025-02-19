@@ -23,21 +23,20 @@ const DERIVATION_PATH_DOMAIN_SEP: &[u8; 44] = b"ic-crypto-vetkd-bls12-381-g2-der
 
 impl DerivationPath {
     /// Create a new derivation path
-    pub fn new<U: AsRef<[u8]>>(canister_id: &[u8], extra_paths: &[U]) -> Self {
-        let mut combined_inputs = vec![];
+    pub fn new(canister_id: &[u8], domain: &[u8]) -> Self {
+        let mut input = vec![];
+        input.extend_from_slice(&(canister_id.len() as u64).to_be_bytes()); // 8 bytes length
+        input.extend_from_slice(canister_id);
 
-        // Each input is prefixed with an 8 byte length field
-        let len = canister_id.len() as u64;
-        combined_inputs.extend_from_slice(&len.to_be_bytes());
-        combined_inputs.extend_from_slice(canister_id);
+        let mut delta = Scalar::hash(DERIVATION_PATH_DOMAIN_SEP, &input);
 
-        for input in extra_paths {
-            let len = input.as_ref().len() as u64;
-            combined_inputs.extend_from_slice(&len.to_be_bytes()); // 8 bytes length
-            combined_inputs.extend_from_slice(input.as_ref());
+        if !domain.is_empty() {
+            let mut input = vec![];
+            input.extend_from_slice(&(domain.len() as u64).to_be_bytes()); // 8 bytes length
+            input.extend_from_slice(domain.as_ref());
+
+            delta += Scalar::hash(DERIVATION_PATH_DOMAIN_SEP, &input);
         }
-
-        let delta = Scalar::hash(DERIVATION_PATH_DOMAIN_SEP, &combined_inputs);
 
         Self { delta }
     }
