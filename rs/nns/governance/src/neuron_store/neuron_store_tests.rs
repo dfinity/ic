@@ -822,6 +822,7 @@ fn test_prune_some_following_super_strict_voting_power_refresh() {
                 // supposed to be cleared.
                 start_reducing_voting_power_after_seconds: Some(42),
                 clear_following_after_seconds: Some(58),
+                neuron_minimum_dissolve_delay_to_vote_seconds: Some(42)
             },
             &mut neuron_store,
             Bound::Unbounded, // Start new cycle.
