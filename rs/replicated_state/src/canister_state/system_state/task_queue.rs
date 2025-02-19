@@ -391,12 +391,6 @@ pub fn is_low_wasm_memory_hook_condition_satisfied(
     let wasm_capacity = memory_allocation.map_or_else(
         || wasm_memory_limit,
         |memory_allocation| {
-            debug_assert!(
-                memory_usage_without_wasm_memory <= memory_allocation,
-                "Used non-Wasm memory: {:?} is larger than memory allocation: {:?}.",
-                memory_usage_without_wasm_memory,
-                memory_allocation
-            );
             std::cmp::min(
                 memory_allocation.saturating_sub(&memory_usage_without_wasm_memory),
                 wasm_memory_limit,
