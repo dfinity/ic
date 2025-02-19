@@ -8404,6 +8404,7 @@ fn test_network_economics_proposal() {
                         voting_power_economics: Some(VotingPowerEconomics {
                             start_reducing_voting_power_after_seconds: Some(42),
                             clear_following_after_seconds: Some(4242),
+                            neuron_minimum_dissolve_delay_to_vote_seconds: Some(42),
                         }),
                         ..Default::default()
                     })),
@@ -8434,6 +8435,7 @@ fn test_network_economics_proposal() {
             voting_power_economics: Some(VotingPowerEconomics {
                 start_reducing_voting_power_after_seconds: Some(42),
                 clear_following_after_seconds: Some(4242),
+                neuron_minimum_dissolve_delay_to_vote_seconds: Some(42)
             }),
 
             // No changes to the rest.

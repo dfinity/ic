@@ -101,6 +101,7 @@ impl VotingPowerEconomics {
             Self::DEFAULT_START_REDUCING_VOTING_POWER_AFTER_SECONDS,
         ),
         clear_following_after_seconds: Some(Self::DEFAULT_CLEAR_FOLLOWING_AFTER_SECONDS),
+        neuron_minimum_dissolve_delay_to_vote_seconds: None,
     };
 
     pub const DEFAULT_START_REDUCING_VOTING_POWER_AFTER_SECONDS: u64 = 6 * ONE_MONTH_SECONDS;
