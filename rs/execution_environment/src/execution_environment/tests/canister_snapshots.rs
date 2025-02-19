@@ -5,10 +5,10 @@ use ic_config::subnet_config::SubnetConfig;
 use ic_cycles_account_manager::ResourceSaturation;
 use ic_error_types::{ErrorCode, RejectCode};
 use ic_management_canister_types_private::{
-    self as ic00, CanisterChange, CanisterChangeDetails, CanisterSnapshotResponse,
-    ClearChunkStoreArgs, DeleteCanisterSnapshotArgs, ListCanisterSnapshotArgs,
-    LoadCanisterSnapshotArgs, Method, Payload as Ic00Payload, TakeCanisterSnapshotArgs,
-    UploadChunkArgs,
+    self as ic00, CanisterChange, CanisterChangeDetails, CanisterSettingsArgsBuilder,
+    CanisterSnapshotResponse, ClearChunkStoreArgs, DeleteCanisterSnapshotArgs,
+    ListCanisterSnapshotArgs, LoadCanisterSnapshotArgs, Method, Payload as Ic00Payload,
+    TakeCanisterSnapshotArgs, UpdateSettingsArgs, UploadChunkArgs,
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
@@ -1500,6 +1500,14 @@ fn load_canister_snapshot_succeeds() {
         .canister_from_cycles_and_binary(CYCLES, UNIVERSAL_CANISTER_WASM.to_vec())
         .unwrap();
 
+    helper_load_canister_snapshot_succeeds(&mut test, canister_id, 1);
+}
+
+fn helper_load_canister_snapshot_succeeds(
+    test: &mut ExecutionTest,
+    canister_id: CanisterId,
+    initial_canister_version: u64,
+) {
     // Upload chunk.
     let chunk = vec![1, 2, 3, 4, 5];
     let upload_args = UploadChunkArgs {
@@ -1524,7 +1532,7 @@ fn load_canister_snapshot_succeeds() {
         .unwrap()
         .system_state
         .canister_version;
-    assert_eq!(canister_version_before, 1u64);
+    assert_eq!(canister_version_before, initial_canister_version);
     let canister_history = test
         .state()
         .canister_state(&canister_id)
@@ -1580,7 +1588,7 @@ fn load_canister_snapshot_succeeds() {
         .canister_version;
     // Canister version should be bumped after loading a snapshot.
     assert!(canister_version_after > canister_version_before);
-    assert_eq!(canister_version_after, 2u64);
+    assert_eq!(canister_version_after, initial_canister_version + 1);
 
     // Entry in canister history should contain the information of
     // the snapshot that was loaded back into the canister.
@@ -1613,6 +1621,60 @@ fn load_canister_snapshot_succeeds() {
     ];
     assert_eq!(expected_unflushed_changes, unflushed_changes);
 }
+
+/*#[test]
+fn load_canister_snapshot_updates_hook_condition() {
+    const CYCLES: Cycles = Cycles::new(1_000_000_000_000);
+    let own_subnet = subnet_test_id(1);
+    let caller_canister = canister_test_id(1);
+    let mut test = ExecutionTestBuilder::new()
+        .with_own_subnet_id(own_subnet)
+        .with_caller(own_subnet, caller_canister)
+        .build();
+
+    let canister_id = test
+        .canister_from_cycles_and_binary(CYCLES, UNIVERSAL_CANISTER_WASM.to_vec())
+        .unwrap();
+
+    test.subnet_message(
+        Method::UpdateSettings,
+        UpdateSettingsArgs {
+            canister_id: canister_id.get(),
+            settings: CanisterSettingsArgsBuilder::new()
+                .with_wasm_memory_limit(100_000_000)
+                .with_memory_allocation(9_000_000)
+                .with_wasm_memory_threshold(8_000_000)
+                .build(),
+            sender_canister_version: None,
+        }
+        .encode(),
+    )
+    .unwrap();
+
+    let prior = test
+        .canister_state_mut(canister_id)
+        .system_state
+        .task_queue
+        .peek_hook_status();
+
+    let prior_usage = test.canister_state_mut(canister_id).memory_usage();
+
+    helper_load_canister_snapshot_succeeds(&mut test, canister_id, 2);
+
+    println!(
+        "Prior: {}, after: {}",
+        prior_usage,
+        test.canister_state_mut(canister_id).memory_usage()
+    );
+
+    assert_ne!(
+        prior,
+        test.canister_state_mut(canister_id)
+            .system_state
+            .task_queue
+            .peek_hook_status()
+    );
+}*/
 
 #[test]
 fn snapshot_is_deleted_with_canister_delete() {

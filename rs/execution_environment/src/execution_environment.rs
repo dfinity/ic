@@ -587,6 +587,8 @@ impl ExecutionEnvironment {
             }
         }
 
+        println!("{:?}", method);
+
         let result: ExecuteSubnetMessageResult = match method {
             Ok(Ic00Method::InstallCode) => {
                 // Tail call is needed for deterministic time slicing here to
