@@ -1638,9 +1638,9 @@ impl ExecutionEnvironment {
                 let res = match response {
                     Ok((res, canister_id)) => {
                         if let Some(canister_id) = canister_id {
-                            if let Some(canister_state) = state.canister_state_mut(canister_id) {
-                                canister_state.update_on_low_wasm_memory_hook_condition();
-                            }
+                            state.canister_state_mut(canister_id).map(|canister_state| {
+                                canister_state.update_on_low_wasm_memory_hook_condition()
+                            });
                         }
                         Ok(res)
                     }
