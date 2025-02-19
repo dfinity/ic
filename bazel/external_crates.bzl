@@ -588,7 +588,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 rev = "7f9e931954637526295269155881207f6c832d6d",
             ),
             "ic-cbor": crate.spec(
-                version = "3.0.2",
+                version = "3.0.3",
             ),
             "ic-cdk": crate.spec(
                 version = "^0.17.0",
@@ -613,16 +613,16 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.3.1",
             ),
             "ic-certification": crate.spec(
-                version = "3.0.2",
+                version = "3.0.3",
             ),
             "ic-certificate-verification": crate.spec(
-                version = "3.0.2",
+                version = "3.0.3",
             ),
             "ic-http-certification": crate.spec(
-                version = "3.0.2",
+                version = "3.0.3",
             ),
             "ic-http-gateway": crate.spec(
-                version = "0.1.0",
+                version = "0.2.0",
             ),
             "ic-metrics-encoder": crate.spec(
                 version = "^1.1.1",
@@ -635,7 +635,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 default_features = False,
             ),
             "ic-response-verification": crate.spec(
-                version = "3.0.2",
+                version = "3.0.3",
             ),
             "ic-sha3": crate.spec(
                 version = "^1.0.0",
