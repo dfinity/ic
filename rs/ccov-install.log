@@ -1,0 +1,14 @@
+info: syncing channel updates for '1.84.0-x86_64-unknown-linux-gnu'
+info: latest update on 2025-01-09, rust version 1.84.0 (9fc6b4312 2025-01-07)
+info: component 'rust-std' for target 'wasm32-unknown-unknown' is up to date
+info: downloading component 'rls'
+error: component download failed for rls-x86_64-unknown-linux-gnu: could not rename downloaded file from '/home/ubuntu/.rustup/downloads/51eb0eefab58deb3f170e73689b4c7919ec011c43f0a3af5208aa9147f127f42.partial' to '/home/ubuntu/.rustup/downloads/51eb0eefab58deb3f170e73689b4c7919ec011c43f0a3af5208aa9147f127f42'
+info: syncing channel updates for '1.84.0-x86_64-unknown-linux-gnu'
+info: latest update on 2025-01-09, rust version 1.84.0 (9fc6b4312 2025-01-07)
+info: component 'rust-std' for target 'wasm32-unknown-unknown' is up to date
+info: downloading component 'rls'
+info: installing component 'rls'
+info: rolling back changes
+error: failed to install component: 'rls-preview-x86_64-unknown-linux-gnu', detected conflict: 'bin/rls'
+info: downloading component 'llvm-tools'
+info: installing component 'llvm-tools'

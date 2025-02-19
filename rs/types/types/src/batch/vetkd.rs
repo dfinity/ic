@@ -19,6 +19,7 @@ use super::{iterator_to_bytes, slice_to_messages};
 /// Errors that may occur when handling a VetKd request.
 #[derive(Copy, Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize, EnumCount)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
+#[repr(u8)]
 pub enum VetKdErrorCode {
     TimedOut = 1,
     InvalidKey = 2,
