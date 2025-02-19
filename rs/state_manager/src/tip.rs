@@ -1222,6 +1222,18 @@ fn handle_compute_manifest_request(
             .inc();
     }
 
+    info!(
+        log,
+        "start simulating long computation @{} by sleeping for 300 seconds",
+        checkpoint_layout.height(),
+    );
+    // Wait for a while to simulate a long computation.
+    std::thread::sleep(std::time::Duration::from_secs(300));
+    info!(
+        log,
+        "Finish simulating long computation and try to persist the metadata"
+    );
+
     let mut states = states.write();
 
     if let Some(metadata) = states.states_metadata.get_mut(&checkpoint_layout.height()) {
