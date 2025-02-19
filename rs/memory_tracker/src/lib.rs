@@ -353,12 +353,12 @@ impl SigsegvMemoryTracker {
                     0
                 }
             };
-            return num_pages;
+            num_pages
         }
         #[cfg(not(target_os = "linux"))]
         {
             // This metric is not useful outside of mainnet environments.
-            return 0;
+            0
         }
     }
 
