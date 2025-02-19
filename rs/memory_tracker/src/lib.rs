@@ -334,7 +334,34 @@ impl SigsegvMemoryTracker {
     }
 
     pub fn num_accessed_pages(&self) -> usize {
-        self.accessed_bitmap.borrow().marked_count()
+        // Use the old code path on any platform where the new signal handler is not available.
+        if !new_signal_handler_available() {
+            return self.accessed_bitmap.borrow().marked_count();
+        }
+        // This path should be Linux on x86_64 hardware.
+        // Use libc mincore() to get the number of pages that are present in memory.
+        // These can be either read or written to, which fits the replica definition
+        // of accessed pages.
+        let num_pages = unsafe {
+            let mut vec = vec![0u8; self.memory_area.size() / PAGE_SIZE];
+            let res = libc::mincore(
+                self.memory_area.addr() as *mut libc::c_void,
+                self.memory_area.size(),
+                vec.as_mut_ptr(),
+            );
+            if res == 0 {
+                vec.iter().filter(|&&x| x != 0).count()
+            } else {
+                0
+            }
+        };
+
+        debug_assert!(
+            num_pages >= self.dirty_bitmap.borrow().marked_count(),
+            "num_pages reported by mincore is less than the number of dirty pages marked in the tracker."
+        );
+
+        num_pages
     }
 
     fn page_index_from(&self, addr: *mut libc::c_void) -> PageIndex {
