@@ -237,7 +237,7 @@ impl XNetPayloadBuilderMetrics {
 /// For the case of `MAX_STREAM_MESSAGES` this acts as a dishonest subnet guard, for a smaller number
 /// it acts as an ensurance that the flow of incoming traffic and that of outgoing traffic does not
 /// diverge too far.
-pub(crate) const MAX_SIGNALS: usize = MAX_STREAM_MESSAGES;
+pub const MAX_SIGNALS: usize = MAX_STREAM_MESSAGES;
 
 /// Implementation of `XNetPayloadBuilder` that uses a `StateManager`,
 /// `RegistryClient` and `XNetClient` to build and validate `XNetPayloads`.

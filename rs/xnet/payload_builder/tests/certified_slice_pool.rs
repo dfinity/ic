@@ -1,4 +1,3 @@
-use crate::MAX_SIGNALS;
 use assert_matches::assert_matches;
 use ic_canonical_state::LabelLike;
 use ic_crypto_tree_hash::{flat_map::FlatMap, Label, LabeledTree};
@@ -17,7 +16,7 @@ use ic_xnet_payload_builder::certified_slice_pool::{
     certified_slice_count_bytes, testing, CertifiedSliceError, CertifiedSlicePool, InvalidAppend,
     InvalidSlice, UnpackedStreamSlice, LABEL_STATUS, STATUS_NONE, STATUS_SUCCESS,
 };
-use ic_xnet_payload_builder::{max_message_index, ExpectedIndices};
+use ic_xnet_payload_builder::{max_message_index, ExpectedIndices, MAX_SIGNALS};
 use maplit::btreemap;
 use mockall::predicate::{always, eq};
 use proptest::prelude::*;
