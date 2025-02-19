@@ -90,7 +90,7 @@ fn test(env: TestEnv) {
             let key = get_public_key_with_logger(key_id, &msg_can, &log)
                 .await
                 .expect(
-                    "Should successfully create and verify the signature after enabling signing",
+                    "Should successfully retrieve the public key",
                 );
 
             let key: [u8; 96] = key
