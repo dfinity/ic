@@ -35,9 +35,9 @@ function test_validate_domain_name() {
     echo "Running test: test_validate_domain_name_valid"
     domain_name="example.com"
     if validate_domain_name; then
-        echo "  PASS: valid domain: $domain_name"
+        echo "  PASS: domain validation: $domain_name"
     else
-        echo "  FAIL: valid domain: $domain_name"
+        echo "  FAIL: failed domain validation, while the domain is valid: $domain_name"
         exit 1
     fi
 
@@ -46,7 +46,7 @@ function test_validate_domain_name() {
     if ! (validate_domain_name); then
         echo "  PASS: domain $domain_name validation failed as expected"
     else
-        echo "  FAIL: domain $domain_name validation was expected to fail but didn't"
+        echo "  FAIL: failed domain validation, while the domain is valid: $domain_name"
         exit 1
     fi
 
@@ -54,7 +54,7 @@ function test_validate_domain_name() {
     if ! (validate_domain_name); then
         echo "  PASS: domain $domain_name validation failed as expected"
     else
-        echo "  FAIL: domain $domain_name validation was expected to fail but didn't"
+        echo "  FAIL: failed domain validation, while the domain is valid: $domain_name"
         exit 1
     fi
 }
