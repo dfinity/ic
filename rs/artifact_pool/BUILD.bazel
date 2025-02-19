@@ -46,7 +46,6 @@ DEV_DEPENDENCIES = [
     "//rs/test_utilities/registry",
     "//rs/test_utilities/time",
     "//rs/test_utilities/types",
-    "//rs/types/management_canister_types",
     "@crate_index//:criterion",
     "@crate_index//:rand",
     "@crate_index//:slog-async",
