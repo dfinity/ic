@@ -97,67 +97,53 @@ function test_detect_hardware_generation_helper() {
     fi
 }
 
-function test_verify_cpu_gen1() {
-    echo "Running test: test_verify_cpu_gen1"
-    FAKE_CPU_JSON='[
+function test_verify_cpu() {
+    # Gen1 Success
+    test_verify_cpu_helper "verify_cpu Gen1 success" "1" '[
       {"id": "cpu:0", "product": "AMD EPYC 7302", "capabilities": {"sev": "true"}},
       {"id": "cpu:1", "product": "AMD EPYC 7302", "capabilities": {"sev": "true"}}
-    ]'
-    function get_cpu_info_json() { echo "$FAKE_CPU_JSON"; }
-    function nproc() { echo 64; }
-    HARDWARE_GENERATION="1"
+    ]' 64 0
 
-    verify_cpu
-    echo "  PASS: verify_cpu for Gen1 passed"
-}
-
-function test_verify_cpu_gen1_failure() {
-    echo "Running test: test_verify_cpu_gen1_failure"
-    FAKE_CPU_JSON='[
+    # Gen1 Failure
+    test_verify_cpu_helper "verify_cpu Gen1 failure" "1" '[
       {"id": "cpu:0", "product": "Invalid CPU", "capabilities": {"sev": "false"}},
       {"id": "cpu:1", "product": "Invalid CPU", "capabilities": {"sev": "false"}}
-    ]'
-    get_cpu_info_json() { echo "$FAKE_CPU_JSON"; }
-    nproc() { echo 64; }
-    HARDWARE_GENERATION="1"
+    ]' 64 1
 
-    if ! (verify_cpu); then
-        echo "  PASS: verify_cpu for Gen1 failed as expected"
-    else
-        echo "  FAIL: verify_cpu for Gen1 passed unexpectedly"
-        exit 1
-    fi
-}
-
-function test_verify_cpu_gen2() {
-    echo "Running test: test_verify_cpu_gen2"
-    FAKE_CPU_JSON='[
+    # Gen2 Success
+    test_verify_cpu_helper "verify_cpu Gen2 success" "2" '[
       {"id": "cpu:0", "product": "AMD EPYC 7313", "capabilities": {"sev_snp": "true"}},
       {"id": "cpu:1", "product": "AMD EPYC 7313", "capabilities": {"sev_snp": "true"}}
-    ]'
-    function get_cpu_info_json() { echo "$FAKE_CPU_JSON"; }
-    function nproc() { echo 70; }
-    HARDWARE_GENERATION="2"
+    ]' 70 0
 
-    verify_cpu
-    echo "  PASS: verify_cpu for Gen2 passed"
-}
-
-function test_verify_cpu_gen2_failure() {
-    echo "Running test: test_verify_cpu_gen2_failure"
-    FAKE_CPU_JSON='[
+    # Gen2 Failure
+    test_verify_cpu_helper "verify_cpu Gen2 failure" "2" '[
       {"id": "cpu:0", "product": "AMD EPYC 7313", "capabilities": {"sev_snp": "false"}},
       {"id": "cpu:1", "product": "AMD EPYC 7313", "capabilities": {"sev_snp": "false"}}
-    ]'
-    get_cpu_info_json() { echo "$FAKE_CPU_JSON"; }
-    nproc() { echo 64; }
-    HARDWARE_GENERATION="2"
+    ]' 64 1
+}
 
-    if ! (verify_cpu); then
-        echo "  PASS: verify_cpu for Gen2 failed as expected"
+function test_verify_cpu_helper() {
+    local test_label="$1"
+    local HARDWARE_GENERATION="$2"
+    local FAKE_CPU_JSON="$3"
+    local nproc_val="$4"
+    local expected_result="$5"
+
+    echo "Running test: ${test_label}"
+    function get_cpu_info_json() { echo "$FAKE_CPU_JSON"; }
+    function nproc() { echo "$nproc_val"; }
+
+    if [ "$expected_result" -eq 0 ]; then
+         verify_cpu
+         echo "  PASS: ${test_label} passed"
     else
-        echo "  FAIL: verify_cpu for Gen2 passed unexpectedly"
-        exit 1
+         if ! (verify_cpu); then
+             echo "  PASS: ${test_label} failed as expected"
+         else
+             echo "  FAIL: ${test_label} passed unexpectedly"
+             exit 1
+         fi
     fi
 }
 
@@ -232,10 +218,7 @@ echo
 echo
 echo "Running check-hardware.sh unit tests..."
 test_detect_hardware_generation
-test_verify_cpu_gen1
-test_verify_cpu_gen1_failure
-test_verify_cpu_gen2
-test_verify_cpu_gen2_failure
+test_verify_cpu
 test_verify_memory_success
 test_verify_memory_failure
 test_verify_deployment_path_warning
