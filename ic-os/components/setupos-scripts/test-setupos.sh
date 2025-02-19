@@ -45,7 +45,7 @@ function test_validate_domain_name() {
         echo "Running test for domain: $domain"
         domain_name="$domain"
 
-        if ( validate_domain_name ); then
+        if (validate_domain_name); then
             if [[ "$expected" -eq 0 ]]; then
                 echo "  PASS: valid domain: $domain"
             else
@@ -135,19 +135,19 @@ function test_verify_cpu_helper() {
     function nproc() { echo "$nproc_val"; }
 
     if [ "$expected_result" -eq 0 ]; then
-         if ( verify_cpu ); then
-              echo "  PASS: ${test_label} passed"
-         else
-              echo "  FAIL: ${test_label} expected to pass but failed"
-              exit 1
-         fi
+        if (verify_cpu); then
+            echo "  PASS: ${test_label} passed"
+        else
+            echo "  FAIL: ${test_label} expected to pass but failed"
+            exit 1
+        fi
     else
-         if ! (verify_cpu); then
-             echo "  PASS: ${test_label} failed as expected"
-         else
-             echo "  FAIL: ${test_label} passed unexpectedly"
-             exit 1
-         fi
+        if ! (verify_cpu); then
+            echo "  PASS: ${test_label} failed as expected"
+        else
+            echo "  FAIL: ${test_label} passed unexpectedly"
+            exit 1
+        fi
     fi
 }
 
@@ -171,19 +171,19 @@ function test_verify_memory_helper() {
     }
 
     if [ "$expected_result" -eq 0 ]; then
-         if ( verify_memory ); then
-              echo "  PASS: verify_memory passed with sufficient memory"
-         else
-              echo "  FAIL: verify_memory expected to pass with sufficient memory but failed"
-              exit 1
-         fi
+        if (verify_memory); then
+            echo "  PASS: verify_memory passed with sufficient memory"
+        else
+            echo "  FAIL: verify_memory expected to pass with sufficient memory but failed"
+            exit 1
+        fi
     else
-         if ! ( verify_memory ); then
-             echo "  PASS: verify_memory failed as expected with insufficient memory"
-         else
-             echo "  FAIL: verify_memory passed unexpectedly with insufficient memory"
-             exit 1
-         fi
+        if ! (verify_memory); then
+            echo "  PASS: verify_memory failed as expected with insufficient memory"
+        else
+            echo "  FAIL: verify_memory passed unexpectedly with insufficient memory"
+            exit 1
+        fi
     fi
 }
 
