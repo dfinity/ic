@@ -158,6 +158,7 @@ pub(crate) fn spawn_tip_thread(
                 while let Ok(req) = tip_receiver.recv() {
                     match req {
                         TipRequest::FilterTipCanisters { height, ids } => {
+                            info!(log, "Handle TipRequest::FilterTipCanisters for height @{}", height);
                             let _timer = request_timer(&metrics, "filter_tip_canisters");
                             debug_assert!(!tip_state.tip_folder_state.has_filtered_canisters);
                             tip_state.tip_folder_state.has_filtered_canisters = true;
@@ -173,6 +174,7 @@ pub(crate) fn spawn_tip_thread(
                                 });
                         }
                         TipRequest::TipToCheckpoint { height, sender } => {
+                            info!(log, "Handle TipRequest::TipToCheckpoint for height @{}", height);
                             debug_assert!(tip_state.latest_checkpoint_state.has_manifest);
                             debug_assert_eq!(tip_state.tip_folder_state.has_protos, Some(height));
                             debug_assert_eq!(tip_state.tip_folder_state.page_maps_height, height);
@@ -215,6 +217,7 @@ pub(crate) fn spawn_tip_thread(
                             pagemaps,
                             snapshot_operations,
                         } => {
+                            info!(log, "Handle TipRequest::FlushPageMapDelta for height @{}", height);
                             let _timer = request_timer(&metrics, "flush_unflushed_delta");
                             debug_assert!(tip_state.tip_folder_state.page_maps_height <= height);
                             tip_state.tip_folder_state.page_maps_height = height;
@@ -287,6 +290,7 @@ pub(crate) fn spawn_tip_thread(
                             height,
                             replicated_state,
                         } => {
+                            info!(log, "Handle TipRequest::SerializeToTip for height @{}", height);
                             let _timer = request_timer(&metrics, "serialize_to_tip");
                             debug_assert!(tip_state.tip_folder_state.has_protos.is_none());
                             tip_state.tip_folder_state.has_protos = Some(height);
@@ -313,6 +317,7 @@ pub(crate) fn spawn_tip_thread(
                             checkpoint_layout,
                             pagemaptypes,
                         } => {
+                            info!(log, "Handle TipRequest::ResetTipAndMerge for height @{}", checkpoint_layout.height());
                             let _timer = request_timer(&metrics, "reset_tip_to");
                             tip_state.tip_folder_state = Default::default();
                             tip_state.tip_folder_state.page_maps_height =
@@ -353,6 +358,7 @@ pub(crate) fn spawn_tip_thread(
                         }
 
                         TipRequest::Wait { sender } => {
+                            info!(log, "Handle TipRequest::Wait");
                             let _timer = request_timer(&metrics, "wait");
                             let _ = sender.send(());
                         }
@@ -363,6 +369,7 @@ pub(crate) fn spawn_tip_thread(
                             states,
                             persist_metadata_guard,
                         } => {
+                            info!(log, "Handle TipRequest::ComputeManifest for height @{}", checkpoint_layout.height());
                             let _timer = request_timer(&metrics, "compute_manifest");
                             tip_state.latest_checkpoint_state.has_manifest = true;
                             handle_compute_manifest_request(
@@ -385,6 +392,7 @@ pub(crate) fn spawn_tip_thread(
                             own_subnet_type,
                             fd_factory,
                         } => {
+                            info!(log, "Handle TipRequest::ValidateReplicatedStateAndFinalize for height @{}", checkpoint_layout.height());
                             let _timer = request_timer(&metrics, "validate_replicated_state");
                             debug_assert_eq!(
                                 tip_state.latest_checkpoint_state.page_maps_height,

@@ -901,6 +901,10 @@ fn initialize_tip(
             pagemaptypes: PageMapType::list_all_including_snapshots(&snapshot.state),
         })
         .unwrap();
+    eprintln!(
+        "Init Send TipRequest::ResetTipAndMerge at height {}",
+        snapshot.height
+    );
     ReplicatedState::clone(&snapshot.state)
 }
 
@@ -1256,6 +1260,7 @@ impl StateManagerImpl {
         self.tip_channel
             .send(TipRequest::Wait { sender })
             .expect("failed to send TipHandler Wait message");
+        eprintln!("Send TipRequest::Wait");
         recv.recv().expect("failed to wait for TipHandler thread");
     }
 
@@ -1513,6 +1518,7 @@ impl StateManagerImpl {
             DeallocatorThread::new("StateDeallocator", Duration::from_millis(1));
 
         for checkpoint_layout in checkpoint_layouts_to_compute_manifest {
+            let height = checkpoint_layout.height();
             tip_channel
                 .send(TipRequest::ComputeManifest {
                     checkpoint_layout,
@@ -1521,6 +1527,7 @@ impl StateManagerImpl {
                     persist_metadata_guard: persist_metadata_guard.clone(),
                 })
                 .expect("failed to send ComputeManifestRequest");
+            eprintln!("Init Send TipRequest::ComputeManifest at height {}", height);
         }
 
         report_last_diverged_state(&log, &metrics, &state_layout);
@@ -2421,6 +2428,10 @@ impl StateManagerImpl {
                 fd_factory: self.fd_factory.clone(),
             })
             .expect("Failed to send Validate request");
+        eprintln!(
+            "Send TipRequest::ValidateReplicatedStateAndFinalize at height {}",
+            height
+        );
 
         // On the NNS subnet we never allow incremental manifest computation
         let is_nns = self.own_subnet_id == state.metadata.network_topology.nns_subnet_id;
@@ -3195,6 +3206,10 @@ impl StateManager for StateManagerImpl {
                 self.tip_channel
                     .send(compute_manifest_request)
                     .expect("failed to send ComputeManifestRequest message");
+                info!(
+                    self.log,
+                    "Sent TipRequest::ComputeManifest for height {}", height
+                );
             }
         } else {
             debug_assert!(scope != CertificationScope::Full);
@@ -3215,6 +3230,7 @@ impl StateManager for StateManagerImpl {
             self.tip_channel
                 .send(req)
                 .expect("failed to send tip request");
+            eprintln!("Sent TipRequest::ResetTipAndMerge at height {}", height);
         }
     }
 

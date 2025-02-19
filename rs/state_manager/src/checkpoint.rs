@@ -1,3 +1,8 @@
+use crate::{
+    CheckpointError, CheckpointMetrics, HasDowngrade, PageMapToFlush, TipRequest,
+    CRITICAL_ERROR_CHECKPOINT_SOFT_INVARIANT_BROKEN,
+    CRITICAL_ERROR_REPLICATED_STATE_ALTERED_AFTER_CHECKPOINT, NUMBER_OF_CHECKPOINT_THREADS,
+};
 use crossbeam_channel::{unbounded, Sender};
 use ic_base_types::{subnet_id_try_from_protobuf, CanisterId, SnapshotId};
 use ic_logger::error;
@@ -21,16 +26,11 @@ use ic_types::batch::RawQueryStats;
 use ic_types::{CanisterTimer, Height, Time};
 use ic_utils::thread::maybe_parallel_map;
 use ic_validate_eq::ValidateEq;
+use slog::info;
 use std::collections::BTreeMap;
 use std::convert::{identity, TryFrom};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-
-use crate::{
-    CheckpointError, CheckpointMetrics, HasDowngrade, PageMapToFlush, TipRequest,
-    CRITICAL_ERROR_CHECKPOINT_SOFT_INVARIANT_BROKEN,
-    CRITICAL_ERROR_REPLICATED_STATE_ALTERED_AFTER_CHECKPOINT, NUMBER_OF_CHECKPOINT_THREADS,
-};
 
 #[cfg(test)]
 mod tests;
@@ -83,6 +83,7 @@ pub(crate) fn make_unvalidated_checkpoint(
                 replicated_state: Box::new(state.clone()),
             })
             .unwrap();
+        eprintln!("Send TipRequest::SerializeToTip at height {}", height);
     }
 
     tip_channel
@@ -91,6 +92,8 @@ pub(crate) fn make_unvalidated_checkpoint(
             ids: state.canister_states.keys().copied().collect(),
         })
         .unwrap();
+
+    eprintln!("Send TipRequest::FilterTipCanisters at height {}", height);
 
     let (cp, has_downgrade) = {
         let _timer = metrics
@@ -105,6 +108,7 @@ pub(crate) fn make_unvalidated_checkpoint(
                 sender: send,
             })
             .unwrap();
+        eprintln!("Send TipRequest::TipToCheckpoint at height {}", height);
         let (cp, has_downgrade) = recv.recv().unwrap()?;
         (cp, has_downgrade)
     };
@@ -406,6 +410,8 @@ pub(crate) fn flush_canister_snapshots_and_page_maps(
             snapshot_operations,
         })
         .unwrap();
+
+    eprintln!("Send TipRequest::FlushPageMapDelta at height {}", height);
 }
 
 struct CheckpointLoader {
