@@ -135,8 +135,12 @@ function test_verify_cpu_helper() {
     function nproc() { echo "$nproc_val"; }
 
     if [ "$expected_result" -eq 0 ]; then
-         verify_cpu
-         echo "  PASS: ${test_label} passed"
+         if ( verify_cpu ); then
+              echo "  PASS: ${test_label} passed"
+         else
+              echo "  FAIL: ${test_label} expected to pass but failed"
+              exit 1
+         fi
     else
          if ! (verify_cpu); then
              echo "  PASS: ${test_label} failed as expected"
@@ -167,8 +171,12 @@ function test_verify_memory_helper() {
     }
 
     if [ "$expected_result" -eq 0 ]; then
-         verify_memory
-         echo "  PASS: verify_memory passed with sufficient memory"
+         if ( verify_memory ); then
+              echo "  PASS: verify_memory passed with sufficient memory"
+         else
+              echo "  FAIL: verify_memory expected to pass with sufficient memory but failed"
+              exit 1
+         fi
     else
          if ! ( verify_memory ); then
              echo "  PASS: verify_memory failed as expected with insufficient memory"
@@ -182,6 +190,7 @@ function test_verify_memory_helper() {
 function test_verify_deployment_path_warning() {
     echo "Running test: test_verify_deployment_path_warning"
     HARDWARE_GENERATION="2"
+    # Override sleep to prevent delays in test context
     function sleep() {
         echo "Sleep skipped for test"
     }
