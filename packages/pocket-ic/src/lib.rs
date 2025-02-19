@@ -70,7 +70,7 @@ use candid::{
     Principal,
 };
 use ic_transport_types::SubnetMetrics;
-use reqwest::{StatusCode, Url};
+use reqwest::Url;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use slog::Level;
@@ -650,11 +650,9 @@ impl PocketIc {
     }
 
     /// Get the controllers of a canister.
+    /// Returns `None` if the canister does not exist.
     #[instrument(ret, skip(self), fields(instance_id=self.pocket_ic.instance_id, canister_id = %canister_id.to_string()))]
-    pub fn try_get_controllers(
-        &self,
-        canister_id: CanisterId,
-    ) -> Result<Vec<Principal>, (StatusCode, String)> {
+    pub fn try_get_controllers(&self, canister_id: CanisterId) -> Option<Vec<Principal>> {
         let runtime = self.runtime.clone();
         runtime.block_on(async { self.pocket_ic.try_get_controllers(canister_id).await })
     }

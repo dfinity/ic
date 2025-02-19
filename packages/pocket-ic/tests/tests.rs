@@ -1744,12 +1744,14 @@ fn try_get_controllers_of_nonexisting_canister() {
     let pic = PocketIc::new();
 
     let canister_id = pic.create_canister();
+    pic.try_get_controllers(canister_id).unwrap();
+
     pic.add_cycles(canister_id, 100_000_000_000_000);
     pic.stop_canister(canister_id, None).unwrap();
     pic.delete_canister(canister_id, None).unwrap();
 
     let res = pic.try_get_controllers(canister_id);
-    assert!(res.is_err())
+    assert!(res.is_none());
 }
 
 #[test]
