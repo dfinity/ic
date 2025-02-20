@@ -94,7 +94,7 @@ def _run_system_test(ctx):
         "FARM_METADATA_PATH": farm_metadata.short_path,
     }
 
-    # RUN_SCRIPT_ env variables are special. They are processed by the run
+    # We use the RUN_SCRIPT_ prefix for variables that are processed by the run
     # script, and not passed directly to the test.
 
     # RUN_SCRIPT_ICOS_IMAGES:
