@@ -826,10 +826,7 @@ fn algorithm_id_should_match_algorithm_id_proto() {
         AlgorithmId::ThresholdEd25519 as i32,
         AlgorithmIdProto::ThresholdEd25519 as i32
     );
-    assert_eq!(
-        AlgorithmId::VetKD as i32,
-        AlgorithmIdProto::Vetkd as i32
-    );
+    assert_eq!(AlgorithmId::VetKD as i32, AlgorithmIdProto::Vetkd as i32);
 }
 
 #[test]
