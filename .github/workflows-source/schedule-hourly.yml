@@ -65,7 +65,7 @@ jobs:
           BAZEL_CI_CONFIG: ""
           BAZEL_COMMAND: >-
             build
-              --config=ci
+              --config=ci --config=stamped
               --repository_cache= --disk_cache= --noremote_accept_cached --remote_instance_name=${CI_COMMIT_SHA} --@rules_rust//rust/settings:pipelined_compilation=True
           BAZEL_TARGETS: //...
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
@@ -85,7 +85,7 @@ jobs:
         uses:  ./.github/actions/bazel-test-all/
         with:
           BAZEL_COMMAND: >-
-            test --config=ci --keep_going --test_tag_filters=system_test_hourly
+            test --config=ci --config=stamped --keep_going --test_tag_filters=system_test_hourly
           BAZEL_TARGETS: //rs/...
           BUILDEVENT_APIKEY: ${{ secrets.HONEYCOMB_TOKEN }}
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
