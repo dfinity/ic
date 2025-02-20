@@ -6,10 +6,10 @@ use ic_system_test_driver::driver::{
     node_software_version::NodeSoftwareVersion,
     prometheus_vm::{HasPrometheus, PrometheusVm},
     test_env::TestEnv,
-    test_env_api::{get_dependency_path, HasTopologySnapshot, NnsCustomizations},
+    test_env_api::{HasTopologySnapshot, NnsCustomizations},
 };
 use serde::Deserialize;
-use slog::{info, Logger};
+use slog::info;
 use url::Url;
 
 pub mod defs;
@@ -20,8 +20,6 @@ const GUESTOS_DISK_IMG_URL: &str = "ENV_DEPS__GUESTOS_DISK_IMG_URL";
 const GUESTOS_UPDATE_IMG_URL: &str = "ENV_DEPS__GUESTOS_UPDATE_IMG_URL";
 
 pub const IC_CONFIG: &str = "IC_CONFIG";
-
-const TAR_EXTENSION: &str = ".tar.zst";
 
 pub fn setup(env: TestEnv, config: IcConfig) {
     let mut ic = InternetComputer::new();
@@ -100,7 +98,7 @@ pub fn setup(env: TestEnv, config: IcConfig) {
 
 fn update_env_variables(env: &TestEnv, pairs: Vec<(String, &str)>) {
     for (value, env_variable) in pairs {
-        std::env::set_var(env_variable, value);
+        std::env::set_var(env_variable, &value);
         info!(
             env.logger(),
             "Overriden env variable `{}` to value: {}", env_variable, value
