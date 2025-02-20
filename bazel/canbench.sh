@@ -30,6 +30,16 @@ if [ -s "${REPO_RESULTS_PATH}" ]; then
     echo "  ${REPO_RESULTS_PATH}" >>${CANBENCH_YML}
 fi
 
+if [ -s "${CANBENCH_INIT_ARGS}" ]; then
+    echo "init_args:" >>${CANBENCH_YML}
+    echo "  ${CANBENCH_INIT_ARGS}" >>${CANBENCH_YML}
+fi
+
+if [ -s "${CANBENCH_STABLE_MEMORY}" ]; then
+    echo "stable_memory:" >>${CANBENCH_YML}
+    echo "  ${CANBENCH_STABLE_MEMORY}" >>${CANBENCH_YML}
+fi
+
 if [ $# -eq 0 ]; then
     # Runs the benchmark without updating the results file.
     ${CANBENCH_BIN} --no-runtime-integrity-check --runtime-path ${POCKET_IC_BIN}
