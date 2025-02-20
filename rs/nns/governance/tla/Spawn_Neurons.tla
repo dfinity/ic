@@ -70,7 +70,8 @@ process (Spawn_Neurons \in Spawn_Neurons_Process_Ids)
     SpawnNeurons_Start:
         await ~spawning_neurons;
 
-        \* TODO: probably need to model the spawning state?
+        \* We abstract away the spawning state and treat any neuron with non-zero maturity and zero cached stake
+        \* as a neuron that can be spawned.
         ready_to_spawn_ids := {nid \in DOMAIN(neuron) : neuron[nid].maturity > 0 /\ neuron[nid].cached_stake = 0};
         await ready_to_spawn_ids # {};
         spawning_neurons := TRUE;

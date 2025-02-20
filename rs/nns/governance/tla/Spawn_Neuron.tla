@@ -56,7 +56,8 @@ process (Spawn_Neuron \in Spawn_Neuron_Process_Ids)
                     maturity_to_spawn \in MIN_STAKE..neuron[parent_neuron_id].maturity;
                     child_neuron_id = FRESH_NEURON_ID(DOMAIN(neuron));
                 ) {
-                    \* TODO: this serves as a poor man's check that the parent isn't spawning, can we get away with that?
+                    \* In the absence of an explicit spawning state in the model, this serves as a poor man's check 
+                    \* that the parent isn't already spawning
                     await(neuron[parent_neuron_id].cached_stake > 0);
 
                     \* The code takes a lock on the child neuron, but releases it in the same message handler,

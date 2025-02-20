@@ -132,11 +132,11 @@ Ledger_Process_Governance_Request ==
                 /\
                   LET
                     acc == VariantGetUnsafe(t, margs).account
+                    \* We don't explicitly cover the case of asking for an invalid account here, as we only
+                    \* expect the governance to ask for valid accounts. If an invalid request would happen,
+                    \* model checking would fail so we'd catch in anyways.
+                    resp == Variant("BalanceQueryOk", balances[acc])
                   IN
-                    \E resp \in {
-                         Variant("Fail", UNIT),
-                         Variant("BalanceQueryOk", balances[acc])
-                      }:
                        /\ ledger_to_governance' = ledger_to_governance \union {response(caller, resp)}
             \/
                 /\ t = "Transfer"
@@ -166,8 +166,8 @@ Ledger_Process_Governance_Request ==
                     \/
                         /\ ~is_invalid_transfer
                         /\ balances' = [balances EXCEPT 
-                                ![from_acc] = balances[from_acc] - (fee + amnt),
-                                ![to_acc] = balances[to_acc] + amnt]
+                                ![from_acc] = @ - (fee + amnt),
+                                ![to_acc] = @ + amnt]
                         /\ ledger_to_governance' = (ledger_to_governance \union {response(caller, Variant("TransferOk", UNIT))})
                         /\ burned' = burned + fee + (IF to_acc = Minting_Account_Id THEN amnt ELSE 0)
                         /\ IF from_acc = Minting_Account_Id
@@ -232,7 +232,7 @@ Init == (* Global variables *)
         /\ Ledger_Init
 
 Change_Neuron_Fee ==
-    \* TODO: it is probably correct that we can change the fee while the neuron is locked?
+    \* Note that we can change the fee even while the neuron is locked
     \E nid \in DOMAIN(neuron):
         \E new_fee_value \in 0..Min({MAX_NEURON_FEE, neuron[nid].cached_stake}):
             \* Does the model need to be more strict on how fees can be decreased?
@@ -241,7 +241,9 @@ Change_Neuron_Fee ==
 
 Increase_Neuron_Maturity ==
     \E nid \in DOMAIN(neuron):
-        \* TODO: true for the implementation?
+        \* We assume that neurons whose cached stake is 0 don't get maturity.
+        \* This is a bit harsh, but otherwise we end up having to model the spawning
+        \* state, which would increase the load on model checking further.
         /\ neuron[nid].cached_stake > 0
         /\ \E new_maturity \in (neuron[nid].maturity+1)..MAX_MATURITY:
             /\ total_rewards' = total_rewards + new_maturity - neuron[nid].maturity
@@ -275,13 +277,14 @@ Can_Stake_Sanity == \A n \in DOMAIN(neuron) : neuron[n].cached_stake = 0
 
 Can_Decrease_Stake_Sanity == [][\A n \in DOMAIN(neuron) \cap DOMAIN(neuron') : neuron[n].cached_stake <= neuron'[n].cached_stake]_<<global_non_ledger_vars, local_vars, env_vars>>
 
-
+\* This may be temporarily violated when the neuron is locked
 \* Cached_Stake_Capped_By_Balance == \A n \in DOMAIN(neuron) :
 \*     neuron[n].cached_stake <= balances[neuron[n].account]
 
-\* TODO: if needed, we can add a precondition that the neuron is not locked
-Fees_Smaller_Than_Cached_Stake == \A n \in DOMAIN(neuron):
-    neuron[n].fees <= neuron[n].cached_stake
+\* This is a s speculative invariant that turned out not to hold, as neurons can incur
+\* a fee even while, say, merging.
+\* Fees_Smaller_Than_Cached_Stake == \A n \in DOMAIN(neuron):
+\*     neuron[n].fees <= neuron[n].cached_stake
 
 Cached_Stake_Capped_By_Balance_When_Not_Locked == \A n \in DOMAIN(neuron) :
     n \notin locks => neuron[n].cached_stake <= balances[neuron[n].account]
@@ -289,7 +292,7 @@ Cached_Stake_Capped_By_Balance_When_Not_Locked == \A n \in DOMAIN(neuron) :
 Regular_Balances_Sum == SumSet(Range([a \in DOMAIN(balances) \ {Minting_Account_Id} |-> balances[a]]))
 Total_Balance_Is_Constant_Modulo_Fees == Regular_Balances_Sum + burned - minted = Regular_Balances_Sum' + burned' - minted'
 
-\* this should prevent double spending of maturity
+\* This invariant should prevent double spending of maturity
 Total_Minting_Does_Not_Exceed_Rewards == minted <= total_rewards
 
 
@@ -302,19 +305,11 @@ Neuron_And_Account_Id_By_Neuron_Coherent == \A n \in DOMAIN(neuron), a \in DOMAI
 
 Cached_Stake_Not_Underflowing == \A n \in DOMAIN(neuron): neuron[n].cached_stake >= 0
 
-\* TODO: this probably doesn't hold, and we probably don't want it as is (maybe: either 0 or this)
-Neurons_Have_At_Least_Min_Stake == \A n \in DOMAIN(neuron) :
-    n \notin locks => neuron[n].cached_stake >= MIN_STAKE
+\* This doesn't hold, and we probably don't want it as is (maybe: either 0 or this)
+\* Neurons_Have_At_Least_Min_Stake == \A n \in DOMAIN(neuron) :
+\*     n \notin locks => neuron[n].cached_stake >= MIN_STAKE
 
 Ready_To_Spawn_Ids_Exist == (UNION Range(ready_to_spawn_ids)) \subseteq DOMAIN(neuron)
-
-Full_Invariant ==   /\ Cached_Stake_Capped_By_Balance_When_Not_Locked
-                    /\ Neuron_And_Account_Id_By_Neuron_Coherent
-                    /\ Total_Minting_Does_Not_Exceed_Rewards
-                    /\ Neurons_Have_Unique_Accounts
-                    /\ Cached_Stake_Not_Underflowing
-                    /\ Ready_To_Spawn_Ids_Exist
-                    /\ Fees_Smaller_Than_Cached_Stake
 
 \*******************************************************************************
 \* Symmetry optimizations for model checking
