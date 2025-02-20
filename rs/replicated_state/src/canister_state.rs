@@ -567,11 +567,6 @@ impl CanisterState {
 
     /// Updates status of `OnLowWasmMemory` hook.
     pub fn update_on_low_wasm_memory_hook_condition(&mut self) {
-        println!(
-            "UPDATING: mem_us: {} wasm_mem_us: {}.",
-            self.memory_usage(),
-            self.wasm_memory_usage()
-        );
         self.system_state
             .update_on_low_wasm_memory_hook_status(self.memory_usage(), self.wasm_memory_usage());
     }
