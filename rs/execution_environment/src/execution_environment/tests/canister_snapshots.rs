@@ -1502,7 +1502,12 @@ fn load_canister_snapshot_succeeds() {
 
     // Upload chunk.
     let chunk = vec![1, 2, 3, 4, 5];
-    helper_upload_chunk(&mut test, canister_id, chunk);
+    let upload_args = UploadChunkArgs {
+        canister_id: canister_id.into(),
+        chunk,
+    };
+    let result = test.subnet_message("upload_chunk", upload_args.encode());
+    assert!(result.is_ok());
 
     // Take a snapshot.
     let (snapshot_id, snapshot_taken_at_timestamp) = helper_take_snapshot(&mut test, canister_id);
@@ -1528,7 +1533,21 @@ fn load_canister_snapshot_succeeds() {
         .collect::<Vec<CanisterChange>>();
 
     // Clear chunk after taking the snapshot.
-    helper_clear_chunk(&mut test, canister_id);
+    let clear_args = ClearChunkStoreArgs {
+        canister_id: canister_id.into(),
+    };
+    let result = test.subnet_message("clear_chunk_store", clear_args.encode());
+    assert!(result.is_ok());
+    // Verify chunk store contains no data.
+    assert!(test
+        .state()
+        .canister_state(&canister_id)
+        .unwrap()
+        .system_state
+        .wasm_chunk_store
+        .keys()
+        .next()
+        .is_none());
 
     // Load an existing snapshot.
     helper_load_snapshot(&mut test, canister_id, snapshot_id);
@@ -1587,15 +1606,6 @@ fn load_canister_snapshot_succeeds() {
     assert_eq!(expected_unflushed_changes, unflushed_changes);
 }
 
-fn helper_upload_chunk(test: &mut ExecutionTest, canister_id: CanisterId, chunk: Vec<u8>) {
-    let upload_args = UploadChunkArgs {
-        canister_id: canister_id.into(),
-        chunk,
-    };
-    let result = test.subnet_message("upload_chunk", upload_args.encode());
-    assert!(result.is_ok());
-}
-
 fn helper_take_snapshot(test: &mut ExecutionTest, canister_id: CanisterId) -> (SnapshotId, u64) {
     let args: TakeCanisterSnapshotArgs = TakeCanisterSnapshotArgs::new(canister_id, None);
     let result = test.subnet_message("take_canister_snapshot", args.encode());
@@ -1606,24 +1616,6 @@ fn helper_take_snapshot(test: &mut ExecutionTest, canister_id: CanisterId) -> (S
     assert!(test.state().canister_snapshots.get(snapshot_id).is_some());
 
     (snapshot_id, snapshot_taken_at_timestamp)
-}
-
-fn helper_clear_chunk(test: &mut ExecutionTest, canister_id: CanisterId) {
-    let clear_args = ClearChunkStoreArgs {
-        canister_id: canister_id.into(),
-    };
-    let result = test.subnet_message("clear_chunk_store", clear_args.encode());
-    assert!(result.is_ok());
-    // Verify chunk store contains no data.
-    assert!(test
-        .state()
-        .canister_state(&canister_id)
-        .unwrap()
-        .system_state
-        .wasm_chunk_store
-        .keys()
-        .next()
-        .is_none());
 }
 
 fn helper_load_snapshot(
@@ -1728,8 +1720,8 @@ fn load_canister_snapshot_updates_hook_condition() {
             canister_id: canister_id.get(),
             settings: CanisterSettingsArgsBuilder::new()
                 .with_wasm_memory_limit(100_000_000)
-                .with_memory_allocation(9_000_000)
-                .with_wasm_memory_threshold(200_000)
+                .with_memory_allocation(10_000_000)
+                .with_wasm_memory_threshold(5_000_000)
                 .build(),
             sender_canister_version: None,
         }
@@ -1737,14 +1729,18 @@ fn load_canister_snapshot_updates_hook_condition() {
     )
     .unwrap();
 
-    let chunk = vec![1, 2, 3, 4, 5];
-    helper_upload_chunk(&mut test, canister_id, chunk);
-
     // Take a snapshot.
     let (snapshot_id, _) = helper_take_snapshot(&mut test, canister_id);
 
-    // Clear chunk after taking the snapshot.
-    helper_clear_chunk(&mut test, canister_id);
+    // Upgrade canister with empty Wasm.
+    let empty_wasm = wat::parse_str(format!(
+        r#"
+        (module
+            (memory 1)
+        )"#
+    ))
+    .unwrap();
+    test.upgrade_canister(canister_id, empty_wasm).unwrap();
 
     assert_eq!(
         test.canister_state_mut(canister_id)
