@@ -10,7 +10,7 @@ use prometheus::{
     register_int_counter_vec_with_registry, register_int_gauge_with_registry, IntCounterVec,
     IntGauge, Registry,
 };
-use salt_sharing_api::GetSaltResponse;
+use salt_sharing_api::{GetSaltError, GetSaltResponse};
 use std::time::{SystemTime, UNIX_EPOCH};
 use std::{sync::Arc, time::Duration};
 use tokio::time::{interval, MissedTickBehavior};
@@ -54,7 +54,7 @@ impl Metrics {
             fetches: register_int_counter_vec_with_registry!(
                 format!("{METRIC_PREFIX}_fetches"),
                 format!("Count of salt fetches and their outcome"),
-                &["result"],
+                &["status", "message"],
                 registry
             )
             .unwrap(),
@@ -88,6 +88,13 @@ impl AnonymizationSaltFetcher {
     }
 
     async fn fetch_salt(&self) {
+        let update_fetch_result = |status: &str, message: &str| {
+            self.metrics
+                .fetches
+                .with_label_values(&[status, message])
+                .inc();
+        };
+
         let query_response = match self
             .agent
             .execute_update(
@@ -102,13 +109,13 @@ impl AnonymizationSaltFetcher {
             Ok(response) => match response {
                 Some(response) => response,
                 None => {
-                    self.metrics.fetches.with_label_values(&["failure"]).inc();
+                    update_fetch_result("failure", "empty_response");
                     warn!("{SERVICE}: got empty response from the canister");
                     return;
                 }
             },
             Err(err) => {
-                self.metrics.fetches.with_label_values(&["failure"]).inc();
+                update_fetch_result("failure", "fetch_failure");
                 warn!("{SERVICE}: failed to get salt from the canister: {err:#}");
                 return;
             }
@@ -117,21 +124,15 @@ impl AnonymizationSaltFetcher {
         let salt_response = match Decode!(&query_response, GetSaltResponse) {
             Ok(response) => response,
             Err(err) => {
-                self.metrics.fetches.with_label_values(&["failure"]).inc();
+                update_fetch_result("failure", "response_decoding_failure");
                 warn!("{SERVICE}: failed to decode candid response: {err:?}");
                 return;
             }
         };
 
-        let status = if salt_response.is_ok() {
-            "success"
-        } else {
-            "failure"
-        };
-        self.metrics.fetches.with_label_values(&[status]).inc();
-
         match salt_response {
             Ok(resp) => {
+                update_fetch_result("success", "");
                 // Overwrite salt (used for hashing sensitive data)
                 self.anonymization_salt.store(Some(Arc::new(resp.salt)));
                 // Update metrics
@@ -144,6 +145,12 @@ impl AnonymizationSaltFetcher {
                 );
             }
             Err(err) => {
+                let message = match err {
+                    GetSaltError::SaltNotInitialized => "salt_not_initialized",
+                    GetSaltError::Unauthorized => "unauthorized",
+                    GetSaltError::Internal(_) => "internal",
+                };
+                update_fetch_result("failure", message);
                 warn!("{SERVICE}: get_salt failed: {err:?}");
             }
         }
