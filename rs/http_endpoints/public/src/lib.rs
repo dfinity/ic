@@ -27,6 +27,7 @@ cfg_if::cfg_if! {
 
 pub use call::{call_v2, call_v3, IngressValidatorBuilder, IngressWatcher, IngressWatcherHandle};
 pub use common::cors_layer;
+use metrics::DelegationManagerMetrics;
 pub use nns_delegation_manager::start_nns_delegation_manager;
 pub use query::QueryServiceBuilder;
 pub use read_state::canister::{CanisterReadStateService, CanisterReadStateServiceBuilder};
@@ -769,6 +770,7 @@ pub(crate) async fn load_root_delegation(
     nns_subnet_id: SubnetId,
     registry_client: &dyn RegistryClient,
     tls_config: &(dyn TlsConfig + Send + Sync),
+    metrics: &DelegationManagerMetrics,
 ) -> Option<CertificateDelegation> {
     // On the NNS subnet. No delegation needs to be fetched.
     if subnet_id == nns_subnet_id {
@@ -803,11 +805,13 @@ pub(crate) async fn load_root_delegation(
             Err(err) => {
                 warn!(
                     log,
-                    "Fetching delegation from nns subnet failed. Retrying again in {} seconds...\n\
-                        Error received: {}",
+                    "Fetching delegation from nns subnet failed. Retrying again in {} seconds...\
+                    Error received: {}",
                     backoff.as_secs(),
                     err
                 );
+
+                metrics.errors.inc();
             }
         }
 
@@ -1594,6 +1598,7 @@ pub(crate) mod tests {
             NNS_SUBNET_ID,
             registry_client.as_ref(),
             &tls_config,
+            &DelegationManagerMetrics::new(&MetricsRegistry::new()),
         )
         .await;
 
@@ -1613,6 +1618,7 @@ pub(crate) mod tests {
             NNS_SUBNET_ID,
             registry_client.as_ref(),
             &tls_config,
+            &DelegationManagerMetrics::new(&MetricsRegistry::new()),
         )
         .await;
 

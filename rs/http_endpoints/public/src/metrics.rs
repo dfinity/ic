@@ -211,6 +211,7 @@ pub(crate) struct DelegationManagerMetrics {
     pub(crate) update_duration: Histogram,
     pub(crate) delegation_size: Histogram,
     pub(crate) updates: IntCounter,
+    pub(crate) errors: IntCounter,
 }
 
 impl DelegationManagerMetrics {
@@ -231,6 +232,10 @@ impl DelegationManagerMetrics {
                 "How big is the delegation, in bytes",
                 // (1, 2, 5, ..., 1MB, 2MB, 5MB)
                 decimal_buckets(0, 6),
+            ),
+            errors: metrics_registry.int_counter(
+                "nns_delegation_manager_errors",
+                "Number of errors encountered while fetching nns delegations",
             ),
         }
     }

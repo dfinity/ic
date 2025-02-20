@@ -77,6 +77,7 @@ impl DelegationManager {
             self.nns_subnet_id,
             self.registry_client.as_ref(),
             self.tls_config.as_ref(),
+            &self.metrics,
         )
         .await;
 
