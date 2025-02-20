@@ -1515,7 +1515,8 @@ pub(crate) mod tests {
 
         registry_client.update_to_latest_version();
 
-        let (_certificate, _root_pk, cbor) =
+        let create_certificate = move |time| {
+            let (_certificate, _root_pk, cbor) =
                 CertificateBuilder::new(CertificateData::CustomTree(LabeledTree::SubTree(flatmap![
                     Label::from("subnet") => LabeledTree::SubTree(flatmap![
                         Label::from(NON_NNS_SUBNET_ID.get_ref().to_vec()) => LabeledTree::SubTree(flatmap![
@@ -1523,17 +1524,26 @@ pub(crate) mod tests {
                             Label::from("public_key") => LabeledTree::Leaf(public_key_to_der(&non_nns_public_key.into_bytes()).unwrap()),
                         ])
                     ]),
-                    Label::from("time") => LabeledTree::Leaf(encoded_time(42))
+                    Label::from("time") => LabeledTree::Leaf(encoded_time(time))
                 ])))
                 .with_root_of_trust(nns_public_key, nns_secret_key)
                 .build();
 
-        rt_handle.spawn(async move {
-            let http_response = HttpReadStateResponse {
-                certificate: Blob(cbor),
-            };
+            cbor
+        };
 
-            let router = axum::routing::any(move || async { Cbor(http_response).into_response() });
+        rt_handle.spawn(async move {
+            let time = Arc::new(RwLock::new(42));
+
+            let router = axum::routing::any(move || async move {
+                let mut time = time.write().unwrap();
+                *time += 1;
+
+                Cbor(HttpReadStateResponse {
+                    certificate: Blob(create_certificate(*time)),
+                })
+                .into_response()
+            });
 
             axum_server::bind_rustls(addr, generate_self_signed_cert().await)
                 .serve(router.into_make_service())

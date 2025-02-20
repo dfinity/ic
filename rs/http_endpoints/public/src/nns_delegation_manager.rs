@@ -125,6 +125,7 @@ mod tests {
     use ic_crypto_tree_hash::{lookup_path, LabeledTree};
     use ic_logger::no_op_logger;
     use ic_types::messages::Certificate;
+    use tokio::time::timeout;
 
     use crate::tests::{set_up_nns_delegation_dependencies, NNS_SUBNET_ID, NON_NNS_SUBNET_ID};
 
@@ -184,5 +185,61 @@ mod tests {
             Some(LabeledTree::SubTree(..)) => (),
             _ => panic!("Didn't find the subnet path in the state tree"),
         }
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn should_not_refresh_if_not_enough_time_passed_test() {
+        let rt_handle = tokio::runtime::Handle::current();
+        let (registry_client, tls_config) = set_up_nns_delegation_dependencies(rt_handle.clone());
+
+        let (_, mut rx) = start_nns_delegation_manager(
+            &MetricsRegistry::new(),
+            Config::default(),
+            no_op_logger(),
+            rt_handle,
+            NON_NNS_SUBNET_ID,
+            NNS_SUBNET_ID,
+            registry_client,
+            Arc::new(tls_config),
+            CancellationToken::new(),
+        );
+
+        // The initial delegation should be fetched immediatelly.
+        rx.changed().await.unwrap();
+        // The subsequent delegations should be fetched only after `DELEGATION_UPDATE_INTERVAL`
+        // has elapsed.
+        tokio::time::advance(DELEGATION_UPDATE_INTERVAL / 2).await;
+        tokio::time::resume();
+
+        assert!(timeout(Duration::from_secs(10), rx.changed())
+            .await
+            .is_err());
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn should_refresh_if_enough_time_passed_test() {
+        let rt_handle = tokio::runtime::Handle::current();
+        let (registry_client, tls_config) = set_up_nns_delegation_dependencies(rt_handle.clone());
+
+        let (_, mut rx) = start_nns_delegation_manager(
+            &MetricsRegistry::new(),
+            Config::default(),
+            no_op_logger(),
+            rt_handle,
+            NON_NNS_SUBNET_ID,
+            NNS_SUBNET_ID,
+            registry_client,
+            Arc::new(tls_config),
+            CancellationToken::new(),
+        );
+
+        // The initial delegation should be fetched immediatelly.
+        rx.changed().await.unwrap();
+        // The subsequent delegations should be fetched only after `DELEGATION_UPDATE_INTERVAL`
+        // has passed.
+        tokio::time::advance(DELEGATION_UPDATE_INTERVAL).await;
+        tokio::time::resume();
+
+        assert!(timeout(Duration::from_secs(10), rx.changed()).await.is_ok());
     }
 }
