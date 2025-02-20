@@ -542,21 +542,18 @@ pub(crate) fn get_pre_signature_ids_to_deliver(
 /// of the given block (as the lower bound for past blocks to lookup the transcript in). In that case
 /// a newer CUP is already present in the pool and we should continue from there.
 pub(crate) fn get_idkg_subnet_public_keys(
-    block: &Block,
+    current_block: &Block,
+    last_dkg_summary_block: &Block,
     pool: &PoolReader<'_>,
     log: &ReplicaLogger,
 ) -> Result<BTreeMap<MasterPublicKeyId, MasterPublicKey>, String> {
-    let Some(idkg_payload) = block.payload.as_ref().as_idkg() else {
+    let Some(idkg_payload) = current_block.payload.as_ref().as_idkg() else {
         return Ok(BTreeMap::new());
     };
 
-    let Some(summary) = pool.dkg_summary_block_for_finalized_height(block.height) else {
-        return Err(format!(
-            "Failed to find dkg summary block for height {}",
-            block.height
-        ));
-    };
-    let chain = pool.pool().build_block_chain(&summary, block);
+    let chain = pool
+        .pool()
+        .build_block_chain(last_dkg_summary_block, current_block);
     let block_reader = IDkgBlockReaderImpl::new(chain);
 
     let mut public_keys = BTreeMap::new();
