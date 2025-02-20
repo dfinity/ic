@@ -43,6 +43,11 @@ fn protocol_flow_with_emulated_server_side() {
     );
 
     let dpk_bytes = derived_public_key.to_compressed().to_vec();
+    assert!(DerivedPublicKey::deserialize(&dpk_bytes).is_ok());
+    assert_eq!(
+        G2Affine::from(DerivedPublicKey::deserialize(&dpk_bytes).unwrap()),
+        derived_public_key
+    );
 
     let ibe_key = tsk.decrypt(&ek, &dpk_bytes, &did).unwrap();
 
