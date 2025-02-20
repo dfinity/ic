@@ -16,6 +16,9 @@ env:
   BRANCH_NAME: ${{ github.event.workflow_run.head_branch || github.ref_name }}
   CI_RUN_ID: ${{ github.run_id }}
   BUILDEVENT_DATASET: "github-ci-dfinity"
+permissions:
+  contents: read
+  pull-requests: read
 jobs:
   ci-main:
     name: CI Main
