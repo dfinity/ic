@@ -1729,7 +1729,7 @@ fn load_canister_snapshot_updates_hook_condition() {
             settings: CanisterSettingsArgsBuilder::new()
                 .with_wasm_memory_limit(100_000_000)
                 .with_memory_allocation(9_000_000)
-                .with_wasm_memory_threshold(1_100_000)
+                .with_wasm_memory_threshold(500_000)
                 .build(),
             sender_canister_version: None,
         }
@@ -1737,7 +1737,7 @@ fn load_canister_snapshot_updates_hook_condition() {
     )
     .unwrap();
 
-    let chunk = vec![0; 400_000];
+    let chunk = vec![1, 2, 3, 4, 5];
     helper_upload_chunk(&mut test, canister_id, chunk);
 
     // Take a snapshot.
