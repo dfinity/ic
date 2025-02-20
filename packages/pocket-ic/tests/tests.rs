@@ -17,7 +17,6 @@ use pocket_ic::{
     query_candid, update_candid, DefaultEffectiveCanisterIdError, ErrorCode, IngressStatusResult,
     PocketIc, PocketIcBuilder, RejectCode,
 };
-#[cfg(unix)]
 use reqwest::blocking::Client;
 use reqwest::header::CONTENT_LENGTH;
 use reqwest::{Method, StatusCode};
