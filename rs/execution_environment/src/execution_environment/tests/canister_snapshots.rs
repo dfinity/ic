@@ -1737,7 +1737,7 @@ fn load_canister_snapshot_updates_hook_condition() {
     )
     .unwrap();
 
-    let chunk = vec![1, 2, 3, 4, 5];
+    let chunk = vec![0; 100_000];
     helper_upload_chunk(&mut test, canister_id, chunk);
 
     // Take a snapshot.
