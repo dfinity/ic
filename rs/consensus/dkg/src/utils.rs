@@ -25,13 +25,10 @@ use std::collections::{BTreeMap, HashSet};
 pub fn get_vetkey_public_keys(
     summary: &Summary,
     logger: &ReplicaLogger,
-) -> Result<
-    (
-        BTreeMap<MasterPublicKeyId, MasterPublicKey>,
-        BTreeMap<MasterPublicKeyId, NiDkgId>,
-    ),
-    String,
-> {
+) -> (
+    BTreeMap<MasterPublicKeyId, MasterPublicKey>,
+    BTreeMap<MasterPublicKeyId, NiDkgId>,
+) {
     // Get all next transcripts
     // If there is a current transcript, but no next transcript, use that one instead.
     let mut transcripts = summary
@@ -80,7 +77,7 @@ pub fn get_vetkey_public_keys(
         })
         .unzip();
 
-    Ok((master_keys, dkg_ids))
+    (master_keys, dkg_ids)
 }
 
 pub(super) fn get_dealers_from_chain(

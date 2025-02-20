@@ -168,18 +168,7 @@ pub fn deliver_batches(
 
         // Add vetKD keys to this map as well
         // TODO(CON-1420: Deliver the ni_dkg_ids to the batch as well)
-        let (mut nidkg_subnet_public_keys, _ni_dkg_ids) =
-            match get_vetkey_public_keys(dkg_summary, log) {
-                Ok((keys, ids)) => (keys, ids),
-                Err(e) => {
-                    warn!(
-                        every_n_seconds => 5,
-                        log,
-                        "Do not deliver height {:?}: {}", height, e
-                    );
-                    return Ok(last_delivered_batch_height);
-                }
-            };
+        let (mut nidkg_subnet_public_keys, _ni_dkg_ids) = get_vetkey_public_keys(dkg_summary, log);
         chain_key_subnet_public_keys.append(&mut nidkg_subnet_public_keys);
 
         let mut batch_stats = BatchStats::new(height);
