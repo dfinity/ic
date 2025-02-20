@@ -152,19 +152,7 @@ pub fn deliver_batches(
 
         let mut chain_key_subnet_public_keys = BTreeMap::new();
         let mut idkg_subnet_public_keys =
-            match get_idkg_subnet_public_keys(&block, &summary_block, pool, log) {
-                Ok(keys) => keys,
-                Err(e) => {
-                    // Do not deliver batch if we can't find a previous summary block,
-                    // this means we should continue with the latest CUP.
-                    warn!(
-                        every_n_seconds => 5,
-                        log,
-                        "Do not deliver height {:?}: {}", height, e
-                    );
-                    return Ok(last_delivered_batch_height);
-                }
-            };
+            get_idkg_subnet_public_keys(&block, &summary_block, pool, log);
         chain_key_subnet_public_keys.append(&mut idkg_subnet_public_keys);
 
         // Add vetKD keys to this map as well
