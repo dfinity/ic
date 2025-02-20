@@ -25,7 +25,7 @@ use ic_recovery::{
     recovery_state::{HasRecoveryState, RecoveryState},
     registry_helper::RegistryPollingStrategy,
     steps::{AdminStep, Step, UploadAndRestartStep},
-    util::UploadMethod,
+    util::DataLocation,
     NeuronArgs, Recovery, RecoveryArgs, IC_REGISTRY_LOCAL_STORE,
 };
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
@@ -348,7 +348,7 @@ impl SubnetSplitting {
         match self.upload_node(target_subnet) {
             Some(node_ip) => Ok(UploadAndRestartStep {
                 logger: self.recovery.logger.clone(),
-                upload_method: UploadMethod::Remote(node_ip),
+                upload_method: DataLocation::Remote(node_ip),
                 work_dir: self.layout.work_dir(target_subnet),
                 data_src: self.layout.ic_state_dir(target_subnet),
                 require_confirmation: !self.recovery_args.skip_prompts,

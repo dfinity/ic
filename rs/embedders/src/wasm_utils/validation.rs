@@ -42,7 +42,7 @@ pub const RESERVED_SYMBOLS: [&str; 6] = [
 
 const WASM_FUNCTION_COMPLEXITY_LIMIT: Complexity = Complexity(1_000_000);
 pub const WASM_FUNCTION_SIZE_LIMIT: usize = 1_000_000;
-pub const MAX_CODE_SECTION_SIZE_IN_BYTES: u32 = 10 * 1024 * 1024;
+pub const MAX_CODE_SECTION_SIZE_IN_BYTES: u32 = 11 * 1024 * 1024;
 
 // Represents the expected function signature for any System APIs the Internet
 // Computer provides or any special exported user functions.
@@ -1521,7 +1521,7 @@ fn can_compile(
     })
 }
 
-fn check_code_section_size(wasm: &BinaryEncodedWasm) -> Result<(), WasmValidationError> {
+fn check_code_section_size(wasm: &BinaryEncodedWasm) -> Result<NumBytes, WasmValidationError> {
     let parser = wasmparser::Parser::new(0);
     let payloads = parser.parse_all(wasm.as_slice());
     for payload in payloads {
@@ -1538,11 +1538,11 @@ fn check_code_section_size(wasm: &BinaryEncodedWasm) -> Result<(), WasmValidatio
                     allowed: MAX_CODE_SECTION_SIZE_IN_BYTES,
                 });
             } else {
-                return Ok(());
+                return Ok(NumBytes::from(size as u64));
             }
         }
     }
-    Ok(())
+    Ok(NumBytes::from(0))
 }
 
 /// Validates a Wasm binary against the requirements of the interface spec
@@ -1564,7 +1564,7 @@ pub(super) fn validate_wasm_binary<'a>(
     wasm: &'a BinaryEncodedWasm,
     config: &EmbeddersConfig,
 ) -> Result<(WasmValidationDetails, Module<'a>), WasmValidationError> {
-    check_code_section_size(wasm)?;
+    let code_section_size = check_code_section_size(wasm)?;
     can_compile(wasm, config)?;
     let module = Module::parse(wasm.as_slice(), false)
         .map_err(|err| WasmValidationError::DecodingError(format!("{}", err)))?;
@@ -1593,6 +1593,7 @@ pub(super) fn validate_wasm_binary<'a>(
             wasm_metadata,
             largest_function_instruction_count,
             max_complexity,
+            code_section_size,
         },
         module,
     ))
