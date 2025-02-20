@@ -1729,7 +1729,7 @@ fn load_canister_snapshot_updates_hook_condition() {
             settings: CanisterSettingsArgsBuilder::new()
                 .with_wasm_memory_limit(100_000_000)
                 .with_memory_allocation(9_000_000)
-                .with_wasm_memory_threshold(500_000)
+                .with_wasm_memory_threshold(200_000)
                 .build(),
             sender_canister_version: None,
         }
