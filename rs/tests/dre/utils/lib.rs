@@ -113,9 +113,7 @@ fn update_env_variables(env: &TestEnv, pairs: Vec<(String, &str)>) {
         std::env::set_var(env_variable, value);
         info!(
             env.logger(),
-            "Overriden env variable `{}` to value: {}",
-            env_variable,
-            value
+            "Overriden env variable `{}` to value: {}", env_variable, value
         )
     }
 }
