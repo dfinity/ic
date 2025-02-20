@@ -11,8 +11,10 @@ use ic_management_canister_types_private::IC_00;
 use ic_nns_constants::CYCLES_MINTING_CANISTER_ID;
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::NumWasmPages;
-use ic_replicated_state::{CallOrigin, Memory, NetworkTopology, SubnetTopology, SystemState};
+use ic_replicated_state::{
+    CallOrigin, Memory, MessageMemoryUsage, NetworkTopology, NumWasmPages, SubnetTopology,
+    SystemState,
+};
 use ic_system_api::{
     sandbox_safe_system_state::SandboxSafeSystemState, ApiType, DefaultOutOfInstructionsHandler,
     ExecutionParameters, InstructionLimits, NonReplicatedQueryKind, SystemApiImpl,
@@ -30,7 +32,7 @@ use ic_types::{
 use maplit::btreemap;
 
 pub const CANISTER_CURRENT_MEMORY_USAGE: NumBytes = NumBytes::new(0);
-pub const CANISTER_CURRENT_MESSAGE_MEMORY_USAGE: NumBytes = NumBytes::new(0);
+pub const CANISTER_CURRENT_MESSAGE_MEMORY_USAGE: MessageMemoryUsage = MessageMemoryUsage::ZERO;
 
 const SUBNET_MEMORY_CAPACITY: i64 = i64::MAX / 2;
 

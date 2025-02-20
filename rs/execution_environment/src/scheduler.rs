@@ -977,7 +977,9 @@ impl SchedulerImpl {
     /// through message routing.
     pub fn induct_messages_on_same_subnet(&self, state: &mut ReplicatedState) {
         // Compute subnet available memory *before* taking out the canisters.
-        let mut subnet_available_memory = self.exec_env.subnet_available_message_memory(state);
+        let mut subnet_available_guaranteed_response_memory = self
+            .exec_env
+            .subnet_available_guaranteed_response_message_memory(state);
 
         // Get a list of canisters in the map before we iterate over the map.
         // This is because we cannot hold an immutable reference to the map
@@ -1008,7 +1010,7 @@ impl SchedulerImpl {
                 .queues()
                 .output_queues_message_count();
             source_canister.induct_messages_to_self(
-                &mut subnet_available_memory,
+                &mut subnet_available_guaranteed_response_memory,
                 state.metadata.own_subnet_type,
             );
             let messages_after_induction = source_canister
@@ -1029,7 +1031,7 @@ impl SchedulerImpl {
                         Some(dest_canister) => dest_canister
                             .push_input(
                                 (*msg).clone(),
-                                &mut subnet_available_memory,
+                                &mut subnet_available_guaranteed_response_memory,
                                 state.metadata.own_subnet_type,
                                 InputQueueType::LocalSubnet,
                             )

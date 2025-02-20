@@ -5,7 +5,7 @@ use ic_error_types::{ErrorCode, UserError};
 use ic_management_canister_types_private::CanisterStatusType;
 use ic_replicated_state::canister_state::NextExecution;
 use ic_replicated_state::testing::SystemStateTesting;
-use ic_replicated_state::NumWasmPages;
+use ic_replicated_state::{MessageMemoryUsage, NumWasmPages};
 use ic_test_utilities_execution_environment::{
     check_ingress_status, ExecutionResponse, ExecutionTest, ExecutionTestBuilder,
 };
@@ -2633,7 +2633,7 @@ fn test_cycles_burn() {
     let test = ExecutionTestBuilder::new().build();
 
     let canister_memory_usage = NumBytes::from(1_000_000);
-    let canister_message_memory_usage = NumBytes::from(0);
+    let canister_message_memory_usage = MessageMemoryUsage::ZERO;
 
     let amount = 1_000_000_000;
     let mut balance = Cycles::new(amount);
@@ -2660,7 +2660,7 @@ fn cycles_burn_up_to_the_threshold_on_not_enough_cycles() {
     let test = ExecutionTestBuilder::new().build();
 
     let canister_memory_usage = NumBytes::from(1_000_000);
-    let canister_message_memory_usage = NumBytes::from(0);
+    let canister_message_memory_usage = MessageMemoryUsage::ZERO;
 
     let freezing_threshold_cycles = test.cycles_account_manager().freeze_threshold_cycles(
         ic_config::execution_environment::Config::default().default_freeze_threshold,

@@ -102,7 +102,7 @@ mod tests {
                 wasm_result: Ok(Some(wasm_result)),
                 num_instructions_left: NumInstructions::new(1),
                 allocated_bytes: NumBytes::new(1000),
-                allocated_message_bytes: NumBytes::new(2000),
+                allocated_guaranteed_response_message_bytes: NumBytes::new(2000),
                 instance_stats: InstanceStats::default(),
                 system_api_call_counters: SystemApiCallCounters::default(),
             },

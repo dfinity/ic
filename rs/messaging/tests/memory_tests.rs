@@ -363,7 +363,7 @@ impl FixtureConfig {
                 cycles_account_manager_config: CyclesAccountManagerConfig::application_subnet(),
             },
             HypervisorConfig {
-                subnet_message_memory_capacity: subnet_message_memory_capacity.into(),
+                guaranteed_response_message_memory_capacity: subnet_message_memory_capacity.into(),
                 best_effort_message_memory_capacity: subnet_message_memory_capacity.into(),
                 embedders_config: EmbeddersConfig {
                     feature_flags: FeatureFlags {

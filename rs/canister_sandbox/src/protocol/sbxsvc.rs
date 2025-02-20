@@ -377,7 +377,7 @@ mod tests {
     use ic_logger::no_op_logger;
     use ic_registry_subnet_type::SubnetType;
     use ic_replicated_state::{
-        Global, Memory, NetworkTopology, NumWasmPages, PageMap, SystemState,
+        Global, Memory, MessageMemoryUsage, NetworkTopology, NumWasmPages, PageMap, SystemState,
     };
     use ic_system_api::{
         sandbox_safe_system_state::SandboxSafeSystemState, ExecutionParameters, InstructionLimits,
@@ -536,7 +536,10 @@ mod tests {
                     Global::V128(123),
                 ],
                 canister_current_memory_usage: NumBytes::new(100),
-                canister_current_message_memory_usage: NumBytes::new(123),
+                canister_current_message_memory_usage: MessageMemoryUsage {
+                    guaranteed_response: NumBytes::new(123),
+                    best_effort: NumBytes::new(123),
+                },
                 execution_parameters: ExecutionParameters {
                     instruction_limits: InstructionLimits::new(
                         FlagStatus::Enabled,

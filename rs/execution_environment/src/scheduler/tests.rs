@@ -771,7 +771,9 @@ fn induct_messages_on_same_subnet_respects_memory_limits() {
                 instruction_overhead_per_canister: NumInstructions::from(0),
                 ..SchedulerConfig::application_subnet()
             })
-            .with_subnet_message_memory(subnet_available_memory.get_message_memory() as u64)
+            .with_subnet_guaranteed_response_message_memory(
+                subnet_available_memory.get_guaranteed_response_message_memory() as u64,
+            )
             .with_subnet_type(subnet_type)
             .build();
 
@@ -1154,7 +1156,7 @@ fn charging_for_message_memory_works() {
         test.canister_state(canister).system_state.balance(),
         balance_before
             - test.memory_cost(
-                test.canister_state(canister).message_memory_usage(),
+                test.canister_state(canister).message_memory_usage().total(),
                 charge_duration,
             ),
     );

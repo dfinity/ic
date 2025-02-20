@@ -249,7 +249,7 @@ fn output_requests_on_system_subnet_ignore_memory_limits() {
         .with_subnet_type(SubnetType::System)
         .with_subnet_execution_memory(canister_memory)
         .with_subnet_memory_reservation(0)
-        .with_subnet_message_memory(13)
+        .with_subnet_guaranteed_response_message_memory(13)
         .with_manual_execution()
         .build();
 
@@ -268,7 +268,11 @@ fn output_requests_on_system_subnet_ignore_memory_limits() {
         test.subnet_available_memory().get_execution_memory(),
         (size_of::<CanisterChange>() + size_of::<PrincipalId>()) as i64
     );
-    assert_eq!(test.subnet_available_memory().get_message_memory(), 13);
+    assert_eq!(
+        test.subnet_available_memory()
+            .get_guaranteed_response_message_memory(),
+        13
+    );
     let system_state = &mut test.canister_state_mut(canister_id).system_state;
     assert_eq!(
         1,
@@ -284,7 +288,7 @@ fn output_requests_on_application_subnets_respect_subnet_message_memory() {
     let mut test = ExecutionTestBuilder::new()
         .with_subnet_execution_memory(ONE_GIB)
         .with_subnet_memory_reservation(0)
-        .with_subnet_message_memory(13)
+        .with_subnet_guaranteed_response_message_memory(13)
         .with_manual_execution()
         .build();
     let canister_id = test.canister_from_wat(CALL_SIMPLE_WAT).unwrap();
@@ -302,7 +306,11 @@ fn output_requests_on_application_subnets_respect_subnet_message_memory() {
         available_memory_after_create,
         test.subnet_available_memory().get_execution_memory()
     );
-    assert_eq!(13, test.subnet_available_memory().get_message_memory());
+    assert_eq!(
+        13,
+        test.subnet_available_memory()
+            .get_guaranteed_response_message_memory()
+    );
     let system_state = &test.canister_state(canister_id).system_state;
     assert!(!system_state.queues().has_output());
 }
@@ -312,7 +320,7 @@ fn output_requests_on_application_subnets_update_subnet_available_memory() {
     let mut test = ExecutionTestBuilder::new()
         .with_subnet_execution_memory(ONE_GIB)
         .with_subnet_memory_reservation(0)
-        .with_subnet_message_memory(ONE_GIB)
+        .with_subnet_guaranteed_response_message_memory(ONE_GIB)
         .with_manual_execution()
         .build();
     let canister_id = test.canister_from_wat(CALL_SIMPLE_WAT).unwrap();
@@ -327,7 +335,9 @@ fn output_requests_on_application_subnets_update_subnet_available_memory() {
     test.ingress_raw(canister_id, "test", vec![]);
     test.execute_message(canister_id);
     let subnet_total_memory = test.subnet_available_memory().get_execution_memory();
-    let subnet_message_memory = test.subnet_available_memory().get_message_memory();
+    let subnet_message_memory = test
+        .subnet_available_memory()
+        .get_guaranteed_response_message_memory();
     let system_state = &mut test.canister_state_mut(canister_id).system_state;
     // There should be one response memory reservation in the queues.
     assert_eq!(
@@ -2107,7 +2117,7 @@ fn subnet_available_memory_reclaimed_when_execution_fails() {
     let mut test = ExecutionTestBuilder::new()
         .with_subnet_execution_memory(ONE_GIB)
         .with_subnet_memory_reservation(0)
-        .with_subnet_message_memory(ONE_GIB)
+        .with_subnet_guaranteed_response_message_memory(ONE_GIB)
         .build();
     let id = test.canister_from_wat(MEMORY_ALLOCATION_WAT).unwrap();
     let memory_after_create = test.state().memory_taken().execution().get() as i64;
@@ -2125,7 +2135,7 @@ fn subnet_available_memory_reclaimed_when_execution_fails() {
         memory.get_execution_memory(),
         ONE_GIB - memory_after_create + canister_history_memory as i64
     );
-    assert_eq!(memory.get_message_memory(), ONE_GIB);
+    assert_eq!(memory.get_guaranteed_response_message_memory(), ONE_GIB);
 }
 
 #[test]
@@ -2133,7 +2143,7 @@ fn test_allocating_memory_reduces_subnet_available_memory() {
     let mut test = ExecutionTestBuilder::new()
         .with_subnet_execution_memory(ONE_GIB)
         .with_subnet_memory_reservation(0)
-        .with_subnet_message_memory(ONE_GIB)
+        .with_subnet_guaranteed_response_message_memory(ONE_GIB)
         .build();
     let id = test.canister_from_wat(MEMORY_ALLOCATION_WAT).unwrap();
     let memory_after_create = test.state().memory_taken().execution().get() as i64;
@@ -2153,7 +2163,7 @@ fn test_allocating_memory_reduces_subnet_available_memory() {
         memory.get_execution_memory() + new_memory_allocated + memory_after_create,
         ONE_GIB + canister_history_memory as i64,
     );
-    assert_eq!(ONE_GIB, memory.get_message_memory());
+    assert_eq!(ONE_GIB, memory.get_guaranteed_response_message_memory());
 }
 
 #[test]
@@ -3171,7 +3181,7 @@ fn output_requests_on_application_subnets_update_subnet_available_memory_reserve
     let mut test = ExecutionTestBuilder::new()
         .with_subnet_execution_memory(ONE_GIB)
         .with_subnet_memory_reservation(0)
-        .with_subnet_message_memory(ONE_GIB)
+        .with_subnet_guaranteed_response_message_memory(ONE_GIB)
         .with_manual_execution()
         .with_initial_canister_cycles(1_000_000_000_000_000)
         .build();
@@ -3180,7 +3190,9 @@ fn output_requests_on_application_subnets_update_subnet_available_memory_reserve
         .unwrap();
     test.ingress_raw(canister_id, "test", vec![]);
     test.execute_message(canister_id);
-    let subnet_message_memory = test.subnet_available_memory().get_message_memory();
+    let subnet_message_memory = test
+        .subnet_available_memory()
+        .get_guaranteed_response_message_memory();
     let system_state = &mut test.canister_state_mut(canister_id).system_state;
     // There should be one response memory reservation in the queues.
     assert_eq!(

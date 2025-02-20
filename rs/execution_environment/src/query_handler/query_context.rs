@@ -25,7 +25,7 @@ use ic_query_stats::QueryStatsCollector;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
     canister_state::execution_state::WasmExecutionMode, CallContextAction, CallOrigin,
-    CanisterState, NetworkTopology, ReplicatedState,
+    CanisterState, MessageMemoryUsage, NetworkTopology, ReplicatedState,
 };
 use ic_system_api::{ApiType, ExecutionParameters, InstructionLimits};
 use ic_types::{
@@ -673,8 +673,6 @@ impl<'a> QueryContext<'a> {
         );
 
         self.add_system_api_call_counters(output.system_api_call_counters);
-        let canister_current_memory_usage = canister.memory_usage();
-        let canister_current_message_memory_usage = canister.message_memory_usage();
         canister.execution_state = Some(output_execution_state);
         execution_parameters
             .instruction_limits
@@ -694,17 +692,21 @@ impl<'a> QueryContext<'a> {
                         // No cleanup closure present. Return the callback error as-is.
                         (output.num_instructions_left, Err(callback_err))
                     }
-                    Some(cleanup_closure) => self.execute_cleanup(
-                        time,
-                        &mut canister,
-                        cleanup_closure,
-                        &call_origin,
-                        callback_err,
-                        canister_current_memory_usage,
-                        canister_current_message_memory_usage,
-                        execution_parameters,
-                        call_context.instructions_executed(),
-                    ),
+                    Some(cleanup_closure) => {
+                        let canister_current_memory_usage = canister.memory_usage();
+                        let canister_current_message_memory_usage = canister.message_memory_usage();
+                        self.execute_cleanup(
+                            time,
+                            &mut canister,
+                            cleanup_closure,
+                            &call_origin,
+                            callback_err,
+                            canister_current_memory_usage,
+                            canister_current_message_memory_usage,
+                            execution_parameters,
+                            call_context.instructions_executed(),
+                        )
+                    }
                 }
             }
         };
@@ -740,7 +742,7 @@ impl<'a> QueryContext<'a> {
         call_origin: &CallOrigin,
         callback_err: HypervisorError,
         canister_current_memory_usage: NumBytes,
-        canister_current_message_memory_usage: NumBytes,
+        canister_current_message_memory_usage: MessageMemoryUsage,
         execution_parameters: ExecutionParameters,
         call_context_instructions_executed: NumInstructions,
     ) -> (NumInstructions, Result<Option<WasmResult>, HypervisorError>) {
