@@ -1733,12 +1733,12 @@ fn load_canister_snapshot_updates_hook_condition() {
     let (snapshot_id, _) = helper_take_snapshot(&mut test, canister_id);
 
     // Upgrade canister with empty Wasm.
-    let empty_wasm = wat::parse_str(format!(
+    let empty_wasm = wat::parse_str(
         r#"
         (module
             (memory 1)
-        )"#
-    ))
+        )"#,
+    )
     .unwrap();
     test.upgrade_canister(canister_id, empty_wasm).unwrap();
 
