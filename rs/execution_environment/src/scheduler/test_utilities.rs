@@ -13,8 +13,8 @@ use ic_config::{
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_embedders::{
     wasm_executor::{
-        CanisterStateChanges, PausedWasmExecution, SliceExecutionOutput, WasmExecutionResult,
-        WasmExecutor,
+        CanisterStateChanges, ExecutionStateChanges, PausedWasmExecution, SliceExecutionOutput,
+        WasmExecutionResult, WasmExecutor,
     },
     CompilationCache, CompilationResult, WasmExecutionInput,
 };
@@ -25,7 +25,7 @@ use ic_interfaces::execution_environment::{
     SystemApiCallCounters, WasmExecutionOutput,
 };
 use ic_logger::{replica_logger::no_op_logger, ReplicaLogger};
-use ic_management_canister_types::{
+use ic_management_canister_types_private::{
     CanisterInstallMode, CanisterStatusType, InstallCodeArgs, MasterPublicKeyId, Method, Payload,
     IC_00,
 };
@@ -33,13 +33,13 @@ use ic_metrics::MetricsRegistry;
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
-    canister_state::execution_state::{self, WasmMetadata},
+    canister_state::execution_state::{self, WasmExecutionMode, WasmMetadata},
     page_map::TestPageAllocatorFileDescriptorImpl,
     testing::{CanisterQueuesTesting, ReplicatedStateTesting},
     CanisterState, ExecutionState, ExportedFunctions, InputQueueType, Memory, ReplicatedState,
 };
 use ic_system_api::{
-    sandbox_safe_system_state::{SandboxSafeSystemState, SystemStateChanges},
+    sandbox_safe_system_state::{SandboxSafeSystemState, SystemStateModifications},
     ApiType, ExecutionParameters,
 };
 use ic_test_utilities::state_manager::FakeStateManager;
@@ -199,7 +199,7 @@ impl SchedulerTest {
     }
 
     pub fn execution_cost(&self, num_instructions: NumInstructions) -> Cycles {
-        use ic_cycles_account_manager::WasmExecutionMode;
+        use ic_replicated_state::canister_state::execution_state::WasmExecutionMode;
         self.scheduler.cycles_account_manager.execution_cost(
             num_instructions,
             self.subnet_size(),
@@ -1200,18 +1200,24 @@ impl TestWasmExecutorCore {
                 allocated_message_bytes: NumBytes::from(0),
                 instance_stats: InstanceStats::default(),
                 system_api_call_counters: SystemApiCallCounters::default(),
-                canister_log: Default::default(),
             };
             self.schedule
                 .push((self.round, canister_id, instructions_to_execute));
-            return WasmExecutionResult::Finished(slice, output, None);
+            return WasmExecutionResult::Finished(
+                slice,
+                output,
+                CanisterStateChanges {
+                    execution_state_changes: None,
+                    system_state_modifications: SystemStateModifications::default(),
+                },
+            );
         }
 
         let message = paused.message;
         let instructions_left = message_limit - paused.instructions_executed;
 
         // Generate all the outgoing calls.
-        let system_state_changes = self.perform_calls(
+        let system_state_modifications = self.perform_calls(
             paused.sandbox_safe_system_state,
             message.calls,
             paused.call_context_id,
@@ -1219,11 +1225,10 @@ impl TestWasmExecutorCore {
             paused.canister_current_message_memory_usage,
         );
 
-        let canister_state_changes = CanisterStateChanges {
+        let execution_state_changes = ExecutionStateChanges {
             globals: execution_state.exported_globals.clone(),
             wasm_memory: execution_state.wasm_memory.clone(),
             stable_memory: execution_state.stable_memory.clone(),
-            system_state_changes,
         };
 
         let instance_stats = InstanceStats {
@@ -1242,11 +1247,17 @@ impl TestWasmExecutorCore {
             num_instructions_left: instructions_left,
             instance_stats,
             system_api_call_counters: SystemApiCallCounters::default(),
-            canister_log: Default::default(),
         };
         self.schedule
             .push((self.round, canister_id, instructions_to_execute));
-        WasmExecutionResult::Finished(slice, output, Some(canister_state_changes))
+        WasmExecutionResult::Finished(
+            slice,
+            output,
+            CanisterStateChanges {
+                execution_state_changes: Some(execution_state_changes),
+                system_state_modifications,
+            },
+        )
     }
 
     fn create_execution_state(
@@ -1290,7 +1301,7 @@ impl TestWasmExecutorCore {
         call_context_id: Option<CallContextId>,
         canister_current_memory_usage: NumBytes,
         canister_current_message_memory_usage: NumBytes,
-    ) -> SystemStateChanges {
+    ) -> SystemStateModifications {
         for call in calls.into_iter() {
             if let Err(error) = self.perform_call(
                 &mut system_state,
@@ -1323,7 +1334,7 @@ impl TestWasmExecutorCore {
             .cycles_account_manager
             .prepayment_for_response_execution(
                 self.subnet_size,
-                system_state.is_wasm64_execution.into(),
+                WasmExecutionMode::from_is_wasm64(system_state.is_wasm64_execution),
             );
         let prepayment_for_response_transmission = self
             .cycles_account_manager

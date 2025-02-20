@@ -8,7 +8,7 @@ use crate::canister_state::queues::CanisterOutputQueuesIterator;
 use crate::canister_state::system_state::{ExecutionTask, SystemState};
 use crate::{InputQueueType, StateError};
 pub use execution_state::{EmbedderCache, ExecutionState, ExportedFunctions, Global};
-use ic_management_canister_types::{CanisterStatusType, LogVisibilityV2};
+use ic_management_canister_types_private::{CanisterStatusType, LogVisibilityV2};
 use ic_registry_subnet_type::SubnetType;
 use ic_types::batch::TotalQueryStats;
 use ic_types::methods::SystemMethod;
@@ -431,13 +431,6 @@ impl CanisterState {
         execution_usage
             + self.wasm_chunk_store_memory_usage()
             + NumBytes::from(self.system_state.certified_data.len() as u64)
-    }
-
-    /// Sets the (transient) size in bytes of guaranteed responses from this
-    /// canister routed into streams and not yet garbage collected.
-    pub(super) fn set_stream_guaranteed_responses_size_bytes(&mut self, size_bytes: usize) {
-        self.system_state
-            .set_stream_guaranteed_responses_size_bytes(size_bytes);
     }
 
     /// Returns the current memory allocation of the canister.

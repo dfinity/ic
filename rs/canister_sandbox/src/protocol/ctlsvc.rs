@@ -67,14 +67,16 @@ mod tests {
         InstanceStats, SystemApiCallCounters, WasmExecutionOutput,
     };
     use ic_replicated_state::{Global, NumWasmPages, PageMap};
-    use ic_system_api::sandbox_safe_system_state::SystemStateChanges;
-    use ic_types::{ingress::WasmResult, CanisterLog, NumBytes, NumInstructions};
+    use ic_system_api::sandbox_safe_system_state::SystemStateModifications;
+    use ic_types::{ingress::WasmResult, NumBytes, NumInstructions};
 
     use crate::protocol::{
         ctlsvc::{ExecutionFinishedReply, ExecutionPausedReply, ExecutionPausedRequest, Reply},
         id::ExecId,
         logging::{LogLevel, LogRequest},
-        structs::{MemoryModifications, SandboxExecOutput, StateModifications},
+        structs::{
+            ExecutionStateModifications, MemoryModifications, SandboxExecOutput, StateModifications,
+        },
     };
 
     use super::{ExecutionFinishedRequest, Request};
@@ -103,26 +105,27 @@ mod tests {
                 allocated_message_bytes: NumBytes::new(2000),
                 instance_stats: InstanceStats::default(),
                 system_api_call_counters: SystemApiCallCounters::default(),
-                canister_log: CanisterLog::default(),
             },
-            state: Some(StateModifications {
-                globals: vec![
-                    Global::I32(10),
-                    Global::I64(32),
-                    Global::F32(10.5),
-                    Global::F64(1.1),
-                    Global::V128(123),
-                ],
-                wasm_memory: MemoryModifications {
-                    page_delta: PageMap::new_for_testing().serialize_delta(&[]),
-                    size: NumWasmPages::new(10),
-                },
-                stable_memory: MemoryModifications {
-                    page_delta: PageMap::new_for_testing().serialize_delta(&[]),
-                    size: NumWasmPages::new(42),
-                },
-                system_state_changes: SystemStateChanges::default(),
-            }),
+            state: StateModifications {
+                execution_state_modifications: Some(ExecutionStateModifications {
+                    globals: vec![
+                        Global::I32(10),
+                        Global::I64(32),
+                        Global::F32(10.5),
+                        Global::F64(1.1),
+                        Global::V128(123),
+                    ],
+                    wasm_memory: MemoryModifications {
+                        page_delta: PageMap::new_for_testing().serialize_delta(&[]),
+                        size: NumWasmPages::new(10),
+                    },
+                    stable_memory: MemoryModifications {
+                        page_delta: PageMap::new_for_testing().serialize_delta(&[]),
+                        size: NumWasmPages::new(42),
+                    },
+                }),
+                system_state_modifications: SystemStateModifications::default(),
+            },
             execute_total_duration: Duration::from_secs(10),
             execute_run_duration: Duration::from_secs(1),
         };

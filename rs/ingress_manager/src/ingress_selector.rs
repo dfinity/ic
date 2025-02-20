@@ -15,7 +15,7 @@ use ic_interfaces::{
 };
 use ic_limits::{MAX_INGRESS_TTL, SMALL_APP_SUBNET_MAX_SIZE};
 use ic_logger::warn;
-use ic_management_canister_types::CanisterStatusType;
+use ic_management_canister_types_private::CanisterStatusType;
 use ic_registry_client_helpers::subnet::IngressMessageSettings;
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
@@ -330,10 +330,29 @@ impl IngressSelector for IngressManager {
 
         // Tracks the sum of cycles needed per canister.
         let mut cycles_needed: BTreeMap<CanisterId, Cycles> = BTreeMap::new();
-        for i in 0..payload.message_count() {
-            let (ingress_id, ingress) = payload
-                .get(i)
-                .map_err(InvalidIngressPayloadReason::IngressPayloadError)?;
+
+        // Validate each ingress message in the payload
+        for (ingress_id, maybe_ingress) in payload.iter() {
+            let ingress = match maybe_ingress {
+                Ok(ingress) => ingress,
+                Err(deserialization_error) => {
+                    return Err(ValidationError::InvalidArtifact(
+                        InvalidIngressPayloadReason::IngressMessageDeserializationFailure(
+                            ingress_id.clone(),
+                            deserialization_error.to_string(),
+                        ),
+                    ));
+                }
+            };
+
+            if IngressMessageId::from(&ingress) != *ingress_id {
+                return Err(ValidationError::InvalidArtifact(
+                    InvalidIngressPayloadReason::MismatchedMessageId {
+                        expected: ingress_id.clone(),
+                        computed: IngressMessageId::from(&ingress),
+                    },
+                ));
+            }
 
             self.validate_ingress(
                 ingress_id.clone(),
@@ -373,7 +392,7 @@ impl IngressSelector for IngressManager {
                     let ingress = ingress_payload_cache
                         .entry((*height, payload_hash.clone()))
                         .or_insert_with(|| {
-                            Arc::new(batch.ingress.message_ids().into_iter().collect())
+                            Arc::new(batch.ingress.message_ids().cloned().collect())
                         });
                     Some(ingress.clone())
                 }
@@ -608,7 +627,7 @@ impl<'a, T: IngressSetQuery> IngressSetChain<'a, T> {
     }
 }
 
-impl<'a, T: IngressSetQuery> IngressSetQuery for IngressSetChain<'a, T> {
+impl<T: IngressSetQuery> IngressSetQuery for IngressSetChain<'_, T> {
     fn contains(&self, msg_id: &IngressMessageId) -> bool {
         if self.first.contains(msg_id) {
             true
@@ -649,7 +668,7 @@ mod tests {
     use ic_interfaces_mocks::consensus_pool::MockConsensusTime;
     use ic_interfaces_state_manager::{StateManagerError, StateManagerResult};
     use ic_interfaces_state_manager_mocks::MockStateManager;
-    use ic_management_canister_types::{CanisterIdRecord, Payload, IC_00};
+    use ic_management_canister_types_private::{CanisterIdRecord, Payload, IC_00};
     use ic_metrics::MetricsRegistry;
     use ic_replicated_state::CanisterState;
     use ic_test_utilities::{
@@ -1046,11 +1065,8 @@ mod tests {
                 assert_eq!(first_ingress_payload.message_count(), 1);
 
                 // we should not get it again because it is part of past payloads
-                let mut hash_set = HashSet::new();
-                for i in 0..first_ingress_payload.message_count() {
-                    let (id, _) = first_ingress_payload.get(i).unwrap();
-                    hash_set.insert(id);
-                }
+                let hash_set = HashSet::from_iter(first_ingress_payload.message_ids().cloned());
+
                 let second_ingress_payload = ingress_manager.get_ingress_payload(
                     &hash_set,
                     &validation_context,

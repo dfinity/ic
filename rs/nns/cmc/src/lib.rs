@@ -1,6 +1,6 @@
 use candid::{CandidType, Nat};
 // TODO(EXC-1687): remove temporary alias `Ic00CanisterSettingsArgs`.
-use ic_management_canister_types::{
+use ic_management_canister_types_private::{
     BoundedControllers, CanisterSettingsArgs as Ic00CanisterSettingsArgs, LogVisibilityV2,
 };
 use ic_nns_common::types::UpdateIcpXdrConversionRatePayload;
@@ -313,9 +313,22 @@ pub struct CyclesLedgerDepositResult {
     pub block_index: Nat,
 }
 
+// When a user sends us ICP, they indicate via memo (or icrc1_memo) what
+// operation they want to perform.
+//
+// We promise that we will NEVER use 0 as one of these values. (This would be
+// very bad, because then, we would have no way to disambiguate between "the
+// user wanted X" vs. "the user made an oversight".)
+//
+// Note to developers: If you add new values, update MEANINGFUL_MEMOS.
 pub const MEMO_CREATE_CANISTER: Memo = Memo(0x41455243); // == 'CREA'
 pub const MEMO_TOP_UP_CANISTER: Memo = Memo(0x50555054); // == 'TPUP'
 pub const MEMO_MINT_CYCLES: Memo = Memo(0x544e494d); // == 'MINT'
+
+// New values might be added to this later. Do NOT assume that values won't be
+// added to this array later.
+pub const MEANINGFUL_MEMOS: [Memo; 3] =
+    [MEMO_CREATE_CANISTER, MEMO_TOP_UP_CANISTER, MEMO_MINT_CYCLES];
 
 pub fn create_canister_txn(
     amount: Tokens,

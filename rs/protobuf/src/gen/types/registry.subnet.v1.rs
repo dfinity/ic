@@ -57,13 +57,6 @@ pub struct SubnetRecord {
     /// to make sure the NNS can be backed up.
     #[prost(string, repeated, tag = "26")]
     pub ssh_backup_access: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
-    /// ECDSA Config. This field cannot be set back to `None` once it has been set
-    /// to `Some`. To remove a key, the list of `key_ids` can be set to not include a particular key.
-    /// If a removed key is not held by another subnet, it will be lost.
-    ///
-    /// Deprecated; please use chain_key_config instead.
-    #[prost(message, optional, tag = "27")]
-    pub ecdsa_config: ::core::option::Option<EcdsaConfig>,
     /// If `true`, the subnet will be halted after reaching the next cup height: it will no longer
     /// create or execute blocks.
     ///

@@ -310,6 +310,9 @@ pub mod nervous_system_function {
         /// <method_name>(proposal_data: ProposalData) -> Result<String, String>
         #[prost(string, optional, tag = "5")]
         pub validator_method_name: ::core::option::Option<::prost::alloc::string::String>,
+        /// The topic this function belongs to
+        #[prost(enumeration = "super::Topic", optional, tag = "6")]
+        pub topic: ::core::option::Option<i32>,
     }
     #[derive(
         candid::CandidType,
@@ -366,6 +369,27 @@ pub struct Motion {
     #[prost(string, tag = "1")]
     pub motion_text: ::prost::alloc::string::String,
 }
+/// Represents a WASM split into smaller chunks, each of which can safely be sent around the ICP.
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct ChunkedCanisterWasm {
+    /// Obligatory check sum of the overall WASM to be reassembled from chunks.
+    #[prost(bytes = "vec", tag = "1")]
+    pub wasm_module_hash: ::prost::alloc::vec::Vec<u8>,
+    /// Obligatory; indicates which canister stores the WASM chunks.
+    #[prost(message, optional, tag = "2")]
+    pub store_canister_id: ::core::option::Option<::ic_base_types::PrincipalId>,
+    /// Specifies a list of hash values for the chunks that comprise this WASM. Must contain at least
+    /// one chunk.
+    #[prost(bytes = "vec", repeated, tag = "3")]
+    pub chunk_hashes_list: ::prost::alloc::vec::Vec<::prost::alloc::vec::Vec<u8>>,
+}
 /// A proposal function that upgrades a canister that is controlled by the
 /// SNS governance canister.
 #[derive(
@@ -395,6 +419,10 @@ pub struct UpgradeSnsControlledCanister {
         tag = "4"
     )]
     pub mode: ::core::option::Option<i32>,
+    /// If the entire WASM does not fit into the 2 MiB ingress limit, then `new_canister_wasm` should be
+    /// an empty, and this field should be set instead.
+    #[prost(message, optional, tag = "5")]
+    pub chunked_canister_wasm: ::core::option::Option<ChunkedCanisterWasm>,
 }
 /// A proposal to transfer SNS treasury funds to (optionally a Subaccount of) the
 /// target principal.
@@ -1448,6 +1476,10 @@ pub struct NervousSystemParameters {
     /// (enabled) agree.
     #[prost(bool, optional, tag = "22")]
     pub maturity_modulation_disabled: ::core::option::Option<bool>,
+    /// Whether to automatically advance the SNS target version after a new upgrade is published
+    /// by the NNS. If not specified, defaults to false for backward compatibility.
+    #[prost(bool, optional, tag = "23")]
+    pub automatically_advance_target_version: ::core::option::Option<bool>,
 }
 #[derive(
     candid::CandidType,
@@ -3522,6 +3554,8 @@ pub mod upgrade_journal_entry {
         pub old_target_version: ::core::option::Option<super::governance::Version>,
         #[prost(message, optional, tag = "2")]
         pub new_target_version: ::core::option::Option<super::governance::Version>,
+        #[prost(bool, optional, tag = "3")]
+        pub is_advanced_automatically: ::core::option::Option<bool>,
     }
     #[derive(
         candid::CandidType,
@@ -4183,6 +4217,71 @@ impl ClaimSwapNeuronsError {
             "CLAIM_SWAP_NEURONS_ERROR_UNSPECIFIED" => Some(Self::Unspecified),
             "CLAIM_SWAP_NEURONS_ERROR_UNAUTHORIZED" => Some(Self::Unauthorized),
             "CLAIM_SWAP_NEURONS_ERROR_INTERNAL" => Some(Self::Internal),
+            _ => None,
+        }
+    }
+}
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    comparable::Comparable,
+    Clone,
+    Copy,
+    Debug,
+    PartialEq,
+    Eq,
+    Hash,
+    PartialOrd,
+    Ord,
+    ::prost::Enumeration,
+)]
+#[repr(i32)]
+pub enum Topic {
+    /// Unused, here for PB lint purposes.
+    Unspecified = 0,
+    /// Proposals to set the direction of the DAO by tokenomics & branding
+    DaoCommunitySettings = 1,
+    /// Proposals to upgrade and manage the SNS DAO framework
+    SnsFrameworkManagement = 2,
+    /// Proposals to manage the dapp's canisters
+    DappCanisterManagement = 3,
+    /// Proposals related to the dapp's business logic
+    ApplicationBusinessLogic = 4,
+    /// Proposals related to governance
+    Governance = 5,
+    /// Proposals related to treasury management
+    TreasuryAssetManagement = 6,
+    /// Critical proposals related to dapp operations
+    CriticalDappOperations = 7,
+}
+impl Topic {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            Self::Unspecified => "TOPIC_UNSPECIFIED",
+            Self::DaoCommunitySettings => "TOPIC_DAO_COMMUNITY_SETTINGS",
+            Self::SnsFrameworkManagement => "TOPIC_SNS_FRAMEWORK_MANAGEMENT",
+            Self::DappCanisterManagement => "TOPIC_DAPP_CANISTER_MANAGEMENT",
+            Self::ApplicationBusinessLogic => "TOPIC_APPLICATION_BUSINESS_LOGIC",
+            Self::Governance => "TOPIC_GOVERNANCE",
+            Self::TreasuryAssetManagement => "TOPIC_TREASURY_ASSET_MANAGEMENT",
+            Self::CriticalDappOperations => "TOPIC_CRITICAL_DAPP_OPERATIONS",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "TOPIC_UNSPECIFIED" => Some(Self::Unspecified),
+            "TOPIC_DAO_COMMUNITY_SETTINGS" => Some(Self::DaoCommunitySettings),
+            "TOPIC_SNS_FRAMEWORK_MANAGEMENT" => Some(Self::SnsFrameworkManagement),
+            "TOPIC_DAPP_CANISTER_MANAGEMENT" => Some(Self::DappCanisterManagement),
+            "TOPIC_APPLICATION_BUSINESS_LOGIC" => Some(Self::ApplicationBusinessLogic),
+            "TOPIC_GOVERNANCE" => Some(Self::Governance),
+            "TOPIC_TREASURY_ASSET_MANAGEMENT" => Some(Self::TreasuryAssetManagement),
+            "TOPIC_CRITICAL_DAPP_OPERATIONS" => Some(Self::CriticalDappOperations),
             _ => None,
         }
     }

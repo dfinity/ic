@@ -21,7 +21,7 @@ use ic_base_types::NumSeconds;
 use ic_error_types::RejectCode;
 use ic_interfaces::execution_environment::HypervisorError;
 use ic_logger::{error, ReplicaLogger};
-use ic_management_canister_types::{
+use ic_management_canister_types_private::{
     CanisterChange, CanisterChangeDetails, CanisterChangeOrigin, CanisterStatusType,
     LogVisibilityV2,
 };
@@ -1152,7 +1152,7 @@ impl SystemState {
         &mut self,
         request: Request,
         reject_context: RejectContext,
-        subnet_ids: &[PrincipalId],
+        subnet_ids: &BTreeSet<PrincipalId>,
     ) -> Result<(), StateError> {
         assert_eq!(
             request.sender, self.canister_id,
@@ -1592,13 +1592,6 @@ impl SystemState {
         self.canister_history.get_memory_usage()
     }
 
-    /// Sets the (transient) size in bytes of guaranteed responses from this
-    /// canister routed into streams and not yet garbage collected.
-    pub(super) fn set_stream_guaranteed_responses_size_bytes(&mut self, size_bytes: usize) {
-        self.queues
-            .set_stream_guaranteed_responses_size_bytes(size_bytes);
-    }
-
     /// Method used only by the dashboard.
     pub fn collect_controllers_as_string(&self) -> String {
         self.controllers
@@ -1850,12 +1843,17 @@ impl SystemState {
     /// Moves the given amount of cycles from the main balance to the reserved balance.
     /// Returns an error if the main balance is lower than the requested amount.
     pub fn reserve_cycles(&mut self, amount: Cycles) -> Result<(), ReservationError> {
+        if amount == Cycles::zero() {
+            return Ok(());
+        }
+
         if let Some(limit) = self.reserved_balance_limit {
             let requested = self.reserved_balance + amount;
             if requested > limit {
                 return Err(ReservationError::ReservedLimitExceed { requested, limit });
             }
         }
+
         if amount > self.cycles_balance {
             Err(ReservationError::InsufficientCycles {
                 requested: amount,

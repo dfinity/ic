@@ -2,10 +2,12 @@ use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::Arc;
 
-use ic_replicated_state::canister_state::execution_state::WasmBinary;
-use ic_replicated_state::page_map::PageAllocatorFileDescriptor;
-use ic_replicated_state::{ExportedFunctions, Global, Memory, NumWasmPages, PageMap};
-use ic_system_api::sandbox_safe_system_state::{SandboxSafeSystemState, SystemStateChanges};
+use ic_replicated_state::{
+    canister_state::execution_state::WasmBinary,
+    canister_state::execution_state::WasmExecutionMode, page_map::PageAllocatorFileDescriptor,
+    ExportedFunctions, Global, Memory, NumWasmPages, PageMap,
+};
+use ic_system_api::sandbox_safe_system_state::{SandboxSafeSystemState, SystemStateModifications};
 use ic_system_api::{ApiType, DefaultOutOfInstructionsHandler};
 use ic_types::methods::{FuncRef, WasmMethod};
 use ic_types::NumOsPages;
@@ -128,9 +130,9 @@ pub trait PausedWasmExecution: std::fmt::Debug + Send {
     fn abort(self: Box<Self>);
 }
 
-/// Changes in the canister state after a successful Wasm execution.
+/// Changes in the canister's execution state after a successful Wasm execution.
 #[derive(Clone, Debug)]
-pub struct CanisterStateChanges {
+pub struct ExecutionStateChanges {
     /// The state of the global variables after execution.
     pub globals: Vec<Global>,
 
@@ -139,8 +141,14 @@ pub struct CanisterStateChanges {
 
     /// The state of the stable memory after execution.
     pub stable_memory: Memory,
+}
 
-    pub system_state_changes: SystemStateChanges,
+/// Changes in the canister state after a successful Wasm execution.
+#[derive(Clone, Debug, Default)]
+pub struct CanisterStateChanges {
+    pub execution_state_changes: Option<ExecutionStateChanges>,
+
+    pub system_state_modifications: SystemStateModifications,
 }
 
 /// The result of WebAssembly execution with deterministic time slicing.
@@ -152,7 +160,7 @@ pub enum WasmExecutionResult {
     Finished(
         SliceExecutionOutput,
         WasmExecutionOutput,
-        Option<CanisterStateChanges>,
+        CanisterStateChanges,
     ),
     Paused(SliceExecutionOutput, Box<dyn PausedWasmExecution>),
 }
@@ -221,7 +229,7 @@ impl WasmExecutor for WasmExecutorImpl {
             instance_or_system_api,
         ) = process(
             func_ref,
-            api_type,
+            api_type.clone(),
             canister_current_memory_usage,
             canister_current_message_memory_usage,
             execution_parameters,
@@ -242,29 +250,29 @@ impl WasmExecutor for WasmExecutorImpl {
             self.emit_state_hashes_for_debugging(&wasm_state_changes, &wasm_execution_output);
         }
 
-        let canister_state_changes = match wasm_state_changes {
-            Some(wasm_state_changes) => {
-                let system_api = match instance_or_system_api {
-                    Ok(instance) => instance.into_store_data().system_api.unwrap(),
-                    Err(system_api) => system_api,
-                };
-                let system_state_changes = system_api.into_system_state_changes();
-                Some(CanisterStateChanges {
-                    globals: wasm_state_changes.globals,
-                    wasm_memory,
-                    stable_memory,
-                    system_state_changes,
-                })
-            }
+        let execution_state_changes = match wasm_state_changes {
+            Some(wasm_state_changes) => Some(ExecutionStateChanges {
+                globals: wasm_state_changes.globals,
+                wasm_memory,
+                stable_memory,
+            }),
             None => None,
         };
+        let mut system_api = match instance_or_system_api {
+            Ok(instance) => instance.into_store_data().system_api.unwrap(),
+            Err(system_api) => system_api,
+        };
+        let system_state_modifications = system_api.take_system_state_modifications();
 
         (
             compilation_result,
             WasmExecutionResult::Finished(
                 slice_execution_output,
                 wasm_execution_output,
-                canister_state_changes,
+                CanisterStateChanges {
+                    execution_state_changes,
+                    system_state_modifications,
+                },
             ),
         )
     }
@@ -315,7 +323,7 @@ impl WasmExecutor for WasmExecutorImpl {
             metadata: wasm_metadata,
             last_executed_round: ExecutionRound::from(0),
             next_scheduled_method: NextScheduledMethod::default(),
-            is_wasm64: serialized_module.is_wasm64(),
+            wasm_execution_mode: WasmExecutionMode::from_is_wasm64(serialized_module.is_wasm64()),
         };
 
         Ok((
@@ -385,6 +393,29 @@ impl WasmExecutorImpl {
             })
         } else {
             match compilation_cache.get(&wasm_binary.binary) {
+                Some(Ok(StoredCompilation::Disk(on_disk_serialized_module))) => {
+                    // This path is only used when sandboxing is disabled.
+                    // Otherwise the fd is implicitly duplicated when passed to
+                    // the sandbox process over the unix socket.
+                    let instance_pre = self.wasm_embedder.read_file_and_pre_instantiate(
+                        on_disk_serialized_module
+                            .bytes
+                            .try_clone()
+                            .expect("Unable to duplicate serialzed module file descriptor."),
+                    );
+                    let cache = EmbedderCache::new(instance_pre.clone());
+                    *guard = Some(cache.clone());
+                    match instance_pre {
+                        Ok(_) => Ok(CacheLookup {
+                            cache,
+                            serialized_module: Some(StoredCompilation::Disk(
+                                on_disk_serialized_module,
+                            )),
+                            compilation_result: None,
+                        }),
+                        Err(err) => Err(err),
+                    }
+                }
                 Some(Ok(StoredCompilation::Memory(serialized_module))) => {
                     let instance_pre = self
                         .wasm_embedder
@@ -399,10 +430,6 @@ impl WasmExecutorImpl {
                         }),
                         Err(err) => Err(err),
                     }
-                }
-                Some(Ok(StoredCompilation::Disk(_serialized_module))) => {
-                    // TODO(EXC-1780)
-                    panic!("On disk compilation cache not yet supported");
                 }
                 Some(Err(err)) => {
                     let cache: HypervisorResult<Module> = Err(err.clone());
@@ -468,9 +495,11 @@ pub fn wasm_execution_error(
             allocated_message_bytes: NumBytes::from(0),
             instance_stats: InstanceStats::default(),
             system_api_call_counters: SystemApiCallCounters::default(),
-            canister_log: Default::default(),
         },
-        None,
+        CanisterStateChanges {
+            execution_state_changes: None,
+            system_state_modifications: SystemStateModifications::default(),
+        },
     )
 }
 
@@ -594,7 +623,6 @@ pub fn process(
 ) {
     let canister_id = sandbox_safe_system_state.canister_id();
     let modification_tracking = api_type.modification_tracking();
-    let timestamp_nanos = api_type.time().as_nanos_since_unix_epoch();
     let system_api = SystemApiImpl::new(
         api_type,
         sandbox_safe_system_state,
@@ -602,9 +630,7 @@ pub fn process(
         canister_current_message_memory_usage,
         execution_parameters.clone(),
         subnet_available_memory,
-        embedder.config().feature_flags.wasm_native_stable_memory,
-        embedder.config().feature_flags.canister_backtrace,
-        embedder.config().max_sum_exported_function_name_lengths,
+        embedder.config(),
         stable_memory.clone(),
         wasm_memory.size,
         out_of_instructions_handler,
@@ -636,7 +662,6 @@ pub fn process(
                     allocated_message_bytes: NumBytes::from(0),
                     instance_stats: InstanceStats::default(),
                     system_api_call_counters: SystemApiCallCounters::default(),
-                    canister_log: Default::default(),
                 },
                 None,
                 Err(system_api.unwrap()), // should be safe because we've passed Some(api) to new_instance
@@ -658,7 +683,6 @@ pub fn process(
     //unwrap should not fail, because we have passed Some(system_api) to the instance above
     let system_api = instance.store_data_mut().system_api_mut().unwrap();
     let system_api_call_counters = system_api.call_counters();
-    let mut canister_log = system_api.take_canister_log();
     let slice_instruction_limit = system_api.slice_instruction_limit();
     // Capping at the limit to preserve the existing behaviour. It should be
     // possible to remove capping after ensuring that all callers can handle
@@ -695,7 +719,6 @@ pub fn process(
                         allocated_message_bytes: NumBytes::from(0),
                         instance_stats,
                         system_api_call_counters,
-                        canister_log,
                     },
                     None,
                     Ok(instance),
@@ -781,32 +804,7 @@ pub fn process(
                 ModificationTracking::Ignore => None,
             }
         }
-        Err(err) => {
-            if let Some(log_message) = match err {
-                HypervisorError::Trapped {
-                    trap_code,
-                    backtrace,
-                } => match backtrace {
-                    Some(bt) => Some(format!("[TRAP]: {}\n{}", trap_code, bt)),
-                    None => Some(format!("[TRAP]: {}", trap_code)),
-                },
-                HypervisorError::CalledTrap { message, backtrace } => {
-                    let message = if message.is_empty() {
-                        "(no message)"
-                    } else {
-                        &message
-                    };
-                    match backtrace {
-                        Some(bt) => Some(format!("[TRAP]: {}\n{}", message, bt)),
-                        None => Some(format!("[TRAP]: {}", message)),
-                    }
-                }
-                _ => None,
-            } {
-                canister_log.add_record(timestamp_nanos, log_message.into_bytes());
-            }
-            None
-        }
+        Err(_) => None,
     };
 
     // If the dirty page optimization slicing has been performed, we know the dirty page copying
@@ -830,7 +828,6 @@ pub fn process(
             allocated_message_bytes,
             instance_stats,
             system_api_call_counters,
-            canister_log,
         },
         wasm_state_changes,
         Ok(instance),

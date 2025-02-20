@@ -1,5 +1,5 @@
 use crate::state_api::state::{HasStateLabel, OpOut, PocketIcError, StateLabel};
-use crate::{async_trait, copy_dir, BlobStore, OpId, Operation};
+use crate::{async_trait, copy_dir, BlobStore, OpId, Operation, SubnetBlockmaker};
 use askama::Template;
 use axum::{
     extract::State,
@@ -22,7 +22,6 @@ use ic_config::{
     subnet_config::SubnetConfig,
 };
 use ic_crypto_sha2::Sha256;
-use ic_error_types::RejectCode;
 use ic_http_endpoints_public::{
     call_v2, call_v3, metrics::HttpHandlerMetrics, CanisterReadStateServiceBuilder,
     IngressValidatorBuilder, QueryServiceBuilder, SubnetReadStateServiceBuilder,
@@ -40,7 +39,7 @@ use ic_interfaces::{crypto::BasicSigner, ingress_pool::IngressPoolThrottler};
 use ic_interfaces_adapter_client::NonBlockingChannel;
 use ic_interfaces_state_manager::StateReader;
 use ic_logger::ReplicaLogger;
-use ic_management_canister_types::{
+use ic_management_canister_types_private::{
     CanisterIdRecord, EcdsaCurve, EcdsaKeyId, MasterPublicKeyId, Method as Ic00Method,
     ProvisionalCreateCanisterWithCyclesArgs, SchnorrAlgorithm, SchnorrKeyId,
 };
@@ -55,6 +54,7 @@ use ic_state_machine_tests::{
     SubmitIngressError, Subnets,
 };
 use ic_test_utilities_registry::add_subnet_list_record;
+use ic_types::batch::BlockmakerMetrics;
 use ic_types::ingress::{IngressState, IngressStatus};
 use ic_types::{
     artifact::UnvalidatedArtifactMutation,
@@ -78,8 +78,9 @@ use pocket_ic::common::rest::{
     self, BinaryBlob, BlobCompression, CanisterHttpHeader, CanisterHttpMethod, CanisterHttpRequest,
     CanisterHttpResponse, ExtendedSubnetConfigSet, MockCanisterHttpResponse, RawAddCycles,
     RawCanisterCall, RawCanisterId, RawEffectivePrincipal, RawMessageId, RawSetStableMemory,
-    SubnetInstructionConfig, SubnetKind, SubnetSpec, Topology,
+    SubnetInstructionConfig, SubnetKind, SubnetSpec, TickConfigs, Topology,
 };
+use pocket_ic::{ErrorCode, RejectCode, RejectResponse};
 use serde::{Deserialize, Serialize};
 use slog::Level;
 use std::hash::Hash;
@@ -121,6 +122,33 @@ pub(crate) type ApiResponse = BoxFuture<'static, (u16, BTreeMap<String, Vec<u8>>
 /// We assume that the maximum number of subnets on the mainnet is 1024.
 /// Used for generating canister ID ranges that do not appear on mainnet.
 pub const MAXIMUM_NUMBER_OF_SUBNETS_ON_MAINNET: u64 = 1024;
+
+fn wasm_result_to_canister_result(
+    res: ic_state_machine_tests::WasmResult,
+    certified: bool,
+) -> Result<Vec<u8>, RejectResponse> {
+    match res {
+        ic_state_machine_tests::WasmResult::Reply(data) => Ok(data),
+        ic_state_machine_tests::WasmResult::Reject(reject_message) => Err(RejectResponse {
+            reject_code: RejectCode::CanisterReject,
+            reject_message,
+            error_code: ErrorCode::CanisterRejectedMessage,
+            certified,
+        }),
+    }
+}
+
+fn user_error_to_reject_response(
+    err: ic_error_types::UserError,
+    certified: bool,
+) -> RejectResponse {
+    RejectResponse {
+        reject_code: RejectCode::try_from(err.reject_code() as u64).unwrap(),
+        reject_message: err.description().to_string(),
+        error_code: ErrorCode::try_from(err.code() as u64).unwrap(),
+        certified,
+    }
+}
 
 async fn into_api_response(resp: AxumResponse) -> (u16, BTreeMap<String, Vec<u8>>, Vec<u8>) {
     (
@@ -384,6 +412,9 @@ impl SubnetsImpl {
     pub(crate) fn get_all(&self) -> Vec<Arc<Subnet>> {
         self.subnets.read().unwrap().values().cloned().collect()
     }
+    fn clear(&self) {
+        self.subnets.write().unwrap().clear();
+    }
 }
 
 impl Subnets for SubnetsImpl {
@@ -421,8 +452,8 @@ pub struct PocketIc {
 
 impl Drop for PocketIc {
     fn drop(&mut self) {
-        let subnets = self.subnets.get_all();
         if let Some(ref state_dir) = self.state_dir {
+            let subnets = self.subnets.get_all();
             for subnet in &subnets {
                 subnet.state_machine.checkpointed_tick();
             }
@@ -452,8 +483,35 @@ impl Drop for PocketIc {
             let topology_json = serde_json::to_string(&raw_topology).unwrap();
             topology_file.write_all(topology_json.as_bytes()).unwrap();
         }
-        for subnet in subnets {
+        for subnet in self.subnets.get_all() {
             subnet.state_machine.drop_payload_builder();
+        }
+        let state_machines: Vec<_> = self
+            .subnets
+            .get_all()
+            .into_iter()
+            .map(|subnet| subnet.state_machine.clone())
+            .collect();
+        self.subnets.clear();
+        // for every StateMachine, wait until nobody else has an Arc to that StateMachine
+        // and then drop that StateMachine
+        let start = std::time::Instant::now();
+        for state_machine in state_machines {
+            let mut state_machine = Some(state_machine);
+            while state_machine.is_some() {
+                match Arc::try_unwrap(state_machine.take().unwrap()) {
+                    Ok(sm) => {
+                        sm.drop();
+                        break;
+                    }
+                    Err(sm) => {
+                        state_machine = Some(sm);
+                    }
+                }
+                if start.elapsed() > std::time::Duration::from_secs(5 * 60) {
+                    panic!("Timed out while dropping PocketIC.");
+                }
+            }
         }
     }
 }
@@ -1109,29 +1167,52 @@ pub struct SetTime {
     pub time: Time,
 }
 
-impl Operation for SetTime {
-    fn compute(&self, pic: &mut PocketIc) -> OpOut {
-        // Time is kept in sync across subnets, so one can take any subnet.
-        let current_time: SystemTime = pic.any_subnet().time();
-        let set_time: SystemTime = self.time.into();
-        match current_time.cmp(&set_time) {
-            std::cmp::Ordering::Greater => OpOut::Error(PocketIcError::SettingTimeIntoPast((
-                systemtime_to_unix_epoch_nanos(current_time),
-                systemtime_to_unix_epoch_nanos(set_time),
-            ))),
-            std::cmp::Ordering::Equal => OpOut::NoOutput,
-            std::cmp::Ordering::Less => {
-                // Sets the time on all subnets.
-                for subnet in pic.subnets.get_all() {
+fn set_time(pic: &PocketIc, time: Time, certified: bool) -> OpOut {
+    // Time is kept in sync across subnets, so one can take any subnet.
+    let current_time: SystemTime = pic.any_subnet().time();
+    let set_time: SystemTime = time.into();
+    match current_time.cmp(&set_time) {
+        std::cmp::Ordering::Greater => OpOut::Error(PocketIcError::SettingTimeIntoPast((
+            systemtime_to_unix_epoch_nanos(current_time),
+            systemtime_to_unix_epoch_nanos(set_time),
+        ))),
+        std::cmp::Ordering::Equal => OpOut::NoOutput,
+        std::cmp::Ordering::Less => {
+            // Sets the time on all subnets.
+            for subnet in pic.subnets.get_all() {
+                if certified {
+                    subnet.state_machine.set_certified_time(set_time);
+                } else {
                     subnet.state_machine.set_time(set_time);
                 }
-                OpOut::NoOutput
             }
+            OpOut::NoOutput
         }
+    }
+}
+
+impl Operation for SetTime {
+    fn compute(&self, pic: &mut PocketIc) -> OpOut {
+        set_time(pic, self.time, false)
     }
 
     fn id(&self) -> OpId {
         OpId(format!("set_time_{}", self.time))
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct SetCertifiedTime {
+    pub time: Time,
+}
+
+impl Operation for SetCertifiedTime {
+    fn compute(&self, pic: &mut PocketIc) -> OpOut {
+        set_time(pic, self.time, true)
+    }
+
+    fn id(&self) -> OpId {
+        OpId(format!("set_certified_time_{}", self.time))
     }
 }
 
@@ -1248,6 +1329,7 @@ impl Operation for ProcessCanisterHttpInternal {
                     timeout: context.time + Duration::from_secs(5 * 60),
                     id,
                     context,
+                    socks_proxy_addrs: vec![],
                 }) {
                     canister_http.pending.insert(id);
                 }
@@ -1358,7 +1440,7 @@ fn process_mock_canister_https_response(
         reject_codes.push(reject_code)
     }
     for reject_code in reject_codes {
-        if RejectCode::try_from(reject_code).is_err() {
+        if ic_error_types::RejectCode::try_from(reject_code).is_err() {
             return OpOut::Error(PocketIcError::InvalidRejectCode(reject_code));
         }
     }
@@ -1415,6 +1497,7 @@ fn process_mock_canister_https_response(
                     timeout,
                     id: canister_http_request_id,
                     context: context.clone(),
+                    socks_proxy_addrs: vec![],
                 })
                 .unwrap();
             let response = loop {
@@ -1429,7 +1512,7 @@ fn process_mock_canister_https_response(
         }
         CanisterHttpResponse::CanisterHttpReject(reject) => {
             CanisterHttpResponseContent::Reject(CanisterHttpReject {
-                reject_code: RejectCode::try_from(reject.reject_code).unwrap(),
+                reject_code: ic_error_types::RejectCode::try_from(reject.reject_code).unwrap(),
                 message: reject.message.clone(),
             })
         }
@@ -1497,14 +1580,82 @@ impl Operation for PubKey {
     }
 }
 
-#[derive(Copy, Clone, Debug)]
-pub struct Tick;
+#[derive(Clone, Debug)]
+pub struct Tick {
+    pub configs: TickConfigs,
+}
+
+impl Tick {
+    fn validate_blockmakers_per_subnet(
+        &self,
+        pic: &mut PocketIc,
+        subnets_blockmaker: &[SubnetBlockmaker],
+    ) -> Result<(), OpOut> {
+        for subnet_blockmaker in subnets_blockmaker {
+            if subnet_blockmaker
+                .failed_blockmakers
+                .contains(&subnet_blockmaker.blockmaker)
+            {
+                return Err(OpOut::Error(PocketIcError::BlockmakerContainedInFailed(
+                    subnet_blockmaker.blockmaker,
+                )));
+            }
+
+            let Some(state_machine) = pic.get_subnet_with_id(subnet_blockmaker.subnet) else {
+                return Err(OpOut::Error(PocketIcError::SubnetNotFound(
+                    subnet_blockmaker.subnet.get().0,
+                )));
+            };
+
+            let mut request_blockmakers = subnet_blockmaker.failed_blockmakers.clone();
+            request_blockmakers.push(subnet_blockmaker.blockmaker);
+            let subnet_nodes: Vec<_> = state_machine.nodes.iter().map(|n| n.node_id).collect();
+            for blockmaker in request_blockmakers {
+                if !subnet_nodes.contains(&blockmaker) {
+                    return Err(OpOut::Error(PocketIcError::BlockmakerNotFound(blockmaker)));
+                }
+            }
+        }
+        Ok(())
+    }
+}
 
 impl Operation for Tick {
     fn compute(&self, pic: &mut PocketIc) -> OpOut {
-        for subnet in pic.subnets.get_all() {
-            subnet.state_machine.execute_round();
+        let blockmakers_per_subnet = self.configs.blockmakers.as_ref().map(|cfg| {
+            cfg.blockmakers_per_subnet
+                .iter()
+                .cloned()
+                .map(SubnetBlockmaker::from)
+                .collect_vec()
+        });
+
+        if let Some(ref bm_per_subnet) = blockmakers_per_subnet {
+            if let Err(error) = self.validate_blockmakers_per_subnet(pic, bm_per_subnet) {
+                return error;
+            }
         }
+
+        let subnets = pic.subnets.subnets.read().unwrap();
+        for (subnet_id, subnet) in subnets.iter() {
+            let blockmaker_metrics = blockmakers_per_subnet.as_ref().and_then(|bm_per_subnet| {
+                bm_per_subnet
+                    .iter()
+                    .find(|bm| bm.subnet == *subnet_id)
+                    .map(|bm| BlockmakerMetrics {
+                        blockmaker: bm.blockmaker,
+                        failed_blockmakers: bm.failed_blockmakers.clone(),
+                    })
+            });
+
+            match blockmaker_metrics {
+                Some(metrics) => subnet
+                    .state_machine
+                    .execute_round_with_blockmaker_metrics(metrics),
+                None => subnet.state_machine.execute_round(),
+            }
+        }
+
         OpOut::NoOutput
     }
 
@@ -1551,7 +1702,7 @@ impl Operation for SubmitIngressMessage {
                     }
                     Err(SubmitIngressError::UserError(e)) => {
                         eprintln!("Failed to submit ingress message: {:?}", e);
-                        Err::<ic_state_machine_tests::WasmResult, ic_state_machine_tests::UserError>(e).into()
+                        OpOut::CanisterResult(Err(user_error_to_reject_response(e, false)))
                     }
                     Ok(msg_id) => OpOut::MessageId((
                         EffectivePrincipal::SubnetId(subnet.get_subnet_id()),
@@ -1614,16 +1765,18 @@ impl Operation for AwaitIngressMessage {
                         IngressStatus::Known {
                             state: IngressState::Completed(result),
                             ..
-                        } => return Ok(result).into(),
+                        } => {
+                            return OpOut::CanisterResult(wasm_result_to_canister_result(
+                                result, true,
+                            ));
+                        }
                         IngressStatus::Known {
                             state: IngressState::Failed(error),
                             ..
                         } => {
-                            return Err::<
-                                ic_state_machine_tests::WasmResult,
-                                ic_state_machine_tests::UserError,
-                            >(error)
-                            .into()
+                            return OpOut::CanisterResult(Err(user_error_to_reject_response(
+                                error, true,
+                            )));
                         }
                         _ => {}
                     }
@@ -1642,71 +1795,6 @@ impl Operation for AwaitIngressMessage {
 
     fn id(&self) -> OpId {
         OpId(format!("await_update_{}", self.0.msg_id))
-    }
-}
-
-#[derive(Clone, Debug)]
-pub struct ExecuteIngressMessage(pub CanisterCall);
-
-impl Operation for ExecuteIngressMessage {
-    fn compute(&self, pic: &mut PocketIc) -> OpOut {
-        let canister_call = self.0.clone();
-        let subnet = route_call(pic, canister_call);
-        match subnet {
-            Ok(subnet) => {
-                match subnet.submit_ingress_as(
-                    self.0.sender,
-                    self.0.canister_id,
-                    self.0.method.clone(),
-                    self.0.payload.clone(),
-                ) {
-                    Err(SubmitIngressError::HttpError(e)) => {
-                        eprintln!("Failed to submit ingress message: {}", e);
-                        OpOut::Error(PocketIcError::BadIngressMessage(e))
-                    }
-                    Err(SubmitIngressError::UserError(e)) => {
-                        eprintln!("Failed to submit ingress message: {:?}", e);
-                        Err::<ic_state_machine_tests::WasmResult, ic_state_machine_tests::UserError>(e).into()
-                    }
-                    Ok(msg_id) => {
-                        // Now, we execute on all subnets until we have the result
-                        let max_rounds = 100;
-                        for _i in 0..max_rounds {
-                            for subnet_ in pic.subnets.get_all() {
-                                subnet_.state_machine.execute_round();
-                            }
-                            match subnet.ingress_status(&msg_id) {
-                                IngressStatus::Known {
-                                    state: IngressState::Completed(result),
-                                    ..
-                                } => return Ok(result).into(),
-                                IngressStatus::Known {
-                                    state: IngressState::Failed(error),
-                                    ..
-                                } => {
-                                    return Err::<
-                                        ic_state_machine_tests::WasmResult,
-                                        ic_state_machine_tests::UserError,
-                                    >(error)
-                                    .into()
-                                }
-                                _ => {}
-                            }
-                        }
-                        OpOut::Error(PocketIcError::BadIngressMessage(format!(
-                            "Failed to answer to ingress {} after {} rounds.",
-                            msg_id, max_rounds
-                        )))
-                    }
-                }
-            }
-            Err(e) => OpOut::Error(PocketIcError::BadIngressMessage(e)),
-        }
-    }
-
-    fn id(&self) -> OpId {
-        let call_id = self.0.id();
-        OpId(format!("canister_update_{}", call_id.0))
     }
 }
 
@@ -1735,11 +1823,11 @@ impl Operation for IngressMessageStatus {
                     IngressStatus::Known {
                         state: IngressState::Completed(result),
                         ..
-                    } => Ok(result).into(),
+                    } => OpOut::CanisterResult(wasm_result_to_canister_result(result, true)),
                     IngressStatus::Known {
                         state: IngressState::Failed(error),
                         ..
-                    } => Err(error).into(),
+                    } => OpOut::CanisterResult(Err(user_error_to_reject_response(error, true))),
                     _ => OpOut::NoOutput,
                 }
             }
@@ -1766,15 +1854,20 @@ impl Operation for Query {
         match subnet {
             Ok(subnet) => {
                 let delegation = pic.get_nns_delegation_for_subnet(subnet.get_subnet_id());
-                subnet
-                    .query_as_with_delegation(
-                        self.0.sender,
-                        self.0.canister_id,
-                        self.0.method.clone(),
-                        self.0.payload.clone(),
-                        delegation,
-                    )
-                    .into()
+                match subnet.query_as_with_delegation(
+                    self.0.sender,
+                    self.0.canister_id,
+                    self.0.method.clone(),
+                    self.0.payload.clone(),
+                    delegation,
+                ) {
+                    Ok(result) => {
+                        OpOut::CanisterResult(wasm_result_to_canister_result(result, false))
+                    }
+                    Err(user_error) => {
+                        OpOut::CanisterResult(Err(user_error_to_reject_response(user_error, false)))
+                    }
+                }
             }
             Err(e) => OpOut::Error(PocketIcError::BadIngressMessage(e)),
         }
@@ -2039,7 +2132,7 @@ pub struct QueryRequest {
 }
 
 #[derive(Clone)]
-struct PocketNodeSigner(pub ic_crypto_ed25519::PrivateKey);
+struct PocketNodeSigner(pub ic_ed25519::PrivateKey);
 
 impl BasicSigner<QueryResponseHash> for PocketNodeSigner {
     fn sign_basic(

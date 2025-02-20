@@ -4,7 +4,7 @@ use dfn_core::api::CanisterId;
 #[cfg(target_arch = "wasm32")]
 use dfn_core::println;
 use ic_crypto_sha2::Sha256;
-use ic_management_canister_types::{
+use ic_management_canister_types_private::{
     CanisterInstallMode, CanisterInstallModeV2, ChunkHash, InstallChunkedCodeArgs, InstallCodeArgs,
     IC_00,
 };
@@ -64,7 +64,7 @@ pub struct ChangeCanisterRequest {
     #[serde(with = "serde_bytes")]
     pub wasm_module: Vec<u8>,
 
-    /// If the entire WASM does not into the 2 MiB ingress limit, then `new_canister_wasm`
+    /// If the entire WASM does not fit into the 2 MiB ingress limit, then `wasm_module`
     /// should be empty, and this field should be set instead.
     pub chunked_canister_wasm: Option<ChunkedCanisterWasm>,
 

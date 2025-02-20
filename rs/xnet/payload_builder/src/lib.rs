@@ -18,6 +18,7 @@ use http_body_util::BodyExt;
 use hyper::{Request, StatusCode, Uri};
 use hyper_util::client::legacy::Client;
 use hyper_util::rt::{TokioExecutor, TokioTimer};
+use ic_config::message_routing::MAX_STREAM_MESSAGES;
 use ic_crypto_tls_interfaces::TlsConfig;
 use ic_interfaces::messaging::{
     InvalidXNetPayload, XNetPayloadBuilder, XNetPayloadValidationError,
@@ -224,9 +225,19 @@ impl XNetPayloadBuilderMetrics {
     }
 }
 
-// TODO(MR-636): Consider making this an argument to allow for testing without generating so many
-// messages; or else at least unify this constant and `MAX_STREAM_MESSAGES` in the stream builder.
-pub const MAX_STREAM_MESSAGES: usize = 10_000;
+/// The maximum number of signals a stream header can have before pulling messages from the reverse
+/// stream stops. This limit prevents one-sided traffic by insisting the other subnet make progress
+/// after at most `MAX_SIGNALS` have been pulled.
+///
+/// More than `MAX_STREAM_MESSAGES` doesn't make sense because an honest subnet needs to garbage
+/// collect messages before it can push more messages into a stream, which it can only do by
+/// observing the signals in the reverse direction, thus advancing its `begin` and allowing for
+/// garbage collecting the signals in turn.
+///
+/// For the case of `MAX_STREAM_MESSAGES` this acts as a dishonest subnet guard, for a smaller number
+/// it acts as an ensurance that the flow of incoming traffic and that of outgoing traffic does not
+/// diverge too far.
+pub const MAX_SIGNALS: usize = MAX_STREAM_MESSAGES;
 
 /// Implementation of `XNetPayloadBuilder` that uses a `StateManager`,
 /// `RegistryClient` and `XNetClient` to build and validate `XNetPayloads`.
@@ -924,13 +935,13 @@ pub fn get_msg_limit(subnet_id: SubnetId, state: &ReplicatedState) -> Option<usi
 }
 
 /// The stream index up to which messages can be inducted while limiting the
-/// number of signals in the reverse stream to `MAX_STREAM_MESSAGES`.
+/// number of signals in the reverse stream to `MAX_SIGNALS`.
 ///
 /// `stream_begin` is the `begin` in the `StreamHeader` contained in the (same) stream slice.
 ///  It reflects the status on the remote subnet as far as we know at present. Up to this index
 ///  signals can be gc'ed in the reverse stream.
 pub fn max_message_index(stream_begin: StreamIndex) -> StreamIndex {
-    stream_begin + (MAX_STREAM_MESSAGES as u64).into()
+    stream_begin + (MAX_SIGNALS as u64).into()
 }
 
 /// Resolves a stream index and byte limit to an `EndpointLocator`, consisting
@@ -1195,6 +1206,85 @@ pub const POOL_SLICE_BYTE_SIZE_MAX: usize = 4 << 20;
 /// the payload once we're this close to the payload size limit.
 pub const SLICE_BYTE_SIZE_MIN: usize = 1 << 10;
 
+/// This struct stores stream indices and byte limit used for refilling
+/// stream slices of a subnet in a certified slice pool.
+pub struct RefillStreamSliceIndices {
+    pub witness_begin: StreamIndex,
+    pub msg_begin: StreamIndex,
+    pub byte_limit: usize,
+}
+
+/// Computes `RefillStreamSliceIndices` for every subnet whose stream slices should be refilled
+/// in the given certified slice pool owned by the given subnet.
+pub fn refill_stream_slice_indices(
+    pool_lock: Arc<Mutex<CertifiedSlicePool>>,
+    own_subnet_id: SubnetId,
+) -> impl Iterator<Item = (SubnetId, RefillStreamSliceIndices)> {
+    let mut result: BTreeMap<SubnetId, RefillStreamSliceIndices> = BTreeMap::new();
+
+    let pool_slice_stats = {
+        let pool = pool_lock.lock().unwrap();
+
+        if pool.byte_size() > POOL_BYTE_SIZE_SOFT_CAP {
+            // Abort if pool is already full.
+            return result.into_iter();
+        }
+
+        pool.peers()
+            // Skip our own subnet, the loopback stream is routed separately.
+            .filter(|&&subnet_id| subnet_id != own_subnet_id)
+            .map(|&subnet_id| (subnet_id, pool.slice_stats(subnet_id)))
+            .collect::<BTreeMap<_, _>>()
+    };
+
+    for (subnet_id, slice_stats) in pool_slice_stats {
+        let (stream_position, messages_begin, msg_count, byte_size) = match slice_stats {
+            // Have a cached stream position.
+            (Some(stream_position), messages_begin, msg_count, byte_size) => {
+                (stream_position, messages_begin, msg_count, byte_size)
+            }
+
+            // No cached stream position, no pooling / refill necessary.
+            (None, _, _, _) => continue,
+        };
+
+        let (witness_begin, msg_begin, slice_byte_limit) = match messages_begin {
+            // Existing pooled stream, pull partial slice and append.
+            Some(messages_begin) if messages_begin == stream_position.message_index => (
+                stream_position.message_index,
+                stream_position.message_index + (msg_count as u64).into(),
+                POOL_SLICE_BYTE_SIZE_MAX.saturating_sub(byte_size),
+            ),
+
+            // No pooled stream, or pooled stream does not begin at cached stream position, pull
+            // complete slice from cached stream position.
+            _ => (
+                stream_position.message_index,
+                stream_position.message_index,
+                POOL_SLICE_BYTE_SIZE_MAX,
+            ),
+        };
+
+        if slice_byte_limit < SLICE_BYTE_SIZE_MIN {
+            // No more space left in the pool for this slice, bail out.
+            continue;
+        }
+
+        result.insert(
+            subnet_id,
+            RefillStreamSliceIndices {
+                witness_begin,
+                msg_begin,
+                // XNetEndpoint only counts message bytes, allow some overhead (measuread: 350
+                // bytes for certification plus base witness, 2% for large payloads).
+                byte_limit: (slice_byte_limit.saturating_sub(350)) * 98 / 100,
+            },
+        );
+    }
+
+    result.into_iter()
+}
+
 /// An async task that refills the slice pool.
 pub struct PoolRefillTask {
     /// A pool of slices, filled in the background by an async task.
@@ -1235,12 +1325,7 @@ impl PoolRefillTask {
 
         runtime_handle.spawn(async move {
             while let Some(registry_version) = refill_receiver.recv().await {
-                task.refill_pool(
-                    POOL_BYTE_SIZE_SOFT_CAP,
-                    POOL_SLICE_BYTE_SIZE_MAX,
-                    registry_version,
-                )
-                .await;
+                task.refill_pool(registry_version).await;
             }
         });
 
@@ -1249,68 +1334,17 @@ impl PoolRefillTask {
 
     /// Queries all subnets for new slices and puts / appends them to the pool after
     /// validation against the given registry version.
-    async fn refill_pool(
-        &self,
-        pool_byte_size_soft_cap: usize,
-        slice_byte_size_max: usize,
-        registry_version: RegistryVersion,
-    ) {
-        let pool_slice_stats = {
-            let pool = self.pool.lock().unwrap();
+    async fn refill_pool(&self, registry_version: RegistryVersion) {
+        let refill_stream_slice_indices =
+            refill_stream_slice_indices(self.pool.clone(), self.endpoint_resolver.subnet_id);
 
-            if pool.byte_size() > pool_byte_size_soft_cap {
-                // Abort if pool is already full.
-                return;
-            }
-
-            pool.peers()
-                // Skip our own subnet, the loopback stream is routed separately.
-                .filter(|&&subnet_id| subnet_id != self.endpoint_resolver.subnet_id)
-                .map(|&subnet_id| (subnet_id, pool.slice_stats(subnet_id)))
-                .collect::<BTreeMap<_, _>>()
-        };
-
-        for (subnet_id, slice_stats) in pool_slice_stats {
-            let (stream_position, messages_begin, msg_count, byte_size) = match slice_stats {
-                // Have a cached stream position.
-                (Some(stream_position), messages_begin, msg_count, byte_size) => {
-                    (stream_position, messages_begin, msg_count, byte_size)
-                }
-
-                // No cached stream position, no pooling / refill necessary.
-                (None, _, _, _) => continue,
-            };
-
-            let (witness_begin, msg_begin, slice_byte_limit) = match messages_begin {
-                // Existing pooled stream, pull partial slice and append.
-                Some(messages_begin) if messages_begin == stream_position.message_index => (
-                    stream_position.message_index,
-                    stream_position.message_index + (msg_count as u64).into(),
-                    slice_byte_size_max.saturating_sub(byte_size),
-                ),
-
-                // No pooled stream, or pooled stream does not begin at cached stream position, pull
-                // complete slice from cached stream position.
-                _ => (
-                    stream_position.message_index,
-                    stream_position.message_index,
-                    slice_byte_size_max,
-                ),
-            };
-
-            if slice_byte_limit < SLICE_BYTE_SIZE_MIN {
-                // No more space left in the pool for this slice, bail out.
-                continue;
-            }
-
+        for (subnet_id, indices) in refill_stream_slice_indices {
             // `XNetEndpoint` URL of a node on `subnet_id`.
             let endpoint_locator = match self.endpoint_resolver.xnet_endpoint_url(
                 subnet_id,
-                witness_begin,
-                msg_begin,
-                // XNetEndpoint only counts message bytes, allow some overhead (measuread: 350
-                // bytes for certification plus base witness, 2% for large payloads).
-                (slice_byte_limit.saturating_sub(350)) * 98 / 100,
+                indices.witness_begin,
+                indices.msg_begin,
+                indices.byte_limit,
             ) {
                 Ok(endpoint_locator) => endpoint_locator,
                 Err(e) => {
@@ -1336,7 +1370,7 @@ impl PoolRefillTask {
                     Ok(slice) => {
                         let logger = log.clone();
                         let res = tokio::task::spawn_blocking(move || {
-                            if witness_begin != msg_begin {
+                            if indices.witness_begin != indices.msg_begin {
                                 // Pulled a stream suffix, append to pooled slice.
                                 pool.lock()
                                     .unwrap()

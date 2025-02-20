@@ -21,9 +21,7 @@ use canister_http::*;
 use canister_test::Canister;
 use dfn_candid::candid_one;
 use ic_cdk::api::call::RejectionCode;
-use ic_management_canister_types::{
-    BoundedHttpHeaders, CanisterHttpRequestArgs, HttpMethod, TransformContext, TransformFunc,
-};
+use ic_management_canister_types_private::{HttpMethod, TransformContext, TransformFunc};
 use ic_system_test_driver::driver::group::SystemTestGroup;
 use ic_system_test_driver::driver::{
     test_env::TestEnv,
@@ -31,6 +29,7 @@ use ic_system_test_driver::driver::{
 };
 use ic_system_test_driver::systest;
 use ic_system_test_driver::util::block_on;
+use proxy_canister::UnvalidatedCanisterHttpRequestArgs;
 use proxy_canister::{RemoteHttpRequest, RemoteHttpResponse};
 use slog::{info, Logger};
 
@@ -81,9 +80,9 @@ async fn test_proxy_canister(proxy_canister: &Canister<'_>, url: String, logger:
                         RemoteHttpRequest,
                     >,
                     RemoteHttpRequest {
-                        request: CanisterHttpRequestArgs {
+                        request: UnvalidatedCanisterHttpRequestArgs {
                             url: url.to_string(),
-                            headers: BoundedHttpHeaders::new(vec![]),
+                            headers: vec![],
                             body: None,
                             transform: Some(TransformContext {
                                 function: TransformFunc(candid::Func {

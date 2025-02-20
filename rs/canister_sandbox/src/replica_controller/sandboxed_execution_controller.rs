@@ -3,14 +3,14 @@ use crate::controller_launcher_service::ControllerLauncherService;
 use crate::launcher_service::LauncherService;
 use crate::protocol::id::{ExecId, MemoryId, WasmId};
 use crate::protocol::sbxsvc::MemorySerialization;
-use crate::protocol::structs::{SandboxExecInput, SandboxExecOutput};
+use crate::protocol::structs::{SandboxExecInput, SandboxExecOutput, StateModifications};
 use crate::sandbox_service::SandboxService;
 use crate::{protocol, rpc};
 use ic_config::embedders::Config as EmbeddersConfig;
 use ic_config::flag_status::FlagStatus;
 use ic_embedders::wasm_executor::{
-    get_wasm_reserved_pages, wasm_execution_error, CanisterStateChanges, PausedWasmExecution,
-    SliceExecutionOutput, WasmExecutionResult, WasmExecutor,
+    get_wasm_reserved_pages, wasm_execution_error, CanisterStateChanges, ExecutionStateChanges,
+    PausedWasmExecution, SliceExecutionOutput, WasmExecutionResult, WasmExecutor,
 };
 use ic_embedders::{
     wasm_utils::WasmImportsDetails, CompilationCache, CompilationResult, StoredCompilation,
@@ -24,7 +24,7 @@ use ic_logger::{error, info, ReplicaLogger};
 use ic_metrics::buckets::decimal_buckets_with_zero;
 use ic_metrics::MetricsRegistry;
 use ic_replicated_state::canister_state::execution_state::{
-    SandboxMemory, SandboxMemoryHandle, SandboxMemoryOwner, WasmBinary,
+    SandboxMemory, SandboxMemoryHandle, SandboxMemoryOwner, WasmBinary, WasmExecutionMode,
 };
 use ic_replicated_state::{
     EmbedderCache, ExecutionState, ExportedFunctions, Memory, PageMap, ReplicatedState,
@@ -286,7 +286,7 @@ impl SandboxedExecutionMetrics {
             sandboxed_execution_executed_message_slices: metrics_registry.int_counter_vec(
                 "sandboxed_execution_executed_message_slices_total",
                 "Number of executed message slices by type and status.",
-                &["api_type", "status"],
+                &["api_type", "status", "wasm_execution_mode"],
             ),
             sandboxed_execution_instructions_left_error: metrics_registry.error_counter("sandboxed_execution_invalid_instructions_left"),
         }
@@ -299,9 +299,14 @@ impl SandboxedExecutionMetrics {
     }
 
     /// Helper function to observe executed message slices.
-    fn observe_executed_message_slice(&self, api_type_label: &str, execution_status: &str) {
+    fn observe_executed_message_slice(
+        &self,
+        api_type_label: &str,
+        execution_status: &str,
+        wasm_execution_mode: &str,
+    ) {
         self.sandboxed_execution_executed_message_slices
-            .with_label_values(&[api_type_label, execution_status])
+            .with_label_values(&[api_type_label, execution_status, wasm_execution_mode])
             .inc();
     }
 }
@@ -755,8 +760,11 @@ impl WasmExecutor for SandboxedExecutionController {
         ) {
             Ok((wasm_id, compilation_result)) => (wasm_id, compilation_result),
             Err(err) => {
-                self.metrics
-                    .observe_executed_message_slice(api_type_label, err.as_str());
+                self.metrics.observe_executed_message_slice(
+                    api_type_label,
+                    err.as_str(),
+                    execution_state.wasm_execution_mode.as_str(),
+                );
                 return (None, wasm_execution_error(err, message_instruction_limit));
             }
         };
@@ -1089,7 +1097,7 @@ impl WasmExecutor for SandboxedExecutionController {
             stable_memory_page_map,
             ic_replicated_state::NumWasmPages::from(0),
         );
-        let is_wasm64 = serialized_module.is_wasm64();
+
         let (exports, metadata) = serialized_module.exports_and_metadata();
         let execution_state = ExecutionState {
             canister_root,
@@ -1101,7 +1109,7 @@ impl WasmExecutor for SandboxedExecutionController {
             metadata,
             last_executed_round: ExecutionRound::from(0),
             next_scheduled_method: NextScheduledMethod::default(),
-            is_wasm64,
+            wasm_execution_mode: WasmExecutionMode::from_is_wasm64(serialized_module.is_wasm64()),
         };
 
         Ok((
@@ -1238,6 +1246,8 @@ impl SandboxedExecutionController {
             let sandbox_processes = get_sandbox_process_stats(&backends);
             #[allow(unused_mut)] // for MacOS
             let mut sandbox_processes_rss = Vec::with_capacity(sandbox_processes.len());
+            let mut active_last_used = Vec::with_capacity(sandbox_processes.len());
+            let mut evicted_last_used = Vec::with_capacity(sandbox_processes.len());
 
             #[cfg(target_os = "linux")]
             {
@@ -1278,14 +1288,10 @@ impl SandboxedExecutionController {
                         .unwrap_or_else(|| std::time::Duration::from_secs(0));
                     match status {
                         SandboxProcessStatus::Active => {
-                            metrics
-                                .sandboxed_execution_subprocess_active_last_used
-                                .observe(time_since_last_usage.as_secs_f64());
+                            active_last_used.push(time_since_last_usage.as_secs_f64());
                         }
                         SandboxProcessStatus::Evicted => {
-                            metrics
-                                .sandboxed_execution_subprocess_evicted_last_used
-                                .observe(time_since_last_usage.as_secs_f64());
+                            evicted_last_used.push(time_since_last_usage.as_secs_f64());
                         }
                     }
                 }
@@ -1313,17 +1319,23 @@ impl SandboxedExecutionController {
                         .unwrap_or_else(|| std::time::Duration::from_secs(0));
                     match status {
                         SandboxProcessStatus::Active => {
-                            metrics
-                                .sandboxed_execution_subprocess_active_last_used
-                                .observe(time_since_last_usage.as_secs_f64());
+                            active_last_used.push(time_since_last_usage.as_secs_f64());
                         }
                         SandboxProcessStatus::Evicted => {
-                            metrics
-                                .sandboxed_execution_subprocess_evicted_last_used
-                                .observe(time_since_last_usage.as_secs_f64());
+                            evicted_last_used.push(time_since_last_usage.as_secs_f64());
                         }
                     }
                 }
+            }
+            for o in active_last_used {
+                metrics
+                    .sandboxed_execution_subprocess_active_last_used
+                    .observe(o);
+            }
+            for o in evicted_last_used {
+                metrics
+                    .sandboxed_execution_subprocess_evicted_last_used
+                    .observe(o);
             }
 
             {
@@ -1504,8 +1516,11 @@ impl SandboxedExecutionController {
         let mut exec_output = match result {
             CompletionResult::Paused(slice) => {
                 execution_tracing.observe_slice(&slice, execution_start.elapsed());
-                self.metrics
-                    .observe_executed_message_slice(api_type_label, "Paused");
+                self.metrics.observe_executed_message_slice(
+                    api_type_label,
+                    "Paused",
+                    execution_state.wasm_execution_mode.as_str(),
+                );
                 let paused = Box::new(PausedSandboxExecution {
                     canister_id,
                     sandbox_process,
@@ -1526,8 +1541,11 @@ impl SandboxedExecutionController {
                     Ok(None) => "NoResponse",
                     Err(e) => e.as_str(),
                 };
-                self.metrics
-                    .observe_executed_message_slice(api_type_label, execution_status);
+                self.metrics.observe_executed_message_slice(
+                    api_type_label,
+                    execution_status,
+                    execution_state.wasm_execution_mode.as_str(),
+                );
                 exec_output
             }
         };
@@ -1575,22 +1593,26 @@ impl SandboxedExecutionController {
         next_stable_memory_id: MemoryId,
         canister_id: CanisterId,
         sandbox_process: Arc<SandboxProcess>,
-    ) -> Option<CanisterStateChanges> {
-        // If the execution has failed, then we don't apply any changes.
-        if exec_output.wasm.wasm_result.is_err() {
-            return None;
-        }
-        match exec_output.state.take() {
-            None => None,
-            Some(state_modifications) => {
+    ) -> CanisterStateChanges {
+        let StateModifications {
+            execution_state_modifications,
+            system_state_modifications,
+        } = exec_output.take_state_modifications();
+
+        match execution_state_modifications {
+            None => CanisterStateChanges {
+                execution_state_changes: None,
+                system_state_modifications,
+            },
+            Some(execution_state_modifications) => {
                 // TODO: If a canister has broken out of wasm then it might have allocated more
                 // wasm or stable memory then allowed. We should add an additional check here
                 // that thet canister is still within it's allowed memory usage.
                 let mut wasm_memory = execution_state.wasm_memory.clone();
                 wasm_memory
                     .page_map
-                    .deserialize_delta(state_modifications.wasm_memory.page_delta);
-                wasm_memory.size = state_modifications.wasm_memory.size;
+                    .deserialize_delta(execution_state_modifications.wasm_memory.page_delta);
+                wasm_memory.size = execution_state_modifications.wasm_memory.size;
                 wasm_memory.sandbox_memory = SandboxMemory::synced(wrap_remote_memory(
                     &sandbox_process,
                     next_wasm_memory_id,
@@ -1610,8 +1632,8 @@ impl SandboxedExecutionController {
                 let mut stable_memory = execution_state.stable_memory.clone();
                 stable_memory
                     .page_map
-                    .deserialize_delta(state_modifications.stable_memory.page_delta);
-                stable_memory.size = state_modifications.stable_memory.size;
+                    .deserialize_delta(execution_state_modifications.stable_memory.page_delta);
+                stable_memory.size = execution_state_modifications.stable_memory.size;
                 stable_memory.sandbox_memory = SandboxMemory::synced(wrap_remote_memory(
                     &sandbox_process,
                     next_stable_memory_id,
@@ -1628,12 +1650,14 @@ impl SandboxedExecutionController {
                         .sandboxed_execution_critical_error_invalid_memory_size
                         .inc();
                 }
-                Some(CanisterStateChanges {
-                    globals: state_modifications.globals,
-                    wasm_memory,
-                    stable_memory,
-                    system_state_changes: state_modifications.system_state_changes,
-                })
+                CanisterStateChanges {
+                    execution_state_changes: Some(ExecutionStateChanges {
+                        globals: execution_state_modifications.globals,
+                        wasm_memory,
+                        stable_memory,
+                    }),
+                    system_state_modifications,
+                }
             }
         }
     }

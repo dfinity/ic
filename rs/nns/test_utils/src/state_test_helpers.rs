@@ -11,7 +11,7 @@ use cycles_minting_canister::{
 use dfn_http::types::{HttpRequest, HttpResponse};
 use dfn_protobuf::ToProto;
 use ic_base_types::{CanisterId, PrincipalId, SubnetId};
-use ic_management_canister_types::{
+use ic_management_canister_types_private::{
     CanisterInstallMode, CanisterSettingsArgs, CanisterSettingsArgsBuilder, CanisterStatusResultV2,
     UpdateSettingsArgs,
 };
@@ -23,7 +23,6 @@ use ic_nervous_system_common::{
     ledger::{compute_neuron_staking_subaccount, compute_neuron_staking_subaccount_bytes},
     DEFAULT_TRANSFER_FEE, ONE_DAY_SECONDS,
 };
-use ic_nervous_system_root::change_canister::ChangeCanisterRequest;
 use ic_nns_common::pb::v1::{NeuronId, ProposalId};
 use ic_nns_constants::{
     canister_id_to_nns_canister_name, memory_allocation_of, CYCLES_LEDGER_CANISTER_ID,
@@ -51,7 +50,6 @@ use ic_nns_governance_api::pb::v1::{
     ManageNeuronResponse, MonthlyNodeProviderRewards, NetworkEconomics, NnsFunction,
     ProposalActionRequest, ProposalInfo, RewardNodeProviders, Topic, Vote,
 };
-use ic_nns_handler_lifeline_interface::UpgradeRootProposal;
 use ic_nns_handler_root::init::RootCanisterInitPayload;
 use ic_registry_transport::pb::v1::{
     RegistryGetChangesSinceRequest, RegistryGetChangesSinceResponse,
@@ -1051,54 +1049,18 @@ pub fn nns_propose_upgrade_nns_canister(
     target_canister_id: CanisterId,
     wasm_module: Vec<u8>,
     module_arg: Vec<u8>,
-    use_proposal_action: bool,
 ) -> ProposalId {
-    let action = if use_proposal_action {
-        Some(ProposalActionRequest::InstallCode(InstallCodeRequest {
+    let target_canister_name = canister_id_to_nns_canister_name(target_canister_id);
+
+    let proposal = MakeProposalRequest {
+        title: Some(format!("Upgrade {}", target_canister_name)),
+        action: Some(ProposalActionRequest::InstallCode(InstallCodeRequest {
             canister_id: Some(target_canister_id.get()),
             install_mode: Some(3),
             wasm_module: Some(wasm_module),
             arg: Some(module_arg),
             skip_stopping_before_installing: None,
-        }))
-    } else if target_canister_id != ROOT_CANISTER_ID {
-        let payload = ChangeCanisterRequest::new(
-            true, // stop_before_installing,
-            CanisterInstallMode::Upgrade,
-            target_canister_id,
-        )
-        .with_memory_allocation(memory_allocation_of(target_canister_id))
-        .with_wasm(wasm_module);
-
-        let payload = Encode!(&payload).unwrap();
-
-        Some(ProposalActionRequest::ExecuteNnsFunction(
-            ExecuteNnsFunction {
-                nns_function: NnsFunction::NnsCanisterUpgrade as i32,
-                payload,
-            },
-        ))
-    } else {
-        let payload = UpgradeRootProposal {
-            wasm_module,
-            module_arg,
-            stop_upgrade_start: true,
-        };
-        let payload = Encode!(&payload).unwrap();
-
-        Some(ProposalActionRequest::ExecuteNnsFunction(
-            ExecuteNnsFunction {
-                nns_function: NnsFunction::NnsRootUpgrade as i32,
-                payload,
-            },
-        ))
-    };
-
-    let target_canister_name = canister_id_to_nns_canister_name(target_canister_id);
-
-    let proposal = MakeProposalRequest {
-        title: Some(format!("Upgrade {}", target_canister_name)),
-        action,
+        })),
         ..Default::default()
     };
 
@@ -1573,6 +1535,38 @@ pub fn list_neurons(
     Decode!(&result, ListNeuronsResponse).unwrap()
 }
 
+/// This function is intended to ensure all neurons are paged through.  It
+/// recursively calls `list_neurons`.  This method will panic if more than 20 requests are made
+/// this method could be adjusted.
+pub fn list_all_neurons_and_combine_responses(
+    state_machine: &StateMachine,
+    sender: PrincipalId,
+    request: ListNeurons,
+) -> ListNeuronsResponse {
+    assert_eq!(
+        request.page_number.unwrap_or_default(),
+        0,
+        "This method is intended to ensure all neurons \
+                        are paged through.  `page_number` should be None or Some(0)"
+    );
+
+    let mut response = list_neurons(state_machine, sender, request.clone());
+
+    let pages_needed = response.total_pages_available.unwrap();
+
+    for page in 1..=pages_needed {
+        let mut new_request = request.clone();
+        new_request.page_number = Some(page);
+        let mut new_response = list_neurons(state_machine, sender, new_request);
+        response.full_neurons.append(&mut new_response.full_neurons);
+        response
+            .neuron_infos
+            .extend(new_response.neuron_infos.into_iter());
+    }
+
+    response
+}
+
 pub fn list_neurons_by_principal(
     state_machine: &StateMachine,
     sender: PrincipalId,
@@ -1585,6 +1579,9 @@ pub fn list_neurons_by_principal(
             include_neurons_readable_by_caller: true,
             include_empty_neurons_readable_by_caller: None,
             include_public_neurons_in_full_neurons: None,
+            page_number: None,
+            page_size: None,
+            neuron_subaccounts: None,
         },
     )
 }
@@ -2101,7 +2098,7 @@ pub fn setup_cycles_ledger(state_machine: &StateMachine) {
     }
     #[derive(Clone, Eq, PartialEq, Debug, CandidType, Serialize)]
     struct Config {
-        pub max_transactions_per_request: u64,
+        pub max_blocks_per_request: u64,
         pub index_id: Option<candid::Principal>,
     }
 
@@ -2122,7 +2119,7 @@ pub fn setup_cycles_ledger(state_machine: &StateMachine) {
     )
     .unwrap();
     let arg = Encode!(&LedgerArgs::Init(Config {
-        max_transactions_per_request: 50,
+        max_blocks_per_request: 50,
         index_id: None,
     }))
     .unwrap();

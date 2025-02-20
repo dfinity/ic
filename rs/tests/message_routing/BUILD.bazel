@@ -26,7 +26,7 @@ system_test_nns(
         "//rs/tests/driver:ic-system-test-driver",
         "@crate_index//:anyhow",
         "@crate_index//:candid",
-        "@crate_index//:ic-cdk",
+        "@crate_index//:ic_cdk_next",
         "@crate_index//:itertools",
         "@crate_index//:slog",
         "@crate_index//:tokio",
@@ -88,7 +88,6 @@ system_test_nns(
     },
     extra_head_nns_tags = ["manual"],  # only run this test with the mainnet NNS canisters.
     tags = [
-        "k8s",
         "system_test_hotfix",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS

@@ -17,7 +17,7 @@ use ic_config::{
 use ic_error_types::RejectCode;
 use ic_interfaces::execution_environment::SubnetAvailableMemory;
 use ic_logger::replica_logger::no_op_logger;
-use ic_management_canister_types::{
+use ic_management_canister_types_private::{
     self as ic00, BoundedHttpHeaders, CanisterHttpResponsePayload, CanisterIdRecord,
     CanisterStatusType, DerivationPath, EcdsaKeyId, EmptyBlob, Method, Payload as _, SchnorrKeyId,
     SignWithSchnorrArgs, TakeCanisterSnapshotArgs, UninstallCodeArgs,
@@ -2685,13 +2685,16 @@ fn can_record_metrics_single_scheduler_thread() {
 
 #[test]
 fn can_record_metrics_for_a_round() {
+    let num_canisters = 3;
+    let scheduler_cores = num_canisters as usize - 1;
+    let instructions = 5;
     let mut test = SchedulerTestBuilder::new()
         .with_scheduler_config(SchedulerConfig {
-            scheduler_cores: 2,
-            max_instructions_per_round: NumInstructions::from(25),
-            max_instructions_per_message: NumInstructions::from(5),
-            max_instructions_per_message_without_dts: NumInstructions::new(5),
-            max_instructions_per_slice: NumInstructions::from(5),
+            scheduler_cores,
+            max_instructions_per_round: NumInstructions::from(instructions * 2),
+            max_instructions_per_message: NumInstructions::from(instructions),
+            max_instructions_per_message_without_dts: NumInstructions::new(instructions),
+            max_instructions_per_slice: NumInstructions::from(instructions),
             instruction_overhead_per_execution: NumInstructions::from(0),
             instruction_overhead_per_canister: NumInstructions::from(0),
             instruction_overhead_per_canister_for_finalization: NumInstructions::from(0),
@@ -2699,7 +2702,6 @@ fn can_record_metrics_for_a_round() {
         })
         .build();
 
-    let num_canisters = 3;
     // The first two canisters have an `Allocation` of 45% and the last 9%. We'll be
     // forced to execute the first two and then run out of instructions (based on
     // the limits) which will result in a violation of third canister's
@@ -2715,12 +2717,9 @@ fn can_record_metrics_for_a_round() {
             None,
         );
         for _ in 0..5 {
-            test.send_ingress(canister, ingress(5));
+            test.send_ingress(canister, ingress(instructions));
         }
     }
-
-    // For allocation violation to happen, the canister age should be more than `100/9 = 11 rounds`
-    test.advance_to_round(ExecutionRound::from(12));
 
     for canister in test.state_mut().canister_states.values_mut() {
         canister.scheduler_state.time_of_last_allocation_charge =
@@ -2744,10 +2743,11 @@ fn can_record_metrics_for_a_round() {
 
     let metrics = &test.scheduler().metrics;
     assert_eq!(
-        metrics.executable_canisters_per_round.get_sample_sum() as i64,
-        3
+        metrics.executable_canisters_per_round.get_sample_sum() as u64,
+        num_canisters
     );
-    assert_eq!(metrics.canister_age.get_sample_sum() as i64, 12);
+    // The canister age metric is not observed for newly created canisters.
+    assert_eq!(metrics.canister_age.get_sample_sum() as i64, 0);
     assert_eq!(metrics.round_preparation_duration.get_sample_count(), 1);
     assert_eq!(metrics.round_preparation_ingress.get_sample_count(), 1);
     assert_eq!(metrics.round_scheduling_duration.get_sample_count(), 1);
@@ -2762,10 +2762,11 @@ fn can_record_metrics_for_a_round() {
     );
     assert_eq!(metrics.round_finalization_ingress.get_sample_count(), 1);
     assert_eq!(metrics.round_finalization_charge.get_sample_count(), 1);
-    assert_eq!(metrics.canister_compute_allocation_violation.get(), 1);
+    // Compute allocation violation is not observed for newly created canisters.
+    assert_eq!(metrics.canister_compute_allocation_violation.get(), 0);
     assert_eq!(
         metrics.canister_messages_where_cycles_were_charged.get(),
-        10
+        scheduler_cores as u64 * 2
     );
 
     assert_eq!(
@@ -2773,12 +2774,26 @@ fn can_record_metrics_for_a_round() {
             .metadata
             .subnet_metrics
             .update_transactions_total,
-        10
+        scheduler_cores as u64 * 2
     );
     assert_eq!(
         test.state().metadata.subnet_metrics.num_canisters,
         num_canisters
     );
+
+    // Bump up the round number.
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+
+    // For allocation violation to happen, the canister age should be more than `100/9 = 11 rounds`
+    // plus 2 rounds already executed.
+    test.advance_to_round(ExecutionRound::from(11 + 2));
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+
+    let metrics = &test.scheduler().metrics;
+    // The canister age metric should be observed now.
+    assert_eq!(metrics.canister_age.get_sample_sum() as i64, 12);
+    // Compute allocation violation should also be observed now.
+    assert_eq!(metrics.canister_compute_allocation_violation.get(), 1);
 }
 
 /// Check that when a canister is scheduled and can't prepay for execution, the

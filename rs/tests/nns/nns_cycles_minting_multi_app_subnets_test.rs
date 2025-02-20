@@ -3,7 +3,7 @@ use cycles_minting::{make_user_ed25519, TestAgent, UserHandle};
 use cycles_minting_canister::{SubnetFilter, SubnetSelection, CREATE_CANISTER_REFUND_FEE};
 use dfn_candid::candid_one;
 use ic_canister_client::{HttpClient, Sender};
-use ic_management_canister_types::{CanisterIdRecord, CanisterStatusResult};
+use ic_management_canister_types_private::{CanisterIdRecord, CanisterStatusResultV2};
 use ic_nervous_system_common_test_keys::{TEST_USER1_KEYPAIR, TEST_USER1_PRINCIPAL};
 use ic_nns_constants::{CYCLES_MINTING_CANISTER_ID, LEDGER_CANISTER_ID};
 use ic_registry_subnet_type::SubnetType;
@@ -242,7 +242,7 @@ pub fn create_canister_on_specific_subnet_type(env: TestEnv) {
             node_on_type1_subnet.effective_canister_id(),
         );
 
-        let _status: CanisterStatusResult = authorized_runtime
+        let _status: CanisterStatusResultV2 = authorized_runtime
             .get_management_canister_with_effective_canister_id(
                 canister_on_authorized_subnet.into(),
             )
@@ -255,7 +255,7 @@ pub fn create_canister_on_specific_subnet_type(env: TestEnv) {
             .await
             .unwrap();
 
-        let _status: CanisterStatusResult = type1_runtime
+        let _status: CanisterStatusResultV2 = type1_runtime
             .get_management_canister_with_effective_canister_id(canister_on_type1_subnet.into())
             .update_from_sender(
                 "canister_status",
@@ -266,7 +266,7 @@ pub fn create_canister_on_specific_subnet_type(env: TestEnv) {
             .await
             .unwrap();
 
-        let _status: CanisterStatusResult = type1_runtime
+        let _status: CanisterStatusResultV2 = type1_runtime
             .get_management_canister_with_effective_canister_id(canister_on_type1_subnet_2.into())
             .update_from_sender(
                 "canister_status",
@@ -277,7 +277,7 @@ pub fn create_canister_on_specific_subnet_type(env: TestEnv) {
             .await
             .unwrap();
 
-        let _status: CanisterStatusResult = authorized_runtime
+        let _status: CanisterStatusResultV2 = authorized_runtime
             .get_management_canister_with_effective_canister_id(
                 canister_on_specific_subnet_authorized.into(),
             )
@@ -290,7 +290,7 @@ pub fn create_canister_on_specific_subnet_type(env: TestEnv) {
             .await
             .unwrap();
 
-        let _status: CanisterStatusResult = type1_runtime
+        let _status: CanisterStatusResultV2 = type1_runtime
             .get_management_canister_with_effective_canister_id(
                 canister_on_specific_subnet_type1.into(),
             )

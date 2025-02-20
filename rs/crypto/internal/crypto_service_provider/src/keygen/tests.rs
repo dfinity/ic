@@ -22,7 +22,7 @@ mod gen_node_siging_key_pair_tests {
     fn should_correctly_generate_node_signing_keys() {
         let csp = csp_with_fixed_seed();
         let public_key = csp.csp_vault.gen_node_signing_key_pair().unwrap();
-        let key_id = KeyId::try_from(&public_key).unwrap();
+        let key_id = KeyId::from(&public_key);
 
         assert_eq!(
             key_id,
@@ -95,7 +95,7 @@ mod gen_key_pair_with_pop_tests {
         let test_vector = multi_bls_test_vector();
         let csp = csp_seeded_with(test_vector.seed);
         let (public_key, pop) = csp.csp_vault.gen_committee_signing_key_pair().unwrap();
-        let key_id = KeyId::try_from(&public_key).unwrap();
+        let key_id = KeyId::from(&public_key);
 
         assert_eq!(key_id, test_vector.key_id);
         assert_eq!(public_key, test_vector.public_key);
@@ -262,13 +262,13 @@ fn should_correctly_convert_tls_cert_hash_as_key_id() {
     let cert = TlsPublicKeyCert::new_from_der(cert_der)
         .expect("failed to build TlsPublicKeyCert from DER");
 
-    let key_id = KeyId::try_from(&cert);
+    let key_id = KeyId::from(&cert);
 
     // We expect the following hard coded key id:
     let expected_key_id = KeyId::from(hex_to_32_bytes(
         "bc1f70570a2aaa0904069e1a77b710c729ac1bf026a02f14ad8613c3627b211a",
     ));
-    assert_matches!(key_id, Ok(actual) if actual == expected_key_id);
+    assert_matches!(key_id, actual if actual == expected_key_id);
 }
 
 mod tls {
@@ -284,7 +284,7 @@ mod tls {
             .csp_vault
             .gen_tls_key_pair(node_test_id(NODE_1))
             .expect("Generation of TLS keys failed.");
-        let key_id = KeyId::try_from(&cert).unwrap();
+        let key_id = KeyId::from(&cert);
 
         assert_eq!(
             key_id,

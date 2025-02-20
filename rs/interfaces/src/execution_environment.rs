@@ -4,7 +4,7 @@ mod errors;
 pub use errors::{CanisterBacktrace, CanisterOutOfCyclesError, HypervisorError, TrapCode};
 use ic_base_types::NumBytes;
 use ic_error_types::UserError;
-use ic_management_canister_types::MasterPublicKeyId;
+use ic_management_canister_types_private::MasterPublicKeyId;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_subnet_type::SubnetType;
 use ic_sys::{PageBytes, PageIndex};
@@ -13,8 +13,7 @@ use ic_types::{
     crypto::canister_threshold_sig::MasterPublicKey,
     ingress::{IngressStatus, WasmResult},
     messages::{CertificateDelegation, MessageId, Query, SignedIngressContent},
-    CanisterLog, Cycles, ExecutionRound, Height, NumInstructions, NumOsPages, Randomness,
-    ReplicaVersion, Time,
+    Cycles, ExecutionRound, Height, NumInstructions, NumOsPages, Randomness, ReplicaVersion, Time,
 };
 use serde::{Deserialize, Serialize};
 use std::{
@@ -219,6 +218,10 @@ pub enum SystemApiCallId {
     OutOfInstructions,
     /// Tracker for `ic0.performance_counter()`
     PerformanceCounter,
+    /// Tracker for `ic0.subnet_self_size()`
+    SubnetSelfSize,
+    /// Tracker for `ic0.subnet_self_copy()`
+    SubnetSelfCopy,
     /// Tracker for `ic0.stable64_grow()`
     Stable64Grow,
     /// Tracker for `ic0.stable64_read()`
@@ -1172,6 +1175,19 @@ pub trait SystemApi {
         dst: usize,
         heap: &mut [u8],
     ) -> HypervisorResult<()>;
+
+    /// Used to look up the size of the subnet Id of the calling canister.
+    fn ic0_subnet_self_size(&self) -> HypervisorResult<usize>;
+
+    /// Used to copy the subnet Id of the calling canister to its heap
+    /// at the location specified by `dst` and `offset`.
+    fn ic0_subnet_self_copy(
+        &self,
+        dst: usize,
+        offset: usize,
+        size: usize,
+        heap: &mut [u8],
+    ) -> HypervisorResult<()>;
 }
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
@@ -1287,7 +1303,6 @@ pub struct WasmExecutionOutput {
     pub instance_stats: InstanceStats,
     /// How many times each tracked System API call was invoked.
     pub system_api_call_counters: SystemApiCallCounters,
-    pub canister_log: CanisterLog,
 }
 
 impl fmt::Display for WasmExecutionOutput {

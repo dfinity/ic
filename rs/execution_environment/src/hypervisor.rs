@@ -12,8 +12,8 @@ use ic_interfaces::execution_environment::{
 };
 use ic_interfaces_state_manager::StateReader;
 use ic_logger::ReplicaLogger;
-use ic_management_canister_types::LogVisibilityV2;
-use ic_metrics::buckets::decimal_buckets_with_zero;
+use ic_management_canister_types_private::LogVisibilityV2;
+use ic_metrics::buckets::{decimal_buckets_with_zero, linear_buckets};
 use ic_metrics::{buckets::exponential_buckets, MetricsRegistry};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{page_map::allocated_pages_count, ExecutionState, SystemState};
@@ -21,11 +21,11 @@ use ic_replicated_state::{NetworkTopology, ReplicatedState};
 use ic_system_api::ExecutionParameters;
 use ic_system_api::{sandbox_safe_system_state::SandboxSafeSystemState, ApiType};
 use ic_types::{
-    messages::RequestMetadata, methods::FuncRef, CanisterId, NumBytes, NumInstructions, SubnetId,
-    Time,
+    messages::RequestMetadata, methods::FuncRef, CanisterId, MemoryDiskBytes, NumBytes,
+    NumInstructions, SubnetId, Time,
 };
 use ic_wasm_types::CanisterModule;
-use prometheus::{Histogram, HistogramVec, IntCounter, IntGauge};
+use prometheus::{Histogram, HistogramVec, IntCounter, IntGauge, IntGaugeVec};
 use std::{
     path::{Path, PathBuf},
     sync::Arc,
@@ -50,6 +50,8 @@ pub struct HypervisorMetrics {
     mmap_count: HistogramVec,
     mprotect_count: HistogramVec,
     copy_page_count: HistogramVec,
+    compilation_cache_size: IntGaugeVec,
+    code_section_size: Histogram,
 }
 
 impl HypervisorMetrics {
@@ -124,6 +126,13 @@ impl HypervisorMetrics {
                 decimal_buckets_with_zero(0,8),
                 &["api_type", "memory_type"]
             ),
+            compilation_cache_size: metrics_registry.int_gauge_vec("hypervisor_compilation_cache_size", "Bytes in memory and on disk used by the compilation cache.", &["location"],
+            ),
+            code_section_size: metrics_registry.histogram(
+                "hypervisor_code_section_size",
+                "Size of the code section in bytes for a canister Wasm. Only Wasms that successfully compile are counted (which implies the code sections are below the current limit).",
+                linear_buckets(1024.0 * 1024.0, 1024.0 * 1204.0, 11), // 1MiB, 2MiB, ..., 11 MiB. Current limit is 11 MiB.
+            ),
         }
     }
 
@@ -184,16 +193,30 @@ impl HypervisorMetrics {
         }
     }
 
-    fn observe_compilation_metrics(&self, compilation_result: &CompilationResult) {
+    fn observe_compilation_metrics(
+        &self,
+        compilation_result: &CompilationResult,
+        cache_memory_size: usize,
+        cache_disk_size: usize,
+    ) {
         let CompilationResult {
             largest_function_instruction_count,
             compilation_time,
             max_complexity,
+            code_section_size,
         } = compilation_result;
         self.largest_function_instruction_count
             .observe(largest_function_instruction_count.get() as f64);
         self.compile.observe(compilation_time.as_secs_f64());
         self.max_complexity.observe(*max_complexity as f64);
+        self.code_section_size
+            .observe(code_section_size.get() as f64);
+        self.compilation_cache_size
+            .with_label_values(&["memory"])
+            .set(cache_memory_size as i64);
+        self.compilation_cache_size
+            .with_label_values(&["disk"])
+            .set(cache_disk_size as i64);
     }
 }
 
@@ -255,8 +278,11 @@ impl Hypervisor {
         match creation_result {
             Ok((execution_state, compilation_cost, compilation_result)) => {
                 if let Some(compilation_result) = compilation_result {
-                    self.metrics
-                        .observe_compilation_metrics(&compilation_result);
+                    self.metrics.observe_compilation_metrics(
+                        &compilation_result,
+                        self.compilation_cache.memory_bytes(),
+                        self.compilation_cache.disk_bytes(),
+                    );
                 }
                 round_limits.instructions -= as_round_instructions(
                     compilation_cost_handling.adjusted_compilation_cost(compilation_cost),
@@ -398,8 +424,8 @@ impl Hypervisor {
             network_topology,
         );
         let (slice, mut output, canister_state_changes) = match execution_result {
-            WasmExecutionResult::Finished(slice, output, system_state_changes) => {
-                (slice, output, system_state_changes)
+            WasmExecutionResult::Finished(slice, output, system_state_modifications) => {
+                (slice, output, system_state_modifications)
             }
             WasmExecutionResult::Paused(_, _) => {
                 unreachable!("DTS is not supported");
@@ -472,7 +498,7 @@ impl Hypervisor {
             request_metadata,
             api_type.caller(),
             api_type.call_context_id(),
-            execution_state.is_wasm64,
+            execution_state.wasm_execution_mode.is_wasm64(),
         );
         let api_type_str = api_type.as_str();
         let (compilation_result, mut execution_result) = Arc::clone(&self.wasm_executor).execute(
@@ -489,8 +515,11 @@ impl Hypervisor {
             execution_state,
         );
         if let Some(compilation_result) = compilation_result {
-            self.metrics
-                .observe_compilation_metrics(&compilation_result);
+            self.metrics.observe_compilation_metrics(
+                &compilation_result,
+                self.compilation_cache.memory_bytes(),
+                self.compilation_cache.disk_bytes(),
+            );
         }
         self.metrics.observe(&execution_result, api_type_str);
 
@@ -515,11 +544,11 @@ impl Hypervisor {
             if let Err(err) = &mut result.wasm_result {
                 let can_view = match &system_state.log_visibility {
                     LogVisibilityV2::Controllers => {
-                        caller.map_or(false, |c| system_state.controllers.contains(&c))
+                        caller.is_some_and(|c| system_state.controllers.contains(&c))
                     }
                     LogVisibilityV2::Public => true,
                     LogVisibilityV2::AllowedViewers(allowed) => {
-                        caller.map_or(false, |c| allowed.get().contains(&c))
+                        caller.is_some_and(|c| allowed.get().contains(&c))
                     }
                 };
                 if !can_view {

@@ -13,10 +13,6 @@ done <"$VERSION_FILE"
 
 VERSION="$(cat $VERSION_TXT)"
 
-if [ "${VERSION}" == "$FAKE_IC_VERSION" ]; then
-    echo "Attempt to upload an artifacts with fake ic version: ${VERSION}" >&2
-    exit 1
-fi
 # rclone reads the $(dirname $f) to get file attribuates.
 # Therefore symlink should be resolved.
 f="$1"
@@ -37,7 +33,6 @@ fi
 # of /opt/namespace) we simply skip the upload.
 if [ -d /opt/namespace ]; then
     touch "$2"
-    touch "$3"
     exit 0
 fi
 
@@ -66,4 +61,3 @@ AWS_PROFILE=cf "$RCLONE" \
 
 URL_PATH="ic/${VERSION}/$REMOTE_SUBDIR/$(basename $f)"
 echo "https://download.dfinity.systems/${URL_PATH}" >"$2"
-echo "http://download.proxy-global.dfinity.network:8080/${URL_PATH}" >"$3"

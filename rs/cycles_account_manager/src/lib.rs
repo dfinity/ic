@@ -17,10 +17,11 @@ use ic_base_types::NumSeconds;
 use ic_config::subnet_config::CyclesAccountManagerConfig;
 use ic_interfaces::execution_environment::CanisterOutOfCyclesError;
 use ic_logger::{error, info, ReplicaLogger};
-use ic_management_canister_types::Method;
+use ic_management_canister_types_private::Method;
 use ic_nns_constants::CYCLES_MINTING_CANISTER_ID;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
+    canister_state::execution_state::WasmExecutionMode,
     canister_state::system_state::CyclesUseCase, CanisterState, SystemState,
 };
 use ic_types::{
@@ -61,24 +62,6 @@ impl std::fmt::Display for CyclesAccountManagerError {
             CyclesAccountManagerError::ContractViolation(msg) => {
                 write!(f, "Contract violation: {}", msg)
             }
-        }
-    }
-}
-
-/// Keeps track of how a canister is executing such that the `CyclesAccountManager`
-/// can charge cycles accordingly.
-#[derive(Debug, Copy, Clone)]
-pub enum WasmExecutionMode {
-    Wasm32,
-    Wasm64,
-}
-
-impl From<bool> for WasmExecutionMode {
-    fn from(is_wasm64: bool) -> Self {
-        if is_wasm64 {
-            WasmExecutionMode::Wasm64
-        } else {
-            WasmExecutionMode::Wasm32
         }
     }
 }
@@ -1211,7 +1194,7 @@ pub enum IngressInductionCostError {
 mod tests {
     use super::*;
     use candid::Encode;
-    use ic_management_canister_types::{CanisterSettingsArgsBuilder, UpdateSettingsArgs};
+    use ic_management_canister_types_private::{CanisterSettingsArgsBuilder, UpdateSettingsArgs};
     use ic_test_utilities_types::ids::subnet_test_id;
 
     const WASM_EXECUTION_MODE: WasmExecutionMode = WasmExecutionMode::Wasm32;

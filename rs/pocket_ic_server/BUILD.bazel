@@ -6,12 +6,12 @@ BUILD_DEPENDENCIES = []
 
 LIB_DEPENDENCIES = [
     # Keep sorted.
+    "//packages/ic-ed25519",
     "//packages/pocket-ic:pocket-ic",
     "//rs/bitcoin/adapter",
     "//rs/boundary_node/ic_boundary",
     "//rs/canister_sandbox:backend_lib",
     "//rs/config",
-    "//rs/crypto/ed25519",
     "//rs/crypto/iccsa",
     "//rs/crypto/sha2",
     "//rs/crypto/utils/threshold_sig_der",
@@ -141,7 +141,10 @@ rust_binary(
     proc_macro_deps = MACRO_DEPENDENCIES,
     # TODO: restrict the visibility
     visibility = ["//visibility:public"],
-    deps = LIB_DEPENDENCIES + [":pocket-ic-server-lib"],
+    deps = LIB_DEPENDENCIES + [
+        ":pocket-ic-server-lib",
+        "//rs/canister_sandbox:build_script",
+    ],
 )
 
 rust_library(

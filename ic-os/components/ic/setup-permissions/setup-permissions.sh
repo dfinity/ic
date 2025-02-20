@@ -24,8 +24,8 @@ function make_group_owned_and_sticky() {
     local GROUP="$3"
 
     mkdir -p "${TARGET_DIR}"
-    chown -R "${USER}:${GROUP}" "${TARGET_DIR}"
-    chmod u=rwX,g=rX,o= -R "${TARGET_DIR}"
+    find "${TARGET_DIR}" -print0 | xargs -0 -P 0 chown "${USER}:${GROUP}"
+    find "${TARGET_DIR}" -print0 | xargs -0 -P 0 chmod u=rwX,g=rX,o=
     find "${TARGET_DIR}" -type d | xargs chmod g+s
 }
 

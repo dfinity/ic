@@ -9,6 +9,23 @@ PATH="/sbin:/bin:/usr/sbin:/usr/bin"
 source /opt/ic/bin/config.sh
 source /opt/ic/bin/functions.sh
 
+function check_generate_network_config() {
+    if [ "$(systemctl is-failed generate-network-config.service)" = "failed" ]; then
+        local service_logs=$(systemctl status generate-network-config.service)
+        local network_settings=$(get_config_value '.network_settings')
+        local log_message="ERROR in generate-network-config.service
+
+generate-network-config.service logs:
+${service_logs}
+
+Config network settings:
+${network_settings}
+
+For more detailed generate-network-config.service logs, run \`\$ journalctl -u generate-network-config\`"
+        log_and_halt_installation_on_error "1" "${log_message}"
+    fi
+}
+
 function read_config_variables() {
     ipv6_prefix=$(get_config_value '.network_settings.ipv6_config.Deterministic.prefix')
     ipv6_gateway=$(get_config_value '.network_settings.ipv6_config.Deterministic.gateway')
@@ -39,18 +56,18 @@ function eval_command_with_retries() {
 
     if [ ${exit_code} -ne 0 ]; then
         local ip6_output=$(ip -6 addr show)
-        local ip6_route_output=$(ip -6 route show)
         local dns_servers=$(grep 'nameserver' /etc/resolv.conf)
+        local network_settings=$(get_config_value '.network_settings')
 
         log_and_halt_installation_on_error "${exit_code}" "${error_message}
 Output of 'ip -6 addr show':
 ${ip6_output}
 
-Output of 'ip -6 route show':
-${ip6_route_output}
-
 Configured DNS servers:
-${dns_servers}"
+${dns_servers}
+
+Config network settings:
+${network_settings}"
     fi
 
     echo "${result}"
@@ -101,13 +118,14 @@ function print_network_settings() {
     echo "* Printing user defined network settings..."
     echo "  IPv6 Prefix : ${ipv6_prefix}"
     echo "  IPv6 Gateway: ${ipv6_gateway}"
+
     if [[ -n ${ipv4_address} && -n ${ipv4_prefix_length} && -n ${ipv4_gateway} ]]; then
         echo "  IPv4 Address: ${ipv4_address}"
         echo "  IPv4 Prefix Length: ${ipv4_prefix_length}"
         echo "  IPv4 Gateway: ${ipv4_gateway}"
     fi
     if [[ -n ${domain_name} ]]; then
-        echo "  Domain name : ${domain_name}"
+        echo "  Domain name: ${domain_name}"
     fi
     echo " "
 
@@ -208,12 +226,16 @@ function query_nns_nodes() {
 main() {
     log_start "$(basename $0)"
     if kernel_cmdline_bool_default_true ic.setupos.check_network; then
+        check_generate_network_config
         read_config_variables
         get_network_settings
         print_network_settings
 
-        if [[ -n ${ipv4_address} && -n ${ipv4_prefix_length} && -n ${ipv4_gateway} ]]; then
+        if [[ -n ${domain_name} ]]; then
             validate_domain_name
+        fi
+
+        if [[ -n ${ipv4_address} && -n ${ipv4_prefix_length} && -n ${ipv4_gateway} ]]; then
             setup_ipv4_network
             ping_ipv4_gateway
         fi

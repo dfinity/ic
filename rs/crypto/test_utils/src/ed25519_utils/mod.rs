@@ -6,7 +6,7 @@ pub fn ed25519_signature_and_public_key<R: Rng + CryptoRng>(
     request_id: &MessageId,
     rng: &mut R,
 ) -> (BasicSigOf<MessageId>, UserPublicKey) {
-    let signing_key = ic_crypto_ed25519::PrivateKey::generate_using_rng(rng);
+    let signing_key = ic_ed25519::PrivateKey::generate_using_rng(rng);
     let signature: BasicSigOf<MessageId> = {
         let bytes_to_sign = {
             let mut buf = vec![];

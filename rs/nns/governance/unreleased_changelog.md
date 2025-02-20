@@ -1,33 +1,8 @@
 # How This File Is Used
 
-1. When there is a user-visible behavior change to this canister, add an entry
-   to this file (in the "Next Upgrade Proposal" section) in the same PR.
-
-2. When making an NNS proposal to upgrade this canister, copy entries to the
-   proposal's summary.
-
-3. After the proposal is executed, move the entries from this file to a new
-   section in the adjacent CHANGELOG.md file.
-
-If your new code is not active in release builds (because it is behind a feature
-flag, or it is simply not called yet), then do NOT add an entry to this file,
-because this new function has no user-visible behavior change yet. Wait until it
-is active (e.g. the feature flag is flipped to "enable") before adding an entry
-to this file.
-
-TODO: Automate moving content from unreleased_changelog.md to CHANGELOG.md.
-
-
-# How to Write a Good Entry
-
-The intended audience here is people who vote (with their neurons) in NNS, not
-necessarily engineers who develop this canister.
-
-
-# The Origin of This Process
-
-This process is modeled after the process used by nns-dapp. nns-dapp in turn
-links to keepachangelog.com as its source of inspiration.
+In general, upcoming/unreleased behavior changes are described here. For details
+on the process that this file is part of, see
+`rs/nervous_system/changelog_process.md`.
 
 
 # Next Upgrade Proposal
@@ -36,9 +11,27 @@ links to keepachangelog.com as its source of inspiration.
 
 ## Changed
 
+* ManageNetworkEconomics proposals can now modify deep fields one at a time.
+  Previously, this was only possible for top level fields.
+
+* Added validation for ManageNetworkEconomics proposals. Previously, there was
+  none. The result must have all the following properties:
+
+  * All "optional" fields are actually set.
+
+  * `maximum_icp_xdr_rate >= minimum_icp_xdr_rate`
+
+  * Decimal fields have parsable `human_readable` values.
+
+  * `one_third_participation_milestone_xdr < full_participation_milestone_xdr`
+
 ## Deprecated
 
 ## Removed
+
+* Neuron migration (`migrate_active_neurons_to_stable_memory`) is rolled back due to issues with
+  reward distribution. It has already been rolled back with a hotfix ([proposal
+  135265](https://dashboard.internetcomputer.org/proposal/135265))
 
 ## Fixed
 

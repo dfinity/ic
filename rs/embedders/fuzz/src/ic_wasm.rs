@@ -1,6 +1,7 @@
 use crate::imports::system_api_imports;
 use arbitrary::{Arbitrary, Result, Unstructured};
 use ic_config::embedders::Config as EmbeddersConfig;
+use ic_config::flag_status::FlagStatus;
 use ic_embedders::wasm_utils::validation::{RESERVED_SYMBOLS, WASM_FUNCTION_SIZE_LIMIT};
 use ic_replicated_state::Global;
 use ic_types::methods::WasmMethod;
@@ -16,7 +17,8 @@ use wasm_smith::{Config, Module};
 use wasmparser::*;
 
 lazy_static! {
-    static ref SYSTEM_API_IMPORTS: Vec<u8> = system_api_imports();
+    static ref SYSTEM_API_IMPORTS_WASM32: Vec<u8> = system_api_imports(ic_embedders_config(false));
+    static ref SYSTEM_API_IMPORTS_WASM64: Vec<u8> = system_api_imports(ic_embedders_config(true));
 }
 
 #[derive(Debug)]
@@ -34,7 +36,8 @@ pub struct ICWasmModule {
 
 impl<'a> Arbitrary<'a> for ICWasmModule {
     fn arbitrary(u: &mut Unstructured<'a>) -> Result<Self> {
-        let embedder_config = EmbeddersConfig::new();
+        let memory64_enabled = u.ratio(2, 3)?;
+        let embedder_config = ic_embedders_config(memory64_enabled);
         let exports = generate_exports(embedder_config.clone(), u)?;
         let mut config = ic_wasm_config(embedder_config);
         config.exports = exports;
@@ -130,7 +133,8 @@ impl ICWasmModule {
     }
 }
 
-fn ic_wasm_config(embedder_config: EmbeddersConfig) -> Config {
+pub fn ic_wasm_config(embedder_config: EmbeddersConfig) -> Config {
+    let memory64_enabled = embedder_config.feature_flags.wasm64 == FlagStatus::Enabled;
     Config {
         min_funcs: 10,
         min_exports: 10,
@@ -138,9 +142,8 @@ fn ic_wasm_config(embedder_config: EmbeddersConfig) -> Config {
         max_funcs: embedder_config.max_functions,
         max_instructions: WASM_FUNCTION_SIZE_LIMIT,
 
-        // TODO: Ignore data segments for now
-        min_data_segments: 0,
-        max_data_segments: 0,
+        min_data_segments: 2,
+        max_data_segments: 10,
 
         allow_start_export: true,
         export_everything: true,
@@ -148,16 +151,31 @@ fn ic_wasm_config(embedder_config: EmbeddersConfig) -> Config {
         bulk_memory_enabled: true,
         reference_types_enabled: true,
         simd_enabled: true,
-        memory64_enabled: true,
+        memory64_enabled,
 
         threads_enabled: false,
         relaxed_simd_enabled: false,
         canonicalize_nans: false,
         exceptions_enabled: false,
 
-        available_imports: Some(SYSTEM_API_IMPORTS.to_vec()),
+        available_imports: Some(if memory64_enabled {
+            SYSTEM_API_IMPORTS_WASM64.to_vec()
+        } else {
+            SYSTEM_API_IMPORTS_WASM32.to_vec()
+        }),
         ..Default::default()
     }
+}
+
+pub fn ic_embedders_config(memory64_enabled: bool) -> EmbeddersConfig {
+    let mut config = EmbeddersConfig::default();
+    config.feature_flags.write_barrier = FlagStatus::Enabled;
+    if memory64_enabled {
+        config.feature_flags.wasm64 = FlagStatus::Enabled;
+    } else {
+        config.feature_flags.wasm64 = FlagStatus::Disabled;
+    }
+    config
 }
 
 fn get_persisted_global(g: wasmparser::Global) -> Option<Global> {
@@ -200,7 +218,7 @@ fn get_persisted_global(g: wasmparser::Global) -> Option<Global> {
     }
 }
 
-fn generate_exports(
+pub fn generate_exports(
     embedder_config: EmbeddersConfig,
     u: &mut Unstructured,
 ) -> Result<Option<Vec<u8>>> {
@@ -211,7 +229,7 @@ fn generate_exports(
     let mut types = TypeSection::new();
     let params = vec![];
     let results = vec![];
-    types.function(params, results);
+    types.ty().function(params, results);
     module.section(&types);
     let type_index = 0;
 

@@ -122,9 +122,7 @@ impl AdminHelper {
         let mut ic_admin = self.get_ic_admin_cmd_base();
 
         ic_admin
-            // TODO: Switch to the new command name:
-            // .add_positional_argument("propose-to-revise-elected-guestos-versions")
-            .add_positional_argument("propose-to-update-elected-replica-versions")
+            .add_positional_argument("propose-to-revise-elected-guestos-versions")
             .add_argument("replica-version-to-elect", quote(upgrade_version))
             .add_argument("release-package-urls", quote(upgrade_url))
             .add_argument("release-package-sha256-hex", quote(sha256))
@@ -149,9 +147,7 @@ impl AdminHelper {
         let mut ic_admin = self.get_ic_admin_cmd_base();
 
         ic_admin
-            // TODO: Switch to the new command name:
-            // .add_positional_argument("propose-to-deploy-guestos-to-all-subnet-nodes")
-            .add_positional_argument("propose-to-update-subnet-replica-version")
+            .add_positional_argument("propose-to-deploy-guestos-to-all-subnet-nodes")
             .add_positional_argument(subnet_id)
             .add_positional_argument(upgrade_version)
             .add_argument(
@@ -340,7 +336,7 @@ mod tests {
     use super::*;
 
     use ic_base_types::PrincipalId;
-    use ic_management_canister_types::{
+    use ic_management_canister_types_private::{
         EcdsaCurve, EcdsaKeyId, MasterPublicKeyId, SchnorrAlgorithm, SchnorrKeyId,
     };
     use ic_registry_subnet_features::KeyConfig;
@@ -416,7 +412,7 @@ mod tests {
             result,
             "/fake/ic/admin/dir/ic-admin \
             --nns-url \"https://fake_nns_url.com:8080/\" \
-            propose-to-update-elected-replica-versions \
+            propose-to-revise-elected-guestos-versions \
             --replica-version-to-elect \"fake_replica_version\" \
             --release-package-urls \"https://fake_upgrade_url.com/\" \
             --release-package-sha256-hex \"fake_sha_256\" \
@@ -529,7 +525,7 @@ mod tests {
         assert_eq!(result,
             "/fake/ic/admin/dir/ic-admin \
             --nns-url \"https://fake_nns_url.com:8080/\" \
-            propose-to-update-subnet-replica-version \
+            propose-to-deploy-guestos-to-all-subnet-nodes \
             gpvux-2ejnk-3hgmh-cegwf-iekfc-b7rzs-hrvep-5euo2-3ywz3-k3hcb-cqe \
             fake_replica_version \
             --summary \"Upgrade replica version of subnet gpvux-2ejnk-3hgmh-cegwf-iekfc-b7rzs-hrvep-5euo2-3ywz3-k3hcb-cqe.\" \

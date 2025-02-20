@@ -1,4 +1,5 @@
 use crate::pb::v1 as pb;
+use crate::topics;
 use ic_sns_governance_api::pb::v1 as pb_api;
 
 impl From<pb::NeuronPermission> for pb_api::NeuronPermission {
@@ -181,7 +182,9 @@ impl From<pb::NervousSystemFunction> for pb_api::NervousSystemFunction {
             id: item.id,
             name: item.name,
             description: item.description,
-            function_type: item.function_type.map(|x| x.into()),
+            function_type: item
+                .function_type
+                .map(|x: pb::nervous_system_function::FunctionType| x.into()),
         }
     }
 }
@@ -200,7 +203,12 @@ impl From<pb::nervous_system_function::GenericNervousSystemFunction>
     for pb_api::nervous_system_function::GenericNervousSystemFunction
 {
     fn from(item: pb::nervous_system_function::GenericNervousSystemFunction) -> Self {
+        let topic = item
+            .topic
+            .and_then(|topic| pb::Topic::try_from(topic).ok())
+            .and_then(|topic| pb_api::topics::Topic::try_from(topic).ok());
         Self {
+            topic,
             target_canister_id: item.target_canister_id,
             target_method_name: item.target_method_name,
             validator_canister_id: item.validator_canister_id,
@@ -213,6 +221,7 @@ impl From<pb_api::nervous_system_function::GenericNervousSystemFunction>
 {
     fn from(item: pb_api::nervous_system_function::GenericNervousSystemFunction) -> Self {
         Self {
+            topic: item.topic.map(pb::Topic::from).map(i32::from),
             target_canister_id: item.target_canister_id,
             target_method_name: item.target_method_name,
             validator_canister_id: item.validator_canister_id,
@@ -291,9 +300,33 @@ impl From<pb::UpgradeSnsControlledCanister> for pb_api::UpgradeSnsControlledCani
             new_canister_wasm: item.new_canister_wasm,
             canister_upgrade_arg: item.canister_upgrade_arg,
             mode: item.mode,
+            chunked_canister_wasm: item
+                .chunked_canister_wasm
+                .map(pb_api::ChunkedCanisterWasm::from),
         }
     }
 }
+
+impl From<pb_api::ChunkedCanisterWasm> for pb::ChunkedCanisterWasm {
+    fn from(item: pb_api::ChunkedCanisterWasm) -> Self {
+        Self {
+            wasm_module_hash: item.wasm_module_hash,
+            store_canister_id: item.store_canister_id,
+            chunk_hashes_list: item.chunk_hashes_list,
+        }
+    }
+}
+
+impl From<pb::ChunkedCanisterWasm> for pb_api::ChunkedCanisterWasm {
+    fn from(item: pb::ChunkedCanisterWasm) -> Self {
+        Self {
+            wasm_module_hash: item.wasm_module_hash,
+            store_canister_id: item.store_canister_id,
+            chunk_hashes_list: item.chunk_hashes_list,
+        }
+    }
+}
+
 impl From<pb_api::UpgradeSnsControlledCanister> for pb::UpgradeSnsControlledCanister {
     fn from(item: pb_api::UpgradeSnsControlledCanister) -> Self {
         Self {
@@ -301,6 +334,9 @@ impl From<pb_api::UpgradeSnsControlledCanister> for pb::UpgradeSnsControlledCani
             new_canister_wasm: item.new_canister_wasm,
             canister_upgrade_arg: item.canister_upgrade_arg,
             mode: item.mode,
+            chunked_canister_wasm: item
+                .chunked_canister_wasm
+                .map(pb::ChunkedCanisterWasm::from),
         }
     }
 }
@@ -1096,6 +1132,7 @@ impl From<pb::NervousSystemParameters> for pb_api::NervousSystemParameters {
             max_dissolve_delay_bonus_percentage: item.max_dissolve_delay_bonus_percentage,
             max_age_bonus_percentage: item.max_age_bonus_percentage,
             maturity_modulation_disabled: item.maturity_modulation_disabled,
+            automatically_advance_target_version: item.automatically_advance_target_version,
         }
     }
 }
@@ -1123,6 +1160,7 @@ impl From<pb_api::NervousSystemParameters> for pb::NervousSystemParameters {
             max_dissolve_delay_bonus_percentage: item.max_dissolve_delay_bonus_percentage,
             max_age_bonus_percentage: item.max_age_bonus_percentage,
             maturity_modulation_disabled: item.maturity_modulation_disabled,
+            automatically_advance_target_version: item.automatically_advance_target_version,
         }
     }
 }
@@ -3195,6 +3233,7 @@ impl From<pb::upgrade_journal_entry::TargetVersionSet>
         Self {
             old_target_version: item.old_target_version.map(|x| x.into()),
             new_target_version: item.new_target_version.map(|x| x.into()),
+            is_advanced_automatically: item.is_advanced_automatically,
         }
     }
 }
@@ -3205,6 +3244,7 @@ impl From<pb_api::upgrade_journal_entry::TargetVersionSet>
         Self {
             old_target_version: item.old_target_version.map(|x| x.into()),
             new_target_version: item.new_target_version.map(|x| x.into()),
+            is_advanced_automatically: item.is_advanced_automatically,
         }
     }
 }
@@ -3721,5 +3761,96 @@ impl From<pb_api::RefreshCachedUpgradeStepsRequest> for pb::RefreshCachedUpgrade
 impl From<pb::RefreshCachedUpgradeStepsResponse> for pb_api::RefreshCachedUpgradeStepsResponse {
     fn from(_: pb::RefreshCachedUpgradeStepsResponse) -> Self {
         Self {}
+    }
+}
+
+impl From<pb_api::topics::Topic> for pb::Topic {
+    fn from(value: pb_api::topics::Topic) -> Self {
+        match value {
+            pb_api::topics::Topic::DaoCommunitySettings => pb::Topic::DaoCommunitySettings,
+            pb_api::topics::Topic::SnsFrameworkManagement => pb::Topic::SnsFrameworkManagement,
+            pb_api::topics::Topic::DappCanisterManagement => pb::Topic::DappCanisterManagement,
+            pb_api::topics::Topic::ApplicationBusinessLogic => pb::Topic::ApplicationBusinessLogic,
+            pb_api::topics::Topic::Governance => pb::Topic::Governance,
+            pb_api::topics::Topic::TreasuryAssetManagement => pb::Topic::TreasuryAssetManagement,
+            pb_api::topics::Topic::CriticalDappOperations => pb::Topic::CriticalDappOperations,
+        }
+    }
+}
+
+impl TryFrom<pb::Topic> for pb_api::topics::Topic {
+    type Error = String;
+
+    fn try_from(value: pb::Topic) -> Result<Self, Self::Error> {
+        match value {
+            pb::Topic::DaoCommunitySettings => Ok(pb_api::topics::Topic::DaoCommunitySettings),
+            pb::Topic::SnsFrameworkManagement => Ok(pb_api::topics::Topic::SnsFrameworkManagement),
+            pb::Topic::DappCanisterManagement => Ok(pb_api::topics::Topic::DappCanisterManagement),
+            pb::Topic::ApplicationBusinessLogic => {
+                Ok(pb_api::topics::Topic::ApplicationBusinessLogic)
+            }
+            pb::Topic::Governance => Ok(pb_api::topics::Topic::Governance),
+            pb::Topic::TreasuryAssetManagement => {
+                Ok(pb_api::topics::Topic::TreasuryAssetManagement)
+            }
+            pb::Topic::CriticalDappOperations => Ok(pb_api::topics::Topic::CriticalDappOperations),
+            pb::Topic::Unspecified => Err("Unspecified topic".to_string()),
+        }
+    }
+}
+
+impl From<pb_api::topics::ListTopicsRequest> for topics::ListTopicsRequest {
+    fn from(value: pb_api::topics::ListTopicsRequest) -> Self {
+        let pb_api::topics::ListTopicsRequest {} = value;
+        topics::ListTopicsRequest {}
+    }
+}
+
+impl From<topics::ListTopicsResponse> for pb_api::topics::ListTopicsResponse {
+    fn from(value: topics::ListTopicsResponse) -> Self {
+        pb_api::topics::ListTopicsResponse {
+            topics: Some(value.topics.into_iter().map(|x| x.into()).collect()),
+            uncategorized_functions: Some(
+                value
+                    .uncategorized_functions
+                    .into_iter()
+                    .map(pb_api::NervousSystemFunction::from)
+                    .collect(),
+            ),
+        }
+    }
+}
+
+impl From<topics::TopicInfo<topics::NervousSystemFunctions>> for pb_api::topics::TopicInfo {
+    fn from(value: topics::TopicInfo<topics::NervousSystemFunctions>) -> Self {
+        let topics::TopicInfo {
+            topic,
+            name,
+            description,
+            functions:
+                topics::NervousSystemFunctions {
+                    native_functions,
+                    custom_functions,
+                },
+            is_critical,
+        } = value;
+        pb_api::topics::TopicInfo {
+            topic: Some(topic),
+            name: Some(name),
+            description: Some(description),
+            native_functions: Some(
+                native_functions
+                    .into_iter()
+                    .map(pb_api::NervousSystemFunction::from)
+                    .collect(),
+            ),
+            custom_functions: Some(
+                custom_functions
+                    .into_iter()
+                    .map(pb_api::NervousSystemFunction::from)
+                    .collect(),
+            ),
+            is_critical: Some(is_critical),
+        }
     }
 }

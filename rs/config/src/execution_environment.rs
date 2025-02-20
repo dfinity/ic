@@ -2,7 +2,8 @@ use crate::embedders::Config as EmbeddersConfig;
 use crate::flag_status::FlagStatus;
 use ic_base_types::{CanisterId, NumSeconds};
 use ic_types::{
-    Cycles, NumBytes, NumInstructions, MAX_STABLE_MEMORY_IN_BYTES, MAX_WASM_MEMORY_IN_BYTES,
+    Cycles, NumBytes, NumInstructions, MAX_STABLE_MEMORY_IN_BYTES, MAX_WASM64_MEMORY_IN_BYTES,
+    MAX_WASM_MEMORY_IN_BYTES,
 };
 use serde::{Deserialize, Serialize};
 use std::{str::FromStr, time::Duration};
@@ -30,7 +31,7 @@ const SUBNET_MEMORY_CAPACITY: NumBytes = NumBytes::new(TIB);
 /// Guaranteed response message memory usage is calculated as the total size of
 /// enqueued guaranteed responses; plus the maximum allowed response size per
 /// reserved guaranteed response slot.
-const SUBNET_GUARANTEED_RESPONSE_MESSAGE_MEMORY_CAPACITY: NumBytes = NumBytes::new(25 * GIB);
+const SUBNET_GUARANTEED_RESPONSE_MESSAGE_MEMORY_CAPACITY: NumBytes = NumBytes::new(15 * GIB);
 
 /// The limit on how much memory may be used by all guaranteed response messages
 /// on a given subnet at the end of a round.
@@ -204,7 +205,12 @@ pub struct Config {
     pub subnet_memory_reservation: NumBytes,
 
     /// The maximum amount of memory that can be utilized by a single canister.
-    pub max_canister_memory_size: NumBytes,
+    /// running in Wasm32 mode.
+    pub max_canister_memory_size_wasm32: NumBytes,
+
+    /// The maximum amount of memory that can be utilized by a single canister.
+    /// running in Wasm64 mode.
+    pub max_canister_memory_size_wasm64: NumBytes,
 
     /// The soft limit on the subnet-wide number of callbacks. Beyond this limit,
     /// canisters are only allowed to make downstream calls up to their individual
@@ -311,10 +317,6 @@ pub struct Config {
     ///   - let `halfway_to_max = (memory_usage + 4GiB) / 2`
     ///   - use the maximum of `default_wasm_memory_limit` and `halfway_to_max`.
     pub default_wasm_memory_limit: NumBytes,
-
-    // TODO(EXC-1678): remove after release.
-    /// Feature flag to enable/disable allowed viewers for canister log visibility.
-    pub allowed_viewers_feature: FlagStatus,
 }
 
 impl Default for Config {
@@ -342,8 +344,11 @@ impl Default for Config {
             subnet_wasm_custom_sections_memory_capacity:
                 SUBNET_WASM_CUSTOM_SECTIONS_MEMORY_CAPACITY,
             subnet_memory_reservation: SUBNET_MEMORY_RESERVATION,
-            max_canister_memory_size: NumBytes::new(
+            max_canister_memory_size_wasm32: NumBytes::new(
                 MAX_STABLE_MEMORY_IN_BYTES + MAX_WASM_MEMORY_IN_BYTES,
+            ),
+            max_canister_memory_size_wasm64: NumBytes::new(
+                MAX_STABLE_MEMORY_IN_BYTES + MAX_WASM64_MEMORY_IN_BYTES,
             ),
             subnet_callback_soft_limit: SUBNET_CALLBACK_SOFT_LIMIT,
             canister_guaranteed_callback_quota: CANISTER_GUARANTEED_CALLBACK_QUOTA,
@@ -389,7 +394,6 @@ impl Default for Config {
             dirty_page_logging: FlagStatus::Disabled,
             max_canister_http_requests_in_flight: MAX_CANISTER_HTTP_REQUESTS_IN_FLIGHT,
             default_wasm_memory_limit: DEFAULT_WASM_MEMORY_LIMIT,
-            allowed_viewers_feature: FlagStatus::Enabled,
         }
     }
 }

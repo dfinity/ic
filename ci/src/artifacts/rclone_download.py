@@ -65,7 +65,6 @@ class RcloneDownload:
         return self._local_repo
 
     def _merge_base(self, merge_base) -> str:
-
         self._git_fetch_branch(merge_base)
         return self.local_repo.merge_base(merge_base, self.local_repo.head.commit)
 

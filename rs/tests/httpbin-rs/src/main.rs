@@ -1,5 +1,4 @@
 use std::{
-    collections::BTreeMap,
     io::Write,
     net::{Ipv6Addr, SocketAddr},
     path::PathBuf,
@@ -92,7 +91,7 @@ async fn anything_handler(method: Method, headers: HeaderMap, body: String) -> V
     let headers = headers
         .iter()
         .map(|h| (h.0.to_string(), h.1.to_str().unwrap().to_string()))
-        .collect::<BTreeMap<String, String>>();
+        .collect::<Vec<(String, String)>>();
 
     let body = json!({
         "method": method.to_string(),

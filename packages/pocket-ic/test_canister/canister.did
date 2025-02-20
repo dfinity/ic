@@ -98,12 +98,29 @@ type TransformArgs = record {
   context : blob;
 };
 
+type NodeMetricsHistoryArgs = record {
+    subnet_id: principal;
+    start_at_timestamp_nanos: nat64;
+};
+
+type NodeMetrics = record {
+    node_id: principal;
+    num_blocks_proposed_total: nat64;
+    num_block_failures_total: nat64;
+};
+
+type NodeMetricsHistoryResponse = record {
+  timestamp_nanos: nat64;
+  node_metrics: vec NodeMetrics;
+};
+
 service : {
   http_request: (request: HttpGatewayRequest) -> (HttpGatewayResponse) query;
   schnorr_public_key : (opt principal, vec blob, SchnorrKeyId) -> (SchnorrPublicKeyResult);
   sign_with_schnorr : (blob, vec blob, SchnorrKeyId) -> (SignWithSchnorrResult);
   ecdsa_public_key : (opt principal, vec blob, text) -> (EcdsaPublicKeyResult);
   sign_with_ecdsa : (blob, vec blob, text) -> (SignWithEcdsaResult);
+  node_metrics_history_proxy: (NodeMetricsHistoryArgs) -> (vec NodeMetricsHistoryResponse);
   canister_http : () -> (HttpResponseResult);
   canister_http_with_transform : () -> (HttpResponse);
   transform : (TransformArgs) -> (HttpResponse) query;
@@ -114,4 +131,8 @@ service : {
   execute_many_instructions : (nat64) -> ();
   canister_log : (text) -> ();
   time : () -> (nat64) query;
+  reject_query : () -> () query;
+  reject_update : () -> ();
+  trap_query : () -> () query;
+  trap_update : () -> ();
 }

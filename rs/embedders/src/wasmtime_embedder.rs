@@ -11,8 +11,6 @@ use std::{
     convert::TryFrom,
     fs::File,
     mem::size_of,
-    os::fd::{AsRawFd, IntoRawFd},
-    os::unix::fs::MetadataExt,
     sync::{atomic::Ordering, Arc, Mutex},
 };
 
@@ -39,7 +37,6 @@ use ic_types::{
 };
 use ic_wasm_types::{BinaryEncodedWasm, WasmEngineError};
 use memory_tracker::{DirtyPageTracking, PageBitmap, SigsegvMemoryTracker};
-use nix::sys::mman::{mmap, MapFlags, ProtFlags};
 use signal_stack::WasmtimeSignalStack;
 
 use crate::wasm_utils::instrumentation::{
@@ -279,7 +276,7 @@ impl WasmtimeEmbedder {
             WasmMemoryType::Wasm32 => {
                 system_api::syscalls::<u32>(
                     &mut linker,
-                    self.config.feature_flags,
+                    self.config.feature_flags.clone(),
                     self.config.stable_memory_dirty_page_limit,
                     self.config.stable_memory_accessed_page_limit,
                     main_memory_type,
@@ -288,7 +285,7 @@ impl WasmtimeEmbedder {
             WasmMemoryType::Wasm64 => {
                 system_api::syscalls::<u64>(
                     &mut linker,
-                    self.config.feature_flags,
+                    self.config.feature_flags.clone(),
                     self.config.stable_memory_dirty_page_limit,
                     self.config.stable_memory_accessed_page_limit,
                     main_memory_type,
@@ -336,28 +333,18 @@ impl WasmtimeEmbedder {
         self.pre_instantiate(&module)
     }
 
-    /// TODO(EXC-1800): Replace this with `wasmtime::Module::deserialize_open_file`.
-    fn deserialize_from_file(&self, serialized_module: &File) -> HypervisorResult<Module> {
-        let mmap_size = serialized_module.metadata().unwrap().size() as usize;
-        let mmap_ptr = unsafe {
-            mmap(
-                std::ptr::null_mut(),
-                mmap_size,
-                ProtFlags::PROT_READ,
-                MapFlags::MAP_PRIVATE,
-                serialized_module.as_raw_fd(),
-                0,
-            )
-        }
-        .unwrap_or_else(|err| panic!("Module deserialization failed: {:?}", err))
-            as *mut u8;
-        let bytes = unsafe { std::slice::from_raw_parts(mmap_ptr, mmap_size) };
+    fn deserialize_from_file(&self, serialized_module: File) -> HypervisorResult<Module> {
+        // SAFETY: The compilation cache setup guarantees that this file is a
+        // valid serialized module and will not be modified after initial
+        // creation.
         unsafe {
-            Module::deserialize(&self.create_engine()?, bytes).map_err(|err| {
-                HypervisorError::WasmEngineError(WasmEngineError::FailedToDeserializeModule(
-                    format!("{:?}", err),
-                ))
-            })
+            Module::deserialize_open_file(&self.create_engine()?, serialized_module).map_err(
+                |err| {
+                    HypervisorError::WasmEngineError(WasmEngineError::FailedToDeserializeModule(
+                        format!("{:?}", err),
+                    ))
+                },
+            )
         }
     }
 
@@ -365,10 +352,7 @@ impl WasmtimeEmbedder {
         &self,
         serialized_module: File,
     ) -> HypervisorResult<InstancePre<StoreData>> {
-        // TODO(EXC-1800): Switch to new wasmtime API and remove leaking the
-        // file.
-        let module = self.deserialize_from_file(&serialized_module)?;
-        let _ = serialized_module.into_raw_fd();
+        let module = self.deserialize_from_file(serialized_module)?;
         self.pre_instantiate(&module)
     }
 

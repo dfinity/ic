@@ -1,19 +1,16 @@
-use ic_config::{
-    embedders::Config as EmbeddersConfig, embedders::FeatureFlags,
-    execution_environment::Config as ExecutionConfig, flag_status::FlagStatus,
-    subnet_config::SubnetConfig,
-};
-use ic_management_canister_types::{CanisterInstallMode, CanisterSettingsArgsBuilder};
+use ic_config::{execution_environment::Config as ExecutionConfig, subnet_config::SubnetConfig};
+use ic_management_canister_types_private::{CanisterInstallMode, CanisterSettingsArgsBuilder};
 use ic_registry_subnet_type::SubnetType;
 use ic_state_machine_tests::{StateMachine, StateMachineBuilder, StateMachineConfig};
 use ic_types::{CanisterId, Cycles, NumBytes};
 
 use libfuzzer_sys::fuzz_target;
 use std::cell::RefCell;
-use wasm_fuzzers::ic_wasm::ICWasmModule;
+use wasm_fuzzers::ic_wasm::{ic_embedders_config, ICWasmModule};
 
 thread_local! {
-    static ENV: RefCell<(StateMachine, CanisterId)> = RefCell::new(setup_env());
+    static ENV_32: RefCell<(StateMachine, CanisterId)> = RefCell::new(setup_env(false));
+    static ENV_64: RefCell<(StateMachine, CanisterId)> = RefCell::new(setup_env(true));
 }
 
 const HELLO_WORLD_WAT: &str = r#"
@@ -26,11 +23,14 @@ const HELLO_WORLD_WAT: &str = r#"
 // bazel run --config=sandbox_fuzzing //rs/execution_environment/fuzz:execute_with_wasm_executor_system_api_call
 
 fn main() {
-    fuzzer_sandbox::fuzzer_main();
+    let features = fuzzer_sandbox::SandboxFeatures {
+        syscall_tracing: true,
+    };
+    fuzzer_sandbox::fuzzer_main(features);
 }
 
 fuzz_target!(|data: ICWasmModule| {
-    with_env(|env, canister_id| {
+    with_env(data.config.memory64_enabled, |env, canister_id| {
         let wasm = data.module.to_bytes();
         if env
             .install_wasm_in_mode(*canister_id, CanisterInstallMode::Reinstall, wasm, vec![])
@@ -44,29 +44,29 @@ fuzz_target!(|data: ICWasmModule| {
     });
 });
 
-fn with_env<F, R>(f: F) -> R
+fn with_env<F, R>(memory64_enabled: bool, f: F) -> R
 where
     F: FnOnce(&StateMachine, &CanisterId) -> R,
 {
-    ENV.with(|env| {
-        let env_ref = env.borrow();
-        f(&env_ref.0, &env_ref.1) // Pass references to the closure
-    })
+    if memory64_enabled {
+        ENV_64.with(|env| {
+            let env_ref = env.borrow();
+            f(&env_ref.0, &env_ref.1)
+        })
+    } else {
+        ENV_32.with(|env| {
+            let env_ref = env.borrow();
+            f(&env_ref.0, &env_ref.1)
+        })
+    }
 }
 
 // A setup function to initialize StateMachine with a dummy canister and expose the cansiter_id.
 // The same canister_id and StateMachine reference is used in the fuzzing runs, where the
 // canister is reinstalled under the same canister_id
-fn setup_env() -> (StateMachine, CanisterId) {
+fn setup_env(memory64_enabled: bool) -> (StateMachine, CanisterId) {
     let exec_config = ExecutionConfig {
-        embedders_config: EmbeddersConfig {
-            feature_flags: FeatureFlags {
-                write_barrier: FlagStatus::Enabled,
-                wasm64: FlagStatus::Enabled, // Enable wasm64 to match generated ICWasmModule.
-                ..Default::default()
-            },
-            ..Default::default()
-        },
+        embedders_config: ic_embedders_config(memory64_enabled),
         max_compilation_cache_size: NumBytes::new(10 * 1024 * 1024), // 10MiB
         ..Default::default()
     };

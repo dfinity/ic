@@ -1,5 +1,5 @@
 use ic_base_types::PrincipalId;
-use ic_nns_common::pb::v1::NeuronId;
+use ic_nns_common::pb::v1::{NeuronId, ProposalId};
 use icp_ledger::protobuf::AccountIdentifier;
 
 /// The entity that owns the nodes that run the network.
@@ -120,6 +120,17 @@ pub struct NeuronInfo {
     #[prost(uint64, optional, tag = "15")]
     pub potential_voting_power: Option<u64>,
 }
+
+impl NeuronInfo {
+    pub fn is_seed_neuron(&self) -> bool {
+        self.neuron_type == Some(NeuronType::Seed as i32)
+    }
+
+    pub fn is_ect_neuron(&self) -> bool {
+        self.neuron_type == Some(NeuronType::Ect as i32)
+    }
+}
+
 /// A transfer performed from some account to stake a new neuron.
 #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
 #[allow(clippy::derive_partial_eq_without_eq)]
@@ -1276,6 +1287,166 @@ pub mod manage_neuron_response {
         #[prost(message, tag = "14")]
         RefreshVotingPower(RefreshVotingPowerResponse),
     }
+
+    // Below, we should remove `manage_neuron_response::`, but that should be
+    // done later, so that the original PR that transplanted this code does not
+    // have "extra" refactoring in it.
+    impl ManageNeuronResponse {
+        pub fn is_err(&self) -> bool {
+            matches!(
+                &self.command,
+                Some(manage_neuron_response::Command::Error(_))
+            )
+        }
+
+        pub fn err_ref(&self) -> Option<&GovernanceError> {
+            match &self.command {
+                Some(manage_neuron_response::Command::Error(err)) => Some(err),
+                _ => None,
+            }
+        }
+
+        pub fn err(self) -> Option<GovernanceError> {
+            match self.command {
+                Some(manage_neuron_response::Command::Error(err)) => Some(err),
+                _ => None,
+            }
+        }
+
+        pub fn is_ok(&self) -> bool {
+            !self.is_err()
+        }
+
+        pub fn panic_if_error(self, msg: &str) -> Self {
+            if let Some(manage_neuron_response::Command::Error(err)) = &self.command {
+                panic!("{}: {:?}", msg, err);
+            }
+            self
+        }
+
+        // This is generic so that callers can pass either GovernanceError from
+        // the ic_nns_governance crate (notice the lack of "_api" at the end of
+        // the name!), in addition to GovernanceError from this crate.
+        pub fn error<E>(err: E) -> Self
+        where
+            GovernanceError: From<E>,
+        {
+            ManageNeuronResponse {
+                command: Some(Command::Error(GovernanceError::from(err))),
+            }
+        }
+
+        pub fn configure_response() -> Self {
+            ManageNeuronResponse {
+                command: Some(manage_neuron_response::Command::Configure(
+                    manage_neuron_response::ConfigureResponse {},
+                )),
+            }
+        }
+
+        pub fn disburse_response(transfer_block_height: u64) -> Self {
+            ManageNeuronResponse {
+                command: Some(manage_neuron_response::Command::Disburse(
+                    manage_neuron_response::DisburseResponse {
+                        transfer_block_height,
+                    },
+                )),
+            }
+        }
+
+        pub fn spawn_response(created_neuron_id: NeuronId) -> Self {
+            let created_neuron_id = Some(created_neuron_id);
+            ManageNeuronResponse {
+                command: Some(manage_neuron_response::Command::Spawn(
+                    manage_neuron_response::SpawnResponse { created_neuron_id },
+                )),
+            }
+        }
+
+        pub fn merge_maturity_response(response: MergeMaturityResponse) -> Self {
+            ManageNeuronResponse {
+                command: Some(manage_neuron_response::Command::MergeMaturity(response)),
+            }
+        }
+
+        pub fn stake_maturity_response(response: StakeMaturityResponse) -> Self {
+            ManageNeuronResponse {
+                command: Some(manage_neuron_response::Command::StakeMaturity(response)),
+            }
+        }
+
+        pub fn follow_response() -> Self {
+            ManageNeuronResponse {
+                command: Some(manage_neuron_response::Command::Follow(
+                    manage_neuron_response::FollowResponse {},
+                )),
+            }
+        }
+
+        pub fn make_proposal_response(proposal_id: ProposalId, message: String) -> Self {
+            let proposal_id = Some(proposal_id);
+            let message = Some(message);
+            ManageNeuronResponse {
+                command: Some(manage_neuron_response::Command::MakeProposal(
+                    manage_neuron_response::MakeProposalResponse {
+                        proposal_id,
+                        message,
+                    },
+                )),
+            }
+        }
+
+        pub fn register_vote_response() -> Self {
+            ManageNeuronResponse {
+                command: Some(manage_neuron_response::Command::RegisterVote(
+                    manage_neuron_response::RegisterVoteResponse {},
+                )),
+            }
+        }
+
+        pub fn split_response(created_neuron_id: NeuronId) -> Self {
+            let created_neuron_id = Some(created_neuron_id);
+            ManageNeuronResponse {
+                command: Some(manage_neuron_response::Command::Split(
+                    manage_neuron_response::SplitResponse { created_neuron_id },
+                )),
+            }
+        }
+
+        pub fn merge_response(merge_response: manage_neuron_response::MergeResponse) -> Self {
+            ManageNeuronResponse {
+                command: Some(manage_neuron_response::Command::Merge(merge_response)),
+            }
+        }
+
+        pub fn disburse_to_neuron_response(created_neuron_id: NeuronId) -> Self {
+            let created_neuron_id = Some(created_neuron_id);
+            ManageNeuronResponse {
+                command: Some(manage_neuron_response::Command::DisburseToNeuron(
+                    manage_neuron_response::DisburseToNeuronResponse { created_neuron_id },
+                )),
+            }
+        }
+
+        pub fn claim_or_refresh_neuron_response(refreshed_neuron_id: NeuronId) -> Self {
+            let refreshed_neuron_id = Some(refreshed_neuron_id);
+            ManageNeuronResponse {
+                command: Some(manage_neuron_response::Command::ClaimOrRefresh(
+                    manage_neuron_response::ClaimOrRefreshResponse {
+                        refreshed_neuron_id,
+                    },
+                )),
+            }
+        }
+
+        pub fn refresh_voting_power_response(_: ()) -> Self {
+            ManageNeuronResponse {
+                command: Some(manage_neuron_response::Command::RefreshVotingPower(
+                    manage_neuron_response::RefreshVotingPowerResponse {},
+                )),
+            }
+        }
+    }
 }
 
 #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
@@ -1987,61 +2158,41 @@ pub struct WaitForQuietState {
 /// This is a view of the ProposalData returned by API queries and is NOT used
 /// for storage. The ballots are restricted to those of the caller's neurons and
 /// additionally it has the computed fields, topic, status, and reward_status.
-#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
-#[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Clone, PartialEq, ::prost::Message)]
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, Clone, Debug, PartialEq)]
 pub struct ProposalInfo {
     /// The unique id for this proposal.
-    #[prost(message, optional, tag = "1")]
     pub id: Option<::ic_nns_common::pb::v1::ProposalId>,
     /// The ID of the neuron that made this proposal.
-    #[prost(message, optional, tag = "2")]
     pub proposer: Option<NeuronId>,
     /// The amount of ICP in E8s to be charged to the proposer if the proposal is
     /// rejected.
-    #[prost(uint64, tag = "3")]
     pub reject_cost_e8s: u64,
     /// The proposal originally submitted.
-    #[prost(message, optional, tag = "4")]
     pub proposal: Option<Proposal>,
     /// The timestamp, in seconds from the Unix epoch, when this proposal was made.
-    #[prost(uint64, tag = "5")]
     pub proposal_timestamp_seconds: u64,
     /// See \[ProposalData::ballots\].
-    #[prost(map = "fixed64, message", tag = "6")]
     pub ballots: ::std::collections::HashMap<u64, Ballot>,
     /// See \[ProposalData::latest_tally\].
-    #[prost(message, optional, tag = "7")]
     pub latest_tally: Option<Tally>,
     /// See \[ProposalData::decided_timestamp_seconds\].
-    #[prost(uint64, tag = "8")]
     pub decided_timestamp_seconds: u64,
     /// See \[ProposalData::executed_timestamp_seconds\].
-    #[prost(uint64, tag = "12")]
     pub executed_timestamp_seconds: u64,
     /// See \[ProposalData::failed_timestamp_seconds\].
-    #[prost(uint64, tag = "13")]
     pub failed_timestamp_seconds: u64,
     /// See \[ProposalData::failure_reason\].
-    #[prost(message, optional, tag = "18")]
     pub failure_reason: Option<GovernanceError>,
     /// See \[ProposalData::reward_event_round\].
-    #[prost(uint64, tag = "14")]
     pub reward_event_round: u64,
     /// Derived - see \[Topic\] for more information
-    #[prost(enumeration = "Topic", tag = "15")]
     pub topic: i32,
     /// Derived - see \[ProposalStatus\] for more information
-    #[prost(enumeration = "ProposalStatus", tag = "16")]
     pub status: i32,
     /// Derived - see \[ProposalRewardStatus\] for more information
-    #[prost(enumeration = "ProposalRewardStatus", tag = "17")]
     pub reward_status: i32,
-    #[prost(uint64, optional, tag = "19")]
     pub deadline_timestamp_seconds: Option<u64>,
-    #[prost(message, optional, tag = "20")]
     pub derived_proposal_information: Option<DerivedProposalInformation>,
-    #[prost(uint64, optional, tag = "21")]
     pub total_potential_voting_power: ::core::option::Option<u64>,
 }
 
@@ -3308,22 +3459,21 @@ pub struct ListProposalInfo {
     #[prost(bool, optional, tag = "7")]
     pub omit_large_fields: Option<bool>,
 }
-#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
-#[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Clone, PartialEq, ::prost::Message)]
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, Clone, Debug, PartialEq)]
 pub struct ListProposalInfoResponse {
-    #[prost(message, repeated, tag = "1")]
     pub proposal_info: Vec<ProposalInfo>,
 }
-/// A request to list neurons. The "requested list", i.e., the list of
-/// neuron IDs to retrieve information about, is the union of the list
-/// of neurons listed in `neuron_ids` and, if `caller_neurons` is true,
-/// the list of neuron IDs of neurons for which the caller is the
-/// controller or one of the hot keys.
+
+/// The same as ListNeurons, but only used in list_neurons_pb, which is deprecated.
+/// This is temporarily split out so that the API changes to list_neurons do not have to
+/// follow both candid and protobuf standards for changes, which simplifies the API design
+/// considerably.
+///
+/// This type should be removed when list_neurons_pb is finally deprecated.
 #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct ListNeurons {
+pub struct ListNeuronsProto {
     /// The neurons to get information about. The "requested list"
     /// contains all of these neuron IDs.
     #[prost(fixed64, repeated, packed = "false", tag = "1")]
@@ -3334,10 +3484,9 @@ pub struct ListNeurons {
     pub include_neurons_readable_by_caller: bool,
     /// Whether to also include empty neurons readable by the caller. This field only has an effect
     /// when `include_neurons_readable_by_caller` is true. If a neuron's id already exists in the
-    /// `neuron_ids` field, then the neuron will be included in the response regardless of the value of
-    /// this field. Since the previous behavior was to always include empty neurons readable by caller,
-    /// if this field is not provided, it defaults to true, in order to maintain backwards
-    /// compatibility. Here, being "empty" means 0 stake, 0 maturity and 0 staked maturity.
+    /// `neuron_ids` field, then the neuron will be included in the response regardless of the value
+    /// of this field. The default value is false (i.e. `None` is treated as `Some(false)`). Here,
+    /// being "empty" means 0 stake, 0 maturity and 0 staked maturity.
     #[prost(bool, optional, tag = "3")]
     pub include_empty_neurons_readable_by_caller: Option<bool>,
     /// If this is set to true, and a neuron in the "requested list" has its
@@ -3350,7 +3499,83 @@ pub struct ListNeurons {
     /// existing (unmigrated) callers.
     #[prost(bool, optional, tag = "4")]
     pub include_public_neurons_in_full_neurons: Option<bool>,
+    /// If this is set, we return the batch of neurons at a given page, using the `page_size` to
+    /// determine how many neurons are returned in each page.
+    #[prost(uint64, optional, tag = "5")]
+    pub page_number: Option<u64>,
+    /// If this is set, we use the page limit provided to determine how large pages will be.
+    /// This cannot be greater than MAX_LIST_NEURONS_RESULTS, which is set to 500.
+    /// If not set, this defaults to MAX_LIST_NEURONS_RESULTS.
+    #[prost(uint64, optional, tag = "6")]
+    pub page_size: Option<u64>,
 }
+/// A request to list neurons. The "requested list", i.e., the list of
+/// neuron IDs to retrieve information about, is the union of the list
+/// of neurons listed in `neuron_ids` and, if `caller_neurons` is true,
+/// the list of neuron IDs of neurons for which the caller is the
+/// controller or one of the hot keys.
+///
+/// Paging is available if the result set is larger than `MAX_LIST_NEURONS_RESULTS`,
+/// which is currently 500 neurons.  If you are unsure of the number of results in a set,
+/// you can use the `total_pages_available` field in the response to determine how many
+/// additional pages need to be queried.  It will be based on your `page_size` parameter.  
+/// When paging through results, it is good to keep in mind that newly inserted neurons
+/// could be missed if they are inserted between calls to pages, and this could result in missing
+/// a neuron in the combined responses.
+///
+/// If a user provides neuron_ids that do not exist in the request, there is no guarantee that
+/// each page will contain the exactly the page size, even if it is not the final request.  This is
+/// because neurons are retrieved by their neuron_id, and no additional checks are made on the
+/// validity of the neuron_ids provided by the user before deciding which sets of neuron_ids
+/// will be returned in the current page.
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct ListNeurons {
+    /// The neurons to get information about. The "requested list"
+    /// contains all of these neuron IDs.
+    pub neuron_ids: Vec<u64>,
+    /// If true, the "requested list" also contains the neuron ID of the
+    /// neurons that the calling principal is authorized to read.
+    pub include_neurons_readable_by_caller: bool,
+    /// Whether to also include empty neurons readable by the caller. This field only has an effect
+    /// when `include_neurons_readable_by_caller` is true. If a neuron's id already exists in the
+    /// `neuron_ids` field, then the neuron will be included in the response regardless of the value
+    /// of this field. The default value is false (i.e. `None` is treated as `Some(false)`). Here,
+    /// being "empty" means 0 stake, 0 maturity and 0 staked maturity.
+    pub include_empty_neurons_readable_by_caller: Option<bool>,
+    /// If this is set to true, and a neuron in the "requested list" has its
+    /// visibility set to public, then, it will (also) be included in the
+    /// full_neurons field in the response (which is of type ListNeuronsResponse).
+    /// Note that this has no effect on which neurons are in the "requested list".
+    /// In particular, this does not cause all public neurons to become part of the
+    /// requested list. In general, you probably want to set this to true, but
+    /// since this feature was added later, it is opt in to avoid confusing
+    /// existing (unmigrated) callers.
+    pub include_public_neurons_in_full_neurons: Option<bool>,
+    /// If this is set, we return the batch of neurons at a given page, using the `page_size` to
+    /// determine how many neurons are returned in each page.
+    pub page_number: Option<u64>,
+    /// If this is set, we use the page limit provided to determine how large pages will be.
+    /// This cannot be greater than MAX_LIST_NEURONS_RESULTS, which is set to 500.
+    /// If not set, this defaults to MAX_LIST_NEURONS_RESULTS.
+    pub page_size: Option<u64>,
+    /// A list of neurons by subaccounts to return in the response.  If the neurons are not
+    /// found by subaccount, no error is returned, but the page will still be returned.
+    pub neuron_subaccounts: Option<Vec<list_neurons::NeuronSubaccount>>,
+}
+
+pub mod list_neurons {
+    /// A type for the request to list neurons.
+    #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
+    #[allow(clippy::derive_partial_eq_without_eq)]
+    #[derive(Clone, Debug, PartialEq)]
+    pub struct NeuronSubaccount {
+        #[serde(with = "serde_bytes")]
+        pub subaccount: Vec<u8>,
+    }
+}
+
 /// A response to a `ListNeurons` request.
 ///
 /// The "requested list" is described in `ListNeurons`.
@@ -3368,6 +3593,10 @@ pub struct ListNeuronsResponse {
     /// `ManageNeuron` topic).
     #[prost(message, repeated, tag = "2")]
     pub full_neurons: Vec<Neuron>,
+    /// This is returned to tell the caller how many pages of results are available to query.
+    /// If there are fewer than the page_size neurons, this will equal 1.
+    #[prost(uint64, optional, tag = "3")]
+    pub total_pages_available: Option<u64>,
 }
 /// A response to "ListKnownNeurons"
 #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]

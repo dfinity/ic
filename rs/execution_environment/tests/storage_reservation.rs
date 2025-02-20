@@ -1,7 +1,8 @@
 use ic_config::execution_environment::Config as ExecutionConfig;
 use ic_config::subnet_config::SubnetConfig;
-use ic_management_canister_types::TakeCanisterSnapshotArgs;
-use ic_management_canister_types::{self as ic00, CanisterInstallMode, EmptyBlob, Payload};
+use ic_error_types::ErrorCode;
+use ic_management_canister_types_private::TakeCanisterSnapshotArgs;
+use ic_management_canister_types_private::{self as ic00, CanisterInstallMode, EmptyBlob, Payload};
 use ic_registry_subnet_type::SubnetType;
 use ic_state_machine_tests::{StateMachine, StateMachineBuilder, StateMachineConfig};
 use ic_test_utilities::universal_canister::{call_args, wasm, UNIVERSAL_CANISTER_WASM};
@@ -166,5 +167,57 @@ fn test_storage_reservation_triggered_in_canister_snapshot_with_enough_cycles_av
     assert_gt!(
         reserved_balance_after_snapshot,
         reserved_balance_before_snapshot
+    );
+}
+
+#[test]
+fn test_storage_reservation_triggered_in_canister_snapshot_without_enough_cycles_available() {
+    // This test verifies that a canister cannot take a snapshot if it does not have enough
+    // cycles to cover the storage reservation triggered by the snapshot operation. The main
+    // point of the test is to verify that the error message is informative and includes the
+    // amount of cycles required to cover the storage reservation.
+    //
+    // The error message is produced by running the test once and checking the output. Calculating
+    // the exact amounts is hard to do in advance. Note that any changes to cycles cost or how
+    // the reservation mechanism works may require updating the error message in the test.
+
+    let (env, canister_id) = setup(
+        SUBNET_MEMORY_THRESHOLD,
+        SUBNET_MEMORY_CAPACITY,
+        Some(300_400_000_000),
+    );
+    assert_eq!(reserved_balance(&env, canister_id), 0);
+
+    // Grow memory in update call, should trigger storage reservation.
+    let _ = env.execute_ingress(canister_id, "update", wasm().stable_grow(3000).build());
+    let reserved_balance_before_snapshot = reserved_balance(&env, canister_id);
+    assert_gt!(reserved_balance_before_snapshot, 0); // Storage reservation is triggered.
+
+    // Take a snapshot to trigger more storage reservation. The canister does not have
+    // enough cycles in its balance, so this should fail.
+    let err = env
+        .take_canister_snapshot(TakeCanisterSnapshotArgs::new(canister_id, None))
+        .expect_err("Expected an error, but got Ok(_)");
+    err.assert_contains(
+        ErrorCode::InsufficientCyclesInMemoryGrow,
+        "Canister cannot grow memory by",
+    );
+
+    // Match on a substring of the error message. Due to a difference in instructions consumed on
+    // Mac vs Linux, we cannot match on the exact number of cycles but we only need to verify it's
+    // a non-zero amount.
+    let regex = regex::Regex::new("At least ([0-9_]+) additional cycles are required.").unwrap();
+    let cycles_needed: u128 = regex
+        .captures(err.description())
+        .expect("Number regex match failed.")
+        .get(1)
+        .expect("No match for cycles needed.")
+        .as_str()
+        .replace("_", "")
+        .parse()
+        .expect("Failed to parse regex match for cycle count.");
+    assert!(
+        cycles_needed > 0,
+        "The amount of cycles needed is {cycles_needed} which is not positive."
     );
 }
