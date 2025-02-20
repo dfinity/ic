@@ -17,9 +17,7 @@ pub mod steps;
 
 const IC_VERSION_FILE: &str = "ENV_DEPS__IC_VERSION_FILE";
 const GUESTOS_DISK_IMG_URL: &str = "ENV_DEPS__GUESTOS_DISK_IMG_URL";
-const GUESTOS_DISK_IMG_HASH: &str = "ENV_DEPS__GUESTOS_DISK_IMG_HASH";
 const GUESTOS_UPDATE_IMG_URL: &str = "ENV_DEPS__GUESTOS_UPDATE_IMG_URL";
-const GUESTOS_UPDATE_IMG_HASH: &str = "ENV_DEPS__GUESTOS_UPDATE_IMG_HASH";
 
 pub const IC_CONFIG: &str = "IC_CONFIG";
 
@@ -47,16 +45,8 @@ pub fn setup(env: TestEnv, config: IcConfig) {
                     GUESTOS_DISK_IMG_URL,
                 ),
                 (
-                    fetch_shasum_for_img(v.to_string(), "disk", env.logger()),
-                    GUESTOS_DISK_IMG_HASH,
-                ),
-                (
                     format!("http://download.proxy-global.dfinity.network:8080/ic/{}/guest-os/update-img/update-img.tar.zst", v),
                     GUESTOS_UPDATE_IMG_URL,
-                ),
-                (
-                    fetch_shasum_for_img(v.to_string(), "update", env.logger()),
-                    GUESTOS_UPDATE_IMG_HASH,
                 ),
             ],
         );
@@ -116,41 +106,6 @@ fn update_env_variables(env: &TestEnv, pairs: Vec<(String, &str)>) {
             "Overriden env variable `{}` to value: {}", env_variable, value
         )
     }
-}
-
-fn fetch_shasum_for_img(version: String, image: &str, logger: Logger) -> String {
-    let url = format!(
-        "http://download.proxy-global.dfinity.network:8080/ic/{}/guest-os/{}-img/SHA256SUMS",
-        version, image
-    );
-    let response = reqwest::blocking::get(&url)
-        .unwrap_or_else(|e| panic!("Failed to fetch url `{}` with err: {:?}", &url, e));
-    if !response.status().is_success() {
-        panic!(
-            "Received non-success response status: {:?}",
-            response.status()
-        )
-    }
-
-    let img = format!("{}-img{}", image, TAR_EXTENSION);
-    info!(logger, "Finding sha256 for {}", img);
-
-    let sha = String::from_utf8(
-        response
-            .bytes()
-            .expect("Failed to deserialize bytes")
-            .to_vec(),
-    )
-    .expect("Failed to convert to UTF8")
-    .lines()
-    .find(|l| l.ends_with(&img))
-    .unwrap_or_else(|| panic!("Failed to find a hash ending with `{}` from: {}", img, &url))
-    .split_whitespace()
-    .next()
-    .expect("The format of hash should contain whitespace")
-    .to_string();
-    info!(logger, "Found sha256 {}", sha);
-    sha
 }
 
 #[derive(Deserialize, Debug)]
