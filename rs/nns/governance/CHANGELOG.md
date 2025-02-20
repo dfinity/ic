@@ -105,7 +105,7 @@ INSERT NEW RELEASES HERE
 
 # 2025-02-07: Proposal 135206
 
-http://dashboard.internetcomputer.org/proposals/135206
+http://dashboard.internetcomputer.org/proposal/135206
 
 ## Added
 

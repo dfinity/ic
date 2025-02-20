@@ -401,19 +401,15 @@ fn new_state_layout(log: ReplicaLogger) -> (TempDir, Time) {
         )
         .unwrap();
 
-    flush_canister_snapshots_and_page_maps(
+    flush_canister_snapshots_and_page_maps(&mut state, HEIGHT, &tip_channel);
+
+    let mut thread_pool = thread_pool();
+    let (cp_layout, _has_downgrade) = make_unvalidated_checkpoint(
         &mut state,
         HEIGHT,
         &tip_channel,
         &state_manager_metrics.checkpoint_metrics,
-    );
-
-    let mut thread_pool = thread_pool();
-    let (cp_layout, _has_downgrade) = make_unvalidated_checkpoint(
-        &state,
-        HEIGHT,
-        &tip_channel,
-        &state_manager_metrics.checkpoint_metrics,
+        Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
     )
     .unwrap_or_else(|err| {
         panic!(

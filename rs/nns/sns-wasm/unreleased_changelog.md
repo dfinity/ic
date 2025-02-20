@@ -11,13 +11,12 @@ on the process that this file is part of, see
 
 ## Changed
 
+NNS Root is no longer the controller of a newly deployed SNS's Swap canister. For more details,
+please refer to [this forum thread](https://forum.dfinity.org/t/making-swap-a-proper-sns-canister/36519?u=aterga).
+
 ## Deprecated
 
 ## Removed
-
-* Logos are no longer included into *serialized* initial SNS initialization parameters for newly
-  deployed SNSs. They are, of course, still included in the metadata responses: 
-  `SnsGov.get_metadata` and `SnsLedger.icrc1_metadata`.
 
 ## Fixed
 

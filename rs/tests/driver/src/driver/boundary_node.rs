@@ -35,7 +35,6 @@ use crate::{
 use anyhow::{bail, Result};
 use async_trait::async_trait;
 use ic_agent::{Agent, AgentError};
-use kube::ResourceExt;
 use reqwest::Url;
 use serde::{Deserialize, Serialize};
 use slog::info;
@@ -463,18 +462,8 @@ impl BoundaryNode {
         let allocated_vm = match InfraProvider::read_attribute(env) {
             InfraProvider::K8s => {
                 let mut tnet = TNet::read_attribute(env);
-                block_on(tnet.deploy_boundary_image(boundary_node_img_url))
-                    .expect("failed to deploy guestos image");
-                let vm_res = block_on(tnet.vm_create(
-                    CreateVmRequest {
-                        primary_image: ImageLocation::PersistentVolumeClaim {
-                            name: format!("{}-image-boundaryos", tnet.owner.name_any()),
-                        },
-                        ..create_vm_req
-                    },
-                    ImageType::IcOsImage,
-                ))
-                .expect("failed to create vm");
+                let vm_res = block_on(tnet.vm_create(create_vm_req, ImageType::IcOsImage))
+                    .expect("failed to create vm");
                 tnet.write_attribute(env);
                 vm_res
             }

@@ -30,7 +30,7 @@ mitigated with a few NNS proposals referenced in the forum thread.
 
 # 2025-02-07: Proposal 135207
 
-http://dashboard.internetcomputer.org/proposals/135207
+http://dashboard.internetcomputer.org/proposal/135207
 
 ## Changed
 
@@ -66,7 +66,7 @@ it will be a required field for node registration in the IC.
 
 # 2025-01-20: Proposal 134904
 
-http://dashboard.internetcomputer.org/proposals/134904
+http://dashboard.internetcomputer.org/proposal/134904
 
 ## Changed
 
