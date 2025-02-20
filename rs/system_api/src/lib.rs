@@ -1,4 +1,4 @@
-use ic_base_types::PrincipalIdBlobParseError;
+use ic_base_types::{InternalAddress, InternalAddressArithmetics, PrincipalIdBlobParseError};
 use ic_config::embedders::{
     BestEffortResponsesFeature, Config as EmbeddersConfig, StableMemoryPageLimit,
 };
@@ -1743,13 +1743,18 @@ impl SystemApiImpl {
     pub fn save_log_message(&mut self, src: usize, size: usize, heap: &[u8]) {
         self.sandbox_safe_system_state.append_canister_log(
             self.api_type.time(),
-            valid_subslice("save_log_message", src, size, heap)
-                .unwrap_or(
-                    // Do not trap here!
-                    // If the specified memory range is invalid, ignore it and log the error message.
-                    b"(debug_print message out of memory bounds)",
-                )
-                .to_vec(),
+            valid_subslice(
+                "save_log_message",
+                InternalAddress::new(src),
+                InternalAddress::new(size),
+                heap,
+            )
+            .unwrap_or(
+                // Do not trap here!
+                // If the specified memory range is invalid, ignore it and log the error message.
+                b"(debug_print message out of memory bounds)",
+            )
+            .to_vec(),
         );
     }
 
@@ -1900,8 +1905,18 @@ impl SystemApi for SystemApiImpl {
         let result = match self.get_msg_caller_id("ic0_msg_caller_copy") {
             Ok(caller_id) => {
                 let id_bytes = caller_id.as_slice();
-                valid_subslice("ic0.msg_caller_copy heap", dst, size, heap)?;
-                let slice = valid_subslice("ic0.msg_caller_copy id", offset, size, id_bytes)?;
+                valid_subslice(
+                    "ic0.msg_caller_copy heap",
+                    InternalAddress::new(dst),
+                    InternalAddress::new(size),
+                    heap,
+                )?;
+                let slice = valid_subslice(
+                    "ic0.msg_caller_copy id",
+                    InternalAddress::new(offset),
+                    InternalAddress::new(size),
+                    id_bytes,
+                )?;
                 deterministic_copy_from_slice(&mut heap[dst..dst + size], slice);
                 Ok(())
             }
@@ -1980,11 +1995,16 @@ impl SystemApi for SystemApiImpl {
             | ApiType::NonReplicatedQuery {
                 incoming_payload, ..
             } => {
-                valid_subslice("ic0.msg_arg_data_copy heap", dst, size, heap)?;
+                valid_subslice(
+                    "ic0.msg_arg_data_copy heap",
+                    InternalAddress::new(dst),
+                    InternalAddress::new(size),
+                    heap,
+                )?;
                 let payload_subslice = valid_subslice(
                     "ic0.msg_arg_data_copy payload",
-                    offset,
-                    size,
+                    InternalAddress::new(offset),
+                    InternalAddress::new(size),
                     incoming_payload,
                 )?;
                 deterministic_copy_from_slice(&mut heap[dst..dst + size], payload_subslice);
@@ -2040,11 +2060,16 @@ impl SystemApi for SystemApiImpl {
             | ApiType::NonReplicatedQuery { .. }
             | ApiType::Init { .. } => Err(self.error_for("ic0_msg_method_name_copy")),
             ApiType::InspectMessage { method_name, .. } => {
-                valid_subslice("ic0.msg_method_name_copy heap", dst, size, heap)?;
+                valid_subslice(
+                    "ic0.msg_method_name_copy heap",
+                    InternalAddress::new(dst),
+                    InternalAddress::new(size),
+                    heap,
+                )?;
                 let payload_subslice = valid_subslice(
                     "ic0.msg_method_name_copy payload",
-                    offset,
-                    size,
+                    InternalAddress::new(offset),
+                    InternalAddress::new(size),
                     method_name.as_bytes(),
                 )?;
                 deterministic_copy_from_slice(&mut heap[dst..dst + size], payload_subslice);
@@ -2139,7 +2164,12 @@ impl SystemApi for SystemApiImpl {
                             doc_link: doc_ref("msg_reply_data_append-payload-too-large"),
                         });
                     }
-                    data.extend_from_slice(valid_subslice("msg.reply", src, size, heap)?);
+                    data.extend_from_slice(valid_subslice(
+                        "msg.reply",
+                        InternalAddress::new(src),
+                        InternalAddress::new(size),
+                        heap,
+                    )?);
                     Ok(())
                 }
                 ResponseStatus::AlreadyReplied | ResponseStatus::JustRepliedWith(_) => {
@@ -2178,7 +2208,12 @@ impl SystemApi for SystemApiImpl {
                             doc_link: doc_ref("msg_reject-payload-too-large"),
                         });
                     }
-                    let msg_bytes = valid_subslice("ic0.msg_reject", src, size, heap)?;
+                    let msg_bytes = valid_subslice(
+                        "ic0.msg_reject",
+                        InternalAddress::new(src),
+                        InternalAddress::new(size),
+                        heap,
+                    )?;
                     let msg = String::from_utf8(msg_bytes.to_vec()).map_err(|_| {
                         ToolchainContractViolation {
                             error: "ic0.msg_reject: invalid UTF-8 string provided".to_string(),
@@ -2234,11 +2269,20 @@ impl SystemApi for SystemApiImpl {
             let reject_context = self
                 .get_reject_context()
                 .ok_or_else(|| self.error_for("ic0_msg_reject_msg_copy"))?;
-            valid_subslice("ic0.msg_reject_msg_copy heap", dst, size, heap)?;
+            valid_subslice(
+                "ic0.msg_reject_msg_copy heap",
+                InternalAddress::new(dst),
+                InternalAddress::new(size),
+                heap,
+            )?;
 
             let msg = reject_context.message();
-            let msg_bytes =
-                valid_subslice("ic0.msg_reject_msg_copy msg", offset, size, msg.as_bytes())?;
+            let msg_bytes = valid_subslice(
+                "ic0.msg_reject_msg_copy msg",
+                InternalAddress::new(offset),
+                InternalAddress::new(size),
+                msg.as_bytes(),
+            )?;
             deterministic_copy_from_slice(&mut heap[dst..dst + size], msg_bytes);
             Ok(())
         };
@@ -2296,10 +2340,20 @@ impl SystemApi for SystemApiImpl {
             | ApiType::ReplyCallback { .. }
             | ApiType::RejectCallback { .. }
             | ApiType::InspectMessage { .. } => {
-                valid_subslice("ic0.canister_self_copy heap", dst, size, heap)?;
+                valid_subslice(
+                    "ic0.canister_self_copy heap",
+                    InternalAddress::new(dst),
+                    InternalAddress::new(size),
+                    heap,
+                )?;
                 let canister_id = self.sandbox_safe_system_state.canister_id;
                 let id_bytes = canister_id.get_ref().as_slice();
-                let slice = valid_subslice("ic0.canister_self_copy id", offset, size, id_bytes)?;
+                let slice = valid_subslice(
+                    "ic0.canister_self_copy id",
+                    InternalAddress::new(offset),
+                    InternalAddress::new(size),
+                    id_bytes,
+                )?;
                 deterministic_copy_from_slice(&mut heap[dst..dst + size], slice);
                 Ok(())
             }
@@ -3404,7 +3458,12 @@ impl SystemApi for SystemApiImpl {
     fn ic0_debug_print(&self, src: usize, size: usize, heap: &[u8]) -> HypervisorResult<()> {
         const MAX_DEBUG_MESSAGE_SIZE: usize = 32 * 1024;
         let size = size.min(MAX_DEBUG_MESSAGE_SIZE);
-        let msg = match valid_subslice("ic0.debug_print", src, size, heap) {
+        let msg = match valid_subslice(
+            "ic0.debug_print",
+            InternalAddress::new(src),
+            InternalAddress::new(size),
+            heap,
+        ) {
             Ok(bytes) => String::from_utf8_lossy(bytes).to_string(),
             // Do not trap here! `ic0_debug_print` should never fail!
             // If the specified memory range is invalid, ignore it and print the error message.
@@ -3434,9 +3493,14 @@ impl SystemApi for SystemApiImpl {
         const MAX_ERROR_MESSAGE_SIZE: usize = 16 * 1024;
         let size = size.min(MAX_ERROR_MESSAGE_SIZE);
         let result = {
-            let message = valid_subslice("trap", src, size, heap)
-                .map(|bytes| String::from_utf8_lossy(bytes).to_string())
-                .unwrap_or_else(|_| "(trap message out of memory bounds)".to_string());
+            let message = valid_subslice(
+                "trap",
+                InternalAddress::new(src),
+                InternalAddress::new(size),
+                heap,
+            )
+            .map(|bytes| String::from_utf8_lossy(bytes).to_string())
+            .unwrap_or_else(|_| "(trap message out of memory bounds)".to_string());
             CalledTrap {
                 message,
                 backtrace: None,
@@ -3459,7 +3523,12 @@ impl SystemApi for SystemApiImpl {
             | ApiType::ReplyCallback { .. }
             | ApiType::RejectCallback { .. }
             | ApiType::InspectMessage { .. } => {
-                let msg_bytes = valid_subslice("ic0.is_controller", src, size, heap)?;
+                let msg_bytes = valid_subslice(
+                    "ic0.is_controller",
+                    InternalAddress::new(src),
+                    InternalAddress::new(size),
+                    heap,
+                )?;
                 PrincipalId::try_from(msg_bytes)
                     .map(|principal_id| {
                         self.sandbox_safe_system_state
@@ -3670,10 +3739,20 @@ impl SystemApi for SystemApiImpl {
             | ApiType::ReplyCallback { .. }
             | ApiType::RejectCallback { .. }
             | ApiType::InspectMessage { .. } => {
-                valid_subslice("ic0.subnet_self_copy heap", dst, size, heap)?;
+                valid_subslice(
+                    "ic0.subnet_self_copy heap",
+                    InternalAddress::new(dst),
+                    InternalAddress::new(size),
+                    heap,
+                )?;
                 let subnet_id = self.sandbox_safe_system_state.get_subnet_id();
                 let id_bytes = subnet_id.get_ref().as_slice();
-                let slice = valid_subslice("ic0.subnet_self_copy id", offset, size, id_bytes)?;
+                let slice = valid_subslice(
+                    "ic0.subnet_self_copy id",
+                    InternalAddress::new(offset),
+                    InternalAddress::new(size),
+                    id_bytes,
+                )?;
                 deterministic_copy_from_slice(&mut heap[dst..dst + size], slice);
 
                 Ok(())
@@ -3751,22 +3830,37 @@ pub(crate) fn copy_cycles_to_heap(
 
 pub(crate) fn valid_subslice<'a>(
     ctx: &str,
-    src: usize,
-    len: usize,
+    src: InternalAddress,
+    len: InternalAddress,
     slice: &'a [u8],
 ) -> HypervisorResult<&'a [u8]> {
-    if slice.len() < src + len {
-        return Err(ToolchainContractViolation {
+    let result_address = src.add(len);
+
+    match result_address {
+        Ok(addr) => {
+            if slice.len() < addr.get() {
+                Err(ToolchainContractViolation {
+                    error: format!(
+                        "{}: src={} + length={} exceeds the slice size={}",
+                        ctx,
+                        src,
+                        len,
+                        slice.len()
+                    ),
+                })
+            } else {
+                Ok(&slice[src.get()..addr.get()])
+            }
+        }
+        Err(_) => Err(ToolchainContractViolation {
             error: format!(
-                "{}: src={} + length={} exceeds the slice size={}",
+                "{}: src={} + length={} is an invalid address",
                 ctx,
-                src,
-                len,
-                slice.len()
+                src.get(),
+                len.get()
             ),
-        });
+        }),
     }
-    Ok(&slice[src..src + len])
 }
 
 #[cfg(test)]
@@ -3776,20 +3870,56 @@ mod test {
     #[test]
     fn test_valid_subslice() {
         // empty slice
-        assert!(valid_subslice("", 0, 0, &[]).is_ok());
+        assert!(valid_subslice("", InternalAddress::new(0), InternalAddress::new(0), &[]).is_ok());
         // the only possible non-empty slice
-        assert!(valid_subslice("", 0, 1, &[1]).is_ok());
+        assert!(valid_subslice("", InternalAddress::new(0), InternalAddress::new(1), &[1]).is_ok());
         // valid empty slice
-        assert!(valid_subslice("", 1, 0, &[1]).is_ok());
+        assert!(valid_subslice("", InternalAddress::new(1), InternalAddress::new(0), &[1]).is_ok());
 
         // just some valid cases
-        assert!(valid_subslice("", 0, 4, &[1, 2, 3, 4]).is_ok());
-        assert!(valid_subslice("", 1, 3, &[1, 2, 3, 4]).is_ok());
-        assert!(valid_subslice("", 2, 2, &[1, 2, 3, 4]).is_ok());
+        assert!(valid_subslice(
+            "",
+            InternalAddress::new(0),
+            InternalAddress::new(4),
+            &[1, 2, 3, 4]
+        )
+        .is_ok());
+        assert!(valid_subslice(
+            "",
+            InternalAddress::new(1),
+            InternalAddress::new(3),
+            &[1, 2, 3, 4]
+        )
+        .is_ok());
+        assert!(valid_subslice(
+            "",
+            InternalAddress::new(2),
+            InternalAddress::new(2),
+            &[1, 2, 3, 4]
+        )
+        .is_ok());
 
         // invalid longer-than-the-heap subslices
-        assert!(valid_subslice("", 3, 2, &[1, 2, 3, 4]).is_err());
-        assert!(valid_subslice("", 0, 5, &[1, 2, 3, 4]).is_err());
-        assert!(valid_subslice("", 4, 1, &[1, 2, 3, 4]).is_err());
+        assert!(valid_subslice(
+            "",
+            InternalAddress::new(3),
+            InternalAddress::new(2),
+            &[1, 2, 3, 4]
+        )
+        .is_err());
+        assert!(valid_subslice(
+            "",
+            InternalAddress::new(0),
+            InternalAddress::new(5),
+            &[1, 2, 3, 4]
+        )
+        .is_err());
+        assert!(valid_subslice(
+            "",
+            InternalAddress::new(4),
+            InternalAddress::new(1),
+            &[1, 2, 3, 4]
+        )
+        .is_err());
     }
 }

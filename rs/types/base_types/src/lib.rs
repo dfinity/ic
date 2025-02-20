@@ -42,6 +42,34 @@ pub struct NumBytesTag;
 /// and allocation of a Canister.
 pub type NumBytes = AmountOf<NumBytesTag, u64>;
 
+pub struct InternalAddressTag;
+/// A type representing an internal address.
+///
+/// This type is used to track pointer arithmetics in the context of
+/// the canister's memory management.
+pub type InternalAddress = AmountOf<InternalAddressTag, usize>;
+
+/// Safe pointer-like arithmetics for InternalAddress.
+pub trait InternalAddressArithmetics {
+    fn add(self, rhs: Self) -> Result<InternalAddress, String>;
+    fn sub(self, rhs: Self) -> Result<InternalAddress, String>;
+}
+
+impl InternalAddressArithmetics for InternalAddress {
+    fn add(self, rhs: Self) -> Result<InternalAddress, String> {
+        self.get()
+            .checked_add(rhs.get())
+            .map(|sum| InternalAddress::new(sum))
+            .ok_or_else(|| "Invalid InternalAddress.".to_string())
+    }
+    fn sub(self, rhs: Self) -> Result<InternalAddress, String> {
+        self.get()
+            .checked_sub(rhs.get())
+            .map(|diff| InternalAddress::new(diff))
+            .ok_or_else(|| "Invalid InternalAddress.".to_string())
+    }
+}
+
 pub enum NumOsPagesTag {}
 /// A number of OS-sized pages.
 pub type NumOsPages = AmountOf<NumOsPagesTag, u64>;
