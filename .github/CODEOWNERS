@@ -113,6 +113,7 @@ go_deps.bzl               @dfinity/idx
 /rs/config/                                             @dfinity/consensus
 /rs/config/src/embedders.rs                             @dfinity/execution
 /rs/config/src/execution_environment.rs                 @dfinity/execution
+/rs/config/src/message_routing.rs                       @dfinity/ic-message-routing-owners
 /rs/config/src/state_manager.rs                         @dfinity/ic-message-routing-owners
 /rs/config/src/subnet_config.rs                         @dfinity/execution
 /rs/consensus/                                          @dfinity/consensus

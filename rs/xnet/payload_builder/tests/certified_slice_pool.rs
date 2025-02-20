@@ -16,7 +16,7 @@ use ic_xnet_payload_builder::certified_slice_pool::{
     certified_slice_count_bytes, testing, CertifiedSliceError, CertifiedSlicePool, InvalidAppend,
     InvalidSlice, UnpackedStreamSlice, LABEL_STATUS, STATUS_NONE, STATUS_SUCCESS,
 };
-use ic_xnet_payload_builder::{max_message_index, ExpectedIndices, MAX_STREAM_MESSAGES};
+use ic_xnet_payload_builder::{max_message_index, ExpectedIndices, MAX_SIGNALS};
 use maplit::btreemap;
 use mockall::predicate::{always, eq};
 use proptest::prelude::*;
@@ -1126,7 +1126,7 @@ proptest! {
     // It is therefore using a reduced number of cases to keep the load within reasonable bounds.
     #[test]
     fn pool_take_slice_respects_signal_limit(
-        (stream, from, msg_count) in arb_stream_slice(MAX_STREAM_MESSAGES, 2 * MAX_STREAM_MESSAGES, 0, 0),
+        (stream, from, msg_count) in arb_stream_slice(MAX_SIGNALS, 2 * MAX_SIGNALS, 0, 0),
     ) {
         with_test_replica_logger(|log| {
             // Stream position matching slice begin.
