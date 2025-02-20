@@ -1504,17 +1504,16 @@ fn load_canister_snapshot_succeeds() {
     let chunk = vec![1, 2, 3, 4, 5];
     helper_upload_chunk(&mut test, canister_id, chunk);
 
+    // Take a snapshot.
+    let (snapshot_id, snapshot_taken_at_timestamp) = helper_take_snapshot(&mut test, canister_id);
+
     let canister_version_before = test
         .state()
         .canister_state(&canister_id)
         .unwrap()
         .system_state
         .canister_version;
-
-    assert_eq!(canister_version_before, 1);
-
-    // Take a snapshot.
-    let (snapshot_id, snapshot_taken_at_timestamp) = helper_take_snapshot(&mut test, canister_id);
+    assert_eq!(canister_version_before, 1u64);
 
     let canister_history = test
         .state()
@@ -1554,7 +1553,7 @@ fn load_canister_snapshot_succeeds() {
         .canister_version;
     // Canister version should be bumped after loading a snapshot.
     assert!(canister_version_after > canister_version_before);
-    assert_eq!(canister_version_after, 2);
+    assert_eq!(canister_version_after, 2u64);
 
     // Entry in canister history should contain the information of
     // the snapshot that was loaded back into the canister.
