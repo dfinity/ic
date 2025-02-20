@@ -56,11 +56,8 @@ impl TryFrom<GetSuccessorsResponse> for BtcServiceGetSuccessorsResponse {
     type Error = Status;
     fn try_from(response: GetSuccessorsResponse) -> Result<Self, Self::Error> {
         let mut blocks = vec![];
-        for block in response.blocks.iter() {
-            let mut encoded_block = vec![];
-            block
-                .consensus_encode(&mut encoded_block)
-                .map_err(|_| Status::unknown("Failed to encode block!"))?;
+        for block in response.blocks {
+            let encoded_block = Arc::unwrap_or_clone(block);
             blocks.push(encoded_block);
         }
 
