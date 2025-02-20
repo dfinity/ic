@@ -102,11 +102,13 @@ impl AnonymizationSaltFetcher {
             Ok(response) => match response {
                 Some(response) => response,
                 None => {
+                    self.metrics.fetches.with_label_values(&["failure"]).inc();
                     warn!("{SERVICE}: got empty response from the canister");
                     return;
                 }
             },
             Err(err) => {
+                self.metrics.fetches.with_label_values(&["failure"]).inc();
                 warn!("{SERVICE}: failed to get salt from the canister: {err:#}");
                 return;
             }
@@ -115,6 +117,7 @@ impl AnonymizationSaltFetcher {
         let salt_response = match Decode!(&query_response, GetSaltResponse) {
             Ok(response) => response,
             Err(err) => {
+                self.metrics.fetches.with_label_values(&["failure"]).inc();
                 warn!("{SERVICE}: failed to decode candid response: {err:?}");
                 return;
             }
