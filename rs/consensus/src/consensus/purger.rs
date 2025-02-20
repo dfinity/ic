@@ -489,12 +489,14 @@ mod tests {
     use ic_test_utilities::message_routing::FakeMessageRouting;
     use ic_test_utilities_consensus::fake::FakeContentUpdate;
     use ic_types::{
-        artifact::{ConsensusMessageId, IdentifiableArtifact},
-        consensus::{BlockPayload, BlockProposal, ConsensusMessageHashable, Payload, Rank},
+        consensus::{BlockPayload, BlockProposal, Payload, Rank},
         crypto::CryptoHash,
         CryptoHashOfState, SubnetId,
     };
-    use std::sync::{Arc, RwLock};
+    use std::{
+        collections::HashSet,
+        sync::{Arc, RwLock},
+    };
 
     #[test]
     fn test_purger() {
@@ -891,7 +893,7 @@ mod tests {
                 .replace(finalized_block_proposal_1.content.as_ref().height);
 
             let pool_reader = PoolReader::new(&pool);
-            let remove_from_validated_changeset: Vec<ChangeAction> = purger
+            let remove_from_validated_changeset: HashSet<_> = purger
                 .on_state_change(&pool_reader)
                 .into_iter()
                 .filter(|change_action| {
@@ -899,30 +901,20 @@ mod tests {
                 })
                 .collect();
 
-            assert_eq!(remove_from_validated_changeset.len(), 3);
-            assert!(is_remove_from_validated(
-                &remove_from_validated_changeset,
-                non_finalized_notarization_2.get_id()
-            ));
-            assert!(is_remove_from_validated(
-                &remove_from_validated_changeset,
-                non_finalized_block_proposal_2_0.get_id()
-            ));
-            assert!(is_remove_from_validated(
-                &remove_from_validated_changeset,
-                non_finalized_block_proposal_2_1.get_id()
-            ));
+            assert_eq!(
+                remove_from_validated_changeset,
+                HashSet::from([
+                    ChangeAction::RemoveFromValidated(ConsensusMessage::Notarization(
+                        non_finalized_notarization_2
+                    )),
+                    ChangeAction::RemoveFromValidated(ConsensusMessage::BlockProposal(
+                        non_finalized_block_proposal_2_0
+                    )),
+                    ChangeAction::RemoveFromValidated(ConsensusMessage::BlockProposal(
+                        non_finalized_block_proposal_2_1
+                    )),
+                ])
+            );
         })
-    }
-
-    fn is_remove_from_validated(change_set: &[ChangeAction], msg_id: ConsensusMessageId) -> bool {
-        for action in change_set {
-            if let ChangeAction::RemoveFromValidated(msg) = action {
-                if msg.id() == msg_id {
-                    return true;
-                }
-            }
-        }
-        false
     }
 }
