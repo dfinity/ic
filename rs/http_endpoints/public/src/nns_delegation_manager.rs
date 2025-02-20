@@ -135,7 +135,7 @@ mod tests {
         let rt_handle = tokio::runtime::Handle::current();
         let (registry_client, tls_config) = set_up_nns_delegation_dependencies(rt_handle.clone());
 
-        let start_nns_delegation_manager = start_nns_delegation_manager(
+        let (_, mut rx) = start_nns_delegation_manager(
             &MetricsRegistry::new(),
             Config::default(),
             no_op_logger(),
@@ -146,7 +146,6 @@ mod tests {
             Arc::new(tls_config),
             CancellationToken::new(),
         );
-        let (_, mut rx) = start_nns_delegation_manager;
 
         rx.changed().await.unwrap();
 
@@ -175,11 +174,11 @@ mod tests {
         let delegation = rx
             .borrow()
             .clone()
-            .expect("Should return Some delegation on non NNS subnet");
+            .expect("Should return some delegation on non NNS subnet");
         let parsed_delegation: Certificate = serde_cbor::from_slice(&delegation.certificate)
-            .expect("Should have returned a valid certificate");
+            .expect("Should return a certificate which can be deserialized");
         let tree = LabeledTree::try_from(parsed_delegation.tree)
-            .expect("Should return a valid state tree");
+            .expect("Should return a state tree which can be parsed");
         // Verify that the state tree has the a subtree corresponding to the requested subnet
         match lookup_path(&tree, &[b"subnet", NON_NNS_SUBNET_ID.get_ref().as_ref()]) {
             Some(LabeledTree::SubTree(..)) => (),
