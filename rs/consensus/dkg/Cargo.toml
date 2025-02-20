@@ -7,13 +7,14 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
+
+ic-metrics = { path = "../../monitoring/metrics" }
 ic-consensus-utils = { path = "../utils" }
 ic-interfaces = { path = "../../interfaces" }
 ic-interfaces-registry = { path = "../../interfaces/registry" }
 ic-interfaces-state-manager = { path = "../../interfaces/state_manager" }
 ic-logger = { path = "../../monitoring/logger" }
 ic-management-canister-types-private = { path = "../../types/management_canister_types" }
-ic-metrics = { path = "../../monitoring/metrics" }
 ic-protobuf = { path = "../../protobuf" }
 ic-registry-client-helpers = { path = "../../registry/helpers" }
 ic-replicated-state = { path = "../../replicated_state" }
