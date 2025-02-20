@@ -1,6 +1,8 @@
 load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+load("//bazel:canbench.bzl", "rust_canbench")
 load("//bazel:canisters.bzl", "rust_canister")
 load("//bazel:defs.bzl", "rust_ic_test")
+
 
 package(default_visibility = ["//visibility:public"])
 
@@ -44,17 +46,28 @@ LIB_PROC_MACRO_DEPS = [
     "@crate_index//:minicbor-derive",
 ]
 
-rust_library(
-    name = "ckbtc_minter_lib",
-    srcs = glob(
-        ["src/**"],
-        exclude = ["src/main.rs"],
-    ),
-    crate_name = "ic_ckbtc_minter",
-    proc_macro_deps = LIB_PROC_MACRO_DEPS,
-    version = "0.1.0",
-    deps = LIB_DEPS,
-)
+[
+    rust_library(
+        name,
+        srcs = glob(
+            ["src/**"],
+            exclude = ["src/main.rs"],
+        ),
+        crate_name = "ic_ckbtc_minter",
+        proc_macro_deps = LIB_PROC_MACRO_DEPS,
+        version = "0.1.0",
+        deps = LIB_DEPS,
+    ) for (name, features) in [
+        (
+            "ckbtc_minter_lib",
+            [],
+        ),
+        (
+            "ckbtc_minter_lib-canbench",
+            ["canbench-rs"],
+        ),
+    ]
+]
 
 alias(
     name = "minter",
@@ -192,5 +205,17 @@ rust_ic_test(
         "@crate_index//:regex",
         "@crate_index//:serde_bytes",
         "@crate_index//:serde_json",
+    ],
+)
+
+rust_canbench(
+    name = "ckbtc-minter-canbench",
+    srcs = ["src/main.rs"],
+    add_test = True,
+    results_file = "canbench_results.yml",
+    data = ["test_resources/mainnet_events.mem"],
+    deps = [
+        # Keep sorted.
+        ":ckbtc_minter_lib-canbench",
     ],
 )
