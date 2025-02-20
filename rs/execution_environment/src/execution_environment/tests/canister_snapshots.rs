@@ -1500,31 +1500,9 @@ fn load_canister_snapshot_succeeds() {
         .canister_from_cycles_and_binary(CYCLES, UNIVERSAL_CANISTER_WASM.to_vec())
         .unwrap();
 
-    helper_load_canister_snapshot_succeeds(&mut test, canister_id, 1);
-}
-
-fn helper_load_canister_snapshot_succeeds(
-    test: &mut ExecutionTest,
-    canister_id: CanisterId,
-    initial_canister_version: u64,
-) {
     // Upload chunk.
     let chunk = vec![1, 2, 3, 4, 5];
-    let upload_args = UploadChunkArgs {
-        canister_id: canister_id.into(),
-        chunk,
-    };
-    let result = test.subnet_message("upload_chunk", upload_args.encode());
-    assert!(result.is_ok());
-
-    // Take a snapshot.
-    let args: TakeCanisterSnapshotArgs = TakeCanisterSnapshotArgs::new(canister_id, None);
-    let result = test.subnet_message("take_canister_snapshot", args.encode());
-    assert!(result.is_ok());
-    let response = CanisterSnapshotResponse::decode(&result.unwrap().bytes()).unwrap();
-    let snapshot_id = response.snapshot_id();
-    let snapshot_taken_at_timestamp = response.taken_at_timestamp();
-    assert!(test.state().canister_snapshots.get(snapshot_id).is_some());
+    helper_upload_chunk(&mut test, canister_id, chunk);
 
     let canister_version_before = test
         .state()
@@ -1532,7 +1510,12 @@ fn helper_load_canister_snapshot_succeeds(
         .unwrap()
         .system_state
         .canister_version;
-    assert_eq!(canister_version_before, initial_canister_version);
+
+    assert_eq!(canister_version_before, 1);
+
+    // Take a snapshot.
+    let (snapshot_id, snapshot_taken_at_timestamp) = helper_take_snapshot(&mut test, canister_id);
+
     let canister_history = test
         .state()
         .canister_state(&canister_id)
@@ -1546,27 +1529,10 @@ fn helper_load_canister_snapshot_succeeds(
         .collect::<Vec<CanisterChange>>();
 
     // Clear chunk after taking the snapshot.
-    let clear_args = ClearChunkStoreArgs {
-        canister_id: canister_id.into(),
-    };
-    let result = test.subnet_message("clear_chunk_store", clear_args.encode());
-    assert!(result.is_ok());
-    // Verify chunk store contains no data.
-    assert!(test
-        .state()
-        .canister_state(&canister_id)
-        .unwrap()
-        .system_state
-        .wasm_chunk_store
-        .keys()
-        .next()
-        .is_none());
+    helper_clear_chunk(&mut test, canister_id);
 
     // Load an existing snapshot.
-    let args: LoadCanisterSnapshotArgs =
-        LoadCanisterSnapshotArgs::new(canister_id, snapshot_id, None);
-    let result = test.subnet_message("load_canister_snapshot", args.encode());
-    assert!(result.is_ok());
+    helper_load_snapshot(&mut test, canister_id, snapshot_id);
 
     // Verify chunk store contains data.
     assert!(test
@@ -1588,7 +1554,7 @@ fn helper_load_canister_snapshot_succeeds(
         .canister_version;
     // Canister version should be bumped after loading a snapshot.
     assert!(canister_version_after > canister_version_before);
-    assert_eq!(canister_version_after, initial_canister_version + 1);
+    assert_eq!(canister_version_after, 2);
 
     // Entry in canister history should contain the information of
     // the snapshot that was loaded back into the canister.
@@ -1620,6 +1586,56 @@ fn helper_load_canister_snapshot_succeeds(
         SnapshotOperation::Restore(canister_id, snapshot_id),
     ];
     assert_eq!(expected_unflushed_changes, unflushed_changes);
+}
+
+fn helper_upload_chunk(test: &mut ExecutionTest, canister_id: CanisterId, chunk: Vec<u8>) {
+    let upload_args = UploadChunkArgs {
+        canister_id: canister_id.into(),
+        chunk,
+    };
+    let result = test.subnet_message("upload_chunk", upload_args.encode());
+    assert!(result.is_ok());
+}
+
+fn helper_take_snapshot(test: &mut ExecutionTest, canister_id: CanisterId) -> (SnapshotId, u64) {
+    let args: TakeCanisterSnapshotArgs = TakeCanisterSnapshotArgs::new(canister_id, None);
+    let result = test.subnet_message("take_canister_snapshot", args.encode());
+    assert!(result.is_ok());
+    let response = CanisterSnapshotResponse::decode(&result.unwrap().bytes()).unwrap();
+    let snapshot_id = response.snapshot_id();
+    let snapshot_taken_at_timestamp = response.taken_at_timestamp();
+    assert!(test.state().canister_snapshots.get(snapshot_id).is_some());
+
+    (snapshot_id, snapshot_taken_at_timestamp)
+}
+
+fn helper_clear_chunk(test: &mut ExecutionTest, canister_id: CanisterId) {
+    let clear_args = ClearChunkStoreArgs {
+        canister_id: canister_id.into(),
+    };
+    let result = test.subnet_message("clear_chunk_store", clear_args.encode());
+    assert!(result.is_ok());
+    // Verify chunk store contains no data.
+    assert!(test
+        .state()
+        .canister_state(&canister_id)
+        .unwrap()
+        .system_state
+        .wasm_chunk_store
+        .keys()
+        .next()
+        .is_none());
+}
+
+fn helper_load_snapshot(
+    test: &mut ExecutionTest,
+    canister_id: CanisterId,
+    snapshot_id: SnapshotId,
+) {
+    let args: LoadCanisterSnapshotArgs =
+        LoadCanisterSnapshotArgs::new(canister_id, snapshot_id, None);
+    let result = test.subnet_message("load_canister_snapshot", args.encode());
+    assert!(result.is_ok());
 }
 
 #[test]
@@ -1659,7 +1675,17 @@ fn load_canister_snapshot_updates_hook_condition() {
         OnLowWasmMemoryHookStatus::ConditionNotSatisfied
     );
 
-    helper_load_canister_snapshot_succeeds(&mut test, canister_id, 2);
+    let chunk = vec![1, 2, 3, 4, 5];
+    helper_upload_chunk(&mut test, canister_id, chunk);
+
+    // Take a snapshot.
+    let (snapshot_id, _) = helper_take_snapshot(&mut test, canister_id);
+
+    // Clear chunk after taking the snapshot.
+    helper_clear_chunk(&mut test, canister_id);
+
+    // Load an existing snapshot.
+    helper_load_snapshot(&mut test, canister_id, snapshot_id);
 
     assert_eq!(
         test.canister_state_mut(canister_id)
@@ -1668,6 +1694,8 @@ fn load_canister_snapshot_updates_hook_condition() {
             .peek_hook_status(),
         OnLowWasmMemoryHookStatus::Ready
     );
+
+    panic!("");
 }
 
 #[test]
