@@ -1,4 +1,4 @@
-use crate::imports::system_api_imports;
+use crate::imports::{system_api_imports, SystemApiImportStore};
 use arbitrary::{Arbitrary, Result, Unstructured};
 use ic_config::embedders::Config as EmbeddersConfig;
 use ic_config::flag_status::FlagStatus;
@@ -11,14 +11,17 @@ use std::collections::HashSet;
 use std::fmt::Write;
 use wasm_encoder::{
     CodeSection, ExportKind, ExportSection, Function, FunctionSection, GlobalSection, GlobalType,
-    Instruction, Module as WasmModule, TypeSection,
+    Instruction, MemorySection, MemoryType, Module as WasmModule, TypeSection,
+    ValType as EncodedValType,
 };
 use wasm_smith::{Config, Module};
 use wasmparser::*;
 
 lazy_static! {
-    static ref SYSTEM_API_IMPORTS_WASM32: Vec<u8> = system_api_imports(ic_embedders_config(false));
-    static ref SYSTEM_API_IMPORTS_WASM64: Vec<u8> = system_api_imports(ic_embedders_config(true));
+    static ref SYSTEM_API_IMPORTS_WASM32: SystemApiImportStore =
+        system_api_imports(ic_embedders_config(false));
+    static ref SYSTEM_API_IMPORTS_WASM64: SystemApiImportStore =
+        system_api_imports(ic_embedders_config(true));
 }
 
 #[derive(Debug)]
@@ -42,6 +45,103 @@ impl<'a> Arbitrary<'a> for ICWasmModule {
         let mut config = ic_wasm_config(embedder_config);
         config.exports = exports;
         Ok(ICWasmModule::new(config.clone(), Module::new(config, u)?))
+    }
+}
+
+#[derive(Debug)]
+pub struct SystemApiModule {
+    pub module: Vec<u8>,
+    pub memory64_enabled: bool,
+    pub exported_functions: BTreeSet<WasmMethod>,
+}
+
+impl<'a> Arbitrary<'a> for SystemApiModule {
+    fn arbitrary(u: &mut Unstructured<'a>) -> Result<Self> {
+        let memory64_enabled = u.ratio(2, 3)?;
+
+        let store: &'static SystemApiImportStore = if memory64_enabled {
+            &SYSTEM_API_IMPORTS_WASM64
+        } else {
+            &SYSTEM_API_IMPORTS_WASM32
+        };
+
+        let mut module = WasmModule::new();
+
+        module.section(&store.type_section);
+        module.section(&store.import_section);
+
+        let mut functions = FunctionSection::new();
+        functions.function(0);
+        module.section(&functions);
+
+        let mut memories = MemorySection::new();
+        memories.memory(MemoryType {
+            minimum: 1,
+            maximum: None,
+            memory64: memory64_enabled,
+            shared: false,
+            page_size_log2: None,
+        });
+        module.section(&memories);
+
+        // Export section
+        let mut exports = ExportSection::new();
+        let export_func_prefix: Vec<String> = vec![
+            "canister_query".to_string(),
+            "canister_update".to_string(),
+            "canister_composite_query".to_string(),
+        ];
+        let mut name = "test".to_string();
+        let choice = u.choose_index(export_func_prefix.len())?;
+        name = format!("{} {}", export_func_prefix[choice], name);
+        exports.export(
+            name.as_str(),
+            ExportKind::Func,
+            store.import_section.len() as u32,
+        );
+        module.section(&exports);
+
+        let mut codes = CodeSection::new();
+        let mut function = Function::new(vec![]);
+
+        assert!(store.import_section.len() == store.import_mapping.len() as u32);
+
+        for _ in 0..10 {
+            let call_index = u.int_in_range(1..=(store.import_section.len() - 1))?;
+            let func_type = store.import_mapping.get(&(call_index as usize)).unwrap();
+
+            for param in func_type.params() {
+                let instruction = match param {
+                    EncodedValType::I32 => Instruction::I32Const(i32::arbitrary(u)?),
+                    EncodedValType::I64 => Instruction::I64Const(i64::arbitrary(u)?),
+                    _ => unimplemented!(),
+                };
+                function.instruction(&instruction);
+            }
+            function.instruction(&Instruction::Call(call_index));
+            for _result in func_type.results() {
+                function.instruction(&Instruction::Drop);
+            }
+        }
+
+        function.instruction(&Instruction::End);
+        codes.function(&function);
+        module.section(&codes);
+
+        let wasm_bytes = module.finish();
+
+        // assert!(wasmparser::validate(&wasm_bytes).is_ok());
+        match wasmparser::validate(&wasm_bytes) {
+            Ok(_) => (),
+            Err(e) => println!("{:?}", e),
+        }
+        let wasm_method = WasmMethod::try_from(name.to_string()).unwrap();
+
+        Ok(SystemApiModule {
+            module: wasm_bytes,
+            memory64_enabled,
+            exported_functions: BTreeSet::from([wasm_method]),
+        })
     }
 }
 
@@ -159,9 +259,9 @@ pub fn ic_wasm_config(embedder_config: EmbeddersConfig) -> Config {
         exceptions_enabled: false,
 
         available_imports: Some(if memory64_enabled {
-            SYSTEM_API_IMPORTS_WASM64.to_vec()
+            SYSTEM_API_IMPORTS_WASM64.module.to_vec()
         } else {
-            SYSTEM_API_IMPORTS_WASM32.to_vec()
+            SYSTEM_API_IMPORTS_WASM32.module.to_vec()
         }),
         ..Default::default()
     }

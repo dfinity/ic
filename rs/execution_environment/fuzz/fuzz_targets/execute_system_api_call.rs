@@ -6,7 +6,7 @@ use ic_types::{CanisterId, Cycles, NumBytes};
 
 use libfuzzer_sys::fuzz_target;
 use std::cell::RefCell;
-use wasm_fuzzers::ic_wasm::{ic_embedders_config, ICWasmModule};
+use wasm_fuzzers::ic_wasm::{ic_embedders_config, SystemApiModule};
 
 thread_local! {
     static ENV_32: RefCell<(StateMachine, CanisterId)> = RefCell::new(setup_env(false));
@@ -29,9 +29,9 @@ fn main() {
     fuzzer_sandbox::fuzzer_main(features);
 }
 
-fuzz_target!(|data: ICWasmModule| {
-    with_env(data.config.memory64_enabled, |env, canister_id| {
-        let wasm = data.module.to_bytes();
+fuzz_target!(|data: SystemApiModule| {
+    with_env(data.memory64_enabled, |env, canister_id| {
+        let wasm = data.module;
         if env
             .install_wasm_in_mode(*canister_id, CanisterInstallMode::Reinstall, wasm, vec![])
             .is_ok()
