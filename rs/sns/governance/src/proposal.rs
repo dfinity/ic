@@ -5322,7 +5322,7 @@ Payload rendering here"#
 
     #[test]
     fn test_manage_nervous_system_parameters_must_set_some_fields() {
-        let current_parameters = NervousSystemParameters::default();
+        let current_parameters = NervousSystemParameters::with_default_values();
 
         // Probably the same as `NervousSystemParameters::default()`, but more verbose.
         let new_parameters = NervousSystemParameters {
@@ -5347,6 +5347,27 @@ Payload rendering here"#
             max_age_bonus_percentage: None,
             maturity_modulation_disabled: None,
             automatically_advance_target_version: None,
+        };
+
+        let result = validate_and_render_manage_nervous_system_parameters(
+            &new_parameters,
+            &current_parameters,
+        );
+
+        assert_eq!(
+            result,
+            Err("NervousSystemParameters: at least one field must be set.".to_string())
+        );
+    }
+
+    #[test]
+    fn test_manage_nervous_system_parameters_happy_set_some_fields() {
+        let current_parameters = NervousSystemParameters::with_default_values();
+
+        // Probably the same as `NervousSystemParameters::default()`, but more verbose.
+        let new_parameters = NervousSystemParameters {
+            automatically_advance_target_version: Some(true),
+            ..Default::default()
         };
 
         let result = validate_and_render_manage_nervous_system_parameters(
