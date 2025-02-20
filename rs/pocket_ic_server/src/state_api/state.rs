@@ -6,11 +6,10 @@ use crate::pocket_ic::{
     AdvanceTimeAndTick, ApiResponse, EffectivePrincipal, PocketIc, ProcessCanisterHttpInternal,
 };
 use crate::state_api::canister_id::{self, DomainResolver, ResolvesDomain};
-use crate::state_api::routes::verify_cbor_content_header;
 use crate::{InstanceId, OpId, Operation};
 use async_trait::async_trait;
 use axum::{
-    extract::{DefaultBodyLimit, Request as AxumRequest, State},
+    extract::{Request as AxumRequest, State},
     response::{IntoResponse, Response},
     routing::{get, post},
     Router,
@@ -30,7 +29,6 @@ use http::{
 use http_body_util::{BodyExt, LengthLimitError, Limited};
 use ic_bn_lib::http::proxy::proxy;
 use ic_bn_lib::http::Client;
-use ic_http_endpoints_public::cors_layer;
 use ic_http_gateway::{CanisterRequest, HttpGatewayClient, HttpGatewayRequestArgs};
 use ic_types::{canister_http::CanisterHttpRequestId, CanisterId, NodeId, PrincipalId, SubnetId};
 use itertools::Itertools;
@@ -57,6 +55,7 @@ use tokio::{
     task::{spawn, spawn_blocking, JoinHandle, JoinSet},
     time::{self, sleep, Instant},
 };
+use tower::ServiceExt;
 use tower_http::cors::{Any, CorsLayer};
 use tracing::{debug, error, trace};
 
@@ -853,58 +852,61 @@ impl ApiState {
                 replica_url.clone(),
             ));
 
+            // ADAPTED from ic-gateway
+            let cors_post = layer(&[Method::POST]);
+            let cors_get = layer(&[Method::HEAD, Method::GET]);
+            // IC API proxy routers
             let router_api_v2 = Router::new()
                 .route(
-                    "/canister/:ecid/call",
-                    post(proxy_handler)
-                        .layer(axum::middleware::from_fn(verify_cbor_content_header)),
+                    "/canister/:principal/query",
+                    post(proxy_handler).layer(cors_post.clone()),
                 )
                 .route(
-                    "/canister/:ecid/query",
-                    post(proxy_handler)
-                        .layer(axum::middleware::from_fn(verify_cbor_content_header)),
+                    "/canister/:principal/call",
+                    post(proxy_handler).layer(cors_post.clone()),
                 )
                 .route(
-                    "/canister/:ecid/read_state",
-                    post(proxy_handler)
-                        .layer(axum::middleware::from_fn(verify_cbor_content_header)),
+                    "/canister/:principal/read_state",
+                    post(proxy_handler).layer(cors_post.clone()),
                 )
                 .route(
-                    "/subnet/:sid/read_state",
-                    post(proxy_handler)
-                        .layer(axum::middleware::from_fn(verify_cbor_content_header)),
+                    "/subnet/:principal/read_state",
+                    post(proxy_handler).layer(cors_post.clone()),
                 )
-                .route("/status", get(proxy_handler))
-                .with_state((format!("{}/api/v2", replica_url), backend_client.clone()))
-                .fallback(|| async { (StatusCode::NOT_FOUND, "") });
+                .route("/status", get(proxy_handler).layer(cors_get.clone()))
+                .fallback(|| async { (StatusCode::NOT_FOUND, "") })
+                .with_state((format!("{}/api/v2", replica_url), backend_client.clone()));
             let router_api_v3 = Router::new()
                 .route(
-                    "/canister/:ecid/call",
-                    post(proxy_handler)
-                        .layer(axum::middleware::from_fn(verify_cbor_content_header)),
+                    "/canister/:principal/call",
+                    post(proxy_handler).layer(cors_post.clone()),
                 )
-                .with_state((format!("{}/api/v3", replica_url), backend_client.clone()))
-                .fallback(|| async { (StatusCode::NOT_FOUND, "") });
+                .fallback(|| async { (StatusCode::NOT_FOUND, "") })
+                .with_state((format!("{}/api/v2", replica_url), backend_client.clone()));
+
+            let router_http = Router::new().fallback(
+                post(handler)
+                    .get(handler)
+                    .put(handler)
+                    .delete(handler)
+                    .patch(handler)
+                    .layer(layer(&[
+                        Method::HEAD,
+                        Method::GET,
+                        Method::POST,
+                        Method::PUT,
+                        Method::DELETE,
+                        Method::PATCH,
+                    ]))
+                    .with_state(state_handler),
+            );
+            // Top-level router
             let router = Router::new()
                 .nest("/api/v2", router_api_v2)
                 .nest("/api/v3", router_api_v3)
-                .fallback(
-                    post(handler)
-                        .get(handler)
-                        .put(handler)
-                        .delete(handler)
-                        .layer(layer(&[
-                            Method::HEAD,
-                            Method::GET,
-                            Method::POST,
-                            Method::PUT,
-                            Method::DELETE,
-                        ]))
-                        .with_state(state_handler),
-                )
-                .layer(DefaultBodyLimit::disable())
-                .layer(cors_layer())
+                .fallback(|request: AxumRequest| async move { router_http.oneshot(request).await })
                 .into_make_service();
+            // END ADAPTED from ic-gateway
 
             match https_config {
                 Some(config) => {
