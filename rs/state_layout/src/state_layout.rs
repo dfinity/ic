@@ -66,15 +66,17 @@ pub const UNVERIFIED_CHECKPOINT_MARKER: &str = "unverified_checkpoint_marker";
 /// don't want to ever modify persisted states.
 pub enum ReadOnly {}
 
-/// `WriteOnly` is the access policy used while we are creating a new
-/// checkpoint.
-pub enum WriteOnly {}
+/// `RwPolicy` is the access policy used for tip on disk state.
+pub struct PageMapsFinalized<'a, Owner> {
+    lifetime_tag: PhantomData<&'a Owner>,
+}
 
 /// `RwPolicy` is the access policy used for tip on disk state.
 pub struct RwPolicy<'a, Owner> {
     lifetime_tag: PhantomData<&'a Owner>,
 }
 
+pub enum Unverified {}
 pub trait AccessPolicy {
     /// `check_dir` specifies what to do the first time we enter a
     /// directory while reading/writing a checkpoint.
@@ -96,24 +98,17 @@ impl<T> ReadWritePolicy for T where T: ReadPolicy + WritePolicy {}
 impl AccessPolicy for ReadOnly {}
 impl ReadPolicy for ReadOnly {}
 
-impl AccessPolicy for WriteOnly {
-    /// For `WriteOnly` mode we want to ensure the directory exists
-    /// when we visit it for the first time as we'll certainly want to
-    /// create new files inside.
-    fn check_dir(path: &Path) -> Result<(), LayoutError> {
-        std::fs::create_dir_all(path).map_err(|err| LayoutError::IoError {
-            path: path.to_path_buf(),
-            message: "Failed to create directory".to_string(),
-            io_err: err,
-        })
-    }
+fn create_dir(path: &Path) -> Result<(), LayoutError> {
+    std::fs::create_dir_all(path).map_err(|err| LayoutError::IoError {
+        path: path.to_path_buf(),
+        message: "Failed to create directory".to_string(),
+        io_err: err,
+    })
 }
-
-impl WritePolicy for WriteOnly {}
 
 impl<T> AccessPolicy for RwPolicy<'_, T> {
     fn check_dir(p: &Path) -> Result<(), LayoutError> {
-        WriteOnly::check_dir(p)
+        create_dir(p)
     }
 }
 
@@ -491,16 +486,16 @@ impl StateLayout {
         // in testing the directory does not already exist and we need to
         // create it.
         if !Path::new(&self.page_deltas()).exists() {
-            WriteOnly::check_dir(&self.page_deltas())?;
+            create_dir(&self.page_deltas())?;
         }
 
-        WriteOnly::check_dir(&self.backups())?;
-        WriteOnly::check_dir(&self.checkpoints())?;
-        WriteOnly::check_dir(&self.diverged_checkpoints())?;
-        WriteOnly::check_dir(&self.diverged_state_markers())?;
-        WriteOnly::check_dir(&self.fs_tmp())?;
-        WriteOnly::check_dir(&self.tip_path())?;
-        WriteOnly::check_dir(&self.tmp())?;
+        create_dir(&self.backups())?;
+        create_dir(&self.checkpoints())?;
+        create_dir(&self.diverged_checkpoints())?;
+        create_dir(&self.diverged_state_markers())?;
+        create_dir(&self.fs_tmp())?;
+        create_dir(&self.tip_path())?;
+        create_dir(&self.tmp())?;
         for path in [
             &self.backups(),
             &self.checkpoints(),
