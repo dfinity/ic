@@ -35,10 +35,8 @@ if [ -n "${CANBENCH_INIT_ARGS_HEX:-}" ]; then
     echo "  hex: ${CANBENCH_INIT_ARGS_HEX}" >>${CANBENCH_YML}
 fi
 
-echo MEMORY FILE ${CANBENCH_STABLE_MEMORY_FILE:-}
-
 if [ -s "${CANBENCH_STABLE_MEMORY_FILE:-}" ]; then
-    TMP_MEMORY_FILE=$(mktemp -p . XXXX.bin)
+    TMP_MEMORY_FILE=$(mktemp -p . XXXXXXX.mem)
     if [[ "${CANBENCH_STABLE_MEMORY_FILE}" =~ [.]gz$ ]]; then
       gunzip -c "${CANBENCH_STABLE_MEMORY_FILE}"  > "$TMP_MEMORY_FILE"
     else
@@ -47,8 +45,6 @@ if [ -s "${CANBENCH_STABLE_MEMORY_FILE:-}" ]; then
     echo "stable_memory:" >>${CANBENCH_YML}
     echo "  file: ${TMP_MEMORY_FILE}" >>${CANBENCH_YML}
 fi
-
-ls -R .
 
 if [ $# -eq 0 ]; then
     # Runs the benchmark without updating the results file.
