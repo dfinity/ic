@@ -40,10 +40,8 @@ pub fn start_nns_delegation_manager(
         rt_handle: rt_handle.clone(),
     };
 
-    // Fetch the initial delegation in a blocking fashion
-    let delegation = rt_handle.block_on(manager.fetch());
+    let (tx, rx) = watch::channel(None);
 
-    let (tx, rx) = watch::channel(delegation);
     let join_handle = rt_handle.spawn(async move {
         cancellation_token
             .run_until_cancelled(manager.run(tx))
@@ -81,12 +79,11 @@ impl DelegationManager {
         )
         .await;
 
-        self.metrics.delegation_size.observe(
-            delegation
-                .as_ref()
-                .map(|d| d.certificate.len() as f64)
-                .unwrap_or_default(),
-        );
+        if let Some(delegation) = delegation.as_ref() {
+            self.metrics
+                .delegation_size
+                .observe(delegation.certificate.len() as f64);
+        }
 
         self.metrics.updates.inc();
 
@@ -95,6 +92,11 @@ impl DelegationManager {
 
     async fn run(self, sender: watch::Sender<Option<CertificateDelegation>>) {
         let mut interval = tokio::time::interval(DELEGATION_UPDATE_INTERVAL);
+        // Since we can't distinguish between yet uninitialized and simply not present
+        // (because we are on the NNS subnet) certification delegation, we explicitely keep
+        // track whether the value has been initialized and notify all receivers when we initialize
+        // it for the first time.
+        let mut initialized = false;
 
         loop {
             // fetch the delegation if enough time has passed
@@ -103,13 +105,17 @@ impl DelegationManager {
             let mut delegation = self.fetch().await;
 
             sender.send_if_modified(move |old_delegation: &mut Option<CertificateDelegation>| {
-                if &delegation != old_delegation {
+                let modified = if &delegation != old_delegation {
                     std::mem::swap(old_delegation, &mut delegation);
                     true
                 } else {
                     false
-                }
+                };
+
+                modified || !initialized
             });
+
+            initialized = true;
         }
     }
 }
@@ -124,43 +130,47 @@ mod tests {
 
     use super::*;
 
-    #[test]
-    fn nns_test() {
-        let rt = tokio::runtime::Runtime::new().unwrap();
-        let (registry_client, tls_config) = set_up_nns_delegation_dependencies(rt.handle().clone());
+    #[tokio::test]
+    async fn load_root_delegation_on_nns_should_return_none_test() {
+        let rt_handle = tokio::runtime::Handle::current();
+        let (registry_client, tls_config) = set_up_nns_delegation_dependencies(rt_handle.clone());
 
         let start_nns_delegation_manager = start_nns_delegation_manager(
             &MetricsRegistry::new(),
             Config::default(),
             no_op_logger(),
-            rt.handle().clone(),
+            rt_handle,
             NNS_SUBNET_ID,
             NNS_SUBNET_ID,
             registry_client,
             Arc::new(tls_config),
             CancellationToken::new(),
         );
-        let (_, rx) = start_nns_delegation_manager;
+        let (_, mut rx) = start_nns_delegation_manager;
+
+        rx.changed().await.unwrap();
 
         assert!(rx.borrow().is_none());
     }
 
-    #[test]
-    fn non_nns_test() {
-        let rt = tokio::runtime::Runtime::new().unwrap();
-        let (registry_client, tls_config) = set_up_nns_delegation_dependencies(rt.handle().clone());
+    #[tokio::test]
+    async fn load_root_delegation_on_non_nns_should_return_some_test() {
+        let rt_handle = tokio::runtime::Handle::current();
+        let (registry_client, tls_config) = set_up_nns_delegation_dependencies(rt_handle.clone());
 
-        let (_, rx) = start_nns_delegation_manager(
+        let (_, mut rx) = start_nns_delegation_manager(
             &MetricsRegistry::new(),
             Config::default(),
             no_op_logger(),
-            rt.handle().clone(),
+            rt_handle,
             NON_NNS_SUBNET_ID,
             NNS_SUBNET_ID,
             registry_client,
             Arc::new(tls_config),
             CancellationToken::new(),
         );
+
+        rx.changed().await.unwrap();
 
         let delegation = rx
             .borrow()

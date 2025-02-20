@@ -167,6 +167,7 @@ fn start_server_initialization(
     state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
     health_status: Arc<AtomicCell<ReplicaHealthStatus>>,
     rt_handle: tokio::runtime::Handle,
+    mut delegation_from_nns: watch::Receiver<Option<CertificateDelegation>>,
 ) {
     rt_handle.spawn(async move {
         info!(log, "Initializing HTTP server...");
@@ -193,6 +194,9 @@ fn start_server_initialization(
         // Fetch the delegation from the NNS for this subnet to be
         // able to issue certificates.
         health_status.store(ReplicaHealthStatus::WaitingForRootDelegation);
+        info!(log, "Waiting for the NNS certificate delegation...");
+        let _ = delegation_from_nns.changed().await;
+        info!(log, "NNS certificate delegation is now available.");
 
         metrics
             .health_status_transitions_total
@@ -390,6 +394,7 @@ pub fn start_server(
         state_reader,
         Arc::clone(&health_status),
         rt_handle.clone(),
+        delegation_from_nns,
     );
 
     let http_handler = HttpHandler {
