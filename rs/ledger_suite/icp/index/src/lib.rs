@@ -6,7 +6,7 @@ use serde_bytes::ByteBuf;
 
 pub mod logs;
 
-#[derive(Debug, CandidType, Deserialize)]
+#[derive(Clone, Debug, CandidType, Deserialize)]
 pub struct InitArg {
     pub ledger_id: Principal,
 }
