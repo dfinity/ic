@@ -1637,6 +1637,77 @@ fn helper_load_snapshot(
     assert!(result.is_ok());
 }
 
+fn helper_delete_snapshot(
+    test: &mut ExecutionTest,
+    canister_id: CanisterId,
+    snapshot_id: SnapshotId,
+) {
+    let args: DeleteCanisterSnapshotArgs =
+        DeleteCanisterSnapshotArgs::new(canister_id, snapshot_id);
+    test.subnet_message("delete_canister_snapshot", args.encode())
+        .unwrap();
+}
+
+#[test]
+fn take_and_delete_canister_snapshot_updates_hook_condition() {
+    const CYCLES: Cycles = Cycles::new(1_000_000_000_000);
+    let own_subnet = subnet_test_id(1);
+    let caller_canister = canister_test_id(1);
+    let mut test = ExecutionTestBuilder::new()
+        .with_own_subnet_id(own_subnet)
+        .with_caller(own_subnet, caller_canister)
+        .build();
+
+    let canister_id = test
+        .canister_from_cycles_and_binary(CYCLES, UNIVERSAL_CANISTER_WASM.to_vec())
+        .unwrap();
+
+    test.subnet_message(
+        Method::UpdateSettings,
+        UpdateSettingsArgs {
+            canister_id: canister_id.get(),
+            settings: CanisterSettingsArgsBuilder::new()
+                .with_wasm_memory_limit(100_000_000)
+                .with_memory_allocation(9_000_000)
+                .with_wasm_memory_threshold(4_000_000)
+                .build(),
+            sender_canister_version: None,
+        }
+        .encode(),
+    )
+    .unwrap();
+
+    assert_eq!(
+        test.canister_state_mut(canister_id)
+            .system_state
+            .task_queue
+            .peek_hook_status(),
+        OnLowWasmMemoryHookStatus::ConditionNotSatisfied
+    );
+
+    // Take a snapshot.
+    let (snapshot_id, _) = helper_take_snapshot(&mut test, canister_id);
+
+    assert_eq!(
+        test.canister_state_mut(canister_id)
+            .system_state
+            .task_queue
+            .peek_hook_status(),
+        OnLowWasmMemoryHookStatus::Ready
+    );
+
+    // Delete a snapshot.
+    helper_delete_snapshot(&mut test, canister_id, snapshot_id);
+
+    assert_eq!(
+        test.canister_state_mut(canister_id)
+            .system_state
+            .task_queue
+            .peek_hook_status(),
+        OnLowWasmMemoryHookStatus::ConditionNotSatisfied
+    );
+}
+
 #[test]
 fn load_canister_snapshot_updates_hook_condition() {
     const CYCLES: Cycles = Cycles::new(1_000_000_000_000);
@@ -1666,14 +1737,6 @@ fn load_canister_snapshot_updates_hook_condition() {
     )
     .unwrap();
 
-    assert_eq!(
-        test.canister_state_mut(canister_id)
-            .system_state
-            .task_queue
-            .peek_hook_status(),
-        OnLowWasmMemoryHookStatus::ConditionNotSatisfied
-    );
-
     let chunk = vec![1, 2, 3, 4, 5];
     helper_upload_chunk(&mut test, canister_id, chunk);
 
@@ -1682,6 +1745,14 @@ fn load_canister_snapshot_updates_hook_condition() {
 
     // Clear chunk after taking the snapshot.
     helper_clear_chunk(&mut test, canister_id);
+
+    assert_eq!(
+        test.canister_state_mut(canister_id)
+            .system_state
+            .task_queue
+            .peek_hook_status(),
+        OnLowWasmMemoryHookStatus::ConditionNotSatisfied
+    );
 
     // Load an existing snapshot.
     helper_load_snapshot(&mut test, canister_id, snapshot_id);
@@ -1693,8 +1764,6 @@ fn load_canister_snapshot_updates_hook_condition() {
             .peek_hook_status(),
         OnLowWasmMemoryHookStatus::Ready
     );
-
-    panic!("");
 }
 
 #[test]
