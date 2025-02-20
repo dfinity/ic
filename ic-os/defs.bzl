@@ -61,7 +61,7 @@ def icos_build(
         src = ic_version,
         out = "version.txt",
         allow_symlink = True,
-        visibility = visibility,
+        visibility = ["//visibility:public"],
         tags = ["manual"],
     )
 
