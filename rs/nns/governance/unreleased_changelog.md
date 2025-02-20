@@ -9,46 +9,29 @@ on the process that this file is part of, see
 
 ## Added
 
-### Periodic Confirmation
-
-Enabled voting power adjustment and follow pruning.
-
-#### Prior Work
-
-This section describes related changes in previous releases.
-
-We already started recording how long it's been since neurons have confirmed
-their following (aka refreshed voting power). Neurons were also given the
-ability to confirm their following. Those who have never confirmed are
-considered as having refreshed on Sep 1, 2024.
-
-This feature was proposed and approved in motion [proposal 132411].
-
-[proposal 132411]: https://dashboard.internetcomputer.org/proposal/132411
-
-#### New Behavior(s) (In This Release)
-
-With this enablement, not refreshing for more than 6 months will start to affect
-the neuron. More precisely,
-
-1. If a neuron has not refreshed in 6 months, then votes have less influence on
-   the outcome of proposals.
-
-2. If a neuron has not refreshed in 7 months,
-
-    a. It stops following other neurons (except on the NeuronManagement topic;
-       those followees are retained).
-
-    b. Its influence on proposals goes to 0.
-
 ## Changed
 
-* `InstallCode` proposal payload hashes are now computed when making the proposal instead of when
-  listing proposal. Hashes for existing proposals are backfilled.
+* ManageNetworkEconomics proposals can now modify deep fields one at a time.
+  Previously, this was only possible for top level fields.
+
+* Added validation for ManageNetworkEconomics proposals. Previously, there was
+  none. The result must have all the following properties:
+
+  * All "optional" fields are actually set.
+
+  * `maximum_icp_xdr_rate >= minimum_icp_xdr_rate`
+
+  * Decimal fields have parsable `human_readable` values.
+
+  * `one_third_participation_milestone_xdr < full_participation_milestone_xdr`
 
 ## Deprecated
 
 ## Removed
+
+* Neuron migration (`migrate_active_neurons_to_stable_memory`) is rolled back due to issues with
+  reward distribution. It has already been rolled back with a hotfix ([proposal
+  135265](https://dashboard.internetcomputer.org/proposal/135265))
 
 ## Fixed
 

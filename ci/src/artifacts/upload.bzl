@@ -3,7 +3,6 @@ Rules to manipulate with artifacts: download, upload etc.
 """
 
 load("@bazel_skylib//rules:common_settings.bzl", "BuildSettingInfo")
-load("//bazel:status.bzl", "FAKE_IC_VERSION")
 
 def _upload_artifact_impl(ctx):
     """
@@ -40,10 +39,9 @@ def _upload_artifact_impl(ctx):
     for f in allinputs:
         filename = ctx.label.name + "_" + f.basename
         url = ctx.actions.declare_file(filename + ".url")
-        proxy_cache_url = ctx.actions.declare_file(filename + ".proxy-cache-url")
         ctx.actions.run(
             executable = ctx.file._artifacts_uploader,
-            arguments = [f.path, url.path, proxy_cache_url.path],
+            arguments = [f.path, url.path],
             env = {
                 "RCLONE_S3_ENDPOINT": rclone_endpoint,
                 "RCLONE": ctx.file._rclone.path,
@@ -51,13 +49,12 @@ def _upload_artifact_impl(ctx):
                 "REMOTE_SUBDIR": ctx.attr.remote_subdir,
                 "VERSION_FILE": ctx.version_file.path,
                 "VERSION_TXT": ctx.file._version_txt.path,
-                "FAKE_IC_VERSION": FAKE_IC_VERSION,
             },
             inputs = [f, ctx.version_file, rclone_config, ctx.file._version_txt],
-            outputs = [url, proxy_cache_url],
+            outputs = [url],
             tools = [ctx.file._rclone],
         )
-        fileurl.extend([url, proxy_cache_url])
+        fileurl.extend([url])
 
     urls = ctx.actions.declare_file(ctx.label.name + ".urls")
     ctx.actions.run_shell(

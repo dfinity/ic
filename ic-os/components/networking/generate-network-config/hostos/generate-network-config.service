@@ -4,7 +4,6 @@ After=systemd-modules-load.service
 After=systemd-udev-settle.service
 Wants=systemd-udev-settle.service
 Before=systemd-networkd.service
-Before=systemd-networkd-wait-online.service
 
 [Service]
 Type=oneshot
@@ -12,6 +11,8 @@ RemainAfterExit=true
 ExecStart=/opt/ic/bin/hostos_tool generate-network-config
 StandardOutput=journal+console
 StandardError=journal+console
+Restart=on-failure
+RestartSec=10
 
 [Install]
 WantedBy=systemd-networkd.service

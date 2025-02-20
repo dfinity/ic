@@ -34,9 +34,7 @@ pub(crate) fn system_api_imports(config: EmbeddersConfig) -> Vec<u8> {
         canister_current_message_memory_usage,
         get_execution_parameters(),
         *MAX_SUBNET_AVAILABLE_MEMORY,
-        config.feature_flags.wasm_native_stable_memory,
-        config.feature_flags.canister_backtrace,
-        config.max_sum_exported_function_name_lengths,
+        &config,
         Memory::new_for_testing(),
         NumWasmPages::from(0),
         Rc::new(DefaultOutOfInstructionsHandler::default()),
@@ -96,7 +94,7 @@ pub(crate) fn system_api_imports(config: EmbeddersConfig) -> Vec<u8> {
         let func_type = FuncType::new(params, results);
         if !type_mapping.contains_key(&func_type) {
             type_mapping.insert(func_type.clone(), type_mapping.len());
-            types.func_type(&func_type);
+            types.ty().func_type(&func_type);
         }
         let func_index = type_mapping.get(&func_type).unwrap();
         imports.import(

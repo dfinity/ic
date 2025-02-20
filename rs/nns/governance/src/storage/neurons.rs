@@ -369,7 +369,7 @@ where
             self.update_followees(neuron_id, followees);
         }
 
-        if known_neuron_data != old_neuron.known_neuron_data {
+        if known_neuron_data.as_ref() != old_neuron.known_neuron_data() {
             update_singleton_field(
                 neuron_id,
                 known_neuron_data,

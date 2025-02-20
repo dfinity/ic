@@ -31,7 +31,7 @@ use ic_nns_common::pb::v1::{NeuronId, ProposalId};
 use icp_ledger::{AccountIdentifier, Subaccount};
 use std::{
     borrow::Cow,
-    collections::{BTreeMap, HashMap, HashSet},
+    collections::{BTreeMap, BTreeSet, HashMap},
     fmt::{Debug, Display, Formatter},
     ops::{Bound, Deref, RangeBounds},
 };
@@ -416,17 +416,10 @@ impl NeuronStore {
 
     /// Takes the neuron store state which should be persisted through upgrades.
     pub fn take(self) -> NeuronStoreState {
-        let now_seconds = self.now();
-
         (
             self.heap_neurons
                 .into_iter()
-                .map(|(id, neuron)| {
-                    (
-                        id,
-                        neuron.into_proto(&VotingPowerEconomics::DEFAULT, now_seconds),
-                    )
-                })
+                .map(|(id, neuron)| (id, NeuronProto::from(neuron.clone())))
                 .collect(),
             heap_topic_followee_index_to_proto(self.topic_followee_index),
         )
@@ -470,30 +463,16 @@ impl NeuronStore {
     /// Clones all the neurons. This is only used for testing.
     /// TODO(NNS-2474) clean it up after NNSState stop using GovernanceProto.
     pub fn __get_neurons_for_tests(&self) -> BTreeMap<u64, NeuronProto> {
-        let now_seconds = self.now();
-
         let mut stable_neurons = with_stable_neuron_store(|stable_store| {
             stable_store
                 .range_neurons(..)
-                .map(|neuron| {
-                    (
-                        neuron.id().id,
-                        neuron.into_proto(&VotingPowerEconomics::DEFAULT, now_seconds),
-                    )
-                })
+                .map(|neuron| (neuron.id().id, NeuronProto::from(neuron.clone())))
                 .collect::<BTreeMap<u64, NeuronProto>>()
         });
         let heap_neurons = self
             .heap_neurons
             .iter()
-            .map(|(id, neuron)| {
-                (
-                    *id,
-                    neuron
-                        .clone()
-                        .into_proto(&VotingPowerEconomics::DEFAULT, now_seconds),
-                )
-            })
+            .map(|(id, neuron)| (*id, NeuronProto::from(neuron.clone())))
             .collect::<BTreeMap<u64, NeuronProto>>();
 
         stable_neurons.extend(heap_neurons);
@@ -1241,7 +1220,7 @@ impl NeuronStore {
     pub fn get_neuron_ids_readable_by_caller(
         &self,
         principal_id: PrincipalId,
-    ) -> HashSet<NeuronId> {
+    ) -> BTreeSet<NeuronId> {
         with_stable_neuron_indexes(|indexes| {
             indexes
                 .principal()
@@ -1256,7 +1235,7 @@ impl NeuronStore {
     pub fn get_non_empty_neuron_ids_readable_by_caller(
         &self,
         caller: PrincipalId,
-    ) -> Vec<NeuronId> {
+    ) -> BTreeSet<NeuronId> {
         let is_non_empty = |neuron_id: &NeuronId| {
             self.with_neuron_sections(neuron_id, NeuronSections::NONE, |neuron| neuron.is_funded())
                 .unwrap_or(false)
@@ -1417,19 +1396,6 @@ pub fn groom_some_neurons(
             return next;
         }
     }
-}
-
-pub fn backfill_some_voting_power_refreshed_timestamps(
-    neuron_store: &mut NeuronStore,
-    next: Bound<NeuronId>,
-    carry_on: impl FnMut() -> bool,
-) -> Bound<NeuronId> {
-    groom_some_neurons(
-        neuron_store,
-        |neuron| neuron.backfill_voting_power_refreshed_timestamp(),
-        next,
-        carry_on,
-    )
 }
 
 /// Number of entries for each neuron indexes (in stable storage)

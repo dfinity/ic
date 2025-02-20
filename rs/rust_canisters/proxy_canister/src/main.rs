@@ -9,7 +9,7 @@ use candid::Principal;
 use ic_cdk::api::call::RejectionCode;
 use ic_cdk::caller;
 use ic_cdk_macros::{query, update};
-use ic_management_canister_types::{
+use ic_management_canister_types_private::{
     CanisterHttpResponsePayload, HttpHeader, Payload, TransformArgs,
 };
 use proxy_canister::{RemoteHttpRequest, RemoteHttpResponse};
@@ -114,7 +114,7 @@ fn transform_with_context(raw: TransformArgs) -> CanisterHttpResponsePayload {
 }
 
 fn test_transform_(raw: TransformArgs) -> CanisterHttpResponsePayload {
-    let (response, _) = (raw.response, raw.context);
+    let (response, context) = (raw.response, raw.context);
     let mut transformed = response;
     transformed.headers = vec![
         HttpHeader {
@@ -126,6 +126,8 @@ fn test_transform_(raw: TransformArgs) -> CanisterHttpResponsePayload {
             value: caller().to_string(),
         },
     ];
+    transformed.body = context;
+    transformed.status = 202;
     transformed
 }
 
@@ -155,7 +157,7 @@ fn main() {}
 #[cfg(test)]
 mod proxy_canister_test {
     use super::*;
-    use ic_management_canister_types::HttpHeader;
+    use ic_management_canister_types_private::HttpHeader;
 
     #[test]
     fn test_transform() {

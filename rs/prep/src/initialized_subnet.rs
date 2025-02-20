@@ -4,7 +4,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use ic_management_canister_types::MasterPublicKeyId;
+use ic_management_canister_types_private::MasterPublicKeyId;
 use ic_protobuf::registry::{
     crypto::v1::{ChainKeySigningSubnetList, PublicKey},
     subnet::v1::{CatchUpPackageContents, SubnetRecord},

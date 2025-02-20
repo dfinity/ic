@@ -31,7 +31,7 @@ pub type NodeIndex = u32;
 #[cfg(test)]
 mod tests;
 
-use ic_bls12_381::hash_to_curve::{ExpandMsgXmd, HashToCurve};
+use ic_bls12_381::hash_to_curve::{ExpandMsgXmd, HashToCurve, HashToField};
 use itertools::multiunzip;
 use pairing::group::{ff::Field, Group};
 use paste::paste;
@@ -232,6 +232,18 @@ impl Scalar {
     /// Return the scalar 1
     pub fn one() -> Self {
         Self::new(ic_bls12_381::Scalar::one())
+    }
+
+    /// Hash to scalar
+    ///
+    /// Uses the same mechanism as RFC 9380's hash_to_field except
+    /// targeting the scalar group.
+    pub fn hash(domain_sep: &[u8], input: &[u8]) -> Self {
+        let mut s = [ic_bls12_381::Scalar::zero()];
+        <ic_bls12_381::Scalar as HashToField>::hash_to_field::<ExpandMsgXmd<sha2::Sha256>>(
+            input, domain_sep, &mut s,
+        );
+        Self::new(s[0])
     }
 
     /// Return true iff this value is zero
@@ -1907,6 +1919,18 @@ declare_muln_vartime_impls_for!(G1Projective, 3, 4);
 declare_muln_vartime_affine_impl_for!(G1Projective, G1Affine);
 impl_debug_using_serialize_for!(G1Affine);
 impl_debug_using_serialize_for!(G1Projective);
+
+impl G1Affine {
+    /// See draft-irtf-cfrg-bls-signature-05 §4.2.2 for details on BLS augmented signatures
+    pub fn augmented_hash(pk: &G2Affine, data: &[u8]) -> Self {
+        let domain_sep = b"BLS_SIG_BLS12381G1_XMD:SHA-256_SSWU_RO_AUG_";
+
+        let mut signature_input = vec![];
+        signature_input.extend_from_slice(&pk.serialize());
+        signature_input.extend_from_slice(data);
+        Self::hash(domain_sep, &signature_input)
+    }
+}
 
 define_affine_and_projective_types!(G2Affine, G2Projective, 96);
 declare_addsub_ops_for!(G2Projective);

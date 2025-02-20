@@ -1,5 +1,7 @@
 use std::collections::BTreeMap;
 
+pub mod topics;
+
 /// A principal with a particular set of permissions over a neuron.
 #[derive(Default, candid::CandidType, candid::Deserialize, Debug, Clone, PartialEq)]
 pub struct NeuronPermission {
@@ -11,7 +13,16 @@ pub struct NeuronPermission {
 /// The id of a specific neuron, which equals the neuron's subaccount on the ledger canister
 /// (the account that holds the neuron's staked tokens).
 #[derive(
-    Default, candid::CandidType, candid::Deserialize, Debug, Eq, std::hash::Hash, Clone, PartialEq,
+    Default,
+    candid::CandidType,
+    candid::Deserialize,
+    Debug,
+    Eq,
+    std::hash::Hash,
+    Clone,
+    PartialEq,
+    PartialOrd,
+    Ord,
 )]
 pub struct NeuronId {
     #[serde(with = "serde_bytes")]
@@ -208,6 +219,8 @@ pub struct NervousSystemFunction {
 }
 /// Nested message and enum types in `NervousSystemFunction`.
 pub mod nervous_system_function {
+    use super::*;
+
     #[derive(Default, candid::CandidType, candid::Deserialize, Debug, Clone, PartialEq)]
     pub struct GenericNervousSystemFunction {
         /// The id of the target canister that will be called to execute the proposal.
@@ -224,6 +237,8 @@ pub mod nervous_system_function {
         /// The signature of the method must be equivalent to the following:
         /// <method_name>(proposal_data: ProposalData) -> Result<String, String>
         pub validator_method_name: Option<String>,
+        /// The topic this function belongs to
+        pub topic: Option<topics::Topic>,
     }
     #[derive(candid::CandidType, candid::Deserialize, Debug, Clone, PartialEq)]
     pub enum FunctionType {
@@ -294,7 +309,9 @@ pub struct UpgradeSnsControlledCanister {
     /// Arguments passed to the post-upgrade method of the new wasm module.
     #[serde(deserialize_with = "ic_utils::deserialize::deserialize_option_blob")]
     pub canister_upgrade_arg: Option<Vec<u8>>,
-    /// Canister install_code mode.
+    /// Canister install_code mode. If specified, the integer value corresponds to
+    /// `ic_protobuf::types::v1::v1CanisterInstallMode` or `canister_install_mode`
+    /// (as per https://internetcomputer.org/docs/current/references/ic-interface-spec#ic-candid).
     pub mode: Option<i32>,
     /// If the entire WASM does not fit into the 2 MiB ingress limit, then `new_canister_wasm` should be
     /// an empty, and this field should be set instead.
@@ -587,6 +604,7 @@ pub mod governance_error {
         Hash,
         PartialOrd,
         Ord,
+        ::prost::Enumeration,
     )]
     #[repr(i32)]
     pub enum ErrorType {
@@ -2380,6 +2398,7 @@ pub struct Account {
     Hash,
     PartialOrd,
     Ord,
+    ::prost::Enumeration,
 )]
 #[repr(i32)]
 pub enum NeuronPermissionType {

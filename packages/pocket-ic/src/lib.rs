@@ -70,7 +70,7 @@ use candid::{
     Principal,
 };
 use ic_transport_types::SubnetMetrics;
-use reqwest::Url;
+use reqwest::{StatusCode, Url};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use slog::Level;
@@ -522,6 +522,14 @@ impl PocketIc {
         runtime.block_on(async { self.pocket_ic.tick().await })
     }
 
+    /// Make the IC produce and progress by one block with custom
+    /// configs for the round.
+    #[instrument(skip(self), fields(instance_id=self.pocket_ic.instance_id))]
+    pub fn tick_with_configs(&self, configs: crate::common::rest::TickConfigs) {
+        let runtime = self.runtime.clone();
+        runtime.block_on(async { self.pocket_ic.tick_with_configs(configs).await })
+    }
+
     /// Configures the IC to make progress automatically,
     /// i.e., periodically update the time of the IC
     /// to the real time and execute rounds on the subnets.
@@ -619,6 +627,13 @@ impl PocketIc {
         runtime.block_on(async { self.pocket_ic.set_time(time).await })
     }
 
+    /// Set the current certified time of the IC, on all subnets.
+    #[instrument(skip(self), fields(instance_id=self.pocket_ic.instance_id, time = ?time))]
+    pub fn set_certified_time(&self, time: SystemTime) {
+        let runtime = self.runtime.clone();
+        runtime.block_on(async { self.pocket_ic.set_certified_time(time).await })
+    }
+
     /// Advance the time on the IC on all subnets by some nanoseconds.
     #[instrument(skip(self), fields(instance_id=self.pocket_ic.instance_id, duration = ?duration))]
     pub fn advance_time(&self, duration: Duration) {
@@ -632,6 +647,16 @@ impl PocketIc {
     pub fn get_controllers(&self, canister_id: CanisterId) -> Vec<Principal> {
         let runtime = self.runtime.clone();
         runtime.block_on(async { self.pocket_ic.get_controllers(canister_id).await })
+    }
+
+    /// Get the controllers of a canister.
+    #[instrument(ret, skip(self), fields(instance_id=self.pocket_ic.instance_id, canister_id = %canister_id.to_string()))]
+    pub fn try_get_controllers(
+        &self,
+        canister_id: CanisterId,
+    ) -> Result<Vec<Principal>, (StatusCode, String)> {
+        let runtime = self.runtime.clone();
+        runtime.block_on(async { self.pocket_ic.try_get_controllers(canister_id).await })
     }
 
     /// Get the current cycles balance of a canister.
@@ -1122,7 +1147,7 @@ impl PocketIc {
         runtime.block_on(async { self.pocket_ic.get_subnet_metrics(subnet_id).await })
     }
 
-    fn update_call_with_effective_principal(
+    pub fn update_call_with_effective_principal(
         &self,
         canister_id: CanisterId,
         effective_principal: RawEffectivePrincipal,

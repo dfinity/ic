@@ -4,7 +4,7 @@ use ic_config::subnet_config::SchedulerConfig;
 use ic_interfaces::execution_environment::SystemApi;
 use ic_limits::SMALL_APP_SUBNET_MAX_SIZE;
 use ic_logger::replica_logger::no_op_logger;
-use ic_management_canister_types::{
+use ic_management_canister_types_private::{
     CanisterIdRecord, CanisterSettingsArgs, Payload, UpdateSettingsArgs, IC_00,
 };
 use ic_nns_constants::CYCLES_MINTING_CANISTER_ID;
@@ -34,7 +34,7 @@ use std::sync::Arc;
 mod common;
 use common::*;
 
-use ic_cycles_account_manager::WasmExecutionMode;
+use ic_replicated_state::canister_state::execution_state::WasmExecutionMode;
 
 const MAX_NUM_INSTRUCTIONS: NumInstructions = NumInstructions::new(1 << 30);
 const INITIAL_CYCLES: Cycles = Cycles::new(5_000_000_000_000);
@@ -443,7 +443,7 @@ fn call_increases_cycles_consumed_metric() {
     api.ic0_call_new(0, 0, 0, 0, 0, 0, 0, 0, &[]).unwrap();
     api.ic0_call_perform().unwrap();
 
-    let system_state_modifications = api.into_system_state_modifications();
+    let system_state_modifications = api.take_system_state_modifications();
     system_state_modifications
         .apply_changes(
             UNIX_EPOCH,

@@ -1,9 +1,9 @@
 use crate::{
     blockchainstate::BlockchainState,
-    config::{Config, IncomingSource},
     get_successors_handler::{GetSuccessorsRequest, GetSuccessorsResponse},
     metrics::{ServiceMetrics, LABEL_GET_SUCCESSOR, LABEL_SEND_TRANSACTION},
-    BlockchainManagerRequest, GetSuccessorsHandler, TransactionManagerRequest,
+    BlockchainManagerRequest, Config, GetSuccessorsHandler, IncomingSource,
+    TransactionManagerRequest,
 };
 use bitcoin::{consensus::Encodable, hashes::Hash, BlockHash};
 use ic_btc_service::{
@@ -56,11 +56,8 @@ impl TryFrom<GetSuccessorsResponse> for BtcServiceGetSuccessorsResponse {
     type Error = Status;
     fn try_from(response: GetSuccessorsResponse) -> Result<Self, Self::Error> {
         let mut blocks = vec![];
-        for block in response.blocks.iter() {
-            let mut encoded_block = vec![];
-            block
-                .consensus_encode(&mut encoded_block)
-                .map_err(|_| Status::unknown("Failed to encode block!"))?;
+        for block in response.blocks {
+            let encoded_block = Arc::unwrap_or_clone(block);
             blocks.push(encoded_block);
         }
 

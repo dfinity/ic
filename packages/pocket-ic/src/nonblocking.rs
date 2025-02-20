@@ -5,7 +5,7 @@ use crate::common::rest::{
     MockCanisterHttpResponse, RawAddCycles, RawCanisterCall, RawCanisterHttpRequest, RawCanisterId,
     RawCanisterResult, RawCycles, RawEffectivePrincipal, RawIngressStatusArgs, RawMessageId,
     RawMockCanisterHttpResponse, RawPrincipalId, RawSetStableMemory, RawStableMemory, RawSubnetId,
-    RawTime, RawVerifyCanisterSigArg, SubnetId, Topology,
+    RawTime, RawVerifyCanisterSigArg, SubnetId, TickConfigs, Topology,
 };
 use crate::management_canister::{
     CanisterId, CanisterIdRecord, CanisterInstallMode, CanisterInstallModeUpgradeInner,
@@ -290,8 +290,15 @@ impl PocketIc {
     /// inter-canister calls or heartbeats.
     #[instrument(skip(self), fields(instance_id=self.instance_id))]
     pub async fn tick(&self) {
+        self.tick_with_configs(TickConfigs::default()).await;
+    }
+
+    /// Make the IC produce and progress by one block with custom
+    /// configs for the round.
+    #[instrument(skip(self), fields(instance_id=self.instance_id))]
+    pub async fn tick_with_configs(&self, configs: TickConfigs) {
         let endpoint = "update/tick";
-        self.post::<(), _>(endpoint, "").await;
+        self.post::<(), _>(endpoint, configs).await;
     }
 
     /// Configures the IC to make progress automatically,
@@ -302,7 +309,7 @@ impl PocketIc {
     #[instrument(skip(self), fields(instance_id=self.instance_id))]
     pub async fn auto_progress(&self) -> Url {
         let now = std::time::SystemTime::now();
-        self.set_time(now).await;
+        self.set_certified_time(now).await;
         let endpoint = "auto_progress";
         let auto_progress_config = AutoProgressConfig {
             artificial_delay_ms: None,
@@ -485,6 +492,22 @@ impl PocketIc {
         .await;
     }
 
+    /// Set the current certified time of the IC, on all subnets.
+    #[instrument(skip(self), fields(instance_id=self.instance_id, time = ?time))]
+    pub async fn set_certified_time(&self, time: SystemTime) {
+        let endpoint = "update/set_certified_time";
+        self.post::<(), _>(
+            endpoint,
+            RawTime {
+                nanos_since_epoch: time
+                    .duration_since(SystemTime::UNIX_EPOCH)
+                    .expect("Time went backwards")
+                    .as_nanos() as u64,
+            },
+        )
+        .await;
+    }
+
     /// Advance the time on the IC on all subnets by some nanoseconds.
     #[instrument(skip(self), fields(instance_id=self.instance_id, duration = ?duration))]
     pub async fn advance_time(&self, duration: Duration) {
@@ -496,16 +519,25 @@ impl PocketIc {
     /// Panics if the canister does not exist.
     #[instrument(ret, skip(self), fields(instance_id=self.instance_id, canister_id = %canister_id.to_string()))]
     pub async fn get_controllers(&self, canister_id: CanisterId) -> Vec<Principal> {
+        self.try_get_controllers(canister_id).await.unwrap()
+    }
+
+    /// Get the controllers of a canister.
+    #[instrument(ret, skip(self), fields(instance_id=self.instance_id, canister_id = %canister_id.to_string()))]
+    pub async fn try_get_controllers(
+        &self,
+        canister_id: CanisterId,
+    ) -> Result<Vec<Principal>, (StatusCode, String)> {
         let endpoint = "read/get_controllers";
-        let result: Vec<RawPrincipalId> = self
-            .post(
+        let result: Result<Vec<RawPrincipalId>, (StatusCode, String)> = self
+            .try_post(
                 endpoint,
                 RawCanisterId {
                     canister_id: canister_id.as_slice().to_vec(),
                 },
             )
             .await;
-        result.into_iter().map(|p| p.into()).collect()
+        result.map(|v| v.into_iter().map(|p| p.into()).collect())
     }
 
     /// Get the current cycles balance of a canister.
@@ -1513,7 +1545,7 @@ impl PocketIc {
         result.into()
     }
 
-    pub(crate) async fn update_call_with_effective_principal(
+    pub async fn update_call_with_effective_principal(
         &self,
         canister_id: CanisterId,
         effective_principal: RawEffectivePrincipal,

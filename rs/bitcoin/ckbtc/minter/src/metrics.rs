@@ -225,13 +225,13 @@ pub fn encode_metrics(
 
     metrics.encode_gauge(
         "ckbtc_minter_concurrent_update_balance_count",
-        state::read_state(|s| s.update_balance_principals.len()) as f64,
+        state::read_state(|s| s.update_balance_accounts.len()) as f64,
         "Total number of concurrent update_balance requests.",
     )?;
 
     metrics.encode_gauge(
         "ckbtc_minter_concurrent_retrieve_btc_count",
-        state::read_state(|s| s.retrieve_btc_principals.len()) as f64,
+        state::read_state(|s| s.retrieve_btc_accounts.len()) as f64,
         "Total number of concurrent retrieve_btc requests.",
     )?;
 
@@ -269,6 +269,12 @@ pub fn encode_metrics(
         "ckbtc_minter_quarantined_utxos_count",
         state::read_state(|s| s.quarantined_utxos().count()) as f64,
         "Total number of suspended UTXOs due to being marked as tainted.",
+    )?;
+
+    metrics.encode_gauge(
+        "ckbtc_minter_mint_status_unknown_utxos_count",
+        state::read_state(|s| s.mint_status_unknown_utxos().count()) as f64,
+        "Total number of UTXOs with unknown mint status.",
     )?;
 
     let mut histogram_vec = metrics.histogram_vec(
