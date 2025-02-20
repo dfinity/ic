@@ -152,3 +152,5 @@ To make the mono repository a success, there needs to be some basic rules to mak
 * Use Cargo workspace for inferring external crate versions by adding the new crate to the section `[workspace.dependencies]` of the workspace `Cargo.toml` and adding `new-crate = { workspace = true }` to each package-specific `Cargo.toml` that needs it.
 
 Test contribution 
+
+Another contribution
