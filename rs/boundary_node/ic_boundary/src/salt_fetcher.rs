@@ -88,7 +88,7 @@ impl AnonymizationSaltFetcher {
     }
 
     async fn fetch_salt(&self) {
-        let update_fetch_result = |status: &str, message: &str| {
+        let update_fetch_metric = |status: &str, message: &str| {
             self.metrics
                 .fetches
                 .with_label_values(&[status, message])
@@ -109,13 +109,13 @@ impl AnonymizationSaltFetcher {
             Ok(response) => match response {
                 Some(response) => response,
                 None => {
-                    update_fetch_result("failure", "empty_response");
+                    update_fetch_metric("failure", "empty_response");
                     warn!("{SERVICE}: got empty response from the canister");
                     return;
                 }
             },
             Err(err) => {
-                update_fetch_result("failure", "fetch_failure");
+                update_fetch_metric("failure", "update_call_failure");
                 warn!("{SERVICE}: failed to get salt from the canister: {err:#}");
                 return;
             }
@@ -124,7 +124,7 @@ impl AnonymizationSaltFetcher {
         let salt_response = match Decode!(&query_response, GetSaltResponse) {
             Ok(response) => response,
             Err(err) => {
-                update_fetch_result("failure", "response_decoding_failure");
+                update_fetch_metric("failure", "response_decoding_failure");
                 warn!("{SERVICE}: failed to decode candid response: {err:?}");
                 return;
             }
@@ -132,7 +132,7 @@ impl AnonymizationSaltFetcher {
 
         match salt_response {
             Ok(resp) => {
-                update_fetch_result("success", "");
+                update_fetch_metric("success", "");
                 // Overwrite salt (used for hashing sensitive data)
                 self.anonymization_salt.store(Some(Arc::new(resp.salt)));
                 // Update metrics
@@ -150,7 +150,7 @@ impl AnonymizationSaltFetcher {
                     GetSaltError::Unauthorized => "unauthorized",
                     GetSaltError::Internal(_) => "internal",
                 };
-                update_fetch_result("failure", message);
+                update_fetch_metric("failure", message);
                 warn!("{SERVICE}: get_salt failed: {err:?}");
             }
         }
