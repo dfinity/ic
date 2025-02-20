@@ -882,7 +882,7 @@ impl ApiState {
                     post(proxy_handler).layer(cors_post.clone()),
                 )
                 .fallback(|| async { (StatusCode::NOT_FOUND, "") })
-                .with_state((format!("{}/api/v2", replica_url), backend_client.clone()));
+                .with_state((format!("{}/api/v3", replica_url), backend_client.clone()));
 
             let router_http = Router::new().fallback(
                 post(handler)
