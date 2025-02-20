@@ -17867,6 +17867,7 @@ dependencies = [
  "serde_json",
  "slog",
  "spec-compliance",
+ "strum",
  "tempfile",
  "time",
  "tokio",

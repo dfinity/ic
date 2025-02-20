@@ -26,9 +26,9 @@ use http::{
     },
     HeaderName, Method, StatusCode,
 };
-use http_body_util::{BodyExt, LengthLimitError, Limited};
+use ic_bn_lib::http::body::buffer_body;
 use ic_bn_lib::http::proxy::proxy;
-use ic_bn_lib::http::Client;
+use ic_bn_lib::http::{Client, Error as IcBnError};
 use ic_http_gateway::{CanisterRequest, HttpGatewayClient, HttpGatewayRequestArgs};
 use ic_types::{canister_http::CanisterHttpRequestId, CanisterId, NodeId, PrincipalId, SubnetId};
 use itertools::Itertools;
@@ -41,13 +41,13 @@ use reqwest::Url;
 use serde::{Deserialize, Serialize};
 use std::{
     collections::HashMap,
-    fmt,
     path::PathBuf,
     str::FromStr,
     sync::atomic::AtomicU64,
     sync::Arc,
     time::{Duration, SystemTime},
 };
+use strum::Display;
 use tokio::{
     sync::mpsc::error::TryRecvError,
     sync::mpsc::Receiver,
@@ -423,7 +423,7 @@ fn received_stop_signal(rx: &mut Receiver<()>) -> bool {
 
 // ADAPTED from ic-gateway
 
-const HEADER_IC_CANISTER_ID: HeaderName = HeaderName::from_static("x-ic-canister-id");
+const X_IC_CANISTER_ID: HeaderName = HeaderName::from_static("x-ic-canister-id");
 const MAX_REQUEST_BODY_SIZE: usize = 10 * 1_048_576;
 const MINUTE: Duration = Duration::from_secs(60);
 
@@ -435,7 +435,7 @@ fn layer(methods: &[Method]) -> CorsLayer {
             ACCEPT_RANGES,
             CONTENT_LENGTH,
             CONTENT_RANGE,
-            HEADER_IC_CANISTER_ID,
+            X_IC_CANISTER_ID,
         ])
         .allow_headers([
             USER_AGENT,
@@ -446,47 +446,51 @@ fn layer(methods: &[Method]) -> CorsLayer {
             CONTENT_TYPE,
             RANGE,
             COOKIE,
-            HEADER_IC_CANISTER_ID,
+            X_IC_CANISTER_ID,
         ])
         .max_age(10 * MINUTE)
 }
 
 // Categorized possible causes for request processing failures
 // Not using Error as inner type since it's not cloneable
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Display)]
 enum ErrorCause {
+    ClientBodyTooLarge,
+    ClientBodyTimeout,
+    ClientBodyError(String),
     ConnectionFailure(String),
-    UnableToReadBody(String),
-    RequestTooLarge,
     CanisterIdNotFound,
+    Other(String),
 }
 
 impl ErrorCause {
     const fn status_code(&self) -> StatusCode {
         match self {
+            Self::ClientBodyTooLarge => StatusCode::PAYLOAD_TOO_LARGE,
+            Self::ClientBodyTimeout => StatusCode::REQUEST_TIMEOUT,
+            Self::ClientBodyError(_) => StatusCode::BAD_REQUEST,
             Self::ConnectionFailure(_) => StatusCode::BAD_GATEWAY,
-            Self::UnableToReadBody(_) => StatusCode::REQUEST_TIMEOUT,
-            Self::RequestTooLarge => StatusCode::PAYLOAD_TOO_LARGE,
             Self::CanisterIdNotFound => StatusCode::BAD_REQUEST,
+            Self::Other(_) => StatusCode::INTERNAL_SERVER_ERROR,
         }
     }
 
     fn details(&self) -> Option<String> {
         match self {
+            Self::ClientBodyError(x) => Some(x.clone()),
             Self::ConnectionFailure(x) => Some(x.clone()),
-            Self::UnableToReadBody(x) => Some(x.clone()),
+            Self::Other(x) => Some(x.clone()),
             _ => None,
         }
     }
-}
 
-impl fmt::Display for ErrorCause {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            Self::ConnectionFailure(_) => write!(f, "connection_failure"),
-            Self::UnableToReadBody(_) => write!(f, "unable_to_read_body"),
-            Self::RequestTooLarge => write!(f, "request_too_large"),
-            Self::CanisterIdNotFound => write!(f, "canister_id_not_found"),
+    // Convert from client-side error
+    pub fn from_client_error(e: IcBnError) -> Self {
+        match e {
+            IcBnError::BodyReadingFailed(v) => Self::ClientBodyError(v),
+            IcBnError::BodyTimedOut => Self::ClientBodyTimeout,
+            IcBnError::BodyTooBig => Self::ClientBodyTooLarge,
+            _ => Self::Other(e.to_string()),
         }
     }
 }
@@ -591,17 +595,13 @@ async fn handler(
         let (parts, body) = request.into_parts();
 
         // Collect the request body up to the limit
-        let body = Limited::new(body, MAX_REQUEST_BODY_SIZE)
-            .collect()
-            .await
-            .map_err(|e| {
-                // TODO improve the inferring somehow
-                e.downcast_ref::<LengthLimitError>().map_or_else(
-                    || ErrorCause::UnableToReadBody(e.to_string()),
-                    |_| ErrorCause::RequestTooLarge,
-                )
-            })?
-            .to_bytes();
+        let body = buffer_body(body, MAX_REQUEST_BODY_SIZE, Duration::from_secs(60)).await;
+        let body = match body {
+            Ok(v) => v,
+            Err(e) => {
+                return Err(ErrorCause::from_client_error(e));
+            }
+        };
 
         let args = HttpGatewayRequestArgs {
             canister_request: CanisterRequest::from_parts(parts, body),
