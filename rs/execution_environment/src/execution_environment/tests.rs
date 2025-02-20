@@ -3599,7 +3599,7 @@ fn upload_and_clear_chunk_updates_hook_condition() {
         OnLowWasmMemoryHookStatus::ConditionNotSatisfied
     );
 
-    let chunk = vec![0; 100_000];
+    let chunk = vec![1, 2, 3, 4, 5];
     helper_upload_chunk(&mut test, canister_id, chunk);
 
     assert_eq!(
