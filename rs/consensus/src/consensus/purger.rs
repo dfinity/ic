@@ -893,6 +893,9 @@ mod tests {
                 .replace(finalized_block_proposal_1.content.as_ref().height);
 
             let pool_reader = PoolReader::new(&pool);
+            // Ignored because the `Hash` implementation of `Block` does not
+            // access the mutable payload `Thunk`.
+            #[allow(clippy::mutable_key_type)]
             let remove_from_validated_changeset: HashSet<_> = purger
                 .on_state_change(&pool_reader)
                 .into_iter()
