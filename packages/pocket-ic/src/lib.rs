@@ -1714,10 +1714,7 @@ To download the binary, please visit https://github.com/dfinity/pocketic."
     let mut cmd = pocket_ic_server_cmd(&bin_path);
     cmd.arg("--port-file");
     #[cfg(windows)]
-    cmd.arg(wsl_path(
-        port_file_path.as_path().as_os_str(),
-        "PocketIC port file",
-    ));
+    cmd.arg(wsl_path(&port_file_path, "PocketIC port file"));
     #[cfg(not(windows))]
     cmd.arg(port_file_path.clone());
     if let Ok(mute_server) = std::env::var("POCKET_IC_MUTE_SERVER") {
