@@ -132,6 +132,26 @@ rust_test(
 )
 
 rust_test(
+    name = "ckbtc_minter_dump_stable_memory",
+    srcs = ["tests/dump_stable_memory.rs"],
+    data = [
+        "test_resources/mainnet_events.gz",
+    ],
+    deps = [
+        # Keep sorted.
+        ":ckbtc_minter_lib",
+        "//packages/pocket-ic",
+        "@crate_index//:bitcoin_0_28",
+        "@crate_index//:candid",
+        "@crate_index//:flate2",
+        "@crate_index//:ic-agent",
+        "@crate_index//:ic-stable-structures",
+        "@crate_index//:serde",
+        "@crate_index//:tokio",
+    ],
+)
+
+rust_test(
     name = "ckbtc_minter_replay_events_tests",
     srcs = ["tests/replay_events.rs"],
     data = [
