@@ -4,7 +4,7 @@ use ic_base_types::{subnet_id_into_protobuf, NodeId, PrincipalId, SubnetId};
 use ic_config::Config;
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 use ic_interfaces_registry::RegistryClient;
-use ic_management_canister_types::{
+use ic_management_canister_types_private::{
     EcdsaCurve, EcdsaKeyId, MasterPublicKeyId, SchnorrAlgorithm, SchnorrKeyId,
 };
 use ic_nns_test_utils::{
@@ -164,7 +164,6 @@ fn test_recover_subnet_with_replacement_nodes() {
                 state_hash: vec![10, 20, 30],
                 replacement_nodes: Some(unassigned_node_ids.clone()),
                 registry_store_uri: None,
-                ecdsa_config: None,
                 chain_key_config: None,
             };
 
@@ -371,7 +370,6 @@ fn test_recover_subnet_gets_chain_keys_when_needed(key_id: MasterPublicKeyId) {
             state_hash: vec![10, 20, 30],
             replacement_nodes: None,
             registry_store_uri: None,
-            ecdsa_config: None, // deprecated
             chain_key_config: Some(InitialChainKeyConfig {
                 key_configs: vec![KeyConfigRequest {
                     key_config: Some(KeyConfig {
@@ -609,7 +607,6 @@ fn test_recover_subnet_without_chain_key_removes_it_from_signing_list(key_id: Ma
                 signature_request_timeout_ns,
                 idkg_key_rotation_period_ms,
             }),
-            ecdsa_config: None, // deprecated
         };
 
         // When we recover a subnet with specified ecdsa_keys
@@ -766,7 +763,6 @@ fn test_recover_subnet_resets_the_halt_at_cup_height_flag() {
             state_hash: vec![10, 20, 30],
             replacement_nodes: None,
             registry_store_uri: None,
-            ecdsa_config: None,
             chain_key_config: None,
         };
 
@@ -1067,7 +1063,6 @@ fn test_recover_subnet_resets_cup_contents() {
             state_hash: vec![10, 20, 30],
             replacement_nodes: None,
             registry_store_uri: None,
-            ecdsa_config: None, // deprecated
             chain_key_config: Some(InitialChainKeyConfig {
                 key_configs: vec![KeyConfigRequest {
                     key_config: Some(KeyConfig {

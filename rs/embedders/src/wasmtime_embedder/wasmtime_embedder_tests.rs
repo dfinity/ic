@@ -92,11 +92,7 @@ fn test_wasmtime_system_api() {
             subnet_memory_saturation: ResourceSaturation::default(),
         },
         *MAX_SUBNET_AVAILABLE_MEMORY,
-        EmbeddersConfig::default()
-            .feature_flags
-            .wasm_native_stable_memory,
-        EmbeddersConfig::default().feature_flags.canister_backtrace,
-        EmbeddersConfig::default().max_sum_exported_function_name_lengths,
+        &EmbeddersConfig::default(),
         Memory::new_for_testing(),
         NumWasmPages::from(0),
         Rc::new(DefaultOutOfInstructionsHandler::default()),

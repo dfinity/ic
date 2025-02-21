@@ -37,3 +37,7 @@ name = "traps"
 [[bench]]
 harness = false
 name = "memory_ops"
+
+[[bench]]
+harness = false
+name = "bit_vec"

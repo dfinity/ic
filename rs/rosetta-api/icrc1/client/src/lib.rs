@@ -89,15 +89,14 @@ impl RosettaClient {
                     };
                 }
                 CurveType::Secp256K1 => {
-                    let verification_key = ic_crypto_secp256k1::PublicKey::deserialize_sec1(
-                        &signer_keypair.get_pb_key(),
-                    )
-                    .with_context(|| {
-                        format!(
-                            "Failed to convert public key to verification key: {:?}",
-                            signer_keypair.get_pb_key()
-                        )
-                    })?;
+                    let verification_key =
+                        ic_secp256k1::PublicKey::deserialize_sec1(&signer_keypair.get_pb_key())
+                            .with_context(|| {
+                                format!(
+                                    "Failed to convert public key to verification key: {:?}",
+                                    signer_keypair.get_pb_key()
+                                )
+                            })?;
                     if !verification_key
                         .verify_signature(signable_bytes.as_slice(), signed_bytes.as_slice())
                     {

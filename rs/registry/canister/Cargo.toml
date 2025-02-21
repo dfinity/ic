@@ -25,7 +25,7 @@ ic-crypto-node-key-validation = { path = "../../crypto/node_key_validation" }
 ic-crypto-sha2 = { path = "../../crypto/sha2/" }
 ic-crypto-utils-basic-sig = { path = "../../crypto/utils/basic_sig" }
 ic-crypto-utils-ni-dkg = { path = "../../crypto/utils/ni_dkg" }
-ic-management-canister-types = { path = "../../types/management_canister_types" }
+ic-management-canister-types-private = { path = "../../types/management_canister_types" }
 ic-metrics-encoder = "1"
 ic-nervous-system-canisters = { path = "../../nervous_system/canisters" }
 ic-nervous-system-clients = { path = "../../nervous_system/clients" }
@@ -55,7 +55,7 @@ serde = { workspace = true }
 url = { workspace = true }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
-getrandom = { version = "0.2", features = [ "custom" ] }
+getrandom = { version = "0.2", features = ["custom"] }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
 assert_matches = { workspace = true }

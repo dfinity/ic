@@ -16,7 +16,7 @@ ic-http-endpoints-async-utils = { path = "../../http_endpoints/async_utils" }
 ic-config = { path = "../../config" }
 ic-error-types = { path = "../../types/error_types" }
 ic-https-outcalls-service = { path = "../service" }
-ic-management-canister-types = { path = "../../types/management_canister_types" }
+ic-management-canister-types-private = { path = "../../types/management_canister_types" }
 ic-interfaces = { path = "../../interfaces" }
 ic-interfaces-adapter-client = { path = "../../interfaces/adapter_client" }
 ic-logger = { path = "../../monitoring/logger" }

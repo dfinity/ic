@@ -1,6 +1,6 @@
 [Unit]
 Description=Generate node_exporter TLS key pair on first boot
-After=boot-config.mount
+RequiresMountsFor=/boot/config
 Before=node_exporter.service
 
 [Install]

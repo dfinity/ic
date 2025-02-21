@@ -6,8 +6,8 @@ DEV_DEPENDENCIES = [
     # Keep sorted.
     "//packages/ic-ed25519",
     "//packages/ic-ledger-hash-of",
+    "//packages/ic-secp256k1",
     "//packages/icrc-ledger-types:icrc_ledger_types",
-    "//rs/crypto/secp256k1",
     "//rs/crypto/test_utils/reproducible_rng",
     "//rs/ledger_suite/common/ledger_core",
     "//rs/ledger_suite/icrc1",

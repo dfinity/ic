@@ -11,4 +11,15 @@ here were moved from the adjacent `unreleased_changelog.md` file.
 INSERT NEW RELEASES HERE
 
 
+# 2025-02-14: Proposal 135314
+
+http://dashboard.internetcomputer.org/proposal/135314
+
+## Removed
+
+* Logos are no longer included into *serialized* initial SNS initialization parameters for newly
+  deployed SNSs. They are, of course, still included in the metadata responses: 
+  `SnsGov.get_metadata` and `SnsLedger.icrc1_metadata`.
+
+
 END

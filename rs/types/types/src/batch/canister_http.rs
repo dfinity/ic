@@ -258,14 +258,16 @@ mod tests {
                 timeout: Time::from_nanos_since_unix_epoch(1234),
                 canister_id: crate::CanisterId::from(1),
                 content: CanisterHttpResponseContent::Success(
-                    Encode!(&ic_management_canister_types::CanisterHttpResponsePayload {
-                        status: 200,
-                        headers: vec![ic_management_canister_types::HttpHeader {
-                            name: "test_header1".to_string(),
-                            value: "value1".to_string()
-                        }],
-                        body: b"Test data in body".to_vec(),
-                    })
+                    Encode!(
+                        &ic_management_canister_types_private::CanisterHttpResponsePayload {
+                            status: 200,
+                            headers: vec![ic_management_canister_types_private::HttpHeader {
+                                name: "test_header1".to_string(),
+                                value: "value1".to_string()
+                            }],
+                            body: b"Test data in body".to_vec(),
+                        }
+                    )
                     .unwrap(),
                 ),
             },

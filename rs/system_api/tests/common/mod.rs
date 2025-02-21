@@ -7,7 +7,7 @@ use ic_config::{
 use ic_cycles_account_manager::{CyclesAccountManager, ResourceSaturation};
 use ic_interfaces::execution_environment::{ExecutionMode, SubnetAvailableMemory};
 use ic_logger::replica_logger::no_op_logger;
-use ic_management_canister_types::IC_00;
+use ic_management_canister_types_private::IC_00;
 use ic_nns_constants::CYCLES_MINTING_CANISTER_ID;
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
 use ic_registry_subnet_type::SubnetType;
@@ -212,14 +212,15 @@ pub fn get_system_api(
     system_state: &SystemState,
     cycles_account_manager: CyclesAccountManager,
 ) -> SystemApiImpl {
-    let execution_mode = api_type.execution_mode();
+    let mut execution_parameters = execution_parameters(api_type.execution_mode());
+    execution_parameters.subnet_type = cycles_account_manager.subnet_type();
     let sandbox_safe_system_state = SandboxSafeSystemState::new_for_testing(
         system_state,
         cycles_account_manager,
         &NetworkTopology::default(),
         SchedulerConfig::application_subnet().dirty_page_overhead,
-        execution_parameters(execution_mode.clone()).compute_allocation,
-        execution_parameters(execution_mode.clone()).canister_guaranteed_callback_quota,
+        execution_parameters.compute_allocation,
+        execution_parameters.canister_guaranteed_callback_quota,
         Default::default(),
         api_type.caller(),
         api_type.call_context_id(),
@@ -229,17 +230,13 @@ pub fn get_system_api(
         sandbox_safe_system_state,
         CANISTER_CURRENT_MEMORY_USAGE,
         CANISTER_CURRENT_MESSAGE_MEMORY_USAGE,
-        execution_parameters(execution_mode),
+        execution_parameters,
         SubnetAvailableMemory::new(
             SUBNET_MEMORY_CAPACITY,
             SUBNET_MEMORY_CAPACITY,
             SUBNET_MEMORY_CAPACITY,
         ),
-        EmbeddersConfig::default()
-            .feature_flags
-            .wasm_native_stable_memory,
-        EmbeddersConfig::default().feature_flags.canister_backtrace,
-        EmbeddersConfig::default().max_sum_exported_function_name_lengths,
+        &EmbeddersConfig::default(),
         Memory::new_for_testing(),
         NumWasmPages::from(0),
         Rc::new(DefaultOutOfInstructionsHandler::default()),

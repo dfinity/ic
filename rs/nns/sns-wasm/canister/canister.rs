@@ -2,7 +2,7 @@ use async_trait::async_trait;
 use ic_base_types::{PrincipalId, SubnetId};
 use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_cdk::api::call::{CallResult, RejectionCode};
-use ic_management_canister_types::{
+use ic_management_canister_types_private::{
     CanisterInstallMode::Install, CanisterSettingsArgsBuilder, CreateCanisterArgs, InstallCodeArgs,
     Method, UpdateSettingsArgs,
 };

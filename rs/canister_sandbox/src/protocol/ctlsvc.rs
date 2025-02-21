@@ -68,7 +68,7 @@ mod tests {
     };
     use ic_replicated_state::{Global, NumWasmPages, PageMap};
     use ic_system_api::sandbox_safe_system_state::SystemStateModifications;
-    use ic_types::{ingress::WasmResult, CanisterLog, NumBytes, NumInstructions};
+    use ic_types::{ingress::WasmResult, NumBytes, NumInstructions};
 
     use crate::protocol::{
         ctlsvc::{ExecutionFinishedReply, ExecutionPausedReply, ExecutionPausedRequest, Reply},
@@ -105,7 +105,6 @@ mod tests {
                 allocated_message_bytes: NumBytes::new(2000),
                 instance_stats: InstanceStats::default(),
                 system_api_call_counters: SystemApiCallCounters::default(),
-                canister_log: CanisterLog::default(),
             },
             state: StateModifications {
                 execution_state_modifications: Some(ExecutionStateModifications {

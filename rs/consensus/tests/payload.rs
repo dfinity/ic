@@ -4,14 +4,16 @@ mod framework;
 use crate::framework::ConsensusDriver;
 use ic_artifact_pool::{consensus_pool, dkg_pool, idkg_pool};
 use ic_consensus::{certification::CertifierImpl, idkg};
-use ic_consensus_dkg::DkgKeyManager;
+use ic_consensus_dkg::{get_dkg_summary_from_cup_contents, DkgKeyManager};
 use ic_consensus_utils::pool_reader::PoolReader;
 use ic_https_outcalls_consensus::test_utils::FakeCanisterHttpPayloadBuilder;
+use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::Labeled;
 use ic_interfaces_state_manager_mocks::MockStateManager;
 use ic_limits::INITIAL_NOTARY_DELAY;
 use ic_logger::replica_logger::no_op_logger;
 use ic_metrics::MetricsRegistry;
+use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_test_utilities::{
     crypto::CryptoReturningOk, ingress_selector::FakeIngressSelector,
     message_routing::FakeMessageRouting,
@@ -116,11 +118,16 @@ fn consensus_produces_expected_batches() {
                     .build(),
             )],
         );
-        let summary = ic_consensus_dkg::make_genesis_summary(
-            &*registry_client,
+        let cup_contents = registry_client
+            .get_cup_contents(subnet_id, registry_client.get_latest_version())
+            .expect("Failed to retreive the DKG transcripts from registry");
+        let summary = get_dkg_summary_from_cup_contents(
+            cup_contents.value.expect("Missing CUP contents"),
             replica_config.subnet_id,
-            None,
-        );
+            &*registry_client,
+            cup_contents.version,
+        )
+        .expect("Failed to get DKG summary from CUP contents");
         let consensus_pool = Arc::new(RwLock::new(consensus_pool::ConsensusPoolImpl::new(
             node_id,
             subnet_id,

@@ -2807,7 +2807,7 @@ pub struct VetKdDeriveEncryptedKeyArgs {
     pub derivation_id: Vec<u8>,
     pub key_id: VetKdKeyId,
     #[serde(with = "serde_bytes")]
-    pub encryption_public_key: Vec<u8>,
+    pub encryption_public_key: [u8; 48],
 }
 
 impl Payload<'_> for VetKdDeriveEncryptedKeyArgs {}

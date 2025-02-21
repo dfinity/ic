@@ -15,7 +15,7 @@ use ic_interfaces::{
 };
 use ic_limits::{MAX_INGRESS_TTL, SMALL_APP_SUBNET_MAX_SIZE};
 use ic_logger::warn;
-use ic_management_canister_types::CanisterStatusType;
+use ic_management_canister_types_private::CanisterStatusType;
 use ic_registry_client_helpers::subnet::IngressMessageSettings;
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
@@ -668,7 +668,7 @@ mod tests {
     use ic_interfaces_mocks::consensus_pool::MockConsensusTime;
     use ic_interfaces_state_manager::{StateManagerError, StateManagerResult};
     use ic_interfaces_state_manager_mocks::MockStateManager;
-    use ic_management_canister_types::{CanisterIdRecord, Payload, IC_00};
+    use ic_management_canister_types_private::{CanisterIdRecord, Payload, IC_00};
     use ic_metrics::MetricsRegistry;
     use ic_replicated_state::CanisterState;
     use ic_test_utilities::{

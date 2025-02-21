@@ -29,11 +29,10 @@ use ic_utils_thread::deallocator_thread::DeallocationSender;
 use ic_wasm_types::WasmEngineError::FailedToApplySystemChanges;
 
 use crate::execution::common::{
-    self, action_to_response, apply_canister_state_changes, update_round_limits,
+    self, action_to_response, apply_canister_state_changes, log_dirty_pages, update_round_limits,
 };
 use crate::execution_environment::{
-    log_dirty_pages, ExecuteMessageResult, ExecutionResponse, PausedExecution, RoundContext,
-    RoundLimits,
+    ExecuteMessageResult, ExecutionResponse, PausedExecution, RoundContext, RoundLimits,
 };
 use crate::metrics::CallTreeMetrics;
 use ic_config::flag_status::FlagStatus;
@@ -362,10 +361,6 @@ impl ResponseHelper {
     ) -> Result<ExecuteMessageResult, (Self, HypervisorError, NumInstructions)> {
         self.canister
             .system_state
-            .canister_log
-            .append(&mut output.canister_log);
-        self.canister
-            .system_state
             .apply_ingress_induction_cycles_debit(
                 self.canister.canister_id(),
                 round.log,
@@ -448,11 +443,6 @@ impl ResponseHelper {
         round_limits: &mut RoundLimits,
         call_tree_metrics: &dyn CallTreeMetrics,
     ) -> ExecuteMessageResult {
-        self.canister
-            .system_state
-            .canister_log
-            .append(&mut output.canister_log);
-
         // The ingress induction debit can interfere with cycles changes that happened concurrently
         // during the cleanup callback execution. If the balance of the canister is not enough to
         // cover the debit + the amount of removed cycles during execution, the canister might end

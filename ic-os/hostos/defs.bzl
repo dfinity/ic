@@ -85,7 +85,7 @@ def image_deps(mode, _malicious = False):
 
 # Inject a step building an LVM partition. This depends on boot and root built
 # earlier in the pipeline, and is depended on by the final disk image.
-def _custom_partitions():
+def _custom_partitions(_):
     lvm_image(
         name = "partition-hostlvm.tzst",
         layout = Label("//ic-os/hostos:volumes.csv"),

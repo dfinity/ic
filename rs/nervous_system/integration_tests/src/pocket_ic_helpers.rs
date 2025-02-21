@@ -14,8 +14,8 @@ use ic_nervous_system_common_test_keys::{TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_P
 use ic_nns_common::pb::v1::{NeuronId, ProposalId};
 use ic_nns_constants::{
     self, ALL_NNS_CANISTER_IDS, CYCLES_MINTING_CANISTER_ID, GOVERNANCE_CANISTER_ID,
-    LEDGER_CANISTER_ID, LIFELINE_CANISTER_ID, REGISTRY_CANISTER_ID, ROOT_CANISTER_ID,
-    SNS_WASM_CANISTER_ID,
+    LEDGER_CANISTER_ID, LEDGER_INDEX_CANISTER_ID, LIFELINE_CANISTER_ID, REGISTRY_CANISTER_ID,
+    ROOT_CANISTER_ID, SNS_WASM_CANISTER_ID,
 };
 use ic_nns_governance_api::pb::v1::{
     install_code::CanisterInstallMode, manage_neuron_response, CreateServiceNervousSystem,
@@ -26,10 +26,11 @@ use ic_nns_governance_api::pb::v1::{
 };
 use ic_nns_test_utils::{
     common::{
-        build_cmc_wasm, build_governance_wasm, build_ledger_wasm, build_lifeline_wasm,
-        build_mainnet_cmc_wasm, build_mainnet_governance_wasm, build_mainnet_ledger_wasm,
-        build_mainnet_lifeline_wasm, build_mainnet_registry_wasm, build_mainnet_root_wasm,
-        build_mainnet_sns_wasms_wasm, build_registry_wasm, build_root_wasm, build_sns_wasms_wasm,
+        build_cmc_wasm, build_governance_wasm, build_index_wasm, build_ledger_wasm,
+        build_lifeline_wasm, build_mainnet_cmc_wasm, build_mainnet_governance_wasm,
+        build_mainnet_index_wasm, build_mainnet_ledger_wasm, build_mainnet_lifeline_wasm,
+        build_mainnet_registry_wasm, build_mainnet_root_wasm, build_mainnet_sns_wasms_wasm,
+        build_registry_wasm, build_root_wasm, build_sns_wasms_wasm, build_test_governance_wasm,
         NnsInitPayloadsBuilder,
     },
     sns_wasm::{
@@ -181,10 +182,10 @@ pub async fn install_canister_with_controllers(
         .await
         .unwrap();
     pocket_ic
-        .install_canister(canister_id, wasm.bytes(), arg, controller_principal)
+        .add_cycles(canister_id, STARTING_CYCLES_PER_CANISTER)
         .await;
     pocket_ic
-        .add_cycles(canister_id, STARTING_CYCLES_PER_CANISTER)
+        .install_canister(canister_id, wasm.bytes(), arg, controller_principal)
         .await;
     let subnet_id = pocket_ic.get_subnet(canister_id).await.unwrap();
     println!(
@@ -329,6 +330,8 @@ pub struct NnsInstaller {
     initial_balances: Vec<(AccountIdentifier, Tokens)>,
     with_cycles_minting_canister: bool,
     with_cycles_ledger: bool,
+    with_index_canister: bool,
+    with_test_governance_canister: bool,
 }
 
 impl NnsInstaller {
@@ -389,6 +392,16 @@ impl NnsInstaller {
         self
     }
 
+    pub fn with_index_canister(&mut self) -> &mut Self {
+        self.with_index_canister = true;
+        self
+    }
+
+    pub fn with_test_governance_canister(&mut self) -> &mut Self {
+        self.with_test_governance_canister = true;
+        self
+    }
+
     /// Installs the NNS canister suite.
     ///
     /// Ensures that there is a whale neuron with `TEST_NEURON_1_ID`.
@@ -400,6 +413,10 @@ impl NnsInstaller {
         let with_mainnet_canister_versions = self
             .mainnet_nns_canister_versions
             .expect("Please explicitly request either mainnet or tip-of-the-branch NNS version.");
+
+        assert!(!(with_mainnet_canister_versions && self.with_test_governance_canister),
+            "The test version of the governance canister cannot be used with mainnet versions of the NNS canisters"
+        );
 
         let topology = pocket_ic.topology().await;
 
@@ -446,7 +463,11 @@ impl NnsInstaller {
                 )
             } else {
                 (
-                    build_governance_wasm(),
+                    if self.with_test_governance_canister {
+                        build_test_governance_wasm()
+                    } else {
+                        build_governance_wasm()
+                    },
                     build_ledger_wasm(),
                     build_root_wasm(),
                     build_lifeline_wasm(),
@@ -547,6 +568,23 @@ impl NnsInstaller {
             cycles_ledger::install(pocket_ic).await;
         }
 
+        if self.with_index_canister {
+            let ledger_index_wasm = if with_mainnet_canister_versions {
+                build_mainnet_index_wasm()
+            } else {
+                build_index_wasm()
+            };
+            install_canister(
+                pocket_ic,
+                "Index",
+                LEDGER_INDEX_CANISTER_ID,
+                Encode!(&nns_init_payload.index).unwrap(),
+                ledger_index_wasm,
+                Some(ROOT_CANISTER_ID.get()),
+            )
+            .await;
+        }
+
         nns_init_payload
             .governance
             .neurons
@@ -603,7 +641,7 @@ pub mod cycles_ledger {
     #[derive(Clone, Eq, PartialEq, Hash, Debug, CandidType)]
     struct CyclesLedgerInitArgs {
         pub index_id: Option<Principal>,
-        pub max_transactions_per_request: u64,
+        pub max_blocks_per_request: u64,
     }
 
     /// Argument taken by the Cycles Ledger canister.
@@ -614,7 +652,7 @@ pub mod cycles_ledger {
     /// (variant {
     ///     Init = record {
     ///         index_id : opt principal;
-    ///         max_transactions_per_request : nat64;
+    ///         max_blocks_per_request : nat64;
     ///     }
     /// })
     /// ```
@@ -630,7 +668,7 @@ pub mod cycles_ledger {
 
         let arg = Encode!(&CyclesLedgerArgs::Init(CyclesLedgerInitArgs {
             index_id: None,
-            max_transactions_per_request: 1000,
+            max_blocks_per_request: 1000,
         }))
         .unwrap();
 
@@ -690,11 +728,13 @@ pub mod cycles_ledger {
 /// Arguments
 /// 1. `with_mainnet_nns_canister_versions` is a flag indicating whether the mainnet
 ///    (or, therwise, tip-of-this-branch) WASM versions should be installed.
-/// 2. `initial_balances` is a `Vec` of `(test_user_icp_ledger_account,
+/// 2. `with_test_nns_governance_canister` is a flag indicating whether the test version of
+///    the governance canister should be installed. Mutually exclusive with `with_mainnet_nns_canister_versions`.
+/// 3. `initial_balances` is a `Vec` of `(test_user_icp_ledger_account,
 ///    test_user_icp_ledger_initial_balance)` pairs, representing some initial ICP balances.
 /// 3. `custom_registry_mutations` are custom mutations for the inital Registry. These
-///    should mutations should comply with Registry invariants, otherwise this function will fail.
-/// 4. `maturity_equivalent_icp_e8s` - hotkeys of the 1st NNS (Neurons' Fund-participating) neuron.
+///    mutations should comply with Registry invariants, otherwise this function will fail.
+/// 4. `neurons_fund_hotkeys` - hotkeys of the 1st NNS (Neurons' Fund-participating) neuron.
 ///
 /// Returns
 /// 1. A list of `controller_principal_id`s of pre-configured NNS neurons.
@@ -1058,19 +1098,14 @@ where
     assert!(expected_event_interval_seconds.start < expected_event_interval_seconds.end, "expected_event_interval_seconds.start must be less than expected_event_interval_seconds.end");
     let timeout_seconds =
         expected_event_interval_seconds.end - expected_event_interval_seconds.start;
-    pocket_ic
-        .advance_time(Duration::from_secs(expected_event_interval_seconds.start))
-        .await;
+    progress_pocket_ic(pocket_ic, expected_event_interval_seconds.start).await;
 
     let mut counter = 0;
     let num_ticks = timeout_seconds.min(500);
     let seconds_per_tick = (timeout_seconds as f64 / num_ticks as f64).ceil() as u64;
 
     loop {
-        pocket_ic
-            .advance_time(Duration::from_secs(seconds_per_tick))
-            .await;
-        pocket_ic.tick().await;
+        progress_pocket_ic(pocket_ic, seconds_per_tick).await;
 
         let observed = observe(pocket_ic).await;
         if observed == *expected {
@@ -1083,6 +1118,17 @@ where
                 "Observed state: {observed:?}\n!= Expected state {expected:?}\nafter {timeout_seconds} seconds ({counter} ticks of {seconds_per_tick}s each)",
             ));
         }
+    }
+}
+
+// Using 'advance_time' in live mode breaks certificate checking, so we have to wait
+// for the time to pass naturally.
+async fn progress_pocket_ic(pocket_ic: &PocketIc, seconds: u64) {
+    if pocket_ic.url().is_some() {
+        std::thread::sleep(Duration::from_secs(seconds));
+    } else {
+        pocket_ic.tick().await;
+        pocket_ic.advance_time(Duration::from_secs(seconds)).await;
     }
 }
 
@@ -1192,11 +1238,10 @@ pub mod nns {
             pocket_ic: &PocketIc,
             proposal_id: u64,
         ) -> Result<ProposalInfo, String> {
-            // We create some blocks until the proposal has finished executing (`pocket_ic.tick()`).
+            // We progress the blockchain until the proposal has finished executing.
             let mut last_proposal_info = None;
             for _attempt_count in 1..=100 {
-                pocket_ic.tick().await;
-                pocket_ic.advance_time(Duration::from_secs(1)).await;
+                progress_pocket_ic(pocket_ic, 1).await;
                 let proposal_info_result =
                     nns_get_proposal_info(pocket_ic, proposal_id, PrincipalId::new_anonymous())
                         .await;
@@ -1665,8 +1710,7 @@ pub mod sns {
         .await;
 
         for _ in 0..20 {
-            pocket_ic.advance_time(Duration::from_secs(10)).await;
-            pocket_ic.tick().await;
+            progress_pocket_ic(pocket_ic, 10).await;
         }
 
         let post_upgrade_version = sns.governance.version(pocket_ic).await;
@@ -1836,11 +1880,10 @@ pub mod sns {
             canister_id: PrincipalId,
             proposal_id: sns_pb::ProposalId,
         ) -> Result<sns_pb::ProposalData, sns_pb::GovernanceError> {
-            // We create some blocks until the proposal has finished executing (`pocket_ic.tick()`).
+            // We progress the blockchain until the proposal has finished executing.
             let mut last_proposal_data = None;
             for _attempt_count in 1..=50 {
-                pocket_ic.tick().await;
-                pocket_ic.advance_time(Duration::from_secs(1)).await;
+                progress_pocket_ic(pocket_ic, 1).await;
                 let proposal_result = get_proposal(
                     pocket_ic,
                     canister_id,
@@ -2637,7 +2680,7 @@ pub mod sns {
         }
     }
 
-    // Helper function that calls tick on env until either the index canister has synced all
+    // Helper function that progress the blockchain until either the index canister has synced all
     // the blocks up to the last one in the ledger or enough attempts passed and therefore it fails.
     pub async fn wait_until_ledger_and_index_sync_is_completed(
         pocket_ic: &PocketIc,
@@ -2648,8 +2691,7 @@ pub mod sns {
         let mut num_blocks_synced = u64::MAX;
         let mut chain_length = u64::MAX;
         for _i in 0..MAX_ATTEMPTS {
-            pocket_ic.tick().await;
-            pocket_ic.advance_time(Duration::from_secs(1)).await;
+            progress_pocket_ic(pocket_ic, 1).await;
             num_blocks_synced = index_ng::status(pocket_ic, index_canister_id)
                 .await
                 .num_blocks_synced
@@ -2920,13 +2962,17 @@ pub mod sns {
             expected_lifecycle: Lifecycle,
         ) -> Result<(), String> {
             // The swap opens in up to 48 after the proposal for creating this SNS was executed.
-            pocket_ic
-                .advance_time(Duration::from_secs(48 * 60 * 60))
-                .await;
+            // Waiting for 48 hours in live mode is not viable, but the live mode is supposed
+            // to use NNS governance canister with test feature to ensure that swap can be started
+            // immediately.
+            if pocket_ic.url().is_none() {
+                pocket_ic
+                    .advance_time(Duration::from_secs(48 * 60 * 60))
+                    .await;
+            }
             let mut last_lifecycle = None;
             for _attempt_count in 1..=100 {
-                pocket_ic.tick().await;
-                pocket_ic.advance_time(Duration::from_secs(1)).await;
+                progress_pocket_ic(pocket_ic, 1).await;
                 let response = get_lifecycle(pocket_ic, swap_canister_id).await;
                 let lifecycle = Lifecycle::try_from(response.lifecycle.unwrap()).unwrap();
                 if lifecycle == expected_lifecycle {
@@ -3090,8 +3136,7 @@ pub mod sns {
         ) -> Result<GetAutoFinalizationStatusResponse, String> {
             let mut last_auto_finalization_status = None;
             for _attempt_count in 1..=1000 {
-                pocket_ic.tick().await;
-                pocket_ic.advance_time(Duration::from_secs(1)).await;
+                progress_pocket_ic(pocket_ic, 1).await;
                 let auto_finalization_status =
                     get_auto_finalization_status(pocket_ic, swap_canister_id).await;
                 match status {

@@ -11,7 +11,7 @@ cargo-fuzz = true
 
 [dependencies]
 candid = { workspace = true }
-ic-management-canister-types = {path = ".."}
+ic-management-canister-types-private = { path = ".." }
 libfuzzer-sys = "0.4"
 
 # Prevent this from interfering with workspaces

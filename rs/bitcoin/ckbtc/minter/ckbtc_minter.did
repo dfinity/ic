@@ -34,6 +34,7 @@ type DefiniteCanisterSettings = record {
 type LogVisibility = variant {
     controllers;
     public;
+    allowed_viewers : vec principal;
 };
 
 type RetrieveBtcArgs = record {
@@ -396,6 +397,10 @@ type EventType = variant {
         kyt_provider : opt principal;
     };
     checked_utxo_v2 : record {
+        utxo : Utxo;
+        account : Account;
+    };
+    checked_utxo_mint_unknown : record {
         utxo : Utxo;
         account : Account;
     };

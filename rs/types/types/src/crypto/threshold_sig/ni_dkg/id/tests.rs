@@ -1,5 +1,5 @@
 use assert_matches::assert_matches;
-use ic_management_canister_types::{EcdsaCurve, EcdsaKeyId, VetKdCurve};
+use ic_management_canister_types_private::{EcdsaCurve, EcdsaKeyId, VetKdCurve};
 
 use super::*;
 

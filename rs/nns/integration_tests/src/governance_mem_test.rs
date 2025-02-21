@@ -3,7 +3,7 @@
 use candid::{Decode, Encode};
 use canister_test::Project;
 use ic_base_types::PrincipalId;
-use ic_management_canister_types::{CanisterInstallMode, CanisterSettingsArgsBuilder};
+use ic_management_canister_types_private::{CanisterInstallMode, CanisterSettingsArgsBuilder};
 use ic_nervous_system_common_test_keys::{TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_PRINCIPAL};
 use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_constants::{
@@ -85,7 +85,6 @@ fn governance_mem_test() {
         GOVERNANCE_CANISTER_ID,
         real_gov_wasm.bytes(),
         module_arg,
-        true,
     );
 
     state_machine.tick();

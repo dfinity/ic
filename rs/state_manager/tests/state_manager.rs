@@ -10,7 +10,7 @@ use ic_interfaces::p2p::state_sync::{ChunkId, Chunkable, StateSyncArtifactId, St
 use ic_interfaces_certified_stream_store::{CertifiedStreamStore, EncodeStreamError};
 use ic_interfaces_state_manager::*;
 use ic_logger::replica_logger::no_op_logger;
-use ic_management_canister_types::{
+use ic_management_canister_types_private::{
     CanisterChangeDetails, CanisterChangeOrigin, CanisterInstallModeV2, InstallChunkedCodeArgs,
     LoadCanisterSnapshotArgs, TakeCanisterSnapshotArgs, UploadChunkArgs,
 };
@@ -37,7 +37,7 @@ use ic_state_manager::{
         },
         StateSync,
     },
-    DirtyPageMap, PageMapType, StateManagerImpl, NUM_ROUNDS_BEFORE_CHECKPOINT_TO_WRITE_OVERLAY,
+    StateManagerImpl, NUM_ROUNDS_BEFORE_CHECKPOINT_TO_WRITE_OVERLAY,
 };
 use ic_sys::PAGE_SIZE;
 use ic_test_utilities_consensus::fake::FakeVerifier;
@@ -4005,169 +4005,6 @@ fn can_short_circuit_state_sync() {
     })
 }
 
-/// Test if `get_dirty_pages` returns correct dirty pages of canisters.
-#[test]
-fn can_get_dirty_pages() {
-    use ic_replicated_state::page_map::PageIndex;
-    use ic_state_manager::get_dirty_pages;
-
-    fn update_state(state: &mut ReplicatedState, canister_id: CanisterId) {
-        let canister_state = state.canister_state_mut(&canister_id).unwrap();
-        canister_state
-            .system_state
-            .wasm_chunk_store
-            .page_map_mut()
-            .update(&[
-                (PageIndex::new(1), &[99u8; PAGE_SIZE]),
-                (PageIndex::new(300), &[99u8; PAGE_SIZE]),
-            ]);
-        let execution_state = canister_state.execution_state.as_mut().unwrap();
-        execution_state.wasm_memory.page_map.update(&[
-            (PageIndex::new(1), &[99u8; PAGE_SIZE]),
-            (PageIndex::new(300), &[99u8; PAGE_SIZE]),
-        ]);
-        execution_state.stable_memory.page_map.update(&[
-            (PageIndex::new(1), &[99u8; PAGE_SIZE]),
-            (PageIndex::new(300), &[99u8; PAGE_SIZE]),
-        ]);
-    }
-
-    fn drop_page_map(state: &mut ReplicatedState, canister_id: CanisterId) {
-        let canister_state = state.canister_state_mut(&canister_id).unwrap();
-        let execution_state = canister_state.execution_state.as_mut().unwrap();
-        execution_state.wasm_memory.page_map = PageMap::new_for_testing();
-    }
-
-    state_manager_test(|metrics, state_manager| {
-        let (_height, mut state) = state_manager.take_tip();
-        insert_dummy_canister(&mut state, canister_test_id(80));
-        insert_dummy_canister(&mut state, canister_test_id(90));
-        insert_dummy_canister(&mut state, canister_test_id(100));
-
-        update_state(&mut state, canister_test_id(80));
-        let dirty_pages = get_dirty_pages(&state);
-        // dirty_pages should be empty because there is no base checkpoint for the page
-        // deltas and the canister binaries are new.
-        assert!(dirty_pages.is_empty());
-
-        state_manager.commit_and_certify(state, height(1), CertificationScope::Full, None);
-
-        let (_height, mut state) = state_manager.take_tip();
-        update_state(&mut state, canister_test_id(90));
-        let mut dirty_pages = get_dirty_pages(&state);
-        let mut expected_dirty_pages = vec![
-            DirtyPageMap {
-                height: height(1),
-                page_type: PageMapType::WasmMemory(canister_test_id(80)),
-                page_delta_indices: vec![],
-            },
-            DirtyPageMap {
-                height: height(1),
-                page_type: PageMapType::StableMemory(canister_test_id(80)),
-                page_delta_indices: vec![],
-            },
-            DirtyPageMap {
-                height: height(1),
-                page_type: PageMapType::WasmMemory(canister_test_id(90)),
-                page_delta_indices: vec![PageIndex::new(1), PageIndex::new(300)],
-            },
-            DirtyPageMap {
-                height: height(1),
-                page_type: PageMapType::StableMemory(canister_test_id(90)),
-                page_delta_indices: vec![PageIndex::new(1), PageIndex::new(300)],
-            },
-            DirtyPageMap {
-                height: height(1),
-                page_type: PageMapType::WasmMemory(canister_test_id(100)),
-                page_delta_indices: vec![],
-            },
-            DirtyPageMap {
-                height: height(1),
-                page_type: PageMapType::StableMemory(canister_test_id(100)),
-                page_delta_indices: vec![],
-            },
-            DirtyPageMap {
-                height: height(1),
-                page_type: PageMapType::WasmChunkStore(canister_test_id(80)),
-                page_delta_indices: vec![],
-            },
-            DirtyPageMap {
-                height: height(1),
-                page_type: PageMapType::WasmChunkStore(canister_test_id(90)),
-                page_delta_indices: vec![PageIndex::new(1), PageIndex::new(300)],
-            },
-            DirtyPageMap {
-                height: height(1),
-                page_type: PageMapType::WasmChunkStore(canister_test_id(100)),
-                page_delta_indices: vec![],
-            },
-        ];
-
-        dirty_pages.sort();
-        expected_dirty_pages.sort();
-        assert_eq!(dirty_pages, expected_dirty_pages);
-
-        state_manager.commit_and_certify(state, height(2), CertificationScope::Full, None);
-
-        let (_height, mut state) = state_manager.take_tip();
-        update_state(&mut state, canister_test_id(100));
-        // It could happen during canister upgrade.
-        drop_page_map(&mut state, canister_test_id(100));
-        update_state(&mut state, canister_test_id(100));
-        replace_wasm(&mut state, canister_test_id(100));
-        let mut dirty_pages = get_dirty_pages(&state);
-        // wasm memory was dropped, but stable memory wasn't
-        let mut expected_dirty_pages = vec![
-            DirtyPageMap {
-                height: height(2),
-                page_type: PageMapType::WasmMemory(canister_test_id(80)),
-                page_delta_indices: vec![],
-            },
-            DirtyPageMap {
-                height: height(2),
-                page_type: PageMapType::StableMemory(canister_test_id(80)),
-                page_delta_indices: vec![],
-            },
-            DirtyPageMap {
-                height: height(2),
-                page_type: PageMapType::WasmMemory(canister_test_id(90)),
-                page_delta_indices: vec![],
-            },
-            DirtyPageMap {
-                height: height(2),
-                page_type: PageMapType::StableMemory(canister_test_id(90)),
-                page_delta_indices: vec![],
-            },
-            DirtyPageMap {
-                height: height(2),
-                page_type: PageMapType::StableMemory(canister_test_id(100)),
-                page_delta_indices: vec![PageIndex::new(1), PageIndex::new(300)],
-            },
-            DirtyPageMap {
-                height: height(2),
-                page_type: PageMapType::WasmChunkStore(canister_test_id(80)),
-                page_delta_indices: vec![],
-            },
-            DirtyPageMap {
-                height: height(2),
-                page_type: PageMapType::WasmChunkStore(canister_test_id(90)),
-                page_delta_indices: vec![],
-            },
-            DirtyPageMap {
-                height: height(2),
-                page_type: PageMapType::WasmChunkStore(canister_test_id(100)),
-                page_delta_indices: vec![PageIndex::new(1), PageIndex::new(300)],
-            },
-        ];
-
-        dirty_pages.sort();
-        expected_dirty_pages.sort();
-        assert_eq!(dirty_pages, expected_dirty_pages);
-
-        assert_error_counters(metrics);
-    })
-}
-
 #[test]
 fn can_reuse_chunk_hashes_when_computing_manifest() {
     use ic_state_manager::manifest::{compute_manifest, validate_manifest};
@@ -5875,7 +5712,7 @@ fn assert_checkpoints_are_readonly(layout: &StateLayout) {
 #[test]
 fn checkpoints_are_readonly() {
     state_manager_test(|_metrics, state_manager| {
-        // We flush the tip channel so that asychronous tip initialization cannot hide the issue
+        // We flush the tip channel so that asynchronous tip initialization cannot hide the issue
         state_manager.flush_tip_channel();
         assert_checkpoints_are_readonly(state_manager.state_layout());
 

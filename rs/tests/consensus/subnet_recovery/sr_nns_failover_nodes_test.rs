@@ -34,7 +34,7 @@ use ic_consensus_system_test_utils::{
 use ic_recovery::nns_recovery_failover_nodes::{
     NNSRecoveryFailoverNodes, NNSRecoveryFailoverNodesArgs, StepType,
 };
-use ic_recovery::{get_node_metrics, util::UploadMethod, RecoveryArgs};
+use ic_recovery::{get_node_metrics, util::DataLocation, RecoveryArgs};
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::constants::SSH_USERNAME;
 use ic_system_test_driver::driver::driver_setup::SSH_AUTHORIZED_PRIV_KEYS_DIR;
@@ -186,7 +186,7 @@ pub fn test(env: TestEnv) {
         registry_url: None,
         validate_nns_url: nns_node.get_public_url(),
         download_node: Some(download_node.get_ip_addr()),
-        upload_method: Some(UploadMethod::Remote(upload_node.get_ip_addr())),
+        upload_method: Some(DataLocation::Remote(upload_node.get_ip_addr())),
         parent_nns_host_ip: Some(parent_nns_node.get_ip_addr()),
         replacement_nodes: Some(replacement_nodes),
         next_step: None,

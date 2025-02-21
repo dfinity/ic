@@ -4,7 +4,7 @@ use ic_config::execution_environment::DEFAULT_WASM_MEMORY_LIMIT;
 use ic_config::subnet_config::CyclesAccountManagerConfig;
 use ic_config::Config;
 use ic_error_types::{ErrorCode, RejectCode};
-use ic_management_canister_types::{
+use ic_management_canister_types_private::{
     self as ic00, CanisterChange, CanisterIdRecord, CanisterInstallMode,
     CanisterSettingsArgsBuilder, CanisterStatusResultV2, CanisterStatusType, EmptyBlob,
     InstallCodeArgs, Method, Payload, UpdateSettingsArgs, IC_00,

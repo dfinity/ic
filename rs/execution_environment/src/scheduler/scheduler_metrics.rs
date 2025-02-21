@@ -60,6 +60,7 @@ pub(super) struct SchedulerMetrics {
     pub(super) queues_response_bytes: IntGauge,
     pub(super) queues_memory_reservations: IntGauge,
     pub(super) queues_oversized_requests_extra_bytes: IntGauge,
+    pub(super) queues_best_effort_message_bytes: IntGauge,
     pub(super) canister_messages_where_cycles_were_charged: IntCounter,
     pub(super) current_heap_delta: IntGauge,
     pub(super) round_skipped_due_to_current_heap_delta_above_limit: IntCounter,
@@ -302,6 +303,10 @@ impl SchedulerMetrics {
             queues_oversized_requests_extra_bytes: metrics_registry.int_gauge(
                 "execution_queues_oversized_requests_extra_bytes",
                 "Total bytes above `MAX_RESPONSE_COUNT_BYTES` across oversized local-subnet requests.",
+            ),
+            queues_best_effort_message_bytes: metrics_registry.int_gauge(
+                "execution_queues_best_effort_message_bytes",
+                "Total byte size of all best-effort messages in canister queues.",
             ),
             canister_messages_where_cycles_were_charged: metrics_registry.int_counter(
                 "scheduler_canister_messages_where_cycles_were_charged",
@@ -767,5 +772,9 @@ impl SchedulerMetrics {
     pub(super) fn observe_oversized_requests_extra_bytes(&self, size_bytes: usize) {
         self.queues_oversized_requests_extra_bytes
             .set(size_bytes as i64);
+    }
+
+    pub(super) fn observe_queues_best_effort_message_bytes(&self, size_bytes: usize) {
+        self.queues_best_effort_message_bytes.set(size_bytes as i64);
     }
 }

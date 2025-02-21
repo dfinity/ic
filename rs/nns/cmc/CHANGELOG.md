@@ -11,4 +11,17 @@ here were moved from the adjacent `unreleased_changelog.md` file.
 INSERT NEW RELEASES HERE
 
 
+# 2025-02-07: Proposal 135205
+
+http://dashboard.internetcomputer.org/proposal/135205
+
+## Added
+
+* Automatically refund when the memo in an incoming ICP transfer is not one of
+  the special values that indicate the purpose of the transfer (e.g. to create a
+  new canister). This was originally proposed without objection in [the forum].
+
+[the forum]: https://forum.dfinity.org/t/extend-cycles-minting-canister-functionality/37749/2
+
+
 END

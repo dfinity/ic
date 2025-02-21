@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::ops::Range;
 
 use wasmparser::{
@@ -91,6 +92,7 @@ pub enum Error {
     InvalidMemoryReservedByte {
         func_range: Range<usize>,
     },
+    UnknownInstruction,
 }
 
 impl From<BinaryReaderError> for Error {
@@ -151,6 +153,9 @@ impl std::fmt::Display for Error {
             }
             Error::InvalidMemoryReservedByte { func_range } => {
                 write!(f, "Found a `memory.*` instruction with an invalid reserved byte in function at {:?}", func_range)
+            }
+            Error::UnknownInstruction => {
+                write!(f, "Fonud an unknown instruction")
             }
         }
     }
@@ -348,7 +353,8 @@ impl<'a> Module<'a> {
                 | Payload::ComponentStartSection { start: _, range: _ }
                 | Payload::ComponentImportSection(_)
                 | Payload::ComponentExportSection(_)
-                | Payload::End(_) => {}
+                | Payload::End(_)
+                | _ => {}
             }
         }
         if code_section_count != code_sections.len() || code_section_count != functions.len() {
@@ -390,9 +396,13 @@ impl<'a> Module<'a> {
         if !self.types.is_empty() {
             let mut types = wasm_encoder::TypeSection::new();
             for subtype in self.types {
-                types.subtype(&wasm_encoder::SubType::try_from(subtype.clone()).map_err(
-                    |_err| Error::ConversionError(format!("Failed to convert type: {:?}", subtype)),
-                )?);
+                types
+                    .ty()
+                    .subtype(&wasm_encoder::SubType::try_from(subtype.clone()).map_err(
+                        |_err| {
+                            Error::ConversionError(format!("Failed to convert type: {:?}", subtype))
+                        },
+                    )?);
             }
             module.section(&types);
         }
@@ -478,7 +488,7 @@ impl<'a> Module<'a> {
                 temp_const_exprs.clear();
                 let element_items = match &items {
                     crate::ElementItems::Functions(funcs) => {
-                        wasm_encoder::Elements::Functions(funcs)
+                        wasm_encoder::Elements::Functions(Cow::Borrowed(funcs))
                     }
                     crate::ElementItems::ConstExprs { ty, exprs } => {
                         temp_const_exprs.reserve(exprs.len());
@@ -489,7 +499,7 @@ impl<'a> Module<'a> {
                             wasm_encoder::RefType::try_from(*ty).map_err(|_err| {
                                 Error::ConversionError(format!("Failed to convert type: {:?}", ty))
                             })?,
-                            &temp_const_exprs,
+                            Cow::Borrowed(&temp_const_exprs),
                         )
                     }
                 };

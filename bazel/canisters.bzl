@@ -126,7 +126,7 @@ def rust_canister(name, service_file, visibility = ["//visibility:public"], test
         name = final_name,
         src_wasm = wasm_name,
         service_file = service_file,
-        version_file = "//bazel:rc_only_version.txt",
+        version_file = "//bazel:version.txt",
         visibility = visibility,
         testonly = testonly,
         keep_name_section = keep_name_section,
@@ -177,7 +177,7 @@ def motoko_canister(name, entry, deps):
     finalize_wasm(
         name = name + ".wasm",
         src_wasm = raw_wasm,
-        version_file = "//bazel:rc_only_version.txt",
+        version_file = "//bazel:version.txt",
         testonly = False,
     )
 

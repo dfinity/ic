@@ -8,7 +8,7 @@ use ic_https_outcalls_service::{
 };
 use ic_interfaces::execution_environment::QueryExecutionService;
 use ic_interfaces_adapter_client::{NonBlockingChannel, SendError, TryReceiveError};
-use ic_management_canister_types::{CanisterHttpResponsePayload, TransformArgs};
+use ic_management_canister_types_private::{CanisterHttpResponsePayload, TransformArgs};
 use ic_metrics::MetricsRegistry;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::{
@@ -186,7 +186,7 @@ impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
                     let canister_http_payload = CanisterHttpResponsePayload{
                         status: status as u128,
                         headers: headers.into_iter().map(|HttpHeader { name, value }| {
-                                    ic_management_canister_types::HttpHeader { name, value }
+                                    ic_management_canister_types_private::HttpHeader { name, value }
                                 }).collect(),
                         body,
                     };
@@ -483,16 +483,18 @@ mod tests {
             timeout: request_timeout,
             canister_id: ic_types::CanisterId::from(1),
             content: CanisterHttpResponseContent::Success(
-                Encode!(&ic_management_canister_types::CanisterHttpResponsePayload {
-                    status,
-                    headers: headers
-                        .into_iter()
-                        .map(|HttpHeader { name, value }| {
-                            ic_management_canister_types::HttpHeader { name, value }
-                        })
-                        .collect(),
-                    body,
-                })
+                Encode!(
+                    &ic_management_canister_types_private::CanisterHttpResponsePayload {
+                        status,
+                        headers: headers
+                            .into_iter()
+                            .map(|HttpHeader { name, value }| {
+                                ic_management_canister_types_private::HttpHeader { name, value }
+                            })
+                            .collect(),
+                        body,
+                    }
+                )
                 .unwrap(),
             ),
         }
@@ -800,17 +802,19 @@ mod tests {
             let (_, rsp) = handle.next_request().await.unwrap();
             rsp.send_response(Ok((
                 Ok(WasmResult::Reply(
-                    Encode!(&ic_management_canister_types::CanisterHttpResponsePayload {
-                        status: 200_u128,
-                        headers: adapter_h
-                            .clone()
-                            .into_iter()
-                            .map(|HttpHeader { name, value }| {
-                                ic_management_canister_types::HttpHeader { name, value }
-                            })
-                            .collect(),
-                        body: adapter_b.clone(),
-                    })
+                    Encode!(
+                        &ic_management_canister_types_private::CanisterHttpResponsePayload {
+                            status: 200_u128,
+                            headers: adapter_h
+                                .clone()
+                                .into_iter()
+                                .map(|HttpHeader { name, value }| {
+                                    ic_management_canister_types_private::HttpHeader { name, value }
+                                })
+                                .collect(),
+                            body: adapter_b.clone(),
+                        }
+                    )
                     .unwrap(),
                 )),
                 current_time(),

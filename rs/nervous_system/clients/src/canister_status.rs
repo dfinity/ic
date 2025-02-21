@@ -1,7 +1,7 @@
 use crate::canister_id_record::CanisterIdRecord;
 use candid::{CandidType, Deserialize};
 use ic_base_types::{CanisterId, NumBytes, PrincipalId};
-use ic_management_canister_types::IC_00;
+use ic_management_canister_types_private::IC_00;
 use ic_nervous_system_runtime::Runtime;
 use num_traits::cast::ToPrimitive;
 
@@ -54,7 +54,7 @@ pub enum LogVisibility {
     AllowedViewers(Vec<PrincipalId>),
 }
 
-/// Partial copy-paste of `ic_management_canister_types::DefiniteCanisterSettings`, and it's used
+/// Partial copy-paste of `ic_management_canister_types_private::DefiniteCanisterSettings`, and it's used
 /// for the response type in the NNS/SNS Root `canister_status` method.
 ///
 /// Only the fields that we need are copied. Candid deserialization is supposed to be tolerant to
@@ -71,7 +71,7 @@ pub struct DefiniteCanisterSettings {
     pub wasm_memory_threshold: Option<candid::Nat>,
 }
 
-/// Partial copy-paste of `ic_management_canister_types::CanisterStatusResultV2`, and it's used for
+/// Partial copy-paste of `ic_management_canister_types_private::CanisterStatusResultV2`, and it's used for
 /// the response type in the NNS/SNS Root `canister_status` method.
 ///
 /// Only the fields that we need are copied. Candid deserialization is supposed to be tolerant to
@@ -89,7 +89,7 @@ pub struct CanisterStatusResult {
     pub query_stats: Option<QueryStats>,
 }
 
-/// Partial copy-paste of `ic_management_canister_types::QueryStats`, and it's used for the response
+/// Partial copy-paste of `ic_management_canister_types_private::QueryStats`, and it's used for the response
 /// type in the NNS/SNS Root `canister_status` method.
 ///
 /// Only the fields that we need are copied. Candid deserialization is supposed to be tolerant to
@@ -102,7 +102,7 @@ pub struct QueryStats {
     pub response_payload_bytes_total: Option<candid::Nat>,
 }
 
-/// Copy-paste of `ic_management_canister_types::CanisterStatusResultV2`, and it's used for the
+/// Copy-paste of `ic_management_canister_types_private::CanisterStatusResultV2`, and it's used for the
 /// `canister_status`` method on the management canister.
 #[derive(Clone, Eq, PartialEq, Debug, Default, CandidType, Deserialize)]
 pub struct CanisterStatusResultFromManagementCanister {
@@ -116,7 +116,7 @@ pub struct CanisterStatusResultFromManagementCanister {
     pub query_stats: QueryStatsFromManagementCanister,
 }
 
-/// Partial copy-paste of `ic_management_canister_types::DefiniteCanisterSettingsArgs`, and it's
+/// Partial copy-paste of `ic_management_canister_types_private::DefiniteCanisterSettingsArgs`, and it's
 /// used for the response type in the management canister `canister_status` method.
 ///
 /// Only the fields that we need are copied. Candid deserialization is supposed to be tolerant to
@@ -133,7 +133,7 @@ pub struct DefiniteCanisterSettingsFromManagementCanister {
     pub wasm_memory_threshold: candid::Nat,
 }
 
-/// Partial copy-paste of `ic_management_canister_types::QueryStats`, and it's used for the response
+/// Partial copy-paste of `ic_management_canister_types_private::QueryStats`, and it's used for the response
 /// type in the management canister `canister_status` method.
 #[derive(Clone, Eq, PartialEq, Debug, Default, CandidType, Deserialize)]
 pub struct QueryStatsFromManagementCanister {
@@ -397,10 +397,10 @@ pub struct DefiniteCanisterSettingsArgs {
     pub wasm_memory_threshold: Option<candid::Nat>,
 }
 
-impl From<ic_management_canister_types::DefiniteCanisterSettingsArgs>
+impl From<ic_management_canister_types_private::DefiniteCanisterSettingsArgs>
     for DefiniteCanisterSettingsArgs
 {
-    fn from(settings: ic_management_canister_types::DefiniteCanisterSettingsArgs) -> Self {
+    fn from(settings: ic_management_canister_types_private::DefiniteCanisterSettingsArgs) -> Self {
         Self {
             controllers: settings.controllers(),
             compute_allocation: settings.compute_allocation(),

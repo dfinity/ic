@@ -428,7 +428,7 @@ mod tests {
 
     use super::*;
     use ic_consensus_mocks::{dependencies, Dependencies};
-    use ic_management_canister_types::{EcdsaKeyId, MasterPublicKeyId, SchnorrKeyId};
+    use ic_management_canister_types_private::{EcdsaKeyId, MasterPublicKeyId, SchnorrKeyId};
     use ic_replicated_state::metadata_state::subnet_call_context_manager::{
         EcdsaArguments, SchnorrArguments, SignWithThresholdContext, ThresholdArguments,
     };

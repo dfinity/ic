@@ -9,7 +9,7 @@ use ic_consensus_threshold_sig_system_test_utils::{
     add_chain_keys_with_timeout_and_rotation_period, empty_subnet_update,
     execute_update_subnet_proposal, get_master_public_key, get_signature_with_logger,
 };
-use ic_management_canister_types::MasterPublicKeyId;
+use ic_management_canister_types_private::MasterPublicKeyId;
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_system_test_driver::util::*;
 use ic_system_test_driver::{driver::test_env_api::*, util::runtime_from_url};

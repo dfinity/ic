@@ -218,7 +218,7 @@ mod tests {
     };
     use ic_crypto_test_utils_reproducible_rng::{reproducible_rng, ReproducibleRng};
     use ic_logger::replica_logger::no_op_logger;
-    use ic_management_canister_types::{EcdsaKeyId, MasterPublicKeyId};
+    use ic_management_canister_types_private::{EcdsaKeyId, MasterPublicKeyId};
     use ic_test_utilities_types::ids::subnet_test_id;
     use ic_types::consensus::idkg::HasIDkgMasterPublicKeyId;
     use ic_types::consensus::idkg::IDkgMasterPublicKeyId;
@@ -231,7 +231,7 @@ mod tests {
     use crate::idkg::{
         test_utils::{
             create_reshare_unmasked_transcript_param,
-            fake_master_public_key_ids_for_all_algorithms, set_up_idkg_payload,
+            fake_master_public_key_ids_for_all_idkg_algorithms, set_up_idkg_payload,
             IDkgPayloadTestHelper, TestIDkgBlockReader, TestIDkgTranscriptBuilder,
         },
         utils::algorithm_for_key_id,
@@ -296,7 +296,7 @@ mod tests {
 
     #[test]
     fn test_update_next_key_transcript_single_all_algorithms() {
-        for key_id in fake_master_public_key_ids_for_all_algorithms() {
+        for key_id in fake_master_public_key_ids_for_all_idkg_algorithms() {
             println!("Running test for key ID {key_id}");
             test_update_next_key_transcript_single(key_id);
         }
@@ -484,7 +484,7 @@ mod tests {
 
     #[test]
     fn test_update_next_key_transcript_xnet_target_subnet_all_algorithms() {
-        for key_id in fake_master_public_key_ids_for_all_algorithms() {
+        for key_id in fake_master_public_key_ids_for_all_idkg_algorithms() {
             println!("Running test for key ID {key_id}");
             test_update_next_key_transcript_xnet_target_subnet_single(key_id);
         }

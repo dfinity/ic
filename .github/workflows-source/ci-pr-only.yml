@@ -17,7 +17,7 @@ env:
 
 anchors:
   image: &image
-    image: ghcr.io/dfinity/ic-build@sha256:2e8185171700872d48fdfb4b08e175fca5be27b3fbbc4d7bed681ec8486f8b1d
+    image: ghcr.io/dfinity/ic-build@sha256:908c9b2abe0647cd54a2485117c263b0dae4a8aba8f25bc073813b09be9b1d59
   dind-small-setup: &dind-small-setup
     timeout-minutes: 30
     runs-on:
@@ -69,6 +69,8 @@ jobs:
     name: Lock Generate
     <<: *dind-small-setup
     <<: *skip-merge-group
+    permissions:
+      pull-requests: write
     env:
       CI_EVENT_NAME: ${{ github.event_name }}
     steps:
@@ -149,6 +151,9 @@ jobs:
     <<: *dind-large-setup
     <<: *skip-merge-group
     if: contains(github.event.pull_request.labels.*.name, 'CI_COVERAGE')
+    permissions:
+      contents: read
+      pull-requests: read
     steps:
       - <<: *checkout
       - name: Run Bazel Test Coverage

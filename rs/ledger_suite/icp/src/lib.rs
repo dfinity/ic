@@ -1230,7 +1230,7 @@ impl Default for FeatureFlags {
 }
 
 pub fn max_blocks_per_request(principal_id: &PrincipalId) -> usize {
-    if ic_cdk::api::data_certificate().is_none() && principal_id.is_self_authenticating() {
+    if ic_cdk::api::in_replicated_execution() && principal_id.is_self_authenticating() {
         return MAX_BLOCKS_PER_INGRESS_REPLICATED_QUERY_REQUEST;
     }
     MAX_BLOCKS_PER_REQUEST

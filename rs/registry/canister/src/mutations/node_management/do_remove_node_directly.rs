@@ -31,6 +31,7 @@ impl Registry {
         );
     }
 
+    #[cfg(test)]
     pub fn do_replace_node_with_another(
         &mut self,
         payload: RemoveNodeDirectlyPayload,
@@ -148,8 +149,10 @@ impl Registry {
         // 4. Check if node is in a subnet, and if so, replace it in the subnet by updating the membership in the subnet record.
         let subnet_list_record = get_subnet_list_record(self);
         let is_node_in_subnet = find_subnet_for_node(self, payload.node_id, &subnet_list_record);
+        // Disabled until the direct replacement of nodes that are active in a subnet is possible.
+        let replacements_of_nodes_in_subnets_enabled = false;
         if let Some(subnet_id) = is_node_in_subnet {
-            if new_node_id.is_some() {
+            if new_node_id.is_some() && replacements_of_nodes_in_subnets_enabled {
                 // The node is in a subnet and is being replaced with a new node.
                 // Update the subnet record with the new node membership.
                 let mut subnet_record = self.get_subnet_or_panic(subnet_id);
@@ -182,7 +185,7 @@ impl Registry {
         }
 
         // 5. Retrieve the NO record and increment its node allowance by 1
-        let mut new_node_operator_record = get_node_operator_record(self, caller_id)
+        let mut updated_node_operator_record = get_node_operator_record(self, node_operator_id)
             .map_err(|err| {
                 format!(
                     "{}do_remove_node_directly: Aborting node removal: {}",
@@ -190,7 +193,7 @@ impl Registry {
                 )
             })
             .unwrap();
-        new_node_operator_record.node_allowance += 1;
+        updated_node_operator_record.node_allowance += 1;
 
         // 6. Finally, generate the following mutations:
         //   * Delete the node record
@@ -200,7 +203,7 @@ impl Registry {
         // mutation to update node operator value
         mutations.push(make_update_node_operator_mutation(
             node_operator_id,
-            &new_node_operator_record,
+            &updated_node_operator_record,
         ));
 
         mutations
@@ -231,6 +234,7 @@ mod tests {
     use ic_registry_keys::{make_node_operator_record_key, make_node_record_key};
     use ic_registry_transport::{insert, update};
     use ic_types::ReplicaVersion;
+    use maplit::btreemap;
     use prost::Message;
     use std::str::FromStr;
 
@@ -406,9 +410,19 @@ mod tests {
             make_node_operator_record_key(node_operator_id),
             node_operator_record.encode_to_vec(),
         )]);
+        let original_node_operator_record =
+            get_node_operator_record(&registry, node_operator_id).unwrap();
+        let expected_node_operator_record = NodeOperatorRecord {
+            node_allowance: original_node_operator_record.node_allowance + 1,
+            ..original_node_operator_record
+        };
+
         let payload = RemoveNodeDirectlyPayload { node_id };
 
         registry.do_remove_node(payload, node_operator_id);
+        let actual_node_operator_record =
+            get_node_operator_record(&registry, node_operator_id).unwrap();
+        assert_eq!(expected_node_operator_record, actual_node_operator_record);
     }
 
     #[test]
@@ -475,6 +489,7 @@ mod tests {
             node_provider_principal_id: PrincipalId::new_user_test_id(3000).to_vec(),
             dc_id: "dc1".to_string(),
             node_allowance: 1,
+            rewardable_nodes: btreemap! { "type0".to_string() => 0, "type1".to_string() => 28 },
             ..Default::default()
         };
         let operator_record_2 = NodeOperatorRecord {
@@ -482,6 +497,7 @@ mod tests {
             node_provider_principal_id: PrincipalId::new_user_test_id(3000).to_vec(),
             dc_id: "dc1".to_string(),
             node_allowance: 1,
+            rewardable_nodes: btreemap! { "type1.1".to_string() => 28 },
             ..Default::default()
         };
         registry.maybe_apply_mutation_internal(vec![
@@ -507,11 +523,33 @@ mod tests {
             .next()
             .expect("should contain at least one node ID")
             .to_owned();
+        let original_operator_record_1 =
+            get_node_operator_record(&registry, operator1_id).expect("failed to get node operator");
+        let original_operator_record_2 =
+            get_node_operator_record(&registry, operator2_id).expect("failed to get node operator");
 
         let payload = RemoveNodeDirectlyPayload { node_id };
 
         // Should succeed because both operator1 and operator2 are under the same provider
         registry.do_remove_node(payload, operator2_id);
+
+        let expected_operator_record_1 = NodeOperatorRecord {
+            node_allowance: original_operator_record_1.node_allowance + 1,
+            ..original_operator_record_1
+        };
+        let expected_operator_record_2 = NodeOperatorRecord {
+            node_allowance: original_operator_record_2.node_allowance,
+            ..original_operator_record_2
+        };
+        let actual_operator_record_1 =
+            get_node_operator_record(&registry, operator1_id).expect("failed to get node operator");
+        println!("node_operator_1_record: {:#?}", actual_operator_record_1);
+        let actual_operator_record_2 =
+            get_node_operator_record(&registry, operator2_id).expect("failed to get node operator");
+        println!("node_operator_2_record: {:#?}", actual_operator_record_2);
+
+        assert_eq!(actual_operator_record_1, expected_operator_record_1);
+        assert_eq!(actual_operator_record_2, expected_operator_record_2);
     }
 
     #[test]
@@ -590,6 +628,8 @@ mod tests {
         registry.do_remove_node(payload, node_operator_id);
     }
 
+    // This test is disabled until it becomes possible to directly replace nodes that are active in a subnet.
+    #[ignore]
     #[test]
     fn should_replace_node_in_subnet_and_update_allowance() {
         let mut registry = invariant_compliant_registry(0);

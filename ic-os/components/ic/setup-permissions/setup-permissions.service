@@ -1,11 +1,7 @@
 [Unit]
 Description=Set up persistent storage permissions
-# We must wait for IC bootstrap to complete (it may
-# write the state files to begin with).
 After=bootstrap-ic-node.service
 Wants=bootstrap-ic-node.service
-StartLimitBurst=5
-StartLimitIntervalSec=60
 
 [Service]
 Type=oneshot

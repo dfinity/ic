@@ -5,7 +5,7 @@ use crate::{
     },
     CanisterId, PrincipalId, UserId,
 };
-use ic_management_canister_types::IC_00;
+use ic_management_canister_types_private::IC_00;
 use std::convert::TryFrom;
 
 /// Represents the source of a query that is sent to a canister.

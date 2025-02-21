@@ -17,7 +17,7 @@ use ic_config::{
 use ic_error_types::RejectCode;
 use ic_interfaces::execution_environment::SubnetAvailableMemory;
 use ic_logger::replica_logger::no_op_logger;
-use ic_management_canister_types::{
+use ic_management_canister_types_private::{
     self as ic00, BoundedHttpHeaders, CanisterHttpResponsePayload, CanisterIdRecord,
     CanisterStatusType, DerivationPath, EcdsaKeyId, EmptyBlob, Method, Payload as _, SchnorrKeyId,
     SignWithSchnorrArgs, TakeCanisterSnapshotArgs, UninstallCodeArgs,

@@ -52,7 +52,7 @@ use ic_base_types::{NumBytes, PrincipalId};
 use ic_error_types::{ErrorCode, RejectCode, UserError};
 #[cfg(test)]
 use ic_exhaustive_derive::ExhaustiveSet;
-use ic_management_canister_types::{
+use ic_management_canister_types_private::{
     CanisterHttpRequestArgs, DataSize, HttpHeader, HttpMethod, TransformContext,
 };
 use ic_protobuf::{

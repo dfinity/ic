@@ -4,7 +4,7 @@ mod errors;
 pub use errors::{CanisterBacktrace, CanisterOutOfCyclesError, HypervisorError, TrapCode};
 use ic_base_types::NumBytes;
 use ic_error_types::UserError;
-use ic_management_canister_types::MasterPublicKeyId;
+use ic_management_canister_types_private::MasterPublicKeyId;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_subnet_type::SubnetType;
 use ic_sys::{PageBytes, PageIndex};
@@ -13,8 +13,7 @@ use ic_types::{
     crypto::canister_threshold_sig::MasterPublicKey,
     ingress::{IngressStatus, WasmResult},
     messages::{CertificateDelegation, MessageId, Query, SignedIngressContent},
-    CanisterLog, Cycles, ExecutionRound, Height, NumInstructions, NumOsPages, Randomness,
-    ReplicaVersion, Time,
+    Cycles, ExecutionRound, Height, NumInstructions, NumOsPages, Randomness, ReplicaVersion, Time,
 };
 use serde::{Deserialize, Serialize};
 use std::{
@@ -1304,7 +1303,6 @@ pub struct WasmExecutionOutput {
     pub instance_stats: InstanceStats,
     /// How many times each tracked System API call was invoked.
     pub system_api_call_counters: SystemApiCallCounters,
-    pub canister_log: CanisterLog,
 }
 
 impl fmt::Display for WasmExecutionOutput {

@@ -319,7 +319,7 @@ fn test_anonymous_transfers() {
     assert!(response.is_err());
     if let Err(err) = response {
         assert_eq!(err.code(), ErrorCode::CanisterCalledTrap);
-        assert!(err.description().contains("Canister called `ic0.trap` with message: Panicked at 'Sending from 2vxsx-fae is not allowed'"));
+        assert!(err.description().contains("Canister called `ic0.trap` with message: 'Panicked at 'Sending from 2vxsx-fae is not allowed'"));
     }
 
     assert_eq!(INITIAL_BALANCE - FEE * 2, total_supply(&env, canister_id));
@@ -590,7 +590,7 @@ fn check_memo() {
             .assert_contains(
                 ErrorCode::CanisterCalledTrap,
                 "Error from Canister rwlgt-iiaaa-aaaaa-aaaaa-cai: Canister called \
-                `ic0.trap` with message: the memo field is too large",
+                `ic0.trap` with message: 'the memo field is too large",
             );
     }
 }

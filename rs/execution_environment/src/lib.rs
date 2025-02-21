@@ -84,6 +84,7 @@ pub struct ExecutionServices {
     pub ingress_history_writer: Arc<dyn IngressHistoryWriter<State = ReplicatedState>>,
     pub ingress_history_reader: Box<dyn IngressHistoryReader>,
     pub query_execution_service: QueryExecutionService,
+    pub https_outcalls_service: QueryExecutionService,
     pub scheduler: Box<dyn Scheduler<State = ReplicatedState>>,
     pub query_stats_payload_builder: QueryStatsPayloadBuilderParams,
 }
@@ -176,6 +177,14 @@ impl ExecutionServices {
             query_scheduler.clone(),
             Arc::clone(&state_reader),
             metrics_registry,
+            "regular",
+        );
+        let https_outcalls_service = HttpQueryHandler::new_service(
+            Arc::clone(&sync_query_handler) as Arc<_>,
+            query_scheduler.clone(),
+            Arc::clone(&state_reader),
+            metrics_registry,
+            "https_outcall",
         );
         let ingress_filter = IngressFilterServiceImpl::new_service(
             query_scheduler.clone(),
@@ -203,6 +212,7 @@ impl ExecutionServices {
             ingress_history_writer,
             ingress_history_reader,
             query_execution_service,
+            https_outcalls_service,
             scheduler,
             query_stats_payload_builder,
         }

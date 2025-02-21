@@ -9,7 +9,7 @@ use dfn_core::call;
 use ic_base_types::{
     subnet_id_into_protobuf, CanisterId, NodeId, PrincipalId, RegistryVersion, SubnetId,
 };
-use ic_management_canister_types::{
+use ic_management_canister_types_private::{
     ComputeInitialIDkgDealingsArgs, ComputeInitialIDkgDealingsResponse, MasterPublicKeyId,
 };
 use ic_protobuf::registry::{

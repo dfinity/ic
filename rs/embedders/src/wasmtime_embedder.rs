@@ -276,7 +276,7 @@ impl WasmtimeEmbedder {
             WasmMemoryType::Wasm32 => {
                 system_api::syscalls::<u32>(
                     &mut linker,
-                    self.config.feature_flags,
+                    self.config.feature_flags.clone(),
                     self.config.stable_memory_dirty_page_limit,
                     self.config.stable_memory_accessed_page_limit,
                     main_memory_type,
@@ -285,7 +285,7 @@ impl WasmtimeEmbedder {
             WasmMemoryType::Wasm64 => {
                 system_api::syscalls::<u64>(
                     &mut linker,
-                    self.config.feature_flags,
+                    self.config.feature_flags.clone(),
                     self.config.stable_memory_dirty_page_limit,
                     self.config.stable_memory_accessed_page_limit,
                     main_memory_type,

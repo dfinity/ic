@@ -2,7 +2,9 @@ use assert_matches::assert_matches;
 use candid::Encode;
 use canister_test::{Project, Runtime};
 use dfn_candid::{candid, candid_one};
-use ic_management_canister_types::CanisterInstallMode::{self, Install, Reinstall, Upgrade};
+use ic_management_canister_types_private::CanisterInstallMode::{
+    self, Install, Reinstall, Upgrade,
+};
 use ic_nervous_system_clients::{
     canister_id_record::CanisterIdRecord,
     canister_status::{CanisterStatusResult, CanisterStatusType::Running},

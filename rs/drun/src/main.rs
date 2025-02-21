@@ -4,7 +4,9 @@ use ic_canister_sandbox_backend_lib::{
     launcher::sandbox_launcher_main, RUN_AS_CANISTER_SANDBOX_FLAG, RUN_AS_COMPILER_SANDBOX_FLAG,
     RUN_AS_SANDBOX_LAUNCHER_FLAG,
 };
-use ic_config::{flag_status::FlagStatus, Config, ConfigSource};
+use ic_config::{
+    embedders::BestEffortResponsesFeature, flag_status::FlagStatus, Config, ConfigSource,
+};
 use ic_drun::{run_drun, DrunOptions};
 use ic_registry_subnet_type::SubnetType;
 use ic_types::NumBytes;
@@ -66,7 +68,7 @@ async fn drun_main() -> Result<(), String> {
         hypervisor_config
             .embedders_config
             .feature_flags
-            .best_effort_responses = FlagStatus::Enabled;
+            .best_effort_responses = BestEffortResponsesFeature::Enabled;
         hypervisor_config.embedders_config.max_wasm64_memory_size = MAIN_MEMORY_CAPACITY;
         hypervisor_config.max_canister_memory_size_wasm64 =
             hypervisor_config.embedders_config.max_wasm64_memory_size

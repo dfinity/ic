@@ -122,8 +122,8 @@ pub fn changes_are_discarded_if_trapped(env: TestEnv) {
                 })) if reject_code == RejectCode::CanisterError
                     // Verify that the original error message as well as the on_cleanup error is
                     // returned.
-                    && reject_message.contains("called `ic0.trap` with message: in on_reply")
-                    && reject_message.contains("called `ic0.trap` with message: in on_call_cleanup")
+                    && reject_message.contains("called `ic0.trap` with message: 'in on_reply")
+                    && reject_message.contains("called `ic0.trap` with message: 'in on_call_cleanup")
             );
 
             // Changes by call_on_cleanup were discarded.

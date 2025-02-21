@@ -46,12 +46,22 @@ pub fn make_registry_cup_from_cup_contents(
             return None;
         }
     };
-    let dkg_summary = get_dkg_summary_from_cup_contents(
+    let dkg_summary = match get_dkg_summary_from_cup_contents(
         cup_contents.clone(),
         subnet_id,
         registry,
         registry_version,
-    );
+    ) {
+        Ok(summary) => summary,
+        Err(err) => {
+            warn!(
+                logger,
+                "Failed constructing NiDKG summary block from CUP contents: {}.", err
+            );
+
+            return None;
+        }
+    };
     let cup_height = Height::new(cup_contents.height);
 
     let idkg_summary = match bootstrap_idkg_summary(
@@ -72,16 +82,25 @@ pub fn make_registry_cup_from_cup_contents(
         }
     };
 
-    let low_dkg_id = dkg_summary
-        .current_transcript(&NiDkgTag::LowThreshold)
-        .expect("No current low threshold transcript available")
-        .dkg_id
-        .clone();
-    let high_dkg_id = dkg_summary
-        .current_transcript(&NiDkgTag::HighThreshold)
-        .expect("No current high threshold transcript available")
-        .dkg_id
-        .clone();
+    let Some(low_threshold_transcript) = dkg_summary.current_transcript(&NiDkgTag::LowThreshold)
+    else {
+        warn!(
+            logger,
+            "No current low threshold transcript in registry CUP contents"
+        );
+        return None;
+    };
+    let low_dkg_id = low_threshold_transcript.dkg_id.clone();
+
+    let Some(high_threshold_transcript) = dkg_summary.current_transcript(&NiDkgTag::HighThreshold)
+    else {
+        warn!(
+            logger,
+            "No current high threshold transcript in registry CUP contents"
+        );
+        return None;
+    };
+    let high_dkg_id = high_threshold_transcript.dkg_id.clone();
 
     // In a NNS subnet recovery case the block validation context needs to reference a registry
     // version of the NNS to be recovered. Otherwise the validation context points to a registry
@@ -154,7 +173,14 @@ pub fn make_registry_cup(
         }
     };
 
-    let cup_contents = versioned_record.value.expect("Missing CUP contents");
+    let Some(cup_contents) = versioned_record.value else {
+        warn!(
+            logger,
+            "Missing registry CUP contents at version {}", versioned_record.version
+        );
+        return None;
+    };
+
     make_registry_cup_from_cup_contents(
         registry,
         subnet_id,

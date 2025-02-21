@@ -6,7 +6,7 @@ use ic_cdk::{
     api::{call::arg_data_raw, call_context_instruction_counter},
     caller as ic_cdk_caller, heartbeat, post_upgrade, pre_upgrade, println, query, spawn, update,
 };
-use ic_management_canister_types::IC_00;
+use ic_management_canister_types_private::IC_00;
 use ic_nervous_system_canisters::cmc::CMCCanister;
 use ic_nervous_system_common::{
     memory_manager_upgrade_storage::{load_protobuf, store_protobuf},
@@ -177,17 +177,17 @@ const PRUNE_FOLLOWING_INTERVAL: Duration = Duration::from_secs(10);
 //
 // Why this value seems to make sense:
 //
-// I think we can conservatively estimate that it takes 2 megainstructions to
-// pull a neuron from stable memory. If we assume 200 kiloneurons are in stable
-// memory, then 400 gigainstructions are needed to read all neurons in stable
-// memory. 400e9 instructions / 25e6 instructions per batch = 16e3 batches. If
-// we process 1 batch / s (see PRUNE_FOLLOWING_INTERVAL), then it would take
-// less than 4.5 hours to complete a full pass.
+// I think we can conservatively estimate that it takes 2e6 instructions to pull
+// a neuron from stable memory. If we assume 200e3 neurons are in stable memory,
+// then 400e9 instructions are needed to read all neurons in stable memory.
+// 400e9 instructions / 50e6 instructions per batch = 8e3 batches. If we process
+// 1 batch every 10 s (see PRUNE_FOLLOWING_INTERVAL), then it would take less
+// than 23 hours to complete a full pass.
 //
-// This comes to 5.4 full passes per day. If each full pass uses 400
-// gigainstructions, then we use 2.16 terainstructions per day doing
+// This comes to 1.08 full passes per day. If each full pass uses 400e9
+// instructions, then we use 432e9 instructions per day doing
 // prune_some_following. If we assume 1 terainstruction costs 1 XDR,
-// prune_some_following uses a couple of bucks worth of instructions each day.
+// prune_some_following uses less than half an XDR per day.
 const MAX_PRUNE_SOME_FOLLOWING_INSTRUCTIONS: u64 = 50_000_000;
 
 fn schedule_seeding(delay: Duration) {

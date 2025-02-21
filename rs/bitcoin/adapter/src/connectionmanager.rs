@@ -394,6 +394,10 @@ impl ConnectionManager {
         addr: &SocketAddr,
         network_message: NetworkMessage,
     ) -> ConnectionManagerResult<()> {
+        self.metrics
+            .bitcoin_messages_sent
+            .with_label_values(&[network_message.cmd()])
+            .inc();
         let conn = self.get_connection(addr)?;
         if conn.send(network_message).is_err() {
             conn.disconnect();
@@ -586,10 +590,6 @@ impl ConnectionManager {
 
 impl Channel for ConnectionManager {
     fn send(&mut self, command: Command) -> Result<(), ChannelError> {
-        self.metrics
-            .bitcoin_messages_sent
-            .with_label_values(&[command.message.cmd()])
-            .inc();
         let Command { address, message } = command;
         if let Some(addr) = address {
             self.send_to(&addr, message).ok();

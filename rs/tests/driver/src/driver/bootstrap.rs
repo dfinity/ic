@@ -1,25 +1,29 @@
-use crate::driver::{
-    config::NODES_INFO,
-    driver_setup::SSH_AUTHORIZED_PUB_KEYS_DIR,
-    farm::{AttachImageSpec, Farm, FarmResult, FileId},
-    ic::{InternetComputer, Node},
-    nested::{NestedNode, NestedVms, NESTED_CONFIGURED_IMAGE_PATH},
-    node_software_version::NodeSoftwareVersion,
-    port_allocator::AddrType,
-    resource::AllocatedVm,
-    test_env::{HasIcPrepDir, TestEnv, TestEnvAttribute},
-    test_env_api::{
-        get_dependency_path, get_dependency_path_from_env, get_elasticsearch_hosts,
-        get_ic_os_update_img_sha256, get_ic_os_update_img_url, get_mainnet_ic_os_update_img_url,
-        get_malicious_ic_os_update_img_sha256, get_malicious_ic_os_update_img_url,
-        read_dependency_from_env_to_string, read_dependency_to_string, HasIcDependencies,
-        HasTopologySnapshot, IcNodeContainer, InitialReplicaVersion, NodesInfo,
-    },
-    test_setup::InfraProvider,
-};
 use crate::k8s::config::LOGS_URL;
 use crate::k8s::tnet::{TNet, TNode};
 use crate::util::block_on;
+use crate::{
+    driver::{
+        config::NODES_INFO,
+        driver_setup::SSH_AUTHORIZED_PUB_KEYS_DIR,
+        farm::{AttachImageSpec, Farm, FarmResult, FileId},
+        ic::{InternetComputer, Node},
+        nested::{NestedNode, NestedVms, NESTED_CONFIGURED_IMAGE_PATH},
+        node_software_version::NodeSoftwareVersion,
+        port_allocator::AddrType,
+        resource::AllocatedVm,
+        test_env::{HasIcPrepDir, TestEnv, TestEnvAttribute},
+        test_env_api::{
+            get_dependency_path, get_dependency_path_from_env, get_elasticsearch_hosts,
+            get_ic_os_update_img_sha256, get_ic_os_update_img_url,
+            get_mainnet_ic_os_update_img_url, get_malicious_ic_os_update_img_sha256,
+            get_malicious_ic_os_update_img_url, read_dependency_from_env_to_string,
+            read_dependency_to_string, HasIcDependencies, HasTopologySnapshot, IcNodeContainer,
+            InitialReplicaVersion, NodesInfo,
+        },
+        test_setup::InfraProvider,
+    },
+    k8s::job::wait_for_job_completion,
+};
 use anyhow::{bail, Result};
 use ic_base_types::NodeId;
 use ic_prep_lib::{
@@ -292,6 +296,9 @@ pub fn setup_and_start_vms(
                         ),
                     )
                     .expect("deploying config image failed");
+                    // wait for job pulling the disk to complete
+                    block_on(wait_for_job_completion(&tnet_node.name.clone().unwrap()))
+                        .expect("waiting for job failed");
                     block_on(tnet_node.start()).expect("starting vm failed");
                     let node_name = tnet_node.name.unwrap();
                     info!(t_farm.logger, "starting k8s vm: {}", node_name);
@@ -587,7 +594,7 @@ fn configure_setupos_image(
     nns_url: &Url,
     nns_public_key: &str,
 ) -> anyhow::Result<PathBuf> {
-    let setupos_image = get_dependency_path_from_env("ENV_DEPS__DEV_SETUPOS_IMG_TAR_ZST");
+    let setupos_image = get_dependency_path_from_env("ENV_DEPS__SETUPOS_IMG_PATH");
     let setupos_inject_configs = get_dependency_path_from_env("ENV_DEPS__SETUPOS_INJECT_CONFIGS");
     let setupos_disable_checks = get_dependency_path_from_env("ENV_DEPS__SETUPOS_DISABLE_CHECKS");
 

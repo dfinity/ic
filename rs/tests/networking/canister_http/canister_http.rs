@@ -199,10 +199,11 @@ pub fn get_runtime_from_node(node: &IcNodeSnapshot) -> Runtime {
     util::runtime_from_url(node.get_public_url(), node.effective_canister_id())
 }
 
-pub fn create_proxy_canister<'a>(
+pub fn create_proxy_canister_with_name<'a>(
     env: &TestEnv,
     runtime: &'a Runtime,
     node: &IcNodeSnapshot,
+    canister_name: &str,
 ) -> Canister<'a> {
     info!(&env.logger(), "Installing proxy_canister.");
 
@@ -221,13 +222,24 @@ pub fn create_proxy_canister<'a>(
     let principal_id = PrincipalId::from(proxy_canister_id);
 
     // write proxy canister id to TestEnv
-    env.write_json_object(PROXY_CANISTER_ID_PATH, &principal_id)
+    env.write_json_object(canister_name, &principal_id)
         .expect("Could not write proxy canister id to TestEnv.");
 
     Canister::new(runtime, CanisterId::unchecked_from_principal(principal_id))
 }
+pub fn create_proxy_canister<'a>(
+    env: &TestEnv,
+    runtime: &'a Runtime,
+    node: &IcNodeSnapshot,
+) -> Canister<'a> {
+    create_proxy_canister_with_name(env, runtime, node, PROXY_CANISTER_ID_PATH)
+}
+
+pub fn get_proxy_canister_id_with_name(env: &TestEnv, name: &str) -> PrincipalId {
+    env.read_json_object(name)
+        .expect("Proxy canister should should .")
+}
 
 pub fn get_proxy_canister_id(env: &TestEnv) -> PrincipalId {
-    env.read_json_object(PROXY_CANISTER_ID_PATH)
-        .expect("Proxy canister should should .")
+    get_proxy_canister_id_with_name(env, PROXY_CANISTER_ID_PATH)
 }

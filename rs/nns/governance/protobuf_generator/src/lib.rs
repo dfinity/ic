@@ -68,6 +68,10 @@ pub fn generate_prost_files(proto: ProtoPaths<'_>, out: &Path) {
         "ic_nns_governance.pb.v1.Topic",
         "#[derive(strum_macros::EnumIter)]",
     );
+    config.type_attribute(
+        "ic_nns_governance.pb.v1.NnsFunction",
+        "#[derive(strum_macros::EnumIter)]",
+    );
 
     // Eq
     // --

@@ -3,7 +3,7 @@ use crate::lifecycle::upgrade::UpgradeArgs;
 use crate::state::invariants::CheckInvariants;
 use crate::state::{
     ChangeOutput, CkBtcMinterState, FinalizedBtcRetrieval, FinalizedStatus, Overdraft,
-    RetrieveBtcRequest, SubmittedBtcTransaction, SuspendedReason, UtxoCheckStatus,
+    RetrieveBtcRequest, SubmittedBtcTransaction, SuspendedReason,
 };
 use crate::state::{ReimburseDepositTask, ReimbursedDeposit, ReimbursementReason};
 use candid::Principal;
@@ -202,6 +202,10 @@ mod event {
             /// The mint block on the ledger.
             mint_block_index: u64,
         },
+
+        /// Indicates an UTXO is checked to be clean and pre-mint
+        #[serde(rename = "checked_utxo_mint_unknown")]
+        CheckedUtxoMintUnknown { account: Account, utxo: Utxo },
     }
 }
 
@@ -366,18 +370,17 @@ pub fn replay<I: CheckInvariants>(
                 uuid,
                 clean,
                 kyt_provider,
-            } => match UtxoCheckStatus::from_clean_flag(clean) {
-                UtxoCheckStatus::Clean => {
+            } => {
+                if clean {
                     state.mark_utxo_checked(
                         utxo,
                         if uuid.is_empty() { None } else { Some(uuid) },
                         kyt_provider,
                     );
-                }
-                UtxoCheckStatus::Tainted => {
+                } else {
                     state.discard_utxo_without_account(utxo, SuspendedReason::Quarantined);
                 }
-            },
+            }
             EventType::CheckedUtxoV2 { utxo, account } => {
                 state.mark_utxo_checked_v2(utxo, &account);
             }
@@ -441,6 +444,9 @@ pub fn replay<I: CheckInvariants>(
                         mint_block_index,
                     },
                 );
+            }
+            EventType::CheckedUtxoMintUnknown { utxo, account } => {
+                state.mark_utxo_checked_mint_unknown(utxo, &account);
             }
         }
     }

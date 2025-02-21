@@ -44,17 +44,19 @@ go_deps.bzl               @dfinity/idx
 /publish/ @dfinity/idx
 
 # [Packages]
-/packages/icrc-cbor/                 @dfinity/finint @dfinity/cross-chain-team
-/packages/icrc-ledger-agent/         @dfinity/finint
-/packages/icrc-ledger-types/         @dfinity/finint
-/packages/ic-ledger-hash-of/         @dfinity/finint
-/packages/pocket-ic/                 @dfinity/pocket-ic
-/packages/ic-ed25519/                @dfinity/crypto-team
-/packages/ic-ethereum-types/         @dfinity/cross-chain-team
-/packages/ic-metrics-assert/         @dfinity/cross-chain-team
-/packages/ic-sha3/                   @dfinity/crypto-team
-/packages/ic-signature-verification/ @dfinity/crypto-team
-/packages/ic-vetkd-utils/            @dfinity/crypto-team
+/packages/icrc-cbor/                    @dfinity/finint @dfinity/cross-chain-team
+/packages/icrc-ledger-agent/            @dfinity/finint
+/packages/icrc-ledger-types/            @dfinity/finint
+/packages/ic-ledger-hash-of/            @dfinity/finint
+/packages/pocket-ic/                    @dfinity/pocket-ic
+/packages/ic-dummy-getrandom-for-wasm/  @dfinity/crypto-team
+/packages/ic-ed25519/                   @dfinity/crypto-team
+/packages/ic-ethereum-types/            @dfinity/cross-chain-team
+/packages/ic-metrics-assert/            @dfinity/cross-chain-team
+/packages/ic-secp256k1/                 @dfinity/crypto-team
+/packages/ic-sha3/                      @dfinity/crypto-team
+/packages/ic-signature-verification/    @dfinity/crypto-team
+/packages/ic-vetkd-utils/               @dfinity/crypto-team
 
 # [IC-OS]
 /ic-os/                                                                 @dfinity/node
@@ -111,6 +113,7 @@ go_deps.bzl               @dfinity/idx
 /rs/config/                                             @dfinity/consensus
 /rs/config/src/embedders.rs                             @dfinity/execution
 /rs/config/src/execution_environment.rs                 @dfinity/execution
+/rs/config/src/message_routing.rs                       @dfinity/ic-message-routing-owners
 /rs/config/src/state_manager.rs                         @dfinity/ic-message-routing-owners
 /rs/config/src/subnet_config.rs                         @dfinity/execution
 /rs/consensus/                                          @dfinity/consensus

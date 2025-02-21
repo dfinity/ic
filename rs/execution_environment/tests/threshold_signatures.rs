@@ -1,6 +1,6 @@
 use candid::Decode;
 use ic_base_types::PrincipalId;
-use ic_management_canister_types::{
+use ic_management_canister_types_private::{
     self as ic00, CanisterInstallMode, DerivationPath, ECDSAPublicKeyResponse, EcdsaCurve,
     EcdsaKeyId, MasterPublicKeyId, Method, Payload as Ic00Payload, SchnorrAlgorithm, SchnorrKeyId,
     SchnorrPublicKeyResponse, SignWithBip341Aux, SignWithECDSAReply, SignWithSchnorrAux,

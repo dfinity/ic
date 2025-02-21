@@ -7,7 +7,7 @@ use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::ni_dkg_groth20_bls12_
     Dealing, EncryptedShares, PublicCoefficientsBytes, ZKProofDec, ZKProofShare, NUM_CHUNKS,
     NUM_ZK_REPETITIONS,
 };
-use ic_management_canister_types::VetKdCurve;
+use ic_management_canister_types_private::VetKdCurve;
 use std::str::FromStr;
 
 #[test]

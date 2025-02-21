@@ -20,6 +20,7 @@ type Config struct {
 	filterTests          string
 	farmBaseUrl          string
 	requiredHostFeatures string
+	k8sBranch            string
 }
 
 func TestCommandWithConfig(cfg *Config) func(cmd *cobra.Command, args []string) error {
@@ -42,7 +43,8 @@ func TestCommandWithConfig(cfg *Config) func(cmd *cobra.Command, args []string) 
 		command := []string{"bazel", "test", target, "--config=systest"}
 		command = append(command, "--cache_test_results=no")
 		// Try and sync k8s dashboards
-		icDashboardsDir, err := sparse_checkout("git@github.com:dfinity-ops/k8s.git", "", []string{"bases/apps/ic-dashboards"})
+		cmd.Println(GREEN + "Will try to sync dashboards from k8s branch: " + cfg.k8sBranch)
+		icDashboardsDir, err := sparse_checkout("git@github.com:dfinity-ops/k8s.git", "", []string{"bases/apps/ic-dashboards"}, cfg.k8sBranch)
 		if err != nil {
 			cmd.PrintErrln(YELLOW + "Failed to sync k8s dashboards. Received the following error: " + err.Error())
 		} else {
@@ -100,6 +102,7 @@ func NewTestCmd() *cobra.Command {
 	testCmd.PersistentFlags().StringVarP(&cfg.filterTests, "include-tests", "i", "", "Execute only those test functions which contain a substring.")
 	testCmd.PersistentFlags().StringVarP(&cfg.farmBaseUrl, "farm-url", "", "", "Use a custom url for the Farm webservice.")
 	testCmd.PersistentFlags().StringVarP(&cfg.requiredHostFeatures, "set-required-host-features", "", "", "Set and override required host features of all hosts spawned.\nFeatures must be one or more of [dc=<dc-name>, host=<host-name>, AMD-SEV-SNP, SNS-load-test, performance], separated by comma (see Examples).")
+	testCmd.PersistentFlags().StringVarP(&cfg.k8sBranch, "k8s-branch", "", "main", "Override the branch from which the dashboards are being synced. Default: main")
 	testCmd.SetOut(os.Stdout)
 	return testCmd
 }

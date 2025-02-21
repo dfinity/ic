@@ -29,7 +29,7 @@ use ic_consensus_threshold_sig_system_test_utils::{
     enable_chain_key_signing, get_public_key_and_test_signature, get_public_key_with_logger,
     make_key_ids_for_all_schemes, DKG_INTERVAL,
 };
-use ic_management_canister_types::MasterPublicKeyId;
+use ic_management_canister_types_private::MasterPublicKeyId;
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_nns_governance_api::pb::v1::NnsFunction;
 use ic_registry_subnet_type::SubnetType;

@@ -1,5 +1,10 @@
 //! Various helper methods enabling execution and piping of system commands.
-use crate::error::{RecoveryError, RecoveryResult};
+use slog::{info, Logger};
+
+use crate::{
+    cli::wait_for_confirmation,
+    error::{RecoveryError, RecoveryResult},
+};
 use std::process::{Command, Stdio};
 
 /// Execute ALL given commands in a blocking manner by creating pipes between
@@ -53,6 +58,21 @@ pub fn pipe(a: &mut Command, b: &mut Command) -> RecoveryResult<()> {
     }
 
     Ok(())
+}
+
+/// Execute the given system [Command] in a blocking manner.
+/// If a logger is provided, ask for user confirmation first.
+pub fn confirm_exec_cmd(
+    command: &mut Command,
+    logger: Option<&Logger>,
+) -> RecoveryResult<Option<String>> {
+    if let Some(log) = logger {
+        info!(log, "");
+        info!(log, "About to execute:");
+        info!(log, "{:?}", command);
+        wait_for_confirmation(log);
+    }
+    exec_cmd(command)
 }
 
 /// Execute the given system [Command] in a blocking manner. Optionally return

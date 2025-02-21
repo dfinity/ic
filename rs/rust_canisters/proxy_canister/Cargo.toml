@@ -9,10 +9,9 @@ edition = "2021"
 candid = { workspace = true }
 ic-cdk = { workspace = true }
 ic-cdk-macros = { workspace = true }
-ic-management-canister-types = { path = "../../types/management_canister_types" }
+ic-management-canister-types-private = { path = "../../types/management_canister_types" }
 serde = { workspace = true }
 
 [[bin]]
 name = "proxy_canister"
 path = "src/main.rs"
-

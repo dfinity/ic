@@ -44,7 +44,7 @@ def image_deps(mode, _malicious = False):
         "extra_boot_args": Label("//ic-os/setupos/context:extra_boot_args"),
 
         # Add any custom partitions to the manifest
-        "custom_partitions": lambda: (_custom_partitions)(mode),
+        "custom_partitions": _custom_partitions,
     }
 
     dev_build_args = ["BUILD_TYPE=dev"]

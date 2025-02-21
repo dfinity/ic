@@ -341,6 +341,8 @@ pub struct MemoryTaken {
     execution: NumBytes,
     /// Memory taken by guaranteed response canister messages.
     guaranteed_response_messages: NumBytes,
+    /// Memory taken by best-effort canister messages.
+    best_effort_messages: NumBytes,
     /// Memory taken by Wasm Custom Sections.
     wasm_custom_sections: NumBytes,
     /// Memory taken by canister history.
@@ -356,6 +358,17 @@ impl MemoryTaken {
     /// Returns the amount of memory taken by guaranteed response canister messages.
     pub fn guaranteed_response_messages(&self) -> NumBytes {
         self.guaranteed_response_messages
+    }
+
+    /// Returns the amount of memory taken by best-effort canister messages.
+    pub fn best_effort_messages(&self) -> NumBytes {
+        self.best_effort_messages
+    }
+
+    /// Returns the amount of memory taken by all canister messages (guaranteed
+    /// response and best-effort).
+    pub fn messages_total(&self) -> NumBytes {
+        self.guaranteed_response_messages + self.best_effort_messages
     }
 
     /// Returns the amount of memory taken by Wasm Custom Sections.
@@ -652,6 +665,7 @@ impl ReplicatedState {
         let (
             raw_memory_taken,
             mut guaranteed_response_message_memory_taken,
+            mut best_effort_message_memory_taken,
             wasm_custom_sections_memory_taken,
             canister_history_memory_taken,
             wasm_chunk_store_memory_usage,
@@ -666,6 +680,7 @@ impl ReplicatedState {
                     canister
                         .system_state
                         .guaranteed_response_message_memory_usage(),
+                    canister.system_state.best_effort_message_memory_usage(),
                     canister.wasm_custom_sections_memory_usage(),
                     canister.canister_history_memory_usage(),
                     canister.wasm_chunk_store_memory_usage(),
@@ -678,12 +693,15 @@ impl ReplicatedState {
                     accum.2 + val.2,
                     accum.3 + val.3,
                     accum.4 + val.4,
+                    accum.5 + val.5,
                 )
             })
             .unwrap_or_default();
 
         guaranteed_response_message_memory_taken +=
             (self.subnet_queues.guaranteed_response_memory_usage() as u64).into();
+        best_effort_message_memory_taken +=
+            (self.subnet_queues.best_effort_message_memory_usage() as u64).into();
 
         let canister_snapshots_memory_taken = self.canister_snapshots.memory_taken();
 
@@ -693,6 +711,7 @@ impl ReplicatedState {
                 + wasm_chunk_store_memory_usage
                 + canister_snapshots_memory_taken,
             guaranteed_response_messages: guaranteed_response_message_memory_taken,
+            best_effort_messages: best_effort_message_memory_taken,
             wasm_custom_sections: wasm_custom_sections_memory_taken,
             canister_history: canister_history_memory_taken,
         }

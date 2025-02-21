@@ -10,12 +10,11 @@ use ic_ledger_suite_orchestrator::candid::{
     AddErc20Arg, Erc20Contract, InitArg, LedgerInitArg, ManagedCanisterIds, OrchestratorArg,
     UpgradeArg,
 };
-use ic_management_canister_types::CanisterInstallMode;
 use ic_nervous_system_clients::canister_status::CanisterStatusResult;
-use ic_nervous_system_common_test_keys::{TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_KEYPAIR};
-use ic_nervous_system_root::change_canister::ChangeCanisterRequest;
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, ROOT_CANISTER_ID};
-use ic_nns_test_utils::governance::submit_external_update_proposal;
+use ic_nns_test_utils::governance::{
+    install_nns_canister_by_proposal, upgrade_nns_canister_with_args_by_proposal,
+};
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::group::SystemTestGroup;
 use ic_system_test_driver::driver::ic::{InternetComputer, Subnet};
@@ -23,7 +22,6 @@ use ic_system_test_driver::driver::test_env::TestEnv;
 use ic_system_test_driver::driver::test_env_api::{
     get_dependency_path, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, NnsCustomizations,
 };
-use ic_system_test_driver::nns::vote_and_execute_proposal;
 use ic_system_test_driver::systest;
 use ic_system_test_driver::util::{block_on, runtime_from_url};
 use ic_wasm_types::CanisterModule;
@@ -188,10 +186,7 @@ async fn install_nns_controlled_canister<'a>(
     canister_wasm: CanisterModule,
     canister_init_payload: Vec<u8>,
 ) -> Canister<'a> {
-    use ic_canister_client::Sender;
     use ic_nervous_system_clients::canister_status::CanisterStatusType;
-    use ic_nns_common::types::{NeuronId, ProposalId};
-    use ic_nns_governance_api::pb::v1::{NnsFunction, ProposalStatus};
 
     let canister = application_subnet_runtime
         .create_canister(Some(u128::MAX))
@@ -214,26 +209,16 @@ async fn install_nns_controlled_canister<'a>(
         ROOT_CANISTER_ID
     );
 
-    let new_module_hash = canister_wasm.module_hash().to_vec();
-    let wasm = canister_wasm.as_slice().to_vec();
-    let proposal_payload =
-        ChangeCanisterRequest::new(true, CanisterInstallMode::Install, canister.canister_id())
-            .with_wasm(wasm)
-            .with_arg(canister_init_payload);
-
-    let proposal_id: ProposalId = submit_external_update_proposal(
+    let new_module_hash = canister_wasm.module_hash();
+    let wasm = Wasm::from_bytes(canister_wasm.as_slice());
+    install_nns_canister_by_proposal(
+        &canister,
         governance_canister,
-        Sender::from_keypair(&TEST_NEURON_1_OWNER_KEYPAIR),
-        NeuronId(TEST_NEURON_1_ID),
-        NnsFunction::NnsCanisterUpgrade,
-        proposal_payload,
-        "Install Canister".to_string(),
-        "<proposal created by install_nns_controlled_canister>".to_string(),
+        root_canister,
+        wasm,
+        Some(canister_init_payload),
     )
     .await;
-
-    let proposal_result = vote_and_execute_proposal(governance_canister, proposal_id).await;
-    assert_eq!(proposal_result.status, ProposalStatus::Executed as i32);
     info!(
         logger,
         "Installed WASM to {} via NNS proposal",
@@ -242,7 +227,7 @@ async fn install_nns_controlled_canister<'a>(
 
     status_of_nns_controlled_canister_satisfy(logger, root_canister, &canister, |status| {
         status.status == CanisterStatusType::Running
-            && status.module_hash.as_deref() == Some(new_module_hash.as_ref())
+            && status.module_hash.as_deref() == Some(new_module_hash.as_slice())
     })
     .await;
 
@@ -259,33 +244,17 @@ async fn upgrade_ledger_suite_orchestrator_by_nns_proposal(
     orchestrator: &LedgerOrchestratorCanister<'_>,
     upgrade_arg: OrchestratorArg,
 ) {
-    use ic_canister_client::Sender;
     use ic_nervous_system_clients::canister_status::CanisterStatusType;
-    use ic_nns_common::types::{NeuronId, ProposalId};
-    use ic_nns_governance_api::pb::v1::{NnsFunction, ProposalStatus};
 
-    let wasm = canister_wasm.as_slice().to_vec();
-    let proposal_payload = ChangeCanisterRequest::new(
-        true,
-        CanisterInstallMode::Upgrade,
-        orchestrator.as_ref().canister_id(),
-    )
-    .with_wasm(wasm)
-    .with_arg(Encode!(&upgrade_arg).unwrap());
-
-    let proposal_id: ProposalId = submit_external_update_proposal(
+    upgrade_nns_canister_with_args_by_proposal(
+        orchestrator.as_ref(),
         governance_canister,
-        Sender::from_keypair(&TEST_NEURON_1_OWNER_KEYPAIR),
-        NeuronId(TEST_NEURON_1_ID),
-        NnsFunction::NnsCanisterUpgrade,
-        proposal_payload,
-        "Upgrade LSO".to_string(),
-        "<proposal created by upgrade_lso_by_nns_proposal>".to_string(),
+        root_canister,
+        true,
+        Wasm::from_bytes(canister_wasm.as_slice()),
+        Encode!(&upgrade_arg).unwrap(),
     )
     .await;
-
-    let proposal_result = vote_and_execute_proposal(governance_canister, proposal_id).await;
-    assert_eq!(proposal_result.status, ProposalStatus::Executed as i32);
     info!(
         logger,
         "Upgrade ledger suite orchestrator {:?} via NNS proposal", upgrade_arg

@@ -57,3 +57,15 @@ rust_bench(
         "@crate_index//:rayon",
     ] + DEPENDENCIES,
 )
+
+rust_bench(
+    name = "bit_vec",
+    testonly = True,
+    srcs = ["benches/bit_vec.rs"],
+    deps = [
+        # Keep sorted.
+        "@crate_index//:criterion",
+        "@crate_index//:memmap2",
+        "@crate_index//:rayon",
+    ] + DEPENDENCIES,
+)

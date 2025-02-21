@@ -5,7 +5,7 @@ use ic_cdk::api::management_canister::provisional::ProvisionalCreateCanisterWith
 use ic_interfaces_registry::{
     RegistryDataProvider, RegistryVersionedRecord, ZERO_REGISTRY_VERSION,
 };
-use ic_management_canister_types::ProvisionalCreateCanisterWithCyclesArgs;
+use ic_management_canister_types_private::ProvisionalCreateCanisterWithCyclesArgs;
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_registry_transport::pb::v1::{
     registry_mutation::Type, RegistryAtomicMutateRequest, RegistryMutation,

@@ -8,7 +8,7 @@ use ic_base_types::{CanisterId, PrincipalId};
 use ic_icrc1_ledger::ChangeArchiveOptions;
 use ic_ledger_suite_orchestrator::candid::{AddErc20Arg, ManagedCanisterIds};
 use ic_ledger_suite_orchestrator::state::{IndexWasm, LedgerWasm};
-use ic_management_canister_types::{
+use ic_management_canister_types_private::{
     CanisterInfoResponse, CanisterInstallMode, CanisterStatusResultV2, InstallCodeArgs, Method,
     Payload,
 };

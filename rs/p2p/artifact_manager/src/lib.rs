@@ -86,8 +86,7 @@ impl ArtifactProcessorMetrics {
     }
 }
 
-// TODO: make it private, it is used only for tests outside of this crate
-pub trait ArtifactProcessor<A: IdentifiableArtifact>: Send {
+trait ArtifactProcessor<A: IdentifiableArtifact>: Send {
     /// Process changes to the client's state, which includes but not
     /// limited to:
     ///   - newly arrived artifacts (passed as input parameters)
@@ -134,8 +133,7 @@ impl Drop for ArtifactProcessorJoinGuard {
     }
 }
 
-// TODO: make it private, it is used only for tests outside of this crate
-pub fn run_artifact_processor<
+fn run_artifact_processor<
     Artifact: IdentifiableArtifact,
     I: Stream<Item = UnvalidatedArtifactMutation<Artifact>> + Send + Unpin + 'static,
 >(
@@ -317,8 +315,7 @@ pub fn create_artifact_handler<
     )
 }
 
-// TODO: make it private, it is used only for tests outside of this crate
-pub struct Processor<A: IdentifiableArtifact + Send, P: MutablePool<A>, C> {
+struct Processor<A: IdentifiableArtifact + Send, P: MutablePool<A>, C> {
     pool: Arc<RwLock<P>>,
     change_set_producer: C,
     unused: std::marker::PhantomData<A>,
@@ -330,7 +327,7 @@ impl<
         C: PoolMutationsProducer<P, Mutations = <P as MutablePool<A>>::Mutations>,
     > Processor<A, P, C>
 {
-    pub fn new(pool: Arc<RwLock<P>>, change_set_producer: C) -> Self {
+    fn new(pool: Arc<RwLock<P>>, change_set_producer: C) -> Self {
         Self {
             pool,
             change_set_producer,
@@ -375,7 +372,7 @@ impl<
 }
 
 /// The ingress `OnStateChange` client.
-pub(crate) struct IngressProcessor<P: MutablePool<SignedIngress>> {
+struct IngressProcessor<P: MutablePool<SignedIngress>> {
     /// The ingress pool, protected by a read-write lock and automatic reference
     /// counting.
     ingress_pool: Arc<RwLock<P>>,
@@ -388,7 +385,7 @@ pub(crate) struct IngressProcessor<P: MutablePool<SignedIngress>> {
 }
 
 impl<P: MutablePool<SignedIngress>> IngressProcessor<P> {
-    pub fn new(
+    fn new(
         ingress_pool: Arc<RwLock<P>>,
         client: Arc<
             dyn PoolMutationsProducer<P, Mutations = <P as MutablePool<SignedIngress>>::Mutations>

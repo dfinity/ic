@@ -1,7 +1,5 @@
 [Unit]
 Description=IC Canister HTTP Provider
-# We must wait for IC bootstrap to complete: It writes various
-# state files and may also be needed to obtain network config.
 After=bootstrap-ic-node.service
 Wants=bootstrap-ic-node.service
 After=network-online.target
@@ -14,7 +12,6 @@ User=ic-http-adapter
 Environment=RUST_BACKTRACE=1
 ExecStartPre=+/opt/ic/bin/generate-https-outcalls-adapter-config.sh -s /boot/config/socks_proxy.conf -o /run/ic-node/config/ic-https-outcalls-adapter.json
 ExecStart=/opt/ic/bin/ic-https-outcalls-adapter /run/ic-node/config/ic-https-outcalls-adapter.json
-NotifyAccess=main
 Restart=always
 
 [Install]

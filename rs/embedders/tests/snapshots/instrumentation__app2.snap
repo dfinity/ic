@@ -1,6 +1,6 @@
 ---
 source: rs/embedders/tests/instrumentation.rs
-assertion_line: 62
+assertion_line: 63
 expression: out
 ---
 (module
@@ -16,6 +16,19 @@ expression: out
   (import "__" "try_grow_stable_memory" (func (;2;) (type 3)))
   (import "__" "internal_trap" (func (;3;) (type 4)))
   (import "__" "stable_read_first_access" (func (;4;) (type 5)))
+  (memory (;0;) i64 0 8192000)
+  (memory (;1;) 2000 2000)
+  (global (;0;) (mut i64) i64.const 0)
+  (global (;1;) (mut i64) i64.const 0)
+  (global (;2;) (mut i64) i64.const 0)
+  (export "compute" (func $compute))
+  (export "tenfold" (func $tenfold))
+  (export "inc" (func $inc))
+  (export "stable_memory" (memory 0))
+  (export "stable_bytemap_memory" (memory 1))
+  (export "canister counter_instructions" (global 0))
+  (export "canister counter_dirty_pages" (global 1))
+  (export "canister counter_accessed_pages" (global 2))
   (func $compute (;5;) (type 0) (param $count i64) (result i64)
     (local $reg i64)
     global.get 0
@@ -202,18 +215,5 @@ expression: out
     local.get 5
     i32.sub
   )
-  (memory (;0;) i64 0 8192000)
-  (memory (;1;) 2000 2000)
-  (global (;0;) (mut i64) i64.const 0)
-  (global (;1;) (mut i64) i64.const 0)
-  (global (;2;) (mut i64) i64.const 0)
-  (export "compute" (func $compute))
-  (export "tenfold" (func $tenfold))
-  (export "inc" (func $inc))
-  (export "stable_memory" (memory 0))
-  (export "stable_bytemap_memory" (memory 1))
-  (export "canister counter_instructions" (global 0))
-  (export "canister counter_dirty_pages" (global 1))
-  (export "canister counter_accessed_pages" (global 2))
 )
 
