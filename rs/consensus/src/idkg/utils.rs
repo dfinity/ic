@@ -337,12 +337,7 @@ pub(super) fn build_signature_inputs(
                     /////////////////////////////////////////////////
                     // TODO: consider moving SignWithThresholdContext::derivation_path into {Ecdsa|Schnorr}Arguments and add VetKdArguments::derivation_domain
                     /////////////////////////////////////////////////
-                    domain: context
-                        .derivation_path
-                        .iter()
-                        .cloned()
-                        .nth(0)
-                        .unwrap_or(vec![]),
+                    domain: context.derivation_path.first().cloned().unwrap_or(vec![]),
                 },
                 ni_dkg_id: args.ni_dkg_id.clone(),
                 derivation_id: args.derivation_id.clone(),
