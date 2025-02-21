@@ -170,6 +170,7 @@ pub mod neurons_fund;
 mod node_provider_rewards;
 pub mod pb;
 pub mod proposals;
+pub mod recurring_tasks;
 mod reward;
 pub mod storage;
 mod subaccount_index;

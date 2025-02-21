@@ -51,6 +51,7 @@ DEPENDENCIES = [
     "//rs/nervous_system/linear_map",
     "//rs/nervous_system/long_message",
     "//rs/nervous_system/neurons_fund",
+    "//rs/nervous_system/recurring_task",
     "//rs/nervous_system/proto",
     "//rs/nervous_system/root",
     "//rs/nervous_system/runtime",

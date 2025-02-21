@@ -635,3 +635,15 @@ fn test_list_neurons() {
     assert_eq!(list_neurons_response.neuron_infos.len(), 3);
     assert_eq!(list_neurons_response.full_neurons.len(), 2);
 }
+
+// #[test]
+// fn test_tasks() {
+//     let state_machine = state_machine_builder_for_nns_tests().build();
+//     let nns_init_payloads = NnsInitPayloadsBuilder::new().with_test_neurons().build();
+//     setup_nns_canisters(&state_machine, nns_init_payloads);
+
+//     for _ in 0..100 {
+//         state_machine.advance_time(Duration::from_secs(1));
+//         state_machine.tick();
+//     }
+// }

@@ -80,7 +80,7 @@ use ic_nervous_system_common::{
     cmc::CMC, ledger, ledger::IcpLedger, NervousSystemError, ONE_DAY_SECONDS, ONE_MONTH_SECONDS,
     ONE_YEAR_SECONDS,
 };
-use ic_nervous_system_governance::maturity_modulation::apply_maturity_modulation;
+use ic_nervous_system_governance::maturity_modulation::{self, apply_maturity_modulation};
 use ic_nervous_system_proto::pb::v1::{GlobalTimeOfDay, Principals};
 use ic_nns_common::{
     pb::v1::{NeuronId, ProposalId},
@@ -119,6 +119,7 @@ use rust_decimal::Decimal;
 use rust_decimal_macros::dec;
 use std::{
     borrow::Cow,
+    cell::RefCell,
     cmp::{max, Ordering},
     collections::{BTreeMap, BTreeSet, HashMap, HashSet},
     convert::{TryFrom, TryInto},
@@ -126,6 +127,7 @@ use std::{
     future::Future,
     ops::RangeInclusive,
     string::ToString,
+    thread::LocalKey,
 };
 
 mod ledger_helper;
@@ -6565,6 +6567,7 @@ impl Governance {
                 }
             };
         }
+        panic!("just panic");
     }
 
     fn can_spawn_neurons(&self) -> bool {
@@ -6588,16 +6591,23 @@ impl Governance {
     /// we're sure not to trap after we've acquired the global lock and made an async call, as otherwise the global
     /// lock will be permanently held and no spawning will occur until a upgrade to fix it is made.
     #[cfg_attr(feature = "tla", tla_update_method(SPAWN_NEURONS_DESC.clone()))]
-    pub async fn maybe_spawn_neurons(&mut self) {
-        if !self.can_spawn_neurons() {
+    pub async fn maybe_spawn_neurons(
+        governance: &'static LocalKey<RefCell<Self>>,
+        ledger: Box<dyn IcpLedger>,
+    ) {
+        let can_spawn = governance.with_borrow(|governance| governance.can_spawn_neurons());
+        if !can_spawn {
             return;
         }
 
-        let now_seconds = self.env.now();
-        let maturity_modulation = match self.heap_data.cached_daily_maturity_modulation_basis_points
-        {
-            None => return,
+        let maturity_modulation = governance.with_borrow(|governance| {
+            governance
+                .heap_data
+                .cached_daily_maturity_modulation_basis_points
+        });
+        let maturity_modulation = match maturity_modulation {
             Some(value) => value,
+            None => return,
         };
 
         // Sanity check that the maturity modulation returned is within bounds.
@@ -6610,14 +6620,20 @@ impl Governance {
         }
 
         // Acquire the global "spawning" lock.
-        self.heap_data.spawning_neurons = Some(true);
+        governance.with_borrow_mut(|governance| {
+            governance.heap_data.spawning_neurons = Some(true);
+        });
 
         // Filter all the neurons that are currently in "spawning" state.
-        // Do this here to avoid having to borrow *self while we perform changes below.
-        // Spawning neurons must have maturity, and no neurons in stable storage should have maturity.
-        let ready_to_spawn_ids = self
-            .neuron_store
-            .list_ready_to_spawn_neuron_ids(now_seconds);
+        // Do this here to avoid having to borrow *self while we perform changes below. Spawning
+        // neurons must have maturity, and no neurons in stable storage should have maturity.
+        let (now_seconds, ready_to_spawn_ids) = governance.with_borrow(|governance| {
+            let now_seconds = governance.env.now();
+            let ready_to_spawn_ids = governance
+                .neuron_store
+                .list_ready_to_spawn_neuron_ids(now_seconds);
+            (now_seconds, ready_to_spawn_ids)
+        });
 
         // We can't alias ready_to_spawn_ids in the loop below, but the TLA model needs access to it,
         // so we clone it here.
@@ -6632,41 +6648,58 @@ impl Governance {
                 command: Some(InFlightCommand::Spawn(neuron_id)),
             };
 
-            // Add the neuron to the set of neurons undergoing ledger updates.
-            match self.lock_neuron_for_command(neuron_id.id, in_flight_command.clone()) {
-                Ok(mut lock) => {
-                    // Since we're multiplying a potentially pretty big number by up to 10500, do
-                    // the calculations as u128 before converting back.
-                    let neuron = self
-                        .with_neuron(&neuron_id, |neuron| neuron.clone())
-                        .expect("Neuron should exist, just found in list");
+            let lock = governance.with_borrow_mut(|governance| {
+                governance.lock_neuron_for_command(neuron_id.id, in_flight_command.clone())
+            });
 
-                    let original_maturity = neuron.maturity_e8s_equivalent;
-                    let subaccount = neuron.subaccount();
+            let mut lock = match lock {
+                Ok(lock) => lock,
+                Err(error) => {
+                    // If the lock was already acquired, just continue.
+                    println!(
+                        "{}Tried to spawn neuron but was already locked: {:?}. Error: {:?}",
+                        LOG_PREFIX, neuron_id, error,
+                    );
+                    continue;
+                }
+            };
 
-                    let neuron_stake: u64 = match apply_maturity_modulation(
-                        original_maturity,
-                        maturity_modulation,
-                    ) {
-                        Ok(neuron_stake) => neuron_stake,
-                        Err(err) => {
-                            // Do not retain the lock so that other Neuron operations can continue.
-                            // This is safe as no changes to the neuron have been made to the neuron
-                            // both internally to governance and externally in ledger.
-                            println!(
+            // Since we're multiplying a potentially pretty big number by up to 10500, do
+            // the calculations as u128 before converting back.
+            let neuron = governance.with_borrow(|governance| {
+                governance
+                    .with_neuron(&neuron_id, |neuron| neuron.clone())
+                    .expect("Neuron should exist, just found in list")
+            });
+
+            let original_maturity = neuron.maturity_e8s_equivalent;
+            let subaccount = neuron.subaccount();
+
+            let neuron_stake: u64 = match apply_maturity_modulation(
+                original_maturity,
+                maturity_modulation,
+            ) {
+                Ok(neuron_stake) => neuron_stake,
+                Err(err) => {
+                    // Do not retain the lock so that other Neuron operations can continue.
+                    // This is safe as no changes to the neuron have been made to the neuron
+                    // both internally to governance and externally in ledger.
+                    println!(
                                 "{}Could not apply modulation to {:?} for neuron {:?} due to {:?}, skipping",
                                 LOG_PREFIX, neuron.maturity_e8s_equivalent, neuron.id(), err
                             );
-                            continue;
-                        }
-                    };
+                    continue;
+                }
+            };
 
-                    println!(
-                        "{}Spawning neuron: {:?}. Performing ledger update.",
-                        LOG_PREFIX, neuron
-                    );
+            println!(
+                "{}Spawning neuron: {:?}. Performing ledger update.",
+                LOG_PREFIX, neuron
+            );
 
-                    let (staked_neuron_clone, original_spawn_at_timestamp_seconds) = self
+            let (staked_neuron_clone, original_spawn_at_timestamp_seconds) = governance
+                .with_borrow_mut(|governance| {
+                    governance
                         .with_neuron_mut(&neuron_id, |neuron| {
                             // Reset the neuron's maturity and set that it's spawning before we actually mint
                             // the stake. This is conservative to prevent a neuron having _both_ the stake and
@@ -6678,73 +6711,64 @@ impl Governance {
 
                             (neuron.clone(), original_spawn_ts)
                         })
-                        .unwrap();
+                        .unwrap()
+                });
 
-                    tla_log_locals! {
-                        neuron_id: neuron_id.id,
-                        ready_to_spawn_ids: _tla_ready_to_spawn_ids
-                    };
+            tla_log_locals! {
+                neuron_id: neuron_id.id,
+                ready_to_spawn_ids: _tla_ready_to_spawn_ids
+            };
 
-                    // Do the transfer, this is a minting transfer, from the governance canister's
-                    // (which is also the minting canister) main account into the neuron's
-                    // subaccount.
-                    match self
-                        .ledger
-                        .transfer_funds(
-                            neuron_stake,
-                            0, // Minting transfer don't pay a fee.
-                            None,
-                            neuron_subaccount(subaccount),
-                            now_seconds,
-                        )
-                        .await
-                    {
-                        Ok(_) => {
-                            println!(
-                                "{}Spawned neuron: {:?}. Ledger update performed.",
-                                LOG_PREFIX, staked_neuron_clone,
-                            );
-                        }
-                        Err(error) => {
-                            println!(
-                                "{}Error spawning neuron: {:?}. Ledger update failed with err: {:?}. \
-                                Reverting state, so another attempt can be made.",
-                                LOG_PREFIX,
-                                neuron_id,
-                                error,
-                            );
-                            match self.with_neuron_mut(&neuron_id, |neuron| {
-                                neuron.maturity_e8s_equivalent = original_maturity;
-                                neuron.cached_neuron_stake_e8s = 0;
-                                neuron.spawn_at_timestamp_seconds =
-                                    original_spawn_at_timestamp_seconds;
-                            }) {
-                                Ok(_) => (),
-                                Err(e) => {
-                                    println!(
-                                        "{} Error reverting state for neuron: {:?}. Retaining lock: {}",
-                                        LOG_PREFIX,
-                                        neuron_id,
-                                        e
-                                    );
-                                    // Retain the neuron lock, the neuron won't be able to undergo stake changing
-                                    // operations until this is fixed.
-                                    // This is different from what we do in most places because we usually rely
-                                    // on trapping to retain the lock, but we can't do that here since we're not
-                                    // working on a single neuron.
-                                    lock.retain();
-                                }
-                            };
-                        }
-                    };
+            // Do the transfer, this is a minting transfer, from the governance canister's
+            // (which is also the minting canister) main account into the neuron's
+            // subaccount.
+            let transfer_result = ledger
+                .transfer_funds(
+                    neuron_stake,
+                    0, // Minting transfer don't pay a fee.
+                    None,
+                    neuron_subaccount(subaccount),
+                    now_seconds,
+                )
+                .await;
+
+            match transfer_result {
+                Ok(_) => {
+                    println!(
+                        "{}Spawned neuron: {:?}. Ledger update performed.",
+                        LOG_PREFIX, staked_neuron_clone,
+                    );
                 }
                 Err(error) => {
-                    // If the lock was already acquired, just continue.
                     println!(
-                        "{}Tried to spawn neuron but was already locked: {:?}. Error: {:?}",
+                        "{}Error spawning neuron: {:?}. Ledger update failed with err: {:?}. \
+                                Reverting state, so another attempt can be made.",
                         LOG_PREFIX, neuron_id, error,
                     );
-                    continue;
+
+                    let revert_result = governance.with_borrow_mut(|governance| {
+                        governance.with_neuron_mut(&neuron_id, |neuron| {
+                            neuron.maturity_e8s_equivalent = original_maturity;
+                            neuron.cached_neuron_stake_e8s = 0;
+                            neuron.spawn_at_timestamp_seconds = original_spawn_at_timestamp_seconds;
+                        })
+                    });
+
+                    match revert_result {
+                        Ok(_) => (),
+                        Err(e) => {
+                            println!(
+                                "{}Error reverting state for neuron: {:?}. Retaining lock: {}",
+                                LOG_PREFIX, neuron_id, e
+                            );
+                            // Retain the neuron lock, the neuron won't be able to undergo stake changing
+                            // operations until this is fixed.
+                            // This is different from what we do in most places because we usually rely
+                            // on trapping to retain the lock, but we can't do that here since we're not
+                            // working on a single neuron.
+                            lock.retain();
+                        }
+                    };
                 }
             }
             #[cfg(feature = "tla")]
@@ -6752,7 +6776,9 @@ impl Governance {
         }
 
         // Release the global spawning lock
-        self.heap_data.spawning_neurons = Some(false);
+        governance.with_borrow_mut(|governance| {
+            governance.heap_data.spawning_neurons = Some(false);
+        });
     }
 
     /// Return `true` if rewards should be distributed, `false` otherwise
