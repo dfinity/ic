@@ -1297,16 +1297,20 @@ impl ExecutionEnvironment {
                     }
                 }
             }
-            Ok(Ic00Method::ReshareChainKey) | Ok(Ic00Method::VetKdDeriveEncryptedKey) => {
-                ExecuteSubnetMessageResult::Finished {
-                    response: Err(UserError::new(
-                        ErrorCode::CanisterRejectedMessage,
-                        format!("{} API is not yet implemented.", msg.method_name()),
-                    )),
-                    refund: msg.take_cycles(),
-                }
-            }
-
+            Ok(Ic00Method::VetKdDeriveEncryptedKey) => ExecuteSubnetMessageResult::Finished {
+                response: Err(UserError::new(
+                    ErrorCode::CanisterRejectedMessage,
+                    format!("{} API is not yet implemented.", msg.method_name()),
+                )),
+                refund: msg.take_cycles(),
+            },
+            Ok(Ic00Method::ReshareChainKey) => ExecuteSubnetMessageResult::Finished {
+                response: Err(UserError::new(
+                    ErrorCode::CanisterRejectedMessage,
+                    format!("{} API is not yet implemented.", msg.method_name()),
+                )),
+                refund: msg.take_cycles(),
+            },
             Ok(Ic00Method::ProvisionalCreateCanisterWithCycles) => {
                 let res =
                     ProvisionalCreateCanisterWithCyclesArgs::decode(payload).and_then(|args| {
