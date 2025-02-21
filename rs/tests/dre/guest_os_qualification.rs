@@ -1,7 +1,6 @@
 use ic_protobuf::registry::subnet::v1::SubnetType;
 use ic_system_test_driver::driver::{
-    group::SystemTestGroup,
-    test_env_api::{read_dependency_from_env_to_string, read_dependency_to_string},
+    group::SystemTestGroup, test_env_api::read_dependency_from_env_to_string,
 };
 use os_qualification_utils::{
     defs::QualificationExecutor,

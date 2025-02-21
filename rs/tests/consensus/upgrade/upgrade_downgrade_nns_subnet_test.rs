@@ -12,7 +12,7 @@ use ic_system_test_driver::driver::ic::{InternetComputer, Subnet};
 use ic_system_test_driver::driver::test_env::TestEnv;
 use ic_system_test_driver::driver::test_env_api::HasPublicApiUrl;
 use ic_system_test_driver::driver::test_env_api::{
-    read_dependency_to_string, GetFirstHealthyNodeSnapshot, HasTopologySnapshot,
+    GetFirstHealthyNodeSnapshot, HasTopologySnapshot,
 };
 use ic_system_test_driver::systest;
 use ic_types::Height;
