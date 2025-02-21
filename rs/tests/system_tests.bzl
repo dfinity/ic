@@ -21,26 +21,33 @@ def _run_system_test(ctx):
         content = """#!/bin/bash
             set -eEuo pipefail
 
-            # for every ic-os image specified, first ensure it's in remote storage, then
-            # export its download URL as an environment variable.
-            if [ -n "$ICOS_IMAGES" ]; then
-              # split the ";"-delimited list of "envvar:filepath;envvar2:filepath2;..."
+            # Resolve any RUN_SCRIPT_ variables
+
+            # RUN_SCRIPT_ICOS_IMAGES:
+            # For every ic-os image specified, first ensure it's in remote
+            # storage, then export its download URL and HASH as environment
+            # variables.
+            if [ -n "$RUN_SCRIPT_ICOS_IMAGES" ]; then
+              # split the ";"-delimited list of "env_prefixr:filepath;env_prefix2:filepath2;..."
               # into an array
-              IFS=';' read -ra icos_images <<<"$ICOS_IMAGES"
+              IFS=';' read -ra icos_images <<<"$RUN_SCRIPT_ICOS_IMAGES"
               for image in "${{icos_images[@]}}"; do
                   # split "envvar:filepath"
-                  image_varname=${{image%:*}}
+                  image_var_prefix=${{image%:*}}
                   image_filename=${{image#*:}}
 
                   # ensure the dep is uploaded
-                  image_download_url=$("$UPLOAD_SYSTEST_DEP" "$image_filename")
-                  echo "  -> $image_varname=$image_download_url" >&2
+                  image_download_url=$("$RUN_SCRIPT_UPLOAD_SYSTEST_DEP" "$image_filename")
+                  echo "  -> $image_filename=$image_download_url" >&2
 
-                  # set the environment variable for the test
-                  export "$image_varname=$image_download_url"
+                  # Since this is a CAS url, we assume the last URL path part is the sha256
+                  image_download_hash="${{image_download_url##*/}}"
+                  # set the environment variables for the test
+                  export "${{image_var_prefix}}_URL=$image_download_url"
+                  export "${{image_var_prefix}}_HASH=$image_download_hash"
               done
             fi
-            unset ICOS_IMAGES # clean up the env for the test
+            unset RUN_SCRIPT_ICOS_IMAGES RUN_SCRIPT_UPLOAD_SYSTEST_DEP # clean up the env for the test
 
             # We export RUNFILES such that the from_location_specified_by_env_var() function in
             # rs/rust_canisters/canister_test/src/canister.rs can find canisters
@@ -63,6 +70,7 @@ def _run_system_test(ctx):
     )
 
     env = dict(ctx.attr.env.items())
+    env_deps = ctx.attr.env_deps
 
     # Expand Make variables in env vars, with runtime_deps as targets
     for key, value in env.items():
@@ -74,23 +82,26 @@ def _run_system_test(ctx):
         "FARM_METADATA_PATH": ctx.info_file.short_path,
     }
 
-    # The test runner script expects a list of enviromment variable names to files:
-    # ICOS_IMAGES=MY_DEP:./path/to/dep;MY_OTHER_DEP:./path/to/other/dep
+    # We use the RUN_SCRIPT_ prefix for variables that are processed by the run
+    # script, and not passed directly to the test.
+
+    # RUN_SCRIPT_ICOS_IMAGES:
+    # Have the run script resolve repo based ICOS images.
+    # The run script expects a map of enviromment variable prefixes to targets. e.g.
+    # RUN_SCRIPT_ICOS_IMAGES=ENV_DEPS__GUESTOS_DISK_IMG:ic-os/guestos/envs/dev/disk-img.tar.zst;ENV_DEPS__GUESTOS_UPDATE_IMG:ic-os/guestos/envs/dev/update-img.tar.zst
     icos_images = ctx.attr.icos_images
     env |= {
-        "ICOS_IMAGES": ";".join([k + ":" + v.files.to_list()[0].short_path for k, v in icos_images.items()]),
+        "RUN_SCRIPT_ICOS_IMAGES": ";".join([k + ":" + v.files.to_list()[0].short_path for k, v in icos_images.items()]),
     }
-
-    env_deps = ctx.attr.env_deps
     env_deps = dict(env_deps, **icos_images)
+
+    env["RUN_SCRIPT_UPLOAD_SYSTEST_DEP"] = ctx.executable._upload_systest_dep.short_path
 
     if ctx.executable.colocated_test_bin != None:
         env["COLOCATED_TEST_BIN"] = ctx.executable.colocated_test_bin.short_path
 
     if k8s:
         env["KUBECONFIG"] = ctx.file._k8sconfig.path
-
-    env["UPLOAD_SYSTEST_DEP"] = ctx.executable._upload_systest_dep.short_path
 
     runtime_deps = [depset([ctx.file._k8sconfig])]
     for target in ctx.attr.runtime_deps:
@@ -134,7 +145,7 @@ run_system_test = rule(
         "_upload_systest_dep": attr.label(executable = True, cfg = "exec", default = "//bazel:upload_systest_dep"),
         "runtime_deps": attr.label_list(allow_files = True),
         "env_deps": attr.string_keyed_label_dict(allow_files = True),
-        "icos_images": attr.string_keyed_label_dict(doc = "Specifies images to be injected to the test. Values will be replaced with actual download URLs.", allow_files = True),
+        "icos_images": attr.string_keyed_label_dict(doc = "Specifies images to be used by the test. Values will be replaced with actual download URLs and hashes.", allow_files = True),
         "env_inherit": attr.string_list(doc = "Specifies additional environment variables to inherit from the external environment when the test is executed by bazel test."),
     },
 )
@@ -230,8 +241,6 @@ def system_test(
     _env_deps = {}
 
     _guestos = "//ic-os/guestos/envs/dev:"
-    _hostos = "//ic-os/hostos/envs/dev:"
-    _setupos = "//ic-os/setupos/envs/dev:"
 
     # Always add version.txt for now as all test use it even that they don't declare they use dev image.
     # NOTE: we use "ENV_DEPS__" as prefix for env variables, which are passed to system-tests via Bazel.
@@ -240,29 +249,30 @@ def system_test(
     icos_images = dict()
 
     if uses_guestos_dev:
-        icos_images["ENV_DEPS__DEV_DISK_IMG_TAR_ZST_CAS_URL"] = _guestos + "disk-img.tar.zst"
-        icos_images["ENV_DEPS__DEV_UPDATE_IMG_TAR_ZST_CAS_URL"] = _guestos + "update-img.tar.zst"
+        icos_images["ENV_DEPS__GUESTOS_DISK_IMG"] = _guestos + "disk-img.tar.zst"
+        icos_images["ENV_DEPS__GUESTOS_UPDATE_IMG"] = _guestos + "update-img.tar.zst"
 
     if uses_hostos_dev_test:
-        icos_images["ENV_DEPS__DEV_HOSTOS_UPDATE_IMG_TEST_TAR_ZST_CAS_URL"] = _hostos + "update-img-test.tar.zst"
+        icos_images["ENV_DEPS__HOSTOS_UPDATE_IMG_TEST"] = "//ic-os/hostos/envs/dev:update-img-test.tar.zst"
 
     if uses_setupos_dev:
-        _env_deps["ENV_DEPS__DEV_SETUPOS_IMG_TAR_ZST"] = _setupos + "disk-img.tar.zst"
+        # Note: SetupOS is still passed directly by path, as it needs some local processing.
+        _env_deps["ENV_DEPS__SETUPOS_IMG_PATH"] = "//ic-os/setupos/envs/dev:disk-img.tar.zst"
 
         _env_deps["ENV_DEPS__SETUPOS_DISABLE_CHECKS"] = "//rs/ic_os/dev_test_tools/setupos-disable-checks"
         _env_deps["ENV_DEPS__SETUPOS_INJECT_CONFIGS"] = "//rs/ic_os/dev_test_tools/setupos-inject-configuration"
 
     if uses_guestos_dev_test:
-        icos_images["ENV_DEPS__DEV_UPDATE_IMG_TEST_TAR_ZST_CAS_URL"] = _guestos + "update-img-test.tar.zst"
+        icos_images["ENV_DEPS__GUESTOS_UPDATE_IMG_TEST"] = _guestos + "update-img-test.tar.zst"
 
     if malicious:
         _guestos_malicous = "//ic-os/guestos/envs/dev-malicious:"
 
-        icos_images["ENV_DEPS__DEV_MALICIOUS_DISK_IMG_TAR_ZST_CAS_URL"] = _guestos_malicous + "disk-img.tar.zst"
-        icos_images["ENV_DEPS__DEV_MALICIOUS_UPDATE_IMG_TAR_ZST_CAS_URL"] = _guestos_malicous + "update-img.tar.zst"
+        icos_images["ENV_DEPS__GUESTOS_MALICIOUS_DISK_IMG"] = _guestos_malicous + "disk-img.tar.zst"
+        icos_images["ENV_DEPS__GUESTOS_MALICIOUS_UPDATE_IMG"] = _guestos_malicous + "update-img.tar.zst"
 
     if uses_boundary_guestos:
-        icos_images["ENV_DEPS__BOUNDARY_GUESTOS_DISK_IMG_TAR_ZST_CAS_URL"] = "//ic-os/boundary-guestos/envs/dev:disk-img.tar.zst"
+        icos_images["ENV_DEPS__BOUNDARY_GUESTOS_DISK_IMG"] = "//ic-os/boundary-guestos/envs/dev:disk-img.tar.zst"
 
     # set "local" tag for k8s system tests due to rootful container image builds
     is_k8s = select({
