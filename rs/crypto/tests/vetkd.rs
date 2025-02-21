@@ -37,7 +37,7 @@ fn should_consistently_derive_the_same_vetkey_given_sufficient_shares() {
     };
     let derived_public_key = ic_crypto_utils_canister_threshold_sig::derive_vetkd_public_key(
         &MasterPublicKey {
-            algorithm_id: AlgorithmId::VetKD,
+            algorithm_id: AlgorithmId::ThresBls12_381,
             public_key: ThresholdSigPublicKey::try_from(&transcript)
                 .expect("invalid transcript")
                 .into_bytes()

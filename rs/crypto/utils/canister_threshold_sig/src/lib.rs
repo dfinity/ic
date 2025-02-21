@@ -33,7 +33,7 @@ pub fn derive_vetkd_public_key(
     extended_derivation_path: &ExtendedDerivationPath,
 ) -> Result<Vec<u8>, VetKdPublicKeyDeriveError> {
     match master_public_key.algorithm_id {
-        AlgorithmId::VetKD => (),
+        AlgorithmId::ThresBls12_381 => (),
         _ => return Err(VetKdPublicKeyDeriveError::InvalidAlgorithmId),
     };
 
