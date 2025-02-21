@@ -59,13 +59,13 @@ impl InternalAddressArithmetics for InternalAddress {
     fn add(self, rhs: Self) -> Result<InternalAddress, String> {
         self.get()
             .checked_add(rhs.get())
-            .map(|sum| InternalAddress::new(sum))
+            .map(InternalAddress::new)
             .ok_or_else(|| "Invalid InternalAddress.".to_string())
     }
     fn sub(self, rhs: Self) -> Result<InternalAddress, String> {
         self.get()
             .checked_sub(rhs.get())
-            .map(|diff| InternalAddress::new(diff))
+            .map(InternalAddress::new)
             .ok_or_else(|| "Invalid InternalAddress.".to_string())
     }
 }
