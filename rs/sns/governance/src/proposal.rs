@@ -5361,23 +5361,32 @@ Payload rendering here"#
     }
 
     #[test]
-    fn test_manage_nervous_system_parameters_happy_set_some_fields() {
+    fn test_manage_nervous_system_parameters_happy() {
         let current_parameters = NervousSystemParameters::with_default_values();
 
-        // Probably the same as `NervousSystemParameters::default()`, but more verbose.
+        // At least one field must be set. Which one - doesn't matter for this test.
         let new_parameters = NervousSystemParameters {
             automatically_advance_target_version: Some(true),
             ..Default::default()
         };
 
-        let result = validate_and_render_manage_nervous_system_parameters(
+        let render = validate_and_render_manage_nervous_system_parameters(
             &new_parameters,
             &current_parameters,
-        );
+        )
+        .unwrap();
 
-        assert_eq!(
-            result,
-            Err("NervousSystemParameters: at least one field must be set.".to_string())
-        );
+        for keyword in [
+            "change nervous system parameters",
+            "automatically_advance_target_version: Some(\n        false,\n    )",
+            "automatically_advance_target_version: Some(\n        true,\n    )",
+        ] {
+            assert!(
+                render.contains(keyword),
+                "Proposal render:\n{}\n does not contain expected keyword {}",
+                render,
+                keyword
+            );
+        }
     }
 }
