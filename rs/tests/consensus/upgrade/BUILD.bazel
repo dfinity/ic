@@ -1,5 +1,5 @@
 load("@rules_rust//rust:defs.bzl", "rust_library")
-load("//rs/tests:common.bzl", "GUESTOS_RUNTIME_DEPS", "MAINNET_REVISION_RUNTIME_DEPS", "UNIVERSAL_VM_RUNTIME_DEPS", "MAINNET_ENV")
+load("//rs/tests:common.bzl", "GUESTOS_RUNTIME_DEPS", "UNIVERSAL_VM_RUNTIME_DEPS", "MAINNET_ENV")
 load("//rs/tests:system_tests.bzl", "system_test_nns")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
@@ -40,8 +40,7 @@ system_test_nns(
     uses_guestos_dev_test = True,
     runtime_deps =
         GUESTOS_RUNTIME_DEPS +
-        UNIVERSAL_VM_RUNTIME_DEPS +
-        MAINNET_REVISION_RUNTIME_DEPS,
+        UNIVERSAL_VM_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
         ":common",
@@ -70,8 +69,7 @@ system_test_nns(
     uses_guestos_dev_test = True,
     runtime_deps =
         GUESTOS_RUNTIME_DEPS +
-        UNIVERSAL_VM_RUNTIME_DEPS +
-        MAINNET_REVISION_RUNTIME_DEPS,
+        UNIVERSAL_VM_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
         ":common",
@@ -94,8 +92,7 @@ system_test_nns(
     uses_guestos_dev_test = True,
     runtime_deps =
         GUESTOS_RUNTIME_DEPS +
-        UNIVERSAL_VM_RUNTIME_DEPS +
-        MAINNET_REVISION_RUNTIME_DEPS,
+        UNIVERSAL_VM_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
         ":common",
@@ -121,8 +118,7 @@ system_test_nns(
     uses_guestos_dev_test = True,
     runtime_deps =
         GUESTOS_RUNTIME_DEPS +
-        UNIVERSAL_VM_RUNTIME_DEPS +
-        MAINNET_REVISION_RUNTIME_DEPS,
+        UNIVERSAL_VM_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
         ":common",
