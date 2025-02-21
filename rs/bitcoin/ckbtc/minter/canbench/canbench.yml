@@ -1,8 +1,18 @@
+# NOTE: This configuration is for referenceh only, and not used by Bazel.
+#
+# To run canbench manually:
+#
+#    gunzip -c ../test_resources/mainnet_events.mem.gz > ../test_resources/mainnet_events.mem
+#     ~/.cargo/bin/canbench
+
 build_cmd:
   cargo build --target wasm32-unknown-unknown --profile canister-release --features canbench-rs
 
+results_path:
+  ./results.yml
+
 wasm_path:
-  ../../../../target/wasm32-unknown-unknown/canister-release/ic-ckbtc-minter.wasm
+  ../../../../../target/wasm32-unknown-unknown/canister-release/ic-ckbtc-minter.wasm
 
 # the following hex arg was produced by command:
 #
@@ -29,5 +39,4 @@ init_args:
 # 1. Upload ./test_resources/mainnet_events.gz into a ckbtc minter canister.
 # 2. Dump the stable memory into a file.
 stable_memory:
-  file:
-    ./test_resources/mainnet_events.mem
+  file: ../test_resources/mainnet_events.mem
