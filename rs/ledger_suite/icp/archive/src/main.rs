@@ -151,8 +151,8 @@ fn append_blocks(blocks: Vec<EncodedBlock>) {
         blocks_len(),
         blocks.len()
     ));
-    for block in blocks {
-        append_block(&block);
+    for block in &blocks {
+        append_block(block);
     }
     if total_block_size() > max_memory_size_bytes() {
         ic_cdk::trap("No space left");
