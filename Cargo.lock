@@ -5694,7 +5694,7 @@ dependencies = [
  "indexmap 2.7.1",
  "itertools 0.12.1",
  "maplit",
- "pocket-ic 6.0.0",
+ "pocket-ic",
  "pretty_assertions",
  "prost 0.13.4",
  "registry-canister",
@@ -5738,7 +5738,7 @@ dependencies = [
  "http 1.2.0",
  "http-body 1.0.1",
  "ic-certification 3.0.2",
- "ic-transport-types 0.39.3",
+ "ic-transport-types",
  "ic-verify-bls-signature 0.5.0",
  "k256 0.13.4",
  "leb128",
@@ -6299,7 +6299,7 @@ dependencies = [
  "ic-test-utilities-load-wasm",
  "ic-types",
  "ic-universal-canister",
- "pocket-ic 6.0.0",
+ "pocket-ic",
  "proptest 1.6.0",
  "scraper",
  "serde",
@@ -6841,18 +6841,6 @@ dependencies = [
 
 [[package]]
 name = "ic-certification"
-version = "2.6.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e64ee3d8b6e81b51f245716d3e0badb63c283c00f3c9fb5d5219afc30b5bf821"
-dependencies = [
- "hex",
- "serde",
- "serde_bytes",
- "sha2 0.10.8",
-]
-
-[[package]]
-name = "ic-certification"
 version = "3.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9eae40f26fcac9c141cad54d9aa5f423efffde78ac371057c53d275ebbcad443"
@@ -6945,7 +6933,6 @@ dependencies = [
  "bech32 0.9.1",
  "bitcoin 0.28.2",
  "bs58 0.5.1",
- "canbench-rs",
  "candid",
  "candid_parser",
  "canister-test",
@@ -6985,7 +6972,6 @@ dependencies = [
  "minicbor-derive",
  "mockall",
  "num-traits",
- "pocket-ic 6.0.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "proptest 1.6.0",
  "ripemd",
  "scopeguard",
@@ -9190,7 +9176,7 @@ dependencies = [
  "icp-ledger",
  "icrc-ledger-types",
  "num-bigint 0.4.6",
- "pocket-ic 6.0.0",
+ "pocket-ic",
  "reqwest 0.12.12",
  "rosetta-core",
  "serde",
@@ -9207,7 +9193,7 @@ dependencies = [
  "ic-ledger-test-utils",
  "ic-rosetta-test-utils",
  "icp-ledger",
- "pocket-ic 6.0.0",
+ "pocket-ic",
  "reqwest 0.12.12",
  "tempfile",
  "tokio",
@@ -9249,7 +9235,7 @@ dependencies = [
  "num-bigint 0.4.6",
  "num-traits",
  "once_cell",
- "pocket-ic 6.0.0",
+ "pocket-ic",
  "proptest 1.6.0",
  "rand 0.8.5",
  "reqwest 0.12.12",
@@ -9288,7 +9274,7 @@ dependencies = [
  "ic-rosetta-api",
  "icrc-ledger-types",
  "num-bigint 0.4.6",
- "pocket-ic 6.0.0",
+ "pocket-ic",
  "reqwest 0.12.12",
  "rosetta-core",
  "serde",
@@ -9303,7 +9289,7 @@ dependencies = [
  "anyhow",
  "candid",
  "icrc-ledger-types",
- "pocket-ic 6.0.0",
+ "pocket-ic",
  "reqwest 0.12.12",
  "tempfile",
  "tokio",
@@ -9874,7 +9860,7 @@ dependencies = [
  "icp-ledger",
  "icrc-ledger-types",
  "on_wire",
- "pocket-ic 6.0.0",
+ "pocket-ic",
  "serde",
 ]
 
@@ -10085,7 +10071,7 @@ name = "ic-metrics-assert"
 version = "0.1.0"
 dependencies = [
  "candid",
- "pocket-ic 6.0.0",
+ "pocket-ic",
  "regex",
  "serde",
  "serde_bytes",
@@ -10123,7 +10109,7 @@ dependencies = [
  "ic-sns-swap",
  "ic-sns-wasm",
  "itertools 0.12.1",
- "pocket-ic 6.0.0",
+ "pocket-ic",
  "registry-canister",
  "serde",
  "serde_cbor",
@@ -10397,7 +10383,7 @@ dependencies = [
  "lifeline",
  "maplit",
  "num-traits",
- "pocket-ic 6.0.0",
+ "pocket-ic",
  "prost 0.13.4",
  "registry-canister",
  "rust_decimal",
@@ -10988,7 +10974,7 @@ dependencies = [
  "maplit",
  "on_wire",
  "phantom_newtype",
- "pocket-ic 6.0.0",
+ "pocket-ic",
  "pretty_assertions",
  "prometheus-parse",
  "prost 0.13.4",
@@ -12057,7 +12043,7 @@ dependencies = [
  "num-bigint 0.4.6",
  "num-traits",
  "on_wire",
- "pocket-ic 6.0.0",
+ "pocket-ic",
  "prometheus",
  "proptest 1.6.0",
  "prost 0.13.4",
@@ -13624,23 +13610,6 @@ dependencies = [
 
 [[package]]
 name = "ic-transport-types"
-version = "0.37.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "875dc4704780383112e8e8b5063a1b98de114321d0c7d3e7f635dcf360a57fba"
-dependencies = [
- "candid",
- "hex",
- "ic-certification 2.6.0",
- "leb128",
- "serde",
- "serde_bytes",
- "serde_repr",
- "sha2 0.10.8",
- "thiserror 1.0.69",
-]
-
-[[package]]
-name = "ic-transport-types"
 version = "0.39.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "979ee7bee5a67150a4c090fb012c93c294a528b4a867bad9a15cc6d01cb4227f"
@@ -14409,7 +14378,7 @@ dependencies = [
  "ledger-canister-protobuf-generator",
  "maplit",
  "on_wire",
- "pocket-ic 6.0.0",
+ "pocket-ic",
  "proptest 1.6.0",
  "prost 0.13.4",
  "rand 0.8.5",
@@ -14439,7 +14408,7 @@ dependencies = [
  "icrc-ledger-types",
  "ledger-canister",
  "num-traits",
- "pocket-ic 6.0.0",
+ "pocket-ic",
  "rosetta-core",
  "serde",
  "tempfile",
@@ -15380,7 +15349,7 @@ dependencies = [
  "ic-nns-constants",
  "icp-ledger",
  "lazy_static",
- "pocket-ic 6.0.0",
+ "pocket-ic",
  "serde",
  "serde_bytes",
 ]
@@ -17774,7 +17743,7 @@ dependencies = [
  "ic-cdk 0.16.0",
  "ic-certification 3.0.2",
  "ic-error-types",
- "ic-transport-types 0.39.3",
+ "ic-transport-types",
  "k256 0.13.4",
  "lazy_static",
  "reqwest 0.12.12",
@@ -17793,35 +17762,6 @@ dependencies = [
  "tracing-appender",
  "tracing-subscriber",
  "wat",
- "wslpath",
-]
-
-[[package]]
-name = "pocket-ic"
-version = "6.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "124a2380ca6f557adf8b02517cbfd2f564113230e14cda6f6aadd3dfe156293c"
-dependencies = [
- "base64 0.13.1",
- "candid",
- "hex",
- "ic-certification 2.6.0",
- "ic-transport-types 0.37.1",
- "reqwest 0.12.12",
- "schemars",
- "serde",
- "serde_bytes",
- "serde_cbor",
- "serde_json",
- "sha2 0.10.8",
- "slog",
- "strum",
- "strum_macros",
- "thiserror 1.0.69",
- "tokio",
- "tracing",
- "tracing-appender",
- "tracing-subscriber",
  "wslpath",
 ]
 
@@ -17895,7 +17835,7 @@ dependencies = [
  "ic-validator-ingress-message",
  "itertools 0.12.1",
  "nix 0.29.0",
- "pocket-ic 6.0.0",
+ "pocket-ic",
  "rand 0.8.5",
  "rcgen",
  "registry-canister",
@@ -18798,7 +18738,7 @@ dependencies = [
  "ic-nns-test-utils",
  "ic-registry-keys",
  "ic-registry-transport",
- "pocket-ic 6.0.0",
+ "pocket-ic",
  "rate-limits-api",
  "serde",
  "tokio",
