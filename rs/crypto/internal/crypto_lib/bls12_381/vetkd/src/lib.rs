@@ -24,19 +24,18 @@ const DERIVATION_DOMAIN_DST: &[u8; 40] = b"\x27ic-vetkd-bls12-381-g2-derivation-
 impl DerivationDomain {
     /// Create a new derivation domain
     pub fn new(canister_id: &[u8], domain: &[u8]) -> Self {
-        let mut input = vec![];
-        input.extend_from_slice(&(canister_id.len() as u64).to_be_bytes()); // 8 bytes length
-        input.extend_from_slice(canister_id);
+        let mut combined_inputs = vec![];
 
-        let mut delta = Scalar::hash(DERIVATION_DOMAIN_DST, &input);
+        // Each input is prefixed with an 8 byte length field
+        let len = canister_id.len() as u64;
+        combined_inputs.extend_from_slice(&len.to_be_bytes());
+        combined_inputs.extend_from_slice(canister_id);
 
-        if !domain.is_empty() {
-            let mut input = vec![];
-            input.extend_from_slice(&(domain.len() as u64).to_be_bytes()); // 8 bytes length
-            input.extend_from_slice(domain.as_ref());
+        let len = domain.as_ref().len() as u64;
+        combined_inputs.extend_from_slice(&len.to_be_bytes()); // 8 bytes length
+        combined_inputs.extend_from_slice(domain.as_ref());
 
-            delta += Scalar::hash(DERIVATION_DOMAIN_DST, &input);
-        }
+        let delta = Scalar::hash(DERIVATION_DOMAIN_DST, &combined_inputs);
 
         Self { delta }
     }
