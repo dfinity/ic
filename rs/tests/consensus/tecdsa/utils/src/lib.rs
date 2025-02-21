@@ -9,7 +9,7 @@ use ic_management_canister_types_private::{
     DerivationPath, ECDSAPublicKeyArgs, ECDSAPublicKeyResponse, EcdsaCurve, EcdsaKeyId,
     MasterPublicKeyId, Payload, SchnorrAlgorithm, SchnorrKeyId, SchnorrPublicKeyArgs,
     SchnorrPublicKeyResponse, SignWithECDSAArgs, SignWithECDSAReply, SignWithSchnorrArgs,
-    SignWithSchnorrReply,
+    SignWithSchnorrReply, VetKdKeyId, VetKdPublicKeyArgs, VetKdPublicKeyResult,
 };
 use ic_message::ForwardParams;
 use ic_nervous_system_common_test_keys::{TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_KEYPAIR};
@@ -298,7 +298,9 @@ pub async fn get_public_key_with_retries(
         MasterPublicKeyId::Schnorr(key_id) => {
             get_schnorr_public_key_with_retries(key_id, msg_can, logger, retries).await
         }
-        MasterPublicKeyId::VetKd(_) => panic!("not applicable to vetKD"),
+        MasterPublicKeyId::VetKd(key_id) => {
+            get_vetkd_public_key_with_retries(key_id, msg_can, logger, retries).await
+        }
     }
 }
 
@@ -416,6 +418,55 @@ pub async fn get_schnorr_public_key_with_retries(
             info!(logger, "schnorr_public_key returns {:?}", vk);
         }
     }
+    Ok(public_key)
+}
+
+pub async fn get_vetkd_public_key_with_retries(
+    key_id: &VetKdKeyId,
+    msg_can: &MessageCanister<'_>,
+    logger: &Logger,
+    retries: u64,
+) -> Result<Vec<u8>, AgentError> {
+    let public_key_request = VetKdPublicKeyArgs {
+        canister_id: None,
+        derivation_path: DerivationPath::new(vec![]),
+        key_id: key_id.clone(),
+    };
+    info!(
+        logger,
+        "Sending a 'get vetkd public key' request: {:?}", public_key_request
+    );
+
+    let mut count = 0;
+    let public_key = loop {
+        let res = msg_can
+            .forward_to(
+                &Principal::management_canister(),
+                "vetkd_public_key",
+                Encode!(&public_key_request).unwrap(),
+            )
+            .await;
+        match res {
+            Ok(bytes) => {
+                let key = VetKdPublicKeyResult::decode(&bytes)
+                    .expect("failed to decode VetKdPublicKeyResult");
+                break key.public_key;
+            }
+            Err(err) => {
+                count += 1;
+                if count < retries {
+                    debug!(
+                        logger,
+                        "vetkd_public_key returns `{}`. Trying again in 2 seconds...", err
+                    );
+                    tokio::time::sleep(Duration::from_secs(2)).await;
+                } else {
+                    return Err(err);
+                }
+            }
+        }
+    };
+
     Ok(public_key)
 }
 
