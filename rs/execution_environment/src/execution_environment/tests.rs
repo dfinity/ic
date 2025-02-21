@@ -179,7 +179,7 @@ fn sign_with_threshold_key_payload(method: Method, key_id: MasterPublicKeyId) ->
                 58, 81, 137, 170, 178, 61, 6, 208, 161, 20, 14, 134, 241, 34, 50, 176, 194, 32, 5,
                 19, 249, 66, 219, 9, 120, 165, 15, 9, 211,
             ],
-            derivation_path: DerivationPath::new(vec![]),
+            derivation_domain: vec![],
             key_id: into_inner_vetkd(key_id),
         }
         .encode(),
@@ -3362,7 +3362,7 @@ fn test_vetkd_public_key_api_is_enabled() {
         Method::VetKdPublicKey,
         ic00::VetKdPublicKeyArgs {
             canister_id: None,
-            derivation_path: DerivationPath::new(vec![]),
+            derivation_domain: vec![],
             key_id: nonexistent_key_id.clone(),
         }
         .encode(),
@@ -3372,7 +3372,7 @@ fn test_vetkd_public_key_api_is_enabled() {
         Method::VetKdPublicKey,
         ic00::VetKdPublicKeyArgs {
             canister_id: None,
-            derivation_path: DerivationPath::new(vec![]),
+            derivation_domain: vec![],
             key_id: into_inner_vetkd(key_id),
         }
         .encode(),
