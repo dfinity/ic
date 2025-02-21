@@ -331,6 +331,7 @@ mod tests {
     use ic_types::ReplicaVersion;
     use itertools::Itertools;
     use lazy_static::lazy_static;
+    use maplit::btreemap;
     use prost::Message;
     use std::str::FromStr;
 
@@ -594,6 +595,7 @@ mod tests {
         // Add node operator record first
         let node_operator_record = NodeOperatorRecord {
             node_allowance: 1, // Should be > 0 to add a new node
+            rewardable_nodes: btreemap! { "type0".to_string() => 0, "type1".to_string() => 28 },
             ..Default::default()
         };
         let node_operator_id = PrincipalId::from_str(TEST_NODE_ID).unwrap();
@@ -616,10 +618,15 @@ mod tests {
         };
         let node_record = registry.get_node_or_panic(node_id);
         assert_eq!(node_record, node_record_expected);
-        // Assert node allowance counter has decremented
+
+        // Assert the node operator record is correct
+        let node_operator_record_expected = NodeOperatorRecord {
+            node_allowance: 0,
+            ..node_operator_record
+        };
         let node_operator_record = get_node_operator_record(&registry, node_operator_id)
             .expect("failed to get node operator");
-        assert_eq!(node_operator_record.node_allowance, 0);
+        assert_eq!(node_operator_record, node_operator_record_expected);
     }
 
     #[test]

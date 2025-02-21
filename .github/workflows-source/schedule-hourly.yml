@@ -62,7 +62,6 @@ jobs:
         env:
           CLOUD_CREDENTIALS_CONTENT: ${{ secrets.CLOUD_CREDENTIALS_CONTENT }}
         with:
-          BAZEL_CI_CONFIG: ""
           BAZEL_COMMAND: >-
             build
               --config=ci
