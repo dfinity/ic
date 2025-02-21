@@ -1,7 +1,7 @@
 load("@bazel_skylib//rules:common_settings.bzl", "string_setting")
 load("@gazelle//:def.bzl", "gazelle")
 load("@rules_python//python:pip.bzl", "compile_pip_requirements")
-load("//bazel:json.bzl", "jq_dep")
+load("@mainnet_versions//:defs.bzl", "mainnet_versions")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -17,11 +17,12 @@ exports_files([
     "mainnet-canister-revisions.json",
 ])
 
-jq_dep(
+# Extract NNS subnet revision
+MAINNET_NNS_SUBNET_REVISION = mainnet_versions["subnets"]["tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe"]
+genrule(
     name = "mainnet_nns_subnet_revision",
-    json_path = ".subnets.\\\"tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe\\\"",
-    source = "mainnet-subnet-revisions.json",
-    target = "mainnet_nns_subnet_revision.txt",
+    outs = ["mainnet_nns_subnet_revision.txt"],
+    cmd = "echo '" + MAINNET_NNS_SUBNET_REVISION + "' > $@",
 )
 
 filegroup(
