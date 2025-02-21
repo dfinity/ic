@@ -55,7 +55,7 @@ use ic_registry_transport::pb::v1::{
     RegistryGetChangesSinceRequest, RegistryGetChangesSinceResponse,
 };
 use ic_sns_governance::{pb::v1::{
-    self as sns_pb, governance, manage_neuron_response::Command as SnsCommandResponse, GetModeResponse, GetRunningSnsVersionRequest, GetRunningSnsVersionResponse, GetUpgradeJournalRequest, GetUpgradeJournalResponse
+    self as sns_pb, governance, manage_neuron_response::Command as SnsCommandResponse, upgrade_journal_entry::{Event, TargetVersionReset, UpgradeOutcome, UpgradeStepsReset}, GetModeResponse, GetRunningSnsVersionRequest, GetRunningSnsVersionResponse, GetUpgradeJournalRequest, GetUpgradeJournalResponse, UpgradeJournal, UpgradeJournalEntry
 }, upgrade_journal::serialize_journal_entries};
 use ic_sns_swap::pb::v1::{GetAutoFinalizationStatusRequest, GetAutoFinalizationStatusResponse};
 use ic_sns_wasm::{
@@ -75,7 +75,7 @@ use icrc_ledger_types::icrc1::{
 use num_traits::ToPrimitive;
 use prost::Message;
 use serde::Serialize;
-use std::{convert::TryInto, env, time::Duration};
+use std::{collections::HashSet, convert::TryInto, env, time::Duration};
 
 /// A `StateMachine` builder setting the IC time to the current time
 /// and using the canister ranges of both the NNS and II subnets.
@@ -2021,12 +2021,31 @@ pub fn sns_wait_for_proposal_executed_or_failed(
     }
 }
 
+pub fn get_upgrade_journal(
+    machine: &StateMachine,
+    governance: CanisterId,
+) -> GetUpgradeJournalResponse {
+    let upgrade_journal = query(
+        &machine,
+        governance,
+        "get_upgrade_journal",
+        Encode!(&GetUpgradeJournalRequest {
+            limit: Some(100),
+            offset: Some(0),
+        }).unwrap(),
+    ).unwrap();
+
+    Decode!(&upgrade_journal, GetUpgradeJournalResponse)
+        .unwrap()
+}
+
 pub fn sns_wait_for_upgrade_completion(
     machine: &StateMachine,
     governance: CanisterId,
     expected_version: governance::Version,
 ) -> GetRunningSnsVersionResponse {
     const MAX_ATTEMPTS: usize = 1000;
+
     let mut running_version_response = None;
     let mut errors = vec![];
 
@@ -2059,27 +2078,87 @@ pub fn sns_wait_for_upgrade_completion(
         machine.advance_time(Duration::from_millis(1000));
     }
 
-    let upgrade_journal = query(
-        &machine,
-        governance,
-        "get_upgrade_journal",
-        Encode!(&GetUpgradeJournalRequest {
-            limit: Some(100),
-            offset: Some(0),
-        }).unwrap(),
-    ).unwrap();
-
-    let upgrade_journal = Decode!(&upgrade_journal, GetUpgradeJournalResponse)
-        .unwrap()
+    let upgrade_journal = get_upgrade_journal(machine, governance)
         .upgrade_journal
         .unwrap();
-
     let upgrade_journal = serialize_journal_entries(&upgrade_journal).unwrap();
 
     panic!(
         "Expected {:?} not observed after {} attempts; last running version: {:?} \
          errors = {:?}\n  upgrade_journal = {:#?}",
         expected_version, MAX_ATTEMPTS, running_version_response, errors, upgrade_journal,
+    );
+}
+
+fn redact_human_readable(event: &Event) -> Event {
+    match event {
+        Event::UpgradeStepsReset(upgrade_steps_reset) => Event::UpgradeStepsReset(UpgradeStepsReset {
+            human_readable: None,
+            ..upgrade_steps_reset.clone()
+        }),
+        Event::TargetVersionReset(target_version_reset) => Event::TargetVersionReset(TargetVersionReset {
+            human_readable: None,
+            ..target_version_reset.clone()
+        }),
+        Event::UpgradeOutcome(upgrade_outcome) => Event::UpgradeOutcome(UpgradeOutcome {
+            human_readable: None,
+            ..upgrade_outcome.clone()
+        }),
+        event => event.clone(),
+    }
+}
+
+pub fn await_upgrade_journal_event(
+    label: &str,
+    machine: &StateMachine,
+    governance: CanisterId,
+    expected_event: &Event,
+) {
+    const MAX_ATTEMPTS: usize = 100;
+
+    let mut last_response = None;
+
+    for _attempt_count in 0..MAX_ATTEMPTS {
+        machine.tick();
+
+        let response = get_upgrade_journal(machine, governance);
+        let last_event = response.upgrade_journal.as_ref().unwrap().entries.iter().filter_map(|entry| {
+            let Some(event) = entry.event.as_ref() else {
+                return None;
+            };
+            
+            // Redact human readable strings to simplify matching.
+            let event = redact_human_readable(event);
+
+            // Collect strings, since traits `Eq` and `Hash` are not implemented on `Event`.
+            let event = format!("{:?}", event);
+
+            Some(event)
+        }).collect::<HashSet::<_>>();
+        
+        let expected_event = format!("{:?}", redact_human_readable(expected_event));
+
+        if last_event.contains(&expected_event) {
+            return;
+        }
+        last_response = Some(response);
+
+        machine.advance_time(Duration::from_millis(1000));
+    }
+
+    let last_response = last_response.expect("There should have been at least one attempt");
+    let last_upgrade_journal = serialize_journal_entries(&last_response.upgrade_journal.unwrap()).unwrap();
+
+    // Wrap `expected_event` into `UpgradeJournal` to enable pretty printing it.
+    let expected_event = UpgradeJournal { entries: vec![UpgradeJournalEntry {
+        timestamp_seconds: None,
+        event: Some(expected_event.clone())
+    }] };
+    let expected_event = serialize_journal_entries(&expected_event).unwrap();
+
+    panic!(
+        "{}: expected upgrade event {} not observed after {} attempts; upgrade_journal = {}",
+        label, expected_event, MAX_ATTEMPTS, last_upgrade_journal, 
     );
 }
 
