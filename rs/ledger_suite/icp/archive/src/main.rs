@@ -34,10 +34,9 @@ const DEFAULT_MAX_MEMORY_SIZE: u64 = 10 * 1024 * 1024 * 1024;
 
 const MAX_MEMORY_SIZE_BYTES_MEMORY_ID: MemoryId = MemoryId::new(0);
 const BLOCK_HEIGHT_OFFSET_MEMORY_ID: MemoryId = MemoryId::new(1);
-const TOTAL_BLOCK_SIZE_MEMORY_ID: MemoryId = MemoryId::new(2);
-const LEDGER_CANISTER_ID_MEMORY_ID: MemoryId = MemoryId::new(3);
-const BLOCK_LOG_INDEX_MEMORY_ID: MemoryId = MemoryId::new(4);
-const BLOCK_LOG_DATA_MEMORY_ID: MemoryId = MemoryId::new(5);
+const LEDGER_CANISTER_ID_MEMORY_ID: MemoryId = MemoryId::new(2);
+const BLOCK_LOG_INDEX_MEMORY_ID: MemoryId = MemoryId::new(3);
+const BLOCK_LOG_DATA_MEMORY_ID: MemoryId = MemoryId::new(4);
 
 thread_local! {
     /// Static memory manager to manage the memory available for stable structures.
@@ -45,7 +44,6 @@ thread_local! {
 
     static MAX_MEMORY_SIZE_BYTES_CACHE: RefCell<Option<u64>> = const { RefCell::new(None) };
     static BLOCK_HEIGHT_OFFSET_CACHE: RefCell<Option<u64>> = const { RefCell::new(None) };
-    static TOTAL_BLOCK_SIZE_CACHE: RefCell<Option<u64>> = const { RefCell::new(None) };
     static LEDGER_CANISTER_ID_CACHE: RefCell<Option<CanisterId>> = const { RefCell::new(None) };
 
     static LAST_UPGRADE_TIMESTAMP: RefCell<u64> = const { RefCell::new(0) };
@@ -58,11 +56,6 @@ thread_local! {
     // Block height offset
     static BLOCK_HEIGHT_OFFSET: RefCell<StableCell<u64, VirtualMemory<DefaultMemoryImpl>>> =
         MEMORY_MANAGER.with(|memory_manager|  RefCell::new(StableCell::init(memory_manager.borrow().get(BLOCK_HEIGHT_OFFSET_MEMORY_ID), 0)
-        .expect("failed to initialize stable cell")));
-
-    // Total block size.
-    static TOTAL_BLOCK_SIZE: RefCell<StableCell<u64, VirtualMemory<DefaultMemoryImpl>>> =
-        MEMORY_MANAGER.with(|memory_manager|  RefCell::new(StableCell::init(memory_manager.borrow().get(TOTAL_BLOCK_SIZE_MEMORY_ID), 0)
         .expect("failed to initialize stable cell")));
 
     // Ledger canister id.
@@ -116,19 +109,7 @@ fn set_block_height_offset(block_height_offset: u64) {
 }
 
 fn total_block_size() -> u64 {
-    if let Some(total_block_size) = TOTAL_BLOCK_SIZE_CACHE.with(|b| *b.borrow()) {
-        return total_block_size;
-    }
-    let total_block_size = TOTAL_BLOCK_SIZE.with(|cell| *cell.borrow().get());
-    TOTAL_BLOCK_SIZE_CACHE.with(|b| *b.borrow_mut() = Some(total_block_size));
-    total_block_size
-}
-
-fn set_total_block_size(total_block_size: u64) {
-    assert!(TOTAL_BLOCK_SIZE
-        .with(|cell| cell.borrow_mut().set(total_block_size))
-        .is_ok());
-    TOTAL_BLOCK_SIZE_CACHE.with(|b| *b.borrow_mut() = Some(total_block_size));
+    BLOCKS.with_borrow(|b| b.log_size_bytes())
 }
 
 fn ledger_canister_id() -> CanisterId {
@@ -170,15 +151,12 @@ fn append_blocks(blocks: Vec<EncodedBlock>) {
         blocks_len(),
         blocks.len()
     ));
-    let mut block_size_new = total_block_size();
     for block in blocks {
-        block_size_new += block.size_bytes() as u64;
         append_block(&block);
     }
-    if block_size_new > max_memory_size_bytes() {
+    if total_block_size() > max_memory_size_bytes() {
         ic_cdk::trap("No space left");
     }
-    set_total_block_size(block_size_new);
     print(format!(
         "[archive node] append_blocks(): done. archive size: {} blocks",
         blocks_len()
@@ -375,7 +353,6 @@ fn post_upgrade() {
         }
 
         set_ledger_canister_id(state.ledger_canister_id);
-        set_total_block_size(state.total_block_size as u64);
         set_block_height_offset(state.block_height_offset);
         match arg_max_memory_size_bytes {
             Some(max_memory_size_bytes) => {
