@@ -256,10 +256,6 @@ pub(super) fn build_signature_inputs(
     context: &SignWithThresholdContext,
     block_reader: &dyn IDkgBlockReader,
 ) -> Result<(RequestId, ThresholdSigInputsRef), BuildSignatureInputsError> {
-    let extended_derivation_path = ExtendedDerivationPath {
-        caller: context.request.sender.into(),
-        derivation_path: context.derivation_path.clone(),
-    };
     match &context.args {
         ThresholdArguments::Ecdsa(args) => {
             let (pre_sig_id, height) = context
@@ -285,7 +281,10 @@ pub(super) fn build_signature_inputs(
                     .ok_or(BuildSignatureInputsError::ContextIncomplete)?,
             );
             let inputs = ThresholdSigInputsRef::Ecdsa(ThresholdEcdsaSigInputsRef::new(
-                extended_derivation_path,
+                ExtendedDerivationPath {
+                    caller: context.request.sender.into(),
+                    derivation_path: context.derivation_path.clone(),
+                },
                 args.message_hash,
                 nonce,
                 pre_sig,
@@ -316,7 +315,10 @@ pub(super) fn build_signature_inputs(
                     .ok_or(BuildSignatureInputsError::ContextIncomplete)?,
             );
             let inputs = ThresholdSigInputsRef::Schnorr(ThresholdSchnorrSigInputsRef::new(
-                extended_derivation_path,
+                ExtendedDerivationPath {
+                    caller: context.request.sender.into(),
+                    derivation_path: context.derivation_path.clone(),
+                },
                 args.message.clone(),
                 nonce,
                 pre_sig,
@@ -331,11 +333,16 @@ pub(super) fn build_signature_inputs(
             };
             let inputs = ThresholdSigInputsRef::VetKd(VetKdArgs {
                 derivation_domain: VetKdDerivationDomain {
-                    caller: extended_derivation_path.caller,
+                    caller: context.request.sender.into(),
                     /////////////////////////////////////////////////
                     // TODO: consider moving SignWithThresholdContext::derivation_path into {Ecdsa|Schnorr}Arguments and add VetKdArguments::derivation_domain
                     /////////////////////////////////////////////////
-                    domain: extended_derivation_path.derivation_path[0].clone(),
+                    domain: context
+                        .derivation_path
+                        .iter()
+                        .cloned()
+                        .nth(0)
+                        .unwrap_or(vec![]),
                 },
                 ni_dkg_id: args.ni_dkg_id.clone(),
                 derivation_id: args.derivation_id.clone(),

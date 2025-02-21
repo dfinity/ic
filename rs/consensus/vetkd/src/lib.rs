@@ -205,7 +205,12 @@ impl VetKdPayloadBuilderImpl {
                 let args = VetKdArgs {
                     derivation_domain: VetKdDerivationDomain {
                         caller: context.request.sender.into(),
-                        domain: context.derivation_path[0].clone(),
+                        domain: context
+                            .derivation_path
+                            .iter()
+                            .cloned()
+                            .nth(0)
+                            .unwrap_or(vec![]),
                     },
                     ni_dkg_id: ctxt_args.ni_dkg_id.clone(),
                     derivation_id: ctxt_args.derivation_id.clone(),
@@ -323,7 +328,12 @@ impl VetKdPayloadBuilderImpl {
         let args = VetKdArgs {
             derivation_domain: VetKdDerivationDomain {
                 caller: context.request.sender.into(),
-                domain: context.derivation_path[0].clone(),
+                domain: context
+                    .derivation_path
+                    .iter()
+                    .cloned()
+                    .nth(0)
+                    .unwrap_or(vec![]),
             },
             ni_dkg_id: ctxt_args.ni_dkg_id.clone(),
             derivation_id: ctxt_args.derivation_id.clone(),
