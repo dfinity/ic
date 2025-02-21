@@ -1,4 +1,5 @@
 use crate::imports::{system_api_imports, SystemApiImportStore};
+use crate::special_int::SpecialInt;
 use arbitrary::{Arbitrary, Result, Unstructured};
 use ic_config::embedders::Config as EmbeddersConfig;
 use ic_config::flag_status::FlagStatus;
@@ -137,8 +138,12 @@ impl<'a> Arbitrary<'a> for SystemApiModule {
 
                 for param in func_type.params() {
                     let instruction = match param {
-                        EncodedValType::I32 => Instruction::I32Const(i32::arbitrary(u)?),
-                        EncodedValType::I64 => Instruction::I64Const(i64::arbitrary(u)?),
+                        EncodedValType::I32 => {
+                            Instruction::I32Const(SpecialInt::<i32>::arbitrary(u)?.0)
+                        }
+                        EncodedValType::I64 => {
+                            Instruction::I64Const(SpecialInt::<i64>::arbitrary(u)?.0)
+                        }
                         _ => unimplemented!(),
                     };
                     function.instruction(&instruction);
