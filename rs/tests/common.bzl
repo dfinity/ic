@@ -2,8 +2,8 @@
 Common dependencies for system-tests.
 """
 
-load(":qualifying_nns_canisters.bzl", "QUALIFYING_NNS_CANISTERS", "QUALIFYING_SNS_CANISTERS")
 load("@mainnet_versions//:defs.bzl", "mainnet_versions")
+load(":qualifying_nns_canisters.bzl", "QUALIFYING_NNS_CANISTERS", "QUALIFYING_SNS_CANISTERS")
 
 GUESTOS_DEV_VERSION = "//ic-os/guestos/envs/dev:version.txt"
 

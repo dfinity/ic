@@ -1,11 +1,9 @@
 load("@rules_rust//rust:defs.bzl", "rust_library")
-load("//rs/tests:common.bzl", "MAINNET_ENV")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
 
 rust_library(
     name = "ic_mainnet_nns_recovery",
-    env = MAINNET_ENV,
     testonly = True,
     srcs = ["src/lib.rs"],
     crate_name = "ic_mainnet_nns_recovery",

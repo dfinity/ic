@@ -16,7 +16,6 @@ exports_files([
     "mainnet-canister-revisions.json",
 ])
 
-
 # TODO: remove
 filegroup(
     name = "mainnet_subnet_revisions",

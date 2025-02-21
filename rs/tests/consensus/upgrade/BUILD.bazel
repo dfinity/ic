@@ -1,12 +1,11 @@
 load("@rules_rust//rust:defs.bzl", "rust_library")
-load("//rs/tests:common.bzl", "GUESTOS_RUNTIME_DEPS", "UNIVERSAL_VM_RUNTIME_DEPS", "MAINNET_ENV")
+load("//rs/tests:common.bzl", "GUESTOS_RUNTIME_DEPS", "MAINNET_ENV", "UNIVERSAL_VM_RUNTIME_DEPS")
 load("//rs/tests:system_tests.bzl", "system_test_nns")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
 
 rust_library(
     name = "common",
-    env = MAINNET_ENV,
     testonly = True,
     srcs = ["common.rs"],
     crate_name = "ic_consensus_system_test_upgrade_common",
@@ -27,10 +26,10 @@ rust_library(
 
 system_test_nns(
     name = "upgrade_downgrade_app_subnet_test",
-    env = MAINNET_ENV,
     colocated_test_driver_vm_resources = {
         "vcpus": 24,
     },
+    env = MAINNET_ENV,
     tags = [
         "experimental_system_test_colocation",
         "system_test_hourly",

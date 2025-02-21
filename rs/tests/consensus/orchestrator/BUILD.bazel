@@ -1,4 +1,4 @@
-load("//rs/tests:common.bzl", "GUESTOS_RUNTIME_DEPS", "UNIVERSAL_VM_RUNTIME_DEPS", "MAINNET_ENV")
+load("//rs/tests:common.bzl", "GUESTOS_RUNTIME_DEPS", "MAINNET_ENV", "UNIVERSAL_VM_RUNTIME_DEPS")
 load("//rs/tests:system_tests.bzl", "system_test", "system_test_nns")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
