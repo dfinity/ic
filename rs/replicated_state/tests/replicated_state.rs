@@ -371,7 +371,7 @@ fn memory_taken_by_subnet_queues() {
     assert_canister_history_memory_taken(0, &fixture);
     assert_wasm_custom_sections_memory_taken(0, &fixture);
 
-    // Push a request into the subnet input queues.
+    // Push a guaranteed resoibse request into the subnet input queues.
     assert!(fixture
         .state
         .push_input(
@@ -550,7 +550,7 @@ fn push_subnet_queues_input_respects_subnet_available_guaranteed_response_memory
     assert_canister_history_memory_taken(0, &fixture);
     assert_wasm_custom_sections_memory_taken(0, &fixture);
 
-    // Push a request into the subnet input queues.
+    // Push a guarnteed response request into the subnet input queues.
     assert!(fixture
         .state
         .push_input(
@@ -570,13 +570,13 @@ fn push_subnet_queues_input_respects_subnet_available_guaranteed_response_memory
         subnet_available_guaranteed_response_memory,
     );
 
-    // Push a second request into the subnet input queues.
+    // Push a second guaranteed response request into the subnet input queues.
     let res = fixture.state.push_input(
         request_to(SUBNET_ID.into()).into(),
         &mut subnet_available_guaranteed_response_memory,
     );
 
-    // No more memory for a second request.
+    // No more memory for a second guaranteed response request.
     assert_eq!(
         Err((
             StateError::OutOfMemory {

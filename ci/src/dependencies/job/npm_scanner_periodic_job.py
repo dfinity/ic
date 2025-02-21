@@ -85,7 +85,7 @@ REPOS_TO_SCAN = [
                 owner=Team.GIX_TEAM,
             )
         ],
-        "18.17.1",
+        "18.20.5",
     ),
     Repository(
         "oisy-wallet",

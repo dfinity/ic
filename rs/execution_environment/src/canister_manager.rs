@@ -644,9 +644,6 @@ impl CanisterManager {
         if let Some(wasm_memory_limit) = settings.wasm_memory_limit() {
             canister.system_state.wasm_memory_limit = Some(wasm_memory_limit);
         }
-        // Change of `wasm_memory_limit` or `new_wasm_memory_threshold` or `memory_allocation`,
-        // can influence the satisfaction of the condition for `low_wasm_memory` hook.
-        canister.update_on_low_wasm_memory_hook_condition();
     }
 
     /// Tries to apply the requested settings on the canister identified by
@@ -809,86 +806,6 @@ impl CanisterManager {
                     Err(err) => return (Err(err), cycles),
                 };
                 (Ok(canister_id), Cycles::zero())
-            }
-        }
-    }
-
-    #[doc(hidden)]
-    /// This function is a wrapper on install_code_dts, which allows to perform
-    /// canister installation or upgrade with an assumption that Pause doesn't happen.
-    /// Currently CanisterManager tests use it extensively.
-    #[cfg(test)]
-    pub(crate) fn install_code(
-        &self,
-        context: InstallCodeContext,
-        message: CanisterCall,
-        call_id: InstallCodeCallId,
-        state: &mut ReplicatedState,
-        mut execution_parameters: ExecutionParameters,
-        round_limits: &mut RoundLimits,
-        round_counters: RoundCounters,
-        subnet_size: usize,
-        log_dirty_pages: FlagStatus,
-    ) -> (
-        Result<InstallCodeResult, CanisterManagerError>,
-        NumInstructions,
-        Option<CanisterState>,
-    ) {
-        let time = state.time();
-        let network_topology = state.metadata.network_topology.clone();
-
-        let old_canister = match state.take_canister_state(&context.canister_id) {
-            None => {
-                return (
-                    Err(CanisterManagerError::CanisterNotFound(context.canister_id)),
-                    NumInstructions::from(0),
-                    None,
-                );
-            }
-            Some(canister) => canister,
-        };
-        execution_parameters.compute_allocation = old_canister.scheduler_state.compute_allocation;
-        execution_parameters.canister_memory_limit = match old_canister.memory_allocation() {
-            MemoryAllocation::Reserved(bytes) => bytes,
-            MemoryAllocation::BestEffort => execution_parameters.canister_memory_limit,
-        };
-
-        let dts_result = self.install_code_dts(
-            context,
-            message,
-            call_id,
-            None,
-            old_canister,
-            time,
-            "NOT_USED".into(),
-            &network_topology,
-            execution_parameters,
-            round_limits,
-            CompilationCostHandling::CountFullAmount,
-            round_counters,
-            subnet_size,
-            log_dirty_pages,
-        );
-        match dts_result {
-            DtsInstallCodeResult::Finished {
-                mut canister,
-                call_id: _,
-                message: _,
-                instructions_used,
-                result,
-            } => {
-                canister.update_on_low_wasm_memory_hook_condition();
-                (result, instructions_used, Some(canister))
-            }
-            DtsInstallCodeResult::Paused {
-                canister: _,
-                paused_execution,
-                ingress_status: _,
-            } => {
-                unreachable!(
-                    "Unexpected paused execution in canister manager tests: {:?}",
-                    paused_execution
-                );
             }
         }
     }
