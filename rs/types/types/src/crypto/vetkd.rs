@@ -97,7 +97,7 @@ pub struct VetKdDerivationDomain {
 
 impl std::fmt::Debug for VetKdDerivationDomain {
     fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
-        fmt.debug_struct("VetKdEncryptedKey")
+        fmt.debug_struct("VetKdDerivationDomain")
             .field("caller", &self.caller)
             .field("domain", &HexEncoding::from(&self.domain))
             .finish()
