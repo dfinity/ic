@@ -1635,9 +1635,10 @@ pub enum IngressStatusResult {
 }
 
 #[cfg(windows)]
-fn wsl_path(path: &std::ffi::OsStr, desc: &str) -> String {
+fn wsl_path(path: &PathBuf, desc: &str) -> String {
     windows_to_wsl(
-        path.to_str()
+        path.as_os_str()
+            .to_str()
             .unwrap_or_else(|| panic!("Could not convert {} path ({:?}) to String", desc, path)),
     )
     .unwrap_or_else(|e| {
