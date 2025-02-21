@@ -246,7 +246,9 @@ impl PocketIc {
     /// List all instances and their status.
     #[instrument(ret)]
     pub async fn list_instances() -> Vec<String> {
-        let url = crate::start_or_reuse_server().join("instances").unwrap();
+        let url = crate::start_or_reuse_server(None)
+            .join("instances")
+            .unwrap();
         let instances: Vec<String> = reqwest::Client::new()
             .get(url)
             .send()

@@ -76,7 +76,7 @@ use serde::{Deserialize, Serialize};
 use slog::Level;
 use std::{
     net::SocketAddr,
-    path::{Path, PathBuf},
+    path::PathBuf,
     process::Command,
     sync::{mpsc::channel, Arc},
     thread,
@@ -103,6 +103,7 @@ const LOCALHOST: &str = "127.0.0.1";
 
 pub struct PocketIcBuilder {
     config: Option<ExtendedSubnetConfigSet>,
+    server_binary: Option<PathBuf>,
     server_url: Option<Url>,
     max_request_time_ms: Option<u64>,
     state_dir: Option<PathBuf>,
@@ -116,6 +117,7 @@ impl PocketIcBuilder {
     pub fn new() -> Self {
         Self {
             config: None,
+            server_binary: None,
             server_url: None,
             max_request_time_ms: Some(DEFAULT_MAX_REQUEST_TIME_MS),
             state_dir: None,
@@ -132,7 +134,9 @@ impl PocketIcBuilder {
     }
 
     pub fn build(self) -> PocketIc {
-        let server_url = self.server_url.unwrap_or_else(crate::start_or_reuse_server);
+        let server_url = self
+            .server_url
+            .unwrap_or_else(|| start_or_reuse_server(self.server_binary));
         PocketIc::from_components(
             self.config.unwrap_or_default(),
             server_url,
@@ -145,7 +149,9 @@ impl PocketIcBuilder {
     }
 
     pub async fn build_async(self) -> PocketIcAsync {
-        let server_url = self.server_url.unwrap_or_else(crate::start_or_reuse_server);
+        let server_url = self
+            .server_url
+            .unwrap_or_else(|| start_or_reuse_server(self.server_binary));
         PocketIcAsync::from_components(
             self.config.unwrap_or_default(),
             server_url,
@@ -156,6 +162,12 @@ impl PocketIcBuilder {
             self.bitcoind_addr,
         )
         .await
+    }
+
+    /// Provide a path to the PocketIC server binary used to start a server process if necessary.
+    pub fn with_server_binary(mut self, server_binary: PathBuf) -> Self {
+        self.server_binary = Some(server_binary);
+        self
     }
 
     /// Use an already running PocketIC server.
@@ -485,7 +497,7 @@ impl PocketIc {
     /// List all instances and their status.
     #[instrument(ret)]
     pub fn list_instances() -> Vec<String> {
-        let url = crate::start_or_reuse_server().join("instances").unwrap();
+        let url = start_or_reuse_server(None).join("instances").unwrap();
         let instances: Vec<String> = reqwest::blocking::Client::new()
             .get(url)
             .send()
@@ -1637,24 +1649,27 @@ fn wsl_path(path: &std::ffi::OsStr, desc: &str) -> String {
 }
 
 #[cfg(windows)]
-fn pocket_ic_server_cmd(bin_path: &std::ffi::OsStr) -> Command {
+fn pocket_ic_server_cmd(bin_path: &PathBuf) -> Command {
     let mut cmd = Command::new("wsl");
     cmd.arg(wsl_path(bin_path, "PocketIC binary"));
     cmd
 }
 
 #[cfg(not(windows))]
-fn pocket_ic_server_cmd(bin_path: &std::ffi::OsStr) -> Command {
+fn pocket_ic_server_cmd(bin_path: &PathBuf) -> Command {
     Command::new(bin_path)
 }
 
 /// Attempt to start a new PocketIC server if it's not already running.
-pub fn start_or_reuse_server() -> Url {
-    let bin_path: std::ffi::OsString =
-        std::env::var_os("POCKET_IC_BIN").unwrap_or("./pocket-ic".into());
+pub(crate) fn start_or_reuse_server(server_binary: Option<PathBuf>) -> Url {
+    let bin_path: PathBuf = server_binary.unwrap_or_else(|| {
+        std::env::var_os("POCKET_IC_BIN")
+            .unwrap_or_else(|| "./pocket-ic".into())
+            .into()
+    });
 
-    if !Path::new(&bin_path).is_file() {
-        let is_dir = if Path::new(&bin_path).is_dir() {
+    if !bin_path.as_path().is_file() {
+        let is_dir = if bin_path.as_path().is_dir() {
             " (this is a directory, but it should be a binary file)"
         } else {
             ""
@@ -1666,7 +1681,7 @@ The PocketIC binary could not be found at {:?}{}. Please specify the path to the
 or place it in your current working directory (you are running PocketIC from {:?}).
 
 To download the binary, please visit https://github.com/dfinity/pocketic."
-, &bin_path, is_dir, &std::env::current_dir().map(|x| x.display().to_string()).unwrap_or_else(|_| "an unknown directory".to_string()));
+, bin_path, is_dir, &std::env::current_dir().map(|x| x.display().to_string()).unwrap_or_else(|_| "an unknown directory".to_string()));
     }
 
     // check PocketIC server version compatibility
