@@ -98,7 +98,7 @@ fn test_remove_stale_metrics() -> Result<(), Error> {
     // - fat3m-uhiam-aaaaa-aaaap-2ai
     let snapshot = Arc::new(generate_custom_registry_snapshot(1, 3, 0));
     let mfs = remove_stale_metrics(Arc::clone(&snapshot), gen_metric_families());
-    assert!(mfs.len() == 6);
+    assert_eq!(mfs.len(), 6);
 
     let mut only_node_id = 0;
     let mut only_subnet_id = 0;

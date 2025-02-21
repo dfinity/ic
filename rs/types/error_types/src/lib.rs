@@ -650,4 +650,17 @@ mod tests {
             [1, 2, 3, 4, 5, 6]
         );
     }
+
+    #[test]
+    fn reject_code_from_error_code() {
+        // If this fails, you are making a change to `RejectCode` which violates the property
+        // that the reject code can be derived from the leading digit of an error code.
+        for error_code in ErrorCode::iter() {
+            let reject_code: RejectCode = error_code.into();
+            let error_code_as_u64: u64 = error_code as u64;
+            assert!((100..700).contains(&error_code_as_u64));
+            let derived_reject_code: RejectCode = (error_code_as_u64 / 100).try_into().unwrap();
+            assert_eq!(reject_code, derived_reject_code);
+        }
+    }
 }

@@ -5,11 +5,15 @@
 /// systemd socket ic-https-outcalls-adapter.socket
 use clap::Parser;
 use ic_adapter_metrics_server::start_metrics_grpc;
-use ic_async_utils::{abort_on_panic, incoming_from_nth_systemd_socket, shutdown_signal};
-use ic_https_outcalls_adapter::{start_server, Cli, IncomingSource};
+use ic_http_endpoints_async_utils::{
+    abort_on_panic, incoming_from_nth_systemd_socket, shutdown_signal,
+};
+use ic_https_outcalls_adapter::{start_server, IncomingSource};
 use ic_logger::{info, new_replica_logger_from_config};
 use ic_metrics::MetricsRegistry;
 use serde_json::to_string_pretty;
+
+mod cli;
 
 #[tokio::main]
 pub async fn main() {
@@ -18,17 +22,12 @@ pub async fn main() {
     // happens.
     abort_on_panic();
 
-    let cli = Cli::parse();
+    let cli = cli::Cli::parse();
 
-    let config = match cli.get_config() {
-        Ok(config) => config,
-        Err(err) => {
-            panic!("An error occurred while getting the config: {}", err);
-        }
-    };
-
+    let config = cli
+        .get_config()
+        .expect("An error occurred while getting the config.");
     let (logger, _async_log_guard) = new_replica_logger_from_config(&config.logger);
-
     let metrics_registry = MetricsRegistry::global();
 
     // Metrics server should only be started if we are managed by systemd and receive the

@@ -111,7 +111,6 @@ fi
 
 PODMAN_RUN_ARGS+=(
     --mount type=bind,source="${REPO_ROOT}",target="${WORKDIR}"
-    --mount type=bind,source="${HOME}",target="${HOME}"
     --mount type=bind,source="${CACHE_DIR:-${HOME}/.cache}",target="${CTR_HOME}/.cache"
     --mount type=bind,source="${HOME}/.ssh",target="${CTR_HOME}/.ssh"
     --mount type=bind,source="${HOME}/.aws",target="${CTR_HOME}/.aws"
@@ -141,6 +140,19 @@ if [ "$(id -u)" = "1000" ]; then
     if [ -e "${HOME}/.zsh_history" ]; then
         PODMAN_RUN_ARGS+=(
             --mount type=bind,source="${HOME}/.zsh_history",target="/home/ubuntu/.zsh_history"
+        )
+    fi
+
+    if findmnt /hoststorage >/dev/null; then
+        # use host's storage for cargo target
+        # * shared with VSCode's devcontainer, see .devcontainer/devcontainer.json
+        # this configuration improves performance of rust-analyzer
+        if [ ! -d /hoststorage/cache/cargo ]; then
+            sudo mkdir -p /hoststorage/cache/cargo
+            sudo chown -R 1000:1000 /hoststorage/cache/cargo
+        fi
+        PODMAN_RUN_ARGS+=(
+            --mount type=bind,source="/hoststorage/cache/cargo",target="/ic/target"
         )
     fi
 

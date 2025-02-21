@@ -1,5 +1,7 @@
 use ic_base_types::PrincipalIdBlobParseError;
-use ic_config::embedders::StableMemoryPageLimit;
+use ic_config::embedders::{
+    BestEffortResponsesFeature, Config as EmbeddersConfig, StableMemoryPageLimit,
+};
 use ic_config::flag_status::FlagStatus;
 use ic_cycles_account_manager::ResourceSaturation;
 use ic_error_types::RejectCode;
@@ -27,15 +29,19 @@ use ic_types::{
 use ic_utils::deterministic_operations::deterministic_copy_from_slice;
 use ic_wasm_types::doc_ref;
 use request_in_prep::{into_request, RequestInPrep};
-use sandbox_safe_system_state::{CanisterStatusView, SandboxSafeSystemState, SystemStateChanges};
+use sandbox_safe_system_state::{
+    CanisterStatusView, SandboxSafeSystemState, SystemStateModifications,
+};
 use serde::{Deserialize, Serialize};
 use stable_memory::StableMemory;
 use std::{
+    collections::BTreeMap,
     convert::{From, TryFrom},
     rc::Rc,
 };
 
 pub mod cycles_balance_change;
+use cycles_balance_change::CyclesBalanceChange;
 mod request_in_prep;
 mod routing;
 pub mod sandbox_safe_system_state;
@@ -177,6 +183,7 @@ pub struct ExecutionParameters {
     // The limit on the Wasm memory set by the developer in canister settings.
     pub wasm_memory_limit: Option<NumBytes>,
     pub memory_allocation: MemoryAllocation,
+    pub canister_guaranteed_callback_quota: u64,
     pub compute_allocation: ComputeAllocation,
     pub subnet_type: SubnetType,
     pub execution_mode: ExecutionMode,
@@ -265,6 +272,7 @@ pub enum ApiType {
         #[serde(with = "serde_bytes")]
         incoming_payload: Vec<u8>,
         caller: PrincipalId,
+        call_context_id: CallContextId,
         #[serde(with = "serde_bytes")]
         response_data: Vec<u8>,
         response_status: ResponseStatus,
@@ -421,11 +429,17 @@ impl ApiType {
         }
     }
 
-    pub fn replicated_query(time: Time, incoming_payload: Vec<u8>, caller: PrincipalId) -> Self {
+    pub fn replicated_query(
+        time: Time,
+        incoming_payload: Vec<u8>,
+        caller: PrincipalId,
+        call_context_id: CallContextId,
+    ) -> Self {
         Self::ReplicatedQuery {
             time,
             incoming_payload,
             caller,
+            call_context_id,
             response_data: vec![],
             response_status: ResponseStatus::NotRepliedYet,
             max_reply_size: MAX_INTER_CANISTER_PAYLOAD_IN_BYTES,
@@ -581,12 +595,14 @@ impl ApiType {
             | ApiType::PreUpgrade { .. }
             | ApiType::Cleanup { .. }
             | ApiType::InspectMessage { .. }
-            | ApiType::ReplicatedQuery { .. }
             | ApiType::NonReplicatedQuery {
                 query_kind: NonReplicatedQueryKind::Pure,
                 ..
             } => None,
             ApiType::Update {
+                call_context_id, ..
+            }
+            | ApiType::ReplicatedQuery {
                 call_context_id, ..
             }
             | ApiType::NonReplicatedQuery {
@@ -872,10 +888,10 @@ impl MemoryUsage {
 
                         self.add_execution_memory(execution_bytes, execution_memory_type)?;
 
-                        sandbox_safe_system_state.check_on_low_wasm_memory_hook_condition(
+                        sandbox_safe_system_state.update_status_of_low_wasm_memory_hook_condition(
                             None,
                             self.wasm_memory_limit,
-                            self.stable_memory_usage,
+                            self.current_usage,
                             self.wasm_memory_usage,
                         );
 
@@ -899,10 +915,10 @@ impl MemoryUsage {
                 self.current_usage = NumBytes::from(new_usage);
                 self.add_execution_memory(execution_bytes, execution_memory_type)?;
 
-                sandbox_safe_system_state.check_on_low_wasm_memory_hook_condition(
+                sandbox_safe_system_state.update_status_of_low_wasm_memory_hook_condition(
                     Some(reserved_bytes),
                     self.wasm_memory_limit,
-                    self.stable_memory_usage,
+                    self.current_usage,
                     self.wasm_memory_usage,
                 );
                 Ok(())
@@ -1031,6 +1047,9 @@ pub struct SystemApiImpl {
     #[allow(unused)]
     canister_backtrace: FlagStatus,
 
+    /// Rollout stage of the best-effort responses feature.
+    best_effort_responses: BestEffortResponsesFeature,
+
     /// The maximum sum of `<name>` lengths in exported functions called `canister_update <name>`,
     /// `canister_query <name>`, or `canister_composite_query <name>`.
     max_sum_exported_function_name_lengths: usize,
@@ -1072,9 +1091,7 @@ impl SystemApiImpl {
         canister_current_message_memory_usage: NumBytes,
         execution_parameters: ExecutionParameters,
         subnet_available_memory: SubnetAvailableMemory,
-        wasm_native_stable_memory: FlagStatus,
-        canister_backtrace: FlagStatus,
-        max_sum_exported_function_name_lengths: usize,
+        embedders_config: &EmbeddersConfig,
         stable_memory: Memory,
         wasm_memory_size: NumWasmPages,
         out_of_instructions_handler: Rc<dyn OutOfInstructionsHandler>,
@@ -1112,9 +1129,11 @@ impl SystemApiImpl {
             api_type,
             memory_usage,
             execution_parameters,
-            wasm_native_stable_memory,
-            canister_backtrace,
-            max_sum_exported_function_name_lengths,
+            wasm_native_stable_memory: embedders_config.feature_flags.wasm_native_stable_memory,
+            canister_backtrace: embedders_config.feature_flags.canister_backtrace,
+            best_effort_responses: embedders_config.feature_flags.best_effort_responses.clone(),
+            max_sum_exported_function_name_lengths: embedders_config
+                .max_sum_exported_function_name_lengths,
             stable_memory,
             sandbox_safe_system_state,
             out_of_instructions_handler,
@@ -1398,11 +1417,11 @@ impl SystemApiImpl {
             | ApiType::Init { .. }
             | ApiType::SystemTask { .. }
             | ApiType::Cleanup { .. }
-            | ApiType::ReplicatedQuery { .. }
             | ApiType::PreUpgrade { .. }
             | ApiType::NonReplicatedQuery { .. }
             | ApiType::InspectMessage { .. } => Err(self.error_for(method_name)),
             ApiType::Update { .. }
+            | ApiType::ReplicatedQuery { .. }
             | ApiType::ReplyCallback { .. }
             | ApiType::RejectCallback { .. } => {
                 if self.execution_parameters.execution_mode == ExecutionMode::NonReplicated {
@@ -1450,23 +1469,15 @@ impl SystemApiImpl {
         max_amount: Cycles,
     ) -> HypervisorResult<Cycles> {
         match &mut self.api_type {
-            ApiType::ReplyCallback {
-                response_status: ResponseStatus::AlreadyReplied,
-                ..
-            }
-            | ApiType::RejectCallback {
-                response_status: ResponseStatus::AlreadyReplied,
-                ..
-            } => Ok(Cycles::new(0)),
             ApiType::Start { .. }
             | ApiType::Init { .. }
             | ApiType::SystemTask { .. }
             | ApiType::PreUpgrade { .. }
             | ApiType::Cleanup { .. }
-            | ApiType::ReplicatedQuery { .. }
             | ApiType::NonReplicatedQuery { .. }
             | ApiType::InspectMessage { .. } => Err(self.error_for(method_name)),
             ApiType::Update { .. }
+            | ApiType::ReplicatedQuery { .. }
             | ApiType::ReplyCallback { .. }
             | ApiType::RejectCallback { .. } => {
                 if self.execution_parameters.execution_mode == ExecutionMode::NonReplicated {
@@ -1480,12 +1491,174 @@ impl SystemApiImpl {
         }
     }
 
-    pub fn into_system_state_changes(self) -> SystemStateChanges {
-        self.sandbox_safe_system_state.system_state_changes
+    fn add_canister_log_for_trap(
+        &self,
+        err: &HypervisorError,
+        time: Time,
+        system_state_modifications: &mut SystemStateModifications,
+    ) {
+        if let Some(log_message) = match err {
+            HypervisorError::Trapped {
+                trap_code,
+                backtrace,
+            } => match backtrace {
+                Some(bt) => Some(format!("[TRAP]: {}\n{}", trap_code, bt)),
+                None => Some(format!("[TRAP]: {}", trap_code)),
+            },
+            HypervisorError::CalledTrap { message, backtrace } => {
+                let message = if message.is_empty() {
+                    "(no message)"
+                } else {
+                    message
+                };
+                match backtrace {
+                    Some(bt) => Some(format!("[TRAP]: {}\n{}", message, bt)),
+                    None => Some(format!("[TRAP]: {}", message)),
+                }
+            }
+            _ => None,
+        } {
+            system_state_modifications
+                .canister_log
+                .add_record(time.as_nanos_since_unix_epoch(), log_message.into_bytes());
+        }
     }
 
-    pub fn take_system_state_changes(&mut self) -> SystemStateChanges {
-        self.sandbox_safe_system_state.take_changes()
+    pub fn take_system_state_modifications(&mut self) -> SystemStateModifications {
+        let mut system_state_modifications = self.sandbox_safe_system_state.take_changes();
+        // In the below, we explicitly list all fields of `SystemStateModifications`
+        // so that an explicit decision needs to be made for each context and
+        // and execution result combination when a new field is added to the struct.
+        match self.api_type {
+            // Inspect message runs in non-replicated mode, not persisting any changes.
+            ApiType::InspectMessage { .. } => SystemStateModifications {
+                new_certified_data: None,
+                callback_updates: vec![],
+                cycles_balance_change: CyclesBalanceChange::zero(),
+                reserved_cycles: Cycles::zero(),
+                consumed_cycles_by_use_case: BTreeMap::new(),
+                call_context_balance_taken: None,
+                request_slots_used: BTreeMap::new(),
+                requests: vec![],
+                new_global_timer: None,
+                canister_log: Default::default(),
+                on_low_wasm_memory_hook_condition_check_result: None,
+                should_bump_canister_version: false,
+            },
+            // Non-replicated query context includes composite queries, so in that case
+            // the changes to output queues, callbacks and slot reservations should be
+            // returned to properly handle the execution of the query graph.
+            ApiType::NonReplicatedQuery { .. } => SystemStateModifications {
+                new_certified_data: None,
+                callback_updates: system_state_modifications.callback_updates,
+                cycles_balance_change: CyclesBalanceChange::zero(),
+                reserved_cycles: Cycles::zero(),
+                consumed_cycles_by_use_case: BTreeMap::new(),
+                call_context_balance_taken: None,
+                request_slots_used: system_state_modifications.request_slots_used,
+                requests: system_state_modifications.requests,
+                new_global_timer: None,
+                canister_log: Default::default(),
+                on_low_wasm_memory_hook_condition_check_result: None,
+                should_bump_canister_version: false,
+            },
+            // Replicated queries return changes to the logs and cycles balance,
+            // as well as bumping the canister's version in case there was no trap.
+            // In case of a trap, only changes to logs should be returned.
+            ApiType::ReplicatedQuery { time, .. } => match &self.execution_error {
+                Some(err) => {
+                    self.add_canister_log_for_trap(err, time, &mut system_state_modifications);
+                    SystemStateModifications {
+                        new_certified_data: None,
+                        callback_updates: vec![],
+                        cycles_balance_change: CyclesBalanceChange::zero(),
+                        reserved_cycles: Cycles::zero(),
+                        consumed_cycles_by_use_case: BTreeMap::new(),
+                        call_context_balance_taken: None,
+                        request_slots_used: BTreeMap::new(),
+                        requests: vec![],
+                        new_global_timer: None,
+                        canister_log: system_state_modifications.canister_log,
+                        on_low_wasm_memory_hook_condition_check_result: None,
+                        should_bump_canister_version: false,
+                    }
+                }
+                None => SystemStateModifications {
+                    new_certified_data: None,
+                    callback_updates: vec![],
+                    cycles_balance_change: system_state_modifications.cycles_balance_change,
+                    reserved_cycles: Cycles::zero(),
+                    consumed_cycles_by_use_case: system_state_modifications
+                        .consumed_cycles_by_use_case,
+                    call_context_balance_taken: system_state_modifications
+                        .call_context_balance_taken,
+                    request_slots_used: BTreeMap::new(),
+                    requests: vec![],
+                    new_global_timer: None,
+                    canister_log: system_state_modifications.canister_log,
+                    on_low_wasm_memory_hook_condition_check_result: None,
+                    should_bump_canister_version: true,
+                },
+            },
+            // Replicated executions (except queries), should return all changes and bump
+            // the canister version in case there was no trap. Otherwise, only changes
+            // to logs are returned.
+            ApiType::SystemTask { time, .. }
+            | ApiType::Update { time, .. }
+            | ApiType::Cleanup { time, .. }
+            | ApiType::ReplyCallback { time, .. }
+            | ApiType::RejectCallback { time, .. } => match &self.execution_error {
+                Some(err) => {
+                    self.add_canister_log_for_trap(err, time, &mut system_state_modifications);
+                    SystemStateModifications {
+                        new_certified_data: None,
+                        callback_updates: vec![],
+                        cycles_balance_change: CyclesBalanceChange::zero(),
+                        reserved_cycles: Cycles::zero(),
+                        consumed_cycles_by_use_case: BTreeMap::new(),
+                        call_context_balance_taken: None,
+                        request_slots_used: BTreeMap::new(),
+                        requests: vec![],
+                        new_global_timer: None,
+                        canister_log: system_state_modifications.canister_log,
+                        on_low_wasm_memory_hook_condition_check_result: None,
+                        should_bump_canister_version: false,
+                    }
+                }
+                None => {
+                    system_state_modifications.should_bump_canister_version = true;
+                    system_state_modifications
+                }
+            },
+            // Start, init and pre-upgrade are very similar to replicated executions
+            // except that they don't bump the canister's version when the execution
+            // was successful. This is because these are part of canister `install_code`
+            // which bumps the version once for the whole `install_code` request as
+            // opposed to per message execution involved during the `install_code`
+            // request.
+            ApiType::Start { time, .. }
+            | ApiType::Init { time, .. }
+            | ApiType::PreUpgrade { time, .. } => match &self.execution_error {
+                Some(err) => {
+                    self.add_canister_log_for_trap(err, time, &mut system_state_modifications);
+                    SystemStateModifications {
+                        new_certified_data: None,
+                        callback_updates: vec![],
+                        cycles_balance_change: CyclesBalanceChange::zero(),
+                        reserved_cycles: Cycles::zero(),
+                        consumed_cycles_by_use_case: BTreeMap::new(),
+                        call_context_balance_taken: None,
+                        request_slots_used: BTreeMap::new(),
+                        requests: vec![],
+                        new_global_timer: None,
+                        canister_log: system_state_modifications.canister_log,
+                        on_low_wasm_memory_hook_condition_check_result: None,
+                        should_bump_canister_version: false,
+                    }
+                }
+                None => system_state_modifications,
+            },
+        }
     }
 
     pub fn stable_memory_size(&self) -> NumWasmPages {
@@ -1638,12 +1811,7 @@ impl SystemApi for SystemApiImpl {
     }
 
     fn get_num_instructions_from_bytes(&self, num_bytes: NumBytes) -> NumInstructions {
-        match self.sandbox_safe_system_state.subnet_type {
-            SubnetType::System => NumInstructions::from(0),
-            SubnetType::VerifiedApplication | SubnetType::Application => {
-                NumInstructions::from(num_bytes.get())
-            }
-        }
+        NumInstructions::from(num_bytes.get())
     }
 
     fn stable_memory_dirty_pages(&self) -> Vec<(PageIndex, &PageBytes)> {
@@ -3130,7 +3298,7 @@ impl SystemApi for SystemApiImpl {
 
                 // Update the certified data.
                 self.sandbox_safe_system_state
-                    .system_state_changes
+                    .system_state_modifications
                     .new_certified_data = Some(heap[src..src + size].to_vec());
                 Ok(())
             }
@@ -3167,7 +3335,8 @@ impl SystemApi for SystemApiImpl {
         trace_syscall!(self, CanisterStatus, result);
         result
     }
-
+    // TODO(EXC-1806): This can be removed (in favour of ic0_mint_cycles128) once the CMC is upgraded, so it
+    // doesn't make sense to deduplicate the shared code.
     fn ic0_mint_cycles(&mut self, amount: u64) -> HypervisorResult<u64> {
         let result = match self.api_type {
             ApiType::Start { .. }
@@ -3186,13 +3355,49 @@ impl SystemApi for SystemApiImpl {
                     // Access to this syscall not permitted.
                     Err(self.error_for("ic0_mint_cycles"))
                 } else {
-                    self.sandbox_safe_system_state
+                    let actually_minted = self
+                        .sandbox_safe_system_state
                         .mint_cycles(Cycles::from(amount))?;
-                    Ok(amount)
+                    // the actually minted amount cannot be larger than the argument, which is a u64.
+                    debug_assert_eq!(actually_minted.high64(), 0, "ic0_mint_cycles was called with u64 but minted more cycles than fit into 64 bit");
+                    Ok(actually_minted.low64())
                 }
             }
         };
         trace_syscall!(self, MintCycles, result, amount);
+        result
+    }
+
+    fn ic0_mint_cycles128(
+        &mut self,
+        amount: Cycles,
+        dst: usize,
+        heap: &mut [u8],
+    ) -> HypervisorResult<()> {
+        let result = match self.api_type {
+            ApiType::Start { .. }
+            | ApiType::Init { .. }
+            | ApiType::PreUpgrade { .. }
+            | ApiType::Cleanup { .. }
+            | ApiType::ReplicatedQuery { .. }
+            | ApiType::NonReplicatedQuery { .. }
+            | ApiType::InspectMessage { .. } => Err(self.error_for("ic0_mint_cycles128")),
+            ApiType::Update { .. }
+            | ApiType::SystemTask { .. }
+            | ApiType::ReplyCallback { .. }
+            | ApiType::RejectCallback { .. } => {
+                if self.execution_parameters.execution_mode == ExecutionMode::NonReplicated {
+                    // Non-replicated mode means we are handling a composite query.
+                    // Access to this syscall not permitted.
+                    Err(self.error_for("ic0_mint_cycles128"))
+                } else {
+                    let actually_minted = self.sandbox_safe_system_state.mint_cycles(amount)?;
+                    copy_cycles_to_heap(actually_minted, dst, heap, "ic0_mint_cycles_128")?;
+                    Ok(())
+                }
+            }
+        };
+        trace_syscall!(self, MintCycles128, result, amount);
         result
     }
 
@@ -3283,6 +3488,8 @@ impl SystemApi for SystemApiImpl {
     ///
     /// Fails and returns an error if `set_timeout()` was already called.
     fn ic0_call_with_best_effort_response(&mut self, timeout_seconds: u32) -> HypervisorResult<()> {
+        let subnet_id = &self.sandbox_safe_system_state.get_subnet_id();
+        let subnet_type = self.subnet_type();
         let result = match &mut self.api_type {
             ApiType::Start { .. }
             | ApiType::Init { .. }
@@ -3319,17 +3526,21 @@ impl SystemApi for SystemApiImpl {
                     error: "ic0.call_with_best_effort_response called when no call is under construction."
                         .to_string(),
                 }),
+
+                Some(request) if request.is_timeout_set() =>
+                    Err(HypervisorError::ToolchainContractViolation {
+                        error: "ic0_call_with_best_effort_response failed because a timeout is already set."
+                            .to_string(),
+                    }),
+
                 Some(request) => {
-                    if request.is_timeout_set() {
-                        Err(HypervisorError::ToolchainContractViolation {
-                            error: "ic0_call_with_best_effort_response failed because a timeout is already set.".to_string(),
-                        })
-                    } else {
+                    // No-op if the feature is disabled on this subnet.
+                    if self.best_effort_responses.is_enabled_on(subnet_id, subnet_type) {
                         let bounded_timeout =
                             std::cmp::min(timeout_seconds, MAX_CALL_TIMEOUT_SECONDS);
                         request.set_timeout(bounded_timeout);
-                        Ok(())
                     }
+                    Ok(())
                 }
             },
         };
@@ -3363,15 +3574,18 @@ impl SystemApi for SystemApiImpl {
         let result = match &self.api_type {
             ApiType::Start { .. }
             | ApiType::Init { .. }
-            | ApiType::ReplyCallback { .. }
-            | ApiType::RejectCallback { .. }
             | ApiType::Cleanup { .. }
             | ApiType::PreUpgrade { .. }
-            | ApiType::InspectMessage { .. }
             | ApiType::Update { .. }
             | ApiType::SystemTask { .. }
             | ApiType::ReplicatedQuery { .. } => Ok(1),
-            ApiType::NonReplicatedQuery { .. } => Ok(0),
+            ApiType::ReplyCallback { .. } | ApiType::RejectCallback { .. } => {
+                match self.execution_parameters.execution_mode {
+                    ExecutionMode::NonReplicated => Ok(0),
+                    ExecutionMode::Replicated => Ok(1),
+                }
+            }
+            ApiType::InspectMessage { .. } | ApiType::NonReplicatedQuery { .. } => Ok(0),
         };
         trace_syscall!(self, ic0_in_replicated_execution, result);
         result
@@ -3386,10 +3600,10 @@ impl SystemApi for SystemApiImpl {
         let method_name = "ic0_cycles_burn128";
         let result = match self.api_type {
             ApiType::Start { .. }
-            | ApiType::ReplicatedQuery { .. }
             | ApiType::NonReplicatedQuery { .. }
             | ApiType::InspectMessage { .. } => Err(self.error_for(method_name)),
             ApiType::Init { .. }
+            | ApiType::ReplicatedQuery { .. }
             | ApiType::PreUpgrade { .. }
             | ApiType::Cleanup { .. }
             | ApiType::Update { .. }
@@ -3412,6 +3626,68 @@ impl SystemApi for SystemApiImpl {
             }
         };
         trace_syscall!(self, CyclesBurn128, result, amount);
+        result
+    }
+
+    fn ic0_subnet_self_size(&self) -> HypervisorResult<usize> {
+        let result = match &self.api_type {
+            ApiType::Start { .. } => Err(self.error_for("ic0_subnet_self_size")),
+            ApiType::Init { .. }
+            | ApiType::SystemTask { .. }
+            | ApiType::Cleanup { .. }
+            | ApiType::Update { .. }
+            | ApiType::ReplicatedQuery { .. }
+            | ApiType::NonReplicatedQuery { .. }
+            | ApiType::ReplyCallback { .. }
+            | ApiType::RejectCallback { .. }
+            | ApiType::PreUpgrade { .. }
+            | ApiType::InspectMessage { .. } => {
+                let subnet_id = self.sandbox_safe_system_state.get_subnet_id();
+                Ok(subnet_id.get_ref().as_slice().len())
+            }
+        };
+
+        trace_syscall!(self, SubnetSelfSize, result);
+        result
+    }
+
+    fn ic0_subnet_self_copy(
+        &self,
+        dst: usize,
+        offset: usize,
+        size: usize,
+        heap: &mut [u8],
+    ) -> HypervisorResult<()> {
+        let result = match &self.api_type {
+            ApiType::Start { .. } => Err(self.error_for("ic0.subnet_self_copy")),
+            ApiType::Init { .. }
+            | ApiType::SystemTask { .. }
+            | ApiType::Cleanup { .. }
+            | ApiType::Update { .. }
+            | ApiType::ReplicatedQuery { .. }
+            | ApiType::NonReplicatedQuery { .. }
+            | ApiType::PreUpgrade { .. }
+            | ApiType::ReplyCallback { .. }
+            | ApiType::RejectCallback { .. }
+            | ApiType::InspectMessage { .. } => {
+                valid_subslice("ic0.subnet_self_copy heap", dst, size, heap)?;
+                let subnet_id = self.sandbox_safe_system_state.get_subnet_id();
+                let id_bytes = subnet_id.get_ref().as_slice();
+                let slice = valid_subslice("ic0.subnet_self_copy id", offset, size, id_bytes)?;
+                deterministic_copy_from_slice(&mut heap[dst..dst + size], slice);
+
+                Ok(())
+            }
+        };
+        trace_syscall!(
+            self,
+            SubnetSelfCopy,
+            dst,
+            offset,
+            size,
+            summarize(heap, dst, size)
+        );
+
         result
     }
 }

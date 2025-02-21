@@ -25,17 +25,18 @@ use ic_types::messages::{
 use ic_types::methods::{Callback, FuncRef, WasmClosure};
 use ic_types::Cycles;
 use ic_types::{NumBytes, NumInstructions, Time};
+use ic_utils_thread::deallocator_thread::DeallocationSender;
 use ic_wasm_types::WasmEngineError::FailedToApplySystemChanges;
 
 use crate::execution::common::{
-    self, action_to_response, apply_canister_state_changes, update_round_limits,
+    self, action_to_response, apply_canister_state_changes, log_dirty_pages, update_round_limits,
 };
 use crate::execution_environment::{
-    log_dirty_pages, ExecuteMessageResult, ExecutionResponse, PausedExecution, RoundContext,
-    RoundLimits,
+    ExecuteMessageResult, ExecutionResponse, PausedExecution, RoundContext, RoundLimits,
 };
 use crate::metrics::CallTreeMetrics;
 use ic_config::flag_status::FlagStatus;
+use ic_replicated_state::canister_state::execution_state::WasmExecutionMode;
 
 #[cfg(test)]
 mod tests;
@@ -100,7 +101,6 @@ const RESERVED_CLEANUP_INSTRUCTIONS_IN_PERCENT: u64 = 5;
 ///   ▼
 /// [end]
 ///```
-
 /// Contains fields of `ResponseHelper` that are necessary for resuming the
 /// response execution.
 #[derive(Debug)]
@@ -120,6 +120,7 @@ struct ResponseHelper {
     initial_cycles_balance: Cycles,
     response_sender: CanisterId,
     applied_subnet_memory_reservation: NumBytes,
+    deallocation_sender: DeallocationSender,
 }
 
 impl ResponseHelper {
@@ -131,6 +132,7 @@ impl ResponseHelper {
         original: &OriginalContext,
         round: &RoundContext,
         round_limits: &mut RoundLimits,
+        deallocation_sender: &DeallocationSender,
     ) -> Self {
         // Canister A sends a request to canister B with some cycles.
         // Canister B can accept some of the cycles in the request.
@@ -181,6 +183,7 @@ impl ResponseHelper {
             initial_cycles_balance,
             response_sender,
             applied_subnet_memory_reservation: NumBytes::new(0),
+            deallocation_sender: deallocation_sender.clone(),
         };
         helper.apply_subnet_memory_reservation(original, round_limits);
         helper
@@ -269,11 +272,12 @@ impl ResponseHelper {
     /// Returns a struct with all the necessary information to replay the
     /// initial steps in subsequent rounds.
     fn pause(
-        &self,
+        self,
         original: &OriginalContext,
         round_limits: &mut RoundLimits,
     ) -> PausedResponseHelper {
         self.revert_subnet_memory_reservation(original, round_limits);
+        self.deallocation_sender.send(Box::new(self.canister));
         PausedResponseHelper {
             refund_for_sent_cycles: self.refund_for_sent_cycles,
             refund_for_response_transmission: self.refund_for_response_transmission,
@@ -297,6 +301,7 @@ impl ResponseHelper {
         original: &OriginalContext,
         round: &RoundContext,
         round_limits: &mut RoundLimits,
+        deallocation_sender: &DeallocationSender,
     ) -> Result<ResponseHelper, (ResponseHelper, HypervisorError)> {
         // We expect the function call to succeed because the call context and
         // the callback have been checked in `execute_response()`.
@@ -317,6 +322,7 @@ impl ResponseHelper {
             initial_cycles_balance: clean_canister.system_state.balance(),
             response_sender: paused.response_sender,
             applied_subnet_memory_reservation: NumBytes::new(0),
+            deallocation_sender: deallocation_sender.clone(),
         };
 
         helper.apply_subnet_memory_reservation(original, round_limits);
@@ -346,17 +352,13 @@ impl ResponseHelper {
     fn handle_wasm_execution_of_response_callback(
         mut self,
         mut output: WasmExecutionOutput,
-        canister_state_changes: Option<CanisterStateChanges>,
+        canister_state_changes: CanisterStateChanges,
         original: &OriginalContext,
         round: &RoundContext,
         round_limits: &mut RoundLimits,
         reserved_cleanup_instructions: NumInstructions,
         call_tree_metrics: &dyn CallTreeMetrics,
     ) -> Result<ExecuteMessageResult, (Self, HypervisorError, NumInstructions)> {
-        self.canister
-            .system_state
-            .canister_log
-            .append(&mut output.canister_log);
         self.canister
             .system_state
             .apply_ingress_induction_cycles_debit(
@@ -367,35 +369,35 @@ impl ResponseHelper {
 
         // Check that the cycles balance does not go below zero after applying
         // the Wasm execution state changes.
-        if let Some(state_changes) = &canister_state_changes {
-            let old_balance = self.canister.system_state.balance();
-            let requested = state_changes.system_state_changes.removed_cycles();
-            // Note that we ignore the freezing threshold as required by the spec.
-            if old_balance < requested {
-                let reveal_top_up = self
-                    .canister
-                    .controllers()
-                    .contains(&original.call_origin.get_principal());
-                let err = CanisterOutOfCyclesError {
-                    canister_id: self.canister.canister_id(),
-                    available: old_balance,
-                    requested,
-                    threshold: original.freezing_threshold,
-                    reveal_top_up,
-                };
-                info!(
+        let old_balance = self.canister.system_state.balance();
+        let requested = canister_state_changes
+            .system_state_modifications
+            .removed_cycles();
+        // Note that we ignore the freezing threshold as required by the spec.
+        if old_balance < requested {
+            let reveal_top_up = self
+                .canister
+                .controllers()
+                .contains(&original.call_origin.get_principal());
+            let err = CanisterOutOfCyclesError {
+                canister_id: self.canister.canister_id(),
+                available: old_balance,
+                requested,
+                threshold: original.freezing_threshold,
+                reveal_top_up,
+            };
+            info!(
                     round.log,
                     "[DTS] Failed response callback execution of canister {} due to concurrent cycle change: {:?}.",
                     self.canister.canister_id(),
                     err,
                 );
-                // Return total instructions: wasm executor leftovers + cleanup reservation.
-                return Err((
-                    self,
-                    HypervisorError::InsufficientCyclesBalance(err),
-                    output.num_instructions_left + reserved_cleanup_instructions,
-                ));
-            }
+            // Return total instructions: wasm executor leftovers + cleanup reservation.
+            return Err((
+                self,
+                HypervisorError::InsufficientCyclesBalance(err),
+                output.num_instructions_left + reserved_cleanup_instructions,
+            ));
         }
 
         apply_canister_state_changes(
@@ -411,6 +413,7 @@ impl ResponseHelper {
             round.counters.state_changes_error,
             call_tree_metrics,
             original.call_context_creation_time,
+            &|system_state| self.deallocation_sender.send(Box::new(system_state)),
         );
 
         // Return total instructions: wasm executor leftovers + cleanup reservation.
@@ -433,18 +436,13 @@ impl ResponseHelper {
     fn handle_wasm_execution_of_cleanup_callback(
         mut self,
         mut output: WasmExecutionOutput,
-        canister_state_changes: Option<CanisterStateChanges>,
+        canister_state_changes: CanisterStateChanges,
         callback_err: HypervisorError,
         original: &OriginalContext,
         round: &RoundContext,
         round_limits: &mut RoundLimits,
         call_tree_metrics: &dyn CallTreeMetrics,
     ) -> ExecuteMessageResult {
-        self.canister
-            .system_state
-            .canister_log
-            .append(&mut output.canister_log);
-
         // The ingress induction debit can interfere with cycles changes that happened concurrently
         // during the cleanup callback execution. If the balance of the canister is not enough to
         // cover the debit + the amount of removed cycles during execution, the canister might end
@@ -455,19 +453,17 @@ impl ResponseHelper {
         // messages being inducted for free in this edge case. This is acceptable because the cleanup
         // callback is expected to always run and allow the canister to perform important cleanup tasks,
         // like releasing locks or undoing other state changes.
-        if let Some(state_changes) = &canister_state_changes {
-            let ingress_induction_cycles_debit =
-                self.canister.system_state.ingress_induction_cycles_debit();
-            let removed_cycles = state_changes.system_state_changes.removed_cycles();
-            if self.canister.system_state.balance()
-                < ingress_induction_cycles_debit + removed_cycles
-            {
-                self.canister
-                    .system_state
-                    .remove_charge_from_ingress_induction_cycles_debit(
-                        ingress_induction_cycles_debit - removed_cycles,
-                    );
-            }
+        let ingress_induction_cycles_debit =
+            self.canister.system_state.ingress_induction_cycles_debit();
+        let removed_cycles = canister_state_changes
+            .system_state_modifications
+            .removed_cycles();
+        if self.canister.system_state.balance() < ingress_induction_cycles_debit + removed_cycles {
+            self.canister
+                .system_state
+                .remove_charge_from_ingress_induction_cycles_debit(
+                    ingress_induction_cycles_debit - removed_cycles,
+                );
         }
         self.canister
             .system_state
@@ -490,6 +486,7 @@ impl ResponseHelper {
             round.counters.state_changes_error,
             call_tree_metrics,
             original.call_context_creation_time,
+            &|system_state| self.deallocation_sender.send(Box::new(system_state)),
         );
 
         match output.wasm_result {
@@ -562,6 +559,12 @@ impl ResponseHelper {
             round.counters.ingress_with_cycles_error,
         );
 
+        let wasm_execution_mode = self
+            .canister
+            .execution_state
+            .as_ref()
+            .map_or(WasmExecutionMode::Wasm32, |state| state.wasm_execution_mode);
+
         round.cycles_account_manager.refund_unused_execution_cycles(
             &mut self.canister.system_state,
             instructions_left,
@@ -569,6 +572,7 @@ impl ResponseHelper {
             original.callback.prepayment_for_response_execution,
             round.counters.execution_refund_error,
             original.subnet_size,
+            wasm_execution_mode,
             round.log,
         );
 
@@ -710,6 +714,7 @@ impl PausedExecution for PausedResponseExecution {
         round_limits: &mut RoundLimits,
         _subnet_size: usize,
         call_tree_metrics: &dyn CallTreeMetrics,
+        deallocation_sender: &DeallocationSender,
     ) -> ExecuteMessageResult {
         info!(
             round.log,
@@ -726,6 +731,7 @@ impl PausedExecution for PausedResponseExecution {
             &self.original,
             &round,
             round_limits,
+            deallocation_sender,
         ) {
             Ok(helper) => {
                 let execution_state = helper.canister().execution_state.as_ref().unwrap();
@@ -805,6 +811,7 @@ impl PausedExecution for PausedCleanupExecution {
         round_limits: &mut RoundLimits,
         _subnet_size: usize,
         call_tree_metrics: &dyn CallTreeMetrics,
+        deallocation_sender: &DeallocationSender,
     ) -> ExecuteMessageResult {
         info!(
             round.log,
@@ -824,6 +831,7 @@ impl PausedExecution for PausedCleanupExecution {
             &self.original,
             &round,
             round_limits,
+            deallocation_sender,
         ) {
             Ok(helper) => {
                 let execution_state = helper.canister().execution_state.as_ref().unwrap();
@@ -894,6 +902,7 @@ pub fn execute_response(
     subnet_memory_reservation: NumBytes,
     call_tree_metrics: &dyn CallTreeMetrics,
     log_dirty_pages: FlagStatus,
+    deallocation_sender: &DeallocationSender,
 ) -> ExecuteMessageResult {
     let (callback, callback_id, call_context, call_context_id) =
         match common::get_call_context_and_callback(
@@ -944,8 +953,14 @@ pub fn execute_response(
         log_dirty_pages,
     };
 
-    let mut helper =
-        ResponseHelper::new(&clean_canister, &response, &original, &round, round_limits);
+    let mut helper = ResponseHelper::new(
+        &clean_canister,
+        &response,
+        &original,
+        &round,
+        round_limits,
+        deallocation_sender,
+    );
     helper.apply_initial_refunds();
     let helper = match helper.validate(&call_context, &original, &round, round_limits) {
         Ok(helper) => helper,
@@ -1140,6 +1155,7 @@ fn process_response_result(
                 );
             }
             update_round_limits(round_limits, &slice);
+            let deallocation_sender = helper.deallocation_sender.clone();
             match helper.handle_wasm_execution_of_response_callback(
                 output,
                 canister_state_changes,
@@ -1149,7 +1165,10 @@ fn process_response_result(
                 reserved_cleanup_instructions,
                 call_tree_metrics,
             ) {
-                Ok(result) => result,
+                Ok(result) => {
+                    deallocation_sender.send(Box::new(clean_canister));
+                    result
+                }
                 Err((helper, err, instructions_left)) => {
                     // A trap has occurred when executing the reply/reject closure.
                     // Execute the cleanup if it exists.
@@ -1168,6 +1187,7 @@ fn process_response_result(
                         ),
                         None => {
                             // No cleanup closure present. Return the callback error as-is.
+                            helper.deallocation_sender.send(Box::new(clean_canister));
                             helper.finish(
                                 Err(err),
                                 instructions_left,
@@ -1235,6 +1255,7 @@ fn process_cleanup_result(
                 );
             }
             update_round_limits(round_limits, &slice);
+            helper.deallocation_sender.send(Box::new(clean_canister));
             helper.handle_wasm_execution_of_cleanup_callback(
                 output,
                 canister_state_changes,

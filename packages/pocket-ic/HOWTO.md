@@ -242,23 +242,22 @@ Here is a sketch of a test for a canister making canister HTTP outcalls:
 fn test_canister_http() {
     let pic = PocketIc::new();
 
-    // Create a canister and charge it with 100T cycles.
-    let can_id = pic.create_canister();
-    pic.add_cycles(can_id, 100_000_000_000_000);
+    // Create a canister and charge it with 2T cycles.
+    let canister_id = pic.create_canister();
+    pic.add_cycles(canister_id, 2_000_000_000_000);
 
     // Install the test canister wasm file on the canister.
-    let test_wasm = [...];
-    pic.install_canister(can_id, test_wasm, vec![], None);
+    let test_wasm = todo!();
+    pic.install_canister(canister_id, test_wasm, vec![], None);
 
     // Submit an update call to the test canister making a canister http outcall
     // and mock a canister http outcall response.
-    let arg_bytes = Encode!(&()).unwrap();
     let call_id = pic
         .submit_call(
-            can_id,
+            canister_id,
             Principal::anonymous(),
             "canister_http",
-            arg_bytes,
+            encode_one(()).unwrap(),
         )
         .unwrap();
 
@@ -283,22 +282,16 @@ fn test_canister_http() {
     };
     pic.mock_canister_http_response(mock_canister_http_response);
 
-    // Now the test canister will receive the http outcall response
-    // and reply to the ingress message from the test driver
-    // relaying the received http outcall response.
-    let reply = pic.await_call(call_id).unwrap();
-    match reply {
-        WasmResult::Reply(data) => {
-            let http_response: Result<HttpResponse, (RejectionCode, String)> =
-                decode_one(&data).unwrap();
-            assert_eq!(http_response.unwrap().body, body);
-        }
-        WasmResult::Reject(msg) => panic!("Unexpected reject {}", msg),
-    };
-
     // There should be no more pending canister http outcalls.
     let canister_http_requests = pic.get_canister_http();
     assert_eq!(canister_http_requests.len(), 0);
+
+    // Now the test canister will receive the http outcall response
+    // and reply to the ingress message from the test driver.
+    let reply = pic.await_call(call_id).unwrap();
+    let http_response: Result<HttpRequestResult, (RejectionCode, String)> =
+        decode_one(&reply).unwrap();
+    assert_eq!(http_response.unwrap().body, body);
 }
 ```
 
@@ -332,18 +325,12 @@ e.g., 13 for a regular application subnet.
     // and reply to the ingress message from the test driver
     // relaying the error.
     let reply = pic.await_call(call_id).unwrap();
-    match reply {
-        WasmResult::Reply(data) => {
-            let http_response: Result<HttpResponse, (RejectionCode, String)> =
-                decode_one(&data).unwrap();
-            let (reject_code, err) = http_response.unwrap_err();
-            assert_eq!(reject_code, RejectionCode::SysTransient);
-            assert!(
-                err.contains("No consensus could be reached. Replicas had different responses.")
-            );
-        }
-        WasmResult::Reject(msg) => panic!("Unexpected reject {}", msg),
-    };
+    let http_response: Result<HttpRequestResult, (RejectionCode, String)> =
+        decode_one(&reply).unwrap();
+    let (reject_code, err) = http_response.unwrap_err();
+    assert!(matches!(reject_code, RejectionCode::SysTransient));
+    let expected = "No consensus could be reached. Replicas had different responses. Details: request_id: 0, timeout: 1620328930000000005, hashes: [98387cc077af9cff2ef439132854e91cb074035bb76e2afb266960d8e3beaf11: 2], [6a2fa8e54fb4bbe62cde29f7531223d9fcf52c21c03500c1060a5f893ed32d2e: 2], [3e9ec98abf56ef680bebb14309858ede38f6fde771cd4c04cda8f066dc2810db: 2], [2c14e77f18cd990676ae6ce0d7eb89c0af9e1a66e17294b5f0efa68422bba4cb: 2], [2843e4133f673571ff919808d3ca542cc54aaf288c702944e291f0e4fafffc69: 2], [1c4ad84926c36f1fbc634a0dc0535709706f7c48f0c6ebd814fe514022b90671: 2], [7bf80e2f02011ab0a7836b526546e75203b94e856d767c9df4cb0c19baf34059: 1]";
+    assert_eq!(err, expected);
 ```
 
 In the live mode (see the section "Live Mode" for more details), the canister HTTP outcalls are processed
@@ -598,9 +585,20 @@ To mine blocks with rewards credited to a given `bitcoin_address: String`, you c
     .unwrap();
 
     let mut n = 101; // must be more than 100 (Coinbase maturity rule)
-    btc_rpc
-        .generate_to_address(n, &Address::from_str(&bitcoin_address).unwrap())
-        .unwrap();
+    // retry generating blocks until the bitcoind is up and running
+    let start = std::time::Instant::now();
+    loop {
+        match btc_rpc.generate_to_address(n, &Address::from_str(&bitcoin_address).unwrap()) {
+            Ok(_) => break,
+            Err(bitcoincore_rpc::Error::JsonRpc(err)) => {
+                if start.elapsed() > std::time::Duration::from_secs(30) {
+                    panic!("Timed out when waiting for bitcoind; last error: {}", err);
+                }
+                std::thread::sleep(std::time::Duration::from_millis(100));
+            }
+            Err(err) => panic!("Unexpected error when talking to bitcoind: {}", err),
+        }
+    }
 ```
 
 For an example of a test canister that can be deployed to an application subnet of the PocketIC instance,

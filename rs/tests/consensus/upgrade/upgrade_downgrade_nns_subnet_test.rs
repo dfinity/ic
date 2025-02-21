@@ -43,7 +43,7 @@ fn upgrade_downgrade_nns_subnet(env: TestEnv) {
     let branch_version = bless_branch_version(&env, &nns_node);
     let (faulty_node, can_id, msg) =
         upgrade(&env, &nns_node, &branch_version, SubnetType::System, None);
-    let mainnet_version = read_dependency_to_string("testnet/mainnet_nns_revision.txt").unwrap();
+    let mainnet_version = read_dependency_to_string("mainnet_nns_subnet_revision.txt").unwrap();
     upgrade(&env, &nns_node, &mainnet_version, SubnetType::System, None);
     // Make sure we can still read the message stored before the first upgrade
     assert!(can_read_msg_with_retries(

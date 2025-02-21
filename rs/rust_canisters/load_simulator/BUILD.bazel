@@ -1,0 +1,53 @@
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_test")
+load("//bazel:canisters.bzl", "rust_canister")
+
+package(default_visibility = ["//visibility:public"])
+
+DEPENDENCIES = [
+    # Keep sorted.
+    "@crate_index//:candid",
+    "@crate_index//:ic-cdk",
+    "@crate_index//:ic-cdk-timers",
+]
+
+MACRO_DEPENDENCIES = [
+    # Keep sorted.
+    "@crate_index//:ic-cdk-macros",
+]
+
+DEV_DEPENDENCIES = []
+
+MACRO_DEV_DEPENDENCIES = []
+
+ALIASES = {}
+
+rust_canister(
+    name = "load_simulator_canister",
+    srcs = ["src/main.rs"],
+    aliases = ALIASES,
+    keep_name_section = True,
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    service_file = ":load_simulator.did",
+    deps = DEPENDENCIES,
+)
+
+rust_test(
+    name = "load_simulator_test",
+    srcs = ["src/main.rs"],
+    aliases = ALIASES,
+    data = ["load_simulator.did"],
+    env = {
+        "DID_PATH": "rs/rust_canisters/load_simulator/load_simulator.did",
+    },
+    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    deps = DEPENDENCIES + DEV_DEPENDENCIES,
+)
+
+rust_binary(
+    name = "load_simulator_binary",
+    srcs = ["src/main.rs"],
+    aliases = ALIASES,
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    visibility = [],
+    deps = DEPENDENCIES,
+)

@@ -14,10 +14,11 @@ use ic_test_utilities_types::{
     ids::{node_test_id, subnet_test_id},
     messages::SignedIngressBuilder,
 };
+use ic_types::consensus::dkg::DkgDataPayload;
 use ic_types::consensus::{BlockPayload, DataPayload};
 use ic_types::{
     batch::{BatchPayload, IngressPayload},
-    consensus::{dkg, Block, BlockProposal, ConsensusMessageHashable, HasHeight, Payload, Rank},
+    consensus::{Block, BlockProposal, ConsensusMessageHashable, HasHeight, Payload, Rank},
     time::UNIX_EPOCH,
     Height,
 };
@@ -65,9 +66,7 @@ fn prepare(pool: &mut ConsensusPoolImpl, num: usize) {
                     ingress,
                     ..BatchPayload::default()
                 },
-                dealings: dkg::Dealings::new_empty(
-                    parent.payload.as_ref().dkg_interval_start_height(),
-                ),
+                dkg: DkgDataPayload::new_empty(parent.payload.as_ref().dkg_interval_start_height()),
                 idkg: None,
             }),
         );

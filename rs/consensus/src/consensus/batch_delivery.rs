@@ -9,8 +9,9 @@ use crate::{
     },
     idkg::utils::{get_idkg_subnet_public_keys, get_pre_signature_ids_to_deliver},
 };
+use ic_consensus_dkg::get_vetkey_public_keys;
 use ic_consensus_utils::{
-    crypto_hashable_to_seed, get_block_hash_string, membership::Membership, pool_reader::PoolReader,
+    crypto_hashable_to_seed, membership::Membership, pool_reader::PoolReader,
 };
 use ic_https_outcalls_consensus::payload_builder::CanisterHttpPayloadBuilderImpl;
 use ic_interfaces::{
@@ -19,7 +20,7 @@ use ic_interfaces::{
 };
 use ic_interfaces_registry::RegistryClient;
 use ic_logger::{debug, error, info, warn, ReplicaLogger};
-use ic_management_canister_types::SetupInitialDKGResponse;
+use ic_management_canister_types_private::SetupInitialDKGResponse;
 use ic_protobuf::{
     log::consensus_log_entry::v1::ConsensusLogEntry,
     registry::{crypto::v1::PublicKey as PublicKeyProto, subnet::v1::InitialNiDkgTranscriptRecord},
@@ -28,14 +29,14 @@ use ic_types::{
     batch::{Batch, BatchMessages, BatchSummary, BlockmakerMetrics, ConsensusResponse},
     consensus::{
         idkg::{self, CompletedSignature},
-        Block,
+        Block, HasVersion,
     },
     crypto::threshold_sig::{
         ni_dkg::{NiDkgId, NiDkgTag, NiDkgTranscript},
         ThresholdSigPublicKey,
     },
     messages::{CallbackId, Payload, RejectContext},
-    Height, PrincipalId, Randomness, ReplicaVersion, SubnetId,
+    Height, PrincipalId, Randomness, SubnetId,
 };
 use std::collections::BTreeMap;
 
@@ -49,7 +50,6 @@ pub fn deliver_batches(
     pool: &PoolReader<'_>,
     registry_client: &dyn RegistryClient,
     subnet_id: SubnetId,
-    current_replica_version: ReplicaVersion,
     log: &ReplicaLogger,
     // This argument should only be used by the ic-replay tool. If it is set to `None`, we will
     // deliver all batches until the finalized height. If it is set to `Some(h)`, we will
@@ -92,14 +92,16 @@ pub fn deliver_batches(
             );
             break;
         };
+        let replica_version = block.version().clone();
+        let block_stats = BlockStats::from(&block);
         debug!(
             every_n_seconds => 5,
             log,
             "Finalized height";
             consensus => ConsensusLogEntry {
                 height: Some(height.get()),
-                hash: Some(get_block_hash_string(&block)),
-                replica_version: Some(String::from(current_replica_version.clone()))
+                hash: Some(block_stats.block_hash.clone()),
+                replica_version: Some(String::from(&replica_version))
             }
         );
 
@@ -134,21 +136,30 @@ pub fn deliver_batches(
 
         let randomness = Randomness::from(crypto_hashable_to_seed(&tape));
 
-        let idkg_subnet_public_keys = match get_idkg_subnet_public_keys(&block, pool, log) {
-            Ok(keys) => keys,
-            Err(e) => {
-                // Do not deliver batch if we can't find a previous summary block,
-                // this means we should continue with the latest CUP.
-                warn!(
-                    every_n_seconds => 5,
-                    log,
-                    "Do not deliver height {:?}: {}", height, e
-                );
-                return Ok(last_delivered_batch_height);
-            }
+        // Retrieve the dkg summary block
+        let Some(summary_block) = pool.dkg_summary_block_for_finalized_height(height) else {
+            warn!(
+                every_n_seconds => 30,
+                log,
+                "Do not deliver height {} because no summary block was found. \
+                Finalized height: {}",
+                height,
+                finalized_height
+            );
+            break;
         };
+        let dkg_summary = &summary_block.payload.as_ref().as_summary().dkg;
 
-        let block_stats = BlockStats::from(&block);
+        let mut chain_key_subnet_public_keys = BTreeMap::new();
+        let mut idkg_subnet_public_keys =
+            get_idkg_subnet_public_keys(&block, &summary_block, pool, log);
+        chain_key_subnet_public_keys.append(&mut idkg_subnet_public_keys);
+
+        // Add vetKD keys to this map as well
+        // TODO(CON-1420: Deliver the ni_dkg_ids to the batch as well)
+        let (mut nidkg_subnet_public_keys, _ni_dkg_ids) = get_vetkey_public_keys(dkg_summary, log);
+        chain_key_subnet_public_keys.append(&mut nidkg_subnet_public_keys);
+
         let mut batch_stats = BatchStats::new(height);
 
         // Compute consensus' responses to subnet calls.
@@ -204,18 +215,6 @@ pub fn deliver_batches(
             failed_blockmakers: blockmaker_ranking[0..(block.rank.0 as usize)].to_vec(),
         };
 
-        let Some(summary_block) = pool.dkg_summary_block_for_finalized_height(height) else {
-            warn!(
-                every_n_seconds => 30,
-                log,
-                "Do not deliver height {} because no summary block was found. \
-                Finalized height: {}",
-                height,
-                finalized_height
-            );
-            break;
-        };
-        let dkg_summary = &summary_block.payload.as_ref().as_summary().dkg;
         let next_checkpoint_height = dkg_summary.get_next_start_height();
         let current_interval_length = dkg_summary.interval_length;
         let batch = Batch {
@@ -227,21 +226,15 @@ pub fn deliver_batches(
             requires_full_state_hash,
             messages: batch_messages,
             randomness,
-            idkg_subnet_public_keys,
+            chain_key_subnet_public_keys,
             idkg_pre_signature_ids: get_pre_signature_ids_to_deliver(&block),
             registry_version: block.context.registry_version,
             time: block.context.time,
             consensus_responses,
             blockmaker_metrics,
+            replica_version,
         };
 
-        debug!(
-            log,
-            "replica {:?} delivered batch {:?} for block_hash {:?}",
-            current_replica_version,
-            batch_stats.batch_height,
-            block_stats.block_hash
-        );
         let result = message_routing.deliver_batch(batch);
         if let Some(f) = result_processor {
             f(&result, block_stats, batch_stats);
@@ -314,7 +307,7 @@ pub fn generate_responses_to_setup_initial_dkg_calls(
     for (id, callback_id, transcript) in transcripts_for_remote_subnets.iter() {
         let add_transcript = |transcript_results: &mut TranscriptResults| {
             let value = Some(transcript.clone());
-            match id.dkg_tag {
+            match &id.dkg_tag {
                 NiDkgTag::LowThreshold => {
                     if transcript_results.low_threshold.is_some() {
                         error!(
@@ -332,6 +325,15 @@ pub fn generate_responses_to_setup_initial_dkg_calls(
                         );
                     }
                     transcript_results.high_threshold = value;
+                }
+                NiDkgTag::HighThresholdForKey(master_public_key_id) => {
+                    /////////////////////////////////////
+                    // TODO(CON-1416): Generalize this function to support both SetupInitialDKG and vetKD key resharing
+                    /////////////////////////////////////
+                    error!(
+                        log,
+                        "Implementation error: NiDkgTag::HighThresholdForKey({master_public_key_id}) used in SetupInitialDKG for callback ID {callback_id}",
+                    );
                 }
             }
         };

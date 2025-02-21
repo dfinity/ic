@@ -10,7 +10,7 @@ use crate::vault::api::{
     PublicAndSecretKeyStoreCspVault, PublicKeyStoreCspVault, PublicRandomSeedGenerator,
     PublicRandomSeedGeneratorError, SecretKeyStoreCspVault, ThresholdEcdsaSignerCspVault,
     ThresholdSchnorrSigShareBytes, ThresholdSchnorrSignerCspVault, ThresholdSignatureCspVault,
-    ValidatePksAndSksError,
+    ValidatePksAndSksError, VetKdCspVault, VetKdEncryptedKeyShareCreationVaultError,
 };
 use crate::vault::remote_csp_vault::codec::{Bincode, CspVaultObserver, ObservableCodec};
 use crate::vault::remote_csp_vault::ThresholdSchnorrCreateSigShareVaultError;
@@ -42,10 +42,11 @@ use ic_types::crypto::canister_threshold_sig::error::{
     IDkgLoadTranscriptError, IDkgOpenTranscriptError, IDkgRetainKeysError,
     IDkgVerifyDealingPrivateError, ThresholdEcdsaCreateSigShareError,
 };
-use ic_types::crypto::canister_threshold_sig::{
-    idkg::{BatchSignedIDkgDealing, IDkgTranscriptOperation},
-    ExtendedDerivationPath,
+use ic_types::crypto::canister_threshold_sig::idkg::{
+    BatchSignedIDkgDealing, IDkgTranscriptOperation,
 };
+use ic_types::crypto::vetkd::VetKdEncryptedKeyShareContent;
+use ic_types::crypto::ExtendedDerivationPath;
 use ic_types::crypto::{AlgorithmId, CurrentNodePublicKeys};
 use ic_types::{NodeId, NumberOfNodes, Randomness};
 use serde::{Deserialize, Serialize};
@@ -788,6 +789,7 @@ impl ThresholdSchnorrSignerCspVault for RemoteCspVault {
         &self,
         derivation_path: ExtendedDerivationPath,
         message: Vec<u8>,
+        taproot_tree_root: Option<Vec<u8>>,
         nonce: Randomness,
         key_raw: IDkgTranscriptInternalBytes,
         presig_raw: IDkgTranscriptInternalBytes,
@@ -797,6 +799,7 @@ impl ThresholdSchnorrSignerCspVault for RemoteCspVault {
             context_with_timeout(self.rpc_timeout),
             derivation_path,
             ByteBuf::from(message),
+            taproot_tree_root.map(ByteBuf::from),
             nonce,
             key_raw,
             presig_raw,
@@ -805,6 +808,35 @@ impl ThresholdSchnorrSignerCspVault for RemoteCspVault {
         .unwrap_or_else(|rpc_error: tarpc::client::RpcError| {
             Err(
                 ThresholdSchnorrCreateSigShareVaultError::TransientInternalError(
+                    rpc_error.to_string(),
+                ),
+            )
+        })
+    }
+}
+
+impl VetKdCspVault for RemoteCspVault {
+    #[instrument(skip_all)]
+    #[inline]
+    fn create_encrypted_vetkd_key_share(
+        &self,
+        key_id: KeyId,
+        master_public_key: Vec<u8>,
+        encryption_public_key: Vec<u8>,
+        derivation_path: ExtendedDerivationPath,
+        derivation_id: Vec<u8>,
+    ) -> Result<VetKdEncryptedKeyShareContent, VetKdEncryptedKeyShareCreationVaultError> {
+        self.tokio_block_on(self.tarpc_csp_client.create_encrypted_vetkd_key_share(
+            context_with_timeout(self.rpc_timeout),
+            key_id,
+            ByteBuf::from(master_public_key),
+            ByteBuf::from(encryption_public_key),
+            derivation_path,
+            ByteBuf::from(derivation_id),
+        ))
+        .unwrap_or_else(|rpc_error: tarpc::client::RpcError| {
+            Err(
+                VetKdEncryptedKeyShareCreationVaultError::TransientInternalError(
                     rpc_error.to_string(),
                 ),
             )

@@ -5,13 +5,12 @@ use crate::{
         status::{self, Status},
         ConsensusCrypto,
     },
-    dkg::payload_builder::create_payload as create_dkg_payload,
     idkg::{self, metrics::IDkgPayloadMetrics},
 };
+use ic_consensus_dkg::payload_builder::create_payload as create_dkg_payload;
 use ic_consensus_utils::{
-    find_lowest_ranked_non_disqualified_proposals, get_block_hash_string,
-    get_notarization_delay_settings, get_subnet_record, membership::Membership,
-    pool_reader::PoolReader,
+    find_lowest_ranked_non_disqualified_proposals, get_notarization_delay_settings,
+    get_subnet_record, membership::Membership, pool_reader::PoolReader,
 };
 use ic_interfaces::{
     consensus::PayloadBuilder, dkg::DkgPool, idkg::IDkgPool, time_source::TimeSource,
@@ -24,8 +23,10 @@ use ic_replicated_state::ReplicatedState;
 use ic_types::{
     batch::{BatchPayload, ValidationContext},
     consensus::{
-        block_maker::SubnetRecords, dkg, hashed, Block, BlockMetadata, BlockPayload, BlockProposal,
-        DataPayload, HasHeight, HasRank, HashedBlock, Payload, RandomBeacon, Rank, SummaryPayload,
+        block_maker::SubnetRecords,
+        dkg::{self, DkgDataPayload},
+        hashed, Block, BlockMetadata, BlockPayload, BlockProposal, DataPayload, HasHeight, HasRank,
+        HashedBlock, Payload, RandomBeacon, Rank, SummaryPayload,
     },
     replica_config::ReplicaConfig,
     time::current_time,
@@ -139,16 +140,8 @@ impl BlockMaker {
                         Some(&self.metrics),
                     )
                 {
-                    self.propose_block(pool, rank, parent).inspect(|proposal| {
-                        debug!(
-                            self.log,
-                            "Make proposal {:?} {:?} {:?}",
-                            proposal.content.get_hash(),
-                            proposal.as_ref().payload.get_hash(),
-                            proposal.as_ref().payload.as_ref()
-                        );
-                        self.log_block(proposal.as_ref());
-                    })
+                    self.propose_block(pool, rank, parent)
+                        .inspect(|block| self.log_block(block))
                 } else {
                     None
                 }
@@ -158,9 +151,10 @@ impl BlockMaker {
                 None
             }
             Err(err) => {
-                debug!(
+                warn!(
+                    every_n_seconds => 30,
                     self.log,
-                    "Not proposing a block due to get_node_rank error {:?}", err
+                    "Not proposing a block due to `get_block_maker_rank` error {:?}", err
                 );
                 None
             }
@@ -342,8 +336,8 @@ impl BlockMaker {
                         idkg: idkg_summary,
                     })
                 }
-                dkg::Payload::Dealings(dealings) => {
-                    let (batch_payload, dealings, idkg_data) = match status::get_status(
+                dkg::Payload::Data(dkg) => {
+                    let (batch_payload, dkg, idkg_data) = match status::get_status(
                         height,
                         self.registry_client.as_ref(),
                         self.replica_config.subnet_id,
@@ -357,7 +351,7 @@ impl BlockMaker {
                         // Use empty payload and empty DKG dealings if the replica is halting.
                         Status::Halting => (
                             BatchPayload::default(),
-                            dkg::Dealings::new_empty(dealings.start_height),
+                            DkgDataPayload::new_empty(dkg.start_height),
                             /*idkg_data=*/ None,
                         ),
                         Status::Running => {
@@ -388,7 +382,7 @@ impl BlockMaker {
                             .ok()
                             .flatten();
 
-                            (batch_payload, dealings, idkg_data)
+                            (batch_payload, dkg, idkg_data)
                         }
                     };
 
@@ -399,7 +393,7 @@ impl BlockMaker {
 
                     BlockPayload::Data(DataPayload {
                         batch: batch_payload,
-                        dealings,
+                        dkg,
                         idkg: idkg_data,
                     })
                 }
@@ -448,27 +442,26 @@ impl BlockMaker {
     }
 
     /// Log an entry for the proposed block and each of its ingress messages
-    fn log_block(&self, block: &Block) {
-        let hash = get_block_hash_string(block);
-        let block_log_entry = block.log_entry(hash.clone());
+    fn log_block(&self, block: &BlockProposal) {
+        let block_log_entry = block.content.log_entry();
         debug!(
             self.log,
             "block_proposal";
             block => block_log_entry
         );
         let empty_batch = BatchPayload::default();
-        let batch = if block.payload.is_summary() {
+        let batch = if block.as_ref().payload.is_summary() {
             &empty_batch
         } else {
-            &block.payload.as_ref().as_data().batch
+            &block.as_ref().payload.as_ref().as_data().batch
         };
 
         for message_id in batch.ingress.message_ids() {
             debug!(
                 self.log,
                 "ingress_message_insert_into_block";
-                ingress_message.message_id => format!("{}", message_id),
-                block.hash => hash,
+                ingress_message.message_id => message_id.to_string(),
+                block.hash => format!("{:?}", block.content.get_hash()),
             );
         }
     }
@@ -525,19 +518,16 @@ pub(crate) fn already_proposed(pool: &PoolReader<'_>, h: Height, this_node: Node
 // Notes:
 // 1) if we assume that the "dynamic delay" is never triggered, then we expect the chain
 //    quality (defined as the fraction of blocks proposed by honest nodes which were eventually
-//    finalized) to be at least 50%: if we look at any random height `h`, then we expect
+//    finalized) to be at least 33%: if we look at any random height `h`, then we expect
 //    around 10 rank-0 blocks to be proposed by malicious nodes (assuming f = n/3) in the past
-//    30 rounds, and at most 5 non-rank-0 blocks from malicious nodes to be finalized, thus we
-//    expect at least 15 blocks from honest replica to be finalized in the last 30 rounds.
+//    30 rounds, and at most 10 non-rank-0 blocks from malicious nodes to be finalized, thus we
+//    expect at least 10 blocks from honest replica to be finalized in the last 30 rounds.
 // 2) `DYNAMIC_DELAY_LOOK_BACK_DISTANCE` cannot be too large for performance reasons.
 // 3) `DYNAMIC_DELAY_MAX_NON_RANK_0_BLOCKS` cannot be too small, otherwise the condition could be
 //    triggered too easily, and lead to average round duration of more than 3s (due to 1/3 of the
 //    blocks arriving after 9s or later)
-// 4) Under "good" networking conditions (at least 300Mbit/s bandwidth and low latency), 10 seconds
-//    should be enough to transfer a block (of size at most 4MB) to all (at most 39) peers.
 const DYNAMIC_DELAY_LOOK_BACK_DISTANCE: Height = Height::new(29);
-const DYNAMIC_DELAY_MAX_NON_RANK_0_BLOCKS: usize = 5;
-const DYNAMIC_DELAY_EXTRA_DURATION: Duration = Duration::from_secs(10);
+const DYNAMIC_DELAY_MAX_NON_RANK_0_BLOCKS: usize = 10;
 
 fn count_non_rank_0_blocks(pool: &PoolReader, block: Block) -> usize {
     let max_height = block.height();
@@ -569,7 +559,7 @@ pub(super) fn get_block_maker_delay(
         if let Some(metrics) = metrics {
             metrics.dynamic_delay_triggered.inc();
         }
-        DYNAMIC_DELAY_EXTRA_DURATION
+        settings.unit_delay
     } else {
         Duration::ZERO
     };
@@ -712,7 +702,7 @@ mod tests {
             let expected_payloads = PoolReader::new(&pool)
                 .get_payloads_from_height(certified_height.increment(), start.as_ref().clone());
             let returned_payload =
-                dkg::Payload::Dealings(dkg::Dealings::new_empty(Height::from(0)));
+                dkg::Payload::Data(dkg::DkgDataPayload::new_empty(Height::from(0)));
             let pool_reader = PoolReader::new(&pool);
             let expected_time = expected_payloads[0].1
                 + get_block_maker_delay(
@@ -1065,17 +1055,17 @@ mod tests {
 
     #[rstest]
     #[case(Rank(0), Duration::from_secs(1), Duration::from_secs(0))]
-    #[case(Rank(1), Duration::from_secs(7), Duration::from_secs(7 + 10))]
-    #[case(Rank(2), Duration::from_secs(3), Duration::from_secs(2 * 3 + 10))]
+    #[case(Rank(1), Duration::from_secs(7), Duration::from_secs(7 + 7))]
+    #[case(Rank(2), Duration::from_secs(3), Duration::from_secs(2 * 3 + 3))]
     fn get_block_maker_delay_many_non_rank_0_blocks(
         #[case] rank: Rank,
         #[case] unit_delay: Duration,
         #[case] expected_block_maker_delay: Duration,
     ) {
-        // there should be 6 non-rank-0 blocks in the past 30 heights
+        // there should be 11 non-rank-0 blocks in the past 30 heights
         let initial = std::iter::repeat(Rank(1)).take(5);
-        let mid = std::iter::repeat(Rank(0)).take(24);
-        let terminal = std::iter::repeat(Rank(2)).take(5);
+        let mid = std::iter::repeat(Rank(0)).take(19);
+        let terminal = std::iter::repeat(Rank(2)).take(8);
 
         let ranks: Vec<Rank> = initial.chain(mid).chain(terminal).collect();
 
@@ -1094,10 +1084,10 @@ mod tests {
         #[case] unit_delay: Duration,
         #[case] expected_block_maker_delay: Duration,
     ) {
-        // there should be 5 non-rank-0 blocks in the past 30 heights
+        // there should be 10 non-rank-0 blocks in the past 30 heights
         let initial = std::iter::repeat(Rank(1)).take(5);
-        let mid = std::iter::repeat(Rank(0)).take(25);
-        let terminal = std::iter::repeat(Rank(2)).take(5);
+        let mid = std::iter::repeat(Rank(0)).take(20);
+        let terminal = std::iter::repeat(Rank(2)).take(8);
 
         let ranks: Vec<Rank> = initial.chain(mid).chain(terminal).collect();
 
@@ -1108,24 +1098,25 @@ mod tests {
     }
 
     #[test]
-    fn get_block_maker_delay_short_chain_few_non_rank_0_blocks_test() {
+    fn get_block_maker_delay_short_chain_many_non_rank_0_blocks_test() {
+        let previous_ranks = std::iter::repeat(Rank(1)).take(11).collect::<Vec<_>>();
         assert_eq!(
             block_maker_delay_test_case(
-                &[Rank(1), Rank(1), Rank(1), Rank(1), Rank(1), Rank(1)],
+                &previous_ranks,
                 Rank(1),
-                Duration::from_secs(1)
+                /*unit_delay*/ Duration::from_secs(1)
             ),
-            Duration::from_secs(11),
+            Duration::from_secs(2),
         );
     }
 
     #[test]
-    fn get_block_maker_delay_short_chain_many_non_rank_0_blocks_test() {
+    fn get_block_maker_delay_short_chain_few_non_rank_0_blocks_test() {
         assert_eq!(
             block_maker_delay_test_case(
                 &[Rank(0), Rank(1), Rank(1), Rank(1), Rank(1), Rank(1)],
                 Rank(1),
-                Duration::from_secs(1)
+                /*unit_delay*/ Duration::from_secs(1)
             ),
             Duration::from_secs(1),
         );

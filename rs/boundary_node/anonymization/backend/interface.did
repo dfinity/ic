@@ -1,0 +1,69 @@
+type InitArg = record {};
+
+type Pair = record { principal; blob };
+
+type LeaderMode = variant {
+    Bootstrap;
+    Refresh;
+};
+
+type RegisterError = variant {
+    Unauthorized;
+    UnexpectedError : text;
+};
+
+type RegisterResponse = variant {
+    Ok;
+    Err : RegisterError;
+};
+
+type QueryError = variant {
+    Unauthorized;
+    Unavailable;
+    LeaderDuty : record { LeaderMode; vec Pair };
+    UnexpectedError : text;
+};
+
+type QueryResponse = variant {
+    Ok : blob;
+    Err : QueryError;
+};
+
+type SubmitError = variant {
+    Unauthorized;
+    UnexpectedError : text;
+};
+
+type SubmitResponse = variant {
+    Ok;
+    Err : SubmitError;
+};
+
+type HeaderField = record { text; text };
+
+type HttpRequest = record {
+    method : text;
+    url : text;
+    headers : vec HeaderField;
+    body : blob;
+};
+
+type HttpResponse = record {
+    status_code : nat16;
+    headers : vec HeaderField;
+    body : blob;
+};
+
+service : (InitArg) -> {
+    // register a public-key for a given caller
+    "register" : (blob) -> (RegisterResponse);
+
+    // query for an encrypted-value for a given caller
+    "query" : () -> (QueryResponse) query;
+
+    // submit a set of encrypted-values for peers
+    "submit" : (vec Pair) -> (SubmitResponse);
+
+    // Metrics (Http Interface)
+    "http_request" : (HttpRequest) -> (HttpResponse) query;
+};

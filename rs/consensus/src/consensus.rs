@@ -5,7 +5,6 @@ pub mod batch_delivery;
 pub(crate) mod block_maker;
 pub mod bounds;
 mod catchup_package_maker;
-pub mod dkg_key_manager;
 mod finalizer;
 pub mod malicious_consensus;
 pub(crate) mod metrics;
@@ -23,19 +22,16 @@ pub mod validator;
 #[cfg(all(test, feature = "proptest"))]
 mod proptests;
 
-use crate::{
-    bouncer_metrics::BouncerMetrics,
-    consensus::{
-        block_maker::BlockMaker, catchup_package_maker::CatchUpPackageMaker,
-        dkg_key_manager::DkgKeyManager, finalizer::Finalizer, metrics::ConsensusMetrics,
-        notary::Notary, payload_builder::PayloadBuilderImpl, priority::new_bouncer, purger::Purger,
-        random_beacon_maker::RandomBeaconMaker, random_tape_maker::RandomTapeMaker,
-        share_aggregator::ShareAggregator, validator::Validator,
-    },
+use crate::consensus::{
+    block_maker::BlockMaker, catchup_package_maker::CatchUpPackageMaker, finalizer::Finalizer,
+    metrics::ConsensusMetrics, notary::Notary, payload_builder::PayloadBuilderImpl,
+    priority::new_bouncer, purger::Purger, random_beacon_maker::RandomBeaconMaker,
+    random_tape_maker::RandomTapeMaker, share_aggregator::ShareAggregator, validator::Validator,
 };
+use ic_consensus_dkg::DkgKeyManager;
 use ic_consensus_utils::{
-    crypto::ConsensusCrypto, get_notarization_delay_settings, membership::Membership,
-    pool_reader::PoolReader, RoundRobin,
+    bouncer_metrics::BouncerMetrics, crypto::ConsensusCrypto, get_notarization_delay_settings,
+    membership::Membership, pool_reader::PoolReader, RoundRobin,
 };
 use ic_interfaces::{
     batch_payload::BatchPayloadBuilder,
@@ -259,7 +255,6 @@ impl ConsensusImpl {
                 logger.clone(),
                 ValidatorMetrics::new(metrics_registry.clone()),
                 Arc::clone(&time_source),
-                Some(ingress_selector.clone()),
             ),
             aggregator: ShareAggregator::new(
                 membership,
@@ -353,7 +348,7 @@ impl ConsensusImpl {
     /// Checks, whether DKG transcripts for this replica are available
     fn dkgs_available(&self, pool_reader: &PoolReader) -> bool {
         // Get last summary
-        let summary_block = pool_reader.get_highest_summary_block();
+        let summary_block = pool_reader.get_highest_finalized_summary_block();
         let block_payload = summary_block.payload.as_ref().as_summary();
 
         // Get transcripts from summary
@@ -613,7 +608,7 @@ impl<Pool: ConsensusPool> BouncerFactory<ConsensusMessageId, Pool> for Consensus
     }
 
     fn refresh_period(&self) -> Duration {
-        Duration::from_secs(3)
+        Duration::from_secs(1)
     }
 }
 

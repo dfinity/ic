@@ -1,3 +1,4 @@
+use crate::cached_upgrade_steps::CachedUpgradeSteps;
 use crate::{pb::v1::governance::Version, proposal::render_version, types::Environment};
 use candid::{Decode, Encode};
 use ic_base_types::{CanisterId, PrincipalId};
@@ -137,7 +138,7 @@ pub(crate) async fn get_proposal_id_that_added_wasm(
     Ok(proposal_id)
 }
 
-async fn get_canisters_to_upgrade(
+pub(crate) async fn get_canisters_to_upgrade(
     env: &dyn Environment,
     root_canister_id: CanisterId,
     canister_type: SnsCanisterType,
@@ -174,7 +175,7 @@ async fn get_canisters_to_upgrade(
         .collect()
 }
 
-fn canister_type_and_wasm_hash_for_upgrade(
+pub(crate) fn canister_type_and_wasm_hash_for_upgrade(
     current_version: &Version,
     next_version: &Version,
 ) -> Result<(SnsCanisterType, Vec<u8>), String> {
@@ -297,37 +298,36 @@ pub(crate) async fn get_upgrade_steps(
     env: &dyn Environment,
     current_version: Version,
     sns_governance_canister_id: PrincipalId,
-) -> Result<Vec<Version>, String> {
+) -> Result<CachedUpgradeSteps, String> {
     let request = ListUpgradeStepsRequest {
         starting_at: Some(current_version.into()),
         sns_governance_canister_id: Some(sns_governance_canister_id),
         limit: 0,
     };
     let arg = Encode!(&request)
-        .map_err(|e| format!("Could not encode ListUpgradeStepsRequest: {:?}", e))?;
+        .map_err(|err| format!("Could not encode ListUpgradeStepsRequest: {:?}", err))?;
+
+    let requested_timestamp_seconds = env.now();
 
     let response = env
         .call_canister(SNS_WASM_CANISTER_ID, "list_upgrade_steps", arg)
         .await
-        .map_err(|e| format!("Request failed for get_next_sns_version: {:?}", e))?;
+        .map_err(|err| format!("Request failed for get_next_sns_version: {:?}", err))?;
 
-    let response = Decode!(&response, ListUpgradeStepsResponse)
-        .map_err(|e| format!("Could not decode response to get_next_sns_version: {:?}", e))?;
-    let response_str = format!("{:?}", response);
+    let response = Decode!(&response, ListUpgradeStepsResponse).map_err(|err| {
+        format!(
+            "Could not decode the response from SnsW.list_upgrade_steps: {}",
+            err
+        )
+    })?;
 
-    response
-        .steps
-        .into_iter()
-        .map(|list_upgrade_step| match list_upgrade_step {
-            ListUpgradeStep {
-                version: Some(version),
-            } => Ok(version.into()),
-            _ => Err(format!(
-                "list_upgrade_steps response had invalid fields: {}",
-                response_str
-            )),
-        })
-        .collect()
+    let response_timestamp_seconds = env.now();
+
+    CachedUpgradeSteps::try_from_sns_w_response(
+        response,
+        requested_timestamp_seconds,
+        response_timestamp_seconds,
+    )
 }
 
 /// Returns all SNS canisters known by the Root canister.
@@ -416,6 +416,7 @@ impl Version {
 
         differences
     }
+
     pub(crate) fn version_has_expected_hashes(
         &self,
         expected_hashes: &[(SnsCanisterType, Vec<u8> /* wasm hash*/)],
@@ -545,7 +546,7 @@ pub(crate) struct GetSnsCanistersSummaryRequest {
     pub update_canister_list: Option<bool>,
 }
 
-#[derive(Eq, PartialEq, Debug, candid::CandidType, candid::Deserialize)]
+#[derive(Clone, Eq, PartialEq, Debug, candid::CandidType, candid::Deserialize)]
 pub(crate) struct GetSnsCanistersSummaryResponse {
     pub root: Option<CanisterSummary>,
     pub governance: Option<CanisterSummary>,
@@ -557,7 +558,7 @@ pub(crate) struct GetSnsCanistersSummaryResponse {
 }
 
 /// Copied from ic-sns-root
-#[derive(Eq, PartialEq, Debug, candid::CandidType, candid::Deserialize)]
+#[derive(Clone, Eq, PartialEq, Debug, candid::CandidType, candid::Deserialize)]
 pub(crate) struct CanisterSummary {
     pub canister_id: Option<PrincipalId>,
     pub status: Option<CanisterStatusResultV2>,
@@ -649,11 +650,11 @@ pub struct ListUpgradeStepsRequest {
     /// Limit to number of entries (for paging)
     pub limit: u32,
 }
-#[derive(candid::CandidType, candid::Deserialize, Debug)]
+#[derive(candid::CandidType, candid::Deserialize, Clone, Debug)]
 pub struct ListUpgradeStepsResponse {
     pub steps: ::prost::alloc::vec::Vec<ListUpgradeStep>,
 }
-#[derive(candid::CandidType, candid::Deserialize, Debug)]
+#[derive(candid::CandidType, candid::Deserialize, Clone, Debug)]
 pub struct ListUpgradeStep {
     pub version: ::core::option::Option<SnsVersion>,
 }

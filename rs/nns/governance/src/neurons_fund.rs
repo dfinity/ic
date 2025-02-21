@@ -1945,21 +1945,19 @@ fn apply_neurons_fund_snapshot(
 ) -> Result<(), String> {
     let mut neurons_fund_action_error = vec![];
     for (neuron_id, neuron_delta) in snapshot.neurons().iter() {
-        let refund_result = neuron_store.with_neuron_mut(neuron_id, |nns_neuron| {
-            let old_nns_neuron_maturity_e8s = nns_neuron.maturity_e8s_equivalent;
-            let maturity_delta_e8s = neuron_delta.amount_icp_e8s;
-            nns_neuron.maturity_e8s_equivalent = action
-                .checked_apply(old_nns_neuron_maturity_e8s, maturity_delta_e8s)
-                .unwrap_or_else(|verb| {
-                    neurons_fund_action_error.push(format!(
+        let action_result = neuron_store.modify_neuron_maturity(neuron_id, |old_maturity| {
+            action
+                .checked_apply(old_maturity, neuron_delta.amount_icp_e8s)
+                .map_err(|verb| {
+                    let maturity_delta_e8s = neuron_delta.amount_icp_e8s;
+                    format!(
                         "u64 overflow while {verb} maturity from {neuron_id:?} \
-                            (*kept* original maturity e8s = {old_nns_neuron_maturity_e8s}; \
+                            (*kept* original maturity e8s = {old_maturity}; \
                             requested maturity delta e8s = {maturity_delta_e8s})."
-                    ));
-                    old_nns_neuron_maturity_e8s
-                });
+                    )
+                })
         });
-        if let Err(with_neuron_mut_error) = refund_result {
+        if let Err(with_neuron_mut_error) = action_result {
             neurons_fund_action_error.push(with_neuron_mut_error.to_string());
         }
     }

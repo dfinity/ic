@@ -8,7 +8,7 @@
 //! 2. We add a test that uses:
 //!
 //!    a. the binary from the commit that matches the latest mainnet versions, as
-//!    defined in mainnet_revisions.json, (the binary is downloaded from S3)
+//!    defined in mainnet-subnet-revisions.json, (the binary is downloaded from S3)
 //!
 //!    b. the binary from the current commit
 //!
@@ -244,7 +244,7 @@ fn test(env: TestEnv) {
     let logger = env.logger();
 
     let versions_json =
-        read_dependency_to_string("testnet/mainnet_revisions.json").expect("mainnet IC versions");
+        read_dependency_to_string("mainnet-subnet-revisions.json").expect("mainnet IC versions");
 
     let parsed: Subnets =
         serde_json::from_str(&versions_json).expect("Can't parse the mainnet revisions JSON");
@@ -261,6 +261,17 @@ fn test(env: TestEnv) {
                 },
                 "_main/rs/replicated_state/replicated_state_test_binary/replicated_state_test_binary",
                 "canister_state::queues::tests::mainnet_compatibility_tests::basic_test",
+            ),
+            TestCase::new(
+                // TODO(MR-638): Switch this to a bi-directional test once a version including
+                // `best_effort_test` has been deployed to mainnet.
+                TestType::SelfTestOnly,
+                // TestType::Bidirectional {
+                //     published_binary: "replicated-state-test".to_string(),
+                //     mainnet_version: v.clone(),
+                // },
+                "_main/rs/replicated_state/replicated_state_test_binary/replicated_state_test_binary",
+                "canister_state::queues::tests::mainnet_compatibility_tests::best_effort_test",
             ),
             TestCase::new(
                 TestType::Bidirectional {

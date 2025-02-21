@@ -1,5 +1,4 @@
 //! Tests of Basic Signature operations in the CSP vault.
-#![allow(clippy::unwrap_used)]
 use crate::imported_test_utils::ed25519::csp_testvec;
 use crate::public_key_store::mock_pubkey_store::MockPublicKeyStore;
 use crate::public_key_store::PublicKeySetOnceError;
@@ -38,9 +37,7 @@ fn should_generate_node_signing_key_pair_and_store_keys() {
         .expect("failed creating key pair");
 
     assert_matches!(gen_key_result, CspPublicKey::Ed25519(_));
-    assert!(csp_vault
-        .sks_contains(KeyId::try_from(&gen_key_result).unwrap())
-        .is_ok());
+    assert!(csp_vault.sks_contains(KeyId::from(&gen_key_result)).is_ok());
     assert_eq!(
         csp_vault
             .current_node_public_keys()
@@ -226,7 +223,7 @@ fn should_fail_to_sign_with_unsupported_algorithm_id() {
             let sign_result = csp_vault.sign(
                 AlgorithmId::EcdsaP256,
                 msg.clone(),
-                KeyId::try_from(&public_key).unwrap(),
+                KeyId::from(&public_key),
             );
             assert!(sign_result.is_err());
             let err = sign_result.expect_err("Expected an error.");
@@ -246,7 +243,7 @@ fn should_fail_to_sign_with_non_existent_key() {
         .build_into_arc();
     let (_, pk_bytes) = ed25519::keypair_from_rng(rng);
 
-    let key_id = KeyId::try_from(&CspPublicKey::Ed25519(pk_bytes)).unwrap();
+    let key_id = KeyId::from(&CspPublicKey::Ed25519(pk_bytes));
     let msg = b"some message".to_vec();
     let sign_result = csp_vault.sign(AlgorithmId::Ed25519, msg, key_id);
     assert!(sign_result.is_err());
@@ -304,11 +301,7 @@ pub fn generate_key_pair_and_sign_message(
         CspPublicKey::Ed25519(pk_bytes) => pk_bytes,
         _ => panic!("Wrong CspPublicKey: {:?}", csp_pk),
     };
-    let sign_result = csp_vault.sign(
-        AlgorithmId::Ed25519,
-        message,
-        KeyId::try_from(&csp_pk).unwrap(),
-    );
+    let sign_result = csp_vault.sign(AlgorithmId::Ed25519, message, KeyId::from(&csp_pk));
     (pk_bytes, sign_result)
 }
 

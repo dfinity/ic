@@ -145,7 +145,7 @@ async fn get_blocks_pb(
             protobuf,
             GetBlocksArgs {
                 start: range.start,
-                length: range.end.saturating_sub(range.start) as usize,
+                length: range.end.saturating_sub(range.start),
             },
         )
         .await
@@ -158,7 +158,7 @@ async fn get_blocks_candid(archive: &Canister<'_>, range: std::ops::Range<u64>) 
             candid_one,
             GetBlocksArgs {
                 start: range.start,
-                length: range.end.saturating_sub(range.start) as usize,
+                length: range.end.saturating_sub(range.start),
             },
         )
         .await
@@ -175,14 +175,14 @@ async fn get_encoded_blocks_candid(
             candid_one,
             GetBlocksArgs {
                 start: range.start,
-                length: range.end.saturating_sub(range.start) as usize,
+                length: range.end.saturating_sub(range.start),
             },
         )
         .await
         .expect("get_encoded_blocks call trapped")
 }
 
-async fn query_blocks(ledger: &Canister<'_>, start: u64, length: usize) -> QueryBlocksResponse {
+async fn query_blocks(ledger: &Canister<'_>, start: u64, length: u64) -> QueryBlocksResponse {
     ledger
         .query_("query_blocks", candid_one, GetBlocksArgs { start, length })
         .await
@@ -192,7 +192,7 @@ async fn query_blocks(ledger: &Canister<'_>, start: u64, length: usize) -> Query
 async fn query_encoded_blocks(
     ledger: &Canister<'_>,
     start: u64,
-    length: usize,
+    length: u64,
 ) -> QueryEncodedBlocksResponse {
     ledger
         .query_(
@@ -479,7 +479,7 @@ fn archive_blocks_small_test() {
                     ledger: ledger.canister_id().into(),
                     arg: GetBlocksArgs {
                         start: 0,
-                        length: all_blocks.len(),
+                        length: all_blocks.len() as u64,
                     },
                     result: all_blocks
                         .iter()
@@ -673,12 +673,11 @@ fn archived_blocks_ranges() {
 
         for start in 0..10 {
             for length in 1..=10 - start {
-                let response = query_blocks(&ledger, start, length as usize).await;
+                let response = query_blocks(&ledger, start, length).await;
                 assert_eq!(response.archived_blocks.len(), 1);
                 assert_eq!(response.archived_blocks[0].start, start);
                 assert_eq!(response.archived_blocks[0].length, length);
-                let response_encoded_blocks =
-                    query_encoded_blocks(&ledger, start, length as usize).await;
+                let response_encoded_blocks = query_encoded_blocks(&ledger, start, length).await;
                 assert_eq!(
                     response.archived_blocks.len(),
                     response_encoded_blocks.archived_blocks.len()

@@ -1,0 +1,41 @@
+load("@rules_rust//rust:defs.bzl", "rust_doc", "rust_doc_test", "rust_library")
+
+package(default_visibility = ["//visibility:public"])
+
+[
+    rust_library(
+        name = "ic-metrics-assert" + name_suffix,
+        srcs = glob(["src/**/*.rs"]),
+        crate_features = features,
+        crate_name = "ic_metrics_assert",
+        deps = [
+            # Keep sorted.
+            "@crate_index//:candid",
+            "@crate_index//:regex",
+            "@crate_index//:serde",
+            "@crate_index//:serde_bytes",
+        ] + extra_deps,
+    )
+    for (name_suffix, features, extra_deps) in [
+        [
+            "",
+            [],
+            [],
+        ],
+        [
+            "_pocket_ic",
+            ["pocket_ic"],
+            ["//packages/pocket-ic"],
+        ],
+    ]
+]
+
+rust_doc(
+    name = "doc",
+    crate = ":ic-metrics-assert",
+)
+
+rust_doc_test(
+    name = "doc_test",
+    crate = ":ic-metrics-assert_pocket_ic",
+)

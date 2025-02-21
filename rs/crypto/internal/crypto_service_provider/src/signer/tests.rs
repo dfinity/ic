@@ -1,5 +1,3 @@
-#![allow(clippy::unwrap_used)]
-
 use super::*;
 use crate::api::CspSigner;
 use crate::imported_test_utils::ed25519::csp_testvec;
@@ -479,11 +477,7 @@ mod verify_ed25519 {
             let sig = csp
                 .csp_vault
                 .as_ref()
-                .sign(
-                    AlgorithmId::Ed25519,
-                    msg.to_vec(),
-                    KeyId::try_from(&pk).expect("Failed to convert CspPublicKey to KeyId"),
-                )
+                .sign(AlgorithmId::Ed25519, msg.to_vec(), KeyId::from(&pk))
                 .expect("Failed to generate a signature");
 
             Self { csp, pk, sig }
@@ -625,7 +619,7 @@ mod multi {
             .gen_committee_signing_key_pair()
             .expect("Failed to generate key pair with PoP");
         let message = b"Three turtle doves";
-        let key_id = KeyId::try_from(&public_key).unwrap();
+        let key_id = KeyId::from(&public_key);
         let signature = csp
             .sign(AlgorithmId::MultiBls12_381, message.to_vec(), key_id)
             .expect("Signing failed");
@@ -643,7 +637,7 @@ mod multi {
         let (public_key, _pop) = csp.csp_vault.gen_committee_signing_key_pair().unwrap();
         let incompatible_signature = {
             let incompatible_public_key = csp.csp_vault.gen_node_signing_key_pair().unwrap();
-            let incompatible_key_id = KeyId::try_from(&incompatible_public_key).unwrap();
+            let incompatible_key_id = KeyId::from(&incompatible_public_key);
             csp.sign(
                 incompatible_algorithm,
                 message.to_vec(),
@@ -662,7 +656,7 @@ mod multi {
         let algorithm = AlgorithmId::MultiBls12_381;
         let [csp, verifier] = csp_and_verifier_with_different_seeds();
         let (public_key, _pop) = csp.csp_vault.gen_committee_signing_key_pair().unwrap();
-        let key_id = KeyId::try_from(&public_key).unwrap();
+        let key_id = KeyId::from(&public_key);
         let incompatible_public_key = csp.csp_vault.gen_node_signing_key_pair().unwrap();
         let message = b"Three turtle doves";
         let signature = csp
@@ -684,12 +678,12 @@ mod multi {
             .csp_vault
             .gen_committee_signing_key_pair()
             .expect("Failed to generate key pair with PoP");
-        let key_id1 = KeyId::try_from(&public_key1).unwrap();
+        let key_id1 = KeyId::from(&public_key1);
         let (public_key2, _pop2) = csp2
             .csp_vault
             .gen_committee_signing_key_pair()
             .expect("Failed to generate key pair with PoP");
-        let key_id2 = KeyId::try_from(&public_key2).unwrap();
+        let key_id2 = KeyId::from(&public_key2);
 
         // Two signatures combined should verify:
         let message = b"Three turtle doves";
@@ -729,12 +723,12 @@ mod multi {
             .csp_vault
             .gen_committee_signing_key_pair()
             .expect("Failed to generate key pair with PoP");
-        let key_id1 = KeyId::try_from(&public_key1).unwrap();
+        let key_id1 = KeyId::from(&public_key1);
         let (public_key2, _pop2) = csp2
             .csp_vault
             .gen_committee_signing_key_pair()
             .expect("Failed to generate key pair with PoP");
-        let key_id2 = KeyId::try_from(&public_key2).unwrap();
+        let key_id2 = KeyId::from(&public_key2);
 
         // Two signatures combined should verify:
         let message = b"Three turtle doves";
@@ -773,7 +767,7 @@ mod multi {
             .csp_vault
             .gen_committee_signing_key_pair()
             .expect("Failed to generate key pair with PoP");
-        let key_id1 = KeyId::try_from(&public_key1).unwrap();
+        let key_id1 = KeyId::from(&public_key1);
 
         // An incompatible signature:
         let (_, incompatible_public_key2, message, incompatible_signature2) =

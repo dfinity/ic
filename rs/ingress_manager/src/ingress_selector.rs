@@ -15,7 +15,7 @@ use ic_interfaces::{
 };
 use ic_limits::{MAX_INGRESS_TTL, SMALL_APP_SUBNET_MAX_SIZE};
 use ic_logger::warn;
-use ic_management_canister_types::CanisterStatusType;
+use ic_management_canister_types_private::CanisterStatusType;
 use ic_registry_client_helpers::subnet::IngressMessageSettings;
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
@@ -94,7 +94,6 @@ impl IngressSelector for IngressManager {
         // becomes greater than byte_limit.
         let mut accumulated_size = 0;
         let mut cycles_needed: BTreeMap<CanisterId, Cycles> = BTreeMap::new();
-        let mut num_messages = 0;
 
         let ingress_pool = self.ingress_pool.read().unwrap();
 
@@ -170,7 +169,7 @@ impl IngressSelector for IngressManager {
                         context,
                         &settings,
                         &past_ingress_set,
-                        num_messages,
+                        messages_in_payload.len(),
                         &mut cycles_needed,
                     );
                     // Any message that generates validation errors gets removed from
@@ -207,14 +206,13 @@ impl IngressSelector for IngressManager {
                         break;
                     }
 
-                    num_messages += 1;
                     accumulated_size += ingress_size;
                     queue.msgs_included += 1;
                     queue.bytes_included += ingress_size;
                     // The quota is not a hard limit. We always include the first message
                     // of each canister. This is why we check the third break criterion
                     // after this line.
-                    messages_in_payload.push(ingress.clone());
+                    messages_in_payload.push(ingress);
                     queue.msgs.pop();
                 }
 
@@ -240,15 +238,13 @@ impl IngressSelector for IngressManager {
                 };
             }
         }
-        // Relevant ingress was cloned, and no references are held, so we drop the lock.
-        drop(ingress_pool);
 
         // NOTE: Since the `Vec<SignedIngress>` is deserialized and slightly smaller than the
         // serialized `IngressPayload`, we need to check the size of the latter.
         // In the improbable case, that the deserialized form fits the size limit but the
         // serialized form does not, we need to remove some `SignedIngress` and try again.
         let payload = loop {
-            let payload = IngressPayload::from(messages_in_payload.clone());
+            let payload = IngressPayload::from_iter(messages_in_payload.iter().copied());
             let payload_size = payload.count_bytes();
             if payload_size < byte_limit.get() as usize {
                 break payload;
@@ -334,10 +330,29 @@ impl IngressSelector for IngressManager {
 
         // Tracks the sum of cycles needed per canister.
         let mut cycles_needed: BTreeMap<CanisterId, Cycles> = BTreeMap::new();
-        for i in 0..payload.message_count() {
-            let (ingress_id, ingress) = payload
-                .get(i)
-                .map_err(InvalidIngressPayloadReason::IngressPayloadError)?;
+
+        // Validate each ingress message in the payload
+        for (ingress_id, maybe_ingress) in payload.iter() {
+            let ingress = match maybe_ingress {
+                Ok(ingress) => ingress,
+                Err(deserialization_error) => {
+                    return Err(ValidationError::InvalidArtifact(
+                        InvalidIngressPayloadReason::IngressMessageDeserializationFailure(
+                            ingress_id.clone(),
+                            deserialization_error.to_string(),
+                        ),
+                    ));
+                }
+            };
+
+            if IngressMessageId::from(&ingress) != *ingress_id {
+                return Err(ValidationError::InvalidArtifact(
+                    InvalidIngressPayloadReason::MismatchedMessageId {
+                        expected: ingress_id.clone(),
+                        computed: IngressMessageId::from(&ingress),
+                    },
+                ));
+            }
 
             self.validate_ingress(
                 ingress_id.clone(),
@@ -377,7 +392,7 @@ impl IngressSelector for IngressManager {
                     let ingress = ingress_payload_cache
                         .entry((*height, payload_hash.clone()))
                         .or_insert_with(|| {
-                            Arc::new(batch.ingress.message_ids().into_iter().collect())
+                            Arc::new(batch.ingress.message_ids().cloned().collect())
                         });
                     Some(ingress.clone())
                 }
@@ -412,16 +427,6 @@ impl IngressSelector for IngressManager {
 
     fn request_purge_finalized_messages(&self, message_ids: Vec<IngressMessageId>) {
         self.messages_to_purge.write().unwrap().push(message_ids)
-    }
-
-    fn has_message(&self, message_id: &IngressMessageId) -> bool {
-        self.ingress_pool
-            .as_ref()
-            .read()
-            .unwrap()
-            .validated()
-            .get(message_id)
-            .is_some()
     }
 }
 
@@ -622,7 +627,7 @@ impl<'a, T: IngressSetQuery> IngressSetChain<'a, T> {
     }
 }
 
-impl<'a, T: IngressSetQuery> IngressSetQuery for IngressSetChain<'a, T> {
+impl<T: IngressSetQuery> IngressSetQuery for IngressSetChain<'_, T> {
     fn contains(&self, msg_id: &IngressMessageId) -> bool {
         if self.first.contains(msg_id) {
             true
@@ -663,7 +668,7 @@ mod tests {
     use ic_interfaces_mocks::consensus_pool::MockConsensusTime;
     use ic_interfaces_state_manager::{StateManagerError, StateManagerResult};
     use ic_interfaces_state_manager_mocks::MockStateManager;
-    use ic_management_canister_types::{CanisterIdRecord, Payload, IC_00};
+    use ic_management_canister_types_private::{CanisterIdRecord, Payload, IC_00};
     use ic_metrics::MetricsRegistry;
     use ic_replicated_state::CanisterState;
     use ic_test_utilities::{
@@ -1060,11 +1065,8 @@ mod tests {
                 assert_eq!(first_ingress_payload.message_count(), 1);
 
                 // we should not get it again because it is part of past payloads
-                let mut hash_set = HashSet::new();
-                for i in 0..first_ingress_payload.message_count() {
-                    let (id, _) = first_ingress_payload.get(i).unwrap();
-                    hash_set.insert(id);
-                }
+                let hash_set = HashSet::from_iter(first_ingress_payload.message_ids().cloned());
+
                 let second_ingress_payload = ingress_manager.get_ingress_payload(
                     &hash_set,
                     &validation_context,

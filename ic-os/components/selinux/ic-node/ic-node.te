@@ -346,6 +346,11 @@ dontaudit ic_canister_sandbox_t proc_t : dir { search };
 dontaudit ic_canister_sandbox_t proc_t : lnk_file { read };
 dontaudit ic_canister_sandbox_t ic_canister_sandbox_t : lnk_file { read };
 
+# There is a pipe used by libunwind to probe memory when generating stack traces.
+# The `anyhow` crate since 1.0.77 is generating stack traces for all errors, not only panics.
+# For now, we silently deny this, until RUST_LIB_BACKTRACE=0 is rolled out and reduces the noise.
+dontaudit ic_canister_sandbox_t ic_canister_sandbox_t : fifo_file { read write };
+
 # Deny accessing system information (tries to access "/proc/sys/kernel/osrelease" for unspecified reasons).
 dontaudit ic_canister_sandbox_t sysctl_kernel_t : dir { search };
 dontaudit ic_canister_sandbox_t sysctl_kernel_t : file { getattr open read };
@@ -370,6 +375,7 @@ allow unconfined_domain_type ic_canister_sandbox_t : process *;
 require { type syslogd_t; }
 allow syslogd_t ic_canister_sandbox_t : dir { getattr open read search };
 allow syslogd_t ic_canister_sandbox_t : file { open read getattr ioctl};
+allow syslogd_t ic_canister_sandbox_t : lnk_file { open read getattr ioctl};
 allow syslogd_t ic_canister_sandbox_t : process { getattr };
 
 # Allow interacting with our own executable.

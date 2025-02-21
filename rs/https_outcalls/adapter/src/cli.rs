@@ -2,10 +2,9 @@
 // Here we can crash as we cannot proceed with an invalid config.
 #![allow(clippy::expect_used)]
 
-use crate::config::Config;
 use clap::Parser;
 use http::Uri;
-use slog::Level;
+use ic_https_outcalls_adapter::Config;
 use std::{fs::File, io, path::PathBuf};
 use thiserror::Error;
 
@@ -25,22 +24,9 @@ pub enum CliError {
 pub struct Cli {
     /// This field contains the path to the config file.
     pub config: PathBuf,
-
-    #[clap(short, long)]
-    /// This field represents if the adapter should run in verbose.
-    pub verbose: bool,
 }
 
 impl Cli {
-    /// Gets the log filter level by checking the verbose field.
-    pub fn get_logging_level(&self) -> Level {
-        if self.verbose {
-            Level::Debug
-        } else {
-            Level::Info
-        }
-    }
-
     /// Loads the config from the provided `config` argument.
     pub fn get_config(&self) -> Result<Config, CliError> {
         // The expected JSON config.
@@ -74,30 +60,11 @@ pub mod test {
     use std::str::FromStr;
     use tempfile::NamedTempFile;
 
-    /// This function tests the `Cli::get_logging_level()` function.
-    #[test]
-    fn test_cli_get_logging_level() {
-        let cli = Cli {
-            config: PathBuf::new(),
-            verbose: false,
-        };
-
-        assert_eq!(cli.get_logging_level(), Level::Info);
-
-        let cli = Cli {
-            config: PathBuf::new(),
-            verbose: true,
-        };
-
-        assert_eq!(cli.get_logging_level(), Level::Debug);
-    }
-
     // This function tests opening a config file that does not exist.
     #[test]
     fn test_cli_get_config_error_opening_file() {
         let cli = Cli {
             config: PathBuf::from_str("/tmp/http-adapter-test.json").expect("Bad file path string"),
-            verbose: true,
         };
         let result = cli.get_config();
         assert!(result.is_err());
@@ -116,7 +83,6 @@ pub mod test {
         // should use the default values
         let cli = Cli {
             config: tmpfile.path().to_owned(),
-            verbose: true,
         };
         let result = cli.get_config();
         assert!(result.is_err());
@@ -142,7 +108,6 @@ pub mod test {
         // should use the default values
         let cli = Cli {
             config: tmpfile.path().to_owned(),
-            verbose: true,
         };
         let result = cli.get_config();
         assert!(result.is_err());
@@ -168,7 +133,6 @@ pub mod test {
         // should use the default values
         let cli = Cli {
             config: tmpfile.path().to_owned(),
-            verbose: true,
         };
         let result = cli.get_config();
         assert!(result.is_err());
@@ -194,7 +158,6 @@ pub mod test {
         // should use the default values
         let cli = Cli {
             config: tmpfile.path().to_owned(),
-            verbose: true,
         };
         let result = cli.get_config();
         assert!(result.is_err());
@@ -217,7 +180,6 @@ pub mod test {
         // should use the default values
         let cli = Cli {
             config: tmpfile.path().to_owned(),
-            verbose: true,
         };
         let result = cli.get_config();
         let config = result.unwrap();
@@ -237,7 +199,6 @@ pub mod test {
 
         let cli = Cli {
             config: tmpfile.path().to_owned(),
-            verbose: true,
         };
         let result = cli.get_config();
         let config = result.unwrap();
@@ -264,7 +225,6 @@ pub mod test {
         // should use the default values
         let cli = Cli {
             config: tmpfile.path().to_owned(),
-            verbose: true,
         };
         let result = cli.get_config();
         let config = result.unwrap();
@@ -304,7 +264,6 @@ pub mod test {
         // should use the default values
         let cli = Cli {
             config: tmpfile.path().to_owned(),
-            verbose: true,
         };
         let result = cli.get_config();
         let config = result.unwrap();

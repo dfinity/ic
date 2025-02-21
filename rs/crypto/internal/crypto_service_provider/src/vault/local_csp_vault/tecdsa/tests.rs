@@ -11,8 +11,8 @@ mod ecdsa_sign_share {
         ThresholdEcdsaSigShareInternal,
     };
     use ic_types::crypto::canister_threshold_sig::error::ThresholdEcdsaCreateSigShareError;
-    use ic_types::crypto::canister_threshold_sig::ExtendedDerivationPath;
     use ic_types::crypto::AlgorithmId;
+    use ic_types::crypto::ExtendedDerivationPath;
     use ic_types::Randomness;
     use proptest::collection::vec;
     use proptest::prelude::any;

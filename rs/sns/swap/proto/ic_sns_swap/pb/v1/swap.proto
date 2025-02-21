@@ -277,13 +277,7 @@ message Swap {
   optional uint64 neurons_fund_participation_icp_e8s = 20;
 
   // Information about the timers that perform periodic tasks of this Swap canister.
-  optional Timers timers = 22;
-}
-
-message Timers {
-  optional bool requires_periodic_tasks = 1;
-  optional uint64 last_reset_timestamp_seconds = 2;
-  optional uint64 last_spawned_timestamp_seconds = 3;
+  optional ic_nervous_system.pb.v1.Timers timers = 22;
 }
 
 // The initialisation data of the canister. Always specified on
@@ -735,7 +729,7 @@ message SnsNeuronRecipe {
     // in the SNS Ledger.
     // See `nervous_system_common::compute_neuron_staking_subaccount`.
     // The memo is used along with the a principal_id of the "controller" of
-    // the neuron. In the case of the decentralization sale, that will either be
+    // the neuron. In the case of the decentralization swap, that will either be
     // the PrincipalId of NNS Governance canister for Neurons' Fund investors,
     // or the PrincipalId of the direct investor.
     uint64 memo = 1;
@@ -793,9 +787,6 @@ message GetStateResponse {
   Swap swap = 1;
   DerivedState derived = 2;
 }
-
-message ResetTimersRequest {}
-message ResetTimersResponse {}
 
 message GetBuyerStateRequest {
   // The principal_id of the user who's buyer state is being queried for.

@@ -2,7 +2,7 @@ use candid::{candid_method, Principal};
 use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_cdk_macros::{init, post_upgrade, query, update};
 use ic_icrc1::{blocks::encoded_block_to_generic_block, Block};
-use ic_ledger_canister_core::runtime::total_memory_size_bytes;
+use ic_ledger_canister_core::runtime::heap_memory_size_bytes;
 use ic_ledger_core::block::{BlockIndex, BlockType, EncodedBlock};
 use ic_stable_structures::memory_manager::{MemoryId, VirtualMemory};
 use ic_stable_structures::{
@@ -364,14 +364,14 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
         "Size of the stable memory allocated by this canister measured in 64K Wasm pages.",
     )?;
     w.encode_gauge(
-        "archive_stable_memory_bytes",
+        "stable_memory_bytes",
         ic_cdk::api::stable::stable_size() as f64 * 65536f64,
-        "Size of the stable memory allocated by this canister.",
+        "Size of the stable memory allocated by this canister measured in bytes.",
     )?;
     w.encode_gauge(
-        "archive_total_memory_bytes",
-        total_memory_size_bytes() as f64,
-        "Total amount of memory (heap, stable memory, etc) that has been allocated by this canister.",
+        "heap_memory_bytes",
+        heap_memory_size_bytes() as f64,
+        "Size of the heap memory allocated by this canister measured in bytes.",
     )?;
 
     let cycle_balance = ic_cdk::api::canister_balance128() as f64;
@@ -435,4 +435,32 @@ fn check_candid_interface() {
         CandidSource::File(old_interface.as_path()),
     )
     .expect("the ledger interface is not compatible with archive.did");
+}
+
+#[test]
+fn check_archive_and_ledger_block_equality() {
+    // check that ledger.did and archive.did agree on the block format
+    let manifest_dir = std::path::PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap());
+    let ledger_did_file = manifest_dir.join("../ledger/ledger.did");
+    let archive_did_file = manifest_dir.join("archive.did");
+    let mut ledger_env = candid_parser::utils::CandidSource::File(ledger_did_file.as_path())
+        .load()
+        .unwrap()
+        .0;
+    let archive_env = candid_parser::utils::CandidSource::File(archive_did_file.as_path())
+        .load()
+        .unwrap()
+        .0;
+    let ledger_block_type = ledger_env.find_type("Block").unwrap().to_owned();
+    let archive_block_type = archive_env.find_type("Block").unwrap().to_owned();
+
+    let mut gamma = std::collections::HashSet::new();
+    let archive_block_type = ledger_env.merge_type(archive_env, archive_block_type.clone());
+    candid::types::subtype::equal(
+        &mut gamma,
+        &ledger_env,
+        &ledger_block_type,
+        &archive_block_type,
+    )
+    .expect("Ledger and Archive block types are different");
 }

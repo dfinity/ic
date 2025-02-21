@@ -22,10 +22,10 @@ REPOS_TO_SCAN = [
             Project(
                 name="frontend",
                 path="nns-dapp/frontend",
-                owner=Team.GIX_TEAM,
+                owner=Team.NNS_TEAM,
             )
         ],
-        "18.17.1",
+        "18.20.5",
     ),
     Repository(
         "internet-identity",
@@ -34,7 +34,7 @@ REPOS_TO_SCAN = [
             Project(
                 name="internet-identity",
                 path="internet-identity",
-                owner=Team.GIX_TEAM,
+                owner=Team.IDENTITY_TEAM,
             )
         ],
         DEFAULT_NODE_VERSION,
@@ -85,7 +85,7 @@ REPOS_TO_SCAN = [
                 owner=Team.GIX_TEAM,
             )
         ],
-        "18.17.1",
+        "18.20.5",
     ),
     Repository(
         "oisy-wallet",
@@ -97,7 +97,7 @@ REPOS_TO_SCAN = [
                 owner=Team.GIX_TEAM,
             )
         ],
-        DEFAULT_NODE_VERSION,
+        "22.11.0",
     ),
     # Removing ic-docutrack temporarily since it supports
     # only pnpm and not npm

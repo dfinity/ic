@@ -182,7 +182,7 @@ impl Summary {
         Self {
             configs: configs
                 .into_iter()
-                .map(|config| (config.dkg_id(), config))
+                .map(|config| (config.dkg_id().clone(), config))
                 .collect(),
             current_transcripts,
             next_transcripts,
@@ -208,10 +208,8 @@ impl Summary {
     /// Returns a reference to the current transcript for the given tag. Note
     /// that currently we expect that a valid summary contains the current
     /// transcript for any DKG tag.
-    pub fn current_transcript(&self, tag: &NiDkgTag) -> &NiDkgTranscript {
-        self.current_transcripts
-            .get(tag)
-            .unwrap_or_else(|| panic!("No current transcript available for tag {:?}", tag))
+    pub fn current_transcript(&self, tag: &NiDkgTag) -> Option<&NiDkgTranscript> {
+        self.current_transcripts.get(tag)
     }
 
     /// Returns a reference to the current transcripts.
@@ -237,17 +235,6 @@ impl Summary {
             .into_iter()
             .chain(self.next_transcripts)
             .map(|(_, t)| t)
-            .collect()
-    }
-
-    /// Return the set of next transcripts for all tags. If for some tag
-    /// the next transcript is not available, the current transcript is used.
-    /// This function avoids expensive copying when transcripts are large.
-    pub fn into_next_transcripts(self) -> BTreeMap<NiDkgTag, NiDkgTranscript> {
-        let mut next_transcripts = self.next_transcripts;
-        self.current_transcripts
-            .into_iter()
-            .map(|(tag, current)| (tag, next_transcripts.remove(&tag).unwrap_or(current)))
             .collect()
     }
 
@@ -289,15 +276,12 @@ impl Summary {
     }
 }
 
-fn build_tagged_transcripts_vec(
+fn build_transcripts_vec(
     transcripts: &BTreeMap<NiDkgTag, NiDkgTranscript>,
-) -> Vec<pb::TaggedNiDkgTranscript> {
+) -> Vec<pb::NiDkgTranscript> {
     transcripts
-        .iter()
-        .map(|(tag, transcript)| pb::TaggedNiDkgTranscript {
-            tag: pb::NiDkgTag::from(tag) as i32,
-            transcript: Some(pb::NiDkgTranscript::from(transcript)),
-        })
+        .values()
+        .map(pb::NiDkgTranscript::from)
         .collect()
 }
 
@@ -308,7 +292,7 @@ fn build_callback_ided_transcripts_vec(
         .iter()
         .map(
             |(id, callback_id, transcript_result)| pb::CallbackIdedNiDkgTranscript {
-                dkg_id: Some(pb::NiDkgId::from(*id)),
+                dkg_id: Some(pb::NiDkgId::from(id.clone())),
                 transcript_result: match transcript_result {
                     Ok(transcript) => Some(pb::NiDkgTranscriptResult {
                         val: Some(pb::ni_dkg_transcript_result::Val::Transcript(
@@ -347,8 +331,8 @@ impl From<&Summary> for pb::Summary {
                 .values()
                 .map(pb::NiDkgConfig::from)
                 .collect(),
-            current_transcripts: build_tagged_transcripts_vec(&summary.current_transcripts),
-            next_transcripts: build_tagged_transcripts_vec(&summary.next_transcripts),
+            current_transcripts: build_transcripts_vec(&summary.current_transcripts),
+            next_transcripts: build_transcripts_vec(&summary.next_transcripts),
             interval_length: summary.interval_length.get(),
             next_interval_length: summary.next_interval_length.get(),
             height: summary.height.get(),
@@ -361,26 +345,14 @@ impl From<&Summary> for pb::Summary {
 }
 
 fn build_tagged_transcripts_map(
-    transcripts: &[pb::TaggedNiDkgTranscript],
+    transcripts: &[pb::NiDkgTranscript],
 ) -> Result<BTreeMap<NiDkgTag, NiDkgTranscript>, ProxyDecodeError> {
     transcripts
         .iter()
-        .map(|tagged_transcript| {
-            tagged_transcript
-                .transcript
-                .as_ref()
-                .ok_or_else(|| ProxyDecodeError::MissingField("TaggedNiDkgTranscript::transcript"))
-                .and_then(|t| {
-                    Ok((
-                        NiDkgTag::try_from(tagged_transcript.tag).map_err(|e| {
-                            ProxyDecodeError::Other(format!(
-                                "Failed to convert NiDkgTag of transcript: {:?}",
-                                e
-                            ))
-                        })?,
-                        NiDkgTranscript::try_from(t).map_err(ProxyDecodeError::Other)?,
-                    ))
-                })
+        .map(|transcript_pb| {
+            let transcript =
+                NiDkgTranscript::try_from(transcript_pb).map_err(ProxyDecodeError::Other)?;
+            Ok((transcript.dkg_id.dkg_tag.clone(), transcript))
         })
         .collect::<Result<BTreeMap<_, _>, _>>()
 }
@@ -452,7 +424,7 @@ impl TryFrom<pb::Summary> for Summary {
             configs: summary
                 .configs
                 .into_iter()
-                .map(|config| NiDkgConfig::try_from(config).map(|c| (c.dkg_id, c)))
+                .map(|config| NiDkgConfig::try_from(config).map(|c| (c.dkg_id.clone(), c)))
                 .collect::<Result<BTreeMap<_, _>, _>>()
                 .map_err(ProxyDecodeError::Other)?,
             current_transcripts: build_tagged_transcripts_map(&summary.current_transcripts)?,
@@ -477,7 +449,7 @@ pub enum Payload {
     /// DKG Summary payload
     Summary(Summary),
     /// DKG Dealings payload
-    Dealings(Dealings),
+    Data(DkgDataPayload),
 }
 
 /// DealingMessages is a vector of DKG messages
@@ -487,20 +459,20 @@ pub type DealingMessages = Vec<Message>;
 /// started
 #[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
-pub struct Dealings {
+pub struct DkgDataPayload {
     /// The height of the DKG interval that this object belongs to
     pub start_height: Height,
     /// The dealing messages
     pub messages: DealingMessages,
 }
 
-impl TryFrom<pb::Dealings> for Dealings {
+impl TryFrom<pb::DkgDataPayload> for DkgDataPayload {
     type Error = ProxyDecodeError;
 
-    fn try_from(dealings: pb::Dealings) -> Result<Self, Self::Error> {
+    fn try_from(data_payload: pb::DkgDataPayload) -> Result<Self, Self::Error> {
         Ok(Self {
-            start_height: Height::from(dealings.summary_height),
-            messages: dealings
+            start_height: Height::from(data_payload.summary_height),
+            messages: data_payload
                 .dealings
                 .into_iter()
                 .map(Message::try_from)
@@ -509,7 +481,7 @@ impl TryFrom<pb::Dealings> for Dealings {
     }
 }
 
-impl Dealings {
+impl DkgDataPayload {
     /// Return an empty DealingsPayload using the given start_height.
     pub fn new_empty(start_height: Height) -> Self {
         Self::new(start_height, vec![])
@@ -522,6 +494,15 @@ impl Dealings {
             messages,
         }
     }
+
+    /// Returns true if the payload is empty
+    pub fn is_empty(&self) -> bool {
+        let DkgDataPayload {
+            start_height: _,
+            messages,
+        } = self;
+        messages.is_empty()
+    }
 }
 
 impl NiDkgTag {
@@ -532,7 +513,7 @@ impl NiDkgTag {
         let f = crate::consensus::get_faults_tolerated(committee_size);
         match self {
             NiDkgTag::LowThreshold => f + 1,
-            NiDkgTag::HighThreshold => committee_size - f,
+            NiDkgTag::HighThreshold | NiDkgTag::HighThresholdForKey(_) => committee_size - f,
         }
     }
 }
@@ -545,18 +526,18 @@ impl From<&Summary> for pb::DkgPayload {
     }
 }
 
-impl From<&Dealings> for pb::DkgPayload {
-    fn from(dealings: &Dealings) -> Self {
+impl From<&DkgDataPayload> for pb::DkgPayload {
+    fn from(data_payload: &DkgDataPayload) -> Self {
         Self {
-            val: Some(pb::dkg_payload::Val::Dealings(pb::Dealings {
+            val: Some(pb::dkg_payload::Val::DataPayload(pb::DkgDataPayload {
                 // TODO do we need this clone
-                dealings: dealings
+                dealings: data_payload
                     .messages
                     .iter()
                     .cloned()
                     .map(pb::DkgMessage::from)
                     .collect(),
-                summary_height: dealings.start_height.get(),
+                summary_height: data_payload.start_height.get(),
             })),
         }
     }
@@ -573,8 +554,8 @@ impl TryFrom<pb::DkgPayload> for Payload {
             pb::dkg_payload::Val::Summary(summary) => {
                 Ok(Payload::Summary(Summary::try_from(summary)?))
             }
-            pb::dkg_payload::Val::Dealings(dealings) => {
-                Ok(Payload::Dealings(Dealings::try_from(dealings)?))
+            pb::dkg_payload::Val::DataPayload(data_payload) => {
+                Ok(Payload::Data(DkgDataPayload::try_from(data_payload)?))
             }
         }
     }
@@ -582,7 +563,12 @@ impl TryFrom<pb::DkgPayload> for Payload {
 
 #[cfg(test)]
 mod tests {
+
     use super::*;
+    use crate::crypto::threshold_sig::ni_dkg::NiDkgMasterPublicKeyId;
+    use ic_management_canister_types_private::{VetKdCurve, VetKdKeyId};
+    use strum::EnumCount;
+    use strum::IntoEnumIterator;
 
     #[test]
     fn should_correctly_calculate_threshold_for_ni_dkg_tag_low_threshold() {
@@ -597,6 +583,7 @@ mod tests {
         assert_eq!(low_threshold_tag.threshold_for_subnet_of_size(28), 10);
         assert_eq!(low_threshold_tag.threshold_for_subnet_of_size(64), 22);
     }
+
     #[test]
     fn should_correctly_calculate_threshold_for_ni_dkg_tag_high_threshold() {
         let high_threshold_tag = NiDkgTag::HighThreshold;
@@ -609,6 +596,29 @@ mod tests {
         assert_eq!(high_threshold_tag.threshold_for_subnet_of_size(6), 3);
         assert_eq!(high_threshold_tag.threshold_for_subnet_of_size(28), 19);
         assert_eq!(high_threshold_tag.threshold_for_subnet_of_size(64), 43);
+    }
+
+    #[test]
+    #[allow(clippy::single_element_loop)]
+    fn should_correctly_calculate_threshold_for_ni_dkg_tag_high_threshold_for_key() {
+        for ni_dkg_master_public_key_id in [NiDkgMasterPublicKeyId::VetKd(VetKdKeyId {
+            curve: VetKdCurve::Bls12_381_G2,
+            name: "some key".to_string(),
+        })] {
+            let tag = NiDkgTag::HighThresholdForKey(ni_dkg_master_public_key_id);
+
+            assert_eq!(tag.threshold_for_subnet_of_size(0), 1);
+            assert_eq!(tag.threshold_for_subnet_of_size(1), 1);
+            assert_eq!(tag.threshold_for_subnet_of_size(2), 1);
+            assert_eq!(tag.threshold_for_subnet_of_size(3), 1);
+            assert_eq!(tag.threshold_for_subnet_of_size(4), 3);
+            assert_eq!(tag.threshold_for_subnet_of_size(5), 3);
+            assert_eq!(tag.threshold_for_subnet_of_size(6), 3);
+            assert_eq!(tag.threshold_for_subnet_of_size(28), 19);
+            assert_eq!(tag.threshold_for_subnet_of_size(64), 43);
+        }
+        assert_eq!(NiDkgMasterPublicKeyId::COUNT, 1);
+        assert_eq!(VetKdCurve::iter().count(), 1);
     }
 
     #[test]

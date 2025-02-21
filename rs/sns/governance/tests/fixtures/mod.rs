@@ -9,10 +9,9 @@ use ic_sns_governance::{
     governance::{Governance, ValidGovernanceProto},
     pb::v1::{
         get_neuron_response, get_proposal_response,
-        governance::{MaturityModulation, Mode, SnsMetadata},
-        manage_neuron,
+        governance::{MaturityModulation, Mode, SnsMetadata, Version},
         manage_neuron::{
-            AddNeuronPermissions, MergeMaturity, RegisterVote, RemoveNeuronPermissions,
+            self, AddNeuronPermissions, MergeMaturity, RegisterVote, RemoveNeuronPermissions,
         },
         manage_neuron_response::{
             self, AddNeuronPermissionsResponse, FollowResponse, MergeMaturityResponse,
@@ -433,6 +432,13 @@ impl GovernanceCanisterFixture {
         self
     }
 
+    /// Ensures that SNS upgrade features are not going to produce any external calls that are
+    /// orthogonal to this test scenario, as they would require setting up mock responses.
+    pub fn temporarily_disable_sns_upgrades(&mut self) -> &mut Self {
+        assert!(self.governance.acquire_upgrade_periodic_task_lock());
+        self
+    }
+
     pub fn capture_state(&mut self) -> &mut Self {
         self.initial_state = Some(self.get_state());
         self
@@ -465,8 +471,8 @@ impl GovernanceCanisterFixture {
         }
     }
 
-    pub fn heartbeat(&mut self) -> &mut Self {
-        self.governance.heartbeat().now_or_never();
+    pub fn run_periodic_tasks_now(&mut self) -> &mut Self {
+        self.governance.run_periodic_tasks().now_or_never();
         self
     }
 
@@ -740,7 +746,7 @@ impl GovernanceCanisterFixture {
         }
     }
 
-    pub fn get_sale_canister_id(&self) -> PrincipalId {
+    pub fn get_swap_canister_id(&self) -> PrincipalId {
         self.governance
             .proto
             .swap_canister_id
@@ -854,6 +860,7 @@ impl Default for GovernanceCanisterFixtureBuilder {
                     current_basis_points: Some(0),
                     updated_at_timestamp_seconds: Some(1),
                 }),
+                deployed_version: Some(Version::default()),
                 ..Default::default()
             },
             sns_ledger_transforms: Vec::default(),

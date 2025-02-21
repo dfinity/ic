@@ -28,7 +28,7 @@ ic-icrc1 = { path = "../../ledger_suite/icrc1" }
 ic-icrc1-ledger = { path = "../../ledger_suite/icrc1/ledger" }
 ic-ledger-canister-core = { path = "../../ledger_suite/common/ledger_canister_core" }
 ic-ledger-core = { path = "../../ledger_suite/common/ledger_core" }
-ic-management-canister-types = { path = "../../types/management_canister_types" }
+ic-management-canister-types-private = { path = "../../types/management_canister_types" }
 ic-nervous-system-clients = { path = "../../nervous_system/clients" }
 ic-nervous-system-common = { path = "../../nervous_system/common" }
 ic-nervous-system-proto = { path = "../../nervous_system/proto" }
@@ -78,7 +78,7 @@ lazy_static = { workspace = true }
 num-traits = { workspace = true }
 on_wire = { path = "../../rust_canisters/on_wire" }
 pretty_assertions = { workspace = true }
-rust_decimal = "1.25"
-rust_decimal_macros = "1.25"
+rust_decimal = "1.36.0"
+rust_decimal_macros = "1.36.0"
 tokio = { workspace = true }
 wat = { workspace = true }

@@ -55,3 +55,26 @@ message Decimal {
   // E.g. "3.14".
   optional string human_readable = 1;
 }
+
+// API types related to managing canister timers.
+
+message ResetTimersRequest {}
+message ResetTimersResponse {}
+
+// TODO[NNS1-3420] This type can be refined into different internal API types, depending on
+// TODO[NNS1-3420] the needs of a particular canister. The fields of this type represent
+// TODO[NNS1-3420] over-approximation of the fields that might be relevant for observing and
+// TODO[NNS1-3420] managing timers in nervous system-related canisters.
+message Timers {
+  // Indicates whether this canister (still) requires (timer-based) periodic tasks.
+  //
+  // May be ignored by canisters that never cancel their periodic tasks.
+  optional bool requires_periodic_tasks = 1;
+  optional uint64 last_reset_timestamp_seconds = 2;
+  optional uint64 last_spawned_timestamp_seconds = 3;
+}
+
+message GetTimersRequest {}
+message GetTimersResponse {
+  optional Timers timers = 1;
+}

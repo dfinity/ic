@@ -22,6 +22,16 @@ filegroup(
     visibility = ["//visibility:public"],
 )
 
+filegroup(
+    name = "helper_contracts",
+    srcs = [
+        "DepositHelperWithSubaccount.sol",
+        "ERC20DepositHelper.sol",
+        "EthDepositHelper.sol",
+    ],
+    visibility = ["//visibility:public"],
+)
+
 rust_library(
     name = "minter",
     srcs = glob(
@@ -42,9 +52,10 @@ rust_library(
     deps = [
         # Keep sorted.
         "//packages/ic-ethereum-types",
+        "//packages/ic-secp256k1",
+        "//packages/icrc-cbor:icrc-cbor_u256",
         "//packages/icrc-ledger-client-cdk:icrc_ledger_client_cdk",
         "//packages/icrc-ledger-types:icrc_ledger_types",
-        "//rs/crypto/secp256k1",
         "//rs/ethereum/evm-rpc-client",
         "//rs/phantom_newtype",
         "//rs/types/management_canister_types",
@@ -132,6 +143,7 @@ rust_test(
     srcs = glob(["src/**/*.rs"]),
     compile_data = [
         "templates/dashboard.html",
+        "templates/pagination.html",
         "templates/principal_to_bytes.js",
     ],
     crate_features = features,
@@ -145,9 +157,9 @@ rust_test(
         # Keep sorted.
         ":minter",
         "//packages/ic-ethereum-types",
+        "//packages/ic-secp256k1",
         "//packages/icrc-ledger-client-cdk:icrc_ledger_client_cdk",
         "//packages/icrc-ledger-types:icrc_ledger_types",
-        "//rs/crypto/secp256k1",
         "//rs/rust_canisters/http_types",
         "@crate_index//:askama",
         "@crate_index//:candid",
@@ -207,6 +219,7 @@ rust_binary(
             "//rs/ethereum/ledger-suite-orchestrator/test_utils",
             "//rs/state_machine_tests",
             "//rs/types/base_types",
+            "//rs/types/management_canister_types",
             "@crate_index//:assert_matches",
             "@crate_index//:candid",
             "@crate_index//:ethers-core",

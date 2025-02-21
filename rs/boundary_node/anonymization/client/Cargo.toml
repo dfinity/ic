@@ -1,0 +1,19 @@
+[package]
+name = "anonymization-client"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+anyhow = { workspace = true }
+async-trait = { workspace = true }
+candid = { workspace = true }
+ic-canister-client = { path = "../../../canister_client" }
+ic-types = { path = "../../../types/types" }
+prometheus = { workspace = true }
+rand = { workspace = true }
+rsa = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+
+[dependencies.anonymization-interface]
+path = "../interface"

@@ -4,29 +4,31 @@ use ic_error_types::{ErrorCode, UserError};
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
 use ic_replicated_state::canister_state::system_state::wasm_chunk_store;
 use ic_replicated_state::{ExecutionTask, ReplicatedState};
-use ic_state_machine_tests::{IngressState, IngressStatus};
+use ic_types::ingress::{IngressState, IngressStatus};
 use ic_types::{
     CanisterId, ComputeAllocation, Cycles, MemoryAllocation, NumBytes, NumInstructions,
 };
 
-use ic_management_canister_types::InstallChunkedCodeArgsLegacy;
-use ic_management_canister_types::{
+use ic_management_canister_types_private::InstallChunkedCodeArgsLegacy;
+use ic_management_canister_types_private::{
     CanisterChange, CanisterChangeDetails, CanisterChangeOrigin, CanisterInstallMode,
     CanisterInstallModeV2, EmptyBlob, InstallChunkedCodeArgs, InstallCodeArgs, InstallCodeArgsV2,
     Method, Payload, UploadChunkArgs, UploadChunkReply,
 };
-use ic_replicated_state::canister_state::NextExecution;
+use ic_replicated_state::canister_state::{execution_state::WasmExecutionMode, NextExecution};
 use ic_test_utilities_execution_environment::{
     check_ingress_status, get_reply, ExecutionTest, ExecutionTestBuilder,
 };
 use ic_test_utilities_metrics::fetch_int_counter;
 use ic_types::messages::MessageId;
-use ic_types::{ingress::WasmResult, MAX_STABLE_MEMORY_IN_BYTES, MAX_WASM_MEMORY_IN_BYTES};
+use ic_types::{ingress::WasmResult, MAX_MEMORY_ALLOCATION};
 use ic_types_test_utils::ids::user_test_id;
 use ic_types_test_utils::ids::{canister_test_id, subnet_test_id};
 use ic_universal_canister::{call_args, wasm, UNIVERSAL_CANISTER_WASM};
 use maplit::btreemap;
 use std::mem::size_of;
+
+const WASM_EXECUTION_MODE: WasmExecutionMode = WasmExecutionMode::Wasm32;
 
 const DTS_INSTALL_WAT: &str = r#"
     (module
@@ -89,7 +91,7 @@ fn install_code_fails_on_invalid_memory_allocation() {
     assert_eq!(
         format!(
             "MemoryAllocation expected to be in the range [0..{}], got 18_446_744_073_709_551_615",
-            candid::Nat((MAX_STABLE_MEMORY_IN_BYTES + MAX_WASM_MEMORY_IN_BYTES).into())
+            candid::Nat(MAX_MEMORY_ALLOCATION.get().into())
         ),
         err.description()
     );
@@ -124,9 +126,11 @@ fn dts_resume_works_in_install_code() {
         assert_eq!(
             test.canister_state(canister_id).system_state.balance(),
             original_system_state.balance()
-                - test
-                    .cycles_account_manager()
-                    .execution_cost(NumInstructions::from(INSTRUCTION_LIMIT), test.subnet_size()),
+                - test.cycles_account_manager().execution_cost(
+                    NumInstructions::from(INSTRUCTION_LIMIT),
+                    test.subnet_size(),
+                    WASM_EXECUTION_MODE,
+                ),
         );
         test.execute_slice(canister_id);
     }
@@ -173,9 +177,11 @@ fn dts_abort_works_in_install_code() {
         assert_eq!(
             test.canister_state(canister_id).system_state.balance(),
             original_system_state.balance()
-                - test
-                    .cycles_account_manager()
-                    .execution_cost(NumInstructions::from(INSTRUCTION_LIMIT), test.subnet_size()),
+                - test.cycles_account_manager().execution_cost(
+                    NumInstructions::from(INSTRUCTION_LIMIT),
+                    test.subnet_size(),
+                    WASM_EXECUTION_MODE
+                ),
         );
         test.execute_slice(canister_id);
     }
@@ -194,9 +200,11 @@ fn dts_abort_works_in_install_code() {
         assert_eq!(
             test.canister_state(canister_id).system_state.balance(),
             original_system_state.balance()
-                - test
-                    .cycles_account_manager()
-                    .execution_cost(NumInstructions::from(INSTRUCTION_LIMIT), test.subnet_size()),
+                - test.cycles_account_manager().execution_cost(
+                    NumInstructions::from(INSTRUCTION_LIMIT),
+                    test.subnet_size(),
+                    WASM_EXECUTION_MODE
+                ),
         );
         test.execute_slice(canister_id);
     }
@@ -455,9 +463,9 @@ fn install_code_succeeds_with_enough_wasm_custom_sections_memory() {
 
 #[test]
 fn install_code_respects_wasm_custom_sections_available_memory() {
-    // As we install canisters in a loop, using more memory spawns thousands of
-    // canister sandboxes, which lead to a few GiB memory usage.
-    let available_wasm_custom_sections_memory = 20 * 1024; // 20KiB
+    // Limit available custom section memory so that we can hit the limit with
+    // only a few canisters.
+    let available_wasm_custom_sections_memory = 1024; // 1 KiB
 
     // This value might need adjustment if something changes in the canister's
     // wasm that gets installed in the test.
@@ -557,9 +565,11 @@ fn execute_install_code_message_dts_helper(
         assert_eq!(
             test.canister_state(canister_id).system_state.balance(),
             original_system_state.balance()
-                - test
-                    .cycles_account_manager()
-                    .execution_cost(NumInstructions::from(1_000_000), test.subnet_size()),
+                - test.cycles_account_manager().execution_cost(
+                    NumInstructions::from(1_000_000),
+                    test.subnet_size(),
+                    WASM_EXECUTION_MODE
+                ),
         );
         test.execute_slice(canister_id);
     }
@@ -1415,7 +1425,7 @@ fn install_chunked_works_from_whitelist() {
     let canister_id = test.create_canister(CYCLES);
 
     // Upload two chunks that make up the universal canister.
-    let uc_wasm = UNIVERSAL_CANISTER_WASM;
+    let uc_wasm = &UNIVERSAL_CANISTER_WASM;
     let wasm_module_hash = ic_crypto_sha2::Sha256::hash(uc_wasm).to_vec();
     let chunk1 = &uc_wasm[..uc_wasm.len() / 2];
     let chunk2 = &uc_wasm[uc_wasm.len() / 2..];
@@ -1476,7 +1486,7 @@ fn install_chunked_defaults_to_using_target_as_store() {
     let canister_id = test.create_canister(CYCLES);
 
     // Upload universal canister.
-    let uc_wasm = UNIVERSAL_CANISTER_WASM;
+    let uc_wasm = &UNIVERSAL_CANISTER_WASM;
     let wasm_module_hash = ic_crypto_sha2::Sha256::hash(uc_wasm).to_vec();
     let hash = UploadChunkReply::decode(&get_reply(
         test.subnet_message(
@@ -1524,7 +1534,7 @@ fn install_chunked_recorded_in_history() {
     let canister_id = test.create_canister(CYCLES);
 
     // Upload universal canister.
-    let uc_wasm = UNIVERSAL_CANISTER_WASM;
+    let uc_wasm = &UNIVERSAL_CANISTER_WASM;
     let wasm_module_hash = ic_crypto_sha2::Sha256::hash(uc_wasm).to_vec();
     let hash = UploadChunkReply::decode(&get_reply(
         test.subnet_message(
@@ -1593,13 +1603,12 @@ fn install_chunked_works_from_other_canister() {
     let store_canister = test.create_canister(CYCLES);
 
     // Upload universal canister chunk.
-    let uc_wasm = UNIVERSAL_CANISTER_WASM;
     let hash = UploadChunkReply::decode(&get_reply(
         test.subnet_message(
             "upload_chunk",
             UploadChunkArgs {
                 canister_id: store_canister.into(),
-                chunk: uc_wasm.to_vec(),
+                chunk: UNIVERSAL_CANISTER_WASM.to_vec(),
             }
             .encode(),
         ),
@@ -1640,13 +1649,12 @@ fn install_chunked_works_with_legacy_args() {
     let store_canister = test.create_canister(CYCLES);
 
     // Upload universal canister chunk.
-    let uc_wasm = UNIVERSAL_CANISTER_WASM;
     let hash = UploadChunkReply::decode(&get_reply(
         test.subnet_message(
             "upload_chunk",
             UploadChunkArgs {
                 canister_id: store_canister.into(),
-                chunk: uc_wasm.to_vec(),
+                chunk: UNIVERSAL_CANISTER_WASM.to_vec(),
             }
             .encode(),
         ),
@@ -1686,13 +1694,12 @@ fn install_chunked_fails_with_wrong_chunk_hash() {
     let canister_id = test.create_canister(CYCLES);
 
     // Upload universal canister chunk.
-    let uc_wasm = UNIVERSAL_CANISTER_WASM;
     let hash = UploadChunkReply::decode(&get_reply(
         test.subnet_message(
             "upload_chunk",
             UploadChunkArgs {
                 canister_id: canister_id.into(),
-                chunk: uc_wasm.to_vec(),
+                chunk: UNIVERSAL_CANISTER_WASM.to_vec(),
             }
             .encode(),
         ),
@@ -1732,13 +1739,12 @@ fn install_chunked_fails_with_wrong_wasm_hash() {
     let canister_id = test.create_canister(CYCLES);
 
     // Upload universal canister chunk.
-    let uc_wasm = UNIVERSAL_CANISTER_WASM;
     let hash = UploadChunkReply::decode(&get_reply(
         test.subnet_message(
             "upload_chunk",
             UploadChunkArgs {
                 canister_id: canister_id.into(),
-                chunk: uc_wasm.to_vec(),
+                chunk: UNIVERSAL_CANISTER_WASM.to_vec(),
             }
             .encode(),
         ),
@@ -1779,7 +1785,7 @@ fn install_chunked_fails_when_store_canister_not_found() {
     // Store canister doesn't actually exist.
     let store_canister = canister_test_id(0);
 
-    let hash = ic_crypto_sha2::Sha256::hash(UNIVERSAL_CANISTER_WASM).to_vec();
+    let hash = ic_crypto_sha2::Sha256::hash(&UNIVERSAL_CANISTER_WASM).to_vec();
 
     // Install the universal canister
     let error = test
@@ -1809,13 +1815,12 @@ fn install_chunked_works_from_controller_of_store() {
     let store_canister = test.create_canister(CYCLES);
     let target_canister = test.create_canister(CYCLES);
     // Upload universal canister chunk to store.
-    let uc_wasm = UNIVERSAL_CANISTER_WASM;
     let hash = UploadChunkReply::decode(&get_reply(
         test.subnet_message(
             "upload_chunk",
             UploadChunkArgs {
                 canister_id: store_canister.into(),
-                chunk: uc_wasm.to_vec(),
+                chunk: UNIVERSAL_CANISTER_WASM.to_vec(),
             }
             .encode(),
         ),
@@ -1825,7 +1830,7 @@ fn install_chunked_works_from_controller_of_store() {
 
     // Create universal canister and use it to install on target.
     let uc = test
-        .canister_from_cycles_and_binary(CYCLES, UNIVERSAL_CANISTER_WASM.into())
+        .canister_from_cycles_and_binary(CYCLES, UNIVERSAL_CANISTER_WASM.to_vec())
         .unwrap();
     test.set_controller(store_canister, uc.into()).unwrap();
     test.set_controller(target_canister, uc.into()).unwrap();
@@ -1864,13 +1869,12 @@ fn install_chunked_fails_from_noncontroller_of_store() {
     let store_canister = test.create_canister(CYCLES);
     let target_canister = test.create_canister(CYCLES);
     // Upload universal canister chunk to store.
-    let uc_wasm = UNIVERSAL_CANISTER_WASM;
     let hash = UploadChunkReply::decode(&get_reply(
         test.subnet_message(
             "upload_chunk",
             UploadChunkArgs {
                 canister_id: store_canister.into(),
-                chunk: uc_wasm.to_vec(),
+                chunk: UNIVERSAL_CANISTER_WASM.to_vec(),
             }
             .encode(),
         ),
@@ -1881,7 +1885,7 @@ fn install_chunked_fails_from_noncontroller_of_store() {
     // Create universal canister and use it to install on target.
     // Don't make it a controller of the store.
     let uc = test
-        .canister_from_cycles_and_binary(CYCLES, UNIVERSAL_CANISTER_WASM.into())
+        .canister_from_cycles_and_binary(CYCLES, UNIVERSAL_CANISTER_WASM.to_vec())
         .unwrap();
     test.set_controller(target_canister, uc.into()).unwrap();
 
@@ -1934,19 +1938,18 @@ fn install_chunked_succeeds_from_store_canister() {
     // Install universal canister to canister which will also be the store and
     // make it a controller of the target.
     let store_canister = test
-        .canister_from_cycles_and_binary(CYCLES, UNIVERSAL_CANISTER_WASM.into())
+        .canister_from_cycles_and_binary(CYCLES, UNIVERSAL_CANISTER_WASM.to_vec())
         .unwrap();
     test.set_controller(target_canister, store_canister.into())
         .unwrap();
 
     // Upload universal canister chunk to store.
-    let uc_wasm = UNIVERSAL_CANISTER_WASM;
     let hash = UploadChunkReply::decode(&get_reply(
         test.subnet_message(
             "upload_chunk",
             UploadChunkArgs {
                 canister_id: store_canister.into(),
-                chunk: uc_wasm.to_vec(),
+                chunk: UNIVERSAL_CANISTER_WASM.to_vec(),
             }
             .encode(),
         ),
@@ -2282,6 +2285,7 @@ fn failed_install_chunked_charges_for_wasm_assembly() {
     let expected_cost = test.cycles_account_manager().execution_cost(
         NumInstructions::from(wasm_chunk_store::chunk_size().get()),
         test.subnet_size(),
+        WASM_EXECUTION_MODE,
     );
 
     // Install the universal canister
@@ -2355,12 +2359,15 @@ fn successful_install_chunked_charges_for_wasm_assembly() {
 
     // There is a fixed overhead in the `execution_cost` which we don't want to
     // double count.
-    let fixed_execution_overhead = test
-        .cycles_account_manager()
-        .execution_cost(NumInstructions::from(0), test.subnet_size());
+    let fixed_execution_overhead = test.cycles_account_manager().execution_cost(
+        NumInstructions::from(0),
+        test.subnet_size(),
+        WASM_EXECUTION_MODE,
+    );
     let expected_cost = test.cycles_account_manager().execution_cost(
         NumInstructions::from(wasm_chunk_store::chunk_size().get()),
         test.subnet_size(),
+        WASM_EXECUTION_MODE,
     ) - fixed_execution_overhead
         + charge_for_regular_install;
 

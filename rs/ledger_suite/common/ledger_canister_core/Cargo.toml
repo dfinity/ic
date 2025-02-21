@@ -14,7 +14,6 @@ ic-canister-log = { path = "../../../rust_canisters/canister_log" }
 ic-limits = { path = "../../../limits" }
 ic-ledger-core = { path = "../ledger_core" }
 ic-ledger-hash-of = { path = "../../../../packages/ic-ledger-hash-of" }
-ic-management-canister-types = { path = "../../../types/management_canister_types" }
+ic-management-canister-types-private = { path = "../../../types/management_canister_types" }
 ic-utils = { path = "../../../utils" }
-num-traits = { workspace = true }
 serde = { workspace = true }

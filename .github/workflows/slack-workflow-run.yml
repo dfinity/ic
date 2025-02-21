@@ -55,6 +55,11 @@ jobs:
             POST_TO_SLACK="true"
           fi
 
+          # Non-IDX alerts
+          if [[ "$TRIGGERING_WORKFLOW_NAME" == "Schedule Rust Benchmarks" ]]; then
+            CHANNEL="eng-crypto-alerts"
+          fi
+
           echo "channel=${CHANNEL}" >> $GITHUB_OUTPUT
           echo "message=${FULL_MESSAGE}" >> $GITHUB_OUTPUT
           echo "post_to_slack=${POST_TO_SLACK}" >> $GITHUB_OUTPUT

@@ -25,13 +25,21 @@ fn initialize_execution_test(
     const LARGE_INSTRUCTION_LIMIT: u64 = 1_000_000_000_000;
 
     // Get the memory type of the wasm module using ic_wasm_transform.
-    let module = Module::parse(wasm, true).unwrap();
-    let mut is_wasm64 = false;
-    if let Some(mem) = module.memories.first() {
-        if mem.memory64 {
-            is_wasm64 = true
+    let is_wasm64 = {
+        // 1f 8b is GZIP magic number, 08 is DEFLATE algorithm.
+        if wasm.starts_with(b"\x1f\x8b\x08") {
+            // Gzipped Wasm is wasm32.
+            false
+        } else {
+            let module = Module::parse(wasm, true).unwrap();
+            if let Some(mem) = module.memories.first() {
+                mem.memory64
+            } else {
+                // Wasm with no memory is wasm32.
+                false
+            }
         }
-    }
+    };
 
     let mut current = cell.borrow_mut();
     if current.is_some() {
@@ -39,6 +47,9 @@ fn initialize_execution_test(
     }
 
     let mut test = ExecutionTestBuilder::new()
+        .with_query_caching_disabled()
+        .with_install_code_instruction_limit(LARGE_INSTRUCTION_LIMIT)
+        .with_install_code_slice_instruction_limit(LARGE_INSTRUCTION_LIMIT)
         .with_instruction_limit(LARGE_INSTRUCTION_LIMIT)
         .with_instruction_limit_without_dts(LARGE_INSTRUCTION_LIMIT)
         .with_slice_instruction_limit(LARGE_INSTRUCTION_LIMIT);
@@ -46,7 +57,7 @@ fn initialize_execution_test(
     if is_wasm64 {
         test = test.with_wasm64();
         // Set memory size to 8 GiB for Wasm64.
-        test = test.with_max_wasm_memory_size(NumBytes::from(8 * 1024 * 1024 * 1024));
+        test = test.with_max_wasm64_memory_size(NumBytes::from(8 * 1024 * 1024 * 1024));
     }
     let mut test = test.build();
 
@@ -70,7 +81,7 @@ fn initialize_execution_test(
         PostSetupAction::None => {}
     }
 
-    // Execute a message to synce the new memory so that time isn't included in
+    // Execute a message to sync the new memory so that time isn't included in
     // benchmarks.
     test.ingress(canister_id, "update_empty", Encode!(&()).unwrap())
         .unwrap();

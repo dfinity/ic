@@ -37,7 +37,7 @@ submit_nns_publish_sns_wasm_proposal_mainnet() {
     PROPOSAL_FILE=$1
     NEURON_ID=$2
 
-    VERSION=$(grep '__Source Code__: ' $PROPOSAL_FILE | sed -E 's~.*\[(.{40})\].*~\1~')
+    VERSION=$(grep '__Source code__: ' $PROPOSAL_FILE | sed -E 's~.*\[(.{40})\].*~\1~')
     PROPOSAL_TITLE=$(grep '.' "$PROPOSAL_FILE" | head -n 1 | sed 's/# //')
     HUMANIZED_CANISTER_TYPE=$(echo "$PROPOSAL_TITLE" | sed -E 's/Publish SNS (.+) WASM Built at Commit .+/\1/')
     CANISTER_TYPE=$(echo "$HUMANIZED_CANISTER_TYPE" | tr '[:upper:]' '[:lower:]' | sed 's/ /-/')
@@ -54,7 +54,7 @@ submit_nns_publish_sns_wasm_proposal_mainnet() {
     echo
 
     echo "Publish SNS WASM Synopsis:"
-    echo "    Target Canister: $HUMANIZED_CANISTER_TYPE"
+    echo "    Target canister: $HUMANIZED_CANISTER_TYPE"
     echo "    Build Commit: $VERSION"
 
     echo

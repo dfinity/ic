@@ -1,10 +1,6 @@
-use std::collections::HashSet;
-
 use super::*;
 use crate::timestamp::TimeStamp;
 use crate::tokens::Tokens;
-use ic_stable_structures::Storable;
-use std::cmp;
 
 fn ts(n: u64) -> TimeStamp {
     TimeStamp::from_nanos_since_unix_epoch(n)
@@ -449,87 +445,6 @@ fn allowance_table_remove_zero_allowance() {
 }
 
 #[test]
-fn allowance_table_select_approvals_for_trimming() {
-    let mut table = TestAllowanceTable::default();
-
-    let approvals_len = 10;
-    for i in 1..approvals_len + 1 {
-        let expiration = if i > 5 { None } else { Some(ts(20 - i)) };
-        table
-            .approve(
-                &Account(0),
-                &Account(i),
-                tokens(100),
-                expiration,
-                ts(i),
-                None,
-            )
-            .unwrap();
-    }
-
-    for i in 0..approvals_len + 2 {
-        let remove = table.select_approvals_to_trim(i as usize);
-        let remove_set: HashSet<(Account, Account)> = remove.into_iter().collect();
-        assert_eq!(remove_set.len(), cmp::min(i, approvals_len) as usize);
-
-        for spender in 1..i + 1 {
-            assert!(
-                i > approvals_len || remove_set.contains(&(Account(0), Account(spender))),
-                "approval for spender {} should be selected for trimming",
-                spender
-            );
-        }
-    }
-
-    fn spender_id(approval_key: &(Account, Account)) -> u64 {
-        approval_key.1 .0
-    }
-
-    let remove = table.select_approvals_to_trim(1);
-    assert_eq!(remove.len(), 1);
-    assert_eq!(spender_id(&remove[0]), 1);
-
-    // Update the approval to change its place in the prune queue.
-    table
-        .approve(
-            &Account(0),
-            &Account(1),
-            tokens(100),
-            Some(ts(15)),
-            ts(14),
-            None,
-        )
-        .unwrap();
-
-    let remove = table.select_approvals_to_trim(1);
-    assert_eq!(remove.len(), 1);
-    assert_eq!(spender_id(&remove[0]), 2);
-
-    // Use up the allowance to remove it from the prune queue.
-    table
-        .use_allowance(&Account(0), &Account(2), tokens(100), ts(1))
-        .unwrap();
-
-    let remove = table.select_approvals_to_trim(1);
-    assert_eq!(remove.len(), 1);
-    assert_eq!(spender_id(&remove[0]), 3);
-
-    // Reset the allowance to zero; the approval should be removed from the queue.
-    table
-        .approve(&Account(0), &Account(3), tokens(0), None, ts(15), None)
-        .unwrap();
-
-    let remove = table.select_approvals_to_trim(1);
-    assert_eq!(remove.len(), 1);
-    assert_eq!(spender_id(&remove[0]), 4);
-    // approvals for 2 and 3 were removed
-    assert_eq!(
-        table.select_approvals_to_trim(100).len(),
-        approvals_len as usize - 2
-    );
-}
-
-#[test]
 fn arrival_table_updated_correctly() {
     let mut table = TestAllowanceTable::default();
 
@@ -619,38 +534,4 @@ fn expected_allowance_if_zero_no_approval() {
             current_allowance: tokens(0)
         }
     );
-}
-
-use proptest::prelude::{any, prop_assert_eq, proptest};
-use proptest::strategy::Strategy;
-
-#[test]
-fn allowance_serialization() {
-    fn arb_token() -> impl Strategy<Value = Tokens> {
-        any::<u64>().prop_map(Tokens::from_e8s)
-    }
-    fn arb_timestamp() -> impl Strategy<Value = TimeStamp> {
-        any::<u64>().prop_map(TimeStamp::from_nanos_since_unix_epoch)
-    }
-    fn arb_opt_expiration() -> impl Strategy<Value = Option<TimeStamp>> {
-        proptest::option::of(any::<u64>().prop_map(TimeStamp::from_nanos_since_unix_epoch))
-    }
-    fn arb_allowance() -> impl Strategy<Value = Allowance<Tokens>> {
-        (arb_token(), arb_opt_expiration(), arb_timestamp()).prop_map(
-            |(amount, expires_at, arrived_at)| Allowance {
-                amount,
-                expires_at,
-                arrived_at,
-            },
-        )
-    }
-    proptest!(|(allowance in arb_allowance())| {
-        let new_allowance: Allowance<Tokens> = Allowance::from_bytes(allowance.to_bytes());
-        prop_assert_eq!(new_allowance.amount, allowance.amount);
-        prop_assert_eq!(new_allowance.expires_at, allowance.expires_at);
-        prop_assert_eq!(
-            new_allowance.arrived_at,
-            TimeStamp::from_nanos_since_unix_epoch(0)
-        );
-    })
 }

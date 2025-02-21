@@ -130,7 +130,7 @@ pub enum EventType {
     ReimbursedErc20Withdrawal {
         #[cbor(n(0), with = "crate::cbor::id")]
         cketh_ledger_burn_index: LedgerBurnIndex,
-        #[cbor(n(1), with = "crate::cbor::principal")]
+        #[cbor(n(1), with = "icrc_cbor::principal")]
         ckerc20_ledger_id: Principal,
         #[n(2)]
         reimbursed: Reimbursed,
@@ -162,6 +162,13 @@ pub enum EventType {
         #[n(0)]
         contract_address: Address,
         #[n(1)]
+        block_number: BlockNumber,
+    },
+    /// The minter processed the deposit helper smart contract with subaccount logs up to the specified height.
+    #[n(24)]
+    SyncedDepositWithSubaccountToBlock {
+        /// The last processed block number for the helper contract (inclusive).
+        #[n(0)]
         block_number: BlockNumber,
     },
 }

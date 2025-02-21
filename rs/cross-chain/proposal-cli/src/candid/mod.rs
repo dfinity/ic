@@ -22,10 +22,6 @@ impl UpgradeArgs {
         &self.encoded_upgrade_args
     }
 
-    pub fn upgrade_args_hex(&self) -> String {
-        hex::encode(&self.encoded_upgrade_args)
-    }
-
     pub fn args_sha256_hex(&self) -> String {
         self.args_sha256.to_string()
     }

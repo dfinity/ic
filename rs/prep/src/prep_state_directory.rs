@@ -128,6 +128,8 @@ mod tests {
                 public_api: SocketAddr::from_str("1.2.3.4:8081").unwrap(),
                 node_operator_principal_id: None,
                 secret_key_store: None,
+                domain: None,
+                node_reward_type: None,
             },
         );
 

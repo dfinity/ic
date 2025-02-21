@@ -1,5 +1,6 @@
 use ic_config::{
-    embedders::Config as EmbeddersConfig, flag_status::FlagStatus, subnet_config::SchedulerConfig,
+    embedders::Config as EmbeddersConfig, execution_environment::Config as HypervisorConfig,
+    flag_status::FlagStatus, subnet_config::SchedulerConfig,
 };
 use ic_cycles_account_manager::ResourceSaturation;
 use ic_embedders::wasm_utils::compile;
@@ -17,7 +18,6 @@ use ic_test_utilities_state::SystemStateBuilder;
 use ic_test_utilities_types::ids::{call_context_test_id, user_test_id};
 use ic_types::MemoryAllocation;
 use ic_types::{
-    messages::RequestMetadata,
     methods::{FuncRef, WasmMethod},
     time::UNIX_EPOCH,
     ComputeAllocation, Cycles, NumBytes, NumInstructions, PrincipalId,
@@ -66,7 +66,7 @@ fn test_api_for_update(
         call_context_test_id(13),
     );
 
-    let static_system_state = SandboxSafeSystemState::new(
+    let static_system_state = SandboxSafeSystemState::new_for_testing(
         &system_state,
         *cycles_account_manager,
         &NetworkTopology::default(),
@@ -77,7 +77,8 @@ fn test_api_for_update(
         }
         .dirty_page_overhead,
         ComputeAllocation::default(),
-        RequestMetadata::new(0, UNIX_EPOCH),
+        HypervisorConfig::default().subnet_callback_soft_limit as u64,
+        Default::default(),
         Some(caller),
         api_type.call_context_id(),
     );
@@ -99,17 +100,16 @@ fn test_api_for_update(
             canister_memory_limit,
             wasm_memory_limit: None,
             memory_allocation: MemoryAllocation::default(),
+            canister_guaranteed_callback_quota: HypervisorConfig::default()
+                .canister_guaranteed_callback_quota
+                as u64,
             compute_allocation: ComputeAllocation::default(),
             subnet_type: SubnetType::Application,
             execution_mode: ExecutionMode::Replicated,
             subnet_memory_saturation: ResourceSaturation::default(),
         },
         *MAX_SUBNET_AVAILABLE_MEMORY,
-        EmbeddersConfig::default()
-            .feature_flags
-            .wasm_native_stable_memory,
-        EmbeddersConfig::default().feature_flags.canister_backtrace,
-        EmbeddersConfig::default().max_sum_exported_function_name_lengths,
+        &EmbeddersConfig::default(),
         Memory::new_for_testing(),
         NumWasmPages::from(0),
         Rc::new(DefaultOutOfInstructionsHandler::new(instruction_limit)),
@@ -976,126 +976,90 @@ mod tests {
 
     #[test]
     fn test_proportional_instructions_consumption_to_data_size() {
-        with_test_replica_logger(|log| {
-            let subnet_type = SubnetType::Application;
-            let dst: u32 = 0;
+        for subnet_type in [
+            SubnetType::Application,
+            SubnetType::VerifiedApplication,
+            SubnetType::System,
+        ] {
+            with_test_replica_logger(|log| {
+                let dst: u32 = 0;
 
-            let dirty_heap_cost = match EmbeddersConfig::default().metering_type {
-                ic_config::embedders::MeteringType::New => SchedulerConfig::application_subnet()
-                    .dirty_page_overhead
-                    .get(),
-                _ => 0,
-            };
+                let dirty_heap_cost = match EmbeddersConfig::default().metering_type {
+                    ic_config::embedders::MeteringType::New => match subnet_type {
+                        SubnetType::System => {
+                            SchedulerConfig::system_subnet().dirty_page_overhead.get()
+                        }
+                        SubnetType::Application => SchedulerConfig::application_subnet()
+                            .dirty_page_overhead
+                            .get(),
+                        SubnetType::VerifiedApplication => {
+                            SchedulerConfig::verified_application_subnet()
+                                .dirty_page_overhead
+                                .get()
+                        }
+                    },
+                    _ => 0,
+                };
 
-            let mut payload: Vec<u8> = dst.to_le_bytes().to_vec();
-            payload.extend(random_payload());
-            let payload_size = payload.len() - 4;
+                let mut payload: Vec<u8> = dst.to_le_bytes().to_vec();
+                payload.extend(random_payload());
+                let payload_size = payload.len() - 4;
 
-            let mut double_size_payload: Vec<u8> = payload.clone();
-            double_size_payload.extend(random_payload());
+                let mut double_size_payload: Vec<u8> = payload.clone();
+                double_size_payload.extend(random_payload());
 
-            let (instructions_consumed_without_data, dry_run_stats) = run_and_get_stats(
-                log.clone(),
-                "write_bytes",
-                dst.to_le_bytes().to_vec(),
-                MAX_NUM_INSTRUCTIONS,
-                subnet_type,
-            )
-            .unwrap();
-            let dry_run_dirty_heap = dry_run_stats.wasm_dirty_pages.len() as u64;
-
-            {
-                // Number of instructions consumed only for copying the payload.
-                let (consumed_instructions, run_stats) = run_and_get_stats(
+                let (instructions_consumed_without_data, dry_run_stats) = run_and_get_stats(
                     log.clone(),
                     "write_bytes",
-                    payload,
+                    dst.to_le_bytes().to_vec(),
                     MAX_NUM_INSTRUCTIONS,
                     subnet_type,
                 )
                 .unwrap();
-                let dirty_heap = run_stats.wasm_dirty_pages.len() as u64;
-                let consumed_instructions =
-                    consumed_instructions - instructions_consumed_without_data;
-                assert_eq!(
-                    (consumed_instructions.get() - dirty_heap * dirty_heap_cost) as usize,
-                    (payload_size / BYTES_PER_INSTRUCTION)
-                        - (dry_run_dirty_heap * dirty_heap_cost) as usize,
-                );
-            }
+                let dry_run_dirty_heap = dry_run_stats.wasm_dirty_pages.len() as u64;
 
-            {
-                // Number of instructions consumed increased with the size of the data.
-                let (consumed_instructions, run_stats) = run_and_get_stats(
-                    log,
-                    "write_bytes",
-                    double_size_payload,
-                    MAX_NUM_INSTRUCTIONS,
-                    subnet_type,
-                )
-                .unwrap();
-                let dirty_heap = run_stats.wasm_dirty_pages.len() as u64;
-                let consumed_instructions =
-                    consumed_instructions - instructions_consumed_without_data;
+                {
+                    // Number of instructions consumed only for copying the payload.
+                    let (consumed_instructions, run_stats) = run_and_get_stats(
+                        log.clone(),
+                        "write_bytes",
+                        payload,
+                        MAX_NUM_INSTRUCTIONS,
+                        subnet_type,
+                    )
+                    .unwrap();
+                    let dirty_heap = run_stats.wasm_dirty_pages.len() as u64;
+                    let consumed_instructions =
+                        consumed_instructions - instructions_consumed_without_data;
+                    assert_eq!(
+                        (consumed_instructions.get() - dirty_heap * dirty_heap_cost) as usize,
+                        (payload_size / BYTES_PER_INSTRUCTION)
+                            - (dry_run_dirty_heap * dirty_heap_cost) as usize,
+                    );
+                }
 
-                assert_eq!(
-                    (consumed_instructions.get() - dirty_heap * dirty_heap_cost) as usize,
-                    (2 * payload_size / BYTES_PER_INSTRUCTION)
-                        - (dry_run_dirty_heap * dirty_heap_cost) as usize
-                );
-            }
-        })
-    }
+                {
+                    // Number of instructions consumed increased with the size of the data.
+                    let (consumed_instructions, run_stats) = run_and_get_stats(
+                        log,
+                        "write_bytes",
+                        double_size_payload,
+                        MAX_NUM_INSTRUCTIONS,
+                        subnet_type,
+                    )
+                    .unwrap();
+                    let dirty_heap = run_stats.wasm_dirty_pages.len() as u64;
+                    let consumed_instructions =
+                        consumed_instructions - instructions_consumed_without_data;
 
-    #[test]
-    fn test_no_instructions_consumption_based_on_data_size_on_system_subnet() {
-        with_test_replica_logger(|log| {
-            let subnet_type = SubnetType::System;
-            let dst: u32 = 0;
-
-            let mut payload: Vec<u8> = dst.to_le_bytes().to_vec();
-            payload.extend(random_payload());
-
-            let mut double_size_payload: Vec<u8> = payload.clone();
-            double_size_payload.extend(random_payload());
-
-            let instructions_consumed_without_data = get_num_instructions_consumed(
-                log.clone(),
-                "write_bytes",
-                dst.to_le_bytes().to_vec(),
-                MAX_NUM_INSTRUCTIONS,
-                subnet_type,
-            )
-            .unwrap();
-
-            {
-                // Number of instructions consumed for copying the payload is zero.
-                let consumed_instructions = get_num_instructions_consumed(
-                    log.clone(),
-                    "write_bytes",
-                    payload,
-                    MAX_NUM_INSTRUCTIONS,
-                    subnet_type,
-                )
-                .unwrap()
-                    - instructions_consumed_without_data;
-                assert_eq!(consumed_instructions.get(), 0);
-            }
-
-            {
-                // Number of instructions consumed for copying the payload is zero.
-                let consumed_instructions = get_num_instructions_consumed(
-                    log,
-                    "write_bytes",
-                    double_size_payload,
-                    MAX_NUM_INSTRUCTIONS,
-                    subnet_type,
-                )
-                .unwrap()
-                    - instructions_consumed_without_data;
-                assert_eq!(consumed_instructions.get(), 0);
-            }
-        })
+                    assert_eq!(
+                        (consumed_instructions.get() - dirty_heap * dirty_heap_cost) as usize,
+                        (2 * payload_size / BYTES_PER_INSTRUCTION)
+                            - (dry_run_dirty_heap * dirty_heap_cost) as usize
+                    );
+                }
+            })
+        }
     }
 
     fn run_and_get_stats(

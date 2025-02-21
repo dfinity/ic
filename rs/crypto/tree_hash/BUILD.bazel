@@ -48,7 +48,6 @@ rust_test(
 rust_test_suite(
     name = "tree_hash_integration",
     srcs = glob(["tests/**"]),
-    edition = "2021",
     deps = DEPENDENCIES + DEV_DEPENDENCIES + [":tree_hash"],
 )
 

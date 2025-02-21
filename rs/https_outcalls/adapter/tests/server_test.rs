@@ -166,6 +166,7 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
             body: "hello".to_string().as_bytes().to_vec(),
             max_response_size_bytes: 512,
             socks_proxy_allowed: false,
+            ..Default::default()
         });
         let response = client.https_outcall(request).await;
         let http_response = response.unwrap().into_inner();
@@ -192,6 +193,7 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
             body: "hello".to_string().as_bytes().to_vec(),
             max_response_size_bytes: 512,
             socks_proxy_allowed: false,
+            ..Default::default()
         });
         let response = client.https_outcall(request).await;
         assert_eq!(
@@ -224,6 +226,7 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
             body: "hello".to_string().as_bytes().to_vec(),
             max_response_size_bytes: 512,
             socks_proxy_allowed: false,
+            ..Default::default()
         });
         let response = client.https_outcall(request).await;
         let http_response = response.unwrap().into_inner();
@@ -248,6 +251,7 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
             body: "420".to_string().as_bytes().to_vec(),
             max_response_size_bytes: 512,
             socks_proxy_allowed: false,
+            ..Default::default()
         });
 
         let response = client.https_outcall(request).await;
@@ -274,6 +278,7 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
             body: "".to_string().as_bytes().to_vec(),
             max_response_size_bytes: 512,
             socks_proxy_allowed: false,
+            ..Default::default()
         });
 
         let response = client.https_outcall(request).await;
@@ -301,6 +306,7 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
             body: format!("{}", response_limit + 1).as_bytes().to_vec(),
             max_response_size_bytes: response_limit,
             socks_proxy_allowed: false,
+            ..Default::default()
         });
 
         let response = client.https_outcall(request).await;
@@ -333,6 +339,7 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
             body: format!("{}", response_size).as_bytes().to_vec(),
             max_response_size_bytes: response_size * 2,
             socks_proxy_allowed: false,
+            ..Default::default()
         });
 
         let response = client.https_outcall(request).await;
@@ -360,6 +367,7 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
             body: format!("{}", delay).as_bytes().to_vec(),
             max_response_size_bytes: 512,
             socks_proxy_allowed: false,
+            ..Default::default()
         });
 
         let response = client.https_outcall(request).await;
@@ -396,16 +404,25 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
             body: "hello".to_string().as_bytes().to_vec(),
             max_response_size_bytes: 64,
             socks_proxy_allowed: false,
+            ..Default::default()
         });
         let response = client.https_outcall(request).await;
         assert_eq!(
             response.as_ref().unwrap_err().code(),
             tonic::Code::Unavailable
         );
-        assert!(response
-            .unwrap_err()
-            .message()
-            .contains(&"client error (Connect)".to_string()));
+
+        let response_error = response.unwrap_err();
+        let actual_error_message = response_error.message();
+
+        let expected_error_message = "Error(Connect, ConnectError(\"tcp connect error\", Custom { kind: TimedOut, error: Elapsed(()) }))";
+
+        assert!(
+            actual_error_message.contains(expected_error_message),
+            "Expected error message to contain, {}, got: {}",
+            expected_error_message,
+            actual_error_message
+        );
     }
 
     #[tokio::test]
@@ -427,6 +444,7 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
             body: "hello".as_bytes().to_vec(),
             max_response_size_bytes: response_limit,
             socks_proxy_allowed: false,
+            ..Default::default()
         });
 
         let response = client.https_outcall(request).await;
@@ -452,6 +470,7 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
             body: "hello".to_string().as_bytes().to_vec(),
             max_response_size_bytes: 512,
             socks_proxy_allowed: false,
+            ..Default::default()
         });
         let response = client.https_outcall(request).await;
         let _ = response.unwrap_err();
@@ -555,6 +574,7 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
                     body: "hello".to_string().as_bytes().to_vec(),
                     max_response_size_bytes: 512,
                     socks_proxy_allowed: false,
+                    ..Default::default()
                 });
 
                 let response = client.https_outcall(request).await;

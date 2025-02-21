@@ -9,9 +9,8 @@ use ic_types::{NodeId, RegistryVersion, SubnetId};
 use std::{
     io::Write,
     process::{Command, Stdio},
-    sync::Arc,
+    sync::{Arc, RwLock},
 };
-use tokio::sync::RwLock;
 
 #[derive(Default)]
 pub(crate) struct SshAccessParameters {
@@ -47,9 +46,9 @@ impl SshAccessManager {
     }
 
     /// Checks for changes in the keysets, and updates the node accordingly.
-    pub(crate) async fn check_for_keyset_changes(&mut self, subnet_id: Option<SubnetId>) {
+    pub(crate) fn check_for_keyset_changes(&mut self, subnet_id: Option<SubnetId>) {
         let registry_version = self.registry.get_latest_version();
-        let last_applied_parameters = self.last_applied_parameters.read().await;
+        let last_applied_parameters = self.last_applied_parameters.read().unwrap();
         if last_applied_parameters.registry_version == registry_version
             && last_applied_parameters.subnet_id == subnet_id
         {
@@ -78,7 +77,7 @@ impl SshAccessManager {
 
         // Update the readonly & backup keys. If it fails, log why.
         if self.update_access_keys(&new_readonly_keys, &new_backup_keys) {
-            *self.last_applied_parameters.write().await = SshAccessParameters {
+            *self.last_applied_parameters.write().unwrap() = SshAccessParameters {
                 registry_version,
                 subnet_id,
             };

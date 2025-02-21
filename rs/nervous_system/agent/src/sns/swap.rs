@@ -1,3 +1,4 @@
+use crate::CallCanisters;
 use ic_base_types::PrincipalId;
 use ic_sns_swap::pb::v1::{
     GetDerivedStateRequest, GetDerivedStateResponse, GetInitRequest, GetInitResponse,
@@ -6,9 +7,9 @@ use ic_sns_swap::pb::v1::{
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use crate::CallCanisters;
+pub mod requests;
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Copy, Clone, Debug, Deserialize, Serialize)]
 pub struct SwapCanister {
     pub canister_id: PrincipalId,
 }

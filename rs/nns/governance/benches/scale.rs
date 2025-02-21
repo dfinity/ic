@@ -135,6 +135,8 @@ fn make_and_process_proposal(gov: &mut Governance) {
             ..Default::default()
         },
     )
+    .now_or_never()
+    .unwrap()
     .unwrap();
     gov.run_periodic_tasks().now_or_never();
 }

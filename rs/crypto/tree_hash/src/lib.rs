@@ -491,7 +491,7 @@ impl MixedHashTree {
             Collect(&'a MixedHashTree),
         }
 
-        impl<'a> StackItem<'a> {
+        impl StackItem<'_> {
             fn to_collect(&self) -> Self {
                 match self {
                     Self::Expand(t) => Self::Collect(t),

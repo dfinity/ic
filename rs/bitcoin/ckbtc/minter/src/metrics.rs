@@ -1,9 +1,66 @@
 use crate::state;
-use std::cell::Cell;
+use std::cell::{Cell, RefCell};
+use std::collections::BTreeMap;
+use std::io::Error;
+use std::time::Duration;
 
 thread_local! {
     pub static GET_UTXOS_CLIENT_CALLS: Cell<u64> = Cell::default();
     pub static GET_UTXOS_MINTER_CALLS: Cell<u64> = Cell::default();
+    pub static UPDATE_CALL_LATENCY: RefCell<BTreeMap<usize,LatencyHistogram>> = RefCell::default();
+}
+
+pub(crate) const BUCKETS_MS: [u64; 7] = [500, 1_000, 2_000, 4_000, 8_000, 16_000, 32_000];
+
+#[derive(Default, Clone, Copy)]
+pub struct LatencyHistogram {
+    latency_buckets: [u64; BUCKETS_MS.len() + 1],
+    latency_sum: u64,
+}
+
+impl LatencyHistogram {
+    pub fn observe_latency(&mut self, latency: Duration) {
+        let latency_ms = latency.as_millis() as u64;
+        let bucket_index = BUCKETS_MS
+            .iter()
+            .enumerate()
+            .find_map(|(bucket_index, bucket_upper_bound)| {
+                if latency_ms <= *bucket_upper_bound {
+                    Some(bucket_index)
+                } else {
+                    None
+                }
+            })
+            .unwrap_or(self.latency_buckets.len() - 1); // infinity bucket
+        self.latency_buckets[bucket_index] += 1;
+        self.latency_sum += latency_ms;
+    }
+
+    /// Returns an iterator over the histogram buckets as tuples containing the bucket upper bound
+    /// (inclusive), and the count of observed values within the bucket.
+    pub(crate) fn iter(&self) -> impl Iterator<Item = (f64, f64)> + '_ {
+        BUCKETS_MS
+            .iter()
+            .map(|bucket| *bucket as f64)
+            .chain(std::iter::once(f64::INFINITY))
+            .zip(self.latency_buckets.iter().cloned())
+            .map(|(k, v)| (k, v as f64))
+    }
+
+    /// Returns the sum of all observed latencies in milliseconds.
+    pub(crate) fn sum(&self) -> u64 {
+        self.latency_sum
+    }
+}
+
+pub fn observe_latency(num_utxos: usize, start_ns: u64, end_ns: u64) {
+    let duration = Duration::from_nanos(end_ns.saturating_sub(start_ns));
+    UPDATE_CALL_LATENCY.with_borrow_mut(|metrics| {
+        metrics
+            .entry(num_utxos)
+            .or_default()
+            .observe_latency(duration)
+    });
 }
 
 pub fn encode_metrics(
@@ -12,13 +69,13 @@ pub fn encode_metrics(
     const WASM_PAGE_SIZE_IN_BYTES: f64 = 65536.0;
 
     metrics.encode_gauge(
-        "ckbtc_minter_stable_memory_bytes",
+        "stable_memory_bytes",
         ic_cdk::api::stable::stable_size() as f64 * WASM_PAGE_SIZE_IN_BYTES,
         "Size of the stable memory allocated by this canister.",
     )?;
 
     metrics.encode_gauge(
-        "ckbtc_minter_heap_memory_bytes",
+        "heap_memory_bytes",
         heap_memory_size_bytes() as f64,
         "Size of the heap memory allocated by this canister.",
     )?;
@@ -123,6 +180,12 @@ pub fn encode_metrics(
     )?;
 
     metrics.encode_gauge(
+        "ckbtc_minter_fee_based_min_retrievable_amount",
+        state::read_state(|s| s.fee_based_retrieve_btc_min_amount) as f64,
+        "Minimum number of ckBTC a user can withdraw (fee based).",
+    )?;
+
+    metrics.encode_gauge(
         "ckbtc_minter_min_confirmations",
         state::read_state(|s| s.min_confirmations) as f64,
         "Min number of confirmations on BTC network",
@@ -139,29 +202,12 @@ pub fn encode_metrics(
             "ckbtc_minter_get_utxos_calls",
             "Number of get_utxos calls the minter issued, labeled by source.",
         )?
-        .value(
-            &[("source", "client")],
-            GET_UTXOS_CLIENT_CALLS.with(|cell| cell.get()) as f64,
-        )?
-        .value(
-            &[("source", "minter")],
-            GET_UTXOS_MINTER_CALLS.with(|cell| cell.get()) as f64,
-        )?;
+        .value(&[("source", "client")], GET_UTXOS_CLIENT_CALLS.get() as f64)?
+        .value(&[("source", "minter")], GET_UTXOS_MINTER_CALLS.get() as f64)?;
 
     metrics.encode_gauge(
         "ckbtc_minter_btc_balance",
-        state::read_state(|s| {
-            s.available_utxos.iter().map(|u| u.value).sum::<u64>()
-                + s.submitted_transactions
-                    .iter()
-                    .map(|tx| {
-                        tx.change_output
-                            .as_ref()
-                            .map(|out| out.value)
-                            .unwrap_or_default()
-                    })
-                    .sum::<u64>()
-        }) as f64,
+        state::read_state(|s| s.get_total_btc_managed()) as f64,
         "Total BTC amount locked in available UTXOs.",
     )?;
 
@@ -179,13 +225,13 @@ pub fn encode_metrics(
 
     metrics.encode_gauge(
         "ckbtc_minter_concurrent_update_balance_count",
-        state::read_state(|s| s.update_balance_principals.len()) as f64,
+        state::read_state(|s| s.update_balance_accounts.len()) as f64,
         "Total number of concurrent update_balance requests.",
     )?;
 
     metrics.encode_gauge(
         "ckbtc_minter_concurrent_retrieve_btc_count",
-        state::read_state(|s| s.retrieve_btc_principals.len()) as f64,
+        state::read_state(|s| s.retrieve_btc_accounts.len()) as f64,
         "Total number of concurrent retrieve_btc requests.",
     )?;
 
@@ -206,6 +252,46 @@ pub fn encode_metrics(
         state::read_state(|s| s.owed_kyt_amount.iter().map(|e| e.1).sum::<u64>()) as f64,
         "The total amount of ckBTC that minter owes to the KYT canister.",
     )?;
+
+    metrics.encode_gauge(
+        "ckbtc_minter_suspended_utxos_without_account_count",
+        state::read_state(|s| s.suspended_utxos.utxos_without_account().len()) as f64,
+        "Total number of suspended UTXOs without account.",
+    )?;
+
+    metrics.encode_gauge(
+        "ckbtc_minter_ignored_utxos_count",
+        state::read_state(|s| s.ignored_utxos().count()) as f64,
+        "Total number of suspended UTXOs due to a too small value.",
+    )?;
+
+    metrics.encode_gauge(
+        "ckbtc_minter_quarantined_utxos_count",
+        state::read_state(|s| s.quarantined_utxos().count()) as f64,
+        "Total number of suspended UTXOs due to being marked as tainted.",
+    )?;
+
+    metrics.encode_gauge(
+        "ckbtc_minter_mint_status_unknown_utxos_count",
+        state::read_state(|s| s.mint_status_unknown_utxos().count()) as f64,
+        "Total number of UTXOs with unknown mint status.",
+    )?;
+
+    let mut histogram_vec = metrics.histogram_vec(
+        "ckbtc_minter_update_calls_latency",
+        "The latency of ckBTC minter `update_balance` calls in milliseconds.",
+    )?;
+
+    UPDATE_CALL_LATENCY.with_borrow(|histograms| -> Result<(), Error> {
+        for (num_new_utxos, histogram) in histograms {
+            histogram_vec = histogram_vec.histogram(
+                &[("num_new_utxos", &num_new_utxos.to_string())],
+                histogram.iter(),
+                histogram.sum() as f64,
+            )?;
+        }
+        Ok(())
+    })?;
 
     Ok(())
 }

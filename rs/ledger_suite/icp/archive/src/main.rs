@@ -4,7 +4,7 @@ use dfn_core::api::{caller, print, stable_memory_size_in_pages};
 use dfn_core::{over_init, stable, BytesS};
 use dfn_protobuf::protobuf;
 use ic_ledger_canister_core::range_utils;
-use ic_ledger_canister_core::runtime::total_memory_size_bytes;
+use ic_ledger_canister_core::runtime::heap_memory_size_bytes;
 use ic_ledger_core::block::{BlockIndex, BlockType, EncodedBlock};
 use ic_metrics_encoder::MetricsEncoder;
 use icp_ledger::{
@@ -177,7 +177,10 @@ fn get_blocks_() {
         let archive_state = ARCHIVE_STATE.read().unwrap();
         let blocks = &archive_state.blocks;
         let from_offset = archive_state.block_height_offset;
-        let length = length.min(icp_ledger::max_blocks_per_request(&caller()));
+        let length = length
+            .min(usize::MAX as u64)
+            .min(icp_ledger::max_blocks_per_request(&caller()) as u64)
+            as usize;
         icp_ledger::get_blocks(blocks, from_offset, start, length)
     });
 }
@@ -185,7 +188,7 @@ fn get_blocks_() {
 #[candid_method(query, rename = "get_blocks")]
 fn get_blocks(GetBlocksArgs { start, length }: GetBlocksArgs) -> GetBlocksResult {
     Ok(BlockRange {
-        blocks: read_encoded_blocks(start, length)?
+        blocks: read_encoded_blocks(start, length.min(usize::MAX as u64) as usize)?
             .into_iter()
             .map(|b| CandidBlock::from(Block::decode(b).expect("failed to decode a block")))
             .collect::<Vec<CandidBlock>>(),
@@ -251,14 +254,14 @@ fn encode_metrics(w: &mut MetricsEncoder<Vec<u8>>) -> std::io::Result<()> {
         "Size of the stable memory allocated by this canister measured in 64K Wasm pages.",
     )?;
     w.encode_gauge(
-        "archive_node_stable_memory_bytes",
+        "stable_memory_bytes",
         (stable_memory_size_in_pages() * 64 * 1024) as f64,
         "Size of the stable memory allocated by this canister measured in bytes.",
     )?;
     w.encode_gauge(
-        "archive_node_total_memory_bytes",
-        total_memory_size_bytes() as f64,
-        "Total amount of memory (heap, stable memory, etc) that has been allocated by this canister.",
+        "heap_memory_bytes",
+        heap_memory_size_bytes() as f64,
+        "Size of the heap memory allocated by this canister measured in bytes.",
     )?;
     w.encode_gauge(
         "archive_node_last_upgrade_time_seconds",
@@ -275,7 +278,7 @@ fn http_request() {
 
 #[candid_method(query, rename = "get_encoded_blocks")]
 fn get_encoded_blocks(GetBlocksArgs { start, length }: GetBlocksArgs) -> GetEncodedBlocksResult {
-    read_encoded_blocks(start, length)
+    read_encoded_blocks(start, length.min(usize::MAX as u64) as usize)
 }
 
 fn read_encoded_blocks(start: u64, length: usize) -> Result<Vec<EncodedBlock>, GetBlocksError> {

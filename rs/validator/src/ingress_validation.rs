@@ -112,6 +112,7 @@ where
         current_time: Time,
         root_of_trust_provider: &R,
     ) -> Result<CanisterIdSet, RequestValidationError> {
+        validate_ingress_expiry(request, current_time)?;
         let delegation_targets = validate_request_content(
             request,
             self.validator.as_ref(),
@@ -134,6 +135,9 @@ where
         current_time: Time,
         root_of_trust_provider: &R,
     ) -> Result<CanisterIdSet, RequestValidationError> {
+        if !request.sender().get().is_anonymous() {
+            validate_ingress_expiry(request, current_time)?;
+        }
         let delegation_targets = validate_request_content(
             request,
             self.validator.as_ref(),
@@ -157,6 +161,9 @@ where
         root_of_trust_provider: &R,
     ) -> Result<CanisterIdSet, RequestValidationError> {
         validate_paths_width_and_depth(&request.content().paths)?;
+        if !request.sender().get().is_anonymous() {
+            validate_ingress_expiry(request, current_time)?;
+        }
         validate_request_content(
             request,
             self.validator.as_ref(),
@@ -194,7 +201,6 @@ where
     R::Error: std::error::Error,
 {
     validate_nonce(request)?;
-    validate_ingress_expiry(request, current_time)?;
     validate_user_id_and_signature(
         ingress_signature_verifier,
         &request.sender(),
@@ -228,7 +234,7 @@ pub enum RequestValidationError {
     InvalidRequestExpiry(String),
     #[error("Invalid delegation expiry: {0}")]
     InvalidDelegationExpiry(String),
-    #[error("The user id '{0}' does not match the public key '{:?}'", hex::encode(.1))]
+    #[error("The user id '{0}' does not match the public key '{n}'", n=hex::encode(.1))]
     UserIdDoesNotMatchPublicKey(UserId, Vec<u8>),
     #[error("Invalid signature: {0}")]
     InvalidSignature(AuthenticationError),
@@ -395,8 +401,8 @@ impl CanisterIdSet {
 #[derive(Clone, Eq, PartialEq, Hash, Debug, Error)]
 pub enum CanisterIdSetInstantiationError {
     #[error(
-        "Expected at most {} elements but got {0}",
-        MAXIMUM_NUMBER_OF_TARGETS_PER_DELEGATION
+        "Expected at most {n} elements but got {0}",
+        n=MAXIMUM_NUMBER_OF_TARGETS_PER_DELEGATION
     )]
     TooManyElements(usize),
 }

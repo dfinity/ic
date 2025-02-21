@@ -5,15 +5,15 @@ package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
     # Keep sorted.
+    "//packages/ic-ed25519",
+    "//packages/ic-secp256k1",
     "//rs/artifact_pool",
     "//rs/bitcoin/client",
     "//rs/bitcoin/consensus",
     "//rs/config",
     "//rs/consensus",
     "//rs/consensus/utils",
-    "//rs/crypto/ed25519",
     "//rs/crypto/interfaces/sig_verification",
-    "//rs/crypto/secp256k1",
     "//rs/crypto/test_utils/ni-dkg",
     "//rs/crypto/tree_hash",
     "//rs/crypto/utils/threshold_sig_der",
@@ -119,6 +119,10 @@ rust_binary(
 rust_ic_test(
     name = "state_machine_multi_subnet_test",
     srcs = ["tests/multi_subnet.rs"],
+    data = ["//rs/universal_canister/impl:universal_canister.wasm.gz"],
+    env = {
+        "UNIVERSAL_CANISTER_WASM_PATH": "$(rootpath //rs/universal_canister/impl:universal_canister.wasm.gz)",
+    },
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = [":state_machine_tests"] + DEPENDENCIES + DEV_DEPENDENCIES,
 )

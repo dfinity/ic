@@ -251,7 +251,7 @@ impl IngressValidator {
             message: "".into(),
         })?
         .map_err(|validation_error| {
-            validation_error_to_http_error(message_id, validation_error, &log)
+            validation_error_to_http_error(msg.as_ref(), validation_error, &log)
         })?;
 
         let ingress_filter = ingress_filter.lock().unwrap().clone();

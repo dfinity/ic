@@ -1,5 +1,6 @@
 use std::path::{Path, PathBuf};
 
+use crate::exes::fdisk;
 use anyhow::{anyhow, Context, Result};
 use async_trait::async_trait;
 use tokio::process::Command;
@@ -41,7 +42,7 @@ pub async fn check_offset(disk_image: &Path, index: usize) -> Result<u64> {
 
     let prefix = disk_image.to_str().expect("Path is not valid UTF-8");
 
-    let out = Command::new("fdisk")
+    let out = Command::new(fdisk().context("fdisk is needed to check offsets")?)
         .args([
             "-l",
             &disk_image.display().to_string(),
@@ -73,7 +74,7 @@ pub async fn check_offset(disk_image: &Path, index: usize) -> Result<u64> {
 pub async fn check_length(disk_image: &Path, index: usize) -> Result<u64> {
     let prefix = disk_image.to_str().expect("Path is not valid UTF-8");
 
-    let out = Command::new("fdisk")
+    let out = Command::new(fdisk().context("fdisk is needed to check lengths")?)
         .args([
             "-l",
             &disk_image.display().to_string(),

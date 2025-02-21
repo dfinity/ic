@@ -1,4 +1,3 @@
-#![allow(clippy::unwrap_used)]
 use super::fixtures::cache::STATE_WITH_TRANSCRIPT;
 use crate::api::NiDkgCspClient;
 use crate::threshold::ni_dkg::tests::fixtures::StateWithTranscript;

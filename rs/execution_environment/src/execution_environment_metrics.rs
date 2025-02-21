@@ -3,7 +3,7 @@ use ic_cycles_account_manager::{
 };
 use ic_error_types::ErrorCode;
 use ic_logger::{error, ReplicaLogger};
-use ic_management_canister_types as ic00;
+use ic_management_canister_types_private as ic00;
 use ic_metrics::buckets::{decimal_buckets, decimal_buckets_with_zero};
 use ic_metrics::MetricsRegistry;
 use ic_replicated_state::metadata_state::subnet_call_context_manager::InstallCodeCallId;
@@ -186,6 +186,7 @@ impl ExecutionEnvironmentMetrics {
                     | ic00::Method::UninstallCode
                     | ic00::Method::ECDSAPublicKey
                     | ic00::Method::SchnorrPublicKey
+                    | ic00::Method::VetKdPublicKey
                     | ic00::Method::UpdateSettings
                     | ic00::Method::BitcoinGetBalance
                     | ic00::Method::BitcoinGetUtxos
@@ -193,6 +194,7 @@ impl ExecutionEnvironmentMetrics {
                     | ic00::Method::BitcoinSendTransaction
                     | ic00::Method::BitcoinGetCurrentFeePercentiles
                     | ic00::Method::NodeMetricsHistory
+                    | ic00::Method::SubnetInfo
                     | ic00::Method::FetchCanisterLogs
                     | ic00::Method::ProvisionalCreateCanisterWithCycles
                     | ic00::Method::ProvisionalTopUpCanister
@@ -215,7 +217,9 @@ impl ExecutionEnvironmentMetrics {
                     | ic00::Method::HttpRequest
                     | ic00::Method::SignWithECDSA
                     | ic00::Method::SignWithSchnorr
+                    | ic00::Method::VetKdDeriveEncryptedKey
                     | ic00::Method::ComputeInitialIDkgDealings
+                    | ic00::Method::ReshareChainKey
                     | ic00::Method::BitcoinSendTransactionInternal
                     | ic00::Method::BitcoinGetSuccessors => String::from("slow"),
                 };

@@ -1,0 +1,14 @@
+[Unit]
+Description=Report custom metrics once per minute
+Before=node_exporter.service
+
+[Service]
+Type=oneshot
+ExecStart=/opt/ic/bin/metrics_tool --metrics /run/node_exporter/collector_textfile/custom_metrics.prom
+
+# Disable systemd start and stop logs
+LogLevelMax=1
+SyslogLevel=2
+
+[Install]
+WantedBy=multi-user.target

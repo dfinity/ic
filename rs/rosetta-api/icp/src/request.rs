@@ -59,6 +59,8 @@ pub enum Request {
     ListNeurons(ListNeurons),
     #[serde(rename = "FOLLOW")]
     Follow(Follow),
+    #[serde(rename = "REFRESH_VOTING_POWER")]
+    RefreshVotingPower(RefreshVotingPower),
 }
 
 impl Request {
@@ -142,7 +144,9 @@ impl Request {
                 neuron_index: *neuron_index,
                 controller: controller.map(PublicKeyOrPrincipal::Principal),
             }),
-            Request::ListNeurons(ListNeurons { .. }) => Ok(RequestType::ListNeurons),
+            Request::ListNeurons(ListNeurons { page_number, .. }) => Ok(RequestType::ListNeurons {
+                page_number: page_number.unwrap_or_default(),
+            }),
             Request::Follow(Follow {
                 neuron_index,
                 controller,
@@ -151,6 +155,11 @@ impl Request {
                 neuron_index: *neuron_index,
                 controller: controller.map(PublicKeyOrPrincipal::Principal),
             }),
+            Request::RefreshVotingPower(RefreshVotingPower { neuron_index, .. }) => {
+                Ok(RequestType::RefreshVotingPower {
+                    neuron_index: *neuron_index,
+                })
+            }
         }
     }
 
@@ -181,6 +190,7 @@ impl Request {
                 Request::NeuronInfo(o) => builder.neuron_info(o),
                 Request::ListNeurons(o) => builder.list_neurons(o),
                 Request::Follow(o) => builder.follow(o),
+                Request::RefreshVotingPower(o) => builder.refresh_voting_power(o),
             }?;
         }
         Ok(builder.build())
@@ -207,6 +217,7 @@ impl Request {
                 | Request::StakeMaturity(_)
                 | Request::ListNeurons(_) // not neuron management but we need it signed.
                 | Request::NeuronInfo(_) // not neuron management but we need it signed.
+                | Request::RefreshVotingPower(_)
                 | Request::Follow(_)
         )
     }
@@ -469,7 +480,10 @@ impl TryFrom<&models::Request> for Request {
                     Some(Err(e)) => Err(e),
                 }
             }
-            RequestType::ListNeurons { .. } => Ok(Request::ListNeurons(ListNeurons { account })),
+            RequestType::ListNeurons { page_number } => Ok(Request::ListNeurons(ListNeurons {
+                account,
+                page_number: Some(*page_number),
+            })),
             RequestType::Follow {
                 neuron_index,
                 controller,
@@ -500,6 +514,20 @@ impl TryFrom<&models::Request> for Request {
                     }
                 } else {
                     Err(ApiError::invalid_request("Invalid follow request."))
+                }
+            }
+            RequestType::RefreshVotingPower { neuron_index } => {
+                if let Some(Command::RefreshVotingPower(manage_neuron::RefreshVotingPower {})) =
+                    manage_neuron()?
+                {
+                    Ok(Request::RefreshVotingPower(RefreshVotingPower {
+                        neuron_index: *neuron_index,
+                        account,
+                    }))
+                } else {
+                    Err(ApiError::invalid_request(
+                        "Invalid refresh voting power request.",
+                    ))
                 }
             }
         }

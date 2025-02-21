@@ -1,5 +1,5 @@
 use ic_error_types::{ErrorCode, UserError};
-use ic_management_canister_types::Method as Ic00Method;
+use ic_management_canister_types_private::Method as Ic00Method;
 use ic_replicated_state::ReplicatedState;
 use ic_types::messages::CanisterCall;
 use ic_types::{CanisterId, SubnetId};
@@ -103,12 +103,27 @@ impl Ic00MethodPermissions {
                 allow_remote_subnet_sender: true,
                 allow_only_nns_subnet_sender: true,
             },
+            Ic00Method::ReshareChainKey => Self {
+                method,
+                allow_remote_subnet_sender: true,
+                allow_only_nns_subnet_sender: true,
+            },
             Ic00Method::SchnorrPublicKey => Self {
                 method,
                 allow_remote_subnet_sender: true,
                 allow_only_nns_subnet_sender: false,
             },
             Ic00Method::SignWithSchnorr => Self {
+                method,
+                allow_remote_subnet_sender: true,
+                allow_only_nns_subnet_sender: false,
+            },
+            Ic00Method::VetKdPublicKey => Self {
+                method,
+                allow_remote_subnet_sender: true,
+                allow_only_nns_subnet_sender: false,
+            },
+            Ic00Method::VetKdDeriveEncryptedKey => Self {
                 method,
                 allow_remote_subnet_sender: true,
                 allow_only_nns_subnet_sender: false,
@@ -149,6 +164,11 @@ impl Ic00MethodPermissions {
                 allow_only_nns_subnet_sender: false,
             },
             Ic00Method::NodeMetricsHistory => Self {
+                method,
+                allow_remote_subnet_sender: true,
+                allow_only_nns_subnet_sender: false,
+            },
+            Ic00Method::SubnetInfo => Self {
                 method,
                 allow_remote_subnet_sender: true,
                 allow_only_nns_subnet_sender: false,

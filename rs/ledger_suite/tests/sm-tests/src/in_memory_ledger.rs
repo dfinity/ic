@@ -1,36 +1,58 @@
-use super::{get_all_ledger_and_archive_blocks, get_allowance, Tokens};
+use super::{get_all_ledger_and_archive_blocks, AllowanceProvider, BalanceProvider};
 use crate::metrics::parse_metric;
-use candid::{Decode, Encode, Nat, Principal};
+use candid::{CandidType, Principal};
 use ic_agent::identity::Identity;
 use ic_base_types::CanisterId;
 use ic_icrc1::Operation;
 use ic_icrc1_test_utils::{ArgWithCaller, LedgerEndpointArg};
 use ic_ledger_core::approvals::Allowance;
 use ic_ledger_core::timestamp::TimeStamp;
-use ic_ledger_core::tokens::{TokensType, Zero};
+use ic_ledger_core::tokens::TokensType;
 use ic_state_machine_tests::StateMachine;
+use icp_ledger::AccountIdentifier;
 use icrc_ledger_types::icrc1::account::Account;
 use std::collections::HashMap;
 use std::hash::Hash;
+use std::time::Instant;
+use std::time::SystemTime;
 
 #[cfg(test)]
 mod tests;
 
 #[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug)]
-pub struct ApprovalKey(Account, Account);
+pub struct ApprovalKey<AccountId>(AccountId, AccountId);
 
-impl From<(&Account, &Account)> for ApprovalKey {
-    fn from((account, spender): (&Account, &Account)) -> Self {
-        Self(*account, *spender)
+impl<AccountId: Clone> From<(&AccountId, &AccountId)> for ApprovalKey<AccountId> {
+    fn from((account, spender): (&AccountId, &AccountId)) -> Self {
+        Self(account.clone(), spender.clone())
     }
 }
 
-impl From<ApprovalKey> for (Account, Account) {
-    fn from(key: ApprovalKey) -> Self {
+impl<AccountId> From<ApprovalKey<AccountId>> for (AccountId, AccountId) {
+    fn from(key: ApprovalKey<AccountId>) -> Self {
         (key.0, key.1)
     }
 }
 
+pub trait ConsumableBlock {
+    fn creation_timestamp(&self) -> u64;
+}
+
+pub trait BlockConsumer<BlockType> {
+    fn consume_blocks(&mut self, block: &[BlockType]);
+}
+
+impl<Token: TokensType> ConsumableBlock for ic_icrc1::Block<Token> {
+    fn creation_timestamp(&self) -> u64 {
+        self.timestamp
+    }
+}
+
+impl ConsumableBlock for icp_ledger::Block {
+    fn creation_timestamp(&self) -> u64 {
+        self.timestamp.as_nanos_since_unix_epoch()
+    }
+}
 pub trait InMemoryLedgerState {
     type AccountId;
     type Tokens;
@@ -70,21 +92,20 @@ pub trait InMemoryLedgerState {
     fn validate_invariants(&self);
 }
 
-pub struct InMemoryLedger<K, AccountId, Tokens>
+pub struct InMemoryLedger<AccountId, Tokens>
 where
-    K: Ord + Hash,
     AccountId: Hash + Eq,
 {
     balances: HashMap<AccountId, Tokens>,
-    allowances: HashMap<K, Allowance<Tokens>>,
+    allowances: HashMap<ApprovalKey<AccountId>, Allowance<Tokens>>,
     total_supply: Tokens,
     fee_collector: Option<AccountId>,
     burns_without_spender: Option<BurnsWithoutSpender<AccountId>>,
+    transactions: u64,
 }
 
-impl<K, AccountId, Tokens: std::fmt::Debug> PartialEq for InMemoryLedger<K, AccountId, Tokens>
+impl<AccountId, Tokens: std::fmt::Debug> PartialEq for InMemoryLedger<AccountId, Tokens>
 where
-    K: Ord + Hash + std::fmt::Debug,
     AccountId: Hash + Eq + std::fmt::Debug,
     Tokens: PartialEq + std::fmt::Debug,
 {
@@ -178,10 +199,8 @@ where
     }
 }
 
-impl<K, AccountId, Tokens> InMemoryLedgerState for InMemoryLedger<K, AccountId, Tokens>
+impl<AccountId, Tokens> InMemoryLedgerState for InMemoryLedger<AccountId, Tokens>
 where
-    K: Eq + PartialEq + Ord + for<'a> From<(&'a AccountId, &'a AccountId)> + Clone + Hash,
-    K: Into<(AccountId, AccountId)>,
     AccountId: Eq + PartialEq + Ord + Clone + Hash + std::fmt::Debug,
     Tokens: TokensType + Default,
 {
@@ -193,7 +212,7 @@ where
         from: &Self::AccountId,
         spender: &Self::AccountId,
     ) -> Option<Allowance<Self::Tokens>> {
-        let key = K::from((from, spender));
+        let key = ApprovalKey::from((from, spender));
         self.allowances.get(&key).cloned()
     }
 
@@ -209,6 +228,7 @@ where
     ) {
         self.burn_fee(from, fee);
         self.set_allowance(from, spender, amount, expected_allowance, expires_at, now);
+        self.transactions += 1;
     }
 
     fn process_burn(
@@ -236,11 +256,13 @@ where
                 self.decrease_allowance(from, spender, amount, None);
             }
         }
+        self.transactions += 1;
     }
 
     fn process_mint(&mut self, to: &Self::AccountId, amount: &Self::Tokens) {
         self.increase_balance(to, amount);
         self.increase_total_supply(amount);
+        self.transactions += 1;
     }
 
     fn process_transfer(
@@ -261,6 +283,7 @@ where
             }
         }
         self.increase_balance(to, amount);
+        self.transactions += 1;
     }
 
     fn validate_invariants(&self) {
@@ -276,10 +299,8 @@ where
     }
 }
 
-impl<K, AccountId, Tokens> Default for InMemoryLedger<K, AccountId, Tokens>
+impl<AccountId, Tokens> Default for InMemoryLedger<AccountId, Tokens>
 where
-    K: Ord + for<'a> From<(&'a AccountId, &'a AccountId)> + Clone + Hash,
-    K: Into<(AccountId, AccountId)>,
     AccountId: PartialEq + Ord + Clone + Hash,
     Tokens: TokensType,
 {
@@ -290,15 +311,14 @@ where
             total_supply: Tokens::zero(),
             fee_collector: None,
             burns_without_spender: None,
+            transactions: 0,
         }
     }
 }
 
-impl<K, AccountId, Tokens> InMemoryLedger<K, AccountId, Tokens>
+impl<AccountId, Tokens> InMemoryLedger<AccountId, Tokens>
 where
-    K: Ord + for<'a> From<(&'a AccountId, &'a AccountId)> + Clone + Hash,
-    K: Into<(AccountId, AccountId)>,
-    AccountId: PartialEq + Ord + Clone + Hash,
+    AccountId: PartialEq + Ord + Clone + Hash + std::fmt::Debug,
     Tokens: TokensType,
 {
     fn decrease_allowance(
@@ -308,7 +328,7 @@ where
         amount: &Tokens,
         fee: Option<&Tokens>,
     ) {
-        let key = K::from((from, spender));
+        let key = ApprovalKey::from((from, spender));
         let old_allowance = self
             .allowances
             .get(&key)
@@ -367,7 +387,7 @@ where
         expires_at: &Option<u64>,
         arrived_at: TimeStamp,
     ) {
-        let key = K::from((from, spender));
+        let key = ApprovalKey::from((from, spender));
         if let Some(expected_allowance) = expected_allowance {
             let current_allowance_amount = self
                 .allowances
@@ -433,7 +453,7 @@ where
     }
 
     fn prune_expired_allowances(&mut self, now: TimeStamp) {
-        let expired_allowances: Vec<K> = self
+        let expired_allowances: Vec<ApprovalKey<AccountId>> = self
             .allowances
             .iter()
             .filter_map(|(key, allowance)| {
@@ -451,15 +471,11 @@ where
     }
 }
 
-impl InMemoryLedger<ApprovalKey, Account, Tokens> {
-    pub fn new(burns_without_spender: Option<BurnsWithoutSpender<Account>>) -> Self {
-        InMemoryLedger {
-            burns_without_spender,
-            ..Default::default()
-        }
-    }
-
-    pub fn ingest_icrc1_ledger_blocks(&mut self, blocks: &[ic_icrc1::Block<Tokens>]) {
+impl<Tokens> BlockConsumer<ic_icrc1::Block<Tokens>> for InMemoryLedger<Account, Tokens>
+where
+    Tokens: Default + TokensType + PartialEq + std::fmt::Debug + std::fmt::Display,
+{
+    fn consume_blocks(&mut self, blocks: &[ic_icrc1::Block<Tokens>]) {
         for (index, block) in blocks.iter().enumerate() {
             if let Some(fee_collector) = block.fee_collector {
                 self.fee_collector = Some(fee_collector);
@@ -472,7 +488,13 @@ impl InMemoryLedger<ApprovalKey, Account, Tokens> {
                     spender,
                     amount,
                     fee,
-                } => self.process_transfer(from, to, spender, amount, &fee.or(block.effective_fee)),
+                } => self.process_transfer(
+                    from,
+                    to,
+                    spender,
+                    amount,
+                    &fee.clone().or(block.effective_fee.clone()),
+                ),
                 Operation::Burn {
                     from,
                     spender,
@@ -491,15 +513,82 @@ impl InMemoryLedger<ApprovalKey, Account, Tokens> {
                     amount,
                     expected_allowance,
                     expires_at,
-                    &fee.or(block.effective_fee),
+                    &fee.clone().or(block.effective_fee.clone()),
                     TimeStamp::from_nanos_since_unix_epoch(block.timestamp),
                 ),
             }
         }
+        self.post_process_ledger_blocks(blocks);
+    }
+}
+
+impl BlockConsumer<icp_ledger::Block>
+    for InMemoryLedger<AccountIdentifier, ic_ledger_core::Tokens>
+{
+    fn consume_blocks(&mut self, blocks: &[icp_ledger::Block]) {
+        for (index, block) in blocks.iter().enumerate() {
+            match &block.transaction.operation {
+                icp_ledger::Operation::Mint { to, amount } => self.process_mint(to, amount),
+                icp_ledger::Operation::Transfer {
+                    from,
+                    to,
+                    amount,
+                    fee,
+                    spender,
+                } => self.process_transfer(from, to, spender, amount, &Some(*fee)),
+                icp_ledger::Operation::Burn {
+                    from,
+                    amount,
+                    spender,
+                } => self.process_burn(from, spender, amount, index),
+                icp_ledger::Operation::Approve {
+                    from,
+                    spender,
+                    allowance,
+                    expected_allowance,
+                    expires_at,
+                    fee,
+                } => self.process_approve(
+                    from,
+                    spender,
+                    allowance,
+                    expected_allowance,
+                    &expires_at.map(|ea| ea.as_nanos_since_unix_epoch()),
+                    &Some(*fee),
+                    block.timestamp,
+                ),
+            }
+        }
+        self.post_process_ledger_blocks(blocks);
+    }
+}
+
+impl<AccountId, Tokens> InMemoryLedger<AccountId, Tokens>
+where
+    AccountId: Ord
+        + Clone
+        + Copy
+        + CandidType
+        + From<Account>
+        + Hash
+        + Eq
+        + std::fmt::Debug
+        + AllowanceProvider
+        + BalanceProvider,
+    Tokens: Default + TokensType + PartialEq + std::fmt::Debug + std::fmt::Display,
+{
+    pub fn new(burns_without_spender: Option<BurnsWithoutSpender<AccountId>>) -> Self {
+        InMemoryLedger {
+            burns_without_spender,
+            ..Default::default()
+        }
+    }
+
+    fn post_process_ledger_blocks<T: ConsumableBlock>(&mut self, blocks: &[T]) {
         if !blocks.is_empty() {
             self.validate_invariants();
             self.prune_expired_allowances(TimeStamp::from_nanos_since_unix_epoch(
-                blocks.last().unwrap().timestamp,
+                blocks.last().unwrap().creation_timestamp(),
             ));
         }
     }
@@ -513,13 +602,13 @@ impl InMemoryLedger<ApprovalKey, Account, Tokens> {
     ) {
         match &arg.arg {
             LedgerEndpointArg::ApproveArg(approve_arg) => {
-                let from = Account {
+                let from = &AccountId::from(Account {
                     owner: arg.caller.sender().unwrap(),
                     subaccount: approve_arg.from_subaccount,
-                };
+                });
                 self.process_approve(
-                    &from,
-                    &approve_arg.spender,
+                    from,
+                    &AccountId::from(approve_arg.spender),
                     &Tokens::try_from(approve_arg.amount.clone()).unwrap(),
                     &approve_arg
                         .expected_allowance
@@ -531,26 +620,25 @@ impl InMemoryLedger<ApprovalKey, Account, Tokens> {
                 );
             }
             LedgerEndpointArg::TransferArg(transfer_arg) => {
-                let from = Account {
-                    owner: arg.caller.sender().unwrap(),
+                let owner = arg.caller.sender().unwrap();
+                let from = &AccountId::from(Account {
+                    owner,
                     subaccount: transfer_arg.from_subaccount,
-                };
-                if from.owner == minter_principal {
-                    self.process_mint(
-                        &transfer_arg.to,
-                        &Tokens::try_from(transfer_arg.amount.clone()).unwrap(),
-                    );
+                });
+                let to = &AccountId::from(transfer_arg.to);
+                if owner == minter_principal {
+                    self.process_mint(to, &Tokens::try_from(transfer_arg.amount.clone()).unwrap());
                 } else if transfer_arg.to.owner == minter_principal {
                     self.process_burn(
-                        &from,
+                        from,
                         &None,
                         &Tokens::try_from(transfer_arg.amount.clone()).unwrap(),
                         0,
                     );
                 } else {
                     self.process_transfer(
-                        &from,
-                        &transfer_arg.to,
+                        from,
+                        to,
                         &None,
                         &Tokens::try_from(transfer_arg.amount.clone()).unwrap(),
                         &fee,
@@ -561,9 +649,23 @@ impl InMemoryLedger<ApprovalKey, Account, Tokens> {
         self.validate_invariants();
     }
 
-    pub fn verify_balances_and_allowances(&self, env: &StateMachine, ledger_id: CanisterId) {
+    pub fn verify_balances_and_allowances(
+        &self,
+        env: &StateMachine,
+        ledger_id: CanisterId,
+        num_ledger_blocks: u64,
+    ) {
         let actual_num_approvals = parse_metric(env, ledger_id, "ledger_num_approvals");
         let actual_num_balances = parse_metric(env, ledger_id, "ledger_balance_store_entries");
+        println!(
+            "total_blocks in ledger: {}, total InMemoryLedger transactions: {}",
+            num_ledger_blocks, self.transactions
+        );
+        assert_eq!(
+            num_ledger_blocks, self.transactions,
+            "Mismatch in number of transactions ({} vs {})",
+            self.transactions, num_ledger_blocks
+        );
         assert_eq!(
             self.balances.len() as u64,
             actual_num_balances,
@@ -582,14 +684,10 @@ impl InMemoryLedger<ApprovalKey, Account, Tokens> {
             "Checking {} balances and {} allowances",
             actual_num_balances, actual_num_approvals
         );
+        let mut balances_checked = 0;
+        let now = Instant::now();
         for (account, balance) in self.balances.iter() {
-            let actual_balance = Decode!(
-                &env.query(ledger_id, "icrc1_balance_of", Encode!(account).unwrap())
-                    .expect("failed to query balance")
-                    .bytes(),
-                Nat
-            )
-            .expect("failed to decode balance_of response");
+            let actual_balance = AccountId::get_balance(env, ledger_id, *account);
 
             assert_eq!(
                 &Tokens::try_from(actual_balance.clone()).unwrap(),
@@ -599,27 +697,91 @@ impl InMemoryLedger<ApprovalKey, Account, Tokens> {
                 balance,
                 actual_balance
             );
+            if balances_checked % 100000 == 0 && balances_checked > 0 {
+                println!(
+                    "Checked {} balances in {:?}",
+                    balances_checked,
+                    now.elapsed()
+                );
+            }
+            balances_checked += 1;
         }
+        println!(
+            "{} balances checked in {:?}",
+            balances_checked,
+            now.elapsed()
+        );
+        let now = Instant::now();
+        let mut allowances_checked = 0;
+        let mut expiration_in_future_count = 0;
+        let mut expiration_in_past_count = 0;
+        let mut no_expiration_count = 0;
+        let timestamp = env
+            .time()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos() as u64;
         for (approval, allowance) in self.allowances.iter() {
-            let (from, spender): (Account, Account) = approval.clone().into();
+            let (from, spender): (AccountId, AccountId) = approval.clone().into();
             assert!(
                 !allowance.amount.is_zero(),
                 "Expected allowance is zero! Should not happen... from: {:?}, spender: {:?}",
                 &from,
                 &spender
             );
-            let actual_allowance = get_allowance(env, ledger_id, from, spender);
+            let actual_allowance = AccountId::get_allowance(env, ledger_id, from, spender);
+            match actual_allowance.expires_at {
+                None => {
+                    no_expiration_count += 1;
+                }
+                Some(expires_at) => {
+                    if expires_at > timestamp {
+                        expiration_in_future_count += 1;
+                    } else {
+                        expiration_in_past_count += 1;
+                    }
+                }
+            }
             assert_eq!(
                 allowance.amount,
                 Tokens::try_from(actual_allowance.allowance.clone()).unwrap(),
-                "Mismatch in allowance for approval from {:?} spender {:?}: {:?} ({:?} vs {:?})",
+                "Mismatch in allowance for approval from {:?} spender {:?}: {:?} ({:?} vs {:?}) at {:?}",
                 &from,
                 &spender,
                 approval,
                 allowance,
-                actual_allowance
+                actual_allowance,
+                env.time()
             );
+            assert_eq!(
+                allowance.expires_at.map(|t| t.as_nanos_since_unix_epoch()),
+                actual_allowance.expires_at,
+                "Mismatch in allowance expiration for approval from {:?} spender {:?}: {:?} ({:?} vs {:?}) at {:?}",
+                &from,
+                &spender,
+                approval,
+                allowance,
+                actual_allowance,
+                env.time()
+            );
+            if allowances_checked % 10000 == 0 && allowances_checked > 0 {
+                println!(
+                    "Checked {} allowances in {:?}",
+                    allowances_checked,
+                    now.elapsed()
+                );
+            }
+            allowances_checked += 1;
         }
+        println!(
+            "{} allowances checked in {:?}",
+            allowances_checked,
+            now.elapsed()
+        );
+        println!(
+            "allowances with no expiration: {}, expiration in future: {}, expiration in past: {}",
+            no_expiration_count, expiration_in_future_count, expiration_in_past_count
+        );
     }
 }
 
@@ -629,17 +791,19 @@ pub struct BurnsWithoutSpender<AccountId> {
     pub burn_indexes: Vec<usize>,
 }
 
-pub fn verify_ledger_state(
+pub fn verify_ledger_state<Tokens>(
     env: &StateMachine,
     ledger_id: CanisterId,
     burns_without_spender: Option<BurnsWithoutSpender<Account>>,
-) {
+) where
+    Tokens: Default + TokensType + PartialEq + std::fmt::Debug + std::fmt::Display,
+{
     println!("verifying state of ledger {}", ledger_id);
-    let blocks = get_all_ledger_and_archive_blocks(env, ledger_id, None, None);
+    let blocks = get_all_ledger_and_archive_blocks::<Tokens>(env, ledger_id, None, None);
     println!("retrieved all ledger and archive blocks");
     let mut expected_ledger_state = InMemoryLedger::new(burns_without_spender);
-    expected_ledger_state.ingest_icrc1_ledger_blocks(&blocks);
+    expected_ledger_state.consume_blocks(&blocks);
     println!("recreated expected ledger state");
-    expected_ledger_state.verify_balances_and_allowances(env, ledger_id);
+    expected_ledger_state.verify_balances_and_allowances(env, ledger_id, blocks.len() as u64);
     println!("ledger state verified successfully");
 }

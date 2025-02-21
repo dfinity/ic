@@ -7,6 +7,7 @@ DEPENDENCIES = [
     "//rs/canister_sandbox:backend_lib",
     "//rs/config",
     "//rs/consensus",
+    "//rs/consensus/dkg",
     "//rs/consensus/utils",
     "//rs/crypto",
     "//rs/crypto/for_verification_only",

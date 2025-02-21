@@ -1,5 +1,4 @@
 #![allow(clippy::needless_range_loop)]
-#![allow(clippy::unwrap_used)]
 
 //! Tests for combined forward secure encryption and ZK proofs
 

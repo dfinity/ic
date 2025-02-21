@@ -3,7 +3,10 @@ use std::time::Duration;
 use ic_base_types::NumBytes;
 use ic_registry_subnet_type::SubnetType;
 use ic_sys::PAGE_SIZE;
-use ic_types::{NumInstructions, NumOsPages, MAX_STABLE_MEMORY_IN_BYTES, MAX_WASM_MEMORY_IN_BYTES};
+use ic_types::{
+    NumInstructions, NumOsPages, SubnetId, MAX_STABLE_MEMORY_IN_BYTES, MAX_WASM64_MEMORY_IN_BYTES,
+    MAX_WASM_MEMORY_IN_BYTES,
+};
 use serde::{Deserialize, Serialize};
 
 use crate::flag_status::FlagStatus;
@@ -42,17 +45,16 @@ const DEFAULT_WASMTIME_RAYON_COMPILATION_THREADS: usize = 10;
 /// The number of rayon threads use for the parallel page copying optimization.
 const DEFAULT_PAGE_ALLOCATOR_THREADS: usize = 8;
 
-/// Sandbox process eviction does not activate if the number of sandbox
-/// processes is below this threshold.
-pub(crate) const DEFAULT_MIN_SANDBOX_COUNT: usize = 500;
-
 /// Sandbox process eviction ensures that the number of sandbox processes is
 /// always below this threshold.
-pub(crate) const DEFAULT_MAX_SANDBOX_COUNT: usize = 1_000;
+pub(crate) const DEFAULT_MAX_SANDBOX_COUNT: usize = 7_000;
 
 /// A sandbox process may be evicted after it has been idle for this
 /// duration and sandbox process eviction is activated.
 pub(crate) const DEFAULT_MAX_SANDBOX_IDLE_TIME: Duration = Duration::from_secs(30 * 60);
+
+/// Sandbox processes may be evicted if their total RSS exceeds 50 GiB.
+pub(crate) const DEFAULT_MAX_SANDBOXES_RSS: NumBytes = NumBytes::new(50 * 1024 * 1024 * 1024);
 
 /// The maximum number of pages that a message dirties without optimizing dirty
 /// page copying by triggering a new execution slice for copying pages.
@@ -61,6 +63,9 @@ pub(crate) const DEFAULT_MAX_DIRTY_PAGES_WITHOUT_OPTIMIZATION: usize = (GiB as u
 
 /// Scheduling overhead for copying dirty pages, in instructions.
 pub(crate) const DIRTY_PAGE_COPY_OVERHEAD: NumInstructions = NumInstructions::new(3_000);
+
+/// The overhead for dirty pages in Wasm64.
+pub const WASM64_DIRTY_PAGE_OVERHEAD_MULTIPLIER: u64 = 4;
 
 #[allow(non_upper_case_globals)]
 const KiB: u64 = 1024;
@@ -95,7 +100,48 @@ const STABLE_MEMORY_ACCESSED_PAGE_LIMIT_QUERY: NumOsPages =
 /// also used as the maximum size for the Wasm chunk store of each canister.
 pub const WASM_MAX_SIZE: NumBytes = NumBytes::new(100 * 1024 * 1024); // 100 MiB
 
-#[derive(Copy, Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
+/// Best-effort responses feature rollout stage.
+///
+/// The intent is to incrementally release the feature, first to a limited
+/// subset of subnets; then to all application subnets; and finally everywhere;
+/// by rolling forward one stage at a time. Rolling back is also supported,
+/// including directly to stage 1.
+///
+/// Subnets where the feature is disabled silently fall back to guaranteed
+/// response calls; and best-effort requests to these subnets are rejected
+/// before routing. We choose this over trapping in order to avoid breaking
+/// canisters that have started using best-effort calls in case of a roll back.
+//
+// TODO(MR-649): Drop this once best-effort responses are fully rolled out.
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
+pub enum BestEffortResponsesFeature {
+    /// Stage 1: Feature is enabled on specific subnets subnets only. Other subnets
+    /// fall back to guaranteed responses; and best-effort requests to these subnets
+    /// are rejected before routing.
+    SpecificSubnets(Vec<SubnetId>),
+
+    /// Stage 2: Feature is enabled on application (and verified application)
+    /// subnets only. System subnets fall back to guaranteed responses; and
+    /// best-effort requests to system subnets are rejected before routing.
+    ApplicationSubnetsOnly,
+
+    /// Stage 3: Feature is enabled on all subnets.
+    Enabled,
+}
+
+impl BestEffortResponsesFeature {
+    /// Returns `true` if the feature is enabled on the given subnet, having the
+    /// given subnet type.
+    pub fn is_enabled_on(&self, subnet_id: &SubnetId, subnet_type: SubnetType) -> bool {
+        match self {
+            BestEffortResponsesFeature::SpecificSubnets(subnets) => subnets.contains(subnet_id),
+            BestEffortResponsesFeature::ApplicationSubnetsOnly => subnet_type != SubnetType::System,
+            BestEffortResponsesFeature::Enabled => true,
+        }
+    }
+}
+
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub struct FeatureFlags {
     /// If this flag is enabled, then the output of the `debug_print` system-api
     /// call will be skipped based on heuristics.
@@ -105,29 +151,31 @@ pub struct FeatureFlags {
     pub wasm_native_stable_memory: FlagStatus,
     /// Indicates whether the support for 64 bit main memory is enabled
     pub wasm64: FlagStatus,
-    // TODO(IC-1674): remove this flag once the feature is enabled by default.
-    /// Indicates whether the best-effort responses feature is enabled.
-    pub best_effort_responses: FlagStatus,
+    /// Rollout stage of the best-effort responses feature.
+    pub best_effort_responses: BestEffortResponsesFeature,
     /// Collect a backtrace from the canister when it panics.
     pub canister_backtrace: FlagStatus,
 }
 
-impl FeatureFlags {
-    const fn const_default() -> Self {
+impl Default for FeatureFlags {
+    fn default() -> Self {
+        use ic_types::PrincipalId;
+        use std::str::FromStr;
+        let subnet_id = |id_str: &str| SubnetId::new(PrincipalId::from_str(id_str).unwrap());
+        let enabled_subnets = vec![
+            subnet_id("eq6en-6jqla-fbu5s-daskr-h6hx2-376n5-iqabl-qgrng-gfqmv-n3yjr-mqe"),
+            subnet_id("2fq7c-slacv-26cgz-vzbx2-2jrcs-5edph-i5s2j-tck77-c3rlz-iobzx-mqe"),
+            subnet_id("4zbus-z2bmt-ilreg-xakz4-6tyre-hsqj4-slb4g-zjwqo-snjcc-iqphi-3qe"),
+        ];
+
         Self {
             rate_limiting_of_debug_prints: FlagStatus::Enabled,
             write_barrier: FlagStatus::Disabled,
             wasm_native_stable_memory: FlagStatus::Enabled,
-            wasm64: FlagStatus::Disabled,
-            best_effort_responses: FlagStatus::Disabled,
-            canister_backtrace: FlagStatus::Disabled,
+            wasm64: FlagStatus::Enabled,
+            best_effort_responses: BestEffortResponsesFeature::SpecificSubnets(enabled_subnets),
+            canister_backtrace: FlagStatus::Enabled,
         }
-    }
-}
-
-impl Default for FeatureFlags {
-    fn default() -> Self {
-        Self::const_default()
     }
 }
 
@@ -197,10 +245,6 @@ pub struct Config {
     /// execution is allowed to produce.
     pub stable_memory_dirty_page_limit: StableMemoryPageLimit,
 
-    /// Sandbox process eviction does not activate if the number of sandbox
-    /// processes is below this threshold.
-    pub min_sandbox_count: usize,
-
     /// Sandbox process eviction ensures that the number of sandbox processes is
     /// always below this threshold.
     pub max_sandbox_count: usize,
@@ -208,6 +252,14 @@ pub struct Config {
     /// A sandbox process may be evicted after it has been idle for this
     /// duration and sandbox process eviction is activated.
     pub max_sandbox_idle_time: Duration,
+
+    /// Sandbox processes may be evicted if their total RSS exceeds
+    /// the specified amount in bytes. By default, we assume that
+    /// each sandbox process has 50 MiB RSS (see `DEFAULT_SANDBOX_PROCESS_RSS`).
+    /// The actual RSS is updated in the background thread, while the
+    /// synchronous RSS-based eviction is only triggered when there is
+    /// a memory pressure (see `DEFAULT_MIN_MEM_AVAILABLE_TO_EVICT_SANDBOXES`)
+    pub max_sandboxes_rss: NumBytes,
 
     /// The type of the local subnet. The default value here should be replaced
     /// with the correct value at runtime when the hypervisor is created.
@@ -230,18 +282,24 @@ pub struct Config {
     /// The dirty page copying overhead, in instructions.
     pub dirty_page_copy_overhead: NumInstructions,
 
+    /// The dirty page overhead factor for Wasm64.
+    pub wasm64_dirty_page_overhead_multiplier: u64,
+
     /// The maximum allowed size for an uncompressed canister Wasm module.
     pub wasm_max_size: NumBytes,
 
     /// The maximum size of the wasm heap memory.
     pub max_wasm_memory_size: NumBytes,
 
+    /// The maximum size of the wasm heap memory for Wasm64 canisters.
+    pub max_wasm64_memory_size: NumBytes,
+
     /// The maximum size of the stable memory.
     pub max_stable_memory_size: NumBytes,
 }
 
 impl Config {
-    pub const fn new() -> Self {
+    pub fn new() -> Self {
         Config {
             query_execution_threads_per_canister: QUERY_EXECUTION_THREADS_PER_CANISTER,
             max_globals: MAX_GLOBALS,
@@ -253,7 +311,7 @@ impl Config {
             cost_to_compile_wasm_instruction: DEFAULT_COST_TO_COMPILE_WASM_INSTRUCTION,
             num_rayon_compilation_threads: DEFAULT_WASMTIME_RAYON_COMPILATION_THREADS,
             num_rayon_page_allocator_threads: DEFAULT_PAGE_ALLOCATOR_THREADS,
-            feature_flags: FeatureFlags::const_default(),
+            feature_flags: FeatureFlags::default(),
             metering_type: MeteringType::New,
             stable_memory_dirty_page_limit: StableMemoryPageLimit {
                 message: STABLE_MEMORY_DIRTY_PAGE_LIMIT_MESSAGE,
@@ -265,9 +323,9 @@ impl Config {
                 upgrade: STABLE_MEMORY_ACCESSED_PAGE_LIMIT_UPGRADE,
                 query: STABLE_MEMORY_ACCESSED_PAGE_LIMIT_QUERY,
             },
-            min_sandbox_count: DEFAULT_MIN_SANDBOX_COUNT,
             max_sandbox_count: DEFAULT_MAX_SANDBOX_COUNT,
             max_sandbox_idle_time: DEFAULT_MAX_SANDBOX_IDLE_TIME,
+            max_sandboxes_rss: DEFAULT_MAX_SANDBOXES_RSS,
             subnet_type: SubnetType::Application,
             dirty_page_overhead: NumInstructions::new(0),
             trace_execution: FlagStatus::Disabled,
@@ -275,7 +333,9 @@ impl Config {
             dirty_page_copy_overhead: DIRTY_PAGE_COPY_OVERHEAD,
             wasm_max_size: WASM_MAX_SIZE,
             max_wasm_memory_size: NumBytes::new(MAX_WASM_MEMORY_IN_BYTES),
+            max_wasm64_memory_size: NumBytes::new(MAX_WASM64_MEMORY_IN_BYTES),
             max_stable_memory_size: NumBytes::new(MAX_STABLE_MEMORY_IN_BYTES),
+            wasm64_dirty_page_overhead_multiplier: WASM64_DIRTY_PAGE_OVERHEAD_MULTIPLIER,
         }
     }
 }
@@ -283,5 +343,40 @@ impl Config {
 impl Default for Config {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use ic_types::PrincipalId;
+
+    const SUBNET_1: SubnetId = SubnetId::new(PrincipalId::new(1, [1; 29]));
+    const SUBNET_2: SubnetId = SubnetId::new(PrincipalId::new(1, [2; 29]));
+
+    #[test]
+    fn test_best_effort_responses_feature_specific_subnets() {
+        let best_effort_responses = BestEffortResponsesFeature::SpecificSubnets(vec![SUBNET_1]);
+
+        assert!(best_effort_responses.is_enabled_on(&SUBNET_1, SubnetType::Application));
+        assert!(best_effort_responses.is_enabled_on(&SUBNET_1, SubnetType::System));
+        assert!(!best_effort_responses.is_enabled_on(&SUBNET_2, SubnetType::Application));
+        assert!(!best_effort_responses.is_enabled_on(&SUBNET_2, SubnetType::System));
+    }
+
+    #[test]
+    fn test_best_effort_responses_feature_application_subnets_only() {
+        let best_effort_responses = BestEffortResponsesFeature::ApplicationSubnetsOnly;
+
+        assert!(best_effort_responses.is_enabled_on(&SUBNET_1, SubnetType::Application));
+        assert!(!best_effort_responses.is_enabled_on(&SUBNET_1, SubnetType::System));
+    }
+
+    #[test]
+    fn test_best_effort_responses_feature_enabled() {
+        let best_effort_responses = BestEffortResponsesFeature::Enabled;
+
+        assert!(best_effort_responses.is_enabled_on(&SUBNET_1, SubnetType::Application));
+        assert!(best_effort_responses.is_enabled_on(&SUBNET_1, SubnetType::System));
     }
 }

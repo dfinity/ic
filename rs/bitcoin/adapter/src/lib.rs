@@ -1,19 +1,19 @@
-#![warn(missing_docs)]
+#![cfg_attr(not(test), warn(missing_docs))]
 
 //! The Bitcoin adapter interacts with the Bitcoin P2P network to obtain blocks
 //! and publish transactions. Moreover, it interacts with the Bitcoin system
 //! component to provide blocks and collect outgoing transactions.
 
-use bitcoin::{network::message::NetworkMessage, BlockHash, BlockHeader};
+use bitcoin::p2p::message::NetworkMessage;
+use bitcoin::{block::Header as BlockHeader, BlockHash};
 use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;
-use parking_lot::RwLock;
 use std::{
     net::SocketAddr,
     sync::{Arc, Mutex},
     time::Instant,
 };
-use tokio::sync::mpsc::channel;
+use tokio::sync::{mpsc::channel, watch};
 /// This module contains the AddressManager struct. The struct stores addresses
 /// that will be used to create new connections. It also tracks addresses that
 /// are in current use to encourage use from non-utilized addresses.
@@ -25,8 +25,6 @@ mod addressbook;
 mod blockchainmanager;
 /// This module contains the data structure for storing the current state of the Bitcoin ledger
 mod blockchainstate;
-/// This module contains command line arguments parser.
-pub mod cli;
 /// This module contains constants and types that are shared by many modules.
 mod common;
 /// This module contains the basic configuration struct used to start up an
@@ -53,10 +51,12 @@ mod transaction_store;
 // malicious fork can be prioritized by a DFS, thus potentially ignoring honest forks).
 mod get_successors_handler;
 
-use crate::{router::start_main_event_loop, stream::StreamEvent};
-pub use blockchainstate::BlockchainState;
-pub use get_successors_handler::GetSuccessorsHandler;
-pub use rpc_server::start_grpc_server;
+pub use config::{address_limits, Config, IncomingSource};
+
+use crate::{
+    blockchainstate::BlockchainState, get_successors_handler::GetSuccessorsHandler,
+    router::start_main_event_loop, rpc_server::start_grpc_server, stream::StreamEvent,
+};
 
 /// This struct is used to represent commands given to the adapter in order to interact
 /// with BTC nodes.
@@ -122,7 +122,7 @@ trait ProcessBitcoinNetworkMessage {
 
 /// Commands sent back to the router in order perform actions on the blockchain state.
 #[derive(Debug)]
-pub enum BlockchainManagerRequest {
+pub(crate) enum BlockchainManagerRequest {
     /// Inform the adapter to enqueue the next block headers into the syncing queue.
     EnqueueNewBlocksToDownload(Vec<BlockHeader>),
     /// Inform the adapter to prune the following block hashes from the cache.
@@ -132,7 +132,7 @@ pub enum BlockchainManagerRequest {
 /// The transaction manager is owned by a single thread which listens on a channel
 /// for TransactionManagerRequest messages and executes the corresponding method.
 #[derive(Debug)]
-pub enum TransactionManagerRequest {
+pub(crate) enum TransactionManagerRequest {
     /// Command for executing send_transaction
     SendTransaction(Vec<u8>),
 }
@@ -140,8 +140,12 @@ pub enum TransactionManagerRequest {
 /// The type tracks when then adapter should become idle. The type is
 /// thread-safe.
 #[derive(Clone)]
-pub struct AdapterState {
-    /// The field contains instant of the latest received request.
+pub(crate) struct AdapterState {
+    /// The field contains how long the adapter should wait before becoming idle.
+    idle_seconds: u64,
+
+    /// The watch channel that holds the last received time.
+    /// The field contains the instant of the latest received request.
     /// None means that we haven't reveived a request yet and the adapter should be in idle mode!
     ///
     /// !!! BE CAREFUL HERE !!! since the adapter should ALWAYS be idle when starting up.
@@ -151,33 +155,45 @@ pub struct AdapterState {
     /// This way the adapter would always be in idle when starting since 'elapsed()' is greater than 'idle_seconds'.
     /// On MacOS this approach caused issues since on MacOS Instant::now() is time since boot and when subtracting
     /// 'idle_seconds' we encountered an underflow and panicked.
-    last_received_at: Arc<RwLock<Option<Instant>>>,
-    /// The field contains how long the adapter should wait to before becoming idle.
-    idle_seconds: u64,
+    ///
+    /// It's simportant that this value is set to [`None`] on startup.
+    last_received_rx: watch::Receiver<Option<Instant>>,
 }
 
 impl AdapterState {
-    /// Crates new instance of the AdapterState.
-    pub fn new(idle_seconds: u64) -> Self {
-        Self {
-            last_received_at: Arc::new(RwLock::new(None)),
-            idle_seconds,
-        }
+    /// Creates a new instance of the [`AdapterState`].
+    pub fn new(idle_seconds: u64) -> (Self, watch::Sender<Option<Instant>>) {
+        // Initialize the watch channel with `None`, indicating no requests have been received yet.
+        let (tx, last_received_rx) = watch::channel(None);
+        (
+            Self {
+                idle_seconds,
+                last_received_rx,
+            },
+            tx,
+        )
     }
 
-    /// Returns if the adapter is idle.
+    /// A future that returns when/if the adapter becomes/is awake.
+    pub async fn active(&mut self) {
+        let _ = self
+            .last_received_rx
+            .wait_for(|v| {
+                if let Some(last) = v {
+                    return last.elapsed().as_secs() < self.idle_seconds;
+                }
+                false
+            })
+            .await;
+    }
+
+    /// Returns whether the adapter is idle.
     pub fn is_idle(&self) -> bool {
-        match *self.last_received_at.read() {
-            Some(last) => last.elapsed().as_secs() > self.idle_seconds,
+        match *self.last_received_rx.borrow() {
+            Some(last) => last.elapsed().as_secs() >= self.idle_seconds,
             // Nothing received yet still in idle from startup.
             None => true,
         }
-    }
-
-    /// Updates the current state of the adapter given a request was received.
-    pub fn received_now(&self) {
-        // Instant::now() is monotonically nondecreasing clock.
-        *self.last_received_at.write() = Some(Instant::now());
     }
 }
 
@@ -190,26 +206,18 @@ pub fn start_server(
 ) {
     let _enter = rt_handle.enter();
 
-    let adapter_state = AdapterState::new(config.idle_seconds);
+    let (adapter_state, tx) = AdapterState::new(config.idle_seconds);
 
     let (blockchain_manager_tx, blockchain_manager_rx) = channel(100);
     let blockchain_state = Arc::new(Mutex::new(BlockchainState::new(&config, metrics_registry)));
-    let get_successors_handler = GetSuccessorsHandler::new(
-        &config,
-        // The get successor handler should be low latency, and instead of not sharing state and
-        // offloading the computation to an event loop here we directly access the shared state.
-        blockchain_state.clone(),
-        blockchain_manager_tx,
-        metrics_registry,
-    );
-
     let (transaction_manager_tx, transaction_manager_rx) = channel(100);
 
     start_grpc_server(
         config.clone(),
         log.clone(),
-        adapter_state.clone(),
-        get_successors_handler,
+        tx,
+        blockchain_state.clone(),
+        blockchain_manager_tx,
         transaction_manager_tx,
         metrics_registry,
     );

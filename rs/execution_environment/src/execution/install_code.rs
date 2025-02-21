@@ -3,14 +3,15 @@
 
 use std::path::{Path, PathBuf};
 
+use crate::execution::common::log_dirty_pages;
 use ic_base_types::{CanisterId, NumBytes, PrincipalId};
 use ic_config::flag_status::FlagStatus;
-use ic_embedders::wasm_executor::CanisterStateChanges;
+use ic_embedders::wasm_executor::{CanisterStateChanges, ExecutionStateChanges};
 use ic_interfaces::execution_environment::{
     HypervisorError, HypervisorResult, SubnetAvailableMemoryError, WasmExecutionOutput,
 };
 use ic_logger::{error, fatal, info, warn};
-use ic_management_canister_types::{
+use ic_management_canister_types_private::{
     CanisterChangeDetails, CanisterChangeOrigin, CanisterInstallModeV2,
 };
 use ic_replicated_state::canister_state::system_state::ReservationError;
@@ -30,9 +31,10 @@ use crate::{
         CanisterManagerError, CanisterMgrConfig, DtsInstallCodeResult, InstallCodeResult,
     },
     canister_settings::{validate_canister_settings, CanisterSettings},
-    execution_environment::{log_dirty_pages, RoundContext},
+    execution_environment::RoundContext,
     CompilationCostHandling, RoundLimits,
 };
+use ic_replicated_state::canister_state::execution_state::WasmExecutionMode;
 
 #[cfg(test)]
 mod tests;
@@ -82,7 +84,7 @@ pub(crate) enum InstallCodeStep {
         module_hash: WasmHash,
     },
     HandleWasmExecution {
-        canister_state_changes: Option<CanisterStateChanges>,
+        canister_state_changes: CanisterStateChanges,
         output: WasmExecutionOutput,
     },
     ChargeForLargeWasmAssembly {
@@ -257,6 +259,12 @@ impl InstallCodeHelper {
             self.canister.system_state.balance()
         );
 
+        let instructions_used = NumInstructions::from(
+            message_instruction_limit
+                .get()
+                .saturating_sub(instructions_left.get()),
+        );
+
         round.cycles_account_manager.refund_unused_execution_cycles(
             &mut self.canister.system_state,
             instructions_left,
@@ -264,6 +272,7 @@ impl InstallCodeHelper {
             original.prepaid_execution_cycles,
             round.counters.execution_refund_error,
             original.subnet_size,
+            original.wasm_execution_mode,
             round.log,
         );
 
@@ -324,7 +333,7 @@ impl InstallCodeHelper {
                         } => CanisterManagerError::InsufficientCyclesInMemoryGrow {
                             bytes,
                             available,
-                            threshold: requested,
+                            required: requested,
                         },
                         ReservationError::ReservedLimitExceed { requested, limit } => {
                             CanisterManagerError::ReservedCyclesLimitExceededInMemoryGrow {
@@ -358,7 +367,7 @@ impl InstallCodeHelper {
                 let err = CanisterManagerError::InsufficientCyclesInMemoryGrow {
                     bytes,
                     available: self.canister.system_state.balance(),
-                    threshold,
+                    required: threshold,
                 };
                 return finish_err(
                     clean_canister,
@@ -452,12 +461,6 @@ impl InstallCodeHelper {
         if original.config.rate_limiting_of_instructions == FlagStatus::Enabled {
             self.canister.scheduler_state.install_code_debit += self.instructions_consumed();
         }
-
-        let instructions_used = NumInstructions::from(
-            message_instruction_limit
-                .get()
-                .saturating_sub(instructions_left.get()),
-        );
 
         let old_wasm_hash = get_wasm_hash(&clean_canister);
         let new_wasm_hash = get_wasm_hash(&self.canister);
@@ -681,15 +684,11 @@ impl InstallCodeHelper {
     /// applying the state changes.
     pub fn handle_wasm_execution(
         &mut self,
-        canister_state_changes: Option<CanisterStateChanges>,
-        mut output: WasmExecutionOutput,
+        canister_state_changes: CanisterStateChanges,
+        output: WasmExecutionOutput,
         original: &OriginalContext,
         round: &RoundContext,
     ) -> (NumInstructions, Result<(), CanisterManagerError>) {
-        self.canister
-            .system_state
-            .canister_log
-            .append(&mut output.canister_log);
         self.steps.push(InstallCodeStep::HandleWasmExecution {
             canister_state_changes: canister_state_changes.clone(),
             output: output.clone(),
@@ -711,6 +710,24 @@ impl InstallCodeHelper {
             .wasm_result
             .clone()
             .map_or(true, |result| result.is_none()));
+
+        let CanisterStateChanges {
+            execution_state_changes,
+            system_state_modifications,
+        } = canister_state_changes;
+
+        // Apply system state changes always.
+        // The result will be checked later after we've checked the wasm execution result so that we
+        // don't miss logging in case there was an error from Wasm execution.
+        let result_of_applying_system_state_modifications = system_state_modifications
+            .apply_changes(
+                original.time,
+                &mut self.canister.system_state,
+                round.network_topology,
+                round.hypervisor.subnet_id(),
+                round.log,
+            );
+
         match output.wasm_result {
             Ok(None) => {}
             Ok(Some(_response)) => {
@@ -734,53 +751,48 @@ impl InstallCodeHelper {
                 }
                 return (
                     instructions_consumed,
-                    Err((self.canister().canister_id(), err).into()),
+                    Err((self.canister.canister_id(), err).into()),
                 );
             }
         };
 
-        if let Some(CanisterStateChanges {
+        if let Err(err) = result_of_applying_system_state_modifications {
+            debug_assert_eq!(err, HypervisorError::OutOfMemory);
+            match &err {
+                HypervisorError::WasmEngineError(err) => {
+                    round.counters.state_changes_error.inc();
+                    error!(
+                        round.log,
+                        "[EXC-BUG]: Failed to apply state changes due to a bug: {}", err
+                    )
+                }
+                HypervisorError::OutOfMemory => {
+                    warn!(
+                        round.log,
+                        "Failed to apply state changes due to DTS: {}", err
+                    )
+                }
+                _ => {
+                    round.counters.state_changes_error.inc();
+                    error!(
+                        round.log,
+                        "[EXC-BUG]: Failed to apply state changes due to an unexpected error: {}",
+                        err
+                    )
+                }
+            }
+            return (
+                instructions_consumed,
+                Err((self.canister.canister_id(), err).into()),
+            );
+        }
+
+        if let Some(ExecutionStateChanges {
             globals,
             wasm_memory,
             stable_memory,
-            system_state_changes,
-        }) = canister_state_changes
+        }) = execution_state_changes
         {
-            if let Err(err) = system_state_changes.apply_changes(
-                original.time,
-                &mut self.canister.system_state,
-                round.network_topology,
-                round.hypervisor.subnet_id(),
-                round.log,
-            ) {
-                debug_assert_eq!(err, HypervisorError::OutOfMemory);
-                match &err {
-                    HypervisorError::WasmEngineError(err) => {
-                        round.counters.state_changes_error.inc();
-                        error!(
-                            round.log,
-                            "[EXC-BUG]: Failed to apply state changes due to a bug: {}", err
-                        )
-                    }
-                    HypervisorError::OutOfMemory => {
-                        warn!(
-                            round.log,
-                            "Failed to apply state changes due to DTS: {}", err
-                        )
-                    }
-                    _ => {
-                        round.counters.state_changes_error.inc();
-                        error!(
-                            round.log,
-                            "[EXC-BUG]: Failed to apply state changes due to an unexpected error: {}", err
-                        )
-                    }
-                }
-                return (
-                    instructions_consumed,
-                    Err((self.canister.canister_id(), err).into()),
-                );
-            }
             let execution_state = self.canister.execution_state.as_mut().unwrap();
             execution_state.wasm_memory = wasm_memory;
             execution_state.stable_memory = stable_memory;
@@ -874,6 +886,7 @@ pub(crate) struct OriginalContext {
     pub sender: PrincipalId,
     pub canister_id: CanisterId,
     pub log_dirty_pages: FlagStatus,
+    pub wasm_execution_mode: WasmExecutionMode,
 }
 
 pub(crate) fn validate_controller(
@@ -934,6 +947,7 @@ pub(crate) fn finish_err(
         );
 
     let message_instruction_limit = original.execution_parameters.instruction_limits.message();
+
     round.cycles_account_manager.refund_unused_execution_cycles(
         &mut new_canister.system_state,
         instructions_left,
@@ -941,6 +955,7 @@ pub(crate) fn finish_err(
         original.prepaid_execution_cycles,
         round.counters.execution_refund_error,
         original.subnet_size,
+        original.wasm_execution_mode,
         round.log,
     );
 

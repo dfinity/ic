@@ -8,6 +8,7 @@ package_group(
     name = "ic_nervous_system_common_test_utils_visibility",
     packages = [
         "//rs/nervous_system/common/...",
+        "//rs/nervous_system/integration_tests/...",
         "//rs/nns/...",
         "//rs/sns/...",
     ],

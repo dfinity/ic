@@ -1,5 +1,4 @@
 use crate::flow::{AddErc20TokenFlow, ManagedCanistersAssert};
-use crate::metrics::MetricsAssert;
 use assert_matches::assert_matches;
 use candid::{Decode, Encode, Nat, Principal};
 use ic_base_types::{CanisterId, PrincipalId};
@@ -11,20 +10,19 @@ use ic_ledger_suite_orchestrator::candid::{
 use ic_ledger_suite_orchestrator::state::{
     ArchiveWasm, IndexWasm, LedgerSuiteVersion, LedgerWasm, Wasm, WasmHash,
 };
-use ic_management_canister_types::{
-    CanisterInstallMode, CanisterStatusType, InstallCodeArgs, Method, Payload,
+use ic_management_canister_types_private::{
+    CanisterInstallMode, CanisterStatusResultV2, CanisterStatusType, InstallCodeArgs, Method,
+    Payload,
 };
-use ic_state_machine_tests::{
-    CanisterStatusResultV2, Cycles, StateMachine, StateMachineBuilder, UserError, WasmResult,
-};
+use ic_metrics_assert::{CanisterHttpQuery, MetricsAssert};
+use ic_state_machine_tests::{StateMachine, StateMachineBuilder, UserError, WasmResult};
 use ic_test_utilities_load_wasm::load_wasm;
+use ic_types::Cycles;
 pub use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue as LedgerMetadataValue;
 pub use icrc_ledger_types::icrc1::account::Account as LedgerAccount;
 use std::sync::Arc;
 
-pub mod arbitrary;
 pub mod flow;
-pub mod metrics;
 pub mod universal_canister;
 
 const MAX_TICKS: usize = 10;
@@ -306,9 +304,54 @@ impl LedgerSuiteOrchestrator {
         .unwrap()
     }
 
-    pub fn check_metrics(self) -> MetricsAssert<Self> {
-        let canister_id = self.ledger_suite_orchestrator_id;
-        MetricsAssert::from_querying_metrics(self, canister_id)
+    pub fn check_metrics(self) -> MetricsAssert<LedgerSuiteOrchestrator> {
+        MetricsAssert::from_http_query(self)
+    }
+
+    pub fn wait_for<T, E, F>(&self, f: F) -> T
+    where
+        F: Fn() -> Result<T, E>,
+        E: std::fmt::Debug,
+    {
+        let mut last_error = None;
+        for _ in 0..MAX_TICKS {
+            self.env.tick();
+            match f() {
+                Ok(t) => return t,
+                Err(e) => {
+                    last_error = Some(e);
+                }
+            }
+        }
+        panic!(
+            "Failed to get result after {} ticks: {:?}",
+            MAX_TICKS, last_error
+        );
+    }
+
+    pub fn wait_for_canister_to_be_installed_and_running(&self, canister_id: Principal) {
+        let canister_id = PrincipalId(canister_id).try_into().unwrap();
+        self.wait_for(|| {
+            let ledger_status = self.canister_status_of(canister_id);
+            if ledger_status.status() == CanisterStatusType::Running
+                && ledger_status.module_hash().is_some()
+            {
+                Ok(())
+            } else {
+                Err(format!(
+                    "Canister {} is not ready {:?}",
+                    canister_id, ledger_status
+                ))
+            }
+        });
+    }
+}
+
+impl CanisterHttpQuery<UserError> for LedgerSuiteOrchestrator {
+    fn http_query(&self, request: Vec<u8>) -> Result<Vec<u8>, UserError> {
+        self.as_ref()
+            .query(self.ledger_suite_orchestrator_id, "http_request", request)
+            .map(assert_reply)
     }
 }
 

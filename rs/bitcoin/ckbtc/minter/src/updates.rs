@@ -1,3 +1,6 @@
+#[cfg(test)]
+mod tests;
+
 pub mod get_btc_address;
 pub mod get_withdrawal_account;
 pub mod retrieve_btc;

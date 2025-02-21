@@ -1,19 +1,22 @@
-#![no_main]
-use ic_management_canister_types::{Method, Payload, UpdateSettingsArgs};
+use ic_management_canister_types_private::{Method, Payload, UpdateSettingsArgs};
 use ic_test_utilities_execution_environment::ExecutionTestBuilder;
 use libfuzzer_sys::{fuzz_target, Corpus};
 
 // This fuzz tries to execute the UpdateSettings management canister method
 //
 // The fuzz test is only compiled but not executed by CI.
-//
-// To execute the fuzzer run
-// bazel run --config=fuzzing //rs/execution_environment/fuzz:execute_subnet_message_update_settings
+// bazel run --config=sandbox_fuzzing //rs/execution_environment/fuzz:execute_subnet_message_update_settings
+
+fn main() {
+    let features = fuzzer_sandbox::SandboxFeatures {
+        syscall_tracing: false,
+    };
+    fuzzer_sandbox::fuzzer_main(features);
+}
 
 fuzz_target!(|args: UpdateSettingsArgs| -> Corpus {
     let mut test = ExecutionTestBuilder::new()
-        .with_deterministic_time_slicing_disabled()
-        .with_canister_sandboxing_disabled()
+        .with_precompiled_universal_canister(false)
         .build();
 
     let wat = r#"(module)"#;

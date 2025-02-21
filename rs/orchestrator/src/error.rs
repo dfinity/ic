@@ -43,6 +43,9 @@ pub(crate) enum OrchestratorError {
     /// A replica version (of a subnet record) could not be parsed
     ReplicaVersionParseError(ReplicaVersionParseError),
 
+    /// The crypto-config could not be serialized
+    SerializeCryptoConfigError(serde_json::Error),
+
     /// An IO error occurred
     IoError(String, io::Error),
 
@@ -144,6 +147,9 @@ impl fmt::Display for OrchestratorError {
             ),
             OrchestratorError::ReplicaVersionParseError(e) => {
                 write!(f, "Failed to parse replica version: {}", e)
+            }
+            OrchestratorError::SerializeCryptoConfigError(e) => {
+                write!(f, "Failed to serialize crypto-config: {}", e)
             }
             OrchestratorError::MakeRegistryCupError(subnet_id, registry_version) => write!(
                 f,

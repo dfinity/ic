@@ -30,7 +30,7 @@ assert_matches = { workspace = true }
 hex = { workspace = true }
 ic-canonical-state-tree-hash-test-utils = { path = "tree_hash/test_utils" }
 ic-crypto-sha2 = { path = "../crypto/sha2/" }
-ic-management-canister-types = { path = "../types/management_canister_types" }
+ic-management-canister-types-private = { path = "../types/management_canister_types" }
 ic-registry-subnet-features = { path = "../registry/subnet_features" }
 ic-sys = { path = "../sys" }
 ic-test-utilities-state = { path = "../test_utilities/state" }

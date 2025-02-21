@@ -80,7 +80,7 @@ impl StateSync {
             .checkpoint_in_verification(height)
             .expect("failed to create checkpoint layout");
 
-        let state = match crate::checkpoint::load_checkpoint_parallel_and_mark_verified(
+        let state = match crate::checkpoint::load_checkpoint_and_validate_parallel(
             &ro_layout,
             self.state_manager.own_subnet_type,
             &self.state_manager.metrics.checkpoint_metrics,
@@ -90,13 +90,12 @@ impl StateSync {
             Err(err) => {
                 fatal!(
                     self.log,
-                    "Failed to load checkpoint or remove the unverified marker @height {}: {}",
+                    "Failed to load and finalize checkpoint or remove the unverified marker @height {}: {}",
                     height,
                     err
                 );
             }
         };
-
         self.state_manager.on_synced_checkpoint(
             state,
             ro_layout,

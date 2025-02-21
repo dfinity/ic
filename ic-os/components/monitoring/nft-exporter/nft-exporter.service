@@ -1,5 +1,6 @@
 [Unit]
 Description=Collect nft counters and write them to a file for node exporter
+Before=node_exporter.service
 
 [Install]
 WantedBy=multi-user.target
@@ -7,3 +8,7 @@ WantedBy=multi-user.target
 [Service]
 Type=oneshot
 ExecStart=/opt/ic/bin/nft-exporter
+
+# Disable systemd start and stop logs
+LogLevelMax=1
+SyslogLevel=2

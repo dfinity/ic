@@ -26,6 +26,7 @@ module IC.Test.Agent.UnsafeCalls
     ic_http_head_request,
     ic_long_url_http_request,
     ic_install,
+    ic_install_single_chunk,
     ic_install_with_sender_canister_version,
     ic_provisional_create,
     ic_provisional_create_with_sender_canister_version,
@@ -38,6 +39,7 @@ module IC.Test.Agent.UnsafeCalls
     ic_top_up,
     ic_uninstall,
     ic_uninstall_with_sender_canister_version,
+    ic_upload_chunk,
     ic_update_settings,
     ic_update_settings_with_sender_canister_version,
   )
@@ -144,6 +146,36 @@ ic_install_with_sender_canister_version ic00 mode canister_id wasm_module arg se
 
 ic_install :: (HasCallStack, HasAgentConfig) => IC00 -> InstallMode -> Blob -> Blob -> Blob -> IO ()
 ic_install ic00 mode canister_id wasm_module arg = ic_install_with_sender_canister_version ic00 mode canister_id wasm_module arg Nothing
+
+ic_install_single_chunk :: (HasCallStack, HasAgentConfig) => IC00 -> InstallMode -> Blob -> Blob -> Blob -> Blob -> IO ()
+ic_install_single_chunk ic00 mode target_canister store_canister chunk_hash arg = do
+  callIC ic00 target_canister #install_chunked_code $
+    empty
+      .+ #mode
+      .== mode
+      .+ #target_canister
+      .== Principal target_canister
+      .+ #store_canister
+      .== Principal store_canister
+      .+ #chunk_hashes_list
+      .== Vec.fromList [empty .+ #hash .== chunk_hash]
+      .+ #wasm_module_hash
+      .== chunk_hash
+      .+ #arg
+      .== arg
+      .+ #sender_canister_version
+      .== (Nothing :: Maybe W.Word64)
+
+ic_upload_chunk :: (HasCallStack, HasAgentConfig) => IC00 -> Blob -> Blob -> IO Blob
+ic_upload_chunk ic00 canister_id chunk = do
+  chunk_hash :: ChunkHash <-
+    callIC ic00 canister_id #upload_chunk $
+      empty
+        .+ #canister_id
+        .== Principal canister_id
+        .+ #chunk
+        .== chunk
+  return $ chunk_hash .! #hash
 
 ic_uninstall_with_sender_canister_version :: (HasCallStack, HasAgentConfig) => IC00 -> Blob -> Maybe W.Word64 -> IO ()
 ic_uninstall_with_sender_canister_version ic00 canister_id sender_canister_version = do

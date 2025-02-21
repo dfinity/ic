@@ -4,6 +4,7 @@ use ic_canister_sandbox_backend_lib::{
     protocol::{ctlsvc, id::WasmId, logging::LogRequest, sbxsvc},
     rpc,
 };
+use ic_embedders::SerializedModuleBytes;
 use std::sync::{atomic::AtomicBool, Arc};
 
 struct DummyControllerService {}
@@ -44,9 +45,9 @@ fn main() {
 
     println!("Controller: Sending 'open_wasm' request");
     let wasm_id = WasmId::new();
-    sbx.open_wasm(sbxsvc::OpenWasmRequest {
+    sbx.open_wasm_serialized(sbxsvc::OpenWasmSerializedRequest {
         wasm_id,
-        wasm_src: Vec::new(),
+        serialized_module: Arc::new(SerializedModuleBytes::empty()),
     })
     .sync()
     .unwrap();

@@ -75,6 +75,7 @@ function read_variables() {
             "ipv4_prefix_length") ipv4_prefix_length="${value}" ;;
             "ipv4_gateway") ipv4_gateway="${value}" ;;
             "domain") domain="${value}" ;;
+            "node_reward_type") node_reward_type="${value}" ;;
         esac
     done <"${CONFIG}"
 }
@@ -82,13 +83,15 @@ function read_variables() {
 function assemble_config_media() {
     cmd=(/opt/ic/bin/build-bootstrap-config-image.sh ${MEDIA})
     cmd+=(--nns_public_key "/boot/config/nns_public_key.pem")
-    cmd+=(--elasticsearch_hosts "$(/opt/ic/bin/fetch-property.sh --key=.logging.hosts --metric=hostos_logging_hosts --config=${DEPLOYMENT})")
     cmd+=(--ipv6_address "$(/opt/ic/bin/hostos_tool generate-ipv6-address --node-type GuestOS)")
     cmd+=(--ipv6_gateway "${ipv6_gateway}")
     if [[ -n "$ipv4_address" && -n "$ipv4_prefix_length" && -n "$ipv4_gateway" && -n "$domain" ]]; then
         cmd+=(--ipv4_address "${ipv4_address}/${ipv4_prefix_length}")
         cmd+=(--ipv4_gateway "${ipv4_gateway}")
         cmd+=(--domain "${domain}")
+    fi
+    if [[ -n "$node_reward_type" ]]; then
+        cmd+=(--node_reward_type "${node_reward_type}")
     fi
     cmd+=(--hostname "guest-$(/opt/ic/bin/hostos_tool fetch-mac-address | sed 's/://g')")
     cmd+=(--nns_urls "$(/opt/ic/bin/fetch-property.sh --key=.nns.url --metric=hostos_nns_url --config=${DEPLOYMENT})")

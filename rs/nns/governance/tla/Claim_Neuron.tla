@@ -5,8 +5,7 @@ CONSTANT
     FRESH_NEURON_ID(_)
 
 CONSTANTS
-    Governance_Account_Ids,
-    Neuron_Ids
+    Governance_Account_Ids
 
 CONSTANTS
     Claim_Neuron_Process_Ids
@@ -17,8 +16,6 @@ CONSTANTS
     \* The transfer fee charged by the ledger canister
     TRANSACTION_FEE
 
-OP_ACCOUNT_BALANCE == "account_balance"
-ACCOUNT_BALANCE_FAIL == "Err"
 DUMMY_ACCOUNT == ""
 
 \* @type: (a -> b, Set(a)) => a -> b;
@@ -40,6 +37,7 @@ variables
     \* The queue of messages sent from the governance canister to the ledger canister
     governance_to_ledger = <<>>;
     ledger_to_governance = {};
+    spawning_neurons = FALSE;
 
 macro cn_reset_local_vars() {
     account := DUMMY_ACCOUNT;
@@ -101,12 +99,12 @@ process ( Claim_Neuron \in Claim_Neuron_Process_Ids )
 
 }
 *)
-\* BEGIN TRANSLATION (chksum(pcal) = "2eb57c75" /\ chksum(tla) = "9f05b2c5")
-VARIABLES neuron, neuron_id_by_account, locks, governance_to_ledger, 
-          ledger_to_governance, pc, account, neuron_id
+\* BEGIN TRANSLATION (chksum(pcal) = "a7e1f417" /\ chksum(tla) = "ded8c980")
+VARIABLES pc, neuron, neuron_id_by_account, locks, governance_to_ledger, 
+          ledger_to_governance, spawning_neurons, account, neuron_id
 
-vars == << neuron, neuron_id_by_account, locks, governance_to_ledger, 
-           ledger_to_governance, pc, account, neuron_id >>
+vars == << pc, neuron, neuron_id_by_account, locks, governance_to_ledger, 
+           ledger_to_governance, spawning_neurons, account, neuron_id >>
 
 ProcSet == (Claim_Neuron_Process_Ids)
 
@@ -116,6 +114,7 @@ Init == (* Global variables *)
         /\ locks = {}
         /\ governance_to_ledger = <<>>
         /\ ledger_to_governance = {}
+        /\ spawning_neurons = FALSE
         (* Process Claim_Neuron *)
         /\ account = [self \in Claim_Neuron_Process_Ids |-> DUMMY_ACCOUNT]
         /\ neuron_id = [self \in Claim_Neuron_Process_Ids |-> 0]
@@ -128,13 +127,13 @@ ClaimNeuron1(self) == /\ pc[self] = "ClaimNeuron1"
                                  /\ account' = [account EXCEPT ![self] = aid]
                                  /\ neuron_id' = [neuron_id EXCEPT ![self] = FRESH_NEURON_ID(DOMAIN(neuron))]
                                  /\ Assert(neuron_id'[self] \notin locks, 
-                                           "Failure of assertion at line 72, column 13.")
+                                           "Failure of assertion at line 70, column 13.")
                                  /\ locks' = (locks \union {neuron_id'[self]})
                                  /\ neuron_id_by_account' = (account'[self] :> neuron_id'[self] @@ neuron_id_by_account)
                                  /\ neuron' = (neuron_id'[self] :> [ cached_stake |-> 0, account |-> account'[self], fees |-> 0, maturity |-> 0 ] @@ neuron)
                                  /\ governance_to_ledger' = Append(governance_to_ledger, request(self, account_balance(account'[self])))
                             /\ pc' = [pc EXCEPT ![self] = "WaitForBalanceQuery"]
-                      /\ UNCHANGED ledger_to_governance
+                      /\ UNCHANGED << ledger_to_governance, spawning_neurons >>
 
 WaitForBalanceQuery(self) == /\ pc[self] = "WaitForBalanceQuery"
                              /\ \E answer \in { resp \in ledger_to_governance : resp.caller = self }:
@@ -152,7 +151,8 @@ WaitForBalanceQuery(self) == /\ pc[self] = "WaitForBalanceQuery"
                              /\ account' = [account EXCEPT ![self] = DUMMY_ACCOUNT]
                              /\ neuron_id' = [neuron_id EXCEPT ![self] = 0]
                              /\ pc' = [pc EXCEPT ![self] = "Done"]
-                             /\ UNCHANGED governance_to_ledger
+                             /\ UNCHANGED << governance_to_ledger, 
+                                             spawning_neurons >>
 
 Claim_Neuron(self) == ClaimNeuron1(self) \/ WaitForBalanceQuery(self)
 
@@ -167,6 +167,6 @@ Spec == Init /\ [][Next]_vars
 
 Termination == <>(\A self \in ProcSet: pc[self] = "Done")
 
-\* END TRANSLATION 
+\* END TRANSLATION
 
 ====

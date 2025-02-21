@@ -481,11 +481,8 @@ fn print_validate_num_cycles(
 }
 
 fn print_result(logger: &Logger, ret_val: &Result<Vec<u8>, AgentError>, msg: &str) {
-    match ret_val {
-        Ok(result) => {
-            debug!(logger, "{} {:?}", msg, result);
-        }
-        Err(_) => (),
+    if let Ok(result) = ret_val {
+        debug!(logger, "{} {:?}", msg, result);
     }
 }
 

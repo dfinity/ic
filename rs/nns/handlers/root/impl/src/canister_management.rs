@@ -1,6 +1,10 @@
 use crate::PROXIED_CANISTER_CALLS_TRACKER;
-use dfn_core::api::{call, call_bytes, call_with_funds, caller, print, CanisterId, Funds};
-use ic_management_canister_types::{CanisterInstallMode::Install, InstallCodeArgs};
+use ic_base_types::{CanisterId, PrincipalId};
+use ic_cdk::{
+    api::call::{call_with_payment, RejectionCode},
+    call, caller, print,
+};
+use ic_management_canister_types_private::{CanisterInstallMode::Install, InstallCodeArgs};
 use ic_nervous_system_clients::{
     canister_id_record::CanisterIdRecord,
     management_canister_client::ManagementCanisterClient,
@@ -10,7 +14,7 @@ use ic_nervous_system_proxied_canister_calls_tracker::ProxiedCanisterCallsTracke
 use ic_nervous_system_root::change_canister::{
     start_canister, stop_canister, AddCanisterRequest, CanisterAction, StopOrStartCanisterRequest,
 };
-use ic_nervous_system_runtime::DfnRuntime;
+use ic_nervous_system_runtime::{CdkRuntime, Runtime};
 use ic_nns_common::{
     registry::{get_value, mutate_registry},
     types::CallCanisterProposal,
@@ -113,22 +117,15 @@ pub async fn do_add_nns_canister(request: AddCanisterRequest) {
 async fn try_to_create_and_install_canister(
     request: AddCanisterRequest,
 ) -> Result<CanisterId, String> {
-    let (id,): (CanisterIdRecord,) = call_with_funds(
-        CanisterId::ic_00(),
+    let (id,): (CanisterIdRecord,) = call_with_payment(
+        CanisterId::ic_00().get().0,
         "create_canister",
-        dfn_candid::candid_multi_arity,
         (),
-        Funds::new(request.initial_cycles),
+        request.initial_cycles,
     )
     .await
-    .map_err(|(code, msg)| {
-        format!(
-            "{}{}",
-            code.map(|c| format!("error code {}: ", c))
-                .unwrap_or_default(),
-            msg
-        )
-    })?;
+    .map_err(|(code, msg)| format!("error code {}: {}", code as i32, msg))?;
+
     let install_args = InstallCodeArgs {
         mode: Install,
         canister_id: id.get_canister_id().get(),
@@ -136,23 +133,13 @@ async fn try_to_create_and_install_canister(
         arg: request.arg,
         compute_allocation: request.compute_allocation,
         memory_allocation: request.memory_allocation,
-        sender_canister_version: Some(dfn_core::api::canister_version()),
+        sender_canister_version: Some(ic_cdk::api::canister_version()),
     };
-    let install_res: Result<(), (Option<i32>, String)> = call(
-        CanisterId::ic_00(),
-        "install_code",
-        dfn_candid::candid_multi_arity,
-        (install_args,),
-    )
-    .await;
-    install_res.map_err(|(code, msg)| {
-        format!(
-            "{}{}",
-            code.map(|c| format!("error code {}: ", c))
-                .unwrap_or_default(),
-            msg
-        )
-    })?;
+    let install_res: Result<(), (RejectionCode, String)> =
+        call(CanisterId::ic_00().get().0, "install_code", (install_args,)).await;
+
+    install_res.map_err(|(code, msg)| format!("error code {}: {}", code as i32, msg))?;
+
     Ok(id.get_canister_id())
 }
 
@@ -161,8 +148,8 @@ pub async fn stop_or_start_nns_canister(
     request: StopOrStartCanisterRequest,
 ) -> Result<(), (i32, String)> {
     match request.action {
-        CanisterAction::Start => start_canister::<DfnRuntime>(request.canister_id).await,
-        CanisterAction::Stop => stop_canister::<DfnRuntime>(request.canister_id).await,
+        CanisterAction::Start => start_canister::<CdkRuntime>(request.canister_id).await,
+        CanisterAction::Stop => stop_canister::<CdkRuntime>(request.canister_id).await,
     }
 }
 
@@ -180,15 +167,15 @@ pub async fn call_canister(proposal: CallCanisterProposal) {
 
     let _tracker = ProxiedCanisterCallsTracker::start_tracking(
         &PROXIED_CANISTER_CALLS_TRACKER,
-        caller(),
+        PrincipalId::from(caller()),
         *canister_id,
         method_name,
         payload,
     );
 
-    let res = call_bytes(*canister_id, method_name, payload, Funds::zero())
+    let res = CdkRuntime::call_bytes_with_cleanup(*canister_id, method_name, payload)
         .await
-        .map_err(|(code, msg)| format!("Error: {}:{}", code.unwrap_or_default(), msg));
+        .map_err(|(code, msg)| format!("Error: {}:{}", code, msg));
 
     print(format!(
         "Call {}::{} returned {:?}",

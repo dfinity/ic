@@ -21,7 +21,7 @@ mod eth_rpc_client {
                 RpcNodeProvider::Sepolia(SepoliaProvider::BlockPi),
                 RpcNodeProvider::Sepolia(SepoliaProvider::PublicNode),
                 RpcNodeProvider::Sepolia(SepoliaProvider::Alchemy),
-                RpcNodeProvider::Sepolia(SepoliaProvider::RpcSepolia)
+                RpcNodeProvider::Sepolia(SepoliaProvider::Ankr)
             ]
         );
     }

@@ -169,7 +169,7 @@ pub(crate) async fn canister_read_state(
             match validator.validate_request(&request_c, current_time(), &root_of_trust_provider) {
                 Ok(targets) => targets,
                 Err(err) => {
-                    let http_err = validation_error_to_http_error(request.id(), err, &log);
+                    let http_err = validation_error_to_http_error(&request, err, &log);
                     return (http_err.status, http_err.message).into_response();
                 }
             };

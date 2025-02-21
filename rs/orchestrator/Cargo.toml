@@ -12,13 +12,14 @@ backoff = { workspace = true }
 candid = { workspace = true }
 clap = { workspace = true }
 exec = "0.3.1"
+env-file-reader = "0.3.0"
 get_if_addrs = "0.5.3"
 hex = { workspace = true }
 http-body-util = { workspace = true }
 hyper = { workspace = true }
 hyper-util = { workspace = true }
 hyper-rustls = { workspace = true }
-ic-async-utils = { path = "../async_utils" }
+ic-http-endpoints-async-utils = { path = "../http_endpoints/async_utils" }
 ic-canister-client = { path = "../canister_client" }
 ic-canister-client-sender = { path = "../canister_client/sender" }
 ic-config = { path = "../config" }
@@ -33,7 +34,7 @@ ic-image-upgrader = { path = "./image_upgrader" }
 ic-interfaces = { path = "../interfaces" }
 ic-interfaces-registry = { path = "../interfaces/registry" }
 ic-logger = { path = "../monitoring/logger" }
-ic-management-canister-types = { path = "../types/management_canister_types" }
+ic-management-canister-types-private = { path = "../types/management_canister_types" }
 ic-metrics = { path = "../monitoring/metrics" }
 ic-nns-constants = { path = "../nns/constants" }
 ic-protobuf = { path = "../protobuf" }
@@ -52,6 +53,7 @@ prost = { workspace = true }
 rand = { workspace = true }
 serde = { workspace = true }
 serde_cbor = { workspace = true }
+serde_json = { workspace = true }
 slog = { workspace = true }
 slog-async = { workspace = true }
 strum = { workspace = true }
@@ -66,6 +68,7 @@ ic-crypto-test-utils-canister-threshold-sigs = { path = "../crypto/test_utils/ca
 ic-crypto-test-utils-reproducible-rng = { path = "../crypto/test_utils/reproducible_rng" }
 ic-crypto-test-utils-tls = { path = "../crypto/test_utils/tls" }
 ic-registry-client-fake = { path = "../registry/fake" }
+ic-registry-subnet-type = { path = "../registry/subnet_type" }
 ic-registry-proto-data-provider = { path = "../registry/proto_data_provider" }
 ic-test-utilities = { path = "../test_utilities" }
 ic-test-utilities-consensus = { path = "../test_utilities/consensus" }

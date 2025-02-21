@@ -5,8 +5,9 @@ use crate::{
     request_handler::{verify_network_id, RosettaRequestHandler},
     request_types::{
         AddHotKey, ChangeAutoStakeMaturity, Disburse, Follow, ListNeurons, MergeMaturity,
-        NeuronInfo, PublicKeyOrPrincipal, RegisterVote, RemoveHotKey, RequestType,
-        SetDissolveTimestamp, Spawn, Stake, StakeMaturity, StartDissolve, StopDissolve,
+        NeuronInfo, PublicKeyOrPrincipal, RefreshVotingPower, RegisterVote, RemoveHotKey,
+        RequestType, SetDissolveTimestamp, Spawn, Stake, StakeMaturity, StartDissolve,
+        StopDissolve,
     },
 };
 use rosetta_core::objects::ObjectMap;
@@ -96,7 +97,9 @@ impl RosettaRequestHandler {
                 RequestType::StakeMaturity { neuron_index } => {
                     stake_maturity(&mut requests, arg, from, neuron_index)?
                 }
-                RequestType::ListNeurons => list_neurons(&mut requests, arg, from)?,
+                RequestType::ListNeurons { page_number } => {
+                    list_neurons(&mut requests, arg, from, Some(page_number))?
+                }
                 RequestType::NeuronInfo {
                     neuron_index,
                     controller,
@@ -105,6 +108,9 @@ impl RosettaRequestHandler {
                     neuron_index,
                     controller,
                 } => follow(&mut requests, arg, from, neuron_index, controller)?,
+                RequestType::RefreshVotingPower { neuron_index } => {
+                    refresh_voting_power(&mut requests, arg, from, neuron_index)?
+                }
             }
         }
 
@@ -546,8 +552,12 @@ fn list_neurons(
     requests: &mut Vec<Request>,
     _arg: Blob,
     from: AccountIdentifier,
+    page_number: Option<u64>,
 ) -> Result<(), ApiError> {
-    requests.push(Request::ListNeurons(ListNeurons { account: from }));
+    requests.push(Request::ListNeurons(ListNeurons {
+        account: from,
+        page_number,
+    }));
     Ok(())
 }
 
@@ -595,6 +605,28 @@ fn follow(
     Ok(())
 }
 
+fn refresh_voting_power(
+    requests: &mut Vec<Request>,
+    arg: Blob,
+    from: AccountIdentifier,
+    neuron_index: u64,
+) -> Result<(), ApiError> {
+    let manage: ManageNeuron = candid::decode_one(arg.0.as_ref()).map_err(|e| {
+        ApiError::internal_error(format!("Could not decode ManageNeuron argument: {:?}", e))
+    })?;
+    if let Some(Command::RefreshVotingPower(manage_neuron::RefreshVotingPower {})) = manage.command
+    {
+        requests.push(Request::RefreshVotingPower(RefreshVotingPower {
+            neuron_index,
+            account: from,
+        }));
+    } else {
+        return Err(ApiError::internal_error(
+            "Incompatible manage_neuron command".to_string(),
+        ));
+    }
+    Ok(())
+}
 #[cfg(test)]
 mod tests {
     use ic_base_types::CanisterId;
@@ -619,7 +651,7 @@ mod tests {
 
     #[test]
     fn test_payloads_parse_identity() {
-        let key = ic_crypto_ed25519::PrivateKey::generate_using_rng(&mut OsRng);
+        let key = ic_ed25519::PrivateKey::generate_using_rng(&mut OsRng);
         let ledger_client = futures::executor::block_on(LedgerClient::new(
             Url::from_str("http://localhost:1234").unwrap(),
             CanisterId::from_u64(1),

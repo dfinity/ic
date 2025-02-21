@@ -2,7 +2,6 @@ load("@rules_rust//rust:defs.bzl", "rust_binary")
 
 DEPENDENCIES = [
     # Keep sorted.
-    "//rs/async_utils",
     "@crate_index//:anyhow",
     "@crate_index//:axum",
     "@crate_index//:clap",

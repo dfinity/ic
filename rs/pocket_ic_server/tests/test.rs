@@ -1,11 +1,11 @@
 use candid::{Encode, Principal};
-use ic_agent::agent::{http_transport::ReqwestTransport, CallResponse};
+use ic_agent::agent::CallResponse;
 use ic_cdk::api::management_canister::main::CanisterIdRecord;
 use ic_cdk::api::management_canister::provisional::ProvisionalCreateCanisterWithCyclesArgument;
 use ic_interfaces_registry::{
     RegistryDataProvider, RegistryVersionedRecord, ZERO_REGISTRY_VERSION,
 };
-use ic_management_canister_types::ProvisionalCreateCanisterWithCyclesArgs;
+use ic_management_canister_types_private::ProvisionalCreateCanisterWithCyclesArgs;
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_registry_transport::pb::v1::{
     registry_mutation::Type, RegistryAtomicMutateRequest, RegistryMutation,
@@ -16,7 +16,7 @@ use pocket_ic::common::rest::{
     CreateHttpGatewayResponse, HttpGatewayBackend, HttpGatewayConfig, HttpGatewayDetails,
     HttpsConfig, InstanceConfig, SubnetConfigSet, SubnetKind, Topology,
 };
-use pocket_ic::{update_candid, PocketIc, PocketIcBuilder, WasmResult};
+use pocket_ic::{update_candid, PocketIc, PocketIcBuilder};
 use rcgen::{CertificateParams, KeyPair};
 use registry_canister::init::RegistryCanisterInitPayload;
 use reqwest::blocking::Client;
@@ -35,6 +35,7 @@ pub const LOCALHOST: &str = "127.0.0.1";
 
 fn start_server_helper(
     test_driver_pid: Option<u32>,
+    log_levels: Option<String>,
     capture_stdout: bool,
     capture_stderr: bool,
 ) -> (Url, Child) {
@@ -46,6 +47,9 @@ fn start_server_helper(
     };
     let mut cmd = Command::new(PathBuf::from(bin_path));
     cmd.arg("--port-file").arg(port_file_path.clone());
+    if let Some(log_levels) = log_levels {
+        cmd.arg("--log-levels").arg(log_levels);
+    }
     // use a long TTL of 5 mins (the bazel test timeout for medium tests)
     // so that the server doesn't die during the test if the runner
     // is overloaded
@@ -74,7 +78,7 @@ fn start_server_helper(
 
 pub fn start_server() -> Url {
     let test_driver_pid = std::process::id();
-    start_server_helper(Some(test_driver_pid), false, false).0
+    start_server_helper(Some(test_driver_pid), None, false, false).0
 }
 
 #[test]
@@ -200,7 +204,7 @@ fn test_blob_store_wrong_encoding() {
 #[test]
 fn test_port_file() {
     // tests the port file by setting the parent PID to None in start_server_helper
-    start_server_helper(None, false, false);
+    start_server_helper(None, None, false, false);
 }
 
 async fn test_gateway(server_url: Url, https: bool) {
@@ -309,14 +313,10 @@ async fn test_gateway(server_url: Url, https: bool) {
     }
     let client = builder.build().unwrap();
 
-    // create agent with custom transport
-    let transport = ReqwestTransport::create_with_client(
-        format!("{}://{}:{}", proto, localhost, port),
-        client.clone(),
-    )
-    .unwrap();
+    // create agent
     let agent = ic_agent::Agent::builder()
-        .with_transport(transport)
+        .with_url(format!("{}://{}:{}", proto, localhost, port))
+        .with_http_client(client.clone())
         .build()
         .unwrap();
     agent.fetch_root_key().await.unwrap();
@@ -450,7 +450,7 @@ fn test_specified_id() {
 
 #[test]
 fn test_dashboard() {
-    let (server_url, _) = start_server_helper(None, false, false);
+    let (server_url, _) = start_server_helper(None, None, false, false);
     let mut pic = PocketIcBuilder::new()
         .with_nns_subnet()
         .with_application_subnet()
@@ -517,7 +517,7 @@ const CANISTER_LOGS_WAT: &str = r#"
 #[test]
 fn canister_and_replica_logs() {
     const INIT_CYCLES: u128 = 2_000_000_000_000;
-    let (server_url, mut out) = start_server_helper(None, true, true);
+    let (server_url, mut out) = start_server_helper(None, None, true, true);
     let pic = PocketIcBuilder::new()
         .with_application_subnet()
         .with_server_url(server_url)
@@ -554,7 +554,7 @@ fn canister_and_replica_logs() {
 #[test]
 fn canister_and_no_replica_logs() {
     const INIT_CYCLES: u128 = 2_000_000_000_000;
-    let (server_url, mut out) = start_server_helper(None, true, true);
+    let (server_url, mut out) = start_server_helper(None, None, true, true);
     let pic = PocketIcBuilder::new()
         .with_application_subnet()
         .with_server_url(server_url)
@@ -628,12 +628,7 @@ fn check_counter(pic: &PocketIc, canister_id: Principal, expected_ctr: u32) {
     let res = pic
         .query_call(canister_id, Principal::anonymous(), "read", vec![])
         .unwrap();
-    match res {
-        WasmResult::Reply(data) => {
-            assert_eq!(u32::from_le_bytes(data.try_into().unwrap()), expected_ctr);
-        }
-        _ => panic!("Unexpected update call response"),
-    };
+    assert_eq!(u32::from_le_bytes(res.try_into().unwrap()), expected_ctr);
 }
 
 /// Tests that the PocketIC topology and canister states
@@ -685,6 +680,28 @@ fn send_signal_to_pic(pic: PocketIc, mut child: Child, shutdown_signal: Option<S
     }
 }
 
+fn kill_gateway_with_signal(shutdown_signal: Signal) {
+    let (server_url, child) = start_server_helper(None, None, false, false);
+    let mut pic = PocketIcBuilder::new()
+        .with_server_url(server_url)
+        .with_nns_subnet()
+        .with_application_subnet()
+        .build();
+    let _ = pic.make_live(None);
+
+    send_signal_to_pic(pic, child, Some(shutdown_signal));
+}
+
+#[test]
+fn kill_gateway_with_sigint() {
+    kill_gateway_with_signal(Signal::SIGINT);
+}
+
+#[test]
+fn kill_gateway_with_sigterm() {
+    kill_gateway_with_signal(Signal::SIGTERM);
+}
+
 fn canister_state_dir(shutdown_signal: Option<Signal>) {
     const INIT_CYCLES: u128 = 2_000_000_000_000;
 
@@ -693,7 +710,7 @@ fn canister_state_dir(shutdown_signal: Option<Signal>) {
     let state_dir_path_buf = state_dir.path().to_path_buf();
 
     // Create a PocketIC instance with NNS and app subnets.
-    let (server_url, child) = start_server_helper(None, false, false);
+    let (server_url, child) = start_server_helper(None, None, false, false);
     let pic = PocketIcBuilder::new()
         .with_state_dir(state_dir_path_buf.clone())
         .with_server_url(server_url)
@@ -769,7 +786,7 @@ fn canister_state_dir(shutdown_signal: Option<Signal>) {
     send_signal_to_pic(pic, child, shutdown_signal);
 
     // Start a new PocketIC server.
-    let (new_server_url, child) = start_server_helper(None, false, false);
+    let (new_server_url, child) = start_server_helper(None, None, false, false);
 
     // Create a PocketIC instance mounting the state created so far.
     let pic = PocketIcBuilder::new()
@@ -810,7 +827,7 @@ fn canister_state_dir(shutdown_signal: Option<Signal>) {
     send_signal_to_pic(pic, child, shutdown_signal);
 
     // Start a new PocketIC server.
-    let (newest_server_url, _) = start_server_helper(None, false, false);
+    let (newest_server_url, _) = start_server_helper(None, None, false, false);
 
     // Create a PocketIC instance mounting the NNS and app state created so far.
     let nns_subnet_seed = topology
@@ -871,12 +888,9 @@ fn test_specified_id_call_v3() {
         .build()
         .unwrap();
     rt.block_on(async {
-        let transport = ReqwestTransport::create(endpoint.clone())
-            .unwrap()
-            .with_use_call_v3_endpoint();
-
         let agent = ic_agent::Agent::builder()
-            .with_transport(transport)
+            .with_url(endpoint)
+            .with_http_client(reqwest::Client::new())
             .build()
             .unwrap();
         agent.fetch_root_key().await.unwrap();
@@ -1122,7 +1136,7 @@ fn test_unresponsive_gateway_backend() {
     let client = Client::new();
 
     // Create PocketIC instance with one NNS subnet and one app subnet.
-    let (backend_server_url, mut backend_process) = start_server_helper(None, false, false);
+    let (backend_server_url, mut backend_process) = start_server_helper(None, None, false, false);
     let pic = PocketIcBuilder::new()
         .with_nns_subnet()
         .with_application_subnet()
@@ -1130,7 +1144,7 @@ fn test_unresponsive_gateway_backend() {
         .build();
 
     // Create HTTP gateway on a different gateway server.
-    let (gateway_server_url, _) = start_server_helper(None, false, false);
+    let (gateway_server_url, _) = start_server_helper(None, None, false, false);
     let create_gateway_endpoint = gateway_server_url.join("http_gateway").unwrap();
     let backend_instance_url = backend_server_url
         .join(&format!("instances/{}/", pic.instance_id()))
@@ -1178,13 +1192,13 @@ fn test_unresponsive_gateway_backend() {
     assert_eq!(resp.status(), StatusCode::BAD_GATEWAY);
     assert!(String::from_utf8(resp.bytes().unwrap().as_ref().to_vec())
         .unwrap()
-        .contains("connection_failure: client error"));
+        .contains("connection_failure: HTTP request failed: error sending request for url"));
 }
 
 #[test]
 fn test_invalid_gateway_backend() {
     // Create HTTP gateway with an invalid backend URL
-    let (gateway_server_url, _) = start_server_helper(None, false, false);
+    let (gateway_server_url, _) = start_server_helper(None, None, false, false);
     let create_gateway_endpoint = gateway_server_url.join("http_gateway").unwrap();
     let backend_url = "http://240.0.0.0";
     let http_gateway_config = HttpGatewayConfig {
@@ -1207,7 +1221,8 @@ fn test_invalid_gateway_backend() {
             panic!("Suceeded to create http gateway!")
         }
         CreateHttpGatewayResponse::Error { message } => {
-            assert!(message.contains("An error happened during communication with the replica: error sending request for url"));
+            assert!(message.contains(&format!("Timed out fetching root key from {}", backend_url))
+            || message.contains(&format!("An error happened during communication with the replica: error sending request for url ({}/api/v2/status)", backend_url)));
         }
     };
 }
@@ -1281,9 +1296,6 @@ fn registry_canister() {
 }
 
 #[test]
-#[should_panic(
-    expected = "The binary representation  of effective canister ID aaaaa-aa should consist of 10 bytes."
-)]
 fn provisional_create_canister_with_cycles() {
     let pic = PocketIcBuilder::new()
         .with_nns_subnet()
@@ -1358,4 +1370,111 @@ fn http_gateway_route_underscore() {
     assert_eq!(error_page.status(), StatusCode::BAD_REQUEST);
     let page = String::from_utf8(error_page.bytes().unwrap().to_vec()).unwrap();
     assert!(page.contains("canister_id_not_found"));
+}
+
+#[test]
+fn auto_progress() {
+    let (server_url, mut out) = start_server_helper(
+        None,
+        Some("pocket_ic_server=debug,tower_http=info,axum::rejection=trace".to_string()),
+        true,
+        true,
+    );
+    let pic = PocketIcBuilder::new()
+        .with_application_subnet()
+        .with_server_url(server_url)
+        .build();
+
+    let t0 = pic.get_time();
+
+    // Starting auto progress on the IC => a corresponding log should be made and time should start incresing automatically now.
+    pic.auto_progress();
+
+    loop {
+        let mut bytes = [0; 1000];
+        let _ = out.stdout.as_mut().unwrap().read(&mut bytes).unwrap();
+        let stdout = String::from_utf8(bytes.to_vec()).unwrap();
+        assert!(!stdout.contains("Stopping auto progress for instance 0."));
+        if stdout.contains("Starting auto progress for instance 0.") {
+            break;
+        }
+    }
+
+    loop {
+        let t = pic.get_time();
+        if t > t0 {
+            break;
+        }
+        std::thread::sleep(Duration::from_millis(10));
+    }
+
+    // Stopping auto progress on the IC => a corresponding log should be made.
+    pic.stop_progress();
+
+    loop {
+        let mut bytes = [0; 1000];
+        let _ = out.stdout.as_mut().unwrap().read(&mut bytes).unwrap();
+        let stdout = String::from_utf8(bytes.to_vec()).unwrap();
+        if stdout.contains("Stopping auto progress for instance 0.") {
+            break;
+        }
+    }
+}
+
+fn create_gateway(
+    server_url: Url,
+    port: Option<u16>,
+    forward_to: HttpGatewayBackend,
+) -> Result<u16, String> {
+    let endpoint = server_url.join("http_gateway").unwrap();
+    let http_gateway_config = HttpGatewayConfig {
+        ip_addr: None,
+        port,
+        forward_to,
+        domains: None,
+        https_config: None,
+    };
+    let res = reqwest::blocking::Client::new()
+        .post(endpoint)
+        .json(&http_gateway_config)
+        .send()
+        .expect("HTTP failure")
+        .json::<CreateHttpGatewayResponse>()
+        .expect("Could not parse response for create HTTP gateway request");
+    match res {
+        CreateHttpGatewayResponse::Created(info) => Ok(info.port),
+        CreateHttpGatewayResponse::Error { message } => Err(message),
+    }
+}
+
+#[test]
+fn test_gateway_address_in_use() {
+    let (server_url, _) = start_server_helper(None, None, false, false);
+
+    // create PocketIC instance
+    let pic = PocketIcBuilder::new()
+        .with_server_url(server_url.clone())
+        .with_nns_subnet()
+        .with_application_subnet()
+        .build();
+
+    // create an HTTP gateway at an arbitrary port
+    let port = create_gateway(
+        server_url.clone(),
+        None,
+        HttpGatewayBackend::PocketIcInstance(pic.instance_id()),
+    )
+    .unwrap();
+
+    // try to create another HTTP gateway at the same port
+    let err = create_gateway(
+        server_url,
+        Some(port),
+        HttpGatewayBackend::PocketIcInstance(pic.instance_id()),
+    )
+    .unwrap_err();
+    assert!(err.contains(&format!(
+        "Failed to bind to address 127.0.0.1:{}: Address already in use",
+        port
+    )));
 }

@@ -1,5 +1,3 @@
-#![allow(clippy::unwrap_used)]
-
 use super::*;
 use crate::common::test_utils::crypto_component::crypto_component_with_csp_and_vault;
 use assert_matches::assert_matches;
@@ -1148,7 +1146,7 @@ mod rotate_idkg_dealing_encryption_keys {
     #[test]
     fn should_not_rotate_key_when_no_ecdsa_config_exists() {
         let setup = Setup::builder()
-            .with_ecdsa_subnet_config(EcdsaSubnetConfig::new_without_ecdsa_config(
+            .with_ecdsa_subnet_config(EcdsaSubnetConfig::new_without_chain_key_config(
                 subnet_id(),
                 Some(node_id()),
             ))

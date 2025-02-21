@@ -1,5 +1,3 @@
-#![allow(clippy::unwrap_used)]
-
 use assert_matches::assert_matches;
 use ic_base_types::{NodeId, PrincipalId, SubnetId};
 use ic_config::crypto::CryptoConfig;
@@ -1214,7 +1212,7 @@ fn should_return_all_keys_registered_from_check_keys_with_registry_if_no_ecdsa_c
         )
         .with_time_source(Arc::clone(&time) as Arc<_>)
         .with_node_id(node_id())
-        .with_ecdsa_subnet_config(EcdsaSubnetConfig::new_without_ecdsa_config(
+        .with_ecdsa_subnet_config(EcdsaSubnetConfig::new_without_chain_key_config(
             subnet_id(),
             Some(node_id()),
         ))

@@ -1,4 +1,3 @@
-#![allow(clippy::unwrap_used)]
 // Note: The mock and temp secret key stores are used in the IDKM.
 // Weird compiler errors - can a mock from elsewhere not be used?
 // Ok, let's duplicate the mock and see what happens.

@@ -35,7 +35,7 @@ use ic_config::{
     ConfigOptional as ReplicaConfig,
 };
 use ic_logger::{info, new_replica_logger_from_config};
-use ic_management_canister_types::{EcdsaKeyId, MasterPublicKeyId};
+use ic_management_canister_types_private::{EcdsaKeyId, MasterPublicKeyId};
 use ic_prep_lib::{
     internet_computer::{IcConfig, TopologyConfig},
     node::{NodeConfiguration, NodeIndex},
@@ -100,6 +100,8 @@ fn main() -> Result<()> {
                 public_api,
                 node_operator_principal_id: None,
                 secret_key_store: None,
+                domain: None,
+                node_reward_type: None,
             },
         );
 
@@ -203,7 +205,7 @@ fn main() -> Result<()> {
         .arg("--config-file")
         .args([config_path.to_str().unwrap()]);
     info!(log, "Executing {:?}", cmd);
-    cmd.exec();
+    let _ = cmd.exec();
 
     Ok(())
 }

@@ -61,6 +61,7 @@ impl UpdateCanisterSettings {
             && settings.freezing_threshold.is_none()
             && settings.log_visibility.is_none()
             && settings.wasm_memory_limit.is_none()
+            && settings.wasm_memory_threshold.is_none()
         {
             return Err(invalid_proposal_error(
                 "At least one setting must be provided",
@@ -75,6 +76,7 @@ impl UpdateCanisterSettings {
         let memory_allocation = settings.memory_allocation.map(Nat::from);
         let freezing_threshold = settings.freezing_threshold.map(Nat::from);
         let wasm_memory_limit = settings.wasm_memory_limit.map(Nat::from);
+        let wasm_memory_threshold = settings.wasm_memory_threshold.map(Nat::from);
         let log_visibility = match settings.log_visibility {
             Some(log_visibility) => Some(Self::valid_log_visibility(log_visibility)?),
             None => None,
@@ -89,6 +91,7 @@ impl UpdateCanisterSettings {
             wasm_memory_limit,
             log_visibility,
             reserved_cycles_limit,
+            wasm_memory_threshold,
         })
     }
 
@@ -223,6 +226,7 @@ mod tests {
                 }),
                 memory_allocation: Some(1 << 32),
                 wasm_memory_limit: Some(1 << 31),
+                wasm_memory_threshold: Some(1 << 30),
                 compute_allocation: Some(10),
                 freezing_threshold: Some(100),
                 log_visibility: Some(LogVisibility::Public as i32),
@@ -257,6 +261,7 @@ mod tests {
                     freezing_threshold: Some(Nat::from(100u64)),
                     log_visibility: Some(RootLogVisibility::Public),
                     reserved_cycles_limit: None,
+                    wasm_memory_threshold: Some(Nat::from(1u64 << 30)),
                 }
             }
         );
@@ -273,6 +278,7 @@ mod tests {
                 }),
                 memory_allocation: Some(1 << 32),
                 wasm_memory_limit: Some(1 << 31),
+                wasm_memory_threshold: Some(1 << 30),
                 compute_allocation: Some(10),
                 freezing_threshold: Some(100),
                 log_visibility: Some(LogVisibility::Public as i32),
@@ -305,6 +311,7 @@ mod tests {
                 freezing_threshold: Some(Nat::from(100u64)),
                 log_visibility: Some(RootLogVisibility::Public),
                 reserved_cycles_limit: None,
+                wasm_memory_threshold: Some(Nat::from(1u64 << 30)),
             }
         );
     }

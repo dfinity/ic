@@ -145,7 +145,7 @@ get_nns_canister_code_location() {
     code_location__governance="$RUST_DIR/nns/governance $SNS_INIT"
     code_location__ledger="$RUST_DIR/rosetta-api/ledger_canister/ledger $LEDGER_COMMON"
     code_location__icp_ledger_archive="$RUST_DIR/ledger_suite/icp/archive $LEDGER_COMMON"
-    code_location__root="$RUST_DIR/nns/handlers/root/impl"
+    code_location__root="$RUST_DIR/nns/handlers/root"
     code_location__cycles_minting="$RUST_DIR/nns/cmc"
     code_location__lifeline="$RUST_DIR/nns/handlers/lifeline"
     code_location__genesis_token="$RUST_DIR/nns/gtc"
@@ -276,7 +276,7 @@ top_up_canister() {
         --amount "$AMOUNT" "$CANISTER"
 }
 
-# Note, this will be deprecated soon when get_state is deprecated from sale canister.
+# Note, this will be deprecated soon when get_state is deprecated from swap canister.
 call_swap() {
     local NNS_URL=$1
     local SWAP_CANISTER_ID=$2
@@ -290,7 +290,7 @@ call_swap() {
         $SWAP_CANISTER_ID $METHOD '(record {})'
 }
 
-sns_quill_participate_in_sale() {
+sns_quill_participate_in_swap() {
     ensure_variable_set SNS_QUILL
 
     # Please forgive me we need separate urls for these subnets until we get the boundary node in the script :(
@@ -347,7 +347,7 @@ sns_get_sns_canisters_summary() {
         "$SNS_ROOT_CANISTER_ID" get_sns_canisters_summary '(record {})'
 }
 
-sns_finalize_sale() {
+sns_finalize_swap() {
     local SNS_URL=$1
     local SWAP_CANISTER_ID=$2
 

@@ -211,17 +211,13 @@ fn export(path: &str, matches: &clap::ArgMatches) {
                 }
             }
             "Certification" => {
-                for x in certification_pool
-                    .persistent_pool
-                    .certifications()
-                    .get_all()
-                {
+                for x in certification_pool.validated.certifications().get_all() {
                     println!("{}", to_string(&CertificationMessage::Certification(x)));
                 }
             }
             "CertificationShare" => {
                 for x in certification_pool
-                    .persistent_pool
+                    .validated
                     .certification_shares()
                     .get_all()
                 {
@@ -250,7 +246,7 @@ fn import(path: &str) {
             });
             consensus_pool.validated.mutate(ops);
         } else if let Ok(msg) = from_str(&s) {
-            certification_pool.persistent_pool.insert(msg)
+            certification_pool.validated.insert(msg)
         } else {
             panic!("Failed to parse JSON: {}", s);
         }

@@ -66,6 +66,8 @@ pub fn execute_inspect_message(
     let mut round_limits = RoundLimits {
         instructions: as_round_instructions(message_instruction_limit),
         subnet_available_memory,
+        // No need for downstream calls.
+        subnet_available_callbacks: 0,
         // Ignore compute allocation
         compute_allocation_used: 0,
     };

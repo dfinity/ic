@@ -102,6 +102,8 @@ impl<M: Memory> NeuronSubaccountIndex<M> {
         validate_stable_btree_map(&self.subaccount_to_id);
     }
 
+    // Dead code while the TLA test is temporarily being disabled.
+    #[allow(dead_code)]
     #[cfg(feature = "test")]
     pub fn iter(&self) -> SBTIter<[u8; 32], NeuronId, M> {
         self.subaccount_to_id.iter()

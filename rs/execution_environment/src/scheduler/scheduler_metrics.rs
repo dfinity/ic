@@ -33,6 +33,7 @@ pub(super) struct SchedulerMetrics {
     pub(super) canister_stable_memory_usage: Histogram,
     pub(super) canister_memory_allocation: Histogram,
     pub(super) canister_compute_allocation: Histogram,
+    pub(super) canister_ingress_queue_latencies: Histogram,
     pub(super) compute_utilization_per_core: Histogram,
     pub(super) instructions_consumed_per_message: Histogram,
     pub(super) instructions_consumed_per_round: Histogram,
@@ -59,7 +60,7 @@ pub(super) struct SchedulerMetrics {
     pub(super) queues_response_bytes: IntGauge,
     pub(super) queues_memory_reservations: IntGauge,
     pub(super) queues_oversized_requests_extra_bytes: IntGauge,
-    pub(super) streams_response_bytes: IntGauge,
+    pub(super) queues_best_effort_message_bytes: IntGauge,
     pub(super) canister_messages_where_cycles_were_charged: IntCounter,
     pub(super) current_heap_delta: IntGauge,
     pub(super) round_skipped_due_to_current_heap_delta_above_limit: IntCounter,
@@ -135,8 +136,8 @@ impl SchedulerMetrics {
             canister_age: metrics_registry.histogram(
                 "scheduler_canister_age_rounds",
                 "Number of rounds for which a canister was not scheduled.",
-                // 1, 2, 5, …, 100, 200, 500
-                decimal_buckets(0, 2),
+                // 1, 2, 5, …, 1000, 2000, 5000
+                decimal_buckets(0, 3),
             ),
             canister_compute_allocation_violation: metrics_registry.int_counter(
                 "scheduler_compute_allocation_violations",
@@ -197,6 +198,12 @@ impl SchedulerMetrics {
                 "canister_compute_allocation_ratio",
                 "Canisters compute allocation distribution ratio (0-1).",
                 linear_buckets(0.0, 0.1, 11),
+            ),
+            canister_ingress_queue_latencies: metrics_registry.histogram(
+                "scheduler_canister_ingress_queue_latencies_seconds",
+                "Per-canister mean IC clock duration spent by messages in the ingress queue.",
+                // 10ms, 20ms, 50ms, …, 100s, 200s, 500s
+                decimal_buckets(-2, 2),
             ),
             compute_utilization_per_core: metrics_registry.histogram(
                 "scheduler_compute_utilization_per_core",
@@ -297,9 +304,9 @@ impl SchedulerMetrics {
                 "execution_queues_oversized_requests_extra_bytes",
                 "Total bytes above `MAX_RESPONSE_COUNT_BYTES` across oversized local-subnet requests.",
             ),
-            streams_response_bytes: metrics_registry.int_gauge(
-                "execution_streams_response_size_bytes",
-                "Total byte size of all responses in subnet streams.",
+            queues_best_effort_message_bytes: metrics_registry.int_gauge(
+                "execution_queues_best_effort_message_bytes",
+                "Total byte size of all best-effort messages in canister queues.",
             ),
             canister_messages_where_cycles_were_charged: metrics_registry.int_counter(
                 "scheduler_canister_messages_where_cycles_were_charged",
@@ -767,7 +774,7 @@ impl SchedulerMetrics {
             .set(size_bytes as i64);
     }
 
-    pub(super) fn observe_streams_response_bytes(&self, size_bytes: usize) {
-        self.streams_response_bytes.set(size_bytes as i64);
+    pub(super) fn observe_queues_best_effort_message_bytes(&self, size_bytes: usize) {
+        self.queues_best_effort_message_bytes.set(size_bytes as i64);
     }
 }

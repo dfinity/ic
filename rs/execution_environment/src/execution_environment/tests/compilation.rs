@@ -3,7 +3,7 @@ mod execution_tests {
 
     use ic_error_types::ErrorCode;
     use ic_replicated_state::{
-        canister_state::execution_state::{WasmBinary, WasmMetadata},
+        canister_state::execution_state::{WasmBinary, WasmExecutionMode, WasmMetadata},
         ExecutionState, ExportedFunctions, Memory,
     };
     use ic_test_utilities_execution_environment::{wat_compilation_cost, ExecutionTestBuilder};
@@ -260,9 +260,11 @@ mod execution_tests {
         assert_eq!(
             test.canister_state(canister_id2).system_state.balance(),
             initial_balance
-                - test
-                    .cycles_account_manager()
-                    .execution_cost(wat_compilation_cost(WAT_EMPTY), test.subnet_size())
+                - test.cycles_account_manager().execution_cost(
+                    wat_compilation_cost(WAT_EMPTY),
+                    test.subnet_size(),
+                    WasmExecutionMode::Wasm32 // Does not matter if it is Wasm64 or Wasm32 for this test.
+                )
         );
     }
 

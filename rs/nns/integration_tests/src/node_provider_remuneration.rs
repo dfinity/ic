@@ -1,6 +1,5 @@
 use candid::{Decode, Encode};
 use cycles_minting_canister::IcpXdrConversionRateCertifiedResponse;
-use dfn_candid::candid_one;
 use ic_canister_client_sender::Sender;
 use ic_nervous_system_common::{ONE_DAY_SECONDS, ONE_MONTH_SECONDS};
 use ic_nervous_system_common_test_keys::{
@@ -764,7 +763,6 @@ fn set_icp_xdr_conversion_rate(
         state_machine,
         CYCLES_MINTING_CANISTER_ID,
         "set_icp_xdr_conversion_rate",
-        candid_one,
         payload,
         GOVERNANCE_CANISTER_ID.get(),
     )

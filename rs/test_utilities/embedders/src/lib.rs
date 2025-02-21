@@ -1,6 +1,7 @@
 use std::{convert::TryFrom, rc::Rc};
 
 use ic_base_types::NumBytes;
+use ic_config::execution_environment::Config as HypervisorConfig;
 use ic_config::{flag_status::FlagStatus, subnet_config::SchedulerConfig};
 use ic_cycles_account_manager::ResourceSaturation;
 use ic_embedders::{wasm_utils::compile, wasmtime_embedder::WasmtimeInstance, WasmtimeEmbedder};
@@ -18,10 +19,7 @@ use ic_system_api::{
 use ic_test_utilities::cycles_account_manager::CyclesAccountManagerBuilder;
 use ic_test_utilities_state::SystemStateBuilder;
 use ic_test_utilities_types::ids::{canister_test_id, user_test_id};
-use ic_types::{
-    messages::RequestMetadata, time::UNIX_EPOCH, ComputeAllocation, MemoryAllocation,
-    NumInstructions,
-};
+use ic_types::{time::UNIX_EPOCH, ComputeAllocation, MemoryAllocation, NumInstructions};
 use ic_wasm_types::BinaryEncodedWasm;
 
 pub const DEFAULT_NUM_INSTRUCTIONS: NumInstructions = NumInstructions::new(5_000_000_000);
@@ -126,14 +124,19 @@ impl WasmtimeInstanceBuilder {
             SubnetType::System => SchedulerConfig::system_subnet(),
         }
         .dirty_page_overhead;
+        let subnet_available_callbacks =
+            HypervisorConfig::default().subnet_callback_soft_limit as u64;
+        let canister_callback_quota =
+            HypervisorConfig::default().canister_guaranteed_callback_quota as u64;
 
-        let sandbox_safe_system_state = SandboxSafeSystemState::new(
+        let sandbox_safe_system_state = SandboxSafeSystemState::new_for_testing(
             &system_state,
             cycles_account_manager,
             &self.network_topology,
             dirty_page_overhead,
             ComputeAllocation::default(),
-            RequestMetadata::new(0, UNIX_EPOCH),
+            subnet_available_callbacks,
+            Default::default(),
             self.api_type.caller(),
             self.api_type.call_context_id(),
         );
@@ -154,6 +157,7 @@ impl WasmtimeInstanceBuilder {
                 canister_memory_limit: self.canister_memory_limit,
                 wasm_memory_limit: None,
                 memory_allocation: MemoryAllocation::default(),
+                canister_guaranteed_callback_quota: canister_callback_quota,
                 compute_allocation: ComputeAllocation::default(),
                 subnet_type: self.subnet_type,
                 execution_mode: ExecutionMode::Replicated,
@@ -164,9 +168,7 @@ impl WasmtimeInstanceBuilder {
                 subnet_memory_capacity,
                 subnet_memory_capacity,
             ),
-            embedder.config().feature_flags.wasm_native_stable_memory,
-            embedder.config().feature_flags.canister_backtrace,
-            embedder.config().max_sum_exported_function_name_lengths,
+            embedder.config(),
             Memory::new_for_testing(),
             NumWasmPages::from(0),
             Rc::new(ic_system_api::DefaultOutOfInstructionsHandler::new(

@@ -104,6 +104,7 @@ fn can_validate_valid_export_section() {
         Ok(WasmValidationDetails {
             largest_function_instruction_count: NumInstructions::new(1),
             max_complexity: Complexity(1),
+            code_section_size: NumBytes::from(3),
             ..Default::default()
         })
     );
@@ -431,6 +432,7 @@ fn can_validate_many_exported_functions() {
         Ok(WasmValidationDetails {
             largest_function_instruction_count: NumInstructions::new(1),
             max_complexity: Complexity(1),
+            code_section_size: NumBytes::from(3),
             ..Default::default()
         })
     );
@@ -467,6 +469,7 @@ fn can_validate_large_sum_exported_function_name_lengths() {
         Ok(WasmValidationDetails {
             largest_function_instruction_count: NumInstructions::new(1),
             max_complexity: Complexity(1),
+            code_section_size: NumBytes::from(3),
             ..Default::default()
         })
     );
@@ -510,6 +513,7 @@ fn can_validate_canister_query_update_method_name_with_whitespace() {
         Ok(WasmValidationDetails {
             largest_function_instruction_count: NumInstructions::new(1),
             max_complexity: Complexity(1),
+            code_section_size: NumBytes::from(3),
             ..Default::default()
         })
     );
@@ -1045,7 +1049,7 @@ fn wasm_with_fixed_sizes(code_section_size: u32, data_section_size: u32) -> Bina
 
 #[test]
 fn large_code_section_rejected() {
-    let wasm = wasm_with_fixed_sizes(10 * KB * KB + 10, 0);
+    let wasm = wasm_with_fixed_sizes(11 * KB * KB + 10, 0);
     let embedder = WasmtimeEmbedder::new(EmbeddersConfig::default(), no_op_logger());
     let result = validate_and_instrument_for_testing(&embedder, &wasm);
     assert_matches!(
@@ -1178,7 +1182,7 @@ fn test_wasm64_initial_wasm_memory_size_validation() {
         ..Default::default()
     };
     let allowed_wasm_memory_size_in_pages =
-        embedders_config.max_wasm_memory_size.get() / WASM_PAGE_SIZE as u64;
+        embedders_config.max_wasm64_memory_size.get() / WASM_PAGE_SIZE as u64;
     let declared_wasm_memory_size_in_pages = allowed_wasm_memory_size_in_pages + 10;
     let wasm = wat2wasm(&format!(
         r#"(module
@@ -1194,5 +1198,32 @@ fn test_wasm64_initial_wasm_memory_size_validation() {
             declared_size: declared_wasm_memory_size_in_pages,
             allowed_size: allowed_wasm_memory_size_in_pages
         })
+    );
+}
+
+#[test]
+fn test_validate_table64() {
+    use ic_config::embedders::FeatureFlags;
+    use ic_config::flag_status::FlagStatus;
+
+    let embedders_config = EmbeddersConfig {
+        feature_flags: FeatureFlags {
+            wasm64: FlagStatus::Enabled,
+            ..Default::default()
+        },
+        ..Default::default()
+    };
+
+    let wasm = wat2wasm(
+        r#"(module
+            (table i64 1 funcref)
+            (memory i64 1 1)
+        )"#,
+    )
+    .unwrap();
+
+    assert_eq!(
+        validate_wasm_binary(&wasm, &embedders_config),
+        Ok(WasmValidationDetails::default())
     );
 }

@@ -44,7 +44,7 @@ function check_index() {
     set -e
 }
 
-sudo apt update && sudo apt install sqlite3 containernetworking-plugins
+sudo apt update && sudo apt install -y sqlite3 containernetworking-plugins
 
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" &>/dev/null && pwd)
 COMMIT_ID="$1"

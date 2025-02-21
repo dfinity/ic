@@ -1,5 +1,3 @@
-#![allow(clippy::unwrap_used)]
-
 use crate::vault::local_csp_vault::tls::SecretKeyStoreInsertionError;
 use crate::vault::test_utils::sks::secret_key_store_containing_key_with_invalid_encoding;
 use crate::vault::test_utils::sks::secret_key_store_with_duplicated_key_id_error_on_insert;
@@ -45,7 +43,7 @@ mod keygen {
         let cert = csp_vault
             .gen_tls_key_pair(node_test_id(NODE_1))
             .expect("Generation of TLS keys failed.");
-        let key_id = KeyId::try_from(&cert).unwrap();
+        let key_id = KeyId::from(&cert);
 
         assert!(csp_vault.sks_contains(key_id).expect("SKS call failed"));
         assert_eq!(
@@ -449,10 +447,7 @@ mod sign {
             .expect("Generation of TLS keys failed.");
 
         assert!(csp_vault
-            .tls_sign(
-                random_message(rng),
-                KeyId::try_from(&public_key_cert).expect("Cannot instantiate KeyId")
-            )
+            .tls_sign(random_message(rng), KeyId::from(&public_key_cert))
             .is_ok());
     }
 
@@ -469,10 +464,7 @@ mod sign {
         let msg = random_message(rng);
 
         let sig = csp_vault
-            .tls_sign(
-                msg.clone(),
-                KeyId::try_from(&public_key_cert).expect("cannot instantiate KeyId"),
-            )
+            .tls_sign(msg.clone(), KeyId::from(&public_key_cert))
             .expect("failed to generate signature");
 
         let csp_pub_key = ed25519_csp_pubkey_from_tls_pubkey_cert(&public_key_cert);
@@ -507,7 +499,7 @@ mod sign {
             .expect("failed to generate keys");
         let msg = random_message(rng);
 
-        let result = csp_vault.tls_sign(msg, KeyId::try_from(&wrong_csp_pub_key).unwrap());
+        let result = csp_vault.tls_sign(msg, KeyId::from(&wrong_csp_pub_key));
 
         assert_eq!(
             result.expect_err("Unexpected success."),

@@ -1,7 +1,7 @@
 //! A pool of incoming `CertifiedStreamSlices` used by `XNetPayloadBuilderImpl`
 //! to build `XNetPayloads` without the need for I/O on the critical path.
 
-use crate::ExpectedIndices;
+use crate::{max_message_index, ExpectedIndices};
 use header::Header;
 use ic_canonical_state::LabelLike;
 use ic_crypto_tree_hash::{
@@ -363,7 +363,10 @@ const EMPTY_PAYLOAD_BYTES: usize = 49;
 const NON_EMPTY_PAYLOAD_FIXED_BYTES: usize = 71;
 
 impl Payload {
-    /// Takes a slice prefix whose estimated size meets the given limits.
+    /// Takes a slice prefix whose estimated size meets the explicit limits below,
+    /// as well as an implicit limit on the number of messages which ensures that
+    /// the number of signals in the reverse stream stays bounded.
+    ///
     /// `byte_limit` applies to the total estimated size of both the payload and
     /// the resulting witness.
     ///
@@ -377,7 +380,28 @@ impl Payload {
         message_limit: Option<usize>,
         byte_limit: Option<usize>,
     ) -> CertifiedSliceResult<(Option<Self>, Option<Self>)> {
-        let message_limit = message_limit.unwrap_or(usize::MAX);
+        // Consider an axis of stream indices along which we progress by inducting messages:
+        //
+        // -------|-------------|---------------------|-------------> stream index
+        //  stream_begin   messages_begin      max_message_index
+        //
+        // When inducting a stream slice, the signals start at `stream_begin`. In order to bound
+        // them, we can not go above an upper limit of `max_message_index`. Since the messages
+        // in the slice start at `messages_begin`, we can therefore induct a number of
+        // `max_messages_index - messages_begin` messages and still stay below the stated limit.
+        let max_message_limit = {
+            let messages_begin =
+                self.messages_begin().unwrap_or(self.header.begin()).get() as usize;
+            let max_message_index = max_message_index(self.header.begin()).get() as usize;
+            // The use of `saturating_sub()` allows decreasing `max_message_index` since for this
+            // case we could have `max_message_index < messages_begin`. This will result in empty
+            // prefixes until `stream_begin` (and thus `max_message_index`) has progressed enough
+            // such that we can start producing signals (by inducting messages) again.
+            max_message_index.saturating_sub(messages_begin)
+        };
+        let message_limit = message_limit.map_or(max_message_limit, |message_limit| {
+            message_limit.min(max_message_limit)
+        });
         let byte_limit = byte_limit.unwrap_or(usize::MAX);
 
         debug_assert!(EMPTY_PAYLOAD_BYTES <= NON_EMPTY_PAYLOAD_FIXED_BYTES);
@@ -1248,10 +1272,7 @@ impl CertifiedSlicePool {
                     Ok(None) => None,
 
                     // Invalid slice, drop it.
-                    Err(_) => {
-                        // TODO(MR-6): Log and increment an error counter.
-                        None
-                    }
+                    Err(_) => None,
                 }
             }
         }
@@ -1560,5 +1581,17 @@ pub mod testing {
 
     pub fn slice_len(slice: &UnpackedStreamSlice) -> usize {
         slice.payload.len()
+    }
+
+    pub fn stream_begin(slice: &UnpackedStreamSlice) -> StreamIndex {
+        slice.payload.header.begin()
+    }
+
+    pub fn slice_end(slice: &UnpackedStreamSlice) -> Option<StreamIndex> {
+        slice
+            .payload
+            .messages
+            .as_ref()
+            .map(|messages| messages.end())
     }
 }

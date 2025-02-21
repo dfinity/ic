@@ -53,7 +53,7 @@ impl EthRpcClient {
     }
 
     pub fn from_state(state: &State) -> Self {
-        use evm_rpc_client::RpcServices as EvmRpcServices;
+        use evm_rpc_client::{EthSepoliaService, RpcServices as EvmRpcServices};
 
         let mut client = Self::new(state.ethereum_network());
         if let Some(evm_rpc_id) = state.evm_rpc_id {
@@ -61,7 +61,12 @@ impl EthRpcClient {
 
             let providers = match client.chain {
                 EthereumNetwork::Mainnet => EvmRpcServices::EthMainnet(None),
-                EthereumNetwork::Sepolia => EvmRpcServices::EthSepolia(None),
+                EthereumNetwork::Sepolia => EvmRpcServices::EthSepolia(Some(vec![
+                    EthSepoliaService::BlockPi,
+                    EthSepoliaService::PublicNode,
+                    EthSepoliaService::Alchemy,
+                    EthSepoliaService::Ankr,
+                ])),
             };
             let min_threshold = match client.chain {
                 EthereumNetwork::Mainnet => 3_u8,

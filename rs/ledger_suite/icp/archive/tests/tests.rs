@@ -7,7 +7,7 @@ use ic_ledger_core::Tokens;
 use ic_ledger_test_utils::build_ledger_archive_wasm;
 use icp_ledger::Operation::Mint;
 use icp_ledger::{AccountIdentifier, Block, Memo, Transaction};
-use pocket_ic::{PocketIcBuilder, WasmResult};
+use pocket_ic::PocketIcBuilder;
 use serde_bytes::ByteBuf;
 
 const GENESIS_IN_NANOS_SINCE_UNIX_EPOCH: u64 = 1_620_328_630_000_000_000;
@@ -57,12 +57,6 @@ impl Setup {
                 Encode!(&()).expect("should encode empty args"),
             )
             .expect("failed to send remaining_capacity request");
-        let result = match result {
-            WasmResult::Reply(result) => result,
-            WasmResult::Reject(s) => {
-                panic!("Call to remaining_capacity failed: {:#?}", s)
-            }
-        };
         let res = Decode!(&result, usize).expect("failed to decode usize");
         assert_eq!(res, remaining_capacity);
     }
@@ -157,7 +151,7 @@ fn large_http_request() {
         body: ByteBuf::from(vec![42; 1_000]),
     };
     let http_request_bytes = Encode!(&http_request).unwrap();
-    let response = match setup
+    let response_bytes = setup
         .pocket_ic
         .update_call(
             setup.archive_canister_id.into(),
@@ -165,11 +159,8 @@ fn large_http_request() {
             "http_request",
             http_request_bytes,
         )
-        .unwrap()
-    {
-        WasmResult::Reply(bytes) => Decode!(&bytes, HttpResponse).unwrap(),
-        WasmResult::Reject(reason) => panic!("Unexpected reject: {}", reason),
-    };
+        .unwrap();
+    let response = Decode!(&response_bytes, HttpResponse).unwrap();
     assert_eq!(response.status_code, 200);
 
     // The anonymous end-user sends a large HTTP request. This should be rejected.
@@ -185,5 +176,5 @@ fn large_http_request() {
             large_http_request_bytes,
         )
         .unwrap_err();
-    assert!(err.description.contains("Deserialization Failed"));
+    assert!(err.reject_message.contains("Deserialization Failed"));
 }

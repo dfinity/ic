@@ -7,22 +7,27 @@ use std::{
 use base32::Alphabet;
 use candid::{types::principal::PrincipalError, CandidType, Deserialize, Principal};
 use ic_stable_structures::{storable::Bound, Storable};
+use minicbor::{Decode, Encode};
 use serde::Serialize;
 use std::borrow::Cow;
-use std::io::{Cursor, Read};
 
 pub type Subaccount = [u8; 32];
 
 pub const DEFAULT_SUBACCOUNT: &Subaccount = &[0; 32];
 
-// Account representation of ledgers supporting the ICRC1 standard
-#[derive(Serialize, CandidType, Deserialize, Clone, Debug, Copy)]
+/// [Account](https://github.com/dfinity/ICRC-1/blob/main/standards/ICRC-3/README.md#value)
+/// representation of ledgers supporting the ICRC-1 standard.
+#[derive(Serialize, CandidType, Deserialize, Clone, Debug, Copy, Encode, Decode)]
 pub struct Account {
+    #[cbor(n(0), with = "icrc_cbor::principal")]
     pub owner: Principal,
+    #[cbor(n(1), with = "minicbor::bytes")]
     pub subaccount: Option<Subaccount>,
 }
 
 impl Account {
+    /// The effective subaccount of an account - the subaccount if it is set, otherwise the default
+    /// subaccount of all zeroes.
     #[inline]
     pub fn effective_subaccount(&self) -> &Subaccount {
         self.subaccount.as_ref().unwrap_or(DEFAULT_SUBACCOUNT)
@@ -170,53 +175,37 @@ impl FromStr for Account {
     }
 }
 
-const MAX_SERIALIZATION_LEN: u32 = 62;
-
 impl Storable for Account {
     fn to_bytes(&self) -> Cow<[u8]> {
-        let mut buffer: Vec<u8> = vec![];
-        let mut buffer0: Vec<u8> = vec![];
-
-        if let Some(subaccount) = self.subaccount {
-            buffer0.extend(subaccount.as_slice());
-        }
-        buffer0.extend(self.owner.as_slice());
-        buffer.extend((buffer0.len() as u8).to_le_bytes());
-        buffer.append(&mut buffer0);
-
-        Cow::Owned(buffer)
+        let mut buf = vec![];
+        minicbor::encode(self, &mut buf).expect("account encoding should always succeed");
+        Cow::Owned(buf)
     }
 
     fn from_bytes(bytes: Cow<[u8]>) -> Self {
-        let mut cursor = Cursor::new(bytes);
-
-        let mut len_bytes = [0u8; 1];
-        cursor
-            .read_exact(&mut len_bytes)
-            .expect("Unable to read the len of the account");
-        let mut len = u8::from_le_bytes(len_bytes);
-        let subaccount = if len >= 32 {
-            let mut subaccount_bytes = [0u8; 32];
-            cursor
-                .read_exact(&mut subaccount_bytes)
-                .expect("Unable to read the bytes of the account's subaccount");
-            len -= 32;
-            Some(subaccount_bytes)
-        } else {
-            None
-        };
-        let mut owner_bytes = vec![0; len as usize];
-        cursor
-            .read_exact(&mut owner_bytes)
-            .expect("Unable to read the bytes of the account's owners");
-        let owner = Principal::from_slice(&owner_bytes);
-        Account { owner, subaccount }
+        minicbor::decode(bytes.as_ref()).unwrap_or_else(|e| {
+            panic!("failed to decode account bytes {}: {e}", hex::encode(bytes))
+        })
     }
 
-    const BOUND: Bound = Bound::Bounded {
-        max_size: MAX_SERIALIZATION_LEN,
-        is_fixed_size: false,
-    };
+    const BOUND: Bound = Bound::Unbounded;
+}
+
+/// Maps a `Principal` to a `Subaccount`.
+/// Can be used to create a separate `Subaccount` for each `Principal`.
+pub fn principal_to_subaccount(principal: Principal) -> Subaccount {
+    let mut subaccount = [0; 32];
+    let principal = principal.as_slice();
+    subaccount[0] = principal.len().try_into().unwrap();
+    subaccount[1..1 + principal.len()].copy_from_slice(principal);
+    subaccount
+}
+
+/// Maps a `Subaccount` to a `Principal`.
+/// Reverse of `principal_to_subaccount` above.
+pub fn subaccount_to_principal(subaccount: Subaccount) -> Principal {
+    let len = subaccount[0] as usize;
+    Principal::from_slice(&subaccount[1..len + 1])
 }
 
 #[cfg(test)]
@@ -225,12 +214,13 @@ mod tests {
     use ic_stable_structures::Storable;
     use proptest::prelude::prop;
     use proptest::strategy::Strategy;
+    use std::borrow::Cow;
     use std::str::FromStr;
 
     use candid::Principal;
 
     use crate::icrc1::account::{
-        Account, ICRC1TextReprError, DEFAULT_SUBACCOUNT, MAX_SERIALIZATION_LEN,
+        principal_to_subaccount, subaccount_to_principal, Account, ICRC1TextReprError,
     };
 
     pub fn principal_strategy() -> impl Strategy<Value = Principal> {
@@ -381,9 +371,26 @@ mod tests {
     }
 
     #[test]
-    fn test_account_max_serialization_length() {
+    fn test_account_serialization() {
+        use proptest::{prop_assert_eq, proptest};
+        proptest!(|(account in account_strategy())| {
+            prop_assert_eq!(Account::from_bytes(account.to_bytes()), account);
+        })
+    }
+
+    #[test]
+    fn test_principal_to_subaccount() {
+        use proptest::{prop_assert_eq, proptest};
+        proptest!(|(principal in principal_strategy())| {
+            let subaccount = principal_to_subaccount(principal);
+            prop_assert_eq!(subaccount_to_principal(subaccount), principal);
+        })
+    }
+
+    #[test]
+    fn test_account_serialization_stability() {
         let owner =
-            Principal::from_text("k2t6j-2nvnp-4zjm3-25dtz-6xhaa-c7boj-5gayf-oj3xs-i43lp-teztq-6ae")
+            Principal::from_str("k2t6j-2nvnp-4zjm3-25dtz-6xhaa-c7boj-5gayf-oj3xs-i43lp-teztq-6ae")
                 .unwrap();
         let subaccount = Some(
             hex::decode("0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20")
@@ -391,20 +398,31 @@ mod tests {
                 .try_into()
                 .unwrap(),
         );
-        let account = Account { owner, subaccount };
-        let serialized_len = account.to_bytes().len();
-        assert_eq!(
-            serialized_len,
-            1 + DEFAULT_SUBACCOUNT.len() + Principal::MAX_LENGTH_IN_BYTES
+        let mut accounts = vec![Account { owner, subaccount }];
+        let mut serialized_accounts = vec![hex::decode("82581db56bf994b37ae8e79f5ce000be1727a6060ae4eef24736b7cc999c3c0258200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20").unwrap()];
+        let owner =
+            Principal::from_str("gjfkw-yiolw-ncij7-yzhg2-gq6ec-xi6jy-feyni-g26f4-x7afk-thx6z-6ae")
+                .unwrap();
+        let subaccount = Some(
+            hex::decode("0000000000000000000000000000000000000000000000000000000000000000")
+                .unwrap()
+                .try_into()
+                .unwrap(),
         );
-        assert_eq!(serialized_len as u32, MAX_SERIALIZATION_LEN);
-    }
+        accounts.push(Account { owner, subaccount });
+        serialized_accounts.push(hex::decode("82581d0e5d9a2427f8c9cda343c415d1e4e0a4c3506d78bcbfc0554cf7f67c0258200000000000000000000000000000000000000000000000000000000000000000").unwrap());
 
-    #[test]
-    fn test_account_serialization() {
-        use proptest::{prop_assert_eq, proptest};
-        proptest!(|(account in account_strategy())| {
-            prop_assert_eq!(Account::from_bytes(account.to_bytes()), account);
-        })
+        let owner = Principal::from_str("2chl6-4hpzw-vqaaa-aaaaa-c").unwrap();
+        let subaccount = None;
+        accounts.push(Account { owner, subaccount });
+        serialized_accounts.push(hex::decode("8149efcdab000000000001").unwrap());
+
+        for (i, account) in accounts.iter().enumerate() {
+            assert_eq!(account.to_bytes(), serialized_accounts[i].clone());
+            assert_eq!(
+                *account,
+                Account::from_bytes(Cow::Owned(serialized_accounts[i].clone()))
+            );
+        }
     }
 }

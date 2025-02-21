@@ -286,6 +286,11 @@ impl Registry {
         self.apply_mutations(mutations);
     }
 
+    #[cfg(test)]
+    pub fn apply_mutations_for_test(&mut self, mutations: Vec<RegistryMutation>) {
+        self.apply_mutations(mutations);
+    }
+
     /// Checks that invariants would hold after applying the mutations
     pub(crate) fn verify_mutations_internal(&self, mutations: &Vec<RegistryMutation>) {
         let errors = self.verify_mutation_type(mutations.as_slice());

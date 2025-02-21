@@ -58,23 +58,3 @@ repos:
     language: system
     always_run: true
     verbose: true
-
-  - id: buf-breaking
-    name: Check no breaking changes were introduced
-    entry: ./pre-commit/check-incompatibilities.sh
-    language: script
-    stages: [manual]
-    pass_filenames: false
-
-- repo: https://github.com/willthames/ansible-lint.git
-  rev: v4.2.0
-  hooks:
-    - id: ansible-lint
-      always_run: false
-      files: (^|/)testnet/.+\.(yaml|yml)$
-      exclude: |
-          (?x)^(
-              testnet/tests/.*|.*/docker-compose.yml|testnet/env/shared-config\.yml
-          )$
-      # To be uncommented upon moving to new ansible-lint
-      # args: ['-i', 'testnet/ansible/.ansible-lint-ignore', 'testnet/ansible']

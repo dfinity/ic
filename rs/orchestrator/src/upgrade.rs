@@ -14,7 +14,7 @@ use ic_image_upgrader::{
 };
 use ic_interfaces_registry::RegistryClient;
 use ic_logger::{error, info, warn, ReplicaLogger};
-use ic_management_canister_types::MasterPublicKeyId;
+use ic_management_canister_types_private::MasterPublicKeyId;
 use ic_protobuf::proxy::try_from_option_field;
 use ic_registry_client_helpers::{node::NodeRegistry, subnet::SubnetRegistry};
 use ic_registry_local_store::LocalStoreImpl;
@@ -28,9 +28,10 @@ use ic_types::{
     Height, NodeId, RegistryVersion, ReplicaVersion, SubnetId,
 };
 use std::{
-    collections::BTreeMap,
+    collections::{BTreeMap, HashMap},
     path::PathBuf,
     sync::{Arc, Mutex},
+    time::Instant,
 };
 
 const KEY_CHANGES_FILENAME: &str = "key_changed_metric.cbor";
@@ -56,6 +57,10 @@ impl Process for ReplicaProcess {
 
     fn get_args(&self) -> &[String] {
         &self.args
+    }
+
+    fn get_env(&self) -> HashMap<String, String> {
+        HashMap::new()
     }
 }
 
@@ -194,7 +199,7 @@ impl Upgrade {
                                     // Otherwise we would have left the subnet before upgrading. This means
                                     // we will trust the registry and go ahead with removing the node's state
                                     // including the broken local CUP.
-                                    self.remove_state()?;
+                                    self.remove_state().await?;
                                     return Ok(None);
                                 }
                                 Err(other) => return Err(other),
@@ -269,8 +274,17 @@ impl Upgrade {
             &latest_cup,
         ) {
             self.stop_replica()?;
-            self.remove_state()?;
-            return Ok(None);
+            return match self.remove_state().await {
+                Ok(()) => Ok(None),
+                Err(err) => {
+                    warn!(
+                        self.logger,
+                        "Removal of the node state failed with error {}", err
+                    );
+                    self.metrics.critical_error_state_removal_failed.inc();
+                    Err(err)
+                }
+            };
         }
 
         // If we arrived here, we have the newest CUP and we're still assigned.
@@ -359,7 +373,7 @@ impl Upgrade {
         Ok(())
     }
 
-    fn remove_state(&self) -> OrchestratorResult<()> {
+    async fn remove_state(&self) -> OrchestratorResult<()> {
         // Reset the key changed errors counter to not raise alerts in other subnets
         self.metrics.master_public_key_changed_errors.reset();
         remove_node_state(
@@ -369,6 +383,18 @@ impl Upgrade {
         )
         .map_err(OrchestratorError::UpgradeError)?;
         info!(self.logger, "Subnet state removed");
+
+        let instant = Instant::now();
+        sync_and_trim_fs(&self.logger)
+            .await
+            .map_err(OrchestratorError::UpgradeError)?;
+        let elapsed = instant.elapsed().as_millis();
+        self.metrics.fstrim_duration.set(elapsed as i64);
+        info!(
+            self.logger,
+            "Filesystem synced and trimmed in {}ms", elapsed
+        );
+
         Ok(())
     }
 
@@ -561,7 +587,7 @@ fn get_subnet_id(registry: &dyn RegistryClient, cup: &CatchUpPackage) -> Result<
     // Note that although sometimes CUPs have no signatures (e.g. genesis and
     // recovery CUPs) they always have the signer id (the DKG id), which is taken
     // from the high-threshold transcript when we build a genesis/recovery CUP.
-    let dkg_id = cup.signature.signer;
+    let dkg_id = &cup.signature.signer;
     // If the DKG key material was signed by the subnet itself — use it, if not, get
     // the subnet id from the registry.
     match dkg_id.target_subnet {
@@ -620,6 +646,28 @@ fn should_node_become_unassigned(
         }
     }
     true
+}
+
+// Call `sync` and `fstrim` on the data partition
+async fn sync_and_trim_fs(logger: &ReplicaLogger) -> Result<(), String> {
+    let mut fstrim_script = tokio::process::Command::new("/opt/ic/bin/sync_fstrim.sh");
+    info!(logger, "Running command '{:?}'...", fstrim_script);
+    match fstrim_script.status().await {
+        Ok(status) => {
+            if status.success() {
+                Ok(())
+            } else {
+                Err(format!(
+                    "Failed to run command '{:?}', return value: {}",
+                    fstrim_script, status
+                ))
+            }
+        }
+        Err(err) => Err(format!(
+            "Failed to run command '{:?}', error: {}",
+            fstrim_script, err
+        )),
+    }
 }
 
 // Deletes the subnet state consisting of the consensus pool, execution state,
@@ -771,7 +819,7 @@ fn get_master_public_keys(
 
         match get_master_public_key_from_transcript(transcript) {
             Ok(public_key) => {
-                public_keys.insert(key_id.clone(), public_key);
+                public_keys.insert(key_id.clone().into(), public_key);
             }
             Err(err) => {
                 warn!(
@@ -889,7 +937,7 @@ mod tests {
         generate_key_transcript, CanisterThresholdSigTestEnvironment, IDkgParticipants,
     };
     use ic_crypto_test_utils_reproducible_rng::{reproducible_rng, ReproducibleRng};
-    use ic_management_canister_types::{EcdsaCurve, EcdsaKeyId};
+    use ic_management_canister_types_private::{EcdsaCurve, EcdsaKeyId};
     use ic_metrics::MetricsRegistry;
     use ic_test_utilities_consensus::fake::{Fake, FakeContent};
     use ic_test_utilities_logger::with_test_replica_logger;
@@ -931,7 +979,7 @@ mod tests {
             vec![MasterKeyTranscript {
                 current: unmasked,
                 next_in_creation: idkg::KeyTranscriptCreation::Begin,
-                master_key_id: key_id.clone(),
+                master_key_id: key_id.clone().try_into().unwrap(),
             }],
         );
         idkg.idkg_transcripts = idkg_transcripts;

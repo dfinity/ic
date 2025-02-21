@@ -7,6 +7,7 @@ pub mod malicious;
 mod runner;
 mod types;
 
+use ic_consensus_dkg::get_dkg_summary_from_cup_contents;
 pub use runner::ConsensusRunner;
 pub use types::{
     ComponentModifier, ConsensusDependencies, ConsensusDriver, ConsensusInstance,
@@ -16,14 +17,15 @@ pub use types::{
 use ic_crypto_temp_crypto::{NodeKeysToGenerate, TempCryptoComponent, TempCryptoComponentGeneric};
 use ic_crypto_test_utils_ni_dkg::{initial_dkg_transcript, InitialNiDkgConfig};
 use ic_interfaces_registry::RegistryClient;
-use ic_management_canister_types::{
+use ic_management_canister_types_private::{
     EcdsaCurve, EcdsaKeyId, MasterPublicKeyId, SchnorrAlgorithm, SchnorrKeyId,
 };
 use ic_protobuf::registry::subnet::v1::{CatchUpPackageContents, InitialNiDkgTranscriptRecord};
 use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_client_helpers::crypto::CryptoRegistry;
+use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
-use ic_registry_subnet_features::{ChainKeyConfig, EcdsaConfig, KeyConfig};
+use ic_registry_subnet_features::{ChainKeyConfig, KeyConfig};
 use ic_test_utilities_consensus::make_genesis;
 use ic_test_utilities_registry::SubnetRecordBuilder;
 use ic_types::{
@@ -195,12 +197,18 @@ pub fn setup_subnet<R: Rng + CryptoRng>(
     registry_client.reload();
     registry_client.update_to_latest_version();
 
-    let summary = ic_consensus::dkg::make_genesis_summary(
-        &*registry_client,
+    let cup_contents = registry_client
+        .get_cup_contents(subnet_id, registry_client.get_latest_version())
+        .expect("Failed to retreive the DKG transcripts from registry");
+    let summary = get_dkg_summary_from_cup_contents(
+        cup_contents.value.expect("Missing CUP contents"),
         subnet_id,
-        Option::from(version),
+        &*registry_client,
+        version,
     )
+    .expect("Failed to get DKG summary from CUP contents")
     .with_current_transcripts(ni_transcripts);
+
     let cup = make_genesis(summary);
     (registry_client, cup, cryptos)
 }

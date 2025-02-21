@@ -777,7 +777,6 @@ impl IncompleteState {
         root: &Path,
         height: Height,
         state_layout: &StateLayout,
-        thread_pool: &mut scoped_threadpool::Pool,
     ) {
         let _timer = metrics
             .state_sync_metrics
@@ -794,19 +793,7 @@ impl IncompleteState {
             CheckpointLayout::<RwPolicy<()>>::new_untracked(root.to_path_buf(), height)
                 .expect("failed to create checkpoint layout");
 
-        scratchpad_layout
-            .create_unverified_checkpoint_marker()
-            .unwrap_or_else(|err| {
-                fatal!(
-                    log,
-                    "Failed to create a checkpoint marker for state {} at path {}: {}",
-                    height,
-                    scratchpad_layout.raw_path().display(),
-                    err,
-                )
-            });
-
-        match state_layout.scratchpad_to_checkpoint(scratchpad_layout, height, Some(thread_pool)) {
+        match state_layout.promote_scratchpad_to_unverified_checkpoint(scratchpad_layout, height) {
             Ok(_) => {
                 let elapsed = started_at.elapsed();
                 metrics
@@ -849,7 +836,7 @@ impl IncompleteState {
 
                 fatal!(
                     log,
-                    "Failed to promote synced state to a checkpoint {} after {:?}: {}: {} (at {})",
+                    "Failed to mark scratchpad as unverified or promote it to a checkpoint {} after {:?}: {}: {} (at {})",
                     height,
                     elapsed,
                     message,
@@ -1156,7 +1143,6 @@ impl Chunkable<StateSyncMessage> for IncompleteState {
                 manifest_in_construction: _,
                 ref manifest_chunks,
             } => {
-                #[allow(clippy::needless_collect)]
                 let ids: Vec<_> = manifest_chunks.iter().map(|id| ChunkId::new(*id)).collect();
                 Box::new(ids.into_iter())
             }
@@ -1166,7 +1152,6 @@ impl Chunkable<StateSyncMessage> for IncompleteState {
                 state_sync_file_group: _,
                 ref fetch_chunks,
             } => {
-                #[allow(clippy::needless_collect)]
                 let ids: Vec<_> = fetch_chunks
                     .iter()
                     .map(|id| ChunkId::new(*id as u32))
@@ -1344,7 +1329,6 @@ impl Chunkable<StateSyncMessage> for IncompleteState {
                             &self.root,
                             self.height,
                             &self.state_layout,
-                            &mut self.thread_pool.lock().unwrap(),
                         );
 
                         self.state_sync.deliver_state_sync(
@@ -1521,7 +1505,6 @@ impl Chunkable<StateSyncMessage> for IncompleteState {
                         &self.root,
                         self.height,
                         &self.state_layout,
-                        &mut self.thread_pool.lock().unwrap(),
                     );
 
                     self.state_sync.deliver_state_sync(

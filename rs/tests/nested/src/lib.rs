@@ -12,13 +12,14 @@ use ic_system_test_driver::driver::test_env::{HasIcPrepDir, TestEnv, TestEnvAttr
 use ic_system_test_driver::driver::test_env_api::*;
 use ic_system_test_driver::driver::test_setup::GroupSetup;
 use ic_system_test_driver::nns::add_nodes_to_subnet;
-use ic_system_test_driver::util::{block_on, get_nns_node};
+use ic_system_test_driver::util::block_on;
 use ic_types::hostos_version::HostosVersion;
 use slog::info;
 use std::str::FromStr;
 use std::time::Duration;
 
 mod util;
+use url::Url;
 use util::{check_hostos_version, elect_hostos_version, update_nodes_hostos_version};
 
 const HOST_VM_NAME: &str = "host-1";
@@ -36,6 +37,7 @@ pub fn config(env: TestEnv) {
     // Setup "testnet"
     InternetComputer::new()
         .add_fast_single_node_subnet(SubnetType::System)
+        .with_api_boundary_nodes(1)
         .with_node_provider(principal)
         .with_node_operator(principal)
         .setup_and_start(&env)
@@ -65,13 +67,26 @@ fn setup_nested_vms(env: TestEnv) {
             .expect("Unable to write nested VM.");
     }
 
-    let nns_node = get_nns_node(&env.topology_snapshot());
-    let nns_url = nns_node.get_public_url();
+    let api_boundary_node = env
+        .topology_snapshot()
+        .api_boundary_nodes()
+        .next()
+        .expect("No API BN present");
+    let api_bn_url = Url::parse(&format!("https://[{}]/", api_boundary_node.get_ip_addr()))
+        .expect("Could not parse Url");
+
     let nns_public_key =
         std::fs::read_to_string(env.prep_dir("").unwrap().root_public_key_path()).unwrap();
 
-    setup_and_start_nested_vms(&nodes, &env, &farm, &group_name, &nns_url, &nns_public_key)
-        .expect("Unable to start nested VMs.");
+    setup_and_start_nested_vms(
+        &nodes,
+        &env,
+        &farm,
+        &group_name,
+        &api_bn_url,
+        &nns_public_key,
+    )
+    .expect("Unable to start nested VMs.");
 }
 
 /// Allow the nested GuestOS to install and launch, and check that it can

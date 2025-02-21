@@ -173,6 +173,7 @@ use ic_protobuf::registry::{
     subnet::v1 as pb_subnet,
 };
 use ic_registry_client_helpers::{
+    api_boundary_node::ApiBoundaryNodeRegistry,
     node::NodeRegistry,
     routing_table::RoutingTableRegistry,
     subnet::{SubnetListRegistry, SubnetRegistry},
@@ -303,6 +304,21 @@ impl std::fmt::Display for TopologySnapshot {
                 .unwrap();
             });
         });
+        if self.api_boundary_nodes().count() > 0 {
+            writeln!(f, "API boundary nodes:").unwrap();
+        }
+        self.api_boundary_nodes().enumerate().for_each(|(idx, n)| {
+            writeln!(
+                f,
+                "\tNode id={}, ipv6={:<width$}, domain_name={}, index={}",
+                n.node_id,
+                n.get_ip_addr(),
+                n.get_domain().map_or("n/a".to_string(), |domain| domain),
+                idx,
+                width = max_length_ipv6,
+            )
+            .unwrap()
+        });
         if self.unassigned_nodes().count() > 0 {
             writeln!(f, "Unassigned nodes:").unwrap();
         }
@@ -332,6 +348,7 @@ impl TopologySnapshot {
         pub struct NodeView {
             pub id: NodeId,
             pub ipv6: IpAddr,
+            pub domain: Option<String>,
         }
 
         #[derive(Deserialize, Serialize)]
@@ -346,6 +363,7 @@ impl TopologySnapshot {
             pub registry_version: String,
             pub subnets: Vec<SubnetView>,
             pub unassigned_nodes: Vec<NodeView>,
+            pub api_boundary_nodes: Vec<NodeView>,
         }
         let subnets: Vec<_> = self
             .subnets()
@@ -355,6 +373,7 @@ impl TopologySnapshot {
                     .map(|n| NodeView {
                         id: n.node_id,
                         ipv6: n.get_ip_addr(),
+                        domain: n.get_domain(),
                     })
                     .collect();
                 SubnetView {
@@ -369,6 +388,15 @@ impl TopologySnapshot {
             .map(|n| NodeView {
                 id: n.node_id,
                 ipv6: n.get_ip_addr(),
+                domain: n.get_domain(),
+            })
+            .collect();
+        let api_boundary_nodes: Vec<_> = self
+            .api_boundary_nodes()
+            .map(|n| NodeView {
+                id: n.node_id,
+                ipv6: n.get_ip_addr(),
+                domain: n.get_domain(),
             })
             .collect();
         let event = log_events::LogEvent::new(
@@ -377,6 +405,7 @@ impl TopologySnapshot {
                 registry_version: self.registry_version.to_string(),
                 subnets,
                 unassigned_nodes,
+                api_boundary_nodes,
             },
         );
         event.emit_log(log);
@@ -426,12 +455,39 @@ impl TopologySnapshot {
             })
             .collect();
 
+        let api_boundary_nodes = self
+            .local_registry
+            .get_api_boundary_node_ids(registry_version)
+            .unwrap();
+
         Box::new(
             self.local_registry
                 .get_node_ids(registry_version)
                 .unwrap()
                 .into_iter()
-                .filter(|node_id| !assigned_nodes.contains(node_id))
+                .filter(|node_id| {
+                    !assigned_nodes.contains(node_id) && !api_boundary_nodes.contains(node_id)
+                })
+                .map(|node_id| IcNodeSnapshot {
+                    node_id,
+                    registry_version,
+                    local_registry: self.local_registry.clone(),
+                    env: self.env.clone(),
+                    ic_name: self.ic_name.clone(),
+                })
+                .collect::<Vec<_>>()
+                .into_iter(),
+        )
+    }
+
+    pub fn api_boundary_nodes(&self) -> Box<dyn Iterator<Item = IcNodeSnapshot>> {
+        let registry_version = self.local_registry.get_latest_version();
+
+        Box::new(
+            self.local_registry
+                .get_api_boundary_node_ids(registry_version)
+                .unwrap()
+                .into_iter()
                 .map(|node_id| IcNodeSnapshot {
                     node_id,
                     registry_version,
@@ -825,10 +881,22 @@ impl IcNodeSnapshot {
                     .expect("Optional routing table is None in local registry.");
                 match canister_ranges.first() {
                     Some(range) => range.start.get(),
-                    None => PrincipalId::default(),
+                    None => {
+                        warn!(
+                            self.env.logger(),
+                            "No canister ranges found for subnet_id={}", subnet_id
+                        );
+                        PrincipalId::default()
+                    }
                 }
             }
-            None => PrincipalId::default(),
+            None => {
+                warn!(
+                    self.env.logger(),
+                    "Node {} is not assigned to any subnet", self.node_id
+                );
+                PrincipalId::default()
+            }
         }
     }
 
@@ -861,6 +929,15 @@ impl IcNodeSnapshot {
         name: &str,
         arg: Option<Vec<u8>>,
     ) -> Principal {
+        self.create_and_install_canister_with_arg_and_cycles(name, arg, None)
+    }
+
+    pub fn create_and_install_canister_with_arg_and_cycles(
+        &self,
+        name: &str,
+        arg: Option<Vec<u8>>,
+        cycles_amount: Option<u128>,
+    ) -> Principal {
         let canister_bytes = load_wasm(name);
         let effective_canister_id = self.effective_canister_id();
 
@@ -869,7 +946,7 @@ impl IcNodeSnapshot {
             let mgr = ManagementCanister::create(&agent);
             let canister_id = mgr
                 .create_canister()
-                .as_provisional_create_with_amount(None)
+                .as_provisional_create_with_amount(cycles_amount)
                 .with_effective_canister_id(effective_canister_id)
                 .call_and_wait()
                 .await
@@ -1051,14 +1128,12 @@ impl<T: HasTestEnv> HasIcDependencies for T {
     }
 
     fn get_mainnet_ic_os_img_sha256(&self) -> Result<String> {
-        let mainnet_version: String =
-            read_dependency_to_string("testnet/mainnet_nns_revision.txt")?;
+        let mainnet_version: String = read_dependency_to_string("mainnet_nns_subnet_revision.txt")?;
         fetch_sha256(format!("http://download.proxy-global.dfinity.network:8080/ic/{mainnet_version}/guest-os/disk-img"), "disk-img.tar.zst", self.test_env().logger())
     }
 
     fn get_mainnet_ic_os_update_img_sha256(&self) -> Result<String> {
-        let mainnet_version: String =
-            read_dependency_to_string("testnet/mainnet_nns_revision.txt")?;
+        let mainnet_version: String = read_dependency_to_string("mainnet_nns_subnet_revision.txt")?;
         fetch_sha256(format!("http://download.proxy-global.dfinity.network:8080/ic/{mainnet_version}/guest-os/update-img"), "update-img.tar.zst", self.test_env().logger())
     }
 }
@@ -1066,106 +1141,85 @@ impl<T: HasTestEnv> HasIcDependencies for T {
 pub fn get_elasticsearch_hosts() -> Result<Vec<String>> {
     let dep_rel_path = "elasticsearch_hosts";
     let hosts = read_dependency_to_string(dep_rel_path)
-        .unwrap_or_else(|_| "elasticsearch.testnet.dfinity.network:443".to_string());
+        .unwrap_or_else(|_| "elasticsearch.ch1-obsdev1.dfinity.network:443".to_string());
     parse_elasticsearch_hosts(Some(hosts))
 }
 
 pub fn get_ic_os_img_url() -> Result<Url> {
-    let url = read_dependency_from_env_to_string("ENV_DEPS__DEV_DISK_IMG_TAR_ZST_CAS_URL")?;
+    let url = std::env::var("ENV_DEPS__GUESTOS_DISK_IMG_URL")?;
     Ok(Url::parse(&url)?)
 }
 
 pub fn get_ic_os_img_sha256() -> Result<String> {
-    let sha256 = read_dependency_from_env_to_string("ENV_DEPS__DEV_DISK_IMG_TAR_ZST_SHA256")?;
-    bail_if_sha256_invalid(&sha256, "ic_os_img_sha256")?;
-    Ok(sha256)
+    Ok(std::env::var("ENV_DEPS__GUESTOS_DISK_IMG_HASH")?)
 }
 
 pub fn get_malicious_ic_os_img_url() -> Result<Url> {
-    let url =
-        read_dependency_from_env_to_string("ENV_DEPS__DEV_MALICIOUS_DISK_IMG_TAR_ZST_CAS_URL")?;
+    let url = std::env::var("ENV_DEPS__GUESTOS_MALICIOUS_DISK_IMG_URL")?;
     Ok(Url::parse(&url)?)
 }
 
 pub fn get_malicious_ic_os_img_sha256() -> Result<String> {
-    let sha256 =
-        read_dependency_from_env_to_string("ENV_DEPS__DEV_MALICIOUS_DISK_IMG_TAR_ZST_SHA256")?;
-    bail_if_sha256_invalid(&sha256, "ic_os_img_sha256")?;
-    Ok(sha256)
+    Ok(std::env::var("ENV_DEPS__GUESTOS_MALICIOUS_DISK_IMG_HASH")?)
 }
 
 pub fn get_ic_os_update_img_url() -> Result<Url> {
-    let url = read_dependency_from_env_to_string("ENV_DEPS__DEV_UPDATE_IMG_TAR_ZST_CAS_URL")?;
+    let url = std::env::var("ENV_DEPS__GUESTOS_UPDATE_IMG_URL")?;
     Ok(Url::parse(&url)?)
 }
 
 pub fn get_ic_os_update_img_sha256() -> Result<String> {
-    let sha256 = read_dependency_from_env_to_string("ENV_DEPS__DEV_UPDATE_IMG_TAR_ZST_SHA256")?;
-    bail_if_sha256_invalid(&sha256, "ic_os_update_img_sha256")?;
-    Ok(sha256)
+    Ok(std::env::var("ENV_DEPS__GUESTOS_UPDATE_IMG_HASH")?)
 }
 
 pub fn get_ic_os_update_img_test_url() -> Result<Url> {
-    let url = read_dependency_from_env_to_string("ENV_DEPS__DEV_UPDATE_IMG_TEST_TAR_ZST_CAS_URL")?;
+    let url = std::env::var("ENV_DEPS__GUESTOS_UPDATE_IMG_TEST_URL")?;
     Ok(Url::parse(&url)?)
 }
 
 pub fn get_ic_os_update_img_test_sha256() -> Result<String> {
-    let sha256 =
-        read_dependency_from_env_to_string("ENV_DEPS__DEV_UPDATE_IMG_TEST_TAR_ZST_SHA256")?;
-    bail_if_sha256_invalid(&sha256, "ic_os_update_img_sha256")?;
-    Ok(sha256)
+    Ok(std::env::var("ENV_DEPS__GUESTOS_UPDATE_IMG_TEST_HASH")?)
 }
 
 pub fn get_malicious_ic_os_update_img_url() -> Result<Url> {
-    let url =
-        read_dependency_from_env_to_string("ENV_DEPS__DEV_MALICIOUS_UPDATE_IMG_TAR_ZST_CAS_URL")?;
+    let url = std::env::var("ENV_DEPS__GUESTOS_MALICIOUS_UPDATE_IMG_URL")?;
     Ok(Url::parse(&url)?)
 }
 
 pub fn get_malicious_ic_os_update_img_sha256() -> Result<String> {
-    let sha256 =
-        read_dependency_from_env_to_string("ENV_DEPS__DEV_MALICIOUS_UPDATE_IMG_TAR_ZST_SHA256")?;
-    bail_if_sha256_invalid(&sha256, "ic_os_update_img_sha256")?;
-    Ok(sha256)
+    Ok(std::env::var(
+        "ENV_DEPS__GUESTOS_MALICIOUS_UPDATE_IMG_HASH",
+    )?)
 }
 
 pub fn get_boundary_node_img_url() -> Result<Url> {
-    let dep_rel_path = "ic-os/boundary-guestos/envs/dev/disk-img.tar.zst.cas-url";
-    let url = read_dependency_to_string(dep_rel_path)?;
+    let url = std::env::var("ENV_DEPS__BOUNDARY_GUESTOS_DISK_IMG_URL")?;
     Ok(Url::parse(&url)?)
 }
 
 pub fn get_boundary_node_img_sha256() -> Result<String> {
-    let dep_rel_path = "ic-os/boundary-guestos/envs/dev/disk-img.tar.zst.sha256";
-    let sha256 = read_dependency_to_string(dep_rel_path)?;
-    bail_if_sha256_invalid(&sha256, "boundary_node_img_sha256")?;
-    Ok(sha256)
+    Ok(std::env::var("ENV_DEPS__BOUNDARY_GUESTOS_DISK_IMG_HASH")?)
 }
 
 pub fn get_mainnet_ic_os_img_url() -> Result<Url> {
-    let mainnet_version: String = read_dependency_to_string("testnet/mainnet_nns_revision.txt")?;
+    let mainnet_version: String = read_dependency_to_string("mainnet_nns_subnet_revision.txt")?;
     let url = format!("http://download.proxy-global.dfinity.network:8080/ic/{mainnet_version}/guest-os/disk-img/disk-img.tar.zst");
     Ok(Url::parse(&url)?)
 }
 
 pub fn get_mainnet_ic_os_update_img_url() -> Result<Url> {
-    let mainnet_version = read_dependency_to_string("testnet/mainnet_nns_revision.txt")?;
+    let mainnet_version = read_dependency_to_string("mainnet_nns_subnet_revision.txt")?;
     let url = format!("http://download.proxy-global.dfinity.network:8080/ic/{mainnet_version}/guest-os/update-img/update-img.tar.zst");
     Ok(Url::parse(&url)?)
 }
 
 pub fn get_hostos_update_img_test_url() -> Result<Url> {
-    let url =
-        read_dependency_from_env_to_string("ENV_DEPS__DEV_HOSTOS_UPDATE_IMG_TEST_TAR_ZST_CAS_URL")?;
+    let url = std::env::var("ENV_DEPS__HOSTOS_UPDATE_IMG_TEST_URL")?;
     Ok(Url::parse(&url)?)
 }
 
 pub fn get_hostos_update_img_test_sha256() -> Result<String> {
-    let sha256 =
-        read_dependency_from_env_to_string("ENV_DEPS__DEV_HOSTOS_UPDATE_IMG_TEST_TAR_ZST_SHA256")?;
-    bail_if_sha256_invalid(&sha256, "hostos_update_img_sha256")?;
-    Ok(sha256)
+    Ok(std::env::var("ENV_DEPS__HOSTOS_UPDATE_IMG_TEST_HASH")?)
 }
 
 pub const FETCH_SHA256SUMS_RETRY_TIMEOUT: Duration = Duration::from_secs(120);
@@ -1320,6 +1374,17 @@ pub fn get_dependency_path<P: AsRef<Path>>(p: P) -> PathBuf {
     Path::new(&runfiles).join(p)
 }
 
+/// Return the (actual) path of the (runfiles-relative) artifact in environment variable `v`.
+pub fn get_dependency_path_from_env(v: &str) -> PathBuf {
+    let runfiles =
+        std::env::var("RUNFILES").expect("Expected environment variable RUNFILES to be defined!");
+
+    let path_from_env =
+        std::env::var(v).unwrap_or_else(|_| panic!("Environment variable {} not set", v));
+
+    Path::new(&runfiles).join(path_from_env)
+}
+
 pub fn read_dependency_to_string<P: AsRef<Path>>(p: P) -> Result<String> {
     let dep_path = get_dependency_path(p);
     if dep_path.exists() {
@@ -1388,9 +1453,11 @@ pub trait SshSession {
         channel.send_eof()?;
         let mut out = String::new();
         channel.read_to_string(&mut out)?;
+        let mut err = String::new();
+        channel.stderr().read_to_string(&mut err)?;
         let exit_status = channel.exit_status()?;
         if exit_status != 0 {
-            bail!("block_on_bash_script: exit_status = {exit_status:?}. Output: {out}");
+            bail!("block_on_bash_script: exit_status = {exit_status:?}. Output: {out} Err: {err}");
         }
         Ok(out)
     }
@@ -1978,7 +2045,7 @@ where
     let start = Instant::now();
     debug!(
         log,
-        "Func=\"{msg}\" is being retried for the maximum of {timeout:?} with a linear backoff of {backoff:?}"
+        "Func=\"{msg}\" is being retried for the maximum of {timeout:?} with a constant backoff of {backoff:?}"
     );
     loop {
         match f().await {

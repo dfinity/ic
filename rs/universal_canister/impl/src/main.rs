@@ -379,6 +379,11 @@ fn eval(ops_bytes: OpsBytes) {
                 let amount = stack.pop_int64();
                 stack.push_int64(api::mint_cycles(amount));
             }
+            Ops::MintCycles128 => {
+                let amount_low = stack.pop_int64();
+                let amount_high = stack.pop_int64();
+                stack.push_blob(api::mint_cycles128(amount_high, amount_low))
+            }
             Ops::OneWayCallNew => {
                 // pop in reverse order!
                 let method = stack.pop_blob();
@@ -475,6 +480,7 @@ fn pre_upgrade() {
     eval(&get_pre_upgrade());
 }
 
+#[cfg(feature = "heartbeat")]
 #[export_name = "canister_heartbeat"]
 fn heartbeat() {
     setup();
@@ -536,6 +542,7 @@ lazy_static! {
 fn set_heartbeat(data: Vec<u8>) {
     *HEARTBEAT.lock().unwrap() = data;
 }
+#[cfg(feature = "heartbeat")]
 fn get_heartbeat() -> Vec<u8> {
     HEARTBEAT.lock().unwrap().clone()
 }

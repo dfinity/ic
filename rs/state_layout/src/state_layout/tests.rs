@@ -1,6 +1,6 @@
 use super::*;
 
-use ic_management_canister_types::{
+use ic_management_canister_types_private::{
     CanisterChange, CanisterChangeDetails, CanisterChangeOrigin, CanisterInstallMode, IC_00,
 };
 use ic_replicated_state::{
@@ -279,44 +279,43 @@ fn test_removal_when_last_dropped() {
         let state_layout = StateLayout::try_new(log, root_path, &metrics_registry).unwrap();
         let scratchpad_dir = tmpdir("scratchpad");
         let cp1 = state_layout
-            .scratchpad_to_checkpoint(
+            .promote_scratchpad_to_unverified_checkpoint(
                 CheckpointLayout::<RwPolicy<()>>::new_untracked(
                     scratchpad_dir.path().to_path_buf().join("1"),
                     Height::new(1),
                 )
                 .unwrap(),
                 Height::new(1),
-                None,
             )
             .unwrap();
+        cp1.finalize_and_remove_unverified_marker(None).unwrap();
         let cp2 = state_layout
-            .scratchpad_to_checkpoint(
+            .promote_scratchpad_to_unverified_checkpoint(
                 CheckpointLayout::<RwPolicy<()>>::new_untracked(
                     scratchpad_dir.path().to_path_buf().join("2"),
                     Height::new(2),
                 )
                 .unwrap(),
                 Height::new(2),
-                None,
             )
             .unwrap();
+        cp2.finalize_and_remove_unverified_marker(None).unwrap();
         // Add one checkpoint so that we never remove the last one and crash
-        let _cp3 = state_layout
-            .scratchpad_to_checkpoint(
+        let cp3 = state_layout
+            .promote_scratchpad_to_unverified_checkpoint(
                 CheckpointLayout::<RwPolicy<()>>::new_untracked(
                     scratchpad_dir.path().to_path_buf().join("3"),
                     Height::new(3),
                 )
                 .unwrap(),
                 Height::new(3),
-                None,
             )
             .unwrap();
+        cp3.finalize_and_remove_unverified_marker(None).unwrap();
         assert_eq!(
             vec![Height::new(1), Height::new(2), Height::new(3)],
             state_layout.checkpoint_heights().unwrap(),
         );
-
         std::mem::drop(cp1);
         state_layout.remove_checkpoint_when_unused(Height::new(1));
         state_layout.remove_checkpoint_when_unused(Height::new(2));
@@ -344,16 +343,16 @@ fn test_last_removal_panics_in_debug() {
         let state_layout = StateLayout::try_new(log, root_path, &metrics_registry).unwrap();
         let scratchpad_dir = tmpdir("scratchpad");
         let cp1 = state_layout
-            .scratchpad_to_checkpoint(
+            .promote_scratchpad_to_unverified_checkpoint(
                 CheckpointLayout::<RwPolicy<()>>::new_untracked(
                     scratchpad_dir.path().to_path_buf().join("1"),
                     Height::new(1),
                 )
                 .unwrap(),
                 Height::new(1),
-                None,
             )
             .unwrap();
+        cp1.finalize_and_remove_unverified_marker(None).unwrap();
         state_layout.remove_checkpoint_when_unused(Height::new(1));
         std::mem::drop(cp1);
     });
@@ -376,7 +375,7 @@ fn test_can_remove_unverified_marker_file_twice() {
             CheckpointLayout::<RwPolicy<()>>::new_untracked(state_sync_scratchpad, height)
                 .expect("failed to create checkpoint layout");
         // Create at least a file in the scratchpad layout. Otherwise, empty folders can be overridden without errors
-        // and calling "scratchpad_to_checkpoint" twice will not fail as expected.
+        // and calling "promote_scratchpad_to_unverified_checkpoint" twice will not fail as expected.
         File::create(scratchpad_layout.raw_path().join(SYSTEM_METADATA_FILE)).unwrap();
 
         let tip_path = state_layout.tip_path();
@@ -391,19 +390,22 @@ fn test_can_remove_unverified_marker_file_twice() {
         tip.create_unverified_checkpoint_marker().unwrap();
 
         let checkpoint = state_layout
-            .scratchpad_to_checkpoint(scratchpad_layout, height, None)
+            .promote_scratchpad_to_unverified_checkpoint(scratchpad_layout, height)
             .unwrap();
-        checkpoint.remove_unverified_checkpoint_marker().unwrap();
+        checkpoint
+            .finalize_and_remove_unverified_marker(None)
+            .unwrap();
 
         // The checkpoint already exists, therefore promoting the tip to checkpoint should fail.
         // However, it can still access the checkpoint and try to remove the marker file again from its side.
-        let checkpoint_result = state_layout.scratchpad_to_checkpoint(tip, height, None);
+        let checkpoint_result =
+            state_layout.promote_scratchpad_to_unverified_checkpoint(tip, height);
         assert!(checkpoint_result.is_err());
 
         let res = state_layout
             .checkpoint_in_verification(height)
             .unwrap()
-            .remove_unverified_checkpoint_marker();
+            .finalize_and_remove_unverified_marker(None);
         assert!(res.is_ok());
     });
 }
@@ -477,6 +479,7 @@ fn overlay_height_test() {
         root: PathBuf::new(),
         name_stem: "42".into(),
         permissions_tag: PhantomData,
+        _checkpoint: None,
     };
 
     assert_eq!(
@@ -493,7 +496,7 @@ fn overlay_height_test() {
     // Test that parsing is consistent with encoding.
     let tmp = tmpdir("canister");
     let canister_layout: CanisterLayout<WriteOnly> =
-        CanisterLayout::new(tmp.path().to_owned()).unwrap();
+        CanisterLayout::new_untracked(tmp.path().to_owned()).unwrap();
     assert_eq!(
         page_map_layout
             .overlay_height(
@@ -512,6 +515,7 @@ fn overlay_shard_test() {
         root: PathBuf::new(),
         name_stem: "42".into(),
         permissions_tag: PhantomData,
+        _checkpoint: None,
     };
 
     assert_eq!(
@@ -530,7 +534,7 @@ fn overlay_shard_test() {
     // Test that parsing is consistent with encoding.
     let tmp = tmpdir("canister");
     let canister_layout: CanisterLayout<WriteOnly> =
-        CanisterLayout::new(tmp.path().to_owned()).unwrap();
+        CanisterLayout::new_untracked(tmp.path().to_owned()).unwrap();
     assert_eq!(
         page_map_layout
             .overlay_shard(
@@ -574,7 +578,7 @@ proptest! {
 fn read_back_wasm_memory_overlay_file_names(heights in random_sorted_unique_heights(10)) {
     let tmp = tmpdir("canister");
     let canister_layout: CanisterLayout<WriteOnly> =
-        CanisterLayout::new(tmp.path().to_owned()).unwrap();
+        CanisterLayout::new_untracked(tmp.path().to_owned()).unwrap();
     let overlay_names: Vec<PathBuf> = heights
         .iter()
         .map(|h| canister_layout.vmemory_0().overlay(*h, Shard::new(0)))
@@ -601,7 +605,7 @@ fn read_back_wasm_memory_overlay_file_names(heights in random_sorted_unique_heig
 fn read_back_stable_memory_overlay_file_names(heights in random_sorted_unique_heights(10)) {
     let tmp = tmpdir("canister");
     let canister_layout: CanisterLayout<WriteOnly> =
-        CanisterLayout::new(tmp.path().to_owned()).unwrap();
+        CanisterLayout::new_untracked(tmp.path().to_owned()).unwrap();
     let overlay_names: Vec<PathBuf> = heights
         .iter()
         .map(|h| canister_layout.stable_memory().overlay(*h, Shard::new(0)))
@@ -628,7 +632,7 @@ fn read_back_stable_memory_overlay_file_names(heights in random_sorted_unique_he
 fn read_back_wasm_chunk_store_overlay_file_names(heights in random_sorted_unique_heights(10)) {
     let tmp = tmpdir("canister");
     let canister_layout: CanisterLayout<WriteOnly> =
-        CanisterLayout::new(tmp.path().to_owned()).unwrap();
+        CanisterLayout::new_untracked(tmp.path().to_owned()).unwrap();
     let overlay_names: Vec<PathBuf> = heights
         .iter()
         .map(|h| canister_layout.wasm_chunk_store().overlay(*h, Shard::new(0)))

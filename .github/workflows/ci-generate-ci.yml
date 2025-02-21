@@ -12,11 +12,20 @@ on:
 env:
   CI_PROJECT_DIR: ${{ github.workspace }}
 
+permissions:
+  pull-requests: write
+
 jobs:
   generate-ci:
     name: Generate CI
     runs-on: ubuntu-latest
     steps:
+      - name: Create GitHub App Token
+        uses: actions/create-github-app-token@v1
+        id: app-token
+        with:
+          app-id: ${{ vars.PR_AUTOMATION_BOT_PUBLIC_APP_ID }}
+          private-key: ${{ secrets.PR_AUTOMATION_BOT_PUBLIC_PRIVATE_KEY }}
       - name: Checkout
         uses: actions/checkout@v4
         # If this is a pull request, use the HEAD ref instead of the merge commit
@@ -24,12 +33,12 @@ jobs:
         with:
           repository: ${{ github.event.pull_request.head.repo.full_name }}
           ref: ${{ github.event.pull_request.head.ref }}
-          token: ${{ secrets.IDX_PUSH_TO_PR }}
+          token: ${{ steps.app-token.outputs.token }}
       - name: Checkout
         uses: actions/checkout@v4
         if: github.event_name != 'pull_request'
         with:
-          token: ${{ secrets.IDX_PUSH_TO_PR }}
+          token: ${{ steps.app-token.outputs.token }}
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
@@ -41,10 +50,11 @@ jobs:
 
           if [ -n "$(git status --porcelain)" ]; then
             git config --global user.name "IDX GitHub Automation"
-            git config --global user.email "IDX GitHub Automation"
+            git config --global user.email "<>"
             git add .
             git commit -m "IDX GitHub Automation"
             git push
+            exit 1
           else
             echo "git working tree clean - no changes to be committed"
           fi

@@ -44,7 +44,7 @@ pub use query_handler::InternalHttpQueryHandler;
 use query_handler::{HttpQueryHandler, QueryScheduler, QuerySchedulerFlag};
 pub use scheduler::RoundSchedule;
 use scheduler::SchedulerImpl;
-use std::sync::Arc;
+use std::{path::Path, sync::Arc};
 use tokio::sync::mpsc::Sender;
 
 /// When executing a wasm method of query type, this enum indicates if we are
@@ -84,6 +84,7 @@ pub struct ExecutionServices {
     pub ingress_history_writer: Arc<dyn IngressHistoryWriter<State = ReplicatedState>>,
     pub ingress_history_reader: Box<dyn IngressHistoryReader>,
     pub query_execution_service: QueryExecutionService,
+    pub https_outcalls_service: QueryExecutionService,
     pub scheduler: Box<dyn Scheduler<State = ReplicatedState>>,
     pub query_stats_payload_builder: QueryStatsPayloadBuilderParams,
 }
@@ -103,6 +104,7 @@ impl ExecutionServices {
         state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
         fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
         completed_execution_messages_tx: Sender<(MessageId, Height)>,
+        temp_dir: &Path,
     ) -> ExecutionServices {
         let hypervisor = Arc::new(Hypervisor::new(
             config.clone(),
@@ -113,6 +115,8 @@ impl ExecutionServices {
             Arc::clone(&cycles_account_manager),
             scheduler_config.dirty_page_overhead,
             Arc::clone(&fd_factory),
+            Arc::clone(&state_reader),
+            temp_dir,
         ));
 
         let ingress_history_writer = Arc::new(IngressHistoryWriterImpl::new(
@@ -135,7 +139,7 @@ impl ExecutionServices {
             metrics_registry,
             own_subnet_id,
             own_subnet_type,
-            SchedulerImpl::compute_capacity_percent(scheduler_config.scheduler_cores),
+            RoundSchedule::compute_capacity_percent(scheduler_config.scheduler_cores),
             config.clone(),
             Arc::clone(&cycles_account_manager),
             scheduler_config.scheduler_cores,
@@ -147,6 +151,7 @@ impl ExecutionServices {
         let sync_query_handler = Arc::new(InternalHttpQueryHandler::new(
             logger.clone(),
             hypervisor,
+            own_subnet_id,
             own_subnet_type,
             config.clone(),
             metrics_registry,
@@ -172,6 +177,14 @@ impl ExecutionServices {
             query_scheduler.clone(),
             Arc::clone(&state_reader),
             metrics_registry,
+            "regular",
+        );
+        let https_outcalls_service = HttpQueryHandler::new_service(
+            Arc::clone(&sync_query_handler) as Arc<_>,
+            query_scheduler.clone(),
+            Arc::clone(&state_reader),
+            metrics_registry,
+            "https_outcall",
         );
         let ingress_filter = IngressFilterServiceImpl::new_service(
             query_scheduler.clone(),
@@ -199,6 +212,7 @@ impl ExecutionServices {
             ingress_history_writer,
             ingress_history_reader,
             query_execution_service,
+            https_outcalls_service,
             scheduler,
             query_stats_payload_builder,
         }

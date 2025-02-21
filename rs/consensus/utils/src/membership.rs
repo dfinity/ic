@@ -85,7 +85,7 @@ impl Membership {
         Ok(node_ids)
     }
 
-    /// Return the the block maker rank of the given node id at the given
+    /// Return the block maker rank of the given node id at the given
     /// height. If the returned rank is None, it means the node id is not a
     /// block maker at this height.
     pub fn get_block_maker_rank(

@@ -51,7 +51,7 @@ impl Add for ContentLength {
     }
 }
 
-impl<'a> Add for &'a ContentLength {
+impl Add for &ContentLength {
     type Output = ContentLength;
 
     fn add(self, rhs: &ContentLength) -> ContentLength {
@@ -59,7 +59,7 @@ impl<'a> Add for &'a ContentLength {
     }
 }
 
-impl<'a> Add<&'a ContentLength> for ContentLength {
+impl Add<&ContentLength> for ContentLength {
     type Output = ContentLength;
 
     fn add(self, rhs: &ContentLength) -> ContentLength {
@@ -67,7 +67,7 @@ impl<'a> Add<&'a ContentLength> for ContentLength {
     }
 }
 
-impl<'a> Add<ContentLength> for &'a ContentLength {
+impl Add<ContentLength> for &ContentLength {
     type Output = ContentLength;
 
     fn add(self, rhs: ContentLength) -> ContentLength {

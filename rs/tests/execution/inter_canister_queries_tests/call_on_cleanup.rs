@@ -122,8 +122,8 @@ pub fn changes_are_discarded_if_trapped(env: TestEnv) {
                 })) if reject_code == RejectCode::CanisterError
                     // Verify that the original error message as well as the on_cleanup error is
                     // returned.
-                    && reject_message.contains("called `ic0.trap` with message: in on_reply")
-                    && reject_message.contains("called `ic0.trap` with message: in on_call_cleanup")
+                    && reject_message.contains("called `ic0.trap` with message: 'in on_reply")
+                    && reject_message.contains("called `ic0.trap` with message: 'in on_call_cleanup")
             );
 
             // Changes by call_on_cleanup were discarded.
@@ -234,10 +234,10 @@ pub fn is_called_in_query(env: TestEnv) {
 
             assert_eq!(
                 canister_a
-                    .query(
+                    .composite_query(
                         wasm()
-                            .inter_query(canister_b.canister_id(), query_call_args.clone(),)
-                            .inter_query(canister_b.canister_id(), query_call_args,),
+                            .composite_query(canister_b.canister_id(), query_call_args.clone(),)
+                            .composite_query(canister_b.canister_id(), query_call_args,),
                     )
                     .await
                     .unwrap(),

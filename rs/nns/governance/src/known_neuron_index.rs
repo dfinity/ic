@@ -8,7 +8,6 @@ use ic_stable_structures::{Memory, StableBTreeMap, Storable};
 /// Note that the index only cares about the uniqueness of the names, not the ids -
 /// the caller should make sure the name-id is removed from the index when a neuron
 /// is removed or its name is changed.
-
 pub struct KnownNeuronIndex<M: Memory> {
     known_neuron_name_to_id: StableBTreeMap<KnownNeuronName, NeuronId, M>,
 }

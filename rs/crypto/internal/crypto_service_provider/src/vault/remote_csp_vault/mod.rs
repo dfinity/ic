@@ -4,8 +4,9 @@ use crate::vault::api::{
     CspBasicSignatureError, CspBasicSignatureKeygenError, CspMultiSignatureError,
     CspMultiSignatureKeygenError, CspPublicKeyStoreError, CspSecretKeyStoreContainsError,
     CspTlsKeygenError, CspTlsSignError, IDkgCreateDealingVaultError, IDkgDealingInternalBytes,
-    IDkgTranscriptInternalBytes, PksAndSksContainsErrors, ThresholdSchnorrCreateSigShareVaultError,
-    ThresholdSchnorrSigShareBytes, ValidatePksAndSksError,
+    IDkgTranscriptInternalBytes, PksAndSksContainsErrors, PublicRandomSeedGeneratorError,
+    ThresholdSchnorrCreateSigShareVaultError, ThresholdSchnorrSigShareBytes,
+    ValidatePksAndSksError, VetKdEncryptedKeyShareCreationVaultError,
 };
 use ic_crypto_internal_seed::Seed;
 use ic_crypto_internal_threshold_sig_bls12381::api::ni_dkg_errors;
@@ -25,10 +26,11 @@ use ic_types::crypto::canister_threshold_sig::error::{
     IDkgLoadTranscriptError, IDkgOpenTranscriptError, IDkgRetainKeysError,
     IDkgVerifyDealingPrivateError, ThresholdEcdsaCreateSigShareError,
 };
-use ic_types::crypto::canister_threshold_sig::{
-    idkg::{BatchSignedIDkgDealing, IDkgTranscriptOperation},
-    ExtendedDerivationPath,
+use ic_types::crypto::canister_threshold_sig::idkg::{
+    BatchSignedIDkgDealing, IDkgTranscriptOperation,
 };
+use ic_types::crypto::vetkd::VetKdEncryptedKeyShareContent;
+use ic_types::crypto::ExtendedDerivationPath;
 use ic_types::crypto::{AlgorithmId, CurrentNodePublicKeys};
 use ic_types::{NodeId, NodeIndex, NumberOfNodes, Randomness};
 use serde_bytes::ByteBuf;
@@ -52,8 +54,6 @@ pub use tarpc_csp_vault_client::{RemoteCspVault, RemoteCspVaultBuilder};
 pub use tarpc_csp_vault_server::{TarpcCspVaultServerImpl, TarpcCspVaultServerImplBuilder};
 use tokio_util::codec::length_delimited::Builder;
 use tokio_util::codec::LengthDelimitedCodec;
-
-use super::api::PublicRandomSeedGeneratorError;
 
 #[cfg(test)]
 mod tests;
@@ -237,11 +237,21 @@ pub trait TarpcCspVault {
     async fn create_schnorr_sig_share(
         derivation_path: ExtendedDerivationPath,
         message: ByteBuf,
+        taproot_tree_root: Option<ByteBuf>,
         nonce: Randomness,
         key_raw: IDkgTranscriptInternalBytes,
         presig_raw: IDkgTranscriptInternalBytes,
         algorithm_id: AlgorithmId,
     ) -> Result<ThresholdSchnorrSigShareBytes, ThresholdSchnorrCreateSigShareVaultError>;
+
+    // Corresponds to `VetKdCspVault.create_encrypted_vetkd_key_share`
+    async fn create_encrypted_vetkd_key_share(
+        key_id: KeyId,
+        master_public_key: ByteBuf,
+        encryption_public_key: ByteBuf,
+        derivation_path: ExtendedDerivationPath,
+        derivation_id: ByteBuf,
+    ) -> Result<VetKdEncryptedKeyShareContent, VetKdEncryptedKeyShareCreationVaultError>;
 
     async fn new_public_seed() -> Result<Seed, PublicRandomSeedGeneratorError>;
 }

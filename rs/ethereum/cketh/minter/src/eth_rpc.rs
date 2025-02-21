@@ -75,6 +75,10 @@ impl AsRef<[u8]> for Data {
 #[serde(transparent)]
 pub struct FixedSizeData(#[serde(with = "ic_ethereum_types::serde_data")] pub [u8; 32]);
 
+impl FixedSizeData {
+    pub const ZERO: Self = Self([0u8; 32]);
+}
+
 impl AsRef<[u8]> for FixedSizeData {
     fn as_ref(&self) -> &[u8] {
         &self.0
@@ -297,7 +301,7 @@ pub struct GetLogsParam {
 }
 
 /// A topic is either a 32 Bytes DATA, or an array of 32 Bytes DATA with "or" options.
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 #[serde(untagged)]
 pub enum Topic {
     Single(FixedSizeData),

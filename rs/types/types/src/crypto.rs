@@ -1,6 +1,8 @@
 //! Defines crypto component types.
 pub mod canister_threshold_sig;
 
+pub mod vetkd;
+
 mod hash;
 
 pub use hash::crypto_hash;
@@ -20,6 +22,7 @@ use crate::crypto::threshold_sig::ni_dkg::NiDkgId;
 use crate::registry::RegistryClientError;
 use crate::{CountBytes, NodeId, RegistryVersion, SubnetId};
 use core::fmt::Formatter;
+use ic_base_types::PrincipalId;
 use ic_crypto_internal_types::sign::threshold_sig::public_coefficients::CspPublicCoefficients;
 use ic_crypto_internal_types::sign::threshold_sig::public_key::bls12_381::ThresholdSigPublicKeyBytesConversionError;
 use ic_crypto_internal_types::sign::threshold_sig::public_key::CspThresholdSigPublicKey;
@@ -35,6 +38,34 @@ use strum_macros::{Display, EnumIter};
 
 #[cfg(test)]
 mod tests;
+
+macro_rules! impl_display_using_debug {
+    ($t:ty) => {
+        impl std::fmt::Display for $t {
+            fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+                std::fmt::Debug::fmt(self, f)
+            }
+        }
+    };
+}
+pub(crate) use impl_display_using_debug;
+
+pub struct HexEncoding<'a> {
+    pub bytes: &'a [u8],
+}
+
+impl fmt::Debug for HexEncoding<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "0x{}", hex::encode(self.bytes))?;
+        Ok(())
+    }
+}
+
+impl<'a> From<&'a Vec<u8>> for HexEncoding<'a> {
+    fn from(bytes: &'a Vec<u8>) -> Self {
+        HexEncoding { bytes }
+    }
+}
 
 /// A cryptographic hash.
 #[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Deserialize, Serialize)]
@@ -768,5 +799,33 @@ impl CurrentNodePublicKeys {
             count += 1;
         }
         count
+    }
+}
+
+/// Metadata used to derive keys for tECDSA, tSchnorr, and vetKD.
+#[serde_with::serde_as]
+#[derive(Clone, Eq, PartialEq, Hash, Deserialize, Serialize)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
+pub struct ExtendedDerivationPath {
+    pub caller: PrincipalId,
+    #[serde_as(as = "Vec<serde_with::Bytes>")]
+    pub derivation_path: Vec<Vec<u8>>,
+}
+
+impl fmt::Debug for ExtendedDerivationPath {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(f, "ExtendedDerivationPath {{ caller: {:?}", self.caller)?;
+        write!(f, ", derivation_path: {{ ")?;
+        let mut first_path = true;
+        for path in &self.derivation_path {
+            if !first_path {
+                write!(f, ", ")?;
+                first_path = false;
+            }
+            write!(f, "{}", hex::encode(path))?;
+        }
+        write!(f, " }}")?;
+        write!(f, " }}")?;
+        Ok(())
     }
 }

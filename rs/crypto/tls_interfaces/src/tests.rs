@@ -1,5 +1,3 @@
-#![allow(clippy::unwrap_used)]
-
 mod tls_public_key_cert {
     use crate::TlsPublicKeyCert;
     use assert_matches::assert_matches;

@@ -12,7 +12,6 @@ use ic_crypto_internal_types::sign::threshold_sig::public_key::bls12_381::{
 proptest! {
     /// Verifies that parsing and serializing PublicKeyBytes returns the initial value.
     #[test]
-    #[allow(clippy::unnecessary_operation)] // Clippy believes that these tests are unnecessary.
     fn proptest_public_key_parsing_and_serialising_should_be_inverse(public_key_bytes in threshold_sig_public_key_bytes()) {
         let parsed = PublicKey::try_from(&public_key_bytes).expect("Could not parse bytes");
         let serialised = PublicKeyBytes::from(parsed); // Consuming exercises both serialisation methods.
@@ -23,7 +22,6 @@ proptest! {
     ///
     /// Note: The default arbitrary strategy produces both valid and invalid bytes so we have to filter out the invalid.
     #[test]
-    #[allow(clippy::unnecessary_operation)] // Clippy believes that these tests are unnecessary.
     fn proptest_secret_key_parsing_and_serialising_should_be_inverse(secret_key_bytes: SecretKeyBytes) {
         if let Ok(parsed) = SecretKey::try_from(&secret_key_bytes) {
           let serialised = SecretKeyBytes::from(parsed); // Consuming exercises both serialisation methods.
@@ -35,7 +33,6 @@ proptest! {
 
     /// Verifies that parsing and serializing IndividualSignatureBytes returns the initial value.
     #[test]
-    #[allow(clippy::unnecessary_operation)] // Clippy believes that these tests are unnecessary.
     fn proptest_individual_signature_parsing_and_serialising_should_be_inverse(signature_bytes: IndividualSignatureBytes) {
         let parsed = IndividualSignature::try_from(&signature_bytes).expect("Could not parse bytes");
         let serialised = IndividualSignatureBytes::from(parsed); // Consuming exercises both serialisation methods.
@@ -44,7 +41,6 @@ proptest! {
 
     /// Verifies that parsing and serializing CombinedSignatureBytes returns the initial value.
     #[test]
-    #[allow(clippy::unnecessary_operation)] // Clippy believes that these tests are unnecessary.
     fn proptest_combined_signature_parsing_and_serialising_should_be_inverse(signature_bytes: CombinedSignatureBytes) {
         let parsed = CombinedSignature::try_from(&signature_bytes).expect("Could not parse bytes");
         let serialised = CombinedSignatureBytes::from(parsed); // Consuming exercises both serialisation methods.

@@ -6,6 +6,7 @@ package(default_visibility = ["//visibility:public"])
 DEPENDENCIES = [
     # Keep sorted.
     "//rs/config",
+    "//rs/consensus/dkg",
     "//rs/consensus/utils",
     "//rs/crypto",
     "//rs/crypto/prng",
@@ -30,7 +31,6 @@ DEPENDENCIES = [
     "@crate_index//:prometheus",
     "@crate_index//:rand",
     "@crate_index//:rand_chacha",
-    "@crate_index//:rayon",
     "@crate_index//:slog",
     "@crate_index//:tokio",
 ]

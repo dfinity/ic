@@ -169,7 +169,6 @@ pub fn duration_to_millis(unit_delay: Duration) -> u64 {
 /// The configuration for app subnets is used for new app subnets with at most
 /// 13 nodes. App subnets with more than 13 nodes will be deployed with the NNS
 /// subnet configs.
-
 pub fn get_default_config_params(subnet_type: SubnetType, nodes_num: usize) -> SubnetConfigParams {
     let use_app_config =
         subnet_type == SubnetType::Application && nodes_num <= ic_limits::SMALL_APP_SUBNET_MAX_SIZE;
@@ -315,7 +314,6 @@ impl SubnetConfig {
             max_number_of_canisters: self.max_number_of_canisters,
             ssh_readonly_access: self.ssh_readonly_access,
             ssh_backup_access: self.ssh_backup_access,
-            ecdsa_config: None,
             chain_key_config: self.chain_key_config,
         };
 

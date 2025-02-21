@@ -8,7 +8,7 @@ documentation.workspace = true
 
 [dependencies]
 crossbeam-channel = { workspace = true }
-ic-async-utils = { path = "../async_utils" }
+ic-http-endpoints-async-utils = { path = "../http_endpoints/async_utils" }
 ic-base-types = { path = "../types/base_types" }
 ic-btc-interface = { workspace = true }
 ic-btc-replica-types = { path = "../bitcoin/replica_types" }
@@ -20,7 +20,7 @@ ic-execution-environment = { path = "../execution_environment" }
 ic-interfaces = { path = "../interfaces" }
 ic-interfaces-registry = { path = "../interfaces/registry" }
 ic-interfaces-state-manager = { path = "../interfaces/state_manager" }
-ic-management-canister-types = { path = "../types/management_canister_types" }
+ic-management-canister-types-private = { path = "../types/management_canister_types" }
 ic-metrics = { path = "../monitoring/metrics" }
 ic-prep = { path = "../prep" }
 ic-protobuf = { path = "../protobuf" }

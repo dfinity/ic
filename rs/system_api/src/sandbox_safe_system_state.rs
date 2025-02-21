@@ -9,16 +9,20 @@ use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_interfaces::execution_environment::{HypervisorError, HypervisorResult};
 use ic_limits::{LOG_CANISTER_OPERATION_CYCLES_THRESHOLD, SMALL_APP_SUBNET_MAX_SIZE};
 use ic_logger::{info, ReplicaLogger};
-use ic_management_canister_types::{
+use ic_management_canister_types_private::{
     CanisterStatusType, CreateCanisterArgs, InstallChunkedCodeArgs, InstallCodeArgsV2,
     LoadCanisterSnapshotArgs, Method as Ic00Method, Payload,
     ProvisionalCreateCanisterWithCyclesArgs, UninstallCodeArgs, UpdateSettingsArgs, IC_00,
 };
 use ic_nns_constants::CYCLES_MINTING_CANISTER_ID;
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::canister_state::system_state::CyclesUseCase;
-use ic_replicated_state::canister_state::DEFAULT_QUEUE_CAPACITY;
-use ic_replicated_state::{CallOrigin, ExecutionTask, NetworkTopology, SystemState};
+use ic_replicated_state::canister_state::system_state::{
+    is_low_wasm_memory_hook_condition_satisfied, CyclesUseCase,
+};
+use ic_replicated_state::{
+    canister_state::execution_state::WasmExecutionMode, canister_state::DEFAULT_QUEUE_CAPACITY,
+    CallOrigin, ExecutionTask, NetworkTopology, SystemState,
+};
 use ic_types::{
     messages::{CallContextId, CallbackId, RejectContext, Request, RequestMetadata, NO_DEADLINE},
     methods::Callback,
@@ -57,25 +61,26 @@ pub enum CallbackUpdate {
 
 /// Tracks changes to the system state that the canister has requested.
 #[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
-pub struct SystemStateChanges {
+pub struct SystemStateModifications {
     pub(super) new_certified_data: Option<Vec<u8>>,
     // pub for testing
     pub callback_updates: Vec<CallbackUpdate>,
-    cycles_balance_change: CyclesBalanceChange,
+    pub(super) cycles_balance_change: CyclesBalanceChange,
     // The cycles that move from the main balance to the reserved balance.
     // Invariant: `cycles_balance_change` contains
     // `CyclesBalanceChange::Removed(reserved_cycles)`.
-    reserved_cycles: Cycles,
-    consumed_cycles_by_use_case: BTreeMap<CyclesUseCase, Cycles>,
-    call_context_balance_taken: Option<(CallContextId, Cycles)>,
-    request_slots_used: BTreeMap<CanisterId, usize>,
-    requests: Vec<Request>,
+    pub(super) reserved_cycles: Cycles,
+    pub(super) consumed_cycles_by_use_case: BTreeMap<CyclesUseCase, Cycles>,
+    pub(super) call_context_balance_taken: Option<(CallContextId, Cycles)>,
+    pub(super) request_slots_used: BTreeMap<CanisterId, usize>,
+    pub(super) requests: Vec<Request>,
     pub(super) new_global_timer: Option<CanisterTimer>,
-    canister_log: CanisterLog,
+    pub(super) canister_log: CanisterLog,
     pub on_low_wasm_memory_hook_condition_check_result: Option<bool>,
+    pub(super) should_bump_canister_version: bool,
 }
 
-impl Default for SystemStateChanges {
+impl Default for SystemStateModifications {
     fn default() -> Self {
         Self {
             new_certified_data: None,
@@ -89,11 +94,12 @@ impl Default for SystemStateChanges {
             new_global_timer: None,
             canister_log: Default::default(),
             on_low_wasm_memory_hook_condition_check_result: None,
+            should_bump_canister_version: false,
         }
     }
 }
 
-impl SystemStateChanges {
+impl SystemStateModifications {
     /// Checks that no cycles were created during the execution of this message
     /// (unless the canister is the cycles minting canister).
     fn validate_cycle_change(&self, is_cmc_canister: bool) -> HypervisorResult<()> {
@@ -134,6 +140,11 @@ impl SystemStateChanges {
         self.cycles_balance_change.get_removed_cycles()
     }
 
+    /// Returns number of newly created callbacks (i.e. enqueued requests).
+    pub fn callbacks_created(&self) -> usize {
+        self.requests.len()
+    }
+
     fn error<S: ToString>(message: S) -> HypervisorError {
         HypervisorError::WasmEngineError(WasmEngineError::FailedToApplySystemChanges(
             message.to_string(),
@@ -142,7 +153,7 @@ impl SystemStateChanges {
 
     fn reject_subnet_message_routing(
         system_state: &mut SystemState,
-        subnet_ids: &[PrincipalId],
+        subnet_ids: &BTreeSet<PrincipalId>,
         msg: Request,
         err: ResolveDestinationError,
         logger: &ReplicaLogger,
@@ -169,7 +180,7 @@ impl SystemStateChanges {
 
     fn reject_subnet_message_user_error(
         system_state: &mut SystemState,
-        subnet_ids: &[PrincipalId],
+        subnet_ids: &BTreeSet<PrincipalId>,
         msg: Request,
         err: UserError,
         logger: &ReplicaLogger,
@@ -182,7 +193,7 @@ impl SystemStateChanges {
             err
         );
 
-        let reject_context = RejectContext::new(RejectCode::CanisterError, err.to_string());
+        let reject_context = RejectContext::new(err.code().into(), err.to_string());
         system_state
             .reject_subnet_output_request(msg, reject_context, subnet_ids)
             .map_err(|e| Self::error(format!("Failed to push IC00 reject response: {:?}", e)))?;
@@ -244,8 +255,11 @@ impl SystemStateChanges {
             | Ok(Ic00Method::SetupInitialDKG)
             | Ok(Ic00Method::ECDSAPublicKey)
             | Ok(Ic00Method::ComputeInitialIDkgDealings)
+            | Ok(Ic00Method::ReshareChainKey)
             | Ok(Ic00Method::SchnorrPublicKey)
             | Ok(Ic00Method::SignWithSchnorr)
+            | Ok(Ic00Method::VetKdPublicKey)
+            | Ok(Ic00Method::VetKdDeriveEncryptedKey)
             | Ok(Ic00Method::ProvisionalTopUpCanister)
             | Ok(Ic00Method::BitcoinSendTransactionInternal)
             | Ok(Ic00Method::BitcoinGetSuccessors)
@@ -255,6 +269,7 @@ impl SystemStateChanges {
             | Ok(Ic00Method::BitcoinSendTransaction)
             | Ok(Ic00Method::BitcoinGetCurrentFeePercentiles)
             | Ok(Ic00Method::NodeMetricsHistory)
+            | Ok(Ic00Method::SubnetInfo)
             | Ok(Ic00Method::FetchCanisterLogs)
             | Ok(Ic00Method::UploadChunk)
             | Ok(Ic00Method::StoredChunks)
@@ -291,7 +306,7 @@ impl SystemStateChanges {
     /// Verify that the changes to the system state are sound and apply them to
     /// the system state if they are.
     pub fn apply_changes(
-        self,
+        mut self,
         time: Time,
         system_state: &mut SystemState,
         network_topology: &NetworkTopology,
@@ -343,18 +358,25 @@ impl SystemStateChanges {
 
         // Get a clone of the request metadata of outgoing requests (they are all equivalent)
         // and their number. This will be used for call tree metrics.
+        let best_effort_request_count = self
+            .requests
+            .iter()
+            .filter(|req| req.is_best_effort())
+            .count() as u64;
         let request_stats = RequestMetadataStats {
             metadata: self
                 .requests
                 .first()
-                .and_then(|request| request.metadata.clone()),
-            count: self.requests.len() as u64,
+                .map_or_else(Default::default, |request| request.metadata.clone()),
+            best_effort_request_count,
+            guaranteed_response_request_count: self.requests.len() as u64
+                - best_effort_request_count,
         };
 
         // Push outgoing messages.
         let mut callback_changes = BTreeMap::new();
         let nns_subnet_id = network_topology.nns_subnet_id;
-        let subnet_ids: Vec<PrincipalId> =
+        let subnet_ids: BTreeSet<PrincipalId> =
             network_topology.subnets.keys().map(|s| s.get()).collect();
         for mut msg in self.requests {
             if msg.receiver == IC_00 {
@@ -468,6 +490,14 @@ impl SystemStateChanges {
             system_state.global_timer = new_global_timer;
         }
 
+        // Append canister log.
+        system_state.canister_log.append(&mut self.canister_log);
+
+        // Bump the canister version after all changes have been applied.
+        if self.should_bump_canister_version {
+            system_state.canister_version += 1;
+        }
+
         Ok(request_stats)
     }
 
@@ -534,8 +564,8 @@ impl SystemStateChanges {
     fn default_with_cycles_changes(
         cycles_balance_change: CyclesBalanceChange,
         consumed_cycles_by_use_case: BTreeMap<CyclesUseCase, Cycles>,
-    ) -> SystemStateChanges {
-        SystemStateChanges {
+    ) -> SystemStateModifications {
+        SystemStateModifications {
             cycles_balance_change,
             consumed_cycles_by_use_case,
             ..Default::default()
@@ -550,7 +580,7 @@ impl SystemStateChanges {
 pub struct SandboxSafeSystemState {
     /// Only public for tests
     #[doc(hidden)]
-    pub system_state_changes: SystemStateChanges,
+    pub system_state_modifications: SystemStateModifications,
     pub(super) canister_id: CanisterId,
     pub(super) status: CanisterStatusView,
     pub(super) subnet_type: SubnetType,
@@ -570,6 +600,9 @@ pub struct SandboxSafeSystemState {
     // register callbacks (e.g. running the `start` method when installing a
     // canister.)
     next_callback_id: Option<u64>,
+    /// The number of calls / callbacks that can still be made. This is the maximum
+    /// available in either the subnet shared pool or the canister quota.
+    available_callbacks: u64,
     available_request_slots: BTreeMap<CanisterId, usize>,
     ic00_available_request_slots: usize,
     ic00_aliases: BTreeSet<CanisterId>,
@@ -578,6 +611,7 @@ pub struct SandboxSafeSystemState {
     controllers: BTreeSet<PrincipalId>,
     pub(super) request_metadata: RequestMetadata,
     caller: Option<PrincipalId>,
+    pub is_wasm64_execution: bool,
 }
 
 impl SandboxSafeSystemState {
@@ -599,6 +633,7 @@ impl SandboxSafeSystemState {
         call_context_deadline: Option<CoarseTime>,
         cycles_account_manager: CyclesAccountManager,
         next_callback_id: Option<u64>,
+        available_callbacks: u64,
         available_request_slots: BTreeMap<CanisterId, usize>,
         ic00_available_request_slots: usize,
         ic00_aliases: BTreeSet<CanisterId>,
@@ -610,6 +645,7 @@ impl SandboxSafeSystemState {
         request_metadata: RequestMetadata,
         caller: Option<PrincipalId>,
         next_canister_log_record_idx: u64,
+        is_wasm64_execution: bool,
     ) -> Self {
         Self {
             canister_id,
@@ -621,12 +657,12 @@ impl SandboxSafeSystemState {
             memory_allocation,
             wasm_memory_threshold,
             compute_allocation,
-            system_state_changes: SystemStateChanges {
+            system_state_modifications: SystemStateModifications {
                 // Start indexing new batch of canister log records from the given index.
                 canister_log: CanisterLog::new_with_next_index(next_canister_log_record_idx),
                 call_context_balance_taken: call_context_id
                     .map(|call_context_id| (call_context_id, Cycles::zero())),
-                ..SystemStateChanges::default()
+                ..SystemStateModifications::default()
             },
             initial_cycles_balance,
             initial_reserved_balance,
@@ -635,6 +671,7 @@ impl SandboxSafeSystemState {
             call_context_deadline,
             cycles_account_manager,
             next_callback_id,
+            available_callbacks,
             available_request_slots,
             ic00_available_request_slots,
             ic00_aliases,
@@ -643,7 +680,34 @@ impl SandboxSafeSystemState {
             controllers,
             request_metadata,
             caller,
+            is_wasm64_execution,
         }
+    }
+
+    pub fn new_for_testing(
+        system_state: &SystemState,
+        cycles_account_manager: CyclesAccountManager,
+        network_topology: &NetworkTopology,
+        dirty_page_overhead: NumInstructions,
+        compute_allocation: ComputeAllocation,
+        available_callbacks: u64,
+        request_metadata: RequestMetadata,
+        caller: Option<PrincipalId>,
+        call_context_id: Option<CallContextId>,
+    ) -> Self {
+        Self::new(
+            system_state,
+            cycles_account_manager,
+            network_topology,
+            dirty_page_overhead,
+            compute_allocation,
+            available_callbacks,
+            request_metadata,
+            caller,
+            call_context_id,
+            // We can assume a Wasm32 environment in tests for now.
+            false,
+        )
     }
 
     pub fn new(
@@ -652,9 +716,11 @@ impl SandboxSafeSystemState {
         network_topology: &NetworkTopology,
         dirty_page_overhead: NumInstructions,
         compute_allocation: ComputeAllocation,
+        available_callbacks: u64,
         request_metadata: RequestMetadata,
         caller: Option<PrincipalId>,
         call_context_id: Option<CallContextId>,
+        is_wasm64_execution: bool,
     ) -> Self {
         let call_context = call_context_id.and_then(|call_context_id| {
             system_state
@@ -716,6 +782,7 @@ impl SandboxSafeSystemState {
             system_state
                 .call_context_manager()
                 .map(|c| c.next_callback_id()),
+            available_callbacks,
             available_request_slots,
             ic00_available_request_slots,
             ic00_aliases,
@@ -727,6 +794,7 @@ impl SandboxSafeSystemState {
             request_metadata,
             caller,
             system_state.canister_log.next_idx(),
+            is_wasm64_execution,
         )
     }
 
@@ -744,12 +812,12 @@ impl SandboxSafeSystemState {
 
     pub fn set_global_timer(&mut self, timer: CanisterTimer) {
         // Update both sandbox global timer and the changes.
-        self.system_state_changes.new_global_timer = Some(timer);
+        self.system_state_modifications.new_global_timer = Some(timer);
         self.global_timer = timer;
     }
 
-    pub fn take_changes(&mut self) -> SystemStateChanges {
-        std::mem::take(&mut self.system_state_changes)
+    pub fn take_changes(&mut self) -> SystemStateModifications {
+        std::mem::take(&mut self.system_state_modifications)
     }
 
     /// Only public for use in tests.
@@ -759,7 +827,7 @@ impl SandboxSafeSystemState {
             Some(next_callback_id) => {
                 *next_callback_id += 1;
                 let id = CallbackId::from(*next_callback_id);
-                self.system_state_changes
+                self.system_state_modifications
                     .callback_updates
                     .push(CallbackUpdate::Register(id, callback));
                 Ok(id)
@@ -774,7 +842,7 @@ impl SandboxSafeSystemState {
     /// Only public for use in tests.
     #[doc(hidden)]
     pub fn unregister_callback(&mut self, id: CallbackId) {
-        self.system_state_changes
+        self.system_state_modifications
             .callback_updates
             .push(CallbackUpdate::Unregister(id))
     }
@@ -782,21 +850,21 @@ impl SandboxSafeSystemState {
     /// Computes the current main balance of the canister based
     /// on the initial value and the changes during the execution.
     pub(super) fn cycles_balance(&self) -> Cycles {
-        let cycles_change = self.system_state_changes.cycles_balance_change;
+        let cycles_change = self.system_state_modifications.cycles_balance_change;
         cycles_change.apply(self.initial_cycles_balance)
     }
 
     /// Computes the current reserved balance of the canister based
     /// on the initial value and the changes during the execution.
     pub(super) fn reserved_balance(&self) -> Cycles {
-        self.initial_reserved_balance + self.system_state_changes.reserved_cycles
+        self.initial_reserved_balance + self.system_state_modifications.reserved_cycles
     }
 
     pub(super) fn msg_cycles_available(&self) -> Cycles {
         let initial_available = self.call_context_balance.unwrap_or(Cycles::zero());
 
         let already_taken = self
-            .system_state_changes
+            .system_state_modifications
             .call_context_balance_taken
             .map_or(Cycles::zero(), |(_, balance_taken)| balance_taken);
 
@@ -809,7 +877,7 @@ impl SandboxSafeSystemState {
     }
 
     fn update_balance_change(&mut self, new_balance: Cycles) {
-        self.system_state_changes.cycles_balance_change =
+        self.system_state_modifications.cycles_balance_change =
             CyclesBalanceChange::new(self.initial_cycles_balance, new_balance);
     }
 
@@ -829,12 +897,12 @@ impl SandboxSafeSystemState {
             new_balance
         );
 
-        self.system_state_changes
+        self.system_state_modifications
             .add_consumed_cycles(consumed_cycles);
         self.update_balance_change(new_balance);
     }
 
-    pub(super) fn mint_cycles(&mut self, amount_to_mint: Cycles) -> HypervisorResult<()> {
+    pub(super) fn mint_cycles(&mut self, amount_to_mint: Cycles) -> HypervisorResult<Cycles> {
         let mut new_balance = self.cycles_balance();
         let result = self
             .cycles_account_manager
@@ -883,16 +951,16 @@ impl SandboxSafeSystemState {
         let mut new_balance = self.cycles_balance();
 
         // It is safe to unwrap since msg_cycles_accept and msg_cycles_accept128 are
-        // available only forApiType::{Update, RepyCallback, RejectCallBack} and all of
-        // them have CallContextId, hence SystemStateChanges::call_context_balance_taken
-        // will never be `None`.
+        // available only forApiType::{Update, ReplicatedQuery, ReplyCallback,
+        // RejectCallBack} and all of them have CallContextId, hence
+        // SystemStateModifications::call_context_balance_taken will never be `None`.
         debug_assert!(self
-            .system_state_changes
+            .system_state_modifications
             .call_context_balance_taken
             .is_some());
 
         let balance_taken = &mut self
-            .system_state_changes
+            .system_state_modifications
             .call_context_balance_taken
             .as_mut()
             .unwrap()
@@ -921,7 +989,10 @@ impl SandboxSafeSystemState {
 
     pub fn prepayment_for_response_execution(&self) -> Cycles {
         self.cycles_account_manager
-            .prepayment_for_response_execution(self.subnet_size)
+            .prepayment_for_response_execution(
+                self.subnet_size,
+                WasmExecutionMode::from_is_wasm64(self.is_wasm64_execution),
+            )
     }
 
     pub fn prepayment_for_response_transmission(&self) -> Cycles {
@@ -966,6 +1037,11 @@ impl SandboxSafeSystemState {
         prepayment_for_response_execution: Cycles,
         prepayment_for_response_transmission: Cycles,
     ) -> Result<(), Request> {
+        if self.available_callbacks == 0 {
+            return Err(msg);
+        }
+        self.available_callbacks -= 1;
+
         let mut new_balance = self.cycles_balance();
         let consumed_cycles = match self.cycles_account_manager.withdraw_request_cycles(
             self.canister_id,
@@ -1003,14 +1079,14 @@ impl SandboxSafeSystemState {
             .get(&msg.receiver)
             .unwrap_or(&DEFAULT_QUEUE_CAPACITY);
         let used_slots = self
-            .system_state_changes
+            .system_state_modifications
             .request_slots_used
             .entry(msg.receiver)
             .or_insert(0);
         if *used_slots >= *initial_available_slots {
             return Err(msg);
         }
-        self.system_state_changes.requests.push(msg);
+        self.system_state_modifications.requests.push(msg);
         *used_slots += 1;
         self.update_balance_change_consuming(new_balance, &consumed_cycles);
         Ok(())
@@ -1163,8 +1239,8 @@ impl SandboxSafeSystemState {
     ///
     /// The reserved cycles are removed from the main balance and added to the
     /// reserved balance. In pseudocode, reserving means:
-    ///   - `self.system_state_changes.cycles_balance_change -= reserved_cycles`
-    ///   - `self.system_state_changes.reserved_cycles += reserved_cycles`
+    ///   - `self.system_state_modifications.cycles_balance_change -= reserved_cycles`
+    ///   - `self.system_state_modifications.reserved_cycles += reserved_cycles`
     pub(super) fn reserve_storage_cycles(
         &mut self,
         allocated_bytes: NumBytes,
@@ -1204,7 +1280,7 @@ impl SandboxSafeSystemState {
                 }
                 let new_balance = old_balance - cycles_to_reserve;
                 self.update_balance_change(new_balance);
-                self.system_state_changes.reserved_cycles += cycles_to_reserve;
+                self.system_state_modifications.reserved_cycles += cycles_to_reserve;
                 Ok(())
             }
         }
@@ -1213,48 +1289,27 @@ impl SandboxSafeSystemState {
     /// Condition for `OnLowWasmMemoryHook` is satisfied if the following holds:
     ///
     /// 1. In the case of `memory_allocation`
-    ///     `wasm_memory_threshold >= min(memory_allocation - used_stable_memory, wasm_memory_limit) - used_wasm_memory`
+    ///     `wasm_memory_threshold >= min(memory_allocation - memory_usage_without_wasm_memory, wasm_memory_limit) - wasm_memory_usage`
     /// 2. Without memory allocation
-    ///     `wasm_memory_threshold >= wasm_memory_limit - used_wasm_memory`
+    ///     `wasm_memory_threshold >= wasm_memory_limit - wasm_memory_usage`
     ///
     /// Note: if `wasm_memory_limit` is not set, its default value is 4 GiB.
-    pub fn check_on_low_wasm_memory_hook_condition(
+    pub fn update_status_of_low_wasm_memory_hook_condition(
         &mut self,
         memory_allocation: Option<NumBytes>,
         wasm_memory_limit: Option<NumBytes>,
-        used_stable_memory: NumBytes,
-        used_wasm_memory: NumBytes,
+        memory_usage: NumBytes,
+        wasm_memory_usage: NumBytes,
     ) {
-        // If wasm memory limit is not set, the default is 4 GiB. Wasm memory
-        // limit is ignored for query methods, response callback handlers,
-        // global timers, heartbeats, and canister pre_upgrade.
-        let wasm_memory_limit =
-            wasm_memory_limit.unwrap_or_else(|| NumBytes::new(4 * 1024 * 1024 * 1024));
-
-        // If the canister has memory allocation, then it maximum allowed Wasm memory
-        // can be calculated as min(memory_allocation - used_stable_memory, wasm_memory_limit).
-        let wasm_capacity = memory_allocation.map_or_else(
-            || wasm_memory_limit,
-            |memory_allocation| {
-                debug_assert!(
-                    used_stable_memory <= memory_allocation,
-                    "Used stable memory: {:?} is larger than memory allocation: {:?}.",
-                    used_stable_memory,
-                    memory_allocation
-                );
-                std::cmp::min(memory_allocation - used_stable_memory, wasm_memory_limit)
-            },
+        let is_condition_satisfied = is_low_wasm_memory_hook_condition_satisfied(
+            memory_usage,
+            wasm_memory_usage,
+            memory_allocation,
+            wasm_memory_limit,
+            self.wasm_memory_threshold,
         );
 
-        // Conceptually we can think that the remaining Wasm memory is
-        // equal to `wasm_capacity - used_wasm_memory` and that should
-        // be compared with `wasm_memory_threshold` when checking for
-        // the condition for the hook. However, since `wasm_memory_limit`
-        // is ignored in some executions as stated above it is possible
-        // that `used_wasm_memory` is greater than `wasm_capacity` to
-        // avoid overflowing subtraction we adopted inequality.
-        let is_condition_satisfied = wasm_capacity < used_wasm_memory + self.wasm_memory_threshold;
-        self.system_state_changes
+        self.system_state_modifications
             .on_low_wasm_memory_hook_condition_check_result = Some(is_condition_satisfied);
     }
 
@@ -1286,19 +1341,19 @@ impl SandboxSafeSystemState {
 
     /// Appends a log record to the system state changes.
     pub fn append_canister_log(&mut self, time: &Time, content: Vec<u8>) {
-        self.system_state_changes
+        self.system_state_modifications
             .canister_log
             .add_record(time.as_nanos_since_unix_epoch(), content);
     }
 
     /// Takes collected canister log records.
     pub fn take_canister_log(&mut self) -> CanisterLog {
-        std::mem::take(&mut self.system_state_changes.canister_log)
+        std::mem::take(&mut self.system_state_modifications.canister_log)
     }
 
     /// Returns collected canister log records.
     pub fn canister_log(&self) -> &CanisterLog {
-        &self.system_state_changes.canister_log
+        &self.system_state_modifications.canister_log
     }
 
     fn caller_is_controller(&self) -> bool {
@@ -1308,6 +1363,10 @@ impl SandboxSafeSystemState {
             false
         }
     }
+
+    pub fn get_subnet_id(&self) -> SubnetId {
+        self.cycles_account_manager.get_subnet_id()
+    }
 }
 
 /// Holds the metadata and the number of downstream requests. Requests created during the same
@@ -1316,8 +1375,9 @@ impl SandboxSafeSystemState {
 ///
 /// This is used for call tree metrics.
 pub struct RequestMetadataStats {
-    pub metadata: Option<RequestMetadata>,
-    pub count: u64,
+    pub metadata: RequestMetadata,
+    pub best_effort_request_count: u64,
+    pub guaranteed_response_request_count: u64,
 }
 
 #[cfg(test)]
@@ -1341,7 +1401,7 @@ mod tests {
     use crate::{
         cycles_balance_change::CyclesBalanceChange,
         sandbox_safe_system_state::{
-            CanisterStatusView, SandboxSafeSystemState, SystemStateChanges,
+            CanisterStatusView, SandboxSafeSystemState, SystemStateModifications,
         },
     };
 
@@ -1358,12 +1418,12 @@ mod tests {
 
         let removed = Cycles::new(500_000);
         let consumed = Cycles::new(100_000);
-        let system_state_changes = SystemStateChanges::default_with_cycles_changes(
+        let system_state_modifications = SystemStateModifications::default_with_cycles_changes(
             CyclesBalanceChange::Removed(removed),
             BTreeMap::from([(CyclesUseCase::RequestAndResponseTransmission, consumed)]),
         );
 
-        system_state_changes.apply_balance_changes(&mut system_state);
+        system_state_modifications.apply_balance_changes(&mut system_state);
 
         assert_eq!(initial_cycles_balance - removed, system_state.balance());
 
@@ -1371,12 +1431,12 @@ mod tests {
 
         let removed = Cycles::new(500_000);
         let consumed = Cycles::new(600_000);
-        let system_state_changes = SystemStateChanges::default_with_cycles_changes(
+        let system_state_modifications = SystemStateModifications::default_with_cycles_changes(
             CyclesBalanceChange::Removed(removed),
             BTreeMap::from([(CyclesUseCase::RequestAndResponseTransmission, consumed)]),
         );
 
-        system_state_changes.apply_balance_changes(&mut system_state);
+        system_state_modifications.apply_balance_changes(&mut system_state);
 
         assert_eq!(initial_cycles_balance - removed, system_state.balance());
 
@@ -1384,12 +1444,12 @@ mod tests {
 
         let added = Cycles::new(500_000);
         let consumed = Cycles::new(100_000);
-        let system_state_changes = SystemStateChanges::default_with_cycles_changes(
+        let system_state_modifications = SystemStateModifications::default_with_cycles_changes(
             CyclesBalanceChange::Added(added),
             BTreeMap::from([(CyclesUseCase::RequestAndResponseTransmission, consumed)]),
         );
 
-        system_state_changes.apply_balance_changes(&mut system_state);
+        system_state_modifications.apply_balance_changes(&mut system_state);
 
         assert_eq!(initial_cycles_balance + added, system_state.balance());
 
@@ -1397,12 +1457,12 @@ mod tests {
 
         let added = Cycles::new(500_000);
         let consumed = Cycles::new(600_000);
-        let system_state_changes = SystemStateChanges::default_with_cycles_changes(
+        let system_state_modifications = SystemStateModifications::default_with_cycles_changes(
             CyclesBalanceChange::Added(added),
             BTreeMap::from([(CyclesUseCase::RequestAndResponseTransmission, consumed)]),
         );
 
-        system_state_changes.apply_balance_changes(&mut system_state);
+        system_state_modifications.apply_balance_changes(&mut system_state);
 
         assert_eq!(initial_cycles_balance + added, system_state.balance());
     }
@@ -1428,6 +1488,7 @@ mod tests {
                 CyclesAccountManagerConfig::application_subnet(),
             ),
             Some(0),
+            0,
             BTreeMap::new(),
             0,
             BTreeSet::new(),
@@ -1439,6 +1500,8 @@ mod tests {
             RequestMetadata::new(0, Time::from_nanos_since_unix_epoch(0)),
             None,
             0,
+            // Wasm32 execution environment. Sufficient in testing.
+            false,
         );
         sandbox_state.msg_deadline()
     }
@@ -1475,6 +1538,7 @@ mod tests {
                 CyclesAccountManagerConfig::application_subnet(),
             ),
             Some(0),
+            0,
             BTreeMap::new(),
             0,
             BTreeSet::new(),
@@ -1486,6 +1550,8 @@ mod tests {
             RequestMetadata::new(0, Time::from_nanos_since_unix_epoch(0)),
             None,
             0,
+            // Wasm32 execution environment. Sufficient in testing.
+            false,
         )
     }
 
@@ -1495,16 +1561,19 @@ mod tests {
         wasm_memory_threshold: u64,
         memory_allocation: Option<u64>,
         wasm_memory_limit: Option<u64>,
-        used_stable_memory: u64,
-        used_wasm_memory: u64,
+        memory_usage: u64,
+        wasm_memory_usage: u64,
     ) -> bool {
         let wasm_memory_limit = wasm_memory_limit.unwrap_or(4 * GIB);
-
+        let memory_usage_without_wasm_memory = memory_usage - wasm_memory_usage;
         let wasm_capacity = memory_allocation.map_or(wasm_memory_limit, |memory_allocation| {
-            std::cmp::min(memory_allocation - used_stable_memory, wasm_memory_limit)
+            std::cmp::min(
+                memory_allocation - memory_usage_without_wasm_memory,
+                wasm_memory_limit,
+            )
         });
 
-        wasm_capacity < used_wasm_memory + wasm_memory_threshold
+        wasm_capacity < wasm_memory_usage + wasm_memory_threshold
     }
     #[test]
     fn test_on_low_wasm_memory_hook_condition_update() {
@@ -1514,36 +1583,38 @@ mod tests {
                 for wasm_memory_limit in
                     [None, Some(GIB), Some(2 * GIB), Some(3 * GIB), Some(4 * GIB)]
                 {
-                    for used_stable_memory in [0, GIB] {
-                        for used_wasm_memory in [0, GIB, 2 * GIB, 3 * GIB, 4 * GIB] {
+                    for memory_usage_without_wasm_memory in [0, GIB] {
+                        for wasm_memory_usage in [0, GIB, 2 * GIB, 3 * GIB, 4 * GIB] {
                             let mut state =
                                 helper_create_state_for_hook_status(wasm_memory_threshold);
 
                             assert_eq!(
                                 state
-                                    .system_state_changes
+                                    .system_state_modifications
                                     .on_low_wasm_memory_hook_condition_check_result,
                                 None
                             );
 
-                            state.check_on_low_wasm_memory_hook_condition(
+                            let memory_usage = wasm_memory_usage + memory_usage_without_wasm_memory;
+
+                            state.update_status_of_low_wasm_memory_hook_condition(
                                 memory_allocation.map(|m| m.into()),
                                 wasm_memory_limit.map(|m| m.into()),
-                                used_stable_memory.into(),
-                                used_wasm_memory.into(),
+                                memory_usage.into(),
+                                wasm_memory_usage.into(),
                             );
 
                             assert_eq!(
                                 state
-                                    .system_state_changes
+                                    .system_state_modifications
                                     .on_low_wasm_memory_hook_condition_check_result
                                     .unwrap(),
                                 helper_is_condition_satisfied_for_on_low_wasm_memory_hook(
                                     wasm_memory_threshold,
                                     memory_allocation,
                                     wasm_memory_limit,
-                                    used_stable_memory,
-                                    used_wasm_memory
+                                    memory_usage,
+                                    wasm_memory_usage
                                 )
                             );
                         }

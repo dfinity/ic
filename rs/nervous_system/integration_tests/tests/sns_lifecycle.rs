@@ -13,7 +13,7 @@ use ic_nervous_system_integration_tests::{
     create_service_nervous_system_builder::CreateServiceNervousSystemBuilder,
     pocket_ic_helpers::{
         add_wasms_to_sns_wasm, install_canister_with_controllers, install_nns_canisters, nns,
-        sns::{self, swap::SwapFinalizationStatus},
+        sns::{self, governance::dissolve_delay_seconds, swap::SwapFinalizationStatus},
     },
 };
 use ic_nervous_system_proto::pb::v1::{Duration as DurationPb, Tokens as TokensPb};
@@ -24,10 +24,8 @@ use ic_nns_governance_api::pb::v1::{
     get_neurons_fund_audit_info_response, neurons_fund_snapshot::NeuronsFundNeuronPortion,
     CreateServiceNervousSystem, Neuron,
 };
-use ic_sns_governance::{
-    governance::TREASURY_SUBACCOUNT_NONCE,
-    pb::v1::{self as sns_pb, NeuronPermissionType},
-};
+use ic_sns_governance::governance::TREASURY_SUBACCOUNT_NONCE;
+use ic_sns_governance_api::pb::v1::{self as sns_pb, NeuronPermissionType};
 use ic_sns_init::distributions::MAX_DEVELOPER_DISTRIBUTION_COUNT;
 use ic_sns_root::CanisterSummary;
 use ic_sns_swap::{
@@ -142,7 +140,7 @@ impl NeuronsFundConfig {
 ///     2. `{  neurons_fund_participation && direct_participation_icp_e8s==0 && neurons_fund_participation_icp_e8s==0 } FinalizeSuccessfully   { direct_participation_icp_e8s==650_000 * E8 && neurons_fund_participation_icp_e8s==150_000 * E8 }`
 ///     3. `{ !neurons_fund_participation && direct_participation_icp_e8s==0 && neurons_fund_participation_icp_e8s==0 } FinalizeUnSuccessfully { direct_participation_icp_e8s==0            && neurons_fund_participation_icp_e8s==0 }`
 ///     4. `{ !neurons_fund_participation && direct_participation_icp_e8s==0 && neurons_fund_participation_icp_e8s==0 } FinalizeSuccessfully   { direct_participation_icp_e8s==650_000 * E8 && neurons_fund_participation_icp_e8s==0 }`
-///     
+///
 ///     Unused portions of Neurons' Fund maturity reserved at SNS creation time are refunded.
 ///
 /// 5. Control over the dapp:
@@ -363,7 +361,7 @@ async fn test_sns_lifecycle(
             "My Test Dapp",
             dapp_canister_id,
             vec![],
-            Wasm::from_bytes(UNIVERSAL_CANISTER_WASM),
+            Wasm::from_bytes(UNIVERSAL_CANISTER_WASM.to_vec()),
             original_controllers.clone(),
         )
         .await;
@@ -419,9 +417,11 @@ async fn test_sns_lifecycle(
         swap_distribution_sns_e8s,
     );
 
-    let nervous_system_parameters =
-        sns::governance::get_nervous_system_parameters(&pocket_ic, sns.governance.canister_id)
-            .await;
+    let nervous_system_parameters = sns
+        .governance
+        .get_nervous_system_parameters(&pocket_ic)
+        .await
+        .unwrap();
     let swap_init = sns::swap::get_init(&pocket_ic, sns.swap.canister_id)
         .await
         .init
@@ -443,8 +443,10 @@ async fn test_sns_lifecycle(
 
     // Assert that the mode of SNS Governance is `PreInitializationSwap`.
     assert_eq!(
-        sns::governance::get_mode(&pocket_ic, sns.governance.canister_id)
+        sns.governance
+            .get_mode(&pocket_ic)
             .await
+            .unwrap()
             .mode
             .unwrap(),
         sns_pb::governance::Mode::PreInitializationSwap as i32
@@ -1111,16 +1113,20 @@ async fn test_sns_lifecycle(
     // Assert that the mode of SNS Governance is correct
     if swap_finalization_status == SwapFinalizationStatus::Aborted {
         assert_eq!(
-            sns::governance::get_mode(&pocket_ic, sns.governance.canister_id)
+            sns.governance
+                .get_mode(&pocket_ic)
                 .await
+                .unwrap()
                 .mode
                 .unwrap(),
             sns_pb::governance::Mode::PreInitializationSwap as i32,
         );
     } else {
         assert_eq!(
-            sns::governance::get_mode(&pocket_ic, sns.governance.canister_id)
+            sns.governance
+                .get_mode(&pocket_ic)
                 .await
+                .unwrap()
                 .mode
                 .unwrap(),
             sns_pb::governance::Mode::Normal as i32
@@ -1502,7 +1508,7 @@ async fn test_sns_lifecycle(
                         .as_secs();
                     let longest_dissolve_delay_sns_neuron = swap_neuron_basket
                         .iter()
-                        .max_by_key(|neuron| neuron.dissolve_delay_seconds(now_seconds))
+                        .max_by_key(|neuron| dissolve_delay_seconds(neuron, now_seconds))
                         .expect(
                             "Expected to have at least one swap SNS neuron for each participant.",
                         );
@@ -1631,7 +1637,8 @@ async fn test_sns_lifecycle(
 
                     // Finally, check that the SNS Ledger balances add up.
                     {
-                        let subaccount = sns_neuron.id.as_ref().unwrap().subaccount().unwrap();
+                        let subaccount = sns_neuron.id.unwrap().id.try_into().unwrap();
+
                         let observed_balance_e8s = sns::ledger::icrc1_balance_of(
                             &pocket_ic,
                             sns.ledger.canister_id,

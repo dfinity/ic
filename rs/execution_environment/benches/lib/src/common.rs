@@ -2,8 +2,10 @@
 /// Common System API benchmark functions, types, constants.
 ///
 use criterion::{BatchSize, Criterion};
-use ic_config::embedders::{Config as EmbeddersConfig, FeatureFlags};
-use ic_config::execution_environment::Config;
+use ic_config::embedders::{BestEffortResponsesFeature, Config as EmbeddersConfig, FeatureFlags};
+use ic_config::execution_environment::{
+    Config, CANISTER_GUARANTEED_CALLBACK_QUOTA, SUBNET_CALLBACK_SOFT_LIMIT,
+};
 use ic_config::flag_status::FlagStatus;
 use ic_config::subnet_config::{SchedulerConfig, SubnetConfig};
 use ic_cycles_account_manager::{CyclesAccountManager, ResourceSaturation};
@@ -29,15 +31,14 @@ use ic_test_utilities_state::canister_from_exec_state;
 use ic_test_utilities_types::ids::{canister_test_id, subnet_test_id, user_test_id};
 use ic_test_utilities_types::messages::IngressBuilder;
 use ic_types::{
-    messages::{CallbackId, CanisterMessage, Payload, RejectContext, RequestMetadata, NO_DEADLINE},
+    messages::{CallbackId, CanisterMessage, Payload, RejectContext, NO_DEADLINE},
     methods::{Callback, WasmClosure},
     time::UNIX_EPOCH,
     Cycles, MemoryAllocation, NumBytes, NumInstructions, Time,
 };
 use ic_wasm_types::CanisterModule;
 use lazy_static::lazy_static;
-use std::convert::TryFrom;
-use std::sync::Arc;
+use std::{convert::TryFrom, path::Path, sync::Arc};
 
 pub const MAX_NUM_INSTRUCTIONS: NumInstructions = NumInstructions::new(500_000_000_000);
 // Note: this canister ID is required for the `ic0_mint_cycles()`
@@ -72,6 +73,7 @@ pub struct BenchmarkArgs {
     pub network_topology: Arc<NetworkTopology>,
     pub execution_parameters: ExecutionParameters,
     pub subnet_available_memory: SubnetAvailableMemory,
+    pub subnet_available_callbacks: i64,
     pub call_origin: CallOrigin,
     pub callback: Callback,
 }
@@ -94,6 +96,7 @@ where
     let mut round_limits = RoundLimits {
         instructions: as_round_instructions(MAX_NUM_INSTRUCTIONS),
         subnet_available_memory: *MAX_SUBNET_AVAILABLE_MEMORY,
+        subnet_available_callbacks: SUBNET_CALLBACK_SOFT_LIMIT as i64,
         compute_allocation_used: 0,
     };
     let execution_state = hypervisor
@@ -123,7 +126,7 @@ where
             call_origin.clone(),
             Cycles::new(10),
             UNIX_EPOCH,
-            RequestMetadata::new(0, UNIX_EPOCH),
+            Default::default(),
         )
         .unwrap();
     let callback = Callback::new(
@@ -161,6 +164,7 @@ where
         canister_memory_limit: canister_state.memory_limit(NumBytes::new(u64::MAX)),
         wasm_memory_limit: None,
         memory_allocation: canister_state.memory_allocation(),
+        canister_guaranteed_callback_quota: CANISTER_GUARANTEED_CALLBACK_QUOTA as u64,
         compute_allocation: canister_state.compute_allocation(),
         subnet_type: hypervisor.subnet_type(),
         execution_mode: ExecutionMode::Replicated,
@@ -185,6 +189,7 @@ where
         network_topology,
         execution_parameters,
         subnet_available_memory: *MAX_SUBNET_AVAILABLE_MEMORY,
+        subnet_available_callbacks: SUBNET_CALLBACK_SOFT_LIMIT as i64,
         call_origin,
         callback,
     }
@@ -203,7 +208,7 @@ fn run_benchmark<G, I, W, R>(
     G: AsRef<str>,
     I: AsRef<str>,
     W: AsRef<str>,
-    R: Fn(&ExecutionEnvironment, u64, BenchmarkArgs),
+    R: Fn(&str, &ExecutionEnvironment, u64, BenchmarkArgs),
 {
     let mut group = c.benchmark_group(group.as_ref());
     let mut bench_args = None;
@@ -225,7 +230,7 @@ fn run_benchmark<G, I, W, R>(
                     bench_args.as_ref().unwrap().clone()
                 },
                 |args| {
-                    routine(exec_env, expected_ops, args);
+                    routine(id.as_ref(), exec_env, expected_ops, args);
                 },
                 BatchSize::SmallInput,
             );
@@ -251,7 +256,7 @@ fn check_sandbox_defined() -> bool {
 pub fn run_benchmarks<G, R>(c: &mut Criterion, group: G, benchmarks: &[Benchmark], routine: R)
 where
     G: AsRef<str>,
-    R: Fn(&ExecutionEnvironment, u64, BenchmarkArgs) + Copy,
+    R: Fn(&str, &ExecutionEnvironment, u64, BenchmarkArgs) + Copy,
 {
     if !check_sandbox_defined() {
         return;
@@ -268,7 +273,7 @@ where
     ));
     let mut embedders_config = EmbeddersConfig {
         feature_flags: FeatureFlags {
-            best_effort_responses: FlagStatus::Enabled,
+            best_effort_responses: BestEffortResponsesFeature::Enabled,
             wasm64: FlagStatus::Enabled,
             ..FeatureFlags::default()
         },
@@ -276,7 +281,7 @@ where
     };
 
     // Set up larger heap, of 8GB for the Wasm64 feature.
-    embedders_config.max_wasm_memory_size = NumBytes::from(8 * 1024 * 1024 * 1024);
+    embedders_config.max_wasm64_memory_size = NumBytes::from(8 * 1024 * 1024 * 1024);
 
     let config = Config {
         embedders_config,
@@ -293,6 +298,8 @@ where
         Arc::clone(&cycles_account_manager),
         SchedulerConfig::application_subnet().dirty_page_overhead,
         Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
+        Arc::new(FakeStateManager::new()),
+        Path::new("/tmp"),
     ));
 
     let (completed_execution_messages_tx, _) = tokio::sync::mpsc::channel(1);

@@ -1,4 +1,4 @@
-load("//rs/tests:common.bzl", "DEPENDENCIES", "GRAFANA_RUNTIME_DEPS", "GUESTOS_RUNTIME_DEPS", "MACRO_DEPENDENCIES", "NNS_CANISTER_ENV", "NNS_CANISTER_RUNTIME_DEPS", "SNS_CANISTER_ENV", "SNS_CANISTER_RUNTIME_DEPS")
+load("//rs/tests:common.bzl", "GRAFANA_RUNTIME_DEPS", "GUESTOS_RUNTIME_DEPS", "NNS_CANISTER_ENV", "NNS_CANISTER_RUNTIME_DEPS", "SNS_CANISTER_ENV", "SNS_CANISTER_RUNTIME_DEPS")
 load("//rs/tests:system_tests.bzl", "system_test")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
@@ -6,7 +6,6 @@ package(default_visibility = ["//rs:system-tests-pkg"])
 system_test(
     name = "sns_sale_load_test_1",
     env = NNS_CANISTER_ENV | SNS_CANISTER_ENV,
-    proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "manual",
     ],
@@ -14,13 +13,16 @@ system_test(
     test_timeout = "eternal",
     runtime_deps = GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS +
                    SNS_CANISTER_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS,
-    deps = DEPENDENCIES + ["//rs/tests"],
+    deps = [
+        "//rs/tests/driver:ic-system-test-driver",
+        "//rs/tests/nns/sns/lib:sns_system_test_lib",
+        "@crate_index//:anyhow",
+    ],
 )
 
 system_test(
     name = "sns_sale_load_test_2",
     env = NNS_CANISTER_ENV | SNS_CANISTER_ENV,
-    proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "manual",
     ],
@@ -28,13 +30,16 @@ system_test(
     test_timeout = "eternal",
     runtime_deps = GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS +
                    SNS_CANISTER_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS,
-    deps = DEPENDENCIES + ["//rs/tests"],
+    deps = [
+        "//rs/tests/driver:ic-system-test-driver",
+        "//rs/tests/nns/sns/lib:sns_system_test_lib",
+        "@crate_index//:anyhow",
+    ],
 )
 
 system_test(
     name = "sns_sale_load_test_3",
     env = NNS_CANISTER_ENV | SNS_CANISTER_ENV,
-    proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "manual",
     ],
@@ -42,7 +47,11 @@ system_test(
     test_timeout = "eternal",
     runtime_deps = GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS +
                    SNS_CANISTER_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS,
-    deps = DEPENDENCIES + ["//rs/tests"],
+    deps = [
+        "//rs/tests/driver:ic-system-test-driver",
+        "//rs/tests/nns/sns/lib:sns_system_test_lib",
+        "@crate_index//:anyhow",
+    ],
 )
 
 system_test(
@@ -51,7 +60,6 @@ system_test(
         "SNS_AGGREGATOR_WASM_PATH": "$(rootpath @sns_aggregator//file)",
     },
     flaky = True,
-    proc_macro_deps = MACRO_DEPENDENCIES,
     # TODO[NNS1-2658]: re-enable this test
     tags = [
         "manual",
@@ -61,13 +69,16 @@ system_test(
                    SNS_CANISTER_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS + [
         "@sns_aggregator//file",
     ],
-    deps = DEPENDENCIES + ["//rs/tests"],
+    deps = [
+        "//rs/tests/driver:ic-system-test-driver",
+        "//rs/tests/nns/sns/lib:sns_system_test_lib",
+        "@crate_index//:anyhow",
+    ],
 )
 
 system_test(
     name = "workload_static_testnet",
     env = NNS_CANISTER_ENV | SNS_CANISTER_ENV,
-    proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "manual",
     ],
@@ -75,7 +86,12 @@ system_test(
     test_timeout = "eternal",
     runtime_deps = GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS +
                    SNS_CANISTER_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS,
-    deps = DEPENDENCIES + ["//rs/tests"],
+    deps = [
+        "//rs/tests/driver:ic-system-test-driver",
+        "//rs/tests/nns/sns/lib:sns_system_test_lib",
+        "@crate_index//:anyhow",
+        "@crate_index//:slog",
+    ],
 )
 
 system_test(
@@ -83,7 +99,6 @@ system_test(
     env = NNS_CANISTER_ENV | SNS_CANISTER_ENV | {
         "SNS_AGGREGATOR_WASM_PATH": "$(rootpath @sns_aggregator//file)",
     },
-    proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "manual",
     ],
@@ -93,7 +108,11 @@ system_test(
                    SNS_CANISTER_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS + [
         "@sns_aggregator//file",
     ],
-    deps = DEPENDENCIES + ["//rs/tests"],
+    deps = [
+        "//rs/tests/driver:ic-system-test-driver",
+        "//rs/tests/nns/sns/lib:sns_system_test_lib",
+        "@crate_index//:anyhow",
+    ],
 )
 
 system_test(
@@ -101,7 +120,6 @@ system_test(
     env = NNS_CANISTER_ENV | SNS_CANISTER_ENV | {
         "SNS_AGGREGATOR_WASM_PATH": "$(rootpath @sns_aggregator//file)",
     },
-    proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "manual",
     ],
@@ -111,7 +129,11 @@ system_test(
                    SNS_CANISTER_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS + [
         "@sns_aggregator//file",
     ],
-    deps = DEPENDENCIES + ["//rs/tests"],
+    deps = [
+        "//rs/tests/driver:ic-system-test-driver",
+        "//rs/tests/nns/sns/lib:sns_system_test_lib",
+        "@crate_index//:anyhow",
+    ],
 )
 
 system_test(
@@ -119,7 +141,6 @@ system_test(
     env = NNS_CANISTER_ENV | SNS_CANISTER_ENV | {
         "SNS_AGGREGATOR_WASM_PATH": "$(rootpath @sns_aggregator//file)",
     },
-    proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "manual",
     ],
@@ -129,13 +150,16 @@ system_test(
                    SNS_CANISTER_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS + [
         "@sns_aggregator//file",
     ],
-    deps = DEPENDENCIES + ["//rs/tests"],
+    deps = [
+        "//rs/tests/driver:ic-system-test-driver",
+        "//rs/tests/nns/sns/lib:sns_system_test_lib",
+        "@crate_index//:anyhow",
+    ],
 )
 
 system_test(
     name = "payment_flow_load_test",
     env = NNS_CANISTER_ENV | SNS_CANISTER_ENV,
-    proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "manual",
     ],
@@ -143,5 +167,9 @@ system_test(
     test_timeout = "eternal",  # TODO: consider removing this
     runtime_deps = GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS +
                    SNS_CANISTER_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS,
-    deps = DEPENDENCIES + ["//rs/tests"],
+    deps = [
+        "//rs/tests/driver:ic-system-test-driver",
+        "//rs/tests/nns/sns/lib:sns_system_test_lib",
+        "@crate_index//:anyhow",
+    ],
 )

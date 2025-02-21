@@ -1,10 +1,10 @@
 use crate::{
-    bouncer_metrics::BouncerMetrics,
     certification::{CertificationCrypto, VerifierImpl},
     consensus::MINIMUM_CHAIN_LENGTH,
 };
 use ic_consensus_utils::{
-    active_high_threshold_nidkg_id, aggregate, membership::Membership, registry_version_at_height,
+    active_high_threshold_nidkg_id, aggregate, bouncer_metrics::BouncerMetrics,
+    membership::Membership, registry_version_at_height,
 };
 use ic_interfaces::{
     certification::{CertificationPool, ChangeAction, Mutations, Verifier, VerifierError},
@@ -1354,7 +1354,7 @@ mod tests {
 
                 for height in 1..=4 {
                     cert_pool
-                        .persistent_pool
+                        .validated
                         .insert(CertificationMessage::Certification(Certification {
                             height: Height::from(height),
                             signed: Signed {

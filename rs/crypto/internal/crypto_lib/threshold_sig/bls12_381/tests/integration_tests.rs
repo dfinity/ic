@@ -1,4 +1,3 @@
-#![allow(clippy::unwrap_used)]
 //! Tests for combined forward secure encryption and ZK proofs
 #![allow(clippy::many_single_char_names)]
 
@@ -191,7 +190,7 @@ fn encrypted_chunks_should_validate(epoch: Epoch) {
         /// Context: Most of this code converts the data used for the fs
         /// encryption to the form needed by the zk crypto. Suggestion:
         /// Put the conversion code in the library.
-
+        ///
         /// Combine a big endian array of group elements (first chunk is the
         /// most significant) into a single group element.
         fn g1_from_big_endian_chunks(terms: &[G1Affine]) -> G1Affine {

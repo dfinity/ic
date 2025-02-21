@@ -8,8 +8,9 @@ use ic_artifact_pool::{consensus_pool::ConsensusPoolImpl, dkg_pool::DkgPoolImpl}
 use ic_config::{artifact_pool::ArtifactPoolConfig, Config};
 use ic_consensus::{
     certification::CertificationCrypto,
-    consensus::{dkg_key_manager::DkgKeyManager, validator::Validator, ValidatorMetrics},
+    consensus::{validator::Validator, ValidatorMetrics},
 };
+use ic_consensus_dkg::DkgKeyManager;
 use ic_consensus_utils::{
     active_high_threshold_nidkg_id, crypto::ConsensusCrypto, membership::Membership,
     pool_reader::PoolReader, registry_version_at_height,
@@ -133,7 +134,6 @@ impl ReplayValidator {
             log.clone(),
             ValidatorMetrics::new(metrics_registry.clone()),
             time_source.clone(),
-            /*ingress_selector=*/ None,
         );
 
         Self {

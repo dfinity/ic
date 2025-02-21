@@ -219,10 +219,17 @@ impl NodeRegistration {
             .expect("Invalid IPv4 configuration"),
             domain: process_domain_name(&self.log, &self.node_config.domain)
                 .expect("Domain name is invalid"),
-            // Unused section follows
-            p2p_flow_endpoints: Default::default(),
-            prometheus_metrics_endpoint: Default::default(),
-            node_reward_type: None,
+            node_reward_type: if self.node_config.registration.node_reward_type.as_deref()
+                == Some("")
+            {
+                None
+            } else {
+                self.node_config.registration.node_reward_type.clone()
+            },
+
+            // The following fields are unused.
+            p2p_flow_endpoints: Default::default(), // unused field
+            prometheus_metrics_endpoint: Default::default(), // unused field
         }
     }
 
@@ -543,7 +550,7 @@ pub(crate) fn is_time_to_rotate_in_subnet(
     let now = SystemTime::now();
     timestamps
         .iter()
-        .all(|ts| now.duration_since(*ts).map_or(false, |d| d >= gamma))
+        .all(|ts| now.duration_since(*ts).is_ok_and(|d| d >= gamma))
 }
 
 pub(crate) fn http_config_to_endpoint(

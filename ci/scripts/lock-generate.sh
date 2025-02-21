@@ -16,7 +16,7 @@ git status
 if ! git diff --cached --quiet; then
     # If this is running from a pull request then update the Cargo.lock file in the PR
     # automatically.
-    if [ "$CI_PIPELINE_SOURCE" = "pull_request" ]; then
+    if [ "$CI_EVENT_NAME" = "pull_request" ]; then
         # There are some changes staged
         git config --global user.email "infra+github-automation@dfinity.org"
         git config --global user.name "IDX GitHub Automation"
