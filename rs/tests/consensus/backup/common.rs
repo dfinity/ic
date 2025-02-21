@@ -133,8 +133,8 @@ pub fn test_downgrade(env: TestEnv) {
     let nns_node = get_nns_node(&env.topology_snapshot());
     let initial_version =
         get_assigned_replica_version(&nns_node).expect("There should be assigned replica version");
-    let mainnet_version = read_dependency_to_string("mainnet_nns_subnet_revision.txt")
-        .expect("could not read mainnet version!");
+    let mainnet_version = std::env::var("MAINNET_NNS_SUBNET_REVISION_ENV")
+        .expect("could not read mainnet version from environment");
     info!(log, "Elect the mainnet replica version");
     info!(log, "TARGET_VERSION: {}", mainnet_version);
     block_on(bless_public_replica_version(
