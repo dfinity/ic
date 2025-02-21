@@ -24,7 +24,7 @@ const HELLO_WORLD_WAT: &str = r#"
 
 fn main() {
     let features = fuzzer_sandbox::SandboxFeatures {
-        syscall_tracing: true,
+        syscall_tracing: false,
     };
     fuzzer_sandbox::fuzzer_main(features);
 }

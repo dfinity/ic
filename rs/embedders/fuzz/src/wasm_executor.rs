@@ -49,7 +49,7 @@ lazy_static! {
 pub fn run_fuzzer(module: ICWasmModule) {
     let wasm = module.module.to_bytes();
 
-    let persisted_globals: Vec<Global> = module.exoported_globals;
+    let persisted_globals: Vec<Global> = module.exported_globals;
 
     let canister_module = CanisterModule::new(wasm);
     let wasm_binary = WasmBinary::new(canister_module);

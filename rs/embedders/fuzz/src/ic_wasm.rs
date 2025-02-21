@@ -24,6 +24,22 @@ lazy_static! {
         system_api_imports(ic_embedders_config(true));
 }
 
+const CANISTER_EXPORT_FUNCTION_ONCE: &[&str] = &[
+    "canister_init",
+    "canister_inspect_message",
+    "canister_pre_upgrade",
+    "canister_post_upgrade",
+    "canister_heartbeat",
+    "canister_global_timer",
+    "canister_on_low_wasm_memory",
+];
+
+const CANISTER_EXPORT_FUNCTION_PREFIX: &[&str] = &[
+    "canister_query",
+    "canister_update",
+    "canister_composite_query",
+];
+
 #[derive(Debug)]
 pub struct ICWasmModule {
     pub module: Module,
@@ -32,7 +48,7 @@ pub struct ICWasmModule {
     #[allow(dead_code)]
     pub config: Config,
     #[allow(dead_code)]
-    pub exoported_globals: Vec<Global>,
+    pub exported_globals: Vec<Global>,
     #[allow(dead_code)]
     pub exported_functions: BTreeSet<WasmMethod>,
 }
@@ -57,6 +73,12 @@ pub struct SystemApiModule {
 
 impl<'a> Arbitrary<'a> for SystemApiModule {
     fn arbitrary(u: &mut Unstructured<'a>) -> Result<Self> {
+        const FUNCTIONS: usize = 2;
+        const SYSTEM_API_PER_FUNCTION: usize = 20;
+
+        // memory pages are bound to 100
+        let memory_minimum = u.int_in_range(0..=50)?;
+        let memory_maximum = u.int_in_range(memory_minimum..=100)?;
         let memory64_enabled = u.ratio(2, 3)?;
 
         let store: &'static SystemApiImportStore = if memory64_enabled {
@@ -71,13 +93,15 @@ impl<'a> Arbitrary<'a> for SystemApiModule {
         module.section(&store.import_section);
 
         let mut functions = FunctionSection::new();
-        functions.function(0);
+        for _ in 0..FUNCTIONS {
+            functions.function(0);
+        }
         module.section(&functions);
 
         let mut memories = MemorySection::new();
         memories.memory(MemoryType {
-            minimum: 1,
-            maximum: None,
+            minimum: memory_minimum,
+            maximum: Some(memory_maximum),
             memory64: memory64_enabled,
             shared: false,
             page_size_log2: None,
@@ -86,55 +110,53 @@ impl<'a> Arbitrary<'a> for SystemApiModule {
 
         // Export section
         let mut exports = ExportSection::new();
-        let export_func_prefix: Vec<String> = vec![
-            "canister_query".to_string(),
-            "canister_update".to_string(),
-            "canister_composite_query".to_string(),
-        ];
-        let mut name = "test".to_string();
-        let choice = u.choose_index(export_func_prefix.len())?;
-        name = format!("{} {}", export_func_prefix[choice], name);
+        let choice = u.choose_index(CANISTER_EXPORT_FUNCTION_PREFIX.len())?;
+        let name = format!("{} test", CANISTER_EXPORT_FUNCTION_PREFIX[choice]);
         exports.export(
             name.as_str(),
             ExportKind::Func,
             store.import_section.len() as u32,
         );
+
+        let choice = u.choose_index(CANISTER_EXPORT_FUNCTION_ONCE.len())?;
+        exports.export(
+            &CANISTER_EXPORT_FUNCTION_ONCE[choice],
+            ExportKind::Func,
+            store.import_section.len() as u32 + 1,
+        );
+
         module.section(&exports);
 
         let mut codes = CodeSection::new();
-        let mut function = Function::new(vec![]);
-
         assert!(store.import_section.len() == store.import_mapping.len() as u32);
+        for _ in 0..FUNCTIONS {
+            let mut function = Function::new(vec![]);
+            for _ in 0..SYSTEM_API_PER_FUNCTION {
+                let call_index = u.int_in_range(0..=(store.import_section.len() - 1))?;
+                let func_type = store.import_mapping.get(&(call_index as usize)).unwrap();
 
-        for _ in 0..10 {
-            let call_index = u.int_in_range(1..=(store.import_section.len() - 1))?;
-            let func_type = store.import_mapping.get(&(call_index as usize)).unwrap();
-
-            for param in func_type.params() {
-                let instruction = match param {
-                    EncodedValType::I32 => Instruction::I32Const(i32::arbitrary(u)?),
-                    EncodedValType::I64 => Instruction::I64Const(i64::arbitrary(u)?),
-                    _ => unimplemented!(),
-                };
-                function.instruction(&instruction);
+                for param in func_type.params() {
+                    let instruction = match param {
+                        EncodedValType::I32 => Instruction::I32Const(i32::arbitrary(u)?),
+                        EncodedValType::I64 => Instruction::I64Const(i64::arbitrary(u)?),
+                        _ => unimplemented!(),
+                    };
+                    function.instruction(&instruction);
+                }
+                function.instruction(&Instruction::Call(call_index));
+                for _result in func_type.results() {
+                    function.instruction(&Instruction::Drop);
+                }
             }
-            function.instruction(&Instruction::Call(call_index));
-            for _result in func_type.results() {
-                function.instruction(&Instruction::Drop);
-            }
+            function.instruction(&Instruction::End);
+            codes.function(&function);
         }
 
-        function.instruction(&Instruction::End);
-        codes.function(&function);
         module.section(&codes);
 
         let wasm_bytes = module.finish();
 
-        // assert!(wasmparser::validate(&wasm_bytes).is_ok());
-        match wasmparser::validate(&wasm_bytes) {
-            Ok(_) => (),
-            Err(e) => println!("{:?}", e),
-        }
+        assert!(wasmparser::validate(&wasm_bytes).is_ok());
         let wasm_method = WasmMethod::try_from(name.to_string()).unwrap();
 
         Ok(SystemApiModule {
@@ -227,7 +249,7 @@ impl ICWasmModule {
         Self {
             config,
             module,
-            exoported_globals: persisted_globals,
+            exported_globals: persisted_globals,
             exported_functions: wasm_methods,
         }
     }
@@ -370,7 +392,7 @@ pub fn generate_exports(
     }
     module.section(&exports);
 
-    // Global Section (dummy values)
+    // Code Section (dummy values)
     let mut codes = CodeSection::new();
     let mut function = Function::new(vec![]);
     function.instruction(&Instruction::End);
@@ -389,36 +411,18 @@ fn export_name(
     exported_names: &mut HashSet<String>,
     visited: &mut BTreeSet<usize>,
 ) -> Result<String> {
-    let export_func_once: Vec<String> = vec![
-        "canister_init".to_string(),
-        "canister_inspect_message".to_string(),
-        "canister_pre_upgrade".to_string(),
-        "canister_post_upgrade".to_string(),
-        "canister_heartbeat".to_string(),
-        "canister_global_timer".to_string(),
-        "canister_on_low_wasm_memory".to_string(),
-    ];
-
-    let export_func_prefix: Vec<String> = vec![
-        "canister_query".to_string(),
-        "canister_update".to_string(),
-        "canister_composite_query".to_string(),
-    ];
-
     let mut name = unique_string(1_000, exported_names, u)?;
-
-    if u.ratio(1, 2)? && export_func_once.len() != visited.len() {
-        let index_choice: Vec<usize> = (0..export_func_once.len())
+    if u.ratio(1, 2)? && CANISTER_EXPORT_FUNCTION_ONCE.len() != visited.len() {
+        let index_choice: Vec<usize> = (0..CANISTER_EXPORT_FUNCTION_ONCE.len())
             .filter(|index| !visited.contains(index))
             .collect();
         let choice = u.choose(&index_choice)?;
-        name.clone_from(&export_func_once[*choice]);
         visited.insert(*choice);
-        return Ok(name);
+        return Ok(CANISTER_EXPORT_FUNCTION_ONCE[*choice].to_string());
     }
 
-    let choice = u.choose_index(export_func_prefix.len())?;
-    name = format!("{} {}", export_func_prefix[choice], name);
+    let choice = u.choose_index(CANISTER_EXPORT_FUNCTION_PREFIX.len())?;
+    name = format!("{} {}", CANISTER_EXPORT_FUNCTION_PREFIX[choice], name);
     exported_names.insert(name.clone());
 
     Ok(name)

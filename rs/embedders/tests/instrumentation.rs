@@ -42,25 +42,6 @@ use ic_types::{
 /// - `bazel test //rs/embedders:instrumentation` should pass now.
 ///
 /// If you find a simpler way to get the new snap files, please update the steps.
-///
-///
-
-#[test]
-fn wasm_timeout() {
-    let wat = r#"
-        (module
-            (import "ic0" "canister_self_copy" (func $ic0_canister_self_copy (param i64) (param i64) (param i64)))
-            (func $test (export "canister_update test")
-                (call $ic0_canister_self_copy (i64.const -1) (i64.const -1) (i64.const 1))
-            )
-            (memory (export "memory") i64 1)
-        )"#;
-
-    let mut instance = new_instance(&wat, 1_000_000_000_000, WasmMemoryType::Wasm64);
-    let res = instance.run(func_ref("test")).unwrap();
-    println!("result {:?}", res);
-}
-
 fn inject_and_cmp(testname: &str) {
     let filename = format!(
         "{}/tests/instrumentation-test-data/{}.wat",

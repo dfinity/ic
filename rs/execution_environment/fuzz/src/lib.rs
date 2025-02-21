@@ -110,6 +110,7 @@ where
                 Sysno::futex,
                 Sysno::close,
                 Sysno::restart_syscall,
+                Sysno::write,
             ]);
 
             let mut threads: Vec<_> = vec![];
