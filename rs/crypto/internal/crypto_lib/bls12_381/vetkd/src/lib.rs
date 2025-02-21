@@ -19,7 +19,9 @@ pub struct DerivationDomain {
     delta: Scalar,
 }
 
-const DERIVATION_DOMAIN_DST: &[u8; 40] = b"\x27ic-vetkd-bls12-381-g2-derivation-domain";
+// Prefix-freeness is not required, as the domain separator is used with XMD,
+// which includes the domain separator's length as a distinct input.
+const DERIVATION_DOMAIN_DST: &[u8; 39] = b"ic-vetkd-bls12-381-g2-derivation-domain";
 
 impl DerivationDomain {
     /// Create a new derivation domain

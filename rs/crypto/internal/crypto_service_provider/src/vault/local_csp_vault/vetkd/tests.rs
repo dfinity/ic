@@ -35,14 +35,18 @@ fn should_correctly_create_encrypted_vetkd_key_share_for_smoke_test_vector() {
                 f3e68e13f62604d027660883213c90ea72810bcecee58b883fb62118e538243\
                 03718e6876ea400d083beb0439d3934122a4c4b2e58e3f145305b9a0c0a00e3\
                 2dd808574dec2605dbc7f122fe593ca0c07ca92720d0f17b7d53c9c68dbb93d\
-                489078859e5e5fe2b6612ac9536fe7f8b463c8cc50fa2c7933696b9c7b07f66\
-                b1f7de29d33b2520293dfbe70ff1e243d68d70a0aa189baa33c8d997ebab28a\
-                50adbc1",
+                489078859e5e5fe2b6612ac9536fe7f8b463c831fb4323db7aae60a0a3f6d54\
+                e7208c764ffc931de04d3d3b418164e3234969f13fce4c207f3ab85588e4068\
+                6667b09",
             )
             .expect("invalid test vector")
         ))
     );
 }
+
+
+
+
 
 fn create_encrypted_vetkd_key_share<R: Rng + CryptoRng>(
     rng: &mut R,
