@@ -31,9 +31,7 @@ fn read_events_file(file_name: &str) -> GetEventsResult {
     let mut decompressed_buffer = Vec::new();
     gz.read_to_end(&mut decompressed_buffer)
         .expect("BUG: failed to decompress events");
-    Decode!(&decompressed_buffer, GetEventsResult)
-        .expect("Failed to decode events")
-        .into()
+    Decode!(&decompressed_buffer, GetEventsResult).expect("Failed to decode events")
 }
 
 struct Setup {
@@ -155,7 +153,7 @@ fn test_minter_dump_stable_mem_mainnet() {
     let file_name = "mainnet_events.gz";
     let network = Network::Mainnet;
     let setup = Setup::new(network);
-    upload_events(&setup, &file_name);
+    upload_events(&setup, file_name);
 
     let mem = setup.env.get_stable_memory(setup.minter_id);
     let mut mem_path = path_to_events_file(file_name);
@@ -168,7 +166,7 @@ fn test_minter_event_upload_mainnet() {
     let file_name = "mainnet_events.gz";
     let network = Network::Mainnet;
     let setup = Setup::new(network);
-    upload_events(&setup, &file_name);
+    upload_events(&setup, file_name);
 
     let result = call_candid::<(), (u64, Option<u64>)>(
         &setup.env,
