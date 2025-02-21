@@ -5,12 +5,11 @@ use crate::types::CspSecretKey;
 use crate::vault::api::{VetKdCspVault, VetKdEncryptedKeyShareCreationVaultError};
 use crate::vault::local_csp_vault::LocalCspVault;
 use ic_crypto_internal_bls12_381_vetkd::{
-    DerivationPath, EncryptedKeyShare, G2Affine, PairingInvalidPoint, Scalar, TransportPublicKey,
+    DerivationDomain, EncryptedKeyShare, G2Affine, PairingInvalidPoint, Scalar, TransportPublicKey,
     TransportPublicKeyDeserializationError,
 };
 use ic_crypto_internal_logmon::metrics::{MetricsDomain, MetricsResult, MetricsScope};
-use ic_types::crypto::vetkd::VetKdEncryptedKeyShareContent;
-use ic_types::crypto::ExtendedDerivationPath;
+use ic_types::crypto::vetkd::{VetKdDerivationDomain, VetKdEncryptedKeyShareContent};
 use rand::{CryptoRng, Rng};
 
 #[cfg(test)]
@@ -25,7 +24,7 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
         key_id: KeyId,
         master_public_key: Vec<u8>,
         encryption_public_key: Vec<u8>,
-        derivation_path: ExtendedDerivationPath,
+        derivation_domain: VetKdDerivationDomain,
         derivation_id: Vec<u8>,
     ) -> Result<VetKdEncryptedKeyShareContent, VetKdEncryptedKeyShareCreationVaultError> {
         let start_time = self.metrics.now();
@@ -33,7 +32,7 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
             key_id,
             master_public_key,
             encryption_public_key,
-            derivation_path,
+            derivation_domain,
             derivation_id,
         );
         self.metrics.observe_duration_seconds(
@@ -55,7 +54,7 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
         key_id: KeyId,
         master_public_key: Vec<u8>,
         encryption_public_key: Vec<u8>,
-        derivation_path: ExtendedDerivationPath,
+        derivation_domain: VetKdDerivationDomain,
         derivation_id: Vec<u8>,
     ) -> Result<VetKdEncryptedKeyShareContent, VetKdEncryptedKeyShareCreationVaultError> {
         let master_public_key =
@@ -96,9 +95,9 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
             &master_public_key,
             &secret_bls_scalar,
             &transport_public_key,
-            &DerivationPath::new(
-                derivation_path.caller.as_slice(),
-                &derivation_path.derivation_path,
+            &DerivationDomain::new(
+                derivation_domain.caller.as_slice(),
+                &derivation_domain.domain,
             ),
             &derivation_id,
         );

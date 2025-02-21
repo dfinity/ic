@@ -33,7 +33,7 @@ use ic_types::crypto::canister_threshold_sig::idkg::{
     IDkgTranscript, IDkgTranscriptOperation, InitialIDkgDealings,
 };
 use ic_types::crypto::canister_threshold_sig::MasterPublicKey;
-use ic_types::crypto::vetkd::VetKdArgs;
+use ic_types::crypto::vetkd::{VetKdArgs, VetKdDerivationDomain};
 use ic_types::crypto::{AlgorithmId, ExtendedDerivationPath};
 use ic_types::messages::CallbackId;
 use ic_types::registry::RegistryClientError;
@@ -330,7 +330,13 @@ pub(super) fn build_signature_inputs(
                 height: args.height,
             };
             let inputs = ThresholdSigInputsRef::VetKd(VetKdArgs {
-                derivation_path: extended_derivation_path,
+                derivation_domain: VetKdDerivationDomain {
+                    caller: extended_derivation_path.caller,
+                    /////////////////////////////////////////////////
+                    // TODO: consider moving SignWithThresholdContext::derivation_path into {Ecdsa|Schnorr}Arguments and add VetKdArguments::derivation_domain
+                    /////////////////////////////////////////////////
+                    domain: extended_derivation_path.derivation_path[0].clone(),
+                },
                 ni_dkg_id: args.ni_dkg_id.clone(),
                 derivation_id: args.derivation_id.clone(),
                 encryption_public_key: args.encryption_public_key.clone(),

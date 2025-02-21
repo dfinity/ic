@@ -802,7 +802,7 @@ impl CurrentNodePublicKeys {
     }
 }
 
-/// Metadata used to derive keys for tECDSA, tSchnorr, and vetKD.
+/// Metadata used to derive keys for tECDSA, and tSchnorr.
 #[serde_with::serde_as]
 #[derive(Clone, Eq, PartialEq, Hash, Deserialize, Serialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]

@@ -65,6 +65,7 @@ use ic_types::{
     crypto::{
         canister_threshold_sig::{MasterPublicKey, PublicKey},
         threshold_sig::ni_dkg::NiDkgTargetId,
+        vetkd::VetKdDerivationDomain,
         ExtendedDerivationPath,
     },
     ingress::{IngressState, IngressStatus, WasmResult},
@@ -1268,7 +1269,7 @@ impl ExecutionEnvironment {
                                     self.get_vetkd_public_key(
                                         pubkey,
                                         canister_id,
-                                        args.derivation_path.into_inner(),
+                                        args.derivation_domain,
                                     )
                                     .map(|public_key| VetKdPublicKeyResult { public_key }.encode())
                                 }
@@ -2693,13 +2694,13 @@ impl ExecutionEnvironment {
         &self,
         subnet_public_key: &MasterPublicKey,
         caller: PrincipalId,
-        derivation_path: Vec<Vec<u8>>,
+        derivation_domain: Vec<u8>,
     ) -> Result<Vec<u8>, UserError> {
         derive_vetkd_public_key(
             subnet_public_key,
-            &ExtendedDerivationPath {
+            &VetKdDerivationDomain {
                 caller,
-                derivation_path,
+                domain: derivation_domain,
             },
         )
         .map_err(|err| {
