@@ -16,12 +16,6 @@ exports_files([
     "mainnet-canister-revisions.json",
 ])
 
-# TODO: remove
-filegroup(
-    name = "mainnet_subnet_revisions",
-    srcs = ["mainnet-subnet-revisions.json"],
-)
-
 alias(
     name = "buildifier",
     actual = "//bazel:buildifier",
