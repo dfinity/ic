@@ -38,9 +38,9 @@ fi
 if [ -s "${CANBENCH_STABLE_MEMORY_FILE:-}" ]; then
     TMP_MEMORY_FILE=$(mktemp -p . XXXXXXX.mem)
     if [[ "${CANBENCH_STABLE_MEMORY_FILE}" =~ [.]gz$ ]]; then
-      gunzip -c "${CANBENCH_STABLE_MEMORY_FILE}"  > "$TMP_MEMORY_FILE"
+        gunzip -c "${CANBENCH_STABLE_MEMORY_FILE}" >"$TMP_MEMORY_FILE"
     else
-      cp "${CANBENCH_STABLE_MEMORY_FILE}" "$TMP_MEMORY_FILE"
+        cp "${CANBENCH_STABLE_MEMORY_FILE}" "$TMP_MEMORY_FILE"
     fi
     echo "stable_memory:" >>${CANBENCH_YML}
     echo "  file: ${TMP_MEMORY_FILE}" >>${CANBENCH_YML}
