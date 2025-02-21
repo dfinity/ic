@@ -706,7 +706,7 @@ impl CanisterManager {
             round_limits
                 .subnet_available_memory
                 .try_decrement(new_mem - old_mem, NumBytes::from(0), NumBytes::from(0))
-                .ok();
+                .expect("Error: Cannot fail to decrement SubnetAvailableMemory after validating the canister's settings");
         } else {
             round_limits.subnet_available_memory.increment(
                 old_mem - new_mem,
@@ -1379,7 +1379,7 @@ impl CanisterManager {
         round_limits
             .subnet_available_memory
             .try_decrement(new_mem, NumBytes::from(0), NumBytes::from(0))
-            .ok();
+            .expect("Error: Cannot fail to decrement SubnetAvailableMemory after validating canister's settings");
 
         round_limits.compute_allocation_used = round_limits
             .compute_allocation_used
