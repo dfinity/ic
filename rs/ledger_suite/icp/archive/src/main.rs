@@ -42,8 +42,6 @@ thread_local! {
     /// Static memory manager to manage the memory available for stable structures.
     static MEMORY_MANAGER: RefCell<MemoryManager<DefaultMemoryImpl>> = RefCell::new(MemoryManager::init(DefaultMemoryImpl::default()));
 
-    static MAX_MEMORY_SIZE_BYTES_CACHE: RefCell<Option<u64>> = const { RefCell::new(None) };
-    static BLOCK_HEIGHT_OFFSET_CACHE: RefCell<Option<u64>> = const { RefCell::new(None) };
     static LEDGER_CANISTER_ID_CACHE: RefCell<Option<CanisterId>> = const { RefCell::new(None) };
 
     static LAST_UPGRADE_TIMESTAMP: RefCell<u64> = const { RefCell::new(0) };
@@ -70,12 +68,7 @@ thread_local! {
 }
 
 fn max_memory_size_bytes() -> u64 {
-    if let Some(max_memory_size_bytes) = MAX_MEMORY_SIZE_BYTES_CACHE.with(|m| *m.borrow()) {
-        return max_memory_size_bytes;
-    }
-    let max_memory_size_bytes = MAX_MEMORY_SIZE_BYTES.with(|cell| *cell.borrow().get());
-    MAX_MEMORY_SIZE_BYTES_CACHE.with(|m| *m.borrow_mut() = Some(max_memory_size_bytes));
-    max_memory_size_bytes
+    MAX_MEMORY_SIZE_BYTES.with(|cell| *cell.borrow().get())
 }
 
 fn set_max_memory_size_bytes(max_memory_size_bytes: u64) {
@@ -89,23 +82,16 @@ fn set_max_memory_size_bytes(max_memory_size_bytes: u64) {
     assert!(MAX_MEMORY_SIZE_BYTES
         .with(|cell| cell.borrow_mut().set(max_memory_size_bytes))
         .is_ok());
-    MAX_MEMORY_SIZE_BYTES_CACHE.with(|m| *m.borrow_mut() = Some(max_memory_size_bytes));
 }
 
 fn block_height_offset() -> u64 {
-    if let Some(block_height_offset) = BLOCK_HEIGHT_OFFSET_CACHE.with(|b| *b.borrow()) {
-        return block_height_offset;
-    }
-    let block_height_offset = BLOCK_HEIGHT_OFFSET.with(|cell| *cell.borrow().get());
-    BLOCK_HEIGHT_OFFSET_CACHE.with(|b| *b.borrow_mut() = Some(block_height_offset));
-    block_height_offset
+    BLOCK_HEIGHT_OFFSET.with(|cell| *cell.borrow().get())
 }
 
 fn set_block_height_offset(block_height_offset: u64) {
     assert!(BLOCK_HEIGHT_OFFSET
         .with(|cell| cell.borrow_mut().set(block_height_offset))
         .is_ok());
-    BLOCK_HEIGHT_OFFSET_CACHE.with(|b| *b.borrow_mut() = Some(block_height_offset));
 }
 
 fn total_block_size() -> u64 {
