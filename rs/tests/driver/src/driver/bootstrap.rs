@@ -594,7 +594,7 @@ fn configure_setupos_image(
     nns_url: &Url,
     nns_public_key: &str,
 ) -> anyhow::Result<PathBuf> {
-    let setupos_image = get_dependency_path_from_env("ENV_DEPS__DEV_SETUPOS_IMG_TAR_ZST");
+    let setupos_image = get_dependency_path_from_env("ENV_DEPS__SETUPOS_IMG_PATH");
     let setupos_inject_configs = get_dependency_path_from_env("ENV_DEPS__SETUPOS_INJECT_CONFIGS");
     let setupos_disable_checks = get_dependency_path_from_env("ENV_DEPS__SETUPOS_DISABLE_CHECKS");
 

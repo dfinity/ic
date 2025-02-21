@@ -538,31 +538,25 @@ pub(crate) fn get_pre_signature_ids_to_deliver(
 }
 
 /// This function returns the subnet master public keys to be added to the batch, if required.
-/// We return `Ok(Some(key))`, if
+/// We return the keys, if
 /// - The block contains an IDKG payload with current key transcript ref, and
 /// - the corresponding transcript exists in past blocks, and
 /// - we can extract the threshold master public key from the transcript.
 ///
-/// Otherwise `Ok(None)` is returned.
-/// Additionally, we return `Err(string)` if we were unable to find a dkg summary block for the height
-/// of the given block (as the lower bound for past blocks to lookup the transcript in). In that case
-/// a newer CUP is already present in the pool and we should continue from there.
+/// Otherwise no keys are returned.
 pub(crate) fn get_idkg_subnet_public_keys(
-    block: &Block,
+    current_block: &Block,
+    last_dkg_summary_block: &Block,
     pool: &PoolReader<'_>,
     log: &ReplicaLogger,
-) -> Result<BTreeMap<MasterPublicKeyId, MasterPublicKey>, String> {
-    let Some(idkg_payload) = block.payload.as_ref().as_idkg() else {
-        return Ok(BTreeMap::new());
+) -> BTreeMap<MasterPublicKeyId, MasterPublicKey> {
+    let Some(idkg_payload) = current_block.payload.as_ref().as_idkg() else {
+        return BTreeMap::new();
     };
 
-    let Some(summary) = pool.dkg_summary_block_for_finalized_height(block.height) else {
-        return Err(format!(
-            "Failed to find dkg summary block for height {}",
-            block.height
-        ));
-    };
-    let chain = pool.pool().build_block_chain(&summary, block);
+    let chain = pool
+        .pool()
+        .build_block_chain(last_dkg_summary_block, current_block);
     let block_reader = IDkgBlockReaderImpl::new(chain);
 
     let mut public_keys = BTreeMap::new();
@@ -593,7 +587,7 @@ pub(crate) fn get_idkg_subnet_public_keys(
         }
     }
 
-    Ok(public_keys)
+    public_keys
 }
 
 fn get_subnet_master_public_key(
