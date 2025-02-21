@@ -44,10 +44,6 @@ fn should_correctly_create_encrypted_vetkd_key_share_for_smoke_test_vector() {
     );
 }
 
-
-
-
-
 fn create_encrypted_vetkd_key_share<R: Rng + CryptoRng>(
     rng: &mut R,
 ) -> Result<VetKdEncryptedKeyShareContent, VetKdEncryptedKeyShareCreationVaultError> {
