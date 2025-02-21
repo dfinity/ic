@@ -103,6 +103,38 @@ END
 INSERT NEW RELEASES HERE
 
 
+# 2025-02-21: Proposal 135436
+
+http://dashboard.internetcomputer.org/proposal/135436
+
+## Changed
+
+* ManageNetworkEconomics proposals can now modify deep fields one at a time.
+  Previously, this was only possible for top level fields.
+
+* Added validation for ManageNetworkEconomics proposals. Previously, there was
+  none. The result must have all the following properties:
+
+  * All "optional" fields are actually set.
+
+  * `maximum_icp_xdr_rate >= minimum_icp_xdr_rate`
+
+  * Decimal fields have parsable `human_readable` values.
+
+  * `one_third_participation_milestone_xdr < full_participation_milestone_xdr`
+
+
+# 2025-02-11: Proposal 135265
+
+https://dashboard.internetcomputer.org/proposal/135265
+
+## Removed
+
+* Neuron migration (`migrate_active_neurons_to_stable_memory`) is rolled back due to issues with
+  reward distribution. It has already been rolled back with a hotfix ([proposal
+  135265](https://dashboard.internetcomputer.org/proposal/135265))
+
+
 # 2025-02-07: Proposal 135206
 
 http://dashboard.internetcomputer.org/proposal/135206
@@ -130,4 +162,3 @@ functional behavior changes, since no APIs rely on where the neurons are stored.
 ## Changed
 
 * The limit of the number of neurons is increased from 380K to 400K.
-
