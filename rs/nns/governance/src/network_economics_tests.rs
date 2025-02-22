@@ -1,5 +1,6 @@
 use super::*;
 use ic_nervous_system_proto::pb::v1::Decimal as ProtoDecimal;
+use crate::governance::MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS;
 use pretty_assertions::assert_eq;
 
 #[test]
@@ -86,4 +87,15 @@ fn test_inherit_from_recursively() {
 #[test]
 fn test_network_economics_with_default_values_is_valid() {
     assert_eq!(NetworkEconomics::with_default_values().validate(), Ok(()));
+}
+
+#[test]
+fn test_neuron_minimum_dissolve_delay_to_vote_seconds_out_of_bounds_is_invalid() {
+    let mut default_network_economics = NetworkEconomics::with_default_values();
+    default_network_economics
+        .voting_power_economics
+        .unwrap()
+        .neuron_minimum_dissolve_delay_to_vote_seconds =
+        Some(MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS + 1);
+    assert_eq!(default_network_economics.validate(), Ok(()));
 }

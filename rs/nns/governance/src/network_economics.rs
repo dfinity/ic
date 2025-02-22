@@ -1,4 +1,3 @@
-use crate::governance::MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS;
 use crate::pb::v1::{
     NetworkEconomics, NeuronsFundEconomics, NeuronsFundMatchedFundingCurveCoefficients,
     VotingPowerEconomics,
@@ -275,10 +274,11 @@ impl VotingPowerEconomics {
         ),
         clear_following_after_seconds: Some(Self::DEFAULT_CLEAR_FOLLOWING_AFTER_SECONDS),
         neuron_minimum_dissolve_delay_to_vote_seconds: Some(
-            MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS,
+            Self::DEFAULT_MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS,
         ),
     };
 
+    pub const DEFAULT_MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS: u64 = 6 * ONE_MONTH_SECONDS;
     pub const DEFAULT_START_REDUCING_VOTING_POWER_AFTER_SECONDS: u64 = 6 * ONE_MONTH_SECONDS;
     pub const DEFAULT_CLEAR_FOLLOWING_AFTER_SECONDS: u64 = ONE_MONTH_SECONDS;
 
@@ -353,6 +353,17 @@ impl VotingPowerEconomics {
         if self.clear_following_after_seconds.is_none() {
             // Ditto comment regarding start_reducing_voting_power_after_seconds.
             defects.push("clear_following_after_seconds must be set.".to_string());
+        }
+
+        if let Some(delay) = self.neuron_minimum_dissolve_delay_to_vote_seconds {
+            let three_months = 3 * ONE_MONTH_SECONDS;
+            let six_months = 6 * ONE_MONTH_SECONDS;
+
+            if delay < three_months || delay > six_months {
+                defects.push("neuron_minimum_dissolve_delay_to_vote_seconds must be between three and six months.".to_string());
+            }
+        } else {
+            defects.push("neuron_minimum_dissolve_delay_to_vote_seconds must be set.".to_string());
         }
 
         if !defects.is_empty() {
