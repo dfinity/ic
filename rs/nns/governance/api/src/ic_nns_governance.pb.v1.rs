@@ -2295,7 +2295,8 @@ pub struct VotingPowerEconomics {
     #[prost(uint64, optional, tag = "2")]
     pub clear_following_after_seconds: ::core::option::Option<u64>,
 
-    /// The minimum dissolve delay a neuron must have in order to be eligible to vote.
+    /// The minimum dissolve delay a neuron must have in order to be eligible to vote or
+    /// make proposals.
     ///
     /// Neurons with a dissolve delay lower than this threshold will not have
     /// voting power, even if they are otherwise active.
