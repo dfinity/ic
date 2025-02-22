@@ -1,6 +1,6 @@
 use super::*;
-use ic_nervous_system_proto::pb::v1::Decimal as ProtoDecimal;
 use crate::governance::MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS;
+use ic_nervous_system_proto::pb::v1::Decimal as ProtoDecimal;
 use pretty_assertions::assert_eq;
 
 #[test]
@@ -91,11 +91,47 @@ fn test_network_economics_with_default_values_is_valid() {
 
 #[test]
 fn test_neuron_minimum_dissolve_delay_to_vote_seconds_out_of_bounds_is_invalid() {
-    let mut default_network_economics = NetworkEconomics::with_default_values();
-    default_network_economics
+    let mut economics = NetworkEconomics::with_default_values();
+
+    // Test upper bound (above 6 months)
+    economics
         .voting_power_economics
-        .unwrap()
+        .as_mut()
+        .expect("bug: voting_power_economics missing")
         .neuron_minimum_dissolve_delay_to_vote_seconds =
         Some(MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS + 1);
-    assert_eq!(default_network_economics.validate(), Ok(()));
+
+    assert_eq!(
+        economics.validate(),
+        Err(vec![
+            "neuron_minimum_dissolve_delay_to_vote_seconds must be between three and six months."
+                .to_string()
+        ])
+    );
+
+    // Test lower bound (below 3 months)
+    economics
+        .voting_power_economics
+        .as_mut()
+        .expect("bug: voting_power_economics missing")
+        .neuron_minimum_dissolve_delay_to_vote_seconds =
+        Some(MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS / 2 - 1);
+
+    assert_eq!(
+        economics.validate(),
+        Err(vec![
+            "neuron_minimum_dissolve_delay_to_vote_seconds must be between three and six months."
+                .to_string()
+        ])
+    );
+
+    // Test valid case (at minimum threshold)
+    economics
+        .voting_power_economics
+        .as_mut()
+        .expect("bug: voting_power_economics missing")
+        .neuron_minimum_dissolve_delay_to_vote_seconds =
+        Some(MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS / 2);
+
+    assert_eq!(economics.validate(), Ok(()));
 }

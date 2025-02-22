@@ -8361,6 +8361,7 @@ fn test_network_economics_proposal() {
             .as_ref()
             .unwrap()
             .voting_power_economics
+            .unwrap()
             .neuron_minimum_dissolve_delay_to_vote_seconds,
         Some(MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS),
     );
