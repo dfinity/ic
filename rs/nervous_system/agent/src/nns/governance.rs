@@ -3,10 +3,14 @@ use ic_base_types::CanisterId;
 use ic_nns_common::pb::v1::{NeuronId, ProposalId};
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_nns_governance_api::pb::v1::{
-    manage_neuron_response, ExecuteNnsFunction, GetNeuronsFundAuditInfoRequest, GetNeuronsFundAuditInfoResponse, MakeProposalRequest, ManageNeuronCommandRequest, ManageNeuronRequest, ManageNeuronResponse, NnsFunction, ProposalActionRequest
+    manage_neuron_response, ExecuteNnsFunction, GetNeuronsFundAuditInfoRequest,
+    GetNeuronsFundAuditInfoResponse, MakeProposalRequest, ManageNeuronCommandRequest,
+    ManageNeuronRequest, ManageNeuronResponse, NnsFunction, ProposalActionRequest,
 };
 use ic_sns_governance_api::format_full_hash;
-use ic_sns_wasm::pb::v1::{AddWasmRequest, InsertUpgradePathEntriesRequest, SnsCanisterType, SnsUpgrade, SnsWasm};
+use ic_sns_wasm::pb::v1::{
+    AddWasmRequest, InsertUpgradePathEntriesRequest, SnsCanisterType, SnsUpgrade, SnsWasm,
+};
 
 pub mod requests;
 
@@ -41,11 +45,15 @@ pub async fn make_proposal<C: CallCanisters>(
     let command = ManageNeuronCommandRequest::MakeProposal(Box::new(proposal));
     let response = manage_neuron(agent, neuron_id, command).await;
     response.map(|response| {
-        let command = response.command.expect("ManageNeuronResponse.command must be set");
+        let command = response
+            .command
+            .expect("ManageNeuronResponse.command must be set");
         let manage_neuron_response::Command::MakeProposal(make_proposal_response) = command else {
             panic!("Unexpected response while making proposal: {:?}", command);
         };
-        make_proposal_response.proposal_id.expect("ManageNeuronResponse must specify proposal_id")
+        make_proposal_response
+            .proposal_id
+            .expect("ManageNeuronResponse must specify proposal_id")
     })
 }
 
@@ -85,10 +93,12 @@ pub async fn add_sns_wasm<C: CallCanisters>(
             format_full_hash(&hash),
         ),
         url: url.to_string(),
-        action: Some(ProposalActionRequest::ExecuteNnsFunction(ExecuteNnsFunction {
-            nns_function: NnsFunction::AddSnsWasm as i32,
-            payload: candid::encode_one(&payload).expect("Error encoding proposal payload"),
-        })),
+        action: Some(ProposalActionRequest::ExecuteNnsFunction(
+            ExecuteNnsFunction {
+                nns_function: NnsFunction::AddSnsWasm as i32,
+                payload: candid::encode_one(&payload).expect("Error encoding proposal payload"),
+            },
+        )),
     };
 
     make_proposal(agent, neuron_id, proposal).await
@@ -101,7 +111,8 @@ pub async fn insert_sns_wasm_upgrade_path_entries<C: CallCanisters>(
     sns_governance_canister_id: Option<CanisterId>,
     url: &str,
 ) -> Result<ProposalId, C::Error> {
-    let sns_governance_canister_id = sns_governance_canister_id.map(|canister_id| canister_id.get());
+    let sns_governance_canister_id =
+        sns_governance_canister_id.map(|canister_id| canister_id.get());
 
     // TODO: Use a more descriptive rendering of `upgrade_path`.
     let upgrade_path_summary_str = format!("with {} steps", upgrade_path.len());
@@ -124,10 +135,12 @@ pub async fn insert_sns_wasm_upgrade_path_entries<C: CallCanisters>(
             upgrade_path_summary_str, sns_selector_str,
         ),
         url: url.to_string(),
-        action: Some(ProposalActionRequest::ExecuteNnsFunction(ExecuteNnsFunction {
-            nns_function: NnsFunction::InsertSnsWasmUpgradePathEntries as i32,
-            payload: candid::encode_one(&payload).expect("Error encoding proposal payload"),
-        })),
+        action: Some(ProposalActionRequest::ExecuteNnsFunction(
+            ExecuteNnsFunction {
+                nns_function: NnsFunction::InsertSnsWasmUpgradePathEntries as i32,
+                payload: candid::encode_one(&payload).expect("Error encoding proposal payload"),
+            },
+        )),
     };
 
     make_proposal(agent, neuron_id, proposal).await

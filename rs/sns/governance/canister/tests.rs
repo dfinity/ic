@@ -135,7 +135,7 @@ fn test_upgrade_journal() {
 
     // Currently, the `/journal` Http endpoint serves the entries directly, rather than the whole
     // journal object.
-    let http_response = serve_journal(&journal);
+    let http_response = serve_journal(journal);
     let expected_headers: HashSet<(_, _)> = HashSet::from_iter([
         ("Content-Type".to_string(), "application/json".to_string()),
         ("Content-Length".to_string(), "277".to_string()),

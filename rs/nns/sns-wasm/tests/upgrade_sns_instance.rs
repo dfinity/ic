@@ -10,12 +10,22 @@ use ic_nns_constants::{GOVERNANCE_CANISTER_ID, SNS_WASM_CANISTER_ID};
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
     sns_wasm::{self, create_modified_sns_wasm, ensure_sns_wasm_gzipped},
-    state_test_helpers::{self, await_upgrade_journal_event, query, set_controllers, setup_nns_canisters, sns_wait_for_upgrade_completion, update, update_with_sender},
+    state_test_helpers::{
+        self, await_upgrade_journal_event, query, set_controllers, setup_nns_canisters,
+        sns_wait_for_upgrade_completion, update, update_with_sender,
+    },
 };
 use ic_sns_governance::{
-    governance::UPGRADE_STEPS_INTERVAL_REFRESH_BACKOFF_SECONDS, pb::v1::{
-        self as sns_governance_pb, governance::{Mode, Version}, proposal::Action, upgrade_journal_entry::{Event, TargetVersionReset}, GetRunningSnsVersionRequest, GetRunningSnsVersionResponse, Proposal, ProposalDecisionStatus, UpgradeSnsToNextVersion
-    }, types::E8S_PER_TOKEN
+    governance::UPGRADE_STEPS_INTERVAL_REFRESH_BACKOFF_SECONDS,
+    pb::v1::{
+        self as sns_governance_pb,
+        governance::{Mode, Version},
+        proposal::Action,
+        upgrade_journal_entry::{Event, TargetVersionReset},
+        GetRunningSnsVersionRequest, GetRunningSnsVersionResponse, Proposal,
+        ProposalDecisionStatus, UpgradeSnsToNextVersion,
+    },
+    types::E8S_PER_TOKEN,
 };
 use ic_sns_init::pb::v1::{
     sns_init_payload::InitialTokenDistribution, AirdropDistribution, DeveloperDistribution,
@@ -1076,17 +1086,21 @@ fn test_custom_upgrade_path_for_sns() {
         }
         sns_wasm
     }
-    let modified_map: BTreeMap<SnsCanisterType, Vec<u8>> = sns_wasm::add_freshly_built_sns_wasms(&machine, filter_wasm)
-        .into_iter()
-        .map(|(key, sns_wasm)| {
-            let sns_wasm = sns_wasm.sha256_hash().to_vec();
-            (key, sns_wasm)
-        })
-        .collect();
+    let modified_map: BTreeMap<SnsCanisterType, Vec<u8>> =
+        sns_wasm::add_freshly_built_sns_wasms(&machine, filter_wasm)
+            .into_iter()
+            .map(|(key, sns_wasm)| {
+                let sns_wasm = sns_wasm.sha256_hash().to_vec();
+                (key, sns_wasm)
+            })
+            .collect();
 
     let last_version = Version {
         root_wasm_hash: modified_map.get(&SnsCanisterType::Root).unwrap().clone(),
-        governance_wasm_hash: modified_map.get(&SnsCanisterType::Governance).unwrap().clone(),
+        governance_wasm_hash: modified_map
+            .get(&SnsCanisterType::Governance)
+            .unwrap()
+            .clone(),
         ledger_wasm_hash: modified_map.get(&SnsCanisterType::Ledger).unwrap().clone(),
         swap_wasm_hash: modified_map.get(&SnsCanisterType::Swap).unwrap().clone(),
         archive_wasm_hash: modified_map.get(&SnsCanisterType::Archive).unwrap().clone(),
@@ -1115,13 +1129,11 @@ fn test_custom_upgrade_path_for_sns() {
         "Awaiting SNS to fail upgrading to latest",
         &machine,
         sns_governance_canister_id,
-        &Event::TargetVersionReset(
-            TargetVersionReset {
-                old_target_version: Some(last_version),
-                new_target_version: None,
-                human_readable: None,
-            }
-        ),
+        &Event::TargetVersionReset(TargetVersionReset {
+            old_target_version: Some(last_version),
+            new_target_version: None,
+            human_readable: None,
+        }),
     );
 
     let custom_paths = vec![
@@ -1174,7 +1186,9 @@ fn test_custom_upgrade_path_for_sns() {
 
     // Wait for the upgrade steps to refresh (the original refresh event preceded the newly
     // added `custom_paths`).
-    machine.advance_time(Duration::from_secs(UPGRADE_STEPS_INTERVAL_REFRESH_BACKOFF_SECONDS));
+    machine.advance_time(Duration::from_secs(
+        UPGRADE_STEPS_INTERVAL_REFRESH_BACKOFF_SECONDS,
+    ));
     machine.tick();
     machine.tick();
 

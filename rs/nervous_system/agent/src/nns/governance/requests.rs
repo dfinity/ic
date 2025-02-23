@@ -1,6 +1,7 @@
 use crate::Request;
 use ic_nns_governance_api::pb::v1::{
-    GetNeuronsFundAuditInfoRequest, GetNeuronsFundAuditInfoResponse, ManageNeuronRequest, ManageNeuronResponse,
+    GetNeuronsFundAuditInfoRequest, GetNeuronsFundAuditInfoResponse, ManageNeuronRequest,
+    ManageNeuronResponse,
 };
 
 impl Request for GetNeuronsFundAuditInfoRequest {
