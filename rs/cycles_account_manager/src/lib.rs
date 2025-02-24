@@ -41,6 +41,7 @@ pub const CRITICAL_ERROR_EXECUTION_CYCLES_REFUND: &str =
     "cycles_account_manager_execution_cycles_refund_error";
 
 const SECONDS_PER_DAY: u128 = 24 * 60 * 60;
+const DAY: Duration = Duration::from_secs(SECONDS_PER_DAY as u64);
 
 /// Maximum payload size of a management call to update_settings
 /// overriding the canister's freezing threshold.
@@ -287,19 +288,18 @@ impl CyclesAccountManager {
             MemoryAllocation::Reserved(bytes) => bytes,
             MemoryAllocation::BestEffort => memory_usage,
         };
-        let day = Duration::from_secs(SECONDS_PER_DAY as u64);
         [
             (
                 CyclesUseCase::Memory,
-                self.memory_cost(memory, day, subnet_size),
+                self.memory_cost(memory, DAY, subnet_size),
             ),
             (
                 CyclesUseCase::Memory,
-                self.memory_cost(message_memory_usage.total(), day, subnet_size),
+                self.memory_cost(message_memory_usage.total(), DAY, subnet_size),
             ),
             (
                 CyclesUseCase::ComputeAllocation,
-                self.compute_allocation_cost(compute_allocation, day, subnet_size),
+                self.compute_allocation_cost(compute_allocation, DAY, subnet_size),
             ),
         ]
     }

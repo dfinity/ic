@@ -16,11 +16,12 @@ use ic_test_utilities_logger::with_test_replica_logger;
 use ic_test_utilities_state::{new_canister_state, SystemStateBuilder};
 use ic_test_utilities_types::{
     ids::{canister_test_id, subnet_test_id, user_test_id},
-    messages::SignedIngressBuilder,
+    messages::{RequestBuilder, SignedIngressBuilder},
 };
 use ic_types::{
     messages::{extract_effective_canister_id, SignedIngressContent},
     nominal_cycles::NominalCycles,
+    time::{CoarseTime, UNIX_EPOCH},
     CanisterId, ComputeAllocation, Cycles, MemoryAllocation, NumBytes, NumInstructions,
 };
 use prometheus::IntCounter;
@@ -379,6 +380,62 @@ fn charging_removes_canisters_with_insufficient_balance() {
                 subnet_size,
             )
             .unwrap_err();
+    })
+}
+
+#[test]
+fn charge_canister_for_memory_usage() {
+    with_test_replica_logger(|log| {
+        const INITIAL_BALANCE: Cycles = Cycles::new(u64::MAX as u128);
+        const MEMORY_ALLOCATION: NumBytes = NumBytes::new(1 << 30);
+        const HOUR: Duration = Duration::from_secs(3600);
+
+        let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
+
+        let canister_id = canister_test_id(1);
+        let mut canister = new_canister_state(
+            canister_id,
+            canister_test_id(11).get(),
+            Cycles::from(INITIAL_BALANCE),
+            NumSeconds::from(0),
+        );
+        canister.system_state.memory_allocation =
+            MemoryAllocation::try_from(MEMORY_ALLOCATION).unwrap();
+        canister
+            .push_output_request(
+                RequestBuilder::new().sender(canister_id).build().into(),
+                UNIX_EPOCH,
+            )
+            .unwrap();
+        canister
+            .push_output_request(
+                RequestBuilder::new()
+                    .sender(canister_id)
+                    .deadline(CoarseTime::from_secs_since_unix_epoch(1))
+                    .build()
+                    .into(),
+                UNIX_EPOCH,
+            )
+            .unwrap();
+        let message_memory_usage = canister.message_memory_usage();
+        assert_ne!(0, message_memory_usage.guaranteed_response.get());
+        assert_ne!(0, message_memory_usage.best_effort.get());
+
+        cycles_account_manager
+            .charge_canister_for_resource_allocation_and_usage(
+                &log,
+                &mut canister,
+                HOUR,
+                SMALL_APP_SUBNET_MAX_SIZE,
+            )
+            .unwrap();
+
+        let memory_usage = MEMORY_ALLOCATION + message_memory_usage.total();
+        let cycles_burned = INITIAL_BALANCE - canister.system_state.balance();
+        assert_eq!(
+            cycles_account_manager.memory_cost(memory_usage, HOUR, SMALL_APP_SUBNET_MAX_SIZE),
+            cycles_burned
+        )
     })
 }
 

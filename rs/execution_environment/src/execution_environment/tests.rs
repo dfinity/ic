@@ -1,5 +1,6 @@
 use candid::{Decode, Encode};
 use ic_base_types::{NumBytes, NumSeconds};
+use ic_config::embedders::BestEffortResponsesFeature;
 use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_management_canister_types_private::{
     self as ic00, BitcoinGetUtxosArgs, BitcoinNetwork, BoundedHttpHeaders, CanisterChange,
@@ -76,6 +77,40 @@ const CALL_SIMPLE_WAT: &str = r#"(module
                     )
                     (call $ic0_call_cycles_add
                         (i64.const 100)
+                    )
+                    (drop (call $ic0_call_perform))
+                  )
+                  (export "canister_update test" (func $test))
+                  (memory $memory 1)
+                  (export "memory" (memory $memory))
+                  (data (i32.const 0) "some_remote_method XYZ")
+                  (data (i32.const 100) "\00\00\00\00\00\00\03\09\01\01")
+            )"#;
+
+// A Wasm module making a best-effort call.
+const CALL_BEST_EFFORT_WAT: &str = r#"(module
+                  (import "ic0" "call_new"
+                    (func $ic0_call_new
+                      (param i32 i32)
+                      (param $method_name_src i32)    (param $method_name_len i32)
+                      (param $reply_fun i32)          (param $reply_env i32)
+                      (param $reject_fun i32)         (param $reject_env i32)
+                  ))
+                  (import "ic0" "call_data_append" (func $ic0_call_data_append (param $src i32) (param $size i32)))
+                  (import "ic0" "call_with_best_effort_response" (func $ic0_call_with_best_effort_response (param $timeout_seconds i32)))
+                  (import "ic0" "call_perform" (func $ic0_call_perform (result i32)))
+                  (func $test
+                    (call $ic0_call_new
+                        (i32.const 100) (i32.const 10)  ;; callee canister id = 777
+                        (i32.const 0) (i32.const 18)    ;; refers to "some_remote_method" on the heap
+                        (i32.const 11) (i32.const 22)   ;; fictive on_reply closure
+                        (i32.const 33) (i32.const 44)   ;; fictive on_reject closure
+                    )
+                    (call $ic0_call_data_append
+                        (i32.const 19) (i32.const 3)    ;; refers to "XYZ" on the heap
+                    )
+                    (call $ic0_call_with_best_effort_response
+                        (i32.const 10)
                     )
                     (drop (call $ic0_call_perform))
                   )
@@ -355,6 +390,39 @@ fn output_requests_on_application_subnets_update_subnet_available_memory() {
         ONE_GIB - MAX_RESPONSE_COUNT_BYTES as i64,
         subnet_message_memory
     );
+    assert_correct_request(system_state, canister_id);
+}
+
+#[test]
+fn output_best_effort_requests_on_application_subnets_update_subnet_available_memory() {
+    let mut test = ExecutionTestBuilder::new()
+        .with_subnet_execution_memory(ONE_GIB)
+        .with_subnet_memory_reservation(0)
+        .with_subnet_guaranteed_response_message_memory(ONE_GIB)
+        .with_best_effort_responses(BestEffortResponsesFeature::Enabled)
+        .with_manual_execution()
+        .build();
+    let canister_id = test.canister_from_wat(CALL_BEST_EFFORT_WAT).unwrap();
+    let initia_available_memory = test.subnet_available_memory().get_execution_memory();
+    test.ingress_raw(canister_id, "test", vec![]);
+    test.execute_message(canister_id);
+    let subnet_total_memory = test.subnet_available_memory().get_execution_memory();
+    let subnet_message_memory = test
+        .subnet_available_memory()
+        .get_guaranteed_response_message_memory();
+    let system_state = &mut test.canister_state_mut(canister_id).system_state;
+    // There should be no response memory reservation in the queues.
+    assert_eq!(
+        0,
+        system_state
+            .queues()
+            .guaranteed_response_memory_reservations()
+    );
+    // But there should be one response slot reservation.
+    assert_eq!(1, system_state.queues().input_queues_reserved_slots());
+    // Subnet available memory and message memory should be unchanged.
+    assert_eq!(initia_available_memory, subnet_total_memory);
+    assert_eq!(ONE_GIB, subnet_message_memory);
     assert_correct_request(system_state, canister_id);
 }
 
