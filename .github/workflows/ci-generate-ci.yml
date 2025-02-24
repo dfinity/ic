@@ -13,6 +13,7 @@ env:
   CI_PROJECT_DIR: ${{ github.workspace }}
 
 permissions:
+  contents: read
   pull-requests: write
 
 jobs:
