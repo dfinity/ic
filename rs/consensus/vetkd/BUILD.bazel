@@ -28,6 +28,7 @@ DEV_DEPENDENCIES = [
     "//rs/artifact_pool",
     "//rs/consensus/mocks",
     "//rs/registry/fake",
+    "//rs/registry/keys",
     "//rs/test_utilities",
     "//rs/test_utilities/registry",
     "//rs/test_utilities/state",

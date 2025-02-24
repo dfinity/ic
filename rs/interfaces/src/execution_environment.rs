@@ -13,8 +13,7 @@ use ic_types::{
     crypto::canister_threshold_sig::MasterPublicKey,
     ingress::{IngressStatus, WasmResult},
     messages::{CertificateDelegation, MessageId, Query, SignedIngressContent},
-    CanisterLog, Cycles, ExecutionRound, Height, NumInstructions, NumOsPages, Randomness,
-    ReplicaVersion, Time,
+    Cycles, ExecutionRound, Height, NumInstructions, NumOsPages, Randomness, ReplicaVersion, Time,
 };
 use serde::{Deserialize, Serialize};
 use std::{
@@ -1304,7 +1303,6 @@ pub struct WasmExecutionOutput {
     pub instance_stats: InstanceStats,
     /// How many times each tracked System API call was invoked.
     pub system_api_call_counters: SystemApiCallCounters,
-    pub canister_log: CanisterLog,
 }
 
 impl fmt::Display for WasmExecutionOutput {

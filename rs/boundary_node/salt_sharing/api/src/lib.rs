@@ -21,7 +21,7 @@ pub struct SaltResponse {
     pub salt_id: u64,
 }
 
-#[derive(CandidType, Deserialize, Debug, Clone)]
+#[derive(CandidType, Deserialize, Debug, Clone, PartialEq)]
 pub enum GetSaltError {
     SaltNotInitialized,
     Unauthorized,

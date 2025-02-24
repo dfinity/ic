@@ -21,7 +21,7 @@ use ic_test_utilities_execution_environment::{
 };
 use ic_test_utilities_metrics::fetch_int_counter;
 use ic_types::messages::MessageId;
-use ic_types::{ingress::WasmResult, MAX_STABLE_MEMORY_IN_BYTES, MAX_WASM_MEMORY_IN_BYTES};
+use ic_types::{ingress::WasmResult, MAX_MEMORY_ALLOCATION};
 use ic_types_test_utils::ids::user_test_id;
 use ic_types_test_utils::ids::{canister_test_id, subnet_test_id};
 use ic_universal_canister::{call_args, wasm, UNIVERSAL_CANISTER_WASM};
@@ -91,7 +91,7 @@ fn install_code_fails_on_invalid_memory_allocation() {
     assert_eq!(
         format!(
             "MemoryAllocation expected to be in the range [0..{}], got 18_446_744_073_709_551_615",
-            candid::Nat((MAX_STABLE_MEMORY_IN_BYTES + MAX_WASM_MEMORY_IN_BYTES).into())
+            candid::Nat(MAX_MEMORY_ALLOCATION.get().into())
         ),
         err.description()
     );

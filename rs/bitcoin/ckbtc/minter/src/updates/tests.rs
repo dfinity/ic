@@ -218,6 +218,77 @@ mod update_balance {
     }
 
     #[tokio::test]
+    async fn should_not_evaluate_mint_unknown_utxo() {
+        init_state_with_ecdsa_public_key();
+        let account = ledger_account();
+        let mut runtime = MockCanisterRuntime::new();
+        mock_increasing_time(&mut runtime, NOW, Duration::from_secs(1));
+
+        // Create two utxos, first one is already checked but with unknown mint status.
+        let checked_but_mint_unknown_utxo = quarantined_utxo();
+        let utxo = crate::test_fixtures::utxo();
+        mutate_state(|s| {
+            audit::mark_utxo_checked_mint_unknown(
+                s,
+                checked_but_mint_unknown_utxo.clone(),
+                account,
+                &runtime,
+            );
+        });
+        let check_fee = read_state(|s| s.check_fee);
+        let minted_amount = utxo.value - check_fee;
+        let events_before: Vec<_> = storage::events().map(|event| event.payload).collect();
+
+        mock_get_utxos_for_account(
+            &mut runtime,
+            account,
+            vec![checked_but_mint_unknown_utxo.clone(), utxo.clone()],
+        );
+        expect_check_transaction_returning(
+            &mut runtime,
+            utxo.clone(),
+            CheckTransactionResponse::Passed,
+        );
+        runtime
+            .expect_mint_ckbtc()
+            .times(1)
+            .withf(move |amount, account_, _memo| amount == &minted_amount && account_ == &account)
+            .return_const(Ok(1));
+        mock_schedule_now_process_logic(&mut runtime);
+        let result = update_balance(
+            UpdateBalanceArgs {
+                owner: Some(account.owner),
+                subaccount: account.subaccount,
+            },
+            &runtime,
+        )
+        .await;
+
+        assert_eq!(suspended_utxo(&checked_but_mint_unknown_utxo), None);
+        assert_eq!(suspended_utxo(&utxo), None);
+        // Only the 2nd utxo is minted
+        assert_eq!(
+            result,
+            Ok(vec![UtxoStatus::Minted {
+                block_index: 1,
+                minted_amount,
+                utxo: utxo.clone()
+            }])
+        );
+        assert_has_new_events(
+            &events_before,
+            &[
+                checked_utxo_event(utxo.clone(), account),
+                EventType::ReceivedUtxos {
+                    mint_txid: Some(1),
+                    to_account: account,
+                    utxos: vec![utxo],
+                },
+            ],
+        );
+    }
+
+    #[tokio::test]
     async fn should_observe_update_balance_latency_metrics() {
         init_state_with_ecdsa_public_key();
 

@@ -162,6 +162,7 @@ pub mod governance_proto_builder;
 mod heap_governance_data;
 mod known_neuron_index;
 mod migrations;
+mod network_economics;
 mod neuron;
 pub mod neuron_data_validation;
 mod neuron_store;
@@ -204,7 +205,7 @@ thread_local! {
 
     static USE_STABLE_MEMORY_FOLLOWING_INDEX: Cell<bool> = const { Cell::new(true) };
 
-    static MIGRATE_ACTIVE_NEURONS_TO_STABLE_MEMORY: Cell<bool> = const { Cell::new(true) };
+    static MIGRATE_ACTIVE_NEURONS_TO_STABLE_MEMORY: Cell<bool> = const { Cell::new(cfg!(feature = "test")) };
 }
 
 thread_local! {

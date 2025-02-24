@@ -94,7 +94,7 @@ pub(crate) fn system_api_imports(config: EmbeddersConfig) -> Vec<u8> {
         let func_type = FuncType::new(params, results);
         if !type_mapping.contains_key(&func_type) {
             type_mapping.insert(func_type.clone(), type_mapping.len());
-            types.func_type(&func_type);
+            types.ty().func_type(&func_type);
         }
         let func_index = type_mapping.get(&func_type).unwrap();
         imports.import(
