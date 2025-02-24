@@ -1,7 +1,11 @@
 #![allow(dead_code)]
+use itertools::Itertools;
+use rand::distributions::Alphanumeric;
+use rand::Rng;
 #[rustfmt::skip]
 use walkdir::WalkDir;
 use crate::driver::constants;
+use crate::driver::test_env_api::{HasTopologySnapshot, IcNodeContainer};
 use crate::driver::{
     farm::{Farm, HostFeature},
     resource::AllocatedVm,
@@ -676,8 +680,10 @@ impl SystemTestGroup {
                 TaskId::Test(String::from(SETUP_TASK_NAME)),
                 move || {
                     debug!(logger, ">>> setup_fn");
+                    let group_name = group_ctx.group_base_name.clone();
                     let env = ensure_setup_env(group_ctx);
                     setup_fn(env.clone());
+                    Self::register_with_service_disc(group_name, env.clone());
                     SetupResult {}.write_attribute(&env);
                 },
                 &mut compose_ctx,
@@ -787,6 +793,62 @@ impl SystemTestGroup {
             vec![report_plan, uvms_stream_plan],
             &mut compose_ctx,
         ))
+    }
+
+    fn register_with_service_disc(test_name: String, env: TestEnv) {
+        let test_name = format!(
+            "{}-{}",
+            test_name,
+            rand::thread_rng()
+                .sample_iter(&Alphanumeric)
+                .take(10)
+                .map(char::from)
+                .collect::<String>()
+        );
+        let logger = env.logger();
+        info!(logger, "Registering with service discovery");
+        let topology = env.topology_snapshot();
+        let root_subnet = topology.root_subnet();
+        let nns_urls = root_subnet
+            .nodes()
+            .map(|node| format!("\"http://[{}]:8080\"", node.get_ip_addr()))
+            .join(",");
+        let body = format!(
+            r#"
+                {{
+                    "name": "{}",
+                    "nns_urls": [{}]
+                }}
+            "#,
+            test_name, nns_urls
+        );
+        info!(logger, "Sending following body: {}", body);
+        let client = reqwest::blocking::Client::new();
+        let response = client
+            .post("https://service-discovery.dm1-esmesh1.dfinity.network")
+            .header("Content-Type", "application/json")
+            .body(body)
+            .send();
+        match response {
+            Ok(r) => {
+                if let Err(e) = r.error_for_status_ref() {
+                    error!(
+                        logger,
+                        "Failed to register with the service discovery: {:?}", e
+                    );
+                    let body = r.text().unwrap();
+                    error!(logger, "Response text: {}", body);
+                } else {
+                    info!(logger, "Successfully registered with the service discovery")
+                }
+            }
+            Err(e) => {
+                error!(
+                    logger,
+                    "Failed to register with the service discovery: {:?}", e
+                )
+            }
+        }
     }
 
     pub fn execute(self) -> Result<Outcome> {
