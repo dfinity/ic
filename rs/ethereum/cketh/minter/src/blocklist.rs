@@ -1,20 +1,20 @@
 #[cfg(test)]
-    mod tests;
+mod tests;
 
-    use ic_ethereum_types::Address;
+use ic_ethereum_types::Address;
 
-    macro_rules! ethereum_address {
-        ($address:expr) => {
-            Address::new(hex_literal::hex!($address))
-        };
-    }
+macro_rules! ethereum_address {
+    ($address:expr) => {
+        Address::new(hex_literal::hex!($address))
+    };
+}
 
-    /// The script to generate this file, including information about the source data, can be found here:
-    /// /rs/cross-chain/scripts/generate_blocklist.py
+/// The script to generate this file, including information about the source data, can be found here:
+/// /rs/cross-chain/scripts/generate_blocklist.py
 
-    /// ETH is not accepted from nor sent to addresses on this list.
-    /// NOTE: Keep it sorted!
-    const ETH_ADDRESS_BLOCKLIST: &[Address] = &[
+/// ETH is not accepted from nor sent to addresses on this list.
+/// NOTE: Keep it sorted!
+const ETH_ADDRESS_BLOCKLIST: &[Address] = &[
     ethereum_address!("01e2919679362dFBC9ee1644Ba9C6da6D6245BB1"),
     ethereum_address!("03893a7c7463AE47D46bc7f091665f1893656003"),
     ethereum_address!("04DBA1194ee10112fE6C3207C0687DEf0e78baCf"),
