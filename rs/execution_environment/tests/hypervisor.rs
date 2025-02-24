@@ -2,7 +2,6 @@ use assert_matches::assert_matches;
 use candid::{Decode, Encode};
 use ic_base_types::{NumSeconds, PrincipalId};
 use ic_config::embedders::BestEffortResponsesFeature;
-use ic_config::subnet_config::CyclesAccountManagerConfig;
 use ic_config::subnet_config::SchedulerConfig;
 use ic_cycles_account_manager::ResourceSaturation;
 use ic_embedders::wasm_utils::instrumentation::instruction_to_cost;
