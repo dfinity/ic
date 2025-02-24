@@ -1,5 +1,6 @@
 use crate::{balances_len, AccountIdentifier, Ledger, StorableAllowance};
 use ic_base_types::{CanisterId, PrincipalId};
+use ic_cdk::api::time;
 use ic_ledger_canister_core::{
     archive::Archive,
     ledger as core_ledger,
@@ -278,7 +279,7 @@ fn bad_created_at_time() {
         amount: Tokens::from_e8s(1000),
     };
 
-    let now = dfn_core::api::now().into();
+    let now = TimeStamp::from_nanos_since_unix_epoch(time());
 
     assert_eq!(
         PaymentError::TransferError(TransferError::TxTooOld {
@@ -366,7 +367,7 @@ fn duplicate_txns() {
         amount: Tokens::from_e8s(1000),
     };
 
-    let now = dfn_core::api::now().into();
+    let now = TimeStamp::from_nanos_since_unix_epoch(time());
 
     assert_eq!(
         state
@@ -670,7 +671,7 @@ fn test_throttle_tx_per_second_nok() {
         amount: Tokens::from_e8s(1000),
     };
 
-    let now: TimeStamp = dfn_core::api::now().into();
+    let now = TimeStamp::from_nanos_since_unix_epoch(time());
 
     assert_eq!(apply_at(&mut ledger, &op, now + millis(1)), 0);
     assert_eq!(apply_at(&mut ledger, &op, now + millis(1002)), 1);
@@ -693,7 +694,7 @@ fn test_throttle_tx_per_second_ok() {
         to: PrincipalId::new_user_test_id(1).into(),
         amount: Tokens::from_e8s(1000),
     };
-    let now: TimeStamp = dfn_core::api::now().into();
+    let now = TimeStamp::from_nanos_since_unix_epoch(time());
 
     assert_eq!(apply_at(&mut ledger, &op, now + millis(1)), 0);
     assert_eq!(apply_at(&mut ledger, &op, now + millis(1002)), 1);
@@ -714,7 +715,7 @@ fn test_throttle_two_tx_per_second_after_soft_limit_ok() {
         to: PrincipalId::new_user_test_id(1).into(),
         amount: Tokens::from_e8s(1000),
     };
-    let now: TimeStamp = dfn_core::api::now().into();
+    let now = TimeStamp::from_nanos_since_unix_epoch(time());
 
     assert_eq!(apply_at(&mut ledger, &op, now + millis(1)), 0);
     assert_eq!(apply_at(&mut ledger, &op, now + millis(2)), 1);
@@ -741,7 +742,7 @@ fn test_throttle_two_tx_per_second_after_soft_limit_nok() {
         to: PrincipalId::new_user_test_id(1).into(),
         amount: Tokens::from_e8s(1000),
     };
-    let now: TimeStamp = dfn_core::api::now().into();
+    let now = TimeStamp::from_nanos_since_unix_epoch(time());
 
     assert_eq!(apply_at(&mut ledger, &op, now + millis(1)), 0);
     assert_eq!(apply_at(&mut ledger, &op, now + millis(2)), 1);

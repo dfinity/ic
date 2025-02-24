@@ -1,9 +1,6 @@
-pub mod cdk_runtime;
-
 #[cfg(test)]
 mod tests;
 
-use crate::cdk_runtime::CdkRuntime;
 use candid::{
     types::number::{Int, Nat},
     CandidType, Principal,
@@ -18,7 +15,7 @@ use ic_icrc1::blocks::encoded_block_to_generic_block;
 use ic_icrc1::{Block, LedgerAllowances, LedgerBalances, Transaction};
 use ic_ledger_canister_core::archive::Archive;
 pub use ic_ledger_canister_core::archive::ArchiveOptions;
-use ic_ledger_canister_core::runtime::Runtime;
+use ic_ledger_canister_core::runtime::{CdkRuntime, Runtime};
 use ic_ledger_canister_core::{
     archive::ArchiveCanisterWasm,
     blockchain::Blockchain,
