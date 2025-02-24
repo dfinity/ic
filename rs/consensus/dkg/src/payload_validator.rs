@@ -287,15 +287,16 @@ fn validate_dealings_payload(
 
 #[cfg(test)]
 mod tests {
-    use crate::{DkgImpl, DkgKeyManager};
-
     use super::*;
+    use crate::{DkgImpl, DkgKeyManager};
     use ic_artifact_pool::dkg_pool::DkgPoolImpl;
     use ic_consensus_mocks::{dependencies_with_subnet_params, Dependencies};
     use ic_crypto_temp_crypto::{NodeKeysToGenerate, TempCryptoComponent};
-    use ic_interfaces::consensus_pool::ConsensusPool;
-    use ic_interfaces::p2p::consensus::MutablePool;
-    use ic_interfaces::{dkg::ChangeAction, p2p::consensus::PoolMutationsProducer};
+    use ic_interfaces::{
+        consensus_pool::ConsensusPool,
+        dkg::ChangeAction,
+        p2p::consensus::{MutablePool, PoolMutationsProducer},
+    };
     use ic_logger::no_op_logger;
     use ic_metrics::MetricsRegistry;
     use ic_registry_keys::make_subnet_record_key;
@@ -304,7 +305,6 @@ mod tests {
     use ic_test_utilities_types::ids::{
         node_test_id, subnet_test_id, NODE_1, NODE_2, NODE_3, SUBNET_1, SUBNET_2,
     };
-    use ic_types::time::UNIX_EPOCH;
     use ic_types::{
         batch::BatchPayload,
         consensus::{
@@ -312,10 +312,13 @@ mod tests {
             idkg, DataPayload, Payload,
         },
         crypto::threshold_sig::ni_dkg::{NiDkgDealing, NiDkgId, NiDkgTag, NiDkgTargetSubnet},
+        time::UNIX_EPOCH,
         RegistryVersion,
     };
-    use std::sync::Arc;
-    use std::{ops::Deref, sync::Mutex};
+    use std::{
+        ops::Deref,
+        sync::{Arc, Mutex},
+    };
 
     /// This tests the `validate_payload` function.
     /// It sets up a subnet with 4 nodes and a dkg interval of 4.
@@ -623,7 +626,7 @@ mod tests {
         )
     }
 
-    /// Test that dealings are created aand validated using the same registry version
+    /// Test that dealings are created and validated using the same registry version
     #[test]
     fn test_validate_payload_dealings_registry_version() {
         let registry_version_start = RegistryVersion::new(1);

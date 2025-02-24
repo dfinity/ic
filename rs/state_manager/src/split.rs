@@ -1,10 +1,9 @@
 //! Prunes a replicated state, as part of a subnet split.
 use crate::{
     checkpoint::{
-        load_checkpoint, make_unvalidated_checkpoint,
+        flush_canister_snapshots_and_page_maps, load_checkpoint, make_unvalidated_checkpoint,
         validate_and_finalize_checkpoint_and_remove_unverified_marker,
     },
-    flush_canister_snapshots_and_page_maps,
     tip::spawn_tip_thread,
     StateManagerMetrics, NUMBER_OF_CHECKPOINT_THREADS,
 };
@@ -203,16 +202,16 @@ fn write_checkpoint(
     let new_height = old_height.increment();
 
     // We need to flush to handle the deletion of canister snapshots.
-    flush_canister_snapshots_and_page_maps(
+    flush_canister_snapshots_and_page_maps(state, new_height, &tip_channel);
+
+    let (cp_layout, _has_downgrade) = make_unvalidated_checkpoint(
         state,
         new_height,
         &tip_channel,
         &metrics.checkpoint_metrics,
-    );
-
-    let (cp_layout, _has_downgrade) =
-        make_unvalidated_checkpoint(state, new_height, &tip_channel, &metrics.checkpoint_metrics)
-            .map_err(|e| format!("Failed to write checkpoint: {}", e))?;
+        fd_factory.clone(),
+    )
+    .map_err(|e| format!("Failed to write checkpoint: {}", e))?;
 
     validate_and_finalize_checkpoint_and_remove_unverified_marker(
         &cp_layout,
