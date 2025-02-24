@@ -859,10 +859,7 @@ impl SystemTestGroup {
                 }
             }
         };
-        request
-            .retry(&ExponentialBuilder::default())
-            .call()
-            .unwrap();
+        let _ = request.retry(&ExponentialBuilder::default()).call();
     }
 
     pub fn execute(self) -> Result<Outcome> {
