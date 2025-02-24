@@ -516,8 +516,10 @@ fn reject_if_invalid(
         return Some(VetKdAgreement::Reject(VetKdErrorCode::TimedOut));
     }
 
+    // We time out vetKD requests that take longer than one DKG interval.
+    // Otherwise the required NiDKG transcript might disappear before we
+    // can complete the request.
     if let ThresholdArguments::VetKd(args) = &context.args {
-        // We should time out contexts that request a transcript which no longer exists
         if args.height < request_expiry.height {
             if let Some(metrics) = metrics {
                 metrics.payload_errors_inc("expired_transcript", &key_id);
