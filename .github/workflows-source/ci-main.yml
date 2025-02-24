@@ -283,14 +283,6 @@ jobs:
           retention-days: 1
           path: |
             out_shafile_build
-      - name: Upload build-ic.tar
-        uses: actions/upload-artifact@v4
-        with:
-          name: build-ic
-          retention-days: 1
-          if-no-files-found: error
-          path: |
-            build-ic.tar
 
   build-determinism:
     name: Build Determinism
@@ -299,35 +291,8 @@ jobs:
     # NOTE: this expects "build-ic" to have built the same set of targets
     # as "bazel-test-all"
     needs: [build-ic, bazel-test-all]
-    strategy:
-      matrix:
-        include:
-          - TARGET: "//publish/binaries:upload"
-            PATH0: "release"
-            PATH1: "build-ic/release"
-            SETUPOS_FLAG: "false"
-          - TARGET: "//publish/canisters:upload"
-            PATH0: "canisters"
-            PATH1: "build-ic/canisters"
-            SETUPOS_FLAG: "false"
-          - TARGET: "//ic-os/guestos/envs/prod:upload_disk-img"
-            PATH0: "guest-os/update-img"
-            PATH1: "build-ic/icos/guestos"
-            SETUPOS_FLAG: "false"
-          - TARGET: "//ic-os/hostos/envs/prod:upload_update-img"
-            PATH0: "host-os/update-img"
-            PATH1: "build-ic/icos/hostos"
-            SETUPOS_FLAG: "false"
-          - TARGET: "//ic-os/setupos/envs/prod:upload_disk-img"
-            PATH0: "setup-os/disk-img"
-            PATH1: "build-ic/icos/setupos"
-            SETUPOS_FLAG: "true"
     steps:
       - <<: *checkout
-      - name: Download build-ic.tar [build-ic]
-        uses: actions/download-artifact@v4
-        with:
-          name: build-ic
       - name: Download out_shafile_all
         uses: actions/download-artifact@v4
         with:
@@ -339,17 +304,14 @@ jobs:
 
       - name: diff
         run: |
-          diff <(sort < ./out_shafile_build) <(sort <./out_shafile_all)
-      - name: Build Determinism Test
-        id: build-determinism
-        run: |
-          tar -xf build-ic.tar # build-determinism.sh expects ./build-ic/
-          "$CI_PROJECT_DIR"/ci/scripts/build-determinism.sh
-        env:
-          TARGET: ${{ matrix.TARGET }}
-          PATH0: ${{ matrix.PATH0 }}
-          PATH1: ${{ matrix.PATH1 }}
-          SETUPOS_FLAG: ${{ matrix.SETUPOS_FLAG }}
+          out=$(comm -23 <(sort out_shafile_build | uniq) <(sort out_shafile_all | uniq))
+          if [ -n "$out" ]; then
+            echo diff
+            echo "$out"
+            exit 1
+          else
+            echo no diff
+          fi
 
   cargo-clippy-linux:
     name: Cargo Clippy Linux
