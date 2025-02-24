@@ -51,7 +51,7 @@ fn nns_agent(pocket_ic: &PocketIc) -> (PocketIcAgent, NeuronId) {
     (PocketIcAgent { pocket_ic, sender }, nns_neuron_id)
 }
 
-const DUMMY_URL_FOR_PROPOSALS: &'static str = "https://forum.dfinity.org";
+const DUMMY_URL_FOR_PROPOSALS: &str = "https://forum.dfinity.org";
 
 #[tokio::test]
 async fn test_custom_upgrade_path_for_sns_auto() {
@@ -193,7 +193,7 @@ async fn test_custom_upgrade_path_for_sns(automatically_advance_target_version: 
         };
         let custom_edge_c = SnsUpgrade {
             current_version: Some(adapt_version(&custom_two.clone())),
-            next_version: Some(adapt_version(&&normal_four.clone())),
+            next_version: Some(adapt_version(&normal_four.clone())),
         };
 
         let proposal_ids = vec![
