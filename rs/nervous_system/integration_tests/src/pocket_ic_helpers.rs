@@ -1764,22 +1764,17 @@ pub mod sns {
     }
 
     pub mod governance {
-        use std::collections::HashSet;
-
         use super::*;
         use assert_matches::assert_matches;
         use ic_crypto_sha2::Sha256;
         use ic_nervous_system_agent::sns::governance::{
             GovernanceCanister, ProposalSubmissionError, SubmittedProposal,
         };
-        use ic_sns_governance_api::{
-            pb::v1::{
-                get_neuron_response,
-                neuron::DissolveState,
-                upgrade_journal_entry::{self, Event},
-                Neuron, UpgradeJournal, UpgradeJournalEntry,
-            },
-            serialize_journal_entries,
+        use ic_sns_governance_api::pb::v1::{
+            get_neuron_response,
+            neuron::DissolveState,
+            upgrade_journal_entry::{self, Event},
+            Neuron,
         };
         use pocket_ic::ErrorCode;
         use sns_pb::UpgradeSnsControlledCanister;
@@ -2215,72 +2210,6 @@ pub mod sns {
             try_get_upgrade_journal(pocket_ic, canister_id)
                 .await
                 .unwrap()
-        }
-
-        pub async fn await_upgrade_journal_event(
-            pocket_ic: &PocketIc,
-            canister_id: PrincipalId,
-            expected_event: &Event,
-            label: &str,
-        ) {
-            const MAX_ATTEMPTS: usize = 100;
-
-            let mut last_response = None;
-
-            for _attempt_count in 0..MAX_ATTEMPTS {
-                pocket_ic.tick();
-
-                let response = get_upgrade_journal(pocket_ic, canister_id).await;
-
-                let last_event = response
-                    .upgrade_journal
-                    .as_ref()
-                    .unwrap()
-                    .entries
-                    .iter()
-                    .filter_map(|entry| {
-                        let Some(event) = entry.event.as_ref() else {
-                            return None;
-                        };
-
-                        // Redact human readable strings to simplify matching.
-                        let event = redact_human_readable(event.clone());
-
-                        // Collect strings, since traits `Eq` and `Hash` are not implemented on `Event`.
-                        let event = format!("{:?}", event);
-
-                        Some(event)
-                    })
-                    .collect::<HashSet<_>>();
-
-                let expected_event = format!("{:?}", redact_human_readable(expected_event.clone()));
-
-                if last_event.contains(&expected_event) {
-                    return;
-                }
-                last_response = Some(response);
-
-                pocket_ic.advance_time(Duration::from_millis(1000));
-            }
-
-            let last_response = last_response.expect("There should have been at least one attempt");
-            let last_upgrade_journal =
-                serialize_journal_entries(&last_response.upgrade_journal.unwrap()).unwrap();
-
-            // Wrap `expected_event` into `UpgradeJournal` to enable pretty printing it.
-            let expected_event = UpgradeJournal {
-                entries: vec![UpgradeJournalEntry {
-                    timestamp_seconds: None,
-                    event: Some(expected_event.clone()),
-                }],
-            };
-            let expected_event = serialize_journal_entries(&expected_event).unwrap();
-
-            panic!(
-                "{}: expected upgrade event {}\n not observed after {} attempts;\n\
-                 upgrade_journal = {}",
-                label, expected_event, MAX_ATTEMPTS, last_upgrade_journal,
-            );
         }
 
         pub async fn advance_target_version(
