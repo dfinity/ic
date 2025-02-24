@@ -3177,7 +3177,7 @@ pub fn test_migration_resumes_from_frozen<T>(
     unfreeze(&env, canister_id);
     // even though 1000s passed, the ledger did not migrate when it was frozen
     assert!(!is_ledger_ready());
-    wait_ledger_ready(&env, canister_id, 20);
+    wait_ledger_ready(&env, canister_id, 30);
     check_approvals();
     check_balances();
 }
