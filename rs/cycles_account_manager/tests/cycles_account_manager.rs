@@ -396,7 +396,7 @@ fn charge_canister_for_memory_usage() {
         let mut canister = new_canister_state(
             canister_id,
             canister_test_id(11).get(),
-            Cycles::from(INITIAL_BALANCE),
+            INITIAL_BALANCE,
             NumSeconds::from(0),
         );
         canister.system_state.memory_allocation =
