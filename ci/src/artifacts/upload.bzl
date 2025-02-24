@@ -48,7 +48,7 @@ def _upload_artifact_impl(ctx):
                 "REMOTE_SUBDIR": ctx.attr.remote_subdir,
                 "VERSION_FILE": ctx.version_file.path,
                 "VERSION_TXT": ctx.file._version_txt.path,
-            } | ({"DRY_RUN": "1"} if s3_upload else {}),
+            } | ({"UPLOAD_BUILD_ARTIFACTS": "1"} if s3_upload else {}),
             inputs = [f, ctx.version_file, rclone_config, ctx.file._version_txt],
             outputs = [url],
             tools = [ctx.file._rclone],

@@ -87,7 +87,7 @@ bazel_args=(
 )
 
 if [[ $release_build == true ]]; then
-    bazel_args+=(--config=stamped)
+    bazel_args+=(--config=release)
 fi
 
 # Unless explicitly provided, we set a default --repository_cache to a volume mounted inside our runners

@@ -25,9 +25,7 @@ if [ "$(basename $f)" == "SHA256SUMS" ]; then
     cat "$f" >&2
 fi
 
-if [ "${DRY_RUN:-}" == "1" ]; then
-    echo "dry run for $f"
-else
+if [ "${UPLOAD_BUILD_ARTIFACTS:-}" == "1" ]; then
     echo "uploading $f"
     # Multipart upload does not work trough the proxy for some reasons. Just disabling it for now.
     "$RCLONE" \
@@ -50,6 +48,8 @@ else
         copy \
         "$f" \
         "public-s3-cf:dfinity-download-public/ic/${VERSION}/$REMOTE_SUBDIR/"
+else
+    echo "dry run for $f"
 fi
 
 URL_PATH="ic/${VERSION}/$REMOTE_SUBDIR/$(basename $f)"
