@@ -106,7 +106,7 @@ def rust_fuzz_test_binary_afl(name, srcs, rustc_flags = [], crate_features = [],
       **kwargs: additional arguments to pass a rust_binary rule.
     """
 
-    RUSTC_FLAGS_AFL = DEFAULT_RUSTC_FLAGS + ZIG_LINK_ARGS + [
+    RUSTC_FLAGS_AFL = DEFAULT_RUSTC_FLAGS + [
         "-Cllvm-args=-sanitizer-coverage-trace-pc-guard",
         "-Clink-arg=-fuse-ld=gold",
         "-Clink-arg=-fsanitize=fuzzer",
