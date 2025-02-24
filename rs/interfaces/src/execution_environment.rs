@@ -1237,10 +1237,16 @@ pub trait SystemApi {
     /// i.e., the management canister's `sign_with_ecdsa`, for the key
     /// with name given by `src` + `size` and the provided curve.
     ///
-    /// Traps if `src`/`size` cannot be decoded to a valid key name.
+    /// Traps if `src`+`size` exceeds the size of the WebAssembly memory.
+    /// Returns 0 on success.
+    /// Returns 1 if an unknown curve variant was provided.
+    /// Returns 2 if the given curve variant does not have a key with the
+    /// name provided via `src`/`size`.
+    ///
     ///
     /// The amount of cycles is represented by a 128-bit value and is copied
-    /// to the canister memory starting at the location `dst`.
+    /// to the canister memory starting at the location `dst` if the return
+    /// value is 0.
     fn ic0_cost_sign_with_ecdsa(
         &self,
         src: usize,
@@ -1254,10 +1260,15 @@ pub trait SystemApi {
     /// i.e., the management canister's `sign_with_schnorr` for the key
     /// with name given by `src` + `size` and the provided algorithm.
     ///
-    /// Traps if `src`/`size` cannot be decoded to a valid key name.
+    /// Traps if `src`/`size` exceeds the size of the WebAssembly memory.
+    /// Returns 0 on success.
+    /// Returns 1 if an unknown curve variant was provided.
+    /// Returns 2 if the given curve variant does not have a key with the
+    /// name provided via `src`/`size`.
     ///
     /// The amount of cycles is represented by a 128-bit value and is copied
-    /// to the canister memory starting at the location `dst`.
+    /// to the canister memory starting at the location `dst` if the return
+    /// value is 0.
     fn ic0_cost_sign_with_schnorr(
         &self,
         src: usize,
@@ -1271,10 +1282,15 @@ pub trait SystemApi {
     /// i.e., the management canister's `vetkd_derive_encrypted_key` for the key
     /// with name given by `src` + `size` and the provided curve.
     ///
-    /// Traps if `src`/`size` cannot be decoded to a valid key name.
+    /// Traps if `src`/`size` exceeds the size of the WebAssembly memory.
+    /// Returns 0 on success.
+    /// Returns 1 if an unknown curve variant was provided.
+    /// Returns 2 if the given curve variant does not have a key with the
+    /// name provided via `src`/`size`.
     ///
     /// The amount of cycles is represented by a 128-bit value and is copied
-    /// to the canister memory starting at the location `dst`.
+    /// to the canister memory starting at the location `dst` if the return
+    /// value is 0.
     fn ic0_cost_vetkd_derive_encrypted_key(
         &self,
         src: usize,
