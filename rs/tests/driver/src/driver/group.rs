@@ -808,7 +808,15 @@ impl SystemTestGroup {
         );
         let logger = env.logger();
         info!(logger, "Registering with service discovery");
-        let topology = env.topology_snapshot();
+        let topology = env.maybe_topology_snapshot();
+        if let None = topology {
+            warn!(
+                logger,
+                "Topology snapshot cannot be made for test: {}", test_name
+            );
+            return;
+        }
+        let topology = topology.unwrap();
         let root_subnet = topology.root_subnet();
         let nns_urls = root_subnet
             .nodes()
