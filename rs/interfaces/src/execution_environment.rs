@@ -156,6 +156,18 @@ pub enum SystemApiCallId {
     CanisterVersion,
     /// Tracker for `ic0.certified_data_set()`
     CertifiedDataSet,
+    /// Tracker for `ic0.cost_call()`
+    CostCall,
+    /// Tracker for `ic0.cost_create_canister()`
+    CostCreateCanister,
+    /// Tracker for `ic0.cost_http_request()`
+    CostHttpRequest,
+    /// Tracker for `ic0.cost_sign_with_ecdsa()`
+    CostSignWithEcdsa,
+    /// Tracker for `ic0.cost_sign_with_schnorr()`
+    CostSignWithSchnorr,
+    /// Tracker for `ic0.cost_vetkd_derive_encrypted_key()`
+    CostVetkdDeriveEncryptedKey,
     /// Tracker for `ic0.cycles_burn128()`
     CyclesBurn128,
     /// Tracker for `ic0.data_certificate_copy()`
@@ -1183,6 +1195,121 @@ pub trait SystemApi {
         dst: usize,
         heap: &mut [u8],
     ) -> HypervisorResult<()>;
+
+    /// This system call returns the amount of cycles that a canister needs to
+    /// be above the freezing threshold in order to successfully make an
+    /// inter-canister call. This includes the base cost for an inter-canister
+    /// call, the cost for each byte transmitted in the request, the cost for
+    /// the transmission of the largest possible response, and the cost for
+    /// executing the largest possible response callback.
+    ///
+    /// The cost is determined by the byte length of the method name and the
+    /// length of the encoded payload.
+    ///
+    /// The amount of cycles is represented by a 128-bit value and is copied
+    /// to the canister memory starting at the location `dst`.
+    fn ic0_cost_call(
+        &self,
+        method_name_size: u64,
+        payload_size: u64,
+        dst: usize,
+        heap: &mut [u8],
+    ) -> HypervisorResult<()>;
+
+    /// This system call indicates the cycle cost of creating a canister on
+    /// the same subnet, i.e., the management canister's `create_canister`.
+    ///
+    /// The amount of cycles is represented by a 128-bit value and is copied
+    /// to the canister memory starting at the location `dst`.
+    fn ic0_cost_create_canister(&self, dst: usize, heap: &mut [u8]) -> HypervisorResult<()>;
+
+    /// This system call indicates the cycle cost of making an http outcall,
+    /// i.e., the management canister's `http_request`.
+    ///
+    /// `request_size` is the sum of the lengths of the variable request parts, as
+    /// documented in the interface specification.
+    /// `max_res_bytes` is the maximum number of response bytes the caller wishes to
+    /// accept.
+    ///
+    /// The amount of cycles is represented by a 128-bit value and is copied
+    /// to the canister memory starting at the location `dst`.
+    fn ic0_cost_http_request(
+        &self,
+        request_size: u64,
+        max_res_bytes: u64,
+        dst: usize,
+        heap: &mut [u8],
+    ) -> HypervisorResult<()>;
+
+    /// This system call indicates the cycle cost of signing with ecdsa,
+    /// i.e., the management canister's `sign_with_ecdsa`, for the key
+    /// (whose name is given by textual representation at heap location `src`
+    /// with byte length `size`) and the provided curve.
+    ///
+    /// Traps if `src`+`size` exceeds the size of the WebAssembly memory.
+    /// Returns 0 on success.
+    /// Returns 1 if an unknown curve variant was provided.
+    /// Returns 2 if the given curve variant does not have a key with the
+    /// name provided via `src`/`size`.
+    ///
+    ///
+    /// The amount of cycles is represented by a 128-bit value and is copied
+    /// to the canister memory starting at the location `dst` if the return
+    /// value is 0.
+    fn ic0_cost_sign_with_ecdsa(
+        &self,
+        src: usize,
+        size: usize,
+        curve: u32,
+        dst: usize,
+        heap: &mut [u8],
+    ) -> HypervisorResult<u32>;
+
+    /// This system call indicates the cycle cost of signing with schnorr,
+    /// i.e., the management canister's `sign_with_schnorr` for the key
+    /// (whose name is given by textual representation at heap location `src`
+    /// with byte length `size`) and the provided algorithm.
+    ///
+    /// Traps if `src`/`size` exceeds the size of the WebAssembly memory.
+    /// Returns 0 on success.
+    /// Returns 1 if an unknown algorithm variant was provided.
+    /// Returns 2 if the given algorithm variant does not have a key with the
+    /// name provided via `src`/`size`.
+    ///
+    /// The amount of cycles is represented by a 128-bit value and is copied
+    /// to the canister memory starting at the location `dst` if the return
+    /// value is 0.
+    fn ic0_cost_sign_with_schnorr(
+        &self,
+        src: usize,
+        size: usize,
+        algorithm: u32,
+        dst: usize,
+        heap: &mut [u8],
+    ) -> HypervisorResult<u32>;
+
+    /// This system call indicates the cycle cost of vetkd key derivation,
+    /// i.e., the management canister's `vetkd_derive_encrypted_key` for the key
+    /// (whose name is given by textual representation at heap location `src`
+    /// with byte length `size`) and the provided curve.
+    ///
+    /// Traps if `src`/`size` exceeds the size of the WebAssembly memory.
+    /// Returns 0 on success.
+    /// Returns 1 if an unknown curve variant was provided.
+    /// Returns 2 if the given curve variant does not have a key with the
+    /// name provided via `src`/`size`.
+    ///
+    /// The amount of cycles is represented by a 128-bit value and is copied
+    /// to the canister memory starting at the location `dst` if the return
+    /// value is 0.
+    fn ic0_cost_vetkd_derive_encrypted_key(
+        &self,
+        src: usize,
+        size: usize,
+        curve: u32,
+        dst: usize,
+        heap: &mut [u8],
+    ) -> HypervisorResult<u32>;
 
     /// Used to look up the size of the subnet Id of the calling canister.
     fn ic0_subnet_self_size(&self) -> HypervisorResult<usize>;

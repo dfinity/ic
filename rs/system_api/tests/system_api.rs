@@ -298,6 +298,12 @@ fn is_supported(api_type: SystemApiCallId, context: &str) -> bool {
         SystemApiCallId::PerformanceCounter => vec!["*", "s"],
         SystemApiCallId::IsController => vec!["*", "s"],
         SystemApiCallId::InReplicatedExecution => vec!["*", "s"],
+        SystemApiCallId::CostCall => vec!["*", "s"],
+        SystemApiCallId::CostCreateCanister => vec!["*", "s"],
+        SystemApiCallId::CostSignWithEcdsa=> vec!["*", "s"],
+        SystemApiCallId::CostHttpRequest=> vec!["*", "s"],
+        SystemApiCallId::CostSignWithSchnorr=> vec!["*", "s"],
+        SystemApiCallId::CostVetkdDeriveEncryptedKey => vec!["*", "s"],
         SystemApiCallId::DebugPrint => vec!["*", "s"],
         SystemApiCallId::Trap => vec!["*", "s"],
         SystemApiCallId::MintCycles => vec!["U", "Ry", "Rt", "T"],
@@ -822,6 +828,13 @@ fn api_availability_test(
         // OutOfInstructions and TryGrowWasmMemory are private
         SystemApiCallId::OutOfInstructions => {}
         SystemApiCallId::TryGrowWasmMemory => {}
+        // These are available in all contexts
+        SystemApiCallId::CostCall => {}
+        SystemApiCallId::CostCreateCanister => {}
+        SystemApiCallId::CostHttpRequest => {}
+        SystemApiCallId::CostSignWithEcdsa => {}
+        SystemApiCallId::CostSignWithSchnorr => {}
+        SystemApiCallId::CostVetkdDeriveEncryptedKey => {}
     }
 }
 

@@ -11,7 +11,7 @@ use ic_limits::{LOG_CANISTER_OPERATION_CYCLES_THRESHOLD, SMALL_APP_SUBNET_MAX_SI
 use ic_logger::{info, ReplicaLogger};
 use ic_management_canister_types_private::{
     CanisterStatusType, CreateCanisterArgs, InstallChunkedCodeArgs, InstallCodeArgsV2,
-    LoadCanisterSnapshotArgs, Method as Ic00Method, Payload,
+    LoadCanisterSnapshotArgs, MasterPublicKeyId, Method as Ic00Method, Payload,
     ProvisionalCreateCanisterWithCyclesArgs, UninstallCodeArgs, UpdateSettingsArgs, IC_00,
 };
 use ic_nns_constants::CYCLES_MINTING_CANISTER_ID;
@@ -612,6 +612,7 @@ pub struct SandboxSafeSystemState {
     pub(super) request_metadata: RequestMetadata,
     caller: Option<PrincipalId>,
     pub is_wasm64_execution: bool,
+    network_topology: NetworkTopology,
 }
 
 impl SandboxSafeSystemState {
@@ -646,6 +647,7 @@ impl SandboxSafeSystemState {
         caller: Option<PrincipalId>,
         next_canister_log_record_idx: u64,
         is_wasm64_execution: bool,
+        network_topology: NetworkTopology,
     ) -> Self {
         Self {
             canister_id,
@@ -681,6 +683,7 @@ impl SandboxSafeSystemState {
             request_metadata,
             caller,
             is_wasm64_execution,
+            network_topology,
         }
     }
 
@@ -795,6 +798,7 @@ impl SandboxSafeSystemState {
             caller,
             system_state.canister_log.next_idx(),
             is_wasm64_execution,
+            network_topology.clone(),
         )
     }
 
@@ -1368,6 +1372,22 @@ impl SandboxSafeSystemState {
     pub fn get_subnet_id(&self) -> SubnetId {
         self.cycles_account_manager.get_subnet_id()
     }
+
+    pub fn get_cycles_account_manager(&self) -> &CyclesAccountManager {
+        &self.cycles_account_manager
+    }
+
+    /// Look up key in `chain_key_enabled_subnets`, then extract all subnets
+    /// for that key and return the replication factor of the biggest one.
+    pub fn get_key_replication_factor(&self, key: MasterPublicKeyId) -> Option<usize> {
+        let subnets_with_key = self.network_topology.chain_key_enabled_subnets(&key);
+        subnets_with_key
+            .iter()
+            .map(|subnet_id| {
+                self.network_topology.get_subnet_size(subnet_id).unwrap() // we got the subnet_id from the same collection
+            })
+            .max()
+    }
 }
 
 /// Holds the metadata and the number of downstream requests. Requests created during the same
@@ -1390,7 +1410,9 @@ mod tests {
     use ic_cycles_account_manager::CyclesAccountManager;
     use ic_limits::SMALL_APP_SUBNET_MAX_SIZE;
     use ic_registry_subnet_type::SubnetType;
-    use ic_replicated_state::{canister_state::system_state::CyclesUseCase, SystemState};
+    use ic_replicated_state::{
+        canister_state::system_state::CyclesUseCase, NetworkTopology, SystemState,
+    };
     use ic_test_utilities_types::ids::{canister_test_id, subnet_test_id, user_test_id};
     use ic_types::{
         messages::{RequestMetadata, NO_DEADLINE},
@@ -1503,6 +1525,7 @@ mod tests {
             0,
             // Wasm32 execution environment. Sufficient in testing.
             false,
+            NetworkTopology::default(),
         );
         sandbox_state.msg_deadline()
     }
@@ -1553,6 +1576,7 @@ mod tests {
             0,
             // Wasm32 execution environment. Sufficient in testing.
             false,
+            NetworkTopology::default(),
         )
     }
 
