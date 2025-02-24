@@ -247,8 +247,8 @@ pub fn lookup_replica_version(
 }
 
 /// Return the registry version to be used for the given height.
-/// Note that this can only look up for height that is greater than or equal
-/// to the latest catch-up package height, otherwise an error is returned.
+/// Note that this can only look up heights that are greater than or equal
+/// to the latest catch-up package height, otherwise `None` is returned.
 pub fn registry_version_at_height(
     reader: &dyn ConsensusPoolCache,
     height: Height,
@@ -256,9 +256,9 @@ pub fn registry_version_at_height(
     get_active_data_at(reader, height, get_registry_version_at_given_summary)
 }
 
-/// Return the registry version and DKG interval lendth to be used for the given height.
-/// Note that this can only look up for height that is greater than or equal
-/// to the latest catch-up package height, otherwise an error is returned.
+/// Return the registry version and DKG interval length to be used for the given height.
+/// Note that this can only look up heights that are greater than or equal
+/// to the latest catch-up package height, otherwise `None` is returned.
 pub fn get_registry_version_and_interval_length_at_height(
     reader: &dyn ConsensusPoolCache,
     height: Height,
