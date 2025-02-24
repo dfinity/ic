@@ -37,6 +37,8 @@ jobs:
           # on images being uploaded to the S3 bucket
           BAZEL_COMMAND: >-
             build
+
+
               --config=ci --config=stamped
               --repository_cache= --disk_cache= --noremote_accept_cached --remote_instance_name=${CI_COMMIT_SHA} --@rules_rust//rust/settings:pipelined_compilation=True
           BAZEL_TARGETS: //...
