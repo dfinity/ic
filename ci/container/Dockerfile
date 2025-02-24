@@ -199,5 +199,3 @@ ARG CI_USER="root"
 USER $CI_USER
 ENTRYPOINT ["/entrypoint.sh"]
 CMD ["/bin/bash"]
-
-# test
