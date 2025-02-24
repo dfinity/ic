@@ -16,7 +16,7 @@ jobs:
     runs-on:
       labels: dind-large
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:5a6e028ac076b39353ae748ccccfc22eed2034d713ecd19a1a66d42fe4b3ed65
+      image: ghcr.io/dfinity/ic-build@sha256:e4997c54f75fa505d05cb3a906e940bd27e621e4776ba8670d9fd2793d713592
       options: >-
         -e NODE_NAME --privileged --cgroupns host -v /cache:/cache -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp
     timeout-minutes: 120
@@ -59,7 +59,7 @@ jobs:
   bazel-system-test-hourly:
     name: Bazel System Tests Hourly
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:5a6e028ac076b39353ae748ccccfc22eed2034d713ecd19a1a66d42fe4b3ed65
+      image: ghcr.io/dfinity/ic-build@sha256:e4997c54f75fa505d05cb3a906e940bd27e621e4776ba8670d9fd2793d713592
       options: >-
         -e NODE_NAME --privileged --cgroupns host -v /cache:/cache -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp
     timeout-minutes: 120
@@ -103,7 +103,7 @@ jobs:
     runs-on:
       labels: dind-large
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:5a6e028ac076b39353ae748ccccfc22eed2034d713ecd19a1a66d42fe4b3ed65
+      image: ghcr.io/dfinity/ic-build@sha256:e4997c54f75fa505d05cb3a906e940bd27e621e4776ba8670d9fd2793d713592
       options: >-
         -e NODE_NAME --privileged --cgroupns host -v /cache:/cache -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp
     timeout-minutes: 120
