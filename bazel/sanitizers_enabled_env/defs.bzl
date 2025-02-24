@@ -1,4 +1,4 @@
-"""Exposes environmental variable `SANITIZERS_ENABLED` to packages."""
+"""Exposes environmental variables `SANITIZERS_ENABLED` and `AFL_ENABLED` to packages."""
 
 def _impl(repository_ctx):
     repository_ctx.file(
@@ -8,7 +8,8 @@ def _impl(repository_ctx):
     )
     repository_ctx.file(
         "defs.bzl",
-        content = "SANITIZERS_ENABLED=" + repository_ctx.getenv("SANITIZERS_ENABLED", "0") + "\n",
+        content = "SANITIZERS_ENABLED=" + repository_ctx.getenv("SANITIZERS_ENABLED", "0") + "\n" +
+                  "AFL_ENABLED=" + repository_ctx.getenv("AFL_ENABLED", "0") + "\n",
         executable = False,
     )
 

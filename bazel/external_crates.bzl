@@ -8,7 +8,7 @@ to regenerate Cargo Bazel lockfiles.
 load("@rules_rust//crate_universe:defs.bzl", "crate", "crates_repository", "splicing_config")
 load("//bazel:fuzz_testing.bzl", "DEFAULT_RUSTC_FLAGS_FOR_FUZZING")
 
-def sanitize_external_crates(sanitizers_enabled):
+def sanitize_external_crates(sanitizers_enabled, afl_enabled):
     FUZZING_ANNOTATION = [crate.annotation(rustc_flags = DEFAULT_RUSTC_FLAGS_FOR_FUZZING)] if sanitizers_enabled else []
     return {
         "candid": FUZZING_ANNOTATION,
@@ -16,13 +16,14 @@ def sanitize_external_crates(sanitizers_enabled):
         "bitcoin": FUZZING_ANNOTATION,
         "bincode": FUZZING_ANNOTATION,
         "ic-stable-structures": FUZZING_ANNOTATION,
+        "libfuzzer-sys": [crate.annotation(crate_features = ["link_libfuzzer"] if not afl_enabled else [])],
     }
 
 ICRC_1_REV = "26a80d777e079644cd69e883e18dad1a201f5b1a"
 
 BUILD_INFO_REV = "701a696844fba5c87df162fbbc1ccef96f27c9d7"
 
-def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enabled):
+def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enabled, afl_enabled):
     CRATE_ANNOTATIONS = {
         "canbench": [crate.annotation(
             gen_binaries = True,
@@ -155,7 +156,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             gen_binaries = True,
         )],
     }
-    CRATE_ANNOTATIONS.update(sanitize_external_crates(sanitizers_enabled = sanitizers_enabled))
+    CRATE_ANNOTATIONS.update(sanitize_external_crates(sanitizers_enabled = sanitizers_enabled, afl_enabled = afl_enabled))
     crates_repository(
         name = name,
         isolated = True,
@@ -773,6 +774,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             ),
             "libfuzzer-sys": crate.spec(
                 version = "^0.4.7",
+                default_features = False,
             ),
             "libnss": crate.spec(
                 version = "^0.5.0",

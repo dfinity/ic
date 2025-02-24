@@ -140,12 +140,13 @@ load("//bazel/sanitizers_enabled_env:defs.bzl", "sanitizers_enabled_env")
 
 sanitizers_enabled_env(name = "sanitizers_enabled_env")
 
-load("@sanitizers_enabled_env//:defs.bzl", "SANITIZERS_ENABLED")
+load("@sanitizers_enabled_env//:defs.bzl", "AFL_ENABLED", "SANITIZERS_ENABLED")
 
 external_crates_repository(
     name = "crate_index",
-    cargo_lockfile = "//:Cargo.Bazel.Fuzzing.toml.lock" if SANITIZERS_ENABLED else "//:Cargo.Bazel.toml.lock",
-    lockfile = "//:Cargo.Bazel.Fuzzing.json.lock" if SANITIZERS_ENABLED else "//:Cargo.Bazel.json.lock",
+    afl_enabled = AFL_ENABLED,
+    cargo_lockfile = "//:Cargo.Bazel.AFL.toml.lock" if AFL_ENABLED else ("//:Cargo.Bazel.Fuzzing.toml.lock" if SANITIZERS_ENABLED else "//:Cargo.Bazel.toml.lock"),
+    lockfile = "//:Cargo.Bazel.AFL.json.lock" if AFL_ENABLED else ("//:Cargo.Bazel.Fuzzing.json.lock" if SANITIZERS_ENABLED else "//:Cargo.Bazel.json.lock"),
     sanitizers_enabled = SANITIZERS_ENABLED,
 )
 
