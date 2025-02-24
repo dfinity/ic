@@ -651,7 +651,7 @@ pub fn http_request(request: HttpRequest) -> HttpResponse {
                 .clone()
                 .expect("The upgrade journal is not initialized for this SNS.");
 
-            serve_journal(journal)
+            serve_journal(&journal)
         }
         "/metrics" => serve_metrics(encode_metrics),
         "/logs" => serve_logs_v2(request, &INFO, &ERROR),
