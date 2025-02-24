@@ -114,8 +114,7 @@ fn upgrade_downgrade_app_subnet(env: TestEnv) {
         SubnetType::Application,
         None,
     );
-    let mainnet_version = read_dependency_from_env_to_string("MAINNET_NNS_SUBNET_REVISION_ENV")
-        .expect("could not read mainnet version from environment");
+    let mainnet_version = read_dependency_from_env_to_string("MAINNET_NNS_SUBNET_REVISION_ENV")?;
     upgrade(
         &env,
         &nns_node,

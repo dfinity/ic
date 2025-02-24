@@ -125,8 +125,7 @@ fn download_mainnet_binary(version: String, log: &Logger, target_dir: &Path) -> 
 fn test(env: TestEnv) {
     let log = env.logger();
 
-    let mainnet_version = read_dependency_from_env_to_string("MAINNET_NNS_SUBNET_REVISION_ENV")
-        .expect("could not read mainnet version from environment");
+    let mainnet_version = read_dependency_from_env_to_string("MAINNET_NNS_SUBNET_REVISION_ENV")?;
     info!(log, "Continuing with mainnet version {mainnet_version}");
 
     let output_dir = PathBuf::from("cup_compatibility_test");
