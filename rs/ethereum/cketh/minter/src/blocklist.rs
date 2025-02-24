@@ -1,5 +1,5 @@
-/// The script to generate this file, including information about the source data, can be found here:
-/// /rs/cross-chain/scripts/generate_blocklist.py
+//! The script to generate this file, including information about the source data, can be found here:
+//! /rs/cross-chain/scripts/generate_blocklist.py
 
 #[cfg(test)]
 mod tests;
