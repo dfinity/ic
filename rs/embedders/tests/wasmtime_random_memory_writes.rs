@@ -882,6 +882,7 @@ mod tests {
                 setup_instruction_overhead()
                     + ic_embedders::wasmtime_embedder::system_api_complexity::overhead::STABLE_READ
                         .get()
+                    + STABLE_OP_BYTES
             );
         }
 
@@ -925,6 +926,7 @@ mod tests {
                 setup_instruction_overhead()
                     + ic_embedders::wasmtime_embedder::system_api_complexity::overhead::STABLE_WRITE
                         .get()
+                    + STABLE_OP_BYTES
                     + SchedulerConfig::system_subnet().dirty_page_overhead.get()
             );
         }
@@ -969,6 +971,7 @@ mod tests {
                 setup_instruction_overhead()
                     + ic_embedders::wasmtime_embedder::system_api_complexity::overhead::STABLE_WRITE
                         .get()
+                    + STABLE_OP_BYTES
                     + SchedulerConfig::system_subnet().dirty_page_overhead.get()
             );
         }
@@ -1073,7 +1076,6 @@ mod tests {
         let wasm = wat2wasm(&wat).unwrap();
 
         let config = EmbeddersConfig {
-            subnet_type,
             dirty_page_overhead: match subnet_type {
                 SubnetType::System => SchedulerConfig::system_subnet(),
                 SubnetType::Application => SchedulerConfig::application_subnet(),
