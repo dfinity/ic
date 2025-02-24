@@ -17,12 +17,15 @@ rust_library(
     ],
     deps = [
         # Keep sorted.
+        "//packages/icrc-cbor",
         "@crate_index//:base32",
         "@crate_index//:candid",
         "@crate_index//:crc32fast",
         "@crate_index//:hex",
         "@crate_index//:ic-cdk",
+        "@crate_index//:ic-stable-structures",
         "@crate_index//:itertools",
+        "@crate_index//:minicbor",
         "@crate_index//:num-bigint",
         "@crate_index//:num-traits",
         "@crate_index//:serde",

@@ -60,7 +60,6 @@
 /// # EXAMPLE: y: "bad"
 /// y: "good"
 /// ```
-
 pub const SAMPLE_CONFIG: &str = r#"
 {
     // ============================================

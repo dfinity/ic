@@ -1,14 +1,7 @@
 use ic_canister_sandbox_backend_lib::{
     protocol, protocol::sbxsvc, rpc, sandbox_service, transport, transport::SocketReaderConfig,
 };
-use ic_embedders::{
-    wasm_utils::{Segments, WasmImportsDetails},
-    CompilationResult, SerializedModule, SerializedModuleBytes,
-};
-use ic_replicated_state::canister_state::execution_state::WasmMetadata;
-use ic_types::NumInstructions;
 
-use std::collections::BTreeSet;
 use std::os::unix::io::FromRawFd;
 use std::sync::Arc;
 
@@ -27,28 +20,19 @@ impl sandbox_service::SandboxService for DummySandboxService {
         rpc::Call::new_resolved(Ok(sbxsvc::TerminateReply {}))
     }
 
-    fn open_wasm(&self, _req: sbxsvc::OpenWasmRequest) -> rpc::Call<sbxsvc::OpenWasmReply> {
-        println!("Sandbox: Received 'open_wasm' request");
-        rpc::Call::new_resolved(Ok(sbxsvc::OpenWasmReply(Ok((
-            CompilationResult::empty_for_testing(),
-            SerializedModule {
-                bytes: Arc::new(SerializedModuleBytes::empty()),
-                exported_functions: BTreeSet::new(),
-                data_segments: Segments::default(),
-                wasm_metadata: WasmMetadata::default(),
-                compilation_cost: NumInstructions::from(0),
-                imports_details: WasmImportsDetails::default(),
-                // For these tests, it doesn't matter if it's wasm64 or not.
-                is_wasm64: false,
-            },
-        )))))
-    }
-
     fn open_wasm_serialized(
         &self,
         _req: sbxsvc::OpenWasmSerializedRequest,
     ) -> rpc::Call<sbxsvc::OpenWasmSerializedReply> {
-        unimplemented!();
+        println!("Sandbox: Received 'open_wasm_serialized' request");
+        rpc::Call::new_resolved(Ok(sbxsvc::OpenWasmSerializedReply(Ok(()))))
+    }
+
+    fn open_wasm_via_file(
+        &self,
+        _req: sbxsvc::OpenWasmViaFileRequest,
+    ) -> rpc::Call<sbxsvc::OpenWasmSerializedReply> {
+        unimplemented!()
     }
 
     fn close_wasm(&self, _req: sbxsvc::CloseWasmRequest) -> rpc::Call<sbxsvc::CloseWasmReply> {
@@ -87,16 +71,16 @@ impl sandbox_service::SandboxService for DummySandboxService {
         unimplemented!()
     }
 
-    fn create_execution_state(
-        &self,
-        _req: sbxsvc::CreateExecutionStateRequest,
-    ) -> rpc::Call<sbxsvc::CreateExecutionStateReply> {
-        unimplemented!()
-    }
-
     fn create_execution_state_serialized(
         &self,
         _req: sbxsvc::CreateExecutionStateSerializedRequest,
+    ) -> rpc::Call<sbxsvc::CreateExecutionStateSerializedReply> {
+        unimplemented!()
+    }
+
+    fn create_execution_state_via_file(
+        &self,
+        _req: sbxsvc::CreateExecutionStateViaFileRequest,
     ) -> rpc::Call<sbxsvc::CreateExecutionStateSerializedReply> {
         unimplemented!()
     }

@@ -8,6 +8,7 @@ documentation.workspace = true
 
 [dependencies]
 ic-config = { path = "../config" }
+ic-consensus-dkg = { path = "./dkg" }
 ic-consensus-utils = { path = "./utils" }
 ic-crypto = { path = "../crypto" }
 ic-crypto-prng = { path = "../crypto/prng" }
@@ -18,8 +19,9 @@ ic-https-outcalls-consensus = { path = "../https_outcalls/consensus" }
 ic-interfaces = { path = "../interfaces" }
 ic-interfaces-registry = { path = "../interfaces/registry" }
 ic-interfaces-state-manager = { path = "../interfaces/state_manager" }
+ic-limits = { path = "../limits" }
 ic-logger = { path = "../monitoring/logger" }
-ic-management-canister-types = { path = "../types/management_canister_types" }
+ic-management-canister-types-private = { path = "../types/management_canister_types" }
 ic-metrics = { path = "../monitoring/metrics" }
 ic-protobuf = { path = "../protobuf" }
 ic-registry-client-helpers = { path = "../registry/helpers" }
@@ -32,7 +34,6 @@ phantom_newtype = { path = "../phantom_newtype" }
 prometheus = { workspace = true }
 rand = { workspace = true }
 rand_chacha = { workspace = true }
-rayon = { workspace = true }
 slog = { workspace = true }
 strum_macros = { workspace = true }
 tokio = { workspace = true }

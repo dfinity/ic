@@ -2,7 +2,7 @@ use std::net::Ipv6Addr;
 
 use anyhow::{bail, Context, Result};
 
-use config::config_ini::ConfigMap;
+use config_types::ConfigMap;
 
 #[derive(Debug)]
 pub struct NetworkInfo {
@@ -27,7 +27,7 @@ impl NetworkInfo {
                 if is_valid_prefix(prefix) {
                     Ok(prefix.clone())
                 } else {
-                    bail!("Invalid ipv6 prefix: {}", prefix)
+                    bail!("Invalid IPv6 prefix: {}", prefix)
                 }
             })?;
 
@@ -47,10 +47,10 @@ impl NetworkInfo {
 }
 
 #[cfg(test)]
-pub mod tests {
+mod tests {
+    use super::*;
     use std::collections::HashMap;
 
-    use super::*;
     #[test]
     fn test_is_valid_prefix() {
         assert!(is_valid_prefix("2a00:1111:1111:1111"));

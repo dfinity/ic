@@ -4,7 +4,7 @@ mod errors;
 pub use errors::{CanisterBacktrace, CanisterOutOfCyclesError, HypervisorError, TrapCode};
 use ic_base_types::NumBytes;
 use ic_error_types::UserError;
-use ic_management_canister_types::MasterPublicKeyId;
+use ic_management_canister_types_private::MasterPublicKeyId;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_subnet_type::SubnetType;
 use ic_sys::{PageBytes, PageIndex};
@@ -13,13 +13,14 @@ use ic_types::{
     crypto::canister_threshold_sig::MasterPublicKey,
     ingress::{IngressStatus, WasmResult},
     messages::{CertificateDelegation, MessageId, Query, SignedIngressContent},
-    CanisterLog, Cycles, ExecutionRound, Height, NumInstructions, NumOsPages, Randomness, Time,
+    Cycles, ExecutionRound, Height, NumInstructions, NumOsPages, Randomness, ReplicaVersion, Time,
 };
 use serde::{Deserialize, Serialize};
 use std::{
     collections::{BTreeMap, BTreeSet},
     convert::{Infallible, TryFrom},
     fmt, ops,
+    sync::Arc,
 };
 use strum_macros::EnumIter;
 use thiserror::Error;
@@ -173,6 +174,8 @@ pub enum SystemApiCallId {
     IsController,
     /// Tracker for `ic0.mint_cycles()`
     MintCycles,
+    /// Tracker for `ic0.mint_cycles128()`
+    MintCycles128,
     /// Tracker for `ic0.msg_arg_data_copy()`
     MsgArgDataCopy,
     /// Tracker for `ic0.msg_arg_data_size()`
@@ -215,6 +218,10 @@ pub enum SystemApiCallId {
     OutOfInstructions,
     /// Tracker for `ic0.performance_counter()`
     PerformanceCounter,
+    /// Tracker for `ic0.subnet_self_size()`
+    SubnetSelfSize,
+    /// Tracker for `ic0.subnet_self_copy()`
+    SubnetSelfCopy,
     /// Tracker for `ic0.stable64_grow()`
     Stable64Grow,
     /// Tracker for `ic0.stable64_read()`
@@ -510,13 +517,18 @@ pub trait IngressHistoryWriter: Send + Sync {
     // Note [Associated Types in Interfaces]
     type State;
 
-    /// Allows to set status on a message.
+    /// Sets the status of a message. Returns the message's previous status.
     ///
     /// The allowed status transitions are:
     /// * "None" -> {"Received", "Processing", "Completed", "Failed"}
     /// * "Received" -> {"Processing", "Completed", "Failed"}
     /// * "Processing" -> {"Processing", "Completed", "Failed"}
-    fn set_status(&self, state: &mut Self::State, message_id: MessageId, status: IngressStatus);
+    fn set_status(
+        &self,
+        state: &mut Self::State,
+        message_id: MessageId,
+        status: IngressStatus,
+    ) -> Arc<IngressStatus>;
 }
 
 /// A trait for handling `out_of_instructions()` calls from the Wasm module.
@@ -1118,12 +1130,24 @@ pub trait SystemApi {
     ///
     /// Adds no more cycles than `amount`.
     ///
-    /// The canister balance afterwards does not exceed
-    /// maximum amount of cycles it can hold.
-    /// However, canisters on system subnets have no balance limit.
-    ///
     /// Returns the amount of cycles added to the canister's balance.
     fn ic0_mint_cycles(&mut self, amount: u64) -> HypervisorResult<u64>;
+
+    /// Mints the `amount` cycles
+    /// Adds cycles to the canister's balance.
+    ///
+    /// Adds no more cycles than `amount`. The balance afterwards cannot
+    /// exceed u128::MAX, so the amount added may be less than `amount`.
+    ///
+    /// The amount of cycles added to the canister's balance is
+    /// represented by a 128-bit value and is copied in the canister
+    /// memory starting at the location `dst`.
+    fn ic0_mint_cycles128(
+        &mut self,
+        amount: Cycles,
+        dst: usize,
+        heap: &mut [u8],
+    ) -> HypervisorResult<()>;
 
     /// Checks whether the principal identified by src/size is one of the
     /// controllers of the canister. If yes, then a value of 1 is returned,
@@ -1149,6 +1173,19 @@ pub trait SystemApi {
         &mut self,
         amount: Cycles,
         dst: usize,
+        heap: &mut [u8],
+    ) -> HypervisorResult<()>;
+
+    /// Used to look up the size of the subnet Id of the calling canister.
+    fn ic0_subnet_self_size(&self) -> HypervisorResult<usize>;
+
+    /// Used to copy the subnet Id of the calling canister to its heap
+    /// at the location specified by `dst` and `offset`.
+    fn ic0_subnet_self_copy(
+        &self,
+        dst: usize,
+        offset: usize,
+        size: usize,
         heap: &mut [u8],
     ) -> HypervisorResult<()>;
 }
@@ -1247,8 +1284,9 @@ pub trait Scheduler: Send {
         &self,
         state: Self::State,
         randomness: Randomness,
-        idkg_subnet_public_keys: BTreeMap<MasterPublicKeyId, MasterPublicKey>,
+        chain_key_subnet_public_keys: BTreeMap<MasterPublicKeyId, MasterPublicKey>,
         idkg_pre_signature_ids: BTreeMap<MasterPublicKeyId, BTreeSet<PreSigId>>,
+        replica_version: &ReplicaVersion,
         current_round: ExecutionRound,
         round_summary: Option<ExecutionRoundSummary>,
         current_round_type: ExecutionRoundType,
@@ -1265,7 +1303,6 @@ pub struct WasmExecutionOutput {
     pub instance_stats: InstanceStats,
     /// How many times each tracked System API call was invoked.
     pub system_api_call_counters: SystemApiCallCounters,
-    pub canister_log: CanisterLog,
 }
 
 impl fmt::Display for WasmExecutionOutput {

@@ -1,5 +1,4 @@
 use crate::pb::v1::ArchivedMonthlyNodeProviderRewards;
-use ic_crypto_sha2::Sha256;
 use ic_stable_structures::{storable::Bound, Storable};
 use prost::Message;
 use std::borrow::Cow;
@@ -10,6 +9,7 @@ pub mod v1;
 
 mod conversions;
 mod convert_struct_to_enum;
+pub mod proposal_conversions;
 
 impl Storable for ArchivedMonthlyNodeProviderRewards {
     fn to_bytes(&self) -> Cow<'_, [u8]> {
@@ -25,13 +25,3 @@ impl Storable for ArchivedMonthlyNodeProviderRewards {
 
     const BOUND: Bound = Bound::Unbounded;
 }
-
-/// Calculates the SHA256 hash of the given bytes.
-fn calculate_hash(bytes: &[u8]) -> [u8; 32] {
-    let mut wasm_sha = Sha256::new();
-    wasm_sha.write(bytes);
-    wasm_sha.finish()
-}
-
-#[cfg(test)]
-mod tests;

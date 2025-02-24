@@ -1,6 +1,7 @@
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
 load("//bazel:defs.bzl", "rust_bench", "rust_ic_bench", "rust_ic_test_suite_with_extra_srcs")
 load("//bazel:fuzz_testing.bzl", "DEFAULT_RUSTC_FLAGS_FOR_FUZZING")
+load("//rs/tests:common.bzl", "UNIVERSAL_CANISTER_ENV", "UNIVERSAL_CANISTER_RUNTIME_DEPS")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -22,6 +23,7 @@ DEPENDENCIES = [
     "//rs/utils/lru_cache",
     "//rs/wasm_transform",
     "@crate_index//:anyhow",
+    "@crate_index//:bincode",
     "@crate_index//:libc",
     "@crate_index//:libflate",
     "@crate_index//:nix",
@@ -33,6 +35,7 @@ DEPENDENCIES = [
     "@crate_index//:serde_bytes",
     "@crate_index//:slog",
     "@crate_index//:slog-term",
+    "@crate_index//:tempfile",
     "@crate_index//:wasm-encoder",
     "@crate_index//:wasmparser",
     "@crate_index//:wasmprinter",
@@ -97,7 +100,10 @@ rust_binary(
     srcs = ["bin/instrument_wasm.rs"],
     aliases = ALIASES,
     proc_macro_deps = MACRO_DEPENDENCIES,
-    deps = DEPENDENCIES + [":embedders"],
+    deps = DEPENDENCIES + [
+        ":embedders",
+        "@crate_index//:clap",
+    ],
 )
 
 rust_test(
@@ -122,6 +128,12 @@ rust_test(
     deps = [":embedders"] + DEPENDENCIES + DEV_DEPENDENCIES,
 )
 
+# Run some tests using wasm spec files.
+# To add a test suite, see the `http_archive` pulling in the testsuite
+# and add a new target.
+#
+# To inspect the spec files, use this command:
+# $ ls $(bazel info output_base)/external/wasm_spec_testsuite
 rust_ic_test_suite_with_extra_srcs(
     name = "embedders_integration",
     srcs = glob(
@@ -133,13 +145,24 @@ rust_ic_test_suite_with_extra_srcs(
     ),
     aliases = ALIASES,
     compile_data = glob(["tests/instrumentation-test-data/*"]),
-    data = DATA + ["@wasm_spec_testsuite//:wast_files"] + glob([
+    data = DATA + [
+        "//rs/universal_canister/impl:universal_canister.module",
+        "//rs/universal_canister/impl:universal_canister.wasm.gz",
+        "@wasm_spec_testsuite//:base_wast_files",
+        "@wasm_spec_testsuite//:memory64_wast_files",
+        "@wasm_spec_testsuite//:multi_memory_wast_files",
+    ] + glob([
         "tests/compressed/*",
         "tests/instrumentation-test-data/*",
         "tests/round-trip-test-data/*",
     ]),
     env = dict(ENV.items() + [
         ("CARGO_MANIFEST_DIR", "rs/embedders"),
+        ("WASM_SPEC_BASE", "$(locations @wasm_spec_testsuite//:base_wast_files)"),
+        ("WASM_SPEC_MULTI_MEMORY", "$(locations @wasm_spec_testsuite//:multi_memory_wast_files)"),
+        ("WASM_SPEC_MEMORY64", "$(locations @wasm_spec_testsuite//:memory64_wast_files)"),
+        ("UNIVERSAL_CANISTER_SERIALIZED_MODULE_PATH", "$(rootpath //rs/universal_canister/impl:universal_canister.module)"),
+        ("UNIVERSAL_CANISTER_WASM_PATH", "$(rootpath //rs/universal_canister/impl:universal_canister.wasm.gz)"),
     ]),
     extra_srcs = [
         "tests/wasmtime_simple.rs",
@@ -153,6 +176,7 @@ rust_bench(
     name = "compilation_bench",
     srcs = ["benches/compilation.rs"],
     compile_data = glob(["benches/test-data/*"]),
+    with_test = True,
     deps = [":embedders"] + DEPENDENCIES + DEV_DEPENDENCIES,
 )
 
@@ -171,12 +195,20 @@ rust_library(
     ] + DEPENDENCIES + DEV_DEPENDENCIES,
 )
 
+UNIVERSAL_CANISTER_TEST_DEPS = UNIVERSAL_CANISTER_RUNTIME_DEPS + [
+    "//rs/universal_canister/impl:universal_canister.module",
+]
+
+UNIVERSAL_CANISTER_TEST_ENV = UNIVERSAL_CANISTER_ENV | {
+    "UNIVERSAL_CANISTER_SERIALIZED_MODULE_PATH": "$(rootpath //rs/universal_canister/impl:universal_canister.module)",
+}
+
 rust_ic_bench(
     name = "stable_memory_bench",
     testonly = True,
     srcs = ["benches/stable_memory.rs"],
-    data = DATA,
-    env = ENV,
+    data = DATA + UNIVERSAL_CANISTER_TEST_DEPS,
+    env = ENV | UNIVERSAL_CANISTER_TEST_ENV,
     deps = [
         # Keep sorted.
         ":embedders_bench",
@@ -189,8 +221,8 @@ rust_ic_bench(
     testonly = True,
     srcs = ["benches/heap.rs"],
     compile_data = glob(["benches/test-data/*"]),
-    data = DATA,
-    env = ENV,
+    data = DATA + UNIVERSAL_CANISTER_TEST_DEPS,
+    env = ENV | UNIVERSAL_CANISTER_TEST_ENV,
     deps = [
         # Keep sorted.
         ":embedders_bench",

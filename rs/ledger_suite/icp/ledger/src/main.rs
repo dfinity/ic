@@ -10,8 +10,10 @@ use dfn_core::{
 use dfn_protobuf::protobuf;
 use ic_base_types::CanisterId;
 use ic_canister_log::{LogEntry, Sink};
+use ic_cdk::api::instruction_counter;
 use ic_icrc1::endpoints::{convert_transfer_error, StandardRecord};
-use ic_ledger_canister_core::runtime::total_memory_size_bytes;
+use ic_ledger_canister_core::ledger::LedgerContext;
+use ic_ledger_canister_core::runtime::heap_memory_size_bytes;
 use ic_ledger_canister_core::{
     archive::{Archive, ArchiveOptions},
     ledger::{
@@ -26,16 +28,17 @@ use ic_ledger_core::{
     tokens::{Tokens, DECIMAL_PLACES},
 };
 use ic_stable_structures::reader::{BufferedReader, Reader};
-#[cfg(feature = "upgrade-to-memory-manager")]
 use ic_stable_structures::writer::{BufferedWriter, Writer};
+#[cfg(feature = "icp-allowance-getter")]
+use icp_ledger::IcpAllowanceArgs;
 use icp_ledger::{
     max_blocks_per_request, protobuf, tokens_into_proto, AccountBalanceArgs, AccountIdBlob,
-    AccountIdentifier, ArchiveInfo, ArchivedBlocksRange, ArchivedEncodedBlocksRange, Archives,
-    BinaryAccountBalanceArgs, Block, BlockArg, BlockRes, CandidBlock, Decimals, FeatureFlags,
-    GetBlocksArgs, InitArgs, IterBlocksArgs, LedgerCanisterPayload, Memo, Name, Operation,
-    PaymentError, QueryBlocksResponse, QueryEncodedBlocksResponse, SendArgs, Subaccount, Symbol,
-    TipOfChainRes, TotalSupplyArgs, Transaction, TransferArgs, TransferError, TransferFee,
-    TransferFeeArgs, MEMO_SIZE_BYTES,
+    AccountIdentifier, AccountIdentifierByteBuf, ArchiveInfo, ArchivedBlocksRange,
+    ArchivedEncodedBlocksRange, Archives, BinaryAccountBalanceArgs, Block, BlockArg, BlockRes,
+    CandidBlock, Decimals, FeatureFlags, GetBlocksArgs, InitArgs, IterBlocksArgs,
+    LedgerCanisterPayload, Memo, Name, Operation, PaymentError, QueryBlocksResponse,
+    QueryEncodedBlocksResponse, SendArgs, Subaccount, Symbol, TipOfChainRes, TotalSupplyArgs,
+    Transaction, TransferArgs, TransferError, TransferFee, TransferFeeArgs, MEMO_SIZE_BYTES,
 };
 use icrc_ledger_types::icrc1::transfer::TransferError as Icrc1TransferError;
 use icrc_ledger_types::icrc2::allowance::{Allowance, AllowanceArgs};
@@ -53,7 +56,11 @@ use icrc_ledger_types::{
     icrc1::transfer::TransferArg,
     icrc21::{errors::Icrc21Error, requests::ConsentMessageRequest, responses::ConsentInfo},
 };
-use ledger_canister::{Ledger, LEDGER, MAX_MESSAGE_SIZE_BYTES, UPGRADES_MEMORY};
+use ledger_canister::{
+    balances_len, clear_stable_allowance_data, clear_stable_balances_data, is_ready, ledger_state,
+    panic_if_not_ready, set_ledger_state, Ledger, LedgerField, LedgerState, LEDGER, LEDGER_VERSION,
+    MAX_MESSAGE_SIZE_BYTES, UPGRADES_MEMORY,
+};
 use num_traits::cast::ToPrimitive;
 #[allow(unused_imports)]
 use on_wire::IntoWire;
@@ -106,8 +113,6 @@ fn init(
     token_symbol: Option<String>,
     token_name: Option<String>,
     feature_flags: Option<FeatureFlags>,
-    maximum_number_of_accounts: Option<usize>,
-    accounts_overflow_trim_quantity: Option<usize>,
 ) {
     print(format!(
         "[ledger] init(): minting account is {}",
@@ -124,8 +129,6 @@ fn init(
         token_symbol,
         token_name,
         feature_flags,
-        maximum_number_of_accounts,
-        accounts_overflow_trim_quantity,
     );
     match max_message_size_bytes {
         None => {
@@ -297,7 +300,7 @@ async fn icrc1_send(
             });
         }
         let ledger = LEDGER.read().unwrap();
-        let balance = ledger.balances.account_balance(&from);
+        let balance = ledger.balances().account_balance(&from);
         let min_burn_amount = ledger.transfer_fee.min(balance);
         if amount < min_burn_amount {
             return Err(CoreTransferError::BadBurn { min_burn_amount });
@@ -366,6 +369,7 @@ thread_local! {
     static NOTIFY_METHOD_CALLS: RefCell<u64> = const { RefCell::new(0) };
     static PRE_UPGRADE_INSTRUCTIONS_CONSUMED: RefCell<u64> = const { RefCell::new(0) };
     static POST_UPGRADE_INSTRUCTIONS_CONSUMED: RefCell<u64> = const { RefCell::new(0) };
+    static STABLE_UPGRADE_MIGRATION_STEPS: RefCell<u64> = const { RefCell::new(0) };
 }
 
 /// You can notify a canister that you have made a payment to it. The
@@ -584,7 +588,7 @@ fn block(block_index: BlockIndex) -> Option<Result<EncodedBlock, CanisterId>> {
 /// Get an account balance.
 /// If the account does not exist it will return 0 Tokens
 fn account_balance(account: AccountIdentifier) -> Tokens {
-    LEDGER.read().unwrap().balances.account_balance(&account)
+    LEDGER.read().unwrap().balances().account_balance(&account)
 }
 
 #[candid_method(query, rename = "icrc1_balance_of")]
@@ -644,12 +648,12 @@ fn icrc1_fee() -> Nat {
 
 /// The total number of Tokens not inside the minting canister
 fn total_supply() -> Tokens {
-    LEDGER.read().unwrap().balances.total_supply()
+    LEDGER.read().unwrap().balances().total_supply()
 }
 
 #[candid_method(query, rename = "icrc1_total_supply")]
 fn icrc1_total_supply() -> Nat {
-    Nat::from(LEDGER.read().unwrap().balances.total_supply().get_e8s())
+    Nat::from(LEDGER.read().unwrap().balances().total_supply().get_e8s())
 }
 
 #[candid_method(query, rename = "symbol")]
@@ -704,8 +708,6 @@ fn canister_init(arg: LedgerCanisterPayload) {
             arg.token_symbol,
             arg.token_name,
             arg.feature_flags,
-            arg.maximum_number_of_accounts,
-            arg.accounts_overflow_trim_quantity,
         ),
         LedgerCanisterPayload::Upgrade(_) => {
             trap_with("Cannot initialize the canister with an Upgrade argument. Please provide an Init argument.");
@@ -737,8 +739,6 @@ fn main() {
                         arg.token_symbol,
                         arg.token_name,
                         arg.feature_flags,
-                        arg.maximum_number_of_accounts,
-                        arg.accounts_overflow_trim_quantity,
                     ),
                     Err(old_err) =>
                     trap_with(&format!("Unable to decode init argument.\nDecode as new init returned the error {}\nDecode as old init returned the error {}", new_err, old_err))
@@ -750,6 +750,16 @@ fn main() {
 
 // We use 8MiB buffer
 const BUFFER_SIZE: usize = 8388608;
+
+#[cfg(not(feature = "low-upgrade-instruction-limits"))]
+const MAX_INSTRUCTIONS_PER_UPGRADE: u64 = 300_000_000_000;
+#[cfg(not(feature = "low-upgrade-instruction-limits"))]
+const MAX_INSTRUCTIONS_PER_TIMER_CALL: u64 = 1_900_000_000;
+
+#[cfg(feature = "low-upgrade-instruction-limits")]
+const MAX_INSTRUCTIONS_PER_UPGRADE: u64 = 5_000_000;
+#[cfg(feature = "low-upgrade-instruction-limits")]
+const MAX_INSTRUCTIONS_PER_TIMER_CALL: u64 = 500_000;
 
 fn post_upgrade(args: Option<LedgerCanisterPayload>) {
     let start = dfn_core::api::performance_counter(0);
@@ -765,24 +775,15 @@ fn post_upgrade(args: Option<LedgerCanisterPayload>) {
         Err(_) => false,
     };
 
-    let mut ledger = LEDGER.write().unwrap();
     let mut pre_upgrade_instructions_consumed = 0;
-    if !memory_manager_found {
-        // The ledger was written with dfn_core and has to be read with dfn_core in order
-        // to skip the first bytes that contain the length of the stable memory.
-        let mut stable_reader = dfn_core::stable::StableReader::new();
-        *ledger =
-            ciborium::de::from_reader(&mut stable_reader).expect("Decoding stable memory failed");
-        let mut pre_upgrade_instructions_counter_bytes = [0u8; 8];
-        pre_upgrade_instructions_consumed =
-            match stable_reader.read_exact(&mut pre_upgrade_instructions_counter_bytes) {
-                Ok(_) => u64::from_le_bytes(pre_upgrade_instructions_counter_bytes),
-                Err(_) => {
-                    // If upgrading from a version that didn't write the instructions counter to stable memory
-                    0u64
-                }
-            };
-    } else {
+    {
+        let mut ledger = LEDGER.write().unwrap();
+        if !memory_manager_found {
+            let msg =
+                "Cannot upgrade from scratch stable memory, please upgrade to memory manager first.";
+            print(msg);
+            panic!("{msg}");
+        }
         *ledger = UPGRADES_MEMORY.with_borrow(|bs| {
             let reader = Reader::new(bs, 0);
             let mut buffered_reader = BufferedReader::new(BUFFER_SIZE, reader);
@@ -800,10 +801,18 @@ fn post_upgrade(args: Option<LedgerCanisterPayload>) {
                 };
             ledger_state
         });
-    }
 
-    if let Some(args) = args {
-        match args {
+        let upgrade_from_version = ledger.ledger_version;
+        if ledger.ledger_version > LEDGER_VERSION {
+            panic!(
+                "Trying to downgrade from incompatible version {}. Current version is {}.",
+                ledger.ledger_version, LEDGER_VERSION
+            );
+        }
+        ledger.ledger_version = LEDGER_VERSION;
+
+        if let Some(args) = args {
+            match args {
             LedgerCanisterPayload::Init(_) => trap_with("Cannot upgrade the canister with an Init argument. Please provide an Upgrade argument."),
             LedgerCanisterPayload::Upgrade(upgrade_args) => {
                 if let Some(upgrade_args) = upgrade_args {
@@ -811,15 +820,36 @@ fn post_upgrade(args: Option<LedgerCanisterPayload>) {
                 }
         }
     }
+        }
+        set_certified_data(
+            &ledger
+                .blockchain
+                .last_hash
+                .map(|h| h.into_bytes())
+                .unwrap_or([0u8; 32]),
+        );
+        PRE_UPGRADE_INSTRUCTIONS_CONSUMED
+            .with(|n| *n.borrow_mut() = pre_upgrade_instructions_consumed);
+
+        if upgrade_from_version < 2 {
+            set_ledger_state(LedgerState::Migrating(LedgerField::Balances));
+            print(format!("Upgrading from version {upgrade_from_version} which does not store balances in stable structures, clearing stable balances data.").as_str());
+            clear_stable_balances_data();
+            ledger.copy_token_pool();
+        }
+        if upgrade_from_version == 0 {
+            set_ledger_state(LedgerState::Migrating(LedgerField::Allowances));
+            print("Upgrading from version 0 which does not use stable structures, clearing stable allowance data.");
+            clear_stable_allowance_data();
+            ledger.clear_arrivals();
+        }
     }
-    set_certified_data(
-        &ledger
-            .blockchain
-            .last_hash
-            .map(|h| h.into_bytes())
-            .unwrap_or([0u8; 32]),
-    );
-    PRE_UPGRADE_INSTRUCTIONS_CONSUMED.with(|n| *n.borrow_mut() = pre_upgrade_instructions_consumed);
+    if !is_ready() {
+        print("Migration started.");
+        migrate_next_part(
+            MAX_INSTRUCTIONS_PER_UPGRADE.saturating_sub(pre_upgrade_instructions_consumed),
+        );
+    }
 
     let end = dfn_core::api::performance_counter(0);
     let post_upgrade_instructions_consumed = end - start;
@@ -827,12 +857,65 @@ fn post_upgrade(args: Option<LedgerCanisterPayload>) {
         .with(|n| *n.borrow_mut() = post_upgrade_instructions_consumed);
 }
 
+fn migrate_next_part(instruction_limit: u64) {
+    let instructions_migration_start = instruction_counter();
+    STABLE_UPGRADE_MIGRATION_STEPS.with(|n| *n.borrow_mut() += 1);
+    let mut migrated_allowances = 0;
+    let mut migrated_expirations = 0;
+    let mut migrated_balances = 0;
+
+    print("Migrating part of the ledger state.");
+
+    let mut ledger = LEDGER.write().unwrap();
+    while instruction_counter() < instruction_limit {
+        let field = match ledger_state() {
+            LedgerState::Migrating(ledger_field) => ledger_field,
+            LedgerState::Ready => break,
+        };
+        match field {
+            LedgerField::Allowances => {
+                if ledger.migrate_one_allowance() {
+                    migrated_allowances += 1;
+                } else {
+                    set_ledger_state(LedgerState::Migrating(LedgerField::AllowancesExpirations));
+                }
+            }
+            LedgerField::AllowancesExpirations => {
+                if ledger.migrate_one_expiration() {
+                    migrated_expirations += 1;
+                } else {
+                    set_ledger_state(LedgerState::Migrating(LedgerField::Balances));
+                }
+            }
+            LedgerField::Balances => {
+                if ledger.migrate_one_balance() {
+                    migrated_balances += 1;
+                } else {
+                    set_ledger_state(LedgerState::Ready);
+                }
+            }
+        }
+    }
+    let instructions_migration = instruction_counter() - instructions_migration_start;
+    let msg = format!("Number of elements migrated: allowances: {migrated_allowances} expirations: {migrated_expirations} balances: {migrated_balances}. Migration step instructions: {instructions_migration}, total instructions used in message: {}, limit: {instruction_limit}." ,
+        instruction_counter());
+    if !is_ready() {
+        print(format!(
+            "Migration partially done. Scheduling the next part. {msg}"
+        ));
+        ic_cdk_timers::set_timer(Duration::from_secs(0), || {
+            migrate_next_part(MAX_INSTRUCTIONS_PER_TIMER_CALL)
+        });
+    } else {
+        print(format!("Migration completed! {msg}"));
+    }
+}
+
 #[export_name = "canister_post_upgrade"]
 fn post_upgrade_() {
     over_init(|CandidOne(args)| post_upgrade(args));
 }
 
-#[cfg(not(feature = "upgrade-to-memory-manager"))]
 #[export_name = "canister_pre_upgrade"]
 fn pre_upgrade() {
     let start = dfn_core::api::performance_counter(0);
@@ -844,29 +927,12 @@ fn pre_upgrade() {
         .read()
         // This should never happen, but it's better to be safe than sorry
         .unwrap_or_else(|poisoned| poisoned.into_inner());
-    let mut stable_writer = dfn_core::stable::StableWriter::new();
-    ciborium::ser::into_writer(&*ledger, &mut stable_writer)
-        .expect("failed to write ledger state to stable memory");
-    let end = dfn_core::api::performance_counter(0);
-    let instructions_consumed = end - start;
-    let counter_bytes: [u8; 8] = instructions_consumed.to_le_bytes();
-    stable_writer
-        .write_all(&counter_bytes)
-        .expect("failed to write instructions consumed to stable memory");
-}
-
-#[cfg(feature = "upgrade-to-memory-manager")]
-#[export_name = "canister_pre_upgrade"]
-fn pre_upgrade() {
-    let start = dfn_core::api::performance_counter(0);
-    setup::START.call_once(|| {
-        printer::hook();
-    });
-
-    let ledger = LEDGER
-        .read()
-        // This should never happen, but it's better to be safe than sorry
-        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    if !is_ready() {
+        // This means that migration did not complete and the correct state
+        // of the ledger is still in UPGRADES_MEMORY.
+        print!("Ledger not ready, skipping write to UPGRADES_MEMORY.");
+        return;
+    }
     UPGRADES_MEMORY.with_borrow_mut(|bs| {
         let writer = Writer::new(bs, 0);
         let mut buffered_writer = BufferedWriter::new(BUFFER_SIZE, writer);
@@ -900,6 +966,7 @@ impl LedgerAccess for Access {
 /// Canister endpoints
 #[export_name = "canister_update send_pb"]
 fn send_() {
+    panic_if_not_ready();
     over_async(
         protobuf,
         |SendArgs {
@@ -919,6 +986,7 @@ fn send_() {
 
 #[candid_method(update, rename = "send_dfx")]
 async fn send_dfx(arg: SendArgs) -> BlockIndex {
+    panic_if_not_ready();
     transfer_candid(TransferArgs::from(arg))
         .await
         .unwrap_or_else(|e| {
@@ -933,6 +1001,7 @@ async fn send_dfx(arg: SendArgs) -> BlockIndex {
 /// I STRONGLY recommend that you use "send_pb" instead.
 #[export_name = "canister_update send_dfx"]
 fn send_dfx_() {
+    panic_if_not_ready();
     over_async(candid_one, send_dfx);
 }
 
@@ -967,6 +1036,7 @@ fn notify_() {
 
 #[candid_method(update, rename = "transfer")]
 async fn transfer_candid(arg: TransferArgs) -> Result<BlockIndex, TransferError> {
+    panic_if_not_ready();
     let to_account = AccountIdentifier::from_address(arg.to).unwrap_or_else(|e| {
         trap_with(&format!("Invalid account identifier: {}", e));
     });
@@ -985,6 +1055,7 @@ async fn transfer_candid(arg: TransferArgs) -> Result<BlockIndex, TransferError>
 async fn icrc1_transfer(
     arg: TransferArg,
 ) -> Result<Nat, icrc_ledger_types::icrc1::transfer::TransferError> {
+    panic_if_not_ready();
     let from_account = Account {
         owner: Principal::from(caller()),
         subaccount: arg.from_subaccount,
@@ -1013,11 +1084,13 @@ async fn icrc1_transfer(
 
 #[export_name = "canister_update transfer"]
 fn transfer() {
+    panic_if_not_ready();
     over_async_may_reject(candid_one, |arg| async { Ok(transfer_candid(arg).await) })
 }
 
 #[export_name = "canister_update icrc1_transfer"]
 fn icrc1_transfer_candid() {
+    panic_if_not_ready();
     over_async_may_reject(candid_one, |arg: TransferArg| async {
         if !LEDGER.read().unwrap().can_send(&caller()) {
             return Err("Anonymous principal cannot hold tokens on the ledger.".to_string());
@@ -1029,6 +1102,7 @@ fn icrc1_transfer_candid() {
 
 #[candid_method(update, rename = "icrc2_transfer_from")]
 async fn icrc2_transfer_from(arg: TransferFromArgs) -> Result<Nat, TransferFromError> {
+    panic_if_not_ready();
     if !LEDGER.read().unwrap().feature_flags.icrc2 {
         trap_with("ICRC-2 features are not enabled on the ledger.");
     }
@@ -1060,6 +1134,7 @@ async fn icrc2_transfer_from(arg: TransferFromArgs) -> Result<Nat, TransferFromE
 
 #[export_name = "canister_update icrc2_transfer_from"]
 fn icrc2_transfer_from_candid() {
+    panic_if_not_ready();
     over_async_may_reject(candid_one, |arg: TransferFromArgs| async {
         if !LEDGER.read().unwrap().can_send(&caller()) {
             return Err("Anonymous principal cannot transfer tokens on the ledger.".to_string());
@@ -1143,11 +1218,16 @@ fn account_balance_() {
 }
 
 #[candid_method(query, rename = "account_balance")]
-fn account_balance_candid_(arg: BinaryAccountBalanceArgs) -> Tokens {
-    let account = AccountIdentifier::from_address(arg.account).unwrap_or_else(|e| {
-        trap_with(&format!("Invalid account identifier: {}", e));
-    });
-    account_balance(account)
+fn account_balance_candid_(arg: AccountIdentifierByteBuf) -> Tokens {
+    match BinaryAccountBalanceArgs::try_from(arg) {
+        Ok(arg) => {
+            let account = AccountIdentifier::from_address(arg.account).unwrap_or_else(|e| {
+                trap_with(&format!("Invalid account identifier: {}", e));
+            });
+            account_balance(account)
+        }
+        Err(_) => Tokens::ZERO,
+    }
 }
 
 #[export_name = "canister_query account_balance"]
@@ -1252,10 +1332,10 @@ fn iter_blocks_() {
 #[export_name = "canister_query get_blocks_pb"]
 fn get_blocks_() {
     over(protobuf, |GetBlocksArgs { start, length }| {
-        let length = std::cmp::min(length, max_blocks_per_request(&caller()));
+        let length = std::cmp::min(length, max_blocks_per_request(&caller()) as u64);
         let blockchain = &LEDGER.read().unwrap().blockchain;
         let start_offset = blockchain.num_archived_blocks();
-        icp_ledger::get_blocks(&blockchain.blocks, start_offset, start, length)
+        icp_ledger::get_blocks(&blockchain.blocks, start_offset, start, length as usize)
     });
 }
 
@@ -1267,7 +1347,7 @@ fn icrc1_supported_standards_candid() {
 #[candid_method(query, rename = "query_blocks")]
 fn query_blocks(GetBlocksArgs { start, length }: GetBlocksArgs) -> QueryBlocksResponse {
     let ledger = LEDGER.read().unwrap();
-    let locations = block_locations(&*ledger, start, length);
+    let locations = block_locations(&*ledger, start, length.min(usize::MAX as u64) as usize);
 
     let local_blocks =
         range_utils::take(&locations.local_blocks, max_blocks_per_request(&caller()));
@@ -1380,14 +1460,14 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
         "Size of the stable memory allocated by this canister measured in 64K Wasm pages.",
     )?;
     w.encode_gauge(
-        "ledger_stable_memory_bytes",
+        "stable_memory_bytes",
         (dfn_core::api::stable_memory_size_in_pages() * 64 * 1024) as f64,
-        "Size of the stable memory allocated by this canister.",
+        "Size of the stable memory allocated by this canister measured in bytes.",
     )?;
     w.encode_gauge(
-        "ledger_total_memory_bytes",
-        total_memory_size_bytes() as f64,
-        "Total amount of memory (heap, stable memory, etc) that has been allocated by this canister.",
+        "heap_memory_bytes",
+        heap_memory_size_bytes() as f64,
+        "Size of the heap memory allocated by this canister measured in bytes.",
     )?;
     w.encode_gauge(
         "ledger_transactions_by_hash_cache_entries",
@@ -1418,16 +1498,18 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
         ledger.blockchain.num_archived_blocks.saturating_add(ledger.blockchain.blocks.len() as u64) as f64,
         "Total number of blocks stored in the main memory, plus total number of blocks sent to the archive.",
     )?;
-    w.encode_gauge(
-        "ledger_balances_token_pool",
-        ledger.balances.token_pool.get_tokens() as f64,
-        "Total number of Tokens in the pool.",
-    )?;
-    w.encode_gauge(
-        "ledger_balance_store_entries",
-        ledger.balances.store.len() as f64,
-        "Total number of accounts in the balance store.",
-    )?;
+    if is_ready() {
+        w.encode_gauge(
+            "ledger_balances_token_pool",
+            ledger.balances().token_pool.get_tokens() as f64,
+            "Total number of Tokens in the pool.",
+        )?;
+        w.encode_gauge(
+            "ledger_balance_store_entries",
+            balances_len() as f64,
+            "Total number of accounts in the balance store.",
+        )?;
+    }
     w.encode_gauge(
         "ledger_most_recent_block_time_seconds",
         ledger.blockchain.last_timestamp.as_nanos_since_unix_epoch() as f64 / 1_000_000_000.0,
@@ -1443,11 +1525,13 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
         num_archives as f64,
         "Total number of archives.",
     )?;
-    w.encode_gauge(
-        "ledger_num_approvals",
-        ledger.approvals.get_num_approvals() as f64,
-        "Total number of approvals.",
-    )?;
+    if is_ready() {
+        w.encode_gauge(
+            "ledger_num_approvals",
+            ledger.approvals().get_num_approvals() as f64,
+            "Total number of approvals.",
+        )?;
+    }
     let pre_upgrade_instructions = PRE_UPGRADE_INSTRUCTIONS_CONSUMED.with(|n| *n.borrow());
     let post_upgrade_instructions = POST_UPGRADE_INSTRUCTIONS_CONSUMED.with(|n| *n.borrow());
     w.encode_gauge(
@@ -1465,6 +1549,11 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
         pre_upgrade_instructions.saturating_add(post_upgrade_instructions) as f64,
         "Total number of instructions consumed during the last upgrade.",
     )?;
+    w.encode_counter(
+        "ledger_stable_upgrade_migration_steps",
+        STABLE_UPGRADE_MIGRATION_STEPS.with(|n| *n.borrow()) as f64,
+        "Number of steps used to migrate data to stable structures.",
+    )?;
     Ok(())
 }
 
@@ -1478,7 +1567,7 @@ fn query_encoded_blocks(
     GetBlocksArgs { start, length }: GetBlocksArgs,
 ) -> QueryEncodedBlocksResponse {
     let ledger = LEDGER.read().unwrap();
-    let locations = block_locations(&*ledger, start, length);
+    let locations = block_locations(&*ledger, start, length.min(usize::MAX as u64) as usize);
 
     let local_blocks =
         range_utils::take(&locations.local_blocks, max_blocks_per_request(&caller()));
@@ -1516,6 +1605,7 @@ fn query_encoded_blocks_() {
 
 #[candid_method(update, rename = "icrc2_approve")]
 async fn icrc2_approve(arg: ApproveArgs) -> Result<Nat, ApproveError> {
+    panic_if_not_ready();
     if !LEDGER.read().unwrap().feature_flags.icrc2 {
         trap_with("ICRC-2 features are not enabled on the ledger.");
     }
@@ -1552,7 +1642,7 @@ async fn icrc2_approve(arg: ApproveArgs) -> Result<Nat, ApproveError> {
                 let current_allowance = LEDGER
                     .read()
                     .unwrap()
-                    .approvals
+                    .approvals()
                     .allowance(&from, &spender, now)
                     .amount;
                 return Err(ApproveError::AllowanceChanged {
@@ -1609,6 +1699,7 @@ async fn icrc2_approve(arg: ApproveArgs) -> Result<Nat, ApproveError> {
 
 #[export_name = "canister_update icrc2_approve"]
 fn icrc2_approve_candid() {
+    panic_if_not_ready();
     over_async_may_reject(candid_one, |arg: ApproveArgs| async {
         if !LEDGER.read().unwrap().can_send(&caller()) {
             return Err(
@@ -1620,25 +1711,41 @@ fn icrc2_approve_candid() {
     })
 }
 
-#[candid_method(query, rename = "icrc2_allowance")]
-fn icrc2_allowance(arg: AllowanceArgs) -> Allowance {
-    if !LEDGER.read().unwrap().feature_flags.icrc2 {
-        trap_with("ICRC-2 features are not enabled on the ledger.");
-    }
+fn get_allowance(from: AccountIdentifier, spender: AccountIdentifier) -> Allowance {
     let now = TimeStamp::from_nanos_since_unix_epoch(time_nanos());
     let ledger = LEDGER.read().unwrap();
-    let account = AccountIdentifier::from(arg.account);
-    let spender = AccountIdentifier::from(arg.spender);
-    let allowance = ledger.approvals.allowance(&account, &spender, now);
+    let allowance = ledger.approvals().allowance(&from, &spender, now);
     Allowance {
         allowance: Nat::from(allowance.amount.get_e8s()),
         expires_at: allowance.expires_at.map(|t| t.as_nanos_since_unix_epoch()),
     }
 }
 
+#[candid_method(query, rename = "icrc2_allowance")]
+fn icrc2_allowance(arg: AllowanceArgs) -> Allowance {
+    if !LEDGER.read().unwrap().feature_flags.icrc2 {
+        trap_with("ICRC-2 features are not enabled on the ledger.");
+    }
+    let from = AccountIdentifier::from(arg.account);
+    let spender = AccountIdentifier::from(arg.spender);
+    get_allowance(from, spender)
+}
+
 #[export_name = "canister_query icrc2_allowance"]
 fn icrc2_allowance_candid() {
     over(candid_one, icrc2_allowance)
+}
+
+#[cfg(feature = "icp-allowance-getter")]
+#[candid_method(query, rename = "allowance")]
+fn icp_allowance(arg: IcpAllowanceArgs) -> Allowance {
+    get_allowance(arg.account, arg.spender)
+}
+
+#[cfg(feature = "icp-allowance-getter")]
+#[export_name = "canister_query allowance"]
+fn allowance_candid() {
+    over(candid_one, icp_allowance)
 }
 
 #[candid_method(update, rename = "icrc21_canister_call_consent_message")]
@@ -1672,6 +1779,16 @@ fn icrc10_supported_standards() -> Vec<StandardRecord> {
 #[export_name = "canister_query icrc10_supported_standards"]
 fn icrc10_supported_standards_candid() {
     over(candid_one, |()| icrc10_supported_standards())
+}
+
+#[candid_method(query, rename = "is_ledger_ready")]
+fn is_ledger_ready() -> bool {
+    is_ready()
+}
+
+#[export_name = "canister_query is_ledger_ready"]
+fn is_ledger_ready_candid() {
+    over(candid_one, |()| is_ledger_ready())
 }
 
 candid::export_service!();

@@ -44,6 +44,7 @@ ic-cdk = { workspace = true }
 ic-cdk-macros = { workspace = true }
 ic-cdk-timers = { workspace = true }
 ic-ledger-core = { path = "../../ledger_suite/common/ledger_core" }
+ic-limits = { path = "../../limits" }
 ic-nervous-system-clients = { path = "../../nervous_system/clients" }
 ic-nervous-system-common = { path = "../../nervous_system/common" }
 ic-nervous-system-runtime = { path = "../../nervous_system/runtime" }
@@ -54,6 +55,7 @@ ic-nns-governance-init = { path = "../governance/init" }
 ic-sns-root = { path = "../../sns/root" }
 ic-sns-swap = { path = "../../sns/swap" }
 ic-stable-structures = { workspace = true }
+ic-test-utilities-metrics = { path = "../../test_utilities/metrics" }
 icp-ledger = { path = "../../ledger_suite/icp" }
 icrc-ledger-types = { path = "../../../packages/icrc-ledger-types" }
 lazy_static = { workspace = true }
@@ -77,7 +79,7 @@ ic-config = { path = "../../config" }
 ic-crypto = { path = "../../crypto" }
 ic-crypto-sha2 = { path = "../../crypto/sha2" }
 ic-error-types = { path = "../../types/error_types" }
-ic-management-canister-types = { path = "../../types/management_canister_types" }
+ic-management-canister-types-private = { path = "../../types/management_canister_types" }
 ic-nervous-system-common-test-keys = { path = "../../nervous_system/common/test_keys" }
 ic-nervous-system-root = { path = "../../nervous_system/root" }
 ic-nns-constants = { path = "../constants" }
@@ -97,9 +99,11 @@ ic-test-utilities = { path = "../../test_utilities" }
 ic-types = { path = "../../types/types" }
 ic-types-test-utils = { path = "../../types/types_test_utils" }
 ic-xrc-types = "1.0.0"
+itertools = { workspace = true }
 maplit = "1.0.2"
 on_wire = { path = "../../rust_canisters/on_wire" }
 phantom_newtype = { path = "../../phantom_newtype" }
+pocket-ic = { path = "../../../packages/pocket-ic" }
 rand = { workspace = true }
 registry-canister = { path = "../../registry/canister" }
 rustc-hash = "1.1.0"
@@ -114,3 +118,4 @@ xrc-mock = { path = "../../rosetta-api/tvl/xrc_mock" }
 ic-nervous-system-common-test-utils = { path = "../../nervous_system/common/test_utils" }
 ic-nervous-system-integration-tests = { path = "../../nervous_system/integration_tests" }
 ic-nns-test-utils-golden-nns-state = { path = "../test_utils/golden_nns_state" }
+pretty_assertions = { workspace = true }

@@ -37,6 +37,15 @@
       "candid": "../../../ledger_suite/icrc1/index-ng/index-ng.did",
       "shrink": false
     },
+    "btc_checker": {
+      "type": "custom",
+      "build": [
+        "bazel build //rs/bitcoin/checker:btc_checker_canister"
+      ],
+      "wasm": "../../../../bazel-bin/rs/bitcoin/checker/btc_checker_canister.wasm.gz",
+      "candid": "../../checker/btc_checker_canister.did",
+      "shrink": false
+    },
     "kyt": {
       "type": "custom",
       "build": [

@@ -1,15 +1,14 @@
 use ic00::CanisterSettingsArgsBuilder;
+use ic_base_types::PrincipalId;
 use ic_config::execution_environment;
 use ic_config::subnet_config::{SchedulerConfig, SubnetConfig};
-use ic_management_canister_types::CanisterInstallMode::{Install, Reinstall, Upgrade};
-use ic_management_canister_types::{
+use ic_management_canister_types_private::CanisterInstallMode::{Install, Reinstall, Upgrade};
+use ic_management_canister_types_private::{
     self as ic00, CanisterIdRecord, CanisterInstallMode, InstallCodeArgs, Method, Payload,
 };
 use ic_registry_subnet_type::SubnetType;
-use ic_state_machine_tests::{
-    IngressState, IngressStatus, PrincipalId, StateMachine, StateMachineBuilder,
-    StateMachineConfig, UserError,
-};
+use ic_state_machine_tests::{StateMachine, StateMachineBuilder, StateMachineConfig, UserError};
+use ic_types::ingress::{IngressState, IngressStatus};
 use ic_types::{ingress::WasmResult, CanisterId, Cycles};
 use ic_types_test_utils::ids::user_test_id;
 

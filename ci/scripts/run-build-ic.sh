@@ -43,7 +43,7 @@ elif [[ "${RUN_ON_DIFF_ONLY:-}" == "true" ]]; then
             exit 1
         fi
         echo "No changes that require building IC-OS, binaries or canisters."
-        touch build-ic.tar
+        tar -cf build-ic.tar -T /dev/null # create empty tar
         exit 0
     fi
     ci/container/build-ic.sh "${ARGS[@]}"

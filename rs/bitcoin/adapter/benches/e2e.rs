@@ -1,11 +1,8 @@
-use bitcoin::{Block, BlockHash, BlockHeader, Network};
-use criterion::{criterion_group, criterion_main, Criterion};
-use ic_btc_adapter::config::IncomingSource;
-use ic_btc_adapter::start_grpc_server;
-use ic_btc_adapter::AdapterState;
-use ic_btc_adapter::{
-    config::Config, BlockchainManagerRequest, BlockchainState, GetSuccessorsHandler,
+use bitcoin::{
+    block::Header as BlockHeader, blockdata::constants::genesis_block, BlockHash, Network,
 };
+use criterion::{criterion_group, criterion_main, Criterion};
+use ic_btc_adapter::{start_server, Config, IncomingSource};
 use ic_btc_adapter_client::setup_bitcoin_adapter_clients;
 use ic_btc_adapter_test_utils::generate_headers;
 use ic_btc_replica_types::BitcoinAdapterRequestWrapper;
@@ -18,9 +15,7 @@ use ic_interfaces_adapter_client::RpcAdapterClient;
 use ic_logger::replica_logger::no_op_logger;
 use ic_metrics::MetricsRegistry;
 use std::path::Path;
-use std::sync::Arc;
 use tempfile::Builder;
-use tokio::sync::{mpsc::channel, Mutex};
 
 type BitcoinAdapterClient = Box<
     dyn RpcAdapterClient<BitcoinAdapterRequestWrapper, Response = BitcoinAdapterResponseWrapper>,
@@ -42,7 +37,6 @@ async fn start_client(uds_path: &Path) -> BitcoinAdapterClient {
 }
 
 fn prepare(
-    blockchain_state: &mut BlockchainState,
     processed_block_hashes: &mut Vec<BlockHash>,
     genesis: BlockHeader,
     forks_num: usize,
@@ -64,16 +58,6 @@ fn prepare(
                 .map(|h| h.block_hash())
                 .collect::<Vec<_>>(),
         );
-        blockchain_state.add_headers(&fork);
-        for header in fork {
-            let block = Block {
-                header,
-                txdata: vec![],
-            };
-            blockchain_state
-                .add_block(block)
-                .expect("Failed to add block");
-        }
     }
 }
 
@@ -83,20 +67,10 @@ fn e2e(criterion: &mut Criterion) {
         ..Default::default()
     };
 
-    let mut blockchain_state = BlockchainState::new(&config, &MetricsRegistry::default());
     let mut processed_block_hashes = vec![];
-    let genesis = *blockchain_state.genesis();
+    let genesis = genesis_block(config.network).header;
 
-    prepare(
-        &mut blockchain_state,
-        &mut processed_block_hashes,
-        genesis,
-        4,
-        2000,
-        1975,
-    );
-
-    let blockchain_state = Arc::new(Mutex::new(blockchain_state));
+    prepare(&mut processed_block_hashes, genesis, 4, 2000, 1975);
 
     let rt = tokio::runtime::Runtime::new().unwrap();
 
@@ -105,26 +79,12 @@ fn e2e(criterion: &mut Criterion) {
             Ok(rt.block_on(async {
                 config.incoming_source = IncomingSource::Path(uds_path.to_path_buf());
 
-                let (blockchain_manager_tx, _) = channel::<BlockchainManagerRequest>(10);
-                let handler = GetSuccessorsHandler::new(
-                    &config,
-                    blockchain_state.clone(),
-                    blockchain_manager_tx,
+                start_server(
+                    &no_op_logger(),
                     &MetricsRegistry::default(),
-                );
-
-                let adapter_state = AdapterState::new(config.idle_seconds);
-
-                let (transaction_manager_tx, _) = channel(100);
-                start_grpc_server(
+                    rt.handle(),
                     config.clone(),
-                    no_op_logger(),
-                    adapter_state.clone(),
-                    handler,
-                    transaction_manager_tx,
-                    &MetricsRegistry::default(),
                 );
-
                 start_client(uds_path).await
             }))
         })

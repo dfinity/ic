@@ -5,23 +5,12 @@ inputs:
     required: true
     default: 'test'
   BAZEL_TARGETS:
-    required: false
-    default: '//...'
-  BAZEL_CI_CONFIG:
-    required: false
-    default: '--config=ci'
-  BAZEL_EXTRA_ARGS:
-    required: false
-    default: '--keep_going'
-  BAZEL_EXTRA_ARGS_RULES:
-    required: false
-    default: ''
-  BAZEL_STARTUP_ARGS:
-    required: false
-    default: '--output_base=/var/tmp/bazel-output/'
-  BUILDEVENT_APIKEY:
     required: true
-  SSH_PRIVATE_KEY:
+  BUILDEVENT_APIKEY:
+    required: false
+  SSH_PRIVATE_KEY_BACKUP_POD:
+    required: false
+  GPG_PASSPHRASE:
     required: false
 
 runs:
@@ -33,21 +22,23 @@ runs:
         run: |
           set +e # manual error handling to ensure we can run some post-build commands
 
-          # temporarily set permissions again until we can figure out issue
+          # freshly deployed k8s machines require ownership correctly set
           if [ -e /cache ]; then
-            sudo chown -RL 1001:1001 /cache
+            sudo find /cache -not -user 1001 -or -not -group 1001 -exec chown 1001:1001 {} +
           fi
 
-          if [ -n "$SSH_PRIVATE_KEY" ]; then
+          if [ -n "$SSH_PRIVATE_KEY_BACKUP_POD" ]; then
             # The following adds the SSH private key to the ssh-agent such that CI can SSH into the backup pod.
-            test -z "${SSH_AUTH_SOCK:-}" && { eval "$(ssh-agent -s)"; ssh-add - <<< "${SSH_PRIVATE_KEY}"; }
+            test -z "${SSH_AUTH_SOCK:-}" && { eval "$(ssh-agent -s)"; ssh-add - <<< "${SSH_PRIVATE_KEY_BACKUP_POD}"; }
             rm -rf ~/.ssh
             mkdir -p ~/.ssh
             chmod 0700 ~/.ssh
             echo -e "Host *\nUser github-runner\n" > ~/.ssh/config
           fi
 
-          ${GITHUB_WORKSPACE}/ci/bazel-scripts/main.sh
+          # unset honeycomb api key but use it later for exporter
+          # TODO: remove exporter when users can use superset
+          env -u BUILDEVENT_APIKEY ${GITHUB_WORKSPACE}/ci/bazel-scripts/main.sh
           BAZEL_EXIT_CODE="$?"
 
           if [ -n "$BUILDEVENT_APIKEY" ] && [ -f ./bazel-bep.pb ]; then
@@ -59,17 +50,25 @@ runs:
                 cat "$exportout"
               fi
               rm "$exportout"
+              echo "BEP events exported to honeycomb!"
           fi
+          if [ -n "$GPG_PASSPHRASE" ] && [ -f ./bazel-bep.pb ]; then
+              gpg --symmetric --cipher-algo AES256 -o bazel-bep.pb.gpg \
+                  --passphrase "$GPG_PASSPHRASE" --batch --yes bazel-bep.pb
+          fi
+          rm -f bazel-bep.pb
+
+          # output node name to gihub step summary
+          [ -n "${NODE_NAME:-}" ] && echo "Run on node: $NODE_NAME" >>$GITHUB_STEP_SUMMARY
 
           exit "$BAZEL_EXIT_CODE"
         env:
           BAZEL_COMMAND: ${{ inputs.BAZEL_COMMAND }}
           BAZEL_TARGETS: ${{ inputs.BAZEL_TARGETS }}
-          BAZEL_CI_CONFIG: ${{ inputs.BAZEL_CI_CONFIG }}
-          BAZEL_EXTRA_ARGS: "${{ inputs.BAZEL_EXTRA_ARGS }} ${{ inputs.BAZEL_EXTRA_ARGS_RULES }}"
-          BAZEL_STARTUP_ARGS: ${{ inputs.BAZEL_STARTUP_ARGS }}
-          CI_PULL_REQUEST_TARGET_BRANCH_NAME: ${{ github.event.pull_request.base.ref }}
-          MERGE_BASE_SHA: ${{ github.event.pull_request.base.sha }}
           BRANCH_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           BUILDEVENT_APIKEY: ${{ inputs.BUILDEVENT_APIKEY }}
-          SSH_PRIVATE_KEY: ${{ inputs.SSH_PRIVATE_KEY }}
+          CI_EVENT_NAME: ${{ github.event_name }}
+          CI_JOB_URL: "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          MERGE_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          SSH_PRIVATE_KEY_BACKUP_POD: ${{ inputs.SSH_PRIVATE_KEY_BACKUP_POD }}
+          GPG_PASSPHRASE: ${{ inputs.GPG_PASSPHRASE }}

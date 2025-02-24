@@ -23,6 +23,10 @@
     "local": "qsgjb-riaaa-aaaaa-aaaga-cai",
     "mainnet": "qsgjb-riaaa-aaaaa-aaaga-cai"
   },
+  "icp-ledger-archive-2": {
+    "local": "q4eej-kyaaa-aaaaa-aaaha-cai",
+    "mainnet": "q4eej-kyaaa-aaaaa-aaaha-cai"
+  },
   "root": {
     "local": "r7inp-6aaaa-aaaaa-aaabq-cai",
     "mainnet": "r7inp-6aaaa-aaaaa-aaabq-cai"

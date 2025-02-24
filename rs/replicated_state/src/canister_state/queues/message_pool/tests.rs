@@ -70,6 +70,9 @@ fn test_insert() {
             (time(50 + REQUEST_LIFETIME.as_secs() as u32), id5)
         },
         pool.deadline_queue
+            .iter()
+            .map(|((t, id), _)| (*t, *id))
+            .collect()
     );
 
     // All best-effort messages should be in the load shedding queue.
@@ -102,7 +105,7 @@ fn test_insert_outbound_request_deadline_rounding() {
 
     pool.insert_outbound_request(request(NO_DEADLINE).into(), current_time);
 
-    assert_eq!(expected_deadline, pool.deadline_queue.first().unwrap().0);
+    assert_eq!(expected_deadline, pool.deadline_queue.min_key().unwrap().0);
 }
 
 #[test]
@@ -233,6 +236,9 @@ fn test_expiration() {
             (time(40 + REQUEST_LIFETIME.as_secs() as u32), id4)
         },
         pool.deadline_queue
+            .iter()
+            .map(|((t, id), _)| (*t, *id))
+            .collect()
     );
     // There are expiring messages.
     assert!(pool.has_expired_deadlines(t_max));
@@ -630,43 +636,31 @@ fn test_is_outbound_guaranteed_request() {
 
 #[test]
 fn test_reference_roundtrip_encode() {
-    fn queue_item(id: Id) -> pb_queues::canister_queue::QueueItem {
-        pb_queues::canister_queue::QueueItem {
-            r: Some(pb_queues::canister_queue::queue_item::R::Reference(id.0)),
-        }
-    }
-
     for kind in [Kind::Request, Kind::Response] {
         for class in [Class::GuaranteedResponse, Class::BestEffort] {
             // Inbound.
-            let id = Id::from(InboundReference::new(class, kind, 13));
-            let item = queue_item(id);
-            // Can be converted to an `InboundReference`.
-            let reference = InboundReference::try_from(item).unwrap();
-            assert_eq!(reference.0, id.0);
-            assert_eq!(id, reference.into());
+            let reference = InboundReference::new(class, kind, 13);
+            let encoded = u64::from(&reference);
+            // Can be converted back to the same `InboundReference`.
+            let decoded = InboundReference::try_from(encoded).unwrap();
+            assert_eq!(reference, decoded);
             // Fails to convert to an `OutboundReference`.
             assert_matches!(
-                OutboundReference::try_from(item),
-                Err(ProxyDecodeError::Other(msg)) if msg == "Not an outbound reference"
+                OutboundReference::try_from(encoded),
+                Err(ProxyDecodeError::Other(msg)) if msg.contains("Mismatched reference context")
             );
-            // Roundtrip encode produces the same item.
-            assert_eq!(item, (&reference).into());
 
             // Outbound.
-            let id = Id::from(OutboundReference::new(class, kind, 13));
-            let item = queue_item(id);
+            let reference = OutboundReference::new(class, kind, 13);
+            let encoded = u64::from(&reference);
             // Fails to convert to an `InboundReference`.
             assert_matches!(
-                InboundReference::try_from(item),
-                Err(ProxyDecodeError::Other(msg)) if msg == "Not an inbound reference"
+                InboundReference::try_from(encoded),
+                Err(ProxyDecodeError::Other(msg)) if msg.contains("Mismatched reference context")
             );
-            // Can be converted to an `OutboundReference`.
-            let reference = OutboundReference::try_from(item).unwrap();
-            assert_eq!(reference.0, id.0);
-            assert_eq!(id, reference.into());
-            // Roundtrip encode produces the same item.
-            assert_eq!(item, (&reference).into());
+            // Can be converted back to the same `OutboundReference`.
+            let decoded = OutboundReference::try_from(encoded).unwrap();
+            assert_eq!(reference, decoded);
         }
     }
 }
@@ -1040,9 +1034,12 @@ fn time(seconds_since_unix_epoch: u32) -> CoarseTime {
     CoarseTime::from_secs_since_unix_epoch(seconds_since_unix_epoch)
 }
 
-fn assert_exact_messages_in_queue<T>(messages: BTreeSet<Id>, queue: &BTreeSet<(T, Id)>) {
+fn assert_exact_messages_in_queue<T>(messages: BTreeSet<Id>, queue: &MutableIntMap<(T, Id), ()>)
+where
+    (T, Id): AsInt,
+{
     assert_eq!(messages.len(), queue.len());
-    assert_eq!(messages, queue.iter().map(|(_, id)| *id).collect())
+    assert_eq!(messages, queue.iter().map(|((_, id), ())| *id).collect())
 }
 
 /// Generates an `InboundReference` for a request of the given class.

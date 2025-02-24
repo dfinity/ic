@@ -37,9 +37,9 @@ const MAX_INSTRUCTIONS_PER_SLICE: NumInstructions = NumInstructions::new(2 * B);
 // to enter and exit the Wasm engine.
 const INSTRUCTION_OVERHEAD_PER_EXECUTION: NumInstructions = NumInstructions::new(2 * M);
 
-// We assume 1 cycles unit ≅ 1 CPU cycle, so on a 2 GHz CPU it takes about 2ms
+// We assume 1 cycles unit ≅ 1 CPU cycle, so on a 2 GHz CPU it takes about 4ms
 // to prepare execution of a canister.
-const INSTRUCTION_OVERHEAD_PER_CANISTER: NumInstructions = NumInstructions::new(4 * M);
+const INSTRUCTION_OVERHEAD_PER_CANISTER: NumInstructions = NumInstructions::new(8 * M);
 
 // Metrics show that finalization can take 13ms when there were 5000 canisters
 // in a subnet. This comes out to about 3us per canister which comes out to
@@ -126,6 +126,12 @@ pub const ECDSA_SIGNATURE_FEE: Cycles = Cycles::new(10 * B as u128);
 /// cover the cost of the subnet.
 pub const SCHNORR_SIGNATURE_FEE: Cycles = Cycles::new(10 * B as u128);
 
+/// 10B cycles corresponds to 1 SDR cent. Assuming we can create 1 signature per
+/// second, that would come to  26k SDR per month if we spent the whole time
+/// creating key derivations. At 13 nodes and 2k SDR per node per month this would
+/// cover the cost of the subnet.
+pub const VETKD_FEE: Cycles = Cycles::new(10 * B as u128);
+
 /// Default subnet size which is used to scale cycles cost according to a subnet replication factor.
 ///
 /// All initial costs were calculated with the assumption that a subnet had 13 replicas.
@@ -134,7 +140,6 @@ const DEFAULT_REFERENCE_SUBNET_SIZE: usize = 13;
 
 /// Costs for each newly created dirty page in stable memory.
 const DEFAULT_DIRTY_PAGE_OVERHEAD: NumInstructions = NumInstructions::new(1_000);
-const SYSTEM_SUBNET_DIRTY_PAGE_OVERHEAD: NumInstructions = NumInstructions::new(0);
 
 /// Accumulated priority reset interval, rounds.
 ///
@@ -159,6 +164,12 @@ pub const DEFAULT_UPLOAD_CHUNK_INSTRUCTIONS: NumInstructions = NumInstructions::
 /// The cost is based on the benchmarks: rs/execution_environment/benches/management_canister/
 pub const DEFAULT_CANISTERS_SNAPSHOT_BASELINE_INSTRUCTIONS: NumInstructions =
     NumInstructions::new(2_000_000_000);
+
+/// The cycle cost overhead of executing canister instructions when running in Wasm64 mode.
+/// This overhead is a multiplier over the cost of executing the same instructions
+/// in Wasm32 mode. The overhead comes from the bound checks performed in Wasm64 mode
+/// as well as larger heap sizes that lead to larger application working sets.
+pub const WASM64_INSTRUCTION_COST_OVERHEAD: u128 = 2;
 
 /// The per subnet type configuration for the scheduler component
 #[derive(Clone, Deserialize, Serialize)]
@@ -329,7 +340,7 @@ impl SchedulerConfig {
             // This limit should be high enough (1000T) to effectively disable
             // rate-limiting for the system subnets.
             install_code_rate_limit: NumInstructions::from(1_000_000_000_000_000),
-            dirty_page_overhead: SYSTEM_SUBNET_DIRTY_PAGE_OVERHEAD,
+            dirty_page_overhead: DEFAULT_DIRTY_PAGE_OVERHEAD,
             accumulated_priority_reset_interval: ACCUMULATED_PRIORITY_RESET_INTERVAL,
             upload_wasm_chunk_instructions: NumInstructions::from(0),
             canister_snapshot_baseline_instructions: NumInstructions::from(0),
@@ -366,6 +377,10 @@ pub struct CyclesAccountManagerConfig {
     /// than 1 cycles per instruction.
     pub ten_update_instructions_execution_fee: Cycles,
 
+    /// Fee for every 10 instructions executed when executing update type
+    /// messages on a Wasm64 canister.
+    pub ten_update_instructions_execution_fee_wasm64: Cycles,
+
     /// Fee for every inter-canister call performed. This includes the fee for
     /// sending the request and receiving the response.
     pub xnet_call_fee: Cycles,
@@ -397,6 +412,9 @@ pub struct CyclesAccountManagerConfig {
     /// Amount to charge for a Schnorr signature.
     pub schnorr_signature_fee: Cycles,
 
+    /// Amount to charge for vet KD.
+    pub vetkd_fee: Cycles,
+
     /// A linear factor of the baseline cost to be charged for HTTP requests per node.
     /// The cost of an HTTP request is represented by a quadratic function due to the communication complexity of the subnet.
     pub http_request_linear_baseline_fee: Cycles,
@@ -421,23 +439,22 @@ pub struct CyclesAccountManagerConfig {
 
 impl CyclesAccountManagerConfig {
     pub fn application_subnet() -> Self {
-        Self {
-            max_storage_reservation_period: Duration::from_secs(300_000_000),
-            ..Self::verified_application_subnet()
-        }
-    }
-
-    pub fn verified_application_subnet() -> Self {
+        let ten_update_instructions_execution_fee_in_cycles = 10;
         Self {
             reference_subnet_size: DEFAULT_REFERENCE_SUBNET_SIZE,
-            canister_creation_fee: Cycles::new(100_000_000_000),
+            canister_creation_fee: Cycles::new(500_000_000_000),
             compute_percent_allocated_per_second_fee: Cycles::new(10_000_000),
 
             // The following fields are set based on a thought experiment where
             // we estimated how many resources a representative benchmark on a
             // verified subnet is using.
-            update_message_execution_fee: Cycles::new(590_000),
-            ten_update_instructions_execution_fee: Cycles::new(4),
+            update_message_execution_fee: Cycles::new(5_000_000),
+            ten_update_instructions_execution_fee: Cycles::new(
+                ten_update_instructions_execution_fee_in_cycles,
+            ),
+            ten_update_instructions_execution_fee_wasm64: Cycles::new(
+                WASM64_INSTRUCTION_COST_OVERHEAD * ten_update_instructions_execution_fee_in_cycles,
+            ),
             xnet_call_fee: Cycles::new(260_000),
             xnet_byte_transmission_fee: Cycles::new(1_000),
             ingress_message_reception_fee: Cycles::new(1_200_000),
@@ -447,15 +464,18 @@ impl CyclesAccountManagerConfig {
             duration_between_allocation_charges: Duration::from_secs(10),
             ecdsa_signature_fee: ECDSA_SIGNATURE_FEE,
             schnorr_signature_fee: SCHNORR_SIGNATURE_FEE,
+            vetkd_fee: VETKD_FEE,
             http_request_linear_baseline_fee: Cycles::new(3_000_000),
             http_request_quadratic_baseline_fee: Cycles::new(60_000),
             http_request_per_byte_fee: Cycles::new(400),
             http_response_per_byte_fee: Cycles::new(800),
-            // This effectively disables the storage reservation mechanism on
-            // verified application subnets.
-            max_storage_reservation_period: Duration::from_secs(0),
+            max_storage_reservation_period: Duration::from_secs(300_000_000),
             default_reserved_balance_limit: DEFAULT_RESERVED_BALANCE_LIMIT,
         }
+    }
+
+    pub fn verified_application_subnet() -> Self {
+        Self::application_subnet()
     }
 
     /// All processing is free on system subnets
@@ -466,6 +486,7 @@ impl CyclesAccountManagerConfig {
             compute_percent_allocated_per_second_fee: Cycles::new(0),
             update_message_execution_fee: Cycles::new(0),
             ten_update_instructions_execution_fee: Cycles::new(0),
+            ten_update_instructions_execution_fee_wasm64: Cycles::new(0),
             xnet_call_fee: Cycles::new(0),
             xnet_byte_transmission_fee: Cycles::new(0),
             ingress_message_reception_fee: Cycles::new(0),
@@ -482,6 +503,7 @@ impl CyclesAccountManagerConfig {
             // - non-zero cost if called from any other subnet which is not NNS subnet
             ecdsa_signature_fee: ECDSA_SIGNATURE_FEE,
             schnorr_signature_fee: SCHNORR_SIGNATURE_FEE,
+            vetkd_fee: VETKD_FEE,
             http_request_linear_baseline_fee: Cycles::new(0),
             http_request_quadratic_baseline_fee: Cycles::new(0),
             http_request_per_byte_fee: Cycles::new(0),

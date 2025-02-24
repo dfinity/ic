@@ -185,7 +185,7 @@ fn test_valid_transitions() {
                     message_id.clone(),
                     next_state.clone(),
                 );
-                assert_eq!(state.get_ingress_status(&message_id), next_state);
+                assert_eq!(state.get_ingress_status(&message_id), &next_state);
             }
         }
     })

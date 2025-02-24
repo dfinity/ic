@@ -15,32 +15,30 @@ message DkgMessage {
 message DkgPayload {
   oneof val {
     Summary summary = 1;
-    Dealings dealings = 2;
+    DkgDataPayload data_payload = 3;
   }
+
+  reserved 2;
+  reserved "dealings";
 }
 
-message Dealings {
+message DkgDataPayload {
   repeated DkgMessage dealings = 1;
   uint64 summary_height = 2;
 }
 
 message Summary {
-  reserved 8;
+  reserved 5, 6, 8;
   reserved "transcripts_for_new_subnets";
   uint64 registry_version = 1;
   uint64 interval_length = 2;
   uint64 next_interval_length = 3;
   uint64 height = 4;
-  repeated TaggedNiDkgTranscript current_transcripts = 5;
-  repeated TaggedNiDkgTranscript next_transcripts = 6;
   repeated NiDkgConfig configs = 7;
   repeated InitialDkgAttemptCount initial_dkg_attempts = 9;
-  repeated CallbackIdedNiDkgTranscript transcripts_for_new_subnets_with_callback_ids = 10;
-}
-
-message TaggedNiDkgTranscript {
-  NiDkgTranscript transcript = 1;
-  NiDkgTag tag = 2;
+  repeated CallbackIdedNiDkgTranscript transcripts_for_remote_subnets = 10;
+  repeated NiDkgTranscript current_transcripts = 11;
+  repeated NiDkgTranscript next_transcripts = 12;
 }
 
 message CallbackIdedNiDkgTranscript {

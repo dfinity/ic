@@ -1,4 +1,4 @@
-#![deny(missing_docs)]
+#![cfg_attr(not(test), deny(missing_docs))]
 //! The consensus crate provides implementations of the consensus algorithm of
 //! the internet computer block chain, a component responsible for executing
 //! distributed key generation using said block chain to hold the state of the
@@ -7,5 +7,7 @@
 
 pub mod certification;
 pub mod consensus;
-pub mod dkg;
+pub mod cup_utils;
 pub mod idkg;
+
+pub use cup_utils::{make_registry_cup, make_registry_cup_from_cup_contents};

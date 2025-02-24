@@ -66,7 +66,7 @@ impl ShareAggregator {
             &self.log,
             self.membership.as_ref(),
             self.crypto.as_aggregate(),
-            Box::new(|_| dkg_id),
+            Box::new(|_| dkg_id.clone()),
             shares,
         ))
     }
@@ -131,7 +131,7 @@ impl ShareAggregator {
 
     /// Attempt to construct `CatchUpPackage`s.
     fn aggregate_catch_up_package_shares(&self, pool: &PoolReader<'_>) -> Vec<ConsensusMessage> {
-        let mut start_block = pool.get_highest_summary_block();
+        let mut start_block = pool.get_highest_finalized_summary_block();
         let current_cup_height = pool.get_catch_up_height();
 
         while start_block.height() > current_cup_height {
@@ -153,7 +153,7 @@ impl ShareAggregator {
                 &self.log,
                 self.membership.as_ref(),
                 self.crypto.as_aggregate(),
-                Box::new(|_| dkg_id),
+                Box::new(|_| dkg_id.clone()),
                 shares,
             );
             if !result.is_empty() {

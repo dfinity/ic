@@ -35,15 +35,15 @@ pub struct RecoveryToolArgs {
     pub nns_url: Url,
 
     /// replica version of ic-admin binary
-    #[clap(long, parse(try_from_str=::std::convert::TryFrom::try_from))]
+    #[clap(long)]
     pub replica_version: Option<ReplicaVersion>,
 
     /// The directory to perform recovery in
-    #[clap(long, parse(from_os_str), default_value = "/var/lib/ic/data")]
+    #[clap(long, default_value = "/var/lib/ic/data")]
     pub dir: PathBuf,
 
     /// The path to a private key to be considered for SSH connections
-    #[clap(long, parse(from_os_str))]
+    #[clap(long)]
     pub key_file: Option<PathBuf>,
 
     /// Flag to enter test mode
@@ -53,6 +53,12 @@ pub struct RecoveryToolArgs {
     /// Flag to make the tool non interactive. No input from the user is requested.
     #[clap(long)]
     pub skip_prompts: bool,
+
+    /// Flag to indicate we're running recovery directly on a node, and should use
+    /// the locally available binaries. If this option is not set, missing binaries
+    /// will be downloaded.
+    #[clap(long)]
+    pub use_local_binaries: bool,
 
     #[clap(subcommand)]
     pub subcmd: Option<SubCommand>,

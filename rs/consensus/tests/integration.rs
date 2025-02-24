@@ -5,7 +5,7 @@ use crate::framework::{
     malicious, setup_subnet, ComponentModifier, ConsensusDependencies, ConsensusInstance,
     ConsensusRunner, ConsensusRunnerConfig, StopPredicate,
 };
-use framework::test_threshold_key_ids;
+use framework::test_master_public_key_ids;
 use ic_consensus_utils::pool_reader::PoolReader;
 use ic_interfaces::consensus_pool::ConsensusPool;
 use ic_interfaces::messaging::MessageRouting;
@@ -330,12 +330,12 @@ fn run_n_rounds_and_check_pubkeys(
         };
 
         let mut found_keys = 0;
-        for key_id in test_threshold_key_ids() {
-            if batch.idkg_subnet_public_keys.contains_key(&key_id) {
+        for key_id in test_master_public_key_ids() {
+            if batch.chain_key_subnet_public_keys.contains_key(&key_id) {
                 found_keys += 1
             }
         }
-        if found_keys == test_threshold_key_ids().len() {
+        if found_keys == test_master_public_key_ids().len() {
             *pubkey_exists_clone.borrow_mut() = true;
         }
         *pubkey_exists_clone.borrow()

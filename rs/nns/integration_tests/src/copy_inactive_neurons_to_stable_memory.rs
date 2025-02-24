@@ -40,7 +40,6 @@ fn test_copy_inactive_neurons_to_stable_memory() {
         GOVERNANCE_CANISTER_ID, // Target, i.e. the canister that we want to upgrade.
         new_wasm_content,       // The new code that we want the canister to start running.
         module_arg,
-        true,
     );
     println!("Done proposing governance upgrade: {:?}", proposal_id);
 

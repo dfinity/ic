@@ -5,14 +5,18 @@ use ic_ledger_canister_core::blockchain::Blockchain;
 use ic_ledger_canister_core::ledger::{
     self as core_ledger, LedgerContext, LedgerData, TransactionInfo,
 };
+use ic_ledger_core::balances::BalancesStore;
 use ic_ledger_core::{
-    approvals::AllowanceTable, approvals::HeapAllowancesData, balances::Balances,
-    block::EncodedBlock, timestamp::TimeStamp,
+    approvals::{Allowance, AllowanceTable, AllowancesData},
+    balances::Balances,
+    block::EncodedBlock,
+    timestamp::TimeStamp,
 };
 use ic_ledger_core::{block::BlockIndex, tokens::Tokens};
 use ic_ledger_hash_of::HashOf;
 use ic_stable_structures::memory_manager::{MemoryId, MemoryManager, VirtualMemory};
-use ic_stable_structures::DefaultMemoryImpl;
+use ic_stable_structures::{storable::Bound, Storable};
+use ic_stable_structures::{DefaultMemoryImpl, StableBTreeMap};
 use icp_ledger::{
     AccountIdentifier, Block, FeatureFlags, LedgerAllowances, LedgerBalances, Memo, Operation,
     PaymentError, Transaction, TransferError, TransferFee, UpgradeArgs, DEFAULT_TRANSFER_FEE,
@@ -20,6 +24,7 @@ use icp_ledger::{
 use icrc_ledger_types::icrc1::account::Account;
 use intmap::IntMap;
 use lazy_static::lazy_static;
+use minicbor::{Decode, Encode};
 use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
 use std::cell::RefCell;
@@ -64,7 +69,60 @@ fn unknown_token() -> String {
     "???".to_string()
 }
 
+fn default_ledger_version() -> u64 {
+    LEDGER_VERSION
+}
+
 const UPGRADES_MEMORY_ID: MemoryId = MemoryId::new(0);
+const ALLOWANCES_MEMORY_ID: MemoryId = MemoryId::new(1);
+const ALLOWANCES_EXPIRATIONS_MEMORY_ID: MemoryId = MemoryId::new(2);
+const BALANCES_MEMORY_ID: MemoryId = MemoryId::new(3);
+
+#[derive(Clone, Debug, Encode, Decode)]
+struct StorableAllowance {
+    #[n(0)]
+    amount: Tokens,
+    #[n(1)]
+    expires_at: Option<TimeStamp>,
+}
+
+impl Storable for StorableAllowance {
+    fn to_bytes(&self) -> Cow<[u8]> {
+        let mut buf = vec![];
+        minicbor::encode(self, &mut buf).expect("StorableAllowance encoding should always succeed");
+        Cow::Owned(buf)
+    }
+
+    fn from_bytes(bytes: Cow<[u8]>) -> Self {
+        minicbor::decode(bytes.as_ref()).unwrap_or_else(|e| {
+            panic!(
+                "failed to decode StorableAllowance bytes {}: {e}",
+                hex::encode(bytes)
+            )
+        })
+    }
+
+    const BOUND: Bound = Bound::Unbounded;
+}
+
+impl From<Allowance<Tokens>> for StorableAllowance {
+    fn from(val: Allowance<Tokens>) -> Self {
+        Self {
+            amount: val.amount,
+            expires_at: val.expires_at,
+        }
+    }
+}
+
+impl From<StorableAllowance> for Allowance<Tokens> {
+    fn from(val: StorableAllowance) -> Self {
+        Self {
+            amount: val.amount,
+            expires_at: val.expires_at,
+            arrived_at: TimeStamp::from_nanos_since_unix_epoch(0),
+        }
+    }
+}
 
 thread_local! {
     static MEMORY_MANAGER: RefCell<MemoryManager<DefaultMemoryImpl>> = RefCell::new(
@@ -74,18 +132,71 @@ thread_local! {
     // The memory where the ledger must write and read its state during an upgrade.
     pub static UPGRADES_MEMORY: RefCell<VirtualMemory<DefaultMemoryImpl>> = MEMORY_MANAGER.with(|memory_manager|
         RefCell::new(memory_manager.borrow().get(UPGRADES_MEMORY_ID)));
+
+    pub static LEDGER_STATE: RefCell<LedgerState> = const { RefCell::new(LedgerState::Ready) };
+
+    // (from, spender) -> allowance - map storing ledger allowances.
+    #[allow(clippy::type_complexity)]
+    pub static ALLOWANCES_MEMORY: RefCell<StableBTreeMap<(AccountIdentifier, AccountIdentifier), StorableAllowance, VirtualMemory<DefaultMemoryImpl>>> =
+        MEMORY_MANAGER.with(|memory_manager| RefCell::new(StableBTreeMap::init(memory_manager.borrow().get(ALLOWANCES_MEMORY_ID))));
+
+    // (timestamp, (from, spender)) - expiration set used for removing expired allowances.
+    #[allow(clippy::type_complexity)]
+    pub static ALLOWANCES_EXPIRATIONS_MEMORY: RefCell<StableBTreeMap<(TimeStamp, (AccountIdentifier, AccountIdentifier)), (), VirtualMemory<DefaultMemoryImpl>>> =
+        MEMORY_MANAGER.with(|memory_manager| RefCell::new(StableBTreeMap::init(memory_manager.borrow().get(ALLOWANCES_EXPIRATIONS_MEMORY_ID))));
+
+    // account -> tokens - map storing ledger balances.
+    pub static BALANCES_MEMORY: RefCell<StableBTreeMap<AccountIdentifier, Tokens, VirtualMemory<DefaultMemoryImpl>>> =
+        MEMORY_MANAGER.with(|memory_manager| RefCell::new(StableBTreeMap::init(memory_manager.borrow().get(BALANCES_MEMORY_ID))));
 }
+
+#[derive(Copy, Clone, Serialize, Deserialize, Debug)]
+pub enum LedgerField {
+    Allowances,
+    AllowancesExpirations,
+    Balances,
+}
+
+#[derive(Copy, Clone, Serialize, Deserialize, Debug)]
+pub enum LedgerState {
+    Migrating(LedgerField),
+    Ready,
+}
+
+impl Default for LedgerState {
+    fn default() -> Self {
+        Self::Ready
+    }
+}
+
+/// The ledger versions represent backwards incompatible versions of the ledger.
+/// Downgrading to a lower ledger version is never suppported.
+/// Upgrading from version N to version N+1 should always be possible.
+/// We have the following ledger versions:
+///   * 0 - the whole ledger state is stored on the heap.
+///   * 1 - the allowances are stored in stable structures.
+///   * 2 - the balances are stored in stable structures.
+#[cfg(not(feature = "next-ledger-version"))]
+pub const LEDGER_VERSION: u64 = 2;
+
+#[cfg(feature = "next-ledger-version")]
+pub const LEDGER_VERSION: u64 = 3;
+
+type StableLedgerBalances = Balances<StableBalances>;
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct Ledger {
-    pub balances: LedgerBalances,
+    balances: LedgerBalances,
     #[serde(default)]
-    pub approvals: LedgerAllowances,
+    stable_balances: StableLedgerBalances,
+    #[serde(default)]
+    approvals: LedgerAllowances,
+    #[serde(default)]
+    stable_approvals: AllowanceTable<StableAllowancesData>,
     pub blockchain: Blockchain<dfn_runtime::DfnRuntime, IcpLedgerArchiveWasm>,
-    // A cap on the maximum number of accounts.
+    // DEPRECATED
     pub maximum_number_of_accounts: usize,
-    // When maximum number of accounts is exceeded, a specified number of
-    // accounts with lowest balances are removed.
+    // DEPRECATED
     accounts_overflow_trim_quantity: usize,
     pub minting_account_id: Option<AccountIdentifier>,
     pub icrc1_minting_account: Option<Account>,
@@ -121,28 +232,35 @@ pub struct Ledger {
 
     #[serde(default)]
     pub feature_flags: FeatureFlags,
+
+    #[serde(default = "default_ledger_version")]
+    pub ledger_version: u64,
 }
 
 impl LedgerContext for Ledger {
     type AccountId = AccountIdentifier;
-    type AllowancesData = HeapAllowancesData<AccountIdentifier, Tokens>;
-    type BalancesStore = BTreeMap<AccountIdentifier, Tokens>;
+    type AllowancesData = StableAllowancesData;
+    type BalancesStore = StableBalances;
     type Tokens = Tokens;
 
     fn balances(&self) -> &Balances<Self::BalancesStore> {
-        &self.balances
+        panic_if_not_ready();
+        &self.stable_balances
     }
 
     fn balances_mut(&mut self) -> &mut Balances<Self::BalancesStore> {
-        &mut self.balances
+        panic_if_not_ready();
+        &mut self.stable_balances
     }
 
     fn approvals(&self) -> &AllowanceTable<Self::AllowancesData> {
-        &self.approvals
+        panic_if_not_ready();
+        &self.stable_approvals
     }
 
     fn approvals_mut(&mut self) -> &mut AllowanceTable<Self::AllowancesData> {
-        &mut self.approvals
+        panic_if_not_ready();
+        &mut self.stable_approvals
     }
 
     fn fee_collector(&self) -> Option<&ic_ledger_core::block::FeeCollector<Self::AccountId>> {
@@ -166,14 +284,6 @@ impl LedgerData for Ledger {
 
     fn max_transactions_to_purge(&self) -> usize {
         Self::MAX_TRANSACTIONS_TO_PURGE
-    }
-
-    fn max_number_of_accounts(&self) -> usize {
-        self.maximum_number_of_accounts
-    }
-
-    fn accounts_overflow_trim_quantity(&self) -> usize {
-        self.accounts_overflow_trim_quantity
     }
 
     fn token_name(&self) -> &str {
@@ -223,10 +333,12 @@ impl Default for Ledger {
     fn default() -> Self {
         Self {
             approvals: Default::default(),
+            stable_balances: StableLedgerBalances::default(),
+            stable_approvals: Default::default(),
             balances: LedgerBalances::default(),
             blockchain: Blockchain::default(),
-            maximum_number_of_accounts: 28_000_000,
-            accounts_overflow_trim_quantity: 100_000,
+            maximum_number_of_accounts: 0,
+            accounts_overflow_trim_quantity: 0,
             minting_account_id: None,
             icrc1_minting_account: None,
             blocks_notified: IntMap::new(),
@@ -239,6 +351,7 @@ impl Default for Ledger {
             token_symbol: unknown_token(),
             token_name: unknown_token(),
             feature_flags: FeatureFlags::default(),
+            ledger_version: LEDGER_VERSION,
         }
     }
 }
@@ -341,8 +454,6 @@ impl Ledger {
         token_symbol: Option<String>,
         token_name: Option<String>,
         feature_flags: Option<FeatureFlags>,
-        maximum_number_of_accounts: Option<usize>,
-        accounts_overflow_trim_quantity: Option<usize>,
     ) {
         self.token_symbol = token_symbol.unwrap_or_else(|| "ICP".to_string());
         self.token_name = token_name.unwrap_or_else(|| "Internet Computer".to_string());
@@ -369,12 +480,6 @@ impl Ledger {
         }
         if let Some(feature_flags) = feature_flags {
             self.feature_flags = feature_flags;
-        }
-        if let Some(maximum_number_of_accounts) = maximum_number_of_accounts {
-            self.maximum_number_of_accounts = maximum_number_of_accounts;
-        }
-        if let Some(accounts_overflow_trim_quantity) = accounts_overflow_trim_quantity {
-            self.accounts_overflow_trim_quantity = accounts_overflow_trim_quantity;
         }
     }
 
@@ -459,6 +564,48 @@ impl Ledger {
             self.feature_flags = feature_flags;
         }
     }
+
+    pub fn migrate_one_allowance(&mut self) -> bool {
+        match self.approvals.allowances_data.pop_first_allowance() {
+            Some((account_spender, allowance)) => {
+                self.stable_approvals
+                    .allowances_data
+                    .set_allowance(account_spender, allowance);
+                true
+            }
+            None => false,
+        }
+    }
+
+    pub fn migrate_one_expiration(&mut self) -> bool {
+        match self.approvals.allowances_data.pop_first_expiry() {
+            Some((timestamp, account_spender)) => {
+                self.stable_approvals
+                    .allowances_data
+                    .insert_expiry(timestamp, account_spender);
+                true
+            }
+            None => false,
+        }
+    }
+
+    pub fn migrate_one_balance(&mut self) -> bool {
+        match self.balances.store.pop_first() {
+            Some((account, tokens)) => {
+                self.stable_balances.credit(&account, tokens);
+                true
+            }
+            None => false,
+        }
+    }
+
+    pub fn clear_arrivals(&mut self) {
+        self.approvals.allowances_data.clear_arrivals();
+    }
+
+    pub fn copy_token_pool(&mut self) {
+        self.stable_balances.token_pool = self.balances.token_pool;
+    }
 }
 
 pub fn add_payment(
@@ -484,4 +631,162 @@ pub fn change_notification_state(
         new_state,
         TimeStamp::from(now()),
     )
+}
+
+pub fn is_ready() -> bool {
+    LEDGER_STATE.with(|s| matches!(*s.borrow(), LedgerState::Ready))
+}
+
+pub fn panic_if_not_ready() {
+    if !is_ready() {
+        ic_cdk::trap("The Ledger is not ready");
+    }
+}
+
+pub fn ledger_state() -> LedgerState {
+    LEDGER_STATE.with(|s| *s.borrow())
+}
+
+pub fn set_ledger_state(ledger_state: LedgerState) {
+    LEDGER_STATE.with(|s| *s.borrow_mut() = ledger_state);
+}
+
+pub fn clear_stable_allowance_data() {
+    ALLOWANCES_MEMORY.with_borrow_mut(|allowances| {
+        allowances.clear_new();
+    });
+    ALLOWANCES_EXPIRATIONS_MEMORY.with_borrow_mut(|expirations| {
+        expirations.clear_new();
+    });
+}
+
+pub fn clear_stable_balances_data() {
+    BALANCES_MEMORY.with_borrow_mut(|balances| {
+        balances.clear_new();
+    });
+}
+
+pub fn balances_len() -> u64 {
+    BALANCES_MEMORY.with_borrow(|balances| balances.len())
+}
+
+#[derive(Serialize, Deserialize, Debug, Default)]
+pub struct StableAllowancesData {}
+
+impl AllowancesData for StableAllowancesData {
+    type AccountId = AccountIdentifier;
+    type Tokens = Tokens;
+
+    fn get_allowance(
+        &self,
+        account_spender: &(Self::AccountId, Self::AccountId),
+    ) -> Option<Allowance<Self::Tokens>> {
+        ALLOWANCES_MEMORY
+            .with_borrow(|allowances| allowances.get(account_spender))
+            .map(|a| a.into())
+    }
+
+    fn set_allowance(
+        &mut self,
+        account_spender: (Self::AccountId, Self::AccountId),
+        allowance: Allowance<Self::Tokens>,
+    ) {
+        ALLOWANCES_MEMORY
+            .with_borrow_mut(|allowances| allowances.insert(account_spender, allowance.into()));
+    }
+
+    fn remove_allowance(&mut self, account_spender: &(Self::AccountId, Self::AccountId)) {
+        ALLOWANCES_MEMORY.with_borrow_mut(|allowances| allowances.remove(account_spender));
+    }
+
+    fn insert_expiry(
+        &mut self,
+        timestamp: TimeStamp,
+        account_spender: (Self::AccountId, Self::AccountId),
+    ) {
+        ALLOWANCES_EXPIRATIONS_MEMORY.with_borrow_mut(|expirations| {
+            expirations.insert((timestamp, account_spender), ());
+        });
+    }
+
+    fn remove_expiry(
+        &mut self,
+        timestamp: TimeStamp,
+        account_spender: (Self::AccountId, Self::AccountId),
+    ) {
+        ALLOWANCES_EXPIRATIONS_MEMORY.with_borrow_mut(|expirations| {
+            expirations.remove(&(timestamp, account_spender));
+        });
+    }
+
+    fn first_expiry(&self) -> Option<(TimeStamp, (Self::AccountId, Self::AccountId))> {
+        ALLOWANCES_EXPIRATIONS_MEMORY
+            .with_borrow(|expirations| expirations.first_key_value().map(|kv| kv.0))
+    }
+
+    fn pop_first_expiry(&mut self) -> Option<(TimeStamp, (Self::AccountId, Self::AccountId))> {
+        ALLOWANCES_EXPIRATIONS_MEMORY
+            .with_borrow_mut(|expirations| expirations.pop_first().map(|kv| kv.0))
+    }
+
+    fn pop_first_allowance(
+        &mut self,
+    ) -> Option<((Self::AccountId, Self::AccountId), Allowance<Self::Tokens>)> {
+        panic!("The method `pop_first_allowance` should not be called for StableAllowancesData")
+    }
+
+    fn len_allowances(&self) -> usize {
+        ALLOWANCES_MEMORY
+            .with_borrow(|allowances| allowances.len())
+            .try_into()
+            .unwrap()
+    }
+
+    fn len_expirations(&self) -> usize {
+        ALLOWANCES_EXPIRATIONS_MEMORY
+            .with_borrow(|expirations| expirations.len())
+            .try_into()
+            .unwrap()
+    }
+
+    fn clear_arrivals(&mut self) {
+        panic!("The method `clear_arrivals` should not be called for StableAllowancesData")
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug, Default, PartialEq)]
+pub struct StableBalances {}
+
+impl BalancesStore for StableBalances {
+    type AccountId = AccountIdentifier;
+    type Tokens = Tokens;
+
+    fn get_balance(&self, k: &AccountIdentifier) -> Option<Tokens> {
+        BALANCES_MEMORY.with_borrow(|balances| balances.get(k))
+    }
+
+    fn update<F, E>(&mut self, k: AccountIdentifier, mut f: F) -> Result<Tokens, E>
+    where
+        F: FnMut(Option<&Tokens>) -> Result<Tokens, E>,
+    {
+        let entry = BALANCES_MEMORY.with_borrow(|balances| balances.get(&k));
+        match entry {
+            Some(v) => {
+                let new_v = f(Some(&v))?;
+                if new_v != Tokens::ZERO {
+                    BALANCES_MEMORY.with_borrow_mut(|balances| balances.insert(k, new_v));
+                } else {
+                    BALANCES_MEMORY.with_borrow_mut(|balances| balances.remove(&k));
+                }
+                Ok(new_v)
+            }
+            None => {
+                let new_v = f(None)?;
+                if new_v != Tokens::ZERO {
+                    BALANCES_MEMORY.with_borrow_mut(|balances| balances.insert(k, new_v));
+                }
+                Ok(new_v)
+            }
+        }
+    }
 }

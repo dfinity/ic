@@ -32,6 +32,7 @@ use candid::Principal;
 use canister_test::Canister;
 use ic_base_types::NodeId;
 use ic_consensus_system_test_utils::{
+    node::assert_node_is_unassigned,
     rw_message::{
         can_read_msg, cannot_store_msg, cert_state_makes_progress_with_retries,
         install_nns_and_check_progress, store_message,
@@ -45,12 +46,13 @@ use ic_consensus_system_test_utils::{
 use ic_consensus_threshold_sig_system_test_utils::{
     create_new_subnet_with_keys, make_key_ids_for_all_schemes, run_chain_key_signature_test,
 };
-use ic_management_canister_types::MasterPublicKeyId;
+use ic_management_canister_types_private::MasterPublicKeyId;
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_protobuf::types::v1 as pb;
 use ic_recovery::{
     app_subnet_recovery::{AppSubnetRecovery, AppSubnetRecoveryArgs, StepType},
     steps::Step,
+    util::DataLocation,
     NodeMetrics, Recovery, RecoveryArgs,
 };
 use ic_recovery::{file_sync_helper, get_node_metrics};
@@ -161,6 +163,7 @@ struct Config {
     upgrade: bool,
     chain_key: bool,
     corrupt_cup: bool,
+    local_recovery: bool,
 }
 
 pub fn test_with_tecdsa(env: TestEnv) {
@@ -171,6 +174,7 @@ pub fn test_with_tecdsa(env: TestEnv) {
             upgrade: true,
             chain_key: true,
             corrupt_cup: false,
+            local_recovery: false,
         },
     );
 }
@@ -183,6 +187,7 @@ pub fn test_without_tecdsa(env: TestEnv) {
             upgrade: true,
             chain_key: false,
             corrupt_cup: false,
+            local_recovery: false,
         },
     );
 }
@@ -197,6 +202,7 @@ pub fn test_no_upgrade_with_tecdsa(env: TestEnv) {
             upgrade: false,
             chain_key: true,
             corrupt_cup,
+            local_recovery: false,
         },
     );
 }
@@ -209,6 +215,7 @@ pub fn test_large_with_tecdsa(env: TestEnv) {
             upgrade: false,
             chain_key: true,
             corrupt_cup: false,
+            local_recovery: false,
         },
     );
 }
@@ -221,6 +228,20 @@ pub fn test_no_upgrade_without_tecdsa(env: TestEnv) {
             upgrade: false,
             chain_key: false,
             corrupt_cup: false,
+            local_recovery: false,
+        },
+    );
+}
+
+pub fn test_no_upgrade_without_tecdsa_local(env: TestEnv) {
+    app_subnet_recovery_test(
+        env,
+        Config {
+            subnet_size: APP_NODES,
+            upgrade: false,
+            chain_key: false,
+            corrupt_cup: false,
+            local_recovery: true,
         },
     );
 }
@@ -337,6 +358,7 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: Config) {
         key_file: Some(ssh_authorized_priv_keys_dir.join(SSH_USERNAME)),
         test_mode: true,
         skip_prompts: true,
+        use_local_binaries: false,
     };
 
     let mut unassigned_nodes = env.topology_snapshot().unassigned_nodes();
@@ -373,10 +395,12 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: Config) {
         replay_until_height: None,
         // If the latest CUP is corrupted we can't deploy read-only access
         pub_key: (!cfg.corrupt_cup).then_some(pub_key),
-        download_node: None,
-        upload_node: Some(upload_node.get_ip_addr()),
+        download_method: None,
+        upload_method: Some(DataLocation::Remote(upload_node.get_ip_addr())),
+        wait_for_cup_node: Some(upload_node.get_ip_addr()),
         chain_key_subnet_id: cfg.chain_key.then_some(root_subnet_id),
         next_step: None,
+        skip: None,
     };
 
     info!(
@@ -417,20 +441,15 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: Config) {
         assert_subnet_is_broken(&app_node.get_public_url(), app_can_id, msg, false, &logger);
     }
 
-    subnet_recovery.params.download_node = Some(download_node.0.get_ip_addr());
+    subnet_recovery.params.download_method =
+        Some(DataLocation::Remote(download_node.0.get_ip_addr()));
 
-    for (step_type, step) in subnet_recovery {
-        info!(logger, "Next step: {:?}", step_type);
-
-        if cfg.corrupt_cup && step_type == StepType::ValidateReplayOutput {
-            // Skip validating the output if the CUP is corrupt, as in this case
-            // no replica will be running to compare the heights to.
-            continue;
-        }
-
-        info!(logger, "{}", step.descr());
-        step.exec()
-            .unwrap_or_else(|e| panic!("Execution of step {:?} failed: {}", step_type, e));
+    if cfg.local_recovery {
+        info!(logger, "Performing a local node recovery");
+        local_recovery(&download_node.0, subnet_recovery, &logger);
+    } else {
+        info!(logger, "Performing remote recovery");
+        remote_recovery(&cfg, subnet_recovery, &logger);
     }
 
     info!(logger, "Blocking for newer registry version");
@@ -503,6 +522,51 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: Config) {
         .for_each(|n| assert_node_is_unassigned(&n, &logger));
 }
 
+fn remote_recovery(cfg: &Config, subnet_recovery: AppSubnetRecovery, logger: &Logger) {
+    for (step_type, step) in subnet_recovery {
+        info!(logger, "Next step: {:?}", step_type);
+
+        if cfg.corrupt_cup && step_type == StepType::ValidateReplayOutput {
+            // Skip validating the output if the CUP is corrupt, as in this case
+            // no replica will be running to compare the heights to.
+            continue;
+        }
+
+        info!(logger, "{}", step.descr());
+        step.exec()
+            .unwrap_or_else(|e| panic!("Execution of step {:?} failed: {}", step_type, e));
+    }
+}
+
+fn local_recovery(node: &IcNodeSnapshot, subnet_recovery: AppSubnetRecovery, logger: &Logger) {
+    let nns_url = subnet_recovery.recovery_args.nns_url;
+    let subnet_id = subnet_recovery.params.subnet_id;
+    let pub_key = subnet_recovery.params.pub_key.unwrap();
+    let pub_key = pub_key.trim();
+    let node_ip = node.get_ip_addr();
+
+    let command = format!(
+        r#"/opt/ic/bin/ic-recovery \
+        --nns-url {nns_url} \
+        --test --skip-prompts --use-local-binaries \
+        app-subnet-recovery \
+        --subnet-id {subnet_id} \
+        --pub-key "{pub_key}" \
+        --download-method local \
+        --upload-method local \
+        --wait-for-cup-node {node_ip} \
+        --skip DownloadCertifications \
+        --skip MergeCertificationPools
+    "#
+    );
+
+    info!(logger, "Executing local recovery command: \n{command}");
+    match node.block_on_bash_script(&command) {
+        Ok(ret) => info!(logger, "Finished local recovery: \n{ret}"),
+        Err(err) => panic!("Local recovery failed: \n{err}"),
+    }
+}
+
 /// break a subnet by breaking the replica binary on f+1 = (subnet_size - 1) / 3 +1
 /// nodes taken from the given iterator.
 fn break_subnet(
@@ -570,7 +634,7 @@ fn halt_subnet(
                     message.cursor
                 ),
             );
-            if res.map_or(false, |r| r.trim().parse::<i32>().unwrap() > 0) {
+            if res.is_ok_and(|r| r.trim().parse::<i32>().unwrap() > 0) {
                 Ok(())
             } else {
                 bail!("Did not find log entry that consensus is halted.")
@@ -657,7 +721,7 @@ fn corrupt_latest_cup(subnet: &SubnetSnapshot, recovery: &Recovery, logger: &Log
                     message.cursor
                 ),
             );
-            if res.map_or(false, |r| r.trim().parse::<i32>().unwrap() > 0) {
+            if res.is_ok_and( |r| r.trim().parse::<i32>().unwrap() > 0) {
                 Ok(())
             } else {
                 bail!("Did not find log entry that cup is corrupted.")
@@ -699,37 +763,6 @@ fn assert_subnet_is_broken(
         "Writing messages still successful on: {}",
         node_url
     );
-}
-
-/// Assert that the given node has deleted its state within the next 5 minutes.
-fn assert_node_is_unassigned(node: &IcNodeSnapshot, logger: &Logger) {
-    info!(
-        logger,
-        "Asserting that node {} has deleted its state.",
-        node.get_ip_addr()
-    );
-    // We need to exclude the page_deltas/ directory, which is not deleted on state deletion.
-    // That is because deleting it would break SELinux assumptions.
-    let check = r#"[ "$(ls -A /var/lib/ic/data/ic_state -I page_deltas)" ] && echo "assigned" || echo "unassigned""#;
-    let s = node
-        .block_on_ssh_session()
-        .expect("Failed to establish SSH session");
-
-    ic_system_test_driver::retry_with_msg!(
-        format!("check if node {} is unassigned", node.node_id),
-        logger.clone(),
-        secs(300),
-        secs(10),
-        || match execute_bash_command(&s, check.to_string()) {
-            Ok(s) if s.trim() == "unassigned" => Ok(()),
-            Ok(s) if s.trim() == "assigned" => {
-                bail!("Node {} is still assigned.", node.get_ip_addr())
-            }
-            Ok(s) => bail!("Received unexpected output: {}", s),
-            Err(e) => bail!("Failed to read directory: {}", e),
-        }
-    )
-    .expect("Failed to detect that node has deleted its state.");
 }
 
 /// Select a node with highest finalization height in the given subnet snapshot

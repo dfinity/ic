@@ -183,7 +183,7 @@ To test the proposals with a testnet that uses the same canister IDs as in the p
 
 ### Spin up the dynamic testnet
 
-The simplest is to tweak the setup from [small](https://sourcegraph.com/github.com/dfinity/ic@7313a15e21d8fb06fa119ef3ab9371da47c2cddc/-/blob/rs/tests/testing_verification/testnets/small.rs?L62)
+The simplest is to tweak the setup from [small](https://sourcegraph.com/github.com/dfinity/ic@7313a15e21d8fb06fa119ef3ab9371da47c2cddc/-/blob/rs/tests/idx/testnets/small.rs?L62)
 ```rust
 pub fn setup(env: TestEnv) {
     PrometheusVm::default()

@@ -1,3 +1,4 @@
+use crate::eth_logs::LedgerSubaccount;
 use crate::eth_rpc::SendRawTransactionResult;
 use crate::eth_rpc_client::responses::TransactionReceipt;
 use crate::eth_rpc_client::EthRpcClient;
@@ -16,6 +17,7 @@ use candid::Nat;
 use futures::future::join_all;
 use ic_canister_log::log;
 use icrc_ledger_client_cdk::{CdkRuntime, ICRC1Client};
+use icrc_ledger_types::icrc1::transfer::Memo;
 use icrc_ledger_types::icrc1::{account::Account, transfer::TransferArg};
 use num_traits::ToPrimitive;
 use scopeguard::ScopeGuard;
@@ -64,18 +66,18 @@ pub async fn process_reimbursement() {
             runtime: CdkRuntime,
             ledger_canister_id,
         };
+        let memo = Memo::from(reimbursement_request.clone());
         let args = TransferArg {
             from_subaccount: None,
             to: Account {
                 owner: reimbursement_request.to,
                 subaccount: reimbursement_request
                     .to_subaccount
-                    .as_ref()
-                    .map(|subaccount| subaccount.0),
+                    .map(LedgerSubaccount::to_bytes),
             },
             fee: None,
             created_at_time: None,
-            memo: Some(reimbursement_request.clone().into()),
+            memo: Some(memo),
             amount: Nat::from(reimbursement_request.reimbursed_amount),
         };
         let block_index = match client.transfer(args).await {

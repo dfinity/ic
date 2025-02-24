@@ -26,6 +26,7 @@ use ic_consensus_utils::{
 use ic_interfaces::{
     ingress_manager::IngressSelector,
     messaging::{MessageRouting, MessageRoutingError},
+    time_source::system_time_now,
 };
 use ic_interfaces_registry::RegistryClient;
 use ic_logger::{debug, trace, ReplicaLogger};
@@ -33,9 +34,11 @@ use ic_metrics::MetricsRegistry;
 use ic_types::{
     consensus::{FinalizationContent, FinalizationShare, HashedBlock},
     replica_config::ReplicaConfig,
-    Height, ReplicaVersion,
+    Height,
 };
-use std::{cell::RefCell, sync::Arc};
+use std::cell::RefCell;
+use std::sync::Arc;
+use std::time::Instant;
 
 pub struct Finalizer {
     pub(crate) replica_config: ReplicaConfig,
@@ -47,6 +50,7 @@ pub struct Finalizer {
     pub(crate) log: ReplicaLogger,
     metrics: FinalizerMetrics,
     prev_finalized_height: RefCell<Height>,
+    last_batch_delivered_at: RefCell<Option<Instant>>,
 }
 
 impl Finalizer {
@@ -71,6 +75,7 @@ impl Finalizer {
             log,
             metrics: FinalizerMetrics::new(metrics_registry),
             prev_finalized_height: RefCell::new(Height::from(0)),
+            last_batch_delivered_at: RefCell::new(None),
         }
     }
 
@@ -98,7 +103,6 @@ impl Finalizer {
             pool,
             &*self.registry_client,
             self.replica_config.subnet_id,
-            ReplicaVersion::default(),
             &self.log,
             None,
             Some(&|result, block_stats, batch_stats| {
@@ -113,7 +117,7 @@ impl Finalizer {
             .collect()
     }
 
-    // Write logs, report metrics depending on the batch deliver result.
+    /// Write logs, report metrics depending on the batch deliver result.
     #[allow(clippy::too_many_arguments)]
     fn process_batch_delivery_result(
         &self,
@@ -123,7 +127,23 @@ impl Finalizer {
     ) {
         match result {
             Ok(()) => {
+                let now = Instant::now();
+                if let Some(last_batch_delivered_at) = *self.last_batch_delivered_at.borrow() {
+                    self.metrics
+                        .batch_delivery_interval
+                        .observe(now.duration_since(last_batch_delivered_at).as_secs_f64());
+                }
+                self.last_batch_delivered_at.borrow_mut().replace(now);
+                // Batch creation time is essentially wall time (on some replica), so the median
+                // duration across the subnet is meaningful.
+                self.metrics.batch_delivery_latency.observe(
+                    system_time_now()
+                        .saturating_duration_since(block_stats.block_time)
+                        .as_secs_f64(),
+                );
+
                 self.metrics.process(&block_stats, &batch_stats);
+
                 for ingress in batch_stats.ingress_ids.iter() {
                     debug!(
                         self.log,
@@ -239,7 +259,7 @@ mod tests {
     use ic_consensus_mocks::{dependencies, dependencies_with_subnet_params, Dependencies};
     use ic_crypto_test_utils_ni_dkg::dummy_transcript_for_tests;
     use ic_logger::replica_logger::no_op_logger;
-    use ic_management_canister_types::SetupInitialDKGResponse;
+    use ic_management_canister_types_private::SetupInitialDKGResponse;
     use ic_metrics::MetricsRegistry;
     use ic_registry_subnet_type::SubnetType;
     use ic_replicated_state::{
@@ -480,7 +500,7 @@ mod tests {
                     payment: Cycles::zero(),
                     method_name: "".to_string(),
                     method_payload: vec![],
-                    metadata: None,
+                    metadata: Default::default(),
                     deadline: NO_DEADLINE,
                 },
                 nodes_in_target_subnet: BTreeSet::new(),
@@ -493,7 +513,7 @@ mod tests {
         .collect::<BTreeMap<_, _>>();
 
         // Build some transcipts with matching ids and tags
-        let transcripts_for_new_subnets = vec![
+        let transcripts_for_remote_subnets = vec![
             (
                 NiDkgId {
                     start_block_height: Height::from(0),
@@ -520,7 +540,7 @@ mod tests {
 
         // Run the
         let result = generate_responses_to_setup_initial_dkg_calls(
-            &transcripts_for_new_subnets[..],
+            &transcripts_for_remote_subnets[..],
             &no_op_logger(),
         );
         assert_eq!(result.len(), 1);

@@ -2,7 +2,7 @@
 /// All essential state of an SNS root canister.
 ///
 /// When canister_init is called in the SNS root canister, it is expected that a
-/// serialized version of this was passed via ic_management_canister_types::InstallCodeArgs::args,
+/// serialized version of this was passed via ic_management_canister_types_private::InstallCodeArgs::args,
 /// which can be retrieved by the canister via ic_cdk::api::call::arg_data().
 #[derive(
     candid::CandidType,
@@ -45,6 +45,9 @@ pub struct SnsRootCanister {
     /// controllers beyond SNS root are allowed when registering a dapp.
     #[prost(bool, tag = "8")]
     pub testflight: bool,
+    /// Information about the timers that perform periodic tasks of this Root canister.
+    #[prost(message, optional, tag = "10")]
+    pub timers: ::core::option::Option<::ic_nervous_system_proto::pb::v1::Timers>,
 }
 #[derive(
     candid::CandidType,
@@ -231,6 +234,8 @@ pub struct ManageDappCanisterSettingsRequest {
     pub log_visibility: ::core::option::Option<i32>,
     #[prost(uint64, optional, tag = "7")]
     pub wasm_memory_limit: ::core::option::Option<u64>,
+    #[prost(uint64, optional, tag = "8")]
+    pub wasm_memory_threshold: ::core::option::Option<u64>,
 }
 #[derive(
     candid::CandidType,

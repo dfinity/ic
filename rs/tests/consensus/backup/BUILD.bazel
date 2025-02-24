@@ -1,0 +1,95 @@
+load("@rules_rust//rust:defs.bzl", "rust_library")
+load("//rs/tests:common.bzl", "GUESTOS_RUNTIME_DEPS", "MAINNET_REVISION_RUNTIME_DEPS", "UNIVERSAL_CANISTER_ENV", "UNIVERSAL_CANISTER_RUNTIME_DEPS", "UNIVERSAL_VM_RUNTIME_DEPS")
+load("//rs/tests:system_tests.bzl", "system_test_nns")
+
+package(default_visibility = ["//rs:system-tests-pkg"])
+
+rust_library(
+    name = "common",
+    testonly = True,
+    srcs = ["common.rs"],
+    crate_name = "ic_consensus_system_test_backup_common",
+    deps = [
+        # Keep sorted.
+        "//rs/backup",
+        "//rs/registry/subnet_features",
+        "//rs/registry/subnet_type",
+        "//rs/tests/consensus/tecdsa/utils",
+        "//rs/tests/consensus/utils",
+        "//rs/tests/driver:ic-system-test-driver",
+        "//rs/types/base_types",
+        "//rs/types/types",
+        "@crate_index//:anyhow",
+        "@crate_index//:hex",
+        "@crate_index//:serde_json",
+        "@crate_index//:slog",
+        "@crate_index//:tempfile",
+    ],
+)
+
+BACKUP_RUNTIME_DEPS = UNIVERSAL_CANISTER_RUNTIME_DEPS + [
+    # Keep sorted.
+    "//rs/backup:ic-backup",
+    "//rs/canister_sandbox:canister_sandbox",
+    "//rs/canister_sandbox:compiler_sandbox",
+    "//rs/canister_sandbox:sandbox_launcher",
+    "//rs/replay:ic-replay",
+]
+
+BACKUP_ENV = UNIVERSAL_CANISTER_ENV | {
+    "IC_BACKUP_PATH": "$(rootpath //rs/backup:ic-backup)",
+    "IC_REPLAY_PATH": "$(rootpath //rs/replay:ic-replay)",
+    "COMPILER_SANDBOX_PATH": "$(rootpath //rs/canister_sandbox:compiler_sandbox)",
+    "SANDBOX_LAUNCHER_PATH": "$(rootpath //rs/canister_sandbox:sandbox_launcher)",
+    "CANISTER_SANDBOX_PATH": "$(rootpath //rs/canister_sandbox:canister_sandbox)",
+}
+
+system_test_nns(
+    name = "backup_manager_downgrade_test",
+    env = BACKUP_ENV,
+    extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on long_test.
+    flaky = True,
+    tags = [
+        "experimental_system_test_colocation",
+        "long_test",  # since it takes longer than 5 minutes.
+    ],
+    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
+    test_timeout = "eternal",  # this test often times out with the default 15 minute timeout so we allow more time
+    uses_guestos_dev_test = True,
+    runtime_deps =
+        GUESTOS_RUNTIME_DEPS +
+        UNIVERSAL_VM_RUNTIME_DEPS +
+        MAINNET_REVISION_RUNTIME_DEPS +
+        BACKUP_RUNTIME_DEPS,
+    deps = [
+        # Keep sorted.
+        ":common",
+        "//rs/tests/driver:ic-system-test-driver",
+        "@crate_index//:anyhow",
+    ],
+)
+
+system_test_nns(
+    name = "backup_manager_upgrade_test",
+    env = BACKUP_ENV,
+    extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on long_test.
+    flaky = True,
+    tags = [
+        "experimental_system_test_colocation",
+        "long_test",  # since it takes longer than 5 minutes.
+    ],
+    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
+    test_timeout = "eternal",  # this test often times out with the default 15 minute timeout so we allow more time
+    uses_guestos_dev_test = True,
+    runtime_deps =
+        GUESTOS_RUNTIME_DEPS +
+        UNIVERSAL_VM_RUNTIME_DEPS +
+        MAINNET_REVISION_RUNTIME_DEPS +
+        BACKUP_RUNTIME_DEPS,
+    deps = [
+        # Keep sorted.
+        ":common",
+        "//rs/tests/driver:ic-system-test-driver",
+        "@crate_index//:anyhow",
+    ],
+)

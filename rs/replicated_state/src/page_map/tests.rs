@@ -5,37 +5,15 @@ use super::{
     storage::StorageLayout,
     test_utils::{base_only_storage_layout, ShardedTestStorageLayout},
     Buffer, FileDescriptor, MemoryInstructions, MemoryMapOrData, PageAllocatorRegistry, PageIndex,
-    PageMap, PageMapSerialization, PersistenceError, Shard, StorageMetrics,
-    TestPageAllocatorFileDescriptorImpl, WRITE_BUCKET_PAGES,
+    PageMap, PageMapSerialization, Shard, StorageMetrics, TestPageAllocatorFileDescriptorImpl,
 };
-use ic_config::flag_status::FlagStatus;
 use ic_config::state_manager::LsmtConfig;
 use ic_metrics::MetricsRegistry;
 use ic_sys::PAGE_SIZE;
 use ic_types::{Height, MAX_STABLE_MEMORY_IN_BYTES};
 use nix::unistd::dup;
 use std::sync::Arc;
-use std::{
-    fs::OpenOptions,
-    path::{Path, PathBuf},
-};
-use tempfile::Builder;
-
-fn persist_delta_to_base(
-    pagemap: &PageMap,
-    base_path: PathBuf,
-    metrics: &StorageMetrics,
-) -> Result<(), PersistenceError> {
-    pagemap.persist_delta(
-        &base_only_storage_layout(base_path),
-        Height::new(0),
-        &LsmtConfig {
-            lsmt_status: FlagStatus::Disabled,
-            shard_num_pages: u64::MAX,
-        },
-        metrics,
-    )
-}
+use tempfile::{Builder, TempDir};
 
 fn assert_equal_page_maps(page_map1: &PageMap, page_map2: &PageMap) {
     assert_eq!(page_map1.num_host_pages(), page_map2.num_host_pages());
@@ -142,9 +120,10 @@ fn new_delta_wins_on_update() {
 fn persisted_map_is_equivalent_to_the_original() {
     fn persist_check_eq_and_load(
         pagemap: &mut PageMap,
-        heap_file: &Path,
         pages_to_update: &[(PageIndex, [u8; PAGE_SIZE])],
         metrics: &StorageMetrics,
+        height: Height,
+        tmp: &TempDir,
     ) -> PageMap {
         pagemap.update(
             &pages_to_update
@@ -152,10 +131,24 @@ fn persisted_map_is_equivalent_to_the_original() {
                 .map(|(idx, p)| (*idx, p))
                 .collect::<Vec<_>>(),
         );
-        persist_delta_to_base(pagemap, heap_file.to_path_buf(), metrics).unwrap();
+        let storage_layout = ShardedTestStorageLayout {
+            dir_path: tmp.path().to_path_buf(),
+            base: tmp.path().join("vmemory_0.bin"),
+            overlay_suffix: "vmemory_0.overlay".into(),
+        };
+        pagemap
+            .persist_delta(
+                &storage_layout,
+                height,
+                &LsmtConfig {
+                    shard_num_pages: u64::MAX,
+                },
+                metrics,
+            )
+            .unwrap();
         let persisted_map = PageMap::open(
-            &base_only_storage_layout(heap_file.to_path_buf()),
-            Height::new(0),
+            Box::new(storage_layout),
+            height,
             Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
         )
         .unwrap();
@@ -168,25 +161,24 @@ fn persisted_map_is_equivalent_to_the_original() {
         .prefix("checkpoints")
         .tempdir()
         .unwrap();
-    let heap_file = tmp.path().join("heap");
 
     let base_page = [42u8; PAGE_SIZE];
     let base_data = vec![&base_page; 50];
     let metrics = StorageMetrics::new(&MetricsRegistry::new());
     let mut pagemap = persist_check_eq_and_load(
         &mut PageMap::new_for_testing(),
-        &heap_file,
         &base_data
             .iter()
             .enumerate()
             .map(|(i, page)| (PageIndex::new(i as u64), **page))
             .collect::<Vec<_>>(),
         &metrics,
+        Height::new(0),
+        &tmp,
     );
 
     let mut pagemap = persist_check_eq_and_load(
         &mut pagemap,
-        &heap_file,
         &[
             (PageIndex::new(1), [1u8; PAGE_SIZE]),
             (PageIndex::new(3), [3u8; PAGE_SIZE]),
@@ -196,28 +188,33 @@ fn persisted_map_is_equivalent_to_the_original() {
             (PageIndex::new(100), [100u8; PAGE_SIZE]),
         ],
         &metrics,
+        Height::new(1),
+        &tmp,
     );
 
     let mut pagemap = persist_check_eq_and_load(
         &mut pagemap,
-        &heap_file,
         &[(PageIndex::new(1), [255u8; PAGE_SIZE])],
         &metrics,
+        Height::new(2),
+        &tmp,
     );
     // Check that it's possible to serialize without reloading.
     persist_check_eq_and_load(
         &mut pagemap,
-        &heap_file,
         &[(PageIndex::new(104), [104u8; PAGE_SIZE])],
         &metrics,
+        Height::new(3),
+        &tmp,
     );
-    persist_check_eq_and_load(
+    let pagemap = persist_check_eq_and_load(
         &mut pagemap,
-        &heap_file,
         &[(PageIndex::new(103), [103u8; PAGE_SIZE])],
         &metrics,
+        Height::new(4),
+        &tmp,
     );
-    assert_eq!(105 * PAGE_SIZE as u64, heap_file.metadata().unwrap().len());
+    assert_eq!(105, pagemap.num_host_pages());
 }
 
 #[test]
@@ -226,13 +223,25 @@ fn can_persist_and_load_an_empty_page_map() {
         .prefix("checkpoints")
         .tempdir()
         .unwrap();
-    let heap_file = tmp.path().join("heap");
-
     let original_map = PageMap::new_for_testing();
     let metrics = StorageMetrics::new(&MetricsRegistry::new());
-    persist_delta_to_base(&original_map, heap_file.to_path_buf(), &metrics).unwrap();
+    let storage_layout = ShardedTestStorageLayout {
+        dir_path: tmp.path().to_path_buf(),
+        base: tmp.path().join("vmemory_0.bin"),
+        overlay_suffix: "vmemory_0.overlay".into(),
+    };
+    original_map
+        .persist_delta(
+            &storage_layout,
+            Height::new(0),
+            &LsmtConfig {
+                shard_num_pages: u64::MAX,
+            },
+            &metrics,
+        )
+        .unwrap();
     let persisted_map = PageMap::open(
-        &base_only_storage_layout(heap_file.to_path_buf()),
+        Box::new(storage_layout),
         Height::new(0),
         Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
     )
@@ -251,7 +260,7 @@ fn can_load_a_page_map_without_files() {
     let heap_file = tmp.path().join("missing_file");
 
     let loaded_map = PageMap::open(
-        &base_only_storage_layout(heap_file.to_path_buf()),
+        Box::new(base_only_storage_layout(heap_file.to_path_buf())),
         Height::new(0),
         Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
     )
@@ -259,38 +268,6 @@ fn can_load_a_page_map_without_files() {
 
     // base_height will be different, but is not part of eq
     assert_eq!(PageMap::new_for_testing(), loaded_map);
-}
-
-#[test]
-fn returns_an_error_if_file_size_is_not_a_multiple_of_page_size() {
-    use std::io::Write;
-
-    let tmp = tempfile::Builder::new()
-        .prefix("checkpoints")
-        .tempdir()
-        .unwrap();
-    let heap_file = tmp.path().join("heap");
-    OpenOptions::new()
-        .write(true)
-        .create(true)
-        .truncate(false)
-        .open(&heap_file)
-        .unwrap()
-        .write_all(&vec![1; PAGE_SIZE / 2])
-        .unwrap();
-
-    match PageMap::open(
-        &base_only_storage_layout(heap_file.to_path_buf()),
-        Height::new(0),
-        Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
-    ) {
-        Err(err) => assert!(
-            err.is_invalid_heap_file(),
-            "Expected invalid heap file error, got {:?}",
-            err
-        ),
-        Ok(_) => panic!("Expected a invalid heap file error, got Ok(_)"),
-    }
 }
 
 #[test]
@@ -458,7 +435,6 @@ fn get_memory_instructions_returns_deltas() {
         .prefix("checkpoints")
         .tempdir()
         .unwrap();
-    let heap_file = tmp.path().join("heap");
     let pages = &[(PageIndex::new(1), &[1u8; PAGE_SIZE])];
     page_map.update(pages);
 
@@ -481,10 +457,24 @@ fn get_memory_instructions_returns_deltas() {
         page_map.get_memory_instructions(range.clone(), range.clone())
     );
     let metrics = StorageMetrics::new(&MetricsRegistry::new());
-    persist_delta_to_base(&page_map, heap_file.to_path_buf(), &metrics).unwrap();
+    let storage_layout = ShardedTestStorageLayout {
+        dir_path: tmp.path().to_path_buf(),
+        base: tmp.path().join("vmemory_0.bin"),
+        overlay_suffix: "vmemory_0.overlay".into(),
+    };
+    page_map
+        .persist_delta(
+            &storage_layout,
+            Height::new(0),
+            &LsmtConfig {
+                shard_num_pages: u64::MAX,
+            },
+            &metrics,
+        )
+        .unwrap();
 
     let mut page_map = PageMap::open(
-        &base_only_storage_layout(heap_file.to_path_buf()),
+        Box::new(storage_layout),
         Height::new(0),
         Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
     )
@@ -492,7 +482,7 @@ fn get_memory_instructions_returns_deltas() {
 
     assert!(matches!(
         page_map.get_base_memory_instructions().instructions[..],
-        [(ref range, _)] if *range == (PageIndex::new(0)..PageIndex::new(2))
+        [(ref range, _)] if *range == (PageIndex::new(1)..PageIndex::new(2))
     ));
     assert_eq!(
         MemoryInstructions {
@@ -511,7 +501,7 @@ fn get_memory_instructions_returns_deltas() {
 
     assert!(matches!(
         page_map.get_base_memory_instructions().instructions[..],
-        [(ref range, _)] if *range == (PageIndex::new(0)..PageIndex::new(2))
+        [(ref range, _)] if *range == (PageIndex::new(1)..PageIndex::new(2))
     ));
     assert_eq!(
         MemoryInstructions {
@@ -529,15 +519,6 @@ fn get_memory_instructions_returns_deltas() {
         },
         page_map.get_memory_instructions(range.clone(), range)
     );
-
-    // Add a page that is not an end of the bucket.
-    assert_ne!((24 + 1) % WRITE_BUCKET_PAGES, 0);
-    let pages = &[(PageIndex::new(24), &[1u8; PAGE_SIZE])];
-    page_map.update(pages);
-
-    // No trailing zero pages are serialized.
-    persist_delta_to_base(&page_map, heap_file.to_path_buf(), &metrics).unwrap();
-    assert_eq!(25 * PAGE_SIZE as u64, heap_file.metadata().unwrap().len());
 }
 
 #[test]
@@ -613,7 +594,6 @@ fn get_memory_instructions_grows_left_and_right() {
 fn get_memory_instructions_ignores_base_file() {
     let metrics = StorageMetrics::new(&MetricsRegistry::new());
     let lsmt_config = LsmtConfig {
-        lsmt_status: FlagStatus::Enabled,
         shard_num_pages: u64::MAX,
     };
     let tempdir = Builder::new().prefix("page_map_test").tempdir().unwrap();
@@ -639,7 +619,7 @@ fn get_memory_instructions_ignores_base_file() {
         .exists());
 
     let page_map = PageMap::open(
-        &storage_layout,
+        Box::new(storage_layout),
         Height::new(0),
         Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
     )
@@ -663,7 +643,6 @@ fn get_memory_instructions_ignores_base_file() {
 fn get_memory_instructions_stops_at_instructions_outside_min_range() {
     let metrics = StorageMetrics::new(&MetricsRegistry::new());
     let lsmt_config = LsmtConfig {
-        lsmt_status: FlagStatus::Enabled,
         shard_num_pages: u64::MAX,
     };
     let tempdir = Builder::new().prefix("page_map_test").tempdir().unwrap();
@@ -702,7 +681,7 @@ fn get_memory_instructions_stops_at_instructions_outside_min_range() {
         .exists());
 
     let page_map = PageMap::open(
-        &storage_layout,
+        Box::new(storage_layout),
         Height::new(1),
         Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
     )
@@ -735,7 +714,6 @@ fn get_memory_instructions_stops_at_instructions_outside_min_range() {
 fn get_memory_instructions_extends_mmap_past_min_range() {
     let metrics = StorageMetrics::new(&MetricsRegistry::new());
     let lsmt_config = LsmtConfig {
-        lsmt_status: FlagStatus::Enabled,
         shard_num_pages: u64::MAX,
     };
     let tempdir = Builder::new().prefix("page_map_test").tempdir().unwrap();
@@ -773,7 +751,7 @@ fn get_memory_instructions_extends_mmap_past_min_range() {
         .exists());
 
     let page_map = PageMap::open(
-        &storage_layout,
+        Box::new(storage_layout),
         Height::new(1),
         Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
     )

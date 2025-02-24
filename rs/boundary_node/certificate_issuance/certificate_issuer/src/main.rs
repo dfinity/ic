@@ -23,9 +23,7 @@ use axum::{
 use candid::{DecoderConfig, Principal};
 use chacha20poly1305::{KeyInit, XChaCha20Poly1305};
 use clap::Parser;
-use ic_agent::{
-    agent::http_transport::reqwest_transport::ReqwestTransport, identity::Secp256k1Identity, Agent,
-};
+use ic_agent::{identity::Secp256k1Identity, Agent};
 use instant_acme::{Account, AccountCredentials, NewAccount};
 use opentelemetry::{
     metrics::{Counter, Histogram, MeterProvider as _},
@@ -198,15 +196,13 @@ async fn main() -> Result<(), Error> {
         static USER_AGENT: &str = "Ic-Certificate-Issuer";
         let client = reqwest::Client::builder().user_agent(USER_AGENT).build()?;
 
-        let transport =
-            ReqwestTransport::create_with_client(cli.orchestrator_uri.to_string(), client)?;
-
         let f = File::open(cli.identity_path).context("failed to open identity file")?;
         let identity = Secp256k1Identity::from_pem(f).context("failed to create basic identity")?;
 
         let agent = Agent::builder()
             .with_identity(identity)
-            .with_transport(transport)
+            .with_url(cli.orchestrator_uri.to_string())
+            .with_http_client(client)
             .build()?;
 
         let root_key = cli

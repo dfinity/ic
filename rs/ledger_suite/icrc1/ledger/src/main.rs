@@ -1,12 +1,13 @@
 #[cfg(feature = "canbench-rs")]
 mod benches;
 
-use candid::candid_method;
 use candid::types::number::Nat;
-use ic_canister_log::{declare_log_buffer, export};
+use candid::{candid_method, Principal};
+use ic_canister_log::{declare_log_buffer, export, log};
 use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_cdk::api::stable::StableReader;
 
+use ic_cdk::api::instruction_counter;
 #[cfg(not(feature = "canbench-rs"))]
 use ic_cdk_macros::init;
 use ic_cdk_macros::{post_upgrade, pre_upgrade, query, update};
@@ -14,13 +15,16 @@ use ic_icrc1::{
     endpoints::{convert_transfer_error, StandardRecord},
     Operation, Transaction,
 };
-use ic_icrc1_ledger::UPGRADES_MEMORY;
-use ic_icrc1_ledger::{InitArgs, Ledger, LedgerArgument};
+use ic_icrc1_ledger::{
+    balances_len, clear_stable_allowance_data, clear_stable_balances_data, is_ready, ledger_state,
+    panic_if_not_ready, set_ledger_state, LEDGER_VERSION, UPGRADES_MEMORY,
+};
+use ic_icrc1_ledger::{InitArgs, Ledger, LedgerArgument, LedgerField, LedgerState};
 use ic_ledger_canister_core::ledger::{
     apply_transaction, archive_blocks, LedgerAccess, LedgerContext, LedgerData,
     TransferError as CoreTransferError,
 };
-use ic_ledger_canister_core::runtime::total_memory_size_bytes;
+use ic_ledger_canister_core::runtime::heap_memory_size_bytes;
 use ic_ledger_core::block::BlockIndex;
 use ic_ledger_core::timestamp::TimeStamp;
 use ic_ledger_core::tokens::Zero;
@@ -34,6 +38,7 @@ use icrc_ledger_types::icrc21::{
 use icrc_ledger_types::icrc3::blocks::DataCertificate;
 #[cfg(not(feature = "get-blocks-disabled"))]
 use icrc_ledger_types::icrc3::blocks::GetBlocksResponse;
+use icrc_ledger_types::icrc3::blocks::ICRC3DataCertificate;
 use icrc_ledger_types::{
     icrc::generic_metadata_value::MetadataValue as Value,
     icrc3::{
@@ -59,8 +64,11 @@ use icrc_ledger_types::{
 };
 use num_traits::{bounds::Bounded, ToPrimitive};
 use serde_bytes::ByteBuf;
-use std::cell::RefCell;
-use std::io::{Read, Write};
+use std::{
+    cell::RefCell,
+    io::{Read, Write},
+    time::Duration,
+};
 
 const MAX_MESSAGE_SIZE: u64 = 1024 * 1024;
 
@@ -71,16 +79,17 @@ pub type Tokens = ic_icrc1_tokens_u64::U64;
 pub type Tokens = ic_icrc1_tokens_u256::U256;
 
 thread_local! {
-    static LEDGER: RefCell<Option<Ledger<Tokens>>> = const { RefCell::new(None) };
+    static LEDGER: RefCell<Option<Ledger>> = const { RefCell::new(None) };
     static PRE_UPGRADE_INSTRUCTIONS_CONSUMED: RefCell<u64> = const { RefCell::new(0) };
     static POST_UPGRADE_INSTRUCTIONS_CONSUMED: RefCell<u64> = const { RefCell::new(0) };
+    static STABLE_UPGRADE_MIGRATION_STEPS: RefCell<u64> = const { RefCell::new(0) };
 }
 
 declare_log_buffer!(name = LOG, capacity = 1000);
 
 struct Access;
 impl LedgerAccess for Access {
-    type Ledger = Ledger<Tokens>;
+    type Ledger = Ledger;
 
     fn with_ledger<R>(f: impl FnOnce(&Self::Ledger) -> R) -> R {
         LEDGER.with(|cell| {
@@ -116,9 +125,7 @@ fn init(args: LedgerArgument) {
 
 fn init_state(init_args: InitArgs) {
     let now = TimeStamp::from_nanos_since_unix_epoch(ic_cdk::api::time());
-    LEDGER.with(|cell| {
-        *cell.borrow_mut() = Some(Ledger::<Tokens>::from_init_args(&LOG, init_args, now))
-    })
+    LEDGER.with(|cell| *cell.borrow_mut() = Some(Ledger::from_init_args(&LOG, init_args, now)))
 }
 
 // We use 8MiB buffer
@@ -132,6 +139,12 @@ fn pre_upgrade() {
     let start = ic_cdk::api::instruction_counter();
     UPGRADES_MEMORY.with_borrow_mut(|bs| {
         Access::with_ledger(|ledger| {
+            if !is_ready() {
+                // This means that migration did not complete and the correct state
+                // of the ledger is still in UPGRADES_MEMORY.
+                log_message("Ledger not ready, skipping write to UPGRADES_MEMORY.");
+                return;
+            }
             let writer = Writer::new(bs, 0);
             let mut buffered_writer = BufferedWriter::new(BUFFER_SIZE, writer);
             ciborium::ser::into_writer(ledger, &mut buffered_writer)
@@ -145,6 +158,16 @@ fn pre_upgrade() {
         });
     });
 }
+
+#[cfg(not(feature = "low-upgrade-instruction-limits"))]
+const MAX_INSTRUCTIONS_PER_UPGRADE: u64 = 199_950_000_000;
+#[cfg(not(feature = "low-upgrade-instruction-limits"))]
+const MAX_INSTRUCTIONS_PER_TIMER_CALL: u64 = 1_950_000_000;
+
+#[cfg(feature = "low-upgrade-instruction-limits")]
+const MAX_INSTRUCTIONS_PER_UPGRADE: u64 = 13_000_000;
+#[cfg(feature = "low-upgrade-instruction-limits")]
+const MAX_INSTRUCTIONS_PER_TIMER_CALL: u64 = 500_000;
 
 #[post_upgrade]
 fn post_upgrade(args: Option<LedgerArgument>) {
@@ -164,43 +187,43 @@ fn post_upgrade(args: Option<LedgerArgument>) {
     let mut pre_upgrade_instructions_consumed = 0;
 
     if !memory_manager_found {
-        let mut stable_reader = StableReader::default();
-        LEDGER.with(|cell| {
-            *cell.borrow_mut() = Some(
-                ciborium::de::from_reader(&mut stable_reader)
-                    .expect("failed to decode ledger state"),
-            );
-        });
+        let msg =
+            "Cannot upgrade from scratch stable memory, please upgrade to memory manager first.";
+        log_message(msg);
+        panic!("{msg}");
+    }
+
+    let state: Ledger = UPGRADES_MEMORY.with_borrow(|bs| {
+        let reader = Reader::new(bs, 0);
+        let mut buffered_reader = BufferedReader::new(BUFFER_SIZE, reader);
+        let state = ciborium::de::from_reader(&mut buffered_reader).expect(
+            "Failed to read the Ledger state from memory manager managed stable structures",
+        );
         let mut pre_upgrade_instructions_counter_bytes = [0u8; 8];
         pre_upgrade_instructions_consumed =
-            match stable_reader.read_exact(&mut pre_upgrade_instructions_counter_bytes) {
+            match buffered_reader.read_exact(&mut pre_upgrade_instructions_counter_bytes) {
                 Ok(_) => u64::from_le_bytes(pre_upgrade_instructions_counter_bytes),
                 Err(_) => {
                     // If upgrading from a version that didn't write the instructions counter to stable memory
                     0u64
                 }
             };
-    } else {
-        let state: Ledger<Tokens> = UPGRADES_MEMORY.with_borrow(|bs| {
-            let reader = Reader::new(bs, 0);
-            let mut buffered_reader = BufferedReader::new(BUFFER_SIZE, reader);
-            let state = ciborium::de::from_reader(&mut buffered_reader).expect(
-                "Failed to read the Ledger state from memory manager managed stable structures",
+        state
+    });
+    ic_cdk::println!("Successfully read state from memory manager managed stable structures");
+    LEDGER.with_borrow_mut(|ledger| *ledger = Some(state));
+
+    let upgrade_from_version = Access::with_ledger_mut(|ledger| {
+        if ledger.ledger_version > LEDGER_VERSION {
+            panic!(
+                "Trying to downgrade from incompatible version {}. Current version is {}.",
+                ledger.ledger_version, LEDGER_VERSION
             );
-            let mut pre_upgrade_instructions_counter_bytes = [0u8; 8];
-            pre_upgrade_instructions_consumed =
-                match buffered_reader.read_exact(&mut pre_upgrade_instructions_counter_bytes) {
-                    Ok(_) => u64::from_le_bytes(pre_upgrade_instructions_counter_bytes),
-                    Err(_) => {
-                        // If upgrading from a version that didn't write the instructions counter to stable memory
-                        0u64
-                    }
-                };
-            state
-        });
-        ic_cdk::println!("Successfully read state from memory manager managed stable structures");
-        LEDGER.with_borrow_mut(|ledger| *ledger = Some(state));
-    }
+        }
+        let upgrade_from_version = ledger.ledger_version;
+        ledger.ledger_version = LEDGER_VERSION;
+        upgrade_from_version
+    });
 
     if let Some(args) = args {
         match args {
@@ -215,26 +238,111 @@ fn post_upgrade(args: Option<LedgerArgument>) {
 
     PRE_UPGRADE_INSTRUCTIONS_CONSUMED.with(|n| *n.borrow_mut() = pre_upgrade_instructions_consumed);
 
+    if upgrade_from_version < 2 {
+        set_ledger_state(LedgerState::Migrating(LedgerField::Balances));
+        log_message(format!("Upgrading from version {upgrade_from_version} which does not store balances in stable structures, clearing stable balances data.").as_str());
+        clear_stable_balances_data();
+        Access::with_ledger_mut(|ledger| {
+            ledger.copy_token_pool();
+        });
+    }
+    if upgrade_from_version == 0 {
+        set_ledger_state(LedgerState::Migrating(LedgerField::Allowances));
+        log_message("Upgrading from version 0 which does not use stable structures, clearing stable allowance data.");
+        clear_stable_allowance_data();
+        Access::with_ledger_mut(|ledger| {
+            ledger.clear_arrivals();
+        });
+    }
+    if !is_ready() {
+        log_message("Migration started.");
+        migrate_next_part(
+            MAX_INSTRUCTIONS_PER_UPGRADE.saturating_sub(pre_upgrade_instructions_consumed),
+        );
+    }
+
     let end = ic_cdk::api::instruction_counter();
     let instructions_consumed = end - start;
     POST_UPGRADE_INSTRUCTIONS_CONSUMED.with(|n| *n.borrow_mut() = instructions_consumed);
 }
 
+fn migrate_next_part(instruction_limit: u64) {
+    let instructions_migration_start = instruction_counter();
+    STABLE_UPGRADE_MIGRATION_STEPS.with(|n| *n.borrow_mut() += 1);
+    let mut migrated_allowances = 0;
+    let mut migrated_expirations = 0;
+    let mut migrated_balances = 0;
+
+    log_message("Migrating part of the ledger state.");
+
+    Access::with_ledger_mut(|ledger| {
+        while instruction_counter() < instruction_limit {
+            let field = match ledger_state() {
+                LedgerState::Migrating(ledger_field) => ledger_field,
+                LedgerState::Ready => break,
+            };
+            match field {
+                LedgerField::Allowances => {
+                    if ledger.migrate_one_allowance() {
+                        migrated_allowances += 1;
+                    } else {
+                        set_ledger_state(LedgerState::Migrating(
+                            LedgerField::AllowancesExpirations,
+                        ));
+                    }
+                }
+                LedgerField::AllowancesExpirations => {
+                    if ledger.migrate_one_expiration() {
+                        migrated_expirations += 1;
+                    } else {
+                        set_ledger_state(LedgerState::Migrating(LedgerField::Balances));
+                    }
+                }
+                LedgerField::Balances => {
+                    if ledger.migrate_one_balance() {
+                        migrated_balances += 1;
+                    } else {
+                        set_ledger_state(LedgerState::Ready);
+                    }
+                }
+            }
+        }
+        let instructions_migration = instruction_counter() - instructions_migration_start;
+        let msg = format!("Number of elements migrated: allowances: {migrated_allowances} expirations: {migrated_expirations} balances: {migrated_balances}. Migration step instructions: {instructions_migration}, total instructions used in message: {}." ,
+            instruction_counter());
+        if !is_ready() {
+            log_message(
+                format!("Migration partially done. Scheduling the next part. {msg}").as_str(),
+            );
+            ic_cdk_timers::set_timer(Duration::from_secs(0), || {
+                migrate_next_part(MAX_INSTRUCTIONS_PER_TIMER_CALL)
+            });
+        } else {
+            log_message(format!("Migration completed! {msg}").as_str());
+        }
+    });
+}
+
+fn log_message(msg: &str) {
+    ic_cdk::println!("{msg}");
+    log!(&LOG, "{msg}");
+}
+
 fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::io::Result<()> {
     w.encode_gauge(
         "ledger_stable_memory_pages",
-        ic_cdk::api::stable::stable64_size() as f64,
+        ic_cdk::api::stable::stable_size() as f64,
         "Size of the stable memory allocated by this canister measured in 64K Wasm pages.",
     )?;
     w.encode_gauge(
-        "ledger_stable_memory_bytes",
-        (ic_cdk::api::stable::stable64_size() * 64 * 1024) as f64,
-        "Size of the stable memory allocated by this canister.",
+        "stable_memory_bytes",
+        (ic_cdk::api::stable::stable_size() * 64 * 1024) as f64,
+        "Size of the stable memory allocated by this canister measured in bytes.",
     )?;
     w.encode_gauge(
-        "ledger_total_memory_bytes",
-        total_memory_size_bytes() as f64,
-        "Total amount of memory (heap, stable memory, etc) that has been allocated by this canister.",
+        "heap_memory_bytes",
+        heap_memory_size_bytes() as f64,
+        "Size of the heap memory allocated by this canister measured in bytes.",
     )?;
 
     let cycle_balance = ic_cdk::api::canister_balance128() as f64;
@@ -247,6 +355,7 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
         .value(&[("canister", "icrc1-ledger")], cycle_balance)?;
     let pre_upgrade_instructions = PRE_UPGRADE_INSTRUCTIONS_CONSUMED.with(|n| *n.borrow());
     let post_upgrade_instructions = POST_UPGRADE_INSTRUCTIONS_CONSUMED.with(|n| *n.borrow());
+    let stable_upgrade_migration_steps = STABLE_UPGRADE_MIGRATION_STEPS.with(|n| *n.borrow());
     w.encode_gauge(
         "ledger_pre_upgrade_instructions_consumed",
         pre_upgrade_instructions as f64,
@@ -261,6 +370,11 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
         "ledger_total_upgrade_instructions_consumed",
         pre_upgrade_instructions.saturating_add(post_upgrade_instructions) as f64,
         "Total number of instructions consumed during the last upgrade.",
+    )?;
+    w.encode_counter(
+        "ledger_stable_upgrade_migration_steps",
+        stable_upgrade_migration_steps as f64,
+        "Number of steps used to migrate data to stable structures.",
     )?;
 
     Access::with_ledger(|ledger| {
@@ -291,23 +405,25 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
             ledger.blockchain().num_archived_blocks.saturating_add(ledger.blockchain().blocks.len() as u64) as f64,
             "Total number of transactions stored in the main memory, plus total number of transactions sent to the archive.",
         )?;
-        let token_pool: Nat = ledger.balances().token_pool.into();
-        w.encode_gauge(
-            "ledger_balances_token_pool",
-            token_pool.0.to_f64().unwrap_or(f64::INFINITY),
-            "Total number of Tokens in the pool.",
-        )?;
-        let total_supply: Nat = ledger.balances().total_supply().into();
-        w.encode_gauge(
-            "ledger_total_supply",
-            total_supply.0.to_f64().unwrap_or(f64::INFINITY),
-            "Total number of tokens in circulation.",
-        )?;
-        w.encode_gauge(
-            "ledger_balance_store_entries",
-            ledger.balances().store.len() as f64,
-            "Total number of accounts in the balance store.",
-        )?;
+        if is_ready() {
+            let token_pool: Nat = ledger.balances().token_pool.into();
+            w.encode_gauge(
+                "ledger_balances_token_pool",
+                token_pool.0.to_f64().unwrap_or(f64::INFINITY),
+                "Total number of Tokens in the pool.",
+            )?;
+            let total_supply: Nat = ledger.balances().total_supply().into();
+            w.encode_gauge(
+                "ledger_total_supply",
+                total_supply.0.to_f64().unwrap_or(f64::INFINITY),
+                "Total number of tokens in circulation.",
+            )?;
+            w.encode_gauge(
+                "ledger_balance_store_entries",
+                balances_len() as f64,
+                "Total number of accounts in the balance store.",
+            )?;
+        }
         w.encode_gauge(
             "ledger_most_recent_block_time_seconds",
             (ledger
@@ -334,11 +450,13 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
                 format!("Failed to read number of archives: {}", err),
             ))?,
         }
-        w.encode_gauge(
-            "ledger_num_approvals",
-            ledger.approvals().get_num_approvals() as f64,
-            "Total number of approvals.",
-        )?;
+        if is_ready() {
+            w.encode_gauge(
+                "ledger_num_approvals",
+                ledger.approvals().get_num_approvals() as f64,
+                "Total number of approvals.",
+            )?;
+        }
         Ok(())
     })
 }
@@ -560,6 +678,7 @@ fn execute_transfer_not_async(
 #[update]
 #[candid_method(update)]
 async fn icrc1_transfer(arg: TransferArg) -> Result<Nat, TransferError> {
+    panic_if_not_ready();
     let from_account = Account {
         owner: ic_cdk::api::caller(),
         subaccount: arg.from_subaccount,
@@ -587,6 +706,7 @@ async fn icrc1_transfer(arg: TransferArg) -> Result<Nat, TransferError> {
 #[update]
 #[candid_method(update)]
 async fn icrc2_transfer_from(arg: TransferFromArgs) -> Result<Nat, TransferFromError> {
+    panic_if_not_ready();
     let spender_account = Account {
         owner: ic_cdk::api::caller(),
         subaccount: arg.spender_subaccount,
@@ -690,14 +810,13 @@ fn get_data_certificate() -> DataCertificate {
     }
 }
 
-#[update]
-#[candid_method(update)]
-async fn icrc2_approve(arg: ApproveArgs) -> Result<Nat, ApproveError> {
+fn icrc2_approve_not_async(caller: Principal, arg: ApproveArgs) -> Result<u64, ApproveError> {
+    panic_if_not_ready();
     let block_idx = Access::with_ledger_mut(|ledger| {
         let now = TimeStamp::from_nanos_since_unix_epoch(ic_cdk::api::time());
 
         let from_account = Account {
-            owner: ic_cdk::api::caller(),
+            owner: caller,
             subaccount: arg.from_subaccount,
         };
         if from_account.owner == arg.spender.owner {
@@ -760,6 +879,14 @@ async fn icrc2_approve(arg: ApproveArgs) -> Result<Nat, ApproveError> {
         Ok(block_idx)
     })?;
 
+    Ok(block_idx)
+}
+
+#[update]
+#[candid_method(update)]
+async fn icrc2_approve(arg: ApproveArgs) -> Result<Nat, ApproveError> {
+    let block_idx = icrc2_approve_not_async(ic_cdk::api::caller(), arg)?;
+
     // NB. we need to set the certified data before the first async call to make sure that the
     // blockchain state agrees with the certificate while archiving is in progress.
     ic_cdk::api::set_certified_data(&Access::with_ledger(Ledger::root_hash));
@@ -791,12 +918,12 @@ fn icrc3_get_archives(args: GetArchivesArgs) -> GetArchivesResult {
 
 #[query]
 #[candid_method(query)]
-fn icrc3_get_tip_certificate() -> Option<icrc_ledger_types::icrc3::blocks::ICRC3DataCertificate> {
+fn icrc3_get_tip_certificate() -> Option<ICRC3DataCertificate> {
     let certificate = ByteBuf::from(ic_cdk::api::data_certificate()?);
     let hash_tree = Access::with_ledger(|ledger| ledger.construct_hash_tree());
     let mut tree_buf = vec![];
     ciborium::ser::into_writer(&hash_tree, &mut tree_buf).unwrap();
-    Some(icrc_ledger_types::icrc3::blocks::ICRC3DataCertificate {
+    Some(ICRC3DataCertificate {
         certificate,
         hash_tree: ByteBuf::from(tree_buf),
     })
@@ -860,6 +987,12 @@ fn icrc21_canister_call_consent_message(
         token_symbol,
         decimals,
     )
+}
+
+#[query]
+#[candid_method(query)]
+fn is_ledger_ready() -> bool {
+    is_ready()
 }
 
 candid::export_service!();

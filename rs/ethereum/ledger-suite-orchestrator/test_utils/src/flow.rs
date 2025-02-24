@@ -1,15 +1,19 @@
-use crate::metrics::MetricsAssert;
 use crate::universal_canister::UniversalCanister;
 use crate::{
-    assert_reply, out_of_band_upgrade, stop_canister, LedgerAccount, LedgerMetadataValue,
-    LedgerSuiteOrchestrator, MAX_TICKS, MINTER_PRINCIPAL,
+    assert_reply, ledger_wasm, out_of_band_upgrade, stop_canister, LedgerAccount,
+    LedgerMetadataValue, LedgerSuiteOrchestrator, MINTER_PRINCIPAL,
 };
 use candid::{Decode, Encode, Nat, Principal};
 use ic_base_types::{CanisterId, PrincipalId};
+use ic_icrc1_ledger::ChangeArchiveOptions;
 use ic_ledger_suite_orchestrator::candid::{AddErc20Arg, ManagedCanisterIds};
 use ic_ledger_suite_orchestrator::state::{IndexWasm, LedgerWasm};
-use ic_management_canister_types::CanisterInfoResponse;
-use ic_state_machine_tests::{CanisterStatusResultV2, StateMachine};
+use ic_management_canister_types_private::{
+    CanisterInfoResponse, CanisterInstallMode, CanisterStatusResultV2, InstallCodeArgs, Method,
+    Payload,
+};
+use ic_metrics_assert::{CanisterHttpQuery, MetricsAssert};
+use ic_state_machine_tests::{StateMachine, UserError};
 use icrc_ledger_types::icrc1::transfer::{TransferArg, TransferError};
 use icrc_ledger_types::icrc3::archive::ArchiveInfo;
 use icrc_ledger_types::icrc3::blocks::{GetBlocksRequest, GetBlocksResult};
@@ -22,10 +26,31 @@ pub struct AddErc20TokenFlow {
 
 impl AddErc20TokenFlow {
     pub fn expect_new_ledger_and_index_canisters(self) -> ManagedCanistersAssert {
-        for _ in 0..MAX_TICKS {
-            self.setup.env.tick();
+        let contract = self.params.contract;
+        let canister_ids =
+            self.setup.wait_for(
+                || match self.setup.call_orchestrator_canister_ids(&contract) {
+                    Some(ids) if ids.ledger.is_some() && ids.index.is_some() => Ok(ids),
+                    incomplete_ids => Err(format!(
+                        "Not all canister IDs are available for ERC-20 {:?}: {:?}",
+                        contract, incomplete_ids
+                    )),
+                },
+            );
+        assert_ne!(
+            canister_ids.ledger, canister_ids.index,
+            "BUG: ledger and index canister IDs MUST be different"
+        );
+
+        self.setup
+            .wait_for_canister_to_be_installed_and_running(canister_ids.ledger.unwrap());
+        self.setup
+            .wait_for_canister_to_be_installed_and_running(canister_ids.index.unwrap());
+
+        ManagedCanistersAssert {
+            setup: self.setup,
+            canister_ids,
         }
-        self.setup.assert_managed_canisters(&self.params.contract)
     }
 }
 
@@ -64,13 +89,20 @@ impl ManagedCanistersAssert {
     }
 
     pub fn check_metrics(self) -> MetricsAssert<Self> {
-        let canister_id = self.setup.ledger_suite_orchestrator_id;
-        MetricsAssert::from_querying_metrics(self, canister_id)
+        MetricsAssert::from_http_query(self)
     }
 
     pub fn trigger_creation_of_archive(self) -> Self {
-        const ARCHIVE_TRIGGER_THRESHOLD: u64 = 2_000;
+        const ARCHIVE_TRIGGER_THRESHOLD: usize = 10;
 
+        // The productive value for `trigger_threshold` is `2_000`,
+        // which would require `2_000` transfers to trigger the creation of an archive,
+        // which would take in the order of 20s (order of magnitude is 10ms per transfer with state machine tests).
+        // We set this value to an artificially low number to speed up the test.
+        self.upgrade_ledger_to_change_archive_options(ChangeArchiveOptions {
+            trigger_threshold: Some(ARCHIVE_TRIGGER_THRESHOLD),
+            ..Default::default()
+        });
         let archive_ids_before: BTreeSet<_> = self
             .call_ledger_archives()
             .into_iter()
@@ -93,8 +125,6 @@ impl ManagedCanistersAssert {
             )
             .expect("BUG: fail to make a transfer to trigger archive creation");
         }
-
-        self.setup.env.run_until_completion(/*max_ticks=*/ 10);
 
         let archive_ids_after: BTreeSet<_> = self
             .call_ledger_archives()
@@ -234,6 +264,43 @@ impl ManagedCanistersAssert {
         .expect("failed to decode transfer response")
     }
 
+    pub fn upgrade_ledger_to_change_archive_options(&self, archive_options: ChangeArchiveOptions) {
+        use ic_icrc1_ledger::{LedgerArgument, UpgradeArgs as LedgerUpgradeArgs};
+
+        let module_hash_before = self
+            .ledger_canister_status()
+            .module_hash()
+            .expect("BUG: ledger is not installed");
+
+        let upgrade_args = Some(LedgerArgument::Upgrade(Some(LedgerUpgradeArgs {
+            change_archive_options: Some(archive_options),
+            ..Default::default()
+        })));
+        let res = self.setup.env.execute_ingress_as(
+            self.setup.ledger_suite_orchestrator_id.into(),
+            CanisterId::ic_00(),
+            Method::InstallCode,
+            InstallCodeArgs::new(
+                CanisterInstallMode::Upgrade,
+                self.ledger_canister_id(),
+                ledger_wasm().to_bytes(),
+                Encode!(&upgrade_args).unwrap(),
+                None,
+                None,
+            )
+            .encode(),
+        );
+        assert_reply(res.unwrap());
+        let module_hash_after = self
+            .ledger_canister_status()
+            .module_hash()
+            .expect("BUG: ledger is not installed");
+        assert_eq!(
+            module_hash_before, module_hash_after,
+            "BUG: ledger wasm hash changed when changing archive options"
+        );
+    }
+
     pub fn call_ledger_icrc3_get_blocks(&self, request: &Vec<GetBlocksRequest>) -> GetBlocksResult {
         Decode!(
             &self
@@ -358,10 +425,16 @@ impl ManagedCanistersAssert {
     }
 }
 
+impl CanisterHttpQuery<UserError> for ManagedCanistersAssert {
+    fn http_query(&self, request: Vec<u8>) -> Result<Vec<u8>, UserError> {
+        self.setup.http_query(request)
+    }
+}
+
 macro_rules! assert_ledger {
     ($name:expr, $ty:ty) => {
         paste::paste! {
-            pub fn [<call_ledger_$name:snake >](env: &ic_state_machine_tests::StateMachine, ledger_canister_id: ic_state_machine_tests::CanisterId) -> $ty {
+            pub fn [<call_ledger_$name:snake >](env: &ic_state_machine_tests::StateMachine, ledger_canister_id: ic_base_types::CanisterId) -> $ty {
                 candid::Decode!(
                     &assert_reply(
                             env

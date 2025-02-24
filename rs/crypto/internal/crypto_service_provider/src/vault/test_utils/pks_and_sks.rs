@@ -1,7 +1,7 @@
 use crate::vault::api::IDkgProtocolCspVault;
 use crate::CspVault;
 use crate::ExternalPublicKeys;
-use ic_crypto_internal_threshold_sig_ecdsa::MEGaPublicKey;
+use ic_crypto_internal_threshold_sig_canister_threshold_sig::MEGaPublicKey;
 use ic_types::crypto::CurrentNodePublicKeys;
 use ic_types_test_utils::ids::node_test_id;
 

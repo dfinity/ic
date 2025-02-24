@@ -2,7 +2,7 @@
 //! The types in this module are used to serialize and deserialize data
 //! from and to JSON, and are used by both crates.
 
-use crate::UserError;
+use crate::RejectResponse;
 use candid::Principal;
 use hex;
 use reqwest::Response;
@@ -98,6 +98,22 @@ pub enum RawEffectivePrincipal {
     ),
 }
 
+impl std::fmt::Display for RawEffectivePrincipal {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            RawEffectivePrincipal::None => write!(f, "None"),
+            RawEffectivePrincipal::SubnetId(subnet_id) => {
+                let principal = Principal::from_slice(subnet_id);
+                write!(f, "SubnetId({})", principal)
+            }
+            RawEffectivePrincipal::CanisterId(canister_id) => {
+                let principal = Principal::from_slice(canister_id);
+                write!(f, "CanisterId({})", principal)
+            }
+        }
+    }
+}
+
 #[derive(Clone, Serialize, Deserialize, Debug, JsonSchema)]
 pub struct RawMessageId {
     pub effective_principal: RawEffectivePrincipal,
@@ -107,9 +123,9 @@ pub struct RawMessageId {
 }
 
 #[derive(Clone, Serialize, Deserialize, Debug, JsonSchema)]
-pub enum RawSubmitIngressResult {
-    Ok(RawMessageId),
-    Err(UserError),
+pub struct RawIngressStatusArgs {
+    pub raw_message_id: RawMessageId,
+    pub raw_caller: Option<RawPrincipalId>,
 }
 
 #[derive(Clone, Serialize, Deserialize, Debug, JsonSchema)]
@@ -129,21 +145,30 @@ pub struct RawCanisterCall {
 
 #[derive(Clone, Serialize, Deserialize, Debug, JsonSchema)]
 pub enum RawCanisterResult {
-    Ok(RawWasmResult),
-    Err(UserError),
-}
-
-#[derive(Clone, Serialize, Deserialize, Debug, JsonSchema)]
-pub enum RawWasmResult {
-    /// Raw response, returned in a "happy" case
-    Reply(
+    Ok(
         #[serde(deserialize_with = "base64::deserialize")]
         #[serde(serialize_with = "base64::serialize")]
         Vec<u8>,
     ),
-    /// Returned with an error message when the canister decides to reject the
-    /// message
-    Reject(String),
+    Err(RejectResponse),
+}
+
+impl From<Result<Vec<u8>, RejectResponse>> for RawCanisterResult {
+    fn from(result: Result<Vec<u8>, RejectResponse>) -> Self {
+        match result {
+            Ok(data) => RawCanisterResult::Ok(data),
+            Err(reject_response) => RawCanisterResult::Err(reject_response),
+        }
+    }
+}
+
+impl From<RawCanisterResult> for Result<Vec<u8>, RejectResponse> {
+    fn from(result: RawCanisterResult) -> Self {
+        match result {
+            RawCanisterResult::Ok(data) => Ok(data),
+            RawCanisterResult::Err(reject_response) => Err(reject_response),
+        }
+    }
 }
 
 #[derive(Clone, Serialize, Deserialize, Debug, JsonSchema)]
@@ -242,6 +267,28 @@ pub struct RawCycles {
 }
 
 #[derive(Clone, Serialize, Eq, PartialEq, Ord, PartialOrd, Deserialize, Debug, JsonSchema)]
+pub struct RawPrincipalId {
+    // raw bytes of the principal
+    #[serde(deserialize_with = "base64::deserialize")]
+    #[serde(serialize_with = "base64::serialize")]
+    pub principal_id: Vec<u8>,
+}
+
+impl From<Principal> for RawPrincipalId {
+    fn from(principal: Principal) -> Self {
+        Self {
+            principal_id: principal.as_slice().to_vec(),
+        }
+    }
+}
+
+impl From<RawPrincipalId> for Principal {
+    fn from(raw_principal_id: RawPrincipalId) -> Self {
+        Principal::from_slice(&raw_principal_id.principal_id)
+    }
+}
+
+#[derive(Clone, Serialize, Eq, PartialEq, Ord, PartialOrd, Deserialize, Debug, JsonSchema)]
 pub struct RawCanisterId {
     // raw bytes of the principal
     #[serde(deserialize_with = "base64::deserialize")]
@@ -254,6 +301,12 @@ impl From<Principal> for RawCanisterId {
         Self {
             canister_id: principal.as_slice().to_vec(),
         }
+    }
+}
+
+impl From<RawCanisterId> for Principal {
+    fn from(raw_canister_id: RawCanisterId) -> Self {
+        Principal::from_slice(&raw_canister_id.canister_id)
     }
 }
 
@@ -301,6 +354,23 @@ impl From<Principal> for RawNodeId {
             node_id: principal.as_slice().to_vec(),
         }
     }
+}
+
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize, JsonSchema, Default)]
+pub struct TickConfigs {
+    pub blockmakers: Option<BlockmakerConfigs>,
+}
+
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct BlockmakerConfigs {
+    pub blockmakers_per_subnet: Vec<RawSubnetBlockmaker>,
+}
+
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct RawSubnetBlockmaker {
+    pub subnet: RawSubnetId,
+    pub blockmaker: RawNodeId,
+    pub failed_blockmakers: Vec<RawNodeId>,
 }
 
 #[derive(Serialize, Deserialize, JsonSchema)]
@@ -461,7 +531,7 @@ pub struct InstanceConfig {
     pub state_dir: Option<PathBuf>,
     pub nonmainnet_features: bool,
     pub log_level: Option<String>,
-    pub bitcoind_addr: Option<SocketAddr>,
+    pub bitcoind_addr: Option<Vec<SocketAddr>>,
 }
 
 #[derive(Debug, Clone, Eq, Hash, PartialEq, Serialize, Deserialize, Default, JsonSchema)]
@@ -481,7 +551,6 @@ pub struct ExtendedSubnetConfigSet {
 pub struct SubnetSpec {
     state_config: SubnetStateConfig,
     instruction_config: SubnetInstructionConfig,
-    dts_flag: DtsFlag,
 }
 
 impl SubnetSpec {
@@ -490,27 +559,13 @@ impl SubnetSpec {
         self
     }
 
-    /// DTS is disabled on benchmarking subnet by default
-    /// since running update calls with very high instruction counts and DTS enabled
-    /// is very slow.
-    /// You can enable DTS by using `.with_dts_flag(DtsConfig::Enabled)`.
     pub fn with_benchmarking_instruction_config(mut self) -> SubnetSpec {
         self.instruction_config = SubnetInstructionConfig::Benchmarking;
-        self.dts_flag = DtsFlag::Disabled;
-        self
-    }
-
-    pub fn with_dts_flag(mut self, dts_flag: DtsFlag) -> SubnetSpec {
-        self.dts_flag = dts_flag;
         self
     }
 
     pub fn get_state_path(&self) -> Option<PathBuf> {
         self.state_config.get_path()
-    }
-
-    pub fn get_dts_flag(&self) -> DtsFlag {
-        self.dts_flag
     }
 
     pub fn get_subnet_id(&self) -> Option<RawSubnetId> {
@@ -539,7 +594,6 @@ impl Default for SubnetSpec {
         Self {
             state_config: SubnetStateConfig::New,
             instruction_config: SubnetInstructionConfig::Production,
-            dts_flag: DtsFlag::Enabled,
         }
     }
 }
@@ -553,13 +607,6 @@ pub enum SubnetInstructionConfig {
     Production,
     /// Use very high instruction limits useful for asymptotic canister benchmarking.
     Benchmarking,
-}
-
-/// Specifies whether DTS should be disabled on this subnet.
-#[derive(Debug, Clone, Copy, Eq, Hash, PartialEq, Serialize, Deserialize, JsonSchema)]
-pub enum DtsFlag {
-    Enabled,
-    Disabled,
 }
 
 /// Specifies whether the subnet should be created from scratch or loaded
@@ -603,7 +650,6 @@ impl ExtendedSubnetConfigSet {
         Option<PathBuf>,
         Option<RawSubnetId>,
         SubnetInstructionConfig,
-        DtsFlag,
     )> {
         use SubnetKind::*;
         vec![
@@ -622,7 +668,6 @@ impl ExtendedSubnetConfigSet {
                 spec.get_state_path(),
                 spec.get_subnet_id(),
                 spec.get_instruction_config(),
-                spec.get_dts_flag(),
             )
         })
         .collect()
@@ -641,32 +686,6 @@ impl ExtendedSubnetConfigSet {
             return Ok(());
         }
         Err("ExtendedSubnetConfigSet must contain at least one subnet".to_owned())
-    }
-
-    pub fn with_dts_flag(mut self, dts_flag: DtsFlag) -> ExtendedSubnetConfigSet {
-        self.nns = self.nns.map(|nns| nns.with_dts_flag(dts_flag));
-        self.sns = self.sns.map(|sns| sns.with_dts_flag(dts_flag));
-        self.ii = self.ii.map(|ii| ii.with_dts_flag(dts_flag));
-        self.fiduciary = self
-            .fiduciary
-            .map(|fiduciary| fiduciary.with_dts_flag(dts_flag));
-        self.bitcoin = self.bitcoin.map(|bitcoin| bitcoin.with_dts_flag(dts_flag));
-        self.system = self
-            .system
-            .into_iter()
-            .map(|conf| conf.with_dts_flag(dts_flag))
-            .collect();
-        self.application = self
-            .application
-            .into_iter()
-            .map(|conf| conf.with_dts_flag(dts_flag))
-            .collect();
-        self.verified_application = self
-            .verified_application
-            .into_iter()
-            .map(|conf| conf.with_dts_flag(dts_flag))
-            .collect();
-        self
     }
 }
 
@@ -689,10 +708,33 @@ pub struct CanisterIdRange {
     pub end: RawCanisterId,
 }
 
+impl CanisterIdRange {
+    fn contains(&self, canister_id: Principal) -> bool {
+        Principal::from_slice(&self.start.canister_id) <= canister_id
+            && canister_id <= Principal::from_slice(&self.end.canister_id)
+    }
+}
+
 #[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize, JsonSchema)]
-pub struct Topology(pub BTreeMap<SubnetId, SubnetConfig>);
+pub struct Topology {
+    pub subnet_configs: BTreeMap<SubnetId, SubnetConfig>,
+    pub default_effective_canister_id: RawCanisterId,
+}
 
 impl Topology {
+    pub fn get_subnet(&self, canister_id: Principal) -> Option<SubnetId> {
+        self.subnet_configs
+            .iter()
+            .find(|(_, config)| {
+                config
+                    .canister_ranges
+                    .iter()
+                    .any(|r| r.contains(canister_id))
+            })
+            .map(|(subnet_id, _)| subnet_id)
+            .copied()
+    }
+
     pub fn get_app_subnets(&self) -> Vec<SubnetId> {
         self.find_subnets(SubnetKind::Application, None)
     }
@@ -737,7 +779,7 @@ impl Topology {
         kind: SubnetKind,
         instruction_config: Option<SubnetInstructionConfig>,
     ) -> Vec<SubnetId> {
-        self.0
+        self.subnet_configs
             .iter()
             .filter(|(_, config)| {
                 config.subnet_kind == kind
@@ -751,7 +793,7 @@ impl Topology {
     }
 
     fn find_subnet(&self, kind: SubnetKind) -> Option<SubnetId> {
-        self.0
+        self.subnet_configs
             .iter()
             .find(|(_, config)| config.subnet_kind == kind)
             .map(|(id, _)| *id)

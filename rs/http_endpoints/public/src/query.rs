@@ -194,7 +194,7 @@ pub(crate) async fn query(
     {
         Ok(Ok(_)) => {}
         Ok(Err(err)) => {
-            let http_err = validation_error_to_http_error(request.id(), err, &log);
+            let http_err = validation_error_to_http_error(&request, err, &log);
             return (http_err.status, http_err.message).into_response();
         }
         Err(_) => {
@@ -234,7 +234,7 @@ pub(crate) async fn query(
         Err(user_error) => HttpQueryResponse::Rejected {
             error_code: user_error.code().to_string(),
             reject_code: user_error.reject_code() as u64,
-            reject_message: user_error.to_string(),
+            reject_message: user_error.description().to_string(),
         },
     };
 

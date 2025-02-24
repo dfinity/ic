@@ -140,7 +140,6 @@ rust_test(
 
 rust_ic_test(
     name = "integration_tests",
-    timeout = "long",
     testonly = True,
     srcs = ["tests/tests.rs"],
     data = [
@@ -150,6 +149,7 @@ rust_ic_test(
         "//rs/ledger_suite/icrc1/index-ng:index_ng_canister_u256.wasm.gz",
         "//rs/ledger_suite/icrc1/ledger:ledger_canister_u256.wasm.gz",
         "//rs/ledger_suite/icrc1/ledger:ledger_canister_u256_getblocksdisabled.wasm.gz",
+        "//rs/universal_canister/impl:universal_canister.wasm.gz",
     ],
     env = {
         "CARGO_MANIFEST_DIR": "rs/ethereum/ledger-suite-orchestrator",
@@ -159,6 +159,7 @@ rust_ic_test(
         "LEDGER_CANISTER_GET_BLOCKS_DISABLED_WASM_PATH": "$(rootpath //rs/ledger_suite/icrc1/ledger:ledger_canister_u256_getblocksdisabled.wasm.gz)",
         "INDEX_CANISTER_WASM_PATH": "$(rootpath //rs/ledger_suite/icrc1/index-ng:index_ng_canister_u256.wasm.gz)",
         "LEDGER_ARCHIVE_NODE_CANISTER_WASM_PATH": "$(rootpath //rs/ledger_suite/icrc1/archive:archive_canister_u256.wasm.gz)",
+        "UNIVERSAL_CANISTER_WASM_PATH": "$(rootpath //rs/universal_canister/impl:universal_canister.wasm.gz)",
     },
     proc_macro_deps = [],
     deps = [
@@ -171,6 +172,7 @@ rust_ic_test(
         "//rs/rust_canisters/http_types",
         "//rs/state_machine_tests",
         "//rs/types/base_types",
+        "//rs/types/management_canister_types",
         "@crate_index//:assert_matches",
         "@crate_index//:candid",
         "@crate_index//:proptest",

@@ -14,9 +14,9 @@ rust_library(
     version = "0.9.0",
     deps = [
         # Keep sorted.
+        "//packages/ic-ed25519",
         "//rs/canonical_state/certification_version",
         "//rs/config",
-        "//rs/crypto/ed25519",
         "//rs/crypto/utils/threshold_sig_der",
         "//rs/cycles_account_manager",
         "//rs/interfaces",
@@ -93,6 +93,10 @@ rust_ic_test_suite(
         "RANDOM_TRAFFIC_TEST_CANISTER_WASM_PATH": "$(rootpath //rs/rust_canisters/random_traffic_test:random-traffic-test-canister)",
         "XNET_TEST_CANISTER_WASM_PATH": "$(rootpath //rs/rust_canisters/xnet_test:xnet-test-canister)",
     },
+    proc_macro_deps = [
+        # Keep sorted.
+        "@crate_index//:test-strategy",
+    ],
     deps = [
         # Keep sorted.
         ":messaging",

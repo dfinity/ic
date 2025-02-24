@@ -1,5 +1,10 @@
 mod call_context_manager;
+mod task_queue;
 pub mod wasm_chunk_store;
+
+pub use self::task_queue::{
+    is_low_wasm_memory_hook_condition_satisfied, OnLowWasmMemoryHookStatus, TaskQueue,
+};
 
 use self::wasm_chunk_store::{WasmChunkStore, WasmChunkStoreMetadata};
 pub use super::queues::memory_required_to_push_request;
@@ -13,11 +18,10 @@ use crate::{
 };
 pub use call_context_manager::{CallContext, CallContextAction, CallContextManager, CallOrigin};
 use ic_base_types::NumSeconds;
-use ic_config::flag_status::FlagStatus;
 use ic_error_types::RejectCode;
-use ic_interfaces::execution_environment::{ExecutionRoundType, HypervisorError};
+use ic_interfaces::execution_environment::HypervisorError;
 use ic_logger::{error, ReplicaLogger};
-use ic_management_canister_types::{
+use ic_management_canister_types_private::{
     CanisterChange, CanisterChangeDetails, CanisterChangeOrigin, CanisterStatusType,
     LogVisibilityV2,
 };
@@ -43,7 +47,6 @@ use lazy_static::lazy_static;
 use maplit::btreeset;
 use prometheus::IntCounter;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::convert::{TryFrom, TryInto};
 use std::str::FromStr;
@@ -76,6 +79,7 @@ pub enum CyclesUseCase {
     NonConsumed = 11,
     BurnedCycles = 12,
     SchnorrOutcalls = 13,
+    VetKd = 14,
 }
 
 impl CyclesUseCase {
@@ -96,6 +100,7 @@ impl CyclesUseCase {
             Self::NonConsumed => "NonConsumed",
             Self::BurnedCycles => "BurnedCycles",
             Self::SchnorrOutcalls => "SchnorrOutcalls",
+            Self::VetKd => "VetKd",
         }
     }
 }
@@ -118,6 +123,7 @@ impl From<CyclesUseCase> for pb::CyclesUseCase {
             CyclesUseCase::NonConsumed => pb::CyclesUseCase::NonConsumed,
             CyclesUseCase::BurnedCycles => pb::CyclesUseCase::BurnedCycles,
             CyclesUseCase::SchnorrOutcalls => pb::CyclesUseCase::SchnorrOutcalls,
+            CyclesUseCase::VetKd => pb::CyclesUseCase::VetKd,
         }
     }
 }
@@ -145,6 +151,7 @@ impl TryFrom<pb::CyclesUseCase> for CyclesUseCase {
             pb::CyclesUseCase::NonConsumed => Ok(Self::NonConsumed),
             pb::CyclesUseCase::BurnedCycles => Ok(Self::BurnedCycles),
             pb::CyclesUseCase::SchnorrOutcalls => Ok(Self::SchnorrOutcalls),
+            pb::CyclesUseCase::VetKd => Ok(Self::VetKd),
         }
     }
 }
@@ -276,232 +283,6 @@ impl CanisterHistory {
     }
 }
 
-/// `TaskQueue` represents the implementation of a queue structure for tasks.
-#[derive(Clone, Eq, PartialEq, Debug, Default)]
-pub struct TaskQueue {
-    /// Queue of tasks.
-    queue: VecDeque<ExecutionTask>,
-
-    /// Status of low_on_wasm_memory hook execution.
-    on_low_wasm_memory_hook_status: OnLowWasmMemoryHookStatus,
-}
-
-impl TaskQueue {
-    pub fn from_checkpoint(
-        queue: VecDeque<ExecutionTask>,
-        on_low_wasm_memory_hook_status: OnLowWasmMemoryHookStatus,
-        canister_id: &CanisterId,
-    ) -> Self {
-        let queue = TaskQueue {
-            queue,
-            on_low_wasm_memory_hook_status,
-        };
-
-        // Because paused tasks are not allowed in checkpoint rounds when
-        // checking dts invariants that is equivalent to disabling dts.
-        queue.check_dts_invariants(
-            FlagStatus::Disabled,
-            ExecutionRoundType::CheckpointRound,
-            canister_id,
-        );
-
-        queue
-    }
-
-    pub fn front(&self) -> Option<&ExecutionTask> {
-        self.queue.front()
-    }
-
-    pub fn pop_front(&mut self) -> Option<ExecutionTask> {
-        self.queue.pop_front()
-    }
-
-    pub fn remove(&mut self, task: ExecutionTask) {
-        match task {
-            ExecutionTask::OnLowWasmMemory => {
-                self.on_low_wasm_memory_hook_status.update(false);
-            }
-            ExecutionTask::Heartbeat
-            | ExecutionTask::GlobalTimer
-            | ExecutionTask::AbortedInstallCode { .. }
-            | ExecutionTask::PausedExecution { .. }
-            | ExecutionTask::PausedInstallCode(_)
-            | ExecutionTask::AbortedExecution { .. } => unreachable!(
-                "Removal of task from TaskQueue is only supported for OnLowWasmMemory type."
-            ),
-        };
-    }
-
-    pub fn enqueue(&mut self, task: ExecutionTask) {
-        match task {
-            ExecutionTask::OnLowWasmMemory => {
-                self.on_low_wasm_memory_hook_status.update(true);
-            }
-            ExecutionTask::Heartbeat
-            | ExecutionTask::GlobalTimer
-            | ExecutionTask::AbortedInstallCode { .. }
-            | ExecutionTask::PausedExecution { .. }
-            | ExecutionTask::PausedInstallCode(_)
-            | ExecutionTask::AbortedExecution { .. } => self.queue.push_front(task),
-        };
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.queue.is_empty()
-    }
-
-    pub fn len(&self) -> usize {
-        self.queue.len()
-    }
-
-    pub fn peek_hook_status(&self) -> OnLowWasmMemoryHookStatus {
-        self.on_low_wasm_memory_hook_status
-    }
-
-    pub fn get_queue(&self) -> &VecDeque<ExecutionTask> {
-        &self.queue
-    }
-
-    /// `check_dts_invariants` should only be called after round execution.
-    ///
-    /// It checks that the following properties are satisfied:
-    /// 1. Heartbeat, GlobalTimer tasks exist only during the round and must not exist after the round.
-    /// 2. Paused executions can exist only in ordinary rounds (not checkpoint rounds).
-    /// 3. If deterministic time slicing is disabled, then there are no paused tasks.
-    ///    Aborted tasks may still exist if DTS was disabled in recent checkpoints.
-    pub fn check_dts_invariants(
-        &self,
-        deterministic_time_slicing: FlagStatus,
-        current_round_type: ExecutionRoundType,
-        id: &CanisterId,
-    ) {
-        // There should be at most one paused or aborted task left in the task queue.
-        assert!(
-            self.queue.len() <= 1,
-            "Unexpected tasks left in the task queue of canister {} after a round in canister {:?}",
-            id,
-            self.queue
-        );
-
-        for task in self.queue.iter() {
-            match task {
-                ExecutionTask::AbortedExecution { .. }
-                | ExecutionTask::AbortedInstallCode { .. } => {}
-                ExecutionTask::Heartbeat => {
-                    panic!(
-                        "Unexpected heartbeat task after a round in canister {:?}",
-                        id
-                    );
-                }
-                ExecutionTask::GlobalTimer => {
-                    panic!(
-                        "Unexpected global timer task after a round in canister {:?}",
-                        id
-                    );
-                }
-                ExecutionTask::OnLowWasmMemory => {
-                    panic!(
-                        "Unexpected on low wasm memory task in the queue part of struct TaskQueue, after a round in canister {:?}",
-                        id
-                    );
-                }
-                ExecutionTask::PausedExecution { .. } | ExecutionTask::PausedInstallCode(_) => {
-                    assert_eq!(
-                        current_round_type,
-                        ExecutionRoundType::OrdinaryRound,
-                        "Unexpected paused execution {:?} after a checkpoint round in canister {:?}",
-                        task,
-                        id
-                    );
-
-                    assert_eq!(
-                        deterministic_time_slicing,
-                        FlagStatus::Enabled,
-                        "Unexpected paused execution {:?} with disabled DTS in canister: {:?}",
-                        task,
-                        id
-                    );
-                }
-            }
-        }
-    }
-
-    /// Removes aborted install code task.
-    pub fn remove_aborted_install_code_task(&mut self) {
-        self.queue.retain(|task| match task {
-            ExecutionTask::AbortedInstallCode { .. } => false,
-            ExecutionTask::Heartbeat
-            | ExecutionTask::GlobalTimer
-            | ExecutionTask::OnLowWasmMemory
-            | ExecutionTask::PausedExecution { .. }
-            | ExecutionTask::PausedInstallCode(_)
-            | ExecutionTask::AbortedExecution { .. } => true,
-        });
-    }
-
-    /// Removes `Heartbeat` and `GlobalTimer` tasks.
-    pub fn remove_heartbeat_and_global_timer(&mut self) {
-        self.queue.retain(|task| match task {
-            ExecutionTask::Heartbeat | ExecutionTask::GlobalTimer => false,
-            ExecutionTask::PausedExecution { .. }
-            | ExecutionTask::PausedInstallCode(..)
-            | ExecutionTask::AbortedExecution { .. }
-            | ExecutionTask::AbortedInstallCode { .. }
-            | ExecutionTask::OnLowWasmMemory => true,
-        });
-    }
-
-    /// Returns all `PausedExecution` and `PausedInstallCode` tasks.
-    pub fn get_all_paused_tasks(&self) -> Vec<&ExecutionTask> {
-        let mut res = Vec::new();
-        for task in self.queue.iter() {
-            match task {
-                ExecutionTask::PausedExecution { .. } | ExecutionTask::PausedInstallCode(..) => {
-                    res.push(task)
-                }
-                ExecutionTask::Heartbeat
-                | ExecutionTask::GlobalTimer
-                | ExecutionTask::AbortedExecution { .. }
-                | ExecutionTask::AbortedInstallCode { .. }
-                | ExecutionTask::OnLowWasmMemory => (),
-            }
-        }
-        res
-    }
-
-    /// Replace all `PausedExecution` and `PausedInstallCode` with corresponding
-    /// `AbortedExecution` and `AbortedInstallCode` respectively.
-    pub fn replace_paused_with_aborted_tasks(
-        &mut self,
-        mut aborted_tasks: HashMap<PausedExecutionId, ExecutionTask>,
-    ) {
-        let task_queue = std::mem::take(&mut self.queue);
-
-        self.queue = task_queue
-            .into_iter()
-            .map(|task| match task {
-                ExecutionTask::AbortedExecution { .. }
-                | ExecutionTask::AbortedInstallCode { .. }
-                | ExecutionTask::Heartbeat
-                | ExecutionTask::GlobalTimer
-                | ExecutionTask::OnLowWasmMemory => task,
-                ExecutionTask::PausedExecution { id, .. } => {
-                    let aborted = aborted_tasks.remove(&id).unwrap();
-                    debug_assert!(matches!(aborted, ExecutionTask::AbortedExecution { .. }));
-                    aborted
-                }
-                ExecutionTask::PausedInstallCode(id) => {
-                    let aborted = aborted_tasks.remove(&id).unwrap();
-                    debug_assert!(matches!(aborted, ExecutionTask::AbortedInstallCode { .. }));
-                    aborted
-                }
-            })
-            .collect();
-
-        debug_assert!(aborted_tasks.is_empty());
-    }
-}
-
 /// State that is controlled and owned by the system (IC).
 ///
 /// Contains structs needed for running and maintaining the canister on the IC.
@@ -615,61 +396,6 @@ pub struct SystemState {
     /// This amount contributes to the total `memory_usage` of the canister as
     /// reported by `CanisterState::memory_usage`.
     pub snapshots_memory_usage: NumBytes,
-}
-
-/// A wrapper around the different statuses of `OnLowWasmMemory` hook execution.
-#[derive(Clone, Copy, Eq, PartialEq, Debug, Default, Deserialize, Serialize)]
-pub enum OnLowWasmMemoryHookStatus {
-    #[default]
-    ConditionNotSatisfied,
-    Ready,
-    Executed,
-}
-
-impl OnLowWasmMemoryHookStatus {
-    fn update(&mut self, is_hook_condition_satisfied: bool) {
-        *self = if is_hook_condition_satisfied {
-            match *self {
-                Self::ConditionNotSatisfied | Self::Ready => Self::Ready,
-                Self::Executed => Self::Executed,
-            }
-        } else {
-            Self::ConditionNotSatisfied
-        };
-    }
-}
-
-impl From<&OnLowWasmMemoryHookStatus> for pb::OnLowWasmMemoryHookStatus {
-    fn from(item: &OnLowWasmMemoryHookStatus) -> Self {
-        use OnLowWasmMemoryHookStatus::*;
-
-        match *item {
-            ConditionNotSatisfied => Self::ConditionNotSatisfied,
-            Ready => Self::Ready,
-            Executed => Self::Executed,
-        }
-    }
-}
-
-impl TryFrom<pb::OnLowWasmMemoryHookStatus> for OnLowWasmMemoryHookStatus {
-    type Error = ProxyDecodeError;
-
-    fn try_from(value: pb::OnLowWasmMemoryHookStatus) -> Result<Self, Self::Error> {
-        match value {
-            pb::OnLowWasmMemoryHookStatus::Unspecified => Err(ProxyDecodeError::ValueOutOfRange {
-                typ: "OnLowWasmMemoryHookStatus",
-                err: format!(
-                    "Unexpected value of status of on low wasm memory hook: {:?}",
-                    value
-                ),
-            }),
-            pb::OnLowWasmMemoryHookStatus::ConditionNotSatisfied => {
-                Ok(OnLowWasmMemoryHookStatus::ConditionNotSatisfied)
-            }
-            pb::OnLowWasmMemoryHookStatus::Ready => Ok(OnLowWasmMemoryHookStatus::Ready),
-            pb::OnLowWasmMemoryHookStatus::Executed => Ok(OnLowWasmMemoryHookStatus::Executed),
-        }
-    }
 }
 
 /// A wrapper around the different canister statuses.
@@ -811,6 +537,20 @@ pub enum ExecutionTask {
         /// Retried execution does not have to pay for it again.
         prepaid_execution_cycles: Cycles,
     },
+}
+
+impl ExecutionTask {
+    pub fn is_hook(&self) -> bool {
+        match self {
+            Self::OnLowWasmMemory => true,
+            Self::Heartbeat
+            | Self::GlobalTimer
+            | Self::PausedExecution { .. }
+            | Self::PausedInstallCode(_)
+            | Self::AbortedExecution { .. }
+            | Self::AbortedInstallCode { .. } => false,
+        }
+    }
 }
 
 impl From<&ExecutionTask> for pb::ExecutionTask {
@@ -1412,7 +1152,7 @@ impl SystemState {
         &mut self,
         request: Request,
         reject_context: RejectContext,
-        subnet_ids: &[PrincipalId],
+        subnet_ids: &BTreeSet<PrincipalId>,
     ) -> Result<(), StateError> {
         assert_eq!(
             request.sender, self.canister_id,
@@ -1524,6 +1264,11 @@ impl SystemState {
     ///  * `Stopping` system states accept responses only.
     ///  * `Stopped` system states accept neither.
     ///
+    /// # Returns
+    ///  * `Ok(true)` on successful induction of a message of any type.
+    ///  * `Ok(false)` for a best-effort `Response` that was silently dropped.
+    ///  * `Err(_)` on induction failure.
+    ///
     /// # Errors
     ///
     /// On failure, returns the provided message along with a `StateError`:
@@ -1544,7 +1289,7 @@ impl SystemState {
         subnet_available_memory: &mut i64,
         own_subnet_type: SubnetType,
         input_queue_type: InputQueueType,
-    ) -> Result<(), (StateError, RequestOrResponse)> {
+    ) -> Result<bool, (StateError, RequestOrResponse)> {
         assert_eq!(
             msg.receiver(),
             self.canister_id,
@@ -1554,7 +1299,14 @@ impl SystemState {
         );
 
         match (&msg, &self.status) {
-            // Requests and responses are both rejected when stopped.
+            // Best-effort responses are silently dropped when stopped.
+            (RequestOrResponse::Response(response), CanisterStatus::Stopped { .. })
+                if response.is_best_effort() =>
+            {
+                Ok(false)
+            }
+
+            // Requests and guaranteed responses are both rejected when stopped.
             (_, CanisterStatus::Stopped { .. }) => {
                 Err((StateError::CanisterStopped(self.canister_id()), msg))
             }
@@ -1587,7 +1339,7 @@ impl SystemState {
                     .map_err(|err| (err, msg.clone()))?
                     {
                         // Best effort response whose callback is gone. Silently drop it.
-                        return Ok(());
+                        return Ok(false);
                     }
                 }
                 push_input(
@@ -1827,17 +1579,17 @@ impl SystemState {
         (self.queues.guaranteed_response_memory_usage() as u64).into()
     }
 
+    /// Returns the memory currently used by best-effort canister messages.
+    ///
+    /// This returns zero iff there are zero best-effort messages enqueued.
+    pub fn best_effort_message_memory_usage(&self) -> NumBytes {
+        (self.queues.best_effort_message_memory_usage() as u64).into()
+    }
+
     /// Returns the memory currently in use by the `SystemState`
     /// for canister history.
     pub fn canister_history_memory_usage(&self) -> NumBytes {
         self.canister_history.get_memory_usage()
-    }
-
-    /// Sets the (transient) size in bytes of guaranteed responses from this
-    /// canister routed into streams and not yet garbage collected.
-    pub(super) fn set_stream_guaranteed_responses_size_bytes(&mut self, size_bytes: usize) {
-        self.queues
-            .set_stream_guaranteed_responses_size_bytes(size_bytes);
     }
 
     /// Method used only by the dashboard.
@@ -1865,10 +1617,12 @@ impl SystemState {
         own_subnet_type: SubnetType,
     ) {
         // Bail out if the canister is not running.
-        match self.status {
-            CanisterStatus::Running { .. } => (),
+        let call_context_manager = match &self.status {
+            CanisterStatus::Running {
+                call_context_manager,
+            } => call_context_manager,
             CanisterStatus::Stopped | CanisterStatus::Stopping { .. } => return,
-        }
+        };
 
         let mut memory_usage = self.queues.guaranteed_response_memory_usage() as i64;
 
@@ -1880,14 +1634,27 @@ impl SystemState {
                 return;
             }
 
-            // Protect against enqueuing a second response for the currently executing
-            // (aborted or paused) callback.
+            // Protect against enqueuing duplicate responses.
             if let RequestOrResponse::Response(response) = &msg {
-                if let Some(aborted_or_paused_response) = self.aborted_or_paused_response() {
-                    if response.originator_reply_callback
-                        == aborted_or_paused_response.originator_reply_callback
-                    {
-                        // The callback is already executing, don't enqueue a second response for it.
+                match should_enqueue_input(
+                    response,
+                    call_context_manager,
+                    self.aborted_or_paused_response(),
+                ) {
+                    // Safe to induct.
+                    Ok(true) => {}
+
+                    // Best effort response whose callback is gone. Silently drop it.
+                    Ok(false) => {
+                        self.queues
+                            .pop_canister_output(&self.canister_id)
+                            .expect("Message peeked above so pop should not fail.");
+                        continue;
+                    }
+
+                    // This should not happen. Bail out and let Message Routing deal with it.
+                    Err(e) => {
+                        debug_assert!(false, "Failed to induct message to self: {:?}", e);
                         return;
                     }
                 }
@@ -2010,6 +1777,19 @@ impl SystemState {
         (expired_callback_count, errors)
     }
 
+    /// Removes the largest best-effort message in the underlying pool. Returns
+    /// `true` if a message was removed; `false` otherwise.
+    ///
+    /// Time complexity: `O(log(n))`.
+    pub fn shed_largest_message(
+        &mut self,
+        own_canister_id: &CanisterId,
+        local_canisters: &BTreeMap<CanisterId, CanisterState>,
+    ) -> bool {
+        self.queues
+            .shed_largest_message(own_canister_id, local_canisters)
+    }
+
     /// Re-partitions the local and remote input schedules of `self.queues`
     /// following a canister migration, based on the updated set of local canisters.
     ///
@@ -2046,6 +1826,7 @@ impl SystemState {
             | CyclesUseCase::CanisterCreation
             | CyclesUseCase::ECDSAOutcalls
             | CyclesUseCase::SchnorrOutcalls
+            | CyclesUseCase::VetKd
             | CyclesUseCase::HTTPOutcalls
             | CyclesUseCase::DeletedCanisters
             | CyclesUseCase::NonConsumed
@@ -2062,14 +1843,17 @@ impl SystemState {
     /// Moves the given amount of cycles from the main balance to the reserved balance.
     /// Returns an error if the main balance is lower than the requested amount.
     pub fn reserve_cycles(&mut self, amount: Cycles) -> Result<(), ReservationError> {
-        if let Some(reserved_balance_limit) = self.reserved_balance_limit {
-            if self.reserved_balance + amount > reserved_balance_limit {
-                return Err(ReservationError::ReservedLimitExceed {
-                    requested: self.reserved_balance + amount,
-                    limit: reserved_balance_limit,
-                });
+        if amount == Cycles::zero() {
+            return Ok(());
+        }
+
+        if let Some(limit) = self.reserved_balance_limit {
+            let requested = self.reserved_balance + amount;
+            if requested > limit {
+                return Err(ReservationError::ReservedLimitExceed { requested, limit });
             }
         }
+
         if amount > self.cycles_balance {
             Err(ReservationError::InsufficientCycles {
                 requested: amount,
@@ -2227,6 +2011,41 @@ impl SystemState {
             _ => None,
         }
     }
+
+    /// Enqueues or removes `OnLowWasmMemory` task from `task_queue`
+    /// depending if the condition for `OnLowWasmMemoryHook` is satisfied:
+    ///
+    /// 1. In the case of `memory_allocation`
+    ///     `wasm_memory_threshold >= min(memory_allocation - memory_usage_without_wasm_memory, wasm_memory_limit) - wasm_memory_usage`
+    /// 2. Without memory allocation
+    ///     `wasm_memory_threshold >= wasm_memory_limit - wasm_memory_usage`
+    ///
+    /// Note: if `wasm_memory_limit` is not set, its default value is 4 GiB.
+    pub fn update_on_low_wasm_memory_hook_status(
+        &mut self,
+        memory_usage: NumBytes,
+        wasm_memory_usage: NumBytes,
+    ) {
+        let memory_allocation = match self.memory_allocation {
+            MemoryAllocation::Reserved(bytes) => Some(bytes),
+            MemoryAllocation::BestEffort => None,
+        };
+
+        let wasm_memory_limit = self.wasm_memory_limit;
+        let wasm_memory_threshold = self.wasm_memory_threshold;
+
+        if is_low_wasm_memory_hook_condition_satisfied(
+            memory_usage,
+            wasm_memory_usage,
+            memory_allocation,
+            wasm_memory_limit,
+            wasm_memory_threshold,
+        ) {
+            self.task_queue.enqueue(ExecutionTask::OnLowWasmMemory);
+        } else {
+            self.task_queue.remove(ExecutionTask::OnLowWasmMemory);
+        }
+    }
 }
 
 /// Implements memory limits verification for pushing a canister-to-canister
@@ -2246,7 +2065,7 @@ pub(crate) fn push_input(
     subnet_available_memory: &mut i64,
     own_subnet_type: SubnetType,
     input_queue_type: InputQueueType,
-) -> Result<(), (StateError, RequestOrResponse)> {
+) -> Result<bool, (StateError, RequestOrResponse)> {
     // Do not enforce limits for local messages on system subnets.
     if own_subnet_type != SubnetType::System || input_queue_type != InputQueueType::LocalSubnet {
         if let Err(required_memory) = can_push(&msg, *subnet_available_memory) {
@@ -2497,42 +2316,5 @@ pub mod testing {
             next_snapshot_id: Default::default(),
             snapshots_memory_usage: Default::default(),
         };
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use crate::canister_state::system_state::OnLowWasmMemoryHookStatus;
-    #[test]
-    fn test_on_low_wasm_memory_hook_start_status_condition_not_satisfied() {
-        let mut status = OnLowWasmMemoryHookStatus::ConditionNotSatisfied;
-        status.update(false);
-        assert_eq!(status, OnLowWasmMemoryHookStatus::ConditionNotSatisfied);
-
-        let mut status = OnLowWasmMemoryHookStatus::ConditionNotSatisfied;
-        status.update(true);
-        assert_eq!(status, OnLowWasmMemoryHookStatus::Ready);
-    }
-
-    #[test]
-    fn test_on_low_wasm_memory_hook_start_status_ready() {
-        let mut status = OnLowWasmMemoryHookStatus::Ready;
-        status.update(false);
-        assert_eq!(status, OnLowWasmMemoryHookStatus::ConditionNotSatisfied);
-
-        let mut status = OnLowWasmMemoryHookStatus::Ready;
-        status.update(true);
-        assert_eq!(status, OnLowWasmMemoryHookStatus::Ready);
-    }
-
-    #[test]
-    fn test_on_low_wasm_memory_hook_start_status_executed() {
-        let mut status = OnLowWasmMemoryHookStatus::Executed;
-        status.update(false);
-        assert_eq!(status, OnLowWasmMemoryHookStatus::ConditionNotSatisfied);
-
-        let mut status = OnLowWasmMemoryHookStatus::Executed;
-        status.update(true);
-        assert_eq!(status, OnLowWasmMemoryHookStatus::Executed);
     }
 }

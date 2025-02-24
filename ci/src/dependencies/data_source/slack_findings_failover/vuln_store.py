@@ -66,6 +66,8 @@ class SlackVulnerabilityStore:
             t = event.type
             if t == SlackVulnerabilityEventType.VULN_ADDED:
                 scan_result_by_channel[event.channel_id].new_vulnerabilities += 1
+                scan_result_by_channel[event.channel_id].unrated_vulnerabilities += 1
+                scan_result_by_channel[event.channel_id].total_vulnerabilities += 1
                 slack_msg = slack_vuln_info.get_slack_msg_for(event.channel_id, info_by_project)
                 if not slack_msg:
                     raise RuntimeError(
@@ -95,6 +97,7 @@ class SlackVulnerabilityStore:
                 )
             elif t == SlackVulnerabilityEventType.VULN_CHANGED:
                 scan_result_by_channel[event.channel_id].changed_vulnerabilities += 1
+                scan_result_by_channel[event.channel_id].total_vulnerabilities += 1
                 slack_msg_id = self.__update_message_if_needed(
                     event.channel_id, slack_vuln_info, updated_messages, info_by_project
                 )
@@ -116,6 +119,8 @@ class SlackVulnerabilityStore:
                 self.slack_api_by_channel[event.channel_id].send_message(
                     message=json.dumps(vuln_chg_msg_blocks), is_block_kit_message=True, thread_id=slack_msg_id
                 )
+            elif t == SlackVulnerabilityEventType.VULN_UNCHANGED:
+                scan_result_by_channel[event.channel_id].total_vulnerabilities += 1
             elif t == SlackVulnerabilityEventType.DEP_ADDED:
                 if event.finding_id not in scan_result_by_channel[event.channel_id].added_dependencies:
                     scan_result_by_channel[event.channel_id].added_dependencies[event.finding_id] = set()
@@ -131,6 +136,7 @@ class SlackVulnerabilityStore:
                 )
                 self.__update_message_if_needed(event.channel_id, slack_vuln_info, updated_messages, info_by_project)
             elif t == SlackVulnerabilityEventType.RISK_UNKNOWN:
+                scan_result_by_channel[event.channel_id].unrated_vulnerabilities += 1
                 if event.channel_id not in slack_vuln_info.msg_info_by_channel:
                     raise RuntimeError(
                         f"could not send risk assessment reminder for channel {event.channel_id} for vuln {slack_vuln_info.vulnerability.id}"
@@ -144,10 +150,11 @@ class SlackVulnerabilityStore:
                                 send_reminder |= ra.wants_assessment_reminder
                                 risk_assessors.add(ra.name)
                 if send_reminder:
-                    self.slack_api_by_channel[event.channel_id].send_message(
-                        message="This finding needs risk assessment from " + ", ".join(sorted(list(risk_assessors))),
-                        is_block_kit_message=False,
-                        thread_id=slack_vuln_info.msg_info_by_channel[event.channel_id].message_id,
+                    permalink = self.slack_api_by_channel[event.channel_id].get_permalink(
+                        slack_vuln_info.msg_info_by_channel[event.channel_id].message_id
+                    )
+                    scan_result_by_channel[event.channel_id].add_unrated_vulnerabilities_reminder(
+                        slack_vuln_info.vulnerability.name, permalink, risk_assessors
                     )
             else:
                 raise RuntimeError(f"event has unknown type: {event}")

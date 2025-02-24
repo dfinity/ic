@@ -11,7 +11,7 @@ backoff = { workspace = true }
 byte-unit = "4.0.14"
 candid = { workspace = true }
 chrono = { workspace = true }
-clap = { version = "3.2.25", features = ["derive"] }
+clap = { workspace = true }
 console = "0.11"
 futures = { workspace = true }
 hex = { workspace = true }
@@ -20,7 +20,7 @@ ic-canister-client-sender = { path = "../canister_client/sender" }
 ic-config = { path = "../config" }
 ic-crypto-sha2 = { path = "../crypto/sha2" }
 ic-http-endpoints-metrics = { path = "../http_endpoints/metrics" }
-ic-management-canister-types = { path = "../types/management_canister_types" }
+ic-management-canister-types-private = { path = "../types/management_canister_types" }
 ic-metrics = { path = "../monitoring/metrics" }
 ic-test-identity = { path = "../test_utilities/identity" }
 ic-types = { path = "../types/types" }

@@ -9,7 +9,7 @@ package(default_visibility = [
 DEPENDENCIES = [
     # There should not be any deps from "//rs".
     # If you have to add a new one please consult the NET team.
-    "//rs/async_utils",
+    "//rs/http_endpoints/async_utils",
     "//rs/crypto/tls_interfaces",
     "//rs/crypto/utils/tls",
     "//rs/interfaces/registry",
@@ -22,12 +22,14 @@ DEPENDENCIES = [
     "@crate_index//:axum",
     "@crate_index//:bytes",
     "@crate_index//:futures",
+    "@crate_index//:http",
     "@crate_index//:prometheus",
     "@crate_index//:prost",
     "@crate_index//:quinn",
     "@crate_index//:rustls",
     "@crate_index//:slog",
     "@crate_index//:socket2",
+    "@crate_index//:static_assertions",
     "@crate_index//:thiserror",
     "@crate_index//:tokio",
     "@crate_index//:tokio-metrics",

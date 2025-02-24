@@ -7,7 +7,7 @@ pub mod wasmtime_embedder;
 
 use std::{sync::Arc, time::Duration};
 
-pub use compilation_cache::CompilationCache;
+pub use compilation_cache::{CompilationCache, StoredCompilation};
 use ic_interfaces::execution_environment::SubnetAvailableMemory;
 use ic_replicated_state::{Global, PageIndex};
 use ic_system_api::{
@@ -15,7 +15,9 @@ use ic_system_api::{
 };
 use ic_types::{methods::FuncRef, NumBytes, NumInstructions};
 use serde::{Deserialize, Serialize};
-pub use serialized_module::{SerializedModule, SerializedModuleBytes};
+pub use serialized_module::{
+    InitialStateData, OnDiskSerializedModule, SerializedModule, SerializedModuleBytes,
+};
 pub use wasmtime_embedder::{WasmtimeEmbedder, WasmtimeMemoryCreator};
 
 /// The minimal required guard region for correctness is 2GiB. We use 8GiB as a
@@ -54,6 +56,8 @@ pub struct CompilationResult {
     pub compilation_time: Duration,
     /// The maximum function complexity found in the canister's wasm module.
     pub max_complexity: u64,
+    /// The size of this Wasm module's code section.
+    pub code_section_size: NumBytes,
 }
 
 impl CompilationResult {
@@ -62,6 +66,7 @@ impl CompilationResult {
             largest_function_instruction_count: NumInstructions::new(0),
             compilation_time: Duration::from_millis(1),
             max_complexity: 0,
+            code_section_size: NumBytes::from(0),
         }
     }
 }

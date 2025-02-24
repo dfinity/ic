@@ -26,7 +26,6 @@ package(default_visibility = ["//visibility:public"])
             # Keep sorted.
             "//packages/ic-ledger-hash-of:ic_ledger_hash_of",
             "//packages/icrc-ledger-types:icrc_ledger_types",
-            "//rs/crypto/tree_hash",
             "//rs/ledger_suite/common/ledger_canister_core",
             "//rs/ledger_suite/common/ledger_core",
             "//rs/ledger_suite/icrc1",
@@ -36,20 +35,38 @@ package(default_visibility = ["//visibility:public"])
             "@crate_index//:ciborium",
             "@crate_index//:hex",
             "@crate_index//:ic-cdk",
+            "@crate_index//:ic-certification",
             "@crate_index//:ic-metrics-encoder",
             "@crate_index//:ic-stable-structures",
+            "@crate_index//:leb128",
+            "@crate_index//:minicbor",
             "@crate_index//:serde",
             "@crate_index//:serde_bytes",
         ] + extra_deps,
     )
     for (name_suffix, archive_name_suffix, features, extra_deps) in [
-        ("", "", [], []),
-        ("_u256", "_u256", [], []),
+        (
+            "",
+            "",
+            [],
+            [
+                "//rs/ledger_suite/icrc1/tokens_u64",
+            ],
+        ),
+        (
+            "_u256",
+            "_u256",
+            ["u256-tokens"],
+            [
+                "//rs/ledger_suite/icrc1/tokens_u256",
+            ],
+        ),
         (
             "_canbench",
             "",
             ["canbench-rs"],
             [
+                "//rs/ledger_suite/icrc1/tokens_u64",
                 "@crate_index//:canbench-rs",
             ],
         ),
@@ -61,7 +78,37 @@ package(default_visibility = ["//visibility:public"])
                 "u256-tokens",
             ],
             [
+                "//rs/ledger_suite/icrc1/tokens_u256",
                 "@crate_index//:canbench-rs",
+            ],
+        ),
+        (
+            "_nextledgerversion",
+            "",
+            ["next-ledger-version"],
+            [
+                "//rs/ledger_suite/icrc1/tokens_u64",
+            ],
+        ),
+        (
+            "_u256_nextledgerversion",
+            "_u256",
+            [
+                "next-ledger-version",
+                "u256-tokens",
+            ],
+            [
+                "//rs/ledger_suite/icrc1/tokens_u256",
+            ],
+        ),
+        (
+            "_icrc3_compatible_data_certificate",
+            "",
+            [
+                "icrc3-compatible-data-certificate",
+            ],
+            [
+                "//rs/ledger_suite/icrc1/tokens_u64",
             ],
         ),
     ]
@@ -91,6 +138,8 @@ package(default_visibility = ["//visibility:public"])
             "@crate_index//:candid",
             "@crate_index//:ciborium",
             "@crate_index//:ic-cdk",
+            "@crate_index//:ic-cdk-timers",
+            "@crate_index//:ic-certification",
             "@crate_index//:ic-metrics-encoder",
             "@crate_index//:ic-stable-structures",
             "@crate_index//:num-traits",
@@ -156,6 +205,51 @@ package(default_visibility = ["//visibility:public"])
                 "//rs/ledger_suite/icrc1/tokens_u256",
             ],
         ),
+        (
+            "_nextledgerversion",
+            [],
+            [
+                ":ledger_nextledgerversion",
+                "//rs/ledger_suite/icrc1/tokens_u64",
+            ],
+        ),
+        (
+            "_u256_nextledgerversion",
+            [
+                "u256-tokens",
+            ],
+            [
+                ":ledger_u256_nextledgerversion",
+                "//rs/ledger_suite/icrc1/tokens_u256",
+            ],
+        ),
+        (
+            "_lowupgradeinstructionlimits",
+            ["low-upgrade-instruction-limits"],
+            [
+                ":ledger",
+                "//rs/ledger_suite/icrc1/tokens_u64",
+            ],
+        ),
+        (
+            "_u256_lowupgradeinstructionlimits",
+            [
+                "low-upgrade-instruction-limits",
+                "u256-tokens",
+            ],
+            [
+                ":ledger_u256",
+                "//rs/ledger_suite/icrc1/tokens_u256",
+            ],
+        ),
+        (
+            "_icrc3_compatible_data_certificate",
+            ["icrc3-compatible-data-certificate"],
+            [
+                ":ledger_icrc3_compatible_data_certificate",
+                "//rs/ledger_suite/icrc1/tokens_u64",
+            ],
+        ),
     ]
 ]
 
@@ -179,20 +273,42 @@ rust_test(
         data = [
             ":block.cddl",
             ":ledger_canister" + name_suffix + ".wasm",
+            ":ledger_canister" + name_suffix + "_lowupgradeinstructionlimits.wasm",
+            ":ledger_canister" + name_suffix + "_nextledgerversion.wasm",
             "//rs/ledger_suite/icrc1/archive:archive_canister" + name_suffix + ".wasm.gz",
-            "@ic-icrc1-ledger-first-version.wasm.gz//file",
+            "//rs/ledger_suite/icrc1/ledger:ledger_canister_icrc3_compatible_data_certificate",
+            "//rs/universal_canister/impl:universal_canister.wasm.gz",
+            "@mainnet_ckbtc_ic-icrc1-ledger-v1//file",
+            "@mainnet_ckbtc_ic-icrc1-ledger-v2-noledgerversion//file",
+            "@mainnet_ckbtc_ic-icrc1-ledger-v2//file",
+            "@mainnet_ckbtc_ic-icrc1-ledger-v3//file",
             "@mainnet_ckbtc_ic-icrc1-ledger//file",
+            "@mainnet_cketh_ic-icrc1-ledger-u256-v1//file",
+            "@mainnet_cketh_ic-icrc1-ledger-u256-v2-noledgerversion//file",
+            "@mainnet_cketh_ic-icrc1-ledger-u256-v2//file",
+            "@mainnet_cketh_ic-icrc1-ledger-u256-v3//file",
             "@mainnet_cketh_ic-icrc1-ledger-u256//file",
             "@mainnet_ic-icrc1-ledger//file",
         ],
         env = {
             "CARGO_MANIFEST_DIR": "rs/ledger_suite/icrc1/ledger",
             "CKBTC_IC_ICRC1_LEDGER_DEPLOYED_VERSION_WASM_PATH": "$(rootpath @mainnet_ckbtc_ic-icrc1-ledger//file)",
+            "CKBTC_IC_ICRC1_LEDGER_V1_VERSION_WASM_PATH": "$(rootpath @mainnet_ckbtc_ic-icrc1-ledger-v1//file)",
+            "CKBTC_IC_ICRC1_LEDGER_V2_VERSION_WASM_PATH": "$(rootpath @mainnet_ckbtc_ic-icrc1-ledger-v2//file)",
+            "CKBTC_IC_ICRC1_LEDGER_V2_NOLEDGERLEVRION_VERSION_WASM_PATH": "$(rootpath @mainnet_ckbtc_ic-icrc1-ledger-v2-noledgerversion//file)",
+            "CKBTC_IC_ICRC1_LEDGER_V3_VERSION_WASM_PATH": "$(rootpath @mainnet_ckbtc_ic-icrc1-ledger-v3//file)",
             "CKETH_IC_ICRC1_LEDGER_DEPLOYED_VERSION_WASM_PATH": "$(rootpath @mainnet_cketh_ic-icrc1-ledger-u256//file)",
+            "CKETH_IC_ICRC1_LEDGER_V1_VERSION_WASM_PATH": "$(rootpath @mainnet_cketh_ic-icrc1-ledger-u256-v1//file)",
+            "CKETH_IC_ICRC1_LEDGER_V2_VERSION_WASM_PATH": "$(rootpath @mainnet_cketh_ic-icrc1-ledger-u256-v2//file)",
+            "CKETH_IC_ICRC1_LEDGER_V2_NOLEDGERLEVRION_VERSION_WASM_PATH": "$(rootpath @mainnet_cketh_ic-icrc1-ledger-u256-v2-noledgerversion//file)",
+            "CKETH_IC_ICRC1_LEDGER_V3_VERSION_WASM_PATH": "$(rootpath @mainnet_cketh_ic-icrc1-ledger-u256-v3//file)",
             "IC_ICRC1_ARCHIVE_WASM_PATH": "$(rootpath //rs/ledger_suite/icrc1/archive:archive_canister" + name_suffix + ".wasm.gz)",
             "IC_ICRC1_LEDGER_DEPLOYED_VERSION_WASM_PATH": "$(rootpath @mainnet_ic-icrc1-ledger//file)",
-            "IC_ICRC1_LEDGER_FIRST_VERSION_WASM_PATH": "$(rootpath @ic-icrc1-ledger-first-version.wasm.gz//file)",
+            "IC_ICRC1_LEDGER_ICRC3_COMPATIBLE_DATA_CERTIFICATE_WASM_PATH": "$(rootpath //rs/ledger_suite/icrc1/ledger:ledger_canister_icrc3_compatible_data_certificate)",
             "IC_ICRC1_LEDGER_WASM_PATH": "$(rootpath :ledger_canister" + name_suffix + ".wasm)",
+            "IC_ICRC1_LEDGER_WASM_INSTR_LIMITS_PATH": "$(rootpath :ledger_canister" + name_suffix + "_lowupgradeinstructionlimits.wasm)",
+            "IC_ICRC1_LEDGER_NEXT_VERSION_WASM_PATH": "$(rootpath :ledger_canister" + name_suffix + "_nextledgerversion.wasm)",
+            "UNIVERSAL_CANISTER_WASM_PATH": "$(rootpath //rs/universal_canister/impl:universal_canister.wasm.gz)",
         },
         deps = [
             # Keep sorted.
@@ -200,7 +316,7 @@ rust_test(
             "//packages/ic-ledger-hash-of:ic_ledger_hash_of",
             "//packages/icrc-ledger-types:icrc_ledger_types",
             "//rs/ledger_suite/icrc1",
-            "//rs/ledger_suite/tests/sm-tests:sm-tests" + name_suffix,
+            "//rs/ledger_suite/tests/sm-tests:ic-ledger-suite-state-machine-tests" + name_suffix,
             "//rs/ledger_suite/common/ledger_canister_core",
             "//rs/ledger_suite/common/ledger_core",
             "//rs/ledger_suite/icrc1/test_utils",
@@ -211,8 +327,10 @@ rust_test(
             "@crate_index//:assert_matches",
             "@crate_index//:candid",
             "@crate_index//:cddl",
+            "@crate_index//:ciborium",
             "@crate_index//:hex",
             "@crate_index//:ic-agent",
+            "@crate_index//:ic-certification",
             "@crate_index//:ic-metrics-encoder",
             "@crate_index//:leb128",
             "@crate_index//:num-bigint",
@@ -236,39 +354,56 @@ rust_test(
     ]
 ]
 
-rust_test(
-    name = "ledger_unit_test",
-    compile_data = [
-        "//rs/ledger_suite/icrc1/archive:archive_canister.wasm.gz",
-    ],
-    crate = "ledger",
-    deps = [
-        # Keep sorted.
-        ":ledger",
-        "//packages/icrc-ledger-types:icrc_ledger_types",
-        "//rs/ledger_suite/common/ledger_canister_core",
-        "//rs/ledger_suite/common/ledger_core",
-        "//rs/ledger_suite/icrc1",
-        "//rs/ledger_suite/tests/sm-tests",
-        "//rs/types/base_types",
-    ],
-)
+[
+    rust_test(
+        name = "ledger_unit_test" + name_suffix,
+        compile_data = [
+            "//rs/ledger_suite/icrc1/archive:archive_canister.wasm.gz",
+        ],
+        crate = "ledger",
+        crate_features = features,
+        deps = [
+            # Keep sorted.
+            ":ledger" + name_suffix,
+            "//packages/icrc-ledger-types:icrc_ledger_types",
+            "//rs/ledger_suite/common/ledger_canister_core",
+            "//rs/ledger_suite/common/ledger_core",
+            "//rs/ledger_suite/icrc1",
+            "//rs/ledger_suite/tests/sm-tests:ic-ledger-suite-state-machine-tests",
+            "//rs/types/base_types",
+            "@crate_index//:proptest",
+        ] + extra_deps,
+    )
+    for (name_suffix, features, extra_deps) in [
+        (
+            "",
+            [],
+            [],
+        ),
+        (
+            "_u256",
+            ["u256-tokens"],
+            ["//rs/ledger_suite/icrc1/tokens_u256"],
+        ),
+    ]
+]
 
 # Usage:
 # Benchmarking:
 # * bazel run //rs/ledger_suite/icrc1/ledger:canbench_u64 for legder using u64 tokens.
 # * bazel run //rs/ledger_suite/icrc1/ledger:canbench_u256 for legder using u256 tokens.
+# Testing:
+# * bazel test //rs/ledger_suite/icrc1/ledger:canbench_u64_test for legder using u64 tokens.
+# * bazel test //rs/ledger_suite/icrc1/ledger:canbench_u256_test for legder using u256 tokens.
 # Updating the results file:
 # * bazel run //rs/ledger_suite/icrc1/ledger:canbench_u64_update for updating the results file.
 # * bazel run //rs/ledger_suite/icrc1/ledger:canbench_u256_update for updating the results file.
-# Currently, updating the results file is not automated, and there are no tests to avoid
-# regression. For now, we can use it as an example for benchmarking as part of an
-# investigation of potential performance issues, or when we make a change that can affect
-# the performance measured in this benchmark.
+#  If the performance change is expected, run these targets to save the updated benchmark results.
 [
     rust_canbench(
         name = "canbench" + name_suffix,
         srcs = glob(["src/**/*.rs"]),
+        add_test = True,
         crate_features = features,
         proc_macro_deps = [
             # Keep sorted.
@@ -288,6 +423,7 @@ rust_test(
             "@crate_index//:candid",
             "@crate_index//:ciborium",
             "@crate_index//:ic-cdk",
+            "@crate_index//:ic-cdk-timers",
             "@crate_index//:ic-metrics-encoder",
             "@crate_index//:ic-stable-structures",
             "@crate_index//:num-traits",

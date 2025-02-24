@@ -1,3 +1,6 @@
+// This allow(dead_code) is necessary because some parts of this file
+// are not used in canbench-rs, but are used elsewhere.  Otherwise we get annoying clippy warnings.
+#![allow(dead_code)]
 use crate::{
     governance::{Environment, HeapGrowthPotential, RngError},
     pb::v1::{ExecuteNnsFunction, GovernanceError, OpenSnsTokenSwap},
@@ -159,6 +162,14 @@ impl MockEnvironment {
             now: Arc::new(Mutex::new(now)),
         }
     }
+
+    pub fn now_setter(&self) -> impl Fn(u64) {
+        let arc = self.now.clone();
+        move |new_now| {
+            let mut now = arc.lock().unwrap();
+            *now = new_now;
+        }
+    }
 }
 
 impl Default for MockEnvironment {
@@ -302,4 +313,10 @@ impl Environment for MockEnvironment {
 
         result
     }
+}
+
+/// Useful for avoiding errors related to index corruption that happens when neurons
+/// share subaccounts.
+pub fn test_subaccount_for_neuron_id(neuron_id: u64) -> Vec<u8> {
+    [vec![0; 24], neuron_id.to_be_bytes().to_vec()].concat()
 }

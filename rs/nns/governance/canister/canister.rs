@@ -3,11 +3,11 @@ use candid::{candid_method, Decode, Encode};
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_cdk::{
-    api::call::arg_data_raw, caller as ic_cdk_caller, heartbeat, post_upgrade, pre_upgrade,
-    println, query, spawn, update,
+    api::{call::arg_data_raw, call_context_instruction_counter},
+    caller as ic_cdk_caller, heartbeat, post_upgrade, pre_upgrade, println, query, spawn, update,
 };
-use ic_management_canister_types::IC_00;
-use ic_nervous_system_canisters::{cmc::CMCCanister, ledger::IcpLedgerCanister};
+use ic_management_canister_types_private::IC_00;
+use ic_nervous_system_canisters::cmc::CMCCanister;
 use ic_nervous_system_common::{
     memory_manager_upgrade_storage::{load_protobuf, store_protobuf},
     serve_metrics,
@@ -22,6 +22,7 @@ use ic_nns_constants::LEDGER_CANISTER_ID;
 use ic_nns_governance::{
     decoder_config, encode_metrics,
     governance::{Environment, Governance, HeapGrowthPotential, RngError, TimeWarp as GovTimeWarp},
+    is_prune_following_enabled,
     neuron_data_validation::NeuronDataValidationSummary,
     pb::v1::{self as gov_pb, Governance as InternalGovernanceProto},
     storage::{grow_upgrades_memory_to, validate_stable_storage, with_upgrades_memory},
@@ -41,11 +42,11 @@ use ic_nns_governance_api::{
         manage_neuron_response, ClaimOrRefreshNeuronFromAccount,
         ClaimOrRefreshNeuronFromAccountResponse, GetNeuronsFundAuditInfoRequest,
         GetNeuronsFundAuditInfoResponse, Governance as ApiGovernanceProto, GovernanceError,
-        ListKnownNeuronsResponse, ListNeurons, ListNeuronsResponse, ListNodeProviderRewardsRequest,
-        ListNodeProviderRewardsResponse, ListNodeProvidersResponse, ListProposalInfo,
-        ListProposalInfoResponse, ManageNeuronCommandRequest, ManageNeuronRequest,
-        ManageNeuronResponse, MonthlyNodeProviderRewards, NetworkEconomics, Neuron, NeuronInfo,
-        NodeProvider, Proposal, ProposalInfo, RestoreAgingSummary, RewardEvent,
+        ListKnownNeuronsResponse, ListNeurons, ListNeuronsProto, ListNeuronsResponse,
+        ListNodeProviderRewardsRequest, ListNodeProviderRewardsResponse, ListNodeProvidersResponse,
+        ListProposalInfo, ListProposalInfoResponse, ManageNeuronCommandRequest,
+        ManageNeuronRequest, ManageNeuronResponse, MonthlyNodeProviderRewards, NetworkEconomics,
+        Neuron, NeuronInfo, NodeProvider, Proposal, ProposalInfo, RestoreAgingSummary, RewardEvent,
         SettleCommunityFundParticipation, SettleNeuronsFundParticipationRequest,
         SettleNeuronsFundParticipationResponse, UpdateNodeProvider, Vote,
     },
@@ -57,9 +58,19 @@ use rand::{RngCore, SeedableRng};
 use rand_chacha::ChaCha20Rng;
 use std::{
     boxed::Box,
+    cell::RefCell,
+    ops::Bound,
     str::FromStr,
     time::{Duration, SystemTime},
 };
+
+#[cfg(not(feature = "tla"))]
+use ic_nervous_system_canisters::ledger::IcpLedgerCanister;
+
+#[cfg(feature = "tla")]
+mod tla_ledger;
+#[cfg(feature = "tla")]
+use tla_ledger::LoggingIcpLedgerCanister as IcpLedgerCanister;
 
 /// WASM memory equivalent to 4GiB, which we want to reserve for upgrades memory. The heap memory
 /// limit is 4GiB but its serialized form with prost should be smaller, so we reserve for 4GiB. This
@@ -69,12 +80,13 @@ const WASM_PAGES_RESERVED_FOR_UPGRADES_MEMORY: u64 = 65_536;
 
 pub(crate) const LOG_PREFIX: &str = "[Governance] ";
 
-// https://dfinity.atlassian.net/browse/NNS1-1050: We are not following
-// standard/best practices for canister globals here.
-//
-// Do not access these global variables directly. Instead, use accessor
-// functions, which are defined immediately after.
-static mut GOVERNANCE: Option<Governance> = None;
+thread_local! {
+    static GOVERNANCE: RefCell<Governance> = RefCell::new(Governance::new_uninitialized(
+        Box::new(CanisterEnv::new()),
+        Box::new(IcpLedgerCanister::<CdkRuntime>::new(LEDGER_CANISTER_ID)),
+        Box::new(CMCCanister::<CdkRuntime>::new()),
+    ));
+}
 
 /*
 Recommendations for Using `unsafe` in the Governance canister:
@@ -123,7 +135,7 @@ are best practices for making use of the unsafe block:
 /// This should only be called once the global state has been initialized, which
 /// happens in `canister_init` or `canister_post_upgrade`.
 fn governance() -> &'static Governance {
-    unsafe { GOVERNANCE.as_ref().expect("Canister not initialized!") }
+    unsafe { &*GOVERNANCE.with(|g| g.as_ptr()) }
 }
 
 /// Returns a mutable reference to the global state.
@@ -131,32 +143,55 @@ fn governance() -> &'static Governance {
 /// This should only be called once the global state has been initialized, which
 /// happens in `canister_init` or `canister_post_upgrade`.
 fn governance_mut() -> &'static mut Governance {
-    unsafe { GOVERNANCE.as_mut().expect("Canister not initialized!") }
+    unsafe { &mut *GOVERNANCE.with(|g| g.as_ptr()) }
 }
 
 // Sets governance global state to the given object.
 fn set_governance(gov: Governance) {
-    unsafe {
-        assert!(
-            GOVERNANCE.is_none(),
-            "{}Trying to initialize an already-initialized governance canister!",
-            LOG_PREFIX
-        );
-        GOVERNANCE = Some(gov);
-    }
+    GOVERNANCE.set(gov);
 
     governance()
         .validate()
         .expect("Error initializing the governance canister.");
 }
 
+fn schedule_timers() {
+    schedule_seeding(Duration::from_nanos(0));
+    schedule_adjust_neurons_storage(Duration::from_nanos(0), Bound::Unbounded);
+    schedule_prune_following(Duration::from_secs(0), Bound::Unbounded);
+    schedule_spawn_neurons();
+    schedule_unstake_maturity_of_dissolved_neurons();
+    schedule_neuron_data_validation();
+    schedule_vote_processing();
+}
+
 // Seeding interval seeks to find a balance between the need for rng secrecy, and
 // avoiding the overhead of frequent reseeding.
 const SEEDING_INTERVAL: Duration = Duration::from_secs(3600);
 const RETRY_SEEDING_INTERVAL: Duration = Duration::from_secs(30);
+const PRUNE_FOLLOWING_INTERVAL: Duration = Duration::from_secs(10);
 
-fn schedule_seeding(duration: Duration) {
-    ic_cdk_timers::set_timer(duration, || {
+// Once this amount of instructions is used by the
+// Governance::prune_some_following, it stops, saves where it is, schedules more
+// pruning later, and returns.
+//
+// Why this value seems to make sense:
+//
+// I think we can conservatively estimate that it takes 2e6 instructions to pull
+// a neuron from stable memory. If we assume 200e3 neurons are in stable memory,
+// then 400e9 instructions are needed to read all neurons in stable memory.
+// 400e9 instructions / 50e6 instructions per batch = 8e3 batches. If we process
+// 1 batch every 10 s (see PRUNE_FOLLOWING_INTERVAL), then it would take less
+// than 23 hours to complete a full pass.
+//
+// This comes to 1.08 full passes per day. If each full pass uses 400e9
+// instructions, then we use 432e9 instructions per day doing
+// prune_some_following. If we assume 1 terainstruction costs 1 XDR,
+// prune_some_following uses less than half an XDR per day.
+const MAX_PRUNE_SOME_FOLLOWING_INSTRUCTIONS: u64 = 50_000_000;
+
+fn schedule_seeding(delay: Duration) {
+    ic_cdk_timers::set_timer(delay, || {
         spawn(async {
             let result: Result<([u8; 32],), (i32, String)> =
                 CdkRuntime::call_with_cleanup(IC_00, "raw_rand", ()).await;
@@ -177,6 +212,71 @@ fn schedule_seeding(duration: Duration) {
             // Schedule reseeding on a timer with duration SEEDING_INTERVAL
             schedule_seeding(SEEDING_INTERVAL);
         })
+    });
+}
+
+fn schedule_prune_following(delay: Duration, original_begin: Bound<NeuronIdProto>) {
+    if !is_prune_following_enabled() {
+        return;
+    }
+
+    ic_cdk_timers::set_timer(delay, move || {
+        let carry_on =
+            || call_context_instruction_counter() < MAX_PRUNE_SOME_FOLLOWING_INSTRUCTIONS;
+        let new_begin = governance_mut().prune_some_following(original_begin, carry_on);
+
+        schedule_prune_following(PRUNE_FOLLOWING_INTERVAL, new_begin);
+    });
+}
+
+// The interval before adjusting neuron storage for the next batch of neurons starting from last
+// neuron id scanned in the last batch.
+const ADJUST_NEURON_STORAGE_BATCH_INTERVAL: Duration = Duration::from_secs(5);
+// The interval before adjusting neuron storage for the next round starting from the smallest neuron
+// id.
+const ADJUST_NEURON_STORAGE_ROUND_INTERVAL: Duration = Duration::from_secs(3600);
+
+fn schedule_adjust_neurons_storage(delay: Duration, next: Bound<NeuronIdProto>) {
+    ic_cdk_timers::set_timer(delay, move || {
+        let next = governance_mut().batch_adjust_neurons_storage(next);
+        let next_delay = if next == Bound::Unbounded {
+            ADJUST_NEURON_STORAGE_ROUND_INTERVAL
+        } else {
+            ADJUST_NEURON_STORAGE_BATCH_INTERVAL
+        };
+        schedule_adjust_neurons_storage(next_delay, next);
+    });
+}
+
+const SPAWN_NEURONS_INTERVAL: Duration = Duration::from_secs(60);
+fn schedule_spawn_neurons() {
+    ic_cdk_timers::set_timer_interval(SPAWN_NEURONS_INTERVAL, || {
+        spawn(async {
+            governance_mut().maybe_spawn_neurons().await;
+        });
+    });
+}
+
+const UNSTAKE_MATURITY_OF_DISSOLVED_NEURONS_INTERVAL: Duration = Duration::from_secs(60);
+fn schedule_unstake_maturity_of_dissolved_neurons() {
+    ic_cdk_timers::set_timer_interval(UNSTAKE_MATURITY_OF_DISSOLVED_NEURONS_INTERVAL, || {
+        governance_mut().unstake_maturity_of_dissolved_neurons();
+    });
+}
+
+const NEURON_DATA_VALIDATION_INTERNVAL: Duration = Duration::from_secs(5);
+fn schedule_neuron_data_validation() {
+    ic_cdk_timers::set_timer_interval(NEURON_DATA_VALIDATION_INTERNVAL, || {
+        governance_mut().maybe_run_validations();
+    });
+}
+
+/// The interval at which the voting state machines are processed.
+const VOTE_PROCESSING_INTERVAL: Duration = Duration::from_secs(3);
+
+fn schedule_vote_processing() {
+    ic_cdk_timers::set_timer_interval(VOTE_PROCESSING_INTERVAL, || {
+        spawn(governance_mut().process_voting_state_machines());
     });
 }
 
@@ -400,9 +500,11 @@ fn canister_init_(init_payload: ApiGovernanceProto) {
         init_payload.neurons.len()
     );
 
-    schedule_seeding(Duration::from_nanos(0));
+    schedule_timers();
+
+    let governance_proto = InternalGovernanceProto::from(init_payload);
     set_governance(Governance::new(
-        InternalGovernanceProto::from(init_payload),
+        governance_proto,
         Box::new(CanisterEnv::new()),
         Box::new(IcpLedgerCanister::<CdkRuntime>::new(LEDGER_CANISTER_ID)),
         Box::new(CMCCanister::<CdkRuntime>::new()),
@@ -444,7 +546,7 @@ fn canister_post_upgrade() {
         restored_state.xdr_conversion_rate,
     );
 
-    schedule_seeding(Duration::from_nanos(0));
+    schedule_timers();
     set_governance(Governance::new_restored(
         restored_state,
         Box::new(CanisterEnv::new()),
@@ -556,20 +658,20 @@ async fn transfer_gtc_neuron(
 #[update]
 async fn manage_neuron(_manage_neuron: ManageNeuronRequest) -> ManageNeuronResponse {
     debug_log("manage_neuron");
-    ManageNeuronResponse::from(
-        governance_mut()
-            .manage_neuron(&caller(), &(gov_pb::ManageNeuron::from(_manage_neuron)))
-            .await,
-    )
+    governance_mut()
+        .manage_neuron(&caller(), &(gov_pb::ManageNeuron::from(_manage_neuron)))
+        .await
 }
 
 #[cfg(feature = "test")]
 #[update]
 /// Internal method for calling update_neuron.
+///
+/// *_voting_power fields are ignored, because the value in those fields is derived.
 fn update_neuron(neuron: Neuron) -> Option<GovernanceError> {
     debug_log("update_neuron");
     governance_mut()
-        .update_neuron(gov_pb::Neuron::from(neuron))
+        .update_neuron(neuron)
         .err()
         .map(GovernanceError::from)
 }
@@ -577,9 +679,7 @@ fn update_neuron(neuron: Neuron) -> Option<GovernanceError> {
 #[update]
 fn simulate_manage_neuron(manage_neuron: ManageNeuronRequest) -> ManageNeuronResponse {
     debug_log("simulate_manage_neuron");
-    let response =
-        governance().simulate_manage_neuron(&caller(), gov_pb::ManageNeuron::from(manage_neuron));
-    ManageNeuronResponse::from(response)
+    governance().simulate_manage_neuron(&caller(), gov_pb::ManageNeuron::from(manage_neuron))
 }
 
 #[query]
@@ -592,7 +692,6 @@ fn get_full_neuron_by_id_or_subaccount(
             &(gov_pb::manage_neuron::NeuronIdOrSubaccount::from(by)),
             &caller(),
         )
-        .map(Neuron::from)
         .map_err(GovernanceError::from)
 }
 
@@ -610,7 +709,6 @@ fn get_neuron_info(neuron_id: NeuronId) -> Result<NeuronInfo, GovernanceError> {
     debug_log("get_neuron_info");
     governance()
         .get_neuron_info(&NeuronIdProto::from(neuron_id), caller())
-        .map(NeuronInfo::from)
         .map_err(GovernanceError::from)
 }
 
@@ -624,16 +722,13 @@ fn get_neuron_info_by_id_or_subaccount(
             &(gov_pb::manage_neuron::NeuronIdOrSubaccount::from(by)),
             caller(),
         )
-        .map(NeuronInfo::from)
         .map_err(GovernanceError::from)
 }
 
 #[query]
 fn get_proposal_info(id: ProposalId) -> Option<ProposalInfo> {
     debug_log("get_proposal_info");
-    governance()
-        .get_proposal_info(&caller(), id)
-        .map(ProposalInfo::from)
+    GOVERNANCE.with_borrow(|governance| governance.get_proposal_info(&caller(), id))
 }
 
 #[query]
@@ -649,23 +744,19 @@ fn get_neurons_fund_audit_info(
 #[query]
 fn get_pending_proposals() -> Vec<ProposalInfo> {
     debug_log("get_pending_proposals");
-    governance()
-        .get_pending_proposals(&caller())
-        .into_iter()
-        .map(ProposalInfo::from)
-        .collect()
+    GOVERNANCE.with_borrow(|governance| governance.get_pending_proposals(&caller()))
 }
 
 #[query]
 fn list_proposals(req: ListProposalInfo) -> ListProposalInfoResponse {
     debug_log("list_proposals");
-    governance().list_proposals(&caller(), &(req.into())).into()
+    GOVERNANCE.with_borrow(|governance| governance.list_proposals(&caller(), &req.into()))
 }
 
 #[query]
 fn list_neurons(req: ListNeurons) -> ListNeuronsResponse {
     debug_log("list_neurons");
-    governance().list_neurons(&(req.into()), caller()).into()
+    governance().list_neurons(&req, caller())
 }
 
 #[query]
@@ -741,7 +832,10 @@ fn get_latest_reward_event() -> RewardEvent {
 #[query]
 fn get_neuron_ids() -> Vec<NeuronId> {
     debug_log("get_neuron_ids");
-    let votable = governance().get_neuron_ids_by_principal(&caller());
+    let votable = governance()
+        .get_neuron_ids_by_principal(&caller())
+        .into_iter()
+        .collect();
 
     governance()
         .get_managed_neuron_ids_for(votable)
@@ -813,8 +907,10 @@ fn list_neurons_pb() {
     );
 
     ic_cdk::setup();
-    let request = ListNeurons::decode(&arg_data_raw()[..]).expect("Could not decode ListNeurons");
-    let res: ListNeuronsResponse = list_neurons(request);
+    let request =
+        ListNeuronsProto::decode(&arg_data_raw()[..]).expect("Could not decode ListNeuronsProto");
+    let candid_request = ListNeurons::from(request);
+    let res: ListNeuronsResponse = list_neurons(candid_request);
     let mut buf = Vec::with_capacity(res.encoded_len());
     res.encode(&mut buf)
         .map_err(|e| e.to_string())
@@ -1071,18 +1167,6 @@ fn add_proposal_id_to_add_wasm_request(
     let payload = Encode!(&add_wasm_request).unwrap();
 
     Ok(payload)
-}
-
-/// Deprecated: The blessed alternative is to do (the equivalent of)
-/// `dfx canister metadata $CANISTER 'candid:service'`.
-#[query(hidden = true)]
-fn __get_candid_interface_tmp_hack() -> String {
-    #[cfg(not(feature = "test"))]
-    let declared_interface = include_str!("governance.did");
-    #[cfg(feature = "test")]
-    let declared_interface = include_str!("governance_test.did");
-
-    declared_interface.to_string()
 }
 
 fn main() {

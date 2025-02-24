@@ -4,7 +4,6 @@ DefaultDependencies=no
 Requires=dev-mapper-store\x2dshared\x2d\x2ddata.device
 After=dev-mapper-store\x2dshared\x2d\x2ddata.device
 Before=systemd-fsck@dev-mapper-store\x2dshared\x2d\x2ddata.service
-Before=var-lib-ic-data\x2dnode.mount
 # Add an explicit sequencing to LVM setup. The observed problem is that the
 # LV apparently becomes notified as "ready" through udev before the actual
 # lvcreate command has finished. This results in filesystem setup racing with
@@ -15,7 +14,6 @@ Requires=setup-lvs.service
 
 [Install]
 RequiredBy=systemd-fsck@dev-mapper-store\x2dshared\x2d\x2ddata.service
-RequiredBy=var-lib-ic-data\x2dnode.mount
 WantedBy=local-fs.target
 
 [Service]

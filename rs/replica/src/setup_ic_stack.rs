@@ -32,13 +32,10 @@ use ic_types::{
     artifact::UnvalidatedArtifactMutation,
     consensus::{CatchUpPackage, HasHeight},
     messages::SignedIngress,
-    Height, NodeId, PrincipalId, SubnetId,
+    Height, NodeId, SubnetId,
 };
 use ic_xnet_payload_builder::XNetPayloadBuilderImpl;
-use std::{
-    str::FromStr,
-    sync::{Arc, RwLock},
-};
+use std::sync::{Arc, RwLock};
 use tokio::sync::{
     mpsc::{channel, UnboundedSender},
     watch, OnceCell,
@@ -47,29 +44,6 @@ use tokio::sync::{
 /// The buffer size for the channel that [`IngressHistoryWriterImpl`] uses to send
 /// the message id and height of messages that complete execution.
 const COMPLETED_EXECUTION_MESSAGES_BUFFER_SIZE: usize = 10_000;
-
-/// The subnets that should not serve synchronous responses to v3 update calls.
-/// The list contains all system subnets.
-const SUBNETS_WITH_DISABLED_SYNCHRONOUS_CALL_V3: [&str; 4] = [
-    "tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe",
-    "uzr34-akd3s-xrdag-3ql62-ocgoh-ld2ao-tamcv-54e7j-krwgb-2gm4z-oqe",
-    "w4rem-dv5e3-widiz-wbpea-kbttk-mnzfm-tzrc7-svcj3-kbxyb-zamch-hqe",
-    "pzp6e-ekpqk-3c5x7-2h6so-njoeq-mt45d-h3h6c-q3mxf-vpeq5-fk5o7-yae",
-];
-
-/// Returns true if the subnet is whitelisted to serve synchronous responses to v3
-/// update calls.
-fn enable_synchronous_call_handler_for_v3_endpoint(subnet_id: &SubnetId) -> bool {
-    let subnet_is_in_disabled_list =
-        SUBNETS_WITH_DISABLED_SYNCHRONOUS_CALL_V3
-            .iter()
-            .any(|s| match PrincipalId::from_str(s) {
-                Ok(principal_id) => SubnetId::from(principal_id) == *subnet_id,
-                Err(_) => false,
-            });
-
-    !subnet_is_in_disabled_list
-}
 
 /// Create the consensus pool directory (if none exists)
 fn create_consensus_pool_dir(config: &Config) {
@@ -132,7 +106,7 @@ pub fn construct_ic_stack(
             // This case is only possible if the replica is started without an orchestrator which
             // is currently only possible in the local development mode with `dfx`.
             None => {
-                let registry_cup = ic_consensus::dkg::make_registry_cup(&*registry, subnet_id, log)
+                let registry_cup = ic_consensus::make_registry_cup(&*registry, subnet_id, log)
                     .expect("Couldn't create a registry CUP");
 
                 info!(
@@ -230,6 +204,7 @@ pub fn construct_ic_stack(
         state_manager.clone(),
         state_manager.get_fd_factory(),
         completed_execution_messages_tx,
+        &state_manager.state_layout().tmp(),
     );
     // ---------- MESSAGE ROUTING DEPS FOLLOW ----------
     let certified_stream_store: Arc<dyn CertifiedStreamStore> =
@@ -282,7 +257,10 @@ pub fn construct_ic_stack(
         metrics_registry,
         log.clone(),
     ));
-    // ---------- BITCOIN INTEGRATION DEPS FOLLOW ----------
+    // ---------- PAYLOAD BUILDERS WITHOUT ARTIFACT POOL FOLLOW -----------
+    let query_stats_payload_builder = execution_services
+        .query_stats_payload_builder
+        .into_payload_builder(state_manager.clone(), node_id, log.clone());
     let BitcoinAdapterClients {
         btc_testnet_client,
         btc_mainnet_client,
@@ -302,21 +280,17 @@ pub fn construct_ic_stack(
         config.bitcoin_payload_builder_config,
         log.clone(),
     ));
-    // ---------- HTTPS OUTCALLS DEPS FOLLOW ----------
+    // ---------- HTTPS OUTCALLS PAYLOAD BUILDER DEPS FOLLOW ----------
     let canister_http_adapter_client = setup_canister_http_client(
         rt_handle_main.clone(),
         metrics_registry,
         config.adapters_config,
-        execution_services.query_execution_service.clone(),
+        execution_services.https_outcalls_service,
         max_canister_http_requests_in_flight,
         log.clone(),
         subnet_type,
         delegation_from_nns.clone(),
     );
-    // ---------- QUERY STATS DEPS FOLLOW -----------
-    let query_stats_payload_builder = execution_services
-        .query_stats_payload_builder
-        .into_payload_builder(state_manager.clone(), node_id, log.clone());
     // ---------- CONSENSUS AND P2P DEPS FOLLOW ----------
     let state_sync = StateSync::new(state_manager.clone(), log.clone());
     let (max_certified_height_tx, max_certified_height_rx) = watch::channel(Height::from(0));
@@ -332,10 +306,10 @@ pub fn construct_ic_stack(
         subnet_id,
         Arc::clone(&crypto) as Arc<_>,
         Arc::clone(&state_manager) as Arc<_>,
+        Arc::new(state_sync) as Arc<_>,
         Arc::clone(&state_manager) as Arc<_>,
         consensus_pool,
         catch_up_package,
-        Arc::new(state_sync),
         xnet_payload_builder,
         self_validating_payload_builder,
         query_stats_payload_builder,
@@ -377,7 +351,6 @@ pub fn construct_ic_stack(
         tracing_handle,
         max_certified_height_rx,
         finalized_ingress_height_rx,
-        enable_synchronous_call_handler_for_v3_endpoint(&subnet_id),
     );
 
     Ok((

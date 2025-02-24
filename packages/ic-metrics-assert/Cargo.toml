@@ -1,0 +1,21 @@
+[package]
+name = "ic-metrics-assert"
+version = "0.1.0"
+description = "Fluent assertions for metrics"
+license = "Apache-2.0"
+readme = "README.md"
+include = ["src", "Cargo.toml", "CHANGELOG.md", "LICENSE", "README.md"]
+repository = "https://github.com/dfinity/ic"
+authors.workspace = true
+edition.workspace = true
+documentation.workspace = true
+
+[dependencies]
+candid = { workspace = true }
+pocket-ic = { path = "../../packages/pocket-ic", optional = true }
+regex = "1.11.0"
+serde = { workspace = true }
+serde_bytes = { workspace = true }
+
+[features]
+pocket_ic = ["dep:pocket-ic"]

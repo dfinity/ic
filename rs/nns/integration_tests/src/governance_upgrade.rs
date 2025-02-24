@@ -8,7 +8,7 @@ use canister_test::Project;
 use dfn_candid::candid_one;
 use ic_base_types::PrincipalId;
 use ic_canister_client_sender::Sender;
-use ic_management_canister_types::{
+use ic_management_canister_types_private::{
     CanisterIdRecord, CanisterInstallMode, CanisterSettingsArgsBuilder,
 };
 use ic_nervous_system_clients::canister_status::{CanisterStatusResult, CanisterStatusType};
@@ -130,13 +130,13 @@ fn test_root_restarts_canister_during_upgrade_canister_with_stop_canister_timeou
         arg: vec![],
         compute_allocation: None,
         memory_allocation: None,
+        chunked_canister_wasm: None,
     };
 
     let _: () = update_with_sender(
         &state_machine,
         ROOT_CANISTER_ID,
         "change_nns_canister",
-        candid_one,
         proposal,
         GOVERNANCE_CANISTER_ID.get(),
     )
@@ -153,7 +153,6 @@ fn test_root_restarts_canister_during_upgrade_canister_with_stop_canister_timeou
         &state_machine,
         ROOT_CANISTER_ID,
         "canister_status",
-        candid_one,
         CanisterIdRecord::from(GOVERNANCE_CANISTER_ID),
         PrincipalId::new_anonymous(),
     )
@@ -170,7 +169,6 @@ fn test_root_restarts_canister_during_upgrade_canister_with_stop_canister_timeou
         &state_machine,
         ROOT_CANISTER_ID,
         "canister_status",
-        candid_one,
         CanisterIdRecord::from(GOVERNANCE_CANISTER_ID),
         PrincipalId::new_anonymous(),
     )

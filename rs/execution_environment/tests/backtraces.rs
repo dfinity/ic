@@ -3,11 +3,9 @@ use ic_config::{
     execution_environment::Config as HypervisorConfig, flag_status::FlagStatus,
     subnet_config::SubnetConfig,
 };
-use ic_management_canister_types::LogVisibilityV2;
+use ic_management_canister_types_private::{CanisterSettingsArgsBuilder, LogVisibilityV2};
 use ic_registry_subnet_type::SubnetType;
-use ic_state_machine_tests::{
-    CanisterSettingsArgsBuilder, ErrorCode, StateMachine, StateMachineBuilder, StateMachineConfig,
-};
+use ic_state_machine_tests::{ErrorCode, StateMachine, StateMachineBuilder, StateMachineConfig};
 use ic_types::{CanisterId, Cycles, PrincipalId};
 
 const B: u128 = 1_000 * 1_000 * 1_000;
@@ -23,7 +21,10 @@ _wasm_backtrace_canister::unreachable::inner
 _wasm_backtrace_canister::unreachable::outer
 "#;
 
-const IC0_TRAP_BACKTRACE: &str = r#"Panicked at 'uh oh', rs/rust_canisters/backtrace_canister/src/main.rs:47:5
+const IC0_TRAP_ERROR: &str =
+    r#"Panicked at 'uh oh', rs/rust_canisters/backtrace_canister/src/main.rs:47:5"#;
+
+const IC0_TRAP_BACKTRACE: &str = r#"
 Canister Backtrace:
 ic_cdk::api::trap
 ic_cdk::printer::set_panic_hook::{{closure}}
@@ -91,7 +92,7 @@ fn assert_error(
     let result = env
         .execute_ingress_as(CONTROLLER, canister_id, method, Encode!(&()).unwrap())
         .unwrap_err();
-    result.assert_contains(code, &format!("{} {}", message, backtrace));
+    result.assert_contains(code, &format!("{}{}", message, backtrace));
     let logs = env.canister_log(canister_id);
     let last_error = std::str::from_utf8(&logs.records().back().as_ref().unwrap().content).unwrap();
     assert!(
@@ -110,7 +111,7 @@ fn unreachable_instr_backtrace() {
         canister_id,
         "unreachable",
         ErrorCode::CanisterTrapped,
-        "Error from Canister rwlgt-iiaaa-aaaaa-aaaaa-cai: Canister trapped:",
+        "Error from Canister rwlgt-iiaaa-aaaaa-aaaaa-cai: Canister trapped: ",
         UNREACHABLE_BACKTRACE,
     );
 }
@@ -154,7 +155,7 @@ fn oob_backtrace() {
         canister_id,
         "oob",
         ErrorCode::CanisterTrapped,
-        "Error from Canister rwlgt-iiaaa-aaaaa-aaaaa-cai: Canister trapped:",
+        "Error from Canister rwlgt-iiaaa-aaaaa-aaaaa-cai: Canister trapped: ",
         r#"heap out of bounds
 Canister Backtrace:
 _wasm_backtrace_canister::oob::inner_2
@@ -172,7 +173,7 @@ fn backtrace_test_ic0_trap() {
         canister_id,
         "ic0_trap",
         ErrorCode::CanisterCalledTrap,
-        "Error from Canister rwlgt-iiaaa-aaaaa-aaaaa-cai: Canister called `ic0.trap` with message:",
+        &format!("Error from Canister rwlgt-iiaaa-aaaaa-aaaaa-cai: Canister called `ic0.trap` with message: '{}'", IC0_TRAP_ERROR),
         IC0_TRAP_BACKTRACE,
     );
 }
@@ -185,10 +186,10 @@ fn backtrace_test_stable_oob() {
         canister_id,
         "stable_oob",
         ErrorCode::CanisterTrapped,
-        "Error from Canister rwlgt-iiaaa-aaaaa-aaaaa-cai: Canister trapped:",
+        "Error from Canister rwlgt-iiaaa-aaaaa-aaaaa-cai: Canister trapped: ",
         r#"stable memory out of bounds
 Canister Backtrace:
-ic0::ic0::stable_write
+ic0::ic0::stable64_write
 _wasm_backtrace_canister::stable_oob::inner_2
 _wasm_backtrace_canister::stable_oob::inner
 _wasm_backtrace_canister::stable_oob::outer
@@ -197,7 +198,7 @@ _wasm_backtrace_canister::stable_oob::outer
 }
 
 mod visibility {
-    use ic_management_canister_types::BoundedVec;
+    use ic_management_canister_types_private::BoundedVec;
 
     use super::*;
 

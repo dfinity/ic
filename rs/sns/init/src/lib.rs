@@ -538,6 +538,17 @@ impl SnsInitPayload {
         })
     }
 
+    pub fn stringify_without_logos(&self) -> Result<String, String> {
+        let redacted_logo = "<redacted-to-save-space>".to_string();
+        let self_without_logos = Self {
+            logo: Some(redacted_logo.clone()),
+            token_logo: Some(redacted_logo),
+            ..self.clone()
+        };
+        serde_yaml::to_string(&self_without_logos)
+            .map_err(|e| format!("Could not create initialization parameters {}", e))
+    }
+
     /// Construct the params used to initialize a SNS Governance canister.
     fn governance_init_args(
         &self,
@@ -557,8 +568,7 @@ impl SnsInitPayload {
 
         governance.neurons = self.get_initial_neurons(&parameters)?;
 
-        governance.sns_initialization_parameters = serde_yaml::to_string(self)
-            .map_err(|e| format!("Could not create initialization parameters {}", e))?;
+        governance.sns_initialization_parameters = self.stringify_without_logos()?;
 
         Ok(governance)
     }
@@ -646,6 +656,7 @@ impl SnsInitPayload {
             archive_canister_ids: vec![],
             index_canister_id: Some(sns_canister_ids.index),
             testflight,
+            timers: None,
         }
     }
 
@@ -2184,6 +2195,90 @@ mod test {
     }
 
     #[test]
+    fn stringify_without_logos() {
+        let sns_init_payload = SnsInitPayload {
+            token_name: Some("ServiceNervousSystem Coin".to_string()),
+            token_symbol: Some("SNS".to_string()),
+            ..SnsInitPayload::with_valid_values_for_testing_post_execution()
+        };
+
+        let observed = sns_init_payload.stringify_without_logos();
+
+        let expected = "transaction_fee_e8s: 10000
+token_name: ServiceNervousSystem Coin
+token_symbol: SNS
+proposal_reject_cost_e8s: 100000000
+neuron_minimum_stake_e8s: 100000000
+fallback_controller_principal_ids:
+- kflrj-iv6cy-aaaaa-aaaap-4ai
+logo: <redacted-to-save-space>
+url: https://internetcomputer.org/
+name: ServiceNervousSystemTest
+description: Description of an SNS Project
+neuron_minimum_dissolve_delay_to_vote_seconds: 15778800
+initial_reward_rate_basis_points: 0
+final_reward_rate_basis_points: 0
+reward_rate_transition_duration_seconds: 0
+max_dissolve_delay_seconds: 252460800
+max_neuron_age_seconds_for_age_bonus: 126230400
+max_dissolve_delay_bonus_percentage: 100
+max_age_bonus_percentage: 25
+initial_voting_period_seconds: 345600
+wait_for_quiet_deadline_increase_seconds: 86400
+confirmation_text: null
+restricted_countries:
+  iso_codes:
+  - CH
+dapp_canisters:
+  canisters:
+  - id: hdjeo-vyaaa-aaaaa-aapua-cai
+min_participants: 5
+min_icp_e8s: null
+max_icp_e8s: null
+min_direct_participation_icp_e8s: 12300000000
+max_direct_participation_icp_e8s: 65000000000
+min_participant_icp_e8s: 6500000000
+max_participant_icp_e8s: 65000000000
+swap_start_timestamp_seconds: 10000000
+swap_due_timestamp_seconds: 10086400
+neuron_basket_construction_parameters:
+  count: 5
+  dissolve_delay_interval_seconds: 10001
+nns_proposal_id: 10
+neurons_fund_participation: true
+token_logo: <redacted-to-save-space>
+neurons_fund_participation_constraints:
+  min_direct_participation_threshold_icp_e8s: 12300000000
+  max_neurons_fund_participation_icp_e8s: 65000000000
+  coefficient_intervals:
+  - from_direct_participation_icp_e8s: 0
+    to_direct_participation_icp_e8s: 18446744073709551615
+    slope_numerator: 1
+    slope_denominator: 1
+    intercept_icp_e8s: 0
+  ideal_matched_participation_function:
+    serialized_representation: '{\"t_1\":\"33300.000000000\",\"t_2\":\"99900.000000000\",\"t_3\":\"166500.000000000\",\"t_4\":\"200000.0000000000\",\"cap\":\"100000.000000000\"}'
+initial_token_distribution: !FractionalDeveloperVotingPower
+  developer_distribution:
+    developer_neurons:
+    - controller: 6fyp7-3ibaa-aaaaa-aaaap-4ai
+      stake_e8s: 100000000
+      memo: 0
+      dissolve_delay_seconds: 15778800
+      vesting_period_seconds: null
+  treasury_distribution:
+    total_e8s: 500000000
+  swap_distribution:
+    total_e8s: 10000000000
+    initial_swap_amount_e8s: 10000000000
+  airdrop_distribution:
+    airdrop_neurons: []
+".to_string();
+
+        assert_eq!(observed, Ok(expected));
+    }
+
+    #[test]
     fn test_governance_init_args_has_generated_config() {
         // Build an sns_init_payload with defaults for non-governance related configuration.
         let sns_init_payload = SnsInitPayload {
@@ -2211,12 +2306,14 @@ mod test {
 
         let governance = canister_payloads.governance;
 
-        // Assert that the Governance canister's params match the SnsInitPayload
+        // Assert that the init params match the SnsInitPayload (modulo logos).
         assert_eq!(
-            serde_yaml::from_str::<SnsInitPayload>(&governance.sns_initialization_parameters)
-                .unwrap(),
-            sns_init_payload
+            governance.sns_initialization_parameters,
+            sns_init_payload.stringify_without_logos().unwrap()
         );
+
+        // Assert that the init params can be deserialized.
+        serde_yaml::from_str::<SnsInitPayload>(&governance.sns_initialization_parameters).unwrap();
     }
 
     #[test]

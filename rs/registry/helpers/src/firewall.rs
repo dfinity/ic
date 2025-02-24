@@ -1,18 +1,19 @@
-use crate::deserialize_registry_value;
-use crate::node::NodeRecord;
+use crate::{
+    deserialize_registry_value,
+    node::NodeRecord,
+    subnet::{SubnetListRegistry, SubnetRegistry},
+};
 use ic_interfaces_registry::{RegistryClient, RegistryClientResult};
-use ic_protobuf::registry::firewall::v1::FirewallConfig;
-use ic_protobuf::registry::firewall::v1::FirewallRuleSet;
-use ic_protobuf::registry::node::v1::ConnectionEndpoint;
-use ic_registry_keys::get_node_record_node_id;
-use ic_registry_keys::make_firewall_config_record_key;
-use ic_registry_keys::make_firewall_rules_record_key;
-use ic_registry_keys::make_node_record_key;
-use ic_registry_keys::FirewallRulesScope;
-use ic_registry_keys::NODE_RECORD_KEY_PREFIX;
+use ic_protobuf::registry::{
+    firewall::v1::{FirewallConfig, FirewallRuleSet},
+    node::v1::ConnectionEndpoint,
+};
+use ic_registry_keys::{
+    get_node_record_node_id, make_firewall_config_record_key, make_firewall_rules_record_key,
+    make_node_record_key, FirewallRulesScope, NODE_RECORD_KEY_PREFIX,
+};
 use ic_types::{NodeId, RegistryVersion};
-use std::collections::HashSet;
-use std::net::IpAddr;
+use std::{collections::HashSet, net::IpAddr};
 
 /// A trait that allows access to firewall rules and ancillary information.
 pub trait FirewallRegistry {
@@ -27,6 +28,11 @@ pub trait FirewallRegistry {
     ) -> RegistryClientResult<FirewallRuleSet>;
 
     fn get_all_nodes_ip_addresses(
+        &self,
+        version: RegistryVersion,
+    ) -> RegistryClientResult<Vec<IpAddr>>;
+
+    fn get_system_subnet_nodes_ip_addresses(
         &self,
         version: RegistryVersion,
     ) -> RegistryClientResult<Vec<IpAddr>>;
@@ -88,6 +94,51 @@ impl<T: RegistryClient + ?Sized> FirewallRegistry for T {
             .collect();
         Ok(Some(result))
     }
+
+    /// Get the IP addresses of all system subnet nodes in the registry, for endpoints used for core protocol services (p2p, xnet, api)
+    fn get_system_subnet_nodes_ip_addresses(
+        &self,
+        version: RegistryVersion,
+    ) -> RegistryClientResult<Vec<IpAddr>> {
+        let system_subnet_node_ids: Vec<NodeId> = self
+            .get_system_subnet_ids(version)?
+            .unwrap_or_default()
+            .into_iter()
+            .map(
+                |subnet_id| match self.get_node_ids_on_subnet(subnet_id, version) {
+                    Ok(Some(node_ids)) => Ok(node_ids),
+                    Ok(None) => Ok(vec![]),
+                    Err(e) => Err(e),
+                },
+            )
+            .collect::<Result<Vec<Vec<NodeId>>, _>>()?
+            .into_iter()
+            .flatten()
+            .collect();
+
+        let mut system_subnet_endpoints: HashSet<IpAddr> = HashSet::new();
+
+        for node_id in system_subnet_node_ids {
+            if let Some(node_record) = deserialize_registry_value::<NodeRecord>(
+                self.get_value(&make_node_record_key(node_id), version),
+            )? {
+                if let Some(ip_addr) = node_record
+                    .xnet
+                    .and_then(|endpoint| endpoint.ip_addr.parse::<IpAddr>().ok())
+                {
+                    system_subnet_endpoints.insert(ip_addr);
+                }
+                if let Some(ip_addr) = node_record
+                    .http
+                    .and_then(|endpoint| endpoint.ip_addr.parse::<IpAddr>().ok())
+                {
+                    system_subnet_endpoints.insert(ip_addr);
+                }
+            }
+        }
+
+        Ok(Some(Vec::from_iter(system_subnet_endpoints)))
+    }
 }
 
 #[cfg(test)]
@@ -147,11 +198,7 @@ mod tests {
                             ip_addr: ip.to_string(),
                             port: 2457,
                         }),
-                        node_operator_id: vec![],
-                        hostos_version_id: None,
-                        chip_id: None,
-                        public_ipv4_config: None,
-                        domain: None,
+                        ..Default::default()
                     },
                 )
             })

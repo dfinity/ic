@@ -1,10 +1,7 @@
 use candid::{CandidType, Deserialize};
 use ic_base_types::NodeId;
 use serde::Serialize;
-use std::collections::HashSet;
-use std::fmt;
-use std::net::Ipv4Addr;
-use std::str::FromStr;
+use std::{collections::HashSet, fmt, net::Ipv4Addr, str::FromStr};
 use thiserror::Error;
 
 #[derive(Debug, Error)]
@@ -186,6 +183,11 @@ pub struct AddNodePayload {
     // TODO(NNS1-2444): The fields below are deprecated and they are not read anywhere.
     pub p2p_flow_endpoints: Vec<String>,
     pub prometheus_metrics_endpoint: String,
+
+    // String representation of the node reward type.  Must be a valid type.
+    // See registry/canister/src/mutations/do_add_node.rs, fn `validate_str_as_node_reward_type` for currently
+    // accepted types.
+    pub node_reward_type: Option<String>,
 }
 
 /// The payload of a request to update keys of the existing node.

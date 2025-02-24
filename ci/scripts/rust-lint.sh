@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -xeuo pipefail
 
-cd "$CI_PROJECT_DIR"
+cd "${CI_PROJECT_DIR:-$(git rev-parse --show-toplevel)}"
 cargo fmt -- --check
 cargo clippy --locked --all-features --workspace --all-targets -- \
     -D warnings \

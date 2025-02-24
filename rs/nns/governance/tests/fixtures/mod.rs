@@ -27,14 +27,17 @@ use ic_nns_governance::{
     pb::v1::{
         manage_neuron,
         manage_neuron::{Command, Merge, MergeMaturity, NeuronIdOrSubaccount},
-        manage_neuron_response,
-        manage_neuron_response::MergeMaturityResponse,
         neuron,
         neuron::DissolveState,
         proposal, ExecuteNnsFunction, Governance as GovernanceProto, GovernanceError, ManageNeuron,
-        ManageNeuronResponse, Motion, NetworkEconomics, Neuron, NeuronType, NnsFunction, Proposal,
-        ProposalData, RewardEvent, Topic, Vote, XdrConversionRate as XdrConversionRatePb,
+        Motion, NetworkEconomics, Neuron, NeuronType, NnsFunction, Proposal, ProposalData,
+        RewardEvent, Topic, Vote, XdrConversionRate as XdrConversionRatePb,
     },
+    storage::reset_stable_memory,
+};
+use ic_nns_governance_api::pb::v1::{
+    manage_neuron_response::{self, MergeMaturityResponse},
+    ManageNeuronResponse,
 };
 use icp_ledger::{AccountIdentifier, Subaccount, Tokens};
 use rand::{prelude::StdRng, RngCore, SeedableRng};
@@ -44,6 +47,12 @@ use std::{
     convert::{TryFrom, TryInto},
     sync::{Arc, Mutex},
 };
+
+#[cfg(feature = "tla")]
+use ic_nns_governance::governance::tla::{
+    self, account_to_tla, Destination, ToTla, TLA_INSTRUMENTATION_STATE,
+};
+use ic_nns_governance::{tla_log_request, tla_log_response};
 
 pub mod environment_fixture;
 
@@ -381,6 +390,7 @@ impl NeuronBuilder {
             joined_community_fund_timestamp_seconds: self.joined_community_fund,
             spawn_at_timestamp_seconds: self.spawn_at_timestamp_seconds,
             neuron_type: self.neuron_type,
+            recent_ballots_next_entry_index: Some(0),
             ..Neuron::default()
         }
     }
@@ -440,6 +450,18 @@ impl IcpLedger for NNSFixture {
             "Issuing ledger transfer from account {} (subaccount {}) to account {} amount {} fee {}",
             from_account, from_subaccount.as_ref().map_or_else(||"None".to_string(), ToString::to_string), to_account, amount_e8s, fee_e8s
         );
+        tla_log_request!(
+            "WaitForTransfer",
+            Destination::new("ledger"),
+            "Transfer",
+            tla::TlaValue::Record(BTreeMap::from([
+                ("amount".to_string(), amount_e8s.to_tla_value()),
+                ("fee".to_string(), fee_e8s.to_tla_value()),
+                ("from".to_string(), account_to_tla(from_account)),
+                ("to".to_string(), account_to_tla(to_account)),
+            ]))
+        );
+
         let accounts = &mut self.nns_state.try_lock().unwrap().ledger.accounts;
 
         let from_e8s = accounts
@@ -459,6 +481,14 @@ impl IcpLedger for NNSFixture {
         }
 
         *accounts.entry(to_account).or_default() += amount_e8s;
+
+        tla_log_response!(
+            Destination::new("ledger"),
+            tla::TlaValue::Variant {
+                tag: "TransferOk".to_string(),
+                value: Box::new(tla::TlaValue::Constant("UNIT".to_string()))
+            }
+        );
 
         Ok(0)
     }
@@ -632,6 +662,8 @@ impl ProposalNeuronBehavior {
                     ..Default::default()
                 },
             )
+            .now_or_never()
+            .unwrap()
             .unwrap();
         // Vote
         for (voter, vote) in &self.votes {
@@ -734,7 +766,7 @@ impl NNS {
             .ledger
             .accounts
             .clone();
-        let governance_proto = self.governance.clone_proto();
+        let governance_proto = self.governance.__get_state_for_test();
         NNSState {
             now: self.now(),
             accounts,
@@ -815,6 +847,8 @@ impl NNS {
                     ..Default::default()
                 },
             )
+            .now_or_never()
+            .unwrap()
             .unwrap()
     }
 
@@ -850,7 +884,7 @@ impl NNS {
             .unwrap();
 
         match result {
-            manage_neuron_response::Command::Error(e) => Err(e),
+            manage_neuron_response::Command::Error(e) => Err(GovernanceError::from(e)),
             manage_neuron_response::Command::MergeMaturity(response) => Ok(response),
             _ => panic!("Merge maturity command returned unexpected response"),
         }
@@ -1037,6 +1071,8 @@ impl NNSBuilder {
     }
 
     pub fn create(self) -> NNS {
+        reset_stable_memory();
+
         let fixture = NNSFixture::new(NNSFixtureState {
             ledger: self.ledger_builder.create(),
             environment: self.environment_builder.create(),

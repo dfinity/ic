@@ -38,10 +38,14 @@ pub fn generate_prost_files(proto: ProtoPaths<'_>, out: &Path) {
     // Misc Attributes
     config.type_attribute(
         "ic_sns_governance.pb.v1.NeuronPermissionType",
-        "#[derive(clap::ArgEnum)]",
+        "#[derive(clap::ValueEnum)]",
     );
     config.type_attribute(
         "ic_sns_governance.pb.v1.NeuronId",
+        "#[derive(Eq, std::hash::Hash)]",
+    );
+    config.type_attribute(
+        "ic_sns_governance.pb.v1.Governance.Version",
         "#[derive(Eq, std::hash::Hash)]",
     );
 
@@ -53,6 +57,27 @@ pub fn generate_prost_files(proto: ProtoPaths<'_>, out: &Path) {
     apply_attribute(
         "#[derive(strum_macros::EnumIter)]",
         vec!["Governance.Mode", "NeuronPermissionType", "Proposal.action"],
+    );
+    apply_attribute(
+        "#[derive(serde::Serialize)]",
+        vec![
+            "Empty",
+            "ProposalId",
+            "UpgradeJournal",
+            "Governance.Version",
+            "Governance.Versions",
+            "UpgradeJournalEntry",
+            "UpgradeJournalEntry.event",
+            "UpgradeJournalEntry.UpgradeStepsRefreshed",
+            "UpgradeJournalEntry.UpgradeStepsReset",
+            "UpgradeJournalEntry.TargetVersionSet",
+            "UpgradeJournalEntry.TargetVersionReset",
+            "UpgradeJournalEntry.UpgradeStarted",
+            "UpgradeJournalEntry.UpgradeStarted.reason",
+            "UpgradeJournalEntry.UpgradeOutcome",
+            "UpgradeJournalEntry.UpgradeOutcome.status",
+            "UpgradeJournalEntry.UpgradeOutcome.InvalidState",
+        ],
     );
     apply_attribute(
         "#[self_describing]",

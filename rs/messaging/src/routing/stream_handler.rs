@@ -10,13 +10,13 @@ use ic_interfaces::messaging::{
     LABEL_VALUE_CANISTER_OUT_OF_CYCLES, LABEL_VALUE_CANISTER_STOPPED,
     LABEL_VALUE_CANISTER_STOPPING, LABEL_VALUE_INVALID_MANAGEMENT_PAYLOAD,
 };
-use ic_logger::{debug, error, fatal, info, trace, ReplicaLogger};
+use ic_logger::{debug, error, info, trace, ReplicaLogger};
 use ic_metrics::{
     buckets::{add_bucket, decimal_buckets},
     MetricsRegistry,
 };
 use ic_replicated_state::{
-    metadata_state::{StreamHandle, Streams},
+    metadata_state::{Stream, StreamMap},
     replicated_state::{
         ReplicatedStateMessageRouting, LABEL_VALUE_QUEUE_FULL, MR_SYNTHETIC_REJECT_MESSAGE_MAX_LEN,
     },
@@ -84,6 +84,7 @@ const METRIC_XNET_MESSAGE_BACKLOG: &str = "mr_xnet_message_backlog";
 
 const LABEL_STATUS: &str = "status";
 const LABEL_VALUE_SUCCESS: &str = "success";
+const LABEL_VALUE_DROPPED: &str = "dropped";
 const LABEL_VALUE_SENDER_SUBNET_MISMATCH: &str = "SenderSubnetMismatch";
 const LABEL_VALUE_RECEIVER_SUBNET_MISMATCH: &str = "ReceiverSubnetMismatch";
 const LABEL_VALUE_REQUEST_MISROUTED: &str = "RequestMisrouted";
@@ -351,20 +352,20 @@ impl StreamHandlerImpl {
 
         let mut streams = state.take_streams();
         // We know for sure that the loopback stream exists, so it is safe to unwrap.
-        let mut loopback_stream = streams.get_mut(&self.subnet_id).unwrap();
+        let loopback_stream = streams.get_mut(&self.subnet_id).unwrap();
 
         // 2. Garbage collect all initial messages and retain any rejected messages.
         let signals_end = loopback_stream.signals_end();
         let reject_signals = loopback_stream.reject_signals().clone();
         let rejected_messages = self.garbage_collect_messages(
-            &mut loopback_stream,
+            loopback_stream,
             self.subnet_id,
             signals_end,
             &reject_signals,
         );
 
         // 3. Garbage collect signals for all initial messages.
-        self.discard_signals_before(&mut loopback_stream, signals_end);
+        self.discard_signals_before(loopback_stream, signals_end);
 
         // 4. Respond to rejected requests and reroute rejected responses.
         self.handle_rejected_messages(
@@ -401,14 +402,14 @@ impl StreamHandlerImpl {
         let mut streams = state.take_streams();
         for (remote_subnet, stream_slice) in stream_slices {
             match streams.get_mut(remote_subnet) {
-                Some(mut stream) => {
+                Some(stream) => {
                     let rejected_messages = self.garbage_collect_messages(
-                        &mut stream,
+                        stream,
                         *remote_subnet,
                         stream_slice.header().signals_end(),
                         stream_slice.header().reject_signals(),
                     );
-                    self.garbage_collect_signals(&mut stream, *remote_subnet, stream_slice);
+                    self.garbage_collect_signals(stream, *remote_subnet, stream_slice);
 
                     if stream.reverse_stream_flags() != stream_slice.header().flags() {
                         stream.set_reverse_stream_flags(*stream_slice.header().flags());
@@ -461,7 +462,7 @@ impl StreamHandlerImpl {
     /// `signals_end` are invalid (not strictly increasing).
     fn garbage_collect_messages(
         &self,
-        stream: &mut StreamHandle,
+        stream: &mut Stream,
         remote_subnet: SubnetId,
         signals_end: StreamIndex,
         reject_signals: &VecDeque<RejectSignal>,
@@ -502,7 +503,7 @@ impl StreamHandlerImpl {
     /// if `stream_slice.messages.begin != stream.signals_end`.
     fn garbage_collect_signals(
         &self,
-        stream: &mut StreamHandle,
+        stream: &mut Stream,
         remote_subnet: SubnetId,
         stream_slice: &StreamSlice,
     ) {
@@ -529,7 +530,7 @@ impl StreamHandlerImpl {
     }
 
     /// Wrapper around `Stream::discard_signals_before()` plus telemetry.
-    fn discard_signals_before(&self, stream: &mut StreamHandle, header_begin: StreamIndex) {
+    fn discard_signals_before(&self, stream: &mut Stream, header_begin: StreamIndex) {
         let signal_count_before = stream.reject_signals().len();
         stream.discard_signals_before(header_begin);
         self.observe_gced_reject_signals(signal_count_before - stream.reject_signals().len());
@@ -550,13 +551,13 @@ impl StreamHandlerImpl {
         rejected_messages: Vec<(RejectReason, RequestOrResponse)>,
         remote_subnet_id: SubnetId,
         state: &mut ReplicatedState,
-        streams: &mut Streams,
+        streams: &mut StreamMap,
         available_guaranteed_response_memory: &mut i64,
     ) {
         fn reroute_response(
             response: RequestOrResponse,
             state: &ReplicatedState,
-            streams: &mut Streams,
+            streams: &mut StreamMap,
             log: &ReplicaLogger,
         ) {
             let new_destination = state
@@ -572,7 +573,7 @@ impl StreamHandlerImpl {
                 new_destination,
                 response,
             );
-            streams.get_mut_or_insert(new_destination).push(response);
+            streams.entry(new_destination).or_default().push(response);
         }
 
         for (reason, msg) in rejected_messages {
@@ -615,14 +616,14 @@ impl StreamHandlerImpl {
                         state,
                         available_guaranteed_response_memory,
                     ) {
-                        Ok(()) => {
+                        None => {
                             // Reject response successfully inducted or dropped.
                         }
-                        Err((StateError::CanisterMigrating { .. }, reject_response)) => {
+                        Some((RejectReason::CanisterMigrating, reject_response)) => {
                             // Canister is being migrated, reroute reject response.
                             reroute_response(reject_response, state, streams, &self.log);
                         }
-                        Err(_) => {
+                        Some(_) => {
                             unreachable!(
                                 "Errors other than `CanisterMigrating` shouldn't be possible."
                             );
@@ -673,7 +674,7 @@ impl StreamHandlerImpl {
         for (remote_subnet_id, mut stream_slice) in stream_slices {
             // Output stream, for resulting signals and (in the initial iteration) reject
             // `Responses`.
-            let mut stream = streams.get_mut_or_insert(remote_subnet_id);
+            let stream = streams.entry(remote_subnet_id).or_default();
 
             while let Some((stream_index, msg)) = stream_slice.pop_message() {
                 assert_eq!(
@@ -687,7 +688,7 @@ impl StreamHandlerImpl {
                     msg,
                     remote_subnet_id,
                     &mut state,
-                    &mut stream,
+                    stream,
                     available_guaranteed_response_memory,
                 );
             }
@@ -725,7 +726,7 @@ impl StreamHandlerImpl {
         msg: RequestOrResponse,
         remote_subnet_id: SubnetId,
         state: &mut ReplicatedState,
-        stream: &mut StreamHandle,
+        stream: &mut Stream,
         available_guaranteed_response_memory: &mut i64,
     ) {
         let msg_type = match msg {
@@ -740,35 +741,26 @@ impl StreamHandlerImpl {
                 state,
                 available_guaranteed_response_memory,
             ) {
-                Ok(()) => {
+                None => {
                     // Message successfully inducted or dropped.
                     stream.push_accept_signal();
                 }
-                Err((StateError::CanisterMigrating { .. }, RequestOrResponse::Response(_))) => {
+                Some((reason, RequestOrResponse::Request(request)))
+                    if state.metadata.certification_version < CertificationVersion::V19 =>
+                {
+                    // Unable to induct a request, generate reject response and push it into `stream`.
+                    stream.push(generate_reject_response_for(reason, &request));
+                    stream.push_accept_signal();
+                }
+                Some((reason, RequestOrResponse::Request(_))) => {
+                    // Unable to induct a request, push a reject signal.
+                    stream.push_reject_signal(reason);
+                }
+                Some((RejectReason::CanisterMigrating, RequestOrResponse::Response(_))) => {
                     // Unable to deliver a response due to migrating canister, push reject signal.
                     stream.push_reject_signal(RejectReason::CanisterMigrating);
                 }
-                Err((err, RequestOrResponse::Request(request))) => {
-                    // TODO(MR-249): Replace generating reject responses with pushing reject signals.
-                    // Unable to induct a request, generate reject response and push it into `stream`.
-                    let code = match err {
-                        StateError::CanisterNotFound(_) => RejectCode::DestinationInvalid,
-                        StateError::CanisterStopped(_) => RejectCode::CanisterError,
-                        StateError::CanisterStopping(_) => RejectCode::CanisterError,
-                        StateError::CanisterMigrating { .. } => RejectCode::SysTransient,
-                        StateError::QueueFull { .. } => RejectCode::SysTransient,
-                        StateError::OutOfMemory { .. } => RejectCode::CanisterError,
-                        StateError::NonMatchingResponse { .. }
-                        | StateError::BitcoinNonMatchingResponse { .. } => {
-                            unreachable!("Not a user error: {}", err);
-                        }
-                    };
-                    *available_guaranteed_response_memory -=
-                        stream.push(generate_reject_response(&request, code, err.to_string()))
-                            as i64;
-                    stream.push_accept_signal()
-                }
-                Err((_, RequestOrResponse::Response(_))) => {
+                Some((_, RequestOrResponse::Response(_))) => {
                     unreachable!("No signals are generated for response induction failures except for CanisterMigrating");
                 }
             }
@@ -792,13 +784,18 @@ impl StreamHandlerImpl {
         }
     }
 
+    /// Inducts a message into `state`. There are 3 possible outcomes:
+    /// - `msg` successfully inducted, returns `None`.
+    /// - `msg` silently dropped (e.g. late best-effort response), `returns None`.
+    /// - Failed to induct `msg` (error or canister migrating), returns `(RejectReason, RequestOrResponse)`.
+    ///   Caller is expected to produce a reject response or a reject signal.
     fn induct_message_impl(
         &self,
         msg: RequestOrResponse,
         msg_type: &str,
         state: &mut ReplicatedState,
         available_guaranteed_response_memory: &mut i64,
-    ) -> Result<(), (StateError, RequestOrResponse)> {
+    ) -> Option<(RejectReason, RequestOrResponse)> {
         // Subnet that should have received the message according to the routing table.
         let receiver_host_subnet = state
             .metadata
@@ -812,9 +809,14 @@ impl StreamHandlerImpl {
             Some(host_subnet) if host_subnet == self.subnet_id => {
                 match state.push_input(msg, available_guaranteed_response_memory) {
                     // Message successfully inducted, all done.
-                    Ok(()) => {
+                    Ok(true) => {
                         self.observe_inducted_message_status(msg_type, LABEL_VALUE_SUCCESS);
                         self.observe_inducted_payload_size(payload_size);
+                    }
+
+                    // Message silently dropped, all done.
+                    Ok(false) => {
+                        self.observe_inducted_message_status(msg_type, LABEL_VALUE_DROPPED);
                     }
 
                     // Message not inducted.
@@ -823,16 +825,31 @@ impl StreamHandlerImpl {
 
                         match msg {
                             RequestOrResponse::Request(ref request) => {
+                                let reason = match err {
+                                    StateError::CanisterNotFound(_) => {
+                                        RejectReason::CanisterNotFound
+                                    }
+                                    StateError::CanisterStopped(_) => RejectReason::CanisterStopped,
+                                    StateError::CanisterStopping(_) => {
+                                        RejectReason::CanisterStopping
+                                    }
+                                    StateError::QueueFull { .. } => RejectReason::QueueFull,
+                                    StateError::OutOfMemory { .. } => RejectReason::OutOfMemory,
+                                    // Unreachable.
+                                    StateError::NonMatchingResponse { .. }
+                                    | StateError::BitcoinNonMatchingResponse { .. } => {
+                                        RejectReason::Unknown
+                                    }
+                                };
                                 debug!(
                                     self.log,
-                                    "Induction failed with error '{}', generating reject Response for {:?}",
-                                    &err,
-                                    &request
+                                    "Inducting request failed: {}\n{:?}", &err, &request
                                 );
-                                return Err((err, msg));
+                                return Some((reason, msg));
                             }
                             RequestOrResponse::Response(response) => {
-                                // Critical error, responses should always be inducted successfully.
+                                // Responses should always be inducted successfully (or silently dropped,
+                                // in the case of duplicate best-effort responses). But never produce an error.
                                 error!(
                                     self.log,
                                     "{}: Inducting response failed: {}\n{:?}",
@@ -850,38 +867,25 @@ impl StreamHandlerImpl {
             // Receiver canister is migrating to/from this subnet.
             Some(host_subnet) if self.should_reroute_message_to(&msg, host_subnet, state) => {
                 self.observe_inducted_message_status(msg_type, LABEL_VALUE_CANISTER_MIGRATED);
-                let err = StateError::CanisterMigrating {
-                    canister_id: msg.receiver(),
-                    host_subnet,
-                };
 
                 match &msg {
                     RequestOrResponse::Request(request) => {
                         debug!(
                             self.log,
-                            "Canister {} is being migrated, generating reject response for {:?}",
+                            "Inducting request failed: Canister {} is migrating\n{:?}",
                             request.receiver,
                             request
                         );
-                        return Err((err, msg));
+                        return Some((RejectReason::CanisterMigrating, msg));
                     }
                     RequestOrResponse::Response(response) => {
-                        if state.metadata.certification_version >= CertificationVersion::V9 {
-                            debug!(
-                                self.log,
-                                "Canister {} is being migrated, generating reject signal for {:?}",
-                                response.originator,
-                                response
-                            );
-                            return Err((err, msg));
-                        } else {
-                            fatal!(
-                                self.log,
-                                "Canister {} is being migrated, but cannot produce reject signal for response {:?}",
-                                response.originator,
-                                response
-                            );
-                        }
+                        debug!(
+                            self.log,
+                            "Inducting response failed: Canister {} is migrating\n{:?}",
+                            response.originator,
+                            response
+                        );
+                        return Some((RejectReason::CanisterMigrating, msg));
                     }
                 }
             }
@@ -906,7 +910,7 @@ impl StreamHandlerImpl {
         }
 
         // Any reject signals generated were returned before this point.
-        Ok(())
+        None
     }
 
     /// Checks whether `actual_subnet_id` is a valid host subnet for `msg.sender()`

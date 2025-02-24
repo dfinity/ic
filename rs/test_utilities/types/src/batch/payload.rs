@@ -47,7 +47,6 @@ impl PayloadBuilder {
 mod tests {
     use ic_types::{
         batch::{BatchPayload, IngressPayload},
-        consensus::dkg::Dealings,
         consensus::{BlockPayload, DataPayload},
     };
 
@@ -69,7 +68,7 @@ mod tests {
     fn payload_serialize_then_deserialize() {
         use ic_types::{
             batch::BatchPayload,
-            consensus::{dkg, Payload},
+            consensus::{dkg::DkgDataPayload, Payload},
             Height,
         };
 
@@ -78,7 +77,7 @@ mod tests {
             ic_types::crypto::crypto_hash,
             BlockPayload::Data(DataPayload {
                 batch: BatchPayload::default(),
-                dealings: Dealings::new_empty(Height::from(0)),
+                dkg: DkgDataPayload::new_empty(Height::from(0)),
                 idkg: None,
             }),
         );
@@ -104,7 +103,7 @@ mod tests {
             ic_types::crypto::crypto_hash,
             BlockPayload::Data(DataPayload {
                 batch: batch_payload_0,
-                dealings: dkg::Dealings::new_empty(Height::new(0)),
+                dkg: DkgDataPayload::new_empty(Height::new(0)),
                 idkg: None,
             }),
         );

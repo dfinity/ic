@@ -7,10 +7,18 @@ on:
       - '.bazelversion'
       - 'rust-toolchain.toml'
       - 'ci/container/**'
+  push:
+    branches:
+      - 'dev-gh-*'
+    paths:
+      - '.github/workflows/container-autobuild.yml'
+      - '.bazelversion'
+      - 'rust-toolchain.toml'
+      - 'ci/container/**'
   workflow_dispatch:
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.head_ref && github.ref || github.run_id }}
+  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
   cancel-in-progress: true
 
 permissions:
@@ -24,11 +32,18 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
+      - name: Create GitHub App Token
+        uses: actions/create-github-app-token@v1
+        id: app-token
+        with:
+          app-id: ${{ vars.PR_AUTOMATION_BOT_PUBLIC_APP_ID }}
+          private-key: ${{ secrets.PR_AUTOMATION_BOT_PUBLIC_PRIVATE_KEY }}
+
       - name: Checkout
         uses: actions/checkout@v4
         with:
           ref: ${{ github.head_ref }}
-          token: ${{ secrets.IDX_PUSH_TO_PR }}
+          token: ${{ steps.app-token.outputs.token }}
           fetch-depth: 8
 
       - name: Set Env Variables
@@ -63,7 +78,7 @@ jobs:
         if: ${{ steps.check.outputs.build == 'true' }}
 
       - name: Login to GHCR
-        uses: docker/login-action@5f4866a30a54f16a52d2ecb4a3898e9e424939cf # v3
+        uses: docker/login-action@9780b0c442fbb1117ed29e0efdff1e18412f7567 # v3.3.0
         if: ${{ steps.check.outputs.build == 'true' }}
         with:
           registry: ghcr.io
@@ -102,7 +117,7 @@ jobs:
           popd
 
           git config --global user.name "IDX GitHub Automation"
-          git config --global user.email "idx@dfinity.org"
+          git config --global user.email "<>"
           git add .
           git commit -m "Updating container image to ${IMAGE_SHA}" -m "Image tag: ${IMAGE_TAG}"
           git push
@@ -111,7 +126,7 @@ jobs:
 
       - name: Add PR Comment
         uses: actions/github-script@v7
-        if: ${{ steps.check.outputs.build == 'true' }}
+        if: ${{ steps.check.outputs.build == 'true' && github.event_name == 'pull_request' }}
         with:
           script: |
             let message = 'Run URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}\n\n'

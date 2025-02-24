@@ -3,8 +3,7 @@ set -eEuo pipefail
 
 TARGET_LIST=$(bazel query "attr(tags, 'rust_bench', ${TARGETS:-'//rs/...'})")
 for TARGET in $TARGET_LIST; do
-    export BAZEL_TARGETS="$TARGET"
-    time ./ci/bazel-scripts/main.sh
+    BAZEL_COMMAND=run BAZEL_TARGETS="$TARGET" time ./ci/bazel-scripts/main.sh
 done
 find -L ./bazel-out -name 'benchmark.json'
 
@@ -25,5 +24,5 @@ while IFS= read -r bench_dir; do
     .revCount = 1' \
         >report.json
     curl --fail --retry 2 -sS -o /dev/null -X POST -H 'Content-Type: application/json' --data @report.json \
-        "https://elasticsearch.testnet.dfinity.network/ci-performance-test/_doc"
+        "https://elasticsearch.ch1-obsdev1.dfinity.network/ci-performance-test/_doc"
 done < <(find -L ./bazel-out -type d -path '*/new')

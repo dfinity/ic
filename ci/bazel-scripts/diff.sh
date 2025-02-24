@@ -18,7 +18,7 @@ MERGE_BASE="${MERGE_BASE_SHA:-HEAD}"
 COMMIT_RANGE="$MERGE_BASE..${BRANCH_HEAD_SHA:-}"
 DIFF_FILES=$(git diff --name-only "${COMMIT_RANGE}")
 
-if grep -qE "(.*\.bazel|.*\.bzl|\.bazelrc|\.bazelversion)" <<<"$DIFF_FILES"; then
+if grep -qE "(.*\.bazel|.*\.bzl|\.bazelrc|\.bazelversion|mainnet-canister-revisions\.json|^\.github)" <<<"$DIFF_FILES"; then
     echo "Changes detected in bazel files. Considering all targets." >&2
     echo ${BAZEL_TARGETS:-"//..."}
     exit 0
@@ -44,7 +44,10 @@ if grep -qE ".*\.hs" <<<"$DIFF_FILES"; then
 fi
 
 if grep -qE ".*\.proto" <<<"$DIFF_FILES"; then
-    files+=(//pre-commit:protobuf-format-check)
+    files+=(
+        //pre-commit:protobuf-format-check
+        //pre-commit:buf-breaking
+    )
 fi
 
 if [ ${#files[@]} -eq 0 ]; then
@@ -52,12 +55,17 @@ if [ ${#files[@]} -eq 0 ]; then
     exit 0
 fi
 
-if [ "${BAZEL_COMMAND:-}" == "build" ]; then
+if [[ $BAZEL_COMMAND =~ ^build[[:space:]] ]]; then
     TARGETS=$(bazel query "rdeps(//..., set(${files[*]}))")
-elif [ "${BAZEL_COMMAND:-}" == "test" ]; then
-    TARGETS=$(bazel query "kind(test, rdeps(//..., set(${files[*]}))) except attr('tags', 'manual|system_test_hourly|system_test_nightly|system_test_staging|system_test_hotfix|system_test_nightly_nns', //...)")
+elif [[ $BAZEL_COMMAND =~ ^test[[:space:]] ]]; then
+    EXCLUDED_TAGS=(manual $EXCLUDED_TEST_TAGS)
+    EXCLUDED_TAGS=$(
+        IFS='|'
+        echo "${EXCLUDED_TAGS[*]}"
+    )
+    TARGETS=$(bazel query "kind(test, rdeps(//..., set(${files[*]}))) except attr('tags', '$EXCLUDED_TAGS', //...)")
 else
-    echo "Unknown BAZEL_COMMAND: ${BAZEL_COMMAND:-}" >&2
+    echo "Cannot infer command from BAZEL_COMMAND: ${BAZEL_COMMAND:-}" >&2
     exit 1
 fi
 

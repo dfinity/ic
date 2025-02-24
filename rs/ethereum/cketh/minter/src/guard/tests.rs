@@ -1,4 +1,4 @@
-use crate::numeric::wei_from_milli_ether;
+use crate::test_fixtures::initial_state;
 
 mod retrieve_eth_guard {
     use crate::guard::tests::init_state;
@@ -130,23 +130,7 @@ mod timer_guard {
 }
 
 fn init_state() {
-    use crate::lifecycle::init::InitArg;
-    use crate::state::State;
-    use candid::Principal;
     crate::state::STATE.with(|s| {
-        *s.borrow_mut() = Some(
-            State::try_from(InitArg {
-                ethereum_network: Default::default(),
-                ecdsa_key_name: "test_key_1".to_string(),
-                ethereum_contract_address: None,
-                ledger_id: Principal::from_text("apia6-jaaaa-aaaar-qabma-cai")
-                    .expect("BUG: invalid principal"),
-                ethereum_block_height: Default::default(),
-                minimum_withdrawal_amount: wei_from_milli_ether(10).into(),
-                next_transaction_nonce: Default::default(),
-                last_scraped_block_number: Default::default(),
-            })
-            .expect("init args should be valid"),
-        );
+        *s.borrow_mut() = Some(initial_state());
     });
 }

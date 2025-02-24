@@ -87,7 +87,7 @@ fn set_tip_height(tip_height: u32) {
 #[update]
 fn bitcoin_get_utxos(utxos_request: GetUtxosRequest) -> GetUtxosResponse {
     read_state(|s| {
-        assert_eq!(utxos_request.network, s.network.into());
+        assert_eq!(Network::from(utxos_request.network), s.network);
 
         let mut utxos = s
             .address_to_utxos
@@ -98,10 +98,14 @@ fn bitcoin_get_utxos(utxos_request: GetUtxosRequest) -> GetUtxosResponse {
             .cloned()
             .collect::<Vec<Utxo>>();
 
-        if let Some(UtxosFilterInRequest::MinConfirmations(min_confirmations)) =
-            utxos_request.filter
-        {
-            utxos.retain(|u| s.tip_height + 1 >= u.height + min_confirmations);
+        if let Some(filter) = utxos_request.filter {
+            match filter {
+                UtxosFilterInRequest::MinConfirmations(min_confirmations)
+                | UtxosFilterInRequest::min_confirmations(min_confirmations) => {
+                    utxos.retain(|u| s.tip_height + 1 >= u.height + min_confirmations)
+                }
+                UtxosFilterInRequest::Page(_) | UtxosFilterInRequest::page(_) => {}
+            }
         }
 
         GetUtxosResponse {

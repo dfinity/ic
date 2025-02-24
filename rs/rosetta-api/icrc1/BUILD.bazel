@@ -6,15 +6,14 @@ load("@rules_pkg//:pkg.bzl", "pkg_tar")
 load("@rules_pkg//pkg:mappings.bzl", "pkg_attributes", "pkg_mkdirs")
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
 load("//bazel:defs.bzl", "rust_test_suite_with_extra_srcs")
+load("//rs/tests:system_tests.bzl", "oci_tar")
 
 package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
     # Keep sorted.
-    "//packages/ic-ledger-hash-of:ic_ledger_hash_of",
     "//packages/icrc-ledger-agent:icrc_ledger_agent",
     "//packages/icrc-ledger-types:icrc_ledger_types",
-    "//rs/crypto/tree_hash",
     "//rs/ledger_suite/common/ledger_canister_core",
     "//rs/ledger_suite/common/ledger_core",
     "//rs/ledger_suite/icrc1",
@@ -33,7 +32,6 @@ DEPENDENCIES = [
     "@crate_index//:clap",  # no clap because feature derive
     "@crate_index//:hex",
     "@crate_index//:ic-agent",
-    "@crate_index//:ic-certification",
     "@crate_index//:indicatif",
     "@crate_index//:lazy_static",
     "@crate_index//:num-bigint",
@@ -47,7 +45,6 @@ DEPENDENCIES = [
     "@crate_index//:serde_bytes",
     "@crate_index//:serde_cbor",
     "@crate_index//:serde_json",
-    "@crate_index//:serde_with",
     "@crate_index//:strum",
     "@crate_index//:tempfile",
     "@crate_index//:tokio",
@@ -64,7 +61,7 @@ DEV_DEPENDENCIES = [
     ":ic-icrc-rosetta",
     "//packages/pocket-ic:pocket-ic",
     "//rs/ledger_suite/icrc1/test_utils",
-    "//rs/ledger_suite/tests/sm-tests",
+    "//rs/ledger_suite/tests/sm-tests:ic-ledger-suite-state-machine-tests",
     "//rs/rosetta-api/icp/test_utils",
     "//rs/rosetta-api/icrc1/client:ic-icrc-rosetta-client",
     "//rs/rosetta-api/icrc1/runner:ic-icrc-rosetta-runner",
@@ -72,7 +69,6 @@ DEV_DEPENDENCIES = [
     "@crate_index//:futures",
     "@crate_index//:ic-utils",
     "@crate_index//:once_cell",
-    "@crate_index//:ring",
 ]
 
 MACRO_DEPENDENCIES = [
@@ -86,7 +82,7 @@ MACRO_DEV_DEPENDENCIES = [
 ALIASES = {
 }
 
-ROSETTA_VERSION = "1.1.1"
+ROSETTA_VERSION = "1.1.2"
 
 rust_library(
     name = "ic-icrc-rosetta",
@@ -121,16 +117,18 @@ LOCAL_REPLICA_DATA = [
     "//rs/canister_sandbox:sandbox_launcher",
     "//rs/replica",
     "//rs/ledger_suite/icrc1/archive:archive_canister",
-    "//rs/ledger_suite/icrc1/ledger:ledger_canister",
+    "//rs/ledger_suite/icrc1/ledger:ledger_canister_icrc3_compatible_data_certificate",
     "//rs/rosetta-api/icrc1:ic-icrc-rosetta-bin",
     "//rs/rosetta-api/icrc1/client:ic-icrc-rosetta-client-bin",
     "//rs/pocket_ic_server:pocket-ic-server",
+    "//rs/ledger_suite/icrc1/ledger:ledger_canister",
 ]
 
 LOCAL_REPLICA_ENV = {
     "CANISTER_LAUNCHER": "$(rootpath //rs/canister_sandbox)",
     "IC_ICRC1_ARCHIVE_WASM_PATH": "$(rootpath //rs/ledger_suite/icrc1/archive:archive_canister)",
-    "IC_ICRC1_LEDGER_WASM_PATH": "$(rootpath //rs/ledger_suite/icrc1/ledger:ledger_canister)",
+    "IC_ICRC1_LEDGER_WASM_PATH": "$(rootpath //rs/ledger_suite/icrc1/ledger:ledger_canister_icrc3_compatible_data_certificate)",
+    "IC_ICRC1_LEDGER_WASM_PATH_OLD_CERTIFICATE": "$(rootpath //rs/ledger_suite/icrc1/ledger:ledger_canister)",
     "POCKET_IC_BIN": "$(rootpath //rs/pocket_ic_server:pocket-ic-server)",
     "REPLICA_BIN": "$(rootpath //rs/replica)",
     "ROSETTA_BIN_PATH": "$(rootpath //rs/rosetta-api/icrc1:ic-icrc-rosetta-bin)",
@@ -278,6 +276,12 @@ expand_template(
     template = [
         "0.0.0",
     ],
+)
+
+oci_tar(
+    name = "icrc_rosetta_image.tar",
+    image = ":ic_icrc_rosetta_image",
+    repo_tags = ["icrc-rosetta:image"],
 )
 
 # Push image with:

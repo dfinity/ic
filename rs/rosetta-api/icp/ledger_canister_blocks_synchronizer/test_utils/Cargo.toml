@@ -8,14 +8,10 @@ documentation.workspace = true
 
 [dependencies]
 ic-canister-client-sender = { path = "../../../../canister_client/sender" }
-ic-cdk = { workspace = true }
 ic-ledger-canister-blocks-synchronizer = { path = "../" }
 ic-ledger-core = { path = "../../../../ledger_suite/common/ledger_core" }
 ic-types = { path = "../../../../types/types" }
 icp-ledger = { path = "../../../../ledger_suite/icp" }
 rand = { workspace = true }
 rand_distr = "0.4"
-serde = { workspace = true }
-serde_bytes = { workspace = true }
 tempfile = { workspace = true }
-tokio = { workspace = true }

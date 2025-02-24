@@ -1,10 +1,9 @@
 use crate::execution_environment::QUERY_EXECUTION_THREADS_TOTAL;
 use serde::{Deserialize, Serialize};
-use std::net::SocketAddr;
+use std::net::{IpAddr, Ipv6Addr, SocketAddr};
 use std::path::PathBuf;
 
-const DEFAULT_IP_ADDR: &str = "0.0.0.0";
-
+const DEFAULT_IP_V6_ADDR: Ipv6Addr = Ipv6Addr::new(0, 0, 0, 0, 0, 0, 0, 0);
 const DEFAULT_PORT: u16 = 8080u16;
 
 /// The internal configuration -- any historical warts from the external
@@ -70,10 +69,7 @@ pub struct Config {
 impl Default for Config {
     fn default() -> Self {
         Self {
-            listen_addr: SocketAddr::new(
-                DEFAULT_IP_ADDR.parse().expect("can't fail"),
-                DEFAULT_PORT,
-            ),
+            listen_addr: SocketAddr::new(IpAddr::V6(DEFAULT_IP_V6_ADDR), DEFAULT_PORT),
             port_file_path: None,
             connection_read_timeout_seconds: 1_200, // 20 min
             request_timeout_seconds: 300,           // 5 min

@@ -479,7 +479,7 @@ pub struct ExecutionState {
     pub next_scheduled_method: NextScheduledMethod,
 
     /// Checks if execution is in Wasm64 mode.
-    pub is_wasm64: bool,
+    pub wasm_execution_mode: WasmExecutionMode,
 }
 
 // We have to implement it by hand as embedder_cache can not be compared for
@@ -499,7 +499,7 @@ impl PartialEq for ExecutionState {
             metadata,
             last_executed_round,
             next_scheduled_method,
-            is_wasm64,
+            wasm_execution_mode,
         } = rhs;
 
         (
@@ -511,7 +511,7 @@ impl PartialEq for ExecutionState {
             &self.metadata,
             &self.last_executed_round,
             &self.next_scheduled_method,
-            &self.is_wasm64,
+            &self.wasm_execution_mode,
         ) == (
             &wasm_binary.binary,
             wasm_memory,
@@ -521,7 +521,7 @@ impl PartialEq for ExecutionState {
             metadata,
             last_executed_round,
             next_scheduled_method,
-            is_wasm64,
+            wasm_execution_mode,
         )
     }
 }
@@ -531,7 +531,7 @@ impl ExecutionState {
     /// The state will be created with empty stable memory, but may have wasm
     /// memory from data sections in the wasm module.
     /// The state will be created with last_executed_round = 0, a
-    /// default next_scheduled_method, and is_wasm64 = false.
+    /// default next_scheduled_method, and wasm_execution_mode = WasmExecutionMode::Wasm32.
     /// Be sure to change these if needed.
     pub fn new(
         canister_root: PathBuf,
@@ -552,7 +552,7 @@ impl ExecutionState {
             metadata: wasm_metadata,
             last_executed_round: ExecutionRound::from(0),
             next_scheduled_method: NextScheduledMethod::default(),
-            is_wasm64: false,
+            wasm_execution_mode: WasmExecutionMode::Wasm32,
         }
     }
 
@@ -561,13 +561,18 @@ impl ExecutionState {
         self.exports.has_method(method)
     }
 
+    /// Returns the Wasm memory currently used by the `ExecutionState`.
+    pub fn wasm_memory_usage(&self) -> NumBytes {
+        num_bytes_try_from(self.wasm_memory.size)
+            .expect("could not convert from wasm memory number of pages to bytes")
+    }
+
     /// Returns the memory currently used by the `ExecutionState`.
     pub fn memory_usage(&self) -> NumBytes {
         // We use 8 bytes per global.
         let globals_size_bytes = 8 * self.exported_globals.len() as u64;
         let wasm_binary_size_bytes = self.wasm_binary.binary.len() as u64;
-        num_bytes_try_from(self.wasm_memory.size)
-            .expect("could not convert from wasm memory number of pages to bytes")
+        self.wasm_memory_usage()
             + num_bytes_try_from(self.stable_memory.size)
                 .expect("could not convert from stable memory number of pages to bytes")
             + NumBytes::from(globals_size_bytes)
@@ -788,6 +793,35 @@ impl TryFrom<pb::WasmMetadata> for WasmMetadata {
             )
             .collect::<Result<_, _>>()?;
         Ok(WasmMetadata::new(custom_sections))
+    }
+}
+
+/// Keeps track of how a canister is executing.
+#[derive(Debug, Copy, Clone, PartialEq)]
+pub enum WasmExecutionMode {
+    Wasm32,
+    Wasm64,
+}
+
+impl WasmExecutionMode {
+    pub fn is_wasm64(&self) -> bool {
+        match self {
+            WasmExecutionMode::Wasm32 => false,
+            WasmExecutionMode::Wasm64 => true,
+        }
+    }
+    pub fn from_is_wasm64(is_wasm64: bool) -> Self {
+        if is_wasm64 {
+            WasmExecutionMode::Wasm64
+        } else {
+            WasmExecutionMode::Wasm32
+        }
+    }
+    pub fn as_str(&self) -> &str {
+        match self {
+            WasmExecutionMode::Wasm32 => "wasm32",
+            WasmExecutionMode::Wasm64 => "wasm64",
+        }
     }
 }
 

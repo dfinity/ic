@@ -13,6 +13,7 @@ use ic_bn_lib::http::{Client as HttpClient, ConnInfo};
 use ic_certification_test_utils::CertificateBuilder;
 use ic_certification_test_utils::CertificateData::*;
 use ic_crypto_tree_hash::Digest;
+use ic_limits::INITIAL_NOTARY_DELAY;
 use ic_protobuf::registry::{
     crypto::v1::{PublicKey as PublicKeyProto, X509PublicKeyCert},
     node::v1::{ConnectionEndpoint, NodeRecord},
@@ -43,6 +44,15 @@ use crate::{
     persist::{Persist, Persister, Routes},
     snapshot::{node_test_id, subnet_test_id, RegistrySnapshot, Snapshot, Snapshotter, Subnet},
 };
+
+#[macro_export]
+macro_rules! principal {
+    ($id:expr) => {{
+        candid::Principal::from_text($id).unwrap()
+    }};
+}
+
+pub use principal;
 
 #[derive(Debug)]
 struct TestHttpClient(usize);
@@ -111,7 +121,7 @@ pub fn test_subnet_record() -> SubnetRecord {
         max_ingress_messages_per_block: 1000,
         max_block_payload_size: 4 * 1024 * 1024,
         unit_delay_millis: 500,
-        initial_notary_delay_millis: 1500,
+        initial_notary_delay_millis: INITIAL_NOTARY_DELAY.as_millis() as u64,
         replica_version_id: ReplicaVersion::default().into(),
         dkg_interval_length: 59,
         dkg_dealings_per_block: 1,
@@ -123,7 +133,6 @@ pub fn test_subnet_record() -> SubnetRecord {
         max_number_of_canisters: 0,
         ssh_readonly_access: vec![],
         ssh_backup_access: vec![],
-        ecdsa_config: None,
         chain_key_config: None,
     }
 }
@@ -270,13 +279,13 @@ pub fn setup_test_router(
 ) -> (Router, Vec<Subnet>) {
     let mut args = vec![
         "",
-        "--local-store-path",
+        "--registry-local-store-path",
         "/tmp",
-        "--log-null",
+        "--obs-log-null",
         "--retry-update-call",
     ];
     if !enable_logging {
-        args.push("--disable-request-logging");
+        args.push("--obs-disable-request-logging");
     }
 
     // Hacky, but required due to &str
@@ -290,7 +299,7 @@ pub fn setup_test_router(
     let cli = Cli::parse_from(args);
     #[cfg(feature = "tls")]
     let cli = Cli::parse_from({
-        args.extend_from_slice(&["--hostname", "foobar"]);
+        args.extend_from_slice(&["--tls-hostname", "foobar"]);
         args
     });
 
@@ -314,6 +323,8 @@ pub fn setup_test_router(
     let subnets = registry_snapshot.load_full().unwrap().subnets.clone();
     persister.persist(subnets.clone());
 
+    let salt: Arc<ArcSwapOption<Vec<u8>>> = Arc::new(ArcSwapOption::empty());
+
     let router = setup_router(
         registry_snapshot,
         routing_table,
@@ -325,6 +336,7 @@ pub fn setup_test_router(
         enable_cache.then_some(Arc::new(
             Cache::new(10485760, 262144, Duration::from_secs(1), false).unwrap(),
         )),
+        salt,
     );
 
     let router = router.layer(axum::middleware::from_fn(add_conninfo));

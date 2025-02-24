@@ -1,6 +1,6 @@
 //! Errors encountered during CSP canister threshold signature operations.
 use crate::KeyId;
-use ic_crypto_internal_threshold_sig_ecdsa::CanisterThresholdSerializationError;
+use ic_crypto_internal_threshold_sig_canister_threshold_sig::CanisterThresholdSerializationError;
 use ic_interfaces::crypto::IDkgDealingEncryptionKeyRotationError;
 use serde::{Deserialize, Serialize};
 

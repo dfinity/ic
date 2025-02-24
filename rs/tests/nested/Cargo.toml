@@ -18,7 +18,7 @@ ic-system-test-driver = { path = "../driver" }
 ic-types = { path = "../../types/types" }
 ic_consensus_system_test_utils = { path = "../consensus/utils" }
 slog = { workspace = true }
-tests = { path = ".." }
+url = { workspace = true }
 
 [[bin]]
 name = "registration"

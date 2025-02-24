@@ -5,11 +5,11 @@ use ic_base_types::{NodeId, SubnetId};
 use ic_canister_client::Sender;
 use ic_config::subnet_config::{ECDSA_SIGNATURE_FEE, SCHNORR_SIGNATURE_FEE};
 use ic_limits::SMALL_APP_SUBNET_MAX_SIZE;
-use ic_management_canister_types::{
+use ic_management_canister_types_private::{
     DerivationPath, ECDSAPublicKeyArgs, ECDSAPublicKeyResponse, EcdsaCurve, EcdsaKeyId,
     MasterPublicKeyId, Payload, SchnorrAlgorithm, SchnorrKeyId, SchnorrPublicKeyArgs,
     SchnorrPublicKeyResponse, SignWithECDSAArgs, SignWithECDSAReply, SignWithSchnorrArgs,
-    SignWithSchnorrReply,
+    SignWithSchnorrReply, VetKdKeyId, VetKdPublicKeyArgs, VetKdPublicKeyResult,
 };
 use ic_message::ForwardParams;
 use ic_nervous_system_common_test_keys::{TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_KEYPAIR};
@@ -185,9 +185,6 @@ pub fn empty_subnet_update() -> UpdateSubnetPayload {
         is_halted: None,
         halt_at_cup_height: None,
         features: None,
-        ecdsa_config: None,
-        ecdsa_key_signing_enable: None,
-        ecdsa_key_signing_disable: None,
         chain_key_config: None,
         chain_key_signing_enable: None,
         chain_key_signing_disable: None,
@@ -301,6 +298,9 @@ pub async fn get_public_key_with_retries(
         MasterPublicKeyId::Schnorr(key_id) => {
             get_schnorr_public_key_with_retries(key_id, msg_can, logger, retries).await
         }
+        MasterPublicKeyId::VetKd(key_id) => {
+            get_vetkd_public_key_with_retries(key_id, msg_can, logger, retries).await
+        }
     }
 }
 
@@ -403,13 +403,13 @@ pub async fn get_schnorr_public_key_with_retries(
 
     match key_id.algorithm {
         SchnorrAlgorithm::Bip340Secp256k1 => {
-            use schnorr_fun::fun::{marker::*, Point};
-            assert_eq!(public_key.len(), 33);
-            let bip340_pk_array =
-                <[u8; 32]>::try_from(&public_key[1..]).expect("public key is not 32 bytes");
+            let pk_with_even_y = {
+                let mut k = public_key.clone();
+                k[0] = 0x02;
+                k
+            };
 
-            let vk = Point::<EvenY, Public>::from_xonly_bytes(bip340_pk_array)
-                .expect("failed to parse public key");
+            let vk = k256::PublicKey::from_sec1_bytes(&pk_with_even_y);
             info!(logger, "schnorr_public_key returns {:?}", vk);
         }
         SchnorrAlgorithm::Ed25519 => {
@@ -418,6 +418,55 @@ pub async fn get_schnorr_public_key_with_retries(
             info!(logger, "schnorr_public_key returns {:?}", vk);
         }
     }
+    Ok(public_key)
+}
+
+pub async fn get_vetkd_public_key_with_retries(
+    key_id: &VetKdKeyId,
+    msg_can: &MessageCanister<'_>,
+    logger: &Logger,
+    retries: u64,
+) -> Result<Vec<u8>, AgentError> {
+    let public_key_request = VetKdPublicKeyArgs {
+        canister_id: None,
+        derivation_path: DerivationPath::new(vec![]),
+        key_id: key_id.clone(),
+    };
+    info!(
+        logger,
+        "Sending a 'get vetkd public key' request: {:?}", public_key_request
+    );
+
+    let mut count = 0;
+    let public_key = loop {
+        let res = msg_can
+            .forward_to(
+                &Principal::management_canister(),
+                "vetkd_public_key",
+                Encode!(&public_key_request).unwrap(),
+            )
+            .await;
+        match res {
+            Ok(bytes) => {
+                let key = VetKdPublicKeyResult::decode(&bytes)
+                    .expect("failed to decode VetKdPublicKeyResult");
+                break key.public_key;
+            }
+            Err(err) => {
+                count += 1;
+                if count < retries {
+                    debug!(
+                        logger,
+                        "vetkd_public_key returns `{}`. Trying again in 2 seconds...", err
+                    );
+                    tokio::time::sleep(Duration::from_secs(2)).await;
+                } else {
+                    return Err(err);
+                }
+            }
+        }
+    };
+
     Ok(public_key)
 }
 
@@ -459,7 +508,7 @@ pub async fn execute_update_subnet_proposal(
         logger,
         "Subnet Update proposal result: {:?}", proposal_result
     );
-    assert_eq!(proposal_result.status(), ProposalStatus::Executed);
+    assert_eq!(proposal_result.status, ProposalStatus::Executed as i32);
 }
 
 pub async fn execute_create_subnet_proposal(
@@ -488,7 +537,7 @@ pub async fn execute_create_subnet_proposal(
         logger,
         "Subnet Creation proposal result: {:?}", proposal_result
     );
-    assert_eq!(proposal_result.status(), ProposalStatus::Executed);
+    assert_eq!(proposal_result.status, ProposalStatus::Executed as i32);
 }
 
 pub async fn get_signature_with_logger(
@@ -507,6 +556,7 @@ pub async fn get_signature_with_logger(
         MasterPublicKeyId::Schnorr(key_id) => {
             get_schnorr_signature_with_logger(message, cycles, key_id, msg_can, logger).await
         }
+        MasterPublicKeyId::VetKd(_) => panic!("not applicable to vetKD"),
     }
 }
 
@@ -575,6 +625,7 @@ pub async fn get_schnorr_signature_with_logger(
         message,
         derivation_path: DerivationPath::new(Vec::new()),
         key_id: key_id.clone(),
+        aux: None,
     };
     info!(
         logger,
@@ -755,7 +806,6 @@ pub async fn create_new_subnet_with_keys(
         ssh_backup_access: vec![],
         chain_key_config: Some(chain_key_config),
         // Unused section follows
-        ecdsa_config: None,
         ingress_bytes_per_block_soft_cap: Default::default(),
         gossip_max_artifact_streams_per_peer: Default::default(),
         gossip_max_chunk_wait_ms: Default::default(),
@@ -770,24 +820,17 @@ pub async fn create_new_subnet_with_keys(
 }
 
 pub fn verify_bip340_signature(sec1_pk: &[u8], sig: &[u8], msg: &[u8]) -> bool {
-    use schnorr_fun::{
-        fun::{marker::*, Point},
-        Message, Schnorr, Signature,
+    let signature = match k256::schnorr::Signature::try_from(sig) {
+        Ok(sig) => sig,
+        Err(_) => return false,
     };
-    use sha2::Sha256;
 
-    let sig_array = <[u8; 64]>::try_from(sig).expect("signature is not 64 bytes");
-    assert_eq!(sec1_pk.len(), 33);
-    // The public key is a BIP-340 public key, which is a 32-byte
-    // compressed public key ignoring the y coordinate in the first byte of the
-    // SEC1 encoding.
-    let bip340_pk_array = <[u8; 32]>::try_from(&sec1_pk[1..]).expect("public key is not 32 bytes");
-
-    let schnorr = Schnorr::<Sha256>::verify_only();
-    let public_key = Point::<EvenY, Public>::from_xonly_bytes(bip340_pk_array)
-        .expect("failed to parse public key");
-    let signature = Signature::<Public>::from_bytes(sig_array).unwrap();
-    schnorr.verify(&public_key, Message::<Secret>::raw(msg), &signature)
+    // from_bytes takes just the x coordinate encoding:
+    if let Ok(bip340) = k256::schnorr::VerifyingKey::from_bytes(&sec1_pk[1..]) {
+        bip340.verify_raw(msg, &signature).is_ok()
+    } else {
+        false
+    }
 }
 
 pub fn verify_ed25519_signature(pk: &[u8], sig: &[u8], msg: &[u8]) -> bool {
@@ -816,6 +859,7 @@ pub fn verify_signature(key_id: &MasterPublicKeyId, msg: &[u8], pk: &[u8], sig: 
             SchnorrAlgorithm::Bip340Secp256k1 => verify_bip340_signature(pk, sig, msg),
             SchnorrAlgorithm::Ed25519 => verify_ed25519_signature(pk, sig, msg),
         },
+        MasterPublicKeyId::VetKd(_) => panic!("not applicable to vetKD"),
     };
     assert!(res);
 }
@@ -844,6 +888,7 @@ impl ChainSignatureRequest {
             MasterPublicKeyId::Schnorr(schnorr_key_id) => {
                 Self::schnorr_params(schnorr_key_id, schnorr_message_size)
             }
+            MasterPublicKeyId::VetKd(_) => panic!("not applicable to vetKD"),
         };
         let payload = Encode!(&params).unwrap();
 
@@ -873,6 +918,7 @@ impl ChainSignatureRequest {
             message: vec![1; message_size],
             derivation_path: DerivationPath::new(Vec::new()),
             key_id: schnorr_key_id,
+            aux: None,
         };
         ForwardParams {
             receiver: Principal::management_canister(),
@@ -908,6 +954,7 @@ impl Request<SignWithChainKeyReply> for ChainSignatureRequest {
             MasterPublicKeyId::Schnorr(_) => {
                 SignWithChainKeyReply::Schnorr(SignWithSchnorrReply::decode(raw_response)?)
             }
+            MasterPublicKeyId::VetKd(_) => panic!("not applicable to vetKD"),
         })
     }
 }

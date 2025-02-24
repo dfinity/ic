@@ -1,7 +1,14 @@
 use super::*;
+use assert_matches::assert_matches;
 use candid_parser::utils::{service_equal, CandidSource};
-use ic_sns_governance::pb::v1::{DisburseMaturityInProgress, Neuron};
+use ic_sns_governance::pb::v1::{
+    governance::{Version, Versions},
+    upgrade_journal_entry::{Event, UpgradeStepsRefreshed},
+    DisburseMaturityInProgress, Neuron, UpgradeJournal, UpgradeJournalEntry,
+};
 use maplit::btreemap;
+use pretty_assertions::assert_eq;
+use std::collections::HashSet;
 
 /// This is NOT affected by
 ///
@@ -58,7 +65,7 @@ fn test_set_time_warp() {
 fn test_populate_finalize_disbursement_timestamp_seconds() {
     // Step 1: prepare a neuron with 2 in progress disbursement, one with
     // finalize_disbursement_timestamp_seconds as None, and the other has incorrect timestamp.
-    let mut governance_proto = GovernanceProto {
+    let mut governance_proto = sns_gov_pb::Governance {
         neurons: btreemap! {
             "1".to_string() => Neuron {
                 disburse_maturity_in_progress: vec![
@@ -83,7 +90,7 @@ fn test_populate_finalize_disbursement_timestamp_seconds() {
     populate_finalize_disbursement_timestamp_seconds(&mut governance_proto);
 
     // Step 3: verifies that both disbursements have the correct finalization timestamps.
-    let expected_governance_proto = GovernanceProto {
+    let expected_governance_proto = sns_gov_pb::Governance {
         neurons: btreemap! {
             "1".to_string() => Neuron {
                 disburse_maturity_in_progress: vec![
@@ -104,4 +111,79 @@ fn test_populate_finalize_disbursement_timestamp_seconds() {
         ..Default::default()
     };
     assert_eq!(governance_proto, expected_governance_proto);
+}
+
+#[test]
+fn test_upgrade_journal() {
+    let journal = UpgradeJournal {
+        entries: vec![UpgradeJournalEntry {
+            timestamp_seconds: Some(1000),
+            event: Some(Event::UpgradeStepsRefreshed(UpgradeStepsRefreshed {
+                upgrade_steps: Some(Versions {
+                    versions: vec![Version {
+                        root_wasm_hash: vec![0, 0, 0, 0],
+                        governance_wasm_hash: vec![0, 0, 0, 1],
+                        swap_wasm_hash: vec![0, 0, 0, 2],
+                        index_wasm_hash: vec![0, 0, 0, 3],
+                        ledger_wasm_hash: vec![0, 0, 0, 4],
+                        archive_wasm_hash: vec![0, 0, 0, 5],
+                    }],
+                }),
+            })),
+        }],
+    };
+
+    // Currently, the `/journal` Http endpoint serves the entries directly, rather than the whole
+    // journal object.
+    let http_response = serve_journal(&journal);
+    let expected_headers: HashSet<(_, _)> = HashSet::from_iter([
+        ("Content-Type".to_string(), "application/json".to_string()),
+        ("Content-Length".to_string(), "277".to_string()),
+    ]);
+    let (observed_headers, observed_body) = assert_matches!(
+        http_response,
+        HttpResponse {
+            status_code: 200,
+            headers,
+            body
+        } => (headers, body)
+    );
+
+    let observed_headers = HashSet::from_iter(observed_headers);
+
+    assert!(
+        expected_headers.is_subset(&observed_headers),
+        "{:?} is expected to be a subset of {:?}",
+        expected_headers,
+        observed_headers
+    );
+
+    let observed_journal_str = std::str::from_utf8(&observed_body).unwrap();
+
+    assert_eq!(
+        observed_journal_str,
+        r#"[
+            {
+                "timestamp_seconds": 1000,
+                "event": {
+                    "UpgradeStepsRefreshed": {
+                        "upgrade_steps": {
+                            "versions": [
+                                {
+                                    "root_wasm_hash":       "00000000",
+                                    "governance_wasm_hash": "00000001",
+                                    "swap_wasm_hash":       "00000002",
+                                    "index_wasm_hash":      "00000003",
+                                    "ledger_wasm_hash":     "00000004",
+                                    "archive_wasm_hash":    "00000005"
+                                }
+                            ]
+                        }
+                    }
+                }
+            }
+        ]"#
+        .replace(" ", "")
+        .replace("\n", "")
+    );
 }

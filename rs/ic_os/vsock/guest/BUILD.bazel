@@ -5,7 +5,7 @@ package(default_visibility = ["//rs:ic-os-pkg"])
 DEPENDENCIES = [
     # Keep sorted.
     "//rs/ic_os/vsock/vsock_lib:vsock_lib",
-    "@crate_index//:clap_3_2_25",
+    "@crate_index//:clap",
 ]
 
 MACRO_DEPENDENCIES = []
@@ -17,7 +17,6 @@ rust_binary(
     srcs = ["src/main.rs"],
     aliases = ALIASES,
     crate_name = "vsock_guest",
-    edition = "2021",
     proc_macro_deps = MACRO_DEPENDENCIES,
     target_compatible_with = [
         "@platforms//os:linux",

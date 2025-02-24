@@ -1,6 +1,5 @@
 use crate::common::constants::MAX_ROSETTA_SYNC_ATTEMPTS;
 use candid::{Decode, Encode};
-use ic_agent::agent::http_transport::ReqwestTransport;
 use ic_agent::identity::BasicIdentity;
 use ic_agent::Agent;
 use ic_agent::Identity;
@@ -8,8 +7,9 @@ use ic_icp_rosetta_client::RosettaClient;
 use ic_ledger_core::block::BlockType;
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_nns_constants::LEDGER_CANISTER_ID;
-use ic_nns_governance::pb::v1::ListNeurons;
-use ic_nns_governance::pb::v1::ListNeuronsResponse;
+use ic_nns_governance_api::pb::v1::GovernanceError;
+use ic_nns_governance_api::pb::v1::ListNeurons;
+use ic_nns_governance_api::pb::v1::ListNeuronsResponse;
 use ic_rosetta_api::convert::to_hash;
 use icp_ledger::GetBlocksArgs;
 use icp_ledger::QueryEncodedBlocksResponse;
@@ -36,16 +36,36 @@ pub async fn get_custom_agent(basic_identity: Arc<dyn Identity>, port: u16) -> A
     let replica_url = Url::parse(&format!("http://localhost:{}", port)).unwrap();
 
     // Setup the agent
-    let transport = ReqwestTransport::create(replica_url.clone()).unwrap();
     let agent = Agent::builder()
+        .with_url(replica_url.clone())
+        .with_http_client(reqwest::Client::new())
         .with_identity(basic_identity)
-        .with_arc_transport(Arc::new(transport))
         .build()
         .unwrap();
 
     // For verification the agent needs the root key of the IC running on the local replica
     agent.fetch_root_key().await.unwrap();
     agent
+}
+
+pub async fn wait_for_rosetta_to_catch_up_with_icp_ledger(
+    rosetta_client: &RosettaClient,
+    network_identifier: NetworkIdentifier,
+    agent: &Agent,
+) {
+    let chain_length = query_encoded_blocks(agent, u64::MAX, 1).await.chain_length;
+    let last_block = wait_for_rosetta_to_sync_up_to_block(
+        rosetta_client,
+        network_identifier,
+        chain_length.saturating_sub(1),
+    )
+    .await
+    .unwrap();
+    assert_eq!(
+        chain_length.saturating_sub(1),
+        last_block,
+        "Failed to sync with the ledger"
+    );
 }
 
 pub async fn wait_for_rosetta_to_sync_up_to_block(
@@ -136,7 +156,7 @@ pub async fn query_encoded_blocks(
     let current_chain_tip_index = response.chain_length.saturating_sub(1);
     let block_request = GetBlocksArgs {
         start: std::cmp::min(min_block_height, current_chain_tip_index),
-        length: std::cmp::min(num_blocks, response.chain_length) as usize,
+        length: std::cmp::min(num_blocks, response.chain_length),
     };
     Decode!(
         &agent
@@ -160,6 +180,9 @@ pub async fn list_neurons(agent: &Agent) -> ListNeuronsResponse {
                     include_neurons_readable_by_caller: true,
                     include_empty_neurons_readable_by_caller: Some(true),
                     include_public_neurons_in_full_neurons: None,
+                    page_number: None,
+                    page_size: None,
+                    neuron_subaccounts: None
                 })
                 .unwrap()
             )
@@ -169,4 +192,18 @@ pub async fn list_neurons(agent: &Agent) -> ListNeuronsResponse {
         ListNeuronsResponse
     )
     .unwrap()
+}
+
+pub async fn update_neuron(agent: &Agent, neuron: ic_nns_governance_api::pb::v1::Neuron) {
+    let result = Decode!(
+        &agent
+            .update(&GOVERNANCE_CANISTER_ID.into(), "update_neuron")
+            .with_arg(Encode!(&neuron).unwrap())
+            .call_and_wait()
+            .await
+            .unwrap(),
+        Option<GovernanceError>
+    )
+    .unwrap();
+    assert!(result.is_none(), "Failed to update neuron: {:?}", result);
 }

@@ -1210,7 +1210,7 @@ impl<'a> IDkgTranscriptBuilderImpl<'a> {
     }
 }
 
-impl<'a> IDkgTranscriptBuilder for IDkgTranscriptBuilderImpl<'a> {
+impl IDkgTranscriptBuilder for IDkgTranscriptBuilderImpl<'_> {
     fn get_completed_transcript(&self, transcript_id: IDkgTranscriptId) -> Option<IDkgTranscript> {
         timed_call(
             "get_completed_transcript",
@@ -1278,7 +1278,7 @@ impl<'a> Action<'a> {
 }
 
 /// Needed as IDKGTranscriptParams doesn't implement Debug
-impl<'a> Debug for Action<'a> {
+impl Debug for Action<'_> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match &self {
             Self::Process(transcript_params) => {
@@ -1352,10 +1352,10 @@ mod tests {
     };
     use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
     use ic_interfaces::p2p::consensus::{MutablePool, UnvalidatedArtifact};
-    use ic_management_canister_types::MasterPublicKeyId;
     use ic_test_utilities_consensus::IDkgStatsNoOp;
     use ic_test_utilities_logger::with_test_replica_logger;
     use ic_test_utilities_types::ids::{NODE_1, NODE_2, NODE_3, NODE_4};
+    use ic_types::consensus::idkg::IDkgMasterPublicKeyId;
     use ic_types::consensus::idkg::IDkgObject;
     use ic_types::crypto::{BasicSig, BasicSigOf, CryptoHash};
     use ic_types::time::UNIX_EPOCH;
@@ -1366,7 +1366,7 @@ mod tests {
     // Tests the Action logic
     #[test]
     fn test_ecdsa_pre_signer_action() {
-        let key_id = fake_ecdsa_master_public_key_id();
+        let key_id = fake_ecdsa_idkg_master_public_key_id();
         let (id_1, id_2, id_3, id_4) = (
             create_transcript_id(1),
             create_transcript_id(2),
@@ -1427,13 +1427,13 @@ mod tests {
     // in progress are filtered out.
     #[test]
     fn test_send_dealings_all_algorithms() {
-        for key_id in fake_master_public_key_ids_for_all_algorithms() {
+        for key_id in fake_master_public_key_ids_for_all_idkg_algorithms() {
             println!("Running test for key ID {key_id}");
             test_send_dealings(key_id);
         }
     }
 
-    fn test_send_dealings(key_id: MasterPublicKeyId) {
+    fn test_send_dealings(key_id: IDkgMasterPublicKeyId) {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
                 let (mut idkg_pool, pre_signer) =
@@ -1529,13 +1529,13 @@ mod tests {
     // specified by the transcript params
     #[test]
     fn test_non_dealers_dont_send_dealings_all_algorithms() {
-        for key_id in fake_master_public_key_ids_for_all_algorithms() {
+        for key_id in fake_master_public_key_ids_for_all_idkg_algorithms() {
             println!("Running test for key ID {key_id}");
             test_non_dealers_dont_send_dealings(key_id);
         }
     }
 
-    fn test_non_dealers_dont_send_dealings(key_id: MasterPublicKeyId) {
+    fn test_non_dealers_dont_send_dealings(key_id: IDkgMasterPublicKeyId) {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
                 let (idkg_pool, pre_signer) = create_pre_signer_dependencies(pool_config, logger);
@@ -1565,7 +1565,7 @@ mod tests {
     fn test_ecdsa_crypto_error_results_in_no_dealing() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
-                let key_id = fake_ecdsa_master_public_key_id();
+                let key_id = fake_ecdsa_idkg_master_public_key_id();
                 let crypto = crypto_without_keys();
                 let (idkg_pool, pre_signer) =
                     create_pre_signer_dependencies_with_crypto(pool_config, logger, Some(crypto));
@@ -1589,13 +1589,13 @@ mod tests {
     // results in complaints.
     #[test]
     fn test_send_dealings_with_complaints_all_algorithms() {
-        for key_id in fake_master_public_key_ids_for_all_algorithms() {
+        for key_id in fake_master_public_key_ids_for_all_idkg_algorithms() {
             println!("Running test for key ID {key_id}");
             test_send_dealings_with_complaints(key_id);
         }
     }
 
-    fn test_send_dealings_with_complaints(key_id: MasterPublicKeyId) {
+    fn test_send_dealings_with_complaints(key_id: IDkgMasterPublicKeyId) {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
                 let (idkg_pool, pre_signer) = create_pre_signer_dependencies(pool_config, logger);
@@ -1667,13 +1667,13 @@ mod tests {
     // requests, and others dealings are either deferred or dropped.
     #[test]
     fn test_validate_dealings_all_algorithms() {
-        for key_id in fake_master_public_key_ids_for_all_algorithms() {
+        for key_id in fake_master_public_key_ids_for_all_idkg_algorithms() {
             println!("Running test for key ID {key_id}");
             test_validate_dealings(key_id);
         }
     }
 
-    fn test_validate_dealings(key_id: MasterPublicKeyId) {
+    fn test_validate_dealings(key_id: IDkgMasterPublicKeyId) {
         let (id_2, id_3, id_4, id_5, id_6) = (
             // A dealing for a transcript that is requested by finalized block (accepted)
             create_transcript_id_with_height(2, Height::from(100)),
@@ -1836,13 +1836,13 @@ mod tests {
     // are dropped.
     #[test]
     fn test_duplicate_dealing_all_algorithms() {
-        for key_id in fake_master_public_key_ids_for_all_algorithms() {
+        for key_id in fake_master_public_key_ids_for_all_idkg_algorithms() {
             println!("Running test for key ID {key_id}");
             test_duplicate_dealing(key_id);
         }
     }
 
-    fn test_duplicate_dealing(key_id: MasterPublicKeyId) {
+    fn test_duplicate_dealing(key_id: IDkgMasterPublicKeyId) {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
                 let (mut idkg_pool, pre_signer) =
@@ -1881,13 +1881,13 @@ mod tests {
     // in the unvalidated pool are dropped.
     #[test]
     fn test_duplicate_dealing_in_batch_all_algorithms() {
-        for key_id in fake_master_public_key_ids_for_all_algorithms() {
+        for key_id in fake_master_public_key_ids_for_all_idkg_algorithms() {
             println!("Running test for key ID {key_id}");
             test_duplicate_dealing_in_batch(key_id);
         }
     }
 
-    fn test_duplicate_dealing_in_batch(key_id: MasterPublicKeyId) {
+    fn test_duplicate_dealing_in_batch(key_id: IDkgMasterPublicKeyId) {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
                 let (mut idkg_pool, pre_signer) =
@@ -1948,13 +1948,13 @@ mod tests {
     // transcript are dropped.
     #[test]
     fn test_unexpected_dealing_all_algorithms() {
-        for key_id in fake_master_public_key_ids_for_all_algorithms() {
+        for key_id in fake_master_public_key_ids_for_all_idkg_algorithms() {
             println!("Running test for key ID {key_id}");
             test_unexpected_dealing(key_id);
         }
     }
 
-    fn test_unexpected_dealing(key_id: MasterPublicKeyId) {
+    fn test_unexpected_dealing(key_id: IDkgMasterPublicKeyId) {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
                 let (mut idkg_pool, pre_signer) =
@@ -1985,13 +1985,13 @@ mod tests {
     // Tests that support shares are sent to eligible dealings
     #[test]
     fn test_send_support_all_algorithms() {
-        for key_id in fake_master_public_key_ids_for_all_algorithms() {
+        for key_id in fake_master_public_key_ids_for_all_idkg_algorithms() {
             println!("Running test for key ID {key_id}");
             test_send_support(key_id);
         }
     }
 
-    fn test_send_support(key_id: MasterPublicKeyId) {
+    fn test_send_support(key_id: IDkgMasterPublicKeyId) {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
                 let (mut idkg_pool, pre_signer) =
@@ -2028,13 +2028,13 @@ mod tests {
     // Tests that sending support shares is deferred if crypto returns transient error.
     #[test]
     fn test_defer_sending_dealing_support_all_algorithms() {
-        for key_id in fake_master_public_key_ids_for_all_algorithms() {
+        for key_id in fake_master_public_key_ids_for_all_idkg_algorithms() {
             println!("Running test for key ID {key_id}");
             test_defer_sending_dealing_support(key_id);
         }
     }
 
-    fn test_defer_sending_dealing_support(key_id: MasterPublicKeyId) {
+    fn test_defer_sending_dealing_support(key_id: IDkgMasterPublicKeyId) {
         let mut rng = reproducible_rng();
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
@@ -2076,13 +2076,13 @@ mod tests {
     // Tests that invalid dealings are handled invalid when creating new dealing support.
     #[test]
     fn test_dont_send_support_for_invalid_all_algorithms() {
-        for key_id in fake_master_public_key_ids_for_all_algorithms() {
+        for key_id in fake_master_public_key_ids_for_all_idkg_algorithms() {
             println!("Running test for key ID {key_id}");
             test_dont_send_support_for_invalid(key_id);
         }
     }
 
-    fn test_dont_send_support_for_invalid(key_id: MasterPublicKeyId) {
+    fn test_dont_send_support_for_invalid(key_id: IDkgMasterPublicKeyId) {
         let mut rng = reproducible_rng();
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
@@ -2117,13 +2117,13 @@ mod tests {
     // the transcript
     #[test]
     fn test_non_receivers_dont_send_support_all_algorithms() {
-        for key_id in fake_master_public_key_ids_for_all_algorithms() {
+        for key_id in fake_master_public_key_ids_for_all_idkg_algorithms() {
             println!("Running test for key ID {key_id}");
             test_non_receivers_dont_send_support(key_id);
         }
     }
 
-    fn test_non_receivers_dont_send_support(key_id: MasterPublicKeyId) {
+    fn test_non_receivers_dont_send_support(key_id: IDkgMasterPublicKeyId) {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
                 let (mut idkg_pool, pre_signer) =
@@ -2210,13 +2210,13 @@ mod tests {
     // transcript requests, and others dealings are either deferred or dropped.
     #[test]
     fn test_validate_dealing_support_all_algorithms() {
-        for key_id in fake_master_public_key_ids_for_all_algorithms() {
+        for key_id in fake_master_public_key_ids_for_all_idkg_algorithms() {
             println!("Running test for key ID {key_id}");
             test_validate_dealing_support(key_id);
         }
     }
 
-    fn test_validate_dealing_support(key_id: MasterPublicKeyId) {
+    fn test_validate_dealing_support(key_id: IDkgMasterPublicKeyId) {
         let (id_2, id_3, id_4, id_5) = (
             create_transcript_id_with_height(2, Height::from(25)),
             create_transcript_id_with_height(3, Height::from(10)),
@@ -2363,7 +2363,7 @@ mod tests {
     fn test_ecdsa_duplicate_support_from_node() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
-                let key_id = fake_ecdsa_master_public_key_id();
+                let key_id = fake_ecdsa_idkg_master_public_key_id();
                 let (mut idkg_pool, pre_signer) =
                     create_pre_signer_dependencies(pool_config, logger);
                 let id = create_transcript_id_with_height(1, Height::from(100));
@@ -2406,7 +2406,7 @@ mod tests {
     fn test_ecdsa_unexpected_support_from_node() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
-                let key_id = fake_ecdsa_master_public_key_id();
+                let key_id = fake_ecdsa_idkg_master_public_key_id();
                 let (mut idkg_pool, pre_signer) =
                     create_pre_signer_dependencies(pool_config, logger);
                 let id = create_transcript_id_with_height(1, Height::from(10));
@@ -2437,7 +2437,7 @@ mod tests {
     fn test_ecdsa_dealing_support_meta_data_mismatch() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
-                let key_id = fake_ecdsa_master_public_key_id();
+                let key_id = fake_ecdsa_idkg_master_public_key_id();
                 let (mut idkg_pool, pre_signer) =
                     create_pre_signer_dependencies(pool_config, logger);
                 let id = create_transcript_id_with_height(1, Height::from(10));
@@ -2476,7 +2476,7 @@ mod tests {
     fn test_ecdsa_dealing_support_missing_hash_meta_data_mismatch() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
-                let key_id = fake_ecdsa_master_public_key_id();
+                let key_id = fake_ecdsa_idkg_master_public_key_id();
                 let (mut idkg_pool, pre_signer) =
                     create_pre_signer_dependencies(pool_config, logger);
                 let id = create_transcript_id_with_height(1, Height::from(10));
@@ -2515,7 +2515,7 @@ mod tests {
     fn test_ecdsa_dealing_support_missing_hash_invalid_dealer() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
-                let key_id = fake_ecdsa_master_public_key_id();
+                let key_id = fake_ecdsa_idkg_master_public_key_id();
                 let (mut idkg_pool, pre_signer) =
                     create_pre_signer_dependencies(pool_config, logger);
                 let id = create_transcript_id_with_height(1, Height::from(10));
@@ -2555,7 +2555,7 @@ mod tests {
     fn test_ecdsa_purge_unvalidated_dealings() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
-                let key_id = fake_ecdsa_master_public_key_id();
+                let key_id = fake_ecdsa_idkg_master_public_key_id();
                 let (mut idkg_pool, pre_signer) =
                     create_pre_signer_dependencies(pool_config, logger);
                 let (id_1, id_2, id_3) = (
@@ -2604,7 +2604,7 @@ mod tests {
     fn test_ecdsa_purge_validated_dealings() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
-                let key_id = fake_ecdsa_master_public_key_id();
+                let key_id = fake_ecdsa_idkg_master_public_key_id();
                 let (mut idkg_pool, pre_signer) =
                     create_pre_signer_dependencies(pool_config, logger);
                 let (id_1, id_2, id_3, id_4) = (
@@ -2652,7 +2652,7 @@ mod tests {
     fn test_ecdsa_purge_unvalidated_dealing_support() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
-                let key_id = fake_ecdsa_master_public_key_id();
+                let key_id = fake_ecdsa_idkg_master_public_key_id();
                 let (mut idkg_pool, pre_signer) =
                     create_pre_signer_dependencies(pool_config, logger);
                 let (id_1, id_2, id_3) = (
@@ -2701,7 +2701,7 @@ mod tests {
     fn test_ecdsa_purge_validated_dealing_support() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
-                let key_id = fake_ecdsa_master_public_key_id();
+                let key_id = fake_ecdsa_idkg_master_public_key_id();
                 let (mut idkg_pool, pre_signer) =
                     create_pre_signer_dependencies(pool_config, logger);
                 let (id_1, id_2, id_3) = (
@@ -2740,13 +2740,13 @@ mod tests {
     // Tests transcript builder failures and success
     #[test]
     fn test_transcript_builder_all_algorithms() {
-        for key_id in fake_master_public_key_ids_for_all_algorithms() {
+        for key_id in fake_master_public_key_ids_for_all_idkg_algorithms() {
             println!("Running test for key ID {key_id}");
             test_transcript_builder(key_id);
         }
     }
 
-    fn test_transcript_builder(key_id: MasterPublicKeyId) {
+    fn test_transcript_builder(key_id: IDkgMasterPublicKeyId) {
         let mut rng = reproducible_rng();
         let env = CanisterThresholdSigTestEnvironment::new(3, &mut rng);
         let (dealers, receivers) = env.choose_dealers_and_receivers(

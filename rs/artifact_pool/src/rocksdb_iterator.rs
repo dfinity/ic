@@ -68,7 +68,7 @@ enum Status {
     Stopped,
 }
 
-impl<'a, F> StandaloneIterator<'a, F> {
+impl<F> StandaloneIterator<'_, F> {
     /// Create an iterator for the given column family 'name' of the given 'db'
     /// starting from 'start_key'
     pub fn new(

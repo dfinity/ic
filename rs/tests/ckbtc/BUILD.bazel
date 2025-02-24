@@ -1,0 +1,236 @@
+load("@rules_rust//rust:defs.bzl", "rust_library")
+load("//rs/tests:common.bzl", "GUESTOS_RUNTIME_DEPS", "UNIVERSAL_VM_RUNTIME_DEPS")
+load("//rs/tests:system_tests.bzl", "system_test_nns")
+
+package(default_visibility = ["//rs/tests:__subpackages__"])
+
+DEPENDENCIES = [
+    # Keep sorted.
+    "//packages/icrc-ledger-agent:icrc_ledger_agent",
+    "//packages/icrc-ledger-types:icrc_ledger_types",
+    "//rs/bitcoin/checker:btc_checker_lib",
+    "//rs/bitcoin/ckbtc/agent",
+    "//rs/bitcoin/ckbtc/minter",
+    "//rs/canister_client",
+    "//rs/config",
+    "//rs/ledger_suite/icp:icp_ledger",
+    "//rs/ledger_suite/icrc1/ledger",
+    "//rs/nervous_system/common/test_keys",
+    "//rs/nns/common",
+    "//rs/nns/constants",
+    "//rs/nns/governance/api",
+    "//rs/nns/test_utils",
+    "//rs/registry/canister",
+    "//rs/registry/subnet_features",
+    "//rs/registry/subnet_type",
+    "//rs/rust_canisters/canister_test",
+    "//rs/rust_canisters/dfn_candid",
+    "//rs/tests/consensus/tecdsa/utils",
+    "//rs/tests/driver:ic-system-test-driver",
+    "//rs/types/base_types",
+    "//rs/types/management_canister_types",
+    "//rs/types/types",
+    "//rs/types/types_test_utils",
+    "//rs/universal_canister/lib",
+    "@crate_index//:anyhow",
+    "@crate_index//:assert_matches",
+    "@crate_index//:bitcoincore-rpc",
+    "@crate_index//:candid",
+    "@crate_index//:ic-agent",
+    "@crate_index//:ic-btc-interface",
+    "@crate_index//:k256",
+    "@crate_index//:rand",
+    "@crate_index//:rand_chacha",
+    "@crate_index//:serde",
+    "@crate_index//:serde_bytes",
+    "@crate_index//:slog",
+    "@crate_index//:tokio",
+]
+
+rust_library(
+    name = "ckbtc",
+    testonly = True,
+    srcs = glob(["src/**/*.rs"]),
+    crate_name = "ic_tests_ckbtc",
+    deps = DEPENDENCIES,
+)
+
+system_test_nns(
+    name = "ckbtc_minter_basics_test",
+    env = {
+        "BTC_WASM_PATH": "$(rootpath @btc_canister//file)",
+        "CKBTC_UVM_CONFIG_PATH": "$(rootpath //rs/tests:ckbtc_uvm_config_image)",
+        "IC_BTC_CHECKER_WASM_PATH": "$(rootpath //rs/bitcoin/checker:btc_checker_canister)",
+        "IC_CKBTC_MINTER_WASM_PATH": "$(rootpath //rs/bitcoin/ckbtc/minter:ckbtc_minter_debug)",
+        "LEDGER_WASM_PATH": "$(rootpath //rs/ledger_suite/icrc1/ledger:ledger_canister)",
+        "UNIVERSAL_CANISTER_WASM_PATH": "$(rootpath //rs/universal_canister/impl:universal_canister.wasm.gz)",
+    },
+    extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on long_test.
+    flaky = True,
+    tags = [
+        "k8s",
+        "long_test",  # since it takes longer than 5 minutes.
+    ],
+    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
+    runtime_deps =
+        GUESTOS_RUNTIME_DEPS +
+        UNIVERSAL_VM_RUNTIME_DEPS + [
+            # Keep sorted.
+            "//rs/bitcoin/checker:btc_checker_canister",
+            "//rs/bitcoin/ckbtc/minter:ckbtc_minter_debug",
+            "//rs/ledger_suite/icrc1/ledger:ledger_canister",
+            "//rs/tests:ckbtc_uvm_config_image",
+            "//rs/universal_canister/impl:universal_canister.wasm.gz",
+            "@btc_canister//file",
+        ],
+    deps = DEPENDENCIES + [":ckbtc"],
+)
+
+system_test_nns(
+    name = "ckbtc_minter_deposit_and_withdrawal",
+    env = {
+        "BTC_WASM_PATH": "$(rootpath @btc_canister//file)",
+        "CKBTC_UVM_CONFIG_PATH": "$(rootpath //rs/tests:ckbtc_uvm_config_image)",
+        "IC_BTC_CHECKER_WASM_PATH": "$(rootpath //rs/bitcoin/checker:btc_checker_canister)",
+        "IC_CKBTC_MINTER_WASM_PATH": "$(rootpath //rs/bitcoin/ckbtc/minter:ckbtc_minter_debug)",
+        "LEDGER_WASM_PATH": "$(rootpath //rs/ledger_suite/icrc1/ledger:ledger_canister)",
+        "UNIVERSAL_CANISTER_WASM_PATH": "$(rootpath //rs/universal_canister/impl:universal_canister.wasm.gz)",
+    },
+    flaky = True,
+    tags = [
+        "long_test",  # since it takes longer than 5 minutes.
+    ],
+    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
+    runtime_deps =
+        GUESTOS_RUNTIME_DEPS +
+        UNIVERSAL_VM_RUNTIME_DEPS + [
+            # Keep sorted.
+            "//rs/bitcoin/checker:btc_checker_canister",
+            "//rs/bitcoin/ckbtc/minter:ckbtc_minter_debug",
+            "//rs/ledger_suite/icrc1/ledger:ledger_canister",
+            "//rs/tests:ckbtc_uvm_config_image",
+            "//rs/universal_canister/impl:universal_canister.wasm.gz",
+            "@btc_canister//file",
+        ],
+    deps = DEPENDENCIES + [":ckbtc"],
+)
+
+system_test_nns(
+    name = "ckbtc_minter_checker",
+    env = {
+        "BTC_WASM_PATH": "$(rootpath @btc_canister//file)",
+        "CKBTC_UVM_CONFIG_PATH": "$(rootpath //rs/tests:ckbtc_uvm_config_image)",
+        "IC_BTC_CHECKER_WASM_PATH": "$(rootpath //rs/bitcoin/checker:btc_checker_canister)",
+        "IC_CKBTC_MINTER_WASM_PATH": "$(rootpath //rs/bitcoin/ckbtc/minter:ckbtc_minter_debug)",
+        "LEDGER_WASM_PATH": "$(rootpath //rs/ledger_suite/icrc1/ledger:ledger_canister)",
+        "UNIVERSAL_CANISTER_WASM_PATH": "$(rootpath //rs/universal_canister/impl:universal_canister.wasm.gz)",
+    },
+    extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on long_test.
+    flaky = True,
+    tags = [
+        "long_test",  # since it takes longer than 5 minutes.
+    ],
+    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
+    runtime_deps =
+        GUESTOS_RUNTIME_DEPS +
+        UNIVERSAL_VM_RUNTIME_DEPS + [
+            # Keep sorted.
+            "//rs/bitcoin/checker:btc_checker_canister",
+            "//rs/bitcoin/ckbtc/minter:ckbtc_minter_debug",
+            "//rs/ledger_suite/icrc1/ledger:ledger_canister",
+            "//rs/tests:ckbtc_uvm_config_image",
+            "//rs/universal_canister/impl:universal_canister.wasm.gz",
+            "@btc_canister//file",
+        ],
+    deps = DEPENDENCIES + [":ckbtc"],
+)
+
+system_test_nns(
+    name = "ckbtc_minter_update_balance",
+    env = {
+        "BTC_WASM_PATH": "$(rootpath @btc_canister//file)",
+        "CKBTC_UVM_CONFIG_PATH": "$(rootpath //rs/tests:ckbtc_uvm_config_image)",
+        "IC_BTC_CHECKER_WASM_PATH": "$(rootpath //rs/bitcoin/checker:btc_checker_canister)",
+        "IC_CKBTC_MINTER_WASM_PATH": "$(rootpath //rs/bitcoin/ckbtc/minter:ckbtc_minter_debug)",
+        "LEDGER_WASM_PATH": "$(rootpath //rs/ledger_suite/icrc1/ledger:ledger_canister)",
+        "UNIVERSAL_CANISTER_WASM_PATH": "$(rootpath //rs/universal_canister/impl:universal_canister.wasm.gz)",
+    },
+    extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on long_test.
+    flaky = True,
+    tags = [
+        "long_test",  # since it takes longer than 5 minutes.
+    ],
+    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
+    runtime_deps =
+        GUESTOS_RUNTIME_DEPS +
+        UNIVERSAL_VM_RUNTIME_DEPS + [
+            # Keep sorted.
+            "//rs/bitcoin/checker:btc_checker_canister",
+            "//rs/bitcoin/ckbtc/minter:ckbtc_minter_debug",
+            "//rs/ledger_suite/icrc1/ledger:ledger_canister",
+            "//rs/tests:ckbtc_uvm_config_image",
+            "//rs/universal_canister/impl:universal_canister.wasm.gz",
+            "@btc_canister//file",
+        ],
+    deps = DEPENDENCIES + [":ckbtc"],
+)
+
+system_test_nns(
+    name = "ckbtc_minter_retrieve_btc",
+    env = {
+        "BTC_WASM_PATH": "$(rootpath @btc_canister//file)",
+        "CKBTC_UVM_CONFIG_PATH": "$(rootpath //rs/tests:ckbtc_uvm_config_image)",
+        "IC_BTC_CHECKER_WASM_PATH": "$(rootpath //rs/bitcoin/checker:btc_checker_canister)",
+        "IC_CKBTC_MINTER_WASM_PATH": "$(rootpath //rs/bitcoin/ckbtc/minter:ckbtc_minter_debug)",
+        "LEDGER_WASM_PATH": "$(rootpath //rs/ledger_suite/icrc1/ledger:ledger_canister)",
+        "UNIVERSAL_CANISTER_WASM_PATH": "$(rootpath //rs/universal_canister/impl:universal_canister.wasm.gz)",
+    },
+    extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on long_test.
+    flaky = True,
+    tags = [
+        "long_test",  # since it takes longer than 5 minutes.
+    ],
+    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
+    runtime_deps =
+        GUESTOS_RUNTIME_DEPS +
+        UNIVERSAL_VM_RUNTIME_DEPS + [
+            # Keep sorted.
+            "//rs/bitcoin/checker:btc_checker_canister",
+            "//rs/bitcoin/ckbtc/minter:ckbtc_minter_debug",
+            "//rs/ledger_suite/icrc1/ledger:ledger_canister",
+            "//rs/tests:ckbtc_uvm_config_image",
+            "//rs/universal_canister/impl:universal_canister.wasm.gz",
+            "@btc_canister//file",
+        ],
+    deps = DEPENDENCIES + [":ckbtc"],
+)
+
+system_test_nns(
+    name = "ckbtc_minter_batching",
+    env = {
+        "BTC_WASM_PATH": "$(rootpath @btc_canister//file)",
+        "IC_BTC_CHECKER_WASM_PATH": "$(rootpath //rs/bitcoin/checker:btc_checker_canister)",
+        "CKBTC_UVM_CONFIG_PATH": "$(rootpath //rs/tests:ckbtc_uvm_config_image)",
+        "IC_CKBTC_MINTER_WASM_PATH": "$(rootpath //rs/bitcoin/ckbtc/minter:ckbtc_minter_debug)",
+        "LEDGER_WASM_PATH": "$(rootpath //rs/ledger_suite/icrc1/ledger:ledger_canister)",
+        "UNIVERSAL_CANISTER_WASM_PATH": "$(rootpath //rs/universal_canister/impl:universal_canister.wasm.gz)",
+    },
+    extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on long_test.
+    flaky = True,
+    tags = [
+        "long_test",  # since it takes longer than 5 minutes.
+    ],
+    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
+    runtime_deps =
+        GUESTOS_RUNTIME_DEPS +
+        UNIVERSAL_VM_RUNTIME_DEPS + [
+            # Keep sorted.
+            "//rs/bitcoin/checker:btc_checker_canister",
+            "//rs/bitcoin/ckbtc/minter:ckbtc_minter_debug",
+            "//rs/ledger_suite/icrc1/ledger:ledger_canister",
+            "//rs/tests:ckbtc_uvm_config_image",
+            "//rs/universal_canister/impl:universal_canister.wasm.gz",
+            "@btc_canister//file",
+        ],
+    deps = DEPENDENCIES + [":ckbtc"],
+)

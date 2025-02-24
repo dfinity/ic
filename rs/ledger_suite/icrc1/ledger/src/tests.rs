@@ -1,4 +1,4 @@
-use crate::{InitArgs, Ledger};
+use crate::{InitArgs, Ledger, StorableAllowance};
 use ic_base_types::PrincipalId;
 use ic_canister_log::Sink;
 use ic_icrc1::{Operation, Transaction};
@@ -6,11 +6,13 @@ use ic_ledger_canister_core::archive::ArchiveOptions;
 use ic_ledger_canister_core::ledger::{LedgerContext, LedgerTransaction, TxApplyError};
 use ic_ledger_core::approvals::Allowance;
 use ic_ledger_core::timestamp::TimeStamp;
-use ic_ledger_core::Tokens;
+use ic_stable_structures::Storable;
 use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue as Value;
 use icrc_ledger_types::icrc1::account::Account;
+use proptest::prelude::{any, prop_assert_eq, proptest};
+use proptest::strategy::Strategy;
 
-use ic_icrc1_ledger_sm_tests::{
+use ic_ledger_suite_state_machine_tests::{
     ARCHIVE_TRIGGER_THRESHOLD, BLOB_META_KEY, BLOB_META_VALUE, DECIMAL_PLACES, FEE, INT_META_KEY,
     INT_META_VALUE, MINTER, NAT_META_KEY, NAT_META_VALUE, NUM_BLOCKS_TO_ARCHIVE, TEXT_META_KEY,
     TEXT_META_VALUE, TOKEN_NAME, TOKEN_SYMBOL,
@@ -32,8 +34,24 @@ fn test_account_id(n: u64) -> Account {
     }
 }
 
+#[cfg(not(feature = "u256-tokens"))]
+pub type Tokens = ic_icrc1_tokens_u64::U64;
+
+#[cfg(feature = "u256-tokens")]
+pub type Tokens = ic_icrc1_tokens_u256::U256;
+
 fn tokens(n: u64) -> Tokens {
-    Tokens::from_e8s(n)
+    Tokens::from(n)
+}
+
+#[cfg(not(feature = "u256-tokens"))]
+fn tokens_to_u64(n: ic_icrc1_tokens_u64::U64) -> u64 {
+    n.to_u64()
+}
+
+#[cfg(feature = "u256-tokens")]
+fn tokens_to_u64(n: ic_icrc1_tokens_u256::U256) -> u64 {
+    n.try_as_u64().expect("failed to convert to u64")
 }
 
 fn ts(n: u64) -> TimeStamp {
@@ -67,8 +85,6 @@ fn default_init_args() -> InitArgs {
         },
         max_memo_length: None,
         feature_flags: None,
-        maximum_number_of_accounts: None,
-        accounts_overflow_trim_quantity: None,
     }
 }
 
@@ -108,7 +124,7 @@ fn test_approvals_are_not_cumulative() {
         Allowance {
             amount: approved_amount,
             expires_at: None,
-            arrived_at: now,
+            arrived_at: ts(0),
         },
     );
 
@@ -136,7 +152,7 @@ fn test_approvals_are_not_cumulative() {
         Allowance {
             amount: new_allowance,
             expires_at: Some(expiration),
-            arrived_at: now,
+            arrived_at: ts(0),
         }
     );
 }
@@ -210,7 +226,7 @@ fn test_approval_transfer_from() {
         Allowance {
             amount: tokens(40_000),
             expires_at: None,
-            arrived_at: now,
+            arrived_at: ts(0),
         },
     );
 
@@ -237,7 +253,7 @@ fn test_approval_transfer_from() {
         Allowance {
             amount: tokens(40_000),
             expires_at: None,
-            arrived_at: now,
+            arrived_at: ts(0),
         },
     );
     assert_eq!(ctx.balances().account_balance(&from), tokens(80_000),);
@@ -275,7 +291,7 @@ fn test_approval_expiration_override() {
         Allowance {
             amount: tokens(100_000),
             expires_at: Some(ts(2000)),
-            arrived_at: now,
+            arrived_at: ts(0),
         },
     );
 
@@ -291,7 +307,7 @@ fn test_approval_expiration_override() {
         Allowance {
             amount: tokens(200_000),
             expires_at: Some(ts(1500)),
-            arrived_at: now,
+            arrived_at: ts(0),
         },
     );
 
@@ -307,7 +323,7 @@ fn test_approval_expiration_override() {
         Allowance {
             amount: tokens(300_000),
             expires_at: Some(ts(2500)),
-            arrived_at: now,
+            arrived_at: ts(0),
         },
     );
 
@@ -327,7 +343,7 @@ fn test_approval_expiration_override() {
         Allowance {
             amount: tokens(300_000),
             expires_at: Some(ts(2500)),
-            arrived_at: now,
+            arrived_at: ts(0),
         },
     );
 }
@@ -497,7 +513,7 @@ fn test_burn_smoke() {
 
     ctx.balances_mut().mint(&from, tokens(200_000)).unwrap();
 
-    assert_eq!(ctx.balances().total_supply().get_e8s(), 200_000);
+    assert_eq!(tokens_to_u64(ctx.balances().total_supply()), 200_000);
 
     let tr = Transaction {
         operation: Operation::Burn {
@@ -526,7 +542,7 @@ fn test_approval_burn_from() {
     ctx.balances_mut().mint(&from, tokens(200_000)).unwrap();
     let fee = tokens(10_000);
 
-    assert_eq!(ctx.balances().total_supply().get_e8s(), 200_000);
+    assert_eq!(tokens_to_u64(ctx.balances().total_supply()), 200_000);
 
     let tr = Transaction {
         operation: Operation::Burn {
@@ -544,7 +560,7 @@ fn test_approval_burn_from() {
         }
     );
 
-    assert_eq!(ctx.balances().total_supply().get_e8s(), 200_000);
+    assert_eq!(tokens_to_u64(ctx.balances().total_supply()), 200_000);
 
     let tr = Transaction {
         operation: Operation::Approve {
@@ -576,14 +592,14 @@ fn test_approval_burn_from() {
 
     assert_eq!(ctx.balances().account_balance(&spender), Tokens::ZERO);
     assert_eq!(ctx.balances().account_balance(&from), tokens(90_000));
-    assert_eq!(ctx.balances().total_supply().get_e8s(), 90_000);
+    assert_eq!(tokens_to_u64(ctx.balances().total_supply()), 90_000);
 
     assert_eq!(
         ctx.approvals().allowance(&from, &spender, now),
         Allowance {
             amount: tokens(50_000),
             expires_at: None,
-            arrived_at: now,
+            arrived_at: ts(0),
         },
     );
 
@@ -608,10 +624,49 @@ fn test_approval_burn_from() {
         Allowance {
             amount: tokens(50_000),
             expires_at: None,
-            arrived_at: now,
+            arrived_at: ts(0),
         },
     );
     assert_eq!(ctx.balances().account_balance(&from), tokens(90_000));
     assert_eq!(ctx.balances().account_balance(&spender), Tokens::ZERO);
-    assert_eq!(ctx.balances().total_supply().get_e8s(), 90_000);
+    assert_eq!(tokens_to_u64(ctx.balances().total_supply()), 90_000);
+}
+
+#[cfg(not(feature = "u256-tokens"))]
+fn arb_token() -> impl Strategy<Value = Tokens> {
+    any::<u64>().prop_map(Tokens::new)
+}
+
+#[cfg(feature = "u256-tokens")]
+fn arb_token() -> impl Strategy<Value = Tokens> {
+    (any::<u128>(), any::<u128>()).prop_map(|(hi, lo)| Tokens::from_words(hi, lo))
+}
+
+#[test]
+fn allowance_serialization() {
+    fn arb_timestamp() -> impl Strategy<Value = TimeStamp> {
+        any::<u64>().prop_map(TimeStamp::from_nanos_since_unix_epoch)
+    }
+    fn arb_opt_expiration() -> impl Strategy<Value = Option<TimeStamp>> {
+        proptest::option::of(any::<u64>().prop_map(TimeStamp::from_nanos_since_unix_epoch))
+    }
+    fn arb_allowance() -> impl Strategy<Value = Allowance<Tokens>> {
+        (arb_token(), arb_opt_expiration(), arb_timestamp()).prop_map(
+            |(amount, expires_at, arrived_at)| Allowance {
+                amount,
+                expires_at,
+                arrived_at,
+            },
+        )
+    }
+    proptest!(|(allowance in arb_allowance())| {
+        let storable_allowance: StorableAllowance = allowance.clone().into();
+        let new_allowance: Allowance<Tokens> = StorableAllowance::from_bytes(storable_allowance.to_bytes()).into();
+        prop_assert_eq!(new_allowance.amount, allowance.amount);
+        prop_assert_eq!(new_allowance.expires_at, allowance.expires_at);
+        prop_assert_eq!(
+            new_allowance.arrived_at,
+            TimeStamp::from_nanos_since_unix_epoch(0)
+        );
+    })
 }

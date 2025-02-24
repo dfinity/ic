@@ -1,5 +1,3 @@
-#![allow(clippy::unwrap_used)]
-
 //! Tests for multisignatures
 
 use crate::{

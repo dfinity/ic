@@ -9,8 +9,7 @@ use crate::{
     types::Environment,
 };
 use candid::{Decode, Encode};
-use dfn_core::CanisterId;
-use ic_base_types::PrincipalId;
+use ic_base_types::{CanisterId, PrincipalId};
 use ic_canister_log::log;
 use ic_nervous_system_clients::{
     canister_id_record::CanisterIdRecord,
@@ -89,8 +88,8 @@ async fn install_code(
     wasm: Vec<u8>,
     arg: Vec<u8>,
 ) -> Result<(), GovernanceError> {
-    let install_code_args = ic_management_canister_types::InstallCodeArgs {
-        mode: ic_management_canister_types::CanisterInstallMode::Upgrade,
+    let install_code_args = ic_management_canister_types_private::InstallCodeArgs {
+        mode: ic_management_canister_types_private::CanisterInstallMode::Upgrade,
         canister_id: canister_id.get(),
         wasm_module: wasm,
         arg,
@@ -100,7 +99,7 @@ async fn install_code(
     };
 
     env.call_canister(
-        ic_management_canister_types::IC_00,
+        ic_management_canister_types_private::IC_00,
         "install_code",
         Encode!(&install_code_args).expect("Unable to encode install_code args."),
     )

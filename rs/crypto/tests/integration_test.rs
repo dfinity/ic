@@ -1,5 +1,3 @@
-#![allow(clippy::unwrap_used)]
-
 use assert_matches::assert_matches;
 use ic_base_types::{NodeId, PrincipalId, SubnetId};
 use ic_config::crypto::CryptoConfig;
@@ -743,7 +741,7 @@ fn should_fail_check_keys_with_registry_if_no_idkg_key_in_registry() {
 /// Ensure the structs are consistent and then update the test below.
 #[test]
 fn algorithm_id_should_match_algorithm_id_proto() {
-    let algorithm_id_variants = 20;
+    let algorithm_id_variants = 21;
     assert_eq!(AlgorithmId::iter().count(), algorithm_id_variants);
 
     for i in 0..algorithm_id_variants {
@@ -828,6 +826,7 @@ fn algorithm_id_should_match_algorithm_id_proto() {
         AlgorithmId::ThresholdEd25519 as i32,
         AlgorithmIdProto::ThresholdEd25519 as i32
     );
+    assert_eq!(AlgorithmId::VetKD as i32, AlgorithmIdProto::Vetkd as i32);
 }
 
 #[test]
@@ -1214,7 +1213,7 @@ fn should_return_all_keys_registered_from_check_keys_with_registry_if_no_ecdsa_c
         )
         .with_time_source(Arc::clone(&time) as Arc<_>)
         .with_node_id(node_id())
-        .with_ecdsa_subnet_config(EcdsaSubnetConfig::new_without_ecdsa_config(
+        .with_ecdsa_subnet_config(EcdsaSubnetConfig::new_without_chain_key_config(
             subnet_id(),
             Some(node_id()),
         ))

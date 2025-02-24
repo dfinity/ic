@@ -9,15 +9,15 @@ use icrc_ledger_types::icrc1::{
 };
 use num_traits::ToPrimitive;
 
-pub async fn balance_of<'a>(canister: &Canister<'a>, account: Account) -> Result<u64, String> {
+pub async fn balance_of(canister: &Canister<'_>, account: Account) -> Result<u64, String> {
     canister
         .query_("icrc1_balance_of", candid_one, account)
         .await
         .map(|n: Nat| n.0.to_u64().unwrap())
 }
 
-pub async fn transfer<'a>(
-    canister: &Canister<'a>,
+pub async fn transfer(
+    canister: &Canister<'_>,
     sender: &Sender,
     args: TransferArg,
 ) -> Result<BlockIndex, String> {

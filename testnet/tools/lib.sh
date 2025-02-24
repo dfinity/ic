@@ -2,6 +2,7 @@ repo_root() {
     git rev-parse --show-toplevel
 }
 
+LIGHT_GRAY_TEXT='\033[0;37m'
 RED_TEXT='\033[0;31m'
 GREEN_TEXT='\033[0;32m'
 YELLOW_TEXT='\033[0;33m'
@@ -9,6 +10,10 @@ BLUE_TEXT='\033[0;34m'
 PURPLE_TEXT='\033[0;35m'
 CYAN_TEXT='\033[0;36m'
 NO_COLOR='\033[0m'
+
+print_light_gray() {
+    echo -e "${LIGHT_GRAY_TEXT}$*${NO_COLOR}"
+}
 
 print_red() {
     echo -e "${RED_TEXT}$*${NO_COLOR}" 1>&2

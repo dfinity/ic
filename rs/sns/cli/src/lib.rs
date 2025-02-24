@@ -2,10 +2,10 @@ use crate::{
     deploy::DirectSnsDeployerForTests, health::HealthArgs, init_config_file::InitConfigFileArgs,
     neuron_id_to_candid_subaccount::NeuronIdToCandidSubaccountArgs,
     prepare_canisters::PrepareCanistersArgs, propose::ProposeArgs,
+    upgrade_sns_controlled_canister::UpgradeSnsControlledCanisterArgs,
 };
 use anyhow::{anyhow, bail, Context, Result};
 use candid::{CandidType, Decode, Encode, IDLArgs};
-use clap::Parser;
 use ic_agent::Agent;
 use ic_base_types::PrincipalId;
 use ic_crypto_sha2::Sha256;
@@ -28,7 +28,7 @@ use std::{
     sync::Once,
 };
 use tempfile::NamedTempFile;
-
+use upgrade_sns_controlled_canister::RefundAfterSnsControlledCanisterUpgradeArgs;
 pub mod deploy;
 pub mod health;
 pub mod init_config_file;
@@ -38,10 +38,14 @@ pub mod prepare_canisters;
 pub mod propose;
 mod table;
 pub mod unit_helpers;
-mod utils;
+pub mod upgrade_sns_controlled_canister;
+use clap::{ArgGroup, Args, Parser};
+pub mod utils;
 
 #[cfg(test)]
 mod tests;
+
+pub const MAINNET_NETWORK: &str = "https://ic0.app";
 
 /// We use a giant tail to avoid colliding with/stomping on identity that a user
 /// might have created for themselves.
@@ -57,6 +61,47 @@ const TEST_NEURON_1_OWNER_DFX_IDENTITY_NAME: &str =
 pub struct CliArgs {
     #[clap(subcommand)]
     pub sub_command: SubCommand,
+
+    /// The user identity to run this command as. It contains your principal as well as some things DFX associates with it like the wallet.
+    #[arg(long, global = true)]
+    identity: Option<String>,
+
+    #[command(flatten)]
+    network: NetworkOpt,
+}
+
+#[derive(Args, Clone, Debug, Default)]
+#[clap(
+group(ArgGroup::new("network-select").multiple(false)),
+)]
+pub struct NetworkOpt {
+    /// Override the compute network to connect to. By default, the local network is used.
+    /// A valid URL (starting with `http:` or `https:`) can be used here, and a special
+    /// ephemeral network will be created specifically for this request. E.g.
+    /// "http://localhost:12345/" is a valid network name.
+    #[arg(long, global(true), group = "network-select")]
+    network: Option<String>,
+
+    /// Shorthand for --network=playground.
+    /// Borrows short-lived canisters on the real IC network instead of creating normal canisters.
+    #[clap(long, global(true), group = "network-select")]
+    playground: bool,
+
+    /// Shorthand for --network=ic.
+    #[clap(long, global(true), group = "network-select")]
+    ic: bool,
+}
+
+impl NetworkOpt {
+    pub fn to_network_name(&self) -> Option<String> {
+        if self.playground {
+            Some("playground".to_string())
+        } else if self.ic {
+            Some("ic".to_string())
+        } else {
+            self.network.clone()
+        }
+    }
 }
 
 #[derive(Debug, Parser)]
@@ -80,11 +125,31 @@ pub enum SubCommand {
     List(list::ListArgs),
     /// Check SNSes for warnings and errors.
     Health(HealthArgs),
+    /// Uploads a given Wasm to a (newly deployed) store canister and submits a proposal to upgrade
+    /// using that Wasm.
+    UpgradeSnsControlledCanister(UpgradeSnsControlledCanisterArgs),
+    /// Attempts to refund the unused cycles after an SNS-controlled canister has been upgraded.
+    RefundAfterSnsControlledCanisterUpgrade(RefundAfterSnsControlledCanisterUpgradeArgs),
 }
 
 impl CliArgs {
-    pub fn agent(&self) -> Result<Agent> {
-        crate::utils::get_mainnet_agent()
+    pub async fn agent(&self) -> Result<Agent> {
+        let network = match self.network.to_network_name() {
+            Some(network) => network,
+            None => {
+                // TODO[SDK-1962]: Stop reading the environment variable.
+                if let Ok(network) = std::env::var("DFX_NETWORK") {
+                    network
+                } else {
+                    eprintln!(
+                        "No network specified. Defaulting to the local network. To connect to the mainnet IC instead, try passing `--network=ic`"
+                    );
+                    "local".to_string()
+                }
+            }
+        };
+
+        crate::utils::get_agent(&network, self.identity.clone()).await
     }
 }
 
@@ -509,6 +574,8 @@ impl NnsGovernanceCanister {
         proposer: &NeuronIdOrSubaccount,
         proposal: &Proposal,
     ) -> Result<MakeProposalResponse, anyhow::Error> {
+        // TODO: Jira ticket NNS1-3555
+        #[allow(non_local_definitions)]
         impl Request for ManageNeuron {
             type Response = ManageNeuronResponse;
             const METHOD_NAME: &'static str = "manage_neuron";
@@ -599,13 +666,13 @@ enum RunCommandError<'a> {
     },
 }
 
-impl<'a> Display for RunCommandError<'a> {
+impl Display for RunCommandError<'_> {
     fn fmt(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
         write!(formatter, "{}", self.new_report())
     }
 }
 
-impl<'a> RunCommandError<'a> {
+impl RunCommandError<'_> {
     fn new_report(&self) -> String {
         match self {
             RunCommandError::UnableToRunCommand { command, error } => {

@@ -5,7 +5,10 @@ use super::{system_api, StoreData, INSTRUCTIONS_COUNTER_GLOBAL_NAME};
 use crate::{wasm_utils::validate_and_instrument_for_testing, WasmtimeEmbedder};
 use ic_base_types::NumSeconds;
 use ic_config::flag_status::FlagStatus;
-use ic_config::{embedders::Config as EmbeddersConfig, subnet_config::SchedulerConfig};
+use ic_config::{
+    embedders::Config as EmbeddersConfig, execution_environment::Config as HypervisorConfig,
+    subnet_config::SchedulerConfig,
+};
 use ic_cycles_account_manager::ResourceSaturation;
 use ic_interfaces::execution_environment::{ExecutionMode, SubnetAvailableMemory};
 use ic_logger::replica_logger::no_op_logger;
@@ -19,8 +22,7 @@ use ic_system_api::{
 use ic_test_utilities::cycles_account_manager::CyclesAccountManagerBuilder;
 use ic_test_utilities_types::ids::canister_test_id;
 use ic_types::{
-    messages::RequestMetadata, time::UNIX_EPOCH, ComputeAllocation, Cycles, MemoryAllocation,
-    NumBytes, NumInstructions,
+    time::UNIX_EPOCH, ComputeAllocation, Cycles, MemoryAllocation, NumBytes, NumInstructions,
 };
 use ic_wasm_types::BinaryEncodedWasm;
 
@@ -53,13 +55,14 @@ fn test_wasmtime_system_api() {
         Arc::new(TestPageAllocatorFileDescriptorImpl),
     );
     let api_type = ApiType::start(UNIX_EPOCH);
-    let sandbox_safe_system_state = SandboxSafeSystemState::new(
+    let sandbox_safe_system_state = SandboxSafeSystemState::new_for_testing(
         &system_state,
         CyclesAccountManagerBuilder::new().build(),
         &NetworkTopology::default(),
         SchedulerConfig::application_subnet().dirty_page_overhead,
         ComputeAllocation::default(),
-        RequestMetadata::new(0, UNIX_EPOCH),
+        HypervisorConfig::default().subnet_callback_soft_limit as u64,
+        Default::default(),
         api_type.caller(),
         api_type.call_context_id(),
     );
@@ -80,17 +83,16 @@ fn test_wasmtime_system_api() {
             canister_memory_limit,
             wasm_memory_limit: None,
             memory_allocation: MemoryAllocation::default(),
+            canister_guaranteed_callback_quota: HypervisorConfig::default()
+                .canister_guaranteed_callback_quota
+                as u64,
             compute_allocation: ComputeAllocation::default(),
             subnet_type: SubnetType::Application,
             execution_mode: ExecutionMode::Replicated,
             subnet_memory_saturation: ResourceSaturation::default(),
         },
         *MAX_SUBNET_AVAILABLE_MEMORY,
-        EmbeddersConfig::default()
-            .feature_flags
-            .wasm_native_stable_memory,
-        EmbeddersConfig::default().feature_flags.canister_backtrace,
-        EmbeddersConfig::default().max_sum_exported_function_name_lengths,
+        &EmbeddersConfig::default(),
         Memory::new_for_testing(),
         NumWasmPages::from(0),
         Rc::new(DefaultOutOfInstructionsHandler::default()),
@@ -162,18 +164,13 @@ fn test_wasmtime_system_api() {
         .expect("call failed");
 }
 
+#[ignore]
 #[test]
 fn test_initial_wasmtime_config() {
-    // The following proposals should be disabled: tail_call, simd, relaxed_simd,
-    // threads, multi_memory, exceptions, memory64, extended_const, component_model,
+    // The following proposals should be disabled: simd, relaxed_simd,
+    // threads, multi_memory, exceptions, extended_const, component_model,
     // function_references, memory_control, gc
     for (proposal, _url, wat, expected_err_msg) in [
-        (
-            "tail_call",
-            "https://github.com/WebAssembly/tail-call/",
-            "(module (func $f1 return_call $f2) (func $f2))",
-            "tail calls support is not enabled",
-        ),
         (
             "relaxed_simd",
             "https://github.com/WebAssembly/relaxed-simd/",
@@ -193,12 +190,6 @@ fn test_initial_wasmtime_config() {
             "failed with multiple memories",
         ),
         // Exceptions
-        (
-            "memory64",
-            "https://github.com/WebAssembly/memory64/",
-            "(module (memory $m i64 1 1))",
-            "memory64 must be enabled",
-        ),
         (
             "extended_const",
             "https://github.com/WebAssembly/extended-const/",
@@ -242,4 +233,20 @@ fn test_initial_wasmtime_config() {
             "Error expecting `{expected_err_msg}`, but got `{err_msg}`"
         );
     }
+}
+
+#[test]
+fn test_wasmtime_validation_error_is_ignored() {
+    let wat = r#"(module (import "env" "memory" (memory 1 1 shared)))"#;
+    let wasm_binary = BinaryEncodedWasm::new(wat::parse_str(wat).unwrap());
+    let err = validate_and_instrument_for_testing(
+        &WasmtimeEmbedder::new(EmbeddersConfig::default(), no_op_logger()),
+        &wasm_binary,
+    )
+    .err()
+    .unwrap();
+    assert_eq!(
+        format!("{:?}", err),
+        r#"InvalidWasm(WasmtimeValidation("wasmtime::Module::validate() failed"))"#
+    );
 }

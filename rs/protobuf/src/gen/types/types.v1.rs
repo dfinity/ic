@@ -122,6 +122,8 @@ pub struct NiDkgId {
     pub dkg_tag: i32,
     #[prost(message, optional, tag = "5")]
     pub remote_target_id: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
+    #[prost(message, optional, tag = "6")]
+    pub key_id: ::core::option::Option<MasterPublicKeyId>,
 }
 #[derive(Clone, Copy, PartialEq, ::prost::Message)]
 pub struct NominalCycles {
@@ -130,6 +132,53 @@ pub struct NominalCycles {
     #[prost(uint64, tag = "2")]
     pub low: u64,
 }
+#[derive(
+    serde::Serialize,
+    serde::Deserialize,
+    Eq,
+    Hash,
+    candid::CandidType,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct EcdsaKeyId {
+    #[prost(enumeration = "EcdsaCurve", tag = "1")]
+    pub curve: i32,
+    #[prost(string, tag = "2")]
+    pub name: ::prost::alloc::string::String,
+}
+#[derive(serde::Serialize, serde::Deserialize, Eq, Hash, Clone, PartialEq, ::prost::Message)]
+pub struct SchnorrKeyId {
+    #[prost(enumeration = "SchnorrAlgorithm", tag = "1")]
+    pub algorithm: i32,
+    #[prost(string, tag = "2")]
+    pub name: ::prost::alloc::string::String,
+}
+#[derive(serde::Serialize, serde::Deserialize, Eq, Hash, Clone, PartialEq, ::prost::Message)]
+pub struct VetKdKeyId {
+    #[prost(enumeration = "VetKdCurve", tag = "1")]
+    pub curve: i32,
+    #[prost(string, tag = "2")]
+    pub name: ::prost::alloc::string::String,
+}
+#[derive(serde::Serialize, serde::Deserialize, Eq, Hash, Clone, PartialEq, ::prost::Message)]
+pub struct MasterPublicKeyId {
+    #[prost(oneof = "master_public_key_id::KeyId", tags = "1, 2, 3")]
+    pub key_id: ::core::option::Option<master_public_key_id::KeyId>,
+}
+/// Nested message and enum types in `MasterPublicKeyId`.
+pub mod master_public_key_id {
+    #[derive(serde::Serialize, serde::Deserialize, Eq, Hash, Clone, PartialEq, ::prost::Oneof)]
+    pub enum KeyId {
+        #[prost(message, tag = "1")]
+        Ecdsa(super::EcdsaKeyId),
+        #[prost(message, tag = "2")]
+        Schnorr(super::SchnorrKeyId),
+        #[prost(message, tag = "3")]
+        Vetkd(super::VetKdKeyId),
+    }
+}
 /// A non-interactive distributed key generation (NI-DKG) tag.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
 #[repr(i32)]
@@ -137,6 +186,7 @@ pub enum NiDkgTag {
     Unspecified = 0,
     LowThreshold = 1,
     HighThreshold = 2,
+    HighThresholdForKey = 3,
 }
 impl NiDkgTag {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -148,6 +198,7 @@ impl NiDkgTag {
             Self::Unspecified => "NI_DKG_TAG_UNSPECIFIED",
             Self::LowThreshold => "NI_DKG_TAG_LOW_THRESHOLD",
             Self::HighThreshold => "NI_DKG_TAG_HIGH_THRESHOLD",
+            Self::HighThresholdForKey => "NI_DKG_TAG_HIGH_THRESHOLD_FOR_KEY",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -156,6 +207,127 @@ impl NiDkgTag {
             "NI_DKG_TAG_UNSPECIFIED" => Some(Self::Unspecified),
             "NI_DKG_TAG_LOW_THRESHOLD" => Some(Self::LowThreshold),
             "NI_DKG_TAG_HIGH_THRESHOLD" => Some(Self::HighThreshold),
+            "NI_DKG_TAG_HIGH_THRESHOLD_FOR_KEY" => Some(Self::HighThresholdForKey),
+            _ => None,
+        }
+    }
+}
+/// Types of curves that can be used for ECDSA signatures.
+#[derive(
+    serde::Serialize,
+    serde::Deserialize,
+    candid::CandidType,
+    Clone,
+    Copy,
+    Debug,
+    PartialEq,
+    Eq,
+    Hash,
+    PartialOrd,
+    Ord,
+    ::prost::Enumeration,
+)]
+#[repr(i32)]
+pub enum EcdsaCurve {
+    Unspecified = 0,
+    Secp256k1 = 1,
+}
+impl EcdsaCurve {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            Self::Unspecified => "ECDSA_CURVE_UNSPECIFIED",
+            Self::Secp256k1 => "ECDSA_CURVE_SECP256K1",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "ECDSA_CURVE_UNSPECIFIED" => Some(Self::Unspecified),
+            "ECDSA_CURVE_SECP256K1" => Some(Self::Secp256k1),
+            _ => None,
+        }
+    }
+}
+/// Types of curves that can be used for Schnorr signatures.
+#[derive(
+    serde::Serialize,
+    serde::Deserialize,
+    Clone,
+    Copy,
+    Debug,
+    PartialEq,
+    Eq,
+    Hash,
+    PartialOrd,
+    Ord,
+    ::prost::Enumeration,
+)]
+#[repr(i32)]
+pub enum SchnorrAlgorithm {
+    Unspecified = 0,
+    Bip340secp256k1 = 1,
+    Ed25519 = 2,
+}
+impl SchnorrAlgorithm {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            Self::Unspecified => "SCHNORR_ALGORITHM_UNSPECIFIED",
+            Self::Bip340secp256k1 => "SCHNORR_ALGORITHM_BIP340SECP256K1",
+            Self::Ed25519 => "SCHNORR_ALGORITHM_ED25519",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "SCHNORR_ALGORITHM_UNSPECIFIED" => Some(Self::Unspecified),
+            "SCHNORR_ALGORITHM_BIP340SECP256K1" => Some(Self::Bip340secp256k1),
+            "SCHNORR_ALGORITHM_ED25519" => Some(Self::Ed25519),
+            _ => None,
+        }
+    }
+}
+#[derive(
+    serde::Serialize,
+    serde::Deserialize,
+    Clone,
+    Copy,
+    Debug,
+    PartialEq,
+    Eq,
+    Hash,
+    PartialOrd,
+    Ord,
+    ::prost::Enumeration,
+)]
+#[repr(i32)]
+pub enum VetKdCurve {
+    Unspecified = 0,
+    Bls12381G2 = 1,
+}
+impl VetKdCurve {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            Self::Unspecified => "VET_KD_CURVE_UNSPECIFIED",
+            Self::Bls12381G2 => "VET_KD_CURVE_BLS12_381_G2",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "VET_KD_CURVE_UNSPECIFIED" => Some(Self::Unspecified),
+            "VET_KD_CURVE_BLS12_381_G2" => Some(Self::Bls12381G2),
             _ => None,
         }
     }
@@ -175,7 +347,7 @@ pub struct DkgMessage {
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct DkgPayload {
-    #[prost(oneof = "dkg_payload::Val", tags = "1, 2")]
+    #[prost(oneof = "dkg_payload::Val", tags = "1, 3")]
     pub val: ::core::option::Option<dkg_payload::Val>,
 }
 /// Nested message and enum types in `DkgPayload`.
@@ -184,12 +356,12 @@ pub mod dkg_payload {
     pub enum Val {
         #[prost(message, tag = "1")]
         Summary(super::Summary),
-        #[prost(message, tag = "2")]
-        Dealings(super::Dealings),
+        #[prost(message, tag = "3")]
+        DataPayload(super::DkgDataPayload),
     }
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct Dealings {
+pub struct DkgDataPayload {
     #[prost(message, repeated, tag = "1")]
     pub dealings: ::prost::alloc::vec::Vec<DkgMessage>,
     #[prost(uint64, tag = "2")]
@@ -205,24 +377,16 @@ pub struct Summary {
     pub next_interval_length: u64,
     #[prost(uint64, tag = "4")]
     pub height: u64,
-    #[prost(message, repeated, tag = "5")]
-    pub current_transcripts: ::prost::alloc::vec::Vec<TaggedNiDkgTranscript>,
-    #[prost(message, repeated, tag = "6")]
-    pub next_transcripts: ::prost::alloc::vec::Vec<TaggedNiDkgTranscript>,
     #[prost(message, repeated, tag = "7")]
     pub configs: ::prost::alloc::vec::Vec<NiDkgConfig>,
     #[prost(message, repeated, tag = "9")]
     pub initial_dkg_attempts: ::prost::alloc::vec::Vec<InitialDkgAttemptCount>,
     #[prost(message, repeated, tag = "10")]
-    pub transcripts_for_new_subnets_with_callback_ids:
-        ::prost::alloc::vec::Vec<CallbackIdedNiDkgTranscript>,
-}
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct TaggedNiDkgTranscript {
-    #[prost(message, optional, tag = "1")]
-    pub transcript: ::core::option::Option<NiDkgTranscript>,
-    #[prost(enumeration = "NiDkgTag", tag = "2")]
-    pub tag: i32,
+    pub transcripts_for_remote_subnets: ::prost::alloc::vec::Vec<CallbackIdedNiDkgTranscript>,
+    #[prost(message, repeated, tag = "11")]
+    pub current_transcripts: ::prost::alloc::vec::Vec<NiDkgTranscript>,
+    #[prost(message, repeated, tag = "12")]
+    pub next_transcripts: ::prost::alloc::vec::Vec<NiDkgTranscript>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CallbackIdedNiDkgTranscript {
@@ -508,8 +672,7 @@ pub struct MasterKeyTranscript {
     #[prost(message, optional, tag = "3")]
     pub next_in_creation: ::core::option::Option<KeyTranscriptCreation>,
     #[prost(message, optional, tag = "4")]
-    pub master_key_id:
-        ::core::option::Option<super::super::registry::crypto::v1::MasterPublicKeyId>,
+    pub master_key_id: ::core::option::Option<MasterPublicKeyId>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct AvailablePreSignature {
@@ -539,14 +702,12 @@ pub struct XnetReshareAgreement {
     #[prost(message, optional, tag = "4")]
     pub initial_dealings: ::core::option::Option<ConsensusResponse>,
 }
-#[derive(Clone, PartialEq, ::prost::Message)]
+#[derive(Clone, Copy, PartialEq, ::prost::Message)]
 pub struct RequestId {
-    #[prost(bytes = "vec", tag = "1")]
-    pub pseudo_random_id: ::prost::alloc::vec::Vec<u8>,
-    #[prost(uint64, tag = "2")]
-    pub pre_signature_id: u64,
     #[prost(uint64, tag = "3")]
     pub height: u64,
+    #[prost(uint64, tag = "5")]
+    pub callback_id: u64,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct TranscriptRef {
@@ -681,7 +842,7 @@ pub struct QuadrupleInCreation {
     #[prost(message, optional, tag = "10")]
     pub kappa_times_lambda: ::core::option::Option<MaskedTranscript>,
     #[prost(message, optional, tag = "12")]
-    pub key_id: ::core::option::Option<super::super::registry::crypto::v1::EcdsaKeyId>,
+    pub key_id: ::core::option::Option<EcdsaKeyId>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct PreSignatureQuadrupleRef {
@@ -696,12 +857,12 @@ pub struct PreSignatureQuadrupleRef {
     #[prost(message, optional, tag = "5")]
     pub key_unmasked_ref: ::core::option::Option<UnmaskedTranscript>,
     #[prost(message, optional, tag = "6")]
-    pub key_id: ::core::option::Option<super::super::registry::crypto::v1::EcdsaKeyId>,
+    pub key_id: ::core::option::Option<EcdsaKeyId>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct TranscriptInCreation {
     #[prost(message, optional, tag = "1")]
-    pub key_id: ::core::option::Option<super::super::registry::crypto::v1::SchnorrKeyId>,
+    pub key_id: ::core::option::Option<SchnorrKeyId>,
     #[prost(message, optional, tag = "2")]
     pub blinder_unmasked_config: ::core::option::Option<RandomUnmaskedTranscriptParams>,
     #[prost(message, optional, tag = "3")]
@@ -710,7 +871,7 @@ pub struct TranscriptInCreation {
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct PreSignatureTranscriptRef {
     #[prost(message, optional, tag = "1")]
-    pub key_id: ::core::option::Option<super::super::registry::crypto::v1::SchnorrKeyId>,
+    pub key_id: ::core::option::Option<SchnorrKeyId>,
     #[prost(message, optional, tag = "2")]
     pub blinder_unmasked_ref: ::core::option::Option<UnmaskedTranscript>,
     #[prost(message, optional, tag = "3")]
@@ -730,8 +891,7 @@ pub struct IDkgReshareRequest {
     #[prost(uint64, tag = "3")]
     pub registry_version: u64,
     #[prost(message, optional, tag = "5")]
-    pub master_key_id:
-        ::core::option::Option<super::super::registry::crypto::v1::MasterPublicKeyId>,
+    pub master_key_id: ::core::option::Option<MasterPublicKeyId>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct KeyTranscriptCreation {
@@ -753,7 +913,7 @@ pub struct KeyTranscriptCreation {
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct IDkgMessage {
-    #[prost(oneof = "i_dkg_message::Msg", tags = "1, 2, 3, 4, 5, 6")]
+    #[prost(oneof = "i_dkg_message::Msg", tags = "1, 2, 3, 4, 5, 6, 7")]
     pub msg: ::core::option::Option<i_dkg_message::Msg>,
 }
 /// Nested message and enum types in `IDkgMessage`.
@@ -772,6 +932,8 @@ pub mod i_dkg_message {
         Opening(super::SignedIDkgOpening),
         #[prost(message, tag = "6")]
         SchnorrSigShare(super::SchnorrSigShare),
+        #[prost(message, tag = "7")]
+        VetkdKeyShare(super::VetKdKeyShare),
     }
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -791,6 +953,17 @@ pub struct SchnorrSigShare {
     pub request_id: ::core::option::Option<RequestId>,
     #[prost(bytes = "vec", tag = "3")]
     pub sig_share_raw: ::prost::alloc::vec::Vec<u8>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct VetKdKeyShare {
+    #[prost(message, optional, tag = "1")]
+    pub signer_id: ::core::option::Option<NodeId>,
+    #[prost(message, optional, tag = "2")]
+    pub request_id: ::core::option::Option<RequestId>,
+    #[prost(bytes = "vec", tag = "3")]
+    pub encrypted_key_share: ::prost::alloc::vec::Vec<u8>,
+    #[prost(bytes = "vec", tag = "4")]
+    pub node_signature: ::prost::alloc::vec::Vec<u8>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct SignedIDkgComplaint {
@@ -866,7 +1039,7 @@ pub struct PrefixPairSigShare {
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct IDkgArtifactId {
-    #[prost(oneof = "i_dkg_artifact_id::Kind", tags = "1, 2, 3, 4, 5, 6")]
+    #[prost(oneof = "i_dkg_artifact_id::Kind", tags = "1, 2, 3, 4, 5, 6, 7")]
     pub kind: ::core::option::Option<i_dkg_artifact_id::Kind>,
 }
 /// Nested message and enum types in `IDkgArtifactId`.
@@ -885,6 +1058,8 @@ pub mod i_dkg_artifact_id {
         Opening(super::PrefixPairIDkg),
         #[prost(message, tag = "6")]
         SchnorrSigShare(super::PrefixPairSigShare),
+        #[prost(message, tag = "7")]
+        VetkdKeyShare(super::PrefixPairSigShare),
     }
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
@@ -1331,6 +1506,23 @@ pub struct CanisterQueryStats {
     pub egress_payload_size: u64,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
+pub struct VetKdAgreement {
+    #[prost(uint64, tag = "1")]
+    pub callback_id: u64,
+    #[prost(oneof = "vet_kd_agreement::Agreement", tags = "2, 3")]
+    pub agreement: ::core::option::Option<vet_kd_agreement::Agreement>,
+}
+/// Nested message and enum types in `VetKdAgreement`.
+pub mod vet_kd_agreement {
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    pub enum Agreement {
+        #[prost(bytes, tag = "2")]
+        Data(::prost::alloc::vec::Vec<u8>),
+        #[prost(enumeration = "super::VetKdErrorCode", tag = "3")]
+        Reject(i32),
+    }
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct IngressIdOffset {
     #[prost(uint64, tag = "1")]
     pub expiry: u64,
@@ -1340,11 +1532,18 @@ pub struct IngressIdOffset {
     pub offset: u64,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
+pub struct IngressMessage {
+    #[prost(bytes = "vec", tag = "1")]
+    pub message_id: ::prost::alloc::vec::Vec<u8>,
+    #[prost(uint64, tag = "2")]
+    pub expiry: u64,
+    #[prost(bytes = "vec", tag = "3")]
+    pub signed_request_bytes: ::prost::alloc::vec::Vec<u8>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct IngressPayload {
-    #[prost(message, repeated, tag = "1")]
-    pub id_and_pos: ::prost::alloc::vec::Vec<IngressIdOffset>,
-    #[prost(bytes = "vec", tag = "2")]
-    pub buffer: ::prost::alloc::vec::Vec<u8>,
+    #[prost(message, repeated, tag = "3")]
+    pub ingress_messages: ::prost::alloc::vec::Vec<IngressMessage>,
 }
 /// Stripped consensus artifacts messages below
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -1353,6 +1552,8 @@ pub struct GetIngressMessageInBlockRequest {
     pub ingress_message_id: ::core::option::Option<IngressMessageId>,
     #[prost(message, optional, tag = "2")]
     pub block_proposal_id: ::core::option::Option<ConsensusMessageId>,
+    #[prost(bytes = "vec", tag = "3")]
+    pub ingress_bytes_hash: ::prost::alloc::vec::Vec<u8>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct GetIngressMessageInBlockResponse {
@@ -1372,6 +1573,8 @@ pub struct StrippedBlockProposal {
 pub struct StrippedIngressMessage {
     #[prost(message, optional, tag = "1")]
     pub stripped: ::core::option::Option<IngressMessageId>,
+    #[prost(bytes = "vec", tag = "2")]
+    pub ingress_bytes_hash: ::prost::alloc::vec::Vec<u8>,
 }
 #[allow(clippy::large_enum_variant)]
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -1394,4 +1597,33 @@ pub mod stripped_consensus_message {
 pub struct StrippedConsensusMessageId {
     #[prost(message, optional, tag = "1")]
     pub unstripped_id: ::core::option::Option<ConsensusMessageId>,
+}
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+#[repr(i32)]
+pub enum VetKdErrorCode {
+    Unspecified = 0,
+    TimedOut = 1,
+    InvalidKey = 2,
+}
+impl VetKdErrorCode {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            Self::Unspecified => "VET_KD_ERROR_CODE_UNSPECIFIED",
+            Self::TimedOut => "VET_KD_ERROR_CODE_TIMED_OUT",
+            Self::InvalidKey => "VET_KD_ERROR_CODE_INVALID_KEY",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "VET_KD_ERROR_CODE_UNSPECIFIED" => Some(Self::Unspecified),
+            "VET_KD_ERROR_CODE_TIMED_OUT" => Some(Self::TimedOut),
+            "VET_KD_ERROR_CODE_INVALID_KEY" => Some(Self::InvalidKey),
+            _ => None,
+        }
+    }
 }

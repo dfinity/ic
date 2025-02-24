@@ -1,0 +1,138 @@
+{
+  "archive": {
+    "rev": "7c6309cb5bec7ab28ed657ac7672af08a59fc1ba",
+    "sha256": "92622a35dc03651a046ef02d48c3d3c3383a25307d719e4a7657601486fa9f4f"
+  },
+  "ck_btc_archive": {
+    "rev": "c741e349451edf0c9792149ad439bb32a0161371",
+    "sha256": "2b0970a84976bc2eb9591b68d44501566937994fa5594972f8aac9c8b058672f"
+  },
+  "ck_btc_index": {
+    "rev": "c741e349451edf0c9792149ad439bb32a0161371",
+    "sha256": "e155db9d06b6147ece4f9defe599844f132a7db21693265671aa6ac60912935f"
+  },
+  "ck_btc_ledger": {
+    "rev": "c741e349451edf0c9792149ad439bb32a0161371",
+    "sha256": "3b03d1bb1145edbcd11101ab2788517bc0f427c3bd7b342b9e3e7f42e29d5822"
+  },
+  "ck_btc_ledger_v1": {
+    "rev": "d4ee25b0865e89d3eaac13a60f0016d5e3296b31",
+    "sha256": "a170bfdce5d66e751a3cc03747cb0f06b450af500e75e15976ec08a3f5691f4c"
+  },
+  "ck_btc_ledger_v2": {
+    "rev": "e54d3fa34ded227c885d04e64505fa4b5d564743",
+    "sha256": "3d808fa63a3d8ebd4510c0400aa078e99a31afaa0515f0b68778f929ce4b2a46"
+  },
+  "ck_btc_ledger_v2_noledgerversion": {
+    "rev": "aba60ffbc46acfc8990bf4d5685c1360bd7026b9",
+    "sha256": "67cfcbabb79e683b6fc855450d9972c9efaa7a1cd28c6387965616fbead191ea"
+  },
+  "ck_btc_ledger_v3": {
+    "rev": "2190613d3b5bcd9b74c382b22d151580b8ac271a",
+    "sha256": "25071c2c55ad4571293e00d8e277f442aec7aed88109743ac52df3125209ff45"
+  },
+  "ck_eth_archive": {
+    "rev": "c741e349451edf0c9792149ad439bb32a0161371",
+    "sha256": "d2170c173f814fafc909737ec82f098714d44aa98ebd4f6dbf4e175160e1200f"
+  },
+  "ck_eth_index": {
+    "rev": "c741e349451edf0c9792149ad439bb32a0161371",
+    "sha256": "d21d059962144c835c8b291af3033e1f1c835af2350a5cd92b3cf8d687a1a7be"
+  },
+  "ck_eth_ledger": {
+    "rev": "c741e349451edf0c9792149ad439bb32a0161371",
+    "sha256": "8b2e3e596a147780b0e99ce36d0b8f1f3ba41a98b819b42980a7c08c309b44c1"
+  },
+  "ck_eth_ledger_v1": {
+    "rev": "d4ee25b0865e89d3eaac13a60f0016d5e3296b31",
+    "sha256": "e6072806ae22868ee09c07923d093b1b0b687dba540d22cfc1e1a5392bfcca46"
+  },
+  "ck_eth_ledger_v2": {
+    "rev": "e54d3fa34ded227c885d04e64505fa4b5d564743",
+    "sha256": "98a7b7391608dc4a554d6964bad24157b6aaf890a05bbaad3fcc92033d9c7b02"
+  },
+  "ck_eth_ledger_v2_noledgerversion": {
+    "rev": "aba60ffbc46acfc8990bf4d5685c1360bd7026b9",
+    "sha256": "73d0c5f057aaf33004218ce588780e1b454c717c702b1cf47532f32c23515f1e"
+  },
+  "ck_eth_ledger_v3": {
+    "rev": "2190613d3b5bcd9b74c382b22d151580b8ac271a",
+    "sha256": "9637743e1215a4db376a62ee807a0986faf20833be2b332df09b3d5dbdd7339e"
+  },
+  "cycles-minting": {
+    "rev": "2d4bcba47ea10520ff21ce54a8acb9cdb0629317",
+    "sha256": "4e4a6f907a3b4720bfeb4c45c5027d9b1379deb840e4ba0217876df9a4c5b193"
+  },
+  "genesis-token": {
+    "rev": "4bed17bfc82cddc5691743db6228992cdc2740f4",
+    "sha256": "fd25a4e2e283b498c3be1aaf63cc9b2726264d78a12b12f43ad453ceeb575e7c"
+  },
+  "governance": {
+    "rev": "345790def6dfa93bcc317171c9733851d205802e",
+    "sha256": "15c9b8db9e54963d4f7075e1fd3bd6a0055dbe6981a2f6a54dd64114fdb0629f"
+  },
+  "index": {
+    "rev": "7c6309cb5bec7ab28ed657ac7672af08a59fc1ba",
+    "sha256": "7b884231f230f5fc66ad18e0baaec0c14921bd5da742db5dbaf51f824b8dfc63"
+  },
+  "ledger": {
+    "rev": "6bc1943fc5bcff846959025c5f3f2f7f510489cf",
+    "sha256": "6dae518b33ef5814462ff921e81d13acd5e7a8f4e383ab849d87a33b0a608b08"
+  },
+  "ledger_v1": {
+    "rev": "6dcfafb491092704d374317d9a72a7ad2475d7c9",
+    "sha256": "4fe38a91a3130e9d8b39e3413ae3b3f46c40d3fbd507df1b6092f962d970a7ea"
+  },
+  "ledger_v2": {
+    "rev": "dac2f36f96d7549d82fa8e3c714979255ce57afd",
+    "sha256": "50c05fd687883fe788c0bb91996de358d8f856ba56088c6ff47767ea853001d7"
+  },
+  "ledger_v3": {
+    "rev": "7c6309cb5bec7ab28ed657ac7672af08a59fc1ba",
+    "sha256": "a9ed1cb9dda555e0fc1038825eb7b3a6b366f17aa4b88575184c7537e864e551"
+  },
+  "lifeline": {
+    "rev": "b5192581ccd35b67fe5a1f795ead9cbcd25956d6",
+    "sha256": "8c8eb285de53ca5609abd7dc41ba3ec8eeb67708b81469311fd670e6738d7d0a"
+  },
+  "registry": {
+    "rev": "4f60863183c418782800fc8ffacf41be494a9a15",
+    "sha256": "c0e70561a26bcb4a2acee50c487335640bab9e7301f9970b08ac345a59075748"
+  },
+  "root": {
+    "rev": "00b04a892dfb2fee1459f1de9d4a731aa04f1ca3",
+    "sha256": "36188e425f4d6d9c0e89252ed6028f6735f1911a4bbdc02312fd009a86d039b8"
+  },
+  "sns-wasm": {
+    "rev": "00b04a892dfb2fee1459f1de9d4a731aa04f1ca3",
+    "sha256": "c1427f6c751fcb587c95797e6ebbbbea1f10df266157fb0a54b34239fa2e9de0"
+  },
+  "sns_archive": {
+    "rev": "c741e349451edf0c9792149ad439bb32a0161371",
+    "sha256": "2b0970a84976bc2eb9591b68d44501566937994fa5594972f8aac9c8b058672f"
+  },
+  "sns_governance": {
+    "rev": "00b04a892dfb2fee1459f1de9d4a731aa04f1ca3",
+    "sha256": "5129b3142d6bef7425fd1a88df417bbbd70edd4240eda017758e409d4f2f624c"
+  },
+  "sns_index": {
+    "rev": "c741e349451edf0c9792149ad439bb32a0161371",
+    "sha256": "e155db9d06b6147ece4f9defe599844f132a7db21693265671aa6ac60912935f"
+  },
+  "sns_ledger": {
+    "rev": "c741e349451edf0c9792149ad439bb32a0161371",
+    "sha256": "3b03d1bb1145edbcd11101ab2788517bc0f427c3bd7b342b9e3e7f42e29d5822"
+  },
+  "sns_ledger_v2": {
+    "rev": "e54d3fa34ded227c885d04e64505fa4b5d564743",
+    "sha256": "3d808fa63a3d8ebd4510c0400aa078e99a31afaa0515f0b68778f929ce4b2a46"
+  },
+  "sns_root": {
+    "rev": "2d4bcba47ea10520ff21ce54a8acb9cdb0629317",
+    "sha256": "cbbc1ffdd911c58692409e942fafbddcf3e3445e1df99b26d83ae8ed5383af9a"
+  },
+  "swap": {
+    "rev": "00b04a892dfb2fee1459f1de9d4a731aa04f1ca3",
+    "sha256": "9289cf5b79e8e4341175fd4bcad3412f57faf2f49a67b8ace6fa113028a515f7"
+  }
+}

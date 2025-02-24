@@ -1,0 +1,151 @@
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_test")
+load("//rs/tests:common.bzl", "COUNTER_CANISTER_RUNTIME_DEPS", "GRAFANA_RUNTIME_DEPS", "GUESTOS_RUNTIME_DEPS", "UNIVERSAL_CANISTER_ENV", "UNIVERSAL_CANISTER_RUNTIME_DEPS", "UNIVERSAL_VM_RUNTIME_DEPS")
+load("//rs/tests:system_tests.bzl", "system_test")
+
+package(default_visibility = ["//rs:system-tests-pkg"])
+
+ALIASES = {
+    "//rs/utils": "utils",
+}
+
+rust_binary(
+    name = "colocate_test_bin",
+    testonly = True,
+    srcs = ["colocate_test.rs"],
+    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
+    deps = [
+        # Keep sorted.
+        "//rs/tests/driver:ic-system-test-driver",
+        "@crate_index//:anyhow",
+        "@crate_index//:serde_json",
+        "@crate_index//:slog",
+        "@crate_index//:ssh2",
+        "@crate_index//:tempfile",
+    ],
+)
+
+system_test(
+    name = "basic_health_test",
+    env = UNIVERSAL_CANISTER_ENV,
+    flaky = True,
+    tags = [
+        "k8s",
+        "long_test",
+    ],
+    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
+    runtime_deps = GUESTOS_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS + UNIVERSAL_CANISTER_RUNTIME_DEPS,
+    deps = [
+        # Keep sorted.
+        "//rs/registry/subnet_type",
+        "//rs/tests/driver:ic-system-test-driver",
+        "@crate_index//:anyhow",
+        "@crate_index//:slog",
+    ],
+)
+
+system_test(
+    name = "ii_delegation_test",
+    env = UNIVERSAL_CANISTER_ENV | {
+        "II_WASM_PATH": "$(rootpath @ii_dev_canister//file)",
+    },
+    flaky = True,
+    tags = [
+        "long_test",
+    ],
+    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
+    runtime_deps = GUESTOS_RUNTIME_DEPS + COUNTER_CANISTER_RUNTIME_DEPS + UNIVERSAL_CANISTER_RUNTIME_DEPS + [
+        "@ii_dev_canister//file",
+    ],
+    deps = [
+        # Keep sorted.
+        "//rs/registry/subnet_type",
+        "//rs/tests/driver:ic-system-test-driver",
+        "//rs/types/types",
+        "//rs/universal_canister/lib",
+        "@crate_index//:anyhow",
+        "@crate_index//:candid",
+        "@crate_index//:ic-agent",
+        "@crate_index//:slog",
+    ],
+)
+
+system_test(
+    name = "mainnet_test",
+    tags = [
+        "manual",
+    ],
+    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
+    runtime_deps = GUESTOS_RUNTIME_DEPS + UNIVERSAL_VM_RUNTIME_DEPS,
+    deps = [
+        # Keep sorted.
+        "//rs/prep",
+        "//rs/registry/local_store",
+        "//rs/registry/local_store/artifacts",
+        "//rs/registry/regedit",
+        "//rs/tests/driver:ic-system-test-driver",
+        "@crate_index//:anyhow",
+        "@crate_index//:serde_json",
+        "@crate_index//:slog",
+        "@crate_index//:tokio",
+    ],
+)
+
+system_test(
+    name = "remote_replicable_mock_test",
+    tags = [
+        "manual",
+    ],
+    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
+    runtime_deps = UNIVERSAL_VM_RUNTIME_DEPS + [":replicable_mock_test_uvm_config_image"],
+    deps = [
+        # Keep sorted.
+        "//rs/tests/driver:ic-system-test-driver",
+        "@crate_index//:anyhow",
+        "@crate_index//:slog",
+    ],
+)
+
+# The target is used for testing the following scenarios:
+# Scenario A: running the test directly
+#    bazel test //rs/tests:replicable_mock_test --test_tag_filters="system_test"
+# Scanario B: Runs the test via Docker
+# 1. bazel build //rs/tests:replicable_mock_test_image.tar # Dockerizes the test
+# 2. docker load -i bazel-out/.../bin/rs/tests/replicable_mock_test_image.tar # Loads the Docker image
+# 3. docker run -it bazel/rs/tests:replicable_mock_test_image
+system_test(
+    name = "replicable_mock_test",
+    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
+    deps = [
+        # Keep sorted.
+        "//rs/tests/driver:ic-system-test-driver",
+        "@crate_index//:anyhow",
+        "@crate_index//:slog",
+    ],
+)
+
+rust_binary(
+    name = "test-driver-e2e-scenarios",
+    testonly = True,
+    srcs = ["test_driver_e2e_scenarios.rs"],
+    aliases = ALIASES,
+    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
+    deps = [
+        # Keep sorted.
+        "//rs/tests/driver:ic-system-test-driver",
+        "@crate_index//:anyhow",
+        "@crate_index//:slog",
+    ],
+)
+
+rust_test(
+    name = "test_e2e_scenarios",
+    srcs = ["test_driver_tests.rs"],
+    crate_root = "test_driver_tests.rs",
+    deps = [
+        # Keep sorted.
+        ":test-driver-e2e-scenarios",
+        "//rs/tests/driver:ic-system-test-driver",
+        "@crate_index//:serde_json",
+        "@crate_index//:tempfile",
+    ],
+)

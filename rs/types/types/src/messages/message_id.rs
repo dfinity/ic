@@ -32,7 +32,7 @@ impl<'a> Deserialize<'a> for MessageId {
     fn deserialize<D: Deserializer<'a>>(deserializer: D) -> Result<Self, D::Error> {
         struct MessageIdVisitor;
 
-        impl<'de> serde::de::Visitor<'de> for MessageIdVisitor {
+        impl serde::de::Visitor<'_> for MessageIdVisitor {
             type Value = MessageId;
 
             fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {

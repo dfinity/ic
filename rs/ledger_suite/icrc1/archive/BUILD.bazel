@@ -56,6 +56,7 @@ rust_test(
     crate = ":_wasm_archive_canister",
     data = [
         ":archive.did",
+        "//rs/ledger_suite/icrc1/ledger:ledger.did",
     ],
     env = {
         "CARGO_MANIFEST_DIR": "rs/ledger_suite/icrc1/archive",

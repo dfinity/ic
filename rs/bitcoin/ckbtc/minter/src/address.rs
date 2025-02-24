@@ -1,4 +1,4 @@
-//! Utilities to derive, display, and parse bitcoin addresses.
+//! Utilities to derive, display, and parse Bitcoin addresses.
 
 use crate::ECDSAPublicKey;
 use bech32::Variant;
@@ -67,7 +67,7 @@ impl BitcoinAddress {
         }
     }
 
-    /// Parses a bitcoin address and checks that it belongs to the specified network.
+    /// Parses a Bitcoin address and checks that it belongs to the specified network.
     pub fn parse(address: &str, network: Network) -> Result<BitcoinAddress, ParseAddressError> {
         // See https://en.bitcoin.it/wiki/Base58Check_encoding#Version_bytes.
         match address.chars().next() {
@@ -99,7 +99,7 @@ pub fn derivation_path(account: &Account) -> Vec<ByteBuf> {
 
 /// Returns a valid extended BIP-32 derivation path from an Account (Principal + subaccount)
 pub fn derive_public_key(ecdsa_public_key: &ECDSAPublicKey, account: &Account) -> ECDSAPublicKey {
-    use ic_crypto_secp256k1::{DerivationIndex, DerivationPath, PublicKey};
+    use ic_secp256k1::{DerivationIndex, DerivationPath, PublicKey};
 
     let path = DerivationPath::new(
         derivation_path(account)
@@ -139,7 +139,7 @@ pub fn account_to_p2wpkh_address(
     )
 }
 
-/// Constructs the bitcoin address corresponding to the specified account.
+/// Constructs the Bitcoin address corresponding to the specified account.
 pub fn account_to_bitcoin_address(
     ecdsa_public_key: &ECDSAPublicKey,
     account: &Account,

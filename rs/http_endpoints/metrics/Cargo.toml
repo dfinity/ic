@@ -8,7 +8,7 @@ documentation.workspace = true
 
 [dependencies]
 axum = { workspace = true }
-ic-async-utils = { path = "../../async_utils" }
+ic-http-endpoints-async-utils = { path = "../../http_endpoints/async_utils" }
 ic-config = { path = "../../config" }
 ic-metrics = { path = "../../monitoring/metrics" }
 prometheus = { workspace = true }

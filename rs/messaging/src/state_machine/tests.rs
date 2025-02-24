@@ -6,7 +6,7 @@ use crate::{
 };
 use ic_interfaces::execution_environment::Scheduler;
 use ic_interfaces_state_manager::StateManager;
-use ic_management_canister_types::MasterPublicKeyId;
+use ic_management_canister_types_private::MasterPublicKeyId;
 use ic_metrics::MetricsRegistry;
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
@@ -21,7 +21,7 @@ use ic_test_utilities_types::{
 use ic_types::consensus::idkg::PreSigId;
 use ic_types::messages::SignedIngress;
 use ic_types::{batch::BatchMessages, crypto::canister_threshold_sig::MasterPublicKey};
-use ic_types::{Height, PrincipalId, SubnetId, Time};
+use ic_types::{Height, PrincipalId, ReplicaVersion, SubnetId, Time};
 use maplit::btreemap;
 use mockall::{mock, predicate::*, Sequence};
 use std::collections::{BTreeMap, BTreeSet};
@@ -34,8 +34,9 @@ mock! {
             &self,
             state: ic_replicated_state::ReplicatedState,
             randomness: ic_types::Randomness,
-            idkg_subnet_public_keys: BTreeMap<MasterPublicKeyId, MasterPublicKey>,
+            chain_key_subnet_public_keys: BTreeMap<MasterPublicKeyId, MasterPublicKey>,
             idkg_pre_signature_ids: BTreeMap<MasterPublicKeyId, BTreeSet<PreSigId>>,
+            replica_version: &ReplicaVersion,
             current_round: ExecutionRound,
             round_summary: Option<ExecutionRoundSummary>,
             current_round_type: ExecutionRoundType,
@@ -90,14 +91,15 @@ fn test_fixture(provided_batch: &Batch) -> StateMachineTestFixture {
         .with(
             always(),
             eq(provided_batch.randomness),
-            eq(provided_batch.idkg_subnet_public_keys.clone()),
+            eq(provided_batch.chain_key_subnet_public_keys.clone()),
             eq(provided_batch.idkg_pre_signature_ids.clone()),
+            eq(provided_batch.replica_version.clone()),
             eq(round),
             eq(None),
             eq(round_type),
             eq(test_registry_settings()),
         )
-        .returning(|state, _, _, _, _, _, _, _| state);
+        .returning(|state, _, _, _, _, _, _, _, _| state);
 
     let mut stream_builder = Box::new(MockStreamBuilder::new());
     stream_builder
@@ -115,7 +117,7 @@ fn test_fixture(provided_batch: &Batch) -> StateMachineTestFixture {
             nodes: BTreeSet::new(),
             subnet_type: SubnetType::Application,
             subnet_features: SubnetFeatures::default(),
-            idkg_keys_held: BTreeSet::new(),
+            chain_keys_held: BTreeSet::new(),
         },
     );
 
@@ -156,6 +158,7 @@ fn state_machine_populates_network_topology() {
             fixture.scheduler,
             fixture.demux,
             fixture.stream_builder,
+            Default::default(),
             log,
             fixture.metrics,
         ));
@@ -190,6 +193,7 @@ fn test_delivered_batch(provided_batch: Batch) -> ReplicatedState {
             fixture.scheduler,
             fixture.demux,
             fixture.stream_builder,
+            Default::default(),
             log,
             fixture.metrics,
         ));
@@ -290,6 +294,7 @@ fn test_batch_time_impl(
             fixture.scheduler,
             fixture.demux,
             fixture.stream_builder,
+            Default::default(),
             log,
             fixture.metrics,
         );

@@ -12,7 +12,7 @@ use ic_interfaces::{
 };
 use ic_limits::{INGRESS_HISTORY_MAX_MESSAGES, SMALL_APP_SUBNET_MAX_SIZE};
 use ic_logger::{debug, error, trace, ReplicaLogger};
-use ic_management_canister_types::CanisterStatusType;
+use ic_management_canister_types_private::CanisterStatusType;
 use ic_metrics::{buckets::decimal_buckets, buckets::linear_buckets, MetricsRegistry};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::ReplicatedState;
@@ -195,7 +195,7 @@ impl ValidSetRuleImpl {
 
     /// Checks whether the given message has already been inducted.
     fn is_duplicate(&self, state: &ReplicatedState, msg: &SignedIngressContent) -> bool {
-        state.get_ingress_status(&msg.id()) != IngressStatus::Unknown
+        state.get_ingress_status(&msg.id()) != &IngressStatus::Unknown
     }
 
     /// Records the result of inducting an ingress message.

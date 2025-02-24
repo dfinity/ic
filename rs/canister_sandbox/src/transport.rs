@@ -137,9 +137,12 @@ impl<Message: 'static + Serialize + Send + EnumerateInnerFileDescriptors>
             trigger_background_sending: Condvar::new(),
         });
         let copy_instance = Arc::clone(&instance);
-        std::thread::spawn(move || {
-            copy_instance.background_sending_thread(idle_timeout_to_trim_buffer);
-        });
+        std::thread::Builder::new()
+            .name("IPCBackgroundSend".to_string())
+            .spawn(move || {
+                copy_instance.background_sending_thread(idle_timeout_to_trim_buffer);
+            })
+            .unwrap();
         instance
     }
 
@@ -468,7 +471,7 @@ pub fn socket_read_messages<
                     // updating the socket timeout.
                     loop {
                         if let Some(bytes) = reader.receive_message(&mut buf, &mut fds, 0, None) {
-                            break (bytes);
+                            break bytes;
                         }
                     }
                 }

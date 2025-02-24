@@ -10,7 +10,7 @@ use ic_crypto_internal_csp::api::CspSigner;
 use ic_crypto_internal_csp::vault::api::{
     CspVault, IDkgCreateDealingVaultError, IDkgDealingInternalBytes,
 };
-use ic_crypto_internal_threshold_sig_ecdsa::{
+use ic_crypto_internal_threshold_sig_canister_threshold_sig::{
     publicly_verify_dealing, IDkgDealingInternal, IDkgTranscriptOperationInternal,
 };
 use ic_interfaces_registry::RegistryClient;

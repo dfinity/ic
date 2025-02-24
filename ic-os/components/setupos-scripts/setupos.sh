@@ -2,6 +2,7 @@
 
 set -o nounset
 set -o pipefail
+set -e
 
 SHELL="/bin/bash"
 PATH="/sbin:/bin:/usr/sbin:/usr/bin"
@@ -39,12 +40,26 @@ main() {
     log_start "$(basename $0)"
     start_setupos
     /opt/ic/bin/check-setupos-age.sh
+    /opt/ic/bin/check-config.sh
     /opt/ic/bin/check-hardware.sh
     /opt/ic/bin/check-network.sh
+    /opt/ic/bin/check-ntp.sh
+    if kernel_cmdline_bool_default_true ic.setupos.perform_installation; then
+        true
+    else
+        echo "* Installation skipped by request via kernel command line; stopping here"
+        exit
+    fi
     /opt/ic/bin/setup-disk.sh
     /opt/ic/bin/install-hostos.sh
     /opt/ic/bin/install-guestos.sh
     /opt/ic/bin/setup-hostos-config.sh
+    if kernel_cmdline_bool_default_true ic.setupos.reboot_after_installation; then
+        true
+    else
+        echo "* Reboot skipped by request via kernel command line; stopping here"
+        exit
+    fi
     reboot_setupos
     log_end "$(basename $0)"
 }

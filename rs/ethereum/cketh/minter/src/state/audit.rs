@@ -4,6 +4,8 @@ mod tests;
 pub use super::event::{Event, EventType};
 use super::State;
 use crate::erc20::CkTokenSymbol;
+use crate::state::eth_logs_scraping::LogScrapingId;
+use crate::state::eth_logs_scraping::LogScrapingId::Erc20DepositWithoutSubaccount;
 use crate::state::transactions::{Reimbursed, ReimbursementIndex};
 use crate::storage::{record_event, with_event_iter};
 
@@ -57,10 +59,15 @@ pub fn apply_state_transition(state: &mut State, payload: &EventType) {
             );
         }
         EventType::SyncedToBlock { block_number } => {
-            state.last_scraped_block_number = *block_number;
+            state.log_scrapings.set_last_scraped_block_number(
+                LogScrapingId::EthDepositWithoutSubaccount,
+                *block_number,
+            );
         }
         EventType::SyncedErc20ToBlock { block_number } => {
-            state.last_erc20_scraped_block_number = *block_number;
+            state
+                .log_scrapings
+                .set_last_scraped_block_number(Erc20DepositWithoutSubaccount, *block_number);
         }
         EventType::AcceptedEthWithdrawalRequest(request) => {
             state
@@ -151,6 +158,12 @@ pub fn apply_state_transition(state: &mut State, payload: &EventType) {
             state
                 .eth_transactions
                 .record_quarantined_reimbursement(index.clone());
+        }
+        EventType::SyncedDepositWithSubaccountToBlock { block_number } => {
+            state.log_scrapings.set_last_scraped_block_number(
+                LogScrapingId::EthOrErc20DepositWithSubaccount,
+                *block_number,
+            );
         }
     }
 }

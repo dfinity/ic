@@ -22,7 +22,7 @@ http-body = { workspace = true }
 http-body-util = { workspace = true }
 hyper = { workspace = true }
 hyper-util = { workspace = true }
-ic-async-utils = { path = "../../async_utils" }
+ic-http-endpoints-async-utils = { path = "../../http_endpoints/async_utils" }
 ic-certification = { path = "../../certification" }
 ic-config = { path = "../../config" }
 ic-crypto-interfaces-sig-verification = { path = "../../crypto/interfaces/sig_verification" }
@@ -43,7 +43,7 @@ ic-replicated-state = { path = "../../replicated_state" }
 ic-tracing = { path = "../../monitoring/tracing" }
 ic-types = { path = "../../types/types" }
 ic-validator = { path = "../../validator" }
-inferno = "0.11.19"
+inferno = { workspace = true }
 prometheus = { workspace = true }
 prost = { workspace = true }
 rand = { workspace = true }
@@ -57,10 +57,11 @@ tokio-rustls = { workspace = true }
 tokio-util = { workspace = true }
 tower = { workspace = true }
 tower-http = { workspace = true }
-tracing-flame = "0.2.0"
+tracing-flame = { workspace = true }
 tracing-subscriber = { workspace = true }
 
 [dev-dependencies]
+axum-server = { version = "0.6.0", features = ["tls-rustls"] }
 ic-canister-client = { path = "../../canister_client" }
 ic-canister-client-sender = { path = "../../canister_client/sender" }
 ic-canonical-state = { path = "../../canonical_state" }
@@ -71,9 +72,13 @@ ic-interfaces-mocks = { path = "../../interfaces/mocks" }
 ic-interfaces-registry-mocks = { path = "../../interfaces/registry/mocks" }
 ic-interfaces-state-manager-mocks = { path = "../../interfaces/state_manager/mocks" }
 ic-protobuf = { path = "../../protobuf" }
+ic-read-state-response-parser = { path = "../../canister_client/read_state_response_parser" }
+ic-registry-client-fake = { path = "../../registry/fake" }
 ic-registry-keys = { path = "../../registry/keys" }
+ic-registry-proto-data-provider = { path = "../../registry/proto_data_provider" }
 ic-registry-routing-table = { path = "../../registry/routing_table" }
 ic-test-utilities = { path = "../../test_utilities" }
+ic-test-utilities-registry = { path = "../../test_utilities/registry" }
 ic-test-utilities-state = { path = "../../test_utilities/state" }
 ic-test-utilities-time = { path = "../../test_utilities/time" }
 ic-test-utilities-types = { path = "../../test_utilities/types" }
@@ -81,6 +86,7 @@ maplit = "1.0.2"
 mockall = { workspace = true }
 pretty_assertions = { workspace = true }
 proptest = { workspace = true }
+rcgen = { workspace = true }
 reqwest = { workspace = true }
 rstest = { workspace = true }
 rustls = { workspace = true }

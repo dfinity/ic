@@ -8,7 +8,7 @@ use ic_interfaces::crypto::{
     IDkgDealingEncryptionKeyRotationError, IDkgKeyRotationResult, IDkgProtocol, KeyManager,
     LoadTranscriptResult, NiDkgAlgorithm, ThresholdEcdsaSigVerifier, ThresholdEcdsaSigner,
     ThresholdSchnorrSigVerifier, ThresholdSchnorrSigner, ThresholdSigVerifier,
-    ThresholdSigVerifierByPublicKey, ThresholdSigner,
+    ThresholdSigVerifierByPublicKey, ThresholdSigner, VetKdProtocol,
 };
 use ic_interfaces::crypto::{MultiSigVerifier, MultiSigner};
 use ic_interfaces_registry::RegistryClient;
@@ -175,7 +175,7 @@ impl<T: Signable> ThresholdSigner<T> for CryptoReturningOk {
     fn sign_threshold(
         &self,
         _message: &T,
-        _dkg_id: NiDkgId,
+        _dkg_id: &NiDkgId,
     ) -> CryptoResult<ThresholdSigShareOf<T>> {
         Ok(ThresholdSigShareOf::new(ThresholdSigShare(vec![])))
     }
@@ -186,7 +186,7 @@ impl<T: Signable> ThresholdSigVerifier<T> for CryptoReturningOk {
         &self,
         _signature: &ThresholdSigShareOf<T>,
         _message: &T,
-        _dkg_id: NiDkgId,
+        _dkg_id: &NiDkgId,
         _signer: NodeId,
     ) -> CryptoResult<()> {
         Ok(())
@@ -195,7 +195,7 @@ impl<T: Signable> ThresholdSigVerifier<T> for CryptoReturningOk {
     fn combine_threshold_sig_shares(
         &self,
         _shares: BTreeMap<NodeId, ThresholdSigShareOf<T>>,
-        _dkg_id: NiDkgId,
+        _dkg_id: &NiDkgId,
     ) -> CryptoResult<CombinedThresholdSigOf<T>> {
         Ok(CombinedThresholdSigOf::new(CombinedThresholdSig(vec![])))
     }
@@ -204,7 +204,7 @@ impl<T: Signable> ThresholdSigVerifier<T> for CryptoReturningOk {
         &self,
         _signature: &CombinedThresholdSigOf<T>,
         _message: &T,
-        _dkg_id: NiDkgId,
+        _dkg_id: &NiDkgId,
     ) -> CryptoResult<()> {
         Ok(())
     }
@@ -255,11 +255,11 @@ impl NiDkgAlgorithm for CryptoReturningOk {
     ) -> Result<NiDkgTranscript, DkgCreateTranscriptError> {
         let mut transcript = dummy_transcript_for_tests_with_params(
             config.receivers().get().clone().into_iter().collect(),
-            config.dkg_id().dkg_tag,
+            config.dkg_id().dkg_tag.clone(),
             config.threshold().get().get(),
             config.registry_version().get(),
         );
-        transcript.dkg_id = config.dkg_id();
+        transcript.dkg_id = config.dkg_id().clone();
         Ok(transcript)
     }
 
@@ -270,7 +270,7 @@ impl NiDkgAlgorithm for CryptoReturningOk {
         self.loaded_transcripts
             .write()
             .unwrap()
-            .insert(transcript.dkg_id);
+            .insert(transcript.dkg_id.clone());
         Ok(LoadTranscriptResult::SigningKeyAvailable)
     }
 
@@ -281,7 +281,7 @@ impl NiDkgAlgorithm for CryptoReturningOk {
         self.retained_transcripts
             .write()
             .unwrap()
-            .push(transcripts.iter().map(|t| t.dkg_id).collect());
+            .push(transcripts.into_iter().map(|t| t.dkg_id).collect());
         Ok(())
     }
 }
@@ -513,6 +513,51 @@ impl ThresholdSchnorrSigVerifier for CryptoReturningOk {
         _inputs: &ThresholdSchnorrSigInputs,
         _signature: &ThresholdSchnorrCombinedSignature,
     ) -> Result<(), ThresholdSchnorrVerifyCombinedSigError> {
+        Ok(())
+    }
+}
+
+use ic_types::crypto::vetkd::{
+    VetKdArgs, VetKdEncryptedKey, VetKdEncryptedKeyShare, VetKdEncryptedKeyShareContent,
+    VetKdKeyShareCombinationError, VetKdKeyShareCreationError, VetKdKeyShareVerificationError,
+    VetKdKeyVerificationError,
+};
+
+impl VetKdProtocol for CryptoReturningOk {
+    fn create_encrypted_key_share(
+        &self,
+        _args: VetKdArgs,
+    ) -> Result<VetKdEncryptedKeyShare, VetKdKeyShareCreationError> {
+        Ok(VetKdEncryptedKeyShare {
+            encrypted_key_share: VetKdEncryptedKeyShareContent(vec![]),
+            node_signature: vec![],
+        })
+    }
+
+    fn verify_encrypted_key_share(
+        &self,
+        _signer: NodeId,
+        _key_share: &VetKdEncryptedKeyShare,
+        _args: &VetKdArgs,
+    ) -> Result<(), VetKdKeyShareVerificationError> {
+        Ok(())
+    }
+
+    fn combine_encrypted_key_shares(
+        &self,
+        _shares: &BTreeMap<NodeId, VetKdEncryptedKeyShare>,
+        _args: &VetKdArgs,
+    ) -> Result<VetKdEncryptedKey, VetKdKeyShareCombinationError> {
+        Ok(VetKdEncryptedKey {
+            encrypted_key: vec![],
+        })
+    }
+
+    fn verify_encrypted_key(
+        &self,
+        _key: &VetKdEncryptedKey,
+        _args: &VetKdArgs,
+    ) -> Result<(), VetKdKeyVerificationError> {
         Ok(())
     }
 }

@@ -65,6 +65,7 @@ fn encode_mint_convert_memo_is_stable() {
         from_address,
         value: Wei::from(10_000_000_000_000_000_u128),
         principal: Principal::from_str("2chl6-4hpzw-vqaaa-aaaaa-c").unwrap(),
+        subaccount: None,
     };
     let memo: Memo = (&ReceivedEvent::from(event)).into();
 
@@ -122,31 +123,18 @@ fn encode_burn_memo_is_stable() {
 }
 
 mod arbitrary {
-    use crate::checked_amount::CheckedAmountOf;
     use crate::eth_rpc::Hash;
     use crate::memo::{BurnMemo, MintMemo};
     use crate::numeric::{LedgerBurnIndex, LogIndex};
-    use crate::state::transactions::{ReimbursementRequest, Subaccount};
-    use candid::Principal;
+    use crate::state::transactions::ReimbursementRequest;
+    use crate::test_fixtures::arb::{
+        arb_address, arb_checked_amount_of, arb_hash, arb_ledger_subaccount, arb_principal,
+    };
     use ic_ethereum_types::Address;
     use proptest::arbitrary::any;
-    use proptest::array::{uniform20, uniform32};
-    use proptest::collection::vec as pvec;
     use proptest::option;
     use proptest::prelude::{BoxedStrategy, Strategy};
     use proptest::prop_oneof;
-
-    fn arb_hash() -> impl Strategy<Value = Hash> {
-        uniform32(any::<u8>()).prop_map(Hash)
-    }
-
-    fn arb_address() -> impl Strategy<Value = Address> {
-        uniform20(any::<u8>()).prop_map(Address::new)
-    }
-
-    pub fn arb_checked_amount_of<Unit>() -> impl Strategy<Value = CheckedAmountOf<Unit>> {
-        uniform32(any::<u8>()).prop_map(CheckedAmountOf::from_be_bytes)
-    }
 
     pub fn arb_mint_memo() -> BoxedStrategy<MintMemo> {
         prop_oneof![
@@ -225,7 +213,7 @@ mod arbitrary {
             any::<u64>(),
             arb_checked_amount_of(),
             arb_principal(),
-            option::of(arb_subaccount()),
+            arb_ledger_subaccount(),
             option::of(arb_hash()),
         )
             .prop_map(
@@ -239,14 +227,6 @@ mod arbitrary {
                     }
                 },
             )
-    }
-
-    fn arb_principal() -> impl Strategy<Value = Principal> {
-        pvec(any::<u8>(), 0..=29).prop_map(|bytes| Principal::from_slice(&bytes))
-    }
-
-    fn arb_subaccount() -> impl Strategy<Value = Subaccount> {
-        uniform32(any::<u8>()).prop_map(Subaccount)
     }
 
     #[test]

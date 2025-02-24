@@ -1,18 +1,19 @@
-use crate::models::amount::{signed_amount, tokens_to_amount};
-use crate::models::operation::OperationType;
-use crate::models::seconds::Seconds;
-use crate::models::OperationIdentifier;
 use crate::{
     convert::to_model_account_identifier,
     errors::ApiError,
-    models::{self, Operation},
+    models::{
+        self,
+        amount::{signed_amount, tokens_to_amount},
+        operation::OperationType,
+        seconds::Seconds,
+        Operation, OperationIdentifier,
+    },
     transaction_id::TransactionIdentifier,
 };
 pub use ic_ledger_canister_blocks_synchronizer::blocks::RosettaBlocksMode;
 use ic_types::PrincipalId;
 use icp_ledger::{AccountIdentifier, BlockIndex, Operation as LedgerOperation, Tokens};
-use rosetta_core::convert::principal_id_from_public_key;
-use rosetta_core::objects::ObjectMap;
+use rosetta_core::{convert::principal_id_from_public_key, objects::ObjectMap};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::convert::TryFrom;
@@ -41,6 +42,7 @@ pub const STAKE_MATURITY: &str = "STAKE_MATURITY";
 pub const NEURON_INFO: &str = "NEURON_INFO";
 pub const LIST_NEURONS: &str = "LIST_NEURONS";
 pub const FOLLOW: &str = "FOLLOW";
+pub const REFRESH_VOTING_POWER: &str = "REFRESH_VOTING_POWER";
 
 /// `RequestType` contains all supported values of `Operation.type`.
 /// Extra information, such as `neuron_index` should only be included
@@ -95,10 +97,16 @@ pub enum RequestType {
     },
     #[serde(rename = "LIST_NEURONS")]
     #[serde(alias = "ListNeurons")]
-    ListNeurons,
+    ListNeurons { page_number: u64 },
     #[serde(rename = "FOLLOW")]
     #[serde(alias = "Follow")]
     Follow {
+        neuron_index: u64,
+        controller: Option<PublicKeyOrPrincipal>,
+    },
+    #[serde(rename = "REFRESH_VOTING_POWER")]
+    #[serde(alias = "RefreshVotingPower")]
+    RefreshVotingPower {
         neuron_index: u64,
         controller: Option<PublicKeyOrPrincipal>,
     },
@@ -123,6 +131,7 @@ impl RequestType {
             RequestType::NeuronInfo { .. } => NEURON_INFO,
             RequestType::ListNeurons { .. } => LIST_NEURONS,
             RequestType::Follow { .. } => FOLLOW,
+            RequestType::RefreshVotingPower { .. } => REFRESH_VOTING_POWER,
         }
     }
 
@@ -365,6 +374,7 @@ pub struct NeuronInfo {
 #[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub struct ListNeurons {
     pub account: icp_ledger::AccountIdentifier,
+    pub page_number: Option<u64>,
 }
 
 #[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
@@ -375,6 +385,13 @@ pub struct Follow {
     pub controller: Option<PrincipalId>,
     #[serde(default)]
     pub neuron_index: u64,
+}
+
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
+pub struct RefreshVotingPower {
+    pub account: icp_ledger::AccountIdentifier,
+    pub neuron_index: u64,
+    pub controller: Option<PrincipalId>,
 }
 
 #[derive(Clone, Eq, Ord, PartialOrd, Debug, Deserialize, Serialize)]
@@ -483,6 +500,7 @@ impl TryFrom<Option<ObjectMap>> for SetDissolveTimestampMetadata {
 pub struct NeuronIdentifierMetadata {
     #[serde(default)]
     pub neuron_index: u64,
+    pub controller: Option<PublicKeyOrPrincipal>,
 }
 
 impl TryFrom<Option<ObjectMap>> for NeuronIdentifierMetadata {
@@ -845,6 +863,34 @@ impl TryFrom<NeuronInfoMetadata> for ObjectMap {
 }
 
 #[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Deserialize, Serialize)]
+pub struct ListNeuronsMetadata {
+    pub page_number: Option<u64>,
+}
+
+impl TryFrom<Option<ObjectMap>> for ListNeuronsMetadata {
+    type Error = ApiError;
+    fn try_from(o: Option<ObjectMap>) -> Result<Self, Self::Error> {
+        serde_json::from_value(serde_json::Value::Object(o.unwrap_or_default())).map_err(|e| {
+            ApiError::internal_error(format!(
+                "Could not parse LIST_NEURONS operation metadata from metadata JSON object: {}",
+                e
+            ))
+        })
+    }
+}
+
+impl TryFrom<ListNeuronsMetadata> for ObjectMap {
+    type Error = ApiError;
+    fn try_from(d: ListNeuronsMetadata) -> Result<ObjectMap, Self::Error> {
+        match serde_json::to_value(d) {
+            Ok(Value::Object(o)) => Ok(o),
+            Ok(o) => Err(ApiError::internal_error(format!("Could not convert ListNeuronsMetadata to ObjectMap. Expected type Object but received: {:?}",o))),
+            Err(err) => Err(ApiError::internal_error(format!("Could not convert ListNeuronsMetadata to ObjectMap: {:?}",err))),
+        }
+    }
+}
+
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Deserialize, Serialize)]
 pub struct FollowMetadata {
     pub topic: i32,
     pub followees: Vec<u64>,
@@ -1052,6 +1098,7 @@ impl TransactionBuilder {
             metadata: Some(
                 NeuronIdentifierMetadata {
                     neuron_index: *neuron_index,
+                    controller: None,
                 }
                 .try_into()?,
             ),
@@ -1135,6 +1182,7 @@ impl TransactionBuilder {
             metadata: Some(
                 NeuronIdentifierMetadata {
                     neuron_index: *neuron_index,
+                    controller: None,
                 }
                 .try_into()?,
             ),
@@ -1159,6 +1207,7 @@ impl TransactionBuilder {
             metadata: Some(
                 NeuronIdentifierMetadata {
                     neuron_index: *neuron_index,
+                    controller: None,
                 }
                 .try_into()?,
             ),
@@ -1380,7 +1429,10 @@ impl TransactionBuilder {
     }
 
     pub fn list_neurons(&mut self, req: &ListNeurons) -> Result<(), ApiError> {
-        let ListNeurons { account } = req;
+        let ListNeurons {
+            account,
+            page_number,
+        } = req;
         let operation_identifier = self.allocate_op_id();
         self.ops.push(Operation {
             operation_identifier,
@@ -1390,7 +1442,12 @@ impl TransactionBuilder {
             amount: None,
             related_operations: None,
             coin_change: None,
-            metadata: None,
+            metadata: Some(
+                ListNeuronsMetadata {
+                    page_number: *page_number,
+                }
+                .try_into()?,
+            ),
         });
         Ok(())
     }
@@ -1418,6 +1475,35 @@ impl TransactionBuilder {
                     followees: followees.clone(),
                     controller: pkp_from_principal(controller),
                     neuron_index: *neuron_index,
+                }
+                .try_into()?,
+            ),
+        });
+        Ok(())
+    }
+
+    pub fn refresh_voting_power(
+        &mut self,
+        refresh_voting_power: &RefreshVotingPower,
+    ) -> Result<(), ApiError> {
+        let RefreshVotingPower {
+            neuron_index,
+            account,
+            controller,
+        } = refresh_voting_power;
+        let operation_identifier = self.allocate_op_id();
+        self.ops.push(Operation {
+            operation_identifier,
+            type_: OperationType::RefreshVotingPower.to_string(),
+            status: None,
+            account: Some(to_model_account_identifier(account)),
+            amount: None,
+            related_operations: None,
+            coin_change: None,
+            metadata: Some(
+                NeuronIdentifierMetadata {
+                    neuron_index: *neuron_index,
+                    controller: pkp_from_principal(controller),
                 }
                 .try_into()?,
             ),

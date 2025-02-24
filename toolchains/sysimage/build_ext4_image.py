@@ -105,41 +105,35 @@ def strip_files(fs_basedir, fakeroot_statefile, strip_paths):
         )
 
 
-def prepare_tree_from_tar(in_file, fakeroot_statefile, fs_basedir, dir_to_extract):
+def prepare_tree_from_tar(in_file, fakeroot_statefile, fs_basedir, dir_to_extract, extra_files):
+    # We batch all commands together and run them under bash. This is significantly faster than invoking fakeroot
+    # multiple times.
+    commands = "set -euo pipefail\n"
     if in_file:
-        subprocess.run(
-            [
-                "fakeroot",
-                "-s",
-                fakeroot_statefile,
-                "tar",
-                "xf",
-                in_file,
-                "--numeric-owner",
-                "-C",
-                fs_basedir,
-                dir_to_extract,
-            ],
-            check=True,
-        )
+        # Untar files to the base dir.
+        commands += f"""tar xf {in_file} --numeric-owner -C "{fs_basedir}" "{dir_to_extract}";\n"""
+
+        # Copy extra files to the base dir and set permissions.
+        for path_target in extra_files or []:
+            (path, target, mod) = path_target.split(":")
+            target_in_basedir = os.path.join(fs_basedir, dir_to_extract, target.lstrip("/"))
+            commands += f"""cp "{path}" "{target_in_basedir}";\n"""
+            commands += f"""chmod "{mod}" "{target_in_basedir}";\n"""
     else:
-        subprocess.run(
-            [
-                "fakeroot",
-                "-s",
-                fakeroot_statefile,
-                "chown",
-                "root:root",
-                fs_basedir,
-            ],
-            check=True,
-        )
+        commands += f"""chown root:root "{fs_basedir}";\n"""
+
+    subprocess.run(["fakeroot", "-s", fakeroot_statefile, "bash"], input=commands.encode(), check=True)
 
 
 def make_argparser():
     parser = argparse.ArgumentParser()
     parser.add_argument("-s", "--size", help="Size of image to build", type=str)
     parser.add_argument("-o", "--output", help="Target (tzst) file to write partition image to", type=str)
+    parser.add_argument(
+        "--extra-files",
+        help="Extra files to inject into the image. Format: source_path:target_path_in_image:target_permissions",
+        nargs="*",
+    )
     parser.add_argument(
         "-i", "--input", help="Source (tar) file to take files from", type=str, default="", required=False
     )
@@ -179,6 +173,7 @@ def main():
     out_file = args.output
     image_size = args.size
     limit_prefix = args.path
+    extra_files = args.extra_files
     file_contexts_file = args.file_contexts
     strip_paths = args.strip_paths
     if limit_prefix and limit_prefix[0] == "/":
@@ -206,7 +201,7 @@ def main():
     # Prepare a filesystem tree that represents what will go into
     # the fs image. Wrap everything in fakeroot so permissions and
     # ownership will be preserved while unpacking (see below).
-    prepare_tree_from_tar(in_file, fakeroot_statefile, fs_basedir, limit_prefix)
+    prepare_tree_from_tar(in_file, fakeroot_statefile, fs_basedir, limit_prefix, extra_files)
     strip_files(fs_basedir, fakeroot_statefile, strip_paths)
     subprocess.run(["sync"], check=True)
 
@@ -221,6 +216,8 @@ def main():
         "hash_seed=c61251eb-100b-48fe-b089-57dea7368612",
         "-U",
         "clear",
+        "-d",
+        os.path.join(fs_basedir, limit_prefix),
         "-F",
         image_file,
         str(image_size),
@@ -258,7 +255,7 @@ def main():
     e2fsdroid_args += ["-C", fs_config_path]
     if file_contexts_file:
         e2fsdroid_args += ["-S", file_contexts_file]
-    e2fsdroid_args += ["-f", os.path.join(fs_basedir, limit_prefix), image_file]
+    e2fsdroid_args += [image_file]
     subprocess.run(e2fsdroid_args, check=True, env={"E2FSPROGS_FAKE_TIME": "0"})
 
     subprocess.run(["sync"], check=True)

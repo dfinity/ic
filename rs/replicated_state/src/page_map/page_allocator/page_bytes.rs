@@ -19,7 +19,7 @@ where
 
 struct PageBytesVisitor;
 
-impl<'de> Visitor<'de> for PageBytesVisitor {
+impl Visitor<'_> for PageBytesVisitor {
     type Value = PageBytes;
 
     fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {

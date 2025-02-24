@@ -3,7 +3,8 @@ use crate::{
     consensus::MINIMUM_CHAIN_LENGTH,
 };
 use ic_consensus_utils::{
-    active_high_threshold_nidkg_id, aggregate, membership::Membership, registry_version_at_height,
+    active_high_threshold_nidkg_id, aggregate, bouncer_metrics::BouncerMetrics,
+    membership::Membership, registry_version_at_height,
 };
 use ic_interfaces::{
     certification::{CertificationPool, ChangeAction, Mutations, Verifier, VerifierError},
@@ -57,13 +58,18 @@ pub struct CertifierImpl {
 /// pool and submitting the corresponding change sets.
 pub struct CertifierBouncer {
     consensus_pool_cache: Arc<dyn ConsensusPoolCache>,
+    metrics: BouncerMetrics,
 }
 
 impl CertifierBouncer {
     /// Construct a new CertifierBouncer.
-    pub fn new(consensus_pool_cache: Arc<dyn ConsensusPoolCache>) -> Self {
+    pub fn new(
+        metrics_registry: &MetricsRegistry,
+        consensus_pool_cache: Arc<dyn ConsensusPoolCache>,
+    ) -> Self {
         Self {
             consensus_pool_cache,
+            metrics: BouncerMetrics::new(metrics_registry, "certification_pool"),
         }
     }
 }
@@ -75,6 +81,8 @@ impl<Pool: CertificationPool> BouncerFactory<CertificationMessageId, Pool> for C
     // any new artifacts at that height. If it is above the CUP height and we do not
     // have a full certification at that height, we're interested in all artifacts.
     fn new_bouncer(&self, certification_pool: &Pool) -> Bouncer<CertificationMessageId> {
+        let _timer = self.metrics.update_duration.start_timer();
+
         let certified_heights = certification_pool.certified_heights();
         let cup_height = self.consensus_pool_cache.catch_up_package().height();
         Box::new(move |id| {
@@ -710,11 +718,11 @@ mod tests {
                     crypto,
                     state_manager.clone(),
                     pool.get_cache(),
-                    metrics_registry,
+                    metrics_registry.clone(),
                     log,
                     max_certified_height_tx,
                 );
-                let bouncer_factory = CertifierBouncer::new(pool.get_cache());
+                let bouncer_factory = CertifierBouncer::new(&metrics_registry, pool.get_cache());
 
                 // generate a certifications for heights 1 and 3
                 for height in &[1, 3] {
@@ -1346,7 +1354,7 @@ mod tests {
 
                 for height in 1..=4 {
                     cert_pool
-                        .persistent_pool
+                        .validated
                         .insert(CertificationMessage::Certification(Certification {
                             height: Height::from(height),
                             signed: Signed {

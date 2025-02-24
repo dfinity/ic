@@ -27,16 +27,19 @@ spec:
         "cni.projectcalico.org/ipAddrs": "[\"{ipv4}\", \"{ipv6}\"]"
       labels:
         kubevirt.io/vm: {name}
-        kubevirt.io/network: passt
     spec:
+      schedulerName: koord-scheduler
       domain:
         cpu:
           cores: {cpus}
+          model: host-passthrough
         firmware:
           bootloader:
             efi:
               secureBoot: false
         devices:
+          autoattachSerialConsole: true
+          logSerialConsole: true
           disks:
             - name: disk0
               disk:
@@ -46,15 +49,14 @@ spec:
                 bus: virtio
           interfaces:
           - name: default
-            passt: {}
-            ports:
-            - port: 22
-            - port: 8332
-            - port: 18444
-            - port: 20443
+            binding:
+              name: passt
         resources:
+          overcommitGuestOverhead: true
           requests:
-            memory: {memory}Ki
+            memory: {memory_request}Ki
+        memory:
+          guest: {memory}Ki
       networks:
       - name: default
         pod: {}
@@ -114,16 +116,21 @@ spec:
         "cni.projectcalico.org/ipAddrs": "[\"{ipv4}\", \"{ipv6}\"]"
       labels:
         kubevirt.io/vm: {name}
-        kubevirt.io/network: passt
     spec:
+      nodeSelector:
+        kubernetes.io/hostname: {node}
+      schedulerName: koord-scheduler
       domain:
         cpu:
           cores: {cpus}
+          model: host-passthrough
         firmware:
           bootloader:
             efi:
               secureBoot: false
         devices:
+          autoattachSerialConsole: true
+          logSerialConsole: true
           disks:
             - name: disk0
               disk:
@@ -134,36 +141,24 @@ spec:
               serial: "config"
           interfaces:
           - name: default
-            passt: {}
-            ports:
-              - port: 22
-              - port: 80
-              - port: 443
-              - port: 2497
-              - port: 4100
-                protocol: UDP
-              - port: 4444
-              - port: 7070
-              - port: 8080
-              - port: 8332
-              - port: 9090
-              - port: 9091
-              - port: 9100
-              - port: 18444
-              - port: 19100
-              - port: 19531
+            binding:
+              name: passt
         resources:
+          overcommitGuestOverhead: true
           requests:
-            memory: {memory}Ki
+            memory: {memory_request}Ki
+        memory:
+          guest: {memory}Ki
       networks:
       - name: default
         pod: {}
       volumes:
-        - dataVolume:
-            name: "{name}-guestos"
+        - hostDisk:
+            type: Disk
+            path: /srv/tnet/{name}/disk.img
           name: disk0
-        - dataVolume:
-            name: "{name}-config"
+        - containerDisk:
+            image: "harbor.ln1-idx1.dfinity.network/tnet/config:{name}"
           name: disk1
 "#;
 
@@ -172,12 +167,14 @@ pub async fn create_vm(
     name: &str,
     cpus: &str,
     memory: &str,
+    memory_request: &str,
     ipv4: Ipv4Addr,
     ipv6: Ipv6Addr,
     running: bool,
     owner: OwnerReference,
     access_key: Option<String>,
     vm_type: ImageType,
+    node: Option<String>,
 ) -> Result<()> {
     info!("Creating virtual machine {}", name);
     let template = match vm_type {
@@ -189,9 +186,11 @@ pub async fn create_vm(
         .replace("{tnet}", &owner.name)
         .replace("{running}", &running.to_string())
         .replace("{memory}", memory)
+        .replace("{memory_request}", memory_request)
         .replace("{cpus}", cpus)
         .replace("{ipv4}", &ipv4.to_string())
-        .replace("{ipv6}", &ipv6.to_string());
+        .replace("{ipv6}", &ipv6.to_string())
+        .replace("{node}", &node.unwrap_or_default());
     let mut data: DynamicObject = serde_yaml::from_str(&yaml)?;
     data.metadata.owner_references = vec![owner].into();
     let response = api

@@ -54,6 +54,8 @@ pub enum DomainSeparator {
     IDkgTranscript,
     EcdsaSigShare,
     SchnorrSigShare,
+    VetKdKeyShare,
+    VetKdEncryptedKeyShareContent,
     IDkgComplaintContent,
     SignedIDkgComplaint,
     IDkgOpeningContent,
@@ -113,6 +115,10 @@ impl DomainSeparator {
             DomainSeparator::IDkgTranscript => "ic-idkg-transcript-domain",
             DomainSeparator::EcdsaSigShare => "ic-threshold-ecdsa-sig-share-domain",
             DomainSeparator::SchnorrSigShare => "ic-threshold-schnorr-sig-share-domain",
+            DomainSeparator::VetKdKeyShare => "ic-vetkd-key-share-domain",
+            DomainSeparator::VetKdEncryptedKeyShareContent => {
+                "ic-vetkd-encrypted-key-share-content-domain"
+            }
             DomainSeparator::IDkgComplaintContent => "ic-threshold-ecdsa-complaint-content-domain",
             DomainSeparator::SignedIDkgComplaint => "ic-threshold-ecdsa-complaint-domain",
             DomainSeparator::IDkgOpeningContent => "ic-threshold-ecdsa-opening-content-domain",
@@ -156,6 +162,6 @@ fn ic_request_domain_variable_is_sound_and_consistent_with_the_enum_variant() {
     );
     assert_eq!(
         DOMAIN_IC_REQUEST[0] as usize,
-        DomainSeparator::IcRequest.as_str().as_bytes().len()
+        DomainSeparator::IcRequest.as_str().len()
     );
 }

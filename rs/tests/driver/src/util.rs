@@ -19,8 +19,8 @@ use futures::{
 };
 use ic_agent::{
     agent::{
-        http_transport::reqwest_transport::{reqwest, ReqwestTransport},
-        CallResponse, EnvelopeContent, RejectCode, RejectResponse,
+        http_transport::reqwest_transport::reqwest, CallResponse, EnvelopeContent, RejectCode,
+        RejectResponse,
     },
     export::Principal,
     identity::BasicIdentity,
@@ -29,7 +29,7 @@ use ic_agent::{
 use ic_canister_client::{Agent as DeprecatedAgent, Sender};
 use ic_config::ConfigOptional;
 use ic_limits::MAX_INGRESS_TTL;
-use ic_management_canister_types::{CanisterStatusResult, EmptyBlob, Payload};
+use ic_management_canister_types_private::{CanisterStatusResultV2, EmptyBlob, Payload};
 use ic_message::ForwardParams;
 use ic_nervous_system_proto::pb::v1::GlobalTimeOfDay;
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, ROOT_CANISTER_ID};
@@ -48,17 +48,16 @@ use ic_types::{
     messages::{HttpCallContent, HttpQueryContent},
     CanisterId, Cycles, PrincipalId,
 };
-use ic_universal_canister::{
-    call_args, wasm as universal_canister_argument_builder, UNIVERSAL_CANISTER_WASM,
-};
+use ic_universal_canister::{call_args, wasm as universal_canister_argument_builder};
 use ic_utils::{call::AsyncCall, interfaces::ManagementCanister};
 use icp_ledger::{
     tokens_from_proto, AccountBalanceArgs, AccountIdentifier, Memo, SendArgs, Subaccount, Tokens,
     DEFAULT_TRANSFER_FEE,
 };
 use itertools::Itertools;
+use lazy_static::lazy_static;
 use on_wire::FromWire;
-use slog::{debug, info};
+use slog::{debug, info, Logger};
 use std::{
     collections::BTreeMap,
     convert::{TryFrom, TryInto},
@@ -86,10 +85,12 @@ pub const _EMPTY_WASM: &[u8] = &[0, 97, 115, 109, 1, 0, 0, 0];
 pub const MESSAGE_CANISTER_WASM: &[u8] = include_bytes!("message.wasm");
 
 pub const CFG_TEMPLATE_BYTES: &[u8] =
-    include_bytes!("../../../../ic-os/components/ic/ic.json5.template");
+    include_bytes!("../../../../ic-os/components/ic/generate-ic-config/ic.json5.template");
 
 // Requests are multiplexed over H2 requests.
 pub const MAX_CONCURRENT_REQUESTS: usize = 10_000;
+
+pub const MAX_TCP_ERROR_RETRIES: usize = 5;
 
 pub fn get_identity() -> ic_agent::identity::BasicIdentity {
     ic_agent::identity::BasicIdentity::from_pem(IDENTITY_PEM.as_bytes())
@@ -113,6 +114,25 @@ pub fn runtime_from_url(url: Url, effective_canister_id: PrincipalId) -> Runtime
         agent,
         effective_canister_id,
     })
+}
+
+// Note that we can't use the UNIVERSAL_CANISTER_WASM from rs/universal_canister/lib/src/lib.rs
+// since in system-tests paths to runtime dependencies need to be get via get_dependency_path(path).
+lazy_static! {
+    /// The WASM of the Universal Canister.
+    pub static ref UNIVERSAL_CANISTER_WASM: &'static [u8] = {
+        let vec = get_universal_canister_wasm();
+        Box::leak(vec.into_boxed_slice())
+    };
+}
+
+fn get_universal_canister_wasm() -> Vec<u8> {
+    let uc_wasm_path = get_dependency_path(
+        std::env::var("UNIVERSAL_CANISTER_WASM_PATH")
+            .expect("UNIVERSAL_CANISTER_WASM_PATH not set"),
+    );
+    std::fs::read(&uc_wasm_path)
+        .unwrap_or_else(|e| panic!("Could not read WASM from {:?}: {e:?}", uc_wasm_path))
 }
 
 /// Provides an abstraction to the universal canister.
@@ -251,7 +271,7 @@ impl<'a> UniversalCanister<'a> {
             .0;
 
         // Install the universal canister.
-        mgr.install_code(&canister_id, UNIVERSAL_CANISTER_WASM)
+        mgr.install_code(&canister_id, &UNIVERSAL_CANISTER_WASM)
             .with_raw_arg(payload.clone())
             .call_and_wait()
             .await
@@ -278,7 +298,7 @@ impl<'a> UniversalCanister<'a> {
             .0;
 
         // Install the universal canister.
-        mgr.install_code(&canister_id, UNIVERSAL_CANISTER_WASM)
+        mgr.install_code(&canister_id, &UNIVERSAL_CANISTER_WASM)
             .with_raw_arg(payload.clone())
             .call_and_wait()
             .await
@@ -306,7 +326,7 @@ impl<'a> UniversalCanister<'a> {
             .0;
 
         // Install the universal canister.
-        mgr.install_code(&canister_id, UNIVERSAL_CANISTER_WASM)
+        mgr.install_code(&canister_id, &UNIVERSAL_CANISTER_WASM)
             .with_raw_arg(payload.clone())
             .call_and_wait()
             .await
@@ -793,9 +813,7 @@ pub async fn agent_with_identity_mapping(
         (Some(addr_mapping), Ok(Some(domain))) => builder.resolve(domain, (addr_mapping, 0).into()),
         _ => builder,
     };
-    let client = builder
-        .build()
-        .map_err(|err| AgentError::TransportError(Box::new(err)))?;
+    let client = builder.build().map_err(AgentError::TransportError)?;
     agent_with_client_identity(url, client, identity).await
 }
 
@@ -804,9 +822,9 @@ pub async fn agent_with_client_identity(
     client: reqwest::Client,
     identity: impl Identity + 'static,
 ) -> Result<Agent, AgentError> {
-    let transport = ReqwestTransport::create_with_client(url, client)?.with_use_call_v3_endpoint();
     let a = Agent::builder()
-        .with_transport(transport)
+        .with_url(url)
+        .with_http_client(client)
         .with_identity(identity)
         .with_max_concurrent_requests(MAX_CONCURRENT_REQUESTS)
         // Ingresses are created with the system time but are checked against the consensus time.
@@ -821,41 +839,11 @@ pub async fn agent_with_client_identity(
         // too further in the future, i.e. greater than x+MAX_INGRESS_TTL in this case. To tolerate
         // the delays in the progress of consensus, we reduce 30sn from MAX_INGRESS_TTL and set the
         // expiry_time of ingresses accordingly.
-        .with_ingress_expiry(Some(MAX_INGRESS_TTL - std::time::Duration::from_secs(30)))
+        .with_ingress_expiry(MAX_INGRESS_TTL - std::time::Duration::from_secs(30))
         .build()
         .unwrap();
     a.fetch_root_key().await?;
     Ok(a)
-}
-
-/// Creates an agent that routes ingress messages to the asynchronous V2 call endpoint.
-pub async fn agent_using_call_v2_endpoint(
-    url: &str,
-    addr_mapping: IpAddr,
-) -> Result<Agent, AgentError> {
-    let identity = get_identity();
-    let parsed_url = reqwest::Url::parse(url).expect("is valid url");
-
-    let reqwest = reqwest::Client::builder()
-        .timeout(AGENT_REQUEST_TIMEOUT)
-        .danger_accept_invalid_certs(true)
-        .resolve(
-            parsed_url.domain().expect("url has domain"),
-            (addr_mapping, 0).into(),
-        )
-        .build()
-        .expect("Is valid reqwest client");
-
-    let transport = ReqwestTransport::create_with_client(url, reqwest)?;
-
-    let agent = Agent::builder()
-        .with_transport(transport)
-        .with_identity(identity)
-        .build()
-        .unwrap();
-    agent.fetch_root_key().await?;
-
-    Ok(agent)
 }
 
 // Creates an identity to be used with `Agent`.
@@ -1249,7 +1237,7 @@ pub async fn get_balance_via_canister(
         )
         .await
         .map(|res| {
-            Decode!(res.as_slice(), CanisterStatusResult)
+            Decode!(res.as_slice(), CanisterStatusResultV2)
                 .unwrap()
                 .cycles()
                 .into()
@@ -1406,13 +1394,11 @@ pub fn get_config() -> ConfigOptional {
     // Make the string parsable by filling the template placeholders with dummy values
     let cfg = String::from_utf8_lossy(CFG_TEMPLATE_BYTES)
         .to_string()
-        .replace("{{ node_index }}", "0")
         .replace("{{ ipv6_address }}", "::")
         .replace("{{ backup_retention_time_secs }}", "0")
         .replace("{{ backup_purging_interval_secs }}", "0")
-        .replace("{{ nns_url }}", "http://www.fakeurl.com/")
+        .replace("{{ nns_urls }}", "http://www.fakeurl.com/")
         .replace("{{ malicious_behavior }}", "null")
-        .replace("{{ query_stats_aggregation }}", "\"Enabled\"")
         .replace("{{ query_stats_epoch_length }}", "600");
 
     json5::from_str::<ConfigOptional>(&cfg).expect("Could not parse json5")
@@ -1493,14 +1479,25 @@ impl LogStream {
 pub struct MetricsFetcher {
     nodes: Vec<IcNodeSnapshot>,
     metrics: Vec<String>,
+    port: u16,
 }
 
 impl MetricsFetcher {
     /// Create a new [`MetricsFetcher`]
     pub fn new(nodes: impl Iterator<Item = IcNodeSnapshot>, metrics: Vec<String>) -> Self {
+        Self::new_with_port(nodes, metrics, 9090)
+    }
+
+    /// Create a new [`MetricsFetcher`] for a specific port
+    pub fn new_with_port(
+        nodes: impl Iterator<Item = IcNodeSnapshot>,
+        metrics: Vec<String>,
+        port: u16,
+    ) -> Self {
         Self {
             nodes: nodes.collect(),
             metrics,
+            port,
         }
     }
 
@@ -1543,7 +1540,7 @@ impl MetricsFetcher {
             IpAddr::V6(ipv6_addr) => ipv6_addr,
         };
 
-        let socket_addr: SocketAddr = SocketAddr::V6(SocketAddrV6::new(ip_addr, 9090, 0, 0));
+        let socket_addr: SocketAddr = SocketAddr::V6(SocketAddrV6::new(ip_addr, self.port, 0, 0));
         let url = format!("http://{}", socket_addr);
         let response = reqwest::get(url).await?.text().await?;
 
@@ -1851,4 +1848,16 @@ pub fn expiry_time() -> Duration {
         .duration_since(SystemTime::UNIX_EPOCH)
         .unwrap()
         + Duration::from_secs(4 * 60)
+}
+
+/// Time the duration of the given closure and log it.
+pub fn timeit<F, R>(log: Logger, description: &str, f: F) -> R
+where
+    F: FnOnce() -> R,
+{
+    let start = Instant::now();
+    let result = f(); // Run the closure
+    let duration = start.elapsed();
+    info!(log, "Executed '{}' in: {:?}", description, duration);
+    result
 }

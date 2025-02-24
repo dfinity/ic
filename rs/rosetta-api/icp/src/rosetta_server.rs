@@ -1,3 +1,4 @@
+#![allow(clippy::disallowed_types)]
 use crate::{
     errors::{self, ApiError},
     ledger_client::LedgerAccess,
@@ -314,7 +315,7 @@ async fn rosetta_metrics() -> HttpResponse {
     let encoder = prometheus::TextEncoder::new();
     encoder.encode(&metrics, &mut buffer).unwrap();
     HttpResponse::Ok()
-        .content_type("text/html; charset=utf-8")
+        .content_type("text/plain; version=0.0.4; charset=utf-8")
         .body(String::from_utf8(buffer).unwrap())
 }
 

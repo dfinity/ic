@@ -1,0 +1,43 @@
+load("//bazel:fuzz_testing.bzl", "rust_fuzz_test_binary")
+
+package(default_visibility = ["//visibility:private"])
+
+DEPENDENCIES = [
+    # Keep sorted.
+    "//rs/crypto/internal/crypto_lib/threshold_sig/canister_threshold_sig",
+    "@crate_index//:arbitrary",
+    "@crate_index//:hex",
+    "@crate_index//:libfuzzer-sys",
+    "@crate_index//:num-bigint",
+    "@crate_index//:subtle",
+]
+
+MACRO_DEPENDENCIES = []
+
+rust_fuzz_test_binary(
+    name = "scalar",
+    srcs = ["fuzz_targets/scalar.rs"],
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = DEPENDENCIES,
+)
+
+rust_fuzz_test_binary(
+    name = "cbor_deserialize_dealing",
+    srcs = ["fuzz_targets/cbor_deserialize_dealing.rs"],
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = DEPENDENCIES,
+)
+
+rust_fuzz_test_binary(
+    name = "cbor_deserialize_ecc_point",
+    srcs = ["fuzz_targets/cbor_deserialize_ecc_point.rs"],
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = DEPENDENCIES,
+)
+
+rust_fuzz_test_binary(
+    name = "hash_to_point",
+    srcs = ["fuzz_targets/hash_to_point.rs"],
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = DEPENDENCIES,
+)

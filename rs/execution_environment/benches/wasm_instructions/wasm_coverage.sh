@@ -16,7 +16,7 @@ PROPOSAL_TO_OP_URL="https://raw.githubusercontent.com/bytecodealliance/wasm-tool
 # The file with Wasm operator to Wasm instruction mapping.
 OP_TO_INSTR_URL="https://raw.githubusercontent.com/bytecodealliance/wasm-tools/main/crates/wast/src/core/expr.rs"
 # The Wasm proposal to exclude from the coverage, i.e. unsupported Wasm proposals.
-EXCLUDE_PROPOSALS="tail_call|relaxed_simd|threads|multi_memory|exceptions|memory64|extended_const|component_model|function_references|memory_control|gc|shared_everything_threads"
+EXCLUDE_PROPOSALS="relaxed_simd|threads|multi_memory|exceptions|memory64|extended_const|component_model|function_references|memory_control|gc|shared_everything_threads"
 
 # Extract `instruction_to_cost` function from the file.
 instruction_to_cost=$(sed -n '/pub fn instruction_to_cost/,/^[}]/{p}' "${INSTRUCTION_TO_COST_FILE}")

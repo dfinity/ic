@@ -81,6 +81,10 @@ RUN systemctl disable \
 
 # ------ SETUPOS WORK --------------------------------------------
 
+# commit-time is checked in the setupOS installation to verify that images
+# are < six weeks old.
+COPY commit-time /commit-time
+
 # Clear additional files that may lead to indeterministic build.
 RUN rm -rf \
     /var/cache/fontconfig/* /var/cache/ldconfig/aux-cache \

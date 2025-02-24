@@ -1,16 +1,15 @@
 use super::{
     canister_state::CanisterState,
-    metadata_state::{IngressHistoryState, Stream, Streams, SystemMetadata},
+    metadata_state::{
+        subnet_call_context_manager::{IDkgDealingsContext, SignWithThresholdContext},
+        IngressHistoryState, Stream, StreamMap, SystemMetadata,
+    },
 };
 use crate::{
     canister_snapshots::CanisterSnapshots,
     canister_state::{
         queues::{CanisterInput, CanisterQueuesLoopDetector},
         system_state::{push_input, CanisterOutputQueuesIterator},
-    },
-    metadata_state::{
-        subnet_call_context_manager::{IDkgDealingsContext, SignWithThresholdContext},
-        StreamMap,
     },
     CanisterQueues,
 };
@@ -29,13 +28,13 @@ use ic_types::{
     ingress::IngressStatus,
     messages::{CallbackId, CanisterMessage, Ingress, MessageId, RequestOrResponse, Response},
     time::CoarseTime,
-    CanisterId, MemoryAllocation, NumBytes, SubnetId, Time,
+    AccumulatedPriority, CanisterId, MemoryAllocation, NumBytes, SubnetId, Time,
 };
 use ic_validate_eq::ValidateEq;
 use ic_validate_eq_derive::ValidateEq;
 use rand::{Rng, SeedableRng};
 use rand_chacha::ChaChaRng;
-use std::collections::{BTreeMap, VecDeque};
+use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::sync::Arc;
 use strum_macros::{EnumCount, EnumIter};
 
@@ -97,12 +96,6 @@ pub enum StateError {
 
     /// Canister is stopping, only accepting responses.
     CanisterStopping(CanisterId),
-
-    /// Message enqueuing failed due to canister migration.
-    CanisterMigrating {
-        canister_id: CanisterId,
-        host_subnet: SubnetId,
-    },
 
     /// Message enqueuing failed due to full in/out queue.
     QueueFull { capacity: usize },
@@ -259,7 +252,6 @@ impl PeekableOutputIterator for OutputIterator<'_> {
     }
 }
 
-pub const LABEL_VALUE_CANISTER_MIGRATING: &str = "CanisterMigrating";
 pub const LABEL_VALUE_QUEUE_FULL: &str = "QueueFull";
 pub const LABEL_VALUE_OUT_OF_MEMORY: &str = "OutOfMemory";
 pub const LABEL_VALUE_INVALID_RESPONSE: &str = "InvalidResponse";
@@ -273,7 +265,6 @@ impl StateError {
             StateError::CanisterNotFound(_) => LABEL_VALUE_CANISTER_NOT_FOUND,
             StateError::CanisterStopped(_) => LABEL_VALUE_CANISTER_STOPPED,
             StateError::CanisterStopping(_) => LABEL_VALUE_CANISTER_STOPPING,
-            StateError::CanisterMigrating { .. } => LABEL_VALUE_CANISTER_MIGRATING,
             StateError::QueueFull { .. } => LABEL_VALUE_QUEUE_FULL,
             StateError::OutOfMemory { .. } => LABEL_VALUE_OUT_OF_MEMORY,
             StateError::NonMatchingResponse { .. } => LABEL_VALUE_INVALID_RESPONSE,
@@ -309,9 +300,6 @@ impl std::fmt::Display for StateError {
             }
             StateError::CanisterStopping(canister_id) => {
                 write!(f, "Canister {} is stopping", canister_id)
-            }
-            StateError::CanisterMigrating { canister_id, host_subnet } => {
-                write!(f, "Canister {} is being migrated to/from {}", canister_id, host_subnet)
             }
             StateError::QueueFull { capacity } => {
                 write!(f, "Maximum queue capacity {} reached", capacity)
@@ -353,6 +341,8 @@ pub struct MemoryTaken {
     execution: NumBytes,
     /// Memory taken by guaranteed response canister messages.
     guaranteed_response_messages: NumBytes,
+    /// Memory taken by best-effort canister messages.
+    best_effort_messages: NumBytes,
     /// Memory taken by Wasm Custom Sections.
     wasm_custom_sections: NumBytes,
     /// Memory taken by canister history.
@@ -368,6 +358,17 @@ impl MemoryTaken {
     /// Returns the amount of memory taken by guaranteed response canister messages.
     pub fn guaranteed_response_messages(&self) -> NumBytes {
         self.guaranteed_response_messages
+    }
+
+    /// Returns the amount of memory taken by best-effort canister messages.
+    pub fn best_effort_messages(&self) -> NumBytes {
+        self.best_effort_messages
+    }
+
+    /// Returns the amount of memory taken by all canister messages (guaranteed
+    /// response and best-effort).
+    pub fn messages_total(&self) -> NumBytes {
+        self.guaranteed_response_messages + self.best_effort_messages
     }
 
     /// Returns the amount of memory taken by Wasm Custom Sections.
@@ -398,6 +399,16 @@ pub struct ReplicatedState {
     pub metadata: SystemMetadata,
 
     /// Queues for holding messages sent/received by the subnet.
+    ///
+    /// The Management Canister does not make outgoing calls as itself (it does so
+    /// on behalf of canisters, but those messages are enqueued in the canister's
+    /// output queue). Therefore, there's only a `push_subnet_output_response()`
+    /// method (no equivalent for requests) and an explicit check against inducting
+    /// responses into the subnet queues. This assumption is used in a number of
+    /// places (e.g. when shedding or timing out messages), so adding support for
+    /// outgoing calls in the future will likely require significant changes across
+    /// `ReplicatedState` and `SystemState`.
+    //
     // Must remain private.
     #[validate_eq(CompareWithValidateEq)]
     subnet_queues: CanisterQueues,
@@ -439,18 +450,44 @@ impl ReplicatedState {
         epoch_query_stats: RawQueryStats,
         canister_snapshots: CanisterSnapshots,
     ) -> Self {
-        let mut res = Self {
+        Self {
             canister_states,
             metadata,
             subnet_queues,
             consensus_queue: Vec::new(),
             epoch_query_stats,
             canister_snapshots,
-        };
-        res.update_stream_guaranteed_responses_size_bytes();
-        res
+        }
     }
 
+    /// References into _all_ fields.
+    pub fn component_refs(
+        &self,
+    ) -> (
+        &BTreeMap<CanisterId, CanisterState>,
+        &SystemMetadata,
+        &CanisterQueues,
+        &Vec<ConsensusResponse>,
+        &RawQueryStats,
+        &CanisterSnapshots,
+    ) {
+        let ReplicatedState {
+            ref canister_states,
+            ref metadata,
+            ref subnet_queues,
+            ref consensus_queue,
+            ref epoch_query_stats,
+            ref canister_snapshots,
+        } = self;
+        (
+            canister_states,
+            metadata,
+            subnet_queues,
+            consensus_queue,
+            epoch_query_stats,
+            canister_snapshots,
+        )
+    }
     pub fn canister_state(&self, canister_id: &CanisterId) -> Option<&CanisterState> {
         self.canister_states.get(canister_id)
     }
@@ -469,6 +506,19 @@ impl ReplicatedState {
 
     pub fn routing_table(&self) -> Arc<RoutingTable> {
         Arc::clone(&self.metadata.network_topology.routing_table)
+    }
+
+    /// Time complexity: O(n), where n is the number of canisters.
+    pub fn get_scheduler_priorities(&self) -> BTreeMap<CanisterId, AccumulatedPriority> {
+        self.canister_states
+            .iter()
+            .map(|(canister_id, canister_state)| {
+                (
+                    *canister_id,
+                    canister_state.scheduler_state.accumulated_priority,
+                )
+            })
+            .collect()
     }
 
     /// Insert the canister state into the replicated state. If a canister
@@ -536,12 +586,11 @@ impl ReplicatedState {
         &self.metadata
     }
 
-    pub fn get_ingress_status(&self, message_id: &MessageId) -> IngressStatus {
+    pub fn get_ingress_status(&self, message_id: &MessageId) -> &IngressStatus {
         self.metadata
             .ingress_history
             .get(message_id)
-            .cloned()
-            .unwrap_or(IngressStatus::Unknown)
+            .unwrap_or(&IngressStatus::Unknown)
     }
 
     pub fn get_ingress_history(&self) -> &IngressHistoryState {
@@ -554,18 +603,20 @@ impl ReplicatedState {
     /// by transitioning `Completed` and `Failed` statuses to `Done` from
     /// oldest to newest in case inserting `status` pushes the memory
     /// consumption over the bound.
+    ///
+    /// Returns the previous status associated with `message_id`.
     pub fn set_ingress_status(
         &mut self,
         message_id: MessageId,
         status: IngressStatus,
         ingress_memory_capacity: NumBytes,
-    ) {
+    ) -> Arc<IngressStatus> {
         self.metadata.ingress_history.insert(
             message_id,
             status,
             self.time(),
             ingress_memory_capacity,
-        );
+        )
     }
 
     /// Prunes ingress history statuses with a pruning time older than
@@ -614,6 +665,7 @@ impl ReplicatedState {
         let (
             raw_memory_taken,
             mut guaranteed_response_message_memory_taken,
+            mut best_effort_message_memory_taken,
             wasm_custom_sections_memory_taken,
             canister_history_memory_taken,
             wasm_chunk_store_memory_usage,
@@ -628,6 +680,7 @@ impl ReplicatedState {
                     canister
                         .system_state
                         .guaranteed_response_message_memory_usage(),
+                    canister.system_state.best_effort_message_memory_usage(),
                     canister.wasm_custom_sections_memory_usage(),
                     canister.canister_history_memory_usage(),
                     canister.wasm_chunk_store_memory_usage(),
@@ -640,12 +693,15 @@ impl ReplicatedState {
                     accum.2 + val.2,
                     accum.3 + val.3,
                     accum.4 + val.4,
+                    accum.5 + val.5,
                 )
             })
             .unwrap_or_default();
 
         guaranteed_response_message_memory_taken +=
             (self.subnet_queues.guaranteed_response_memory_usage() as u64).into();
+        best_effort_message_memory_taken +=
+            (self.subnet_queues.best_effort_message_memory_usage() as u64).into();
 
         let canister_snapshots_memory_taken = self.canister_snapshots.memory_taken();
 
@@ -655,6 +711,7 @@ impl ReplicatedState {
                 + wasm_chunk_store_memory_usage
                 + canister_snapshots_memory_taken,
             guaranteed_response_messages: guaranteed_response_message_memory_taken,
+            best_effort_messages: best_effort_message_memory_taken,
             wasm_custom_sections: wasm_custom_sections_memory_taken,
             canister_history: canister_history_memory_taken,
         }
@@ -679,9 +736,33 @@ impl ReplicatedState {
         canisters_memory_usage + subnet_memory_usage
     }
 
+    /// Computes the memory taken by best-effort response messages.
+    pub fn best_effort_message_memory_taken(&self) -> NumBytes {
+        let canisters_memory_usage: NumBytes = self
+            .canisters_iter()
+            .map(|canister| canister.system_state.best_effort_message_memory_usage())
+            .sum();
+        let subnet_memory_usage =
+            (self.subnet_queues.best_effort_message_memory_usage() as u64).into();
+
+        canisters_memory_usage + subnet_memory_usage
+    }
+
     /// Returns the total memory taken by the ingress history in bytes.
     pub fn total_ingress_memory_taken(&self) -> NumBytes {
         self.metadata.ingress_history.memory_usage()
+    }
+
+    /// Returns the total number of callbacks across all canisters.
+    pub fn callback_count(&self) -> usize {
+        self.canisters_iter()
+            .map(|canister| {
+                canister
+                    .system_state
+                    .call_context_manager()
+                    .map_or(0, |ccm| ccm.callbacks().len())
+            })
+            .sum()
     }
 
     /// Returns the `SubnetId` hosting the given `principal_id` (canister or
@@ -709,6 +790,10 @@ impl ReplicatedState {
     /// queue, while the messages from the other subnets get pushed to the inter
     /// subnet queues.
     ///
+    /// On success, returns `Ok(true)` if the message was successfully inducted; or
+    /// `Ok(false)` if the message was a best-effort response that was silently
+    /// dropped.
+    ///
     /// On failure (queue full, canister not found, out of memory), returns the
     /// corresponding error and the original message.
     ///
@@ -717,7 +802,7 @@ impl ReplicatedState {
         &mut self,
         msg: RequestOrResponse,
         subnet_available_memory: &mut i64,
-    ) -> Result<(), (StateError, RequestOrResponse)> {
+    ) -> Result<bool, (StateError, RequestOrResponse)> {
         let own_subnet_type = self.metadata.own_subnet_type;
         let sender = msg.sender();
         let input_queue_type = if sender.get_ref() == self.metadata.own_subnet_id.get_ref()
@@ -757,7 +842,14 @@ impl ReplicatedState {
                         )),
                     }
                 } else {
-                    Err((StateError::CanisterNotFound(receiver), msg))
+                    match msg {
+                        // Best-effort responses are silently dropped if the canister is not found.
+                        RequestOrResponse::Response(response) if response.is_best_effort() => {
+                            Ok(false)
+                        }
+                        // For all other messages this is an error.
+                        _ => Err((StateError::CanisterNotFound(receiver), msg)),
+                    }
                 }
             }
         }
@@ -862,16 +954,6 @@ impl ReplicatedState {
         &self.epoch_query_stats
     }
 
-    /// Updates the byte size of guaranteed responses in streams for each canister.
-    fn update_stream_guaranteed_responses_size_bytes(&mut self) {
-        for (canister_id, size_bytes) in self.metadata.streams.guaranteed_responses_size_bytes() {
-            if let Some(canister_state) = self.canister_states.get_mut(canister_id) {
-                canister_state.set_stream_guaranteed_responses_size_bytes(*size_bytes);
-            }
-        }
-        Arc::make_mut(&mut self.metadata.streams).prune_zero_guaranteed_responses_size_bytes()
-    }
-
     /// Returns the number of canisters in this `ReplicatedState`.
     pub fn num_canisters(&self) -> usize {
         self.canister_states.len()
@@ -926,6 +1008,14 @@ impl ReplicatedState {
             self.canister_states.insert(canister_id, canister);
         }
 
+        if self.subnet_queues.has_expired_deadlines(current_time) {
+            timed_out_messages_count += self.subnet_queues.time_out_messages(
+                current_time,
+                &self.metadata.own_subnet_id.into(),
+                &self.canister_states,
+            );
+        }
+
         timed_out_messages_count
     }
 
@@ -966,6 +1056,96 @@ impl ReplicatedState {
         }
 
         (expired_callback_count, errors)
+    }
+
+    /// Enforces the best-effort message limit by repeatedly shedding the largest
+    /// best-effort message of the canister with the highest best-effort message
+    /// memory usage until the total memory usage drops below the limit.
+    ///
+    /// Returns the number of messages and message bytes that were shed.
+    ///
+    /// Time complexity: `O(n * log(n))`.
+    pub fn enforce_best_effort_message_limit(&mut self, limit: NumBytes) -> (u64, NumBytes) {
+        const ZERO_BYTES: NumBytes = NumBytes::new(0);
+
+        // Check if we need to do anything at all before constructing a priority queue.
+        let mut memory_usage = self.best_effort_message_memory_taken();
+        if memory_usage <= limit {
+            // No need to do anything.
+            return (0, 0.into());
+        }
+
+        // Construct a priority queue of canisters by best-effort message memory usage.
+        let mut priority_queue: BTreeSet<_> = self
+            .canister_states
+            .iter()
+            .filter_map(|(canister_id, canister)| {
+                let memory_usage = canister.system_state.best_effort_message_memory_usage();
+                if memory_usage > ZERO_BYTES {
+                    Some((memory_usage, *canister_id))
+                } else {
+                    None
+                }
+            })
+            .collect();
+        let subnet_queues_memory_usage = self.subnet_queues.best_effort_message_memory_usage();
+        if subnet_queues_memory_usage > 0 {
+            priority_queue.insert((
+                (subnet_queues_memory_usage as u64).into(),
+                self.metadata.own_subnet_id.into(),
+            ));
+        }
+
+        let mut shed_messages = 0;
+        let mut shed_message_bytes = 0.into();
+
+        // Shed messages from the canisters with the largest memory usage until we are
+        // below the limit.
+        //
+        // The `is_empty()` check is a safety net, in case a canister somehow reports
+        // non-zero best-effort memory usage but then fails to shed a message.
+        while memory_usage > limit && !priority_queue.is_empty() {
+            let (memory_usage_before, canister_id) = priority_queue.pop_last().unwrap();
+
+            let (message_shed, memory_usage_after) = if canister_id.get()
+                == self.metadata.own_subnet_id.get()
+            {
+                // Shed from the subnet queues.
+                let message_shed = self
+                    .subnet_queues
+                    .shed_largest_message(&canister_id, &self.canister_states);
+                let memory_usage_after =
+                    (self.subnet_queues.best_effort_message_memory_usage() as u64).into();
+                (message_shed, memory_usage_after)
+            } else {
+                // Shed from a canister's queues: remove the canister, shed its largest message,
+                // replace it.
+                let mut canister = self.canister_states.remove(&canister_id).unwrap();
+                let message_shed = canister
+                    .system_state
+                    .shed_largest_message(&canister_id, &self.canister_states);
+                let memory_usage_after = canister.system_state.best_effort_message_memory_usage();
+                self.canister_states.insert(canister_id, canister);
+                (message_shed, memory_usage_after)
+            };
+            debug_assert!(message_shed);
+
+            // Replace the canister in the priority queue iff its memory usage is still
+            // non-zero AND a message was actually shed.
+            if memory_usage_after > ZERO_BYTES && message_shed {
+                priority_queue.insert((memory_usage_after, canister_id));
+            }
+
+            // Update the total memory usage.
+            debug_assert!(memory_usage_before > memory_usage_after);
+            let memory_usage_delta = memory_usage_before - memory_usage_after;
+            memory_usage -= memory_usage_delta;
+
+            shed_messages += message_shed as u64;
+            shed_message_bytes += memory_usage_delta;
+            debug_assert_eq!(self.best_effort_message_memory_taken(), memory_usage);
+        }
+        (shed_messages, shed_message_bytes)
     }
 
     /// Splits the replicated state as part of subnet splitting phase 1, retaining
@@ -1106,8 +1286,6 @@ impl ReplicatedState {
             |canister_id| canister_states.contains_key(&canister_id),
             subnet_queues,
         );
-
-        self.update_stream_guaranteed_responses_size_bytes();
     }
 }
 
@@ -1136,34 +1314,31 @@ pub trait ReplicatedStateMessageRouting {
     fn streams(&self) -> &StreamMap;
 
     /// Removes the streams from this `ReplicatedState`.
-    fn take_streams(&mut self) -> Streams;
+    fn take_streams(&mut self) -> StreamMap;
 
     /// Atomically replaces the streams.
-    fn put_streams(&mut self, streams: Streams);
+    fn put_streams(&mut self, streams: StreamMap);
 }
 
 impl ReplicatedStateMessageRouting for ReplicatedState {
     fn streams(&self) -> &StreamMap {
-        self.metadata.streams.streams()
+        &self.metadata.streams
     }
 
-    fn take_streams(&mut self) -> Streams {
+    fn take_streams(&mut self) -> StreamMap {
         std::mem::take(Arc::make_mut(&mut self.metadata.streams))
     }
 
-    fn put_streams(&mut self, streams: Streams) {
-        // Should never replace a non-empty Streams via `put_streams()`.
-        assert!(self.metadata.streams.streams().is_empty());
+    fn put_streams(&mut self, streams: StreamMap) {
+        // Should never replace a non-empty StreamMap via `put_streams()`.
+        assert!(self.metadata.streams.is_empty());
 
         *Arc::make_mut(&mut self.metadata.streams) = streams;
-        self.update_stream_guaranteed_responses_size_bytes();
     }
 }
 
 pub mod testing {
     use super::*;
-    use crate::metadata_state::testing::StreamsTesting;
-    use crate::testing::CanisterQueuesTesting;
 
     /// Exposes `ReplicatedState` internals for use in other crates' unit tests.
     pub trait ReplicatedStateTesting {
@@ -1208,16 +1383,16 @@ pub mod testing {
 
         fn modify_streams<F: FnOnce(&mut StreamMap)>(&mut self, f: F) {
             let mut streams = self.take_streams();
-            streams.modify_streams(f);
+            f(&mut streams);
             self.put_streams(streams);
         }
 
         fn output_message_count(&self) -> usize {
             self.canister_states
                 .values()
-                .map(|canister| canister.system_state.queues().output_message_count())
+                .map(|canister| canister.system_state.queues().output_queues_message_count())
                 .sum::<usize>()
-                + self.subnet_queues.output_message_count()
+                + self.subnet_queues.output_queues_message_count()
         }
     }
 

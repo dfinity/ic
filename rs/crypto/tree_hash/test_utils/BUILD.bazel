@@ -33,6 +33,5 @@ rust_library(
 rust_test_suite(
     name = "test_utils_integration",
     srcs = glob(["tests/**"]),
-    edition = "2021",
     deps = DEPENDENCIES + DEV_DEPENDENCIES + [":test_utils"],
 )

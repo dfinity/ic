@@ -1,5 +1,5 @@
 use clap::Parser;
-use ic_async_utils::shutdown_signal;
+use ic_http_endpoints_async_utils::shutdown_signal;
 use orchestrator::{args::OrchestratorArgs, orchestrator::Orchestrator};
 
 #[tokio::main]

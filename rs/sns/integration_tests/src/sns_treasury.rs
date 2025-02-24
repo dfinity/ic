@@ -221,6 +221,10 @@ fn new_treasury_scenario(
         index_canister_id: _,
     } = sns_test_canister_ids;
 
+    // Make sure at least one Swap periodic tasks is executed.
+    state_machine.advance_time(std::time::Duration::from_secs(100));
+    state_machine.tick();
+
     participate_in_swap(
         state_machine,
         swap_canister_id,

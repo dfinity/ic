@@ -17,6 +17,7 @@ DEPENDENCIES = [
     "//rs/types/types",
     "@crate_index//:anyhow",
     "@crate_index//:slog",
+    "@crate_index//:url",
 ]
 
 RUNNER_DEPENDENCIES = [
@@ -24,9 +25,6 @@ RUNNER_DEPENDENCIES = [
     "nested",
     "//rs/tests/driver:ic-system-test-driver",
     "@crate_index//:anyhow",
-]
-
-MACRO_DEPENDENCIES = [
 ]
 
 rust_library(
@@ -41,7 +39,6 @@ rust_library(
 system_test_nns(
     name = "registration",
     flaky = True,
-    proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "system_test_hourly",
     ],
@@ -56,7 +53,6 @@ system_test_nns(
 system_test_nns(
     name = "upgrade",
     flaky = True,
-    proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "system_test_hourly",
     ],

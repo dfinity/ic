@@ -10,19 +10,21 @@ use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::{
     CspNiDkgDealing, CspNiDkgTranscript, Epoch,
 };
 use ic_crypto_internal_types::sign::threshold_sig::public_key::CspThresholdSigPublicKey;
+use ic_management_canister_types_private::{VetKdCurve, VetKdKeyId};
 use ic_types::crypto::threshold_sig::ni_dkg::config::dealers::NiDkgDealers;
 use ic_types::crypto::threshold_sig::ni_dkg::config::receivers::NiDkgReceivers;
 use ic_types::crypto::threshold_sig::ni_dkg::config::NiDkgThreshold;
-use ic_types::crypto::threshold_sig::ni_dkg::{NiDkgId, NiDkgTag, NiDkgTargetSubnet};
+use ic_types::crypto::threshold_sig::ni_dkg::{
+    NiDkgId, NiDkgMasterPublicKeyId, NiDkgTag, NiDkgTargetSubnet,
+};
 use ic_types::crypto::AlgorithmId;
 use ic_types::{Height, NodeId, NodeIndex, NumberOfNodes, SubnetId};
 use ic_types_test_utils::ids::{node_test_id, subnet_test_id};
-use rand::seq::IteratorRandom;
-use rand::Rng;
+use rand::{distributions::Alphanumeric, seq::IteratorRandom, Rng};
 use rand_chacha::ChaCha20Rng;
 use std::collections::BTreeMap;
 use std::sync::Arc;
-use strum::IntoEnumIterator;
+use strum::{EnumCount, IntoEnumIterator};
 
 // Generate random data structures:
 // Alternatively we could implement Distribution for all of these types.
@@ -33,10 +35,31 @@ pub fn random_height(rng: &mut ChaCha20Rng) -> Height {
 pub fn random_subnet_id(rng: &mut ChaCha20Rng) -> SubnetId {
     subnet_test_id(rng.gen::<u64>())
 }
+pub fn random_ni_dkg_master_public_key_id(rng: &mut ChaCha20Rng) -> NiDkgMasterPublicKeyId {
+    assert_eq!(NiDkgMasterPublicKeyId::COUNT, 1);
+    assert_eq!(VetKdCurve::iter().count(), 1);
+
+    let name: String = rng
+        .sample_iter(&Alphanumeric)
+        .take(20)
+        .map(char::from)
+        .collect();
+
+    NiDkgMasterPublicKeyId::VetKd(VetKdKeyId {
+        curve: VetKdCurve::Bls12_381_G2,
+        name,
+    })
+}
 pub fn random_ni_dkg_tag(rng: &mut ChaCha20Rng) -> NiDkgTag {
-    NiDkgTag::iter()
-        .choose(rng)
-        .expect("Could not choose a NiDkgTag")
+    use rand::prelude::SliceRandom;
+    [
+        NiDkgTag::LowThreshold,
+        NiDkgTag::HighThreshold,
+        NiDkgTag::HighThresholdForKey(random_ni_dkg_master_public_key_id(rng)),
+    ]
+    .choose(rng)
+    .cloned()
+    .expect("Could not choose a NiDkgTag")
 }
 pub fn random_ni_dkg_id(rng: &mut ChaCha20Rng) -> NiDkgId {
     NiDkgId {
@@ -341,7 +364,6 @@ impl StateWithVerifiedDealings {
                 let test_result = if let Some(transcript) = &config.resharing_transcript {
                     ni_dkg_static_api::verify_resharing_dealing(
                         config.algorithm_id,
-                        config.dkg_id,
                         dealer_index,
                         config.threshold.get(),
                         config.epoch,
@@ -352,7 +374,6 @@ impl StateWithVerifiedDealings {
                 } else {
                     ni_dkg_static_api::verify_dealing(
                         config.algorithm_id,
-                        config.dkg_id,
                         dealer_index,
                         config.threshold.get(),
                         config.epoch,

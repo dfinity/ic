@@ -724,7 +724,10 @@ fn test_neuron_action_is_not_authorized() {
 // This is a bit hacky and fragile, as it depends on how `SnsCanisters` is setup.
 // TODO(NNS1-1892): expose SnsCanisters' current time via API.
 fn get_sns_canisters_now_seconds() -> i64 {
-    (NativeEnvironment::default().now() as i64)
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs() as i64
         + (NervousSystemParameters::with_default_values()
             .initial_voting_period_seconds
             .unwrap() as i64)
@@ -1299,7 +1302,7 @@ async fn zero_total_reward_shares() {
     governance.latest_gc_timestamp_seconds = now;
 
     // Step 2: Run code under test.
-    governance.heartbeat().await;
+    governance.run_periodic_tasks().await;
 
     // Step 3: Inspect results. The main thing is to make sure that we did not
     // divide by zero. If that happened, it would show up in a couple places:
@@ -1517,7 +1520,7 @@ async fn couple_of_neurons_who_voted_get_rewards() {
     governance.latest_gc_timestamp_seconds = now;
 
     // Step 2: Run code under test.
-    governance.heartbeat().await;
+    governance.run_periodic_tasks().await;
 
     // Step 3: Inspect results.
 

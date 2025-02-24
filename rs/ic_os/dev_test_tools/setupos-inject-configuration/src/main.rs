@@ -39,6 +39,9 @@ struct Cli {
 #[derive(Args)]
 struct ConfigIni {
     #[arg(long)]
+    node_reward_type: Option<String>,
+
+    #[arg(long)]
     ipv6_prefix: Option<String>,
 
     #[arg(long)]
@@ -77,6 +80,9 @@ struct DeploymentConfig {
 
     #[arg(long)]
     mgmt_mac: Option<String>,
+
+    #[arg(long)]
+    deployment_environment: Option<String>,
 }
 
 #[tokio::main]
@@ -182,6 +188,7 @@ async fn write_config(path: &Path, cfg: &ConfigIni) -> Result<(), Error> {
     let mut f = File::create(path).context("failed to create config file")?;
 
     let ConfigIni {
+        node_reward_type,
         ipv6_prefix,
         ipv6_gateway,
         ipv4_address,
@@ -190,6 +197,10 @@ async fn write_config(path: &Path, cfg: &ConfigIni) -> Result<(), Error> {
         domain,
         verbose,
     } = cfg;
+
+    if let Some(node_reward_type) = node_reward_type {
+        writeln!(&mut f, "node_reward_type={}", node_reward_type)?;
+    }
 
     if let (Some(ipv6_prefix), Some(ipv6_gateway)) = (ipv6_prefix, ipv6_gateway) {
         // Always write 4 segments, even if our prefix is less.
@@ -246,6 +257,10 @@ async fn update_deployment(path: &Path, cfg: &DeploymentConfig) -> Result<(), Er
 
     if let Some(cpu) = &cfg.cpu {
         deployment_json.resources.cpu = Some(cpu.to_owned());
+    }
+
+    if let Some(deployment_environment) = &cfg.deployment_environment {
+        deployment_json.deployment.name = deployment_environment.to_owned();
     }
 
     let mut f = File::create(path).context("failed to open deployment config file")?;

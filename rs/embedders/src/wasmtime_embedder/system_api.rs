@@ -286,7 +286,9 @@ fn ic0_performance_counter_helper(
     }
 }
 
-pub(crate) fn syscalls<
+/// pub for usage in fuzzing to generate the available system api imports
+#[doc(hidden)]
+pub fn syscalls<
     I: TryInto<usize>
         + TryInto<u64>
         + TryInto<u32>
@@ -354,7 +356,7 @@ pub(crate) fn syscalls<
     /// Check if debug print is enabled.
     fn debug_print_is_enabled(
         caller: &mut Caller<'_, StoreData>,
-        feature_flags: FeatureFlags,
+        feature_flags: &FeatureFlags,
     ) -> Result<bool, anyhow::Error> {
         match (
             feature_flags.rate_limiting_of_debug_prints,
@@ -381,7 +383,7 @@ pub(crate) fn syscalls<
         // by the log capacity and the remaining space in the log.
         // The cost is calculated as follows:
         // - the allocated bytes (x2 to account for adding new message and removing the oldest one)
-        //   - this must be in sync with `CanisterLog::add_record()` from `ic_management_canister_types`
+        //   - this must be in sync with `CanisterLog::add_record()` from `ic_management_canister_types_private`
         // - the transmitted bytes (multiplied by the cost factor) for sending the payload to the replica.
         Ok(2 * allocated_num_bytes + BYTE_TRANSMISSION_COST_FACTOR as u64 * transmitted_num_bytes)
         // LINT.ThenChange(logging_charge_bytes_rule)
@@ -457,7 +459,7 @@ pub(crate) fn syscalls<
                 charge_for_cpu(&mut caller, overhead::MSG_METHOD_NAME_SIZE)?;
                 with_system_api(&mut caller, |s| s.ic0_msg_method_name_size()).and_then(|s| {
                     I::try_from(s).map_err(|e| {
-                        anyhow::Error::msg(format!("ic0::msg_metohd_name_size failed: {}", e))
+                        anyhow::Error::msg(format!("ic0::msg_method_name_size failed: {}", e))
                     })
                 })
             }
@@ -610,11 +612,12 @@ pub(crate) fn syscalls<
 
     linker
         .func_wrap("ic0", "debug_print", {
+            let feature_flags = feature_flags.clone();
             move |mut caller: Caller<'_, StoreData>, offset: I, length: I| {
                 let length: u64 = length.try_into().expect("Failed to convert I to u64");
                 let mut num_bytes = 0;
                 num_bytes += logging_charge_bytes(&mut caller, length)?;
-                let debug_print_is_enabled = debug_print_is_enabled(&mut caller, feature_flags)?;
+                let debug_print_is_enabled = debug_print_is_enabled(&mut caller, &feature_flags)?;
                 if debug_print_is_enabled {
                     num_bytes += length;
                 }
@@ -1035,6 +1038,38 @@ pub(crate) fn syscalls<
         })
         .unwrap();
 
+    linker
+        .func_wrap("ic0", "subnet_self_size", {
+            move |mut caller: Caller<'_, StoreData>| {
+                charge_for_cpu(&mut caller, overhead::SUBNET_SELF_SIZE)?;
+                with_system_api(&mut caller, |s| s.ic0_subnet_self_size()).and_then(|s| {
+                    I::try_from(s).map_err(|e| {
+                        anyhow::Error::msg(format!("ic0::subnet_self_size failed: {}", e))
+                    })
+                })
+            }
+        })
+        .unwrap();
+
+    linker
+        .func_wrap("ic0", "subnet_self_copy", {
+            move |mut caller: Caller<'_, StoreData>, dst: I, offset: I, size: I| {
+                let dst: usize = dst.try_into().expect("Failed to convert I to usize");
+                let offset: usize = offset.try_into().expect("Failed to convert I to usize");
+                let size: usize = size.try_into().expect("Failed to convert I to usize");
+                charge_for_cpu_and_mem(&mut caller, overhead::SUBNET_SELF_COPY, size)?;
+                with_memory_and_system_api(&mut caller, |system_api, memory| {
+                    system_api.ic0_subnet_self_copy(dst, offset, size, memory)
+                })?;
+                if feature_flags.write_barrier == FlagStatus::Enabled {
+                    mark_writes_on_bytemap(&mut caller, dst, size)
+                } else {
+                    Ok(())
+                }
+            }
+        })
+        .unwrap();
+
     match main_memory_type {
         WasmMemoryType::Wasm32 => {
             linker
@@ -1189,8 +1224,21 @@ pub(crate) fn syscalls<
         .unwrap();
 
     linker
+        .func_wrap("ic0", "mint_cycles128", {
+            move |mut caller: Caller<'_, StoreData>, amount_high: u64, amount_low: u64, dst: I| {
+                with_memory_and_system_api(&mut caller, |s, memory| {
+                    let dst: usize = dst.try_into().expect("Failed to convert I to usize");
+                    s.ic0_mint_cycles128(Cycles::from_parts(amount_high, amount_low), dst, memory)
+                })
+                .map_err(|e| anyhow::Error::msg(format!("ic0_mint_cycles128 failed: {}", e)))
+            }
+        })
+        .unwrap();
+
+    linker
         .func_wrap("ic0", "cycles_burn128", {
             move |mut caller: Caller<'_, StoreData>, amount_high: u64, amount_low: u64, dst: I| {
+                charge_for_cpu(&mut caller, overhead::CYCLES_BURN128)?;
                 with_memory_and_system_api(&mut caller, |s, memory| {
                     let dst: usize = dst.try_into().expect("Failed to convert I to usize");
                     s.ic0_cycles_burn128(Cycles::from_parts(amount_high, amount_low), dst, memory)
@@ -1204,16 +1252,9 @@ pub(crate) fn syscalls<
         .func_wrap("ic0", "call_with_best_effort_response", {
             move |mut caller: Caller<'_, StoreData>, timeout_seconds: u32| {
                 charge_for_cpu(&mut caller, overhead::CALL_WITH_BEST_EFFORT_RESPONSE)?;
-                if feature_flags.best_effort_responses == FlagStatus::Enabled {
-                    with_system_api(&mut caller, |system_api| {
-                        system_api.ic0_call_with_best_effort_response(timeout_seconds)
-                    })
-                } else {
-                    let err = HypervisorError::ToolchainContractViolation {
-                        error: "ic0::call_with_best_effort_response is not enabled.".to_string(),
-                    };
-                    Err(process_err(&mut caller, err))
-                }
+                with_system_api(&mut caller, |system_api| {
+                    system_api.ic0_call_with_best_effort_response(timeout_seconds)
+                })
             }
         })
         .unwrap();
@@ -1222,14 +1263,7 @@ pub(crate) fn syscalls<
         .func_wrap("ic0", "msg_deadline", {
             move |mut caller: Caller<'_, StoreData>| {
                 charge_for_cpu(&mut caller, overhead::MSG_DEADLINE)?;
-                if feature_flags.best_effort_responses == FlagStatus::Enabled {
-                    with_system_api(&mut caller, |system_api| system_api.ic0_msg_deadline())
-                } else {
-                    let err = HypervisorError::ToolchainContractViolation {
-                        error: "ic0::msg_deadline is not enabled.".to_string(),
-                    };
-                    Err(process_err(&mut caller, err))
-                }
+                with_system_api(&mut caller, |system_api| system_api.ic0_msg_deadline())
             }
         })
         .unwrap();

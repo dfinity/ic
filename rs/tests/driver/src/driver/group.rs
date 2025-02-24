@@ -1117,7 +1117,7 @@ async fn stream_journald_from_cursor(
     unwrap_or_return!(
         cursor,
         stream
-            .write_all(format!("Range: entries={cursor}:0:\n\r\n\r").as_bytes())
+            .write_all(format!("Range: entries={cursor}\n\r\n\r").as_bytes())
             .await
     );
     let buf_reader = BufReader::new(stream);
