@@ -641,7 +641,7 @@ pub mod cycles_ledger {
     #[derive(Clone, Eq, PartialEq, Hash, Debug, CandidType)]
     struct CyclesLedgerInitArgs {
         pub index_id: Option<Principal>,
-        pub max_blocks_per_request: u64,
+        pub max_transactions_per_request: u64,
     }
 
     /// Argument taken by the Cycles Ledger canister.
@@ -652,7 +652,7 @@ pub mod cycles_ledger {
     /// (variant {
     ///     Init = record {
     ///         index_id : opt principal;
-    ///         max_blocks_per_request : nat64;
+    ///         max_transactions_per_request : nat64;
     ///     }
     /// })
     /// ```
@@ -668,7 +668,7 @@ pub mod cycles_ledger {
 
         let arg = Encode!(&CyclesLedgerArgs::Init(CyclesLedgerInitArgs {
             index_id: None,
-            max_blocks_per_request: 1000,
+            max_transactions_per_request: 1000,
         }))
         .unwrap();
 
@@ -2031,6 +2031,46 @@ pub mod sns {
                     url: "".to_string(),
                     action: Some(sns_pb::proposal::Action::AdvanceSnsTargetVersion(
                         sns_pb::AdvanceSnsTargetVersion { new_target: None },
+                    )),
+                },
+            )
+            .await
+            .map_err(|err| format!("{err:?}"))
+        }
+
+        pub async fn propose_to_set_automatically_advance_target_version(
+            pocket_ic: &PocketIc,
+            sns_governance_canister_id: PrincipalId,
+            automatically_advance_target_version: bool,
+        ) -> Result<sns_pb::ProposalData, String> {
+            // Get an ID of an SNS neuron that can submit proposals. We rely on the fact that this
+            // neuron either holds the majority of the voting power or the follow graph is set up
+            // s.t. when this neuron submits a proposal, that proposal gets through without the need
+            // for any voting.
+            let (sns_neuron_id, sns_neuron_principal_id) =
+                sns::governance::find_neuron_with_majority_voting_power(
+                    pocket_ic,
+                    sns_governance_canister_id,
+                )
+                .await
+                .expect("cannot find SNS neuron with dissolve delay over 6 months.");
+
+            sns::governance::propose_and_wait(
+                pocket_ic,
+                sns_governance_canister_id,
+                sns_neuron_principal_id,
+                sns_neuron_id.clone(),
+                sns_pb::Proposal {
+                    title: "Set propose_to_set_automatically_advance_target_version.".to_string(),
+                    summary: "".to_string(),
+                    url: "".to_string(),
+                    action: Some(sns_pb::proposal::Action::ManageNervousSystemParameters(
+                        sns_pb::NervousSystemParameters {
+                            automatically_advance_target_version: Some(
+                                automatically_advance_target_version,
+                            ),
+                            ..Default::default()
+                        },
                     )),
                 },
             )

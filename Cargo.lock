@@ -12280,6 +12280,7 @@ dependencies = [
  "prost 0.13.5",
  "serde",
  "serde_bytes",
+ "serde_json",
  "strum",
  "strum_macros",
 ]
