@@ -20,7 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The function `PocketIc::set_certified_time` to set the current certified time on all subnets of the PocketIC instance.
 - The function `PocketIc::update_call_with_effective_principal` is made public. It is helpful, e.g., for
   modeling management canister calls that need to be routed to the right subnet using effective principals.
-- The function `PocketIcBuilder::with_server_binary` to provide a path to the PocketIC server binary used instead of the environment variable `POCKET_IC_BIN`.
+- The function `PocketIcBuilder::with_server_binary` to provide a path to the PocketIC server binary used instead of the environment variable `POCKET_IC_BIN` and the current working directory.
 
 ### Changed
 - The response types `pocket_ic::WasmResult`, `pocket_ic::UserError`, and `pocket_ic::CallError` are replaced by a single reject response type `pocket_ic::RejectResponse`.

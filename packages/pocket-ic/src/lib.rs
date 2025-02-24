@@ -164,7 +164,7 @@ impl PocketIcBuilder {
         .await
     }
 
-    /// Provide a path to the PocketIC server binary used instead of the environment variable `POCKET_IC_BIN`.
+    /// Provide a path to the PocketIC server binary used instead of the environment variable `POCKET_IC_BIN` and the current working directory.
     pub fn with_server_binary(mut self, server_binary: PathBuf) -> Self {
         self.server_binary = Some(server_binary);
         self
