@@ -1235,7 +1235,8 @@ pub trait SystemApi {
 
     /// This system call indicates the cycle cost of signing with ecdsa,
     /// i.e., the management canister's `sign_with_ecdsa`, for the key
-    /// with name given by `src` + `size` and the provided curve.
+    /// (whose name is given by textual representation at heap location `src`
+    /// with byte length `size`) and the provided curve.
     ///
     /// Traps if `src`+`size` exceeds the size of the WebAssembly memory.
     /// Returns 0 on success.
@@ -1258,12 +1259,13 @@ pub trait SystemApi {
 
     /// This system call indicates the cycle cost of signing with schnorr,
     /// i.e., the management canister's `sign_with_schnorr` for the key
-    /// with name given by `src` + `size` and the provided algorithm.
+    /// (whose name is given by textual representation at heap location `src`
+    /// with byte length `size`) and the provided algorithm.
     ///
     /// Traps if `src`/`size` exceeds the size of the WebAssembly memory.
     /// Returns 0 on success.
-    /// Returns 1 if an unknown curve variant was provided.
-    /// Returns 2 if the given curve variant does not have a key with the
+    /// Returns 1 if an unknown algorithm variant was provided.
+    /// Returns 2 if the given algorithm variant does not have a key with the
     /// name provided via `src`/`size`.
     ///
     /// The amount of cycles is represented by a 128-bit value and is copied
@@ -1278,9 +1280,10 @@ pub trait SystemApi {
         heap: &mut [u8],
     ) -> HypervisorResult<u32>;
 
-    /// This system call indicates the cycle cost of threshold key derivation,
+    /// This system call indicates the cycle cost of vetkd key derivation,
     /// i.e., the management canister's `vetkd_derive_encrypted_key` for the key
-    /// with name given by `src` + `size` and the provided curve.
+    /// (whose name is given by textual representation at heap location `src`
+    /// with byte length `size`) and the provided curve.
     ///
     /// Traps if `src`/`size` exceeds the size of the WebAssembly memory.
     /// Returns 0 on success.

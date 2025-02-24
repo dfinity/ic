@@ -349,7 +349,7 @@ pub struct Params2<P1, P2>(pub P1, pub P2);
 /// System API call with 3 parameters.
 pub struct Params3<P1, P2, P3>(pub P1, pub P2, pub P3);
 
-/// System API call with 3 parameters.
+/// System API call with 4 parameters.
 pub struct Params4<P1, P2, P3, P4>(pub P1, pub P2, pub P3, pub P4);
 
 /// Trait to render System API call parameters.

@@ -2186,19 +2186,6 @@ impl ExecutionTestBuilder {
         self
     }
 
-    /// Note: This fails if the provided CyclesAccountManagerConfig has a different subnet size than self.
-    pub fn with_cycles_account_manager_config(mut self, cfg: CyclesAccountManagerConfig) -> Self {
-        if SubnetConfig::new(self.subnet_type)
-            .cycles_account_manager_config
-            .reference_subnet_size
-            != cfg.reference_subnet_size
-        {
-            panic!("ExecutionTestBuilder subnet_type is inconsistent with the provided CyclesAccountManagerConfig");
-        }
-        self.cycles_account_manager_config = Some(cfg);
-        self
-    }
-
     pub fn build(self) -> ExecutionTest {
         let own_range = CanisterIdRange {
             start: CanisterId::from(CANISTER_IDS_PER_SUBNET),

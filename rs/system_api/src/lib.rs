@@ -717,7 +717,7 @@ enum ExecutionMemoryType {
 /// type must be used by the caller to determine success or failure.
 pub enum CostReturnCode {
     Success = 0,
-    UnknownCurve = 1,
+    UnknownCurveOrAlgorithm = 1,
     UnknownKey = 2,
 }
 /// A struct to gather the relevant fields that correspond to a canister's
@@ -3718,7 +3718,7 @@ impl SystemApi for SystemApiImpl {
             })?
             .to_string();
         let Ok(curve) = EcdsaCurve::try_from(curve) else {
-            return Ok(CostReturnCode::UnknownCurve as u32);
+            return Ok(CostReturnCode::UnknownCurveOrAlgorithm as u32);
         };
         let key = MasterPublicKeyId::Ecdsa(EcdsaKeyId { curve, name });
         let Some(subnet_size) = self
@@ -3754,7 +3754,7 @@ impl SystemApi for SystemApiImpl {
             })?
             .to_string();
         let Ok(algorithm) = SchnorrAlgorithm::try_from(algorithm) else {
-            return Ok(CostReturnCode::UnknownCurve as u32);
+            return Ok(CostReturnCode::UnknownCurveOrAlgorithm as u32);
         };
         let key = MasterPublicKeyId::Schnorr(SchnorrKeyId { algorithm, name });
         let Some(subnet_size) = self
@@ -3791,7 +3791,7 @@ impl SystemApi for SystemApiImpl {
             })?
             .to_string();
         let Ok(curve) = VetKdCurve::try_from(curve) else {
-            return Ok(CostReturnCode::UnknownCurve as u32);
+            return Ok(CostReturnCode::UnknownCurveOrAlgorithm as u32);
         };
         let key = MasterPublicKeyId::VetKd(VetKdKeyId { curve, name });
         let Some(subnet_size) = self
