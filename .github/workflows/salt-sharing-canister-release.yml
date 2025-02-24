@@ -1,4 +1,4 @@
-name: anonymization-backend-release
+name: salt-sharing-canister-release
 
 on:
   workflow_dispatch:
@@ -17,7 +17,7 @@ permissions:
   contents: write
 
 env:
-  NAME: anonymization-backend
+  NAME: salt-sharing-canister
   GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
 defaults:
@@ -26,14 +26,14 @@ defaults:
 
 jobs:
   build-and-release:
-    name: Build and release the anonymization backend canister
+    name: Build and release the salt-sharing canister
 
     runs-on:
       group: zh1
       labels: dind-large
 
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:2e8185171700872d48fdfb4b08e175fca5be27b3fbbc4d7bed681ec8486f8b1d
+      image: ghcr.io/dfinity/ic-build@sha256:908c9b2abe0647cd54a2485117c263b0dae4a8aba8f25bc073813b09be9b1d59
       options: >-
         -e NODE_NAME --privileged --cgroupns host -v /cache:/cache -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp -v /ceph-s3-info:/ceph-s3-info
 
@@ -42,16 +42,16 @@ jobs:
 
       - name: build
         run: |
-          TARGET='//rs/boundary_node/anonymization/backend:anonymization_backend'
+          TARGET='//rs/boundary_node/salt_sharing:salt_sharing_canister'
           bazel build --config=ci ${TARGET}
 
-          OUTPUT='bazel-bin/rs/boundary_node/anonymization/backend/anonymization_backend.wasm.gz'
-          mv ${OUTPUT} anonymization_backend.wasm.gz
+          OUTPUT='bazel-bin/rs/boundary_node/salt_sharing/salt_sharing_canister.wasm.gz'
+          mv ${OUTPUT} salt_sharing_canister.wasm.gz
 
       - name: artifacts
         run: |
           ARTIFACTS=(
-            anonymization_backend.wasm.gz
+            salt_sharing_canister.wasm.gz
           )
 
           echo "ARTIFACTS<<EOF"                                >> $GITHUB_ENV
@@ -89,7 +89,7 @@ jobs:
           To reproduce the artifacts of this release:
 
           ${CODE_BLOCK}
-          bazel build --config=local //rs/boundary_node/anonymization/backend:anonymization_backend
+          bazel build --config=local //rs/boundary_node/salt_sharing:salt_sharing_canister
           ${CODE_BLOCK}
 
           ## Checksums

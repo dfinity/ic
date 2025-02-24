@@ -177,7 +177,7 @@ fn should_fail_if_arguments_missing() {
         .assert()
         .stdout(predicate::str::is_empty())
         .stderr(predicate::str::contains(
-            "error: the following required arguments were not provided",
+            "the following required arguments were not provided",
         ))
         .failure();
 }

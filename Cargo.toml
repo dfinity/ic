@@ -32,8 +32,6 @@ members = [
     "rs/bitcoin/replica_types",
     "rs/bitcoin/validation",
     "rs/boundary_node/canary_proxy",
-    "rs/boundary_node/anonymization/backend",
-    "rs/boundary_node/anonymization/client",
     "rs/boundary_node/certificate_issuance/certificate_issuer",
     "rs/boundary_node/certificate_issuance/certificate_orchestrator",
     "rs/boundary_node/ic_boundary",
@@ -323,7 +321,6 @@ members = [
     "rs/rust_canisters/load_simulator",
     "rs/rust_canisters/memory_test",
     "rs/rust_canisters/on_wire",
-    "rs/rust_canisters/pmap",
     "rs/rust_canisters/proxy_canister",
     "rs/rust_canisters/response_payload_test",
     "rs/rust_canisters/stable_reader",
@@ -346,6 +343,7 @@ members = [
     "rs/sns/swap",
     "rs/sns/swap/proto_library",
     "rs/sns/test_utils",
+    "rs/sns/testing",
     "rs/starter",
     "rs/state_manager",
     "rs/state_machine_tests",
@@ -572,7 +570,7 @@ ic-certificate-verification = "3"
 ic-certification = "3"
 ic-http-certification = "3"
 ic-http-gateway = "0.1"
-ic-management-canister-types = "0.1.0"
+ic-management-canister-types = "0.2.0"
 ic-response-verification = "3"
 ic-sha3 = "1.0.0"
 ic-stable-structures = "0.6.5"
@@ -746,11 +744,11 @@ url = { version = "2.5.3", features = ["serde"] }
 uuid = { version = "1.11.0", features = ["v4", "serde"] }
 walkdir = "2.3.3"
 walrus = "0.21.1"
-wasm-encoder = { version = "0.217.0", features = ["wasmparser"] }
-wasmparser = "0.217.0"
-wasmprinter = "0.217.0"
-wast = "212.0.0"
-wat = "1.212.0"
+wasm-encoder = { version = "0.221.0", features = ["wasmparser"] }
+wasmparser = "0.221.0"
+wasmprinter = "0.221.0"
+wast = "221.0.0"
+wat = "1.221.0"
 which = "6.0.3"
 x509-cert = { version = "0.2.5", features = ["builder", "hazmat"] }
 x509-parser = { version = "0.16.0" }

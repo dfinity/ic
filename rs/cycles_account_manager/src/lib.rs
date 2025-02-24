@@ -21,8 +21,8 @@ use ic_management_canister_types_private::Method;
 use ic_nns_constants::CYCLES_MINTING_CANISTER_ID;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
-    canister_state::execution_state::WasmExecutionMode,
-    canister_state::system_state::CyclesUseCase, CanisterState, SystemState,
+    canister_state::{execution_state::WasmExecutionMode, system_state::CyclesUseCase},
+    CanisterState, MessageMemoryUsage, SystemState,
 };
 use ic_types::{
     canister_http::MAX_CANISTER_HTTP_RESPONSE_BYTES,
@@ -41,6 +41,7 @@ pub const CRITICAL_ERROR_EXECUTION_CYCLES_REFUND: &str =
     "cycles_account_manager_execution_cycles_refund_error";
 
 const SECONDS_PER_DAY: u128 = 24 * 60 * 60;
+const DAY: Duration = Duration::from_secs(SECONDS_PER_DAY as u64);
 
 /// Maximum payload size of a management call to update_settings
 /// overriding the canister's freezing threshold.
@@ -256,7 +257,7 @@ impl CyclesAccountManager {
         &self,
         memory_allocation: MemoryAllocation,
         memory_usage: NumBytes,
-        message_memory_usage: NumBytes,
+        message_memory_usage: MessageMemoryUsage,
         compute_allocation: ComputeAllocation,
         subnet_size: usize,
     ) -> Cycles {
@@ -279,7 +280,7 @@ impl CyclesAccountManager {
         &self,
         memory_allocation: MemoryAllocation,
         memory_usage: NumBytes,
-        message_memory_usage: NumBytes,
+        message_memory_usage: MessageMemoryUsage,
         compute_allocation: ComputeAllocation,
         subnet_size: usize,
     ) -> [(CyclesUseCase, Cycles); 3] {
@@ -287,19 +288,18 @@ impl CyclesAccountManager {
             MemoryAllocation::Reserved(bytes) => bytes,
             MemoryAllocation::BestEffort => memory_usage,
         };
-        let day = Duration::from_secs(SECONDS_PER_DAY as u64);
         [
             (
                 CyclesUseCase::Memory,
-                self.memory_cost(memory, day, subnet_size),
+                self.memory_cost(memory, DAY, subnet_size),
             ),
             (
                 CyclesUseCase::Memory,
-                self.memory_cost(message_memory_usage, day, subnet_size),
+                self.memory_cost(message_memory_usage.total(), DAY, subnet_size),
             ),
             (
                 CyclesUseCase::ComputeAllocation,
-                self.compute_allocation_cost(compute_allocation, day, subnet_size),
+                self.compute_allocation_cost(compute_allocation, DAY, subnet_size),
             ),
         ]
     }
@@ -311,7 +311,7 @@ impl CyclesAccountManager {
         freeze_threshold: NumSeconds,
         memory_allocation: MemoryAllocation,
         memory_usage: NumBytes,
-        message_memory_usage: NumBytes,
+        message_memory_usage: MessageMemoryUsage,
         compute_allocation: ComputeAllocation,
         subnet_size: usize,
         reserved_balance: Cycles,
@@ -351,7 +351,7 @@ impl CyclesAccountManager {
         freeze_threshold: NumSeconds,
         memory_allocation: MemoryAllocation,
         canister_current_memory_usage: NumBytes,
-        canister_current_message_memory_usage: NumBytes,
+        canister_current_message_memory_usage: MessageMemoryUsage,
         canister_compute_allocation: ComputeAllocation,
         cycles_balance: &mut Cycles,
         cycles: Cycles,
@@ -389,7 +389,7 @@ impl CyclesAccountManager {
         &self,
         canister: &mut CanisterState,
         canister_current_memory_usage: NumBytes,
-        canister_current_message_memory_usage: NumBytes,
+        canister_current_message_memory_usage: MessageMemoryUsage,
         canister_compute_allocation: ComputeAllocation,
         cycles: Cycles,
         subnet_size: usize,
@@ -443,7 +443,7 @@ impl CyclesAccountManager {
         &self,
         system_state: &mut SystemState,
         canister_current_memory_usage: NumBytes,
-        canister_current_message_memory_usage: NumBytes,
+        canister_current_message_memory_usage: MessageMemoryUsage,
         canister_compute_allocation: ComputeAllocation,
         cycles: Cycles,
         subnet_size: usize,
@@ -503,7 +503,7 @@ impl CyclesAccountManager {
         &self,
         system_state: &mut SystemState,
         canister_current_memory_usage: NumBytes,
-        canister_current_message_memory_usage: NumBytes,
+        canister_current_message_memory_usage: MessageMemoryUsage,
         canister_compute_allocation: ComputeAllocation,
         num_instructions: NumInstructions,
         subnet_size: usize,
@@ -747,7 +747,7 @@ impl CyclesAccountManager {
         freeze_threshold: NumSeconds,
         memory_allocation: MemoryAllocation,
         canister_current_memory_usage: NumBytes,
-        canister_current_message_memory_usage: NumBytes,
+        canister_current_message_memory_usage: MessageMemoryUsage,
         canister_compute_allocation: ComputeAllocation,
         request: &Request,
         prepayment_for_response_execution: Cycles,
@@ -896,7 +896,7 @@ impl CyclesAccountManager {
         system_state: &SystemState,
         requested: Cycles,
         canister_current_memory_usage: NumBytes,
-        canister_current_message_memory_usage: NumBytes,
+        canister_current_message_memory_usage: MessageMemoryUsage,
         canister_compute_allocation: ComputeAllocation,
         subnet_size: usize,
         reveal_top_up: bool,
@@ -1061,7 +1061,7 @@ impl CyclesAccountManager {
         freeze_threshold: NumSeconds,
         memory_allocation: MemoryAllocation,
         memory_usage: NumBytes,
-        message_memory_usage: NumBytes,
+        message_memory_usage: MessageMemoryUsage,
         compute_allocation: ComputeAllocation,
         subnet_size: usize,
         reserved_balance: Cycles,
@@ -1341,7 +1341,7 @@ mod tests {
                 NumSeconds::new(0),
                 MemoryAllocation::default(),
                 0.into(),
-                0.into(),
+                MessageMemoryUsage::ZERO,
                 ComputeAllocation::default(),
                 13,
                 Cycles::new(0)

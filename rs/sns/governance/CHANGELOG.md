@@ -13,7 +13,7 @@ INSERT NEW RELEASES HERE
 
 # 2025-02-15: Proposal 135315
 
-http://dashboard.internetcomputer.org/proposals/135315
+http://dashboard.internetcomputer.org/proposal/135315
 
 ## Added
 
@@ -28,7 +28,7 @@ The new `topic` field is required when submitting an `AddGenericNervousSystemFun
 
 # 2025-02-07: Proposal 135208
 
-http://dashboard.internetcomputer.org/proposals/135208
+http://dashboard.internetcomputer.org/proposal/135208
 
 ## Added
 
@@ -53,24 +53,24 @@ to the newest version blessed by the NNS. To do so, please submit a `ManageNervo
 proposal, e.g.:
 
     ```bash
-    dfx canister --network ic call $SNS_GOVERNANCE_CANISTER_ID manage_neuron '(
-    record {
-        subaccount = blob "'${PROPOSER_SNS_NEURON_SUBACCOUNT}'";
-        command = opt variant {
-        MakeProposal = record {
-            url = "https://forum.dfinity.org/t/proposal-opt-in-mechanism-for-automatic-sns-target-version-advancement/39874";
-            title = "Opt for automatic advancement of SNS target versions";
-            action = opt variant {
-            ManageNervousSystemParameters = record {
-                automatically_advance_target_version = opt true;
-            }
+    dfx canister --ic call ${SNS_GOVERNANCE_CANISTER_ID} manage_neuron '(
+        record {
+            subaccount = blob "'${PROPOSER_SNS_NEURON_SUBACCOUNT}'";
+            command = opt variant {
+                MakeProposal = record {
+                    url = "https://forum.dfinity.org/t/proposal-opt-in-mechanism-for-automatic-sns-target-version-advancement";
+                    title = "Opt for automatic advancement of SNS target versions";
+                    action = opt variant {
+                        ManageNervousSystemParameters = record {
+                            automatically_advance_target_version = opt true;
+                        }
+                    };
+                    summary = "Enable automatically advancing the target version \
+                            of this SNS to speed up the delivery of SNS framework \
+                            upgrades that were already blessed by the NNS.";
+                }
             };
-            summary = "Enable automatically advancing the target version \
-                    of this SNS to speed up the delivery of SNS framework \
-                    upgrades that were already blessed by the NNS.";
-        }
-        };
-    },
+        },
     )'
     ```
 
@@ -89,7 +89,7 @@ a potentially large WASM module (over 2 MiB) uploaded to some *store* canister, 
 
 # 2025-01-20: Proposal 134906
 
-http://dashboard.internetcomputer.org/proposals/134906
+http://dashboard.internetcomputer.org/proposal/134906
 
 ## Added
 

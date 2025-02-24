@@ -1406,7 +1406,10 @@ fn growing_wasm_memory_updates_subnet_available_memory() {
 
     api.try_grow_wasm_memory(0, 1).unwrap();
     assert_eq!(api.get_allocated_bytes().get() as i64, wasm_page_size);
-    assert_eq!(api.get_allocated_message_bytes().get() as i64, 0);
+    assert_eq!(
+        api.get_allocated_guaranteed_response_message_bytes().get() as i64,
+        0
+    );
     assert_eq!(
         subnet_available_memory.get_wasm_custom_sections_memory(),
         wasm_custom_sections_available_memory_before
@@ -1414,7 +1417,10 @@ fn growing_wasm_memory_updates_subnet_available_memory() {
 
     api.try_grow_wasm_memory(0, 10).unwrap_err();
     assert_eq!(api.get_allocated_bytes().get() as i64, wasm_page_size);
-    assert_eq!(api.get_allocated_message_bytes().get() as i64, 0);
+    assert_eq!(
+        api.get_allocated_guaranteed_response_message_bytes().get() as i64,
+        0
+    );
     assert_eq!(
         subnet_available_memory.get_wasm_custom_sections_memory(),
         wasm_custom_sections_available_memory_before
@@ -1727,7 +1733,7 @@ fn push_output_request_respects_memory_limits() {
     assert_eq!(api.get_allocated_bytes().get(), 0);
     // `MAX_RESPONSE_COUNT_BYTES` are consumed for message memory.
     assert_eq!(
-        api.get_allocated_message_bytes().get(),
+        api.get_allocated_guaranteed_response_message_bytes().get(),
         MAX_RESPONSE_COUNT_BYTES as u64
     );
     assert_eq!(
@@ -1744,7 +1750,7 @@ fn push_output_request_respects_memory_limits() {
     // Without altering memory usage.
     assert_eq!(api.get_allocated_bytes().get(), 0,);
     assert_eq!(
-        api.get_allocated_message_bytes().get(),
+        api.get_allocated_guaranteed_response_message_bytes().get(),
         MAX_RESPONSE_COUNT_BYTES as u64
     );
     assert_eq!(
@@ -1836,7 +1842,10 @@ fn push_output_request_oversized_request_memory_limits() {
 
     // Memory usage unchanged.
     assert_eq!(0, api.get_allocated_bytes().get());
-    assert_eq!(0, api.get_allocated_message_bytes().get());
+    assert_eq!(
+        0,
+        api.get_allocated_guaranteed_response_message_bytes().get()
+    );
 
     // Slightly smaller, still oversized request.
     let req = RequestBuilder::default()
@@ -1857,7 +1866,7 @@ fn push_output_request_oversized_request_memory_limits() {
     assert_eq!(0, api.get_allocated_bytes().get());
     assert_eq!(
         req_size_bytes as u64,
-        api.get_allocated_message_bytes().get()
+        api.get_allocated_guaranteed_response_message_bytes().get()
     );
     assert_eq!(
         CANISTER_CURRENT_MEMORY_USAGE,

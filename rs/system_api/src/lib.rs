@@ -20,8 +20,8 @@ use ic_management_canister_types_private::{
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::canister_state::execution_state::WasmExecutionMode;
 use ic_replicated_state::{
-    canister_state::WASM_PAGE_SIZE_IN_BYTES, memory_required_to_push_request, Memory, NumWasmPages,
-    PageIndex,
+    canister_state::WASM_PAGE_SIZE_IN_BYTES, memory_usage_of_request, Memory, MessageMemoryUsage,
+    NumWasmPages, PageIndex,
 };
 use ic_sys::PageBytes;
 use ic_types::{
@@ -739,7 +739,7 @@ struct MemoryUsage {
     wasm_memory_usage: NumBytes,
 
     /// The current amount of message memory that the canister is using.
-    current_message_usage: NumBytes,
+    current_message_usage: MessageMemoryUsage,
 
     // This is the amount of memory that the subnet has available. Any
     // expansions in the canister's memory need to be deducted from here.
@@ -750,7 +750,7 @@ struct MemoryUsage {
     allocated_execution_memory: NumBytes,
 
     /// Message memory allocated during this message execution.
-    allocated_message_memory: NumBytes,
+    allocated_message_memory: MessageMemoryUsage,
 
     /// The memory allocation of the canister.
     memory_allocation: MemoryAllocation,
@@ -765,7 +765,7 @@ impl MemoryUsage {
         current_usage: NumBytes,
         stable_memory_usage: NumBytes,
         wasm_memory_usage: NumBytes,
-        current_message_usage: NumBytes,
+        current_message_usage: MessageMemoryUsage,
         subnet_available_memory: SubnetAvailableMemory,
         memory_allocation: MemoryAllocation,
     ) -> Self {
@@ -791,8 +791,8 @@ impl MemoryUsage {
             wasm_memory_usage,
             current_message_usage,
             subnet_available_memory,
-            allocated_execution_memory: NumBytes::from(0),
-            allocated_message_memory: NumBytes::from(0),
+            allocated_execution_memory: NumBytes::new(0),
+            allocated_message_memory: MessageMemoryUsage::ZERO,
             memory_allocation,
         }
     }
@@ -880,8 +880,8 @@ impl MemoryUsage {
             MemoryAllocation::BestEffort => {
                 match self.subnet_available_memory.check_available_memory(
                     execution_bytes,
-                    NumBytes::from(0),
-                    NumBytes::from(0),
+                    NumBytes::new(0),
+                    NumBytes::new(0),
                 ) {
                     Ok(()) => {
                         sandbox_safe_system_state.reserve_storage_cycles(
@@ -892,12 +892,12 @@ impl MemoryUsage {
                         // All state changes after this point should not fail
                         // because the cycles have already been reserved.
                         self.subnet_available_memory
-                            .try_decrement(execution_bytes, NumBytes::from(0), NumBytes::from(0))
+                            .try_decrement(execution_bytes, NumBytes::new(0), NumBytes::new(0))
                             .expect(
                                 "Decrementing subnet available memory is \
                                  guaranteed to succeed by check_available_memory().",
                             );
-                        self.current_usage = NumBytes::from(new_usage);
+                        self.current_usage = NumBytes::new(new_usage);
                         self.allocated_execution_memory += execution_bytes;
 
                         self.add_execution_memory(execution_bytes, execution_memory_type)?;
@@ -926,7 +926,7 @@ impl MemoryUsage {
                     // keep code robust, we repeat the check here again.
                     return Err(HypervisorError::OutOfMemory);
                 }
-                self.current_usage = NumBytes::from(new_usage);
+                self.current_usage = NumBytes::new(new_usage);
                 self.add_execution_memory(execution_bytes, execution_memory_type)?;
 
                 sandbox_safe_system_state.update_status_of_low_wasm_memory_hook_condition(
@@ -958,7 +958,7 @@ impl MemoryUsage {
     /// Tries to allocate the requested amount of message memory.
     ///
     /// Returns `Err(HypervisorError::OutOfMemory)` and leaves `self` unchanged
-    /// if the message memory limit would be exceeded.
+    /// if the guaranteed response message memory limit would be exceeded.
     ///
     /// Returns `Err(HypervisorError::InsufficientCyclesInMessageMemoryGrow)`
     /// and leaves `self` unchanged if freezing threshold check is needed
@@ -966,14 +966,13 @@ impl MemoryUsage {
     /// allocation.
     fn allocate_message_memory(
         &mut self,
-        message_bytes: NumBytes,
+        message_memory_usage: MessageMemoryUsage,
         api_type: &ApiType,
         sandbox_safe_system_state: &SandboxSafeSystemState,
     ) -> HypervisorResult<()> {
-        let (new_usage, overflow) = self
+        let (new_message_usage, overflow) = self
             .current_message_usage
-            .get()
-            .overflowing_add(message_bytes.get());
+            .overflowing_add(&message_memory_usage);
         if overflow {
             return Err(HypervisorError::OutOfMemory);
         }
@@ -982,43 +981,48 @@ impl MemoryUsage {
             api_type,
             self.current_usage,
             self.current_message_usage,
-            NumBytes::new(new_usage),
+            new_message_usage,
         )?;
 
-        match self.subnet_available_memory.try_decrement(
-            NumBytes::from(0),
-            message_bytes,
-            NumBytes::from(0),
-        ) {
-            Ok(()) => {
-                self.allocated_message_memory += message_bytes;
-                self.current_message_usage = NumBytes::from(new_usage);
-                Ok(())
+        if message_memory_usage.guaranteed_response.get() != 0 {
+            if let Err(_err) = self.subnet_available_memory.try_decrement(
+                NumBytes::new(0),
+                message_memory_usage.guaranteed_response,
+                NumBytes::new(0),
+            ) {
+                return Err(HypervisorError::OutOfMemory);
             }
-            Err(_err) => Err(HypervisorError::OutOfMemory),
         }
+
+        self.allocated_message_memory += message_memory_usage;
+        self.current_message_usage = new_message_usage;
+        Ok(())
     }
 
-    /// Deallocates the given number of message bytes.
+    /// Deallocates the given amount of message memory.
+    ///
     /// Should only be called immediately after `allocate_message_memory()`, with the
     /// same number of bytes, in case allocation failed.
-    fn deallocate_message_memory(&mut self, message_bytes: NumBytes) {
+    fn deallocate_message_memory(&mut self, message_memory_usage: MessageMemoryUsage) {
         assert!(
-            self.allocated_message_memory >= message_bytes,
-            "Precondition of self.allocated_message_memory in deallocate_message_memory failed: {} >= {}",
+            self.allocated_message_memory.ge(message_memory_usage),
+            "Precondition of self.allocated_message_memory in deallocate_message_memory failed: {:?} >= {:?}",
             self.allocated_message_memory,
-            message_bytes
+            message_memory_usage
         );
         assert!(
-            self.current_message_usage >= message_bytes,
-            "Precondition of self.current_message_usage in deallocate_message_memory failed: {} >= {}",
+            self.current_message_usage.ge(message_memory_usage),
+            "Precondition of self.current_message_usage in deallocate_message_memory failed: {:?} >= {:?}",
             self.current_message_usage,
-            message_bytes
+            message_memory_usage
         );
-        self.subnet_available_memory
-            .increment(NumBytes::from(0), message_bytes, NumBytes::from(0));
-        self.allocated_message_memory -= message_bytes;
-        self.current_message_usage -= message_bytes;
+        self.subnet_available_memory.increment(
+            NumBytes::new(0),
+            message_memory_usage.guaranteed_response,
+            NumBytes::new(0),
+        );
+        self.allocated_message_memory -= message_memory_usage;
+        self.current_message_usage -= message_memory_usage;
     }
 }
 
@@ -1102,7 +1106,7 @@ impl SystemApiImpl {
         api_type: ApiType,
         sandbox_safe_system_state: SandboxSafeSystemState,
         canister_current_memory_usage: NumBytes,
-        canister_current_message_memory_usage: NumBytes,
+        canister_current_message_memory_usage: MessageMemoryUsage,
         execution_parameters: ExecutionParameters,
         subnet_available_memory: SubnetAvailableMemory,
         embedders_config: &EmbeddersConfig,
@@ -1245,9 +1249,11 @@ impl SystemApiImpl {
         self.memory_usage.allocated_execution_memory
     }
 
-    /// Bytes allocated in messages.
-    pub fn get_allocated_message_bytes(&self) -> NumBytes {
-        self.memory_usage.allocated_message_memory
+    /// Bytes used by or reserved for for guaranteed response messages.
+    pub fn get_allocated_guaranteed_response_message_bytes(&self) -> NumBytes {
+        self.memory_usage
+            .allocated_message_memory
+            .guaranteed_response
     }
 
     fn error_for(&self, method_name: &str) -> HypervisorError {
@@ -1483,14 +1489,6 @@ impl SystemApiImpl {
         max_amount: Cycles,
     ) -> HypervisorResult<Cycles> {
         match &mut self.api_type {
-            ApiType::ReplyCallback {
-                response_status: ResponseStatus::AlreadyReplied,
-                ..
-            }
-            | ApiType::RejectCallback {
-                response_status: ResponseStatus::AlreadyReplied,
-                ..
-            } => Ok(Cycles::new(0)),
             ApiType::Start { .. }
             | ApiType::Init { .. }
             | ApiType::SystemTask { .. }
@@ -1706,14 +1704,15 @@ impl SystemApiImpl {
             sandbox_safe_system_state.unregister_callback(request.sender_reply_callback);
         };
 
-        let reservation_bytes = if self.execution_parameters.subnet_type == SubnetType::System {
+        let memory_usage_of_request = if self.execution_parameters.subnet_type == SubnetType::System
+        {
             // Effectively disable the memory limit checks on system subnets.
-            NumBytes::from(0)
+            MessageMemoryUsage::ZERO
         } else {
-            (memory_required_to_push_request(&req) as u64).into()
+            memory_usage_of_request(&req)
         };
         if let Err(_err) = self.memory_usage.allocate_message_memory(
-            reservation_bytes,
+            memory_usage_of_request,
             &self.api_type,
             &self.sandbox_safe_system_state,
         ) {
@@ -1733,7 +1732,7 @@ impl SystemApiImpl {
             Ok(()) => Ok(0),
             Err(request) => {
                 self.memory_usage
-                    .deallocate_message_memory(reservation_bytes);
+                    .deallocate_message_memory(memory_usage_of_request);
                 abort(request, &mut self.sandbox_safe_system_state);
                 Ok(RejectCode::SysTransient as i32)
             }
