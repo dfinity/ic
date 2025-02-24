@@ -492,7 +492,7 @@ fn get_block_range_from_stable_memory(
     start: u64,
     length: u64,
 ) -> Result<Vec<EncodedBlock>, String> {
-    let length = length.min(icp_ledger::max_blocks_per_request(&caller().into()) as u64);
+    let length = length.min(icp_ledger::max_blocks_per_request(&PrincipalId::from(caller())) as u64);
     with_blocks(|blocks| {
         let limit = blocks.len().min(start.saturating_add(length));
         let mut res = vec![];
