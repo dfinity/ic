@@ -164,7 +164,7 @@ impl PocketIcBuilder {
         .await
     }
 
-    /// Provide a path to the PocketIC server binary used to start a server process if necessary.
+    /// Provide a path to the PocketIC server binary used instead of the environment variable `POCKET_IC_BIN`.
     pub fn with_server_binary(mut self, server_binary: PathBuf) -> Self {
         self.server_binary = Some(server_binary);
         self
@@ -1678,7 +1678,7 @@ pub(crate) fn start_or_reuse_server(server_binary: Option<PathBuf>) -> Url {
         panic!("
 Could not find the PocketIC binary.
 
-The PocketIC binary could not be found at {:?}{}. Please specify the path to the binary with the POCKET_IC_BIN environment variable, \
+The PocketIC binary could not be found at {:?}{}. Please specify the path to the binary using `PocketIcBuilder::with_server_binary`, the `POCKET_IC_BIN` environment variable, \
 or place it in your current working directory (you are running PocketIC from {:?}).
 
 To download the binary, please visit https://github.com/dfinity/pocketic."
