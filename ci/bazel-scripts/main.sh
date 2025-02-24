@@ -113,8 +113,4 @@ if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
 fi
 rm "$url_out"
 
-echo "the shasums:"
-
-find -L bazel-out -name SHA256SUMS
-
 for shafile in $(find bazel-out/ -name SHA256SUMS); do if [ -f "$shafile" ]; then echo "$shafile"; fi; done | xargs cat | sort | uniq >out_shafile_all

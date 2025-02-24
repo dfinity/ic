@@ -142,7 +142,7 @@ jobs:
         uses: ./.github/actions/bazel-test-all/
         with:
           BAZEL_COMMAND: test --config=ci ${{ env.BAZEL_EXTRA_ARGS }}
-          BAZEL_TARGETS: "//..."
+          BAZEL_TARGETS: //...
           BUILDEVENT_APIKEY: ${{ secrets.HONEYCOMB_TOKEN }}
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
 
@@ -304,6 +304,8 @@ jobs:
 
       - name: diff
         run: |
+          n_lines=$(cat out_shafile_build | wc -l)
+          echo "comparing $n_lines lines"
           out=$(comm -23 <(sort out_shafile_build | uniq) <(sort out_shafile_all | uniq))
           if [ -n "$out" ]; then
             echo diff
