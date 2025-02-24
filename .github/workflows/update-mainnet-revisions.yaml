@@ -24,11 +24,10 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 1
-          token: ${{ steps.app-token.outputs.token }}
 
       - name: Update IC versions file
         env:
-          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
         run: |
           set -eEuxo pipefail
 
@@ -53,7 +52,6 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 1
-          token: ${{ steps.app-token.outputs.token }}
 
       - name: Setup gh cli
         uses: ksivamuthu/actions-setup-gh-cli@v3
@@ -62,7 +60,7 @@ jobs:
 
       - name: Update Mainnet canisters file
         env:
-          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
         run: |
           set -eEuxo pipefail
 
