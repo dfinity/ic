@@ -4786,3 +4786,152 @@ pub fn generate_transactions(
         start.elapsed()
     );
 }
+
+pub mod metadata {
+    use super::*;
+
+    const METADATA_DECIMALS: &str = "icrc1:decimals";
+    const METADATA_NAME: &str = "icrc1:name";
+    const METADATA_SYMBOL: &str = "icrc1:symbol";
+    const METADATA_FEE: &str = "icrc1:fee";
+    const METADATA_MAX_MEMO_LENGTH: &str = "icrc1:max_memo_length";
+    const FORBIDDEN_METADATA: [&str; 5] = [
+        METADATA_DECIMALS,
+        METADATA_NAME,
+        METADATA_SYMBOL,
+        METADATA_FEE,
+        METADATA_MAX_MEMO_LENGTH,
+    ];
+
+    pub fn test_setting_forbidden_metadata_works_in_v3_ledger<T>(
+        ledger_wasm_v3: Vec<u8>,
+        encode_init_args: fn(InitArgs) -> T,
+    ) where
+        T: CandidType,
+    {
+        let env = StateMachine::new();
+
+        let forbidden_metadata = vec![
+            Value::entry(METADATA_DECIMALS, 8u64),
+            Value::entry(METADATA_NAME, "BogusName"),
+            Value::entry(METADATA_SYMBOL, "BN"),
+            Value::entry(METADATA_FEE, Nat::from(10_000u64)),
+            Value::entry(METADATA_MAX_MEMO_LENGTH, 8u64),
+        ];
+
+        let args = encode_init_args(InitArgs {
+            metadata: forbidden_metadata.clone(),
+            ..init_args(vec![])
+        });
+        let args = Encode!(&args).unwrap();
+        let canister_id = env
+            .install_canister(ledger_wasm_v3.clone(), args, None)
+            .unwrap();
+
+        let verify_duplicate_metadata = || {
+            let metadata = Decode!(
+                &env.query(canister_id, "icrc1_metadata", Encode!().unwrap())
+                    .expect("failed to query metadata")
+                    .bytes(),
+                Vec<(String, Value)>
+            )
+            .expect("failed to decode metadata response");
+
+            let mut key_counts = HashMap::new();
+
+            for (k, _v) in metadata.iter() {
+                key_counts
+                    .entry(k.clone())
+                    .and_modify(|counter| *counter += 1)
+                    .or_insert(1);
+            }
+
+            // The forbidden metadata should be present twice - one instance from the init args, and
+            // one dynamically set by the ledger based on its internal state.
+            for forbidden_metadata in FORBIDDEN_METADATA.iter() {
+                assert_eq!(key_counts.get(*forbidden_metadata), Some(&2));
+            }
+        };
+
+        verify_duplicate_metadata();
+
+        let ledger_upgrade_arg = LedgerArgument::Upgrade(Some(UpgradeArgs {
+            metadata: Some(forbidden_metadata),
+            ..UpgradeArgs::default()
+        }));
+        env.upgrade_canister(
+            canister_id,
+            ledger_wasm_v3,
+            Encode!(&ledger_upgrade_arg).unwrap(),
+        )
+        .unwrap();
+
+        verify_duplicate_metadata();
+    }
+
+    pub fn test_setting_forbidden_metadata_not_possible<T>(
+        ledger_wasm: Vec<u8>,
+        encode_init_args: fn(InitArgs) -> T,
+    ) where
+        T: CandidType,
+    {
+        let env = StateMachine::new();
+
+        // Verify that specifying any of the forbidden metadata in the init args is not possible.
+        for forbidden_metadata in FORBIDDEN_METADATA.iter() {
+            let args = encode_init_args(InitArgs {
+                metadata: vec![Value::entry(*forbidden_metadata, 8u64)],
+                ..init_args(vec![])
+            });
+            let args = Encode!(&args).unwrap();
+            match env.install_canister(ledger_wasm.clone(), args, None) {
+                Ok(_) => {
+                    panic!("should not be able to install ledger with forbidden metadata")
+                }
+                Err(err) => {
+                    err.assert_contains(
+                        ErrorCode::CanisterCalledTrap,
+                        "is reserved and cannot be set",
+                    );
+                }
+            }
+        }
+
+        let args = encode_init_args(init_args(vec![]));
+        let args = Encode!(&args).unwrap();
+        let canister_id = env
+            .install_canister(ledger_wasm.clone(), args, None)
+            .expect("should successfully install ledger without forbidden metadata");
+
+        // Verify that also upgrading does not accept the forbidden metadata
+        for forbidden_metadata in FORBIDDEN_METADATA.iter() {
+            let ledger_upgrade_arg = LedgerArgument::Upgrade(Some(UpgradeArgs {
+                metadata: Some(vec![Value::entry(*forbidden_metadata, 8u64)]),
+                ..UpgradeArgs::default()
+            }));
+            match env.upgrade_canister(
+                canister_id,
+                ledger_wasm.clone(),
+                Encode!(&ledger_upgrade_arg).unwrap(),
+            ) {
+                Ok(_) => {
+                    panic!("should not be able to upgrade ledger with forbidden metadata")
+                }
+                Err(err) => {
+                    err.assert_contains(
+                        ErrorCode::CanisterCalledTrap,
+                        "is reserved and cannot be set",
+                    );
+                }
+            }
+        }
+
+        let ledger_upgrade_arg = LedgerArgument::Upgrade(Some(UpgradeArgs::default()));
+        env.upgrade_canister(
+            canister_id,
+            ledger_wasm.clone(),
+            Encode!(&ledger_upgrade_arg).unwrap(),
+        )
+        .expect("should successfully upgrade the ledger");
+    }
+}
