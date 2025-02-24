@@ -122,7 +122,7 @@ jobs:
           git commit -m "Updating container image to ${IMAGE_SHA}" -m "Image tag: ${IMAGE_TAG}"
           git push
         env:
-          IMAGE_SHA: ${{ steps.build.outputs.imageid }g}
+          IMAGE_SHA: ${{ steps.build.outputs.imageid }}
           GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
 
       - name: Add PR Comment
