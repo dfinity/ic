@@ -235,11 +235,6 @@ impl TestCase {
     }
 }
 
-#[derive(Deserialize)]
-struct Subnets {
-    subnets: HashMap<String, String>,
-}
-
 fn test(env: TestEnv) {
     let logger = env.logger();
 
