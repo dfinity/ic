@@ -388,50 +388,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4b46cbb362ab8752921c97e041f5e366ee6297bd428a31275b9fcf1e380f7299"
 
 [[package]]
-name = "anonymization-client"
-version = "0.1.0"
-dependencies = [
- "anonymization-interface",
- "anyhow",
- "async-trait",
- "candid",
- "ic-canister-client",
- "ic-types",
- "prometheus",
- "rand 0.8.5",
- "rsa",
- "thiserror 2.0.11",
- "tokio",
-]
-
-[[package]]
-name = "anonymization-interface"
-version = "0.1.0"
-dependencies = [
- "candid",
- "serde",
- "serde_bytes",
-]
-
-[[package]]
-name = "anonymization_backend"
-version = "0.1.0"
-dependencies = [
- "anonymization-interface",
- "anyhow",
- "async-trait",
- "candid",
- "ic-cdk 0.17.1",
- "ic-cdk-timers",
- "ic-nns-constants",
- "ic-stable-structures",
- "lazy_static",
- "prometheus",
- "serde",
- "thiserror 2.0.11",
-]
-
-[[package]]
 name = "anstream"
 version = "0.6.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
