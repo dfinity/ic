@@ -1,7 +1,8 @@
 use nix::unistd::Pid;
+use std::io::BufRead;
 use std::os::unix::io::AsRawFd;
 use std::os::unix::prelude::{CommandExt, RawFd};
-use std::process::{Child, Command};
+use std::process::{Child, Command, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use crate::transport::SocketReaderConfig;
@@ -12,10 +13,30 @@ use crate::{
 
 use std::sync::Arc;
 
+/// Copy a prefixed child output (reader) into the replica's output (writer).
+fn copying_task<R, W>(prefix: &'static str, reader: Option<R>, mut writer: W)
+where
+    R: std::io::Read + Send + 'static,
+    W: std::io::Write + Send + 'static,
+{
+    let Some(reader) = reader else {
+        return;
+    };
+    let reader = std::io::BufReader::new(reader);
+    for line in reader.lines() {
+        let Ok(line) = line else {
+            break;
+        };
+        let out = format!("{prefix}{line}\n");
+        let _res = writer.write_all(out.as_bytes());
+    }
+}
+
 /// Spawns a subprocess and passes the given unix domain socket to
 /// it for control. The socket will arrive as file descriptor 3 in the
 /// target process.
 pub fn spawn_socketed_process(
+    prefix: &'static str,
     exec_path: &str,
     argv: &[String],
     env: &[(&str, &str)],
@@ -45,7 +66,13 @@ pub fn spawn_socketed_process(
         })
     };
 
-    let child_handle = cmd.spawn()?;
+    cmd.stdout(Stdio::piped()).stderr(Stdio::piped());
+    let mut child_handle = cmd.spawn()?;
+
+    let child_stdout = child_handle.stdout.take();
+    rayon::spawn(move || copying_task(prefix, child_stdout, std::io::stdout()));
+    let child_stderr = child_handle.stderr.take();
+    rayon::spawn(move || copying_task(prefix, child_stderr, std::io::stderr()));
 
     Ok(child_handle)
 }
@@ -84,7 +111,14 @@ pub fn spawn_canister_sandbox_process_with_factory(
     safe_shutdown: Arc<AtomicBool>,
 ) -> std::io::Result<(Arc<dyn SandboxService>, Pid, std::thread::JoinHandle<()>)> {
     let (socket, sock_sandbox) = std::os::unix::net::UnixStream::pair()?;
-    let pid = spawn_socketed_process(exec_path, argv, &[], sock_sandbox.as_raw_fd())?.id() as i32;
+    let pid = spawn_socketed_process(
+        "[TEST SANDBOX]: ",
+        exec_path,
+        argv,
+        &[],
+        sock_sandbox.as_raw_fd(),
+    )?
+    .id() as i32;
 
     let socket = Arc::new(socket);
 
@@ -160,4 +194,94 @@ pub fn build_sandbox_binary_relative_path(sandbox_executable_name: &str) -> Opti
     let this_exec_path = std::path::Path::new(&argv0);
     let parent = this_exec_path.parent()?;
     Some(parent.join(sandbox_executable_name).to_str()?.to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use std::io::Cursor;
+
+    use super::*;
+
+    #[test]
+    fn spawn_socketed_process_does_not_fail() {
+        let res = spawn_socketed_process(
+            "[TEST]: ",
+            "/bin/sh",
+            &[
+                "-c".into(),
+                r#"
+                echo "stdout 1.1\n  stdout 1.2"; echo "stderr 1.1\n  stderr 1.2" 1>&2
+                sleep 1
+                echo "stdout 2.1\n  stdout 2.2"; echo "stderr 2.1\n  stderr 2.2" 1>&2
+            "#
+                .into(),
+            ],
+            &[],
+            0,
+        );
+        let mut child = res.expect("Error spawning a process");
+        rayon::spawn(move || {
+            for i in 0..10 {
+                println!("main output {i}");
+                std::thread::sleep(std::time::Duration::from_millis(100));
+            }
+        });
+        child.wait().expect("Error waiting a process");
+    }
+
+    use std::io;
+    use std::io::Write;
+    use std::sync::{Arc, Mutex};
+
+    #[derive(Clone)]
+    struct SharedWriter<W>(Arc<Mutex<W>>);
+
+    impl<W: Write> SharedWriter<W> {
+        pub fn new(w: W) -> Self {
+            SharedWriter(Arc::new(Mutex::new(w)))
+        }
+    }
+
+    impl<W: Write> Write for SharedWriter<W> {
+        fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+            (*self.0.lock().unwrap())
+                .write_all(buf)
+                .expect("Error writing to a shared buffer");
+            Ok(buf.len())
+        }
+
+        fn flush(&mut self) -> io::Result<()> {
+            (*self.0.lock().unwrap()).flush()
+        }
+    }
+
+    impl<W: Clone> SharedWriter<W> {
+        pub fn get(&self) -> W {
+            (*self.0.lock().unwrap()).clone()
+        }
+    }
+
+    #[test]
+    fn copying_task_prefixes_lines() {
+        fn pfx(s: &str, expected: &str) {
+            let reader = Cursor::new(s.to_string());
+            let writer = SharedWriter::new(Vec::new());
+            rayon::in_place_scope(|_scope| copying_task("pfx ", Some(reader), writer.clone()));
+            assert_eq!(
+                writer.get(),
+                expected.as_bytes(),
+                "Error asserting {:?} == {expected:?}",
+                String::from_utf8_lossy(&writer.get())
+            );
+        }
+        pfx("line\n", "pfx line\n");
+        pfx("line", "pfx line\n");
+        pfx("line1\nline2\n", "pfx line1\npfx line2\n");
+        pfx("line1\nline2", "pfx line1\npfx line2\n");
+        // Binary output is supported.
+        pfx(
+            &String::from_utf8_lossy(&[0_u8; 1234]),
+            &format!("pfx {}\n", String::from_utf8_lossy(&[0_u8; 1234])),
+        );
+    }
 }
