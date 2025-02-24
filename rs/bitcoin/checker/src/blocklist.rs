@@ -1,14 +1,14 @@
 #[cfg(test)]
-    mod tests;
+mod tests;
 
-    use bitcoin::Address;
+use bitcoin::Address;
 
-    /// The script to generate this file, including information about the source data, can be found here:
-    /// /rs/cross-chain/scripts/generate_blocklist.py
+/// The script to generate this file, including information about the source data, can be found here:
+/// /rs/cross-chain/scripts/generate_blocklist.py
 
-    /// BTC is not accepted from nor sent to addresses on this list.
-    /// NOTE: Keep it sorted!
-    pub const BTC_ADDRESS_BLOCKLIST: &[&str] = &[
+/// BTC is not accepted from nor sent to addresses on this list.
+/// NOTE: Keep it sorted!
+pub const BTC_ADDRESS_BLOCKLIST: &[&str] = &[
     "123WBUDmSJv4GctdVEz6Qq6z8nXSKrJ4KX",
     "125W5ek3DT6Zqy5S2iPt4FHQdNMCbZA3FU",
     "1295rkVyNfFpqZpXvKGhDqwhP1jZcNNDMV",
