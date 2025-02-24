@@ -251,7 +251,7 @@ fn test(env: TestEnv) {
         mainnet_application_subnet_version
     );
 
-    let mainnet_versions = vec![mainnet_nns_version, mainnet_application_subnet_version];
+    let mainnet_versions = [mainnet_nns_version, mainnet_application_subnet_version];
 
     let tests = mainnet_versions.iter().flat_map(|v| {
         [
