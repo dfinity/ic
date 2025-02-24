@@ -243,14 +243,20 @@ struct Subnets {
 fn test(env: TestEnv) {
     let logger = env.logger();
 
-    let versions_json =
-        read_dependency_to_string("mainnet-subnet-revisions.json").expect("mainnet IC versions");
+    let mainnet_nns_version = std::env::var("MAINNET_NNS_SUBNET_REVISION_ENV")
+        .expect("could not read nns mainnet version from environment");
+    let mainnet_application_subnet_version =
+        std::env::var("MAINNET_APPLICATION_SUBNET_REVISION_ENV")
+            .expect("could not read mainnet application subnet version from environment");
 
-    let parsed: Subnets =
-        serde_json::from_str(&versions_json).expect("Can't parse the mainnet revisions JSON");
-    let mainnet_versions: Vec<String> = parsed.subnets.values().cloned().collect();
+    info!(
+        logger,
+        "Mainnet versions: \nNNS version: {:?}\nApplication subnet version: {:?}",
+        mainnet_nns_version,
+        mainnet_application_subnet_version
+    );
 
-    info!(logger, "Mainnet versions: {:?}", mainnet_versions);
+    let mainnet_versions = vec![mainnet_nns_version, mainnet_application_subnet_version];
 
     let tests = mainnet_versions.iter().flat_map(|v| {
         [
