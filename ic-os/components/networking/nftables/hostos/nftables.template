@@ -2,7 +2,6 @@ table ip filter {
   define icmp_v4_types_accept = {
     destination-unreachable,
     time-exceeded,
-    parameter-problem,
     echo-request,
     echo-reply,
   }
@@ -68,7 +67,6 @@ table ip6 filter {
     destination-unreachable,
     packet-too-big,
     time-exceeded,
-    parameter-problem,
     echo-request,
     echo-reply,
     nd-router-advert,
