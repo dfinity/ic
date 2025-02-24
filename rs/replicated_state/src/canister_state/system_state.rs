@@ -1010,23 +1010,6 @@ impl SystemState {
         self.ingress_induction_cycles_debit = Cycles::zero();
     }
 
-    /// This method is used for maintaining the backwards compatibility.
-    /// Returns:
-    /// - controller ID as-is, if there is only one controller.
-    /// - DEFAULT_PRINCIPAL_MULTIPLE_CONTROLLERS, if there are multiple
-    ///   controllers.
-    /// - DEFAULT_PRINCIPAL_ZERO_CONTROLLERS, if there is no controller.
-    pub fn controller(&self) -> &PrincipalId {
-        if self.controllers.len() < 2 {
-            match self.controllers.iter().next() {
-                None => &DEFAULT_PRINCIPAL_ZERO_CONTROLLERS,
-                Some(controller) => controller,
-            }
-        } else {
-            &DEFAULT_PRINCIPAL_MULTIPLE_CONTROLLERS
-        }
-    }
-
     /// Returns a reference to the `CallContextManager` in a `Running` or `Stopping`
     /// canister.
     pub fn call_context_manager(&self) -> Option<&CallContextManager> {
