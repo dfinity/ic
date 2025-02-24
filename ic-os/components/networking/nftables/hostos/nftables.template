@@ -55,9 +55,6 @@ table ip filter {
     ct state { invalid } drop
     ct state { established, related } accept
     icmp type $icmp_v4_types_accept accept
-    ip daddr { 0.0.0.0/0 } ct state { new } tcp dport { 53 } accept
-    ip daddr { 0.0.0.0/0 } ct state { new } udp dport { 53 } accept
-    ip daddr { 0.0.0.0/0 } ct state { new } udp dport { 123 } accept
     ip daddr { 0.0.0.0/0 } ct state { new } tcp dport { 80, 443 } accept
   }
 }
