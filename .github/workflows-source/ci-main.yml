@@ -24,6 +24,8 @@ permissions:
   contents: read
   pull-requests: read
 
+# test
+
 env:
   CI_COMMIT_SHA: ${{ github.sha }}
   CI_JOB_NAME: ${{ github.job }}
