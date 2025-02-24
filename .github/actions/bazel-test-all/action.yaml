@@ -23,7 +23,7 @@ runs:
           set +e # manual error handling to ensure we can run some post-build commands
 
           # freshly deployed k8s machines require ownership correctly set
-          if [ -d /cache ]; then
+          if [ -e /cache ]; then
             sudo find /cache -not -user 1001 -or -not -group 1001 -exec chown 1001:1001 {} +
           fi
 
