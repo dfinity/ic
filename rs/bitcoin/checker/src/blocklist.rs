@@ -366,7 +366,7 @@ pub const BTC_ADDRESS_BLOCKLIST: &[&str] = &[
     "3QnWE5GVfQu3wVav91RuFkqip4Ti4NWqAY",
     "3QrukkUiBrn23rFUKUgasNd1wYWNk7WdSV",
     "3Qw9Fn19gCnga9LfHfpM99aGzuqxBNjR2i",
-    "TUCsTq7TofTCJRRoHk6RvhMoS2mJLm5Yzq",
+    // "TUCsTq7TofTCJRRoHk6RvhMoS2mJLm5Yzq", reason: legacy address base58 prefix: invalid legacy address prefix in decoded base58 data 65
     "bc1q05aktddf9ce4p7hh3stgsf253m4vweu7nkhtmw",
     "bc1q202ajnhxgg9d9jjczmg0g4usp6haqldyy2eakl",
     "bc1q237mvl0heyw0r38wd3xz8h5mar96rrwpams8pp",
