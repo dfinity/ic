@@ -36,7 +36,6 @@ pub trait BlockData {
     fn remove_oldest_blocks(&mut self, num_blocks: u64);
     fn len(&self) -> u64;
     fn is_empty(&self) -> bool;
-    fn last(&self) -> Option<EncodedBlock>;
     fn migrate_one_block(&mut self, num_archived_blocks: u64) -> bool;
 }
 
@@ -73,10 +72,6 @@ impl BlockData for HeapBlockData {
 
     fn is_empty(&self) -> bool {
         self.blocks.is_empty()
-    }
-
-    fn last(&self) -> Option<EncodedBlock> {
-        self.blocks.last().cloned()
     }
 
     fn migrate_one_block(&mut self, _num_archived_blocks: u64) -> bool {
@@ -164,10 +159,6 @@ where
             self.blocks
                 .get_block(height.checked_sub(self.num_archived_blocks()).unwrap())
         }
-    }
-
-    pub fn last(&self) -> Option<EncodedBlock> {
-        self.blocks.last()
     }
 
     pub fn num_archived_blocks(&self) -> u64 {

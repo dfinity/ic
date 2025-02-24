@@ -1378,14 +1378,6 @@ impl BlockData for StableBlockData {
         BLOCKS_MEMORY.with_borrow(|blocks| blocks.is_empty())
     }
 
-    fn last(&self) -> Option<EncodedBlock> {
-        BLOCKS_MEMORY.with_borrow(|blocks| {
-            blocks
-                .last_key_value()
-                .map(|kv| EncodedBlock::from_vec(kv.1))
-        })
-    }
-
     fn migrate_one_block(&mut self, num_archived_blocks: u64) -> bool {
         let num_migrated = self.len();
         if num_migrated < self.blocks.len() as u64 {
