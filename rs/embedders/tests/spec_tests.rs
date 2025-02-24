@@ -49,6 +49,12 @@ mod convert {
                         heap_type
                     )
                 }
+                AbstractHeapType::Cont | AbstractHeapType::NoCont => {
+                    panic!(
+                        "Unable to handle heap type {:?}. The stack switching proposal isn't supported",
+                        heap_type
+                    )
+                }
             },
             HeapType::Concrete(_) => {
                 panic!(
@@ -81,6 +87,9 @@ mod convert {
                     arg
                 );
                 None
+            }
+            _ => {
+                panic!("Unknown WastArg {:?}", arg);
             }
         }
     }
@@ -516,7 +525,7 @@ fn run_directive<'a>(
         // Here we check that an example module can be parsed and encoded with
         // wasm-transform and is still validated by wasmtime after the round
         // trip.
-        WastDirective::Wat(mut wat) => {
+        WastDirective::Module(mut wat) => {
             if is_component(&wat) {
                 return Ok(());
             }
@@ -716,7 +725,11 @@ fn run_directive<'a>(
                 }
             }
         }
-        WastDirective::Thread(_) | WastDirective::Wait { .. } => todo!(),
+        WastDirective::Thread(_)
+        | WastDirective::Wait { .. }
+        | WastDirective::ModuleDefinition(_)
+        | WastDirective::ModuleInstance { .. }
+        | WastDirective::AssertSuspension { .. } => todo!(),
     }
 }
 

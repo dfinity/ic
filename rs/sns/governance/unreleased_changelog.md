@@ -17,4 +17,6 @@ on the process that this file is part of, see
 
 ## Fixed
 
+`ManageNervousSystemParameters` proposals now enforce that at least one field is set.
+
 ## Security

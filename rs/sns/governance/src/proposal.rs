@@ -519,6 +519,10 @@ fn validate_and_render_manage_nervous_system_parameters(
     new_parameters: &NervousSystemParameters,
     current_parameters: &NervousSystemParameters,
 ) -> Result<String, String> {
+    if new_parameters == &NervousSystemParameters::default() {
+        return Err("NervousSystemParameters: at least one field must be set.".to_string());
+    }
+
     new_parameters.inherit_from(current_parameters).validate()?;
 
     Ok(format!(
@@ -5314,5 +5318,75 @@ Payload rendering here"#
                 ..Default::default()
             }
         );
+    }
+
+    #[test]
+    fn test_manage_nervous_system_parameters_must_set_some_fields() {
+        let current_parameters = NervousSystemParameters::with_default_values();
+
+        // Probably the same as `NervousSystemParameters::default()`, but more verbose.
+        let new_parameters = NervousSystemParameters {
+            reject_cost_e8s: None,
+            neuron_minimum_stake_e8s: None,
+            transaction_fee_e8s: None,
+            max_proposals_to_keep_per_action: None,
+            initial_voting_period_seconds: None,
+            wait_for_quiet_deadline_increase_seconds: None,
+            default_followees: None,
+            max_number_of_neurons: None,
+            neuron_minimum_dissolve_delay_to_vote_seconds: None,
+            max_followees_per_function: None,
+            max_dissolve_delay_seconds: None,
+            max_neuron_age_for_age_bonus: None,
+            max_number_of_proposals_with_ballots: None,
+            neuron_claimer_permissions: None,
+            neuron_grantable_permissions: None,
+            max_number_of_principals_per_neuron: None,
+            voting_rewards_parameters: None,
+            max_dissolve_delay_bonus_percentage: None,
+            max_age_bonus_percentage: None,
+            maturity_modulation_disabled: None,
+            automatically_advance_target_version: None,
+        };
+
+        let result = validate_and_render_manage_nervous_system_parameters(
+            &new_parameters,
+            &current_parameters,
+        );
+
+        assert_eq!(
+            result,
+            Err("NervousSystemParameters: at least one field must be set.".to_string())
+        );
+    }
+
+    #[test]
+    fn test_manage_nervous_system_parameters_happy() {
+        let current_parameters = NervousSystemParameters::with_default_values();
+
+        // At least one field must be set. Which one - doesn't matter for this test.
+        let new_parameters = NervousSystemParameters {
+            automatically_advance_target_version: Some(true),
+            ..Default::default()
+        };
+
+        let render = validate_and_render_manage_nervous_system_parameters(
+            &new_parameters,
+            &current_parameters,
+        )
+        .unwrap();
+
+        for keyword in [
+            "change nervous system parameters",
+            "automatically_advance_target_version: Some(\n        false,\n    )",
+            "automatically_advance_target_version: Some(\n        true,\n    )",
+        ] {
+            assert!(
+                render.contains(keyword),
+                "Proposal render:\n{}\n does not contain expected keyword {}",
+                render,
+                keyword
+            );
+        }
     }
 }

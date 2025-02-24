@@ -388,50 +388,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4b46cbb362ab8752921c97e041f5e366ee6297bd428a31275b9fcf1e380f7299"
 
 [[package]]
-name = "anonymization-client"
-version = "0.1.0"
-dependencies = [
- "anonymization-interface",
- "anyhow",
- "async-trait",
- "candid",
- "ic-canister-client",
- "ic-types",
- "prometheus",
- "rand 0.8.5",
- "rsa",
- "thiserror 2.0.11",
- "tokio",
-]
-
-[[package]]
-name = "anonymization-interface"
-version = "0.1.0"
-dependencies = [
- "candid",
- "serde",
- "serde_bytes",
-]
-
-[[package]]
-name = "anonymization_backend"
-version = "0.1.0"
-dependencies = [
- "anonymization-interface",
- "anyhow",
- "async-trait",
- "candid",
- "ic-cdk 0.17.1",
- "ic-cdk-timers",
- "ic-nns-constants",
- "ic-stable-structures",
- "lazy_static",
- "prometheus",
- "serde",
- "thiserror 2.0.11",
-]
-
-[[package]]
 name = "anstream"
 version = "0.6.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1932,7 +1888,7 @@ dependencies = [
  "on_wire",
  "rand 0.8.5",
  "tokio",
- "wasmprinter 0.217.1",
+ "wasmprinter",
  "wat",
 ]
 
@@ -2636,6 +2592,7 @@ dependencies = [
  "ic-registry-subnet-type",
  "ic-system-test-driver",
  "ic-types",
+ "ic_bls12_381",
  "ic_consensus_system_test_utils",
  "ic_consensus_threshold_sig_system_test_utils",
  "slog",
@@ -5859,7 +5816,6 @@ dependencies = [
  "ic-interfaces",
  "ic-limits",
  "ic-logger",
- "ic-management-canister-types-private",
  "ic-metrics",
  "ic-protobuf",
  "ic-sys",
@@ -8511,7 +8467,7 @@ dependencies = [
  "slog-term",
  "tokio",
  "tower 0.5.2",
- "wasmparser 0.217.1",
+ "wasmparser 0.221.3",
 ]
 
 [[package]]
@@ -8593,12 +8549,12 @@ dependencies = [
  "slog",
  "slog-term",
  "tempfile",
- "wasm-encoder 0.217.1",
- "wasmparser 0.217.1",
- "wasmprinter 0.217.1",
+ "wasm-encoder 0.221.3",
+ "wasmparser 0.221.3",
+ "wasmprinter",
  "wasmtime",
  "wasmtime-environ",
- "wast 212.0.0",
+ "wast 221.0.2",
  "wat",
 ]
 
@@ -8706,7 +8662,7 @@ dependencies = [
  "tokio",
  "tower 0.5.2",
  "tracing",
- "wasmparser 0.217.1",
+ "wasmparser 0.221.3",
  "wat",
 ]
 
@@ -8795,6 +8751,7 @@ dependencies = [
  "askama",
  "async-trait",
  "axum",
+ "axum-server",
  "byte-unit",
  "bytes",
  "cfg-if 1.0.0",
@@ -8832,13 +8789,16 @@ dependencies = [
  "ic-pprof",
  "ic-protobuf",
  "ic-read-state-response-parser",
+ "ic-registry-client-fake",
  "ic-registry-client-helpers",
  "ic-registry-keys",
+ "ic-registry-proto-data-provider",
  "ic-registry-provisional-whitelist",
  "ic-registry-routing-table",
  "ic-registry-subnet-type",
  "ic-replicated-state",
  "ic-test-utilities",
+ "ic-test-utilities-registry",
  "ic-test-utilities-state",
  "ic-test-utilities-time",
  "ic-test-utilities-types",
@@ -8853,6 +8813,7 @@ dependencies = [
  "proptest 1.6.0",
  "prost 0.13.5",
  "rand 0.8.5",
+ "rcgen",
  "reqwest 0.12.12",
  "rstest",
  "rustls 0.23.23",
@@ -9915,8 +9876,6 @@ name = "ic-message"
 version = "0.9.0"
 dependencies = [
  "candid",
- "dfn_candid",
- "dfn_core",
  "ic-cdk 0.17.1",
  "ic-cdk-macros 0.17.1",
  "serde",
@@ -11938,7 +11897,7 @@ dependencies = [
 
 [[package]]
 name = "ic-rosetta-api"
-version = "2.1.1"
+version = "2.1.2"
 dependencies = [
  "actix-rt",
  "actix-web",
@@ -13277,7 +13236,7 @@ dependencies = [
  "tempfile",
  "tokio",
  "tower 0.5.2",
- "wasmprinter 0.217.1",
+ "wasmprinter",
  "wat",
 ]
 
@@ -13926,9 +13885,9 @@ dependencies = [
 name = "ic-wasm-transform"
 version = "0.9.0"
 dependencies = [
- "wasm-encoder 0.217.1",
- "wasmparser 0.217.1",
- "wasmprinter 0.217.1",
+ "wasm-encoder 0.221.3",
+ "wasmparser 0.221.3",
+ "wasmprinter",
  "wat",
 ]
 
@@ -15648,7 +15607,7 @@ dependencies = [
  "ic-nns-common",
  "ic-nns-constants",
  "ic-nns-test-utils",
- "wasmprinter 0.217.1",
+ "wasmprinter",
 ]
 
 [[package]]
@@ -17747,17 +17706,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "pmap"
-version = "0.9.0"
-dependencies = [
- "canister-test",
- "dfn_core",
- "dfn_json",
- "dfn_macro",
- "ic-utils 0.9.0",
-]
-
-[[package]]
 name = "pocket-ic"
 version = "6.0.0"
 dependencies = [
@@ -19144,6 +19092,7 @@ dependencies = [
  "ic-nervous-system-common-test-keys",
  "ic-nns-common",
  "ic-nns-constants",
+ "itertools 0.12.1",
  "rgb",
  "serde",
  "serde_json",
@@ -22893,16 +22842,6 @@ dependencies = [
 
 [[package]]
 name = "wasm-encoder"
-version = "0.217.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "10961fd76db420582926af70816dd205019d8152d9e51e1b939125dd1639f854"
-dependencies = [
- "leb128",
- "wasmparser 0.217.1",
-]
-
-[[package]]
-name = "wasm-encoder"
 version = "0.221.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "dc8444fe4920de80a4fe5ab564fff2ae58b6b73166b89751f8c6c93509da32e5"
@@ -22950,20 +22889,6 @@ dependencies = [
 
 [[package]]
 name = "wasmparser"
-version = "0.217.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "65a5a0689975b9fd93c02f5400cfd9669858b99607e54e7b892c6080cba598bb"
-dependencies = [
- "ahash 0.8.11",
- "bitflags 2.8.0",
- "hashbrown 0.14.5",
- "indexmap 2.7.1",
- "semver",
- "serde",
-]
-
-[[package]]
-name = "wasmparser"
 version = "0.221.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d06bfa36ab3ac2be0dee563380147a5b81ba10dd8885d7fbbc9eb574be67d185"
@@ -22984,17 +22909,6 @@ dependencies = [
  "bitflags 2.8.0",
  "indexmap 2.7.1",
  "semver",
-]
-
-[[package]]
-name = "wasmprinter"
-version = "0.217.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "324c6782d7b81c01625335d252653b26ea68e835ddb4aef4cb1ed3ea40ae3a49"
-dependencies = [
- "anyhow",
- "termcolor",
- "wasmparser 0.217.1",
 ]
 
 [[package]]
@@ -23127,7 +23041,7 @@ dependencies = [
  "target-lexicon",
  "wasm-encoder 0.221.3",
  "wasmparser 0.221.3",
- "wasmprinter 0.221.3",
+ "wasmprinter",
 ]
 
 [[package]]
@@ -23214,15 +23128,15 @@ dependencies = [
 
 [[package]]
 name = "wast"
-version = "212.0.0"
+version = "221.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4606a05fb0aae5d11dd7d8280a640d88a63ee019360ba9be552da3d294b8d1f5"
+checksum = "fcc4470b9de917ba199157d1f0ae104f2ae362be728c43e68c571c7715bd629e"
 dependencies = [
  "bumpalo",
  "leb128",
  "memchr",
- "unicode-width 0.1.14",
- "wasm-encoder 0.212.0",
+ "unicode-width 0.2.0",
+ "wasm-encoder 0.221.3",
 ]
 
 [[package]]

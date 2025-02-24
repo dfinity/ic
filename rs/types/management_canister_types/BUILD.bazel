@@ -14,7 +14,6 @@ permanent_whitelist = [
 # These crates depend on this library directly for historical reasons
 # and must move to the published version of this library on crates.io.
 temporary_whitelist = [
-    "//rs/artifact_pool:__subpackages__",
     "//rs/bitcoin:__subpackages__",
     "//rs/canister_client:__subpackages__",
     "//rs/canister_sandbox:__subpackages__",  # permanent?
