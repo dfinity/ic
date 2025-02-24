@@ -11941,7 +11941,7 @@ dependencies = [
 
 [[package]]
 name = "ic-rosetta-api"
-version = "2.1.1"
+version = "2.1.2"
 dependencies = [
  "actix-rt",
  "actix-web",
