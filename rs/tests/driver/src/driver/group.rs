@@ -1,4 +1,5 @@
 #![allow(dead_code)]
+use backon::{BlockingRetryable, ExponentialBuilder};
 use itertools::Itertools;
 use rand::distributions::Alphanumeric;
 use rand::Rng;
@@ -824,31 +825,44 @@ impl SystemTestGroup {
         );
         info!(logger, "Sending following body: {}", body);
         let client = reqwest::blocking::Client::new();
-        let response = client
-            .post("https://service-discovery.dm1-esmesh1.dfinity.network")
-            .header("Content-Type", "application/json")
-            .body(body)
-            .send();
-        match response {
-            Ok(r) => {
-                if let Err(e) = r.error_for_status_ref() {
-                    error!(
-                        logger,
-                        "Failed to register with the service discovery: {:?}", e
+        Self::register_with_backoff(&client, logger, body);
+    }
+
+    fn register_with_backoff(client: &reqwest::blocking::Client, logger: Logger, body: String) {
+        let request = || {
+            let response = client
+                .post("https://service-discovery.dm1-esmesh1.dfinity.network")
+                .header("Content-Type", "application/json")
+                .timeout(Duration::from_secs(30))
+                .body(body.clone())
+                .send()
+                .map_err(|e| e.to_string());
+            match response {
+                Ok(r) => {
+                    if let Err(e) = r.error_for_status_ref() {
+                        let body = r.text().unwrap();
+                        let message = format!(
+                        "Failed to register with the service discovery: {:?}, Response text: {}",
+                        e, body
                     );
-                    let body = r.text().unwrap();
-                    error!(logger, "Response text: {}", body);
-                } else {
-                    info!(logger, "Successfully registered with the service discovery")
+                        error!(logger, "{}", message);
+                        Err(message)
+                    } else {
+                        info!(logger, "Successfully registered with the service discovery");
+                        Ok(())
+                    }
+                }
+                Err(e) => {
+                    let message = format!("Failed to register with the service discovery: {:?}", e);
+                    error!(logger, "{}", message);
+                    Err(message)
                 }
             }
-            Err(e) => {
-                error!(
-                    logger,
-                    "Failed to register with the service discovery: {:?}", e
-                )
-            }
-        }
+        };
+        request
+            .retry(&ExponentialBuilder::default())
+            .call()
+            .unwrap();
     }
 
     pub fn execute(self) -> Result<Outcome> {
