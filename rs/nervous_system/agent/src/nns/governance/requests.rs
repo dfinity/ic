@@ -1,7 +1,6 @@
 use crate::Request;
 use ic_nns_governance_api::pb::v1::{
-    GetNeuronsFundAuditInfoRequest, GetNeuronsFundAuditInfoResponse, ManageNeuronRequest,
-    ManageNeuronResponse,
+    GetNeuronsFundAuditInfoRequest, GetNeuronsFundAuditInfoResponse,
 };
 
 impl Request for GetNeuronsFundAuditInfoRequest {
@@ -18,20 +17,4 @@ impl Request for GetNeuronsFundAuditInfoRequest {
     }
 
     type Response = GetNeuronsFundAuditInfoResponse;
-}
-
-impl Request for ManageNeuronRequest {
-    fn method(&self) -> &'static str {
-        "manage_neuron"
-    }
-
-    fn update(&self) -> bool {
-        true
-    }
-
-    fn payload(&self) -> Result<Vec<u8>, candid::Error> {
-        candid::encode_one(self)
-    }
-
-    type Response = ManageNeuronResponse;
 }
