@@ -72,7 +72,4 @@ for DIR in release canisters icos/guestos icos/hostos icos/setupos; do
     fi
 done
 
-EXTERNAL_URL="https://objects.$(echo "${NODE_NAME:-}" | cut -d'-' -f1)-idx1.dfinity.network/$(cat /ceph-s3-info/BUCKET_NAME)/${VERSION}/${CI_JOB_NAME}/artifacts.tar"
-echo -e "Node: ${NODE_NAME:-}\nURL: ${URL}\nExternal URL: ${EXTERNAL_URL}" >./build-ic/info
-echo "${EXTERNAL_URL}" >./build-ic/url
 tar -cf build-ic.tar build-ic
