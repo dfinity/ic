@@ -1519,7 +1519,9 @@ impl ExecutionTest {
     /// `self.xnet_messages`.
     pub fn induct_messages(&mut self) {
         let mut state = self.state.take().unwrap();
-        let mut subnet_available_memory = self.subnet_available_memory.get_message_memory();
+        let mut subnet_available_guaranteed_response_memory = self
+            .subnet_available_memory
+            .get_guaranteed_response_message_memory();
         let output_messages = get_output_messages(&mut state);
         let mut canisters = state.take_canister_states();
         for (canister_id, message) in output_messages {
@@ -1527,7 +1529,7 @@ impl ExecutionTest {
                 Some(dest_canister) => {
                     let result = dest_canister.push_input(
                         message.clone(),
-                        &mut subnet_available_memory,
+                        &mut subnet_available_guaranteed_response_memory,
                         state.metadata.own_subnet_type,
                         InputQueueType::LocalSubnet,
                     );
@@ -1933,9 +1935,13 @@ impl ExecutionTestBuilder {
         self
     }
 
-    pub fn with_subnet_message_memory(mut self, subnet_message_memory: i64) -> Self {
-        self.execution_config.subnet_message_memory_capacity =
-            NumBytes::from(subnet_message_memory as u64);
+    pub fn with_subnet_guaranteed_response_message_memory(
+        mut self,
+        subnet_guaranteed_response_message_memory: i64,
+    ) -> Self {
+        self.execution_config
+            .guaranteed_response_message_memory_capacity =
+            NumBytes::from(subnet_guaranteed_response_message_memory as u64);
         self
     }
 
@@ -2390,7 +2396,9 @@ impl ExecutionTestBuilder {
             subnet_available_memory: SubnetAvailableMemory::new(
                 self.execution_config.subnet_memory_capacity.get() as i64
                     - self.execution_config.subnet_memory_reservation.get() as i64,
-                self.execution_config.subnet_message_memory_capacity.get() as i64,
+                self.execution_config
+                    .guaranteed_response_message_memory_capacity
+                    .get() as i64,
                 self.execution_config
                     .subnet_wasm_custom_sections_memory_capacity
                     .get() as i64,

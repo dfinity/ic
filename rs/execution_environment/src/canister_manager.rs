@@ -43,7 +43,8 @@ use ic_replicated_state::{
     },
     metadata_state::subnet_call_context_manager::InstallCodeCallId,
     page_map::PageAllocatorFileDescriptor,
-    CallOrigin, CanisterState, NetworkTopology, ReplicatedState, SchedulerState, SystemState,
+    CallOrigin, CanisterState, MessageMemoryUsage, NetworkTopology, ReplicatedState,
+    SchedulerState, SystemState,
 };
 use ic_system_api::ExecutionParameters;
 use ic_types::{
@@ -569,7 +570,7 @@ impl CanisterManager {
         validate_canister_settings(
             settings,
             NumBytes::new(0),
-            NumBytes::new(0),
+            MessageMemoryUsage::ZERO,
             MemoryAllocation::BestEffort,
             subnet_available_memory,
             subnet_memory_saturation,
@@ -1525,8 +1526,8 @@ impl CanisterManager {
             });
         }
 
-        let current_memory_usage = canister.memory_usage();
-        let message_memory = canister.message_memory_usage();
+        let memory_usage = canister.memory_usage();
+        let message_memory_usage = canister.message_memory_usage();
         let compute_allocation = canister.compute_allocation();
         let reveal_top_up = canister.controllers().contains(&sender);
 
@@ -1535,8 +1536,8 @@ impl CanisterManager {
             .cycles_account_manager
             .prepay_execution_cycles(
                 &mut canister.system_state,
-                current_memory_usage,
-                message_memory,
+                memory_usage,
+                message_memory_usage,
                 compute_allocation,
                 instructions,
                 subnet_size,

@@ -14,12 +14,11 @@ use ic_management_canister_types_private::{
 use ic_nns_constants::CYCLES_MINTING_CANISTER_ID;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::canister_state::{NextExecution, WASM_PAGE_SIZE_IN_BYTES};
-use ic_replicated_state::testing::CanisterQueuesTesting;
-use ic_replicated_state::testing::SystemStateTesting;
+use ic_replicated_state::testing::{CanisterQueuesTesting, SystemStateTesting};
 use ic_replicated_state::{
-    canister_state::execution_state::CustomSectionType, ExportedFunctions, Global, PageIndex,
+    canister_state::execution_state::CustomSectionType, ExportedFunctions, Global,
+    MessageMemoryUsage, NumWasmPages, PageIndex, PageMap,
 };
-use ic_replicated_state::{NumWasmPages, PageMap};
 use ic_sys::PAGE_SIZE;
 use ic_system_api::MAX_CALL_TIMEOUT_SECONDS;
 use ic_test_utilities::assert_utils::assert_balance_equals;
@@ -27,17 +26,18 @@ use ic_test_utilities_execution_environment::{
     assert_empty_reply, check_ingress_status, cycles_reserved_for_app_and_verified_app_subnets,
     get_reply, wasm_compilation_cost, wat_compilation_cost, ExecutionTest, ExecutionTestBuilder,
 };
-use ic_test_utilities_metrics::fetch_int_counter;
-use ic_test_utilities_metrics::{fetch_histogram_vec_stats, metric_vec, HistogramStats};
-use ic_types::messages::{CanisterMessage, NO_DEADLINE};
+use ic_test_utilities_metrics::{
+    fetch_histogram_vec_stats, fetch_int_counter, metric_vec, HistogramStats,
+};
+use ic_types::messages::{
+    CanisterMessage, CanisterTask, MAX_INTER_CANISTER_PAYLOAD_IN_BYTES, NO_DEADLINE,
+};
 use ic_types::time::CoarseTime;
-use ic_types::Time;
 use ic_types::{
     ingress::{IngressState, IngressStatus, WasmResult},
-    messages::CanisterTask,
-    messages::MAX_INTER_CANISTER_PAYLOAD_IN_BYTES,
     methods::WasmMethod,
-    CanisterId, ComputeAllocation, Cycles, NumBytes, NumInstructions, MAX_STABLE_MEMORY_IN_BYTES,
+    CanisterId, ComputeAllocation, Cycles, NumBytes, NumInstructions, Time,
+    MAX_STABLE_MEMORY_IN_BYTES,
 };
 use ic_universal_canister::{call_args, wasm, UNIVERSAL_CANISTER_WASM};
 #[cfg(not(all(target_arch = "aarch64", target_vendor = "apple")))]
@@ -2663,8 +2663,9 @@ fn subnet_available_memory_is_updated() {
         test.subnet_available_memory().get_execution_memory()
     );
     assert_eq!(
-        initial_subnet_available_memory.get_message_memory(),
-        test.subnet_available_memory().get_message_memory()
+        initial_subnet_available_memory.get_guaranteed_response_message_memory(),
+        test.subnet_available_memory()
+            .get_guaranteed_response_message_memory()
     )
 }
 
@@ -2690,8 +2691,9 @@ fn subnet_available_memory_is_updated_in_heartbeat() {
         test.subnet_available_memory().get_execution_memory()
     );
     assert_eq!(
-        initial_subnet_available_memory.get_message_memory(),
-        test.subnet_available_memory().get_message_memory()
+        initial_subnet_available_memory.get_guaranteed_response_message_memory(),
+        test.subnet_available_memory()
+            .get_guaranteed_response_message_memory()
     )
 }
 
@@ -2717,8 +2719,9 @@ fn subnet_available_memory_is_updated_in_global_timer() {
         test.subnet_available_memory().get_execution_memory()
     );
     assert_eq!(
-        initial_subnet_available_memory.get_message_memory(),
-        test.subnet_available_memory().get_message_memory()
+        initial_subnet_available_memory.get_guaranteed_response_message_memory(),
+        test.subnet_available_memory()
+            .get_guaranteed_response_message_memory()
     )
 }
 
@@ -2741,8 +2744,9 @@ fn subnet_available_memory_is_not_updated_in_query() {
         test.subnet_available_memory().get_execution_memory()
     );
     assert_eq!(
-        initial_subnet_available_memory.get_message_memory(),
-        test.subnet_available_memory().get_message_memory()
+        initial_subnet_available_memory.get_guaranteed_response_message_memory(),
+        test.subnet_available_memory()
+            .get_guaranteed_response_message_memory()
     )
 }
 
@@ -2763,8 +2767,9 @@ fn subnet_available_memory_is_updated_by_canister_init() {
             > test.subnet_available_memory().get_execution_memory()
     );
     assert_eq!(
-        initial_subnet_available_memory.get_message_memory(),
-        test.subnet_available_memory().get_message_memory()
+        initial_subnet_available_memory.get_guaranteed_response_message_memory(),
+        test.subnet_available_memory()
+            .get_guaranteed_response_message_memory()
     );
     let memory_used = test.state().memory_taken().execution().get() as i64;
     let canister_history_memory = 2 * size_of::<CanisterChange>() + size_of::<PrincipalId>();
@@ -2794,8 +2799,9 @@ fn subnet_available_memory_is_updated_by_canister_start() {
             > test.subnet_available_memory().get_execution_memory()
     );
     assert_eq!(
-        initial_subnet_available_memory.get_message_memory(),
-        test.subnet_available_memory().get_message_memory()
+        initial_subnet_available_memory.get_guaranteed_response_message_memory(),
+        test.subnet_available_memory()
+            .get_guaranteed_response_message_memory()
     );
     let mem_before_upgrade = test.subnet_available_memory().get_execution_memory();
     let result = test.upgrade_canister(canister_id, wat::parse_str(wat).unwrap());
@@ -2813,8 +2819,9 @@ fn subnet_available_memory_is_updated_by_canister_start() {
             + canister_history_memory as i64
     );
     assert_eq!(
-        initial_subnet_available_memory.get_message_memory(),
-        test.subnet_available_memory().get_message_memory()
+        initial_subnet_available_memory.get_guaranteed_response_message_memory(),
+        test.subnet_available_memory()
+            .get_guaranteed_response_message_memory()
     );
 }
 
@@ -2840,8 +2847,9 @@ fn subnet_available_memory_is_updated_by_canister_pre_upgrade() {
         test.subnet_available_memory().get_execution_memory()
     );
     assert_eq!(
-        initial_subnet_available_memory.get_message_memory(),
-        test.subnet_available_memory().get_message_memory()
+        initial_subnet_available_memory.get_guaranteed_response_message_memory(),
+        test.subnet_available_memory()
+            .get_guaranteed_response_message_memory()
     )
 }
 
@@ -2864,8 +2872,9 @@ fn subnet_available_memory_is_not_updated_by_canister_pre_upgrade_wasm_memory() 
         test.subnet_available_memory().get_execution_memory()
     );
     assert_eq!(
-        initial_subnet_available_memory.get_message_memory(),
-        test.subnet_available_memory().get_message_memory()
+        initial_subnet_available_memory.get_guaranteed_response_message_memory(),
+        test.subnet_available_memory()
+            .get_guaranteed_response_message_memory()
     )
 }
 
@@ -2888,8 +2897,9 @@ fn subnet_available_memory_is_updated_by_canister_post_upgrade() {
         test.subnet_available_memory().get_execution_memory()
     );
     assert_eq!(
-        initial_subnet_available_memory.get_message_memory(),
-        test.subnet_available_memory().get_message_memory()
+        initial_subnet_available_memory.get_guaranteed_response_message_memory(),
+        test.subnet_available_memory()
+            .get_guaranteed_response_message_memory()
     )
 }
 
@@ -2913,8 +2923,9 @@ fn subnet_available_memory_does_not_change_after_failed_execution() {
         test.subnet_available_memory().get_execution_memory()
     );
     assert_eq!(
-        initial_subnet_available_memory.get_message_memory(),
-        test.subnet_available_memory().get_message_memory()
+        initial_subnet_available_memory.get_guaranteed_response_message_memory(),
+        test.subnet_available_memory()
+            .get_guaranteed_response_message_memory()
     )
 }
 
@@ -2950,8 +2961,9 @@ fn subnet_available_memory_is_not_updated_when_allocation_reserved() {
         test.subnet_available_memory().get_execution_memory()
     );
     assert_eq!(
-        initial_subnet_available_memory.get_message_memory(),
-        test.subnet_available_memory().get_message_memory()
+        initial_subnet_available_memory.get_guaranteed_response_message_memory(),
+        test.subnet_available_memory()
+            .get_guaranteed_response_message_memory()
     );
     assert_eq!(initial_memory_used, test.state().memory_taken().execution());
 }
@@ -6809,7 +6821,7 @@ fn memory_grow_succeeds_in_init_if_canister_has_memory_allocation() {
         freezing_threshold,
         ic_types::MemoryAllocation::Reserved(NumBytes::new(memory_allocation)),
         NumBytes::new(0),
-        NumBytes::new(0),
+        MessageMemoryUsage::ZERO,
         ComputeAllocation::zero(),
         test.subnet_size(),
         Cycles::zero(),
@@ -6854,7 +6866,7 @@ fn memory_grow_succeeds_in_post_upgrade_if_the_same_amount_is_dropped_after_pre_
         freezing_threshold,
         ic_types::MemoryAllocation::BestEffort,
         NumBytes::new(memory_usage),
-        NumBytes::new(0),
+        MessageMemoryUsage::ZERO,
         ComputeAllocation::zero(),
         test.subnet_size(),
         Cycles::zero(),

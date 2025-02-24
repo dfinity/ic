@@ -34,7 +34,9 @@ use ic_validate_eq::ValidateEq;
 use ic_validate_eq_derive::ValidateEq;
 use rand::{Rng, SeedableRng};
 use rand_chacha::ChaChaRng;
+use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
+use std::ops::{AddAssign, SubAssign};
 use std::sync::Arc;
 use strum_macros::{EnumCount, EnumIter};
 
@@ -339,7 +341,7 @@ pub struct MemoryTaken {
     /// Wasm custom sections) where no explicit memory reservation
     /// has been made.
     execution: NumBytes,
-    /// Memory taken by guaranteed response canister messages.
+    /// Memory taken by guaranteed response canister messages or reservations.
     guaranteed_response_messages: NumBytes,
     /// Memory taken by best-effort canister messages.
     best_effort_messages: NumBytes,
@@ -355,7 +357,8 @@ impl MemoryTaken {
         self.execution
     }
 
-    /// Returns the amount of memory taken by guaranteed response canister messages.
+    /// Returns the amount of memory taken by guaranteed response canister messages
+    /// or reservations.
     pub fn guaranteed_response_messages(&self) -> NumBytes {
         self.guaranteed_response_messages
     }
@@ -379,6 +382,74 @@ impl MemoryTaken {
     /// Returns the amount of memory taken by canister history.
     pub fn canister_history(&self) -> NumBytes {
         self.canister_history
+    }
+}
+
+/// Combination of memory used by and reserved for guaranteed response messages
+/// and memory used by best-effort messages.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize, Serialize)]
+pub struct MessageMemoryUsage {
+    /// Memory used by and reserved for guaranteed response canister messages, in
+    /// bytes.
+    pub guaranteed_response: NumBytes,
+
+    /// Memory used by best-effort canister messages, in bytes.
+    pub best_effort: NumBytes,
+}
+
+impl MessageMemoryUsage {
+    pub const ZERO: MessageMemoryUsage = MessageMemoryUsage {
+        guaranteed_response: NumBytes::new(0),
+        best_effort: NumBytes::new(0),
+    };
+
+    /// Returns the total memory used by all canister messages (guaranteed response
+    /// or best-effort).
+    pub fn total(&self) -> NumBytes {
+        self.guaranteed_response + self.best_effort
+    }
+
+    /// Calculates `self` + `rhs`.
+    ///
+    /// Returns a tuple of the addition along with a boolean indicating whether an
+    /// arithmetic overflow would occur on either field. If an overflow would have
+    /// occurred then the wrapped value is returned.
+    pub fn overflowing_add(&self, rhs: &Self) -> (Self, bool) {
+        let (guaranteed_response, overflow1) = self
+            .guaranteed_response
+            .get()
+            .overflowing_add(rhs.guaranteed_response.get());
+        let (best_effort, overflow2) = self
+            .best_effort
+            .get()
+            .overflowing_add(rhs.best_effort.get());
+        (
+            Self {
+                guaranteed_response: guaranteed_response.into(),
+                best_effort: best_effort.into(),
+            },
+            overflow1 || overflow2,
+        )
+    }
+
+    /// Returns `true` iff both fields of `self` are greater than or equal to the
+    /// corresponding fields of `rhs`.
+    pub fn ge(&self, rhs: Self) -> bool {
+        self.guaranteed_response >= rhs.guaranteed_response && self.best_effort >= rhs.best_effort
+    }
+}
+
+impl AddAssign<MessageMemoryUsage> for MessageMemoryUsage {
+    fn add_assign(&mut self, rhs: MessageMemoryUsage) {
+        self.guaranteed_response += rhs.guaranteed_response;
+        self.best_effort += rhs.best_effort;
+    }
+}
+
+impl SubAssign<MessageMemoryUsage> for MessageMemoryUsage {
+    fn sub_assign(&mut self, rhs: MessageMemoryUsage) {
+        self.guaranteed_response -= rhs.guaranteed_response;
+        self.best_effort -= rhs.best_effort;
     }
 }
 
@@ -797,11 +868,12 @@ impl ReplicatedState {
     /// On failure (queue full, canister not found, out of memory), returns the
     /// corresponding error and the original message.
     ///
-    /// Updates `subnet_available_memory` to reflect any change in memory usage.
+    /// Updates `subnet_available_guaranteed_response_memory` to reflect any change
+    /// in memory usage.
     pub fn push_input(
         &mut self,
         msg: RequestOrResponse,
-        subnet_available_memory: &mut i64,
+        subnet_available_guaranteed_response_memory: &mut i64,
     ) -> Result<bool, (StateError, RequestOrResponse)> {
         let own_subnet_type = self.metadata.own_subnet_type;
         let sender = msg.sender();
@@ -817,7 +889,7 @@ impl ReplicatedState {
         match self.canister_state_mut(&receiver) {
             Some(receiver_canister) => receiver_canister.push_input(
                 msg,
-                subnet_available_memory,
+                subnet_available_guaranteed_response_memory,
                 own_subnet_type,
                 input_queue_type,
             ),
@@ -828,7 +900,7 @@ impl ReplicatedState {
                         RequestOrResponse::Request(_) => push_input(
                             &mut self.subnet_queues,
                             msg,
-                            subnet_available_memory,
+                            subnet_available_guaranteed_response_memory,
                             own_subnet_type,
                             input_queue_type,
                         ),

@@ -21,7 +21,7 @@ use ic_replicated_state::canister_state::system_state::{
 };
 use ic_replicated_state::{
     canister_state::execution_state::WasmExecutionMode, canister_state::DEFAULT_QUEUE_CAPACITY,
-    CallOrigin, ExecutionTask, NetworkTopology, SystemState,
+    CallOrigin, ExecutionTask, MessageMemoryUsage, NetworkTopology, SystemState,
 };
 use ic_types::{
     messages::{CallContextId, CallbackId, RejectContext, Request, RequestMetadata, NO_DEADLINE},
@@ -920,7 +920,7 @@ impl SandboxSafeSystemState {
         &mut self,
         amount_to_burn: Cycles,
         canister_current_memory_usage: NumBytes,
-        canister_current_message_memory_usage: NumBytes,
+        canister_current_message_memory_usage: MessageMemoryUsage,
     ) -> Cycles {
         let mut new_balance = self.cycles_balance();
         let burned_cycles = self.cycles_account_manager.cycles_burn(
@@ -1003,7 +1003,7 @@ impl SandboxSafeSystemState {
     pub(super) fn withdraw_cycles_for_transfer(
         &mut self,
         canister_current_memory_usage: NumBytes,
-        canister_current_message_memory_usage: NumBytes,
+        canister_current_message_memory_usage: MessageMemoryUsage,
         amount: Cycles,
         reveal_top_up: bool,
     ) -> HypervisorResult<()> {
@@ -1032,7 +1032,7 @@ impl SandboxSafeSystemState {
     pub fn push_output_request(
         &mut self,
         canister_current_memory_usage: NumBytes,
-        canister_current_message_memory_usage: NumBytes,
+        canister_current_message_memory_usage: MessageMemoryUsage,
         msg: Request,
         prepayment_for_response_execution: Cycles,
         prepayment_for_response_transmission: Cycles,
@@ -1120,7 +1120,7 @@ impl SandboxSafeSystemState {
     pub(super) fn check_freezing_threshold_for_memory_grow(
         &self,
         api_type: &ApiType,
-        current_message_memory_usage: NumBytes,
+        current_message_memory_usage: MessageMemoryUsage,
         old_memory_usage: NumBytes,
         new_memory_usage: NumBytes,
     ) -> HypervisorResult<()> {
@@ -1158,8 +1158,9 @@ impl SandboxSafeSystemState {
         }
     }
 
-    /// Checks the cycles balance against the freezing threshold with the new
-    /// message memory usage if that's needed for the given API type.
+    /// Checks the cycles balance against the freezing threshold with the new total
+    /// (guaranteed response plus best-effort) message memory usage if that's needed
+    /// for the given API type.
     ///
     /// If the old message memory usage is higher than the new message memory usage,
     /// then no check is performed.
@@ -1171,11 +1172,11 @@ impl SandboxSafeSystemState {
         &self,
         api_type: &ApiType,
         current_memory_usage: NumBytes,
-        old_message_memory_usage: NumBytes,
-        new_message_memory_usage: NumBytes,
+        old_message_memory_usage: MessageMemoryUsage,
+        new_message_memory_usage: MessageMemoryUsage,
     ) -> HypervisorResult<()> {
         let should_check = self.should_check_freezing_threshold_for_memory_grow(api_type);
-        if !should_check || old_message_memory_usage >= new_message_memory_usage {
+        if !should_check || old_message_memory_usage.total() >= new_message_memory_usage.total() {
             return Ok(());
         }
 
@@ -1192,7 +1193,7 @@ impl SandboxSafeSystemState {
             Ok(())
         } else {
             Err(HypervisorError::InsufficientCyclesInMessageMemoryGrow {
-                bytes: new_message_memory_usage - old_message_memory_usage,
+                bytes: new_message_memory_usage.total() - old_message_memory_usage.total(),
                 available: self.cycles_balance(),
                 threshold,
                 reveal_top_up: self.caller_is_controller(),
