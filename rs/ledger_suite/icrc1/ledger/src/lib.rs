@@ -1339,24 +1339,26 @@ impl BlockData for StableBlockData {
     }
 
     fn get_blocks(&self, range: Range<u64>) -> Vec<EncodedBlock> {
-        BLOCKS_MEMORY.with_borrow(|blocks| {
-            let mut result = vec![];
-            let first_index = blocks.first_key_value().unwrap_or((0, vec![])).0;
-            let start = range.start + first_index;
-            let end = range.end + first_index;
-            for block in blocks.range(start..end) {
-                result.push(EncodedBlock::from_vec(block.1));
+        BLOCKS_MEMORY.with_borrow(|blocks| match blocks.first_key_value() {
+            Some((first_index, _)) => {
+                let mut result = vec![];
+                let start = range.start + first_index;
+                let end = range.end + first_index;
+                for block in blocks.range(start..end) {
+                    result.push(EncodedBlock::from_vec(block.1));
+                }
+                result
             }
-            result
+            None => vec![],
         })
     }
 
     fn get_block(&self, index: u64) -> Option<EncodedBlock> {
-        BLOCKS_MEMORY.with_borrow(|blocks| {
-            let first_index = blocks.first_key_value().unwrap_or((0, vec![])).0;
-            blocks
+        BLOCKS_MEMORY.with_borrow(|blocks| match blocks.first_key_value() {
+            Some((first_index, _)) => blocks
                 .get(&(index + first_index))
-                .map(EncodedBlock::from_vec)
+                .map(EncodedBlock::from_vec),
+            None => None,
         })
     }
 
