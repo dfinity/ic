@@ -6,7 +6,9 @@ use crate::utils::{
     group_shares_by_callback_id, invalid_artifact, invalid_artifact_err, parse_past_payload_ids,
     validation_failed, validation_failed_err,
 };
-use ic_consensus_utils::{crypto::ConsensusCrypto, registry_version_at_height};
+use ic_consensus_utils::{
+    crypto::ConsensusCrypto, get_registry_version_and_interval_length_at_height,
+};
 use ic_error_types::RejectCode;
 use ic_interfaces::crypto::ErrorReproducibility;
 use ic_interfaces::{
@@ -35,15 +37,14 @@ use ic_types::{
         bytes_to_vetkd_payload, vetkd_payload_to_bytes, ConsensusResponse, ValidationContext,
         VetKdAgreement, VetKdErrorCode, VetKdPayload,
     },
-    consensus::dkg::Summary,
     crypto::{
-        threshold_sig::ni_dkg::{NiDkgId, NiDkgTranscript},
         vetkd::{VetKdArgs, VetKdEncryptedKey},
         ExtendedDerivationPath,
     },
     messages::{CallbackId, Payload as ResponsePayload, RejectContext},
     CountBytes, Height, NumBytes, SubnetId, Time,
 };
+use num_traits::ops::saturating::SaturatingSub;
 use std::time::Duration;
 use std::{
     collections::{BTreeMap, BTreeSet, HashSet},
@@ -54,6 +55,12 @@ mod metrics;
 #[cfg(test)]
 mod test_utils;
 mod utils;
+
+#[derive(Debug)]
+struct RequestExpiry {
+    time: Option<Time>,
+    height: Height,
+}
 
 /// Implementation of the [`BatchPayloadBuilder`] for the VetKd feature.
 pub struct VetKdPayloadBuilderImpl {
@@ -97,14 +104,16 @@ impl VetKdPayloadBuilderImpl {
         &self,
         height: Height,
         context_time: Time,
-    ) -> Result<(BTreeSet<MasterPublicKeyId>, Option<Time>), PayloadValidationError> {
-        let Some(registry_version) = registry_version_at_height(self.cache.as_ref(), height) else {
+    ) -> Result<(BTreeSet<MasterPublicKeyId>, RequestExpiry), PayloadValidationError> {
+        let Some((registry_version, dkg_interval_length)) =
+            get_registry_version_and_interval_length_at_height(self.cache.as_ref(), height)
+        else {
             warn!(
                 self.log,
-                "Failed to obtain consensus registry version in VetKd payload builder"
+                "Failed to obtain consensus registry version and interval length in VetKd payload builder"
             );
             return Err(validation_failed(
-                VetKdPayloadValidationFailure::RegistryVersionUnavailable(height),
+                VetKdPayloadValidationFailure::DkgSummaryUnavailable(height),
             ));
         };
 
@@ -157,13 +166,20 @@ impl VetKdPayloadBuilderImpl {
             })
             .collect();
 
-        Ok((key_ids, request_expiry_time))
+        let request_expiry_height = height.saturating_sub(&dkg_interval_length);
+
+        Ok((
+            key_ids,
+            RequestExpiry {
+                time: request_expiry_time,
+                height: request_expiry_height,
+            },
+        ))
     }
 
     fn get_vetkd_payload_impl(
         &self,
-        height: Height,
-        request_expiry_time: Option<Time>,
+        request_expiry: RequestExpiry,
         valid_keys: BTreeSet<MasterPublicKeyId>,
         state: &ReplicatedState,
         delivered_ids: HashSet<CallbackId>,
@@ -180,11 +196,6 @@ impl VetKdPayloadBuilderImpl {
             )
         };
 
-        // Get the latest finalized summary. Note that there may be a higher
-        // notarized summary block.
-        let summary = self.cache.summary_block();
-        let dkg_summary = &summary.payload.as_ref().as_summary().dkg;
-
         // Iterate over all outstanding VetKD requests
         let mut candidates = BTreeMap::new();
         let mut accumulated_size = 0;
@@ -199,14 +210,9 @@ impl VetKdPayloadBuilderImpl {
                 continue;
             }
 
-            let candidate = if let Some(reject) = reject_if_invalid(
-                height,
-                dkg_summary,
-                &valid_keys,
-                context,
-                request_expiry_time,
-                Some(&self.metrics),
-            ) {
+            let candidate = if let Some(reject) =
+                reject_if_invalid(&valid_keys, context, &request_expiry, Some(&self.metrics))
+            {
                 reject
             } else {
                 let Some(shares) = grouped_shares.get(callback_id) else {
@@ -270,19 +276,13 @@ impl VetKdPayloadBuilderImpl {
 
     fn validate_vetkd_payload_impl(
         &self,
-        height: Height,
         payload: VetKdPayload,
-        request_expiry_time: Option<Time>,
+        request_expiry: RequestExpiry,
         valid_keys: BTreeSet<MasterPublicKeyId>,
         state: &ReplicatedState,
         delivered_ids: HashSet<CallbackId>,
     ) -> Result<(), PayloadValidationError> {
         let contexts = state.signature_request_contexts();
-
-        // Get the latest finalized summary. Note that there may be a higher
-        // notarized summary block.
-        let summary = self.cache.summary_block();
-        let dkg_summary = &summary.payload.as_ref().as_summary().dkg;
 
         for (id, agreement) in payload.vetkd_agreements {
             if delivered_ids.contains(&id) {
@@ -297,14 +297,7 @@ impl VetKdPayloadBuilderImpl {
                 return invalid_artifact_err(InvalidVetKdPayloadReason::UnexpectedIDkgContext(id));
             }
 
-            let expected_reject = reject_if_invalid(
-                height,
-                dkg_summary,
-                &valid_keys,
-                context,
-                request_expiry_time,
-                None,
-            );
+            let expected_reject = reject_if_invalid(&valid_keys, context, &request_expiry, None);
 
             match agreement {
                 VetKdAgreement::Success(data) => {
@@ -397,7 +390,7 @@ impl BatchPayloadBuilder for VetKdPayloadBuilderImpl {
             .with_label_values(&["build"])
             .start_timer();
 
-        let Ok((valid_keys, request_expiry_time)) =
+        let Ok((valid_keys, request_expiry)) =
             self.get_enabled_keys_and_expiry(height, context.time)
         else {
             return vec![];
@@ -409,8 +402,7 @@ impl BatchPayloadBuilder for VetKdPayloadBuilderImpl {
 
         let delivered_ids = parse_past_payload_ids(past_payloads, &self.log);
         let payload = self.get_vetkd_payload_impl(
-            height,
-            request_expiry_time,
+            request_expiry,
             valid_keys,
             state.get_ref(),
             delivered_ids,
@@ -437,7 +429,7 @@ impl BatchPayloadBuilder for VetKdPayloadBuilderImpl {
             return Ok(());
         }
 
-        let (valid_keys, request_expiry_time) =
+        let (valid_keys, request_expiry) =
             self.get_enabled_keys_and_expiry(height, context.validation_context.time)?;
 
         let state = match self
@@ -455,9 +447,8 @@ impl BatchPayloadBuilder for VetKdPayloadBuilderImpl {
             .map_err(|e| invalid_artifact(InvalidVetKdPayloadReason::DeserializationFailed(e)))?;
 
         self.validate_vetkd_payload_impl(
-            height,
             payload,
-            request_expiry_time,
+            request_expiry,
             valid_keys,
             state.get_ref(),
             delivered_ids,
@@ -499,15 +490,12 @@ impl IntoMessages<Vec<ConsensusResponse>> for VetKdPayloadBuilderImpl {
 
 /// Reject the given context if
 /// 1. it requests a key ID that isn't part of `valid_keys`,
-/// 2. the request is expired according to the given `request_expiry_time`,
-/// 3. the request is expired according to the latest summary block,
-///    meaning the requested NiDKG transcript no longer exists.
+/// 2. the request is expired according to the given `request_expiry.time`,
+/// 3. the request is expired according to the given `request_expiry.height`
 fn reject_if_invalid(
-    height: Height,
-    dkg: &Summary,
     valid_keys: &BTreeSet<MasterPublicKeyId>,
     context: &SignWithThresholdContext,
-    request_expiry_time: Option<Time>,
+    request_expiry: &RequestExpiry,
     metrics: Option<&VetKdPayloadBuilderMetrics>,
 ) -> Option<VetKdAgreement> {
     let key_id = context.key_id();
@@ -518,7 +506,10 @@ fn reject_if_invalid(
         return Some(VetKdAgreement::Reject(VetKdErrorCode::InvalidKey));
     }
 
-    if request_expiry_time.is_some_and(|expiry| context.batch_time < expiry) {
+    if request_expiry
+        .time
+        .is_some_and(|expiry| context.batch_time < expiry)
+    {
         if let Some(metrics) = metrics {
             metrics.payload_errors_inc("expired_request", &key_id);
         }
@@ -527,7 +518,7 @@ fn reject_if_invalid(
 
     if let ThresholdArguments::VetKd(args) = &context.args {
         // We should time out contexts that request a transcript which no longer exists
-        if !summary_has_vetkd_transcript(dkg, height, &args.ni_dkg_id) {
+        if args.height < request_expiry.height {
             if let Some(metrics) = metrics {
                 metrics.payload_errors_inc("expired_transcript", &key_id);
             }
@@ -536,30 +527,6 @@ fn reject_if_invalid(
     }
 
     None
-}
-
-/// Check if the given NiDKG summary contains a transcript with the given ID, that
-/// will still be active for the given height. Not that the height may be part of
-/// either the current, or the next interval of the given summary.
-fn summary_has_vetkd_transcript(dkg: &Summary, height: Height, dkg_id: &NiDkgId) -> bool {
-    let dkg_id_match = |transcript: &NiDkgTranscript| transcript.dkg_id == *dkg_id;
-    let tag = &dkg_id.dkg_tag;
-    if dkg.current_interval_includes(height) {
-        // If the height of this payload is part of the current interval,
-        // then the transcript may be either a current, or a next transcript.
-        dkg.current_transcript(tag).is_some_and(dkg_id_match)
-            || dkg.next_transcript(tag).is_some_and(dkg_id_match)
-    } else if dkg.next_interval_includes(height) {
-        // If the height of this payload is part of the next interval,
-        // then the transcript must be a next transcript, or there must be no
-        // next transcript yet. Otherwise, if it were a current transcript,
-        // then it would no longer exist in the following summary.
-        dkg.next_transcript(tag).is_some_and(dkg_id_match)
-            || (dkg.current_transcript(tag).is_some_and(dkg_id_match)
-                && dkg.next_transcript(tag).is_none())
-    } else {
-        false
-    }
 }
 
 #[cfg(test)]
@@ -1258,7 +1225,11 @@ mod tests {
                     .get_enabled_keys_and_expiry(HEIGHT, UNIX_EPOCH)
                     .unwrap();
                 assert!(keys.is_empty());
-                assert!(expiry.is_none());
+                assert!(expiry.time.is_none());
+                assert_eq!(
+                    expiry.height,
+                    Height::new(HEIGHT.get() - DKG_INTERVAL_LENGTH)
+                );
             },
         )
     }
@@ -1277,7 +1248,11 @@ mod tests {
             assert!(keys.contains(&MasterPublicKeyId::VetKd(
                 VetKdKeyId::from_str("bls12_381_g2:some_other_key").unwrap()
             )));
-            assert_matches!(expiry, Some(time) if time == now.saturating_sub(timeout));
+            assert_matches!(expiry.time, Some(time) if time == now.saturating_sub(timeout));
+            assert_eq!(
+                expiry.height,
+                Height::new(HEIGHT.get() - DKG_INTERVAL_LENGTH)
+            );
         })
     }
 
@@ -1297,7 +1272,11 @@ mod tests {
             |builder| {
                 let (keys, expiry) = builder.get_enabled_keys_and_expiry(HEIGHT, now).unwrap();
                 assert!(keys.is_empty());
-                assert_matches!(expiry, Some(time) if time == now.saturating_sub(timeout));
+                assert_matches!(expiry.time, Some(time) if time == now.saturating_sub(timeout));
+                assert_eq!(
+                    expiry.height,
+                    Height::new(HEIGHT.get() - DKG_INTERVAL_LENGTH)
+                );
             },
         )
     }

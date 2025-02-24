@@ -256,6 +256,20 @@ pub fn registry_version_at_height(
     get_active_data_at(reader, height, get_registry_version_at_given_summary)
 }
 
+/// Return the registry version and DKG interval lendth to be used for the given height.
+/// Note that this can only look up for height that is greater than or equal
+/// to the latest catch-up package height, otherwise an error is returned.
+pub fn get_registry_version_and_interval_length_at_height(
+    reader: &dyn ConsensusPoolCache,
+    height: Height,
+) -> Option<(RegistryVersion, Height)> {
+    get_active_data_at(reader, height, |block, height| {
+        let registry_version = get_registry_version_at_given_summary(block, height)?;
+        let dkg_interval_length = get_dkg_interval_length_at_given_summary(block, height)?;
+        Some((registry_version, dkg_interval_length))
+    })
+}
+
 /// Return the current low transcript for the given height if it was found.
 pub fn active_low_threshold_nidkg_id(
     reader: &dyn ConsensusPoolCache,
@@ -356,6 +370,20 @@ fn get_registry_version_at_given_summary(
         Some(dkg_summary.registry_version)
     } else if dkg_summary.next_interval_includes(height) {
         Some(summary_block.context.registry_version)
+    } else {
+        None
+    }
+}
+
+fn get_dkg_interval_length_at_given_summary(
+    summary_block: &Block,
+    height: Height,
+) -> Option<Height> {
+    let dkg_summary = &summary_block.payload.as_ref().as_summary().dkg;
+    if dkg_summary.current_interval_includes(height) {
+        Some(dkg_summary.interval_length)
+    } else if dkg_summary.next_interval_includes(height) {
+        Some(dkg_summary.next_interval_length)
     } else {
         None
     }

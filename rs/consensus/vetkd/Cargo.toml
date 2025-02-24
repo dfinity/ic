@@ -24,6 +24,7 @@ ic-types = { path = "../../types/types" }
 prometheus = { workspace = true }
 slog = { workspace = true }
 strum_macros = { workspace = true }
+num-traits = { workspace = true }
 
 [dev-dependencies]
 assert_matches = { workspace = true }
