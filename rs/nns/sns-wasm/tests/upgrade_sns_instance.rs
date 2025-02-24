@@ -30,8 +30,8 @@ use ic_sns_init::pb::v1::{
 };
 use ic_sns_root::{GetSnsCanistersSummaryRequest, GetSnsCanistersSummaryResponse};
 use ic_sns_wasm::pb::v1::{
-    GetNextSnsVersionRequest, InsertUpgradePathEntriesRequest, InsertUpgradePathEntriesResponse,
-    SnsCanisterIds, SnsCanisterType, SnsUpgrade, SnsWasm,
+    InsertUpgradePathEntriesRequest, InsertUpgradePathEntriesResponse, SnsCanisterIds,
+    SnsCanisterType, SnsWasm,
 };
 use ic_state_machine_tests::{StateMachine, StateMachineBuilder};
 use ic_types::Cycles;
