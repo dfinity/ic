@@ -56,7 +56,7 @@ dfx deploy --network ic archive --argument '(principal "mc6ru-gyaaa-aaaar-qaaaq-
 ### Install
 
 ```shell
-dfx deploy btc_checker --network ic --argument '(variant { InitArg = record { btc_network = variant { mainnet }; check_mode = variant { AcceptAll }; num_subnet_nodes = 34; } })'
+dfx deploy btc_checker --network ic --argument '(variant { InitArg = record { btc_network = variant { testnet }; check_mode = variant { AcceptAll }; num_subnet_nodes = 34; } })'
 ```
 
 ### Upgrade
