@@ -25,6 +25,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           ref: 'master-private'
+          token: ${{ steps.app-token.outputs.token }}
   
       - name: Sync changes from public ic
         run: |
@@ -34,5 +35,3 @@ jobs:
           git remote add public https://github.com/dfinity/ic.git
           git fetch public master
           git push origin public/master:master-private
-        env:
-          GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
