@@ -1675,7 +1675,8 @@ pub(crate) fn start_or_reuse_server(server_binary: Option<PathBuf>) -> Url {
         } else {
             ""
         };
-        panic!("
+        panic!(
+            "
 Could not find the PocketIC binary.
 
 The PocketIC binary could not be found at {:?}{}. Please specify the path to the binary\n
@@ -1683,8 +1684,13 @@ The PocketIC binary could not be found at {:?}{}. Please specify the path to the
   - or using the `POCKET_IC_BIN` environment variable,\n
   - or place it in your current working directory (you are running PocketIC from {:?}).\n
 
-To download the binary, please visit https://github.com/dfinity/pocketic."
-, bin_path, is_dir, &std::env::current_dir().map(|x| x.display().to_string()).unwrap_or_else(|_| "an unknown directory".to_string()));
+To download the binary, please visit https://github.com/dfinity/pocketic.",
+            bin_path,
+            is_dir,
+            &std::env::current_dir()
+                .map(|x| x.display().to_string())
+                .unwrap_or_else(|_| "an unknown directory".to_string())
+        );
     }
 
     // check PocketIC server version compatibility
