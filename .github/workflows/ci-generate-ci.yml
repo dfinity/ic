@@ -55,4 +55,3 @@ jobs:
           else
             echo "git working tree clean - no changes to be committed"
           fi
-
