@@ -199,13 +199,6 @@ impl CandidCallBuilder<CreateCanisterArgs> {
         self
     }
 
-    pub fn with_controller<P: AsRef<[u8]>>(mut self, controller: P) -> Self {
-        let mut settings = self.args.settings.unwrap_or_default();
-        settings.controller = Some(Principal::try_from(controller.as_ref()).unwrap());
-        self.args.settings = Some(settings);
-        self
-    }
-
     pub fn with_controllers<P: AsRef<[u8]>>(mut self, controllers: Vec<P>) -> Self {
         let mut settings = self.args.settings.unwrap_or_default();
         settings.controllers = Some(
@@ -256,13 +249,6 @@ impl CandidCallBuilder<UpdateSettings> {
     pub fn with_memory_allocation<T: Into<candid::Nat>>(mut self, allocation: T) -> Self {
         let mut settings = self.args.settings;
         settings.memory_allocation = Some(allocation.into());
-        self.args.settings = settings;
-        self
-    }
-
-    pub fn with_controller<P: AsRef<[u8]>>(mut self, controller: P) -> Self {
-        let mut settings = self.args.settings;
-        settings.controller = Some(Principal::try_from(controller.as_ref()).unwrap());
         self.args.settings = settings;
         self
     }
@@ -347,7 +333,6 @@ pub struct UpdateSettings {
 
 #[derive(Default, CandidType)]
 pub struct CanisterSettings {
-    pub controller: Option<Principal>,
     pub controllers: Option<Vec<Principal>>,
     pub compute_allocation: Option<candid::Nat>,
     pub memory_allocation: Option<candid::Nat>,

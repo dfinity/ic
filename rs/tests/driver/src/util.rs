@@ -1189,7 +1189,7 @@ pub async fn set_controller(
 ) {
     let mgr = ManagementCanister::create(controllee_agent);
     mgr.update_settings(controllee)
-        .with_controller(*controller)
+        .with_controllers(vec![*controller])
         .call_and_wait()
         .await
         .unwrap_or_else(|err| panic!("Could not set controller: {}", err))

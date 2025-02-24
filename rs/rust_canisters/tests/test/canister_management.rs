@@ -62,7 +62,10 @@ fn test_set_controller() {
             .await
             .unwrap();
         let status = Decode!(&status_bytes, CanisterStatusResultV2).unwrap();
-        assert_eq!(status.controller(), universal_canister.canister_id().get());
+        assert_eq!(
+            status.controllers(),
+            vec![universal_canister.canister_id().get()]
+        );
 
         Ok(())
     })
