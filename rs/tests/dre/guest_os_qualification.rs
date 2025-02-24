@@ -20,7 +20,7 @@ pub fn main() -> anyhow::Result<()> {
     // setup env variable for config
     let old_version = match std::env::var("OLD_VERSION") {
         Ok(v) => v,
-        Err(_) => read_dependency_from_env_to_string("MAINNET_NNS_SUBNET_REVISION_ENV")
+        Err(_) => std::env::var("MAINNET_NNS_SUBNET_REVISION_ENV")
             .expect("could not read mainnet version from environment"),
     };
     let new_version = std::env::var("NEW_VERSION").ok();

@@ -22,8 +22,8 @@ use ic_system_test_driver::driver::group::SystemTestGroup;
 use ic_system_test_driver::driver::ic::{InternetComputer, Subnet};
 use ic_system_test_driver::driver::test_env::TestEnv;
 use ic_system_test_driver::driver::test_env_api::{
-    read_dependency_from_env_to_string, GetFirstHealthyNodeSnapshot, HasPublicApiUrl,
-    HasTopologySnapshot, IcNodeContainer, SubnetSnapshot,
+    GetFirstHealthyNodeSnapshot, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer,
+    SubnetSnapshot,
 };
 use ic_system_test_driver::generic_workload_engine::engine::Engine;
 use ic_system_test_driver::generic_workload_engine::metrics::{
@@ -114,7 +114,7 @@ fn upgrade_downgrade_app_subnet(env: TestEnv) {
         SubnetType::Application,
         None,
     );
-    let mainnet_version = read_dependency_from_env_to_string("MAINNET_NNS_SUBNET_REVISION_ENV")
+    let mainnet_version = std::env::var("MAINNET_NNS_SUBNET_REVISION_ENV")
         .expect("could not read mainnet version from environment");
     upgrade(
         &env,

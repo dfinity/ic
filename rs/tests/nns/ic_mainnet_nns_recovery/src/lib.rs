@@ -681,7 +681,7 @@ fn with_ledger_account_for_tests(env: TestEnv, account_id: AccountIdentifier) {
 
 fn fetch_mainnet_ic_replay(env: TestEnv) {
     let logger = env.logger();
-    let version = read_dependency_from_env_to_string("MAINNET_NNS_SUBNET_REVISION_ENV")
+    let version = std::env::var("MAINNET_NNS_SUBNET_REVISION_ENV")
         .expect("could not read mainnet version from environment");
     let mainnet_ic_replica_url =
         format!("https://download.dfinity.systems/ic/{version}/release/ic-replay.gz");
@@ -734,7 +734,7 @@ fn prepare_nns_state(env: TestEnv, account_id: AccountIdentifier) -> NeuronId {
 
 fn fetch_mainnet_ic_recovery(env: TestEnv) {
     let logger = env.logger();
-    let version = read_dependency_from_env_to_string("MAINNET_NNS_SUBNET_REVISION_ENV")
+    let version = std::env::var("MAINNET_NNS_SUBNET_REVISION_ENV")
         .expect("could not read mainnet version from environment");
     let mainnet_ic_recovery_url =
         format!("https://download.dfinity.systems/ic/{version}/release/ic-recovery.gz");

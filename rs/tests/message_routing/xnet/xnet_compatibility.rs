@@ -165,7 +165,7 @@ pub async fn test_async(env: TestEnv) {
         60,
     );
 
-    let mainnet_version = read_dependency_from_env_to_string("MAINNET_NNS_SUBNET_REVISION_ENV")
+    let mainnet_version = std::env::var("MAINNET_NNS_SUBNET_REVISION_ENV")
         .expect("could not read mainnet version from environment");
 
     let original_branch_version = read_dependency_from_env_to_string("ENV_DEPS__IC_VERSION_FILE")
