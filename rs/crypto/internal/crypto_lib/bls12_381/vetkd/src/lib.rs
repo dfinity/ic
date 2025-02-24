@@ -10,8 +10,6 @@ use ic_crypto_internal_bls12_381_type::{G2Prepared, Gt, LagrangeCoefficients};
 
 use rand::{CryptoRng, RngCore};
 
-mod ro;
-
 /// The index of a node
 pub type NodeIndex = u32;
 
@@ -21,18 +19,26 @@ pub struct DerivationPath {
     delta: Scalar,
 }
 
+const DERIVATION_PATH_DOMAIN_SEP: &[u8; 44] = b"ic-crypto-vetkd-bls12-381-g2-derivation-path";
+
 impl DerivationPath {
     /// Create a new derivation path
     pub fn new<U: AsRef<[u8]>>(canister_id: &[u8], extra_paths: &[U]) -> Self {
-        let mut ro = ro::RandomOracle::new("ic-crypto-vetkd-bls12-381-derivation-path");
+        let mut combined_inputs = vec![];
 
-        ro.update_bin(canister_id);
+        // Each input is prefixed with an 8 byte length field
+        let len = canister_id.len() as u64;
+        combined_inputs.extend_from_slice(&len.to_be_bytes());
+        combined_inputs.extend_from_slice(canister_id);
 
-        for path in extra_paths {
-            ro.update_bin(path.as_ref());
+        for input in extra_paths {
+            let len = input.as_ref().len() as u64;
+            combined_inputs.extend_from_slice(&len.to_be_bytes()); // 8 bytes length
+            combined_inputs.extend_from_slice(input.as_ref());
         }
 
-        let delta = ro.finalize_to_scalar();
+        let delta = Scalar::hash(DERIVATION_PATH_DOMAIN_SEP, &combined_inputs);
+
         Self { delta }
     }
 

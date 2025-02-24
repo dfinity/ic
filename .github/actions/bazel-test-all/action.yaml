@@ -5,17 +5,7 @@ inputs:
     required: true
     default: 'test'
   BAZEL_TARGETS:
-    required: false
-    default: '//...'
-  BAZEL_CI_CONFIG:
-    required: false
-    default: '--config=ci'
-  BAZEL_EXTRA_ARGS:
-    required: false
-    default: ''
-  BAZEL_STARTUP_ARGS:
-    required: false
-    default: '--output_base=/var/tmp/bazel-output/'
+    required: true
   BUILDEVENT_APIKEY:
     required: false
   SSH_PRIVATE_KEY_BACKUP_POD:
@@ -31,6 +21,11 @@ runs:
         shell: bash
         run: |
           set +e # manual error handling to ensure we can run some post-build commands
+
+          # freshly deployed k8s machines require ownership correctly set
+          if [ -e /cache ]; then
+            sudo find /cache -not -user 1001 -or -not -group 1001 -exec chown 1001:1001 {} +
+          fi
 
           if [ -n "$SSH_PRIVATE_KEY_BACKUP_POD" ]; then
             # The following adds the SSH private key to the ssh-agent such that CI can SSH into the backup pod.
@@ -70,14 +65,10 @@ runs:
         env:
           BAZEL_COMMAND: ${{ inputs.BAZEL_COMMAND }}
           BAZEL_TARGETS: ${{ inputs.BAZEL_TARGETS }}
-          BAZEL_CI_CONFIG: ${{ inputs.BAZEL_CI_CONFIG }}
-          BAZEL_EXTRA_ARGS: ${{ inputs.BAZEL_EXTRA_ARGS }}
-          BAZEL_STARTUP_ARGS: ${{ inputs.BAZEL_STARTUP_ARGS }}
           BRANCH_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           BUILDEVENT_APIKEY: ${{ inputs.BUILDEVENT_APIKEY }}
           CI_EVENT_NAME: ${{ github.event_name }}
           CI_JOB_URL: "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-          CI_PULL_REQUEST_TARGET_BRANCH_NAME: ${{ github.event.pull_request.base.ref }}
           MERGE_BASE_SHA: ${{ github.event.pull_request.base.sha }}
           SSH_PRIVATE_KEY_BACKUP_POD: ${{ inputs.SSH_PRIVATE_KEY_BACKUP_POD }}
           GPG_PASSPHRASE: ${{ inputs.GPG_PASSPHRASE }}

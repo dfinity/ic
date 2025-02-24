@@ -1469,14 +1469,6 @@ impl SystemApiImpl {
         max_amount: Cycles,
     ) -> HypervisorResult<Cycles> {
         match &mut self.api_type {
-            ApiType::ReplyCallback {
-                response_status: ResponseStatus::AlreadyReplied,
-                ..
-            }
-            | ApiType::RejectCallback {
-                response_status: ResponseStatus::AlreadyReplied,
-                ..
-            } => Ok(Cycles::new(0)),
             ApiType::Start { .. }
             | ApiType::Init { .. }
             | ApiType::SystemTask { .. }
@@ -1499,12 +1491,46 @@ impl SystemApiImpl {
         }
     }
 
+    fn add_canister_log_for_trap(
+        &self,
+        err: &HypervisorError,
+        time: Time,
+        system_state_modifications: &mut SystemStateModifications,
+    ) {
+        if let Some(log_message) = match err {
+            HypervisorError::Trapped {
+                trap_code,
+                backtrace,
+            } => match backtrace {
+                Some(bt) => Some(format!("[TRAP]: {}\n{}", trap_code, bt)),
+                None => Some(format!("[TRAP]: {}", trap_code)),
+            },
+            HypervisorError::CalledTrap { message, backtrace } => {
+                let message = if message.is_empty() {
+                    "(no message)"
+                } else {
+                    message
+                };
+                match backtrace {
+                    Some(bt) => Some(format!("[TRAP]: {}\n{}", message, bt)),
+                    None => Some(format!("[TRAP]: {}", message)),
+                }
+            }
+            _ => None,
+        } {
+            system_state_modifications
+                .canister_log
+                .add_record(time.as_nanos_since_unix_epoch(), log_message.into_bytes());
+        }
+    }
+
     pub fn take_system_state_modifications(&mut self) -> SystemStateModifications {
-        let system_state_modifications = self.sandbox_safe_system_state.take_changes();
+        let mut system_state_modifications = self.sandbox_safe_system_state.take_changes();
+        // In the below, we explicitly list all fields of `SystemStateModifications`
+        // so that an explicit decision needs to be made for each context and
+        // and execution result combination when a new field is added to the struct.
         match self.api_type {
-            // List all fields of `SystemStateModifications` so that
-            // there's an explicit decision that needs to be made
-            // for each context when a new field is added.
+            // Inspect message runs in non-replicated mode, not persisting any changes.
             ApiType::InspectMessage { .. } => SystemStateModifications {
                 new_certified_data: None,
                 callback_updates: vec![],
@@ -1517,7 +1543,11 @@ impl SystemApiImpl {
                 new_global_timer: None,
                 canister_log: Default::default(),
                 on_low_wasm_memory_hook_condition_check_result: None,
+                should_bump_canister_version: false,
             },
+            // Non-replicated query context includes composite queries, so in that case
+            // the changes to output queues, callbacks and slot reservations should be
+            // returned to properly handle the execution of the query graph.
             ApiType::NonReplicatedQuery { .. } => SystemStateModifications {
                 new_certified_data: None,
                 callback_updates: system_state_modifications.callback_updates,
@@ -1530,28 +1560,104 @@ impl SystemApiImpl {
                 new_global_timer: None,
                 canister_log: Default::default(),
                 on_low_wasm_memory_hook_condition_check_result: None,
+                should_bump_canister_version: false,
             },
-            ApiType::ReplicatedQuery { .. } => SystemStateModifications {
-                new_certified_data: None,
-                callback_updates: vec![],
-                cycles_balance_change: system_state_modifications.cycles_balance_change,
-                reserved_cycles: Cycles::zero(),
-                consumed_cycles_by_use_case: system_state_modifications.consumed_cycles_by_use_case,
-                call_context_balance_taken: system_state_modifications.call_context_balance_taken,
-                request_slots_used: BTreeMap::new(),
-                requests: vec![],
-                new_global_timer: None,
-                canister_log: system_state_modifications.canister_log,
-                on_low_wasm_memory_hook_condition_check_result: None,
+            // Replicated queries return changes to the logs and cycles balance,
+            // as well as bumping the canister's version in case there was no trap.
+            // In case of a trap, only changes to logs should be returned.
+            ApiType::ReplicatedQuery { time, .. } => match &self.execution_error {
+                Some(err) => {
+                    self.add_canister_log_for_trap(err, time, &mut system_state_modifications);
+                    SystemStateModifications {
+                        new_certified_data: None,
+                        callback_updates: vec![],
+                        cycles_balance_change: CyclesBalanceChange::zero(),
+                        reserved_cycles: Cycles::zero(),
+                        consumed_cycles_by_use_case: BTreeMap::new(),
+                        call_context_balance_taken: None,
+                        request_slots_used: BTreeMap::new(),
+                        requests: vec![],
+                        new_global_timer: None,
+                        canister_log: system_state_modifications.canister_log,
+                        on_low_wasm_memory_hook_condition_check_result: None,
+                        should_bump_canister_version: false,
+                    }
+                }
+                None => SystemStateModifications {
+                    new_certified_data: None,
+                    callback_updates: vec![],
+                    cycles_balance_change: system_state_modifications.cycles_balance_change,
+                    reserved_cycles: Cycles::zero(),
+                    consumed_cycles_by_use_case: system_state_modifications
+                        .consumed_cycles_by_use_case,
+                    call_context_balance_taken: system_state_modifications
+                        .call_context_balance_taken,
+                    request_slots_used: BTreeMap::new(),
+                    requests: vec![],
+                    new_global_timer: None,
+                    canister_log: system_state_modifications.canister_log,
+                    on_low_wasm_memory_hook_condition_check_result: None,
+                    should_bump_canister_version: true,
+                },
             },
-            ApiType::Start { .. }
-            | ApiType::Init { .. }
-            | ApiType::SystemTask { .. }
-            | ApiType::PreUpgrade { .. }
-            | ApiType::Update { .. }
-            | ApiType::Cleanup { .. }
-            | ApiType::ReplyCallback { .. }
-            | ApiType::RejectCallback { .. } => system_state_modifications,
+            // Replicated executions (except queries), should return all changes and bump
+            // the canister version in case there was no trap. Otherwise, only changes
+            // to logs are returned.
+            ApiType::SystemTask { time, .. }
+            | ApiType::Update { time, .. }
+            | ApiType::Cleanup { time, .. }
+            | ApiType::ReplyCallback { time, .. }
+            | ApiType::RejectCallback { time, .. } => match &self.execution_error {
+                Some(err) => {
+                    self.add_canister_log_for_trap(err, time, &mut system_state_modifications);
+                    SystemStateModifications {
+                        new_certified_data: None,
+                        callback_updates: vec![],
+                        cycles_balance_change: CyclesBalanceChange::zero(),
+                        reserved_cycles: Cycles::zero(),
+                        consumed_cycles_by_use_case: BTreeMap::new(),
+                        call_context_balance_taken: None,
+                        request_slots_used: BTreeMap::new(),
+                        requests: vec![],
+                        new_global_timer: None,
+                        canister_log: system_state_modifications.canister_log,
+                        on_low_wasm_memory_hook_condition_check_result: None,
+                        should_bump_canister_version: false,
+                    }
+                }
+                None => {
+                    system_state_modifications.should_bump_canister_version = true;
+                    system_state_modifications
+                }
+            },
+            // Start, init and pre-upgrade are very similar to replicated executions
+            // except that they don't bump the canister's version when the execution
+            // was successful. This is because these are part of canister `install_code`
+            // which bumps the version once for the whole `install_code` request as
+            // opposed to per message execution involved during the `install_code`
+            // request.
+            ApiType::Start { time, .. }
+            | ApiType::Init { time, .. }
+            | ApiType::PreUpgrade { time, .. } => match &self.execution_error {
+                Some(err) => {
+                    self.add_canister_log_for_trap(err, time, &mut system_state_modifications);
+                    SystemStateModifications {
+                        new_certified_data: None,
+                        callback_updates: vec![],
+                        cycles_balance_change: CyclesBalanceChange::zero(),
+                        reserved_cycles: Cycles::zero(),
+                        consumed_cycles_by_use_case: BTreeMap::new(),
+                        call_context_balance_taken: None,
+                        request_slots_used: BTreeMap::new(),
+                        requests: vec![],
+                        new_global_timer: None,
+                        canister_log: system_state_modifications.canister_log,
+                        on_low_wasm_memory_hook_condition_check_result: None,
+                        should_bump_canister_version: false,
+                    }
+                }
+                None => system_state_modifications,
+            },
         }
     }
 

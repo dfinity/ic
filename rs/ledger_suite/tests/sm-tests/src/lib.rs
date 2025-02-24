@@ -2805,7 +2805,7 @@ pub fn icrc1_test_stable_migration_endpoints_disabled<T>(
         if expect_error {
             result
                 .unwrap_err()
-                .assert_contains(ErrorCode::CanisterCalledTrap, "The Ledger is not ready.");
+                .assert_contains(ErrorCode::CanisterCalledTrap, "The Ledger is not ready");
         } else {
             assert!(result.is_ok());
         }

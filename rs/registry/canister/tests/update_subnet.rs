@@ -390,7 +390,7 @@ fn test_subnets_configuration_chain_key_fields_are_updated_correctly(key_id: Mas
     let enable_before_adding_reject_msg = format!(
         "Canister rejected with \
         message: IC0503: Error from Canister rwlgt-iiaaa-aaaaa-aaaaa-cai: Canister \
-        called `ic0.trap` with message: Panicked at '[Registry] Proposal attempts to enable \
+        called `ic0.trap` with message: 'Panicked at '[Registry] Proposal attempts to enable \
         signing for chain key '{}' on Subnet \
         'bn3el-jdvcs-a3syn-gyqwo-umlu3-avgud-vq6yl-hunln-3jejb-226vq-mae', but the \
         subnet does not hold the given key. A proposal to add that key to the subnet \
@@ -401,7 +401,7 @@ fn test_subnets_configuration_chain_key_fields_are_updated_correctly(key_id: Mas
     let no_chain_key_config_reject_msg = format!(
         "Canister rejected with message: \
         IC0503: Error from Canister rwlgt-iiaaa-aaaaa-aaaaa-cai: Canister called \
-        `ic0.trap` with message: Panicked at '[Registry] Proposal attempts to enable signing \
+        `ic0.trap` with message: 'Panicked at '[Registry] Proposal attempts to enable signing \
         for chain key '{}' \
         on Subnet 'bn3el-jdvcs-a3syn-gyqwo-umlu3-avgud-vq6yl-hunln-3jejb-226vq-mae', \
         but the subnet does not hold the given key. A proposal to add that key to the subnet \

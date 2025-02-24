@@ -4,6 +4,7 @@ use crate::{
 };
 use ic_config::embedders::BestEffortResponsesFeature;
 use ic_config::execution_environment::{BitcoinConfig, Config as HypervisorConfig};
+use ic_config::message_routing::{MAX_STREAM_MESSAGES, TARGET_STREAM_SIZE_BYTES};
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_interfaces::{crypto::ErrorReproducibility, execution_environment::ChainKeySettings};
 use ic_interfaces::{
@@ -616,6 +617,7 @@ pub(crate) type NodePublicKeys = BTreeMap<NodeId, Vec<u8>>;
 pub(crate) type ApiBoundaryNodes = BTreeMap<NodeId, ApiBoundaryNodeEntry>;
 
 impl BatchProcessorImpl {
+    #[allow(clippy::too_many_arguments)]
     fn new(
         state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
         certified_stream_store: Arc<dyn CertifiedStreamStore>,
@@ -624,6 +626,8 @@ impl BatchProcessorImpl {
         hypervisor_config: HypervisorConfig,
         cycles_account_manager: Arc<CyclesAccountManager>,
         subnet_id: SubnetId,
+        max_stream_messages: usize,
+        target_stream_size_bytes: usize,
         metrics: MessageRoutingMetrics,
         metrics_registry: &MetricsRegistry,
         log: ReplicaLogger,
@@ -657,6 +661,8 @@ impl BatchProcessorImpl {
         ));
         let stream_builder = Box::new(routing::stream_builder::StreamBuilderImpl::new(
             subnet_id,
+            max_stream_messages,
+            target_stream_size_bytes,
             metrics_registry,
             &metrics,
             time_in_stream_metrics,
@@ -1491,6 +1497,11 @@ impl MessageRoutingImpl {
             hypervisor_config,
             cycles_account_manager,
             subnet_id,
+            // Do NOT replace these constants. Stream limits must remain constant on mainnet,
+            // otherwise the payload builder might mistakenly identify subnets as dishonest.
+            // Changes must be carefully considered.
+            MAX_STREAM_MESSAGES,
+            TARGET_STREAM_SIZE_BYTES,
             metrics.clone(),
             metrics_registry,
             log.clone(),
@@ -1512,6 +1523,8 @@ impl MessageRoutingImpl {
     ) -> Self {
         let stream_builder = Box::new(routing::stream_builder::StreamBuilderImpl::new(
             subnet_id,
+            MAX_STREAM_MESSAGES,
+            TARGET_STREAM_SIZE_BYTES,
             metrics_registry,
             &MessageRoutingMetrics::new(metrics_registry),
             Arc::new(Mutex::new(LatencyMetrics::new_time_in_stream(
@@ -1597,8 +1610,7 @@ impl MessageRouting for MessageRoutingImpl {
     }
 }
 
-/// An MessageRouting implementation that processes batches synchronously. Primarily used for
-/// testing.
+/// An MessageRouting implementation that processes batches synchronously. Used for state machine tests.
 pub struct SyncMessageRouting {
     batch_processor: Arc<Mutex<dyn BatchProcessor>>,
     state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
@@ -1616,6 +1628,8 @@ impl SyncMessageRouting {
         hypervisor_config: HypervisorConfig,
         cycles_account_manager: Arc<CyclesAccountManager>,
         subnet_id: SubnetId,
+        max_stream_messages: usize,
+        target_stream_size_bytes: usize,
         metrics_registry: &MetricsRegistry,
         log: ReplicaLogger,
         registry: Arc<dyn RegistryClient>,
@@ -1631,6 +1645,8 @@ impl SyncMessageRouting {
             hypervisor_config,
             cycles_account_manager,
             subnet_id,
+            max_stream_messages,
+            target_stream_size_bytes,
             metrics,
             metrics_registry,
             log.clone(),

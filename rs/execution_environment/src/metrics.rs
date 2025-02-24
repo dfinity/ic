@@ -18,6 +18,10 @@ pub(crate) const SYSTEM_API_CANISTER_CYCLE_BALANCE: &str = "canister_cycle_balan
 pub(crate) const SYSTEM_API_CANISTER_CYCLE_BALANCE128: &str = "canister_cycle_balance128";
 pub(crate) const SYSTEM_API_TIME: &str = "time";
 
+const LABEL_CLASS: &str = "class";
+const LABEL_VALUE_BEST_EFFORT: &str = "best_effort";
+const LABEL_VALUE_GUARANTEED_RESPONSE: &str = "guaranteed_response";
+
 pub const SUCCESS_STATUS_LABEL: &str = "success";
 
 #[derive(Clone)]
@@ -78,31 +82,37 @@ impl CallTreeMetrics for CallTreeMetricsNoOp {
 
 #[derive(Clone)]
 pub struct CallTreeMetricsImpl {
-    /// The depth down the call tree requests were created at (starting at 0).
-    pub(crate) request_call_tree_depth: Histogram,
-    /// Call tree age at the point when each new request was created.
-    pub(crate) request_call_tree_age_seconds: Histogram,
-    /// Call context age at the point when each new request was created.
-    pub(crate) request_call_context_age_seconds: Histogram,
+    /// The depth down the call tree requests were created at (starting at 0), by
+    /// message class.
+    pub(crate) request_call_tree_depth: HistogramVec,
+    /// Call tree age at the point when each new request was created, by message
+    /// class.
+    pub(crate) request_call_tree_age_seconds: HistogramVec,
+    /// Call context age at the point when each new request was created, by message
+    /// class.
+    pub(crate) request_call_context_age_seconds: HistogramVec,
 }
 
 impl CallTreeMetricsImpl {
     pub fn new(metrics_registry: &MetricsRegistry) -> Self {
         Self {
-            request_call_tree_depth: metrics_registry.histogram(
+            request_call_tree_depth: metrics_registry.histogram_vec(
                 "execution_environment_request_call_tree_depth",
-                "The depth down the call tree that new requests were created at (0 based).",
+                "The depth down the call tree that new requests were created at (0 based), by message class.",
                 decimal_buckets_with_zero(0, 2),
+                &[LABEL_CLASS],
             ),
-            request_call_tree_age_seconds: metrics_registry.histogram(
+            request_call_tree_age_seconds: metrics_registry.histogram_vec(
                 "execution_environment_request_call_tree_age_seconds",
-                "Call tree age at the point when each new request was created.",
+                "Call tree age at the point when each new request was created, by message class.",
                 decimal_buckets_with_zero(0, 6),
+                &[LABEL_CLASS],
             ),
-            request_call_context_age_seconds: metrics_registry.histogram(
+            request_call_context_age_seconds: metrics_registry.histogram_vec(
                 "execution_environment_request_call_context_age_seconds",
-                "Call context age at the point when each new request was created.",
+                "Call context age at the point when each new request was created, by message class.",
                 decimal_buckets_with_zero(0, 6),
+                &[LABEL_CLASS],
             ),
         }
     }
@@ -115,24 +125,51 @@ impl CallTreeMetrics for CallTreeMetricsImpl {
         call_context_creation_time: Time,
         time: Time,
     ) {
-        // Observe call-tree related metrics.
-        for _ in 0..request_stats.count {
-            self.request_call_tree_depth
-                .observe(*request_stats.metadata.call_tree_depth() as f64);
-        }
-        let duration =
-            time.saturating_duration_since(*request_stats.metadata.call_tree_start_time());
-        for _ in 0..request_stats.count {
-            self.request_call_tree_age_seconds
-                .observe(duration.as_secs_f64());
+        if request_stats.best_effort_request_count == 0
+            && request_stats.guaranteed_response_request_count == 0
+        {
+            // No requests produced.
+            return;
         }
 
-        // Observe new requests vs. original context.
-        for _ in 0..request_stats.count {
-            self.request_call_context_age_seconds.observe(
-                time.saturating_duration_since(call_context_creation_time)
-                    .as_secs_f64(),
-            );
+        // Observe call-tree related metrics.
+        for _ in 0..request_stats.best_effort_request_count {
+            self.request_call_tree_depth
+                .with_label_values(&[LABEL_VALUE_BEST_EFFORT])
+                .observe(*request_stats.metadata.call_tree_depth() as f64);
+        }
+        for _ in 0..request_stats.guaranteed_response_request_count {
+            self.request_call_tree_depth
+                .with_label_values(&[LABEL_VALUE_GUARANTEED_RESPONSE])
+                .observe(*request_stats.metadata.call_tree_depth() as f64);
+        }
+        let duration = time
+            .saturating_duration_since(*request_stats.metadata.call_tree_start_time())
+            .as_secs_f64();
+        for _ in 0..request_stats.best_effort_request_count {
+            self.request_call_tree_age_seconds
+                .with_label_values(&[LABEL_VALUE_BEST_EFFORT])
+                .observe(duration);
+        }
+        for _ in 0..request_stats.guaranteed_response_request_count {
+            self.request_call_tree_age_seconds
+                .with_label_values(&[LABEL_VALUE_GUARANTEED_RESPONSE])
+                .observe(duration);
+        }
+
+        // Observe age of requests relative to parent call context.
+        let age = time
+            .saturating_duration_since(call_context_creation_time)
+            .as_secs_f64();
+        for _ in 0..request_stats.best_effort_request_count {
+            self.request_call_context_age_seconds
+                .with_label_values(&[LABEL_VALUE_BEST_EFFORT])
+                .observe(age);
+        }
+        for _ in 0..request_stats.guaranteed_response_request_count {
+            self.request_call_context_age_seconds
+                .with_label_values(&[LABEL_VALUE_GUARANTEED_RESPONSE])
+                .observe(age);
         }
     }
 }
