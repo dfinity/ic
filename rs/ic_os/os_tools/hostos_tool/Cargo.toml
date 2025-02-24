@@ -10,8 +10,8 @@ path = "src/main.rs"
 [dependencies]
 anyhow = { workspace = true }
 clap = { workspace = true }
-config = { path = "../../config" }
-config_types = { path = "../../config_types" }
-network = { path = "../../network" }
-deterministic_ips = { path = "../../deterministic_ips" }
-utils = { path = "../../utils" }
+config = { workspace = true }
+config_types = { workspace = true }
+network = { workspace = true }
+deterministic_ips = { workspace = true }
+utils = { workspace = true }

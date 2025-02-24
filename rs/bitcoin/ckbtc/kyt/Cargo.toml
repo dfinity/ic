@@ -11,10 +11,10 @@ askama = { workspace = true }
 candid = { workspace = true }
 ciborium = { workspace = true }
 hex = { workspace = true }
-ic-canisters-http-types = { path = "../../../rust_canisters/http_types" }
+ic-canisters-http-types = { workspace = true }
 ic-cdk = { workspace = true }
 ic-cdk-macros = { workspace = true }
-ic-metrics-encoder = "1.1"
+ic-metrics-encoder = { workspace = true }
 ic-stable-structures = { workspace = true }
 num-traits = { workspace = true }
 serde = { workspace = true }
@@ -24,7 +24,7 @@ time = { workspace = true }
 [dev-dependencies]
 assert_matches = { workspace = true }
 candid_parser = { workspace = true }
-ic-management-canister-types-private = { path = "../../../types/management_canister_types" }
-ic-state-machine-tests = { path = "../../../state_machine_tests" }
-ic-test-utilities-load-wasm = { path = "../../../test_utilities/load_wasm" }
-ic-types = { path = "../../../types/types" }
+ic-management-canister-types-private = { workspace = true }
+ic-state-machine-tests = { workspace = true }
+ic-test-utilities-load-wasm = { workspace = true }
+ic-types = { workspace = true }

@@ -13,25 +13,25 @@ path = "src/main.rs"
 [dependencies]
 assert_matches = { workspace = true, optional = true }
 async-trait = { workspace = true }
-canbench-rs = { version = "0.1.7", optional = true }
+canbench-rs = { workspace = true, optional = true }
 candid = { workspace = true }
 ciborium = { workspace = true }
 hex = { workspace = true }
-ic-base-types = { path = "../../../types/base_types" }
+ic-base-types = { workspace = true }
 ic-canister-log = { path = "../../../rust_canisters/canister_log" }
-ic-canisters-http-types = { path = "../../../rust_canisters/http_types" }
+ic-canisters-http-types = { workspace = true }
 ic-cdk = { workspace = true }
 ic-cdk-macros = { workspace = true }
 ic-cdk-timers = { workspace = true }
 ic-certification = { workspace = true }
-ic-crypto-tree-hash = { path = "../../../crypto/tree_hash" }
-ic-icrc1 = { path = ".." }
-ic-icrc1-tokens-u256 = { path = "../tokens_u256", optional = true }
-ic-icrc1-tokens-u64 = { path = "../tokens_u64" }
-ic-ledger-canister-core = { path = "../../common/ledger_canister_core" }
-ic-ledger-core = { path = "../../common/ledger_core" }
-ic-ledger-hash-of = { path = "../../../../packages/ic-ledger-hash-of" }
-ic-metrics-encoder = "1.1.1"
+ic-crypto-tree-hash = { workspace = true }
+ic-icrc1 = { workspace = true }
+ic-icrc1-tokens-u256 = { workspace = true, optional = true }
+ic-icrc1-tokens-u64 = { workspace = true }
+ic-ledger-canister-core = { workspace = true }
+ic-ledger-core = { workspace = true }
+ic-ledger-hash-of = { workspace = true }
+ic-metrics-encoder = { workspace = true }
 ic-stable-structures = { workspace = true }
 icrc-ledger-types = { path = "../../../../packages/icrc-ledger-types" }
 minicbor = { workspace = true }
@@ -43,14 +43,14 @@ leb128 = { workspace = true }
 [dev-dependencies]
 assert_matches = { workspace = true }
 candid_parser = { workspace = true }
-cddl = "0.9.4"
+cddl = { workspace = true }
 ciborium = { workspace = true }
 ic-agent = { workspace = true }
 ic-certification = { workspace = true }
-ic-ledger-suite-state-machine-tests = { path = "../../tests/sm-tests" }
-ic-icrc1-test-utils = { path = "../test_utils" }
-ic-state-machine-tests = { path = "../../../state_machine_tests" }
-ic-test-utilities-load-wasm = { path = "../../../test_utilities/load_wasm" }
+ic-ledger-suite-state-machine-tests = { workspace = true }
+ic-icrc1-test-utils = { workspace = true }
+ic-state-machine-tests = { workspace = true }
+ic-test-utilities-load-wasm = { workspace = true }
 num-bigint = { workspace = true }
 proptest = { workspace = true }
 

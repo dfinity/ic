@@ -16,8 +16,8 @@ name = "lifeline"
 path = "src/main.rs"
 
 [build-dependencies]
-ic-base-types = { path = "../../../../types/base_types" }
-ic-nns-constants = { path = "../../../constants" }
+ic-base-types = { workspace = true }
+ic-nns-constants = { workspace = true }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
 candid = { workspace = true }

@@ -15,15 +15,15 @@ axum = { workspace = true }
 bytes = { workspace = true }
 futures = { workspace = true }
 http = { workspace = true }
-ic-http-endpoints-async-utils = { path = "../../http_endpoints/async_utils" }
-ic-base-types = { path = "../../types/base_types" }
-ic-crypto-tls-interfaces = { path = "../../crypto/tls_interfaces" }
-ic-crypto-utils-tls = { path = "../../crypto/utils/tls" }
-ic-interfaces-registry = { path = "../../interfaces/registry" }
-ic-logger = { path = "../../monitoring/logger" }
-ic-metrics = { path = "../../monitoring/metrics" }
-ic-protobuf = { path = "../../protobuf" }
-phantom_newtype = { path = "../../phantom_newtype" }
+ic-http-endpoints-async-utils = { workspace = true }
+ic-base-types = { workspace = true }
+ic-crypto-tls-interfaces = { workspace = true }
+ic-crypto-utils-tls = { workspace = true }
+ic-interfaces-registry = { workspace = true }
+ic-logger = { workspace = true }
+ic-metrics = { workspace = true }
+ic-protobuf = { workspace = true }
+phantom_newtype = { workspace = true }
 prometheus = { workspace = true }
 prost = { workspace = true }
 quinn = { workspace = true }
@@ -41,8 +41,8 @@ tracing = { workspace = true }
 [dev-dependencies]
 assert_matches = { workspace = true }
 criterion = { workspace = true }
-ic-p2p-test-utils = { path = "../test_utils" }
-ic-test-utilities-logger = { path = "../../test_utilities/logger" }
-ic-types-test-utils = { path = "../../types/types_test_utils" }
+ic-p2p-test-utils = { workspace = true }
+ic-test-utilities-logger = { workspace = true }
+ic-types-test-utils = { workspace = true }
 rstest = { workspace = true }
 turmoil = { workspace = true }

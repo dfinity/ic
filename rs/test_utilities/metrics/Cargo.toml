@@ -7,5 +7,5 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
-ic-metrics = { path = "../../monitoring/metrics" }
+ic-metrics = { workspace = true }
 prometheus = { workspace = true }

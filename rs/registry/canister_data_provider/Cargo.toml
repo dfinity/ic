@@ -7,14 +7,14 @@ documentation.workspace = true
 edition.workspace = true
 
 [dependencies]
-ic-interfaces-registry = { path = "../../interfaces/registry" }
-ic-registry-transport = { path = "../transport" }
-ic-types = { path = "../../types/types" }
+ic-interfaces-registry = { workspace = true }
+ic-registry-transport = { workspace = true }
+ic-types = { workspace = true }
 ic-stable-structures = { workspace = true }
-ic-nns-constants = { path = "../../nns/constants" }
+ic-nns-constants = { workspace = true }
 itertools = { workspace = true }
-ic-nns-common = { path = "../../nns/common" }
+ic-nns-common = { workspace = true }
 anyhow = { workspace = true }
 ic-cdk = { workspace = true }
 candid = { workspace = true }
-ic-registry-canister-client = { path = "../canister-client" }
+ic-registry-canister-client = { workspace = true }

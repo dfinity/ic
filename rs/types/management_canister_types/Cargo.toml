@@ -9,11 +9,11 @@ documentation.workspace = true
 [dependencies]
 arbitrary = { workspace = true, optional = true }
 candid = { workspace = true }
-ic-base-types = { path = "../base_types" }
+ic-base-types = { workspace = true }
 ic-btc-interface = { workspace = true }
-ic-btc-replica-types = { path = "../../bitcoin/replica_types" }
-ic-error-types = { path = "../error_types" }
-ic-protobuf = { path = "../../protobuf" }
+ic-btc-replica-types = { workspace = true }
+ic-error-types = { workspace = true }
+ic-protobuf = { workspace = true }
 ic-utils = { path = "../../utils" }
 num-traits = { workspace = true }
 serde = { workspace = true }

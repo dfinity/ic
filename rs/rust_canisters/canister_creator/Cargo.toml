@@ -12,20 +12,20 @@ path = "src/main.rs"
 
 [dependencies]
 candid = { workspace = true }
-dfn_core = { path = "../dfn_core" }
-dfn_json = { path = "../dfn_json" }
-dfn_macro = { path = "../dfn_macro" }
+dfn_core = { workspace = true }
+dfn_json = { workspace = true }
+dfn_macro = { workspace = true }
 futures = { workspace = true }
-ic-management-canister-types-private = { path = "../../types/management_canister_types" }
+ic-management-canister-types-private = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 wat = { workspace = true }
 
 [dev-dependencies]
-canister-test = { path = "../../rust_canisters/canister_test" }
-ic-state-machine-tests = { path = "../../state_machine_tests" }
-ic-test-utilities = { path = "../../test_utilities" }
-ic-types = { path = "../../types/types" }
+canister-test = { workspace = true }
+ic-state-machine-tests = { workspace = true }
+ic-test-utilities = { workspace = true }
+ic-types = { workspace = true }
 
 [[test]]
 name = "test"

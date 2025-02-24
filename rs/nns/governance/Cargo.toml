@@ -31,71 +31,71 @@ build-info = { workspace = true }
 async-trait = { workspace = true }
 bytes = { workspace = true }
 candid = { workspace = true }
-cycles-minting-canister = { path = "../cmc" }
-dyn-clone = "1.0.14"
+cycles-minting-canister = { workspace = true }
+dyn-clone = { workspace = true }
 futures = { workspace = true }
-ic-base-types = { path = "../../types/base_types" }
-ic-canisters-http-types = { path = "../../rust_canisters/http_types" }
+ic-base-types = { workspace = true }
+ic-canisters-http-types = { workspace = true }
 ic-cdk = { workspace = true }
 ic-cdk-macros = { workspace = true }
 ic-cdk-timers = { workspace = true }
-ic-crypto-sha2 = { path = "../../crypto/sha2/" }
-ic-dummy-getrandom-for-wasm = { path = "../../../packages/ic-dummy-getrandom-for-wasm" }
-ic-ledger-core = { path = "../../ledger_suite/common/ledger_core" }
-ic-management-canister-types-private = { path = "../../types/management_canister_types" }
-ic-metrics-encoder = "1"
-ic-nervous-system-canisters = { path = "../../nervous_system/canisters" }
-ic-nervous-system-clients = { path = "../../nervous_system/clients" }
-ic-nervous-system-common = { path = "../../nervous_system/common" }
-ic-nervous-system-common-build-metadata = { path = "../../nervous_system/common/build_metadata" }
-ic-nervous-system-governance = { path = "../../nervous_system/governance" }
-ic-nervous-system-linear-map = { path = "../../nervous_system/linear_map" }
-ic-nervous-system-long-message = { path = "../../nervous_system/long_message" }
-ic-nervous-system-root = { path = "../../nervous_system/root" }
-ic-nervous-system-runtime = { path = "../../nervous_system/runtime" }
-ic-nervous-system-proto = { path = "../../nervous_system/proto" }
-ic-nervous-system-temporary = { path = "../../nervous_system/temporary" }
-ic-neurons-fund = { path = "../../nervous_system/neurons_fund" }
-ic-nns-common = { path = "../common" }
-ic-nns-constants = { path = "../constants" }
-ic-nns-gtc-accounts = { path = "../gtc_accounts" }
-ic-nns-governance-api = { path = "./api" }
-ic-nns-governance-init = { path = "./init" }
-ic-nns-handler-root-interface = { path = "../handlers/root/interface" }
-ic-protobuf = { path = "../../protobuf" }
-ic-sns-init = { path = "../../sns/init" }                                                         # This is just for a couple of PB definitions.
-ic-sns-root = { path = "../../sns/root" }                                                         # This is just for a couple of PB definitions.
-ic-sns-swap = { path = "../../sns/swap" }                                                         # This is just for a couple of PB definitions.
-ic-sns-wasm = { path = "../sns-wasm" }
+ic-crypto-sha2 = { workspace = true }
+ic-dummy-getrandom-for-wasm = { workspace = true }
+ic-ledger-core = { workspace = true }
+ic-management-canister-types-private = { workspace = true }
+ic-metrics-encoder = { workspace = true }
+ic-nervous-system-canisters = { workspace = true }
+ic-nervous-system-clients = { workspace = true }
+ic-nervous-system-common = { workspace = true }
+ic-nervous-system-common-build-metadata = { workspace = true }
+ic-nervous-system-governance = { workspace = true }
+ic-nervous-system-linear-map = { workspace = true }
+ic-nervous-system-long-message = { workspace = true }
+ic-nervous-system-root = { workspace = true }
+ic-nervous-system-runtime = { workspace = true }
+ic-nervous-system-proto = { workspace = true }
+ic-nervous-system-temporary = { workspace = true }
+ic-neurons-fund = { workspace = true }
+ic-nns-common = { workspace = true }
+ic-nns-constants = { workspace = true }
+ic-nns-gtc-accounts = { workspace = true }
+ic-nns-governance-api = { workspace = true }
+ic-nns-governance-init = { workspace = true }
+ic-nns-handler-root-interface = { workspace = true }
+ic-protobuf = { workspace = true }
+ic-sns-init = { workspace = true }                                                         # This is just for a couple of PB definitions.
+ic-sns-root = { workspace = true }                                                         # This is just for a couple of PB definitions.
+ic-sns-swap = { workspace = true }                                                         # This is just for a couple of PB definitions.
+ic-sns-wasm = { workspace = true }
 ic-stable-structures = { workspace = true }
-ic-types = { path = "../../types/types" }
+ic-types = { workspace = true }
 ic-utils = { path = "../../utils" }
-icp-ledger = { path = "../../ledger_suite/icp" }
+icp-ledger = { workspace = true }
 itertools = { workspace = true }
 lazy_static = { workspace = true }
-maplit = "1.0.2"
+maplit = { workspace = true }
 mockall = { workspace = true }
 num-traits = { workspace = true }
-on_wire = { path = "../../rust_canisters/on_wire" }
+on_wire = { workspace = true }
 pretty_assertions = { workspace = true }
 prometheus-parse = { workspace = true }
 prost = { workspace = true }
-rust_decimal = "1.36.0"
-rust_decimal_macros = "1.36.0"
+rust_decimal = { workspace = true }
+rust_decimal_macros = { workspace = true }
 serde = { workspace = true }
 serde_bytes = { workspace = true }
 serde_json = { workspace = true }
 rand = { workspace = true }
 rand_chacha = { workspace = true }
-registry-canister = { path = "../../registry/canister" }
+registry-canister = { workspace = true }
 strum_macros = { workspace = true }
 strum = { workspace = true }
-comparable = { version = "0.5", features = ["derive"] }
-canbench-rs = { version = "0.1.7", optional = true }
+comparable = { workspace = true, features = ["derive"] }
+canbench-rs = { workspace = true, optional = true }
 
-local_key = { path = "../../tla_instrumentation/local_key", optional = true }
-tla_instrumentation = { path = "../../tla_instrumentation/tla_instrumentation", optional = true }
-tla_instrumentation_proc_macros = { path = "../../tla_instrumentation/tla_instrumentation_proc_macros", optional = true }
+local_key = { workspace = true, optional = true }
+tla_instrumentation = { workspace = true, optional = true }
+tla_instrumentation_proc_macros = { workspace = true, optional = true }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 csv = "1.1"
@@ -110,16 +110,16 @@ build-info-build = { workspace = true }
 [dev-dependencies]
 candid_parser = { workspace = true }
 criterion = { workspace = true }
-cycles-minting-canister = { path = "../cmc" }
-ic-config = { path = "../../config" }
-ic-nervous-system-common-test-utils = { path = "../../nervous_system/common/test_utils" }
-ic-nns-governance = { path = ".", features = ["test"] }
-ic-nns-governance-protobuf-generator = { path = "./protobuf_generator" }
-ic-test-utilities-compare-dirs = { path = "../../test_utilities/compare_dirs" }
-local_key = { path = "../../tla_instrumentation/local_key" }
+cycles-minting-canister = { workspace = true }
+ic-config = { workspace = true }
+ic-nervous-system-common-test-utils = { workspace = true }
+ic-nns-governance = { workspace = true, features = ["test"] }
+ic-nns-governance-protobuf-generator = { workspace = true }
+ic-test-utilities-compare-dirs = { workspace = true }
+local_key = { workspace = true }
 proptest = { workspace = true }
 tempfile = { workspace = true }
-tla_instrumentation = { path = "../../tla_instrumentation/tla_instrumentation" }
+tla_instrumentation = { workspace = true }
 tokio = { workspace = true }
 tokio-test = { workspace = true }
 

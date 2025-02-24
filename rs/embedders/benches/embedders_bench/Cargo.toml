@@ -8,8 +8,8 @@ documentation.workspace = true
 
 [dependencies]
 candid = { workspace = true }
-canister-test = { path = "../../../rust_canisters/canister_test" }
+canister-test = { workspace = true }
 criterion = { workspace = true }
-ic-test-utilities-execution-environment = { path = "../../../test_utilities/execution_environment" }
-ic-types = { path = "../../../types/types" }
-ic-wasm-transform = { path = "../../../wasm_transform" }
+ic-test-utilities-execution-environment = { workspace = true }
+ic-types = { workspace = true }
+ic-wasm-transform = { workspace = true }

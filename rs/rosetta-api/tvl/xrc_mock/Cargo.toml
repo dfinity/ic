@@ -10,5 +10,5 @@ documentation.workspace = true
 candid = { workspace = true }
 ic-cdk = { workspace = true }
 ic-cdk-macros = { workspace = true }
-ic-xrc-types = "1.1.0"
+ic-xrc-types = { workspace = true }
 serde = { workspace = true }

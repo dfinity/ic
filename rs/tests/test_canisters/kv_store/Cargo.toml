@@ -16,7 +16,7 @@ candid = { workspace = true }
 flate2 = { workspace = true }
 ic-cdk = { workspace = true }
 ic-cdk-macros = { workspace = true }
-ic-certified-map = "0.3"
+ic-certified-map = { workspace = true }
 serde = { workspace = true }
 serde_cbor = { workspace = true }
 sha2 = { workspace = true }

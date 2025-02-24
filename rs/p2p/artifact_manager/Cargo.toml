@@ -7,10 +7,10 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
-ic-consensus-manager = { path = "../consensus_manager" }
-ic-interfaces = { path = "../../interfaces" }
-ic-metrics = { path = "../../monitoring/metrics" }
-ic-types = { path = "../../types/types" }
+ic-consensus-manager = { workspace = true }
+ic-interfaces = { workspace = true }
+ic-metrics = { workspace = true }
+ic-types = { workspace = true }
 futures = { workspace = true }
 prometheus = { workspace = true }
 tokio = { workspace = true }
@@ -19,7 +19,7 @@ tracing = { workspace = true }
 
 [dev-dependencies]
 assert_matches = { workspace = true }
-ic-artifact-pool = { path = "../../artifact_pool" }
-ic-config = { path = "../../config" }
-ic-protobuf = { path = "../../protobuf" }
-ic-test-utilities = { path = "../../test_utilities" }
+ic-artifact-pool = { workspace = true }
+ic-config = { workspace = true }
+ic-protobuf = { workspace = true }
+ic-test-utilities = { workspace = true }

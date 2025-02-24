@@ -7,14 +7,14 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
-canister-test = { path = "../../../../rust_canisters/canister_test" }
-dfn_candid = { path = "../../../../rust_canisters/dfn_candid" }
+canister-test = { workspace = true }
+dfn_candid = { workspace = true }
 futures = { workspace = true }
-ic-registry-subnet-type = { path = "../../../../registry/subnet_type" }
-ic-system-test-driver = { path = "../../../driver" }
+ic-registry-subnet-type = { workspace = true }
+ic-system-test-driver = { workspace = true }
 slog = { workspace = true }
-systest-message-routing-common = { path = "../../common" }
-xnet-test = { path = "../../../../rust_canisters/xnet_test" }
+systest-message-routing-common = { workspace = true }
+xnet-test = { workspace = true }
 tokio = { workspace = true }
 
 [lib]

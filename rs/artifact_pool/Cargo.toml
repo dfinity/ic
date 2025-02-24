@@ -8,22 +8,22 @@ documentation.workspace = true
 
 [dependencies]
 bincode = { workspace = true }
-byteorder = "1.3.4"
+byteorder = { workspace = true }
 clap = { workspace = true }
-ic-config = { path = "../config" }
-ic-interfaces = { path = "../interfaces" }
-ic-logger = { path = "../monitoring/logger" }
-ic-metrics = { path = "../monitoring/metrics" }
-ic-protobuf = { path = "../protobuf" }
-ic-sys = { path = "../sys" }
-ic-types = { path = "../types/types" }
-lmdb-rkv = { git = "https://github.com/dfinity-lab/lmdb-rs", rev = "f62018b2deb79ea0d53914d5502389433fc3e6da" }
-lmdb-rkv-sys = { git = "https://github.com/dfinity-lab/lmdb-rs", rev = "f62018b2deb79ea0d53914d5502389433fc3e6da" }
+ic-config = { workspace = true }
+ic-interfaces = { workspace = true }
+ic-logger = { workspace = true }
+ic-metrics = { workspace = true }
+ic-protobuf = { workspace = true }
+ic-sys = { workspace = true }
+ic-types = { workspace = true }
+lmdb-rkv = { workspace = true }
+lmdb-rkv-sys = { workspace = true }
 nix = { workspace = true }
 prometheus = { workspace = true }
 prost = { workspace = true }
 serde = { workspace = true }
-serde-bytes-repr = "0.1.5"
+serde-bytes-repr = { workspace = true }
 serde_json = { workspace = true }
 slog = { workspace = true }
 strum = { workspace = true }
@@ -35,18 +35,18 @@ rocksdb = { version = "0.22.0", default-features = false }
 
 [dev-dependencies]
 criterion = { workspace = true }
-ic-limits = { path = "../limits" }
-ic-crypto-test-utils-canister-threshold-sigs = { path = "../crypto/test_utils/canister_threshold_sigs" }
-ic-test-artifact-pool = { path = "../test_utilities/artifact_pool" }
-ic-test-utilities = { path = "../test_utilities" }
-ic-test-utilities-consensus = { path = "../test_utilities/consensus" }
-ic-test-utilities-logger = { path = "../test_utilities/logger" }
-ic-test-utilities-registry = { path = "../test_utilities/registry" }
-ic-test-utilities-time = { path = "../test_utilities/time" }
-ic-test-utilities-types = { path = "../test_utilities/types" }
+ic-limits = { workspace = true }
+ic-crypto-test-utils-canister-threshold-sigs = { workspace = true }
+ic-test-artifact-pool = { workspace = true }
+ic-test-utilities = { workspace = true }
+ic-test-utilities-consensus = { workspace = true }
+ic-test-utilities-logger = { workspace = true }
+ic-test-utilities-registry = { workspace = true }
+ic-test-utilities-time = { workspace = true }
+ic-test-utilities-types = { workspace = true }
 rand = { workspace = true }
 slog-async = { workspace = true }
-slog-envlogger = "2.2.0"
+slog-envlogger = { workspace = true }
 slog-term = { workspace = true }
 
 [[bench]]

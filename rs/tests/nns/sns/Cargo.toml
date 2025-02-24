@@ -8,13 +8,13 @@ documentation.workspace = true
 
 [dependencies]
 anyhow = { workspace = true }
-ic-nervous-system-common = { path = "../../../nervous_system/common" }
-ic-nervous-system-proto = { path = "../../../nervous_system/proto" }
-ic-sns-swap = { path = "../../../sns/swap" }
-ic-system-test-driver = { path = "../../driver" }
-rust_decimal = "1.36.0"
+ic-nervous-system-common = { workspace = true }
+ic-nervous-system-proto = { workspace = true }
+ic-sns-swap = { workspace = true }
+ic-system-test-driver = { workspace = true }
+rust_decimal = { workspace = true }
 slog = { workspace = true }
-sns_system_test_lib = { path = "./lib" }
+sns_system_test_lib = { workspace = true }
 
 [[bin]]
 name = "ic-systest-sns-sale-simple-load-test"

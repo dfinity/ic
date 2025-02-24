@@ -9,11 +9,11 @@ documentation.workspace = true
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-hmac = "0.12"
+hmac = { workspace = true }
 lazy_static = { workspace = true }
 num-bigint = { workspace = true }
 p256 = { workspace = true }
-pem = "1.1.0"
+pem = { workspace = true }
 rand = { workspace = true }
 rand_chacha = { workspace = true }
 sha2 = { workspace = true }
@@ -22,7 +22,7 @@ zeroize = { workspace = true }
 
 [dev-dependencies]
 hex = { workspace = true }
-hex-literal = "0.4"
-ic-crypto-sha2 = { path = "../sha2" }
-ic-crypto-test-utils-reproducible-rng = { path = "../test_utils/reproducible_rng" }
-wycheproof = { version = "0.6", default-features = false, features = ["ecdsa"] }
+hex-literal = { workspace = true }
+ic-crypto-sha2 = { workspace = true }
+ic-crypto-test-utils-reproducible-rng = { workspace = true }
+wycheproof = { workspace = true, features = ["ecdsa"] }

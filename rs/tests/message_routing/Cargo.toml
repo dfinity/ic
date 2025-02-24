@@ -9,22 +9,22 @@ documentation.workspace = true
 [dependencies]
 anyhow = { workspace = true }
 candid = { workspace = true }
-canister-test = { path = "../../rust_canisters/canister_test" }
-dfn_candid = { path = "../../rust_canisters/dfn_candid" }
+canister-test = { workspace = true }
+dfn_candid = { workspace = true }
 ic-cdk = { git = "https://github.com/dfinity/cdk-rs", rev = "4e287ce51636b0e70768c193da38d2fc5324ea15" }
-ic-registry-subnet-type = { path = "../../registry/subnet_type" }
-ic-system-test-driver = { path = "../driver" }
+ic-registry-subnet-type = { workspace = true }
+ic-system-test-driver = { workspace = true }
 itertools = { workspace = true }
 slog = { workspace = true }
 tokio = { workspace = true }
-xnet-test = { path = "../../rust_canisters/xnet_test" }
+xnet-test = { workspace = true }
 ic-agent = { workspace = true }
-ic-base-types = { path = "../../types/base_types" }
-ic-types = { path = "../../types/types" }
+ic-base-types = { workspace = true }
+ic-types = { workspace = true }
 ic-utils = { workspace = true }
 rand = { workspace = true }
 rand_chacha = { workspace = true }
-rejoin-test-lib = { path = "./rejoin_test_lib" }
+rejoin-test-lib = { workspace = true }
 
 [[bin]]
 name = "global_reboot_test"

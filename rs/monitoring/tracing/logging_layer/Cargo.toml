@@ -7,8 +7,8 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
-ic-config = { path = "../../../config" }
-ic-base-types = { path = "../../../types/base_types" }
+ic-config = { workspace = true }
+ic-base-types = { workspace = true }
 time = { workspace = true }
 tracing = { workspace = true }
 tracing-appender = { workspace = true }

@@ -6,21 +6,21 @@ edition = "2021"
 [dependencies]
 async-trait = { workspace = true }
 candid = { workspace = true }
-cycles-minting-canister = { path = "../../../nns/cmc" }
+cycles-minting-canister = { workspace = true }
 futures = { workspace = true }
-ic-base-types = { path = "../../../types/base_types" }
+ic-base-types = { workspace = true }
 ic-cdk = { workspace = true }
-ic-nervous-system-common = { path = "../../../nervous_system/common" }
-ic-nervous-system-initial-supply = { path = "../../../nervous_system/initial_supply" }
-ic-nervous-system-runtime = { path = "../../../nervous_system/runtime" }
-ic-nns-constants = { path = "../../../nns/constants" }
-ic-sns-swap-proto-library = { path = "../../../sns/swap/proto_library" }
+ic-nervous-system-common = { workspace = true }
+ic-nervous-system-initial-supply = { workspace = true }
+ic-nervous-system-runtime = { workspace = true }
+ic-nns-constants = { workspace = true }
+ic-sns-swap-proto-library = { workspace = true }
 icrc-ledger-types = { path = "../../../../packages/icrc-ledger-types" }
 mockall = { workspace = true }
 num-traits = { workspace = true }
-rust_decimal = "1.36.0"
+rust_decimal = { workspace = true }
 
 [dev-dependencies]
 lazy_static = { workspace = true }
-maplit = "1.0.2"
+maplit = { workspace = true }
 tokio = { workspace = true }

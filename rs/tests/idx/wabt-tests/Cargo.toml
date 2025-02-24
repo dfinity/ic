@@ -7,5 +7,5 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
-leb128 = "0.2.5"
+leb128 = { workspace = true }
 wat = { workspace = true }

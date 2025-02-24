@@ -7,4 +7,4 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
-ic-crypto-internal-basic-sig-iccsa = { path = "../internal/crypto_lib/basic_sig/iccsa" }
+ic-crypto-internal-basic-sig-iccsa = { workspace = true }

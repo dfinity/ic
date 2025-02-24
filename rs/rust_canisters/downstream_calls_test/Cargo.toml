@@ -9,7 +9,7 @@ path = "src/main.rs"
 
 [dependencies]
 candid = { workspace = true }
-ic-base-types = { path = "../../types/base_types" }
+ic-base-types = { workspace = true }
 ic-cdk = { workspace = true }
 ic-cdk-macros = { workspace = true }
 serde = { workspace = true }

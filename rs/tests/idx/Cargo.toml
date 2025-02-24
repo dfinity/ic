@@ -8,18 +8,18 @@ documentation.workspace = true
 
 [dependencies]
 anyhow = { workspace = true }
-ic-registry-subnet-type = { path = "../../registry/subnet_type" }
-ic-system-test-driver = { path = "../driver" }
+ic-registry-subnet-type = { workspace = true }
+ic-system-test-driver = { workspace = true }
 slog = { workspace = true }
 candid = { workspace = true }
 ic-agent = { workspace = true }
 tokio = { workspace = true }
-ic-types = { path = "../../types/types" }
-ic-universal-canister = { path = "../../universal_canister/lib" }
-ic-prep = { path = "../../prep" }
-ic-registry-local-store = { path = "../../registry/local_store" }
-ic-registry-local-store-artifacts = { path = "../../registry/local_store/artifacts" }
-ic-regedit = { path = "../../registry/regedit" }
+ic-types = { workspace = true }
+ic-universal-canister = { workspace = true }
+ic-prep = { workspace = true }
+ic-registry-local-store = { workspace = true }
+ic-registry-local-store-artifacts = { workspace = true }
+ic-regedit = { workspace = true }
 serde_json = { workspace = true }
 tempfile = { workspace = true }
 ssh2 = { workspace = true }

@@ -7,6 +7,6 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
-ic-crypto-internal-logmon = { path = "../../internal/logmon" }
-ic-metrics = { path = "../../../monitoring/metrics" }
-ic-test-utilities-metrics = { path = "../../../test_utilities/metrics" }
+ic-crypto-internal-logmon = { workspace = true }
+ic-metrics = { workspace = true }
+ic-test-utilities-metrics = { workspace = true }

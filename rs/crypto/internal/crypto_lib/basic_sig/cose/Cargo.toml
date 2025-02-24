@@ -7,15 +7,15 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
-ic-crypto-internal-basic-sig-der-utils = { path = "../der_utils" }
-ic-crypto-internal-basic-sig-ecdsa-secp256r1 = { path = "../ecdsa_secp256r1" }
-ic-crypto-internal-basic-sig-rsa-pkcs1 = { path = "../rsa_pkcs1" }
-ic-types = { path = "../../../../../types/types" }
+ic-crypto-internal-basic-sig-der-utils = { workspace = true }
+ic-crypto-internal-basic-sig-ecdsa-secp256r1 = { workspace = true }
+ic-crypto-internal-basic-sig-rsa-pkcs1 = { workspace = true }
+ic-types = { workspace = true }
 serde = { workspace = true }
 serde_cbor = { workspace = true }
 simple_asn1 = { workspace = true }
 
 [dev-dependencies]
 hex = { workspace = true }
-ic-crypto-internal-test-vectors = { path = "../../../test_vectors" }
-ic-crypto-sha2 = { path = "../../../../sha2" }
+ic-crypto-internal-test-vectors = { workspace = true }
+ic-crypto-sha2 = { workspace = true }

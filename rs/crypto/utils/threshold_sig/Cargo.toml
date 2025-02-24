@@ -8,10 +8,10 @@ documentation.workspace = true
 
 [dependencies]
 base64 = { workspace = true }
-ic-crypto-internal-threshold-sig-bls12381 = { path = "../../internal/crypto_lib/threshold_sig/bls12_381" }
-ic-crypto-internal-types = { path = "../../internal/crypto_lib/types" }
-ic-types = { path = "../../../types/types"}
+ic-crypto-internal-threshold-sig-bls12381 = { workspace = true }
+ic-crypto-internal-types = { workspace = true }
+ic-types = { workspace = true }
 
 [dev-dependencies]
-ic-crypto-internal-csp = { path = "../../internal/crypto_service_provider" }
+ic-crypto-internal-csp = { workspace = true }
 

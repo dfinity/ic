@@ -8,25 +8,25 @@ documentation.workspace = true
 
 [dependencies]
 async-trait = { workspace = true }
-ic-base-types = { path = "../../types/base_types" }
-ic-config = { path = "../../config" }
-ic-crypto = { path = ".." }
-ic-crypto-interfaces-sig-verification = { path = "../interfaces/sig_verification" }
-ic-crypto-internal-csp = { path = "../internal/crypto_service_provider" }
-ic-crypto-internal-logmon = { path = "../internal/logmon" }
-ic-crypto-node-key-generation = { path = "../node_key_generation" }
-ic-crypto-temp-crypto-vault = { path = "temp_vault" }
-ic-crypto-tls-interfaces = { path = "../tls_interfaces" }
-ic-crypto-utils-basic-sig = { path = "../utils/basic_sig" }
-ic-interfaces = { path = "../../interfaces" }
-ic-interfaces-registry = { path = "../../interfaces/registry" }
-ic-limits = { path = "../../limits" }
-ic-logger = { path = "../../monitoring/logger" }
-ic-protobuf = { path = "../../protobuf" }
-ic-registry-client-fake = { path = "../../registry/fake" }
-ic-registry-keys = { path = "../../registry/keys" }
-ic-registry-proto-data-provider = { path = "../../registry/proto_data_provider" }
-ic-types = { path = "../../types/types" }
+ic-base-types = { workspace = true }
+ic-config = { workspace = true }
+ic-crypto = { workspace = true }
+ic-crypto-interfaces-sig-verification = { workspace = true }
+ic-crypto-internal-csp = { workspace = true }
+ic-crypto-internal-logmon = { workspace = true }
+ic-crypto-node-key-generation = { workspace = true }
+ic-crypto-temp-crypto-vault = { workspace = true }
+ic-crypto-tls-interfaces = { workspace = true }
+ic-crypto-utils-basic-sig = { workspace = true }
+ic-interfaces = { workspace = true }
+ic-interfaces-registry = { workspace = true }
+ic-limits = { workspace = true }
+ic-logger = { workspace = true }
+ic-protobuf = { workspace = true }
+ic-registry-client-fake = { workspace = true }
+ic-registry-keys = { workspace = true }
+ic-registry-proto-data-provider = { workspace = true }
+ic-types = { workspace = true }
 rand = { workspace = true }
 rustls = { workspace = true }
 tempfile = { workspace = true }
@@ -34,8 +34,8 @@ tokio = { workspace = true }
 
 [dev-dependencies]
 assert_matches = { workspace = true }
-ic-crypto-test-utils = { path = "../test_utils" }
-ic-crypto-test-utils-reproducible-rng = { path = "../test_utils/reproducible_rng" }
-ic-test-utilities-time = { path = "../../test_utilities/time" }
-ic-types-test-utils = { path = "../../types/types_test_utils" }
+ic-crypto-test-utils = { workspace = true }
+ic-crypto-test-utils-reproducible-rng = { workspace = true }
+ic-test-utilities-time = { workspace = true }
+ic-types-test-utils = { workspace = true }
 rand_chacha = { workspace = true }

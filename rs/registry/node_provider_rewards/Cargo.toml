@@ -7,5 +7,5 @@ documentation.workspace = true
 edition.workspace = true
 
 [dependencies]
-ic-base-types = { path = "../../types/base_types/" }
-ic-protobuf = { path = "../../protobuf" }
+ic-base-types = { workspace = true }
+ic-protobuf = { workspace = true }

@@ -8,4 +8,4 @@ documentation.workspace = true
 
 [dependencies]
 http = { workspace = true }
-ic-types = { path = "../../types/types" }
+ic-types = { workspace = true }

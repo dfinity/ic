@@ -13,7 +13,7 @@ anyhow = { workspace = true }
 async-trait = { workspace = true }
 axum = { workspace = true }
 bytes = { workspace = true }
-ic-quic-transport = { path = "../quic_transport" }
-ic-types = { path = "../../types/types" }
+ic-quic-transport = { workspace = true }
+ic-types = { workspace = true }
 tokio = { workspace = true }
 tower = { workspace = true }

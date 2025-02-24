@@ -10,21 +10,21 @@ documentation.workspace = true
 
 [dependencies]
 hex = { workspace = true }
-ic-limits = { path = "../limits" }
-ic-crypto-interfaces-sig-verification = { path = "../crypto/interfaces/sig_verification" }
-ic-crypto-sha2 = { path = "../crypto/sha2" }
-ic-crypto-standalone-sig-verifier = { path = "../crypto/standalone-sig-verifier" }
-ic-crypto-tree-hash = { path = "../crypto/tree_hash" }
-ic-types = { path = "../types/types" }
+ic-limits = { workspace = true }
+ic-crypto-interfaces-sig-verification = { workspace = true }
+ic-crypto-sha2 = { workspace = true }
+ic-crypto-standalone-sig-verifier = { workspace = true }
+ic-crypto-tree-hash = { workspace = true }
+ic-types = { workspace = true }
 thiserror = { workspace = true }
 
 [dev-dependencies]
 assert_matches = { workspace = true }
 base64 = { workspace = true }
 hex = { workspace = true }
-ic-crypto-test-utils-reproducible-rng = { path = "../crypto/test_utils/reproducible_rng" }
-ic-crypto-test-utils-root-of-trust = { path = "../crypto/test_utils/root_of_trust" }
-ic-test-utilities = { path = "../test_utilities" }
-ic-test-utilities-types = { path = "../test_utilities/types" }
+ic-crypto-test-utils-reproducible-rng = { workspace = true }
+ic-crypto-test-utils-root-of-trust = { workspace = true }
+ic-test-utilities = { workspace = true }
+ic-test-utilities-types = { workspace = true }
 mockall = { workspace = true }
 rand = { workspace = true }

@@ -7,12 +7,12 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
-bech32 = "0.9.0"
+bech32 = { workspace = true }
 candid = { workspace = true }
 ic-btc-interface = { workspace = true }
 ic-cdk = { workspace = true }
 ic-cdk-macros = { workspace = true }
-ic-ckbtc-minter = { path = "../ckbtc/minter" }
+ic-ckbtc-minter = { workspace = true }
 rand = { workspace = true }
 serde = { workspace = true }
 serde_bytes = { workspace = true }
@@ -21,9 +21,9 @@ serde_bytes = { workspace = true }
 bitcoin = { workspace = true }
 candid_parser = { workspace = true }
 hex = { workspace = true }
-ic-base-types = { path = "../../types/base_types" }
-ic-config = { path = "../../config" }
-ic-state-machine-tests = { path = "../../state_machine_tests" }
-ic-test-utilities-load-wasm = { path = "../../test_utilities/load_wasm" }
-ic-types = { path = "../../types/types" }
-ic-universal-canister = { path = "../../universal_canister/lib" }
+ic-base-types = { workspace = true }
+ic-config = { workspace = true }
+ic-state-machine-tests = { workspace = true }
+ic-test-utilities-load-wasm = { workspace = true }
+ic-types = { workspace = true }
+ic-universal-canister = { workspace = true }

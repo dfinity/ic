@@ -7,9 +7,9 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
-ic-base-types = { path = "../../../types/base_types" }
-ic-canister-client-sender = { path = "../../../canister_client/sender" }
-ic-types = { path = "../../../types/types" }
+ic-base-types = { workspace = true }
+ic-canister-client-sender = { workspace = true }
+ic-types = { workspace = true }
 lazy_static = { workspace = true }
 rand = { workspace = true }
 rand_chacha = { workspace = true }

@@ -9,48 +9,48 @@ version.workspace = true
 [dependencies]
 candid = { workspace = true }
 hex = { workspace = true }
-ic-base-types = { path = "../types/base_types" }
+ic-base-types = { workspace = true }
 ic-btc-interface = { workspace = true }
-ic-canister-sandbox-backend-lib = { path = "../canister_sandbox" }
-ic-config = { path = "../config" }
-ic-crypto-prng = { path = "../crypto/prng" }
-ic-crypto-sha2 = { path = "../crypto/sha2" }
-ic-crypto-tree-hash = { path = "../crypto/tree_hash" }
-ic-crypto-utils-canister-threshold-sig = { path = "../crypto/utils/canister_threshold_sig" }
-ic-cycles-account-manager = { path = "../cycles_account_manager" }
-ic-embedders = { path = "../embedders" }
-ic-error-types = { path = "../types/error_types" }
-ic-interfaces = { path = "../interfaces" }
-ic-interfaces-state-manager = { path = "../interfaces/state_manager" }
-ic-limits = { path = "../limits" }
-ic-logger = { path = "../monitoring/logger" }
-ic-management-canister-types-private = { path = "../types/management_canister_types" }
-ic-metrics = { path = "../monitoring/metrics" }
-ic-nns-constants = { path = "../nns/constants" }
-ic-query-stats = { path = "../query_stats" }
-ic-registry-provisional-whitelist = { path = "../registry/provisional_whitelist" }
-ic-registry-routing-table = { path = "../registry/routing_table" }
-ic-registry-subnet-features = { path = "../registry/subnet_features" }
-ic-registry-subnet-type = { path = "../registry/subnet_type" }
-ic-replicated-state = { path = "../replicated_state" }
-ic-state-layout = { path = "../state_layout" }
-ic-sys = { path = "../sys" }
-ic-system-api = { path = "../system_api" }
-ic-types = { path = "../types/types" }
+ic-canister-sandbox-backend-lib = { workspace = true }
+ic-config = { workspace = true }
+ic-crypto-prng = { workspace = true }
+ic-crypto-sha2 = { workspace = true }
+ic-crypto-tree-hash = { workspace = true }
+ic-crypto-utils-canister-threshold-sig = { workspace = true }
+ic-cycles-account-manager = { workspace = true }
+ic-embedders = { workspace = true }
+ic-error-types = { workspace = true }
+ic-interfaces = { workspace = true }
+ic-interfaces-state-manager = { workspace = true }
+ic-limits = { workspace = true }
+ic-logger = { workspace = true }
+ic-management-canister-types-private = { workspace = true }
+ic-metrics = { workspace = true }
+ic-nns-constants = { workspace = true }
+ic-query-stats = { workspace = true }
+ic-registry-provisional-whitelist = { workspace = true }
+ic-registry-routing-table = { workspace = true }
+ic-registry-subnet-features = { workspace = true }
+ic-registry-subnet-type = { workspace = true }
+ic-replicated-state = { workspace = true }
+ic-state-layout = { workspace = true }
+ic-sys = { workspace = true }
+ic-system-api = { workspace = true }
+ic-types = { workspace = true }
 ic-utils = { path = "../utils" }
-ic-utils-thread = { path = "../utils/thread" }
-ic-utils-lru-cache = { path = "../utils/lru_cache" }
-ic-wasm-transform = { path = "../wasm_transform" }
-ic-wasm-types = { path = "../types/wasm_types" }
+ic-utils-thread = { workspace = true }
+ic-utils-lru-cache = { workspace = true }
+ic-wasm-transform = { workspace = true }
+ic-wasm-types = { workspace = true }
 lazy_static = { workspace = true }
-memory_tracker = { path = "../memory_tracker" }
-more-asserts = "0.3.1"
-num-rational = "0.2.2"
+memory_tracker = { workspace = true }
+more-asserts = { workspace = true }
+num-rational = { workspace = true }
 num-traits = { workspace = true }
-phantom_newtype = { path = "../phantom_newtype" }
+phantom_newtype = { workspace = true }
 prometheus = { workspace = true }
 rand = { workspace = true }
-scoped_threadpool = "0.1.*"
+scoped_threadpool = { workspace = true }
 serde = { workspace = true }
 serde_bytes = { workspace = true }
 serde_cbor = { workspace = true }
@@ -64,24 +64,24 @@ tracing = { workspace = true }
 
 [dev-dependencies]
 assert_matches = { workspace = true }
-canister-test = { path = "../rust_canisters/canister_test" }
+canister-test = { workspace = true }
 criterion = { workspace = true }
-execution-environment-bench = { path = "benches/lib" }
-ic-interfaces-state-manager-mocks = { path = "../interfaces/state_manager/mocks" }
-ic-management-canister-types-private = { path = "../types/management_canister_types" }
-ic-state-machine-tests = { path = "../state_machine_tests" }
-ic-test-utilities = { path = "../test_utilities" }
-ic-test-utilities-execution-environment = { path = "../test_utilities/execution_environment" }
-ic-test-utilities-logger = { path = "../test_utilities/logger" }
-ic-test-utilities-metrics = { path = "../test_utilities/metrics" }
-ic-test-utilities-state = { path = "../test_utilities/state" }
-ic-test-utilities-types = { path = "../test_utilities/types" }
-ic-types-test-utils = { path = "../types/types_test_utils" }
-ic-universal-canister = { path = "../universal_canister/lib" }
-ic-wasm-types = { path = "../types/wasm_types" }
+execution-environment-bench = { workspace = true }
+ic-interfaces-state-manager-mocks = { workspace = true }
+ic-management-canister-types-private = { workspace = true }
+ic-state-machine-tests = { workspace = true }
+ic-test-utilities = { workspace = true }
+ic-test-utilities-execution-environment = { workspace = true }
+ic-test-utilities-logger = { workspace = true }
+ic-test-utilities-metrics = { workspace = true }
+ic-test-utilities-state = { workspace = true }
+ic-test-utilities-types = { workspace = true }
+ic-types-test-utils = { workspace = true }
+ic-universal-canister = { workspace = true }
+ic-wasm-types = { workspace = true }
 itertools = { workspace = true }
 libflate = { workspace = true }
-maplit = "1.0.2"
+maplit = { workspace = true }
 proptest = { workspace = true }
 regex = { workspace = true }
 test-strategy = "0.3.1"
@@ -89,7 +89,7 @@ wasmparser = { workspace = true }
 wat = { workspace = true }
 
 [build-dependencies]
-escargot = "0.5"
+escargot = { workspace = true }
 
 [features]
 default = []

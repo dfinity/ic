@@ -17,22 +17,22 @@ path = "canister/canister.rs"
 build-info = { workspace = true }
 
 candid = { workspace = true }
-dfn_candid = { path = "../../rust_canisters/dfn_candid" }
-dfn_core = { path = "../../rust_canisters/dfn_core" }
+dfn_candid = { workspace = true }
+dfn_core = { workspace = true }
 hex = { workspace = true }
-hex-literal = "0.4.1"
-ic-base-types = { path = "../../types/base_types" }
-ic-crypto-sha2 = { path = "../../crypto/sha2/" }
-ic-dummy-getrandom-for-wasm = { path = "../../../packages/ic-dummy-getrandom-for-wasm" }
-ic-nervous-system-common = { path = "../../nervous_system/common" }
-ic-nervous-system-common-build-metadata = { path = "../../nervous_system/common/build_metadata" }
-ic-nns-governance-api = { path = "../governance/api" }
-ic-nns-common = { path = "../common" }
-ic-nns-constants = { path = "../constants" }
-ic-nns-gtc-accounts = { path = "../gtc_accounts" }
-ic-secp256k1 = { path = "../../../packages/ic-secp256k1" }
+hex-literal = { workspace = true }
+ic-base-types = { workspace = true }
+ic-crypto-sha2 = { workspace = true }
+ic-dummy-getrandom-for-wasm = { workspace = true }
+ic-nervous-system-common = { workspace = true }
+ic-nervous-system-common-build-metadata = { workspace = true }
+ic-nns-governance-api = { workspace = true }
+ic-nns-common = { workspace = true }
+ic-nns-constants = { workspace = true }
+ic-nns-gtc-accounts = { workspace = true }
+ic-secp256k1 = { workspace = true }
 lazy_static = { workspace = true }
-icp-ledger = { path = "../../ledger_suite/icp" }
+icp-ledger = { workspace = true }
 prost = { workspace = true }
 rand = { workspace = true }
 serde = { workspace = true }
@@ -40,8 +40,8 @@ sha3 = { workspace = true }
 
 [dev-dependencies]
 candid_parser = { workspace = true }
-ic-nns-gtc-protobuf-generator = { path = "./protobuf_generator" }
-ic-test-utilities-compare-dirs = { path = "../../test_utilities/compare_dirs" }
+ic-nns-gtc-protobuf-generator = { workspace = true }
+ic-test-utilities-compare-dirs = { workspace = true }
 tempfile = { workspace = true }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]

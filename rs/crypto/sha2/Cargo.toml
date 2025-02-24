@@ -7,4 +7,4 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
-ic-crypto-internal-sha2 = { path = "../internal/crypto_lib/sha2" }
+ic-crypto-internal-sha2 = { workspace = true }

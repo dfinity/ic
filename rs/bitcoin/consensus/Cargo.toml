@@ -8,33 +8,33 @@ documentation.workspace = true
 
 [dependencies]
 ic-btc-interface = { workspace = true }
-ic-btc-replica-types = { path = "../replica_types" }
-ic-config = { path = "../../config" }
-ic-error-types = { path = "../../types/error_types" }
-ic-interfaces = { path = "../../interfaces" }
-ic-interfaces-adapter-client = { path = "../../interfaces/adapter_client" }
-ic-interfaces-registry = { path = "../../interfaces/registry" }
-ic-interfaces-state-manager = { path = "../../interfaces/state_manager" }
-ic-logger = { path = "../../monitoring/logger" }
-ic-metrics = { path = "../../monitoring/metrics" }
-ic-protobuf = { path = "../../protobuf" }
-ic-registry-client-helpers = { path = "../../registry/helpers" }
-ic-registry-subnet-features = { path = "../../registry/subnet_features" }
-ic-replicated-state = { path = "../../replicated_state" }
-ic-types = { path = "../../types/types" }
+ic-btc-replica-types = { workspace = true }
+ic-config = { workspace = true }
+ic-error-types = { workspace = true }
+ic-interfaces = { workspace = true }
+ic-interfaces-adapter-client = { workspace = true }
+ic-interfaces-registry = { workspace = true }
+ic-interfaces-state-manager = { workspace = true }
+ic-logger = { workspace = true }
+ic-metrics = { workspace = true }
+ic-protobuf = { workspace = true }
+ic-registry-client-helpers = { workspace = true }
+ic-registry-subnet-features = { workspace = true }
+ic-replicated-state = { workspace = true }
+ic-types = { workspace = true }
 prometheus = { workspace = true }
 prost = { workspace = true }
 slog = { workspace = true }
 thiserror = { workspace = true }
 
 [dev-dependencies]
-ic-interfaces-registry-mocks = { path = "../../interfaces/registry/mocks" }
-ic-interfaces-state-manager-mocks = { path = "../../interfaces/state_manager/mocks" }
-ic-test-utilities = { path = "../../test_utilities" }
-ic-test-utilities-logger = { path = "../../test_utilities/logger" }
-ic-test-utilities-state = { path = "../../test_utilities/state" }
-ic-test-utilities-time = { path = "../../test_utilities/time" }
-ic-test-utilities-types = { path = "../../test_utilities/types" }
+ic-interfaces-registry-mocks = { workspace = true }
+ic-interfaces-state-manager-mocks = { workspace = true }
+ic-test-utilities = { workspace = true }
+ic-test-utilities-logger = { workspace = true }
+ic-test-utilities-state = { workspace = true }
+ic-test-utilities-time = { workspace = true }
+ic-test-utilities-types = { workspace = true }
 mockall = { workspace = true }
 proptest = { workspace = true }
 

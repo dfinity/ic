@@ -7,7 +7,7 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
-addr = { version = "0.15.6", default-features = false, features = ["idna"] }
+addr = { workspace = true, features = ["idna"] }
 candid = { workspace = true }
 ic-stable-structures = { workspace = true }
 serde = { workspace = true }

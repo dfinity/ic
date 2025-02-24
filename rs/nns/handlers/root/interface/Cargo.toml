@@ -6,8 +6,8 @@ edition = "2021"
 [dependencies]
 async-trait = { workspace = true }
 candid = { workspace = true }
-ic-base-types = { path = "../../../../types/base_types" }
+ic-base-types = { workspace = true }
 ic-cdk = { workspace = true }
-ic-nervous-system-clients = { path = "../../../../nervous_system/clients" }
-ic-nns-constants = { path = "../../../../nns/constants" }
+ic-nervous-system-clients = { workspace = true }
+ic-nns-constants = { workspace = true }
 serde = { workspace = true }

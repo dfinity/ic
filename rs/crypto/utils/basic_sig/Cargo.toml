@@ -7,9 +7,9 @@ edition.workspace = true
 documentation.workspace = true
 
 [dependencies]
-ic-base-types = { path = "../../../types/base_types" }
-ic-ed25519 = { path = "../../../../packages/ic-ed25519" }
-ic-protobuf = { path = "../../../protobuf" }
+ic-base-types = { workspace = true }
+ic-ed25519 = { workspace = true }
+ic-protobuf = { workspace = true }
 
 [dev-dependencies]
 assert_matches = { workspace = true }

@@ -5,9 +5,9 @@ edition = "2021"
 
 [dependencies]
 candid = { workspace = true }
-comparable = { version = "0.5.1", features = ["derive"] }
-ic-base-types = { path = "../../../types/base_types" }
-ic-nervous-system-proto = { path = "../../../nervous_system/proto" }
+comparable = { workspace = true, features = ["derive"] }
+ic-base-types = { workspace = true }
+ic-nervous-system-proto = { workspace = true }
 ic-utils = { path = "../../../utils" }
 prost = { workspace = true }
 serde = { workspace = true }

@@ -9,12 +9,12 @@ documentation.workspace = true
 [dependencies]
 candid = { workspace = true }
 ic-cdk = { workspace = true }
-canister-test = { path = "../../../rust_canisters/canister_test" }
-dfn_candid = { path = "../../../rust_canisters/dfn_candid" }
+canister-test = { workspace = true }
+dfn_candid = { workspace = true }
 futures = { workspace = true }
 slog = { workspace = true }
-xnet-test = { path = "../../../rust_canisters/xnet_test" }
-ic-system-test-driver = { path = "../../driver" }
+xnet-test = { workspace = true }
+ic-system-test-driver = { workspace = true }
 
 [lib]
 name = "systest_message_routing_common"

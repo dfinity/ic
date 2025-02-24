@@ -13,39 +13,39 @@ path = "src/main.rs"
 [dependencies]
 candid = { workspace = true }
 ciborium = { workspace = true }
-ic-base-types = { path = "../../../types/base_types" }
+ic-base-types = { workspace = true }
 ic-canister-log = { path = "../../../rust_canisters/canister_log" }
-ic-canister-profiler = { path = "../../../rust_canisters/canister_profiler" }
-ic-canisters-http-types = { path = "../../../rust_canisters/http_types" }
+ic-canister-profiler = { workspace = true }
+ic-canisters-http-types = { workspace = true }
 ic-cdk = { workspace = true }
 ic-cdk-macros = { workspace = true }
 ic-cdk-timers = { workspace = true }
-ic-crypto-sha2 = { path = "../../../crypto/sha2" }
-ic-icrc1 = { path = ".." }
-ic-icrc1-tokens-u256 = { path = "../tokens_u256", optional = true }
-ic-icrc1-tokens-u64 = { path = "../tokens_u64" }
-ic-ledger-canister-core = { path = "../../common/ledger_canister_core" }
-ic-ledger-core = { path = "../../common/ledger_core" }
-ic-metrics-encoder = "1.1"
+ic-crypto-sha2 = { workspace = true }
+ic-icrc1 = { workspace = true }
+ic-icrc1-tokens-u256 = { workspace = true, optional = true }
+ic-icrc1-tokens-u64 = { workspace = true }
+ic-ledger-canister-core = { workspace = true }
+ic-ledger-core = { workspace = true }
+ic-metrics-encoder = { workspace = true }
 ic-stable-structures = { workspace = true }
 icrc-ledger-types = { path = "../../../../packages/icrc-ledger-types" }
 num-traits = { workspace = true }
-scopeguard = "1.1.0"
+scopeguard = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 
 [dev-dependencies]
 candid_parser = { workspace = true }
 ic-agent = { workspace = true }
-ic-base-types = { path = "../../../types/base_types" }
-ic-icrc1-ledger = { path = "../ledger" }
-ic-ledger-suite-state-machine-tests = { path = "../../tests/sm-tests" }
-ic-icrc1-test-utils = { path = "../test_utils" }
-ic-registry-subnet-type = { path = "../../../registry/subnet_type" }
-ic-rosetta-test-utils = { path = "../../../rosetta-api/icp/test_utils" }
-ic-state-machine-tests = { path = "../../../state_machine_tests" }
-ic-test-utilities-load-wasm = { path = "../../../test_utilities/load_wasm" }
-ic-types = { path = "../../../types/types" }
+ic-base-types = { workspace = true }
+ic-icrc1-ledger = { workspace = true }
+ic-ledger-suite-state-machine-tests = { workspace = true }
+ic-icrc1-test-utils = { workspace = true }
+ic-registry-subnet-type = { workspace = true }
+ic-rosetta-test-utils = { workspace = true }
+ic-state-machine-tests = { workspace = true }
+ic-test-utilities-load-wasm = { workspace = true }
+ic-types = { workspace = true }
 proptest = { workspace = true }
 serde_bytes = { workspace = true }
 serde_json = { workspace = true }

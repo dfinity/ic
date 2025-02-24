@@ -12,7 +12,7 @@ candid = { workspace = true }
 clap = { workspace = true }
 ic-agent = { workspace = true }
 k256 = { workspace = true }
-rate-limits-api = { path = "../api" }
+rate-limits-api = { workspace = true }
 regex = { workspace = true }
 serde = { workspace = true }
 serde_yaml = { workspace = true }

@@ -8,14 +8,14 @@ documentation.workspace = true
 
 [dependencies]
 arbitrary = { workspace = true, optional = true }
-byte-unit = "4.0.14"
+byte-unit = { workspace = true }
 bytes = { workspace = true }
 candid = { workspace = true }
-comparable = { version = "0.5.1", features = ["derive"] }
+comparable = { workspace = true, features = ["derive"] }
 hex = { workspace = true }
-ic-crypto-sha2 = { path = "../../crypto/sha2" }
-ic-protobuf = { path = "../../protobuf" }
-phantom_newtype = { path = "../../phantom_newtype" }
+ic-crypto-sha2 = { workspace = true }
+ic-protobuf = { workspace = true }
+phantom_newtype = { workspace = true }
 prost = { workspace = true }
 serde = { workspace = true }
 strum = { workspace = true }
@@ -23,8 +23,8 @@ strum_macros = { workspace = true }
 
 [dev-dependencies]
 assert_matches = { workspace = true }
-ic-base-types-protobuf-generator = { path = "./protobuf_generator" }
-ic-test-utilities-compare-dirs = { path = "../../test_utilities/compare_dirs" }
+ic-base-types-protobuf-generator = { workspace = true }
+ic-test-utilities-compare-dirs = { workspace = true }
 proptest = { workspace = true }
 proptest-derive = { workspace = true }
 serde_cbor = { workspace = true }

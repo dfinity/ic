@@ -8,7 +8,7 @@ documentation.workspace = true
 
 [dependencies]
 hex = { workspace = true }
-ic-crypto-sha2 = { path = "../../../sha2" }
+ic-crypto-sha2 = { workspace = true }
 rand = { workspace = true }
 rand_chacha = { workspace = true }
 serde = { workspace = true }

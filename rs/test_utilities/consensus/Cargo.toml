@@ -8,13 +8,13 @@ documentation.workspace = true
 
 [dependencies]
 bincode = { workspace = true }
-ic-base-types = { path = "../../types/base_types" }
-ic-crypto-test-utils-ni-dkg = { path = "../../crypto/test_utils/ni-dkg" }
-ic-interfaces = { path = "../../interfaces" }
-ic-protobuf = { path = "../../protobuf" }
-ic-test-utilities-types = { path = "../types" }
-ic-types = { path = "../../types/types" }
+ic-base-types = { workspace = true }
+ic-crypto-test-utils-ni-dkg = { workspace = true }
+ic-interfaces = { workspace = true }
+ic-protobuf = { workspace = true }
+ic-test-utilities-types = { workspace = true }
+ic-types = { workspace = true }
 mockall = { workspace = true }
-phantom_newtype = { path = "../../phantom_newtype" }
+phantom_newtype = { workspace = true }
 prost = { workspace = true }
 serde = { workspace = true }

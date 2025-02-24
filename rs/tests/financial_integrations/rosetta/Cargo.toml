@@ -7,28 +7,28 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
-ic-canister-client = { path = "../../../canister_client" }
-icp-ledger = { path = "../../../ledger_suite/icp" }
-ic-nns-constants = { path = "../../../nns/constants" }
-ic-nns-governance-api = { path = "../../../nns/governance/api" }
-ic-nns-test-utils = { path = "../../../nns/test_utils" }
-ic-registry-subnet-type = { path = "../../../registry/subnet_type" }
-ic-ledger-canister-blocks-synchronizer-test-utils = { path = "../../../rosetta-api/icp/ledger_canister_blocks_synchronizer/test_utils" }
-ic-rosetta-test-utils = { path = "../../../rosetta-api/icp/test_utils" }
-canister-test = { path = "../../../rust_canisters/canister_test" }
-dfn_protobuf = { path = "../../../rust_canisters/dfn_protobuf" }
-ic-test-identity = { path = "../../../test_utilities/identity" }
-ic-system-test-driver = { path = "../../driver" }
-ic-types = { path = "../../../types/types" }
+ic-canister-client = { workspace = true }
+icp-ledger = { workspace = true }
+ic-nns-constants = { workspace = true }
+ic-nns-governance-api = { workspace = true }
+ic-nns-test-utils = { workspace = true }
+ic-registry-subnet-type = { workspace = true }
+ic-ledger-canister-blocks-synchronizer-test-utils = { workspace = true }
+ic-rosetta-test-utils = { workspace = true }
+canister-test = { workspace = true }
+dfn_protobuf = { workspace = true }
+ic-test-identity = { workspace = true }
+ic-system-test-driver = { workspace = true }
+ic-types = { workspace = true }
 anyhow = { workspace = true }
 lazy_static = { workspace = true }
 slog = { workspace = true }
 url = { workspace = true }
-ic-ledger-core = { path = "../../../ledger_suite/common/ledger_core" }
-ic-nns-common = { path = "../../../nns/common" }
-ic-rosetta-api = { path = "../../../rosetta-api/icp" }
-rosetta_test_lib = { path = "./rosetta_test_lib" }
-assert-json-diff = "2.0.1"
+ic-ledger-core = { workspace = true }
+ic-nns-common = { workspace = true }
+ic-rosetta-api = { workspace = true }
+rosetta_test_lib = { workspace = true }
+assert-json-diff = { workspace = true }
 rand = { workspace = true }
 serde_json = { workspace = true }
 ic-agent = { workspace = true }

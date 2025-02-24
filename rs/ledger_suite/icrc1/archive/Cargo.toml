@@ -9,26 +9,26 @@ documentation.workspace = true
 [dependencies]
 candid = { workspace = true }
 ciborium = { workspace = true }
-ic-base-types = { path = "../../../types/base_types" }
-ic-canisters-http-types = { path = "../../../rust_canisters/http_types" }
+ic-base-types = { workspace = true }
+ic-canisters-http-types = { workspace = true }
 ic-cdk = { workspace = true }
 ic-cdk-macros = { workspace = true }
-ic-icrc1 = { path = "../" }
-ic-icrc1-tokens-u256 = { path = "../tokens_u256", optional = true }
-ic-icrc1-tokens-u64 = { path = "../tokens_u64" }
-ic-ledger-canister-core = { path = "../../common/ledger_canister_core" }
-ic-ledger-core = { path = "../../common/ledger_core" }
-ic-metrics-encoder = "1"
+ic-icrc1 = { workspace = true }
+ic-icrc1-tokens-u256 = { workspace = true, optional = true }
+ic-icrc1-tokens-u64 = { workspace = true }
+ic-ledger-canister-core = { workspace = true }
+ic-ledger-core = { workspace = true }
+ic-metrics-encoder = { workspace = true }
 ic-stable-structures = { workspace = true }
 icrc-ledger-types = { path = "../../../../packages/icrc-ledger-types" }
 serde = { workspace = true }
 
 [dev-dependencies]
 candid_parser = { workspace = true }
-ic-ledger-core = { path = "../../common/ledger_core" }
-ic-rosetta-test-utils = { path = "../../../rosetta-api/icp/test_utils" }
-ic-state-machine-tests = { path = "../../../state_machine_tests" }
-ic-test-utilities-load-wasm = { path = "../../../test_utilities/load_wasm" }
+ic-ledger-core = { workspace = true }
+ic-rosetta-test-utils = { workspace = true }
+ic-state-machine-tests = { workspace = true }
+ic-test-utilities-load-wasm = { workspace = true }
 
 [features]
 default = []

@@ -8,11 +8,11 @@ documentation.workspace = true
 
 [dependencies]
 clap = { workspace = true }
-eyre = "0.6.8"
-ic-config = { path = "../../config" }
-ic-replicated-state = { path = "../../replicated_state" }
-ic-system-api = { path = "../../system_api" }
-ic-types = { path = "../../types/types" }
+eyre = { workspace = true }
+ic-config = { workspace = true }
+ic-replicated-state = { workspace = true }
+ic-system-api = { workspace = true }
+ic-types = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 

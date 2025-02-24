@@ -7,25 +7,25 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
-ic-crypto-prng = { path = "../../crypto/prng" }
-ic-interfaces = { path = "../../interfaces" }
-ic-interfaces-registry = { path = "../../interfaces/registry" }
-ic-logger = { path = "../../monitoring/logger" }
-ic-metrics = { path = "../../monitoring/metrics" }
-ic-protobuf = { path = "../../protobuf" }
-ic-registry-client-helpers = { path = "../../registry/helpers" }
-ic-replicated-state = { path = "../../replicated_state" }
-ic-types = { path = "../../types/types" }
+ic-crypto-prng = { workspace = true }
+ic-interfaces = { workspace = true }
+ic-interfaces-registry = { workspace = true }
+ic-logger = { workspace = true }
+ic-metrics = { workspace = true }
+ic-protobuf = { workspace = true }
+ic-registry-client-helpers = { workspace = true }
+ic-replicated-state = { workspace = true }
+ic-types = { workspace = true }
 prometheus = { workspace = true }
 rand = { workspace = true }
 slog = { workspace = true }
 
 [dev-dependencies]
 assert_matches = { workspace = true }
-ic-consensus-mocks = { path = "../mocks" }
-ic-management-canister-types-private = { path = "../../types/management_canister_types" }
-ic-test-utilities = { path = "../../test_utilities" }
-ic-test-utilities-registry = { path = "../../test_utilities/registry" }
-ic-test-utilities-state = { path = "../../test_utilities/state" }
-ic-test-utilities-time = { path = "../../test_utilities/time" }
-ic-test-utilities-types = { path = "../../test_utilities/types" }
+ic-consensus-mocks = { workspace = true }
+ic-management-canister-types-private = { workspace = true }
+ic-test-utilities = { workspace = true }
+ic-test-utilities-registry = { workspace = true }
+ic-test-utilities-state = { workspace = true }
+ic-test-utilities-time = { workspace = true }
+ic-test-utilities-types = { workspace = true }

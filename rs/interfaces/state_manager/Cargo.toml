@@ -7,7 +7,7 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
-ic-crypto-tree-hash = { path = "../../crypto/tree_hash" }
-ic-types = { path = "../../types/types" }
-phantom_newtype = { path = "../../phantom_newtype" }
+ic-crypto-tree-hash = { workspace = true }
+ic-types = { workspace = true }
+phantom_newtype = { workspace = true }
 thiserror = { workspace = true }

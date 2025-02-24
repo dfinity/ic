@@ -7,13 +7,13 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
-ic-ledger-core = { path = "../../../ledger_suite/common/ledger_core" }
-icp-ledger = { path = "../../../ledger_suite/icp" }
-ic-icrc1-ledger = { path = "../../../ledger_suite/icrc1/ledger" }
-ic-nns-constants = { path = "../../../nns/constants" }
-ic-registry-subnet-type = { path = "../../../registry/subnet_type" }
-ic-system-test-driver = { path = "../../driver" }
-ic-base-types = { path = "../../../types/base_types" }
+ic-ledger-core = { workspace = true }
+icp-ledger = { workspace = true }
+ic-icrc1-ledger = { workspace = true }
+ic-nns-constants = { workspace = true }
+ic-registry-subnet-type = { workspace = true }
+ic-system-test-driver = { workspace = true }
+ic-base-types = { workspace = true }
 candid = { workspace = true }
 serde = { workspace = true }
 slog = { workspace = true }

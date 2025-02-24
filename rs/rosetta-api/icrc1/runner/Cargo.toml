@@ -13,5 +13,5 @@ tempfile = { workspace = true }
 tokio = { workspace = true }
 
 [dev-dependencies]
-pocket-ic = { path = "../../../../packages/pocket-ic" }
+pocket-ic = { workspace = true }
 reqwest = { workspace = true }

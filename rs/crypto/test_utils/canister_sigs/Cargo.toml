@@ -7,11 +7,11 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
-ic-certification-test-utils = { path = "../../../certification/test-utils" }
-ic-crypto-internal-basic-sig-iccsa = { path = "../../internal/crypto_lib/basic_sig/iccsa" }
-ic-crypto-internal-basic-sig-iccsa-test-utils = { path = "../../internal/crypto_lib/basic_sig/iccsa/test_utils" }
-ic-crypto-temp-crypto = { path = "../../temp_crypto" }
-ic-crypto-test-utils = { path = ".." }
-ic-types = { path = "../../../types/types" }
+ic-certification-test-utils = { workspace = true }
+ic-crypto-internal-basic-sig-iccsa = { workspace = true }
+ic-crypto-internal-basic-sig-iccsa-test-utils = { workspace = true }
+ic-crypto-temp-crypto = { workspace = true }
+ic-crypto-test-utils = { workspace = true }
+ic-types = { workspace = true }
 rand = { workspace = true }
 rand_chacha = { workspace = true }

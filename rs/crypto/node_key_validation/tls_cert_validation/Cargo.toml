@@ -12,15 +12,15 @@ documentation.workspace = true
 # use dependencies that can be compiled to WebAssembly.
 ########################################################
 hex = { workspace = true }
-ic-crypto-internal-basic-sig-ed25519 = { path = "../../internal/crypto_lib/basic_sig/ed25519" }
-ic-protobuf = { path = "../../../protobuf" }
-ic-types = { path = "../../../types/types" }
+ic-crypto-internal-basic-sig-ed25519 = { workspace = true }
+ic-protobuf = { workspace = true }
+ic-types = { workspace = true }
 serde = { workspace = true }
 x509-parser = { workspace = true }
 
 [dev-dependencies]
 assert_matches = { workspace = true }
 curve25519-dalek = { workspace = true }
-ic-crypto-test-utils-keys = { path = "../../test_utils/keys" }
-ic-crypto-test-utils-reproducible-rng = { path = "../../test_utils/reproducible_rng" }
-ic-crypto-test-utils-tls = { path = "../../test_utils/tls" }
+ic-crypto-test-utils-keys = { workspace = true }
+ic-crypto-test-utils-reproducible-rng = { workspace = true }
+ic-crypto-test-utils-tls = { workspace = true }

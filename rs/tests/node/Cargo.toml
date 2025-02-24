@@ -10,15 +10,15 @@ documentation.workspace = true
 anyhow = { workspace = true }
 candid = { workspace = true }
 ic-agent = { workspace = true }
-ic-base-types = { path = "../../types/base_types" }
-ic-nns-constants = { path = "../../nns/constants" }
-ic-registry-canister-api = { path = "../../registry/canister/api" }
-ic-registry-subnet-type = { path = "../../registry/subnet_type" }
-ic_consensus_system_test_utils = { path = "../consensus/utils" }
-ic-system-test-driver = { path = "../driver" }
-indoc = "1.0.9"
+ic-base-types = { workspace = true }
+ic-nns-constants = { workspace = true }
+ic-registry-canister-api = { workspace = true }
+ic-registry-subnet-type = { workspace = true }
+ic_consensus_system_test_utils = { workspace = true }
+ic-system-test-driver = { workspace = true }
+indoc = { workspace = true }
 k256 = { workspace = true }
-registry-canister = { path = "../../registry/canister" }
+registry-canister = { workspace = true }
 slog = { workspace = true }
 tokio = { workspace = true }
 

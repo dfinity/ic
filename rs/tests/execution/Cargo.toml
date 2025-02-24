@@ -12,30 +12,30 @@ bitcoincore-rpc = { workspace = true }
 candid = { workspace = true }
 futures = { workspace = true }
 ic-agent = { workspace = true }
-ic-management-canister-types-private = { path = "../../types/management_canister_types" }
-ic-registry-subnet-type = { path = "../../registry/subnet_type" }
-ic-system-test-driver = { path = "../driver" }
-ic-universal-canister = { path = "../../universal_canister/lib" }
+ic-management-canister-types-private = { workspace = true }
+ic-registry-subnet-type = { workspace = true }
+ic-system-test-driver = { workspace = true }
+ic-universal-canister = { workspace = true }
 ic-utils = { workspace = true }
 slog = { workspace = true }
-ic-tests-ckbtc = { path = "../ckbtc" }
-ic-types = { path = "../../types/types" }
-ic-config = { path = "../../config" }
+ic-tests-ckbtc = { workspace = true }
+ic-types = { workspace = true }
+ic-config = { workspace = true }
 ic-cdk = { workspace = true }
-ic-base-types = { path = "../../types/base_types" }
-ic-cycles-account-manager = { path = "../../cycles_account_manager" }
+ic-base-types = { workspace = true }
+ic-cycles-account-manager = { workspace = true }
 rand = { workspace = true }
 rand_chacha = { workspace = true }
 reqwest = { workspace = true }
-ic-types-test-utils = { path = "../../types/types_test_utils" }
-ic-nns-constants = { path = "../../nns/constants" }
+ic-types-test-utils = { workspace = true }
+ic-nns-constants = { workspace = true }
 lazy_static = { workspace = true }
 serde_cbor = { workspace = true }
-ic-crypto-sha2 = { path = "../../crypto/sha2" }
+ic-crypto-sha2 = { workspace = true }
 tokio = { workspace = true }
 wat = { workspace = true }
 assert_matches = { workspace = true }
-ic-registry-routing-table = { path = "../../registry/routing_table" }
+ic-registry-routing-table = { workspace = true }
 
 [[bin]]
 name = "compute_allocation_test"

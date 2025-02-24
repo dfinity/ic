@@ -18,58 +18,58 @@ path = "bin/principal_to_hex.rs"
 askama = { workspace = true }
 candid = { workspace = true }
 ethnum = { workspace = true }
-evm-rpc-client = { path = "../../evm-rpc-client" }
+evm-rpc-client = { workspace = true }
 futures = { workspace = true }
 hex = { workspace = true }
-hex-literal = "0.4.1"
+hex-literal = { workspace = true }
 ic-canister-log = "0.2.0"
-ic-canisters-http-types = { path = "../../../rust_canisters/http_types" }
+ic-canisters-http-types = { workspace = true }
 ic-cdk = { workspace = true }
 ic-cdk-macros = { workspace = true }
 ic-cdk-timers = { workspace = true }
-ic-ethereum-types = { path = "../../../../packages/ic-ethereum-types" }
-ic-management-canister-types-private = { path = "../../../types/management_canister_types" }
-ic-metrics-encoder = "1"
-ic-secp256k1 = { path = "../../../../packages/ic-secp256k1" }
+ic-ethereum-types = { workspace = true }
+ic-management-canister-types-private = { workspace = true }
+ic-metrics-encoder = { workspace = true }
+ic-secp256k1 = { workspace = true }
 ic-sha3 = { workspace = true }
 ic-stable-structures = { workspace = true }
-ic-utils-ensure = { path = "../../../utils/ensure" }
+ic-utils-ensure = { workspace = true }
 icrc-cbor = { path = "../../../../packages/icrc-cbor", features = ["u256"] }
-icrc-ledger-client-cdk = { path = "../../../../packages/icrc-ledger-client-cdk" }
+icrc-ledger-client-cdk = { workspace = true }
 icrc-ledger-types = { path = "../../../../packages/icrc-ledger-types" }
 minicbor = { workspace = true }
 minicbor-derive = { workspace = true }
 num-bigint = { workspace = true }
 num-traits = { workspace = true }
-phantom_newtype = { path = "../../../phantom_newtype" }
-rlp = "0.5.2"
-scopeguard = "1.1.0"
+phantom_newtype = { workspace = true }
+rlp = { workspace = true }
+scopeguard = { workspace = true }
 serde = { workspace = true }
 serde_bytes = { workspace = true }
 serde_json = { workspace = true }
 strum = { workspace = true }
 strum_macros = { workspace = true }
 thiserror = { workspace = true }
-thousands = "0.2"
+thousands = { workspace = true }
 time = { workspace = true }
 
 [dev-dependencies]
 assert_matches = { workspace = true }
 candid_parser = { workspace = true }
-ethers-core = "2.0.8"
+ethers-core = { workspace = true }
 flate2 = { workspace = true }
 hex = { workspace = true }
 ic-agent = { workspace = true }
-ic-base-types = { path = "../../../types/base_types" }
-ic-cketh-test-utils = { path = "../test_utils" }
-ic-config = { path = "../../../config" }
-ic-crypto-test-utils-reproducible-rng = { path = "../../../crypto/test_utils/reproducible_rng" }
-ic-ledger-suite-orchestrator-test-utils = { path = "../../ledger-suite-orchestrator/test_utils" }
-ic-state-machine-tests = { path = "../../../state_machine_tests" }
-maplit = "1"
+ic-base-types = { workspace = true }
+ic-cketh-test-utils = { workspace = true }
+ic-config = { workspace = true }
+ic-crypto-test-utils-reproducible-rng = { workspace = true }
+ic-ledger-suite-orchestrator-test-utils = { workspace = true }
+ic-state-machine-tests = { workspace = true }
+maplit = { workspace = true }
 proptest = { workspace = true }
 rand = { workspace = true }
-scraper = "0.17.1"
+scraper = { workspace = true }
 tempfile = { workspace = true }
 tokio = { workspace = true }
 

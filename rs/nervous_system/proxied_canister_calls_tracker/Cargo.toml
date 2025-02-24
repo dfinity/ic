@@ -7,9 +7,9 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
-ic-base-types = { path = "../../types/base_types" }
+ic-base-types = { workspace = true }
 
 [dev-dependencies]
-maplit = "1.0.2"
+maplit = { workspace = true }
 pretty_assertions = { workspace = true }
 tokio = { workspace = true }

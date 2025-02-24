@@ -9,23 +9,23 @@ documentation.workspace = true
 [dependencies]
 candid = { workspace = true }
 ciborium = { workspace = true }
-dfn_candid = { path = "../../../rust_canisters/dfn_candid" }
-dfn_core = { path = "../../../rust_canisters/dfn_core" }
-dfn_http_metrics = { path = "../../../rust_canisters/dfn_http_metrics" }
-dfn_protobuf = { path = "../../../rust_canisters/dfn_protobuf" }
-ic-base-types = { path = "../../../types/base_types" }
+dfn_candid = { workspace = true }
+dfn_core = { workspace = true }
+dfn_http_metrics = { workspace = true }
+dfn_protobuf = { workspace = true }
+ic-base-types = { workspace = true }
 ic-cdk = { workspace = true }
-ic-ledger-canister-core = { path = "../../common/ledger_canister_core" }
-ic-ledger-core = { path = "../../common/ledger_core" }
-ic-metrics-encoder = "1"
-ic-nns-constants = { path = "../../../nns/constants" }
-icp-ledger = { path = "../" }
+ic-ledger-canister-core = { workspace = true }
+ic-ledger-core = { workspace = true }
+ic-metrics-encoder = { workspace = true }
+ic-nns-constants = { workspace = true }
+icp-ledger = { workspace = true }
 lazy_static = { workspace = true }
 serde = { workspace = true }
 
 [dev-dependencies]
 candid_parser = { workspace = true }
-ic-canisters-http-types = { path = "../../../rust_canisters/http_types" }
-ic-ledger-test-utils = { path = "../test_utils" }
-pocket-ic = { path = "../../../../packages/pocket-ic" }
+ic-canisters-http-types = { workspace = true }
+ic-ledger-test-utils = { workspace = true }
+pocket-ic = { workspace = true }
 serde_bytes = { workspace = true }

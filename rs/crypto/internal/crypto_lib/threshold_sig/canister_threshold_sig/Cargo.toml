@@ -10,16 +10,16 @@ documentation.workspace = true
 
 [dependencies]
 curve25519-dalek = { workspace = true }
-fe-derive = { path = "fe-derive" }
-group = "0.13"
+fe-derive = { workspace = true }
+group = { workspace = true }
 hex = { workspace = true }
-hex-literal = "0.4.1"
-ic-crypto-internal-hmac = { path = "../../hmac" }
-ic-crypto-internal-seed = { path = "../../seed" }
-ic-crypto-internal-types = { path = "../../types" }
-ic-crypto-secrets-containers = { path = "../../../../secrets_containers" }
-ic-crypto-sha2 = { path = "../../../../sha2" }
-ic-types = { path = "../../../../../types/types" }
+hex-literal = { workspace = true }
+ic-crypto-internal-hmac = { workspace = true }
+ic-crypto-internal-seed = { workspace = true }
+ic-crypto-internal-types = { workspace = true }
+ic-crypto-secrets-containers = { workspace = true }
+ic-crypto-sha2 = { workspace = true }
+ic-types = { workspace = true }
 k256 = { workspace = true }
 lazy_static = { workspace = true }
 p256 = { workspace = true }
@@ -35,11 +35,11 @@ zeroize = { workspace = true }
 
 [dev-dependencies]
 assert_matches = { workspace = true }
-bip32 = { version = "0.5", features = ["secp256k1"] }
+bip32 = { workspace = true, features = ["secp256k1"] }
 criterion = { workspace = true }
 ed25519-dalek = { workspace = true }
-ic-crypto-internal-threshold-sig-canister-threshold-sig-test-utils = { path = "test_utils" }
-ic-crypto-test-utils-reproducible-rng = { path = "../../../../test_utils/reproducible_rng" }
+ic-crypto-internal-threshold-sig-canister-threshold-sig-test-utils = { workspace = true }
+ic-crypto-test-utils-reproducible-rng = { workspace = true }
 num-traits = { workspace = true }
 strum = { workspace = true }
 

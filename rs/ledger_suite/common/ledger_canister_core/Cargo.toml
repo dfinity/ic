@@ -9,11 +9,11 @@ documentation.workspace = true
 [dependencies]
 async-trait = { workspace = true }
 candid = { workspace = true }
-ic-base-types = { path = "../../../types/base_types" }
+ic-base-types = { workspace = true }
 ic-canister-log = { path = "../../../rust_canisters/canister_log" }
-ic-limits = { path = "../../../limits" }
-ic-ledger-core = { path = "../ledger_core" }
-ic-ledger-hash-of = { path = "../../../../packages/ic-ledger-hash-of" }
-ic-management-canister-types-private = { path = "../../../types/management_canister_types" }
+ic-limits = { workspace = true }
+ic-ledger-core = { workspace = true }
+ic-ledger-hash-of = { workspace = true }
+ic-management-canister-types-private = { workspace = true }
 ic-utils = { path = "../../../utils" }
 serde = { workspace = true }

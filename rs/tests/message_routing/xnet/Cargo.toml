@@ -7,16 +7,16 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
-xnet-slo-test-lib = { path = "../xnet/slo_test_lib" }
+xnet-slo-test-lib = { workspace = true }
 anyhow = { workspace = true }
-ic_consensus_system_test_utils = { path = "../../consensus/utils" }
-ic-registry-subnet-type = { path = "../../../registry/subnet_type" }
-ic-system-test-driver = { path = "../../driver" }
+ic_consensus_system_test_utils = { workspace = true }
+ic-registry-subnet-type = { workspace = true }
+ic-system-test-driver = { workspace = true }
 slog = { workspace = true }
-ic-types = { path = "../../../types/types" }
+ic-types = { workspace = true }
 tokio = { workspace = true }
-systest-message-routing-common = { path = "../common" }
-canister-test = { path = "../../../rust_canisters/canister_test" }
+systest-message-routing-common = { workspace = true }
+canister-test = { workspace = true }
 
 [[bin]]
 name = "xnet_compatibility"

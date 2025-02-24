@@ -11,44 +11,44 @@ build-info = { workspace = true }
 
 async-trait = { workspace = true }
 candid = { workspace = true }
-dfn_candid = { path = "../../rust_canisters/dfn_candid" }
-dfn_protobuf = { path = "../../rust_canisters/dfn_protobuf" }
-dfn_core = { path = "../../rust_canisters/dfn_core" }
-dfn_http_metrics = { path = "../../rust_canisters/dfn_http_metrics" }
+dfn_candid = { workspace = true }
+dfn_protobuf = { workspace = true }
+dfn_core = { workspace = true }
+dfn_http_metrics = { workspace = true }
 icrc-ledger-types = { path = "../../../packages/icrc-ledger-types" }
-ic-base-types = { path = "../../types/base_types" }
-ic-crypto-tree-hash = { path = "../../crypto/tree_hash" }
-ic-dummy-getrandom-for-wasm = { path = "../../../packages/ic-dummy-getrandom-for-wasm" }
-ic-management-canister-types-private = { path = "../../types/management_canister_types" }
-ic-ledger-core = { path = "../../ledger_suite/common/ledger_core" }
-ic-metrics-encoder = "1"
-ic-nervous-system-clients = { path = "../../nervous_system/clients" }
-ic-nervous-system-common = { path = "../../nervous_system/common" }
-ic-nervous-system-common-build-metadata = { path = "../../nervous_system/common/build_metadata" }
-ic-nervous-system-governance = { path = "../../nervous_system/governance" }
-ic-nns-common = { path = "../../nns/common" }
-ic-nns-constants = { path = "../../nns/constants" }
-ic-protobuf = { path = "../../protobuf" }
-ic-types = { path = "../../types/types" }
+ic-base-types = { workspace = true }
+ic-crypto-tree-hash = { workspace = true }
+ic-dummy-getrandom-for-wasm = { workspace = true }
+ic-management-canister-types-private = { workspace = true }
+ic-ledger-core = { workspace = true }
+ic-metrics-encoder = { workspace = true }
+ic-nervous-system-clients = { workspace = true }
+ic-nervous-system-common = { workspace = true }
+ic-nervous-system-common-build-metadata = { workspace = true }
+ic-nervous-system-governance = { workspace = true }
+ic-nns-common = { workspace = true }
+ic-nns-constants = { workspace = true }
+ic-protobuf = { workspace = true }
+ic-types = { workspace = true }
 lazy_static = { workspace = true }
-icp-ledger = { path = "../../ledger_suite/icp" }
-on_wire = { path = "../../rust_canisters/on_wire" }
+icp-ledger = { workspace = true }
+on_wire = { workspace = true }
 
 base64 = { workspace = true }
-ic-certified-map = "0.3.1"
-ic-xrc-types = "1.0.0"
+ic-certified-map = { workspace = true }
+ic-xrc-types = { workspace = true }
 prost = { workspace = true }
 rand = { workspace = true }
 serde = { workspace = true }
 serde_cbor = { workspace = true }
 sha2 = { workspace = true }
-yansi = "0.5.0"
+yansi = { workspace = true }
 
 [dev-dependencies]
 candid_parser = { workspace = true }
-maplit = "1.0.2"
+maplit = { workspace = true }
 futures = { workspace = true }
-ic-types-test-utils = { path = "../../types/types_test_utils" }
+ic-types-test-utils = { workspace = true }
 serde_bytes = { workspace = true }
 
 [[bin]]

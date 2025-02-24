@@ -10,13 +10,13 @@ documentation.workspace = true
 anyhow = { workspace = true }
 backoff = { workspace = true }
 candid = { workspace = true }
-ic-registry-subnet-type = { path = "../../registry/subnet_type" }
-ic-system-test-driver = { path = "../driver" }
-ic_consensus_system_test_utils = { path = "../consensus/utils" }
+ic-registry-subnet-type = { workspace = true }
+ic-system-test-driver = { workspace = true }
+ic_consensus_system_test_utils = { workspace = true }
 reqwest = { workspace = true }
 serde_json = { workspace = true }
 slog = { workspace = true }
-nns_dapp = { path = "../nns/nns_dapp" }
+nns_dapp = { workspace = true }
 
 [[bin]]
 name = "dfx_check_old_wallet_version_test"

@@ -5,5 +5,5 @@ edition = "2021"
 
 [dependencies]
 candid = { workspace = true }
-ic-crypto-sha2 = { path = "../../../../crypto/sha2" }
+ic-crypto-sha2 = { workspace = true }
 serde = { workspace = true }

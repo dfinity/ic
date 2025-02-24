@@ -19,9 +19,9 @@ name = "test"
 path = "test/test.rs"
 
 [dependencies]
-ic-base-types = { path = "../../types/base_types" }
-on_wire = { path = "../on_wire" }
+ic-base-types = { workspace = true }
+on_wire = { workspace = true }
 
 [dev-dependencies]
-canister-test = { path = "../../rust_canisters/canister_test" }
-dfn_json = { path = "../dfn_json" }
+canister-test = { workspace = true }
+dfn_json = { workspace = true }

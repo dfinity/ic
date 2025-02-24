@@ -8,14 +8,14 @@ documentation.workspace = true
 
 [dependencies]
 anyhow = { workspace = true }
-canister-test = { path = "../../../rust_canisters/canister_test" }
-ic-management-canister-types-private = { path = "../../../types/management_canister_types" }
-ic-nns-constants = { path = "../../../nns/constants" }
-ic-registry-subnet-type = { path = "../../../registry/subnet_type" }
-ic-system-test-driver = { path = "../../driver" }
-ic-types = { path = "../../../types/types" }
-ic_consensus_system_test_utils = { path = "../utils" }
-ic_consensus_threshold_sig_system_test_utils = { path = "../tecdsa/utils" }
+canister-test = { workspace = true }
+ic-management-canister-types-private = { workspace = true }
+ic-nns-constants = { workspace = true }
+ic-registry-subnet-type = { workspace = true }
+ic-system-test-driver = { workspace = true }
+ic-types = { workspace = true }
+ic_consensus_system_test_utils = { workspace = true }
+ic_consensus_threshold_sig_system_test_utils = { workspace = true }
 ic_bls12_381 = { workspace = true }
 slog = { workspace = true }
 tokio = { workspace = true }

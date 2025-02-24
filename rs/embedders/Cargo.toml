@@ -10,23 +10,23 @@ version.workspace = true
 anyhow = { workspace = true }
 bincode = { workspace = true }
 clap = { workspace = true }
-ic-config = { path = "../config" }
-ic-cycles-account-manager = { path = "../cycles_account_manager" }
-ic-interfaces = { path = "../interfaces" }
-ic-logger = { path = "../monitoring/logger" }
-ic-metrics = { path = "../monitoring/metrics" }
-ic-registry-subnet-type = { path = "../registry/subnet_type" }
-ic-replicated-state = { path = "../replicated_state" }
-ic-sys = { path = "../sys" }
-ic-system-api = { path = "../system_api" }
-ic-types = { path = "../types/types" }
+ic-config = { workspace = true }
+ic-cycles-account-manager = { workspace = true }
+ic-interfaces = { workspace = true }
+ic-logger = { workspace = true }
+ic-metrics = { workspace = true }
+ic-registry-subnet-type = { workspace = true }
+ic-replicated-state = { workspace = true }
+ic-sys = { workspace = true }
+ic-system-api = { workspace = true }
+ic-types = { workspace = true }
 ic-utils = { path = "../utils" }
-ic-utils-lru-cache = { path = "../utils/lru_cache" }
-ic-wasm-transform = { path = "../wasm_transform" }
-ic-wasm-types = { path = "../types/wasm_types" }
+ic-utils-lru-cache = { workspace = true }
+ic-wasm-transform = { workspace = true }
+ic-wasm-types = { workspace = true }
 libc = { workspace = true }
 libflate = { workspace = true }
-memory_tracker = { path = "../memory_tracker" }
+memory_tracker = { workspace = true }
 nix = { workspace = true }
 num-traits = { workspace = true }
 prometheus = { workspace = true }
@@ -39,14 +39,8 @@ slog-term = { workspace = true }
 tempfile = { workspace = true }
 wasm-encoder = { workspace = true }
 wasmparser = { workspace = true }
-wasmtime = { version = "29.0.0", default-features = false, features = [
-    'cranelift',
-    'gc',
-    'gc-null',
-    'parallel-compilation',
-    'runtime',
-] }
-wasmtime-environ = "29.0.0"
+wasmtime = { workspace = true, features = ["cranelift", "gc", "gc-null", "parallel-compilation", "runtime"] }
+wasmtime-environ = { workspace = true }
 
 # Wasmtime depends on 0.4.2 but specifies 0.4.1 in the toml file.
 # Enforce 0.4.2 using a dummy dependency until the upstream issue
@@ -57,23 +51,23 @@ mach2 = "0.4.2"
 [dev-dependencies]
 assert_matches = { workspace = true }
 candid = { workspace = true }
-canister-test = { path = "../rust_canisters/canister_test" }
+canister-test = { workspace = true }
 criterion = { workspace = true }
-embedders_bench = { path = "benches/embedders_bench" }
-ic-base-types = { path = "../types/base_types" }
-ic-error-types = { path = "../types/error_types" }
-ic-registry-routing-table = { path = "../registry/routing_table" }
-ic-system-api = { path = "../system_api" }
-ic-test-utilities = { path = "../test_utilities" }
-ic-test-utilities-embedders = { path = "../test_utilities/embedders" }
-ic-test-utilities-execution-environment = { path = "../test_utilities/execution_environment" }
-ic-test-utilities-logger = { path = "../test_utilities/logger" }
-ic-test-utilities-state = { path = "../test_utilities/state" }
-ic-test-utilities-time = { path = "../test_utilities/time" }
-ic-test-utilities-types = { path = "../test_utilities/types" }
-insta = "1.8.0"
+embedders_bench = { workspace = true }
+ic-base-types = { workspace = true }
+ic-error-types = { workspace = true }
+ic-registry-routing-table = { workspace = true }
+ic-system-api = { workspace = true }
+ic-test-utilities = { workspace = true }
+ic-test-utilities-embedders = { workspace = true }
+ic-test-utilities-execution-environment = { workspace = true }
+ic-test-utilities-logger = { workspace = true }
+ic-test-utilities-state = { workspace = true }
+ic-test-utilities-time = { workspace = true }
+ic-test-utilities-types = { workspace = true }
+insta = { workspace = true }
 lazy_static = { workspace = true }
-maplit = "1.0.2"
+maplit = { workspace = true }
 pretty_assertions = { workspace = true }
 proptest = { workspace = true }
 slog = { workspace = true }

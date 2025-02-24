@@ -5,8 +5,8 @@ authors = ["The Internet Computer Project Developers"]
 edition = "2021"
 
 [dependencies]
-ic-base-types = { path = "../../types/base_types" }
+ic-base-types = { workspace = true }
 ic-stable-structures = { workspace = true }
 ic_principal = { workspace = true }
-maplit = "1.0.2"
+maplit = { workspace = true }
 num-traits = { workspace = true }

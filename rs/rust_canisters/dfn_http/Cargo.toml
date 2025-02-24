@@ -8,8 +8,8 @@ documentation.workspace = true
 
 [dependencies]
 candid = { workspace = true }
-dfn_candid = { path = "../dfn_candid" }
-dfn_core = { path = "../dfn_core" }
+dfn_candid = { workspace = true }
+dfn_core = { workspace = true }
 serde = { workspace = true }
 serde_bytes = { workspace = true }
 

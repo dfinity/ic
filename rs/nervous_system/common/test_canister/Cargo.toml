@@ -10,16 +10,16 @@ edition = "2021"
 build-info = { workspace = true }
 
 candid = { workspace = true }
-dfn_candid = { path = "../../../rust_canisters/dfn_candid" }
-dfn_core = { path = "../../../rust_canisters/dfn_core" }
-ic-nervous-system-common-build-metadata = { path = "../build_metadata" }
+dfn_candid = { workspace = true }
+dfn_core = { workspace = true }
+ic-nervous-system-common-build-metadata = { workspace = true }
 
 [build-dependencies]
 build-info-build = { workspace = true }
 
 [dev-dependencies]
 candid_parser = { workspace = true }
-canister-test = { path = "../../../rust_canisters/canister_test" }
-ic-state-machine-tests = { path = "../../../state_machine_tests" }
-ic-types = { path = "../../../types/types" }
+canister-test = { workspace = true }
+ic-state-machine-tests = { workspace = true }
+ic-types = { workspace = true }
 tokio = { workspace = true }

@@ -10,11 +10,11 @@ documentation.workspace = true
 
 [dependencies]
 candid = { workspace = true }
-dfn_core = { path = "../../rust_canisters/dfn_core" }
+dfn_core = { workspace = true }
 ic-cdk = { workspace = true }
-ic-crypto-sha2 = { path = "../../crypto/sha2" }
-ic-management-canister-types-private = { path = "../../types/management_canister_types" }
-ic-nervous-system-clients = { path = "../clients" }
-ic-nervous-system-runtime = { path = "../runtime" }
+ic-crypto-sha2 = { workspace = true }
+ic-management-canister-types-private = { workspace = true }
+ic-nervous-system-clients = { workspace = true }
+ic-nervous-system-runtime = { workspace = true }
 serde = { workspace = true }
 serde_bytes = { workspace = true }

@@ -18,18 +18,18 @@ candid = { workspace = true }
 clap = { workspace = true }
 hex = { workspace = true }
 ic-agent = { workspace = true }
-ic-ed25519 = { path = "../../../../packages/ic-ed25519" }
-ic-icrc-rosetta = { path = ".." }
-ic-rosetta-api = { path = "../../icp" }
-ic-secp256k1 = { path = "../../../../packages/ic-secp256k1" }
+ic-ed25519 = { workspace = true }
+ic-icrc-rosetta = { workspace = true }
+ic-rosetta-api = { workspace = true }
+ic-secp256k1 = { workspace = true }
 icrc-ledger-types = { path = "../../../../packages/icrc-ledger-types" }
 num-bigint = { workspace = true }
 reqwest = { workspace = true }
-rosetta-core = { path = "../../common/rosetta_core" }
+rosetta-core = { workspace = true }
 serde = { workspace = true }
 tokio = { workspace = true }
 url = { workspace = true }
 
 [dev-dependencies]
-ic-icrc-rosetta-runner = { path = "../runner" }
-pocket-ic = { path = "../../../../packages/pocket-ic" }
+ic-icrc-rosetta-runner = { workspace = true }
+pocket-ic = { workspace = true }

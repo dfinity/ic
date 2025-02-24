@@ -8,9 +8,9 @@ documentation.workspace = true
 
 [dependencies]
 anyhow = { workspace = true }
-ic-registry-subnet-type = { path = "../../registry/subnet_type" }
-ic-system-test-driver = { path = "../driver" }
-spec-compliance = { path = "./spec_compliance" }
+ic-registry-subnet-type = { workspace = true }
+ic-system-test-driver = { workspace = true }
+spec-compliance = { workspace = true }
 
 [[bin]]
 name = "spec_compliance_application_subnet_test"

@@ -7,9 +7,9 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
-ic-crypto-internal-types = { path = "../internal/crypto_lib/types" }
-ic-crypto-sha2 = { path = "../sha2" }
-ic-protobuf = { path = "../../protobuf" }
+ic-crypto-internal-types = { workspace = true }
+ic-crypto-sha2 = { workspace = true }
+ic-protobuf = { workspace = true }
 serde = { workspace = true }
 serde_bytes = { workspace = true }
 thiserror = { workspace = true }
@@ -17,9 +17,9 @@ thiserror = { workspace = true }
 [dev-dependencies]
 assert_matches = { workspace = true }
 criterion = { workspace = true }
-ic-crypto-test-utils-reproducible-rng = { path = "../test_utils/reproducible_rng" }
-ic-crypto-tree-hash-test-utils = { path = "test_utils" }
-maplit = "1.0.2"
+ic-crypto-test-utils-reproducible-rng = { workspace = true }
+ic-crypto-tree-hash-test-utils = { workspace = true }
+maplit = { workspace = true }
 proptest = { workspace = true }
 prost = { workspace = true }
 rand = { workspace = true }

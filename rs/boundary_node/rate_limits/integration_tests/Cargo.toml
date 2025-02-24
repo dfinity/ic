@@ -7,9 +7,9 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
-rate-limits-api = { path = "../api" }
-ic-nervous-system-integration-tests = { path = "../../../nervous_system/integration_tests" }
-ic-base-types = { path = "../../../types/base_types" }
+rate-limits-api = { workspace = true }
+ic-nervous-system-integration-tests = { workspace = true }
+ic-base-types = { workspace = true }
 assert_matches = { workspace = true }
 candid = { workspace = true }
 serde = { workspace = true }

@@ -10,8 +10,8 @@ documentation.workspace = true
 flate2 = { workspace = true }
 hex = { workspace = true }
 http = { workspace = true }
-ic-crypto-sha2 = { path = "../crypto/sha2" }
-ic-logger = { path = "../monitoring/logger" }
+ic-crypto-sha2 = { workspace = true }
+ic-logger = { workspace = true }
 reqwest = { workspace = true }
 slog = { workspace = true }
 tar = { workspace = true }
@@ -20,6 +20,6 @@ zstd = { workspace = true }
 
 [dev-dependencies]
 assert_matches = { workspace = true }
-ic-test-utilities-in-memory-logger = { path = "../test_utilities/in_memory_logger" }
+ic-test-utilities-in-memory-logger = { workspace = true }
 mockito = { workspace = true }
 tempfile = { workspace = true }

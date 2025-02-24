@@ -4,4 +4,4 @@ edition = "2021"
 version = "0.0.1"
 
 [dependencies]
-ic-nervous-system-proto = { path = "../../../nervous_system/proto" }
+ic-nervous-system-proto = { workspace = true }

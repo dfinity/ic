@@ -11,9 +11,9 @@ edition.workspace = true
 documentation.workspace = true
 
 [dependencies]
-base32 = "0.4.0"
+base32 = { workspace = true }
 candid = { workspace = true }
-crc32fast = "1.2.0"
+crc32fast = { workspace = true }
 hex = { workspace = true }
 ic-stable-structures = { workspace = true }
 icrc-cbor = { path = "../icrc-cbor", version = "0.1.0" }

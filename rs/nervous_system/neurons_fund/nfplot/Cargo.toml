@@ -12,13 +12,13 @@ path = "src/main.rs"
 
 [dependencies]
 candid = { workspace = true }
-colored = "2.0.0"
+colored = { workspace = true }
 ic-agent = { workspace = true }
-ic-neurons-fund = { path = "../" }
-ic-sns-governance = { path = "../../../sns/governance" }
-ic-sns-swap = { path = "../../../sns/swap" }
-rgb = "0.8.37"
-rust_decimal = "1.36.0"
+ic-neurons-fund = { workspace = true }
+ic-sns-governance = { workspace = true }
+ic-sns-swap = { workspace = true }
+rgb = { workspace = true }
+rust_decimal = { workspace = true }
 serde = { workspace = true }
-textplots = { version = "0.8" }
+textplots = { workspace = true }
 tokio = { workspace = true }

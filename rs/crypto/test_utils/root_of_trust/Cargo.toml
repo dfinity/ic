@@ -7,6 +7,6 @@ edition.workspace = true
 documentation.workspace = true
 
 [dependencies]
-ic-types = { path = "../../../types/types" }
+ic-types = { workspace = true }
 mockall = { workspace = true }
 thiserror = { workspace = true }

@@ -20,9 +20,9 @@ futures = { workspace = true }
 hex = { workspace = true }
 ic-btc-interface = { workspace = true }
 ic-canister-log = { path = "../../rust_canisters/canister_log" }
-ic-canisters-http-types = { path = "../../rust_canisters/http_types" }
+ic-canisters-http-types = { workspace = true }
 ic-cdk = { workspace = true }
-ic-metrics-encoder = "1.1"
+ic-metrics-encoder = { workspace = true }
 ic-stable-structures = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
@@ -31,12 +31,12 @@ url = { workspace = true }
 
 [dev-dependencies]
 candid_parser = { workspace = true }
-ic-base-types = { path = "../../types/base_types" }
-ic-metrics-assert = { path = "../../../packages/ic-metrics-assert", features = ["pocket_ic"] }
-ic-types = { path = "../../types/types" }
-ic-test-utilities-load-wasm = { path = "../../test_utilities/load_wasm" }
-ic-universal-canister = { path = "../../universal_canister/lib" }
-pocket-ic = { path = "../../../packages/pocket-ic" }
+ic-base-types = { workspace = true }
+ic-metrics-assert = { workspace = true, features = ["pocket_ic"] }
+ic-types = { workspace = true }
+ic-test-utilities-load-wasm = { workspace = true }
+ic-universal-canister = { workspace = true }
+pocket-ic = { workspace = true }
 proptest = { workspace = true }
 tokio = { workspace = true }
-scraper = "0.17.1"
+scraper = { workspace = true }

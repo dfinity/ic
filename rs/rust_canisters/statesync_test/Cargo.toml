@@ -16,16 +16,16 @@ ic-cdk = { workspace = true }
 ic-cdk-macros = { workspace = true }
 lazy_static = { workspace = true }
 rand = { workspace = true }
-rand_pcg = "0.3.1"
+rand_pcg = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 
 [dev-dependencies]
-canister-test = { path = "../../rust_canisters/canister_test" }
-ic-management-canister-types-private = { path = "../../types/management_canister_types" }
-ic-state-machine-tests = { path = "../../state_machine_tests" }
-ic-test-utilities = { path = "../../test_utilities" }
-ic-types = { path = "../../types/types" }
+canister-test = { workspace = true }
+ic-management-canister-types-private = { workspace = true }
+ic-state-machine-tests = { workspace = true }
+ic-test-utilities = { workspace = true }
+ic-types = { workspace = true }
 
 [[test]]
 name = "test"

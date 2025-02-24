@@ -7,18 +7,18 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
-ic-base-types = { path = "../types/base_types" }
-ic-crypto-interfaces-sig-verification = { path = "../crypto/interfaces/sig_verification" }
-ic-error-types = { path = "../types/error_types" }
-ic-interfaces-state-manager = { path = "./state_manager" }
-ic-management-canister-types-private = { path = "../types/management_canister_types" }
-ic-protobuf = { path = "../protobuf" }
-ic-registry-provisional-whitelist = { path = "../registry/provisional_whitelist" }
-ic-registry-subnet-type = { path = "../registry/subnet_type" }
-ic-sys = { path = "../sys" }
-ic-types = { path = "../types/types" }
-ic-wasm-types = { path = "../types/wasm_types" }
-phantom_newtype = { path = "../phantom_newtype" }
+ic-base-types = { workspace = true }
+ic-crypto-interfaces-sig-verification = { workspace = true }
+ic-error-types = { workspace = true }
+ic-interfaces-state-manager = { workspace = true }
+ic-management-canister-types-private = { workspace = true }
+ic-protobuf = { workspace = true }
+ic-registry-provisional-whitelist = { workspace = true }
+ic-registry-subnet-type = { workspace = true }
+ic-sys = { workspace = true }
+ic-types = { workspace = true }
+ic-wasm-types = { workspace = true }
+phantom_newtype = { workspace = true }
 prost = { workspace = true }
 serde = { workspace = true }
 strum = { workspace = true }
@@ -27,5 +27,5 @@ thiserror = { workspace = true }
 tower = { workspace = true }
 
 [dev-dependencies]
-ic-crypto-internal-csp-proptest-utils = { path = "../crypto/internal/crypto_service_provider/csp_proptest_utils" }
+ic-crypto-internal-csp-proptest-utils = { workspace = true }
 proptest = { workspace = true }

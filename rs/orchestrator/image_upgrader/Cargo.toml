@@ -8,8 +8,8 @@ documentation.workspace = true
 
 [dependencies]
 async-trait = { workspace = true }
-ic-http-utils = { path = "../../http_utils" }
-ic-logger = { path = "../../monitoring/logger" }
+ic-http-utils = { workspace = true }
+ic-logger = { workspace = true }
 slog = { workspace = true }
 tokio = { workspace = true }
 

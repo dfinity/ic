@@ -4,14 +4,14 @@ version = "0.0.1"
 edition = "2021"
 
 [dependencies]
-ic-sns-governance-token-valuation = { path = "../token_valuation" }
+ic-sns-governance-token-valuation = { workspace = true }
 num-traits = { workspace = true }
-rust_decimal = "1.36.0"
-rust_decimal_macros = "1.36.0"
+rust_decimal = { workspace = true }
+rust_decimal_macros = { workspace = true }
 
 [dev-dependencies]
 candid = { workspace = true }
-ic-base-types = { path = "../../../types/base_types" }
-ic-nervous-system-common = { path = "../../../nervous_system/common" }
+ic-base-types = { workspace = true }
+ic-nervous-system-common = { workspace = true }
 icrc-ledger-types = { path = "../../../../packages/icrc-ledger-types" }
 lazy_static = { workspace = true }

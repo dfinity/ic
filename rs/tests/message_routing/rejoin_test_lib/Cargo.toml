@@ -8,13 +8,13 @@ documentation.workspace = true
 
 [dependencies]
 candid = { workspace = true }
-canister-test = { path = "../../../rust_canisters/canister_test" }
+canister-test = { workspace = true }
 chrono = { workspace = true }
 futures = { workspace = true }
-ic-system-test-driver = { path = "../../driver" }
+ic-system-test-driver = { workspace = true }
 slog = { workspace = true }
 tokio = { workspace = true }
-dfn_candid = { path = "../../../rust_canisters/dfn_candid" }
+dfn_candid = { workspace = true }
 
 [lib]
 name = "rejoin_test_lib"

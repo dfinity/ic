@@ -8,9 +8,9 @@ documentation.workspace = true
 
 [dependencies]
 candid = { workspace = true }
-dfn_core = { path = "../dfn_core" }
-ic-base-types = {path="../../types/base_types"}
-on_wire = { path = "../on_wire" }
+dfn_core = { workspace = true }
+ic-base-types = { workspace = true }
+on_wire = { workspace = true }
 serde = { workspace = true }
 
 [[bin]]
@@ -20,7 +20,7 @@ test = false
 doc = false
 
 [dev-dependencies]
-canister-test = { path = "../../rust_canisters/canister_test" }
+canister-test = { workspace = true }
 
 [[test]]
 name = "test"

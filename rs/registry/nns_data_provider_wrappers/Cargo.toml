@@ -7,9 +7,9 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
-ic-interfaces-registry = { path = "../../interfaces/registry" }
-ic-registry-nns-data-provider = { path = "../nns_data_provider" }
-ic-types = { path = "../../types/types" }
+ic-interfaces-registry = { workspace = true }
+ic-registry-nns-data-provider = { workspace = true }
+ic-types = { workspace = true }
 tokio = { workspace = true }
 url = { workspace = true }
 

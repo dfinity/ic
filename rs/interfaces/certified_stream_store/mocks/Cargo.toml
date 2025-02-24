@@ -7,6 +7,6 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
-ic-interfaces-certified-stream-store = { path = "../" }
-ic-types = { path = "../../../types/types" }
+ic-interfaces-certified-stream-store = { workspace = true }
+ic-types = { workspace = true }
 mockall = { workspace = true }

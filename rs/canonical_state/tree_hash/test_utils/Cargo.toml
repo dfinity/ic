@@ -7,7 +7,7 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
-ic-canonical-state-tree-hash = { path = ".." }
-ic-crypto-tree-hash = { path = "../../../crypto/tree_hash" }
-ic-crypto-tree-hash-test-utils = { path = "../../../crypto/tree_hash/test_utils" }
+ic-canonical-state-tree-hash = { workspace = true }
+ic-crypto-tree-hash = { workspace = true }
+ic-crypto-tree-hash-test-utils = { workspace = true }
 rand = { workspace = true }

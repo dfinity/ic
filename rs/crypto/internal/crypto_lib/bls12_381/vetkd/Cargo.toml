@@ -7,13 +7,13 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
-ic-crypto-internal-bls12-381-type = { path = "../type" }
+ic-crypto-internal-bls12-381-type = { workspace = true }
 rand = { workspace = true }
 
 [dev-dependencies]
 criterion = { workspace = true }
 hex = { workspace = true }
-ic-crypto-test-utils-reproducible-rng = { path = "../../../../test_utils/reproducible_rng" }
+ic-crypto-test-utils-reproducible-rng = { workspace = true }
 rand_chacha = { workspace = true }
 
 [[bench]]

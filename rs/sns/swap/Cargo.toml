@@ -22,35 +22,35 @@ build-info = { workspace = true }
 
 async-trait = { workspace = true }
 candid = { workspace = true }
-comparable = { version = "0.5.1", features = ["derive"] }
+comparable = { workspace = true, features = ["derive"] }
 hex = { workspace = true }
-ic-base-types = { path = "../../types/base_types" }
+ic-base-types = { workspace = true }
 ic-canister-log = { path = "../../rust_canisters/canister_log" }
-ic-canisters-http-types = { path = "../../rust_canisters/http_types" }
-ic-ledger-core = { path = "../../ledger_suite/common/ledger_core" }
+ic-canisters-http-types = { workspace = true }
+ic-ledger-core = { workspace = true }
 ic-cdk = { workspace = true }
 ic-cdk-macros = { workspace = true }
 ic-cdk-timers = { workspace = true }
-ic-metrics-encoder = "1"
-ic-nervous-system-canisters = { path = "../../nervous_system/canisters" }
-ic-nervous-system-clients = { path = "../../nervous_system/clients" }
-ic-nervous-system-common = { path = "../../nervous_system/common" }
-ic-nervous-system-proto = { path = "../../nervous_system/proto" }
-ic-nervous-system-runtime = { path = "../../nervous_system/runtime" }
-ic-neurons-fund = { path = "../../nervous_system/neurons_fund" }
+ic-metrics-encoder = { workspace = true }
+ic-nervous-system-canisters = { workspace = true }
+ic-nervous-system-clients = { workspace = true }
+ic-nervous-system-common = { workspace = true }
+ic-nervous-system-proto = { workspace = true }
+ic-nervous-system-runtime = { workspace = true }
+ic-neurons-fund = { workspace = true }
 ic-stable-structures = { workspace = true }
-ic-sns-governance = { path = "../governance" }
+ic-sns-governance = { workspace = true }
 ic-utils = { path = "../../utils" }
 # TODO(NNS1-1589): Delete hack, and uncomment this.
 # ic-sns-root = { path = "../root" }
-icp-ledger = { path = "../../ledger_suite/icp" }
+icp-ledger = { workspace = true }
 icrc-ledger-types = { path = "../../../packages/icrc-ledger-types" }
 itertools = { workspace = true }
 lazy_static = { workspace = true }
-maplit = "1.0.2"
+maplit = { workspace = true }
 prost = { workspace = true }
-rust_decimal = "1.36.0"
-rust_decimal_macros = "1.36.0"
+rust_decimal = { workspace = true }
+rust_decimal_macros = { workspace = true }
 serde = { workspace = true }
 serde_bytes = { workspace = true }
 
@@ -61,10 +61,10 @@ build-info-build = { workspace = true }
 assert_matches = { workspace = true }
 candid_parser = { workspace = true }
 futures = { workspace = true }
-ic-nervous-system-common-test-keys = { path = "../../nervous_system/common/test_keys" }
-ic-nervous-system-common-test-utils = { path = "../../nervous_system/common/test_utils" }
-ic-sns-swap-protobuf-generator = { path = "./protobuf_generator" }
-ic-test-utilities-compare-dirs = { path = "../../test_utilities/compare_dirs" }
+ic-nervous-system-common-test-keys = { workspace = true }
+ic-nervous-system-common-test-utils = { workspace = true }
+ic-sns-swap-protobuf-generator = { workspace = true }
+ic-test-utilities-compare-dirs = { workspace = true }
 pretty_assertions = { workspace = true }
 proptest = { workspace = true }
 tempfile = { workspace = true }

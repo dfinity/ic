@@ -7,10 +7,10 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
-ic-crypto-internal-csp-test-utils = { path = "../internal/csp_test_utils" }
-ic-ed25519 = { path = "../../../packages/ic-ed25519" }
-ic-interfaces-registry = { path = "../../interfaces/registry" }
-ic-registry-client-fake = { path = "../../registry/fake" }
-ic-registry-proto-data-provider = { path = "../../registry/proto_data_provider" }
-ic-types = { path = "../../types/types" }
+ic-crypto-internal-csp-test-utils = { workspace = true }
+ic-ed25519 = { workspace = true }
+ic-interfaces-registry = { workspace = true }
+ic-registry-client-fake = { workspace = true }
+ic-registry-proto-data-provider = { workspace = true }
+ic-types = { workspace = true }
 rand = { workspace = true }

@@ -16,9 +16,9 @@ serde = { workspace = true }
 ic-nervous-system-temporary = { path = "../../nervous_system/temporary" }
 
 [dev-dependencies]
-ic-types = { path = "../../types/types" }
+ic-types = { workspace = true }
 ic-cdk-timers = { workspace = true }
-ic-registry-subnet-type = { path = "../../registry/subnet_type" }
+ic-registry-subnet-type = { workspace = true }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
 ic-config = { path = "../../config" }

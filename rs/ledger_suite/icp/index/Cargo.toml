@@ -13,30 +13,30 @@ path = "src/main.rs"
 [dependencies]
 candid = { workspace = true }
 ciborium = { workspace = true }
-dfn_core = { path = "../../../rust_canisters/dfn_core" }
-ic-base-types = { path = "../../../types/base_types" }
+dfn_core = { workspace = true }
+ic-base-types = { workspace = true }
 ic-canister-log = { path = "../../../rust_canisters/canister_log" }
-ic-canisters-http-types = { path = "../../../rust_canisters/http_types" }
+ic-canisters-http-types = { workspace = true }
 ic-cdk = { workspace = true }
 ic-cdk-macros = { workspace = true }
 ic-cdk-timers = { workspace = true }
-ic-icrc1-index-ng = { path = "../../icrc1/index-ng" }
-ic-ledger-canister-core = { path = "../../common/ledger_canister_core" }
-ic-ledger-core = { path = "../../common/ledger_core" }
-ic-metrics-encoder = "1.1"
+ic-icrc1-index-ng = { workspace = true }
+ic-ledger-canister-core = { workspace = true }
+ic-ledger-core = { workspace = true }
+ic-metrics-encoder = { workspace = true }
 ic-stable-structures = { workspace = true }
-icp-ledger = { path = ".." }
+icp-ledger = { workspace = true }
 icrc-ledger-types = { path = "../../../../packages/icrc-ledger-types" }
 num-traits = { workspace = true }
-scopeguard = "1.1.0"
+scopeguard = { workspace = true }
 serde = { workspace = true }
 serde_bytes = { workspace = true }
 serde_json = { workspace = true }
 
 [dev-dependencies]
 candid_parser = { workspace = true }
-ic-ledger-suite-state-machine-tests = { path = "../../tests/sm-tests" }
-ic-ledger-test-utils = { path = "../test_utils" }
-ic-rosetta-test-utils = { path = "../../../rosetta-api/icp/test_utils" }
-ic-state-machine-tests = { path = "../../../state_machine_tests" }
-ic-test-utilities-load-wasm = { path = "../../../test_utilities/load_wasm" }
+ic-ledger-suite-state-machine-tests = { workspace = true }
+ic-ledger-test-utils = { workspace = true }
+ic-rosetta-test-utils = { workspace = true }
+ic-state-machine-tests = { workspace = true }
+ic-test-utilities-load-wasm = { workspace = true }

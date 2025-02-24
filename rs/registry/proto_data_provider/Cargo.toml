@@ -8,9 +8,9 @@ documentation.workspace = true
 
 [dependencies]
 bytes = { workspace = true }
-ic-interfaces-registry = { path = "../../interfaces/registry" }
-ic-registry-common-proto = { path = "../proto" }
-ic-registry-transport = { path = "../transport" }
-ic-sys = { path = "../../sys" }
-ic-types = { path = "../../types/types" }
+ic-interfaces-registry = { workspace = true }
+ic-registry-common-proto = { workspace = true }
+ic-registry-transport = { workspace = true }
+ic-sys = { workspace = true }
+ic-types = { workspace = true }
 thiserror = { workspace = true }

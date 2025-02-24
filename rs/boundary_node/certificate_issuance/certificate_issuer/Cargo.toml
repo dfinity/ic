@@ -6,15 +6,13 @@ edition.workspace = true
 description.workspace = true
 documentation.workspace = true
 
-[dependencies.certificate_orchestrator_interface]
-path = "../certificate_orchestrator_interface"
-
 [dependencies]
+certificate_orchestrator_interface= { workspace = true }
 anyhow = { workspace = true }
 async-trait = { workspace = true }
 axum = { workspace = true }
 candid = { workspace = true }
-chacha20poly1305 = "0.10.0"
+chacha20poly1305 = { workspace = true }
 clap = { workspace = true }
 cloudflare = { workspace = true }
 flate2 = { workspace = true }
@@ -25,12 +23,12 @@ ic-http-certification = { workspace = true }
 ic-response-verification = { workspace = true }
 ic-utils = { workspace = true, features = ["raw"] }
 idna = { workspace = true }
-instant-acme = "0.7.2"
-leb128 = "0.2.5"
+instant-acme = { workspace = true }
+leb128 = { workspace = true }
 mockall = { workspace = true }
 opentelemetry = { version = "0.20", features = ["metrics", "trace"] }
-opentelemetry-prometheus = { version = "0.13" }
-pem = "1.1.0"
+opentelemetry-prometheus = { workspace = true }
+pem = { workspace = true }
 prometheus = { workspace = true }
 rcgen = { workspace = true }
 reqwest = { workspace = true, default-features = false, features = [
@@ -50,5 +48,5 @@ tokio = { workspace = true }
 tower = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
-trust-dns-resolver = "0.22.0"
+trust-dns-resolver = { workspace = true }
 zeroize = { workspace = true }

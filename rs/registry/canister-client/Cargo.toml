@@ -7,9 +7,9 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
-ic-interfaces-registry = { path = "../../interfaces/registry" }
-ic-types = { path = "../../types/types" }
+ic-interfaces-registry = { workspace = true }
+ic-types = { workspace = true }
 ic-cdk = { workspace = true }
 
 [dev-dependencies]
-ic-registry-keys = { path = "../keys" }
+ic-registry-keys = { workspace = true }

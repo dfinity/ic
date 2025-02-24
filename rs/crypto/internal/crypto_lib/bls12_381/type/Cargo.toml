@@ -23,7 +23,7 @@ zeroize = { workspace = true }
 
 [dev-dependencies]
 criterion = { workspace = true }
-ic-crypto-test-utils-reproducible-rng = { path = "../../../../test_utils/reproducible_rng" }
+ic-crypto-test-utils-reproducible-rng = { workspace = true }
 
 [[bench]]
 name = "ops"

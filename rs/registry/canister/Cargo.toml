@@ -14,42 +14,42 @@ path = "canister/canister.rs"
 build-info = { workspace = true }
 
 candid = { workspace = true }
-dfn_candid = { path = "../../rust_canisters/dfn_candid" }
-dfn_core = { path = "../../rust_canisters/dfn_core" }
-dfn_http_metrics = { path = "../../rust_canisters/dfn_http_metrics" }
+dfn_candid = { workspace = true }
+dfn_core = { workspace = true }
+dfn_http_metrics = { workspace = true }
 futures = { workspace = true }
-ic-base-types = { path = "../../types/base_types/" }
-ic-certified-map = "0.3.1"
+ic-base-types = { workspace = true }
+ic-certified-map = { workspace = true }
 ic-cdk = { workspace = true }
-ic-crypto-node-key-validation = { path = "../../crypto/node_key_validation" }
-ic-crypto-sha2 = { path = "../../crypto/sha2/" }
-ic-crypto-utils-basic-sig = { path = "../../crypto/utils/basic_sig" }
-ic-crypto-utils-ni-dkg = { path = "../../crypto/utils/ni_dkg" }
-ic-management-canister-types-private = { path = "../../types/management_canister_types" }
-ic-metrics-encoder = "1"
-ic-nervous-system-canisters = { path = "../../nervous_system/canisters" }
-ic-nervous-system-clients = { path = "../../nervous_system/clients" }
-ic-nervous-system-common = { path = "../../nervous_system/common" }
-ic-nervous-system-common-build-metadata = { path = "../../nervous_system/common/build_metadata" }
-ic-nervous-system-string = { path = "../../nervous_system/string" }
-ic-nns-common = { path = "../../nns/common" }
-ic-nns-constants = { path = "../../nns/constants" }
-ic-protobuf = { path = "../../protobuf" }
-ic-registry-canister-api = { path = "../../registry/canister/api" }
-ic-registry-keys = { path = "../../registry/keys" }
-ic-registry-routing-table = { path = "../../registry/routing_table" }
-ic-registry-subnet-features = { path = "../../registry/subnet_features" }
-ic-registry-subnet-type = { path = "../../registry/subnet_type" }
-ic-registry-transport = { path = "../transport" }
-ic-registry-node-provider-rewards = { path = "../node_provider_rewards" }
+ic-crypto-node-key-validation = { workspace = true }
+ic-crypto-sha2 = { workspace = true }
+ic-crypto-utils-basic-sig = { workspace = true }
+ic-crypto-utils-ni-dkg = { workspace = true }
+ic-management-canister-types-private = { workspace = true }
+ic-metrics-encoder = { workspace = true }
+ic-nervous-system-canisters = { workspace = true }
+ic-nervous-system-clients = { workspace = true }
+ic-nervous-system-common = { workspace = true }
+ic-nervous-system-common-build-metadata = { workspace = true }
+ic-nervous-system-string = { workspace = true }
+ic-nns-common = { workspace = true }
+ic-nns-constants = { workspace = true }
+ic-protobuf = { workspace = true }
+ic-registry-canister-api = { workspace = true }
+ic-registry-keys = { workspace = true }
+ic-registry-routing-table = { workspace = true }
+ic-registry-subnet-features = { workspace = true }
+ic-registry-subnet-type = { workspace = true }
+ic-registry-transport = { workspace = true }
+ic-registry-node-provider-rewards = { workspace = true }
 ic-stable-structures = { workspace = true }
-ic-types = { path = "../../types/types" }
+ic-types = { workspace = true }
 idna = { workspace = true }
 lazy_static = { workspace = true }
-leb128 = "0.2.4"
-ipnet = "2.5.0"
-maplit = "1.0.2"
-on_wire = { path = "../../rust_canisters/on_wire" }
+leb128 = { workspace = true }
+ipnet = { workspace = true }
+maplit = { workspace = true }
+on_wire = { workspace = true }
 prost = { workspace = true }
 serde = { workspace = true }
 url = { workspace = true }
@@ -83,14 +83,14 @@ serde_json = { workspace = true }
 build-info-build = { workspace = true }
 
 [dev-dependencies]
-ic-crypto-test-utils-ni-dkg = { path = "../../crypto/test_utils/ni-dkg" }
-ic-crypto-test-utils-reproducible-rng = { path = "../../crypto/test_utils/reproducible_rng" }
-ic-crypto-tree-hash = { path = "../../crypto/tree_hash" }
-ic-nervous-system-common-test-keys = { path = "../../nervous_system/common/test_keys" }
-ic-nns-test-utils = { path = "../../nns/test_utils" }
-ic-nns-test-utils-macros = { path = "../../nns/test_utils_macros" }
-ic-test-utilities-compare-dirs = { path = "../../test_utilities/compare_dirs" }
+ic-crypto-test-utils-ni-dkg = { workspace = true }
+ic-crypto-test-utils-reproducible-rng = { workspace = true }
+ic-crypto-tree-hash = { workspace = true }
+ic-nervous-system-common-test-keys = { workspace = true }
+ic-nns-test-utils = { workspace = true }
+ic-nns-test-utils-macros = { workspace = true }
+ic-test-utilities-compare-dirs = { workspace = true }
 itertools = { workspace = true }
-registry-canister-protobuf-generator = { path = "./protobuf_generator" }
+registry-canister-protobuf-generator = { workspace = true }
 tempfile = { workspace = true }
 tokio = { workspace = true }

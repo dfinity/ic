@@ -16,32 +16,32 @@ async-trait = { workspace = true }
 build-info = { workspace = true }
 
 candid = { workspace = true }
-comparable = { version = "0.5.1", features = ["derive"] }
+comparable = { workspace = true, features = ["derive"] }
 futures = { workspace = true }
-ic-base-types = { path = "../../types/base_types" }
+ic-base-types = { workspace = true }
 ic-canister-log = { path = "../../rust_canisters/canister_log" }
-ic-canisters-http-types = { path = "../../rust_canisters/http_types" }
+ic-canisters-http-types = { workspace = true }
 ic-cdk = { workspace = true }
 ic-cdk-macros = { workspace = true }
 ic-cdk-timers = { workspace = true }
-ic-management-canister-types-private = { path = "../../types/management_canister_types" }
-ic-metrics-encoder = "1"
-ic-nervous-system-clients = { path = "../../nervous_system/clients" }
-ic-nervous-system-common = { path = "../../nervous_system/common" }
-ic-nervous-system-common-build-metadata = { path = "../../nervous_system/common/build_metadata" }
-ic-nervous-system-proto = { path = "../../nervous_system/proto" }
-ic-nervous-system-root = { path = "../../nervous_system/root" }
-ic-nervous-system-runtime = { path = "../../nervous_system/runtime" }
-ic-sns-swap = { path = "../swap" }
+ic-management-canister-types-private = { workspace = true }
+ic-metrics-encoder = { workspace = true }
+ic-nervous-system-clients = { workspace = true }
+ic-nervous-system-common = { workspace = true }
+ic-nervous-system-common-build-metadata = { workspace = true }
+ic-nervous-system-proto = { workspace = true }
+ic-nervous-system-root = { workspace = true }
+ic-nervous-system-runtime = { workspace = true }
+ic-sns-swap = { workspace = true }
 icrc-ledger-types = { path = "../../../packages/icrc-ledger-types" }
 prost = { workspace = true }
 serde = { workspace = true }
 
 [dev-dependencies]
 candid_parser = { workspace = true }
-ic-sns-root-protobuf-generator = { path = "./protobuf_generator" }
-ic-test-utilities-compare-dirs = { path = "../../test_utilities/compare_dirs" }
-maplit = "1.0.2"
+ic-sns-root-protobuf-generator = { workspace = true }
+ic-test-utilities-compare-dirs = { workspace = true }
+maplit = { workspace = true }
 tempfile = { workspace = true }
 tokio = { workspace = true }
 

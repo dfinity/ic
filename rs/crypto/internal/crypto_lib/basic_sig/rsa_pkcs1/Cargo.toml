@@ -7,9 +7,9 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
-ic-crypto-internal-basic-sig-der-utils = { path = "../der_utils" }
-ic-crypto-sha2 = { path = "../../../../sha2" }
-ic-types = { path = "../../../../../types/types" }
+ic-crypto-internal-basic-sig-der-utils = { workspace = true }
+ic-crypto-sha2 = { workspace = true }
+ic-types = { workspace = true }
 num-bigint = { workspace = true }
 num-traits = { workspace = true }
 pkcs8 = { workspace = true }
@@ -22,4 +22,4 @@ simple_asn1 = { workspace = true }
 hex = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
-wycheproof = { version = "0.6", default-features = false, features = ["rsa_sig"] }
+wycheproof = { workspace = true, features = ["rsa_sig"] }

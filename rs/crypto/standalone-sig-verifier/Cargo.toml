@@ -7,24 +7,24 @@ edition.workspace = true
 documentation.workspace = true
 
 [dependencies]
-ic-crypto-iccsa = { path = "../iccsa" }
-ic-crypto-internal-basic-sig-cose = { path = "../internal/crypto_lib/basic_sig/cose" }
-ic-crypto-internal-basic-sig-der-utils = { path = "../internal/crypto_lib/basic_sig/der_utils" }
-ic-crypto-internal-basic-sig-ecdsa-secp256k1 = { path = "../internal/crypto_lib/basic_sig/ecdsa_secp256k1" }
-ic-crypto-internal-basic-sig-ecdsa-secp256r1 = { path = "../internal/crypto_lib/basic_sig/ecdsa_secp256r1" }
-ic-crypto-internal-basic-sig-ed25519 = { path = "../internal/crypto_lib/basic_sig/ed25519" }
-ic-crypto-internal-basic-sig-iccsa = { path = "../internal/crypto_lib/basic_sig/iccsa" }
-ic-crypto-internal-basic-sig-rsa-pkcs1 = { path = "../internal/crypto_lib/basic_sig/rsa_pkcs1" }
-ic-crypto-sha2 = { path = "../sha2" }
-ic-types = { path = "../../types/types" }
+ic-crypto-iccsa = { workspace = true }
+ic-crypto-internal-basic-sig-cose = { workspace = true }
+ic-crypto-internal-basic-sig-der-utils = { workspace = true }
+ic-crypto-internal-basic-sig-ecdsa-secp256k1 = { workspace = true }
+ic-crypto-internal-basic-sig-ecdsa-secp256r1 = { workspace = true }
+ic-crypto-internal-basic-sig-ed25519 = { workspace = true }
+ic-crypto-internal-basic-sig-iccsa = { workspace = true }
+ic-crypto-internal-basic-sig-rsa-pkcs1 = { workspace = true }
+ic-crypto-sha2 = { workspace = true }
+ic-types = { workspace = true }
 
 [dev-dependencies]
 assert_matches = { workspace = true }
 hex = { workspace = true }
-ic-crypto-ecdsa-secp256r1 = { path = "../ecdsa_secp256r1" }
-ic-crypto-internal-test-vectors = { path = "../internal/test_vectors" }
-ic-crypto-test-utils-canister-sigs = { path = "../test_utils/canister_sigs" }
-ic-crypto-test-utils-reproducible-rng = { path = "../test_utils/reproducible_rng" }
+ic-crypto-ecdsa-secp256r1 = { workspace = true }
+ic-crypto-internal-test-vectors = { workspace = true }
+ic-crypto-test-utils-canister-sigs = { workspace = true }
+ic-crypto-test-utils-reproducible-rng = { workspace = true }
 p256 = { workspace = true }
 rand = { workspace = true }
 simple_asn1 = { workspace = true }

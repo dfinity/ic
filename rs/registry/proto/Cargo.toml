@@ -11,6 +11,6 @@ documentation.workspace = true
 prost = { workspace = true }
 
 [dev-dependencies]
-ic-registry-common-proto-generator = { path = "./generator" }
-ic-test-utilities-compare-dirs = { path = "../../test_utilities/compare_dirs" }
+ic-registry-common-proto-generator = { workspace = true }
+ic-test-utilities-compare-dirs = { workspace = true }
 tempfile = { workspace = true }

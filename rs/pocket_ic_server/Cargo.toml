@@ -4,22 +4,22 @@ version = "7.0.0"
 edition = "2021"
 
 [dependencies]
-aide = { version = "^0.13.4", features = ["axum"] }
+aide = { workspace = true, features = ["axum"] }
 askama = { workspace = true }
 async-trait = { workspace = true }
 axum = { workspace = true }
-axum-extra = { version = "^0.9", features = ["typed-header"] }
-axum-server = { version = "0.6.0", features = ["tls-rustls"] }
+axum-extra = { workspace = true, features = ["typed-header"] }
+axum-server = { workspace = true, features = ["tls-rustls"] }
 backoff = { workspace = true }
 base64 = { workspace = true }
 bitcoin = { workspace = true }
 bytes = { workspace = true }
 candid = { workspace = true }
 clap = { workspace = true }
-ctrlc = { version = "3.4.5", features = ["termination"] }
+ctrlc = { workspace = true, features = ["termination"] }
 flate2 = { workspace = true }
-form_urlencoded = "1"
-fqdn = "0.3.11"
+form_urlencoded = { workspace = true }
+fqdn = { workspace = true }
 futures = { workspace = true }
 hex = { workspace = true }
 http = { workspace = true }
@@ -28,43 +28,43 @@ hyper = { workspace = true }
 hyper-util = { workspace = true }
 ic-agent = { workspace = true }
 ic-bn-lib = { workspace = true }
-ic-boundary = { path = "../boundary_node/ic_boundary" }
-ic-btc-adapter = { path = "../bitcoin/adapter" }
-ic-canister-sandbox-backend-lib = { path = "../canister_sandbox" }
+ic-boundary = { workspace = true }
+ic-btc-adapter = { workspace = true }
+ic-canister-sandbox-backend-lib = { workspace = true }
 ic-cdk = { workspace = true }
-ic-config = { path = "../config" }
-ic-crypto-iccsa = { path = "../crypto/iccsa" }
-ic-crypto-sha2 = { path = "../crypto/sha2" }
-ic-crypto-utils-threshold-sig-der = { path = "../crypto/utils/threshold_sig_der" }
-ic-ed25519 = { path = "../../packages/ic-ed25519" }
-ic-error-types = { path = "../types/error_types" }
+ic-config = { workspace = true }
+ic-crypto-iccsa = { workspace = true }
+ic-crypto-sha2 = { workspace = true }
+ic-crypto-utils-threshold-sig-der = { workspace = true }
+ic-ed25519 = { workspace = true }
+ic-error-types = { workspace = true }
 ic-http-gateway = { workspace = true }
-ic-http-endpoints-public = { path = "../http_endpoints/public" }
-ic-https-outcalls-adapter = { path = "../https_outcalls/adapter" }
-ic-https-outcalls-adapter-client = { path = "../https_outcalls/client" }
-ic-https-outcalls-service = { path = "../https_outcalls/service" }
-ic-interfaces = { path = "../interfaces" }
-ic-interfaces-adapter-client = { path = "../interfaces/adapter_client" }
-ic-interfaces-state-manager = { path = "../interfaces/state_manager" }
-ic-logger = { path = "../monitoring/logger" }
-ic-management-canister-types-private = { path = "../types/management_canister_types" }
-ic-metrics = { path = "../monitoring/metrics" }
-ic-protobuf = { path = "../protobuf" }
-ic-registry-keys = { path = "../registry/keys" }
-ic-registry-proto-data-provider = { path = "../registry/proto_data_provider" }
-ic-registry-routing-table = { path = "../registry/routing_table" }
-ic-registry-subnet-type = { path = "../registry/subnet_type" }
-ic-replicated-state = { path = "../replicated_state" }
-ic-starter = { path = "../starter" }
-ic-state-machine-tests = { path = "../state_machine_tests" }
-ic-test-utilities = { path = "../test_utilities" }
-ic-test-utilities-registry = { path = "../test_utilities/registry" }
-ic-types = { path = "../types/types" }
+ic-http-endpoints-public = { workspace = true }
+ic-https-outcalls-adapter = { workspace = true }
+ic-https-outcalls-adapter-client = { workspace = true }
+ic-https-outcalls-service = { workspace = true }
+ic-interfaces = { workspace = true }
+ic-interfaces-adapter-client = { workspace = true }
+ic-interfaces-state-manager = { workspace = true }
+ic-logger = { workspace = true }
+ic-management-canister-types-private = { workspace = true }
+ic-metrics = { workspace = true }
+ic-protobuf = { workspace = true }
+ic-registry-keys = { workspace = true }
+ic-registry-proto-data-provider = { workspace = true }
+ic-registry-routing-table = { workspace = true }
+ic-registry-subnet-type = { workspace = true }
+ic-replicated-state = { workspace = true }
+ic-starter = { workspace = true }
+ic-state-machine-tests = { workspace = true }
+ic-test-utilities = { workspace = true }
+ic-test-utilities-registry = { workspace = true }
+ic-types = { workspace = true }
 ic-utils = { workspace = true }
-ic-utils-thread = { path = "../utils/thread" }
-ic-validator-ingress-message = { path = "../validator/ingress_message" }
+ic-utils-thread = { workspace = true }
+ic-validator-ingress-message = { workspace = true }
 itertools = { workspace = true }
-pocket-ic = { path = "../../packages/pocket-ic" }
+pocket-ic = { workspace = true }
 rand = { workspace = true }
 reqwest = { workspace = true }
 serde = { workspace = true }
@@ -86,13 +86,13 @@ wat = { workspace = true }
 [dev-dependencies]
 bitcoincore-rpc = { workspace = true }
 ic-btc-interface = { workspace = true }
-ic-config = { path = "../config" }
-ic-registry-transport = { path = "../registry/transport" }
-ic-interfaces-registry = { path = "../interfaces/registry" }
-ic-nns-constants = { path = "../nns/constants" }
+ic-config = { workspace = true }
+ic-registry-transport = { workspace = true }
+ic-interfaces-registry = { workspace = true }
+ic-nns-constants = { workspace = true }
 nix = { version = "0.29.0" }
 rcgen = { workspace = true }
-registry-canister = { path = "../registry/canister" }
+registry-canister = { workspace = true }
 reqwest = { workspace = true }
 serde_json = { workspace = true }
-spec-compliance = { path = "../tests/research/spec_compliance" }
+spec-compliance = { workspace = true }

@@ -7,18 +7,18 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
-ic-base-types = { path = "../types/base_types" }
-ic-canonical-state-tree-hash = { path = "./tree_hash" }
-ic-certification-version = { path = "./certification_version" }
-ic-crypto-tree-hash = { path = "../crypto/tree_hash" }
-ic-error-types = { path = "../types/error_types" }
-ic-protobuf = { path = "../protobuf" }
-ic-registry-routing-table = { path = "../registry/routing_table" }
-ic-registry-subnet-type = { path = "../registry/subnet_type" }
-ic-replicated-state = { path = "../replicated_state" }
-ic-types = { path = "../types/types" }
-leb128 = "0.2.1"
-phantom_newtype = { path = "../phantom_newtype" }
+ic-base-types = { workspace = true }
+ic-canonical-state-tree-hash = { workspace = true }
+ic-certification-version = { workspace = true }
+ic-crypto-tree-hash = { workspace = true }
+ic-error-types = { workspace = true }
+ic-protobuf = { workspace = true }
+ic-registry-routing-table = { workspace = true }
+ic-registry-subnet-type = { workspace = true }
+ic-replicated-state = { workspace = true }
+ic-types = { workspace = true }
+leb128 = { workspace = true }
+phantom_newtype = { workspace = true }
 serde = { workspace = true }
 serde_bytes = { workspace = true }
 serde_cbor = { workspace = true }
@@ -28,17 +28,17 @@ strum_macros = { workspace = true }
 [dev-dependencies]
 assert_matches = { workspace = true }
 hex = { workspace = true }
-ic-canonical-state-tree-hash-test-utils = { path = "tree_hash/test_utils" }
-ic-crypto-sha2 = { path = "../crypto/sha2/" }
-ic-management-canister-types-private = { path = "../types/management_canister_types" }
-ic-registry-subnet-features = { path = "../registry/subnet_features" }
-ic-sys = { path = "../sys" }
-ic-test-utilities-state = { path = "../test_utilities/state" }
-ic-test-utilities-time = { path = "../test_utilities/time" }
-ic-test-utilities-types = { path = "../test_utilities/types" }
+ic-canonical-state-tree-hash-test-utils = { workspace = true }
+ic-crypto-sha2 = { workspace = true }
+ic-management-canister-types-private = { workspace = true }
+ic-registry-subnet-features = { workspace = true }
+ic-sys = { workspace = true }
+ic-test-utilities-state = { workspace = true }
+ic-test-utilities-time = { workspace = true }
+ic-test-utilities-types = { workspace = true }
 ic-utils = { path = "../utils" }
-ic-wasm-types = { path = "../types/wasm_types" }
+ic-wasm-types = { workspace = true }
 lazy_static = { workspace = true }
-maplit = "1.0.2"
+maplit = { workspace = true }
 proptest = { workspace = true }
 tempfile = { workspace = true }

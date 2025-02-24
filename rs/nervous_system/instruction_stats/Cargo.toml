@@ -4,8 +4,8 @@ version = "0.0.1"
 edition = { workspace = true }
 
 [dependencies]
-ic-nervous-system-histogram = { path = "../histogram" }
+ic-nervous-system-histogram = { workspace = true }
 ic-cdk = { workspace = true }
-ic-metrics-encoder = "1"
+ic-metrics-encoder = { workspace = true }
 itertools = { workspace = true }
 lazy_static = { workspace = true }

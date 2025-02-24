@@ -7,18 +7,18 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
-ic-base-types = { path = "../../types/base_types" }
-ic-config = { path = "../../config" }
-ic-cycles-account-manager = { path = "../../cycles_account_manager" }
-ic-embedders = { path = "../../embedders" }
-ic-interfaces = { path = "../../interfaces" }
-ic-logger = { path = "../../monitoring/logger" }
-ic-registry-subnet-type = { path = "../../registry/subnet_type" }
-ic-replicated-state = { path = "../../replicated_state" }
-ic-system-api = { path = "../../system_api" }
-ic-test-utilities = { path = ".." }
-ic-test-utilities-state = { path = "../state" }
-ic-test-utilities-types = { path = "../types" }
-ic-types = { path = "../../types/types" }
-ic-wasm-types = { path = "../../types/wasm_types" }
+ic-base-types = { workspace = true }
+ic-config = { workspace = true }
+ic-cycles-account-manager = { workspace = true }
+ic-embedders = { workspace = true }
+ic-interfaces = { workspace = true }
+ic-logger = { workspace = true }
+ic-registry-subnet-type = { workspace = true }
+ic-replicated-state = { workspace = true }
+ic-system-api = { workspace = true }
+ic-test-utilities = { workspace = true }
+ic-test-utilities-state = { workspace = true }
+ic-test-utilities-types = { workspace = true }
+ic-types = { workspace = true }
+ic-wasm-types = { workspace = true }
 wat = { workspace = true }

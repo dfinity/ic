@@ -7,14 +7,14 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
-ic-canonical-state = { path = "../../canonical_state" }
+ic-canonical-state = { workspace = true }
 ic-certification = { path = "../../certification" }
-ic-crypto-tree-hash = { path = "../../crypto/tree_hash" }
-ic-types = { path = "../../types/types" }
+ic-crypto-tree-hash = { workspace = true }
+ic-types = { workspace = true }
 serde = { workspace = true }
 serde_cbor = { workspace = true }
-tree-deserializer = { path = "../../tree_deserializer" }
+tree-deserializer = { workspace = true }
 
 [dev-dependencies]
-ic-certification-test-utils = { path = "../../certification/test-utils" }
+ic-certification-test-utils = { workspace = true }
 

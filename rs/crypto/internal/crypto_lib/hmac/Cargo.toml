@@ -7,8 +7,8 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
-ic-crypto-internal-sha2 = { path = "../sha2" }
+ic-crypto-internal-sha2 = { workspace = true }
 
 [dev-dependencies]
 hex = { workspace = true }
-wycheproof = { version = "0.6", default-features = false, features = ["hkdf", "mac"] }
+wycheproof = { workspace = true, features = ["hkdf", "mac"] }

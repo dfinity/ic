@@ -8,9 +8,9 @@ documentation.workspace = true
 
 [dependencies]
 futures = { workspace = true }
-ic-adapter-metrics-service = { path = "../service" }
-ic-logger = { path = "../../logger" }
-ic-metrics = { path = "../../metrics" }
+ic-adapter-metrics-service = { workspace = true }
+ic-logger = { workspace = true }
+ic-metrics = { workspace = true }
 protobuf = { workspace = true }
 slog = { workspace = true }
 tokio = { workspace = true }

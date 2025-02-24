@@ -8,28 +8,28 @@ documentation.workspace = true
 
 [dependencies]
 hex = { workspace = true }
-ic-base-types = { path = "../types/base_types" }
-ic-config = { path = "../config" }
-ic-logger = { path = "../monitoring/logger" }
-ic-management-canister-types-private = { path = "../types/management_canister_types" }
-ic-metrics = { path = "../monitoring/metrics" }
-ic-protobuf = { path = "../protobuf" }
-ic-replicated-state = { path = "../replicated_state" }
-ic-sys = { path = "../sys" }
-ic-types = { path = "../types/types" }
+ic-base-types = { workspace = true }
+ic-config = { workspace = true }
+ic-logger = { workspace = true }
+ic-management-canister-types-private = { workspace = true }
+ic-metrics = { workspace = true }
+ic-protobuf = { workspace = true }
+ic-replicated-state = { workspace = true }
+ic-sys = { workspace = true }
+ic-types = { workspace = true }
 ic-utils = { path = "../utils" }
-ic-wasm-types = { path = "../types/wasm_types" }
+ic-wasm-types = { workspace = true }
 libc = { workspace = true }
 prometheus = { workspace = true }
 prost = { workspace = true }
-scoped_threadpool = "0.1.*"
+scoped_threadpool = { workspace = true }
 slog = { workspace = true }
 
 [dev-dependencies]
-ic-interfaces = { path = "../interfaces" }
-ic-test-utilities-logger = { path = "../test_utilities/logger" }
-ic-test-utilities-time = { path = "../test_utilities/time" }
-ic-test-utilities-tmpdir = { path = "../test_utilities/tmpdir" }
-ic-test-utilities-types = { path = "../test_utilities/types" }
+ic-interfaces = { workspace = true }
+ic-test-utilities-logger = { workspace = true }
+ic-test-utilities-time = { workspace = true }
+ic-test-utilities-tmpdir = { workspace = true }
+ic-test-utilities-types = { workspace = true }
 itertools = { workspace = true }
 proptest = { workspace = true }

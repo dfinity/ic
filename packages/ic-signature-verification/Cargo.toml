@@ -15,19 +15,17 @@ documentation = "https://docs.rs/ic-signature-verification"
 [dependencies]
 ic-canister-sig-creation = { workspace = true }
 ic-certification = { workspace = true }
-ic-verify-bls-signature = { version = "0.6", default-features = false, features = [
-    "alloc",
-] }
-ic_principal = "0.1"
+ic-verify-bls-signature = { workspace = true, features = ["alloc"] }
+ic_principal = { workspace = true }
 serde = { workspace = true }
-serde_bytes = "0.11"
-serde_cbor = "0.11"
-sha2 = "0.10"
+serde_bytes = { workspace = true }
+serde_cbor = { workspace = true }
+sha2 = { workspace = true }
 
 [dev-dependencies]
 assert_matches = { workspace = true }
 hex = { workspace = true }
-ic-crypto-internal-types = { path = "../../rs/crypto/internal/crypto_lib/types" }
-ic-crypto-test-utils-canister-sigs = { path = "../../rs/crypto/test_utils/canister_sigs" }
-ic-crypto-test-utils-reproducible-rng = { path = "../../rs/crypto/test_utils/reproducible_rng" }
-ic-types = { path = "../../rs/types/types" }
+ic-crypto-internal-types = { workspace = true }
+ic-crypto-test-utils-canister-sigs = { workspace = true }
+ic-crypto-test-utils-reproducible-rng = { workspace = true }
+ic-types = { workspace = true }

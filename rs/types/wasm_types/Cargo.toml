@@ -7,10 +7,10 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
-ic-crypto-sha2 = { path = "../../crypto/sha2" }
-ic-sys = { path = "../../sys" }
-ic-types = { path = "../types" }
+ic-crypto-sha2 = { workspace = true }
+ic-sys = { workspace = true }
+ic-types = { workspace = true }
 ic-utils = { path = "../../utils" }
-ic-validate-eq = { path = "../../utils/validate_eq" }
-ic-validate-eq-derive = { path = "../../utils/validate_eq_derive" }
+ic-validate-eq = { workspace = true }
+ic-validate-eq-derive = { workspace = true }
 serde = { workspace = true }

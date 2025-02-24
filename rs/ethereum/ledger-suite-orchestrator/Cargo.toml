@@ -17,22 +17,22 @@ candid = { workspace = true }
 ciborium = { workspace = true }
 futures = { workspace = true }
 hex = { workspace = true }
-ic-base-types = { path = "../../types/base_types" }
+ic-base-types = { workspace = true }
 ic-canister-log = "0.2.0"
-ic-canisters-http-types = { path = "../../rust_canisters/http_types" }
+ic-canisters-http-types = { workspace = true }
 ic-cdk = { workspace = true }
 ic-cdk-macros = { workspace = true }
-ic-crypto-sha2 = { path = "../../crypto/sha2" }
-ic-ethereum-types = { path = "../../../packages/ic-ethereum-types" }
-ic-icrc1-index-ng = { path = "../../ledger_suite/icrc1/index-ng" }
-ic-icrc1-ledger = { path = "../../ledger_suite/icrc1/ledger" }
-ic-management-canister-types-private = { path = "../../types/management_canister_types" }
-ic-metrics-encoder = "1"
+ic-crypto-sha2 = { workspace = true }
+ic-ethereum-types = { workspace = true }
+ic-icrc1-index-ng = { workspace = true }
+ic-icrc1-ledger = { workspace = true }
+ic-management-canister-types-private = { workspace = true }
+ic-metrics-encoder = { workspace = true }
 ic-stable-structures = { workspace = true }
 ic0 = "0.21.1"
 icrc-ledger-types = { path = "../../../packages/icrc-ledger-types" }
 num-traits = { workspace = true }
-scopeguard = "1.1.0"
+scopeguard = { workspace = true }
 serde = { workspace = true }
 serde_bytes = { workspace = true }
 serde_json = { workspace = true }
@@ -41,12 +41,12 @@ time = { workspace = true }
 [dev-dependencies]
 assert_matches = { workspace = true }
 candid_parser = { workspace = true }
-ic-crypto-test-utils-reproducible-rng = { path = "../../crypto/test_utils/reproducible_rng" }
-ic-ledger-suite-orchestrator-test-utils = { path = "test_utils" }
-ic-state-machine-tests = { path = "../../state_machine_tests" }
-maplit = "1"
+ic-crypto-test-utils-reproducible-rng = { workspace = true }
+ic-ledger-suite-orchestrator-test-utils = { workspace = true }
+ic-state-machine-tests = { workspace = true }
+maplit = { workspace = true }
 mockall = { workspace = true }
 paste = { workspace = true }
 proptest = { workspace = true }
-scraper = "0.17.1"
+scraper = { workspace = true }
 tokio = { workspace = true }

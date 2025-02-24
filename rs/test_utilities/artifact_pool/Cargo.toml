@@ -7,19 +7,19 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
-ic-artifact-pool = { path = "../../artifact_pool" }
-ic-config = { path = "../../config" }
-ic-consensus = { path = "../../consensus" }
-ic-consensus-dkg = { path = "../../consensus/dkg" }
-ic-consensus-utils = { path = "../../consensus/utils" }
-ic-interfaces = { path = "../../interfaces" }
-ic-interfaces-registry = { path = "../../interfaces/registry" }
-ic-interfaces-state-manager = { path = "../../interfaces/state_manager" }
-ic-logger = { path = "../../monitoring/logger" }
-ic-metrics = { path = "../../monitoring/metrics" }
-ic-registry-client-helpers = { path = "../../registry/helpers" }
-ic-replicated-state = { path = "../../replicated_state" }
-ic-test-utilities = { path = "../" }
-ic-test-utilities-consensus = { path = "../consensus" }
-ic-test-utilities-types = { path = "../types" }
-ic-types = { path = "../../types/types" }
+ic-artifact-pool = { workspace = true }
+ic-config = { workspace = true }
+ic-consensus = { workspace = true }
+ic-consensus-dkg = { workspace = true }
+ic-consensus-utils = { workspace = true }
+ic-interfaces = { workspace = true }
+ic-interfaces-registry = { workspace = true }
+ic-interfaces-state-manager = { workspace = true }
+ic-logger = { workspace = true }
+ic-metrics = { workspace = true }
+ic-registry-client-helpers = { workspace = true }
+ic-replicated-state = { workspace = true }
+ic-test-utilities = { workspace = true }
+ic-test-utilities-consensus = { workspace = true }
+ic-test-utilities-types = { workspace = true }
+ic-types = { workspace = true }

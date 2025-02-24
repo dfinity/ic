@@ -20,4 +20,4 @@ syn = { workspace = true }
 nightly_compiler = []
 
 [build-dependencies]
-rustversion = "1.0"
+rustversion = { workspace = true }

@@ -7,8 +7,8 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
-ic-protobuf = { path = "../../protobuf" }
-ic-types = { path = "../../types/types" }
+ic-protobuf = { workspace = true }
+ic-types = { workspace = true }
 rustls = { workspace = true }
 serde = { workspace = true }
 thiserror = { workspace = true }
@@ -16,7 +16,7 @@ x509-parser = { workspace = true }
 
 [dev-dependencies]
 assert_matches = { workspace = true }
-ic-crypto-test-utils-reproducible-rng = { path = "../test_utils/reproducible_rng" }
-ic-crypto-test-utils-tls = { path = "../test_utils/tls" }
-json5 = "0.4.1"
-maplit = "1.0"
+ic-crypto-test-utils-reproducible-rng = { workspace = true }
+ic-crypto-test-utils-tls = { workspace = true }
+json5 = { workspace = true }
+maplit = { workspace = true }

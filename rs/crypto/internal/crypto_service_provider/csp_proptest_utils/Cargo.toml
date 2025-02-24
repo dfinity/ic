@@ -8,16 +8,16 @@ documentation.workspace = true
 
 [dependencies]
 hex = { workspace = true }
-ic-crypto-internal-basic-sig-ecdsa-secp256k1 = { path = "../../crypto_lib/basic_sig/ecdsa_secp256k1" }
-ic-crypto-internal-basic-sig-ecdsa-secp256r1 = { path = "../../crypto_lib/basic_sig/ecdsa_secp256r1" }
-ic-crypto-internal-basic-sig-ed25519 = { path = "../../crypto_lib/basic_sig/ed25519" }
-ic-crypto-internal-basic-sig-rsa-pkcs1 = { path = "../../crypto_lib/basic_sig/rsa_pkcs1" }
-ic-crypto-internal-csp = { path = "../../crypto_service_provider" }
-ic-crypto-internal-multi-sig-bls12381 = { path = "../../crypto_lib/multi_sig/bls12_381" }
-ic-crypto-internal-seed = { path = "../../crypto_lib/seed" }
-ic-crypto-internal-threshold-sig-bls12381 = { path = "../../crypto_lib/threshold_sig/bls12_381" }
-ic-protobuf = { path = "../../../../protobuf" }
-ic-types = { path = "../../../../types/types" }
+ic-crypto-internal-basic-sig-ecdsa-secp256k1 = { workspace = true }
+ic-crypto-internal-basic-sig-ecdsa-secp256r1 = { workspace = true }
+ic-crypto-internal-basic-sig-ed25519 = { workspace = true }
+ic-crypto-internal-basic-sig-rsa-pkcs1 = { workspace = true }
+ic-crypto-internal-csp = { workspace = true }
+ic-crypto-internal-multi-sig-bls12381 = { workspace = true }
+ic-crypto-internal-seed = { workspace = true }
+ic-crypto-internal-threshold-sig-bls12381 = { workspace = true }
+ic-protobuf = { workspace = true }
+ic-types = { workspace = true }
 paste = { workspace = true }
 proptest = { workspace = true }
 strum = { workspace = true }

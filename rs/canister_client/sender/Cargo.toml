@@ -7,9 +7,9 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
-ic-base-types = { path = "../../types/base_types" }
-ic-ed25519 = { path = "../../../packages/ic-ed25519" }
-ic-secp256k1 = { path = "../../../packages/ic-secp256k1" }
-ic-types = { path = "../../types/types" }
+ic-base-types = { workspace = true }
+ic-ed25519 = { workspace = true }
+ic-secp256k1 = { workspace = true }
+ic-types = { workspace = true }
 rand = { workspace = true }
 rand_chacha = { workspace = true }

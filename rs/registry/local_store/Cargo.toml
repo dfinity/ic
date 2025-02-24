@@ -7,13 +7,13 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
-ic-interfaces-registry = { path = "../../interfaces/registry" }
-ic-registry-common-proto = { path = "../proto" }
-ic-sys = { path = "../../sys" }
-ic-types = { path = "../../types/types" }
+ic-interfaces-registry = { workspace = true }
+ic-registry-common-proto = { workspace = true }
+ic-sys = { workspace = true }
+ic-types = { workspace = true }
 prost = { workspace = true }
 
 [dev-dependencies]
-ic-registry-local-store-artifacts = { path = "./artifacts" }
+ic-registry-local-store-artifacts = { workspace = true }
 rand = { workspace = true }
 tempfile = { workspace = true }

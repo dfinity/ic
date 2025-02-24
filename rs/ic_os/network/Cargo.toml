@@ -5,13 +5,13 @@ edition = "2021"
 
 [dependencies]
 anyhow = { workspace = true }
-config_types = { path = "../config_types" }
-deterministic_ips = { path = "../deterministic_ips" }
+config_types = { workspace = true }
+deterministic_ips = { workspace = true }
 macaddr = { workspace = true }
-ping = { version = "^0.5.0" }
+ping = { workspace = true }
 rayon = { workspace = true }
 regex = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
-serde_with = { version = "^1.6.2" }
-utils = { path = "../utils" }
+serde_with = { workspace = true }
+utils = { workspace = true }

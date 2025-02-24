@@ -10,10 +10,10 @@ documentation.workspace = true
 askama = { workspace = true }
 async-trait = { workspace = true }
 axum = { workspace = true }
-byte-unit = "4.0.14"
+byte-unit = { workspace = true }
 bytes = { workspace = true }
-cfg-if = "1.0.0"
-crossbeam = "0.8.4"
+cfg-if = { workspace = true }
+crossbeam = { workspace = true }
 futures = { workspace = true }
 futures-util = { workspace = true }
 hex = { workspace = true }
@@ -22,27 +22,27 @@ http-body = { workspace = true }
 http-body-util = { workspace = true }
 hyper = { workspace = true }
 hyper-util = { workspace = true }
-ic-http-endpoints-async-utils = { path = "../../http_endpoints/async_utils" }
+ic-http-endpoints-async-utils = { workspace = true }
 ic-certification = { path = "../../certification" }
-ic-config = { path = "../../config" }
-ic-crypto-interfaces-sig-verification = { path = "../../crypto/interfaces/sig_verification" }
-ic-crypto-tls-interfaces = { path = "../../crypto/tls_interfaces" }
-ic-crypto-tree-hash = { path = "../../crypto/tree_hash" }
-ic-crypto-utils-threshold-sig-der = { path = "../../crypto/utils/threshold_sig_der" }
-ic-error-types = { path = "../../types/error_types" }
-ic-interfaces = { path = "../../interfaces" }
-ic-interfaces-registry = { path = "../../interfaces/registry" }
-ic-interfaces-state-manager = { path = "../../interfaces/state_manager" }
-ic-logger = { path = "../../monitoring/logger" }
-ic-metrics = { path = "../../monitoring/metrics" }
-ic-pprof = { path = "../../monitoring/pprof" }
-ic-registry-client-helpers = { path = "../../registry/helpers" }
-ic-registry-provisional-whitelist = { path = "../../registry/provisional_whitelist" }
-ic-registry-subnet-type = { path = "../../registry/subnet_type" }
-ic-replicated-state = { path = "../../replicated_state" }
-ic-tracing = { path = "../../monitoring/tracing" }
-ic-types = { path = "../../types/types" }
-ic-validator = { path = "../../validator" }
+ic-config = { workspace = true }
+ic-crypto-interfaces-sig-verification = { workspace = true }
+ic-crypto-tls-interfaces = { workspace = true }
+ic-crypto-tree-hash = { workspace = true }
+ic-crypto-utils-threshold-sig-der = { workspace = true }
+ic-error-types = { workspace = true }
+ic-interfaces = { workspace = true }
+ic-interfaces-registry = { workspace = true }
+ic-interfaces-state-manager = { workspace = true }
+ic-logger = { workspace = true }
+ic-metrics = { workspace = true }
+ic-pprof = { workspace = true }
+ic-registry-client-helpers = { workspace = true }
+ic-registry-provisional-whitelist = { workspace = true }
+ic-registry-subnet-type = { workspace = true }
+ic-replicated-state = { workspace = true }
+ic-tracing = { workspace = true }
+ic-types = { workspace = true }
+ic-validator = { workspace = true }
 inferno = { workspace = true }
 prometheus = { workspace = true }
 prost = { workspace = true }
@@ -52,7 +52,7 @@ serde_cbor = { workspace = true }
 slog = { workspace = true }
 tempfile = { workspace = true }
 tokio = { workspace = true }
-tokio-io-timeout = "1.2.0"
+tokio-io-timeout = { workspace = true }
 tokio-rustls = { workspace = true }
 tokio-util = { workspace = true }
 tower = { workspace = true }
@@ -61,28 +61,28 @@ tracing-flame = { workspace = true }
 tracing-subscriber = { workspace = true }
 
 [dev-dependencies]
-axum-server = { version = "0.6.0", features = ["tls-rustls"] }
-ic-canister-client = { path = "../../canister_client" }
-ic-canister-client-sender = { path = "../../canister_client/sender" }
-ic-canonical-state = { path = "../../canonical_state" }
-ic-certification-test-utils = { path = "../../certification/test-utils" }
-ic-crypto-temp-crypto = { path = "../../crypto/temp_crypto" }
-ic-crypto-tls-interfaces-mocks = { path = "../../crypto/tls_interfaces/mocks" }
-ic-interfaces-mocks = { path = "../../interfaces/mocks" }
-ic-interfaces-registry-mocks = { path = "../../interfaces/registry/mocks" }
-ic-interfaces-state-manager-mocks = { path = "../../interfaces/state_manager/mocks" }
-ic-protobuf = { path = "../../protobuf" }
-ic-read-state-response-parser = { path = "../../canister_client/read_state_response_parser" }
-ic-registry-client-fake = { path = "../../registry/fake" }
-ic-registry-keys = { path = "../../registry/keys" }
-ic-registry-proto-data-provider = { path = "../../registry/proto_data_provider" }
-ic-registry-routing-table = { path = "../../registry/routing_table" }
-ic-test-utilities = { path = "../../test_utilities" }
-ic-test-utilities-registry = { path = "../../test_utilities/registry" }
-ic-test-utilities-state = { path = "../../test_utilities/state" }
-ic-test-utilities-time = { path = "../../test_utilities/time" }
-ic-test-utilities-types = { path = "../../test_utilities/types" }
-maplit = "1.0.2"
+axum-server = { workspace = true, features = ["tls-rustls"] }
+ic-canister-client = { workspace = true }
+ic-canister-client-sender = { workspace = true }
+ic-canonical-state = { workspace = true }
+ic-certification-test-utils = { workspace = true }
+ic-crypto-temp-crypto = { workspace = true }
+ic-crypto-tls-interfaces-mocks = { workspace = true }
+ic-interfaces-mocks = { workspace = true }
+ic-interfaces-registry-mocks = { workspace = true }
+ic-interfaces-state-manager-mocks = { workspace = true }
+ic-protobuf = { workspace = true }
+ic-read-state-response-parser = { workspace = true }
+ic-registry-client-fake = { workspace = true }
+ic-registry-keys = { workspace = true }
+ic-registry-proto-data-provider = { workspace = true }
+ic-registry-routing-table = { workspace = true }
+ic-test-utilities = { workspace = true }
+ic-test-utilities-registry = { workspace = true }
+ic-test-utilities-state = { workspace = true }
+ic-test-utilities-time = { workspace = true }
+ic-test-utilities-types = { workspace = true }
+maplit = { workspace = true }
 mockall = { workspace = true }
 pretty_assertions = { workspace = true }
 proptest = { workspace = true }
@@ -91,7 +91,7 @@ reqwest = { workspace = true }
 rstest = { workspace = true }
 rustls = { workspace = true }
 serde_bytes = { workspace = true }
-tower-test = "0.4.0"
+tower-test = { workspace = true }
 
 [features]
 fuzzing_code = []

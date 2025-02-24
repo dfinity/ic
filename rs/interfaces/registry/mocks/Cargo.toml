@@ -7,7 +7,7 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
-ic-base-types = { path = "../../../types/base_types" }
-ic-interfaces-registry = { path = "../" }
-ic-types = { path = "../../../types/types" }
+ic-base-types = { workspace = true }
+ic-interfaces-registry = { workspace = true }
+ic-types = { workspace = true }
 mockall = { workspace = true }

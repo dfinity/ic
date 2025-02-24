@@ -7,9 +7,9 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
-dfn_candid = { path = "../dfn_candid" }
-dfn_core = { path = "../dfn_core" }
-dfn_http = { path = "../dfn_http" }
-ic-canisters-http-types = { path = "../../rust_canisters/http_types" }
-ic-metrics-encoder = "1"
+dfn_candid = { workspace = true }
+dfn_core = { workspace = true }
+dfn_http = { workspace = true }
+ic-canisters-http-types = { workspace = true }
+ic-metrics-encoder = { workspace = true }
 serde_bytes = { workspace = true }

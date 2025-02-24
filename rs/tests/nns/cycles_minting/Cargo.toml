@@ -8,16 +8,16 @@ documentation.workspace = true
 
 [dependencies]
 anyhow = { workspace = true }
-ic-canister-client = { path = "../../../canister_client" }
-ic-canister-client-sender = { path = "../../../canister_client/sender" }
-ic-ledger-core = { path = "../../../ledger_suite/common/ledger_core" }
-icp-ledger = { path = "../../../ledger_suite/icp" }
-cycles-minting-canister = { path = "../../../nns/cmc" }
-ic-nns-constants = { path = "../../../nns/constants" }
-dfn_candid = { path = "../../../rust_canisters/dfn_candid" }
-dfn_protobuf = { path = "../../../rust_canisters/dfn_protobuf" }
-on_wire = { path = "../../../rust_canisters/on_wire" }
-ic-types = { path = "../../../types/types" }
+ic-canister-client = { workspace = true }
+ic-canister-client-sender = { workspace = true }
+ic-ledger-core = { workspace = true }
+icp-ledger = { workspace = true }
+cycles-minting-canister = { workspace = true }
+ic-nns-constants = { workspace = true }
+dfn_candid = { workspace = true }
+dfn_protobuf = { workspace = true }
+on_wire = { workspace = true }
+ic-types = { workspace = true }
 candid = { workspace = true }
 rand = { workspace = true }
 serde = { workspace = true }

@@ -8,5 +8,5 @@ documentation.workspace = true
 
 [dependencies]
 hex = { workspace = true }
-ic-protobuf = { path = "../../../protobuf" }
-ic-types = { path = "../../../types/types" }
+ic-protobuf = { workspace = true }
+ic-types = { workspace = true }

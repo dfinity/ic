@@ -754,6 +754,523 @@ x509-cert = { version = "0.2.5", features = ["builder", "hazmat"] }
 x509-parser = { version = "0.16.0" }
 zeroize = { version = "1.8.1", features = ["zeroize_derive"] }
 zstd = "0.13.2"
+addr = { version = "0.15.6", default-features = false }
+aide = "0.13.4"
+arc-swap = "1.7.1"
+assert-json-diff = "2.0.1"
+async-scoped = "0.9"
+axum-extra = "0.9.3"
+axum-server = "0.6.0"
+backon = "0.4.1"
+base32 = "0.4.0"
+bech32 = "0.9.0"
+bip32 = "0.5"
+bit-vec = "0.6.3"
+bitcoind = "0.32.0"
+bs58 = "0.5.0"
+by_address = "1.1.0"
+byte-unit = "4.0.14"
+byteorder = "1.3.4"
+cached = { version = "0.49", default-features = false }
+canbench-rs = "0.1.7"
+candid-utils = { path = "rs/nervous_system/candid_utils" }
+canister-test = { path = "rs/rust_canisters/canister_test" }
+canister_http = { path = "rs/tests/networking/canister_http" }
+cargo_metadata = "0.14.2"
+cc = "1.0"
+cddl = "0.9.4"
+certificate_orchestrator_interface = { path = "rs/boundary_node/certificate_issuance/certificate_orchestrator_interface" }
+cfg-if = "1.0.0"
+chacha20poly1305 = "0.10.0"
+cloner-canister-types = { path = "rs/tests/networking/canisters" }
+colored = "2.0.0"
+comparable = "0.5.1"
+config = { path = "rs/ic_os/config" }
+config_types = { path = "rs/ic_os/config_types" }
+console = "0.11"
+convert_case = "0.6.0"
+crc32fast = "1.2.0"
+criterion-time = { path = "rs/criterion_time" }
+crossbeam = "0.8.4"
+csv = "1.1"
+ctrlc = "3.4.5"
+cvt = "0.1.1"
+cycles-minting-canister = { path = "rs/nns/cmc" }
+cycles_minting = { path = "rs/tests/nns/cycles_minting" }
+dashmap = "6.1.0"
+deterministic_ips = { path = "rs/ic_os/deterministic_ips" }
+dfn_candid = { path = "rs/rust_canisters/dfn_candid" }
+dfn_core = { path = "rs/rust_canisters/dfn_core" }
+dfn_http = { path = "rs/rust_canisters/dfn_http" }
+dfn_http_metrics = { path = "rs/rust_canisters/dfn_http_metrics" }
+dfn_json = { path = "rs/rust_canisters/dfn_json" }
+dfn_macro = { path = "rs/rust_canisters/dfn_macro" }
+dfn_protobuf = { path = "rs/rust_canisters/dfn_protobuf" }
+downstream-calls-test = { path = "rs/rust_canisters/downstream_calls_test" }
+dyn-clone = "1.0.14"
+educe = "0.4"
+embedders_bench = { path = "rs/embedders/benches/embedders_bench" }
+env-file-reader = "0.3.0"
+erased-serde = "0.3.11"
+escargot = "0.5.7"
+ethers-core = "2.0.8"
+evm-rpc-client = { path = "rs/ethereum/evm-rpc-client" }
+evm_rpc_types = "1.3.0"
+exec = "0.3.1"
+execution-environment-bench = { path = "rs/execution_environment/benches/lib" }
+eyre = "0.6.8"
+fe-derive = { path = "rs/crypto/internal/crypto_lib/threshold_sig/canister_threshold_sig/fe-derive" }
+form_urlencoded = "1"
+fqdn = "0.3.11"
+fs_extra = "1.2.0"
+get_if_addrs = "0.5.3"
+getrandom = "0.2"
+group = "0.13"
+hashlink = "0.8.0"
+hex-literal = "0.4.1"
+hkdf = "0.12"
+hmac = "0.12"
+humantime = "2.1.0"
+ic-adapter-metrics-client = { path = "rs/monitoring/adapter_metrics/client" }
+ic-adapter-metrics-server = { path = "rs/monitoring/adapter_metrics/server" }
+ic-adapter-metrics-service = { path = "rs/monitoring/adapter_metrics/service" }
+ic-admin-derive = { path = "rs/registry/admin-derive" }
+ic-artifact-downloader = { path = "rs/p2p/artifact_downloader" }
+ic-artifact-manager = { path = "rs/p2p/artifact_manager" }
+ic-artifact-pool = { path = "rs/artifact_pool" }
+ic-backup = { path = "rs/backup" }
+ic-base-types = { path = "rs/types/base_types" }
+ic-base-types-protobuf-generator = { path = "rs/types/base_types/protobuf_generator" }
+ic-bitcoin-canister-mock = { path = "rs/bitcoin/mock" }
+ic-boundary = { path = "rs/boundary_node/ic_boundary" }
+ic-boundary-nodes-integration-test-common = { path = "rs/tests/boundary_nodes/integration_test_common" }
+ic-boundary-nodes-performance-test-common = { path = "rs/tests/boundary_nodes/performance_test_common" }
+ic-boundary-nodes-system-test-utils = { path = "rs/tests/boundary_nodes/utils" }
+ic-btc-adapter = { path = "rs/bitcoin/adapter" }
+ic-btc-adapter-client = { path = "rs/bitcoin/client" }
+ic-btc-adapter-test-utils = { path = "rs/bitcoin/adapter/test_utils" }
+ic-btc-checker = { path = "rs/bitcoin/checker" }
+ic-btc-consensus = { path = "rs/bitcoin/consensus" }
+ic-btc-replica-types = { path = "rs/bitcoin/replica_types" }
+ic-btc-service = { path = "rs/bitcoin/service" }
+ic-btc-validation = { path = "rs/bitcoin/validation" }
+ic-canister-client = { path = "rs/canister_client" }
+ic-canister-client-sender = { path = "rs/canister_client/sender" }
+ic-canister-profiler = { path = "rs/rust_canisters/canister_profiler" }
+ic-canister-sandbox-backend-lib = { path = "rs/canister_sandbox" }
+ic-canisters-http-types = { path = "rs/rust_canisters/http_types" }
+ic-canonical-state = { path = "rs/canonical_state" }
+ic-canonical-state-tree-hash = { path = "rs/canonical_state/tree_hash" }
+ic-canonical-state-tree-hash-test-utils = { path = "rs/canonical_state/tree_hash/test_utils" }
+ic-certification-test-utils = { path = "rs/certification/test-utils" }
+ic-certification-version = { path = "rs/canonical_state/certification_version" }
+ic-certified-map = "0.3.2"
+ic-ckbtc-agent = { path = "rs/bitcoin/ckbtc/agent" }
+ic-ckbtc-minter = { path = "rs/bitcoin/ckbtc/minter" }
+ic-cketh-minter = { path = "rs/ethereum/cketh/minter" }
+ic-cketh-test-utils = { path = "rs/ethereum/cketh/test_utils" }
+ic-config = { path = "rs/config" }
+ic-consensus = { path = "rs/consensus" }
+ic-consensus-dkg = { path = "rs/consensus/dkg" }
+ic-consensus-manager = { path = "rs/p2p/consensus_manager" }
+ic-consensus-mocks = { path = "rs/consensus/mocks" }
+ic-consensus-utils = { path = "rs/consensus/utils" }
+ic-crypto = { path = "rs/crypto" }
+ic-crypto-ecdsa-secp256r1 = { path = "rs/crypto/ecdsa_secp256r1" }
+ic-crypto-for-verification-only = { path = "rs/crypto/for_verification_only" }
+ic-crypto-iccsa = { path = "rs/crypto/iccsa" }
+ic-crypto-interfaces-sig-verification = { path = "rs/crypto/interfaces/sig_verification" }
+ic-crypto-internal-basic-sig-cose = { path = "rs/crypto/internal/crypto_lib/basic_sig/cose" }
+ic-crypto-internal-basic-sig-der-utils = { path = "rs/crypto/internal/crypto_lib/basic_sig/der_utils" }
+ic-crypto-internal-basic-sig-ecdsa-secp256k1 = { path = "rs/crypto/internal/crypto_lib/basic_sig/ecdsa_secp256k1" }
+ic-crypto-internal-basic-sig-ecdsa-secp256r1 = { path = "rs/crypto/internal/crypto_lib/basic_sig/ecdsa_secp256r1" }
+ic-crypto-internal-basic-sig-ed25519 = { path = "rs/crypto/internal/crypto_lib/basic_sig/ed25519" }
+ic-crypto-internal-basic-sig-iccsa = { path = "rs/crypto/internal/crypto_lib/basic_sig/iccsa" }
+ic-crypto-internal-basic-sig-iccsa-test-utils = { path = "rs/crypto/internal/crypto_lib/basic_sig/iccsa/test_utils" }
+ic-crypto-internal-basic-sig-rsa-pkcs1 = { path = "rs/crypto/internal/crypto_lib/basic_sig/rsa_pkcs1" }
+ic-crypto-internal-bls12-381-type = { path = "rs/crypto/internal/crypto_lib/bls12_381/type" }
+ic-crypto-internal-bls12-381-vetkd = { path = "rs/crypto/internal/crypto_lib/bls12_381/vetkd" }
+ic-crypto-internal-csp = { path = "rs/crypto/internal/crypto_service_provider" }
+ic-crypto-internal-csp-proptest-utils = { path = "rs/crypto/internal/crypto_service_provider/csp_proptest_utils" }
+ic-crypto-internal-csp-protobuf-generator = { path = "rs/crypto/internal/crypto_service_provider/protobuf_generator" }
+ic-crypto-internal-csp-test-utils = { path = "rs/crypto/internal/csp_test_utils" }
+ic-crypto-internal-hmac = { path = "rs/crypto/internal/crypto_lib/hmac" }
+ic-crypto-internal-logmon = { path = "rs/crypto/internal/logmon" }
+ic-crypto-internal-multi-sig-bls12381 = { path = "rs/crypto/internal/crypto_lib/multi_sig/bls12_381" }
+ic-crypto-internal-seed = { path = "rs/crypto/internal/crypto_lib/seed" }
+ic-crypto-internal-sha2 = { path = "rs/crypto/internal/crypto_lib/sha2" }
+ic-crypto-internal-test-vectors = { path = "rs/crypto/internal/test_vectors" }
+ic-crypto-internal-threshold-sig-bls12381 = { path = "rs/crypto/internal/crypto_lib/threshold_sig/bls12_381" }
+ic-crypto-internal-threshold-sig-canister-threshold-sig = { path = "rs/crypto/internal/crypto_lib/threshold_sig/canister_threshold_sig" }
+ic-crypto-internal-threshold-sig-canister-threshold-sig-test-utils = { path = "rs/crypto/internal/crypto_lib/threshold_sig/canister_threshold_sig/test_utils" }
+ic-crypto-internal-tls = { path = "rs/crypto/internal/crypto_lib/tls" }
+ic-crypto-internal-types = { path = "rs/crypto/internal/crypto_lib/types" }
+ic-crypto-node-key-generation = { path = "rs/crypto/node_key_generation" }
+ic-crypto-node-key-validation = { path = "rs/crypto/node_key_validation" }
+ic-crypto-prng = { path = "rs/crypto/prng" }
+ic-crypto-secrets-containers = { path = "rs/crypto/secrets_containers" }
+ic-crypto-sha2 = { path = "rs/crypto/sha2" }
+ic-crypto-standalone-sig-verifier = { path = "rs/crypto/standalone-sig-verifier" }
+ic-crypto-temp-crypto = { path = "rs/crypto/temp_crypto" }
+ic-crypto-temp-crypto-vault = { path = "rs/crypto/temp_crypto/temp_vault" }
+ic-crypto-test-utils = { path = "rs/crypto/test_utils" }
+ic-crypto-test-utils-canister-sigs = { path = "rs/crypto/test_utils/canister_sigs" }
+ic-crypto-test-utils-canister-threshold-sigs = { path = "rs/crypto/test_utils/canister_threshold_sigs" }
+ic-crypto-test-utils-csp = { path = "rs/crypto/test_utils/csp" }
+ic-crypto-test-utils-keygen = { path = "rs/crypto/test_utils/keygen" }
+ic-crypto-test-utils-keys = { path = "rs/crypto/test_utils/keys" }
+ic-crypto-test-utils-local-csp-vault = { path = "rs/crypto/test_utils/local_csp_vault" }
+ic-crypto-test-utils-metrics = { path = "rs/crypto/test_utils/metrics" }
+ic-crypto-test-utils-multi-sigs = { path = "rs/crypto/test_utils/multi_sigs" }
+ic-crypto-test-utils-ni-dkg = { path = "rs/crypto/test_utils/ni-dkg" }
+ic-crypto-test-utils-reproducible-rng = { path = "rs/crypto/test_utils/reproducible_rng" }
+ic-crypto-test-utils-root-of-trust = { path = "rs/crypto/test_utils/root_of_trust" }
+ic-crypto-test-utils-tls = { path = "rs/crypto/test_utils/tls" }
+ic-crypto-tls-cert-validation = { path = "rs/crypto/node_key_validation/tls_cert_validation" }
+ic-crypto-tls-interfaces = { path = "rs/crypto/tls_interfaces" }
+ic-crypto-tls-interfaces-mocks = { path = "rs/crypto/tls_interfaces/mocks" }
+ic-crypto-tree-hash = { path = "rs/crypto/tree_hash" }
+ic-crypto-tree-hash-test-utils = { path = "rs/crypto/tree_hash/test_utils" }
+ic-crypto-utils-basic-sig = { path = "rs/crypto/utils/basic_sig" }
+ic-crypto-utils-canister-threshold-sig = { path = "rs/crypto/utils/canister_threshold_sig" }
+ic-crypto-utils-ni-dkg = { path = "rs/crypto/utils/ni_dkg" }
+ic-crypto-utils-threshold-sig = { path = "rs/crypto/utils/threshold_sig" }
+ic-crypto-utils-threshold-sig-der = { path = "rs/crypto/utils/threshold_sig_der" }
+ic-crypto-utils-tls = { path = "rs/crypto/utils/tls" }
+ic-cup-explorer = { path = "rs/cup_explorer" }
+ic-cycles-account-manager = { path = "rs/cycles_account_manager" }
+ic-dashboard = { path = "rs/orchestrator/dashboard" }
+ic-dummy-getrandom-for-wasm = { path = "packages/ic-dummy-getrandom-for-wasm" }
+ic-ed25519 = { path = "packages/ic-ed25519" }
+ic-embedders = { path = "rs/embedders" }
+ic-error-types = { path = "rs/types/error_types" }
+ic-ethereum-types = { path = "packages/ic-ethereum-types" }
+ic-execution-environment = { path = "rs/execution_environment" }
+ic-exhaustive-derive = { path = "rs/types/exhaustive_derive" }
+ic-fstrim-tool = { path = "rs/ic_os/fstrim_tool" }
+ic-http-endpoints-async-utils = { path = "rs/http_endpoints/async_utils" }
+ic-http-endpoints-metrics = { path = "rs/http_endpoints/metrics" }
+ic-http-endpoints-public = { path = "rs/http_endpoints/public" }
+ic-http-endpoints-xnet = { path = "rs/http_endpoints/xnet" }
+ic-http-utils = { path = "rs/http_utils" }
+ic-https-outcalls-adapter = { path = "rs/https_outcalls/adapter" }
+ic-https-outcalls-adapter-client = { path = "rs/https_outcalls/client" }
+ic-https-outcalls-consensus = { path = "rs/https_outcalls/consensus" }
+ic-https-outcalls-service = { path = "rs/https_outcalls/service" }
+ic-icp-index = { path = "rs/ledger_suite/icp/index" }
+ic-icp-rosetta-client = { path = "rs/rosetta-api/icp/client" }
+ic-icp-rosetta-runner = { path = "rs/rosetta-api/icp/runner" }
+ic-icrc-rosetta = { path = "rs/rosetta-api/icrc1" }
+ic-icrc-rosetta-client = { path = "rs/rosetta-api/icrc1/client" }
+ic-icrc-rosetta-runner = { path = "rs/rosetta-api/icrc1/runner" }
+ic-icrc1 = { path = "rs/ledger_suite/icrc1" }
+ic-icrc1-index-ng = { path = "rs/ledger_suite/icrc1/index-ng" }
+ic-icrc1-ledger = { path = "rs/ledger_suite/icrc1/ledger" }
+ic-icrc1-test-utils = { path = "rs/ledger_suite/icrc1/test_utils" }
+ic-icrc1-tokens-u256 = { path = "rs/ledger_suite/icrc1/tokens_u256" }
+ic-icrc1-tokens-u64 = { path = "rs/ledger_suite/icrc1/tokens_u64" }
+ic-image-upgrader = { path = "rs/orchestrator/image_upgrader" }
+ic-ingress-manager = { path = "rs/ingress_manager" }
+ic-interfaces = { path = "rs/interfaces" }
+ic-interfaces-adapter-client = { path = "rs/interfaces/adapter_client" }
+ic-interfaces-certified-stream-store = { path = "rs/interfaces/certified_stream_store" }
+ic-interfaces-certified-stream-store-mocks = { path = "rs/interfaces/certified_stream_store/mocks" }
+ic-interfaces-mocks = { path = "rs/interfaces/mocks" }
+ic-interfaces-registry = { path = "rs/interfaces/registry" }
+ic-interfaces-registry-mocks = { path = "rs/interfaces/registry/mocks" }
+ic-interfaces-state-manager = { path = "rs/interfaces/state_manager" }
+ic-interfaces-state-manager-mocks = { path = "rs/interfaces/state_manager/mocks" }
+ic-ledger-canister-blocks-synchronizer = { path = "rs/rosetta-api/icp/ledger_canister_blocks_synchronizer" }
+ic-ledger-canister-blocks-synchronizer-test-utils = { path = "rs/rosetta-api/icp/ledger_canister_blocks_synchronizer/test_utils" }
+ic-ledger-canister-core = { path = "rs/ledger_suite/common/ledger_canister_core" }
+ic-ledger-core = { path = "rs/ledger_suite/common/ledger_core" }
+ic-ledger-hash-of = { path = "packages/ic-ledger-hash-of" }
+ic-ledger-suite-orchestrator = { path = "rs/ethereum/ledger-suite-orchestrator" }
+ic-ledger-suite-orchestrator-test-utils = { path = "rs/ethereum/ledger-suite-orchestrator/test_utils" }
+ic-ledger-suite-state-machine-tests = { path = "rs/ledger_suite/tests/sm-tests" }
+ic-ledger-test-utils = { path = "rs/ledger_suite/icp/test_utils" }
+ic-limits = { path = "rs/limits" }
+ic-logger = { path = "rs/monitoring/logger" }
+ic-mainnet-nns-recovery = { path = "rs/tests/nns/ic_mainnet_nns_recovery" }
+ic-management-canister-types-private = { path = "rs/types/management_canister_types" }
+ic-memory-transport = { path = "rs/p2p/memory_transport" }
+ic-message = { path = "rs/tests/test_canisters/message" }
+ic-messaging = { path = "rs/messaging" }
+ic-metrics = { path = "rs/monitoring/metrics" }
+ic-metrics-assert = { path = "packages/ic-metrics-assert" }
+ic-metrics-encoder = "1.1.1"
+ic-nervous-system-agent = { path = "rs/nervous_system/agent" }
+ic-nervous-system-canisters = { path = "rs/nervous_system/canisters" }
+ic-nervous-system-clients = { path = "rs/nervous_system/clients" }
+ic-nervous-system-collections-union-multi-map = { path = "rs/nervous_system/collections/union_multi_map" }
+ic-nervous-system-common = { path = "rs/nervous_system/common" }
+ic-nervous-system-common-build-metadata = { path = "rs/nervous_system/common/build_metadata" }
+ic-nervous-system-common-test-keys = { path = "rs/nervous_system/common/test_keys" }
+ic-nervous-system-common-test-utils = { path = "rs/nervous_system/common/test_utils" }
+ic-nervous-system-common-validation = { path = "rs/nervous_system/common/validation" }
+ic-nervous-system-governance = { path = "rs/nervous_system/governance" }
+ic-nervous-system-histogram = { path = "rs/nervous_system/histogram" }
+ic-nervous-system-humanize = { path = "rs/nervous_system/humanize" }
+ic-nervous-system-initial-supply = { path = "rs/nervous_system/initial_supply" }
+ic-nervous-system-integration-tests = { path = "rs/nervous_system/integration_tests" }
+ic-nervous-system-linear-map = { path = "rs/nervous_system/linear_map" }
+ic-nervous-system-lock = { path = "rs/nervous_system/lock" }
+ic-nervous-system-long-message = { path = "rs/nervous_system/long_message" }
+ic-nervous-system-proto = { path = "rs/nervous_system/proto" }
+ic-nervous-system-proto-protobuf-generator = { path = "rs/nervous_system/proto/protobuf_generator" }
+ic-nervous-system-proxied-canister-calls-tracker = { path = "rs/nervous_system/proxied_canister_calls_tracker" }
+ic-nervous-system-root = { path = "rs/nervous_system/root" }
+ic-nervous-system-runtime = { path = "rs/nervous_system/runtime" }
+ic-nervous-system-string = { path = "rs/nervous_system/string" }
+ic-nervous-system-temporary = { path = "rs/nervous_system/temporary" }
+ic-nervous-system-timestamp = { path = "rs/nervous_system/timestamp" }
+ic-networking-subnet-update-workload = { path = "rs/tests/networking/subnet_update_workload" }
+ic-neurons-fund = { path = "rs/nervous_system/neurons_fund" }
+ic-nns-common = { path = "rs/nns/common" }
+ic-nns-common-protobuf-generator = { path = "rs/nns/common/protobuf_generator" }
+ic-nns-constants = { path = "rs/nns/constants" }
+ic-nns-governance = { path = "rs/nns/governance" }
+ic-nns-governance-api = { path = "rs/nns/governance/api" }
+ic-nns-governance-init = { path = "rs/nns/governance/init" }
+ic-nns-governance-protobuf-generator = { path = "rs/nns/governance/protobuf_generator" }
+ic-nns-gtc = { path = "rs/nns/gtc" }
+ic-nns-gtc-accounts = { path = "rs/nns/gtc_accounts" }
+ic-nns-gtc-protobuf-generator = { path = "rs/nns/gtc/protobuf_generator" }
+ic-nns-handler-lifeline-interface = { path = "rs/nns/handlers/lifeline/interface" }
+ic-nns-handler-root = { path = "rs/nns/handlers/root/impl" }
+ic-nns-handler-root-interface = { path = "rs/nns/handlers/root/interface" }
+ic-nns-init = { path = "rs/nns/init" }
+ic-nns-test-utils = { path = "rs/nns/test_utils" }
+ic-nns-test-utils-golden-nns-state = { path = "rs/nns/test_utils/golden_nns_state" }
+ic-nns-test-utils-macros = { path = "rs/nns/test_utils_macros" }
+ic-p2p-test-utils = { path = "rs/p2p/test_utils" }
+ic-peer-manager = { path = "rs/p2p/peer_manager" }
+ic-pprof = { path = "rs/monitoring/pprof" }
+ic-prep = { path = "rs/prep" }
+ic-protobuf = { path = "rs/protobuf" }
+ic-protobuf-generator = { path = "rs/protobuf/generator" }
+ic-query-stats = { path = "rs/query_stats" }
+ic-quic-transport = { path = "rs/p2p/quic_transport" }
+ic-read-state-response-parser = { path = "rs/canister_client/read_state_response_parser" }
+ic-recovery = { path = "rs/recovery" }
+ic-regedit = { path = "rs/registry/regedit" }
+ic-registry-canister-api = { path = "rs/registry/canister/api" }
+ic-registry-canister-client = { path = "rs/registry/canister-client" }
+ic-registry-client = { path = "rs/registry/client" }
+ic-registry-client-fake = { path = "rs/registry/fake" }
+ic-registry-client-helpers = { path = "rs/registry/helpers" }
+ic-registry-common-proto = { path = "rs/registry/proto" }
+ic-registry-common-proto-generator = { path = "rs/registry/proto/generator" }
+ic-registry-keys = { path = "rs/registry/keys" }
+ic-registry-local-registry = { path = "rs/registry/local_registry" }
+ic-registry-local-store = { path = "rs/registry/local_store" }
+ic-registry-local-store-artifacts = { path = "rs/registry/local_store/artifacts" }
+ic-registry-nns-data-provider = { path = "rs/registry/nns_data_provider" }
+ic-registry-nns-data-provider-wrappers = { path = "rs/registry/nns_data_provider_wrappers" }
+ic-registry-node-provider-rewards = { path = "rs/registry/node_provider_rewards" }
+ic-registry-proto-data-provider = { path = "rs/registry/proto_data_provider" }
+ic-registry-provisional-whitelist = { path = "rs/registry/provisional_whitelist" }
+ic-registry-replicator = { path = "rs/orchestrator/registry_replicator" }
+ic-registry-routing-table = { path = "rs/registry/routing_table" }
+ic-registry-subnet-features = { path = "rs/registry/subnet_features" }
+ic-registry-subnet-type = { path = "rs/registry/subnet_type" }
+ic-registry-transport = { path = "rs/registry/transport" }
+ic-registry-transport-protobuf-generator = { path = "rs/registry/transport/protobuf_generator" }
+ic-replay = { path = "rs/replay" }
+ic-replica = { path = "rs/replica" }
+ic-replica-setup-ic-network = { path = "rs/replica/setup_ic_network" }
+ic-replica-tests = { path = "rs/replica_tests" }
+ic-replicated-state = { path = "rs/replicated_state" }
+ic-rosetta-api = { path = "rs/rosetta-api/icp" }
+ic-rosetta-test-utils = { path = "rs/rosetta-api/icp/test_utils" }
+ic-secp256k1 = { path = "packages/ic-secp256k1" }
+ic-sender-canister = { path = "rs/rosetta-api/icp/test_utils/sender_canister" }
+ic-sns-cli = { path = "rs/sns/cli" }
+ic-sns-governance = { path = "rs/sns/governance" }
+ic-sns-governance-api = { path = "rs/sns/governance/api" }
+ic-sns-governance-proposal-criticality = { path = "rs/sns/governance/proposal_criticality" }
+ic-sns-governance-proposals-amount-total-limit = { path = "rs/sns/governance/proposals_amount_total_limit" }
+ic-sns-governance-protobuf-generator = { path = "rs/sns/governance/protobuf_generator" }
+ic-sns-governance-token-valuation = { path = "rs/sns/governance/token_valuation" }
+ic-sns-init = { path = "rs/sns/init" }
+ic-sns-init-protobuf-generator = { path = "rs/sns/init/protobuf_generator" }
+ic-sns-root = { path = "rs/sns/root" }
+ic-sns-root-protobuf-generator = { path = "rs/sns/root/protobuf_generator" }
+ic-sns-swap = { path = "rs/sns/swap" }
+ic-sns-swap-proto-library = { path = "rs/sns/swap/proto_library" }
+ic-sns-swap-protobuf-generator = { path = "rs/sns/swap/protobuf_generator" }
+ic-sns-test-utils = { path = "rs/sns/test_utils" }
+ic-sns-wasm = { path = "rs/nns/sns-wasm" }
+ic-sns-wasm-protobuf-generator = { path = "rs/nns/sns-wasm/protobuf_generator" }
+ic-starter = { path = "rs/starter" }
+ic-state-layout = { path = "rs/state_layout" }
+ic-state-machine-tests = { path = "rs/state_machine_tests" }
+ic-state-manager = { path = "rs/state_manager" }
+ic-state-sync-manager = { path = "rs/p2p/state_sync_manager" }
+ic-state-tool = { path = "rs/state_tool" }
+ic-subnet-splitting = { path = "rs/recovery/subnet_splitting" }
+ic-sys = { path = "rs/sys" }
+ic-system-api = { path = "rs/system_api" }
+ic-system-test-driver = { path = "rs/tests/driver" }
+ic-test-artifact-pool = { path = "rs/test_utilities/artifact_pool" }
+ic-test-identity = { path = "rs/test_utilities/identity" }
+ic-test-state-machine-client = "3.0"
+ic-test-utilities = { path = "rs/test_utilities" }
+ic-test-utilities-compare-dirs = { path = "rs/test_utilities/compare_dirs" }
+ic-test-utilities-consensus = { path = "rs/test_utilities/consensus" }
+ic-test-utilities-embedders = { path = "rs/test_utilities/embedders" }
+ic-test-utilities-execution-environment = { path = "rs/test_utilities/execution_environment" }
+ic-test-utilities-in-memory-logger = { path = "rs/test_utilities/in_memory_logger" }
+ic-test-utilities-io = { path = "rs/test_utilities/io" }
+ic-test-utilities-load-wasm = { path = "rs/test_utilities/load_wasm" }
+ic-test-utilities-logger = { path = "rs/test_utilities/logger" }
+ic-test-utilities-metrics = { path = "rs/test_utilities/metrics" }
+ic-test-utilities-registry = { path = "rs/test_utilities/registry" }
+ic-test-utilities-state = { path = "rs/test_utilities/state" }
+ic-test-utilities-time = { path = "rs/test_utilities/time" }
+ic-test-utilities-tmpdir = { path = "rs/test_utilities/tmpdir" }
+ic-test-utilities-types = { path = "rs/test_utilities/types" }
+ic-tests-ckbtc = { path = "rs/tests/ckbtc" }
+ic-tracing = { path = "rs/monitoring/tracing" }
+ic-tracing-jaeger-exporter = { path = "rs/monitoring/tracing/jaeger_exporter" }
+ic-tracing-logging-layer = { path = "rs/monitoring/tracing/logging_layer" }
+ic-types = { path = "rs/types/types" }
+ic-types-test-utils = { path = "rs/types/types_test_utils" }
+ic-universal-canister = { path = "rs/universal_canister/lib" }
+ic-utils-ensure = { path = "rs/utils/ensure" }
+ic-utils-lru-cache = { path = "rs/utils/lru_cache" }
+ic-utils-rustfmt = { path = "rs/utils/rustfmt" }
+ic-utils-thread = { path = "rs/utils/thread" }
+ic-validate-eq = { path = "rs/utils/validate_eq" }
+ic-validate-eq-derive = { path = "rs/utils/validate_eq_derive" }
+ic-validator = { path = "rs/validator" }
+ic-validator-http-request-test-utils = { path = "rs/validator/http_request_test_utils" }
+ic-validator-ingress-message = { path = "rs/validator/ingress_message" }
+ic-verify-bls-signature = { version = "0.6", default-features = false }
+ic-vetkd-utils = { path = "packages/ic-vetkd-utils" }
+ic-wasm-transform = { path = "rs/wasm_transform" }
+ic-wasm-types = { path = "rs/types/wasm_types" }
+ic-xnet-hyper = { path = "rs/xnet/hyper" }
+ic-xnet-payload-builder = { path = "rs/xnet/payload_builder" }
+ic-xnet-uri = { path = "rs/xnet/uri" }
+ic-xrc-types = "1.1.0"
+ic_consensus_system_test_catch_up_test_common = { path = "rs/tests/consensus/catch_up_test_common" }
+ic_consensus_system_test_liveness_test_common = { path = "rs/tests/consensus/liveness_test_common" }
+ic_consensus_system_test_utils = { path = "rs/tests/consensus/utils" }
+ic_consensus_threshold_sig_system_test_utils = { path = "rs/tests/consensus/tecdsa/utils" }
+icp-ledger = { path = "rs/ledger_suite/icp" }
+icrc-ledger-agent = { path = "packages/icrc-ledger-agent" }
+icrc-ledger-client = { path = "packages/icrc-ledger-client" }
+icrc-ledger-client-cdk = { path = "packages/icrc-ledger-client-cdk" }
+icrc1-test-env = { git = "https://github.com/dfinity/ICRC-1", rev = "26a80d777e079644cd69e883e18dad1a201f5b1a" }
+icrc1-test-suite = { git = "https://github.com/dfinity/ICRC-1", rev = "26a80d777e079644cd69e883e18dad1a201f5b1a" }
+indexmap = "2.2.6"
+indicatif = "0.17.3"
+indoc = "1.0.9"
+insta = "1.8.0"
+instant-acme = "0.7.2"
+intmap = "1.1.0"
+isocountry = "0.3.2"
+json-patch = "0.2.6"
+json5 = "0.4.1"
+ledger-canister = { path = "rs/ledger_suite/icp/ledger" }
+ledger-canister-protobuf-generator = { path = "rs/ledger_suite/icp/protobuf_generator" }
+lifeline = { path = "rs/nns/handlers/lifeline/impl" }
+linux_kernel_command_line = { path = "rs/ic_os/linux_kernel_command_line" }
+lmdb-rkv = { git = "https://github.com/dfinity-lab/lmdb-rs", rev = "f62018b2deb79ea0d53914d5502389433fc3e6da" }
+lmdb-rkv-sys = { git = "https://github.com/dfinity-lab/lmdb-rs", rev = "f62018b2deb79ea0d53914d5502389433fc3e6da" }
+local_key = { path = "rs/tla_instrumentation/local_key" }
+lru = { version = "0.7.8", default-features = false }
+maplit = "1.0.2"
+maxminddb = "0.24"
+memory_tracker = { path = "rs/memory_tracker" }
+moka = "0.12.8"
+more-asserts = "0.3.1"
+network = { path = "rs/ic_os/network" }
+nns_dapp = { path = "rs/tests/nns/nns_dapp" }
+num-bigint-dig = "0.8"
+num-rational = "0.2.2"
+on_wire = { path = "rs/rust_canisters/on_wire" }
+once_cell = "1.18.0"
+openssh-keys = "0.5.0"
+opentelemetry-prometheus = "0.13"
+os_qualification_utils = { path = "rs/tests/dre/utils" }
+partition_tools = { path = "rs/ic_os/build_tools/partition_tools" }
+pcre2 = "0.2.6"
+pem = "1.1.0"
+phantom_newtype = { path = "rs/phantom_newtype" }
+pin-project-lite = "0.2.13"
+pocket-ic = { path = "packages/pocket-ic" }
+pretty-bytes = "0.2.2"
+primitive-types = "0.12"
+priority-queue = "1.3.1"
+proxy_canister = { path = "rs/rust_canisters/proxy_canister" }
+publicsuffix = "2.2.3"
+rand_distr = "0.4"
+rand_pcg = "0.3.1"
+random-traffic-test = { path = "rs/rust_canisters/random_traffic_test" }
+rate-limit-canister-integration-tests = { path = "rs/boundary_node/rate_limits/integration_tests" }
+rate-limits-api = { path = "rs/boundary_node/rate_limits/api" }
+ratelimit = "0.9.1"
+registry-canister = { path = "rs/registry/canister" }
+registry-canister-protobuf-generator = { path = "rs/registry/canister/protobuf_generator" }
+rejoin-test-lib = { path = "rs/tests/message_routing/rejoin_test_lib" }
+rgb = "0.8.37"
+ring = "0.17.7"
+ripemd = "0.1.1"
+rlp = "0.5.2"
+rosetta-core = { path = "rs/rosetta-api/common/rosetta_core" }
+rosetta_test_lib = { path = "rs/tests/financial_integrations/rosetta/rosetta_test_lib" }
+rusqlite = "~0.28.0"
+rust_decimal = "1.36.0"
+rust_decimal_macros = "1.36.0"
+rustls-pemfile = "2.1.3"
+rustversion = "1.0"
+rusty-fork = "0.3.0"
+salt-sharing-api = { path = "rs/boundary_node/salt_sharing/api" }
+scoped_threadpool = "0.1.*"
+scopeguard = "1.1.0"
+scraper = "0.17.1"
+secp256k1 = "0.22"
+serde-bytes-repr = "0.1.5"
+serde_regex = "1.1"
+simple_moving_average = "1.0.2"
+slog-envlogger = "2.2.0"
+slog-json = "2.6.1"
+sns_system_test_lib = { path = "rs/tests/nns/sns/lib" }
+spec-compliance = { path = "rs/tests/research/spec_compliance" }
+stubborn-io = "0.3.2"
+systest-message-routing-common = { path = "rs/tests/message_routing/common" }
+tarpc = "0.34"
+textplots = "0.8"
+thousands = "0.2.0"
+tikv-jemalloc-ctl = "0.5"
+tikv-jemallocator = "0.5"
+tla_instrumentation = { path = "rs/tla_instrumentation/tla_instrumentation" }
+tla_instrumentation_proc_macros = { path = "rs/tla_instrumentation/tla_instrumentation_proc_macros" }
+tokio-io-timeout = "1.2.0"
+tokio-serde = "0.8"
+tokio-socks = "0.5.1"
+tower-request-id = "0.3.0"
+tower-test = "0.4.0"
+tower_governor = "0.4.2"
+tracing-serde = "0.1.3"
+tracing-slog = "0.2"
+tree-deserializer = { path = "rs/tree_deserializer" }
+trust-dns-resolver = "0.22.0"
+universal-canister = { path = "rs/universal_canister/impl" }
+utils = { path = "rs/ic_os/utils" }
+warp = "0.3.7"
+wasm-bindgen = "0.2.84"
+wasmtime = { version = "29.0.0", default-features = false }
+wasmtime-environ = "29.0.0"
+wee_alloc = "0.4.3"
+wsl = "0.1.0"
+wycheproof = { version = "0.6", default-features = false }
+xnet-slo-test-lib = { path = "rs/tests/message_routing/xnet/slo_test_lib" }
+xnet-test = { path = "rs/rust_canisters/xnet_test" }
+xrc-mock = { path = "rs/rosetta-api/tvl/xrc_mock" }
+yansi = "0.5.0"
 
 [workspace.dependencies.ic-wasm]
 default-features = false

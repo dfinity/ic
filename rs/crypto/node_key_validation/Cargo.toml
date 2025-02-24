@@ -12,20 +12,20 @@ documentation.workspace = true
 # use dependencies that can be compiled to WebAssembly.
 ########################################################
 hex = { workspace = true }
-ic-base-types = { path = "../../types/base_types" }
-ic-crypto-internal-basic-sig-ed25519 = { path = "../internal/crypto_lib/basic_sig/ed25519" }
-ic-crypto-internal-multi-sig-bls12381 = { path = "../internal/crypto_lib/multi_sig/bls12_381" }
-ic-crypto-internal-threshold-sig-bls12381 = { path = "../internal/crypto_lib/threshold_sig/bls12_381" }
-ic-crypto-internal-threshold-sig-canister-threshold-sig = { path = "../internal/crypto_lib/threshold_sig/canister_threshold_sig" }
-ic-crypto-internal-types = { path = "../internal/crypto_lib/types" }
-ic-crypto-tls-cert-validation = { path = "tls_cert_validation" }
-ic-protobuf = { path = "../../protobuf" }
-ic-types = { path = "../../types/types" }
+ic-base-types = { workspace = true }
+ic-crypto-internal-basic-sig-ed25519 = { workspace = true }
+ic-crypto-internal-multi-sig-bls12381 = { workspace = true }
+ic-crypto-internal-threshold-sig-bls12381 = { workspace = true }
+ic-crypto-internal-threshold-sig-canister-threshold-sig = { workspace = true }
+ic-crypto-internal-types = { workspace = true }
+ic-crypto-tls-cert-validation = { workspace = true }
+ic-protobuf = { workspace = true }
+ic-types = { workspace = true }
 serde = { workspace = true }
 
 [dev-dependencies]
 assert_matches = { workspace = true }
 curve25519-dalek = { workspace = true }
-ic-crypto-test-utils-keys = { path = "../test_utils/keys" }
-ic-crypto-utils-basic-sig = { path = "../utils/basic_sig" }
-ic-test-utilities = { path = "../../test_utilities" }
+ic-crypto-test-utils-keys = { workspace = true }
+ic-crypto-utils-basic-sig = { workspace = true }
+ic-test-utilities = { workspace = true }

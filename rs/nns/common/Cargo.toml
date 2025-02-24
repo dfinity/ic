@@ -12,26 +12,26 @@ path = "src/lib.rs"
 
 [dependencies]
 candid = { workspace = true }
-comparable = { version = "0.5", features = ["derive"] }
-dfn_core = { path = "../../rust_canisters/dfn_core" }
-ic-base-types = { path = "../../types/base_types" }
-ic-crypto-sha2 = { path = "../../crypto/sha2/" }
-ic-nervous-system-common = { path = "../../nervous_system/common" }
-ic-nns-constants = { path = "../constants" }
-ic-protobuf = { path = "../../protobuf" }
-ic-registry-keys = { path = "../../registry/keys" }
-ic-registry-transport = { path = "../../registry/transport" }
+comparable = { workspace = true, features = ["derive"] }
+dfn_core = { workspace = true }
+ic-base-types = { workspace = true }
+ic-crypto-sha2 = { workspace = true }
+ic-nervous-system-common = { workspace = true }
+ic-nns-constants = { workspace = true }
+ic-protobuf = { workspace = true }
+ic-registry-keys = { workspace = true }
+ic-registry-transport = { workspace = true }
 ic-stable-structures = { workspace = true }
-ic-types = { path = "../../types/types" }
+ic-types = { workspace = true }
 lazy_static = { workspace = true }
 num-traits = { workspace = true }
-on_wire = { path = "../../rust_canisters/on_wire" }
+on_wire = { workspace = true }
 prost = { workspace = true }
 serde = { workspace = true }
 serde_bytes = { workspace = true }
 sha2 = { workspace = true }
 
 [dev-dependencies]
-ic-nns-common-protobuf-generator = { path = "./protobuf_generator" }
-ic-test-utilities-compare-dirs = { path = "../../test_utilities/compare_dirs" }
+ic-nns-common-protobuf-generator = { workspace = true }
+ic-test-utilities-compare-dirs = { workspace = true }
 tempfile = { workspace = true }

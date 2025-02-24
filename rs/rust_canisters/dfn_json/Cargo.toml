@@ -7,6 +7,6 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
-on_wire = { path = "../on_wire" }
+on_wire = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }

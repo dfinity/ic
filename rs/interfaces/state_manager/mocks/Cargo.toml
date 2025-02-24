@@ -7,8 +7,8 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
-ic-crypto-tree-hash = { path = "../../../crypto/tree_hash" }
-ic-interfaces-state-manager = { path = "../" }
-ic-replicated-state = { path = "../../../replicated_state" }
-ic-types = { path = "../../../types/types" }
+ic-crypto-tree-hash = { workspace = true }
+ic-interfaces-state-manager = { workspace = true }
+ic-replicated-state = { workspace = true }
+ic-types = { workspace = true }
 mockall = { workspace = true }

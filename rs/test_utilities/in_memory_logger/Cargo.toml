@@ -7,9 +7,9 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
-ic-config = { path = "../../config" }
-ic-logger = { path = "../../monitoring/logger" }
-ic-protobuf = { path = "../../protobuf" }
+ic-config = { workspace = true }
+ic-logger = { workspace = true }
+ic-protobuf = { workspace = true }
 parking_lot = { workspace = true }
 serde_json = { workspace = true }
 slog = { workspace = true }

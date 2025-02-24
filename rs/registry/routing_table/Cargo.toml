@@ -8,10 +8,10 @@ documentation.workspace = true
 
 [dependencies]
 candid = { workspace = true }
-ic-base-types = { path = "../../types/base_types" }
-ic-protobuf = { path = "../../protobuf" }
+ic-base-types = { workspace = true }
+ic-protobuf = { workspace = true }
 serde = { workspace = true }
 
 [dev-dependencies]
 assert_matches = { workspace = true }
-ic-test-utilities-types = { path = "../../test_utilities/types" }
+ic-test-utilities-types = { workspace = true }

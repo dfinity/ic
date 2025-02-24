@@ -8,22 +8,22 @@ documentation.workspace = true
 
 [dependencies]
 candid = { workspace = true }
-comparable = { version = "0.5", features = ["derive"] }
-crc32fast = "1.2.0"
-dfn_candid = { path = "../../rust_canisters/dfn_candid" }
-dfn_core = { path = "../../rust_canisters/dfn_core" }
-dfn_protobuf = { path = "../../rust_canisters/dfn_protobuf" }
+comparable = { workspace = true, features = ["derive"] }
+crc32fast = { workspace = true }
+dfn_candid = { workspace = true }
+dfn_core = { workspace = true }
+dfn_protobuf = { workspace = true }
 hex = { workspace = true }
-ic-base-types = { path = "../../types/base_types" }
+ic-base-types = { workspace = true }
 ic-cdk = { workspace = true }
-ic-crypto-sha2 = { path = "../../crypto/sha2" }
-ic-ledger-canister-core = { path = "../common/ledger_canister_core" }
-ic-ledger-core = { path = "../common/ledger_core" }
-ic-ledger-hash-of = { path = "../../../packages/ic-ledger-hash-of" }
+ic-crypto-sha2 = { workspace = true }
+ic-ledger-canister-core = { workspace = true }
+ic-ledger-core = { workspace = true }
+ic-ledger-hash-of = { workspace = true }
 ic-stable-structures = { workspace = true }
 icrc-ledger-types = { path = "../../../packages/icrc-ledger-types" }
 lazy_static = { workspace = true }
-on_wire = { path = "../../rust_canisters/on_wire" }
+on_wire = { workspace = true }
 prost = { workspace = true }
 serde = { workspace = true }
 serde_bytes = { workspace = true }
@@ -33,19 +33,19 @@ strum_macros = { workspace = true }
 
 [dev-dependencies]
 candid_parser = { workspace = true }
-canister-test = { path = "../../rust_canisters/canister_test" }
-ic-canister-client-sender = { path = "../../canister_client/sender" }
-ic-canisters-http-types = { path = "../../rust_canisters/http_types" }
-ic-icp-index = { path = "index" }
-ic-ledger-suite-state-machine-tests = { path = "../tests/sm-tests" }
-ic-ledger-test-utils = { path = "test_utils" }
-ic-nns-constants = { path = "../../nns/constants" }
-ic-nns-test-utils-golden-nns-state = { path = "../../nns/test_utils/golden_nns_state" }
-ic-state-machine-tests = { path = "../../state_machine_tests" }
-ic-test-utilities-compare-dirs = { path = "../../test_utilities/compare_dirs" }
-ledger-canister-protobuf-generator = { path = "./protobuf_generator" }
-maplit = "1.0.2"
-pocket-ic = { path = "../../../packages/pocket-ic" }
+canister-test = { workspace = true }
+ic-canister-client-sender = { workspace = true }
+ic-canisters-http-types = { workspace = true }
+ic-icp-index = { workspace = true }
+ic-ledger-suite-state-machine-tests = { workspace = true }
+ic-ledger-test-utils = { workspace = true }
+ic-nns-constants = { workspace = true }
+ic-nns-test-utils-golden-nns-state = { workspace = true }
+ic-state-machine-tests = { workspace = true }
+ic-test-utilities-compare-dirs = { workspace = true }
+ledger-canister-protobuf-generator = { workspace = true }
+maplit = { workspace = true }
+pocket-ic = { workspace = true }
 proptest = { workspace = true }
 rand = { workspace = true }
 rand_chacha = { workspace = true }

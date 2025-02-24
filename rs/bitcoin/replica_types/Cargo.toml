@@ -9,7 +9,7 @@ documentation.workspace = true
 [dependencies]
 candid = { workspace = true }
 ic-btc-interface = { workspace = true }
-ic-error-types = { path = "../../types/error_types" }
-ic-protobuf = { path = "../../protobuf" }
+ic-error-types = { workspace = true }
+ic-protobuf = { workspace = true }
 serde = { workspace = true }
 serde_bytes = { workspace = true }

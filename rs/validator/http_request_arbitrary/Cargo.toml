@@ -8,6 +8,6 @@ documentation.workspace = true
 
 [dependencies]
 arbitrary = { workspace = true }
-ic-base-types = { path = "../../types/base_types" }
-ic-crypto-tree-hash = { path = "../../crypto/tree_hash" }
-ic-types = { path = "../../types/types" }
+ic-base-types = { workspace = true }
+ic-crypto-tree-hash = { workspace = true }
+ic-types = { workspace = true }

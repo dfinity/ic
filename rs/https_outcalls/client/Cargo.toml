@@ -11,18 +11,18 @@ documentation.workspace = true
 candid = { workspace = true }
 futures = { workspace = true }
 hyper-util = { workspace = true }
-ic-adapter-metrics-client = { path = "../../monitoring/adapter_metrics/client" }
-ic-http-endpoints-async-utils = { path = "../../http_endpoints/async_utils" }
-ic-config = { path = "../../config" }
-ic-error-types = { path = "../../types/error_types" }
-ic-https-outcalls-service = { path = "../service" }
-ic-management-canister-types-private = { path = "../../types/management_canister_types" }
-ic-interfaces = { path = "../../interfaces" }
-ic-interfaces-adapter-client = { path = "../../interfaces/adapter_client" }
-ic-logger = { path = "../../monitoring/logger" }
-ic-metrics = { path = "../../monitoring/metrics" }
-ic-registry-subnet-type = { path = "../../registry/subnet_type" }
-ic-types = { path = "../../types/types" }
+ic-adapter-metrics-client = { workspace = true }
+ic-http-endpoints-async-utils = { workspace = true }
+ic-config = { workspace = true }
+ic-error-types = { workspace = true }
+ic-https-outcalls-service = { workspace = true }
+ic-management-canister-types-private = { workspace = true }
+ic-interfaces = { workspace = true }
+ic-interfaces-adapter-client = { workspace = true }
+ic-logger = { workspace = true }
+ic-metrics = { workspace = true }
+ic-registry-subnet-type = { workspace = true }
+ic-types = { workspace = true }
 prometheus = { workspace = true }
 slog = { workspace = true }
 tokio = { workspace = true }
@@ -31,6 +31,6 @@ tower = { workspace = true }
 tracing = { workspace = true }
 
 [dev-dependencies]
-ic-test-utilities-time = { path = "../../test_utilities/time" }
-ic-test-utilities-types = { path = "../../test_utilities/types" }
-tower-test = "0.4.0"
+ic-test-utilities-time = { workspace = true }
+ic-test-utilities-types = { workspace = true }
+tower-test = { workspace = true }

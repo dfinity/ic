@@ -7,5 +7,5 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
-ic-metrics-encoder = "1.1.0"
+ic-metrics-encoder = { workspace = true }
 ic0 = "0.18.9"

@@ -9,19 +9,19 @@ documentation.workspace = true
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-ic-base-types = { path = "../../types/base_types" }
-ic-interfaces = { path = "../../interfaces" }
-ic-interfaces-registry = { path = "../../interfaces/registry" }
-ic-logger = { path = "../../monitoring/logger" }
-ic-metrics = { path = "../../monitoring/metrics" }
-ic-quic-transport = { path = "../quic_transport" }
-ic-registry-client-helpers = { path = "../../registry/helpers" }
+ic-base-types = { workspace = true }
+ic-interfaces = { workspace = true }
+ic-interfaces-registry = { workspace = true }
+ic-logger = { workspace = true }
+ic-metrics = { workspace = true }
+ic-quic-transport = { workspace = true }
+ic-registry-client-helpers = { workspace = true }
 prometheus = { workspace = true }
 serde = { workspace = true }
 slog = { workspace = true }
 tokio = { workspace = true }
 
 [dev-dependencies]
-ic-p2p-test-utils = { path = "../test_utils" }
-ic-test-utilities-logger = { path = "../../test_utilities/logger" }
-ic-types-test-utils = { path = "../../types/types_test_utils" }
+ic-p2p-test-utils = { workspace = true }
+ic-test-utilities-logger = { workspace = true }
+ic-types-test-utils = { workspace = true }

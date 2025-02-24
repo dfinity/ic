@@ -14,14 +14,14 @@ path = "src/lib.rs"
 bytes = { workspace = true }
 candid = { workspace = true }
 clap = { workspace = true }
-comparable = { version = "0.5", features = ["derive"] }
-ic-base-types = { path = "../../../types/base_types" }
-ic-nervous-system-proto = { path = "../../../nervous_system/proto" }
-ic-nns-common = { path = "../../../nns/common" }
-ic-protobuf = { path = "../../../protobuf" }
-ic-types = { path = "../../../types/types" }
+comparable = { workspace = true, features = ["derive"] }
+ic-base-types = { workspace = true }
+ic-nervous-system-proto = { workspace = true }
+ic-nns-common = { workspace = true }
+ic-protobuf = { workspace = true }
+ic-types = { workspace = true }
 ic-utils = { path = "../../../utils" }
-icp-ledger = { path = "../../../ledger_suite/icp" }
+icp-ledger = { workspace = true }
 itertools = { workspace = true }
 prost = { workspace = true }
 serde = { workspace = true }

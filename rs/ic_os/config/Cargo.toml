@@ -5,20 +5,20 @@ edition = "2021"
 
 [dependencies]
 anyhow = { workspace = true }
-ic-types = { path = "../../types/types" }
+ic-types = { workspace = true }
 clap = { workspace = true }
 macaddr = { workspace = true }
-utils = { path = "../utils" }
+utils = { workspace = true }
 url = { workspace = true }
 serde_json = { workspace = true }
 serde = { workspace = true }
-serde_with = "1.6.2"
+serde_with = { workspace = true }
 regex = { workspace = true }
-config_types = { path = "../config_types" }
-network = { path = "../network" }           # Only required by bin
+config_types = { workspace = true }
+network = { workspace = true }           # Only required by bin
 
 [dev-dependencies]
-once_cell = "1.8"
+once_cell = { workspace = true }
 tempfile = { workspace = true }
 
 [lib]

@@ -11,13 +11,13 @@ documentation.workspace = true
 path = "src/lib.rs"
 
 [dependencies]
-ic-base-types = { path = "../../../types/base_types" }
-ic-nervous-system-common = { path = "../../../nervous_system/common" }
-ic-nervous-system-common-build-metadata = { path = "../../../nervous_system/common/build_metadata" }
-ic-nervous-system-common-test-keys = { path = "../../../nervous_system/common/test_keys" }
-ic-nns-common = { path = "../../common" }
-ic-nns-governance-api = { path = "../api" }
-icp-ledger = { path = "../../../ledger_suite/icp" }
+ic-base-types = { workspace = true }
+ic-nervous-system-common = { workspace = true }
+ic-nervous-system-common-build-metadata = { workspace = true }
+ic-nervous-system-common-test-keys = { workspace = true }
+ic-nns-common = { workspace = true }
+ic-nns-governance-api = { workspace = true }
+icp-ledger = { workspace = true }
 rand = { workspace = true }
 rand_chacha = { workspace = true }
 

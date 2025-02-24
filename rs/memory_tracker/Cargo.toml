@@ -9,10 +9,10 @@ version.workspace = true
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-bit-vec = "0.6.3"
-ic-logger = { path = "../monitoring/logger" }
-ic-replicated-state = { path = "../replicated_state" }
-ic-sys = { path = "../sys" }
+bit-vec = { workspace = true }
+ic-logger = { workspace = true }
+ic-replicated-state = { workspace = true }
+ic-sys = { workspace = true }
 lazy_static = { workspace = true }
 libc = { workspace = true }
 nix = { workspace = true }
@@ -24,7 +24,7 @@ sigsegv_handler_checksum = []
 
 [dev-dependencies]
 criterion = { workspace = true }
-ic-types = { path = "../types/types" }
+ic-types = { workspace = true }
 memmap2 = { workspace = true }
 proptest = { workspace = true }
 rayon = { workspace = true }

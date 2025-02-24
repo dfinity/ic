@@ -10,7 +10,7 @@ documentation.workspace = true
 candid = { workspace = true }
 ciborium = { workspace = true }
 ethnum = { workspace = true }
-ic-ledger-core = { path = "../../common/ledger_core" }
+ic-ledger-core = { workspace = true }
 ic-stable-structures = { workspace = true }
 icrc-cbor = { path = "../../../../packages/icrc-cbor", features = ["u256"] }
 minicbor = { workspace = true }
