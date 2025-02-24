@@ -1,3 +1,6 @@
+/// The script to generate this file, including information about the source data, can be found here:
+/// /rs/cross-chain/scripts/generate_blocklist.py
+
 #[cfg(test)]
 mod tests;
 
@@ -8,9 +11,6 @@ macro_rules! ethereum_address {
         Address::new(hex_literal::hex!($address))
     };
 }
-
-/// The script to generate this file, including information about the source data, can be found here:
-/// /rs/cross-chain/scripts/generate_blocklist.py
 
 /// ETH is not accepted from nor sent to addresses on this list.
 /// NOTE: Keep it sorted!
