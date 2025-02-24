@@ -64,7 +64,7 @@ pub fn bless_branch_version(env: &TestEnv, nns_node: &IcNodeSnapshot) -> String 
 pub fn bless_mainnet_version(env: &TestEnv, nns_node: &IcNodeSnapshot) -> String {
     let logger = env.logger();
 
-    let mainnet_version = std::env::var("MAINNET_NNS_SUBNET_REVISION_ENV")
+    let mainnet_version = read_dependency_from_env_to_string("MAINNET_NNS_SUBNET_REVISION_ENV")
         .expect("could not read mainnet version from environment");
 
     // Bless mainnet version

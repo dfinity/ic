@@ -12,7 +12,7 @@ use ic_system_test_driver::driver::ic::{InternetComputer, Subnet};
 use ic_system_test_driver::driver::test_env::TestEnv;
 use ic_system_test_driver::driver::test_env_api::HasPublicApiUrl;
 use ic_system_test_driver::driver::test_env_api::{
-    GetFirstHealthyNodeSnapshot, HasTopologySnapshot,
+    read_dependency_from_env_to_string, GetFirstHealthyNodeSnapshot, HasTopologySnapshot,
 };
 use ic_system_test_driver::systest;
 use ic_types::Height;
@@ -43,7 +43,7 @@ fn upgrade_downgrade_nns_subnet(env: TestEnv) {
     let branch_version = bless_branch_version(&env, &nns_node);
     let (faulty_node, can_id, msg) =
         upgrade(&env, &nns_node, &branch_version, SubnetType::System, None);
-    let mainnet_version = std::env::var("MAINNET_NNS_SUBNET_REVISION_ENV")
+    let mainnet_version = read_dependency_from_env_to_string("MAINNET_NNS_SUBNET_REVISION_ENV")
         .expect("could not read mainnet version from environment");
     upgrade(&env, &nns_node, &mainnet_version, SubnetType::System, None);
     // Make sure we can still read the message stored before the first upgrade
