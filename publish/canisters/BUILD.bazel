@@ -167,4 +167,7 @@ upload_artifacts(
     testonly = True,
     inputs = [":canisters"] + [":canisters.did"],
     remote_subdir = "canisters",
+    visibility = [
+        "//testnet/tools:icos_deploy-pkg",
+    ],
 )

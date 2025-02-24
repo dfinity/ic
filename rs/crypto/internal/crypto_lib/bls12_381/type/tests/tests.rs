@@ -1333,6 +1333,39 @@ fn test_verify_bls_signature_batch_with_same_pk() {
 }
 
 #[test]
+fn test_hash_to_scalar_matches_known_values() {
+    // I was not able to locate any official test vectors for BLS12-381 hash_to_scalar
+    // so these were just generated using ic_bls12_381 itself.
+
+    let dst = b"QUUX-V01-CS02-with-BLS12381SCALAR_XMD:SHA-256_SSWU_RO_";
+
+    scalar_test_encoding(
+        Scalar::hash(&dst[..], b""),
+        "3b3fdf74b194c0a0f683d67a312a4e72d663d74b8478dc7b56be41e0ce11caa1",
+    );
+
+    scalar_test_encoding(
+        Scalar::hash(&dst[..], b"abc"),
+        "47e7a8839695a3df27f202cf71e295a8554b47cef75c1e316b1865317720e188",
+    );
+
+    scalar_test_encoding(
+        Scalar::hash(&dst[..], b"abcdef0123456789"),
+        "3dff572f262e702f2ee8fb79b70e3225f5ee543a389eea2e58eec7b2bfd6afeb",
+    );
+
+    scalar_test_encoding(
+        Scalar::hash(&dst[..], format!("q128_{}", "q".repeat(128)).as_bytes()),
+        "2874c0e7814fcf42a5f63258417d4be8ea0465ff7352691493d0eca2dd5a9729",
+    );
+
+    scalar_test_encoding(
+        Scalar::hash(&dst[..], format!("a512_{}", "a".repeat(512)).as_bytes()),
+        "3cf6864b1a81fba0798c370f6daf9c23a838f9dbb96ea3a3a1145899ddf259b4",
+    );
+}
+
+#[test]
 fn test_hash_to_g1_matches_draft() {
     /*
     These are the test vectors from draft-irtf-cfrg-hash-to-curve-16 section J.9.1

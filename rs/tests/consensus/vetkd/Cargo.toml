@@ -16,6 +16,7 @@ ic-system-test-driver = { path = "../../driver" }
 ic-types = { path = "../../../types/types" }
 ic_consensus_system_test_utils = { path = "../utils" }
 ic_consensus_threshold_sig_system_test_utils = { path = "../tecdsa/utils" }
+ic_bls12_381 = { workspace = true }
 slog = { workspace = true }
 tokio = { workspace = true }
 

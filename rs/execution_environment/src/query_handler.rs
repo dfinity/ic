@@ -35,7 +35,7 @@ use ic_types::{
     messages::{Blob, Certificate, CertificateDelegation, Query},
     CanisterId, NumInstructions, PrincipalId, SubnetId,
 };
-use prometheus::Histogram;
+use prometheus::{histogram_opts, labels, Histogram};
 use serde::Serialize;
 use std::convert::Infallible;
 use std::str::FromStr;
@@ -119,12 +119,15 @@ struct HttpQueryHandlerMetrics {
 }
 
 impl HttpQueryHandlerMetrics {
-    pub fn new(metrics_registry: &MetricsRegistry) -> Self {
+    pub fn new(metrics_registry: &MetricsRegistry, namespace: &str) -> Self {
         Self {
-            height_diff_during_query_scheduling: metrics_registry.histogram(
-                "execution_query_height_diff_during_query_scheduling",
-                "The height difference between the latest certified height before query scheduling and state height used for execution",
-                vec![0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 20.0, 50.0, 100.0],
+            height_diff_during_query_scheduling: metrics_registry.register(
+                Histogram::with_opts(histogram_opts!(
+                    "execution_query_height_diff_during_query_scheduling",
+                    "The height difference between the latest certified height before query scheduling and state height used for execution",
+                    vec![0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 20.0, 50.0, 100.0],
+                    labels! {"query_type".to_string() => namespace.to_string()}
+                )).unwrap(),
             ),
         }
     }
@@ -210,7 +213,6 @@ impl InternalHttpQueryHandler {
                         query.source(),
                         state.get_ref(),
                         FetchCanisterLogsRequest::decode(&query.method_payload)?,
-                        self.config.allowed_viewers_feature,
                     );
                     self.metrics.observe_subnet_query_message(
                         QueryMethod::FetchCanisterLogs,
@@ -308,7 +310,6 @@ fn fetch_canister_logs(
     sender: PrincipalId,
     state: &ReplicatedState,
     args: FetchCanisterLogsRequest,
-    allowed_viewers_feature: FlagStatus,
 ) -> Result<WasmResult, UserError> {
     let canister_id = args.get_canister_id();
     let canister = state.canister_state(&canister_id).ok_or_else(|| {
@@ -318,14 +319,7 @@ fn fetch_canister_logs(
         )
     })?;
 
-    let log_visibility = match canister.log_visibility() {
-        // If the feature is disabled override `AllowedViewers` with default value.
-        LogVisibilityV2::AllowedViewers(_) if allowed_viewers_feature == FlagStatus::Disabled => {
-            &LogVisibilityV2::default()
-        }
-        other => other,
-    };
-    match log_visibility {
+    match canister.log_visibility() {
         LogVisibilityV2::Public => Ok(()),
         LogVisibilityV2::Controllers if canister.controllers().contains(&sender) => Ok(()),
         LogVisibilityV2::AllowedViewers(principals) if principals.get().contains(&sender) => Ok(()),
@@ -358,12 +352,13 @@ impl HttpQueryHandler {
         query_scheduler: QueryScheduler,
         state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
         metrics_registry: &MetricsRegistry,
+        namespace: &str,
     ) -> QueryExecutionService {
         BoxCloneService::new(Self {
             internal,
             state_reader,
             query_scheduler,
-            metrics: Arc::new(HttpQueryHandlerMetrics::new(metrics_registry)),
+            metrics: Arc::new(HttpQueryHandlerMetrics::new(metrics_registry, namespace)),
         })
     }
 }

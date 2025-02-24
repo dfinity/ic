@@ -12,7 +12,6 @@ candid = { workspace = true }
 canister-test = { path = "../../rust_canisters/canister_test" }
 cycles-minting-canister = { path = "../../nns/cmc" }
 dfn_candid = { path = "../../rust_canisters/dfn_candid" }
-dfn_core = { path = "../../rust_canisters/dfn_core" }
 dfn_http = { path = "../../rust_canisters/dfn_http" }
 dfn_json = { path = "../../rust_canisters/dfn_json" }
 dfn_protobuf = { path = "../../rust_canisters/dfn_protobuf" }
@@ -29,6 +28,7 @@ ic-crypto-sha2 = { path = "../../crypto/sha2" }
 ic-crypto-test-utils-ni-dkg = { path = "../../crypto/test_utils/ni-dkg" }
 ic-crypto-test-utils-reproducible-rng = { path = "../../crypto/test_utils/reproducible_rng" }
 ic-crypto-utils-ni-dkg = { path = "../../crypto/utils/ni_dkg" }
+ic-icp-index = { path = "../../ledger_suite/icp/index" }
 ic-icrc1 = { path = "../../ledger_suite/icrc1" }
 ic-management-canister-types-private = { path = "../../types/management_canister_types" }
 ic-nervous-system-clients = { path = "../../nervous_system/clients" }

@@ -48,7 +48,6 @@ import IC.Test.Agent.UnsafeCalls
 import IC.Test.Agent.UserCalls
 import IC.Test.Spec.CanisterHistory
 import IC.Test.Spec.CanisterVersion
-import IC.Test.Spec.HTTP
 import IC.Test.Spec.Timer
 import IC.Test.Spec.Utils
 import IC.Test.Universal
@@ -604,7 +603,6 @@ icTests my_sub other_sub conf =
                                                                                                          BS.length r1 @?= 32
                                                                                                          BS.length r2 @?= 32
                                                                                                          assertBool "random blobs are different" $ r1 /= r2,
-                                                                                                       testGroup "canister http outcalls" $ canister_http_calls my_sub httpbin_proto,
                                                                                                        testGroup
                                                                                                          "large calls"
                                                                                                          $ let arg n = BS.pack $ take n $ repeat 0

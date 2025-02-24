@@ -5,6 +5,7 @@ use ic_protobuf::proxy::ProxyDecodeError;
 use ic_protobuf::state::canister_state_bits::v1 as pb;
 use ic_types::CanisterId;
 use ic_types::NumBytes;
+use num_traits::SaturatingSub;
 use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
 
@@ -383,22 +384,15 @@ pub fn is_low_wasm_memory_hook_condition_satisfied(
         memory_usage
     );
 
-    let memory_usage_without_wasm_memory =
-        NumBytes::new(memory_usage.get().saturating_sub(wasm_memory_usage.get()));
+    let memory_usage_without_wasm_memory = memory_usage.saturating_sub(&wasm_memory_usage);
 
     // If the canister has memory allocation, then it maximum allowed Wasm memory can be calculated
     // as min(memory_allocation - memory_usage_without_wasm_memory, wasm_memory_limit).
     let wasm_capacity = memory_allocation.map_or_else(
         || wasm_memory_limit,
         |memory_allocation| {
-            debug_assert!(
-                memory_usage_without_wasm_memory <= memory_allocation,
-                "Used non-Wasm memory: {:?} is larger than memory allocation: {:?}.",
-                memory_usage_without_wasm_memory,
-                memory_allocation
-            );
             std::cmp::min(
-                memory_allocation - memory_usage_without_wasm_memory,
+                memory_allocation.saturating_sub(&memory_usage_without_wasm_memory),
                 wasm_memory_limit,
             )
         },

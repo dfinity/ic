@@ -114,7 +114,7 @@ fn transform_with_context(raw: TransformArgs) -> CanisterHttpResponsePayload {
 }
 
 fn test_transform_(raw: TransformArgs) -> CanisterHttpResponsePayload {
-    let (response, _) = (raw.response, raw.context);
+    let (response, context) = (raw.response, raw.context);
     let mut transformed = response;
     transformed.headers = vec![
         HttpHeader {
@@ -126,6 +126,8 @@ fn test_transform_(raw: TransformArgs) -> CanisterHttpResponsePayload {
             value: caller().to_string(),
         },
     ];
+    transformed.body = context;
+    transformed.status = 202;
     transformed
 }
 

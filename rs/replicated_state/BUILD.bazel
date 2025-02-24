@@ -34,6 +34,7 @@ DEPENDENCIES = [
     "@crate_index//:libc",
     "@crate_index//:maplit",
     "@crate_index//:nix",
+    "@crate_index//:num-traits",
     "@crate_index//:prometheus",
     "@crate_index//:prost",
     "@crate_index//:rand",

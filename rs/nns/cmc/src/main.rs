@@ -1663,14 +1663,12 @@ async fn fetch_transaction(
         )));
     }
 
-    if IS_AUTOMATIC_REFUND_ENABLED {
-        issue_automatic_refund_if_memo_not_offerred(
-            block_index,
-            expected_to_subaccount,
-            block.transaction().as_ref(),
-        )
-        .await?;
-    }
+    issue_automatic_refund_if_memo_not_offerred(
+        block_index,
+        expected_to_subaccount,
+        block.transaction().as_ref(),
+    )
+    .await?;
 
     transaction_has_expected_memo(block.transaction().as_ref(), expected_memo)?;
 
