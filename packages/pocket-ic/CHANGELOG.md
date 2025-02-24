@@ -8,8 +8,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## Unreleased
 
 ### Added
-- The function `PocketIc::try_get_controllers` which gets the controllers of a canister but doesn't panic if the target canister
-  doesn't exist.
 - The function `PocketIcBuilder::with_bitcoind_addrs` to specify multiple addresses and ports at which `bitcoind` processes are listening.
 - The function `PocketIc::query_call_with_effective_principal` for making generic query calls (including management canister query calls).
 - The function `PocketIc::ingress_status` to fetch the status of an update call submitted through an ingress message.
