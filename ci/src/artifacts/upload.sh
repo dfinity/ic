@@ -25,27 +25,32 @@ if [ "$(basename $f)" == "SHA256SUMS" ]; then
     cat "$f" >&2
 fi
 
-# Multipart upload does not work trough the proxy for some reasons. Just disabling it for now.
-"$RCLONE" \
-    --config="$RCLONE_CONFIG" \
-    --stats-one-line \
-    --checksum \
-    --immutable \
-    --s3-upload-cutoff=5G \
-    copy \
-    "$f" \
-    "public-s3:dfinity-download-public/ic/${VERSION}/$REMOTE_SUBDIR/"
+if [ "${DRY_RUN:-}" == "1" ]; then
+    echo "dry run for $f"
+else
+    echo "uploading $f"
+    # Multipart upload does not work trough the proxy for some reasons. Just disabling it for now.
+    "$RCLONE" \
+        --config="$RCLONE_CONFIG" \
+        --stats-one-line \
+        --checksum \
+        --immutable \
+        --s3-upload-cutoff=5G \
+        copy \
+        "$f" \
+        "public-s3:dfinity-download-public/ic/${VERSION}/$REMOTE_SUBDIR/"
 
-# Upload to Cloudflare's R2 (S3)
-unset RCLONE_S3_ENDPOINT
-AWS_PROFILE=cf "$RCLONE" \
-    --config="$RCLONE_CONFIG" \
-    --stats-one-line \
-    --checksum \
-    --immutable \
-    copy \
-    "$f" \
-    "public-s3-cf:dfinity-download-public/ic/${VERSION}/$REMOTE_SUBDIR/"
+    # Upload to Cloudflare's R2 (S3)
+    unset RCLONE_S3_ENDPOINT
+    AWS_PROFILE=cf "$RCLONE" \
+        --config="$RCLONE_CONFIG" \
+        --stats-one-line \
+        --checksum \
+        --immutable \
+        copy \
+        "$f" \
+        "public-s3-cf:dfinity-download-public/ic/${VERSION}/$REMOTE_SUBDIR/"
+fi
 
 URL_PATH="ic/${VERSION}/$REMOTE_SUBDIR/$(basename $f)"
 echo "https://download.dfinity.systems/${URL_PATH}" >"$2"
