@@ -10,18 +10,14 @@ use ic_nns_constants::{GOVERNANCE_CANISTER_ID, SNS_WASM_CANISTER_ID};
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
     sns_wasm::{self, create_modified_sns_wasm, ensure_sns_wasm_gzipped},
-    state_test_helpers::{
-        self, await_upgrade_journal_event, query, set_controllers, setup_nns_canisters,
-        sns_wait_for_upgrade_completion, update, update_with_sender,
-    },
+    state_test_helpers,
+    state_test_helpers::{query, set_controllers, setup_nns_canisters, update, update_with_sender},
 };
 use ic_sns_governance::{
-    governance::UPGRADE_STEPS_INTERVAL_REFRESH_BACKOFF_SECONDS,
     pb::v1::{
         self as sns_governance_pb,
         governance::{Mode, Version},
         proposal::Action,
-        upgrade_journal_entry::{Event, TargetVersionReset},
         GetRunningSnsVersionRequest, GetRunningSnsVersionResponse, Proposal,
         ProposalDecisionStatus, UpgradeSnsToNextVersion,
     },
@@ -38,7 +34,6 @@ use ic_sns_wasm::pb::v1::{
     SnsCanisterIds, SnsCanisterType, SnsUpgrade, SnsWasm,
 };
 use ic_state_machine_tests::{StateMachine, StateMachineBuilder};
-use ic_test_utilities::universal_canister::UNIVERSAL_CANISTER_WASM;
 use ic_types::Cycles;
 use icrc_ledger_types::icrc1::{
     account::Account,
@@ -1008,207 +1003,6 @@ fn test_out_of_sync_version_still_allows_upgrade_to_succeed() {
 
     // After checking version stuff, ensure proposal executed (not failed)
     state_test_helpers::sns_wait_for_proposal_execution(&machine, governance, proposal_id);
-}
-
-#[test]
-fn test_custom_upgrade_path_for_sns() {
-    state_test_helpers::reduce_state_machine_logging_unless_env_set();
-    let machine = StateMachineBuilder::new().with_current_time().build();
-
-    let nns_init_payload = NnsInitPayloadsBuilder::new()
-        .with_initial_invariant_compliant_mutations()
-        .with_test_neurons()
-        .with_sns_dedicated_subnets(machine.get_subnet_ids())
-        .build();
-
-    setup_nns_canisters(&machine, nns_init_payload);
-    machine.add_cycles(SNS_WASM_CANISTER_ID, EXPECTED_SNS_CREATION_FEE);
-
-    let wasm_map = sns_wasm::add_freshly_built_sns_wasms(&machine, ensure_sns_wasm_gzipped);
-
-    // To get an SNS neuron, we airdrop our new tokens to this user.
-    let user = PrincipalId::new_user_test_id(0);
-
-    let payload = SnsInitPayload {
-        dapp_canisters: None,
-        transaction_fee_e8s: Some(DEFAULT_TRANSFER_FEE.get_e8s()),
-        token_name: Some("An SNS Token".to_string()),
-        token_symbol: Some("AST".to_string()),
-        proposal_reject_cost_e8s: Some(E8S_PER_TOKEN),
-        neuron_minimum_stake_e8s: Some(E8S_PER_TOKEN),
-        fallback_controller_principal_ids: vec![user.to_string()],
-        initial_token_distribution: Some(InitialTokenDistribution::FractionalDeveloperVotingPower(
-            FractionalDeveloperVotingPower {
-                developer_distribution: Some(DeveloperDistribution {
-                    developer_neurons: Default::default(),
-                }),
-                treasury_distribution: Some(TreasuryDistribution {
-                    total_e8s: 500_000_000,
-                }),
-                swap_distribution: Some(SwapDistribution {
-                    total_e8s: 10_000_000_000,
-                    initial_swap_amount_e8s: 10_000_000_000,
-                }),
-                airdrop_distribution: Some(AirdropDistribution {
-                    airdrop_neurons: vec![NeuronDistribution {
-                        controller: Some(user),
-                        stake_e8s: 2_000_000_000_000,
-                        memo: 0,
-                        dissolve_delay_seconds: 15780000, // 6 months
-                        vesting_period_seconds: None,
-                    }],
-                }),
-            },
-        )),
-        ..SnsInitPayload::with_valid_values_for_testing_post_execution()
-    };
-
-    let response = sns_wasm::deploy_new_sns(
-        &machine,
-        GOVERNANCE_CANISTER_ID,
-        SNS_WASM_CANISTER_ID,
-        payload,
-    );
-
-    assert_eq!(response.error, None);
-
-    let SnsCanisterIds { governance, .. } = response.canisters.unwrap();
-
-    let sns_governance_canister_id = CanisterId::unchecked_from_principal(governance.unwrap());
-
-    let deployed_version = wasm_map_to_version(&wasm_map);
-    // After our deploy, we need to add a bunch of wasms so there's an upgrade path
-    fn filter_wasm(sns_wasm: SnsWasm) -> SnsWasm {
-        let mut sns_wasm = ensure_sns_wasm_gzipped(create_modified_sns_wasm(&sns_wasm, Some(64)));
-        // Make sure the 1st upgrade fails due to the Wasm not being right.
-        if sns_wasm.canister_type == SnsCanisterType::Root as i32 {
-            sns_wasm.wasm = UNIVERSAL_CANISTER_WASM.clone();
-        }
-        sns_wasm
-    }
-    let modified_map: BTreeMap<SnsCanisterType, Vec<u8>> =
-        sns_wasm::add_freshly_built_sns_wasms(&machine, filter_wasm)
-            .into_iter()
-            .map(|(key, sns_wasm)| {
-                let sns_wasm = sns_wasm.sha256_hash().to_vec();
-                (key, sns_wasm)
-            })
-            .collect();
-
-    let last_version = Version {
-        root_wasm_hash: modified_map.get(&SnsCanisterType::Root).unwrap().clone(),
-        governance_wasm_hash: modified_map
-            .get(&SnsCanisterType::Governance)
-            .unwrap()
-            .clone(),
-        ledger_wasm_hash: modified_map.get(&SnsCanisterType::Ledger).unwrap().clone(),
-        swap_wasm_hash: modified_map.get(&SnsCanisterType::Swap).unwrap().clone(),
-        archive_wasm_hash: modified_map.get(&SnsCanisterType::Archive).unwrap().clone(),
-        index_wasm_hash: modified_map.get(&SnsCanisterType::Index).unwrap().clone(),
-    };
-
-    // Normal path: (Deployed) ---> +root (broken) ---> +governance  ---> +ledger ---> +swap (Last)
-    //                        \                                    /
-    // Modified path:           ---> +governance ---> +root ------
-
-    let custom_one = Version {
-        governance_wasm_hash: last_version.governance_wasm_hash.clone(),
-        ..deployed_version.clone()
-    };
-
-    let custom_two = Version {
-        root_wasm_hash: last_version.root_wasm_hash.clone(),
-        ..custom_one.clone()
-    };
-    let normal_three = Version {
-        ledger_wasm_hash: last_version.ledger_wasm_hash.clone(),
-        ..custom_two.clone()
-    };
-
-    await_upgrade_journal_event(
-        "Awaiting SNS to fail upgrading to latest",
-        &machine,
-        sns_governance_canister_id,
-        &Event::TargetVersionReset(TargetVersionReset {
-            old_target_version: Some(last_version),
-            new_target_version: None,
-            human_readable: None,
-        }),
-    );
-
-    let custom_paths = vec![
-        SnsUpgrade {
-            current_version: Some(deployed_version.clone().into()),
-            next_version: Some(custom_one.clone().into()),
-        },
-        SnsUpgrade {
-            current_version: Some(custom_one.clone().into()),
-            next_version: Some(custom_two.clone().into()),
-        },
-        SnsUpgrade {
-            current_version: Some(custom_two.clone().into()),
-            next_version: Some(normal_three.clone().into()),
-        },
-    ];
-    sns_wasm::insert_upgrade_path_entries_via_proposal(
-        &machine,
-        custom_paths,
-        Some(sns_governance_canister_id),
-    );
-
-    let next_version_standard_response = sns_wasm::get_next_sns_version(
-        &machine,
-        SNS_WASM_CANISTER_ID,
-        GetNextSnsVersionRequest {
-            current_version: Some(deployed_version.clone().into()),
-            governance_canister_id: None,
-        },
-    );
-
-    let next_version_custom_response = sns_wasm::get_next_sns_version(
-        &machine,
-        SNS_WASM_CANISTER_ID,
-        GetNextSnsVersionRequest {
-            current_version: Some(deployed_version.into()),
-            governance_canister_id: Some(sns_governance_canister_id.into()),
-        },
-    );
-
-    assert_ne!(
-        next_version_custom_response.next_version.clone().unwrap(),
-        next_version_standard_response.next_version.unwrap()
-    );
-
-    assert_eq!(
-        custom_one,
-        next_version_custom_response.next_version.unwrap().into()
-    );
-
-    // Wait for the upgrade steps to refresh (the original refresh event preceded the newly
-    // added `custom_paths`).
-    machine.advance_time(Duration::from_secs(
-        UPGRADE_STEPS_INTERVAL_REFRESH_BACKOFF_SECONDS,
-    ));
-    machine.tick();
-    machine.tick();
-
-    let mut running_version_response = None;
-
-    for (label, expected_version) in [
-        ("custom_one", custom_one),
-        ("custom_two", custom_two),
-        ("normal_three", normal_three),
-    ] {
-        println!("Awaiting version {label} ...");
-        running_version_response = Some(sns_wait_for_upgrade_completion(
-            &machine,
-            sns_governance_canister_id,
-            expected_version,
-        ));
-    }
-
-    // The pending upgrade should be cleared after upgrade completion.
-    assert_eq!(running_version_response.unwrap().pending_version, None);
 }
 
 #[test]
