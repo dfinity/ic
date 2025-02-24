@@ -51,18 +51,18 @@ pub type InternalAddress = AmountOf<InternalAddressTag, usize>;
 
 /// Safe pointer-like arithmetics for InternalAddress.
 pub trait InternalAddressArithmetics {
-    fn add(self, rhs: Self) -> Result<InternalAddress, String>;
-    fn sub(self, rhs: Self) -> Result<InternalAddress, String>;
+    fn checked_add(self, rhs: Self) -> Result<InternalAddress, String>;
+    fn checked_sub(self, rhs: Self) -> Result<InternalAddress, String>;
 }
 
 impl InternalAddressArithmetics for InternalAddress {
-    fn add(self, rhs: Self) -> Result<InternalAddress, String> {
+    fn checked_add(self, rhs: Self) -> Result<InternalAddress, String> {
         self.get()
             .checked_add(rhs.get())
             .map(InternalAddress::new)
             .ok_or_else(|| "Invalid InternalAddress.".to_string())
     }
-    fn sub(self, rhs: Self) -> Result<InternalAddress, String> {
+    fn checked_sub(self, rhs: Self) -> Result<InternalAddress, String> {
         self.get()
             .checked_sub(rhs.get())
             .map(InternalAddress::new)

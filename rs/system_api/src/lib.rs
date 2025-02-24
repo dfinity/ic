@@ -3834,7 +3834,7 @@ pub(crate) fn valid_subslice<'a>(
     len: InternalAddress,
     slice: &'a [u8],
 ) -> HypervisorResult<&'a [u8]> {
-    let result_address = src.add(len);
+    let result_address = src.checked_add(len);
 
     match result_address {
         Ok(addr) => {
