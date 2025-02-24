@@ -1711,6 +1711,14 @@ To download the binary, please visit https://github.com/dfinity/pocketic."
         }
     }
 
+    // Start the server in the background so that it doesn't receive signals such as CTRL^C
+    // from the foreground terminal.
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::CommandExt;
+        cmd.process_group(0);
+    }
+
     // TODO: SDK-1936
     #[allow(clippy::zombie_processes)]
     cmd.spawn()
