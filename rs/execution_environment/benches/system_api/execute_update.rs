@@ -976,7 +976,7 @@ pub fn execute_update_bench(c: &mut Criterion) {
                 Result::No,
                 Wasm64::Disabled,
             ),
-            119001006,
+            519001006,
         ),
         common::Benchmark(
             "wasm64/ic0_cost_call()".into(),
@@ -986,7 +986,7 @@ pub fn execute_update_bench(c: &mut Criterion) {
                 Result::No,
                 Wasm64::Enabled,
             ),
-            119004006,
+            519004006,
         ),
         common::Benchmark(
             "wasm32/ic0_cost_create_canister()".into(),
@@ -996,7 +996,7 @@ pub fn execute_update_bench(c: &mut Criterion) {
                 Result::No,
                 Wasm64::Disabled,
             ),
-            117001006,
+            517001006,
         ),
         common::Benchmark(
             "wasm64/ic0_cost_create_canister()".into(),
@@ -1006,7 +1006,7 @@ pub fn execute_update_bench(c: &mut Criterion) {
                 Result::No,
                 Wasm64::Enabled,
             ),
-            117004006,
+            517004006,
         ),
         common::Benchmark(
             "wasm32/ic0_cost_http_request()".into(),
@@ -1016,7 +1016,7 @@ pub fn execute_update_bench(c: &mut Criterion) {
                 Result::No,
                 Wasm64::Disabled,
             ),
-            119001006,
+            519001006,
         ),
         common::Benchmark(
             "wasm64/ic0_cost_http_request()".into(),
@@ -1026,7 +1026,7 @@ pub fn execute_update_bench(c: &mut Criterion) {
                 Result::No,
                 Wasm64::Enabled,
             ),
-            119004006,
+            519004006,
         ),
         common::Benchmark(
             "wasm32/ic0_cost_sign_with_ecdsa()".into(),
@@ -1036,7 +1036,7 @@ pub fn execute_update_bench(c: &mut Criterion) {
                 Result::I32,
                 Wasm64::Disabled,
             ),
-            123000006,
+            523000006,
         ),
         common::Benchmark(
             "wasm64/ic0_cost_sign_with_ecdsa()".into(),
@@ -1046,7 +1046,7 @@ pub fn execute_update_bench(c: &mut Criterion) {
                 Result::I32,
                 Wasm64::Enabled,
             ),
-            123000006,
+            523000006,
         ),
         common::Benchmark(
             "wasm32/ic0_cost_sign_with_schnorr()".into(),
@@ -1056,7 +1056,7 @@ pub fn execute_update_bench(c: &mut Criterion) {
                 Result::I32,
                 Wasm64::Disabled,
             ),
-            123000006,
+            523000006,
         ),
         common::Benchmark(
             "wasm64/ic0_cost_sign_with_schnorr()".into(),
@@ -1066,7 +1066,7 @@ pub fn execute_update_bench(c: &mut Criterion) {
                 Result::I32,
                 Wasm64::Enabled,
             ),
-            123000006,
+            523000006,
         ),
         common::Benchmark(
             "wasm32/ic0_cost_vetkd_derive_encrypted_key()".into(),
@@ -1076,7 +1076,7 @@ pub fn execute_update_bench(c: &mut Criterion) {
                 Result::I32,
                 Wasm64::Disabled,
             ),
-            123000006,
+            523000006,
         ),
         common::Benchmark(
             "wasm64/ic0_cost_vetkd_derive_encrypted_key()".into(),
@@ -1086,7 +1086,7 @@ pub fn execute_update_bench(c: &mut Criterion) {
                 Result::I32,
                 Wasm64::Enabled,
             ),
-            123000006,
+            523000006,
         ),
     ];
 
