@@ -56,4 +56,4 @@ jobs:
             echo "git working tree clean - no changes to be committed"
           fi
         env:
-          GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
