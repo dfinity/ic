@@ -705,7 +705,6 @@ fn can_get_canister_information() {
             Ok(WasmResult::Reply(res)) if CanisterStatusResultV2::decode(&res).unwrap() == CanisterStatusResultV2::new(
                 CanisterStatusType::Running,
                 None,
-                canister_a.get(),
                 vec![canister_a.get()],
                 NumBytes::from((2 * size_of::<CanisterChange>() + 2 * size_of::<PrincipalId>()) as u64),
                 num_cycles.get(),
@@ -762,7 +761,6 @@ fn can_get_canister_information() {
                 CanisterStatusResultV2::new(
                     CanisterStatusType::Running,
                     Some(ic_crypto_sha2::Sha256::hash(&UNIVERSAL_CANISTER_WASM).to_vec()),
-                    canister_a.get(),
                     vec![canister_a.get()],
                     // We don't assert a specific memory size since the universal canister's
                     // size changes between updates.
@@ -941,7 +939,7 @@ fn assert_canister_status_result_equals(
 ) {
     assert_eq!(expected.status(), actual.status());
     assert_eq!(expected.module_hash(), actual.module_hash());
-    assert_eq!(expected.controller(), actual.controller());
+    assert_eq!(expected.controllers(), actual.controllers());
     assert_balance_equals(
         Cycles::from(expected.cycles()),
         Cycles::from(actual.cycles()),

@@ -871,7 +871,6 @@ impl TryFrom<pb_canister_state_bits::LogVisibilityV2> for LogVisibilityV2 {
 
 /// Struct used for encoding/decoding
 /// `(record {
-///     controller : principal;
 ///     compute_allocation: nat;
 ///     memory_allocation: nat;
 ///     freezing_threshold: nat;
@@ -882,7 +881,6 @@ impl TryFrom<pb_canister_state_bits::LogVisibilityV2> for LogVisibilityV2 {
 /// })`
 #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
 pub struct DefiniteCanisterSettingsArgs {
-    controller: PrincipalId,
     controllers: Vec<PrincipalId>,
     compute_allocation: candid::Nat,
     memory_allocation: candid::Nat,
@@ -895,7 +893,6 @@ pub struct DefiniteCanisterSettingsArgs {
 
 impl DefiniteCanisterSettingsArgs {
     pub fn new(
-        controller: PrincipalId,
         controllers: Vec<PrincipalId>,
         compute_allocation: u64,
         memory_allocation: Option<u64>,
@@ -909,7 +906,6 @@ impl DefiniteCanisterSettingsArgs {
         let reserved_cycles_limit = candid::Nat::from(reserved_cycles_limit.unwrap_or(0));
         let wasm_memory_limit = candid::Nat::from(wasm_memory_limit.unwrap_or(0));
         Self {
-            controller,
             controllers,
             compute_allocation: candid::Nat::from(compute_allocation),
             memory_allocation,
@@ -969,7 +965,6 @@ pub struct QueryStats {
 ///     status : variant { running; stopping; stopped };
 ///     settings: definite_canister_settings;
 ///     module_hash: opt blob;
-///     controller: principal;
 ///     memory_size: nat;
 ///     cycles: nat;
 ///     freezing_threshold: nat,
@@ -986,7 +981,6 @@ pub struct QueryStats {
 pub struct CanisterStatusResultV2 {
     status: CanisterStatusType,
     module_hash: Option<Vec<u8>>,
-    controller: candid::Principal,
     settings: DefiniteCanisterSettingsArgs,
     memory_size: candid::Nat,
     cycles: candid::Nat,
@@ -1003,7 +997,6 @@ impl CanisterStatusResultV2 {
     pub fn new(
         status: CanisterStatusType,
         module_hash: Option<Vec<u8>>,
-        controller: PrincipalId,
         controllers: Vec<PrincipalId>,
         memory_size: NumBytes,
         cycles: u128,
@@ -1024,14 +1017,12 @@ impl CanisterStatusResultV2 {
         Self {
             status,
             module_hash,
-            controller: candid::Principal::from_text(controller.to_string()).unwrap(),
             memory_size: candid::Nat::from(memory_size.get()),
             cycles: candid::Nat::from(cycles),
             // the following is spec 0.12/0.13 compat;
             // "\x00" denotes cycles
             balance: vec![(vec![0], candid::Nat::from(cycles))],
             settings: DefiniteCanisterSettingsArgs::new(
-                controller,
                 controllers,
                 compute_allocation,
                 memory_allocation,
@@ -1059,10 +1050,6 @@ impl CanisterStatusResultV2 {
 
     pub fn module_hash(&self) -> Option<Vec<u8>> {
         self.module_hash.clone()
-    }
-
-    pub fn controller(&self) -> PrincipalId {
-        PrincipalId::try_from(self.controller.as_slice()).unwrap()
     }
 
     pub fn controllers(&self) -> Vec<PrincipalId> {
