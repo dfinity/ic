@@ -263,33 +263,34 @@ fn out_stream(in_stream: &Stream, messages_begin: StreamIndex) -> Stream {
 proptest! {
     #![proptest_config(ProptestConfig::with_cases(10))]
 
-    /// Tests that the payload builder does not include a stream slice that would
-    /// lead to more than `MAX_SIGNALS` amount of signals in the outgoing stream.
+    /// Tests that the payload builder does not include messages in a stream slice that
+    /// would lead to more than `MAX_SIGNALS` amount of signals in the outgoing stream.
     ///
     /// The input consists of
     /// - an outgoing stream that has already seen most of the messages coming
     ///   from the incoming stream, i.e. it has close and up to `SIGNALS_MAX` signals.
-    /// - a very large incoming stream that has `SIGNALS_MAX` or slightly more messages in it.
+    /// - a very large incoming stream that has slightly more than `SIGNALS_MAX` messages in it.
     ///
     /// The stream slice to include in the payload will start from `out_stream.signals_end()`.
     ///
-    /// Just enough messages are expected to be included in the payload such that
-    /// `slice.messages_end() - in_stream.begin()` <= `MAX_SIGNALS`.
+    /// If there is room for more signals, messages are expected to be included in the slice
+    /// such that `slice.messages_end() - in_stream.begin()` == `MAX_SIGNALS`, i.e. after inducting
+    /// the slice there would be exactly `MAX_SIGNALS` signals in the `out_stream`.
     #[test]
     fn get_xnet_payload_respects_signal_limit(
-        // `MAX_SIGNALS` - 10 <= signals_end()` <= `MAX_SIGNALS` + 10
+        // `MAX_SIGNALS` <= signals_end()` <= `MAX_SIGNALS` + 20
         out_stream in arb_stream_with_config(
             0..=10, // msg_start_range
-            20..=30, // size_range
-            0..=10, // signal_start_range
+            30..=40, // size_range
+            10..=20, // signal_start_range
             (MAX_SIGNALS - 10)..=MAX_SIGNALS, // signal_count_range
             RejectReason::all(),
         ),
-        // `MAX_SIGNALS` + 10 <= `messages_end() <= `MAX_SIGNALS` + 30
+        // `MAX_SIGNALS` + 20 <= `messages_end() <= `MAX_SIGNALS` + 40
         in_stream in arb_stream_with_config(
             0..=10, // msg_start_range
-            (MAX_SIGNALS + 10)..=(MAX_SIGNALS + 20), // size_range
-            0..=10, // signal_start_range
+            (MAX_SIGNALS + 20)..=(MAX_SIGNALS + 30), // size_range
+            10..=20, // signal_start_range
             0..=10, // signal_count_range
             RejectReason::all(),
         ),
@@ -306,7 +307,8 @@ proptest! {
             let xnet_payload_builder = XNetPayloadBuilderFixture::new(state_manager);
             xnet_payload_builder.pool_slice(SUBNET_1, &in_stream, from, msg_count, &log);
 
-            // Build the payload.
+            // Build the payload without a byte limit. Messages up to the signal limit should be
+            // included.
             let (payload, _) = xnet_payload_builder.get_xnet_payload(usize::MAX);
 
             if signals_count_after_gc < MAX_SIGNALS {
@@ -314,12 +316,16 @@ proptest! {
                 let messages = slice.messages().unwrap();
 
                 let signals_count = messages.end().get() - in_stream.messages_begin().get();
-                assert!(
-                    signals_count as usize <= MAX_SIGNALS,
+                assert_eq!(
+                    MAX_SIGNALS,
+                    signals_count as usize,
                     "inducting payload would lead to signals_count > MAX_SIGNALS",
                 );
             } else {
-                assert!(payload.is_empty(), "no room for signals, but payload found");
+                assert!(payload.len() <= 1, "at most one slice expected in the payload");
+                if let Some(slice) = payload.get(&SUBNET_1) {
+                    assert!(slice.messages().is_none(), "no messages expected in the slice");
+                }
             }
         });
     }

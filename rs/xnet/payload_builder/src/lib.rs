@@ -550,7 +550,7 @@ impl XNetPayloadBuilderImpl {
             // An honest subnet will only produce signals for the messages in the incoming
             // stream (i.e. no signals for future messages; and all signals for past
             // messages have been GC-ed). Meaning we can never have signals going back
-            // farther than the maximum number of messages in a stream.
+            // farther than the maximum number of messages in a stream (but at most `MAX_SIGNALS`).
             let signals_begin = reject_signals.front().unwrap();
             if signals_end.get() - signals_begin.index.get() > 2 * MAX_SIGNALS as u64 {
                 warn!(
