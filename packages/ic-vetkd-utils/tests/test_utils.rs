@@ -3,10 +3,6 @@
 use ic_bls12_381::hash_to_curve::{ExpandMsgXmd, HashToCurve};
 use ic_bls12_381::*;
 use rand::{CryptoRng, RngCore};
-use sha3::{
-    digest::{ExtendableOutputReset, Update, XofReader},
-    Shake256,
-};
 
 pub fn random_scalar<R: RngCore + CryptoRng>(rng: &mut R) -> Scalar {
     loop {
@@ -43,44 +39,16 @@ fn augmented_hash_to_g1(pk: &G2Affine, data: &[u8]) -> G1Affine {
     G1Affine::from(pt)
 }
 
-struct RandomOracle {
-    shake: Shake256,
-}
+fn hash_to_scalar(input: &[u8], domain_sep: &str) -> ic_bls12_381::Scalar {
+    use ic_bls12_381::hash_to_curve::HashToField;
 
-impl RandomOracle {
-    fn new(domain_separator: &str) -> Self {
-        let mut ro = Self {
-            shake: Shake256::default(),
-        };
-
-        ro.update_str(domain_separator);
-
-        ro
-    }
-
-    fn update_str(&mut self, s: &str) {
-        self.update_bin(s.as_bytes());
-    }
-
-    fn update_bin(&mut self, v: &[u8]) {
-        let v_len = v.len() as u64;
-        self.shake.update(&v_len.to_be_bytes());
-        self.shake.update(v);
-    }
-
-    fn finalize(&mut self, output: &mut [u8]) {
-        let o_len = output.len() as u64;
-        self.shake.update(&o_len.to_be_bytes());
-
-        let mut xof = self.shake.finalize_xof_reset();
-        xof.read(output);
-    }
-
-    fn finalize_to_scalar(mut self) -> Scalar {
-        let mut output = [0u8; 2 * 32];
-        self.finalize(&mut output);
-        Scalar::from_bytes_wide(&output)
-    }
+    let mut s = [ic_bls12_381::Scalar::zero()];
+    <ic_bls12_381::Scalar as HashToField>::hash_to_field::<ExpandMsgXmd<sha2::Sha256>>(
+        input,
+        domain_sep.as_bytes(),
+        &mut s,
+    );
+    s[0]
 }
 
 pub struct DerivationPath {
@@ -89,16 +57,10 @@ pub struct DerivationPath {
 
 impl DerivationPath {
     /// Create a new derivation path
-    pub fn new<U: AsRef<[u8]>>(canister_id: &[u8], extra_paths: &[U]) -> Self {
-        let mut ro = RandomOracle::new("ic-crypto-vetkd-bls12-381-derivation-path");
-
-        ro.update_bin(canister_id);
-
-        for path in extra_paths {
-            ro.update_bin(path.as_ref());
-        }
-
-        let delta = ro.finalize_to_scalar();
+    pub fn new(canister_id: &[u8], context: &[u8]) -> Self {
+        let domain_sep = "ic-crypto-vetkd-bls12-381-derivation-path";
+        let mut delta = hash_to_scalar(&canister_id, domain_sep);
+        delta += hash_to_scalar(&context, domain_sep);
         Self { delta }
     }
 
