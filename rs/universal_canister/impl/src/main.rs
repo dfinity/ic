@@ -441,6 +441,50 @@ fn eval(ops_bytes: OpsBytes) {
                 }
                 std::hint::black_box(a);
             }
+            Ops::CostCall => {
+                let payload_size = stack.pop_int64();
+                let method_name_size = stack.pop_int64();
+                stack.push_blob(api::cost_call(method_name_size, payload_size));
+            }
+            Ops::CostCreateCanister => stack.push_blob(api::cost_create_canister()),
+            Ops::CostHttpRequest => {
+                let max_res_bytes = stack.pop_int64();
+                let request_size = stack.pop_int64();
+                stack.push_blob(api::cost_http_request(request_size, max_res_bytes));
+            }
+            Ops::CostSignWithEcdsa => {
+                let ecdsa_curve = stack.pop_int();
+                let key_name = stack.pop_blob();
+                match api::cost_sign_with_ecdsa(&key_name, ecdsa_curve) {
+                    Ok(bytes) => stack.push_blob(bytes),
+                    Err(err_code) => api::trap_with(&format!(
+                        "ic0.cost_sign_with_ecdsa failed with error code {}",
+                        err_code
+                    )),
+                }
+            }
+            Ops::CostSignWithSchnorr => {
+                let algorithm = stack.pop_int();
+                let key_name = stack.pop_blob();
+                match api::cost_sign_with_schnorr(&key_name, algorithm) {
+                    Ok(bytes) => stack.push_blob(bytes),
+                    Err(err_code) => api::trap_with(&format!(
+                        "ic0.cost_sign_with_schnorr failed with error code {}",
+                        err_code
+                    )),
+                }
+            }
+            Ops::CostVetkdDeriveEncryptedKey => {
+                let vetkd_curve = stack.pop_int();
+                let key_name = stack.pop_blob();
+                match api::cost_vetkd_derive_encrypted_key(&key_name, vetkd_curve) {
+                    Ok(bytes) => stack.push_blob(bytes),
+                    Err(err_code) => api::trap_with(&format!(
+                        "ic0.cost_vetkd_derive_encrypted_key failed with error code {}",
+                        err_code
+                    )),
+                }
+            }
         }
     }
 }

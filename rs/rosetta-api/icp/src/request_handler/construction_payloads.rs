@@ -907,11 +907,15 @@ fn handle_refresh_voting_power(
 ) -> Result<(), ApiError> {
     let account = req.account;
     let neuron_index = req.neuron_index;
+    let controller = req.controller;
     let command = Command::RefreshVotingPower(manage_neuron::RefreshVotingPower {});
     add_neuron_management_payload(
-        RequestType::RefreshVotingPower { neuron_index },
+        RequestType::RefreshVotingPower {
+            neuron_index,
+            controller: controller.map(PublicKeyOrPrincipal::Principal),
+        },
         account,
-        None,
+        controller,
         neuron_index,
         command,
         payloads,

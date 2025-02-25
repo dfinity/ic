@@ -22,7 +22,7 @@ Notes on init args:
 
 
 ```shell
-dfx deploy minter --network ic --argument '(record { btc_network = variant { Testnet }; ledger_id = principal "mc6ru-gyaaa-aaaar-qaaaq-cai"; ecdsa_key_name = "key_1"; retrieve_btc_min_amount = 5_000; max_time_in_queue_nanos = 420_000_000_000 })'
+dfx deploy minter --network ic --argument '(variant { Init = record { btc_network = variant { Testnet }; ledger_id = principal "mc6ru-gyaaa-aaaar-qaaaq-cai"; ecdsa_key_name = "key_1"; retrieve_btc_min_amount = 5_000; max_time_in_queue_nanos = 420_000_000_000; btc_checker_principal = opt principal "o6ude-eyaaa-aaaar-qal6a-cai"; check_fee = opt 100; mode = variant { GeneralAvailability }; }})'
 ```
 
 ## Installing the ledger ([`mc6ru-gyaaa-aaaar-qaaaq-cai`](https://dashboard.internetcomputer.org/canister/mc6ru-gyaaa-aaaar-qaaaq-cai))
@@ -36,13 +36,13 @@ Notes on init args:
   We can afford that much memory because archives store transactions in stable memory.
 
 ```shell
-dfx deploy ledger --network ic --argument '(record { minting_account = record { owner = principal "ml52i-qqaaa-aaaar-qaaba-cai" }; transfer_fee = 10; token_symbol = "ckTESTBTC"; token_name = "Chain key testnet Bitcoin"; metadata = vec {}; initial_balances = vec {}; max_memo_length = opt 80; archive_options = record { num_blocks_to_archive = 1000; trigger_threshold = 2000; max_message_size_bytes = null; cycles_for_archive_creation = opt 1_000_000_000_000; node_max_memory_size_bytes = opt 3_221_225_472; controller_id = principal "mf7xa-laaaa-aaaar-qaaaa-cai" } })'
+dfx deploy ledger --network ic --argument '(variant { Init = record { minting_account = record { owner = principal "ml52i-qqaaa-aaaar-qaaba-cai" }; transfer_fee = 10; token_symbol = "ckTESTBTC"; token_name = "Chain key testnet Bitcoin"; metadata = vec {}; initial_balances = vec {}; max_memo_length = opt 80; archive_options = record { num_blocks_to_archive = 1000; trigger_threshold = 2000; max_message_size_bytes = null; cycles_for_archive_creation = opt 1_000_000_000_000; node_max_memory_size_bytes = opt 3_221_225_472; controller_id = principal "mf7xa-laaaa-aaaar-qaaaa-cai" } }})'
 ```
 
 ## Installing the index ([`mm444-5iaaa-aaaar-qaabq-cai`](https://dashboard.internetcomputer.org/canister/mm444-5iaaa-aaaar-qaabq-cai))
 
 ```shell
-dfx deploy index --network ic --argument '(record { ledger_id = principal "mc6ru-gyaaa-aaaar-qaaaq-cai" })'
+dfx deploy index --network ic --argument '(opt variant { Init = record { ledger_id = principal "mc6ru-gyaaa-aaaar-qaaaq-cai" } })'
 ```
 
 ## Upgrading the archive ([`m62lf-ryaaa-aaaar-qaacq-cai`](https://dashboard.internetcomputer.org/canister/m62lf-ryaaa-aaaar-qaacq-cai))
@@ -51,12 +51,12 @@ dfx deploy index --network ic --argument '(record { ledger_id = principal "mc6ru
 dfx deploy --network ic archive --argument '(principal "mc6ru-gyaaa-aaaar-qaaaq-cai", 0, opt 3_221_225_472, null)'
 ```
 
-## KYT ([`pvm5g-xaaaa-aaaar-qaaia-cai`](https://dashboard.internetcomputer.org/canister/pvm5g-xaaaa-aaaar-qaaia-cai))
+## Bitcoin Checker ([`o6ude-eyaaa-aaaar-qal6a-cai`](https://dashboard.internetcomputer.org/canister/o6ude-eyaaa-aaaar-qal6a-cai))
 
 ### Install
 
 ```shell
-dfx deploy kyt --network ic --argument '(variant { InitArg = record { api_key = ""; maintainers = vec {}; mode = variant { AcceptAll }; minter_id = principal "ml52i-qqaaa-aaaar-qaaba-cai" } })'
+dfx deploy btc_checker --network ic --argument '(variant { InitArg = record { btc_network = variant { testnet }; check_mode = variant { AcceptAll }; num_subnet_nodes = 34; } })'
 ```
 
 ### Upgrade

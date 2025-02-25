@@ -22,7 +22,7 @@ use super::get_btc_address::init_ecdsa_public_key;
 use crate::{
     guard::{balance_update_guard, GuardError},
     management::{get_utxos, CallError, CallSource},
-    metrics::observe_latency,
+    metrics::observe_update_call_latency,
     state,
     tx::{DisplayAmount, DisplayOutpoint},
     updates::get_btc_address,
@@ -232,7 +232,7 @@ pub async fn update_balance<R: CanisterRuntime>(
 
         let current_confirmations = pending_utxos.iter().map(|u| u.confirmations).max();
 
-        observe_latency(0, start_time, runtime.time());
+        observe_update_call_latency(0, start_time, runtime.time());
 
         return Err(UpdateBalanceError::NoNewUtxos {
             current_confirmations,
@@ -345,7 +345,7 @@ pub async fn update_balance<R: CanisterRuntime>(
 
     schedule_now(TaskType::ProcessLogic, runtime);
 
-    observe_latency(utxo_statuses.len(), start_time, runtime.time());
+    observe_update_call_latency(utxo_statuses.len(), start_time, runtime.time());
 
     Ok(utxo_statuses)
 }

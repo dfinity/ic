@@ -13,23 +13,23 @@ use ic_interfaces::execution_environment::{
 use ic_interfaces_state_manager::StateReader;
 use ic_logger::ReplicaLogger;
 use ic_management_canister_types_private::LogVisibilityV2;
-use ic_metrics::buckets::{decimal_buckets_with_zero, linear_buckets};
-use ic_metrics::{buckets::exponential_buckets, MetricsRegistry};
+use ic_metrics::buckets::{decimal_buckets_with_zero, exponential_buckets, linear_buckets};
+use ic_metrics::MetricsRegistry;
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::{page_map::allocated_pages_count, ExecutionState, SystemState};
-use ic_replicated_state::{NetworkTopology, ReplicatedState};
-use ic_system_api::ExecutionParameters;
-use ic_system_api::{sandbox_safe_system_state::SandboxSafeSystemState, ApiType};
+use ic_replicated_state::page_map::allocated_pages_count;
+use ic_replicated_state::{
+    ExecutionState, MessageMemoryUsage, NetworkTopology, ReplicatedState, SystemState,
+};
+use ic_system_api::sandbox_safe_system_state::SandboxSafeSystemState;
+use ic_system_api::{ApiType, ExecutionParameters};
 use ic_types::{
     messages::RequestMetadata, methods::FuncRef, CanisterId, MemoryDiskBytes, NumBytes,
     NumInstructions, SubnetId, Time,
 };
 use ic_wasm_types::CanisterModule;
 use prometheus::{Histogram, HistogramVec, IntCounter, IntGauge, IntGaugeVec};
-use std::{
-    path::{Path, PathBuf},
-    sync::Arc,
-};
+use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 use crate::execution::common::{apply_canister_state_changes, update_round_limits};
 use crate::execution_environment::{as_round_instructions, CompilationCostHandling, RoundLimits};
@@ -397,7 +397,7 @@ impl Hypervisor {
         time: Time,
         mut system_state: SystemState,
         canister_current_memory_usage: NumBytes,
-        canister_current_message_memory_usage: NumBytes,
+        canister_current_message_memory_usage: MessageMemoryUsage,
         execution_parameters: ExecutionParameters,
         func_ref: FuncRef,
         mut execution_state: ExecutionState,
@@ -458,7 +458,7 @@ impl Hypervisor {
         execution_state: &ExecutionState,
         system_state: &SystemState,
         canister_current_memory_usage: NumBytes,
-        canister_current_message_memory_usage: NumBytes,
+        canister_current_message_memory_usage: MessageMemoryUsage,
         execution_parameters: ExecutionParameters,
         func_ref: FuncRef,
         request_metadata: RequestMetadata,
