@@ -253,8 +253,7 @@ fn lsmt_merge_overhead() {
     fn checkpoint_size(checkpoint: &CheckpointLayout<ReadOnly>) -> f64 {
         let mut size = 0.0;
         for canister_id in checkpoint.canister_ids().unwrap() {
-            let canister = checkpoint.canister(&canister_id).unwrap();
-            for entry in std::fs::read_dir(canister.raw_path()).unwrap() {
+            for entry in std::fs::read_dir(checkpoint.canister_path(&canister_id)).unwrap() {
                 size += std::fs::metadata(entry.unwrap().path()).unwrap().len() as f64;
             }
         }
@@ -5444,9 +5443,7 @@ fn can_delete_canister() {
             .state_layout()
             .checkpoint_verified(height(1))
             .unwrap()
-            .canister(&canister_test_id(100))
-            .unwrap()
-            .raw_path();
+            .canister_path(&canister_test_id(100));
         assert!(std::fs::metadata(canister_path).unwrap().is_dir());
 
         let (_height, mut state) = state_manager.take_tip();
@@ -5467,9 +5464,7 @@ fn can_delete_canister() {
             .state_layout()
             .checkpoint_verified(height(3))
             .unwrap()
-            .canister(&canister_test_id(100))
-            .unwrap()
-            .raw_path()
+            .canister_path(&canister_test_id(100))
             .exists());
 
         assert_error_counters(metrics);
@@ -5503,7 +5498,7 @@ fn can_uninstall_code() {
             .checkpoint_verified(height(1))
             .unwrap();
         let canister_layout = checkpoint_layout.canister(&canister_test_id(100)).unwrap();
-        let canister_path = canister_layout.raw_path();
+        let canister_path = checkpoint_layout.canister_path(&canister_test_id(100));
         assert!(std::fs::metadata(canister_path).unwrap().is_dir());
 
         // WASM binary, WASM memory and stable memory should all be present.
@@ -5538,7 +5533,9 @@ fn can_uninstall_code() {
             .unwrap();
         let canister_layout = checkpoint_layout.canister(&canister_test_id(100)).unwrap();
 
-        assert!(canister_layout.raw_path().exists());
+        assert!(checkpoint_layout
+            .canister_path(&canister_test_id(100))
+            .exists());
 
         // WASM and stable memory should be empty after checkpoint.
         assert_eq!(vmemory_size(&canister_layout), 0);
@@ -5977,9 +5974,7 @@ fn can_create_and_delete_canister_snapshot() {
             .state_layout()
             .checkpoint_verified(height(1))
             .unwrap()
-            .canister(&canister_test_id(100))
-            .unwrap()
-            .raw_path();
+            .canister_path(&canister_test_id(100));
         assert!(std::fs::metadata(canister_path.clone()).unwrap().is_dir());
 
         // Check the checkpoint has the snapshot.
