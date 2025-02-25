@@ -1118,6 +1118,8 @@ pub(crate) mod tests {
         ClientConfig, DigitallySignedStruct, SignatureScheme,
     };
     use std::convert::Infallible;
+    use std::net::TcpListener;
+    use std::ops::Deref;
     use std::{net::SocketAddr, sync::Arc};
     use tower::ServiceExt;
 
@@ -1446,6 +1448,9 @@ pub(crate) mod tests {
     /// Sets up all the dependencies.
     pub(crate) fn set_up_nns_delegation_dependencies(
         rt_handle: tokio::runtime::Handle,
+        // Optional certificate delegation returned by a mocked NNS node.
+        // None means we will generate a random, valid certificate.
+        override_nns_delegation: Arc<RwLock<Option<CertificateDelegation>>>,
     ) -> (Arc<FakeRegistryClient>, MockTlsConfig) {
         let registry_version = 1;
 
@@ -1493,6 +1498,7 @@ pub(crate) mod tests {
         );
 
         let addr = get_free_localhost_socket_addr();
+        let tcp_listener = TcpListener::bind(addr).unwrap();
 
         let node_record = NodeRecord {
             http: Some(ConnectionEndpoint {
@@ -1539,13 +1545,17 @@ pub(crate) mod tests {
                 let mut time = time.write().unwrap();
                 *time += 1;
 
-                Cbor(HttpReadStateResponse {
-                    certificate: Blob(create_certificate(*time)),
-                })
-                .into_response()
+                let certificate =
+                    if let Some(delegation) = override_nns_delegation.read().unwrap().deref() {
+                        delegation.certificate.clone()
+                    } else {
+                        Blob(create_certificate(*time))
+                    };
+
+                Cbor(HttpReadStateResponse { certificate }).into_response()
             });
 
-            axum_server::bind_rustls(addr, generate_self_signed_cert().await)
+            axum_server::from_tcp_rustls(tcp_listener, generate_self_signed_cert().await)
                 .serve(router.into_make_service())
                 .await
                 .unwrap()
@@ -1603,7 +1613,8 @@ pub(crate) mod tests {
     #[tokio::test]
     async fn load_root_delegation_on_nns_should_return_none_test() {
         let rt_handle = tokio::runtime::Handle::current();
-        let (registry_client, tls_config) = set_up_nns_delegation_dependencies(rt_handle.clone());
+        let (registry_client, tls_config) =
+            set_up_nns_delegation_dependencies(rt_handle.clone(), Arc::new(RwLock::new(None)));
 
         let delegation = load_root_delegation(
             &Config::default(),
@@ -1623,7 +1634,8 @@ pub(crate) mod tests {
     #[tokio::test]
     async fn load_root_delegation_on_non_nns_should_return_some_test() {
         let rt_handle = tokio::runtime::Handle::current();
-        let (registry_client, tls_config) = set_up_nns_delegation_dependencies(rt_handle.clone());
+        let (registry_client, tls_config) =
+            set_up_nns_delegation_dependencies(rt_handle.clone(), Arc::new(RwLock::new(None)));
 
         let delegation = load_root_delegation(
             &Config::default(),
@@ -1636,6 +1648,8 @@ pub(crate) mod tests {
             &DelegationManagerMetrics::new(&MetricsRegistry::new()),
         )
         .await;
+
+        tokio::time::pause();
 
         let delegation = delegation.expect("Should return Some delegation on non NNS subnet");
         let parsed_delegation: Certificate = serde_cbor::from_slice(&delegation.certificate)

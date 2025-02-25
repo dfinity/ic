@@ -122,19 +122,22 @@ impl DelegationManager {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::RwLock;
+
     use ic_crypto_tree_hash::{lookup_path, LabeledTree};
     use ic_logger::no_op_logger;
-    use ic_types::messages::Certificate;
+    use ic_types::messages::{Blob, Certificate};
     use tokio::time::timeout;
 
     use crate::tests::{set_up_nns_delegation_dependencies, NNS_SUBNET_ID, NON_NNS_SUBNET_ID};
 
     use super::*;
 
-    #[tokio::test]
+    #[tokio::test(start_paused = true)]
     async fn load_root_delegation_on_nns_should_return_none_test() {
         let rt_handle = tokio::runtime::Handle::current();
-        let (registry_client, tls_config) = set_up_nns_delegation_dependencies(rt_handle.clone());
+        let (registry_client, tls_config) =
+            set_up_nns_delegation_dependencies(rt_handle.clone(), Arc::new(RwLock::new(None)));
 
         let (_, mut rx) = start_nns_delegation_manager(
             &MetricsRegistry::new(),
@@ -153,10 +156,11 @@ mod tests {
         assert!(rx.borrow().is_none());
     }
 
-    #[tokio::test]
+    #[tokio::test(start_paused = true)]
     async fn load_root_delegation_on_non_nns_should_return_some_test() {
         let rt_handle = tokio::runtime::Handle::current();
-        let (registry_client, tls_config) = set_up_nns_delegation_dependencies(rt_handle.clone());
+        let (registry_client, tls_config) =
+            set_up_nns_delegation_dependencies(rt_handle.clone(), Arc::new(RwLock::new(None)));
 
         let (_, mut rx) = start_nns_delegation_manager(
             &MetricsRegistry::new(),
@@ -187,10 +191,13 @@ mod tests {
         }
     }
 
+    const TIMEOUT_WAIT: Duration = Duration::from_secs(3);
+
     #[tokio::test(start_paused = true)]
     async fn should_not_refresh_if_not_enough_time_passed_test() {
         let rt_handle = tokio::runtime::Handle::current();
-        let (registry_client, tls_config) = set_up_nns_delegation_dependencies(rt_handle.clone());
+        let (registry_client, tls_config) =
+            set_up_nns_delegation_dependencies(rt_handle.clone(), Arc::new(RwLock::new(None)));
 
         let (_, mut rx) = start_nns_delegation_manager(
             &MetricsRegistry::new(),
@@ -211,15 +218,14 @@ mod tests {
         tokio::time::advance(DELEGATION_UPDATE_INTERVAL / 2).await;
         tokio::time::resume();
 
-        assert!(timeout(Duration::from_secs(10), rx.changed())
-            .await
-            .is_err());
+        assert!(timeout(TIMEOUT_WAIT, rx.changed()).await.is_err());
     }
 
     #[tokio::test(start_paused = true)]
     async fn should_refresh_if_enough_time_passed_test() {
         let rt_handle = tokio::runtime::Handle::current();
-        let (registry_client, tls_config) = set_up_nns_delegation_dependencies(rt_handle.clone());
+        let (registry_client, tls_config) =
+            set_up_nns_delegation_dependencies(rt_handle.clone(), Arc::new(RwLock::new(None)));
 
         let (_, mut rx) = start_nns_delegation_manager(
             &MetricsRegistry::new(),
@@ -240,6 +246,48 @@ mod tests {
         tokio::time::advance(DELEGATION_UPDATE_INTERVAL).await;
         tokio::time::resume();
 
-        assert!(timeout(Duration::from_secs(10), rx.changed()).await.is_ok());
+        assert!(timeout(TIMEOUT_WAIT, rx.changed()).await.is_ok());
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn poop_test() {
+        let override_nns_delegation = Arc::new(RwLock::new(None));
+        let rt_handle = tokio::runtime::Handle::current();
+        let (registry_client, tls_config) =
+            set_up_nns_delegation_dependencies(rt_handle.clone(), override_nns_delegation.clone());
+
+        let (_, mut rx) = start_nns_delegation_manager(
+            &MetricsRegistry::new(),
+            Config::default(),
+            no_op_logger(),
+            rt_handle,
+            NON_NNS_SUBNET_ID,
+            NNS_SUBNET_ID,
+            registry_client,
+            Arc::new(tls_config),
+            CancellationToken::new(),
+        );
+
+        // The initial *valid* delegation should be fetched immediatelly.
+        assert!(rx.changed().await.is_ok());
+
+        // Mock an *invalid* certificate delegation.
+        *override_nns_delegation.write().unwrap() = Some(CertificateDelegation {
+            subnet_id: Blob(vec![]),
+            certificate: Blob(vec![]),
+        });
+
+        // Advance enough time to wake up the manager
+        tokio::time::advance(2 * DELEGATION_UPDATE_INTERVAL).await;
+        tokio::time::resume();
+
+        // Since the returned certificate is invalid, we don't expect the manager to return
+        // any new certification.
+        assert!(timeout(TIMEOUT_WAIT, rx.changed()).await.is_err());
+
+        *override_nns_delegation.write().unwrap() = None;
+        // The mocked NNS node should now return a valid certification, so we expect that
+        // the manager will fetch and send it to all receivers.
+        assert!(rx.changed().await.is_ok());
     }
 }
