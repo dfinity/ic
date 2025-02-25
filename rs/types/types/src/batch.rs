@@ -62,7 +62,7 @@ pub struct Batch {
     pub chain_key_subnet_public_keys: BTreeMap<MasterPublicKeyId, MasterPublicKey>,
     /// The pre-signature Ids available to be matched with signature requests.
     pub idkg_pre_signature_ids: BTreeMap<MasterPublicKeyId, BTreeSet<PreSigId>>,
-    /// The NiDKG Ids available to be used for VetKD Public Key responses
+    /// The NiDKG Ids corresponding to available transcripts to be used to answer vetkd requests
     pub ni_dkg_ids: BTreeMap<MasterPublicKeyId, NiDkgId>,
     /// The version of the registry to be referenced when processing the batch.
     pub registry_version: RegistryVersion,

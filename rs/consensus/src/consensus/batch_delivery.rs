@@ -156,8 +156,8 @@ pub fn deliver_batches(
         chain_key_subnet_public_keys.append(&mut idkg_subnet_public_keys);
 
         // Add vetKD keys to this map as well
-        let (mut nidkg_subnet_public_keys, ni_dkg_ids) = get_vetkey_public_keys(dkg_summary, log);
-        chain_key_subnet_public_keys.append(&mut nidkg_subnet_public_keys);
+        let (mut ni_dkg_subnet_public_keys, ni_dkg_ids) = get_vetkey_public_keys(dkg_summary, log);
+        chain_key_subnet_public_keys.append(&mut ni_dkg_subnet_public_keys);
 
         let mut batch_stats = BatchStats::new(height);
 
