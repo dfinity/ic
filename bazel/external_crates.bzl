@@ -465,7 +465,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 features = ["serde"],
             ),
             "evm_rpc_types": crate.spec(
-                version = "^1.2.0",
+                version = "^1.3.0",
             ),
             "exec": crate.spec(
                 version = "^0.3.1",
@@ -588,16 +588,16 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 rev = "7f9e931954637526295269155881207f6c832d6d",
             ),
             "ic-cbor": crate.spec(
-                version = "3.0.2",
+                version = "3.0.3",
             ),
             "ic-cdk": crate.spec(
-                version = "^0.16.0",
+                version = "^0.17.0",
             ),
             "ic-cdk-timers": crate.spec(
                 version = "^0.11.0",
             ),
             "ic-cdk-macros": crate.spec(
-                version = "^0.9.0",
+                version = "^0.17.0",
             ),
             "ic-cdk-macros-next": crate.spec(
                 package = "ic-cdk-macros",
@@ -613,29 +613,29 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.3.1",
             ),
             "ic-certification": crate.spec(
-                version = "3.0.2",
+                version = "3.0.3",
             ),
             "ic-certificate-verification": crate.spec(
-                version = "3.0.2",
+                version = "3.0.3",
             ),
             "ic-http-certification": crate.spec(
-                version = "3.0.2",
+                version = "3.0.3",
             ),
             "ic-http-gateway": crate.spec(
-                version = "0.1.0",
+                version = "0.2.0",
             ),
             "ic-metrics-encoder": crate.spec(
                 version = "^1.1.1",
             ),
             "ic-management-canister-types": crate.spec(
-                version = "0.1.0",
+                version = "0.2.0",
             ),
             "ic_principal": crate.spec(
                 version = "^0.1.1",
                 default_features = False,
             ),
             "ic-response-verification": crate.spec(
-                version = "3.0.2",
+                version = "3.0.3",
             ),
             "ic-sha3": crate.spec(
                 version = "^1.0.0",
@@ -1445,23 +1445,23 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.2",
             ),
             "wasm-encoder": crate.spec(
-                version = "^0.217.0",
+                version = "^0.221.0",
                 features = [
                     "wasmparser",
                 ],
             ),
             "wasm-smith": crate.spec(
-                version = "^0.212.0",
+                version = "^0.221.0",
                 default_features = False,
                 features = [
                     "wasmparser",
                 ],
             ),
             "wasmparser": crate.spec(
-                version = "^0.217.0",
+                version = "^0.221.0",
             ),
             "wasmprinter": crate.spec(
-                version = "^0.217.0",
+                version = "^0.221.0",
             ),
             "wasmtime": crate.spec(
                 version = "^29.0.0",
@@ -1478,10 +1478,10 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^29.0.0",
             ),
             "wast": crate.spec(
-                version = "^212.0.0",
+                version = "^221.0.0",
             ),
             "wat": crate.spec(
-                version = "1.212.0",
+                version = "^1.221.0",
             ),
             "wee_alloc": crate.spec(
                 version = "^0.4.3",

@@ -1,12 +1,8 @@
 ------------ MODULE Refresh_Neuron ------------
 EXTENDS TLC, Sequences, Naturals, FiniteSets, Variants
 
-CONSTANT
-    FRESH_NEURON_ID(_)
-
 CONSTANTS
-    Governance_Account_Ids,
-    Neuron_Ids
+    Governance_Account_Ids
 
 CONSTANTS
     Refresh_Neuron_Process_Ids
@@ -88,12 +84,12 @@ process ( Refresh_Neuron \in Refresh_Neuron_Process_Ids )
 
 }
 *)
-\* BEGIN TRANSLATION (chksum(pcal) = "e3951dde" /\ chksum(tla) = "3003d9f1")
-VARIABLES neuron, neuron_id_by_account, locks, governance_to_ledger, 
-          ledger_to_governance, spawning_neurons, pc, neuron_id
+\* BEGIN TRANSLATION (chksum(pcal) = "e3951dde" /\ chksum(tla) = "d922bb3e")
+VARIABLES pc, neuron, neuron_id_by_account, locks, governance_to_ledger, 
+          ledger_to_governance, spawning_neurons, neuron_id
 
-vars == << neuron, neuron_id_by_account, locks, governance_to_ledger, 
-           ledger_to_governance, spawning_neurons, pc, neuron_id >>
+vars == << pc, neuron, neuron_id_by_account, locks, governance_to_ledger, 
+           ledger_to_governance, spawning_neurons, neuron_id >>
 
 ProcSet == (Refresh_Neuron_Process_Ids)
 

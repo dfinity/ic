@@ -2,6 +2,7 @@ use crate::message_routing::MessageRoutingMetrics;
 
 use super::*;
 use ic_base_types::NumSeconds;
+use ic_config::message_routing::{MAX_STREAM_MESSAGES, TARGET_STREAM_SIZE_BYTES};
 use ic_error_types::RejectCode;
 use ic_management_canister_types_private::Method;
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
@@ -336,9 +337,22 @@ fn build_streams_local_canisters() {
 }
 
 #[test]
-fn build_streams_impl_at_limit_leaves_state_untouched() {
+fn build_streams_impl_at_message_limit_leaves_state_untouched() {
+    build_streams_impl_at_limit_leaves_state_untouched_impl(0, usize::MAX);
+}
+
+#[test]
+fn build_streams_impl_at_memory_limit_leaves_state_untouched() {
+    build_streams_impl_at_limit_leaves_state_untouched_impl(usize::MAX, 0);
+}
+
+fn build_streams_impl_at_limit_leaves_state_untouched_impl(
+    max_stream_messages: usize,
+    target_stream_size_bytes: usize,
+) {
     with_test_replica_logger(|log| {
-        let (stream_builder, mut provided_state, metrics_registry) = new_fixture(&log);
+        let (stream_builder, mut provided_state, metrics_registry) =
+            new_fixture_with_limits(&log, max_stream_messages, target_stream_size_bytes);
         provided_state.metadata.network_topology.routing_table = Arc::new(RoutingTable::try_from(
             btreemap! {
                 CanisterIdRange{ start: CanisterId::from(0), end: CanisterId::from(0xfff) } => REMOTE_SUBNET,
@@ -360,10 +374,7 @@ fn build_streams_impl_at_limit_leaves_state_untouched() {
         let expected_state = provided_state.clone();
 
         // Act.
-        let result_state = stream_builder.build_streams_impl(provided_state.clone(), usize::MAX, 0);
-        assert_eq!(result_state, expected_state);
-
-        let result_state = stream_builder.build_streams_impl(provided_state, 0, usize::MAX);
+        let result_state = stream_builder.build_streams_impl(provided_state.clone());
         assert_eq!(result_state, expected_state);
 
         assert_eq!(
@@ -413,17 +424,25 @@ fn build_streams_impl_respects_limits(
     expected_messages: u64,
 ) {
     with_test_replica_logger(|log| {
-        let (stream_builder, mut provided_state, metrics_registry) = new_fixture(&log);
+        let msgs = generate_messages_for_test(/* senders = */ 2, /* receivers = */ 2);
+        let msg_count = msgs.len();
+        // All messages returned by `generate_messages_for_test` are of the same size
+        let msg_size = msgs.first().unwrap().count_bytes() as u64;
+
+        // Target stream size: stream struct plus `max_stream_messages_by_byte_size - 1`
+        // messages plus 1 byte. Since this is a target / soft limit, it should ensure
+        // that exactly `max_stream_messages_by_byte_size` messages (or
+        // `max_stream_messages_by_byte_size * msg_size` bytes) are routed.
+        let target_stream_size_bytes =
+            size_of::<Stream>() + (max_stream_messages_by_byte_size - 1) * msg_size as usize + 1;
+
+        let (stream_builder, mut provided_state, metrics_registry) =
+            new_fixture_with_limits(&log, max_stream_messages, target_stream_size_bytes);
         provided_state.metadata.network_topology.routing_table = Arc::new(RoutingTable::try_from(
             btreemap! {
                 CanisterIdRange{ start: CanisterId::from(0), end: CanisterId::from(0xfff) } => REMOTE_SUBNET,
             },
         ).unwrap());
-
-        let msgs = generate_messages_for_test(/* senders = */ 2, /* receivers = */ 2);
-        let msg_count = msgs.len();
-        // All messages returned by `generate_messages_for_test` are of the same size
-        let msg_size = msgs.first().unwrap().count_bytes() as u64;
 
         assert!(
             msg_count > expected_messages as usize,
@@ -459,19 +478,8 @@ fn build_streams_impl_respects_limits(
             streams.insert(REMOTE_SUBNET, expected_stream);
         });
 
-        // Target stream size: stream struct plus `max_stream_messages_by_byte_size - 1`
-        // messages plus 1 byte. Since this is a target / soft limit, it should ensure
-        // that exactly `max_stream_messages_by_byte_size` messages (or
-        // `max_stream_messages_by_byte_size * msg_size` bytes) are routed.
-        let target_stream_size_bytes =
-            size_of::<Stream>() + (max_stream_messages_by_byte_size - 1) * msg_size as usize + 1;
-
         // Act.
-        let result_state = stream_builder.build_streams_impl(
-            provided_state,
-            max_stream_messages,
-            target_stream_size_bytes,
-        );
+        let result_state = stream_builder.build_streams_impl(provided_state);
 
         assert_eq!(expected_state.canister_states, result_state.canister_states);
         assert_eq!(expected_state.metadata, result_state.metadata);
@@ -998,13 +1006,19 @@ fn build_streams_with_oversized_payloads() {
 }
 
 /// Sets up the `StreamHandlerImpl`, `ReplicatedState` and `MetricsRegistry` to
-/// be used by a test.
-fn new_fixture(log: &ReplicaLogger) -> (StreamBuilderImpl, ReplicatedState, MetricsRegistry) {
+/// be used by a test using specific stream limits.
+fn new_fixture_with_limits(
+    log: &ReplicaLogger,
+    max_stream_messages: usize,
+    target_stream_size_bytes: usize,
+) -> (StreamBuilderImpl, ReplicatedState, MetricsRegistry) {
     let mut state = ReplicatedState::new(LOCAL_SUBNET, SubnetType::Application);
     state.metadata.batch_time = Time::from_nanos_since_unix_epoch(5);
     let metrics_registry = MetricsRegistry::new();
     let stream_builder = StreamBuilderImpl::new(
         LOCAL_SUBNET,
+        max_stream_messages,
+        target_stream_size_bytes,
         &metrics_registry,
         &MessageRoutingMetrics::new(&metrics_registry),
         Arc::new(Mutex::new(LatencyMetrics::new_time_in_stream(
@@ -1015,6 +1029,12 @@ fn new_fixture(log: &ReplicaLogger) -> (StreamBuilderImpl, ReplicatedState, Metr
     );
 
     (stream_builder, state, metrics_registry)
+}
+
+/// Sets up the `StreamHandlerImpl`, `ReplicatedState` and `MetricsRegistry` to
+/// be used by a test using default stream limits.
+fn new_fixture(log: &ReplicaLogger) -> (StreamBuilderImpl, ReplicatedState, MetricsRegistry) {
+    new_fixture_with_limits(log, MAX_STREAM_MESSAGES, TARGET_STREAM_SIZE_BYTES)
 }
 
 /// Simulates routing the given requests into a `StreamIndexedQueue` with the

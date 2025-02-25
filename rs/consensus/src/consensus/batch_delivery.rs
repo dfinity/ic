@@ -9,6 +9,7 @@ use crate::{
     },
     idkg::utils::{get_idkg_subnet_public_keys, get_pre_signature_ids_to_deliver},
 };
+use ic_consensus_dkg::get_vetkey_public_keys;
 use ic_consensus_utils::{
     crypto_hashable_to_seed, membership::Membership, pool_reader::PoolReader,
 };
@@ -135,20 +136,29 @@ pub fn deliver_batches(
 
         let randomness = Randomness::from(crypto_hashable_to_seed(&tape));
 
-        // TODO(CON-1419): Add vetKD keys to this map as well
-        let chain_key_subnet_public_keys = match get_idkg_subnet_public_keys(&block, pool, log) {
-            Ok(keys) => keys,
-            Err(e) => {
-                // Do not deliver batch if we can't find a previous summary block,
-                // this means we should continue with the latest CUP.
-                warn!(
-                    every_n_seconds => 5,
-                    log,
-                    "Do not deliver height {:?}: {}", height, e
-                );
-                return Ok(last_delivered_batch_height);
-            }
+        // Retrieve the dkg summary block
+        let Some(summary_block) = pool.dkg_summary_block_for_finalized_height(height) else {
+            warn!(
+                every_n_seconds => 30,
+                log,
+                "Do not deliver height {} because no summary block was found. \
+                Finalized height: {}",
+                height,
+                finalized_height
+            );
+            break;
         };
+        let dkg_summary = &summary_block.payload.as_ref().as_summary().dkg;
+
+        let mut chain_key_subnet_public_keys = BTreeMap::new();
+        let mut idkg_subnet_public_keys =
+            get_idkg_subnet_public_keys(&block, &summary_block, pool, log);
+        chain_key_subnet_public_keys.append(&mut idkg_subnet_public_keys);
+
+        // Add vetKD keys to this map as well
+        // TODO(CON-1420: Deliver the ni_dkg_ids to the batch as well)
+        let (mut nidkg_subnet_public_keys, _ni_dkg_ids) = get_vetkey_public_keys(dkg_summary, log);
+        chain_key_subnet_public_keys.append(&mut nidkg_subnet_public_keys);
 
         let mut batch_stats = BatchStats::new(height);
 
@@ -205,18 +215,6 @@ pub fn deliver_batches(
             failed_blockmakers: blockmaker_ranking[0..(block.rank.0 as usize)].to_vec(),
         };
 
-        let Some(summary_block) = pool.dkg_summary_block_for_finalized_height(height) else {
-            warn!(
-                every_n_seconds => 30,
-                log,
-                "Do not deliver height {} because no summary block was found. \
-                Finalized height: {}",
-                height,
-                finalized_height
-            );
-            break;
-        };
-        let dkg_summary = &summary_block.payload.as_ref().as_summary().dkg;
         let next_checkpoint_height = dkg_summary.get_next_start_height();
         let current_interval_length = dkg_summary.interval_length;
         let batch = Batch {

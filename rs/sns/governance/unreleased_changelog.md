@@ -9,18 +9,40 @@ on the process that this file is part of, see
 
 ## Added
 
-The concept of topics has now been introduced to the SNS. This means that when custom function is added via an `AddGenericNervousSystemFunction` proposal, a topic can be specified for that custom function. This can be used for organizing the following page, and could be used for more in the future.
-
-A `list_topics` API has been added, which returns a list of topics and all the functions categorized in those topics. 
-
 ## Changed
 
-The new `topic` field is required when submitting an `AddGenericNervousSystemFunction` proposal.
+* Enable
+[automatic target version advancement](https://forum.dfinity.org/t/proposal-opt-in-mechanism-for-automatic-sns-target-version-advancement/39874)
+for newly deployed SNSs. To opt out, please submit a `ManageNervousSystemParameters` proposal, e.g.:
+
+    ```bash
+    dfx canister --ic call ${SNS_GOVERNANCE_CANISTER_ID} manage_neuron '(
+        record {
+            subaccount = blob "'${PROPOSER_SNS_NEURON_SUBACCOUNT}'";
+            command = opt variant {
+                MakeProposal = record {
+                    url = "https://forum.dfinity.org/t/proposal-opt-in-mechanism-for-automatic-sns-target-version-advancement";
+                    title = "Opt out from automatic advancement of SNS target versions";
+                    action = opt variant {
+                        ManageNervousSystemParameters = record {
+                            automatically_advance_target_version = opt false;
+                        }
+                    };
+                    summary = "Disable automatically advancing the target version \
+                            of this SNS to have full control over the delivery of SNS framework \
+                            upgrades blessed by the NNS.";
+                }
+            };
+        },
+    )'
+    ```
 
 ## Deprecated
 
 ## Removed
 
 ## Fixed
+
+`ManageNervousSystemParameters` proposals now enforce that at least one field is set.
 
 ## Security

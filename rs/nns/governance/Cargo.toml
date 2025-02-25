@@ -55,6 +55,7 @@ ic-nervous-system-root = { path = "../../nervous_system/root" }
 ic-nervous-system-runtime = { path = "../../nervous_system/runtime" }
 ic-nervous-system-proto = { path = "../../nervous_system/proto" }
 ic-nervous-system-temporary = { path = "../../nervous_system/temporary" }
+ic-nervous-system-time-helpers = { path = "../../nervous_system/time_helpers" }
 ic-neurons-fund = { path = "../../nervous_system/neurons_fund" }
 ic-nns-common = { path = "../common" }
 ic-nns-constants = { path = "../constants" }

@@ -9,7 +9,7 @@ on the process that this file is part of, see
 
 ## Added
 
-* Added the `query_stats` field for the `canister_status` method.
+## Changed
 
 ## Deprecated
 
