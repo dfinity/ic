@@ -4,7 +4,7 @@ use dfn_candid::{candid, candid_one, CandidOne};
 use dfn_core::BytesS;
 use dfn_core::{
     endpoint::reject_on_decode_error::{over, over_async, over_async_may_reject},
-    over_init, printer, setup,
+    over_init,
 };
 use dfn_protobuf::protobuf;
 use ic_base_types::{CanisterId, PrincipalId};
@@ -917,9 +917,6 @@ fn post_upgrade_() {
 #[export_name = "canister_pre_upgrade"]
 fn pre_upgrade() {
     let start = instruction_counter();
-    setup::START.call_once(|| {
-        printer::hook();
-    });
 
     let ledger = LEDGER
         .read()
@@ -928,7 +925,7 @@ fn pre_upgrade() {
     if !is_ready() {
         // This means that migration did not complete and the correct state
         // of the ledger is still in UPGRADES_MEMORY.
-        print!("Ledger not ready, skipping write to UPGRADES_MEMORY.");
+        print("Ledger not ready, skipping write to UPGRADES_MEMORY.");
         return;
     }
     UPGRADES_MEMORY.with_borrow_mut(|bs| {
