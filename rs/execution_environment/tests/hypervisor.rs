@@ -30,7 +30,7 @@ use ic_test_utilities_execution_environment::{
     get_reply, wasm_compilation_cost, wat_compilation_cost, ExecutionTest, ExecutionTestBuilder,
 };
 use ic_test_utilities_metrics::{
-    fetch_histogram_stats, fetch_histogram_vec_stats, fetch_int_counter, metric_vec, HistogramStats,
+    fetch_histogram_vec_stats, fetch_int_counter, metric_vec, HistogramStats,
 };
 use ic_types::messages::{
     CanisterMessage, CanisterTask, MAX_INTER_CANISTER_PAYLOAD_IN_BYTES, NO_DEADLINE,
@@ -3203,6 +3203,7 @@ fn query_stable_memory_metrics_are_recorded() {
 #[test]
 #[cfg(not(all(target_arch = "aarch64", target_vendor = "apple")))]
 fn active_pages_metric_is_observable() {
+    use ic_test_utilities_metrics::fetch_histogram_stats;
     let mut env = ExecutionTestBuilder::new().build();
     let wat = r#"
         (module
