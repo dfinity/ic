@@ -13,7 +13,7 @@ use ic_nervous_system_integration_tests::pocket_ic_helpers::{
     sns::{
         self,
         governance::{
-            propose_to_set_automatically_advance_target_version, redact_human_readable,
+            redact_human_readable, set_automatically_advance_target_version_flag,
             EXPECTED_UPGRADE_DURATION_MAX_SECONDS, EXPECTED_UPGRADE_STEPS_REFRESH_MAX_SECONDS,
         },
     },
@@ -74,6 +74,12 @@ async fn test_custom_upgrade_path_for_sns_no_auto() {
 /// Normal path: (Deployed) ---> +root (broken) ---> +root (fixed)  ---> +ledger ---> +swap (Last)
 ///                        \                                                   /
 /// Custom path:             ------> +ledger ------> +root (fixed) -----------
+///
+/// Note that only Wasms published via `NnsFunction::AddSnsWasm` can be referred to from the custom
+/// upgrade path, which leaves us with only two possible customizations:
+/// 1. Hop over some upgrade.
+/// 2. Switch the order of upgrades.
+/// We use this fairly complex custom upgrade path in this test to illustrate both of these cases.
 async fn test_custom_upgrade_path_for_sns(automatically_advance_target_version: bool) {
     let pocket_ic = PocketIcBuilder::new()
         .with_nns_subnet()
@@ -83,7 +89,7 @@ async fn test_custom_upgrade_path_for_sns(automatically_advance_target_version: 
 
     // Step 0: Prepare the world.
 
-    // Step 0.0: Install the (master) NNS canisters.
+    // Step 0.0: Install the NNS WASMs built from the working copy.
     let with_mainnet_nns_canisters = false;
     install_nns_canisters(&pocket_ic, vec![], with_mainnet_nns_canisters, None, vec![]).await;
     let (pocket_ic_agent, nns_neuron_id) = nns_agent(&pocket_ic);
@@ -120,11 +126,12 @@ async fn test_custom_upgrade_path_for_sns(automatically_advance_target_version: 
             swap_parameters,
         )
         .await;
+
         sns
     };
 
     // Step 0.3
-    propose_to_set_automatically_advance_target_version(
+    set_automatically_advance_target_version_flag(
         &pocket_ic,
         sns.governance.canister_id,
         automatically_advance_target_version,

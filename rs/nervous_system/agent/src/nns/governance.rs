@@ -57,9 +57,9 @@ pub async fn make_proposal<C: CallCanisters>(
     })
 }
 
-fn sns_canister_str(sns_canister_type: i32) -> &'static str {
+fn sns_canister_type_code_to_name(sns_canister_type: i32) -> &str {
     let Ok(sns_canister_type) = SnsCanisterType::try_from(sns_canister_type) else {
-        return "Unknown";
+        return &format!("Unknown ({})", sns_canister_type);
     };
     match sns_canister_type {
         SnsCanisterType::Unspecified => "Unspecified",
@@ -89,7 +89,7 @@ pub async fn add_sns_wasm<C: CallCanisters>(
         title: Some("Add SNS Wasm".into()),
         summary: format!(
             "Add SNS Wasm (+ {}; module hash {})",
-            sns_canister_str(wasm.canister_type),
+            sns_canister_type_code_to_name(wasm.canister_type),
             format_full_hash(&hash),
         ),
         url: url.to_string(),

@@ -189,6 +189,7 @@ rust_test_suite_with_extra_srcs(
             "tests/sns_release_qualification_legacy.rs",
             "tests/sns_upgrade_test_utils_legacy.rs",
             "tests/upgrade_sns_controlled_canister_with_large_wasm.rs",
+            "tests/custom_upgrade_path.rs",
         ],
     ),
     aliases = ALIASES,
@@ -317,7 +318,7 @@ rust_test(
     aliases = ALIASES,
     data = DEV_DATA,
     env = DEV_ENV | {"RUST_TEST_NOCAPTURE": "1"},
-    flaky = True,
+    flaky = False,
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     tags = [
         "cpu:4",
