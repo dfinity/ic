@@ -4866,7 +4866,7 @@ pub fn test_cycles_for_archive_creation_no_overwrite_of_none_in_upgrade<T>(
 }
 
 pub fn test_cycles_for_archive_creation_default_spawns_archive<T>(
-    ledger_wasm_current_lowinstructionlimits: Vec<u8>,
+    ledger_wasm: Vec<u8>,
     encode_init_args: fn(InitArgs) -> T,
 ) where
     T: CandidType,
@@ -4898,12 +4898,7 @@ pub fn test_cycles_for_archive_creation_default_spawns_archive<T>(
     let args = encode_init_args(args_with_null_cycles);
     let args = Encode!(&args).unwrap();
     let canister_id = env
-        .install_canister_with_cycles(
-            ledger_wasm_current_lowinstructionlimits,
-            args,
-            None,
-            Cycles::new(100_000_000_000_000),
-        )
+        .install_canister_with_cycles(ledger_wasm, args, None, Cycles::new(100_000_000_000_000))
         .unwrap();
 
     const TRANSFER_AMOUNT: u64 = 100;
