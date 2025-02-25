@@ -13,7 +13,7 @@ fn increase_counter(name: &'static str) {
 }
 
 thread_local! {
-    static COUNTERS : RefCell<BTreeMap<String, u64>> = RefCell::new(BTreeMap::new());
+    static COUNTERS : RefCell<BTreeMap<String, u64>> = const { RefCell::new(BTreeMap::new()) };
 }
 
 fn schedule(name: &str) {

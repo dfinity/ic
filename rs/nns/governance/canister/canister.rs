@@ -10,7 +10,7 @@ use ic_nervous_system_common::{
     memory_manager_upgrade_storage::{load_protobuf, store_protobuf},
     serve_metrics,
 };
-use ic_nervous_system_runtime::{CdkRuntime, Runtime};
+use ic_nervous_system_runtime::CdkRuntime;
 use ic_nervous_system_time_helpers::now_seconds;
 use ic_nns_common::{
     access_control::{check_caller_is_gtc, check_caller_is_ledger},
@@ -28,8 +28,8 @@ use ic_nns_governance::{
     is_prune_following_enabled,
     neuron_data_validation::NeuronDataValidationSummary,
     pb::v1::{self as gov_pb, Governance as InternalGovernanceProto},
-    recurring_tasks::schedule_tasks,
     storage::{grow_upgrades_memory_to, validate_stable_storage, with_upgrades_memory},
+    timer_tasks::schedule_tasks,
 };
 use ic_nns_governance_api::pb::v1::{
     claim_or_refresh_neuron_from_account_response::Result as ClaimOrRefreshNeuronFromAccountResponseResult,
@@ -84,7 +84,6 @@ fn schedule_timers() {
     schedule_tasks();
 }
 
-const RETRY_SEEDING_INTERVAL: Duration = Duration::from_secs(30);
 const PRUNE_FOLLOWING_INTERVAL: Duration = Duration::from_secs(10);
 
 // Once this amount of instructions is used by the
