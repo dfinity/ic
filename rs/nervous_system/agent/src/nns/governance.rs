@@ -57,18 +57,18 @@ pub async fn make_proposal<C: CallCanisters>(
     })
 }
 
-fn sns_canister_type_code_to_name(sns_canister_type: i32) -> &str {
+fn sns_canister_type_code_to_name(sns_canister_type: i32) -> String {
     let Ok(sns_canister_type) = SnsCanisterType::try_from(sns_canister_type) else {
-        return &format!("Unknown ({})", sns_canister_type);
+        return format!("Unknown ({})", sns_canister_type);
     };
     match sns_canister_type {
-        SnsCanisterType::Unspecified => "Unspecified",
-        SnsCanisterType::Root => "Root",
-        SnsCanisterType::Governance => "Governance",
-        SnsCanisterType::Swap => "Swap",
-        SnsCanisterType::Index => "Index",
-        SnsCanisterType::Ledger => "Ledger",
-        SnsCanisterType::Archive => "Archive",
+        SnsCanisterType::Unspecified => "Unspecified".to_string(),
+        SnsCanisterType::Root => "Root".to_string(),
+        SnsCanisterType::Governance => "Governance".to_string(),
+        SnsCanisterType::Swap => "Swap".to_string(),
+        SnsCanisterType::Index => "Index".to_string(),
+        SnsCanisterType::Ledger => "Ledger".to_string(),
+        SnsCanisterType::Archive => "Archive".to_string(),
     }
 }
 

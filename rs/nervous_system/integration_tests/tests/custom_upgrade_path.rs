@@ -79,6 +79,7 @@ async fn test_custom_upgrade_path_for_sns_no_auto() {
 /// upgrade path, which leaves us with only two possible customizations:
 /// 1. Hop over some upgrade.
 /// 2. Switch the order of upgrades.
+///
 /// We use this fairly complex custom upgrade path in this test to illustrate both of these cases.
 async fn test_custom_upgrade_path_for_sns(automatically_advance_target_version: bool) {
     let pocket_ic = PocketIcBuilder::new()
