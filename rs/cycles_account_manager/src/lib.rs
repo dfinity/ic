@@ -757,16 +757,15 @@ impl CyclesAccountManager {
         reveal_top_up: bool,
     ) -> Result<Vec<(CyclesUseCase, Cycles)>, CanisterOutOfCyclesError> {
         // The total amount charged consists of:
-        //   - the fee to do the xnet call (request + response)
-        //   - the fee to send the request (by size)
-        //   - the fee for the largest possible response
-        //   - the fee for executing the largest allowed response when it eventually arrives.
-        let transmission_fee = self.scale_cost(
-            self.config.xnet_call_fee
-                + self.config.xnet_byte_transmission_fee * request.payload_size_bytes().get(),
+        // the fee to do the xnet call (request + response),
+        // the fee to send the request (by size),
+        // the fee for the largest possible response,
+        let transmission_fee = self.xnet_total_transmission_fee(
+            request.payload_size_bytes(),
             subnet_size,
-        ) + prepayment_for_response_transmission;
-
+            prepayment_for_response_transmission,
+        );
+        // and the fee for executing the largest allowed response when it eventually arrives.
         let fee = transmission_fee + prepayment_for_response_execution;
 
         self.withdraw_with_threshold(
@@ -795,6 +794,40 @@ impl CyclesAccountManager {
                 transmission_fee,
             ),
         ]))
+    }
+
+    /// The total amount for an xnet call transmission. Includes response transmission, but
+    /// excludes the response execution.
+    pub fn xnet_total_transmission_fee(
+        &self,
+        payload_size: NumBytes,
+        subnet_size: usize,
+        prepayment_for_response_transmission: Cycles,
+    ) -> Cycles {
+        self.xnet_call_performed_fee(subnet_size)
+            + self.xnet_call_bytes_transmitted_fee(payload_size, subnet_size)
+            + prepayment_for_response_transmission
+    }
+
+    /// The total fee for an xnet call, including payload size, transmission (both ways)
+    /// and the reservation for the response execution. Corresponds to the amount of
+    /// cycles above the freezing threshold a canister must be for ic0.call_perform to
+    /// succeed.
+    pub fn xnet_call_total_fee(
+        &self,
+        payload_size: NumBytes,
+        execution_mode: WasmExecutionMode,
+    ) -> Cycles {
+        let subnet_size = self.config.reference_subnet_size;
+        let prepayment_for_response_transmission =
+            self.prepayment_for_response_transmission(subnet_size);
+        let prepayment_for_response_execution =
+            self.prepayment_for_response_execution(subnet_size, execution_mode);
+        self.xnet_total_transmission_fee(
+            payload_size,
+            subnet_size,
+            prepayment_for_response_transmission,
+        ) + prepayment_for_response_execution
     }
 
     /// Returns the amount of cycles required for executing the longest-running

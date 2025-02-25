@@ -9008,7 +9008,6 @@ dependencies = [
  "candid",
  "candid_parser",
  "ciborium",
- "dfn_core",
  "ic-base-types",
  "ic-canister-log 0.2.0",
  "ic-canisters-http-types",
@@ -10375,6 +10374,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-nervous-system-time-helpers"
+version = "0.9.0"
+dependencies = [
+ "ic-cdk 0.17.1",
+]
+
+[[package]]
 name = "ic-nervous-system-timestamp"
 version = "0.0.1"
 dependencies = [
@@ -10522,6 +10528,7 @@ dependencies = [
  "ic-nervous-system-root",
  "ic-nervous-system-runtime",
  "ic-nervous-system-temporary",
+ "ic-nervous-system-time-helpers",
  "ic-neurons-fund",
  "ic-nns-common",
  "ic-nns-constants",

@@ -10,9 +10,12 @@ use ic_error_types::{ErrorCode, RejectCode};
 use ic_interfaces::execution_environment::{HypervisorError, SubnetAvailableMemory};
 use ic_management_canister_types_private::{
     CanisterChange, CanisterHttpResponsePayload, CanisterStatusType, CanisterUpgradeOptions,
+    EcdsaCurve, EcdsaKeyId, MasterPublicKeyId, SchnorrAlgorithm, SchnorrKeyId, VetKdCurve,
+    VetKdKeyId,
 };
 use ic_nns_constants::CYCLES_MINTING_CANISTER_ID;
 use ic_registry_subnet_type::SubnetType;
+use ic_replicated_state::canister_state::execution_state::WasmExecutionMode;
 use ic_replicated_state::canister_state::{NextExecution, WASM_PAGE_SIZE_IN_BYTES};
 use ic_replicated_state::testing::{CanisterQueuesTesting, SystemStateTesting};
 use ic_replicated_state::{
@@ -8152,4 +8155,311 @@ fn wasm64_correct_execution_state() {
 #[test]
 fn wasm32_correct_execution_state() {
     check_correct_execution_state(false);
+}
+
+#[test]
+fn invoke_cost_call() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let canister_id = test.universal_canister().unwrap();
+    let method_name = "inc";
+    let argument = vec![42; 2000];
+    let payload = wasm()
+        .cost_call(method_name.len() as u64, argument.len() as u64)
+        .reply_data_append()
+        .reply()
+        .build();
+    let res = test.ingress(canister_id, "update", payload);
+    let expected_cost = test.cycles_account_manager().xnet_call_total_fee(
+        (method_name.len() as u64 + argument.len() as u64).into(),
+        WasmExecutionMode::Wasm32,
+    );
+    let Ok(WasmResult::Reply(bytes)) = res else {
+        panic!("Expected reply, got {:?}", res);
+    };
+    let actual_cost = Cycles::from(&bytes);
+    assert_eq!(actual_cost, expected_cost,);
+}
+
+#[test]
+fn invoke_cost_create_canister() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let subnet_size = test.subnet_size();
+    let canister_id = test.universal_canister().unwrap();
+    let payload = wasm()
+        .cost_create_canister()
+        .reply_data_append()
+        .reply()
+        .build();
+    let res = test.ingress(canister_id, "update", payload);
+    let expected_cost = test
+        .cycles_account_manager()
+        .canister_creation_fee(subnet_size);
+    let Ok(WasmResult::Reply(bytes)) = res else {
+        panic!("Expected reply, got {:?}", res);
+    };
+    let actual_cost = Cycles::from(&bytes);
+    assert_eq!(actual_cost, expected_cost,);
+}
+
+#[test]
+fn invoke_cost_http_request() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let subnet_size = test.subnet_size();
+    let canister_id = test.universal_canister().unwrap();
+    let request_size = 1000;
+    let max_res_bytes = 1_800_000;
+    let payload = wasm()
+        .cost_http_request(request_size, max_res_bytes)
+        .reply_data_append()
+        .reply()
+        .build();
+    let res = test.ingress(canister_id, "update", payload);
+    let expected_cost = test.cycles_account_manager().http_request_fee(
+        request_size.into(),
+        Some(max_res_bytes.into()),
+        subnet_size,
+    );
+    let Ok(WasmResult::Reply(bytes)) = res else {
+        panic!("Expected reply, got {:?}", res);
+    };
+    let actual_cost = Cycles::from(&bytes);
+    assert_eq!(actual_cost, expected_cost,);
+}
+
+#[test]
+fn invoke_cost_sign_with_ecdsa() {
+    let key_name = String::from("testkey");
+    let curve_variant = 0;
+    let mut test = ExecutionTestBuilder::new()
+        .with_chain_key(MasterPublicKeyId::Ecdsa(EcdsaKeyId {
+            curve: EcdsaCurve::try_from(curve_variant).unwrap(),
+            name: key_name.clone(),
+        }))
+        .build();
+    let subnet_size = test.subnet_size();
+    let canister_id = test.universal_canister().unwrap();
+    let payload = wasm()
+        .cost_sign_with_ecdsa(key_name.as_bytes(), curve_variant)
+        .reply_data_append()
+        .reply()
+        .build();
+    let res = test.ingress(canister_id, "update", payload);
+    let expected_cost = test
+        .cycles_account_manager()
+        .ecdsa_signature_fee(subnet_size);
+    let Ok(WasmResult::Reply(bytes)) = res else {
+        panic!("Expected reply, got {:?}", res);
+    };
+    let actual_cost = Cycles::from(&bytes);
+    assert_eq!(actual_cost, expected_cost,);
+}
+
+#[test]
+fn cost_sign_with_ecdsa_fails_bad_curve() {
+    let key_name = String::from("testkey");
+    let curve_variant = 0;
+    let mut test = ExecutionTestBuilder::new()
+        .with_chain_key(MasterPublicKeyId::Ecdsa(EcdsaKeyId {
+            curve: EcdsaCurve::try_from(curve_variant).unwrap(),
+            name: key_name.clone(),
+        }))
+        .build();
+    let canister_id = test.universal_canister().unwrap();
+    let payload = wasm()
+        .cost_sign_with_ecdsa(key_name.as_bytes(), curve_variant + 10)
+        .reply_data_append()
+        .reply()
+        .build();
+    let res = test.ingress(canister_id, "update", payload);
+    let Err(err) = res else {
+        panic!("Expected Err, got Ok");
+    };
+    err.assert_contains(
+        ErrorCode::CanisterCalledTrap,
+        "ic0.cost_sign_with_ecdsa failed with error code 1",
+    );
+}
+
+#[test]
+fn cost_sign_with_ecdsa_fails_bad_key_name() {
+    let key_name = String::from("testkey");
+    let curve_variant = 0;
+    let mut test = ExecutionTestBuilder::new()
+        .with_chain_key(MasterPublicKeyId::Ecdsa(EcdsaKeyId {
+            curve: EcdsaCurve::try_from(curve_variant).unwrap(),
+            name: key_name.clone(),
+        }))
+        .build();
+    let canister_id = test.universal_canister().unwrap();
+    let payload = wasm()
+        .cost_sign_with_ecdsa(String::from("yesn't").as_bytes(), curve_variant)
+        .reply_data_append()
+        .reply()
+        .build();
+    let res = test.ingress(canister_id, "update", payload);
+    let Err(err) = res else {
+        panic!("Expected Err, got Ok");
+    };
+    err.assert_contains(
+        ErrorCode::CanisterCalledTrap,
+        "ic0.cost_sign_with_ecdsa failed with error code 2",
+    );
+}
+
+#[test]
+fn invoke_cost_sign_with_schnorr() {
+    let key_name = String::from("testkey");
+    let algorithm_variant = 0;
+    let mut test = ExecutionTestBuilder::new()
+        .with_chain_key(MasterPublicKeyId::Schnorr(SchnorrKeyId {
+            algorithm: SchnorrAlgorithm::try_from(algorithm_variant).unwrap(),
+            name: key_name.clone(),
+        }))
+        .build();
+    let subnet_size = test.subnet_size();
+    let canister_id = test.universal_canister().unwrap();
+    let payload = wasm()
+        .cost_sign_with_schnorr(key_name.as_bytes(), algorithm_variant)
+        .reply_data_append()
+        .reply()
+        .build();
+    let res = test.ingress(canister_id, "update", payload);
+    let expected_cost = test
+        .cycles_account_manager()
+        .schnorr_signature_fee(subnet_size);
+    let Ok(WasmResult::Reply(bytes)) = res else {
+        panic!("Expected reply, got {:?}", res);
+    };
+    let actual_cost = Cycles::from(&bytes);
+    assert_eq!(actual_cost, expected_cost,);
+}
+
+#[test]
+fn cost_sign_with_schnorr_fails_bad_curve() {
+    let key_name = String::from("testkey");
+    let algorithm_variant = 0;
+    let mut test = ExecutionTestBuilder::new()
+        .with_chain_key(MasterPublicKeyId::Schnorr(SchnorrKeyId {
+            algorithm: SchnorrAlgorithm::try_from(algorithm_variant).unwrap(),
+            name: key_name.clone(),
+        }))
+        .build();
+    let canister_id = test.universal_canister().unwrap();
+    let payload = wasm()
+        .cost_sign_with_schnorr(key_name.as_bytes(), algorithm_variant + 10)
+        .reply_data_append()
+        .reply()
+        .build();
+    let res = test.ingress(canister_id, "update", payload);
+    let Err(err) = res else {
+        panic!("Expected Err, got Ok");
+    };
+    err.assert_contains(
+        ErrorCode::CanisterCalledTrap,
+        "ic0.cost_sign_with_schnorr failed with error code 1",
+    );
+}
+
+#[test]
+fn cost_sign_with_schnorr_fails_bad_key_name() {
+    let key_name = String::from("testkey");
+    let algorithm_variant = 0;
+    let mut test = ExecutionTestBuilder::new()
+        .with_chain_key(MasterPublicKeyId::Schnorr(SchnorrKeyId {
+            algorithm: SchnorrAlgorithm::try_from(algorithm_variant).unwrap(),
+            name: key_name.clone(),
+        }))
+        .build();
+    let canister_id = test.universal_canister().unwrap();
+    let payload = wasm()
+        .cost_sign_with_schnorr(String::from("yesn't").as_bytes(), algorithm_variant)
+        .reply_data_append()
+        .reply()
+        .build();
+    let res = test.ingress(canister_id, "update", payload);
+    let Err(err) = res else {
+        panic!("Expected Err, got Ok");
+    };
+    err.assert_contains(
+        ErrorCode::CanisterCalledTrap,
+        "ic0.cost_sign_with_schnorr failed with error code 2",
+    );
+}
+
+#[test]
+fn invoke_cost_vetkd_derive_encrypted_key() {
+    let key_name = String::from("testkey");
+    let curve_variant = 0;
+    let mut test = ExecutionTestBuilder::new()
+        .with_chain_key(MasterPublicKeyId::VetKd(VetKdKeyId {
+            curve: VetKdCurve::try_from(curve_variant).unwrap(),
+            name: key_name.clone(),
+        }))
+        .build();
+    let subnet_size = test.subnet_size();
+    let canister_id = test.universal_canister().unwrap();
+    let payload = wasm()
+        .cost_vetkd_derive_encrypted_key(key_name.as_bytes(), curve_variant)
+        .reply_data_append()
+        .reply()
+        .build();
+    let res = test.ingress(canister_id, "update", payload);
+    let expected_cost = test.cycles_account_manager().vetkd_fee(subnet_size);
+    let Ok(WasmResult::Reply(bytes)) = res else {
+        panic!("Expected reply, got {:?}", res);
+    };
+    let actual_cost = Cycles::from(&bytes);
+    assert_eq!(actual_cost, expected_cost,);
+}
+
+#[test]
+fn cost_vetkd_derive_encrypted_key_fails_bad_curve() {
+    let key_name = String::from("testkey");
+    let curve_variant = 0;
+    let mut test = ExecutionTestBuilder::new()
+        .with_chain_key(MasterPublicKeyId::VetKd(VetKdKeyId {
+            curve: VetKdCurve::try_from(curve_variant).unwrap(),
+            name: key_name.clone(),
+        }))
+        .build();
+    let canister_id = test.universal_canister().unwrap();
+    let payload = wasm()
+        .cost_vetkd_derive_encrypted_key(key_name.as_bytes(), curve_variant + 10)
+        .reply_data_append()
+        .reply()
+        .build();
+    let res = test.ingress(canister_id, "update", payload);
+    let Err(err) = res else {
+        panic!("Expected Err, got Ok");
+    };
+    err.assert_contains(
+        ErrorCode::CanisterCalledTrap,
+        "ic0.cost_vetkd_derive_encrypted_key failed with error code 1",
+    );
+}
+
+#[test]
+fn cost_vetkd_derive_encrypted_key_fails_bad_key_name() {
+    let key_name = String::from("testkey");
+    let curve_variant = 0;
+    let mut test = ExecutionTestBuilder::new()
+        .with_chain_key(MasterPublicKeyId::VetKd(VetKdKeyId {
+            curve: VetKdCurve::try_from(curve_variant).unwrap(),
+            name: key_name.clone(),
+        }))
+        .build();
+    let canister_id = test.universal_canister().unwrap();
+    let payload = wasm()
+        .cost_vetkd_derive_encrypted_key(String::from("yesn't").as_bytes(), curve_variant)
+        .reply_data_append()
+        .reply()
+        .build();
+    let res = test.ingress(canister_id, "update", payload);
+    let Err(err) = res else {
+        panic!("Expected Err, got Ok");
+    };
+    err.assert_contains(
+        ErrorCode::CanisterCalledTrap,
+        "ic0.cost_vetkd_derive_encrypted_key failed with error code 2",
+    );
 }

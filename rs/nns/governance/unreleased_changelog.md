@@ -13,6 +13,8 @@ on the process that this file is part of, see
 
 ## Deprecated
 
+* NnsCanisterUpgrade/NnsRootUpgrade NNS funtions are made obsolete.
+
 ## Removed
 
 ## Fixed
