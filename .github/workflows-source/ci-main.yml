@@ -146,10 +146,10 @@ jobs:
           BUILDEVENT_APIKEY: ${{ secrets.HONEYCOMB_TOKEN }}
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
 
-      - name: Upload SHA256SUMS-cache
+      - name: Upload SHA256SUMS (cache)
         uses: actions/upload-artifact@v4
         with:
-          name: SHA256SUMS-cache
+          name: shasums-cache
           path: SHA256SUMS
       - <<: *bazel-bep
 
@@ -274,10 +274,10 @@ jobs:
           MERGE_BASE_SHA: ${{ github.event.pull_request.base.sha }}
           BRANCH_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           RUN_ON_DIFF_ONLY: ${{ github.event_name == 'pull_request' && !contains(github.event.pull_request.labels.*.name, 'CI_ALL_BAZEL_TARGETS') }}
-      - name: Upload SHA256SUMS-nocache
+      - name: Upload SHA256SUMS (nocache)
         uses: actions/upload-artifact@v4
         with:
-          name: SHA256SUMS-nocache
+          name: shasums-nocache
           path: SHA256SUMS
 
   build-determinism:
@@ -289,27 +289,27 @@ jobs:
     needs: [build-ic, bazel-test-all]
     steps:
       - <<: *checkout
-      - name: Download SHA256SUMS-cache
+      - name: Download SHA256SUMS (cache)
         uses: actions/download-artifact@v4
         with:
-          name: SHA256SUMS-cache
-          paths: SHA256SUMS-cache
-      - name: Download SHA256SUMS-nocache
+          name: shasums-cache
+          path: shasums-cache
+      - name: Download SHA256SUMS (nocache)
         uses: actions/download-artifact@v4
         with:
-          name: SHA256SUMS-nocache
-          path: SHA256SUMS-nocache
+          name: shasums-nocache
+          path: shasums-nocache
 
       - name: Build Determinism Test
         run: |
-          n_lines=$(cat SHA256SUMS-nocache | wc -l)
+          n_lines=$(cat shasums-nocache/SHA256SUMS | wc -l)
           echo "comparing $n_lines lines"
           if [ "$n_lines" == 0 ]; then
             echo "No lines to compare, this is unexpected"
             exit 1
           fi
 
-          difference=$(comm -23 <(sort SHA256SUMS-nocache | uniq) <(sort SHA256SUMS-cache | uniq))
+          difference=$(comm -23 <(sort shasums-nocache/SHA256SUMS | uniq) <(sort shasums-cache/SHA256SUMS | uniq))
           if [ -n "$difference" ]; then
             echo "Build Determinism Check Failed! Please contact IDX."
             echo "The following artifacts were different:"
