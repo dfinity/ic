@@ -1,5 +1,5 @@
 [package]
-name = "ic-management-canister-types"
+name = "ic-management-canister-types-private"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true

@@ -6,12 +6,12 @@ BUILD_DEPENDENCIES = []
 
 LIB_DEPENDENCIES = [
     # Keep sorted.
+    "//packages/ic-ed25519",
     "//packages/pocket-ic:pocket-ic",
     "//rs/bitcoin/adapter",
     "//rs/boundary_node/ic_boundary",
     "//rs/canister_sandbox:backend_lib",
     "//rs/config",
-    "//rs/crypto/ed25519",
     "//rs/crypto/iccsa",
     "//rs/crypto/sha2",
     "//rs/crypto/utils/threshold_sig_der",

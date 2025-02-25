@@ -2,7 +2,7 @@ use crate::{runtime::Runtime, spawn};
 use candid::{CandidType, Encode};
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_canister_log::{log, Sink};
-use ic_management_canister_types::IC_00;
+use ic_management_canister_types_private::IC_00;
 use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
 use std::collections::VecDeque;
@@ -390,12 +390,14 @@ async fn create_and_initialize_node_canister<Rt: Runtime, Wasm: ArchiveCanisterW
         IC_00,
         "update_settings",
         0,
-        (ic_management_canister_types::UpdateSettingsArgs::new(
-            node_canister_id,
-            ic_management_canister_types::CanisterSettingsArgsBuilder::new()
-                .with_controllers(controller_ids)
-                .build(),
-        ),),
+        (
+            ic_management_canister_types_private::UpdateSettingsArgs::new(
+                node_canister_id,
+                ic_management_canister_types_private::CanisterSettingsArgsBuilder::new()
+                    .with_controllers(controller_ids)
+                    .build(),
+            ),
+        ),
     )
     .await;
 

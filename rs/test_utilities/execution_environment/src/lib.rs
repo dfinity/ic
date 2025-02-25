@@ -1,5 +1,6 @@
 use ic_base_types::{NumBytes, NumSeconds, PrincipalId, SubnetId};
-use ic_config::embedders::{MeteringType, StableMemoryPageLimit};
+use ic_config::embedders::{BestEffortResponsesFeature, MeteringType, StableMemoryPageLimit};
+use ic_config::subnet_config::CyclesAccountManagerConfig;
 use ic_config::{
     embedders::{Config as EmbeddersConfig, WASM_MAX_SIZE},
     execution_environment::Config,
@@ -26,7 +27,7 @@ use ic_interfaces::execution_environment::{
 use ic_interfaces_state_manager::Labeled;
 use ic_limits::SMALL_APP_SUBNET_MAX_SIZE;
 use ic_logger::{replica_logger::no_op_logger, ReplicaLogger};
-use ic_management_canister_types::{
+use ic_management_canister_types_private::{
     CanisterIdRecord, CanisterInstallMode, CanisterInstallModeV2, CanisterSettingsArgs,
     CanisterSettingsArgsBuilder, CanisterStatusType, CanisterUpgradeOptions, EmptyBlob,
     InstallCodeArgs, InstallCodeArgsV2, LogVisibilityV2, MasterPublicKeyId, Method, Payload,
@@ -1519,7 +1520,9 @@ impl ExecutionTest {
     /// `self.xnet_messages`.
     pub fn induct_messages(&mut self) {
         let mut state = self.state.take().unwrap();
-        let mut subnet_available_memory = self.subnet_available_memory.get_message_memory();
+        let mut subnet_available_guaranteed_response_memory = self
+            .subnet_available_memory
+            .get_guaranteed_response_message_memory();
         let output_messages = get_output_messages(&mut state);
         let mut canisters = state.take_canister_states();
         for (canister_id, message) in output_messages {
@@ -1527,7 +1530,7 @@ impl ExecutionTest {
                 Some(dest_canister) => {
                     let result = dest_canister.push_input(
                         message.clone(),
-                        &mut subnet_available_memory,
+                        &mut subnet_available_guaranteed_response_memory,
                         state.metadata.own_subnet_type,
                         InputQueueType::LocalSubnet,
                     );
@@ -1747,6 +1750,7 @@ pub struct ExecutionTestBuilder {
     canister_snapshot_baseline_instructions: NumInstructions,
     replica_version: ReplicaVersion,
     precompiled_universal_canister: bool,
+    cycles_account_manager_config: Option<CyclesAccountManagerConfig>,
 }
 
 impl Default for ExecutionTestBuilder {
@@ -1790,6 +1794,7 @@ impl Default for ExecutionTestBuilder {
                 .canister_snapshot_baseline_instructions,
             replica_version: ReplicaVersion::default(),
             precompiled_universal_canister: true,
+            cycles_account_manager_config: None,
         }
     }
 }
@@ -1933,9 +1938,13 @@ impl ExecutionTestBuilder {
         self
     }
 
-    pub fn with_subnet_message_memory(mut self, subnet_message_memory: i64) -> Self {
-        self.execution_config.subnet_message_memory_capacity =
-            NumBytes::from(subnet_message_memory as u64);
+    pub fn with_subnet_guaranteed_response_message_memory(
+        mut self,
+        subnet_guaranteed_response_message_memory: i64,
+    ) -> Self {
+        self.execution_config
+            .guaranteed_response_message_memory_capacity =
+            NumBytes::from(subnet_guaranteed_response_message_memory as u64);
         self
     }
 
@@ -2140,11 +2149,11 @@ impl ExecutionTestBuilder {
         self
     }
 
-    pub fn with_best_effort_responses(mut self, status: FlagStatus) -> Self {
+    pub fn with_best_effort_responses(mut self, stage: BestEffortResponsesFeature) -> Self {
         self.execution_config
             .embedders_config
             .feature_flags
-            .best_effort_responses = status;
+            .best_effort_responses = stage;
         self
     }
 
@@ -2228,7 +2237,9 @@ impl ExecutionTestBuilder {
 
         let metrics_registry = MetricsRegistry::new();
 
-        let mut config = SubnetConfig::new(self.subnet_type).cycles_account_manager_config;
+        let mut config = self
+            .cycles_account_manager_config
+            .unwrap_or_else(|| SubnetConfig::new(self.subnet_type).cycles_account_manager_config);
         if let Some(ecdsa_signature_fee) = self.ecdsa_signature_fee {
             config.ecdsa_signature_fee = ecdsa_signature_fee;
         }
@@ -2289,7 +2300,7 @@ impl ExecutionTestBuilder {
                 MasterPublicKeyId::VetKd(_) => (
                     key_id,
                     MasterPublicKey {
-                        algorithm_id: AlgorithmId::ThresBls12_381,
+                        algorithm_id: AlgorithmId::VetKD,
                         public_key: b"efefefef".to_vec(),
                     },
                 ),
@@ -2390,7 +2401,9 @@ impl ExecutionTestBuilder {
             subnet_available_memory: SubnetAvailableMemory::new(
                 self.execution_config.subnet_memory_capacity.get() as i64
                     - self.execution_config.subnet_memory_reservation.get() as i64,
-                self.execution_config.subnet_message_memory_capacity.get() as i64,
+                self.execution_config
+                    .guaranteed_response_message_memory_capacity
+                    .get() as i64,
                 self.execution_config
                     .subnet_wasm_custom_sections_memory_capacity
                     .get() as i64,

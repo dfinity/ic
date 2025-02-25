@@ -144,7 +144,9 @@ impl Request {
                 neuron_index: *neuron_index,
                 controller: controller.map(PublicKeyOrPrincipal::Principal),
             }),
-            Request::ListNeurons(ListNeurons { .. }) => Ok(RequestType::ListNeurons),
+            Request::ListNeurons(ListNeurons { page_number, .. }) => Ok(RequestType::ListNeurons {
+                page_number: page_number.unwrap_or_default(),
+            }),
             Request::Follow(Follow {
                 neuron_index,
                 controller,
@@ -153,11 +155,14 @@ impl Request {
                 neuron_index: *neuron_index,
                 controller: controller.map(PublicKeyOrPrincipal::Principal),
             }),
-            Request::RefreshVotingPower(RefreshVotingPower { neuron_index, .. }) => {
-                Ok(RequestType::RefreshVotingPower {
-                    neuron_index: *neuron_index,
-                })
-            }
+            Request::RefreshVotingPower(RefreshVotingPower {
+                neuron_index,
+                controller,
+                ..
+            }) => Ok(RequestType::RefreshVotingPower {
+                neuron_index: *neuron_index,
+                controller: controller.map(PublicKeyOrPrincipal::Principal),
+            }),
         }
     }
 
@@ -478,7 +483,10 @@ impl TryFrom<&models::Request> for Request {
                     Some(Err(e)) => Err(e),
                 }
             }
-            RequestType::ListNeurons { .. } => Ok(Request::ListNeurons(ListNeurons { account })),
+            RequestType::ListNeurons { page_number } => Ok(Request::ListNeurons(ListNeurons {
+                account,
+                page_number: Some(*page_number),
+            })),
             RequestType::Follow {
                 neuron_index,
                 controller,
@@ -511,13 +519,25 @@ impl TryFrom<&models::Request> for Request {
                     Err(ApiError::invalid_request("Invalid follow request."))
                 }
             }
-            RequestType::RefreshVotingPower { neuron_index } => {
+            RequestType::RefreshVotingPower {
+                neuron_index,
+                controller,
+            } => {
                 if let Some(Command::RefreshVotingPower(manage_neuron::RefreshVotingPower {})) =
                     manage_neuron()?
                 {
+                    let pid = match controller
+                        .clone()
+                        .map(principal_id_from_public_key_or_principal)
+                    {
+                        None => None,
+                        Some(Ok(pid)) => Some(pid),
+                        Some(Err(e)) => return Err(e),
+                    };
                     Ok(Request::RefreshVotingPower(RefreshVotingPower {
                         neuron_index: *neuron_index,
                         account,
+                        controller: pid,
                     }))
                 } else {
                     Err(ApiError::invalid_request(

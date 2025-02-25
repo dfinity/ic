@@ -37,5 +37,13 @@ async fn main() -> Result<()> {
                 }
             }
         }
+        SubCommand::RefundAfterSnsControlledCanisterUpgrade(args) => {
+            match upgrade_sns_controlled_canister::refund(args, &agent).await {
+                Ok(_) => Ok(()),
+                Err(err) => {
+                    bail!("{}", err);
+                }
+            }
+        }
     }
 }

@@ -286,7 +286,7 @@ impl SandboxedExecutionMetrics {
             sandboxed_execution_executed_message_slices: metrics_registry.int_counter_vec(
                 "sandboxed_execution_executed_message_slices_total",
                 "Number of executed message slices by type and status.",
-                &["api_type", "status"],
+                &["api_type", "status", "wasm_execution_mode"],
             ),
             sandboxed_execution_instructions_left_error: metrics_registry.error_counter("sandboxed_execution_invalid_instructions_left"),
         }
@@ -299,9 +299,14 @@ impl SandboxedExecutionMetrics {
     }
 
     /// Helper function to observe executed message slices.
-    fn observe_executed_message_slice(&self, api_type_label: &str, execution_status: &str) {
+    fn observe_executed_message_slice(
+        &self,
+        api_type_label: &str,
+        execution_status: &str,
+        wasm_execution_mode: &str,
+    ) {
         self.sandboxed_execution_executed_message_slices
-            .with_label_values(&[api_type_label, execution_status])
+            .with_label_values(&[api_type_label, execution_status, wasm_execution_mode])
             .inc();
     }
 }
@@ -755,8 +760,11 @@ impl WasmExecutor for SandboxedExecutionController {
         ) {
             Ok((wasm_id, compilation_result)) => (wasm_id, compilation_result),
             Err(err) => {
-                self.metrics
-                    .observe_executed_message_slice(api_type_label, err.as_str());
+                self.metrics.observe_executed_message_slice(
+                    api_type_label,
+                    err.as_str(),
+                    execution_state.wasm_execution_mode.as_str(),
+                );
                 return (None, wasm_execution_error(err, message_instruction_limit));
             }
         };
@@ -1508,8 +1516,11 @@ impl SandboxedExecutionController {
         let mut exec_output = match result {
             CompletionResult::Paused(slice) => {
                 execution_tracing.observe_slice(&slice, execution_start.elapsed());
-                self.metrics
-                    .observe_executed_message_slice(api_type_label, "Paused");
+                self.metrics.observe_executed_message_slice(
+                    api_type_label,
+                    "Paused",
+                    execution_state.wasm_execution_mode.as_str(),
+                );
                 let paused = Box::new(PausedSandboxExecution {
                     canister_id,
                     sandbox_process,
@@ -1530,8 +1541,11 @@ impl SandboxedExecutionController {
                     Ok(None) => "NoResponse",
                     Err(e) => e.as_str(),
                 };
-                self.metrics
-                    .observe_executed_message_slice(api_type_label, execution_status);
+                self.metrics.observe_executed_message_slice(
+                    api_type_label,
+                    execution_status,
+                    execution_state.wasm_execution_mode.as_str(),
+                );
                 exec_output
             }
         };
@@ -1580,11 +1594,6 @@ impl SandboxedExecutionController {
         canister_id: CanisterId,
         sandbox_process: Arc<SandboxProcess>,
     ) -> CanisterStateChanges {
-        // If the execution has failed, then we don't apply any changes.
-        if exec_output.wasm.wasm_result.is_err() {
-            return CanisterStateChanges::default();
-        }
-
         let StateModifications {
             execution_state_modifications,
             system_state_modifications,

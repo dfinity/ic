@@ -1,6 +1,3 @@
-use candid::candid_method;
-use dfn_candid::candid_one;
-use dfn_core::over_async_may_reject;
 use ic_message::ForwardParams;
 use std::cell::RefCell;
 
@@ -18,12 +15,7 @@ fn read() -> Option<String> {
     MSG.with(|msg| (*msg.borrow()).clone())
 }
 
-#[export_name = "canister_update forward"]
-fn forward_() {
-    over_async_may_reject(candid_one, forward)
-}
-
-#[candid_method(update, rename = "forward")]
+#[ic_cdk_macros::update]
 pub async fn forward(
     ForwardParams {
         receiver,

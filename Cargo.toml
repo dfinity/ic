@@ -6,8 +6,11 @@ members = [
     "packages/icrc-ledger-client",
     "packages/icrc-ledger-client-cdk",
     "packages/icrc-ledger-types",
+    "packages/ic-dummy-getrandom-for-wasm",
+    "packages/ic-ed25519",
     "packages/ic-ethereum-types",
     "packages/ic-metrics-assert",
+    "packages/ic-secp256k1",
     "packages/ic-sha3",
     "packages/ic-ledger-hash-of",
     "packages/ic-signature-verification",
@@ -29,14 +32,14 @@ members = [
     "rs/bitcoin/replica_types",
     "rs/bitcoin/validation",
     "rs/boundary_node/canary_proxy",
-    "rs/boundary_node/anonymization/backend",
-    "rs/boundary_node/anonymization/client",
     "rs/boundary_node/certificate_issuance/certificate_issuer",
     "rs/boundary_node/certificate_issuance/certificate_orchestrator",
     "rs/boundary_node/ic_boundary",
     "rs/boundary_node/rate_limits",
     "rs/boundary_node/rate_limits/api",
     "rs/boundary_node/rate_limits/canister_client",
+    "rs/boundary_node/salt_sharing",
+    "rs/boundary_node/salt_sharing/api",
     "rs/boundary_node/systemd_journal_gatewayd_shim",
     "rs/canister_client",
     "rs/canister_client/read_state_response_parser",
@@ -63,7 +66,6 @@ members = [
     "rs/criterion_time",
     "rs/crypto",
     "rs/crypto/ecdsa_secp256r1",
-    "rs/crypto/ed25519",
     "rs/crypto/for_verification_only",
     "rs/crypto/iccsa",
     "rs/crypto/internal/crypto_lib/basic_sig/der_utils",
@@ -79,7 +81,6 @@ members = [
     "rs/crypto/internal/crypto_lib/multi_sig/bls12_381",
     "rs/crypto/internal/crypto_lib/seed",
     "rs/crypto/internal/crypto_lib/sha2",
-    "rs/crypto/secp256k1",
     "rs/crypto/secrets_containers",
     "rs/crypto/internal/crypto_lib/threshold_sig/bls12_381",
     "rs/crypto/internal/crypto_lib/threshold_sig/canister_threshold_sig",
@@ -94,7 +95,6 @@ members = [
     "rs/crypto/internal/test_vectors",
     "rs/crypto/node_key_generation",
     "rs/crypto/node_key_validation",
-    "rs/crypto/getrandom_for_wasm",
     "rs/crypto/prng",
     "rs/crypto/sha2",
     "rs/crypto/utils/canister_threshold_sig",
@@ -199,6 +199,7 @@ members = [
     "rs/nervous_system/runtime",
     "rs/nervous_system/string",
     "rs/nervous_system/temporary",
+    "rs/nervous_system/time_helpers",
     "rs/nervous_system/tools/release-runscript",
     "rs/nervous_system/tools/sync-with-released-nervous-system-wasms",
     "rs/nns/constants",
@@ -321,7 +322,6 @@ members = [
     "rs/rust_canisters/load_simulator",
     "rs/rust_canisters/memory_test",
     "rs/rust_canisters/on_wire",
-    "rs/rust_canisters/pmap",
     "rs/rust_canisters/proxy_canister",
     "rs/rust_canisters/response_payload_test",
     "rs/rust_canisters/stable_reader",
@@ -344,6 +344,7 @@ members = [
     "rs/sns/swap",
     "rs/sns/swap/proto_library",
     "rs/sns/test_utils",
+    "rs/sns/testing",
     "rs/starter",
     "rs/state_manager",
     "rs/state_machine_tests",
@@ -563,13 +564,14 @@ ic-bn-lib = { git = "https://github.com/dfinity/ic-bn-lib", rev = "d74a6527fbaf8
 ic-btc-interface = "0.2.2"
 ic-canister-sig-creation = { git = "https://github.com/dfinity/ic-canister-sig-creation", rev = "7f9e931954637526295269155881207f6c832d6d" }
 ic-cbor = "3"
-ic-cdk = "0.16.0"
-ic-cdk-macros = "0.9.0"
-ic-cdk-timers = "0.7.0"
+ic-cdk = "0.17.1"
+ic-cdk-macros = "0.17.0"
+ic-cdk-timers = "0.11.0"
 ic-certificate-verification = "3"
 ic-certification = "3"
 ic-http-certification = "3"
 ic-http-gateway = "0.1"
+ic-management-canister-types = "0.2.0"
 ic-response-verification = "3"
 ic-sha3 = "1.0.0"
 ic-stable-structures = "0.6.5"
@@ -597,7 +599,8 @@ k256 = { version = "0.13.4", default-features = false, features = [
     "std",
 ] }
 # kube is used by our test driver
-kube = { version = "0.93.1" }
+k8s-openapi = { version = "0.22.0", features = ["v1_28", "schemars"] }
+kube = { version = "0.94.0", features = ["client", "derive"] }
 lazy_static = "1.4.0"
 leb128 = "0.2.5"
 libc = "0.2.158"
@@ -605,6 +608,7 @@ libflate = "2.1.0"
 libnss = "0.5.0"
 local-ip-address = "0.5.6"
 macaddr = "1.0"
+memmap2 = "0.9.5"
 minicbor = { version = "0.19.1", features = ["alloc", "derive"] }
 minicbor-derive = "0.13.0"
 mockall = "0.13.0"
@@ -675,6 +679,7 @@ rustls = { version = "0.23.18", default-features = false, features = [
     "std",
     "brotli",
 ] }
+schemars = { version = "0.8.21", features = ["derive"] }
 serde = { version = "1.0.203", features = ["derive"] }
 serde_bytes = "0.11.15"
 serde_cbor = "0.11.2"
@@ -740,11 +745,11 @@ url = { version = "2.5.3", features = ["serde"] }
 uuid = { version = "1.11.0", features = ["v4", "serde"] }
 walkdir = "2.3.3"
 walrus = "0.21.1"
-wasm-encoder = { version = "0.217.0", features = ["wasmparser"] }
-wasmparser = "0.217.0"
-wasmprinter = "0.217.0"
-wast = "212.0.0"
-wat = "1.212.0"
+wasm-encoder = { version = "0.221.0", features = ["wasmparser"] }
+wasmparser = "0.221.0"
+wasmprinter = "0.221.0"
+wast = "221.0.0"
+wat = "1.221.0"
 which = "6.0.3"
 x509-cert = { version = "0.2.5", features = ["builder", "hazmat"] }
 x509-parser = { version = "0.16.0" }

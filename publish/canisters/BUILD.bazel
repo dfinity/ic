@@ -1,5 +1,6 @@
 load("@bazel_skylib//rules:copy_file.bzl", "copy_file")
 load("//ci/src/artifacts:upload.bzl", "upload_artifacts")
+load("//publish:defs.bzl", "checksum_rule")
 load("//rs/nns:nns.bzl", NNS_CANISTER_NAME_TO_MAX_COMPRESSED_WASM_SIZE_E5_BYTES = "CANISTER_NAME_TO_MAX_COMPRESSED_WASM_SIZE_E5_BYTES")
 load("//rs/sns:sns.bzl", SNS_CANISTER_NAME_TO_MAX_COMPRESSED_WASM_SIZE_E5_BYTES = "CANISTER_NAME_TO_MAX_COMPRESSED_WASM_SIZE_E5_BYTES")
 
@@ -125,6 +126,12 @@ filegroup(
            [name for name in COMPRESSED_CANISTERS],
 )
 
+# Export checksums & build artifacts
+checksum_rule(
+    name = "compute_checksums",
+    inputs = [":canisters"],
+)
+
 # the further targets are all testonly for simplicity because if a target was
 # violating the testonly flag, it would error at this point
 
@@ -159,4 +166,7 @@ upload_artifacts(
     testonly = True,
     inputs = [":canisters"] + [":canisters.did"],
     remote_subdir = "canisters",
+    visibility = [
+        "//testnet/tools:icos_deploy-pkg",
+    ],
 )

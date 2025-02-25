@@ -45,7 +45,9 @@ use ic_canister_log::log;
 use ic_crypto_sha2::Sha256;
 use ic_icrc1_ledger::UpgradeArgs as LedgerUpgradeArgs;
 use ic_ledger_core::tokens::TOKEN_SUBDIVIDABLE_BY;
-use ic_management_canister_types::{CanisterIdRecord, CanisterInstallModeError, StoredChunksReply};
+use ic_management_canister_types_private::{
+    CanisterIdRecord, CanisterInstallModeError, StoredChunksReply,
+};
 use ic_nervous_system_common::{
     hash_to_hex_string, ledger_validation::MAX_LOGO_LENGTH, NervousSystemError,
     DEFAULT_TRANSFER_FEE, ONE_DAY_SECONDS, ONE_MONTH_SECONDS, ONE_YEAR_SECONDS,
@@ -83,6 +85,8 @@ pub const MAX_INSTALL_CODE_WASM_AND_ARG_SIZE: usize = 2_000_000; // 2MB
 /// The Governance spec gives each Action a u64 equivalent identifier. This module gives
 /// those u64 values a human-readable const variable for use in the SNS.
 pub mod native_action_ids {
+    use crate::pb::v1::NervousSystemFunction;
+
     /// Unspecified Action.
     pub const UNSPECIFIED: u64 = 0;
 
@@ -130,6 +134,27 @@ pub mod native_action_ids {
 
     /// AdvanceSnsTargetVersion Action.
     pub const ADVANCE_SNS_TARGET_VERSION: u64 = 15;
+
+    // When adding something to this list, make sure to update the below function.
+    pub fn native_functions() -> Vec<NervousSystemFunction> {
+        vec![
+            NervousSystemFunction::motion(),
+            NervousSystemFunction::manage_nervous_system_parameters(),
+            NervousSystemFunction::upgrade_sns_controlled_canister(),
+            NervousSystemFunction::add_generic_nervous_system_function(),
+            NervousSystemFunction::remove_generic_nervous_system_function(),
+            NervousSystemFunction::execute_generic_nervous_system_function(),
+            NervousSystemFunction::upgrade_sns_to_next_version(),
+            NervousSystemFunction::manage_sns_metadata(),
+            NervousSystemFunction::transfer_sns_treasury_funds(),
+            NervousSystemFunction::register_dapp_canisters(),
+            NervousSystemFunction::deregister_dapp_canisters(),
+            NervousSystemFunction::mint_sns_tokens(),
+            NervousSystemFunction::manage_ledger_parameters(),
+            NervousSystemFunction::manage_dapp_canister_settings(),
+            NervousSystemFunction::advance_sns_target_version(),
+        ]
+    }
 }
 
 impl governance::Mode {
@@ -458,7 +483,7 @@ impl NervousSystemParameters {
             max_dissolve_delay_bonus_percentage: Some(100),
             max_age_bonus_percentage: Some(25),
             maturity_modulation_disabled: Some(false),
-            automatically_advance_target_version: Some(false),
+            automatically_advance_target_version: Some(true),
         }
     }
 
@@ -1914,16 +1939,18 @@ impl From<ManageLedgerParameters> for LedgerUpgradeArgs {
             token_symbol,
             token_logo,
         } = manage_ledger_parameters;
-        let metadata = [("icrc1:logo", token_logo.map(MetadataValue::Text))]
-            .into_iter()
-            .filter_map(|(k, v)| v.map(|v| (k.to_string(), v)))
-            .collect();
+
+        let metadata = token_logo.map(|token_logo| {
+            let key = "icrc1:logo".to_string();
+            let value = MetadataValue::Text(token_logo);
+            vec![(key, value)]
+        });
 
         LedgerUpgradeArgs {
             transfer_fee: transfer_fee.map(|tf| tf.into()),
             token_name,
             token_symbol,
-            metadata: Some(metadata),
+            metadata,
             ..LedgerUpgradeArgs::default()
         }
     }

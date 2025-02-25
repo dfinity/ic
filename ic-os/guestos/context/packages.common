@@ -5,6 +5,7 @@
 # image only.
 
 # Need kernel to boot anything
+linux-image-extra-virtual-hwe-24.04
 initramfs-tools
 
 # Need systemd for boot process

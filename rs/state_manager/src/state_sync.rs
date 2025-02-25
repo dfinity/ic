@@ -90,7 +90,7 @@ impl StateSync {
             Err(err) => {
                 fatal!(
                     self.log,
-                    "Failed to load checkpoint or remove the unverified marker @height {}: {}",
+                    "Failed to load and finalize checkpoint or remove the unverified marker @height {}: {}",
                     height,
                     err
                 );

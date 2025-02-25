@@ -68,6 +68,11 @@ const MAX_TRANSACTIONS_TO_PURGE: usize = 100_000;
 #[allow(dead_code)]
 const MAX_U64_ENCODING_BYTES: usize = 10;
 const DEFAULT_MAX_MEMO_LENGTH: u16 = 32;
+const METADATA_DECIMALS: &str = "icrc1:decimals";
+const METADATA_NAME: &str = "icrc1:name";
+const METADATA_SYMBOL: &str = "icrc1:symbol";
+const METADATA_FEE: &str = "icrc1:fee";
+const METADATA_MAX_MEMO_LENGTH: &str = "icrc1:max_memo_length";
 
 #[cfg(not(feature = "u256-tokens"))]
 pub type Tokens = ic_icrc1_tokens_u64::U64;
@@ -612,6 +617,28 @@ fn default_decimals() -> u8 {
     ic_ledger_core::tokens::DECIMAL_PLACES as u8
 }
 
+fn map_metadata_or_trap(arg_metadata: Vec<(String, Value)>) -> Vec<(String, StoredValue)> {
+    const DISALLOWED_METADATA_FIELDS: [&str; 5] = [
+        METADATA_DECIMALS,
+        METADATA_NAME,
+        METADATA_SYMBOL,
+        METADATA_FEE,
+        METADATA_MAX_MEMO_LENGTH,
+    ];
+    arg_metadata
+        .into_iter()
+        .map(|(k, v)| {
+            if DISALLOWED_METADATA_FIELDS.contains(&k.as_str()) {
+                ic_cdk::trap(&format!(
+                    "Metadata field {} is reserved and cannot be set",
+                    k
+                ));
+            }
+            (k, StoredValue::from(v))
+        })
+        .collect()
+}
+
 impl Ledger {
     pub fn from_init_args(
         sink: impl Sink + Clone,
@@ -655,10 +682,7 @@ impl Ledger {
             token_symbol,
             token_name,
             decimals: decimals.unwrap_or_else(default_decimals),
-            metadata: metadata
-                .into_iter()
-                .map(|(k, v)| (k, StoredValue::from(v)))
-                .collect(),
+            metadata: map_metadata_or_trap(metadata),
             max_memo_length: max_memo_length.unwrap_or(DEFAULT_MAX_MEMO_LENGTH),
             feature_flags: feature_flags.unwrap_or_default(),
             maximum_number_of_accounts: 0,
@@ -840,12 +864,12 @@ impl Ledger {
             .into_iter()
             .map(|(k, v)| (k, StoredValue::into(v)))
             .collect();
-        records.push(Value::entry("icrc1:decimals", self.decimals() as u64));
-        records.push(Value::entry("icrc1:name", self.token_name()));
-        records.push(Value::entry("icrc1:symbol", self.token_symbol()));
-        records.push(Value::entry("icrc1:fee", Nat::from(self.transfer_fee())));
+        records.push(Value::entry(METADATA_DECIMALS, self.decimals() as u64));
+        records.push(Value::entry(METADATA_NAME, self.token_name()));
+        records.push(Value::entry(METADATA_SYMBOL, self.token_symbol()));
+        records.push(Value::entry(METADATA_FEE, Nat::from(self.transfer_fee())));
         records.push(Value::entry(
-            "icrc1:max_memo_length",
+            METADATA_MAX_MEMO_LENGTH,
             self.max_memo_length() as u64,
         ));
         records
@@ -857,10 +881,7 @@ impl Ledger {
 
     pub fn upgrade(&mut self, sink: impl Sink + Clone, args: UpgradeArgs) {
         if let Some(upgrade_metadata_args) = args.metadata {
-            self.metadata = upgrade_metadata_args
-                .into_iter()
-                .map(|(k, v)| (k, StoredValue::from(v)))
-                .collect();
+            self.metadata = map_metadata_or_trap(upgrade_metadata_args);
         }
         if let Some(token_name) = args.token_name {
             self.token_name = token_name;

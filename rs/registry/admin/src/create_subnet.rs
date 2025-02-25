@@ -7,7 +7,7 @@ use async_trait::async_trait;
 use clap::Parser;
 use ic_admin_derive::derive_common_proposal_fields;
 use ic_canister_client::{Agent, Sender};
-use ic_management_canister_types::MasterPublicKeyId;
+use ic_management_canister_types_private::MasterPublicKeyId;
 use ic_nns_common::types::NeuronId;
 use ic_prep_lib::subnet_configuration::get_default_config_params;
 use ic_protobuf::registry::subnet::v1::SubnetFeatures as SubnetFeaturesPb;
@@ -285,7 +285,6 @@ impl ProposeToCreateSubnetCmd {
             chain_key_config,
 
             // Deprecated fields.
-            ecdsa_config: None,
             ingress_bytes_per_block_soft_cap: Default::default(),
             gossip_max_artifact_streams_per_peer: Default::default(),
             gossip_max_chunk_wait_ms: Default::default(),
@@ -310,7 +309,9 @@ impl ProposalPayload<do_create_subnet::CreateSubnetPayload> for ProposeToCreateS
 mod tests {
     use std::str::FromStr;
 
-    use ic_management_canister_types::{EcdsaCurve, EcdsaKeyId, SchnorrAlgorithm, SchnorrKeyId};
+    use ic_management_canister_types_private::{
+        EcdsaCurve, EcdsaKeyId, SchnorrAlgorithm, SchnorrKeyId,
+    };
     use ic_types::PrincipalId;
 
     use super::*;

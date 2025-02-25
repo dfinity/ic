@@ -1070,7 +1070,7 @@ mod tests {
     // Tests validation of the received complaints
     #[test]
     fn test_validate_complaints_all_algorithms() {
-        for key_id in fake_master_public_key_ids_for_all_algorithms() {
+        for key_id in fake_master_public_key_ids_for_all_idkg_algorithms() {
             println!("Running test for key ID {key_id}");
             test_validate_complaints(key_id);
         }
@@ -1311,7 +1311,7 @@ mod tests {
     // Tests that openings are sent for eligible complaints
     #[test]
     fn test_send_openings_all_algorithms() {
-        for key_id in fake_master_public_key_ids_for_all_algorithms() {
+        for key_id in fake_master_public_key_ids_for_all_idkg_algorithms() {
             println!("Running test for key ID {key_id}");
             test_send_openings(key_id);
         }
@@ -1427,7 +1427,7 @@ mod tests {
     // Tests the validation of received openings
     #[test]
     fn test_validate_openings_all_algorithms() {
-        for key_id in fake_master_public_key_ids_for_all_algorithms() {
+        for key_id in fake_master_public_key_ids_for_all_idkg_algorithms() {
             println!("Running test for key ID {key_id}");
             test_validate_openings(key_id);
         }
@@ -1899,7 +1899,7 @@ mod tests {
     // Tests that crypto failure when creating complaint leads to transcript load failure
     #[test]
     fn test_load_transcript_failure_to_create_complaint_all_algorithms() {
-        for key_id in fake_master_public_key_ids_for_all_algorithms() {
+        for key_id in fake_master_public_key_ids_for_all_idkg_algorithms() {
             println!("Running test for key ID {key_id}");
             test_load_transcript_failure_to_create_complaint(key_id);
         }

@@ -75,13 +75,13 @@ impl BasicSigVerifierInternal {
                         .to_string(),
                 });
             }
-            let pk = ic_crypto_ed25519::PublicKey::deserialize_raw(&pk_proto.key_value).map_err(
-                |e| CryptoError::MalformedPublicKey {
+            let pk = ic_ed25519::PublicKey::deserialize_raw(&pk_proto.key_value).map_err(|e| {
+                CryptoError::MalformedPublicKey {
                     algorithm: AlgorithmId::Ed25519,
                     key_bytes: Some(pk_proto.key_value),
                     internal_error: e.to_string(),
-                },
-            )?;
+                }
+            })?;
 
             msgs.push(&message[..]);
             sigs.push(&signature.get_ref().0[..]);
@@ -95,7 +95,7 @@ impl BasicSigVerifierInternal {
         })?;
         let rng = &mut seed.into_rng();
 
-        ic_crypto_ed25519::PublicKey::batch_verify(&msgs, &sigs, &keys, rng).map_err(|e| {
+        ic_ed25519::PublicKey::batch_verify(&msgs, &sigs, &keys, rng).map_err(|e| {
             CryptoError::SignatureVerification {
                 algorithm: AlgorithmId::Ed25519,
                 public_key_bytes: vec![],

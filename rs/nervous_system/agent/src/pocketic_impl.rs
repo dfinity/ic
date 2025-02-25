@@ -1,4 +1,6 @@
-use crate::management_canister::requests::{StoredChunksArgs, UploadChunkArgs};
+use crate::management_canister::requests::{
+    CanisterStatusArgs, DeleteCanisterArgs, StopCanisterArgs, StoredChunksArgs, UploadChunkArgs,
+};
 use crate::Request;
 use crate::{CallCanisters, CanisterInfo};
 use candid::Principal;
@@ -69,6 +71,21 @@ impl PocketIcAgent<'_> {
                     .map_err(PocketIcCallError::CandidDecode)?
                     .canister_id
             }
+            "canister_status" => {
+                candid::decode_one::<CanisterStatusArgs>(payload.as_slice())
+                    .map_err(PocketIcCallError::CandidDecode)?
+                    .canister_id
+            }
+            "stop_canister" => {
+                candid::decode_one::<StopCanisterArgs>(payload.as_slice())
+                    .map_err(PocketIcCallError::CandidDecode)?
+                    .canister_id
+            }
+            "delete_canister" => {
+                candid::decode_one::<DeleteCanisterArgs>(payload.as_slice())
+                    .map_err(PocketIcCallError::CandidDecode)?
+                    .canister_id
+            }
             mathod_name => {
                 unimplemented!(
                     "PocketIcAgent does not currently implement IC00.{}",
@@ -131,7 +148,12 @@ impl CallCanisters for PocketIcAgent<'_> {
     ) -> Result<CanisterInfo, Self::Error> {
         let canister_id = canister_id.into();
 
-        let controllers = self.pocket_ic.get_controllers(canister_id).await;
+        let canister_exists = self.pocket_ic.canister_exists(canister_id).await;
+        let controllers = if canister_exists {
+            self.pocket_ic.get_controllers(canister_id).await
+        } else {
+            vec![]
+        };
 
         let Some(controller) = controllers.into_iter().last() else {
             return Err(Self::Error::BlackHole);

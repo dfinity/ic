@@ -10,6 +10,50 @@ use requests::*;
 
 pub const CHUNK_SIZE: usize = 1024 * 1024; // 1 MiB
 
+pub async fn canister_status<C: CallCanisters>(
+    agent: &C,
+    canister_id: CanisterId,
+) -> Result<CanisterStatusResult, C::Error> {
+    let response = agent
+        .call(
+            Principal::management_canister(),
+            CanisterStatusArgs {
+                canister_id: canister_id.get().0,
+            },
+        )
+        .await?;
+
+    Ok(response)
+}
+
+pub async fn stop_canister<C: CallCanisters>(
+    agent: &C,
+    canister_id: CanisterId,
+) -> Result<(), C::Error> {
+    agent
+        .call(
+            Principal::management_canister(),
+            StopCanisterArgs {
+                canister_id: canister_id.get().0,
+            },
+        )
+        .await
+}
+
+pub async fn delete_canister<C: CallCanisters>(
+    agent: &C,
+    canister_id: CanisterId,
+) -> Result<(), C::Error> {
+    agent
+        .call(
+            Principal::management_canister(),
+            DeleteCanisterArgs {
+                canister_id: canister_id.get().0,
+            },
+        )
+        .await
+}
+
 async fn upload_chunk<C: CallCanisters>(
     agent: &C,
     store_canister_id: CanisterId,

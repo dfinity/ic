@@ -5,7 +5,7 @@ This module defines functions to run benchmarks using canbench.
 load("@rules_rust//rust:defs.bzl", "rust_binary")
 load("//bazel:canisters.bzl", "wasm_rust_binary_rule")
 
-def rust_canbench(name, results_file, add_test = False, opt = "3", **kwargs):
+def rust_canbench(name, results_file, add_test = False, opt = "3", noise_threshold = None, **kwargs):
     """ Run a Rust benchmark using canbench. 
 
     This creates 2 executable rules: :${name} for running the benchmark and :${name}_update for
@@ -17,6 +17,8 @@ def rust_canbench(name, results_file, add_test = False, opt = "3", **kwargs):
         add_test: If True add an additional :${name}_test rule that fails if canbench benchmark fails.
         opt: The optimization level to use for the rust_binary compilation.
         **kwargs: Additional arguments to pass to rust_binary.
+        noise_threshold: The noise threshold to use for the benchmark. If None, the default value from
+            canbench is used.
     """
 
     rust_binary(
@@ -49,6 +51,9 @@ def rust_canbench(name, results_file, add_test = False, opt = "3", **kwargs):
         # Hack to escape the sandbox and update the actual repository
         "WORKSPACE": "$(rootpath //:WORKSPACE.bazel)",
     }
+
+    if noise_threshold:
+        env["NOISE_THRESHOLD"] = str(noise_threshold)
 
     native.sh_binary(
         name = name,

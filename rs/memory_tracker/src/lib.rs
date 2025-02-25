@@ -93,8 +93,8 @@ impl PageBitmap {
         }
     }
 
-    fn grow(&mut self, delta: usize) {
-        self.pages.grow(delta, false);
+    fn grow(&mut self, num_pages: usize) {
+        self.pages.grow(num_pages, false);
     }
 
     fn marked_count(&self) -> usize {
@@ -306,8 +306,14 @@ impl SigsegvMemoryTracker {
     pub fn expand(&self, delta: usize) {
         let old_size = self.area().size.get();
         self.area().size.set(old_size + delta);
-        self.accessed_bitmap.borrow_mut().grow(delta);
-        self.dirty_bitmap.borrow_mut().grow(delta);
+        let num_pages = delta / PAGE_SIZE;
+        debug_assert_eq!(
+            num_pages * PAGE_SIZE,
+            delta,
+            "Expand delta {delta} must be page-size aligned (page size: {PAGE_SIZE})"
+        );
+        self.accessed_bitmap.borrow_mut().grow(num_pages);
+        self.dirty_bitmap.borrow_mut().grow(num_pages);
     }
 
     pub fn take_dirty_pages(&self) -> Vec<PageIndex> {

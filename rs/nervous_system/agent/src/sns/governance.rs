@@ -2,8 +2,9 @@ use crate::{null_request::NullRequest, CallCanisters};
 use ic_base_types::PrincipalId;
 use ic_sns_governance_api::pb::v1::{
     manage_neuron, manage_neuron_response, GetMetadataRequest, GetMetadataResponse, GetMode,
-    GetModeResponse, GetRunningSnsVersionRequest, GetRunningSnsVersionResponse, GovernanceError,
-    ManageNeuron, ManageNeuronResponse, NervousSystemParameters, NeuronId, Proposal, ProposalId,
+    GetModeResponse, GetProposal, GetProposalResponse, GetRunningSnsVersionRequest,
+    GetRunningSnsVersionResponse, GovernanceError, ManageNeuron, ManageNeuronResponse,
+    NervousSystemParameters, NeuronId, Proposal, ProposalId,
 };
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -107,6 +108,17 @@ impl GovernanceCanister {
             .await?;
 
         Ok(response)
+    }
+
+    pub async fn get_proposal<C: CallCanisters>(
+        &self,
+        agent: &C,
+        proposal_id: ProposalId,
+    ) -> Result<GetProposalResponse, C::Error> {
+        let request = GetProposal {
+            proposal_id: Some(proposal_id),
+        };
+        agent.call(self.canister_id, request).await
     }
 }
 

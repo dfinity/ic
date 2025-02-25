@@ -1,37 +1,45 @@
 mod state;
 
-use crate::convert::state::State;
-use crate::errors::ApiError;
-use crate::models::amount::{from_amount, ledgeramount_from_amount};
-use crate::models::operation::OperationType;
-use crate::models::{self, AccountIdentifier, BlockIdentifier, Operation};
-use crate::request::request_result::RequestResult;
-use crate::request::transaction_operation_results::TransactionOperationResults;
-use crate::request::transaction_results::TransactionResults;
-use crate::request::Request;
-use crate::request_types::{
-    ChangeAutoStakeMaturityMetadata, DisburseMetadata, FollowMetadata, KeyMetadata,
-    MergeMaturityMetadata, NeuronIdentifierMetadata, NeuronInfoMetadata, PublicKeyOrPrincipal,
-    RegisterVoteMetadata, RequestResultMetadata, SetDissolveTimestampMetadata, SpawnMetadata,
-    StakeMaturityMetadata, Status, STATUS_COMPLETED,
+use crate::{
+    convert,
+    convert::state::State,
+    errors,
+    errors::ApiError,
+    models::{
+        self,
+        amount::{from_amount, ledgeramount_from_amount},
+        operation::OperationType,
+        AccountIdentifier, BlockIdentifier, Operation,
+    },
+    request::{
+        request_result::RequestResult, transaction_operation_results::TransactionOperationResults,
+        transaction_results::TransactionResults, Request,
+    },
+    request_types::{
+        ChangeAutoStakeMaturityMetadata, DisburseMetadata, FollowMetadata, KeyMetadata,
+        ListNeuronsMetadata, MergeMaturityMetadata, NeuronIdentifierMetadata, NeuronInfoMetadata,
+        PublicKeyOrPrincipal, RegisterVoteMetadata, RequestResultMetadata,
+        SetDissolveTimestampMetadata, SpawnMetadata, StakeMaturityMetadata, Status,
+        STATUS_COMPLETED,
+    },
+    transaction_id::TransactionIdentifier,
 };
-use crate::transaction_id::TransactionIdentifier;
-use crate::{convert, errors};
 use dfn_protobuf::ProtoBuf;
 use ic_crypto_tree_hash::Path;
 use ic_ledger_canister_blocks_synchronizer::blocks::HashedBlock;
 use ic_ledger_core::block::BlockType;
 use ic_ledger_hash_of::HashOf;
-use ic_types::messages::{HttpCanisterUpdate, HttpReadState};
-use ic_types::{CanisterId, PrincipalId};
+use ic_types::{
+    messages::{HttpCanisterUpdate, HttpReadState},
+    CanisterId, PrincipalId,
+};
 use icp_ledger::{
     Block, BlockIndex, Operation as LedgerOperation, SendArgs, Subaccount, TimeStamp, Tokens,
     Transaction,
 };
 use on_wire::{FromWire, IntoWire};
 use rosetta_core::convert::principal_id_from_public_key;
-use serde_json::map::Map;
-use serde_json::{from_value, Number, Value};
+use serde_json::{from_value, map::Map, Number, Value};
 use std::convert::{TryFrom, TryInto};
 
 /// This module converts from ledger_canister data structures to Rosetta data
@@ -152,7 +160,8 @@ pub fn operations_to_requests(
             }
             OperationType::Stake => {
                 validate_neuron_management_op()?;
-                let NeuronIdentifierMetadata { neuron_index } = o.metadata.clone().try_into()?;
+                let NeuronIdentifierMetadata { neuron_index, .. } =
+                    o.metadata.clone().try_into()?;
                 state.stake(account, neuron_index)?;
             }
             OperationType::SetDissolveTimestamp => {
@@ -178,12 +187,14 @@ pub fn operations_to_requests(
 
             OperationType::StartDissolving => {
                 validate_neuron_management_op()?;
-                let NeuronIdentifierMetadata { neuron_index } = o.metadata.clone().try_into()?;
+                let NeuronIdentifierMetadata { neuron_index, .. } =
+                    o.metadata.clone().try_into()?;
                 state.start_dissolve(account, neuron_index)?;
             }
             OperationType::StopDissolving => {
                 validate_neuron_management_op()?;
-                let NeuronIdentifierMetadata { neuron_index } = o.metadata.clone().try_into()?;
+                let NeuronIdentifierMetadata { neuron_index, .. } =
+                    o.metadata.clone().try_into()?;
                 state.stop_dissolve(account, neuron_index)?;
             }
             OperationType::AddHotkey => {
@@ -270,7 +281,8 @@ pub fn operations_to_requests(
             }
             OperationType::ListNeurons => {
                 validate_neuron_management_op()?;
-                state.list_neurons(account)?;
+                let ListNeuronsMetadata { page_number } = o.metadata.clone().try_into()?;
+                state.list_neurons(account, page_number)?;
             }
             OperationType::Burn | OperationType::Mint => {
                 let msg = format!("Unsupported operation type: {:?}", o.type_);
@@ -292,9 +304,17 @@ pub fn operations_to_requests(
                 state.follow(account, pid, neuron_index, topic, followees)?;
             }
             OperationType::RefreshVotingPower => {
-                let NeuronIdentifierMetadata { neuron_index } = o.metadata.clone().try_into()?;
+                let NeuronIdentifierMetadata {
+                    neuron_index,
+                    controller,
+                } = o.metadata.clone().try_into()?;
                 validate_neuron_management_op()?;
-                state.refresh_voting_power(account, neuron_index)?;
+                // convert from pkp in operation to principal in request.
+                let pid = match controller {
+                    None => None,
+                    Some(p) => Some(principal_id_from_public_key_or_principal(p)?),
+                };
+                state.refresh_voting_power(account, neuron_index, pid)?;
             }
         }
     }

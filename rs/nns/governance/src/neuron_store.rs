@@ -1398,19 +1398,6 @@ pub fn groom_some_neurons(
     }
 }
 
-pub fn backfill_some_voting_power_refreshed_timestamps(
-    neuron_store: &mut NeuronStore,
-    next: Bound<NeuronId>,
-    carry_on: impl FnMut() -> bool,
-) -> Bound<NeuronId> {
-    groom_some_neurons(
-        neuron_store,
-        |neuron| neuron.backfill_voting_power_refreshed_timestamp(),
-        next,
-        carry_on,
-    )
-}
-
 /// Number of entries for each neuron indexes (in stable storage)
 pub struct NeuronIndexesLens {
     pub subaccount: usize,

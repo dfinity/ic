@@ -8,7 +8,7 @@ use ic_consensus_utils::RoundRobin;
 use ic_interfaces::consensus_pool::ConsensusBlockCache;
 use ic_interfaces::crypto::{
     ErrorReproducibility, ThresholdEcdsaSigVerifier, ThresholdEcdsaSigner,
-    ThresholdSchnorrSigVerifier, ThresholdSchnorrSigner,
+    ThresholdSchnorrSigVerifier, ThresholdSchnorrSigner, VetKdProtocol,
 };
 use ic_interfaces::idkg::{IDkgChangeAction, IDkgChangeSet, IDkgPool};
 use ic_interfaces_state_manager::{CertifiedStateSnapshot, StateReader};
@@ -24,7 +24,7 @@ use ic_types::consensus::idkg::common::{
 };
 use ic_types::consensus::idkg::{
     ecdsa_sig_share_prefix, vetkd_key_share_prefix, EcdsaSigShare, IDkgBlockReader, IDkgMessage,
-    IDkgStats, RequestId,
+    IDkgStats, RequestId, VetKdKeyShare,
 };
 use ic_types::consensus::idkg::{schnorr_sig_share_prefix, SchnorrSigShare, SigShare};
 use ic_types::crypto::canister_threshold_sig::error::ThresholdEcdsaCombineSigSharesError;
@@ -33,9 +33,7 @@ use ic_types::crypto::canister_threshold_sig::error::{
     ThresholdSchnorrCombineSigSharesError, ThresholdSchnorrCreateSigShareError,
     ThresholdSchnorrVerifySigShareError,
 };
-use ic_types::crypto::vetkd::{
-    VetKdKeyShareCombinationError, VetKdKeyShareCreationError, VetKdKeyShareVerificationError,
-};
+use ic_types::crypto::vetkd::{VetKdKeyShareCreationError, VetKdKeyShareVerificationError};
 use ic_types::messages::CallbackId;
 use ic_types::{Height, NodeId};
 use std::cell::RefCell;
@@ -54,8 +52,6 @@ enum CreateSigShareError {
 }
 
 #[derive(Clone, Debug)]
-// TODO(CON-1421): Remove once all errors are in use
-#[allow(dead_code)]
 enum VerifySigShareError {
     Ecdsa(ThresholdEcdsaVerifySigShareError),
     Schnorr(ThresholdSchnorrVerifySigShareError),
@@ -75,12 +71,10 @@ impl VerifySigShareError {
 }
 
 #[derive(Clone, Debug)]
-// TODO(CON-1421): Remove once all errors are in use
-#[allow(dead_code)]
 enum CombineSigSharesError {
     Ecdsa(ThresholdEcdsaCombineSigSharesError),
     Schnorr(ThresholdSchnorrCombineSigSharesError),
-    VetKd(VetKdKeyShareCombinationError),
+    VetKdUnexpected,
 }
 
 impl CombineSigSharesError {
@@ -91,8 +85,6 @@ impl CombineSigSharesError {
                 ThresholdEcdsaCombineSigSharesError::UnsatisfiedReconstructionThreshold { .. }
             ) | CombineSigSharesError::Schnorr(
                 ThresholdSchnorrCombineSigSharesError::UnsatisfiedReconstructionThreshold { .. }
-            ) | CombineSigSharesError::VetKd(
-                VetKdKeyShareCombinationError::UnsatisfiedReconstructionThreshold { .. }
             )
         )
     }
@@ -178,7 +170,7 @@ impl ThresholdSignerImpl {
                             idkg_pool,
                             transcript_loader,
                             request_id,
-                            &sig_inputs,
+                            sig_inputs,
                         )
                     })
                     .unwrap_or_default()
@@ -379,9 +371,9 @@ impl ThresholdSignerImpl {
         idkg_pool: &dyn IDkgPool,
         transcript_loader: &dyn IDkgTranscriptLoader,
         request_id: RequestId,
-        sig_inputs: &ThresholdSigInputs,
+        sig_inputs: ThresholdSigInputs,
     ) -> IDkgChangeSet {
-        if let Some(changes) = self.load_dependencies(idkg_pool, transcript_loader, sig_inputs) {
+        if let Some(changes) = self.load_dependencies(idkg_pool, transcript_loader, &sig_inputs) {
             return changes;
         }
 
@@ -404,11 +396,11 @@ impl ThresholdSignerImpl {
     fn crypto_create_sig_share(
         &self,
         request_id: RequestId,
-        sig_inputs: &ThresholdSigInputs,
+        sig_inputs: ThresholdSigInputs,
     ) -> Result<IDkgMessage, CreateSigShareError> {
         match sig_inputs {
             ThresholdSigInputs::Ecdsa(inputs) => {
-                ThresholdEcdsaSigner::create_sig_share(&*self.crypto, inputs).map_or_else(
+                ThresholdEcdsaSigner::create_sig_share(&*self.crypto, &inputs).map_or_else(
                     |err| Err(CreateSigShareError::Ecdsa(err)),
                     |share| {
                         let sig_share = EcdsaSigShare {
@@ -421,7 +413,7 @@ impl ThresholdSignerImpl {
                 )
             }
             ThresholdSigInputs::Schnorr(inputs) => {
-                ThresholdSchnorrSigner::create_sig_share(&*self.crypto, inputs).map_or_else(
+                ThresholdSchnorrSigner::create_sig_share(&*self.crypto, &inputs).map_or_else(
                     |err| Err(CreateSigShareError::Schnorr(err)),
                     |share| {
                         let sig_share = SchnorrSigShare {
@@ -433,8 +425,18 @@ impl ThresholdSignerImpl {
                     },
                 )
             }
-            ThresholdSigInputs::VetKd(_inputs) => {
-                todo!("CON-1421: Call crypto endpoint to create a VetKd share");
+            ThresholdSigInputs::VetKd(inputs) => {
+                VetKdProtocol::create_encrypted_key_share(&*self.crypto, inputs).map_or_else(
+                    |err| Err(CreateSigShareError::VetKd(Box::new(err))),
+                    |share| {
+                        let sig_share = VetKdKeyShare {
+                            signer_id: self.node_id,
+                            request_id,
+                            share,
+                        };
+                        Ok(IDkgMessage::VetKdKeyShare(sig_share))
+                    },
+                )
             }
         }
     }
@@ -473,8 +475,17 @@ impl ThresholdSignerImpl {
                     |_| Ok(IDkgMessage::SchnorrSigShare(share)),
                 )
             }
-            (ThresholdSigInputs::VetKd(_inputs), SigShare::VetKd(_share)) => {
-                todo!("CON-1421: Call crypto endpoint to verify VetKd share")
+            (ThresholdSigInputs::VetKd(inputs), SigShare::VetKd(share)) => {
+                VetKdProtocol::verify_encrypted_key_share(
+                    &*self.crypto,
+                    share.signer_id,
+                    &share.share,
+                    inputs,
+                )
+                .map_or_else(
+                    |err| Err(VerifySigShareError::VetKd(err)),
+                    |_| Ok(IDkgMessage::VetKdKeyShare(share)),
+                )
             }
             _ => Err(VerifySigShareError::ThresholdSchemeMismatch),
         };
@@ -710,16 +721,9 @@ impl<'a> ThresholdSignatureBuilderImpl<'a> {
                         |share| Ok(CombinedSignature::Schnorr(share)),
                     )
             }
-            ThresholdSigInputs::VetKd(_inputs) => {
-                // Collect the VetKd shares for the request.
-                let mut sig_shares = BTreeMap::new();
-                for (_, share) in self.idkg_pool.validated().vetkd_key_shares() {
-                    if share.request_id == *request_id {
-                        sig_shares.insert(share.signer_id, share.share.clone());
-                    }
-                }
-                todo!("CON-1421: Call crypto endpoint to combine VetKd shares");
-            }
+            // We don't expect to combine VetKD shares here
+            // (this is done by the VetKD payload builder instead).
+            ThresholdSigInputs::VetKd(_) => Err(CombineSigSharesError::VetKdUnexpected),
         };
         stats.record_sig_share_aggregation(request_id, start.elapsed());
         ret
@@ -857,10 +861,11 @@ mod tests {
     };
     use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
     use ic_interfaces::p2p::consensus::{MutablePool, UnvalidatedArtifact};
-    use ic_management_canister_types::{MasterPublicKeyId, SchnorrAlgorithm};
+    use ic_management_canister_types_private::{MasterPublicKeyId, SchnorrAlgorithm};
     use ic_replicated_state::metadata_state::subnet_call_context_manager::{
-        EcdsaArguments, SchnorrArguments, ThresholdArguments,
+        EcdsaArguments, SchnorrArguments, ThresholdArguments, VetKdArguments,
     };
+    use ic_test_utilities::crypto::CryptoReturningOk;
     use ic_test_utilities_consensus::IDkgStatsNoOp;
     use ic_test_utilities_logger::with_test_replica_logger;
     use ic_test_utilities_types::ids::{
@@ -944,7 +949,7 @@ mod tests {
         }
     }
 
-    fn test_signature_shares_purging(key_id: IDkgMasterPublicKeyId) {
+    fn test_signature_shares_purging(key_id: MasterPublicKeyId) {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
                 let (mut idkg_pool, signer, state_manager) =
@@ -1014,7 +1019,7 @@ mod tests {
         }
     }
 
-    fn test_send_signature_shares(key_id: IDkgMasterPublicKeyId) {
+    fn test_send_signature_shares(key_id: MasterPublicKeyId) {
         let mut generator = IDkgUIDGenerator::new(subnet_test_id(1), Height::new(0));
         let height = Height::from(100);
         let ids: Vec<_> = (0..5).map(|i| request_id(i, height)).collect();
@@ -1119,8 +1124,10 @@ mod tests {
 
     // Tests that no signature shares for incomplete contexts are created
     #[test]
-    fn test_send_signature_shares_incomplete_contexts_all_algorithms() {
-        for key_id in fake_master_public_key_ids_for_all_algorithms() {
+    fn test_send_signature_shares_incomplete_contexts_all_idkg_algorithms() {
+        // Only test IDKG algorithms, as VetKD contexts don't require pre-signatures
+        // and therefore cannot be "incomplete".
+        for key_id in fake_master_public_key_ids_for_all_idkg_algorithms() {
             println!("Running test for key ID {key_id}");
             test_send_signature_shares_incomplete_contexts(key_id);
         }
@@ -1161,11 +1168,11 @@ mod tests {
                 // One context without nonce
                 fake_signature_request_context_with_pre_sig(ids[1], key_id.clone(), Some(pids[1])),
                 // One completed context
-                fake_signature_request_context_from_id(key_id.clone(), pids[2], ids[2]),
+                fake_signature_request_context_from_id(key_id.clone().into(), pids[2], ids[2]),
                 // One completed context matched to a pre-signature of the wrong scheme
-                fake_signature_request_context_from_id(key_id.clone(), pids[3], ids[3]),
+                fake_signature_request_context_from_id(key_id.clone().into(), pids[3], ids[3]),
                 // One completed context matched to a pre-signature that doesn't exist
-                fake_signature_request_context_from_id(key_id.clone(), pids[4], ids[4]),
+                fake_signature_request_context_from_id(key_id.clone().into(), pids[4], ids[4]),
             ],
         );
 
@@ -1200,7 +1207,7 @@ mod tests {
         }
     }
 
-    fn test_send_signature_shares_when_failure(key_id: IDkgMasterPublicKeyId) {
+    fn test_send_signature_shares_when_failure(key_id: MasterPublicKeyId) {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
                 let mut generator = IDkgUIDGenerator::new(subnet_test_id(1), Height::new(0));
@@ -1224,7 +1231,7 @@ mod tests {
                     }),
                 );
 
-                let (idkg_pool, signer) = create_signer_dependencies(pool_config, logger);
+                let (mut idkg_pool, signer) = create_signer_dependencies(pool_config, logger);
 
                 let transcript_loader =
                     TestIDkgTranscriptLoader::new(TestTranscriptLoadStatus::Failure);
@@ -1235,8 +1242,15 @@ mod tests {
                     &state,
                 );
 
-                // No shares should be created when transcripts fail to load
-                assert!(change_set.is_empty());
+                if key_id.is_idkg_key() {
+                    // No shares should be created for IDKG keys when transcripts fail to load
+                    assert!(change_set.is_empty());
+                } else {
+                    // NiDKG transcripts are loaded ahead of time, so creation should succeed, even if
+                    // IDKG transcripts fail to load.
+                    assert_eq!(change_set.len(), 3);
+                }
+                idkg_pool.apply(change_set);
 
                 let transcript_loader =
                     TestIDkgTranscriptLoader::new(TestTranscriptLoadStatus::Success);
@@ -1247,8 +1261,13 @@ mod tests {
                     &state,
                 );
 
-                // Shares should be created when transcripts succeed to load
-                assert_eq!(change_set.len(), 3);
+                if key_id.is_idkg_key() {
+                    // IDKG key siganture shares should be created when transcripts succeed to load
+                    assert_eq!(change_set.len(), 3);
+                } else {
+                    // No new shares should be created with NiDKG, as they were already created above
+                    assert!(change_set.is_empty());
+                }
             })
         })
     }
@@ -1256,8 +1275,9 @@ mod tests {
     // Tests that complaints are generated and added to the pool if loading transcript
     // results in complaints.
     #[test]
-    fn test_send_signature_shares_with_complaints_all_algorithms() {
-        for key_id in fake_master_public_key_ids_for_all_algorithms() {
+    fn test_send_signature_shares_with_complaints_all_idkg_algorithms() {
+        // Only test IDKG algorithms, as there are no complaints for NiDKG
+        for key_id in fake_master_public_key_ids_for_all_idkg_algorithms() {
             println!("Running test for key ID {key_id}");
             test_send_signature_shares_with_complaints(key_id);
         }
@@ -1283,7 +1303,11 @@ mod tests {
                 let state = fake_state_with_signature_requests(
                     height,
                     (0..3).map(|i| {
-                        fake_signature_request_context_from_id(key_id.clone(), pids[i], ids[i])
+                        fake_signature_request_context_from_id(
+                            key_id.clone().into(),
+                            pids[i],
+                            ids[i],
+                        )
                     }),
                 );
 
@@ -1320,14 +1344,14 @@ mod tests {
     }
 
     #[test]
-    fn test_crypto_verify_sig_share_all_algorithms() {
-        for key_id in fake_master_public_key_ids_for_all_algorithms() {
+    fn test_crypto_verify_sig_share_all_idkg_algorithms() {
+        for key_id in fake_master_public_key_ids_for_all_idkg_algorithms() {
             println!("Running test for key ID {key_id}");
-            test_crypto_verify_sig_share(key_id);
+            test_crypto_verify_idkg_sig_share(key_id);
         }
     }
 
-    fn test_crypto_verify_sig_share(key_id: IDkgMasterPublicKeyId) {
+    fn test_crypto_verify_idkg_sig_share(key_id: IDkgMasterPublicKeyId) {
         let mut rng = reproducible_rng();
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
@@ -1418,7 +1442,7 @@ mod tests {
         }
     }
 
-    fn test_validate_signature_shares(key_id: IDkgMasterPublicKeyId) {
+    fn test_validate_signature_shares(key_id: MasterPublicKeyId) {
         let mut generator = IDkgUIDGenerator::new(subnet_test_id(1), Height::new(0));
         let height = Height::from(100);
         let (id_1, id_2, id_3, id_4) = (
@@ -1500,20 +1524,27 @@ mod tests {
             })
         });
 
-        // Simulate failure when resolving transcripts
+        // Simulate failure when resolving IDKG transcripts
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
                 let (mut idkg_pool, signer) = create_signer_dependencies(pool_config, logger);
                 artifacts.iter().for_each(|a| idkg_pool.insert(a.clone()));
 
                 let block_reader = block_reader.clone().with_fail_to_resolve();
-                // There are no transcripts in the block reader, shares created for transcripts
-                // that cannot be resolved should be handled invalid.
+
                 let change_set =
                     signer.validate_signature_shares(&idkg_pool, &block_reader, &state);
                 assert_eq!(change_set.len(), 3);
-                assert!(is_handle_invalid(&change_set, &msg_id_2));
-                assert!(is_handle_invalid(&change_set, &msg_id_3));
+                if key_id.is_idkg_key() {
+                    // There are no IDKG transcripts in the block reader, shares created for IDKG transcripts
+                    // that cannot be resolved should be handled invalid.
+                    assert!(is_handle_invalid(&change_set, &msg_id_2));
+                    assert!(is_handle_invalid(&change_set, &msg_id_3));
+                } else {
+                    // IDKG transcripts should not affect NiDKG key share validation
+                    assert!(is_moved_to_validated(&change_set, &msg_id_2));
+                    assert!(is_moved_to_validated(&change_set, &msg_id_3));
+                }
                 assert!(is_removed_from_unvalidated(&change_set, &msg_id_4));
             })
         });
@@ -1528,7 +1559,7 @@ mod tests {
         }
     }
 
-    fn test_validate_signature_shares_mismatching_schemes(key_id: IDkgMasterPublicKeyId) {
+    fn test_validate_signature_shares_mismatching_schemes(key_id: MasterPublicKeyId) {
         let mut generator = IDkgUIDGenerator::new(subnet_test_id(1), Height::new(0));
         let height = Height::from(100);
         let (id_1, id_2) = (request_id(1, height), request_id(2, height));
@@ -1566,12 +1597,12 @@ mod tests {
         });
 
         // A share for the second context with mismatching schemes
-        let key_id_wrong_scheme = match key_id.inner() {
+        let key_id_wrong_scheme = match key_id {
             MasterPublicKeyId::Ecdsa(_) => {
-                fake_schnorr_idkg_master_public_key_id(SchnorrAlgorithm::Ed25519)
+                fake_schnorr_idkg_master_public_key_id(SchnorrAlgorithm::Ed25519).into()
             }
-            MasterPublicKeyId::Schnorr(_) => fake_ecdsa_idkg_master_public_key_id(),
-            MasterPublicKeyId::VetKd(_) => panic!("not applicable to vetKD"),
+            MasterPublicKeyId::Schnorr(_) => fake_vetkd_master_public_key_id(),
+            MasterPublicKeyId::VetKd(_) => fake_ecdsa_idkg_master_public_key_id().into(),
         };
         let message = create_signature_share(&key_id_wrong_scheme, NODE_2, id_2);
         let msg_id_2 = message.message_id();
@@ -1598,7 +1629,9 @@ mod tests {
     // Tests that signature shares for incomplete contexts are not validated
     #[test]
     fn test_validate_signature_shares_incomplete_contexts_all_algorithms() {
-        for key_id in fake_master_public_key_ids_for_all_algorithms() {
+        // Only test IDKG algorithms, as VetKD contexts don't require pre-signatures
+        // and therefore cannot be "incomplete".
+        for key_id in fake_master_public_key_ids_for_all_idkg_algorithms() {
             println!("Running test for key ID {key_id}");
             test_validate_signature_shares_incomplete_contexts(key_id);
         }
@@ -1628,7 +1661,7 @@ mod tests {
                 // One context without nonce
                 fake_signature_request_context_with_pre_sig(ids[1], key_id.clone(), Some(pids[1])),
                 // One completed context
-                fake_signature_request_context_from_id(key_id.clone(), pids[2], ids[2]),
+                fake_signature_request_context_from_id(key_id.clone().into(), pids[2], ids[2]),
             ],
         );
 
@@ -1694,7 +1727,7 @@ mod tests {
         }
     }
 
-    fn test_duplicate_signature_shares(key_id: IDkgMasterPublicKeyId) {
+    fn test_duplicate_signature_shares(key_id: MasterPublicKeyId) {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
                 let height = Height::from(100);
@@ -1750,7 +1783,7 @@ mod tests {
         }
     }
 
-    fn test_duplicate_signature_shares_in_batch(key_id: IDkgMasterPublicKeyId) {
+    fn test_duplicate_signature_shares_in_batch(key_id: MasterPublicKeyId) {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
                 let height = Height::from(100);
@@ -1802,7 +1835,6 @@ mod tests {
 
                 let change_set =
                     signer.validate_signature_shares(&idkg_pool, &block_reader, &state);
-                println!("{change_set:?}");
                 assert_eq!(change_set.len(), 3);
                 let msg_1_valid = is_moved_to_validated(&change_set, &msg_id_1)
                     && is_handle_invalid(&change_set, &msg_id_2);
@@ -1825,7 +1857,7 @@ mod tests {
         }
     }
 
-    fn test_purge_unvalidated_signature_shares(key_id: IDkgMasterPublicKeyId) {
+    fn test_purge_unvalidated_signature_shares(key_id: MasterPublicKeyId) {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
                 let height = Height::from(100);
@@ -1892,7 +1924,7 @@ mod tests {
         }
     }
 
-    fn test_purge_validated_signature_shares(key_id: IDkgMasterPublicKeyId) {
+    fn test_purge_validated_signature_shares(key_id: MasterPublicKeyId) {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
                 let height = Height::from(100);
@@ -2209,6 +2241,64 @@ mod tests {
                     &metrics,
                     logger,
                 );
+
+                let result = sig_builder.get_completed_signature(callback_id, &context);
+                assert_matches!(result, None);
+            });
+        })
+    }
+
+    #[test]
+    fn test_vetkd_get_completed_signature_unexpected() {
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            with_test_replica_logger(|logger| {
+                let (idkg_pool, _) = create_signer_dependencies(pool_config, logger.clone());
+
+                let callback_id = CallbackId::from(1);
+                let key_id = fake_vetkd_key_id();
+                let height = Height::from(100);
+                let context = SignWithThresholdContext {
+                    request: RequestBuilder::new().sender(canister_test_id(1)).build(),
+                    args: ThresholdArguments::VetKd(VetKdArguments {
+                        key_id: key_id.clone(),
+                        derivation_id: vec![],
+                        encryption_public_key: vec![],
+                        ni_dkg_id: fake_dkg_id(key_id),
+                        height,
+                    }),
+                    pseudo_random_id: [1; 32],
+                    derivation_path: vec![],
+                    batch_time: UNIX_EPOCH,
+                    matched_pre_signature: None,
+                    nonce: None,
+                };
+
+                // Set up the block reader
+                let block_reader = TestIDkgBlockReader::for_signer_test(height, vec![]);
+
+                let metrics = IDkgPayloadMetrics::new(MetricsRegistry::new());
+                let crypto: Arc<dyn ConsensusCrypto> = Arc::new(CryptoReturningOk::default());
+
+                let sig_builder = ThresholdSignatureBuilderImpl::new(
+                    &block_reader,
+                    crypto.deref(),
+                    &idkg_pool,
+                    &metrics,
+                    logger,
+                );
+
+                // We don't expect to combine VetKD shares using the ThresholdSignatureBuilder
+                // (they are instead created by the VetKD payload builder).
+                let (request_id, sig_inputs_ref) =
+                    build_signature_inputs(callback_id, &context, &block_reader).unwrap();
+                let sig_inputs = sig_inputs_ref.translate(&block_reader).unwrap();
+
+                let result = sig_builder.crypto_combine_sig_shares(
+                    &request_id,
+                    &sig_inputs,
+                    idkg_pool.stats(),
+                );
+                assert_matches!(result, Err(CombineSigSharesError::VetKdUnexpected));
 
                 let result = sig_builder.get_completed_signature(callback_id, &context);
                 assert_matches!(result, None);
