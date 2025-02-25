@@ -527,7 +527,9 @@ fn induct_loopback_stream_success() {
 fn induct_loopback_stream_with_subnet_message_memory_limit() {
     // A stream handler with a subnet message memory limit that only allows up to 3 reservations.
     induct_loopback_stream_with_memory_limit_impl(HypervisorConfig {
-        subnet_message_memory_capacity: NumBytes::new(MAX_RESPONSE_COUNT_BYTES as u64 * 7 / 2),
+        guaranteed_response_message_memory_capacity: NumBytes::new(
+            MAX_RESPONSE_COUNT_BYTES as u64 * 7 / 2,
+        ),
         ..Default::default()
     });
 }
@@ -539,7 +541,9 @@ fn induct_loopback_stream_with_subnet_message_memory_limit() {
 fn legacy_induct_loopback_stream_with_subnet_message_memory_limit() {
     // A stream handler with a subnet message memory limit that only allows up to 3 reservations.
     legacy_induct_loopback_stream_with_memory_limit_impl(HypervisorConfig {
-        subnet_message_memory_capacity: NumBytes::new(MAX_RESPONSE_COUNT_BYTES as u64 * 7 / 2),
+        guaranteed_response_message_memory_capacity: NumBytes::new(
+            MAX_RESPONSE_COUNT_BYTES as u64 * 7 / 2,
+        ),
         ..Default::default()
     });
 }
@@ -551,7 +555,9 @@ fn induct_loopback_stream_with_zero_subnet_wasm_custom_sections_limit() {
     // A stream handler with a subnet message memory limit that only allows up to 3 reservations
     // and no allowance for wasm custom sections.
     induct_loopback_stream_with_memory_limit_impl(HypervisorConfig {
-        subnet_message_memory_capacity: NumBytes::new(MAX_RESPONSE_COUNT_BYTES as u64 * 7 / 2),
+        guaranteed_response_message_memory_capacity: NumBytes::new(
+            MAX_RESPONSE_COUNT_BYTES as u64 * 7 / 2,
+        ),
         subnet_wasm_custom_sections_memory_capacity: NumBytes::new(0),
         ..Default::default()
     });
@@ -565,7 +571,9 @@ fn legacy_induct_loopback_stream_with_zero_subnet_wasm_custom_sections_limit() {
     // A stream handler with a subnet message memory limit that only allows up to 3 reservations
     // and no allowance for wasm custom sections.
     legacy_induct_loopback_stream_with_memory_limit_impl(HypervisorConfig {
-        subnet_message_memory_capacity: NumBytes::new(MAX_RESPONSE_COUNT_BYTES as u64 * 7 / 2),
+        guaranteed_response_message_memory_capacity: NumBytes::new(
+            MAX_RESPONSE_COUNT_BYTES as u64 * 7 / 2,
+        ),
         subnet_wasm_custom_sections_memory_capacity: NumBytes::new(0),
         ..Default::default()
     });
@@ -601,7 +609,9 @@ fn system_subnet_induct_loopback_stream_ignores_subnet_memory_limit() {
 fn system_subnet_induct_loopback_stream_ignores_subnet_message_memory_limit() {
     // A stream handler with a subnet message memory limit that only allows up to 3 reservations.
     induct_loopback_stream_ignores_memory_limit_impl(HypervisorConfig {
-        subnet_message_memory_capacity: NumBytes::new(MAX_RESPONSE_COUNT_BYTES as u64 * 7 / 2),
+        guaranteed_response_message_memory_capacity: NumBytes::new(
+            MAX_RESPONSE_COUNT_BYTES as u64 * 7 / 2,
+        ),
         ..Default::default()
     });
 }
@@ -612,7 +622,9 @@ fn system_subnet_induct_loopback_stream_ignores_subnet_message_memory_limit() {
 fn system_subnet_induct_loopback_stream_ignores_subnet_wasm_custom_sections_memory_limit() {
     // A stream handler with a subnet message memory limit that only allows up to 3 reservations.
     induct_loopback_stream_ignores_memory_limit_impl(HypervisorConfig {
-        subnet_message_memory_capacity: NumBytes::new(MAX_RESPONSE_COUNT_BYTES as u64 * 7 / 2),
+        guaranteed_response_message_memory_capacity: NumBytes::new(
+            MAX_RESPONSE_COUNT_BYTES as u64 * 7 / 2,
+        ),
         subnet_wasm_custom_sections_memory_capacity: NumBytes::new(0),
         ..Default::default()
     });
@@ -3052,7 +3064,7 @@ fn induct_stream_slices_with_memory_limit_impl(subnet_type: SubnetType) {
     with_test_setup_and_config(
         // A config with only enough subnet message memory for one request + epsilon.
         HypervisorConfig {
-            subnet_message_memory_capacity: NumBytes::new(
+            guaranteed_response_message_memory_capacity: NumBytes::new(
                 MAX_RESPONSE_COUNT_BYTES as u64 * 15 / 10,
             ),
             ..Default::default()
@@ -3151,7 +3163,7 @@ fn legacy_induct_stream_slices_with_memory_limit_impl(subnet_type: SubnetType) {
     with_test_setup_and_config(
         // A config with only enough subnet message memory for one request + epsilon.
         HypervisorConfig {
-            subnet_message_memory_capacity: NumBytes::new(
+            guaranteed_response_message_memory_capacity: NumBytes::new(
                 MAX_RESPONSE_COUNT_BYTES as u64 * 15 / 10,
             ),
             ..Default::default()

@@ -11,5 +11,6 @@ boundary_node_icos_build(
     visibility = [
         "//rs:ic-os-pkg",
         "//rs:system-tests-pkg",
+        "//testnet/tools:icos_deploy-pkg",
     ],
 )

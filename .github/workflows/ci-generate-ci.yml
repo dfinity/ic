@@ -12,9 +12,6 @@ on:
 env:
   CI_PROJECT_DIR: ${{ github.workspace }}
 
-permissions:
-  contents: write
-  pull-requests: write
 
 jobs:
   generate-ci:
