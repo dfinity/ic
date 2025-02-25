@@ -14,10 +14,10 @@ mod test {
     use ic_metrics::MetricsRegistry;
     use once_cell::sync::OnceCell;
     use rstest::rstest;
-    use rustls::ServerConfig;
+    use rustls::{pki_types::Ipv6Addr, ServerConfig};
     use std::{convert::TryFrom, env, io::Write, path::Path, sync::Arc};
     use tempfile::TempDir;
-    use tokio::net::{TcpSocket, UnixStream};
+    use tokio::{io::AsyncWriteExt, net::{TcpListener, TcpSocket, TcpStream, UnixStream}};
     use tokio_rustls::TlsAcceptor;
     use tonic::transport::{Channel, Endpoint, Uri};
     use tower::service_fn;
@@ -27,6 +27,9 @@ mod test {
         http::{header::HeaderValue, Response, StatusCode},
         Filter,
     };
+    use socks5_impl::protocol::{handshake, Address, AsyncStreamOperation, AuthMethod, Command, Reply, Request as Socks5Request, Response as Socks5Response};
+    use std::io;
+    use std::net::SocketAddr;
 
     #[cfg(feature = "http")]
     use std::net::IpAddr;
@@ -130,6 +133,180 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
         cert_dir.path().join("key.pem")
     }
 
+    /// Spawns a minimal SOCKS5 server on `bind_addr` in the background (via `tokio::spawn`).
+    /// Returns the actual local address (which includes the ephemeral port) that the server
+    /// ended up binding to.  You can then pass `socks5://127.0.0.1:<port>` to your code.
+    pub async fn spawn_socks5_server(bind_addr: &str, url: String) -> io::Result<SocketAddr> {
+        let listener = TcpListener::bind(bind_addr).await?;
+        let local_addr = listener.local_addr()?;
+
+        // Spawn the server in the background
+        tokio::spawn(async move {
+            loop {
+                match listener.accept().await {
+                    Ok((stream, _client_addr)) => {
+                        let url = url.clone();
+                        tokio::spawn(async move {
+                            if let Err(e) = handle_client(stream, url).await {
+                                eprintln!("[SOCKS5] Error in client handler: {:?}", e);
+                            }
+                        });
+                    }
+                    Err(e) => {
+                        eprintln!("[SOCKS5] Error accepting: {:?}", e);
+                        break;
+                    }
+                }
+            }
+        });
+
+        Ok(local_addr)
+    }
+
+    pub async fn handle_client(stream: TcpStream, url: String) -> io::Result<()> {
+        // 1) Perform SOCKS5 handshake
+        let mut stream = stream; // We'll do the handshake before splitting.
+        println!("debuggg 10");
+        let handshake_req = handshake::Request::retrieve_from_async_stream(&mut stream).await?;
+        if handshake_req.evaluate_method(AuthMethod::NoAuth) {
+            // Accept "no auth"
+            handshake::Response::new(AuthMethod::NoAuth)
+                .write_to_async_stream(&mut stream)
+                .await?;
+        } else {
+            // If the client doesn't support "no auth", reject.
+            handshake::Response::new(AuthMethod::NoAcceptableMethods)
+                .write_to_async_stream(&mut stream)
+                .await?;
+            stream.shutdown().await?;
+            return Err(io::Error::new(
+                io::ErrorKind::Unsupported,
+                "No supported authentication method",
+            ));
+        }
+        println!("debuggg 11");
+
+        // 2) Read the SOCKS request (command + target)
+        let req = match Socks5Request::retrieve_from_async_stream(&mut stream).await {
+            Ok(req) => req,
+            Err(e) => {
+                Socks5Response::new(Reply::GeneralFailure, Address::unspecified())
+                    .write_to_async_stream(&mut stream)
+                    .await?;
+                stream.shutdown().await?;
+                return Err(e);
+            }
+        };
+        println!("debuggg 12");
+
+        // 3) Only handle CONNECT in this minimal example
+        if req.command != Command::Connect {
+            Socks5Response::new(Reply::CommandNotSupported, Address::unspecified())
+                .write_to_async_stream(&mut stream)
+                .await?;
+            stream.shutdown().await?;
+            return Err(io::Error::new(
+                io::ErrorKind::Unsupported,
+                "Only CONNECT command is supported",
+            ));
+        }
+        println!("debuggg 13 {}", req.address.clone());
+
+        // 4) Convert the Address to a SocketAddr (or do DNS for domain names).
+        //    socks5_impl::protocol::Address can contain:
+        //      - SocketAddress(SocketAddr)
+        //      - IpV4([u8;4], port)
+        //      - IpV6([u8;16], port)
+        //      - DomainName { domain, port }
+        //    but let's handle a couple common variants:
+        let mut target_addrs: Vec<SocketAddr> = match req.address.clone() {
+            // If it's already SocketAddr(127.0.0.1:8080), just use it
+            Address::SocketAddress(sock) => vec![sock],
+
+            // If the library gives us "DomainName { domain, port }",
+            // do a DNS lookup to convert to an IP
+            Address::DomainAddress(domain, port) => {
+                println!("debuggg need dns");
+                tokio::net::lookup_host((domain.as_str(), port)).await?.collect()
+            }
+        };
+        println!("debuggg 13.5");
+
+        target_addrs = tokio::net::lookup_host(url.clone()).await?.collect();
+
+        println!("debuggg 14 {} {:?} {}", req.address, target_addrs, url);
+
+        let mut remote_stream = None;
+        let mut last_err = None;
+
+        for target_addr in target_addrs {
+
+            // 5) Attempt to connect to target
+             match TcpStream::connect(target_addr).await {
+                Ok(s) => {
+                    remote_stream = Some(s);
+                    break;        
+                },
+                Err(e) => {
+                    last_err = Some(e);
+                }
+            };
+        }
+        remote_stream = Some(TcpStream::connect(url.clone()).await?);
+        println!("debuggg 15");
+
+        let remote_stream = match remote_stream {
+            Some(s) => s,
+            None => {
+                // All addresses failed, pick whatever last error we got
+                let e = last_err.unwrap_or_else(|| {
+                    std::io::Error::new(std::io::ErrorKind::Other, "No addresses from DNS")
+                });
+
+                Socks5Response::new(Reply::HostUnreachable, Address::unspecified())
+                    .write_to_async_stream(&mut stream)
+                    .await?;
+                stream.shutdown().await?;
+
+                return Err(e);
+            }
+        };
+
+        // 6) Send "Succeeded" to the client
+        let local_sock = remote_stream.local_addr()?;
+        Socks5Response::new(Reply::Succeeded, Address::SocketAddress(local_sock))
+            .write_to_async_stream(&mut stream)
+            .await?;
+        println!("debuggg 16");
+        // 7) Split both streams with `into_split()`, not `split()`.
+        //    `into_split()` consumes the `TcpStream` and returns owned halves.
+        //    Owned halves implement `Send + 'static`, so they can be moved into spawn tasks.
+        let (client_read, client_write) = stream.into_split();
+        let (remote_read, remote_write) = remote_stream.into_split();
+
+        // Forward client -> remote in a background task
+        tokio::spawn(async move {
+            let mut client_read = client_read;
+            let mut remote_write = remote_write;
+            let _ = tokio::io::copy(&mut client_read, &mut remote_write).await;
+            let _ = remote_write.shutdown().await;
+        });
+        println!("debuggg 17");
+
+        // Forward remote -> client in the current task
+        {
+            let mut remote_read = remote_read;
+            let mut client_write = client_write;
+            println!("debuggg 18");
+            let _ = tokio::io::copy(&mut remote_read, &mut client_write).await;
+            println!("debuggg 19");
+            let _ = client_write.shutdown().await;
+            println!("debuggg 20");
+        }
+
+        Ok(())
+    }
+
     fn start_server(cert_dir: &TempDir) -> String {
         let (addr, fut) = warp::serve(warp_server())
             .tls()
@@ -150,6 +327,40 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
     }
 
     #[tokio::test]
+    async fn test_canister_http_socks_server() {
+        let url = start_server(CERT_INIT.get_or_init(generate_certs));
+
+        println!("debuggg url {}", url);
+        let socks_addr = spawn_socks5_server("127.0.0.1:0", url.clone())
+            .await
+            .expect("Failed to bind socks");
+
+        let path = "/tmp/canister-http-test-".to_string() + &Uuid::new_v4().to_string();
+        let server_config = Config {
+            incoming_source: IncomingSource::Path(path.into()),
+            socks_proxy: format!("socks5://{}", socks_addr),
+            //TODO(mihailjianu): start the socks server, and add it here. 
+            ..Default::default()
+        };
+        let mut client = spawn_grpc_server(server_config);
+        let unreachable_url = "10.255.255.1:9999";
+
+        // Make direct request to unreachable url. Need to rely on the socks proxy to make the correct request. 
+        let request = tonic::Request::new(HttpsOutcallRequest {
+            url: format!("https://{}/get", &url),
+            headers: Vec::new(),
+            method: HttpMethod::Get as i32,
+            body: "hello".to_string().as_bytes().to_vec(),
+            max_response_size_bytes: 512,
+            socks_proxy_allowed: true,
+            ..Default::default()
+        });
+        let response = client.https_outcall(request).await;
+        let http_response = response.unwrap().into_inner();
+        assert_eq!(http_response.status, StatusCode::OK.as_u16() as u32);
+    }
+
+    #[tokio::test]
     async fn test_canister_http_server() {
         let path = "/tmp/canister-http-test-".to_string() + &Uuid::new_v4().to_string();
         let server_config = Config {
@@ -159,8 +370,29 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
         let url = start_server(CERT_INIT.get_or_init(generate_certs));
         let mut client = spawn_grpc_server(server_config);
 
+        let ips: Vec<SocketAddr> = tokio::net::lookup_host(url.clone()).await.unwrap().collect();
+        let mut ipv4_addr = None;
+        let mut ipv6_addr = None;
+        for ip in ips {
+            println!("debuggg ip {}", ip);
+            match ip {
+                SocketAddr::V4(ipv4) => {
+                    ipv4_addr = Some(ipv4.clone());
+                }
+                SocketAddr::V6(ipv6) => {
+                    ipv6_addr = Some(ipv6.clone());
+                }
+            }
+        }
+        if ipv6_addr.is_none() {
+            panic!("No ipv6 address found");
+        }
+
+        let ipv6_addr = ipv6_addr.unwrap();
+        let ipv4_addr = ipv4_addr.unwrap();
+
         let request = tonic::Request::new(HttpsOutcallRequest {
-            url: format!("https://{}/get", &url),
+            url: format!("https://{}/get", url),
             headers: Vec::new(),
             method: HttpMethod::Get as i32,
             body: "hello".to_string().as_bytes().to_vec(),

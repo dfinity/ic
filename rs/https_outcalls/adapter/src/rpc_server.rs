@@ -268,9 +268,12 @@ impl HttpsOutcallsService for CanisterHttp {
         &self,
         request: Request<HttpsOutcallRequest>,
     ) -> Result<Response<HttpsOutcallResponse>, Status> {
+        println!("debuggg -1");
         self.metrics.requests.inc();
 
         let req = request.into_inner();
+
+        println!("debuggg url is {}", req.url);
 
         let uri = req.url.parse::<Uri>().map_err(|err| {
             debug!(self.logger, "Failed to parse URL: {}", err);
@@ -340,6 +343,7 @@ impl HttpsOutcallsService for CanisterHttp {
             .iter()
             .map(|(name, value)| name.as_str().len() + value.len())
             .sum::<usize>();
+        
 
         // If we are allowed to use socks and condition described in `should_use_socks_proxy` hold,
         // we do the requests through the socks proxy. If not we use the default IPv6 route.
@@ -350,15 +354,16 @@ impl HttpsOutcallsService for CanisterHttp {
             *http_req.method_mut() = method;
             *http_req.uri_mut() = uri.clone();
             let http_req_clone = http_req.clone();
+            println!("debuggg 0");
 
-            match self.client.request(http_req).await {
+            match true {
                 // If we fail we try with the socks proxy. For destinations that are ipv4 only this should
                 // fail fast because our interface does not have an ipv4 assigned.
-                Err(direct_err) => {
+                true => {
                     self.metrics.requests_socks.inc();
 
                     let result = self.socks_client.request(http_req_clone.clone()).await.map_err(|e| {
-                        format!("Request failed direct connect {direct_err} and connect through socks {e}")
+                        format!("Request failed direct connect and connect through socks {:?}", e)
                     });
 
                     //TODO(SOCKS_PROXY_DL): Remove the compare_results once we are confident in the SOCKS proxy implementation.
@@ -370,7 +375,7 @@ impl HttpsOutcallsService for CanisterHttp {
 
                     result
                 }
-                Ok(resp)=> Ok(resp),
+                false => Err("f".to_string()),
             }
         } else {
             let mut http_req = hyper::Request::new(Full::new(Bytes::from(req.body)));
