@@ -2388,7 +2388,7 @@ impl From<CanisterStateBits> for pb_canister_state_bits::CanisterStateBitsV2 {
             wasm_memory_limit: item.wasm_memory_limit.map(|v| v.get()),
             next_snapshot_id: item.next_snapshot_id,
             snapshots_memory_usage: item.snapshots_memory_usage.get(),
-            task_queue: item.task_queue.into_pb(),
+            task_queue: item.task_queue.into(),
         }
     }
 }
