@@ -267,12 +267,12 @@ mod tests {
             result,
             Ok(RewardsPerNodeProvider {
                 rewards_per_node_provider: btreemap! {
-                    node_operator_a_id.clone() => expected_node_operator_a_rewards,
-                    node_operator_b_id.clone() => expected_node_operator_b_rewards,
+                    node_operator_a_id => expected_node_operator_a_rewards,
+                    node_operator_b_id => expected_node_operator_b_rewards,
                 },
                 computation_log: btreemap! {
-                    node_operator_a_id.clone() => RewardsPerNodeProviderLog {
-                        node_provider_id: node_operator_a_id.clone(),
+                    node_operator_a_id => RewardsPerNodeProviderLog {
+                        node_provider_id: node_operator_a_id,
                         entries: vec![
                             LogEntry::NodeRewards {
                                 node_type: "type3".to_string(),
@@ -303,8 +303,8 @@ mod tests {
                             },
                         ]
                     },
-                    node_operator_b_id.clone() => RewardsPerNodeProviderLog {
-                        node_provider_id: node_operator_b_id.clone(),
+                    node_operator_b_id => RewardsPerNodeProviderLog {
+                        node_provider_id: node_operator_b_id,
                         entries: vec![
                             LogEntry::DCRewards {
                                 dc_id: "dc2".to_string(),
