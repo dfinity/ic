@@ -1202,7 +1202,6 @@ mod tests {
                         block_reader.tip_height()
                     ));
                 } else {
-                    println!("{change_set:?}");
                     // additional contexts are valid, because nonce and pre-signature don't matter,
                     // as long as the vetkd context was matched to an NiDkgId
                     assert_eq!(change_set.len(), 4);
@@ -1734,6 +1733,7 @@ mod tests {
                     assert!(is_removed_from_unvalidated(&change_set, &msg_id_4));
                 } else {
                     assert_eq!(change_set.len(), 3);
+                    // this context is considered completed in vetKD, as the nonce is unused.
                     assert!(is_moved_to_validated(&change_set, &msg_id_2));
                     assert!(is_moved_to_validated(&change_set, &msg_id_3));
                     assert!(is_removed_from_unvalidated(&change_set, &msg_id_4));
