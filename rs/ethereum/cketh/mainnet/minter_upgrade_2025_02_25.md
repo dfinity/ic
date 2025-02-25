@@ -16,7 +16,9 @@ Previous ckETH minter proposal: https://dashboard.internetcomputer.org/proposal/
 
 ## Motivation
 
-Upgrade the ckETH minter to update the OFAC checklist.
+Update the ckETH minter canister to include the latest code changes:
+* Replace the [rpc.sepolia.org](https://rpc.sepolia.org/) Sepolia RPC provider by Ankr.
+* Update the OFAC checklist.
 
 ## Upgrade args
 
