@@ -254,20 +254,29 @@ function verify_disks() {
 ###############################################################################
 
 function verify_drive_health() {
-    echo "* Verifying NVMe drive health..."
+    echo "* Verifying drive health..."
 
     local drives=($(get_large_drives))
+    local warning_triggered=0
+
     for drive in "${drives[@]}"; do
         echo "* Checking drive /dev/${drive} health..."
-        local nvme_output=$(nvme smart-log /dev/${drive})
-        log_and_halt_installation_on_error "${?}" "Failed to run nvme smart-log on /dev/${drive}."
-
-        local critical_warning=$(echo "${nvme_output}" | grep -i "critical_warning" | awk '{print $3}')
-        if [ "${critical_warning}" != "0" ]; then
-            log_and_halt_installation_on_error "1" "Drive /dev/${drive} reports a critical warning (value: ${critical_warning})."
+        local smartctl_output
+        if ! smartctl_output=$(smartctl -H /dev/${drive} 2>&1); then
+            echo -e "\033[1;31mWARNING: Failed to run smartctl on /dev/${drive}.\033[0m"
+            warning_triggered=1
+        elif ! echo "${smartctl_output}" | grep -qi "PASSED"; then
+            echo -e "\033[1;31mWARNING: Drive /dev/${drive} did not pass the SMART health check.\033[0m"
+            warning_triggered=1
+        else
+            echo "Drive /dev/${drive} health is OK."
         fi
-        echo "Drive /dev/${drive} health is OK."
     done
+
+    if [ "${warning_triggered}" -eq 1 ]; then
+        echo "Pausing for 5 minutes before continuing installation..."
+        sleep 300
+    fi
 }
 
 ###############################################################################
