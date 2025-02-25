@@ -1674,6 +1674,23 @@ fn check_pocketic_server_version(server_binary: &PathBuf) -> Result<(), String> 
     Ok(())
 }
 
+async fn download_pocketic_server(
+    server_url: String,
+    mut out: std::fs::File,
+) -> Result<(), String> {
+    let binary = reqwest::get(server_url)
+        .await
+        .map_err(|e| format!("Failed to download PocketIC server: {}", e))?
+        .bytes()
+        .await
+        .map_err(|e| format!("Failed to download PocketIC server: {}", e))?
+        .to_vec();
+    let mut gz = GzDecoder::new(&binary[..]);
+    let _ = std::io::copy(&mut gz, &mut out)
+        .map_err(|e| format!("Failed to write PocketIC server binary: {}", e));
+    Ok(())
+}
+
 /// Attempt to start a new PocketIC server if it's not already running.
 pub(crate) async fn start_or_reuse_server(server_binary: Option<PathBuf>) -> Url {
     let default_bin_dir =
@@ -1693,7 +1710,7 @@ pub(crate) async fn start_or_reuse_server(server_binary: Option<PathBuf>) -> Url
         options.write(true).create_new(true);
         #[cfg(unix)]
         options.mode(0o777);
-        if let Ok(mut out) = options.open(&default_bin_path) {
+        if let Ok(out) = options.open(&default_bin_path) {
             #[cfg(target_os = "macos")]
             let os = "darwin";
             #[cfg(not(target_os = "macos"))]
@@ -1702,21 +1719,21 @@ pub(crate) async fn start_or_reuse_server(server_binary: Option<PathBuf>) -> Url
                 "https://github.com/dfinity/pocketic/releases/download/{}/pocket-ic-x86_64-{}.gz",
                 EXPECTED_SERVER_VERSION, os
             );
-            println!("Failed to validate PocketIC server binary: `{}`. Going to download PocketIC server {} from {}. To avoid downloads during test execution, please specify the path to the (ungzipped and executable) PocketIC server {} using the function `PocketIcBuilder::with_server_binary` or using the `POCKET_IC_BIN` environment variable.", e, EXPECTED_SERVER_VERSION, server_url, EXPECTED_SERVER_VERSION);
-            let binary = reqwest::get(server_url)
-                .await
-                .expect("Failed to download PocketIC server")
-                .bytes()
-                .await
-                .expect("Failed to download PocketIC server")
-                .to_vec();
-            let mut gz = GzDecoder::new(&binary[..]);
-            std::io::copy(&mut gz, &mut out).expect("Failed to write PocketIC server binary");
+            println!("Failed to validate PocketIC server binary: `{}`. Going to download PocketIC server {} from {} to the local path {}. To avoid downloads during test execution, please specify the path to the (ungzipped and executable) PocketIC server {} using the function `PocketIcBuilder::with_server_binary` or using the `POCKET_IC_BIN` environment variable.", e, EXPECTED_SERVER_VERSION, server_url, default_bin_path.display(), EXPECTED_SERVER_VERSION);
+            if let Err(e) = download_pocketic_server(server_url, out).await {
+                let _ = std::fs::remove_file(default_bin_path);
+                panic!("{}", e);
+            }
         } else {
             // PocketIC server has already been created: wait until it's fully downloaded.
+            let start = std::time::Instant::now();
             loop {
                 if check_pocketic_server_version(&default_bin_path).is_ok() {
                     break;
+                }
+                if start.elapsed() > std::time::Duration::from_secs(60) {
+                    let _ = std::fs::remove_file(&default_bin_path);
+                    panic!("Timed out waiting for PocketIC server being available at the local path {}.", default_bin_path.display());
                 }
                 std::thread::sleep(std::time::Duration::from_millis(100));
             }
