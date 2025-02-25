@@ -734,8 +734,7 @@ fn prepare_nns_state(env: TestEnv, account_id: AccountIdentifier) -> NeuronId {
 
 fn fetch_mainnet_ic_recovery(env: TestEnv) {
     let logger = env.logger();
-    let version = std::env::var("MAINNET_NNS_SUBNET_REVISION_ENV")
-        .expect("could not read mainnet version from environment");
+    let version = get_mainnet_nns_revision();
     let mainnet_ic_recovery_url =
         format!("https://download.dfinity.systems/ic/{version}/release/ic-recovery.gz");
     let ic_recovery_path = env.get_path(IC_RECOVERY);
