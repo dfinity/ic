@@ -356,47 +356,6 @@ impl TaskQueue {
     }
 }
 
-impl From<pb::TaskQueue> for TaskQueue {
-    fn from(item: pb::TaskQueue) -> Self {
-        let queue = Self {
-            paused_or_aborted_task: item
-                .paused_or_aborted_task
-                .map(|paused_task| paused_task.try_into().unwrap()),
-            on_low_wasm_memory_hook_status: pb::OnLowWasmMemoryHookStatus::try_from(
-                item.on_low_wasm_memory_hook_status,
-            )
-            .unwrap()
-            .try_into()
-            .unwrap(),
-            queue: item
-                .queue
-                .into_iter()
-                .map(|t| t.try_into().unwrap())
-                .collect(),
-        };
-
-        // Because paused tasks are not allowed in checkpoint rounds when
-        // checking dts invariants that is equivalent to disabling dts.
-        queue.check_dts_invariants(
-            FlagStatus::Disabled,
-            ExecutionRoundType::CheckpointRound,
-            canister_id,
-        );
-
-        queue
-    }
-}
-
-/*
-pub fn into_pb(&mut self) -> pb::TaskQueue {
-    pb::TaskQueue {
-        paused_or_aborted_task: self.paused_or_aborted_task,
-        on_low_wasm_memory_hook_status: self.on_low_wasm_memory_hook_status,
-        queue: self.queue.into_iter().collect(),
-    }
-}
-    */
-
 impl From<&TaskQueue> for pb::TaskQueue {
     fn from(item: &TaskQueue) -> Self {
         Self {

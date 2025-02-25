@@ -14,8 +14,7 @@ use ic_replicated_state::{
     canister_state::{
         execution_state::{NextScheduledMethod, WasmMetadata},
         system_state::{
-            wasm_chunk_store::WasmChunkStoreMetadata, CanisterHistory, CyclesUseCase,
-            OnLowWasmMemoryHookStatus, TaskQueue,
+            wasm_chunk_store::WasmChunkStoreMetadata, CanisterHistory, CyclesUseCase, TaskQueue,
         },
     },
     page_map::{Shard, StorageLayout, StorageResult},
@@ -30,7 +29,7 @@ use ic_types::{
 use ic_utils::thread::maybe_parallel_map;
 use ic_wasm_types::{CanisterModule, WasmHash};
 use prometheus::{Histogram, IntCounterVec};
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::convert::{identity, From, TryFrom, TryInto};
 use std::ffi::OsStr;
 use std::fs::OpenOptions;
@@ -2388,7 +2387,7 @@ impl From<CanisterStateBits> for pb_canister_state_bits::CanisterStateBitsV2 {
             wasm_memory_limit: item.wasm_memory_limit.map(|v| v.get()),
             next_snapshot_id: item.next_snapshot_id,
             snapshots_memory_usage: item.snapshots_memory_usage.get(),
-            task_queue: item.task_queue.into(),
+            task_queue: Some((&item.task_queue).into()),
         }
     }
 }
@@ -2428,11 +2427,11 @@ impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
             .map(|c| c.into())
             .unwrap_or_else(Cycles::zero);
 
-        let task_queue: Vec<_> = value
+        let task_queue: VecDeque<ExecutionTask> = value
             .task_queue
             .into_iter()
-            .map(|v| v.try_into())
-            .collect::<Result<_, _>>()?;
+            .map(|v| v.try_into().unwrap())
+            .collect();
         if task_queue.len() > 1 {
             return Err(ProxyDecodeError::Other(format!(
                 "Expecting at most one task queue entry. Found {:?}",
