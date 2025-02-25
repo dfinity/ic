@@ -1,4 +1,5 @@
 use backoff::backoff::Backoff;
+use candid::{CandidType, Deserialize};
 use core::future::Future;
 use dfn_candid::{candid, candid_multi_arity};
 use ic_canister_client::{Agent, Sender};
@@ -13,7 +14,8 @@ pub use ic_types::{ingress::WasmResult, CanisterId, Cycles, PrincipalId};
 use on_wire::{FromWire, IntoWire, NewType};
 
 use ic_management_canister_types_private::{
-    CanisterSettingsArgsBuilder, CanisterStatusResultV2, UpdateSettingsArgs,
+    CanisterSettingsArgsBuilder, CanisterStatusType, DefiniteCanisterSettingsArgs, QueryStats,
+    UpdateSettingsArgs,
 };
 use ic_replica_tests::{canister_test_async, LocalTestRuntime};
 pub use ic_replica_tests::{canister_test_with_config_async, get_ic_config};
@@ -26,6 +28,33 @@ use std::{
     path::Path,
     time::Duration,
 };
+
+// Temporary copy of `ic_management_canister_typesL::private::CanisterStatusResultV2`
+// without the new `memory_metrics` field until the change is rolled out to production.
+#[derive(Eq, PartialEq, Debug, CandidType, Deserialize)]
+pub struct CanisterStatusResultV2 {
+    status: CanisterStatusType,
+    module_hash: Option<Vec<u8>>,
+    controller: candid::Principal,
+    settings: DefiniteCanisterSettingsArgs,
+    memory_size: candid::Nat,
+    cycles: candid::Nat,
+    balance: Vec<(Vec<u8>, candid::Nat)>,
+    freezing_threshold: candid::Nat,
+    idle_cycles_burned_per_day: candid::Nat,
+    reserved_cycles: candid::Nat,
+    query_stats: QueryStats,
+}
+
+impl CanisterStatusResultV2 {
+    pub fn controllers(&self) -> Vec<PrincipalId> {
+        self.settings.controllers()
+    }
+
+    pub fn status(&self) -> CanisterStatusType {
+        self.status.clone()
+    }
+}
 
 const MIN_BACKOFF_INTERVAL: Duration = Duration::from_millis(250);
 // The value must be smaller than `ic_http_handler::MAX_TCP_PEEK_TIMEOUT_SECS`.
