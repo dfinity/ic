@@ -5,6 +5,10 @@ use futures::future::FutureExt;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_ledger_core::tokens::CheckedSub;
 use ic_nervous_system_common::{cmc::CMC, ledger::IcpLedger, NervousSystemError};
+use ic_nervous_system_proto::pb::v1::Duration;
+use ic_nervous_system_timers::test::{
+    advance_time_for_timers, run_pending_timers, set_time_for_timers,
+};
 use ic_nns_common::{
     pb::v1::{NeuronId, ProposalId},
     types::UpdateIcpXdrConversionRatePayload,
@@ -130,6 +134,7 @@ impl FakeDriver {
 
     /// Constructs a mock driver that starts at the given timestamp.
     pub fn at(self, timestamp: u64) -> FakeDriver {
+        set_time_for_timers(std::time::Duration::from_secs(timestamp));
         self.state.lock().unwrap().now = timestamp;
         self
     }
@@ -178,6 +183,7 @@ impl FakeDriver {
 
     /// Increases the time by the given amount.
     pub fn advance_time_by(&mut self, delta_seconds: u64) {
+        advance_time_for_timers(std::time::Duration::from_secs(delta_seconds));
         self.state.lock().unwrap().now += delta_seconds;
     }
 

@@ -1,6 +1,8 @@
 use ic_base_types::PrincipalId;
 use ic_nervous_system_common::{E8, ONE_DAY_SECONDS};
+use ic_nervous_system_timers::test::run_pending_timers_every_x_seconds;
 use ic_nns_common::pb::v1::{NeuronId, ProposalId};
+use ic_nns_governance::timer_tasks::schedule_tasks;
 use ic_nns_governance::{
     governance::{Governance, REWARD_DISTRIBUTION_PERIOD_SECONDS},
     pb::v1::{
@@ -14,6 +16,7 @@ use icp_ledger::Tokens;
 use lazy_static::lazy_static;
 use maplit::{btreemap, hashmap};
 use std::collections::BTreeMap;
+use std::time::Duration;
 
 pub mod fake;
 
@@ -221,8 +224,10 @@ async fn test_distribute_rewards_with_total_potential_voting_power() {
         fake_driver.get_fake_randomness_generator(),
     );
 
+    schedule_tasks();
+
     // Step 2: Call code under test.
-    governance.run_periodic_tasks().await;
+    run_pending_timers_every_x_seconds(Duration::from_secs(1), 1);
 
     // Step 3: Inspect result(s).
     let get_neuron_rewards = |neuron_id| {

@@ -1,5 +1,5 @@
 {
-  "checksum": "bdcbdf21b5cda7470290bfa053f648ac6bd22c5ca394d196b9d1c7029e9284f3",
+  "checksum": "463739edeac607185ad74f0a5b0f09fd7a9cace2ff4deb02cb9bece956e53d08",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -20380,6 +20380,10 @@
             {
               "id": "slog-term 2.9.1",
               "target": "slog_term"
+            },
+            {
+              "id": "slotmap 1.0.6",
+              "target": "slotmap"
             },
             {
               "id": "socket2 0.5.7",
@@ -91230,9 +91234,6 @@
     "ic-http-certification 3.0.3",
     "ic-http-gateway 0.2.0",
     "ic-management-canister-types 0.2.0",
-    "ic-metrics-encoder 1.1.1",
-    "ic-response-verification 3.0.3",
-    "ic-sha3 1.0.0",
     "ic-stable-structures 0.6.5",
     "ic-test-state-machine-client 3.0.1",
     "ic-transport-types 0.39.2",
@@ -91381,6 +91382,7 @@
     "slog-json 2.6.1",
     "slog-scope 4.4.0",
     "slog-term 2.9.1",
+    "slotmap 1.0.6",
     "socket2 0.5.7",
     "ssh2 0.9.4",
     "static_assertions 1.1.0",

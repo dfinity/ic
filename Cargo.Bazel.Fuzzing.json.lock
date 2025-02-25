@@ -1,5 +1,5 @@
 {
-  "checksum": "1e8bffe24652db11f439e8104fd2a22890550692ac65d2158f6bf76b10cf8a04",
+  "checksum": "d0f0f988501ecfed5ed6b3b2705ca44d21c1a91296ea1f80731345f495a9cff7",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -20552,6 +20552,10 @@
             {
               "id": "slog-term 2.9.1",
               "target": "slog_term"
+            },
+            {
+              "id": "slotmap 1.0.6",
+              "target": "slotmap"
             },
             {
               "id": "socket2 0.5.7",
@@ -91468,6 +91472,7 @@
     "slog-json 2.6.1",
     "slog-scope 4.4.0",
     "slog-term 2.9.1",
+    "slotmap 1.0.6",
     "socket2 0.5.7",
     "ssh2 0.9.4",
     "static_assertions 1.1.0",

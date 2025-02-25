@@ -33,6 +33,7 @@ use ic_nervous_system_common_test_keys::{
 };
 use ic_nervous_system_common_test_utils::{LedgerReply, SpyLedger};
 use ic_nervous_system_proto::pb::v1::{Decimal, Duration, GlobalTimeOfDay, Image, Percentage};
+use ic_nervous_system_timers::test::{run_pending_timers, run_pending_timers_every_x_seconds};
 use ic_neurons_fund::{
     NeuronsFundParticipationLimits, PolynomialMatchingFunction, SerializableFunction,
 };
@@ -43,6 +44,7 @@ use ic_nns_common::{
 use ic_nns_constants::{
     GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID as ICP_LEDGER_CANISTER_ID, SNS_WASM_CANISTER_ID,
 };
+use ic_nns_governance::canister_state::{governance_mut, set_governance_for_tests};
 use ic_nns_governance::governance::RandomnessGenerator;
 use ic_nns_governance::{
     governance::{
@@ -141,6 +143,7 @@ use std::{
 #[cfg(feature = "tla")]
 use ic_nns_governance::governance::tla::{check_traces as tla_check_traces, TLA_TRACES_LKEY};
 use ic_nns_governance::storage::reset_stable_memory;
+use ic_nns_governance::timer_tasks::schedule_tasks;
 #[cfg(feature = "tla")]
 use tla_instrumentation_proc_macros::with_tla_trace_check;
 
@@ -3868,13 +3871,17 @@ fn test_reward_distribution_skips_deleted_neurons() {
     // Let's set genesis
     let genesis_timestamp_seconds = fake_driver.now();
     fixture.genesis_timestamp_seconds = genesis_timestamp_seconds;
-    let mut gov = Governance::new(
+    let gov = Governance::new(
         fixture,
         fake_driver.get_fake_env(),
         fake_driver.get_fake_ledger(),
         fake_driver.get_fake_cmc(),
         fake_driver.get_fake_randomness_generator(),
     );
+
+    set_governance_for_tests(gov);
+    let gov = governance_mut();
+    schedule_tasks();
 
     // Make sure that the fixture function indeed did not create a neuron 999.
     assert_matches!(gov.neuron_store.with_neuron(&NeuronId { id: 999 }, |n| n.clone()).map_err(|e| {
@@ -3884,6 +3891,7 @@ fn test_reward_distribution_skips_deleted_neurons() {
 
     // The proposal at genesis time is not ready to be settled
     gov.run_periodic_tasks().now_or_never();
+    run_pending_timers();
     assert_eq!(
         *gov.latest_reward_event(),
         RewardEvent {
@@ -3899,6 +3907,8 @@ fn test_reward_distribution_skips_deleted_neurons() {
 
     fake_driver.advance_time_by(REWARD_DISTRIBUTION_PERIOD_SECONDS);
     gov.run_periodic_tasks().now_or_never();
+    run_pending_timers();
+
     assert_eq!(
         *gov.latest_reward_event(),
         RewardEvent {
@@ -4220,13 +4230,16 @@ fn compute_maturities(
         .with_wait_for_quiet_threshold(10)
         .build();
 
-    let mut gov = Governance::new(
+    let gov = Governance::new(
         governance_proto,
         fake_driver.get_fake_env(),
         fake_driver.get_fake_ledger(),
         fake_driver.get_fake_cmc(),
         fake_driver.get_fake_randomness_generator(),
     );
+    set_governance_for_tests(gov);
+    let gov = governance_mut();
+    schedule_tasks();
 
     let expected_initial_event = RewardEvent {
         day_after_genesis: 0,
@@ -4237,11 +4250,10 @@ fn compute_maturities(
         rounds_since_last_distribution: Some(0),
         latest_round_available_e8s_equivalent: Some(0),
     };
-
     assert_eq!(*gov.latest_reward_event(), expected_initial_event);
 
     for (i, behavior) in (1_u64..).zip(proposals.iter()) {
-        behavior.propose_and_vote(&mut gov, format!("proposal {}", i));
+        behavior.propose_and_vote(gov, format!("proposal {}", i));
     }
 
     // Let's advance time by one reward periods. All proposals should be considered
@@ -4254,6 +4266,9 @@ fn compute_maturities(
         }
     }
     gov.run_periodic_tasks().now_or_never();
+    run_pending_timers();
+
+    run_pending_timers_every_x_seconds(core::time::Duration::from_secs(10), 3);
 
     // Inspect latest_reward_event.
     let actual_reward_event = gov.latest_reward_event();
@@ -4280,6 +4295,8 @@ fn compute_maturities(
         "{:#?}",
         actual_reward_event,
     );
+
+    run_pending_timers_every_x_seconds(core::time::Duration::from_secs(10), 3);
 
     (0_u64..stakes_e8s.len() as u64)
         .map(|id| {
@@ -14411,6 +14428,7 @@ async fn distribute_rewards_load_test() {
         execution_duration_seconds
     );
 
+    run_pending_timers_every_x_seconds(std::time::Duration::from_secs(2), 10);
     // Step 3.1: Inspect neurons to make sure they have been rewarded for voting.
     governance.neuron_store.with_active_neurons_iter(|iter| {
         for neuron in iter {

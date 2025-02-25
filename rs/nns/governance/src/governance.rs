@@ -6392,6 +6392,10 @@ impl Governance {
         }
     }
 
+    pub fn get_ledger(&self) -> Arc<dyn IcpLedger + Send + Sync> {
+        //  async fn total_supply(&self) -> Result<Tokens, NervousSystemError>;
+        self.ledger.clone()
+    }
     /// Triggers a reward distribution event if enough time has passed since
     /// the last one. This is intended to be called by a cron
     /// process.
@@ -6417,23 +6421,6 @@ impl Governance {
                 ),
             }
         // Second try to distribute voting rewards (once per day).
-        } else if self.should_distribute_rewards() {
-            // Getting the total ICP supply from the ledger is expensive enough that we
-            // don't want to do it on every call to `run_periodic_tasks`. So we only
-            // fetch it when it's needed.
-            match self.ledger.total_supply().await {
-                Ok(supply) => {
-                    if self.should_distribute_rewards() {
-                        self.distribute_rewards(supply);
-                    }
-                }
-                Err(e) => println!(
-                    "{}Error when getting total ICP supply: {}",
-                    LOG_PREFIX,
-                    GovernanceError::from(e),
-                ),
-            }
-        // Third try to compute cached metrics (once per day).
         } else if self.should_compute_cached_metrics() {
             match self.ledger.total_supply().await {
                 Ok(supply) => {
