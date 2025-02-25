@@ -9008,7 +9008,6 @@ dependencies = [
  "candid",
  "candid_parser",
  "ciborium",
- "dfn_core",
  "ic-base-types",
  "ic-canister-log 0.2.0",
  "ic-canisters-http-types",
