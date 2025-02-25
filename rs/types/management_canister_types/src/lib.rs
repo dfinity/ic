@@ -1057,7 +1057,7 @@ impl CanisterStatusResultV2 {
             module_hash,
             controller: candid::Principal::from_text(controller.to_string()).unwrap(),
             memory_size: candid::Nat::from(memory_size.get()),
-            memory_metrics: MemoryMetrics{
+            memory_metrics: MemoryMetrics {
                 wasm_memory_size: candid::Nat::from(wasm_memory_size.get()),
                 stable_memory_size: candid::Nat::from(stable_memory_size.get()),
                 global_memory_size: candid::Nat::from(global_memory_size.get()),
@@ -1065,7 +1065,7 @@ impl CanisterStatusResultV2 {
                 custom_sections_size: candid::Nat::from(custom_sections_size.get()),
                 canister_history_size: candid::Nat::from(canister_history_size.get()),
                 wasm_chunk_store_size: candid::Nat::from(wasm_chunk_store_size.get()),
-                snapshots_size: candid::Nat::from(snapshots_size.get())
+                snapshots_size: candid::Nat::from(snapshots_size.get()),
             },
             cycles: candid::Nat::from(cycles),
             // the following is spec 0.12/0.13 compat;
@@ -1135,11 +1135,23 @@ impl CanisterStatusResultV2 {
     }
 
     pub fn canister_history_size(&self) -> NumBytes {
-        NumBytes::from(self.memory_metrics.canister_history_size.0.to_u64().unwrap())
+        NumBytes::from(
+            self.memory_metrics
+                .canister_history_size
+                .0
+                .to_u64()
+                .unwrap(),
+        )
     }
-    
+
     pub fn wasm_chunk_store_size(&self) -> NumBytes {
-        NumBytes::from(self.memory_metrics.wasm_chunk_store_size.0.to_u64().unwrap())
+        NumBytes::from(
+            self.memory_metrics
+                .wasm_chunk_store_size
+                .0
+                .to_u64()
+                .unwrap(),
+        )
     }
 
     pub fn snapshots_size(&self) -> NumBytes {

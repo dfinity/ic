@@ -35,13 +35,13 @@ use ic_types::{
     },
     nominal_cycles::NominalCycles,
     time::UNIX_EPOCH,
-    CanisterId, Cycles, PrincipalId, RegistryVersion, CountBytes
+    CanisterId, CountBytes, Cycles, PrincipalId, RegistryVersion,
 };
 use ic_types_test_utils::ids::{canister_test_id, node_test_id, subnet_test_id, user_test_id};
 use ic_universal_canister::{call_args, wasm, UNIVERSAL_CANISTER_WASM};
 use maplit::btreemap;
-use std::mem::size_of;
 use more_asserts::assert_gt;
+use std::mem::size_of;
 
 #[cfg(test)]
 mod canister_task;
@@ -886,10 +886,13 @@ fn get_canister_status_of_nonexisting_canister() {
     assert_eq!(ErrorCode::CanisterNotFound, err.code());
 }
 
-fn get_canister_status(test: &mut ExecutionTest, canister_id: CanisterId) -> CanisterStatusResultV2 {
+fn get_canister_status(
+    test: &mut ExecutionTest,
+    canister_id: CanisterId,
+) -> CanisterStatusResultV2 {
     match test.canister_status(canister_id).unwrap() {
         WasmResult::Reply(reply) => CanisterStatusResultV2::decode(&reply).unwrap(),
-        WasmResult::Reject(msg) => panic!("{}", msg) ,
+        WasmResult::Reject(msg) => panic!("unexpected reject: {}", msg),
     }
 }
 
@@ -898,14 +901,18 @@ fn get_canister_status_memory_metrics() {
     let mut test = ExecutionTestBuilder::new().build();
     let canister_id = test.universal_canister().unwrap();
     let csr: CanisterStatusResultV2 = get_canister_status(&mut test, canister_id);
-    
+
     let wasm_memory_size = csr.wasm_memory_size();
     let stable_memory_size = csr.stable_memory_size();
     let global_memory_size = csr.global_memory_size();
     let wasm_binary_size = csr.wasm_binary_size();
     let custom_sections_size = csr.custom_sections_size();
-    
-    let execution_memory_size = wasm_memory_size + stable_memory_size + global_memory_size + wasm_binary_size + custom_sections_size;
+
+    let execution_memory_size = wasm_memory_size
+        + stable_memory_size
+        + global_memory_size
+        + wasm_binary_size
+        + custom_sections_size;
 
     let canister_history_size = csr.canister_history_size();
     let wasm_chunk_store_size = csr.wasm_chunk_store_size();
@@ -924,7 +931,7 @@ fn get_canister_status_memory_metrics_wasm_memory_size() {
     let csr: CanisterStatusResultV2 = get_canister_status(&mut test, canister_id);
 
     assert_eq!(
-        get_canister_status(&mut test, canister_id).wasm_memory_size(), 
+        get_canister_status(&mut test, canister_id).wasm_memory_size(),
         csr.wasm_memory_size()
     );
 
@@ -940,10 +947,7 @@ fn get_canister_status_memory_metrics_wasm_memory_size() {
     let reply = get_reply(result);
     let updated_csr = CanisterStatusResultV2::decode(&reply).unwrap();
 
-    assert_gt!(
-        updated_csr.wasm_memory_size(), 
-        csr.wasm_memory_size()
-    );
+    assert_gt!(updated_csr.wasm_memory_size(), csr.wasm_memory_size());
 }
 
 #[test]
@@ -960,7 +964,8 @@ fn get_canister_status_memory_metrics_stable_memory_size() {
             .push_bytes(&[])
             .append_and_reply()
             .build(),
-    ).unwrap();
+    )
+    .unwrap();
     assert_eq!(
         get_canister_status(&mut test, canister_id).stable_memory_size(),
         csr.stable_memory_size() + NumBytes::from(WASM_PAGE_SIZE_IN_BYTES as u64)
@@ -974,7 +979,7 @@ fn get_canister_status_memory_metrics_global_memory_size() {
     let csr: CanisterStatusResultV2 = get_canister_status(&mut test, canister_id);
     let exported_globals = test.execution_state(canister_id).exported_globals.clone();
     assert_eq!(
-        csr.global_memory_size(), 
+        csr.global_memory_size(),
         NumBytes::new(8 * exported_globals.len() as u64)
     );
 }
@@ -999,7 +1004,8 @@ fn get_canister_status_memory_metrics_custom_sections_size() {
     assert_eq!(
         csr.custom_sections_size(),
         NumBytes::new(
-            metadata.custom_sections()
+            metadata
+                .custom_sections()
                 .iter()
                 .map(|(k, v)| k.len() + v.count_bytes())
                 .sum::<usize>() as u64
@@ -1012,10 +1018,12 @@ fn get_canister_status_memory_metrics_canister_history_size() {
     let mut test = ExecutionTestBuilder::new().build();
     let canister_id = test.universal_canister().unwrap();
     let csr: CanisterStatusResultV2 = get_canister_status(&mut test, canister_id);
-    test.set_controller(canister_id, test.user_id().get()).unwrap();
-    let memory_difference = NumBytes::from((size_of::<CanisterChange>() + size_of::<PrincipalId>()) as u64);
+    test.set_controller(canister_id, test.user_id().get())
+        .unwrap();
+    let memory_difference =
+        NumBytes::from((size_of::<CanisterChange>() + size_of::<PrincipalId>()) as u64);
     assert_eq!(
-        get_canister_status(&mut test, canister_id).canister_history_size(), 
+        get_canister_status(&mut test, canister_id).canister_history_size(),
         csr.canister_history_size() + memory_difference
     );
 }
@@ -1030,8 +1038,10 @@ fn get_canister_status_memory_metrics_wasm_chunk_store_size() {
         UploadChunkArgs {
             canister_id: canister_id.into(),
             chunk: vec![1, 2, 3, 4, 5],
-        }.encode(),
-    ).unwrap();
+        }
+        .encode(),
+    )
+    .unwrap();
     assert_gt!(
         get_canister_status(&mut test, canister_id).wasm_chunk_store_size(),
         csr.wasm_chunk_store_size()
@@ -1045,13 +1055,15 @@ fn get_canister_status_memory_metrics_snapshots_size() {
     let csr: CanisterStatusResultV2 = get_canister_status(&mut test, canister_id);
     test.subnet_message(
         "take_canister_snapshot",
-        TakeCanisterSnapshotArgs{
+        TakeCanisterSnapshotArgs {
             canister_id: canister_id.into(),
             replace_snapshot: None,
-        }.encode()
-    ).unwrap();
+        }
+        .encode(),
+    )
+    .unwrap();
     assert_gt!(
-        get_canister_status(&mut test, canister_id).snapshots_size(), 
+        get_canister_status(&mut test, canister_id).snapshots_size(),
         csr.snapshots_size()
     );
 }

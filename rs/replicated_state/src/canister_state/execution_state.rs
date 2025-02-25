@@ -589,7 +589,7 @@ impl ExecutionState {
     // Returns the memory size of the custom sections currently used by the `ExecutionState`.
     pub fn custom_sections_memory_size(&self) -> NumBytes {
         self.metadata.memory_usage()
-    } 
+    }
 
     /// Returns the memory currently used by the `ExecutionState`.
     pub fn memory_usage(&self) -> NumBytes {

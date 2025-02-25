@@ -689,7 +689,8 @@ fn can_get_canister_information() {
             Ok(WasmResult::Reply(EmptyBlob.encode()))
         );
 
-        let canister_history_size = NumBytes::from((2 * size_of::<CanisterChange>() + 2 * size_of::<PrincipalId>()) as u64);
+        let canister_history_size =
+            NumBytes::from((2 * size_of::<CanisterChange>() + 2 * size_of::<PrincipalId>()) as u64);
         // Request the status of canister_b.
         assert_matches!(
             test.ingress(
