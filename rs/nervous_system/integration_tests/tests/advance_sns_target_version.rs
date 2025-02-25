@@ -3,8 +3,8 @@ use ic_nervous_system_integration_tests::pocket_ic_helpers::{
     sns::{
         self,
         governance::{
-            propose_to_set_automatically_advance_target_version,
-            EXPECTED_UPGRADE_DURATION_MAX_SECONDS, EXPECTED_UPGRADE_STEPS_REFRESH_MAX_SECONDS,
+            set_automatically_advance_target_version_flag, EXPECTED_UPGRADE_DURATION_MAX_SECONDS,
+            EXPECTED_UPGRADE_STEPS_REFRESH_MAX_SECONDS,
         },
     },
 };
@@ -88,7 +88,7 @@ async fn test_get_upgrade_journal(automatically_advance_target_version: bool) {
     };
 
     // Step 0.3:
-    propose_to_set_automatically_advance_target_version(
+    set_automatically_advance_target_version_flag(
         &pocket_ic,
         sns.governance.canister_id,
         automatically_advance_target_version,
