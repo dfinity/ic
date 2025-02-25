@@ -636,7 +636,7 @@ fn check_query_blocks_coherence() {
             max_message_size_bytes: None,
             controller_id: PrincipalId::new_anonymous(),
             more_controller_ids: None,
-            cycles_for_archive_creation: None,
+            cycles_for_archive_creation: Some(0),
             max_transactions_per_response: None,
         })
         .minting_account(MINTER.into())
@@ -736,7 +736,7 @@ fn check_block_endpoint_limits() {
             max_message_size_bytes: None,
             controller_id: PrincipalId::new_anonymous(),
             more_controller_ids: None,
-            cycles_for_archive_creation: None,
+            cycles_for_archive_creation: Some(0),
             max_transactions_per_response: None,
         })
         .minting_account(MINTER.into())
@@ -923,7 +923,7 @@ fn check_archive_block_endpoint_limits() {
             max_message_size_bytes: None,
             controller_id: PrincipalId::new_anonymous(),
             more_controller_ids: None,
-            cycles_for_archive_creation: None,
+            cycles_for_archive_creation: Some(0),
             max_transactions_per_response: None,
         })
         .minting_account(MINTER.into())
@@ -1639,7 +1639,7 @@ fn test_query_archived_blocks() {
             max_message_size_bytes: None,
             controller_id: PrincipalId::new_anonymous(),
             more_controller_ids: None,
-            cycles_for_archive_creation: None,
+            cycles_for_archive_creation: Some(0),
             max_transactions_per_response: None,
         })
         .feature_flags(FeatureFlags { icrc2: true })
