@@ -812,7 +812,7 @@ impl SystemTestGroup {
         if topology.is_none() {
             warn!(
                 logger,
-                "Topology snapshot cannot be made for test: {}", test_name
+                "Topology snapshot cannot be made for testnet: {}", test_name
             );
             return;
         }
