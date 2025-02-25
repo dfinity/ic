@@ -24,7 +24,7 @@ runs:
 
           # freshly deployed k8s machines require ownership correctly set
           if [ -e /cache ]; then
-            sudo chown -RL 1001:1001 /cache
+            sudo find /cache -not -user 1001 -or -not -group 1001 -exec chown 1001:1001 {} +
           fi
 
           if [ -n "$SSH_PRIVATE_KEY_BACKUP_POD" ]; then
