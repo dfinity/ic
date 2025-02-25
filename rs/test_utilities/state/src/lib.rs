@@ -849,9 +849,13 @@ pub fn insert_dummy_canister(
 }
 
 prop_compose! {
-    /// Produces a strategy that generates an arbitrary `signals_end` and between
-    /// `[min_signal_count, max_signal_count]` reject signals.
-    pub fn arb_reject_signals(
+    /// Produces a strategy that generates arbitrary stream signals.
+    ///
+    /// Signals start at `signal_start` from which there are `signal_count` signals.
+    /// Of these signals, `ceil(sqrt(signal_count))` are randomly distributed reject signals.
+    ///
+    /// `signals_end` comes after the signal range, i.e. `signal_start + signal_count + 1`.
+    pub fn arb_stream_signals(
         signal_start_range: RangeInclusive<u64>,
         signal_count_range: RangeInclusive<usize>,
         with_reject_reasons: Vec<RejectReason>
@@ -859,13 +863,13 @@ prop_compose! {
         signal_start in signal_start_range,
         (signal_count, reject_signals_map) in signal_count_range
             .prop_flat_map(move |signal_count| {
-                let max_reject_signals = (signal_count as f64).sqrt().ceil() as usize;
+                let reject_signals_count = (signal_count as f64).sqrt().ceil() as usize;
                 (
                     Just(signal_count),
                     prop::collection::btree_map(
                         0..=signal_count,
                         proptest::sample::select(with_reject_reasons.clone()),
-                        0..=max_reject_signals
+                        reject_signals_count,
                     ),
                 )
             })
@@ -896,9 +900,8 @@ prop_compose! {
             arbitrary::request_or_response_with_config(true),
             size_range,
         ),
-        (signals_end, reject_signals) in arb_reject_signals(
+        (signals_end, reject_signals) in arb_stream_signals(
             signal_start_range,
-            //signal_count_range.start() / 10
             signal_count_range,
             with_reject_reasons,
         ),
@@ -962,7 +965,7 @@ prop_compose! {
     )(
         msg_start in 0..10000u64,
         msg_len in 0..10000u64,
-        (signals_end, reject_signals) in arb_reject_signals(
+        (signals_end, reject_signals) in arb_stream_signals(
             0..=10000,
             min_signal_count..=max_signal_count,
             with_reject_reasons

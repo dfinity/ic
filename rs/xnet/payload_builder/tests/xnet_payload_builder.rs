@@ -263,7 +263,7 @@ fn out_stream(in_stream: &Stream, messages_begin: StreamIndex) -> Stream {
 proptest! {
     #![proptest_config(ProptestConfig::with_cases(10))]
 
-    /// Tests that the payload builder does not include a stream slices that would
+    /// Tests that the payload builder does not include a stream slice that would
     /// lead to more than `MAX_SIGNALS` amount of signals in the outgoing stream.
     ///
     /// The input consists of
