@@ -15,8 +15,8 @@ Previous ckETH minter proposal: https://dashboard.internetcomputer.org/proposal/
 ---
 
 ## Motivation
-TODO: THIS MUST BE FILLED OUT
 
+Upgrade the ckETH minter to update the OFAC checklist.
 
 ## Upgrade args
 
