@@ -1716,7 +1716,11 @@ async fn icrc2_approve(arg: ApproveArgs) -> Result<Nat, ApproveError> {
 fn icrc2_approve_candid() {
     panic_if_not_ready();
     over_async_may_reject(candid_one, |arg: ApproveArgs| async {
-        if !LEDGER.read().unwrap().can_send(&PrincipalId::from(caller())) {
+        if !LEDGER
+            .read()
+            .unwrap()
+            .can_send(&PrincipalId::from(caller()))
+        {
             return Err(
                 "Anonymous principal cannot approve token transfers on the ledger.".to_string(),
             );
