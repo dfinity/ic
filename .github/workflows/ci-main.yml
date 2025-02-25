@@ -333,7 +333,7 @@ jobs:
         run: |
           n_lines=$(cat shasums-nocache/SHA256SUMS | wc -l)
           echo "comparing $n_lines lines"
-          if [ "$n_lines" == 0 ]; then
+          if [ "$n_lines" -eq 0 ]; then
             echo "No lines to compare, this is unexpected"
             exit 1
           fi
