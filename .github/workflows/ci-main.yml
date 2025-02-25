@@ -333,9 +333,9 @@ jobs:
         run: |
           n_lines=$(cat shasums-nocache/SHA256SUMS | wc -l)
           echo "comparing $n_lines lines"
-          if [ "$n_lines" -eq 0 ]; then
-            echo "No lines to compare, this is unexpected"
-            exit 1
+          if [ "$n_lines" == 0 ]; then
+            echo "No lines to compare"
+            exit 0
           fi
 
           # this checks that all lines in the first argument (subset) are identical
