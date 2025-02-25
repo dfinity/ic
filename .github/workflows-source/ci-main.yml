@@ -146,13 +146,11 @@ jobs:
           BUILDEVENT_APIKEY: ${{ secrets.HONEYCOMB_TOKEN }}
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
 
-      - name: Upload out_shafile
+      - name: Upload SHA256SUMS-cache
         uses: actions/upload-artifact@v4
         with:
-          name: out_shafile_all
-          retention-days: 1
-          path: |
-            out_shafile_all
+          name: SHA256SUMS-cache
+          path: SHA256SUMS
       - <<: *bazel-bep
 
   bazel-test-macos-intel:
@@ -268,7 +266,7 @@ jobs:
           "$CI_PROJECT_DIR"/ci/scripts/run-build-ic.sh
           rm -rf "/cache/job/${CI_JOB_NAME}/${CI_RUN_ID}"
 
-          find -L bazel-out -name SHA256SUMS | xargs cat | sort | uniq > out_shafile_build
+          find -L bazel-out -name SHA256SUMS | xargs cat | sort | uniq > SHA256SUMS
 
         env:
           BAZEL_COMMAND: build --config=ci
@@ -276,13 +274,11 @@ jobs:
           MERGE_BASE_SHA: ${{ github.event.pull_request.base.sha }}
           BRANCH_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           RUN_ON_DIFF_ONLY: ${{ github.event_name == 'pull_request' && !contains(github.event.pull_request.labels.*.name, 'CI_ALL_BAZEL_TARGETS') }}
-      - name: Upload out_shafile
+      - name: Upload SHA256SUMS-nocache
         uses: actions/upload-artifact@v4
         with:
-          name: out_shafile_build
-          retention-days: 1
-          path: |
-            out_shafile_build
+          name: SHA256SUMS-nocache
+          path: SHA256SUMS
 
   build-determinism:
     name: Build Determinism
@@ -293,27 +289,35 @@ jobs:
     needs: [build-ic, bazel-test-all]
     steps:
       - <<: *checkout
-      - name: Download out_shafile_all
+      - name: Download SHA256SUMS-cache
         uses: actions/download-artifact@v4
         with:
-          name: out_shafile_all
-      - name: Download out_shafile_build
+          name: SHA256SUMS-cache
+          paths: SHA256SUMS-cache
+      - name: Download SHA256SUMS-nocache
         uses: actions/download-artifact@v4
         with:
-          name: out_shafile_build
+          name: SHA256SUMS-nocache
+          path: SHA256SUMS-nocache
 
-      - name: diff
+      - name: Build Determinism Test
         run: |
-          n_lines=$(cat out_shafile_build | wc -l)
+          n_lines=$(cat SHA256SUMS-nocache | wc -l)
           echo "comparing $n_lines lines"
-          out=$(comm -23 <(sort out_shafile_build | uniq) <(sort out_shafile_all | uniq))
-          if [ -n "$out" ]; then
-            echo diff
-            echo "$out"
+          if [ "$n_lines" == 0 ]; then
+            echo "No lines to compare, this is unexpected"
             exit 1
-          else
-            echo no diff
           fi
+
+          difference=$(comm -23 <(sort SHA256SUMS-nocache | uniq) <(sort SHA256SUMS-cache | uniq))
+          if [ -n "$difference" ]; then
+            echo "Build Determinism Check Failed! Please contact IDX."
+            echo "The following artifacts were different:"
+            echo "$difference"
+            exit 1
+          fi
+
+          echo "Build Determinism Check Successful"
 
   cargo-clippy-linux:
     name: Cargo Clippy Linux
