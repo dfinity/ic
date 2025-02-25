@@ -1,10 +1,10 @@
 [package]
-name = "ic-nervous-system-recurring-task"
+name = "ic-nervous-system-timer-task"
 version = "0.0.1"
 edition = "2021"
 
 [[bin]]
-name = "recurring-task-canister"
+name = "timer-task-canister"
 path = "tests/test_canisters/timer_task_canister.rs"
 
 [lib]
