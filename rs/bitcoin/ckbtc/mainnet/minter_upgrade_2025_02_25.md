@@ -19,7 +19,7 @@ Previous ckBTC minter proposal: https://dashboard.internetcomputer.org/proposal/
 Update the ckBTC minter to include the latest code changes, notably:
 * Add new metrics regarding `get_utxos` latency and result size.
 * Use [mempool.space](https://mempool.space/) instead of [blockstream.info](https://blockstream.info/) in ckBTC dashboard URLs.
-* Use scope guard to prevent double minting.
+* Use scope guard to prevent double minting. Note that this was already applied as part of the previous proposal ([135282](https://dashboard.internetcomputer.org/proposal/135282)). The reason it appears in the diff is that in accordance with our Security Patch Policy and Procedure, the fix was released from another branch as a security fix and then cherry-picked on the master branch. See the forum [post](https://forum.dfinity.org/t/ckbtc-a-canister-issued-bitcoin-twin-token-on-the-ic-1-1-backed-by-btc/17606/190) for more details.
 
 ## Upgrade args
 
