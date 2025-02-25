@@ -13,8 +13,8 @@ MACRO_DEPENDENCIES = [
 ]
 
 rust_library(
-    name = "ic-error-types",
-    srcs = glob(["src/**/*.rs"]),
+    name = "ic-error-types2",
+    srcs = glob(["src/**"]),
     proc_macro_deps = MACRO_DEPENDENCIES,
     version = "0.0.0",
     deps = DEPENDENCIES,

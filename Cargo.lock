@@ -8544,6 +8544,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-error-types2"
+version = "0.0.0"
+dependencies = [
+ "serde",
+ "strum",
+ "strum_macros",
+]
+
+[[package]]
 name = "ic-ethereum-types"
 version = "1.0.0"
 dependencies = [

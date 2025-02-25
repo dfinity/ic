@@ -1,4 +1,5 @@
-//! Helpers for truncating string slices at character boundaries.
+// Note that this file is being `include!()`d by ic/packages/ic-error-codes,
+// therefore it cannot have a module-level docstring.
 
 /// Trait, implemented for `str`, for truncating string slices at character
 /// boundaries.

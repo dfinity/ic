@@ -4,9 +4,9 @@ use ic_protobuf::{
     proxy::ProxyDecodeError, state::ingress::v1::ErrorCode as ErrorCodeProto,
     types::v1::RejectCode as RejectCodeProto,
 };
-use ic_utils::str::StrEllipsize;
 use serde::{Deserialize, Serialize};
 use std::{convert::TryFrom, fmt};
+use str_traits::StrEllipsize;
 use strum_macros::EnumIter;
 
 #[derive(Copy, Clone, Debug)]
@@ -663,4 +663,11 @@ mod tests {
             assert_eq!(reject_code, derived_reject_code);
         }
     }
+}
+
+// ========================================================================= //
+
+// Copy these internal traits, but keep them private.
+mod str_traits {
+    include!("../../../rs/utils/src/str.rs");
 }
