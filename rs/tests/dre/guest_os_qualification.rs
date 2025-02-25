@@ -1,6 +1,8 @@
 use ic_protobuf::registry::subnet::v1::SubnetType;
 use ic_system_test_driver::driver::{
-    group::SystemTestGroup, test_env_api::read_dependency_from_env_to_string,
+    get_mainnet_nns_revision,
+    group::SystemTestGroup,
+    test_env_api::{get_mainnet_nns_revision, read_dependency_from_env_to_string},
 };
 use os_qualification_utils::{
     defs::QualificationExecutor,
@@ -20,8 +22,7 @@ pub fn main() -> anyhow::Result<()> {
     // setup env variable for config
     let old_version = match std::env::var("OLD_VERSION") {
         Ok(v) => v,
-        Err(_) => std::env::var("MAINNET_NNS_SUBNET_REVISION_ENV")
-            .expect("could not read mainnet version from environment"),
+        Err(_) => get_mainnet_nns_revision(),
     };
     let new_version = std::env::var("NEW_VERSION").ok();
 

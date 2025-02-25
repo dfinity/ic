@@ -236,11 +236,8 @@ impl TestCase {
 fn test(env: TestEnv) {
     let logger = env.logger();
 
-    let mainnet_nns_version = std::env::var("MAINNET_NNS_SUBNET_REVISION_ENV")
-        .expect("could not read nns mainnet version from environment");
-    let mainnet_application_subnet_version =
-        std::env::var("MAINNET_APPLICATION_SUBNET_REVISION_ENV")
-            .expect("could not read mainnet application subnet version from environment");
+    let mainnet_nns_version = get_mainnet_nns_revision();
+    let mainnet_application_subnet_version = get_mainnet_application_subnet_revision();
 
     info!(
         logger,
