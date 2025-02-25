@@ -9,6 +9,7 @@ DEPENDENCIES = [
 
 DEV_DEPENDENCIES = [
     "@crate_index//:maplit",
+    "@crate_index//:pretty_assertions",
 ]
 
 rust_library(

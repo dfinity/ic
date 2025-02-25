@@ -188,6 +188,7 @@ go_deps.bzl               @dfinity/idx
 /rs/query_stats/                                        @dfinity/execution @dfinity/consensus
 /rs/recovery/                                           @dfinity/consensus
 /rs/registry/                                           @dfinity/nns-team
+/rs/registry/node_provider_rewards                      @dfinity/dre
 /rs/registry/helpers/src/crypto.rs                      @dfinity/crypto-team
 /rs/registry/helpers/src/crypto/                        @dfinity/crypto-team
 /rs/registry/helpers/src/firewall.rs                    @dfinity/consensus
