@@ -4854,7 +4854,7 @@ pub fn test_cycles_for_archive_creation_no_overwrite_of_none_in_upgrade<T>(
         ledger_wasm,
         Encode!(&LedgerArgument::Upgrade(None)).unwrap(),
     )
-        .unwrap();
+    .unwrap();
 
     send_transfers();
 
