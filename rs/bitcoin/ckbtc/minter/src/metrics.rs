@@ -106,7 +106,7 @@ pub fn observe_get_utxos_latency(
 ) {
     GET_UTXOS_CALL_LATENCY.with_borrow_mut(|metrics| {
         metrics
-            .entry((num_pages as NumUtxoPages, call_source.clone()))
+            .entry((num_pages as NumUtxoPages, call_source))
             .or_default()
             .observe_latency(start_ns, end_ns);
     });
