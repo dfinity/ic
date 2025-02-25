@@ -971,6 +971,16 @@ pub struct QueryStats {
 ///     module_hash: opt blob;
 ///     controller: principal;
 ///     memory_size: nat;
+///     memory_metrics: record {
+///         wasm_memory_size : nat;
+///         stable_memory_size : nat;
+///         global_memory_size : nat;
+///         wasm_binary_size : nat;
+///         custom_sections_size : nat;
+///         canister_history_size : nat;
+///         wasm_chunk_store_size : nat;
+///         snapshots_size : nat;
+///     };
 ///     cycles: nat;
 ///     freezing_threshold: nat,
 ///     idle_cycles_burned_per_day: nat;
@@ -989,6 +999,7 @@ pub struct CanisterStatusResultV2 {
     controller: candid::Principal,
     settings: DefiniteCanisterSettingsArgs,
     memory_size: candid::Nat,
+    memory_metrics: MemoryMetrics,
     cycles: candid::Nat,
     // this is for compat with Spec 0.12/0.13
     balance: Vec<(Vec<u8>, candid::Nat)>,
@@ -996,6 +1007,18 @@ pub struct CanisterStatusResultV2 {
     idle_cycles_burned_per_day: candid::Nat,
     reserved_cycles: candid::Nat,
     query_stats: QueryStats,
+}
+
+#[derive(Eq, PartialEq, Debug, CandidType, Deserialize)]
+pub struct MemoryMetrics {
+    wasm_memory_size: candid::Nat,
+    stable_memory_size: candid::Nat,
+    global_memory_size: candid::Nat,
+    wasm_binary_size: candid::Nat,
+    custom_sections_size: candid::Nat,
+    canister_history_size: candid::Nat,
+    wasm_chunk_store_size: candid::Nat,
+    snapshots_size: candid::Nat,
 }
 
 impl CanisterStatusResultV2 {
@@ -1006,6 +1029,14 @@ impl CanisterStatusResultV2 {
         controller: PrincipalId,
         controllers: Vec<PrincipalId>,
         memory_size: NumBytes,
+        wasm_memory_size: NumBytes,
+        stable_memory_size: NumBytes,
+        global_memory_size: NumBytes,
+        wasm_binary_size: NumBytes,
+        custom_sections_size: NumBytes,
+        canister_history_size: NumBytes,
+        wasm_chunk_store_size: NumBytes,
+        snapshots_size: NumBytes,
         cycles: u128,
         compute_allocation: u64,
         memory_allocation: Option<u64>,
@@ -1026,6 +1057,16 @@ impl CanisterStatusResultV2 {
             module_hash,
             controller: candid::Principal::from_text(controller.to_string()).unwrap(),
             memory_size: candid::Nat::from(memory_size.get()),
+            memory_metrics: MemoryMetrics {
+                wasm_memory_size: candid::Nat::from(wasm_memory_size.get()),
+                stable_memory_size: candid::Nat::from(stable_memory_size.get()),
+                global_memory_size: candid::Nat::from(global_memory_size.get()),
+                wasm_binary_size: candid::Nat::from(wasm_binary_size.get()),
+                custom_sections_size: candid::Nat::from(custom_sections_size.get()),
+                canister_history_size: candid::Nat::from(canister_history_size.get()),
+                wasm_chunk_store_size: candid::Nat::from(wasm_chunk_store_size.get()),
+                snapshots_size: candid::Nat::from(snapshots_size.get()),
+            },
             cycles: candid::Nat::from(cycles),
             // the following is spec 0.12/0.13 compat;
             // "\x00" denotes cycles
@@ -1071,6 +1112,50 @@ impl CanisterStatusResultV2 {
 
     pub fn memory_size(&self) -> NumBytes {
         NumBytes::from(self.memory_size.0.to_u64().unwrap())
+    }
+
+    pub fn wasm_memory_size(&self) -> NumBytes {
+        NumBytes::from(self.memory_metrics.wasm_memory_size.0.to_u64().unwrap())
+    }
+
+    pub fn stable_memory_size(&self) -> NumBytes {
+        NumBytes::from(self.memory_metrics.stable_memory_size.0.to_u64().unwrap())
+    }
+
+    pub fn global_memory_size(&self) -> NumBytes {
+        NumBytes::from(self.memory_metrics.global_memory_size.0.to_u64().unwrap())
+    }
+
+    pub fn wasm_binary_size(&self) -> NumBytes {
+        NumBytes::from(self.memory_metrics.wasm_binary_size.0.to_u64().unwrap())
+    }
+
+    pub fn custom_sections_size(&self) -> NumBytes {
+        NumBytes::from(self.memory_metrics.custom_sections_size.0.to_u64().unwrap())
+    }
+
+    pub fn canister_history_size(&self) -> NumBytes {
+        NumBytes::from(
+            self.memory_metrics
+                .canister_history_size
+                .0
+                .to_u64()
+                .unwrap(),
+        )
+    }
+
+    pub fn wasm_chunk_store_size(&self) -> NumBytes {
+        NumBytes::from(
+            self.memory_metrics
+                .wasm_chunk_store_size
+                .0
+                .to_u64()
+                .unwrap(),
+        )
+    }
+
+    pub fn snapshots_size(&self) -> NumBytes {
+        NumBytes::from(self.memory_metrics.snapshots_size.0.to_u64().unwrap())
     }
 
     pub fn cycles(&self) -> u128 {
