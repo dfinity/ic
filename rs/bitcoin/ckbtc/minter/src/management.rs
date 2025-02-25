@@ -137,7 +137,7 @@ where
     }
 }
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum CallSource {
     /// The client initiated the call.
     Client,
@@ -209,13 +209,7 @@ pub async fn get_utxos<R: CanisterRuntime>(
         num_pages += 1;
     }
 
-    observe_get_utxos_latency(
-        utxos.len(),
-        num_pages,
-        source.to_string(),
-        start_time,
-        runtime.time(),
-    );
+    observe_get_utxos_latency(utxos.len(), num_pages, source, start_time, runtime.time());
 
     response.utxos = utxos;
 

@@ -1,15 +1,18 @@
+use crate::management::CallSource;
 use crate::state;
 use std::cell::{Cell, RefCell};
 use std::collections::BTreeMap;
 use std::io::Error;
 use std::time::Duration;
 
+pub type NumUtxoPages = u32;
+
 thread_local! {
     pub static GET_UTXOS_CLIENT_CALLS: Cell<u64> = Cell::default();
     pub static GET_UTXOS_MINTER_CALLS: Cell<u64> = Cell::default();
-    pub static UPDATE_CALL_LATENCY: RefCell<BTreeMap<usize,LatencyHistogram>> = RefCell::default();
-    pub static GET_UTXOS_CALL_LATENCY: RefCell<BTreeMap<(usize, String),LatencyHistogram>> = RefCell::default();
-    pub static GET_UTXOS_RESULT_SIZE: RefCell<BTreeMap<String,NumUtxosHistogram>> = RefCell::default();
+    pub static UPDATE_CALL_LATENCY: RefCell<BTreeMap<NumUtxoPages,LatencyHistogram>> = RefCell::default();
+    pub static GET_UTXOS_CALL_LATENCY: RefCell<BTreeMap<(NumUtxoPages, CallSource),LatencyHistogram>> = RefCell::default();
+    pub static GET_UTXOS_RESULT_SIZE: RefCell<BTreeMap<CallSource,NumUtxosHistogram>> = RefCell::default();
 }
 
 pub const BUCKETS_MS: [u64; 8] = [500, 1_000, 2_000, 4_000, 8_000, 16_000, 32_000, u64::MAX];
@@ -66,7 +69,7 @@ impl<const NUM_BUCKETS: usize> Histogram<NUM_BUCKETS> {
                     None
                 }
             })
-            .unwrap();
+            .expect("BUG: all values should be less than or equal to the last bucket upper bound");
         self.bucket_counts[bucket_index] += 1;
         self.value_sum += value;
     }
@@ -97,13 +100,13 @@ impl<const NUM_BUCKETS: usize> Histogram<NUM_BUCKETS> {
 pub fn observe_get_utxos_latency(
     num_utxos: usize,
     num_pages: usize,
-    call_source: String,
+    call_source: CallSource,
     start_ns: u64,
     end_ns: u64,
 ) {
     GET_UTXOS_CALL_LATENCY.with_borrow_mut(|metrics| {
         metrics
-            .entry((num_pages, call_source.clone()))
+            .entry((num_pages as NumUtxoPages, call_source.clone()))
             .or_default()
             .observe_latency(start_ns, end_ns);
     });
@@ -119,7 +122,7 @@ pub fn observe_get_utxos_latency(
 pub fn observe_update_call_latency(num_new_utxos: usize, start_ns: u64, end_ns: u64) {
     UPDATE_CALL_LATENCY.with_borrow_mut(|metrics| {
         metrics
-            .entry(num_new_utxos)
+            .entry(num_new_utxos as NumUtxoPages)
             .or_default()
             .observe_latency(start_ns, end_ns);
     });
@@ -135,7 +138,6 @@ pub fn encode_metrics(
         ic_cdk::api::stable::stable_size() as f64 * WASM_PAGE_SIZE_IN_BYTES,
         "Size of the stable memory allocated by this canister.",
     )?;
-
     metrics.encode_gauge(
         "heap_memory_bytes",
         heap_memory_size_bytes() as f64,
