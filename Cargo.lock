@@ -13,6 +13,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "abnf-core"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c44e09c43ae1c368fb91a03a566472d0087c26cf7e1b9e8e289c14ede681dd7d"
+dependencies = [
+ "nom",
+]
+
+[[package]]
 name = "abnf_to_pest"
 version = "0.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
