@@ -1575,6 +1575,12 @@ where
     pub fn wasm(&self, canister_id: &CanisterId) -> Result<WasmFile<Permissions>, LayoutError> {
         Ok(self.canister(canister_id)?.wasm())
     }
+    pub fn snapshot_wasm(
+        &self,
+        snapshot_id: &SnapshotId,
+    ) -> Result<WasmFile<Permissions>, LayoutError> {
+        Ok(self.snapshot(snapshot_id)?.wasm())
+    }
     /// Removes the unverified checkpoint marker.
     /// If the marker does not exist, this function does nothing and returns `Ok(())`.
     ///
@@ -1892,7 +1898,7 @@ where
         self.canister_root.join(QUEUES_FILE).into()
     }
 
-    pub fn wasm(&self) -> WasmFile<Permissions> {
+    fn wasm(&self) -> WasmFile<Permissions> {
         self.canister_root.join(WASM_FILE).into()
     }
 
@@ -1981,7 +1987,7 @@ where
         self.snapshot_root.clone()
     }
 
-    pub fn wasm(&self) -> WasmFile<Permissions> {
+    fn wasm(&self) -> WasmFile<Permissions> {
         self.snapshot_root.join(WASM_FILE).into()
     }
 

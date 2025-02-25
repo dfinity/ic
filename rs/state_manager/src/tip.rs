@@ -479,7 +479,10 @@ fn backup<T>(
         &snapshot_layout.wasm_chunk_store(),
     )?;
 
-    WasmFile::hardlink_file(&layout.wasm(&canister_id)?, &snapshot_layout.wasm())?;
+    WasmFile::hardlink_file(
+        &layout.wasm(&canister_id)?,
+        &layout.snapshot_wasm(&snapshot_id)?,
+    )?;
 
     Ok(())
 }
@@ -517,7 +520,10 @@ fn restore<T>(
     )?;
 
     layout.wasm(&canister_id)?.try_delete_file()?;
-    WasmFile::hardlink_file(&snapshot_layout.wasm(), &layout.wasm(&canister_id)?)?;
+    WasmFile::hardlink_file(
+        &layout.snapshot_wasm(&snapshot_id)?,
+        &layout.wasm(&canister_id)?,
+    )?;
 
     Ok(())
 }
@@ -1024,10 +1030,10 @@ fn serialize_snapshot_to_tip(
     // Like for canisters, the wasm binary is either already present on disk, or it is new and needs to be written.
     let wasm_binary = canister_snapshot.canister_module();
     if wasm_binary.file().is_none() {
-        snapshot_layout.wasm().serialize(wasm_binary)?;
+        tip.snapshot_wasm(snapshot_id)?.serialize(wasm_binary)?;
     } else {
         // During `flush_page_maps` we created copied this file from the canister directory.
-        debug_assert!(snapshot_layout.wasm().raw_path().exists());
+        debug_assert!(tip.snapshot_wasm(snapshot_id).unwrap().raw_path().exists());
     }
 
     canister_snapshot

@@ -926,7 +926,8 @@ fn load_canister_state_from_checkpoint(
     )
 }
 
-pub fn load_snapshot(
+fn load_snapshot(
+    checkpoint_layout: &CheckpointLayout<ReadOnly>,
     snapshot_layout: &SnapshotLayout<ReadOnly>,
     snapshot_id: &SnapshotId,
     height: Height,
@@ -979,8 +980,8 @@ pub fn load_snapshot(
         durations.insert("snapshot_stable_memory", starting_time.elapsed());
 
         let starting_time = Instant::now();
-        let wasm_binary = snapshot_layout
-            .wasm()
+        let wasm_binary = checkpoint_layout
+            .snapshot_wasm(&snapshot_id)?
             .deserialize(canister_snapshot_bits.binary_hash)?;
         durations.insert("snapshot_canister_module", starting_time.elapsed());
 
@@ -1029,6 +1030,7 @@ fn load_snapshot_from_checkpoint(
 ) -> Result<(CanisterSnapshot, LoadCanisterMetrics), CheckpointError> {
     let snapshot_layout = checkpoint_layout.snapshot(snapshot_id)?;
     load_snapshot(
+        &checkpoint_layout,
         &snapshot_layout,
         snapshot_id,
         checkpoint_layout.height(),
