@@ -746,6 +746,7 @@ impl LoadCanisterMetrics {
 pub fn load_canister_state(
     canister_layout: &CanisterLayout<ReadOnly>,
     canister_id: &CanisterId,
+    checkpoint_layout: &CheckpointLayout<ReadOnly>,
     height: Height,
     fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
     metrics: &dyn CheckpointLoadingMetrics,
@@ -797,8 +798,8 @@ pub fn load_canister_state(
 
             let starting_time = Instant::now();
             let wasm_binary = WasmBinary::new(
-                canister_layout
-                    .wasm()
+                checkpoint_layout
+                    .wasm(canister_id)?
                     .deserialize(execution_state_bits.binary_hash)?,
             );
             durations.insert("wasm_binary", starting_time.elapsed());
@@ -918,6 +919,7 @@ fn load_canister_state_from_checkpoint(
     load_canister_state(
         &canister_layout,
         canister_id,
+        checkpoint_layout,
         checkpoint_layout.height(),
         Arc::clone(&fd_factory),
         metrics,

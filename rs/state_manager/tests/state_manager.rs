@@ -458,16 +458,17 @@ fn checkpoint_marked_ro_at_restart() {
         insert_dummy_canister(&mut state, canister_id);
         state_manager.commit_and_certify(state, height(1), CertificationScope::Full, None);
         state_manager.flush_tip_channel();
-        let canister_100_layout = state_manager
+        let checkpoint_layout = state_manager
             .state_layout()
             .checkpoint_verified(height(1))
-            .unwrap()
-            .canister(&canister_test_id(100))
             .unwrap();
-
         // Make sure we don't do asynchronous operations with checkpoint.
         state_manager.flush_tip_channel();
-        let canister_100_wasm = canister_100_layout.wasm().raw_path().to_path_buf();
+        let canister_100_wasm = checkpoint_layout
+            .wasm(&canister_test_id(100))
+            .unwrap()
+            .raw_path()
+            .to_path_buf();
         make_mutable(&canister_100_wasm).unwrap();
 
         // Check that there are mutable files before the restart...
@@ -5497,19 +5498,22 @@ fn can_uninstall_code() {
         state_manager.flush_tip_channel();
 
         // Check the checkpoint has the canister
-        let canister_layout = state_manager
+        let checkpoint_layout = state_manager
             .state_layout()
             .checkpoint_verified(height(1))
-            .unwrap()
-            .canister(&canister_test_id(100))
             .unwrap();
+        let canister_layout = checkpoint_layout.canister(&canister_test_id(100)).unwrap();
         let canister_path = canister_layout.raw_path();
         assert!(std::fs::metadata(canister_path).unwrap().is_dir());
 
         // WASM binary, WASM memory and stable memory should all be present.
         assert_ne!(vmemory_size(&canister_layout), 0);
         assert_ne!(stable_memory_size(&canister_layout), 0);
-        assert!(canister_layout.wasm().raw_path().exists());
+        assert!(checkpoint_layout
+            .wasm(&canister_test_id(100))
+            .unwrap()
+            .raw_path()
+            .exists());
 
         let (_height, mut state) = state_manager.take_tip();
 
@@ -5528,12 +5532,11 @@ fn can_uninstall_code() {
         state_manager.flush_tip_channel();
 
         // Check that the checkpoint does contains the canister
-        let canister_layout = state_manager
+        let checkpoint_layout = state_manager
             .state_layout()
             .checkpoint_verified(height(3))
-            .unwrap()
-            .canister(&canister_test_id(100))
             .unwrap();
+        let canister_layout = checkpoint_layout.canister(&canister_test_id(100)).unwrap();
 
         assert!(canister_layout.raw_path().exists());
 
@@ -5541,7 +5544,11 @@ fn can_uninstall_code() {
         assert_eq!(vmemory_size(&canister_layout), 0);
         assert_eq!(stable_memory_size(&canister_layout), 0);
         // WASM binary should be missing
-        assert!(!canister_layout.wasm().raw_path().exists());
+        assert!(!checkpoint_layout
+            .wasm(&canister_test_id(100))
+            .unwrap()
+            .raw_path()
+            .exists());
 
         assert_error_counters(metrics);
     });
@@ -5566,12 +5573,15 @@ fn can_uninstall_code_state_machine() {
     env.tick();
     env.state_manager.flush_tip_channel();
 
-    let canister_layout = layout
+    let checkpoint_layout = layout
         .checkpoint_verified(*layout.checkpoint_heights().unwrap().last().unwrap())
-        .unwrap()
-        .canister(&canister_id)
         .unwrap();
-    assert!(canister_layout.wasm().raw_path().exists());
+    let canister_layout = checkpoint_layout.canister(&canister_id).unwrap();
+    assert!(checkpoint_layout
+        .wasm(&canister_id)
+        .unwrap()
+        .raw_path()
+        .exists());
     assert_ne!(vmemory_size(&canister_layout), 0);
     assert_ne!(stable_memory_size(&canister_layout), 0);
 
@@ -5583,7 +5593,11 @@ fn can_uninstall_code_state_machine() {
         .unwrap()
         .canister(&canister_id)
         .unwrap();
-    assert!(!canister_layout.wasm().raw_path().exists());
+    assert!(!checkpoint_layout
+        .wasm(&canister_id)
+        .unwrap()
+        .raw_path()
+        .exists());
     assert_eq!(vmemory_size(&canister_layout), 0);
     assert_eq!(stable_memory_size(&canister_layout), 0);
 }
@@ -5619,11 +5633,10 @@ fn tip_is_initialized_correctly() {
         assert!(!tip_layout.system_metadata().raw_path().exists());
         assert!(!tip_layout.subnet_queues().raw_path().exists());
         assert_eq!(tip_layout.canister_ids().unwrap().len(), 1);
-        let canister_layout = tip_layout
-            .canister(&tip_layout.canister_ids().unwrap()[0])
-            .unwrap();
+        let canister_id = &tip_layout.canister_ids().unwrap()[0];
+        let canister_layout = tip_layout.canister(&canister_id).unwrap();
         assert!(!canister_layout.queues().raw_path().exists());
-        assert!(canister_layout.wasm().raw_path().exists());
+        assert!(tip_layout.wasm(&canister_id).unwrap().raw_path().exists());
         assert!(
             canister_layout.vmemory_0().base().exists()
                 || canister_layout.vmemory_0().existing_overlays().unwrap()[0].exists()
@@ -5646,12 +5659,15 @@ fn tip_is_initialized_correctly() {
         assert!(checkpoint_layout.system_metadata().raw_path().exists());
         assert!(!checkpoint_layout.subnet_queues().raw_path().exists()); // empty
         assert_eq!(checkpoint_layout.canister_ids().unwrap().len(), 1);
-        let canister_layout = checkpoint_layout
-            .canister(&checkpoint_layout.canister_ids().unwrap()[0])
-            .unwrap();
+        let canister_id = &checkpoint_layout.canister_ids().unwrap()[0];
+        let canister_layout = checkpoint_layout.canister(&canister_id).unwrap();
         assert!(!canister_layout.queues().raw_path().exists()); // empty
         assert!(canister_layout.canister().raw_path().exists());
-        assert!(canister_layout.wasm().raw_path().exists());
+        assert!(checkpoint_layout
+            .wasm(&canister_id)
+            .unwrap()
+            .raw_path()
+            .exists());
         assert!(
             canister_layout.vmemory_0().base().exists()
                 || canister_layout.vmemory_0().existing_overlays().unwrap()[0].exists()

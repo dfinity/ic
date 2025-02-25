@@ -479,7 +479,7 @@ fn backup<T>(
         &snapshot_layout.wasm_chunk_store(),
     )?;
 
-    WasmFile::hardlink_file(&canister_layout.wasm(), &snapshot_layout.wasm())?;
+    WasmFile::hardlink_file(&layout.wasm(&canister_id)?, &snapshot_layout.wasm())?;
 
     Ok(())
 }
@@ -516,8 +516,8 @@ fn restore<T>(
         &canister_layout.wasm_chunk_store(),
     )?;
 
-    canister_layout.wasm().try_delete_file()?;
-    WasmFile::hardlink_file(&snapshot_layout.wasm(), &canister_layout.wasm())?;
+    layout.wasm(&canister_id)?.try_delete_file()?;
+    WasmFile::hardlink_file(&snapshot_layout.wasm(), &layout.wasm(&canister_id)?)?;
 
     Ok(())
 }
@@ -854,7 +854,7 @@ fn serialize_canister_to_tip(
             let wasm_binary = &execution_state.wasm_binary.binary;
             match wasm_binary.file() {
                 Some(path) => {
-                    let wasm = canister_layout.wasm();
+                    let wasm = tip.wasm(&canister_id)?;
                     // This if should always be false, as we reflink copy the entire checkpoint to the tip
                     // It is left in mainly as defensive programming
                     if !wasm.raw_path().exists() {
@@ -869,8 +869,7 @@ fn serialize_canister_to_tip(
                 }
                 None => {
                     // Canister was installed/upgraded. Persist the new wasm binary.
-                    canister_layout
-                        .wasm()
+                    tip.wasm(&canister_id)?
                         .serialize(&execution_state.wasm_binary.binary)?;
                 }
             }
@@ -901,7 +900,7 @@ fn serialize_canister_to_tip(
         None => {
             canister_layout.vmemory_0().delete_files()?;
             canister_layout.stable_memory().delete_files()?;
-            canister_layout.wasm().try_delete_file()?;
+            tip.wasm(&canister_id)?.try_delete_file()?;
             None
         }
     };
