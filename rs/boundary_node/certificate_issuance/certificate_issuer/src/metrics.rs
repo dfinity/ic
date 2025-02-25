@@ -52,7 +52,7 @@ impl MetricParams {
             labels,
         )
         .unwrap();
-    
+
         let recorder = HistogramVec::new(
             prometheus::HistogramOpts::new(
                 format!("{namespace}.{action}.duration_sec"),
@@ -392,7 +392,7 @@ impl<T: Process> Process for WithMetrics<T> {
 
         let is_renewal = IS_RENEWAL.with(|cell| cell.borrow().clone());
         let is_important = IS_IMPORTANT.with(|cell| cell.borrow().clone());
-        
+
         let apex_domain = match is_important.as_str() {
             "1" => extract_domain(&task.name),
             _ => "N/A",
