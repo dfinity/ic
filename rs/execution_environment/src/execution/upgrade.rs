@@ -284,10 +284,9 @@ fn upgrade_stage_2_and_3a_create_execution_state_and_call_start(
     // Stage 2: create a new execution state based on the new Wasm code, deactivate global timer, and bump canister version.
     // Replace the execution state of the canister with a new execution state, but
     // persist the stable memory (if it exists).
-    let layout = canister_layout(&original.canister_layout_path, &canister_id);
     let (instructions_from_compilation, result) = round.hypervisor.create_execution_state(
         wasm_module,
-        layout.raw_path(),
+        original.canister_layout_path.clone(),
         canister_id,
         round_limits,
         original.compilation_cost_handling,

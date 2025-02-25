@@ -94,7 +94,6 @@ pub(crate) fn execute_install(
 
     // Stage 1: create a new execution state based on the new Wasm binary, clear certified data, deactivate global timer, and bump canister version.
     let canister_id = helper.canister().canister_id();
-    let layout = canister_layout(&original.canister_layout_path, &canister_id);
     let context_sender = context.sender();
     let instructions_to_assemble = context.wasm_source.instructions_to_assemble();
     helper.charge_for_large_wasm_assembly(instructions_to_assemble);
@@ -115,7 +114,7 @@ pub(crate) fn execute_install(
     let module_hash = wasm_module.module_hash();
     let (instructions_from_compilation, result) = round.hypervisor.create_execution_state(
         wasm_module,
-        layout.raw_path(),
+        original.canister_layout_path.clone(),
         canister_id,
         round_limits,
         original.compilation_cost_handling,
