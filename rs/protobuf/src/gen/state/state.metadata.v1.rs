@@ -111,8 +111,8 @@ pub struct VetKdArguments {
     pub encryption_public_key: ::prost::alloc::vec::Vec<u8>,
     #[prost(message, optional, tag = "4")]
     pub ni_dkg_id: ::core::option::Option<super::super::super::types::v1::NiDkgId>,
-    #[prost(uint64, tag = "5")]
-    pub height: u64,
+    #[prost(uint64, optional, tag = "5")]
+    pub height: ::core::option::Option<u64>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ThresholdArguments {

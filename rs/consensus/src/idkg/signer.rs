@@ -604,10 +604,14 @@ impl ThresholdSigner for ThresholdSignerImpl {
                         height,
                     })
                 }
-                ThresholdArguments::VetKd(args) => Some(RequestId {
-                    callback_id: *callback_id,
-                    height: args.height,
-                }),
+                ThresholdArguments::VetKd(args) => {
+                    args.matched_ni_dkg_id
+                        .as_ref()
+                        .map(|(_, height)| RequestId {
+                            callback_id: *callback_id,
+                            height: *height,
+                        })
+                }
             })
             .collect();
         idkg_pool
@@ -2266,8 +2270,7 @@ mod tests {
                         key_id: key_id.clone(),
                         derivation_id: vec![],
                         encryption_public_key: vec![],
-                        ni_dkg_id: fake_dkg_id(key_id),
-                        height,
+                        matched_ni_dkg_id: Some((fake_dkg_id(key_id), height)),
                     }),
                     pseudo_random_id: [1; 32],
                     derivation_path: vec![],

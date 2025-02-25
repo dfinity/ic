@@ -205,12 +205,15 @@ impl VetKdPayloadBuilderImpl {
                 let ThresholdArguments::VetKd(ctxt_args) = &context.args else {
                     continue;
                 };
+                let Some((ni_dkg_id, _)) = &ctxt_args.matched_ni_dkg_id else {
+                    continue;
+                };
                 let args = VetKdArgs {
                     derivation_path: ExtendedDerivationPath {
                         caller: context.request.sender.into(),
                         derivation_path: context.derivation_path.clone(),
                     },
-                    ni_dkg_id: ctxt_args.ni_dkg_id.clone(),
+                    ni_dkg_id: ni_dkg_id.clone(),
                     derivation_id: ctxt_args.derivation_id.clone(),
                     encryption_public_key: ctxt_args.encryption_public_key.clone(),
                 };
@@ -323,12 +326,15 @@ impl VetKdPayloadBuilderImpl {
         let ThresholdArguments::VetKd(ctxt_args) = &context.args else {
             return invalid_artifact_err(InvalidVetKdPayloadReason::UnexpectedIDkgContext(id));
         };
+        let Some((ni_dkg_id, _)) = &ctxt_args.matched_ni_dkg_id else {
+            return invalid_artifact_err(InvalidVetKdPayloadReason::ContextIncomplete(id));
+        };
         let args = VetKdArgs {
             derivation_path: ExtendedDerivationPath {
                 caller: context.request.sender.into(),
                 derivation_path: context.derivation_path.clone(),
             },
-            ni_dkg_id: ctxt_args.ni_dkg_id.clone(),
+            ni_dkg_id: ni_dkg_id.clone(),
             derivation_id: ctxt_args.derivation_id.clone(),
             encryption_public_key: ctxt_args.encryption_public_key.clone(),
         };

@@ -815,8 +815,7 @@ pub struct VetKdArguments {
     pub key_id: VetKdKeyId,
     pub derivation_id: Vec<u8>,
     pub encryption_public_key: Vec<u8>,
-    pub ni_dkg_id: NiDkgId,
-    pub height: Height,
+    pub matched_ni_dkg_id: Option<(NiDkgId, Height)>,
 }
 
 impl From<&VetKdArguments> for pb_metadata::VetKdArguments {
@@ -825,8 +824,11 @@ impl From<&VetKdArguments> for pb_metadata::VetKdArguments {
             key_id: Some((&args.key_id).into()),
             derivation_id: args.derivation_id.to_vec(),
             encryption_public_key: args.encryption_public_key.to_vec(),
-            ni_dkg_id: Some((args.ni_dkg_id.clone()).into()),
-            height: args.height.get(),
+            ni_dkg_id: args
+                .matched_ni_dkg_id
+                .as_ref()
+                .map(|(id, _)| id.clone().into()),
+            height: args.matched_ni_dkg_id.as_ref().map(|(_, h)| h.get()),
         }
     }
 }
@@ -838,8 +840,12 @@ impl TryFrom<pb_metadata::VetKdArguments> for VetKdArguments {
             key_id: try_from_option_field(context.key_id, "VetKdArguments::key_id")?,
             derivation_id: context.derivation_id.to_vec(),
             encryption_public_key: context.encryption_public_key.to_vec(),
-            ni_dkg_id: try_from_option_field(context.ni_dkg_id, "VetKdArguments::ni_dkg_id")?,
-            height: Height::from(context.height),
+            matched_ni_dkg_id: context
+                .ni_dkg_id
+                .map(NiDkgId::try_from)
+                .transpose()?
+                .zip(context.height)
+                .map(|(id, h)| (id, Height::from(h))),
         })
     }
 }

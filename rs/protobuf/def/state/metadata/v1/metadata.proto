@@ -84,7 +84,7 @@ message VetKdArguments {
   bytes derivation_id = 2;
   bytes encryption_public_key = 3;
   types.v1.NiDkgId ni_dkg_id = 4;
-  uint64 height = 5;
+  optional uint64 height = 5;
 }
 
 message ThresholdArguments {
