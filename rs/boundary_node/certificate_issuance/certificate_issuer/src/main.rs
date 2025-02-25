@@ -70,7 +70,7 @@ mod registration;
 mod verification;
 mod work;
 
-const SERVICE_NAME: &str = "certificate-issuer";
+const SERVICE_NAME: &str = "certificate_issuer";
 
 pub(crate) static TASK_DELAY_SEC: AtomicU64 = AtomicU64::new(60);
 pub(crate) static TASK_ERROR_DELAY_SEC: AtomicU64 = AtomicU64::new(10 * 60);
@@ -240,7 +240,12 @@ async fn main() -> Result<(), Error> {
 
     let resolver = WithMetrics(
         resolver,
-        MetricParams::new(&registry, SERVICE_NAME, "resolve"),
+        MetricParams::new(
+            &registry,
+            SERVICE_NAME,
+            "resolve",
+            &["status", "record_type"],
+        ),
     );
 
     // Encryption
@@ -253,7 +258,7 @@ async fn main() -> Result<(), Error> {
     let encoder = Encoder::new(cipher.clone());
     let encoder = WithMetrics(
         encoder,
-        MetricParams::new(&registry, SERVICE_NAME, "encrypt"),
+        MetricParams::new(&registry, SERVICE_NAME, "encrypt", &["status"]),
     );
     let encoder = Arc::new(encoder);
 
@@ -268,7 +273,7 @@ async fn main() -> Result<(), Error> {
     );
     let registration_checker = WithMetrics(
         registration_checker,
-        MetricParams::new(&registry, SERVICE_NAME, "check_registration"),
+        MetricParams::new(&registry, SERVICE_NAME, "check_registration", &["status"]),
     );
     let registration_checker = Arc::new(registration_checker);
 
@@ -276,7 +281,7 @@ async fn main() -> Result<(), Error> {
         registration::CanisterCreator(agent.clone(), cli.orchestrator_canister_id);
     let registration_creator = WithMetrics(
         registration_creator,
-        MetricParams::new(&registry, SERVICE_NAME, "create_registration"),
+        MetricParams::new(&registry, SERVICE_NAME, "create_registration", &["status"]),
     );
     let registration_creator = Arc::new(registration_creator);
 
@@ -284,7 +289,7 @@ async fn main() -> Result<(), Error> {
         registration::CanisterUpdater(agent.clone(), cli.orchestrator_canister_id);
     let registration_updater = WithMetrics(
         registration_updater,
-        MetricParams::new(&registry, SERVICE_NAME, "update_registration"),
+        MetricParams::new(&registry, SERVICE_NAME, "update_registration", &["status"]),
     );
     let registration_updater = Arc::new(registration_updater);
 
@@ -292,7 +297,7 @@ async fn main() -> Result<(), Error> {
         registration::CanisterRemover(agent.clone(), cli.orchestrator_canister_id);
     let registration_remover = WithMetrics(
         registration_remover,
-        MetricParams::new(&registry, SERVICE_NAME, "remove_registration"),
+        MetricParams::new(&registry, SERVICE_NAME, "remove_registration", &["status"]),
     );
     let registration_remover = Arc::new(registration_remover);
 
@@ -300,7 +305,7 @@ async fn main() -> Result<(), Error> {
         registration::CanisterGetter(agent.clone(), cli.orchestrator_canister_id);
     let registration_getter = WithMetrics(
         registration_getter,
-        MetricParams::new(&registry, SERVICE_NAME, "get_registration"),
+        MetricParams::new(&registry, SERVICE_NAME, "get_registration", &["status"]),
     );
     let registration_getter = Arc::new(registration_getter);
 
@@ -309,7 +314,7 @@ async fn main() -> Result<(), Error> {
         CertificateVerifier::new(agent.clone(), cli.orchestrator_canister_id);
     let certificate_verifier = WithMetrics(
         certificate_verifier,
-        MetricParams::new(&registry, SERVICE_NAME, "verify_certificates"),
+        MetricParams::new(&registry, SERVICE_NAME, "verify_certificates", &["status"]),
     );
     let certificate_verifier = Arc::new(certificate_verifier);
 
@@ -318,7 +323,7 @@ async fn main() -> Result<(), Error> {
         CanisterCertGetter::new(agent.clone(), cli.orchestrator_canister_id, decoder.clone());
     let certificate_getter = WithMetrics(
         certificate_getter,
-        MetricParams::new(&registry, SERVICE_NAME, "get_certificate"),
+        MetricParams::new(&registry, SERVICE_NAME, "get_certificate", &["status"]),
     );
     let certificate_getter = Arc::new(certificate_getter);
 
@@ -331,7 +336,7 @@ async fn main() -> Result<(), Error> {
     let certificate_exporter = WithDecode(certificate_exporter, decoder);
     let certificate_exporter = WithMetrics(
         certificate_exporter,
-        MetricParams::new(&registry, SERVICE_NAME, "export_certificates"),
+        MetricParams::new(&registry, SERVICE_NAME, "export_certificates", &["status"]),
     );
     let certificate_exporter = WithPagination(
         certificate_exporter,
@@ -343,12 +348,15 @@ async fn main() -> Result<(), Error> {
         CanisterUploader::new(agent.clone(), cli.orchestrator_canister_id, encoder);
     let certificate_uploader = WithMetrics(
         certificate_uploader,
-        MetricParams::new(&registry, SERVICE_NAME, "upload_certificate"),
+        MetricParams::new(&registry, SERVICE_NAME, "upload_certificate", &["status"]),
     );
 
     // Work
     let queuer = work::CanisterQueuer(agent.clone(), cli.orchestrator_canister_id);
-    let queuer = WithMetrics(queuer, MetricParams::new(&registry, SERVICE_NAME, "queue"));
+    let queuer = WithMetrics(
+        queuer,
+        MetricParams::new(&registry, SERVICE_NAME, "queue", &["status"]),
+    );
     let queuer = Arc::new(queuer);
 
     // API
@@ -473,19 +481,19 @@ async fn main() -> Result<(), Error> {
     let acme_order = WithIDNA(acme_client.clone());
     let acme_order = WithMetrics(
         acme_order,
-        MetricParams::new(&registry, SERVICE_NAME, "acme_create_order"),
+        MetricParams::new(&registry, SERVICE_NAME, "acme_create_order", &["status"]),
     );
 
     let acme_ready = WithIDNA(acme_client.clone());
     let acme_ready = WithMetrics(
         acme_ready,
-        MetricParams::new(&registry, SERVICE_NAME, "acme_ready_order"),
+        MetricParams::new(&registry, SERVICE_NAME, "acme_ready_order", &["status"]),
     );
 
     let acme_finalize = WithIDNA(acme_client.clone());
     let acme_finalize = WithMetrics(
         acme_finalize,
-        MetricParams::new(&registry, SERVICE_NAME, "acme_finalize_order"),
+        MetricParams::new(&registry, SERVICE_NAME, "acme_finalize_order", &["status"]),
     );
 
     // Cloudflare
@@ -496,7 +504,7 @@ async fn main() -> Result<(), Error> {
     };
     let dns_creator = WithMetrics(
         dns_creator,
-        MetricParams::new(&registry, SERVICE_NAME, "dns_create"),
+        MetricParams::new(&registry, SERVICE_NAME, "dns_create", &["status"]),
     );
 
     let dns_deleter = {
@@ -505,17 +513,20 @@ async fn main() -> Result<(), Error> {
     };
     let dns_deleter = WithMetrics(
         dns_deleter,
-        MetricParams::new(&registry, SERVICE_NAME, "dns_delete"),
+        MetricParams::new(&registry, SERVICE_NAME, "dns_delete", &["status"]),
     );
 
     // Work
     let peeker = work::CanisterPeeker(agent.clone(), cli.orchestrator_canister_id);
-    let peeker = WithMetrics(peeker, MetricParams::new(&registry, SERVICE_NAME, "peek"));
+    let peeker = WithMetrics(
+        peeker,
+        MetricParams::new(&registry, SERVICE_NAME, "peek", &["status"]),
+    );
 
     let dispenser = work::CanisterDispenser(agent.clone(), cli.orchestrator_canister_id);
     let dispenser = WithMetrics(
         dispenser,
-        MetricParams::new(&registry, SERVICE_NAME, "dispense"),
+        MetricParams::new(&registry, SERVICE_NAME, "dispense", &["status"]),
     );
 
     let processor = work::Processor::new(
@@ -531,7 +542,18 @@ async fn main() -> Result<(), Error> {
     );
     let processor = WithMetrics(
         processor,
-        MetricParams::new(&registry, SERVICE_NAME, "process"),
+        MetricParams::new(
+            &registry,
+            SERVICE_NAME,
+            "process",
+            &[
+                "status",
+                "task",
+                "is_renewal",
+                "is_important",
+                "apex_domain",
+            ],
+        ),
     );
     let processor = WithDetectRenewal::new(processor, certificate_getter.clone());
     let processor = WithDetectImportance::new(processor, cli.important_domains);

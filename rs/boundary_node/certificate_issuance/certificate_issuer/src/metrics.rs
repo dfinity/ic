@@ -33,20 +33,10 @@ pub struct MetricParams {
 }
 
 impl MetricParams {
-    pub fn new(registry: &Registry, namespace: &str, action: &str) -> Self {
-        let labels = &[
-            "status",
-            "type",
-            "task",
-            "is_renewal",
-            "is_important",
-            "apex_domain",
-            "record_type",
-        ];
-
+    pub fn new(registry: &Registry, namespace: &str, action: &str, labels: &[&str]) -> Self {
         let counter = CounterVec::new(
             prometheus::Opts::new(
-                format!("{namespace}.{action}"),
+                format!("{namespace}_{action}"),
                 format!("Counts occurrences of {action} calls"),
             ),
             labels,
@@ -55,7 +45,7 @@ impl MetricParams {
 
         let recorder = HistogramVec::new(
             prometheus::HistogramOpts::new(
-                format!("{namespace}.{action}.duration_sec"),
+                format!("{namespace}_{action}_duration_sec"),
                 format!("Records the duration of {action} calls in sec"),
             ),
             labels,
@@ -100,12 +90,8 @@ impl<T: Create> Create for WithMetrics<T> {
             recorder,
         } = &self.1;
 
-        counter
-            .with_label_values(&[status, "", "", "", "", ""])
-            .inc();
-        recorder
-            .with_label_values(&[status, "", "", "", "", ""])
-            .observe(duration);
+        counter.with_label_values(&[status]).inc();
+        recorder.with_label_values(&[status]).observe(duration);
 
         info!(action = action.as_str(), name, status, duration, error = ?out.as_ref().err());
 
@@ -141,11 +127,9 @@ impl<T: Update> Update for WithMetrics<T> {
             recorder,
         } = &self.1;
 
-        counter
-            .with_label_values(&[status, &type_str, "", "", "", ""])
-            .inc();
+        counter.with_label_values(&[status, &type_str]).inc();
         recorder
-            .with_label_values(&[status, &type_str, "", "", "", ""])
+            .with_label_values(&[status, &type_str])
             .observe(duration);
 
         info!(action = action.as_str(), %id, typ = ?typ, status, duration, error = ?out.as_ref().err());
@@ -177,12 +161,8 @@ impl<T: Remove> Remove for WithMetrics<T> {
             recorder,
         } = &self.1;
 
-        counter
-            .with_label_values(&[status, "", "", "", "", ""])
-            .inc();
-        recorder
-            .with_label_values(&[status, "", "", "", "", ""])
-            .observe(duration);
+        counter.with_label_values(&[status]).inc();
+        recorder.with_label_values(&[status]).observe(duration);
 
         info!(action = action.as_str(), %id, status, duration, error = ?out.as_ref().err());
 
@@ -213,12 +193,8 @@ impl<T: Get> Get for WithMetrics<T> {
             recorder,
         } = &self.1;
 
-        counter
-            .with_label_values(&[status, "", "", "", "", ""])
-            .inc();
-        recorder
-            .with_label_values(&[status, "", "", "", "", ""])
-            .observe(duration);
+        counter.with_label_values(&[status]).inc();
+        recorder.with_label_values(&[status]).observe(duration);
 
         info!(action = action.as_str(), %id, status, duration, error = ?out.as_ref().err());
 
@@ -249,12 +225,8 @@ impl<T: GetCert> GetCert for WithMetrics<T> {
             recorder,
         } = &self.1;
 
-        counter
-            .with_label_values(&[status, "", "", "", "", ""])
-            .inc();
-        recorder
-            .with_label_values(&[status, "", "", "", "", ""])
-            .observe(duration);
+        counter.with_label_values(&[status]).inc();
+        recorder.with_label_values(&[status]).observe(duration);
 
         info!(action = action.as_str(), %id, status, duration, error = ?out.as_ref().err());
 
@@ -285,12 +257,8 @@ impl<T: Queue> Queue for WithMetrics<T> {
             recorder,
         } = &self.1;
 
-        counter
-            .with_label_values(&[status, "", "", "", "", ""])
-            .inc();
-        recorder
-            .with_label_values(&[status, "", "", "", "", ""])
-            .observe(duration);
+        counter.with_label_values(&[status]).inc();
+        recorder.with_label_values(&[status]).observe(duration);
 
         info!(action = action.as_str(), %id, t, status, duration, error = ?out.as_ref().err());
 
@@ -321,12 +289,8 @@ impl<T: Peek> Peek for WithMetrics<T> {
             recorder,
         } = &self.1;
 
-        counter
-            .with_label_values(&[status, "", "", "", "", ""])
-            .inc();
-        recorder
-            .with_label_values(&[status, "", "", "", "", ""])
-            .observe(duration);
+        counter.with_label_values(&[status]).inc();
+        recorder.with_label_values(&[status]).observe(duration);
 
         info!(action = action.as_str(), status, duration, error = ?out.as_ref().err());
 
@@ -357,12 +321,8 @@ impl<T: Dispense> Dispense for WithMetrics<T> {
             recorder,
         } = &self.1;
 
-        counter
-            .with_label_values(&[status, "", "", "", "", ""])
-            .inc();
-        recorder
-            .with_label_values(&[status, "", "", "", "", ""])
-            .observe(duration);
+        counter.with_label_values(&[status]).inc();
+        recorder.with_label_values(&[status]).observe(duration);
 
         info!(action = action.as_str(), status, duration, error = ?out.as_ref().err());
 
@@ -407,7 +367,6 @@ impl<T: Process> Process for WithMetrics<T> {
         counter
             .with_label_values(&[
                 status,
-                "",
                 &task.action.to_string(),
                 &is_renewal,
                 &is_important,
@@ -417,7 +376,6 @@ impl<T: Process> Process for WithMetrics<T> {
         recorder
             .with_label_values(&[
                 status,
-                "",
                 &task.action.to_string(),
                 &is_renewal,
                 &is_important,
@@ -448,10 +406,10 @@ impl<T: Resolve> Resolve for WithMetrics<T> {
         } = &self.1;
 
         counter
-            .with_label_values(&[status, "", "", "", "", "", &record_type.to_string()])
+            .with_label_values(&[status, &record_type.to_string()])
             .inc();
         recorder
-            .with_label_values(&[status, "", "", "", "", "", &record_type.to_string()])
+            .with_label_values(&[status, &record_type.to_string()])
             .observe(duration);
 
         info!(action = action.as_str(), name, record_type = record_type.to_string(), status, duration, error = ?out.as_ref().err());
@@ -476,12 +434,8 @@ impl<T: dns::Create> dns::Create for WithMetrics<T> {
             recorder,
         } = &self.1;
 
-        counter
-            .with_label_values(&[status, "", "", "", "", ""])
-            .inc();
-        recorder
-            .with_label_values(&[status, "", "", "", "", ""])
-            .observe(duration);
+        counter.with_label_values(&[status]).inc();
+        recorder.with_label_values(&[status]).observe(duration);
 
         info!(action = action.as_str(), zone, name, status, duration, error = ?out.as_ref().err());
 
@@ -505,12 +459,8 @@ impl<T: dns::Delete> dns::Delete for WithMetrics<T> {
             recorder,
         } = &self.1;
 
-        counter
-            .with_label_values(&[status, "", "", "", "", ""])
-            .inc();
-        recorder
-            .with_label_values(&[status, "", "", "", "", ""])
-            .observe(duration);
+        counter.with_label_values(&[status]).inc();
+        recorder.with_label_values(&[status]).observe(duration);
 
         info!(action = action.as_str(), zone, name, status, duration, error = ?out.as_ref().err());
 
@@ -534,12 +484,8 @@ impl<T: acme::Order> acme::Order for WithMetrics<T> {
             recorder,
         } = &self.1;
 
-        counter
-            .with_label_values(&[status, "", "", "", "", ""])
-            .inc();
-        recorder
-            .with_label_values(&[status, "", "", "", "", ""])
-            .observe(duration);
+        counter.with_label_values(&[status]).inc();
+        recorder.with_label_values(&[status]).observe(duration);
 
         info!(action = action.as_str(), name, status, duration, error = ?out.as_ref().err());
 
@@ -563,12 +509,8 @@ impl<T: acme::Ready> acme::Ready for WithMetrics<T> {
             recorder,
         } = &self.1;
 
-        counter
-            .with_label_values(&[status, "", "", "", "", ""])
-            .inc();
-        recorder
-            .with_label_values(&[status, "", "", "", "", ""])
-            .observe(duration);
+        counter.with_label_values(&[status]).inc();
+        recorder.with_label_values(&[status]).observe(duration);
 
         info!(action = action.as_str(), name, status, duration, error = ?out.as_ref().err());
 
@@ -592,12 +534,8 @@ impl<T: acme::Finalize> acme::Finalize for WithMetrics<T> {
             recorder,
         } = &self.1;
 
-        counter
-            .with_label_values(&[status, "", "", "", "", ""])
-            .inc();
-        recorder
-            .with_label_values(&[status, "", "", "", "", ""])
-            .observe(duration);
+        counter.with_label_values(&[status]).inc();
+        recorder.with_label_values(&[status]).observe(duration);
 
         info!(action = action.as_str(), name, status, duration, error = ?out.as_ref().err());
 
@@ -628,12 +566,8 @@ impl<T: certificate::Upload> certificate::Upload for WithMetrics<T> {
             recorder,
         } = &self.1;
 
-        counter
-            .with_label_values(&[status, "", "", "", "", ""])
-            .inc();
-        recorder
-            .with_label_values(&[status, "", "", "", "", ""])
-            .observe(duration);
+        counter.with_label_values(&[status]).inc();
+        recorder.with_label_values(&[status]).observe(duration);
 
         info!(action = action.as_str(), %id, status, duration, error = ?out.as_ref().err());
 
@@ -664,12 +598,8 @@ impl<T: Verify> Verify for WithMetrics<T> {
             recorder,
         } = &self.1;
 
-        counter
-            .with_label_values(&[status, "", "", "", "", ""])
-            .inc();
-        recorder
-            .with_label_values(&[status, "", "", "", "", ""])
-            .observe(duration);
+        counter.with_label_values(&[status]).inc();
+        recorder.with_label_values(&[status]).observe(duration);
 
         info!(action = action.as_str(), ?key, limit, status, duration, error = ?out.as_ref().err());
 
@@ -697,12 +627,8 @@ impl<T: certificate::Export> certificate::Export for WithMetrics<T> {
             recorder,
         } = &self.1;
 
-        counter
-            .with_label_values(&[status, "", "", "", "", ""])
-            .inc();
-        recorder
-            .with_label_values(&[status, "", "", "", "", ""])
-            .observe(duration);
+        counter.with_label_values(&[status]).inc();
+        recorder.with_label_values(&[status]).observe(duration);
 
         info!(action = action.as_str(), ?key, limit, status, duration, error = ?out.as_ref().err());
 
@@ -739,12 +665,8 @@ impl<T: Check> Check for WithMetrics<T> {
             recorder,
         } = &self.1;
 
-        counter
-            .with_label_values(&[status, "", "", "", "", ""])
-            .inc();
-        recorder
-            .with_label_values(&[status, "", "", "", "", ""])
-            .observe(duration);
+        counter.with_label_values(&[status]).inc();
+        recorder.with_label_values(&[status]).observe(duration);
 
         info!(action = action.as_str(), name, status, duration, error = ?out.as_ref().err());
 
