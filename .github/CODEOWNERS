@@ -49,6 +49,7 @@ go_deps.bzl               @dfinity/idx
 /packages/icrc-ledger-types/            @dfinity/finint
 /packages/ic-ledger-hash-of/            @dfinity/finint
 /packages/pocket-ic/                    @dfinity/pocket-ic
+/packages/ic-error/types/               @dfinity/execution
 /packages/ic-dummy-getrandom-for-wasm/  @dfinity/crypto-team
 /packages/ic-ed25519/                   @dfinity/crypto-team
 /packages/ic-ethereum-types/            @dfinity/cross-chain-team
