@@ -8625,6 +8625,7 @@ dependencies = [
  "proptest 1.6.0",
  "rand 0.8.5",
  "regex",
+ "rstest",
  "scoped_threadpool",
  "serde",
  "serde_bytes",
