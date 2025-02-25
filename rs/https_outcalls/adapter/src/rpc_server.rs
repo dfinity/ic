@@ -207,19 +207,19 @@ impl CanisterHttp {
             Some(h) => h,
             None => return "empty".to_string(),
         };
-    
+
         if host.parse::<Ipv4Addr>().is_ok() {
-            return format!("v4");
+            return "v4".to_string();
         }
-    
+
         if host.starts_with('[') && host.ends_with(']') {
-            let inside = &host[1..host.len()-1];
+            let inside = &host[1..host.len() - 1];
             if inside.parse::<Ipv6Addr>().is_ok() {
-                return format!("v6");
+                return "v6".to_string();
             }
         }
-    
-        format!("domain_name")
+
+        "domain_name".to_string()
     }
 
     async fn do_https_outcall_socks_proxy(
@@ -251,20 +251,30 @@ impl CanisterHttp {
 
             let socks_client = self.get_socks_client(socks_proxy_uri);
 
-            let url_format = Self::classify_uri_host(&request.uri());
+            let url_format = Self::classify_uri_host(request.uri());
 
             match socks_client.request(request.clone()).await {
                 Ok(resp) => {
                     self.metrics
                         .socks_connection_attempts
-                        .with_label_values(&[&tries.to_string(), "success", socks_proxy_addr, &url_format])
+                        .with_label_values(&[
+                            &tries.to_string(),
+                            "success",
+                            socks_proxy_addr,
+                            &url_format,
+                        ])
                         .inc();
                     return Ok(resp);
                 }
                 Err(socks_err) => {
                     self.metrics
                         .socks_connection_attempts
-                        .with_label_values(&[&tries.to_string(), "failure", socks_proxy_addr, &url_format])
+                        .with_label_values(&[
+                            &tries.to_string(),
+                            "failure",
+                            socks_proxy_addr,
+                            &url_format,
+                        ])
                         .inc();
                     debug!(
                         self.logger,
@@ -657,10 +667,22 @@ mod tests {
         let ipv6_url = "http://[2001:db8::1]/path";
         let domain_name_url = "http://example.com/something";
         let empty_hostname_url = "/hello/world";
-        
-        assert_eq!(CanisterHttp::classify_uri_host(&Uri::from_str(ipv4_url).unwrap()), "v4");
-        assert_eq!(CanisterHttp::classify_uri_host(&Uri::from_str(ipv6_url).unwrap()), "v6");
-        assert_eq!(CanisterHttp::classify_uri_host(&Uri::from_str(domain_name_url).unwrap()), "domain_name");
-        assert_eq!(CanisterHttp::classify_uri_host(&Uri::from_str(empty_hostname_url).unwrap()), "empty");
+
+        assert_eq!(
+            CanisterHttp::classify_uri_host(&Uri::from_str(ipv4_url).unwrap()),
+            "v4"
+        );
+        assert_eq!(
+            CanisterHttp::classify_uri_host(&Uri::from_str(ipv6_url).unwrap()),
+            "v6"
+        );
+        assert_eq!(
+            CanisterHttp::classify_uri_host(&Uri::from_str(domain_name_url).unwrap()),
+            "domain_name"
+        );
+        assert_eq!(
+            CanisterHttp::classify_uri_host(&Uri::from_str(empty_hostname_url).unwrap()),
+            "empty"
+        );
     }
 }
