@@ -8,8 +8,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## Unreleased
 
 ### Added
-- The function `PocketIc::try_get_controllers` which gets the controllers of a canister but doesn't panic if the target canister
-  doesn't exist.
 - The function `PocketIcBuilder::with_bitcoind_addrs` to specify multiple addresses and ports at which `bitcoind` processes are listening.
 - The function `PocketIc::query_call_with_effective_principal` for making generic query calls (including management canister query calls).
 - The function `PocketIc::ingress_status` to fetch the status of an update call submitted through an ingress message.
@@ -19,7 +17,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (round execution must be triggered separarely, e.g., on a "live" instance or by separate PocketIC library calls).
 - The function `PocketIc::set_certified_time` to set the current certified time on all subnets of the PocketIC instance.
 - The function `PocketIc::update_call_with_effective_principal` is made public. It is helpful, e.g., for
-modeling management canister calls that need to be routed to the right subnet using effective principals.
+  modeling management canister calls that need to be routed to the right subnet using effective principals.
+- The function `PocketIcBuilder::with_server_binary` to provide a path to the PocketIC server binary used instead of the environment variable `POCKET_IC_BIN` and the current working directory.
 
 ### Changed
 - The response types `pocket_ic::WasmResult`, `pocket_ic::UserError`, and `pocket_ic::CallError` are replaced by a single reject response type `pocket_ic::RejectResponse`.

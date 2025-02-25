@@ -187,7 +187,7 @@ pub struct Config {
 
     /// The maximum amount of logical storage available to guaranteed response
     /// canister messages across the whole subnet.
-    pub subnet_message_memory_capacity: NumBytes,
+    pub guaranteed_response_message_memory_capacity: NumBytes,
 
     /// The maximum amount of logical storage available to best-effort canister
     /// messages across the whole subnet.
@@ -338,7 +338,8 @@ impl Default for Config {
                 MAX_INSTRUCTIONS_FOR_MESSAGE_ACCEPTANCE_CALLS,
             subnet_memory_threshold: SUBNET_MEMORY_THRESHOLD,
             subnet_memory_capacity: SUBNET_MEMORY_CAPACITY,
-            subnet_message_memory_capacity: SUBNET_GUARANTEED_RESPONSE_MESSAGE_MEMORY_CAPACITY,
+            guaranteed_response_message_memory_capacity:
+                SUBNET_GUARANTEED_RESPONSE_MESSAGE_MEMORY_CAPACITY,
             best_effort_message_memory_capacity: SUBNET_BEST_EFFORT_MESSAGE_MEMORY_CAPACITY,
             ingress_history_memory_capacity: INGRESS_HISTORY_MEMORY_CAPACITY,
             subnet_wasm_custom_sections_memory_capacity:
