@@ -29,7 +29,7 @@ use std::{
     time::Duration,
 };
 
-// Temporary copy of `ic_management_canister_typesL::private::CanisterStatusResultV2`
+// Temporary copy of `ic_management_canister_types_private::CanisterStatusResultV2`
 // without the new `memory_metrics` field until the change is rolled out to production.
 #[derive(Eq, PartialEq, Debug, CandidType, Deserialize)]
 pub struct CanisterStatusResultV2 {
