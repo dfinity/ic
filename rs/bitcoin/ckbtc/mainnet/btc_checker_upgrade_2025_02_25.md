@@ -15,8 +15,10 @@ Previous BTC Checker proposal: https://dashboard.internetcomputer.org/proposal/1
 ---
 
 ## Motivation
-TODO: THIS MUST BE FILLED OUT
 
+Update the Bitcoin checker canister to include the latest code changes, notably:
+* Update the OFAC checklist.
+* Add new `check_transaction_query` and `check_transaction_str` methods.
 
 ## Upgrade args
 
