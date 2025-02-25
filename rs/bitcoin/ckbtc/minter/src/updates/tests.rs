@@ -1,7 +1,7 @@
 mod update_balance {
     use crate::management::{get_utxos, CallError, CallSource};
-    use crate::metrics::Histogram;
     use crate::metrics::LatencyHistogram;
+    use crate::metrics::{Histogram, NumUtxoPages};
     use crate::state::{audit, eventlog::EventType, mutate_state, read_state, SuspendedReason};
     use crate::test_fixtures::{
         ecdsa_public_key, get_uxos_response, ignored_utxo, init_args, init_state, ledger_account,
@@ -369,7 +369,7 @@ mod update_balance {
         assert_eq!(histogram.sum(), 250);
     }
 
-    fn update_balance_latency_histogram(num_new_utxos: usize) -> Histogram<8> {
+    fn update_balance_latency_histogram(num_new_utxos: NumUtxoPages) -> Histogram<8> {
         crate::metrics::UPDATE_CALL_LATENCY.with_borrow(|histograms| {
             let &LatencyHistogram(histogram) = histograms
                 .get(&num_new_utxos)
@@ -465,7 +465,7 @@ mod update_balance {
         .await;
         assert_eq!(result, Ok(vec![utxo(), utxo(), utxo()]));
 
-        let histogram = get_utxos_latency_histogram(1, "minter".to_string());
+        let histogram = get_utxos_latency_histogram(1, CallSource::Minter);
         assert_eq!(
             histogram.iter().collect::<Vec<_>>(),
             vec![
@@ -481,7 +481,7 @@ mod update_balance {
         );
         assert_eq!(histogram.sum(), get_utxos_latencies_ms.iter().sum::<u64>());
 
-        let histogram = get_utxos_latency_histogram(3, "minter".to_string());
+        let histogram = get_utxos_latency_histogram(3, CallSource::Minter);
         assert_eq!(
             histogram.iter().collect::<Vec<_>>(),
             vec![
@@ -498,7 +498,10 @@ mod update_balance {
         assert_eq!(histogram.sum(), 3_500);
     }
 
-    fn get_utxos_latency_histogram(num_pages: usize, call_source: String) -> Histogram<8> {
+    fn get_utxos_latency_histogram(
+        num_pages: NumUtxoPages,
+        call_source: CallSource,
+    ) -> Histogram<8> {
         crate::metrics::GET_UTXOS_CALL_LATENCY.with_borrow(|histograms| {
             let &LatencyHistogram(histogram) = histograms
                 .get(&(num_pages, call_source))
