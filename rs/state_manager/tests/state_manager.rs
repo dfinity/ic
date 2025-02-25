@@ -5588,11 +5588,10 @@ fn can_uninstall_code_state_machine() {
     env.uninstall_code(canister_id).unwrap();
 
     env.state_manager.flush_tip_channel();
-    let canister_layout = layout
+    let checkpoint_layout = layout
         .checkpoint_verified(*layout.checkpoint_heights().unwrap().last().unwrap())
-        .unwrap()
-        .canister(&canister_id)
         .unwrap();
+    let canister_layout = checkpoint_layout.canister(&canister_id).unwrap();
     assert!(!checkpoint_layout
         .wasm(&canister_id)
         .unwrap()

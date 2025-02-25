@@ -1892,7 +1892,7 @@ where
         self.canister_root.join(QUEUES_FILE).into()
     }
 
-    fn wasm(&self) -> WasmFile<Permissions> {
+    pub fn wasm(&self) -> WasmFile<Permissions> {
         self.canister_root.join(WASM_FILE).into()
     }
 
