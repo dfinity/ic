@@ -1,6 +1,7 @@
 use async_trait::async_trait;
 use candid::{CandidType, Decode, Encode, Error};
 use ic_base_types::CanisterId;
+use ic_nervous_system_timers::test::{advance_time_for_timers, set_time_for_timers};
 use ic_nns_governance::governance::RandomnessGenerator;
 use ic_nns_governance::{
     governance::{Environment, HeapGrowthPotential, RngError},
@@ -12,6 +13,7 @@ use ic_sns_wasm::pb::v1::{DeployNewSnsRequest, ListDeployedSnsesRequest};
 use proptest::prelude::RngCore;
 use rand::rngs::StdRng;
 use rand_chacha::ChaCha20Rng;
+use std::time::Duration;
 use std::{
     collections::VecDeque,
     sync::{Arc, Mutex},
@@ -61,12 +63,18 @@ pub struct EnvironmentFixture {
 
 impl EnvironmentFixture {
     pub fn new(state: EnvironmentFixtureState) -> Self {
-        EnvironmentFixture {
+        let ret = EnvironmentFixture {
             environment_fixture_state: Arc::new(Mutex::new(state)),
-        }
+        };
+        set_time_for_timers(Duration::from_secs(
+            ret.environment_fixture_state.try_lock().unwrap().now,
+        ));
+
+        ret
     }
 
     pub fn advance_time_by(&self, delta_seconds: u64) {
+        advance_time_for_timers(Duration::from_secs(delta_seconds));
         self.environment_fixture_state.try_lock().unwrap().now += delta_seconds
     }
 

@@ -1241,6 +1241,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "slog-term": crate.spec(
                 version = "^2.9.1",
             ),
+            "slotmap": crate.spec(
+                version = "^1.0.7",
+            ),
             "socket2": crate.spec(
                 version = "^0.5.7",
                 features = [

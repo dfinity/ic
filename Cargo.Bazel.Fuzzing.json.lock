@@ -20559,6 +20559,10 @@
               "target": "slog_term"
             },
             {
+              "id": "slotmap 1.0.7",
+              "target": "slotmap"
+            },
+            {
               "id": "socket2 0.5.7",
               "target": "socket2"
             },
@@ -32975,7 +32979,7 @@
               "target": "serde_bytes"
             },
             {
-              "id": "slotmap 1.0.6",
+              "id": "slotmap 1.0.7",
               "target": "slotmap"
             }
           ],
@@ -71288,14 +71292,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "slotmap 1.0.6": {
+    "slotmap 1.0.7": {
       "name": "slotmap",
-      "version": "1.0.6",
+      "version": "1.0.7",
       "package_url": "https://github.com/orlp/slotmap",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/slotmap/1.0.6/download",
-          "sha256": "e1e08e261d0e8f5c43123b7adf3e4ca1690d655377ac93a03b2c9d3e98de1342"
+          "url": "https://static.crates.io/crates/slotmap/1.0.7/download",
+          "sha256": "dbff4acf519f630b3a3ddcfaea6c06b42174d9a44bc70c620e9ed1649d58b82a"
         }
       },
       "targets": [
@@ -71339,14 +71343,14 @@
         "deps": {
           "common": [
             {
-              "id": "slotmap 1.0.6",
+              "id": "slotmap 1.0.7",
               "target": "build_script_build"
             }
           ],
           "selects": {}
         },
         "edition": "2018",
-        "version": "1.0.6"
+        "version": "1.0.7"
       },
       "build_script_attrs": {
         "compile_data_glob": [
@@ -91637,6 +91641,7 @@
     "slog-json 2.6.1",
     "slog-scope 4.4.0",
     "slog-term 2.9.1",
+    "slotmap 1.0.7",
     "socket2 0.5.7",
     "ssh2 0.9.4",
     "static_assertions 1.1.0",
