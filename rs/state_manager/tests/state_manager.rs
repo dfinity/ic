@@ -5630,9 +5630,9 @@ fn tip_is_initialized_correctly() {
         assert!(!tip_layout.subnet_queues().raw_path().exists());
         assert_eq!(tip_layout.canister_ids().unwrap().len(), 1);
         let canister_id = &tip_layout.canister_ids().unwrap()[0];
-        let canister_layout = tip_layout.canister(&canister_id).unwrap();
+        let canister_layout = tip_layout.canister(canister_id).unwrap();
         assert!(!canister_layout.queues().raw_path().exists());
-        assert!(tip_layout.wasm(&canister_id).unwrap().raw_path().exists());
+        assert!(tip_layout.wasm(canister_id).unwrap().raw_path().exists());
         assert!(
             canister_layout.vmemory_0().base().exists()
                 || canister_layout.vmemory_0().existing_overlays().unwrap()[0].exists()
@@ -5656,11 +5656,11 @@ fn tip_is_initialized_correctly() {
         assert!(!checkpoint_layout.subnet_queues().raw_path().exists()); // empty
         assert_eq!(checkpoint_layout.canister_ids().unwrap().len(), 1);
         let canister_id = &checkpoint_layout.canister_ids().unwrap()[0];
-        let canister_layout = checkpoint_layout.canister(&canister_id).unwrap();
+        let canister_layout = checkpoint_layout.canister(canister_id).unwrap();
         assert!(!canister_layout.queues().raw_path().exists()); // empty
         assert!(canister_layout.canister().raw_path().exists());
         assert!(checkpoint_layout
-            .wasm(&canister_id)
+            .wasm(canister_id)
             .unwrap()
             .raw_path()
             .exists());
