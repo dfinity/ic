@@ -25,13 +25,9 @@ use chacha20poly1305::{KeyInit, XChaCha20Poly1305};
 use clap::Parser;
 use ic_agent::{identity::Secp256k1Identity, Agent};
 use instant_acme::{Account, AccountCredentials, NewAccount};
-use opentelemetry::{
-    metrics::{Counter, Histogram, MeterProvider as _},
-    sdk::metrics::MeterProvider,
-    KeyValue,
+use prometheus::{
+    labels, CounterVec, Encoder as PrometheusEncoder, HistogramVec, Registry, TextEncoder,
 };
-use opentelemetry_prometheus::exporter;
-use prometheus::{labels, Encoder as PrometheusEncoder, Registry, TextEncoder};
 use tokio::{net::TcpListener, sync::Semaphore, task, time::sleep};
 use tower::ServiceBuilder;
 use tracing::info;
@@ -175,11 +171,10 @@ async fn main() -> Result<(), Error> {
         Some(labels! {"service".into() => SERVICE_NAME.into()}),
     )
     .unwrap();
-    let exporter = exporter().with_registry(registry.clone()).build()?;
-    let provider = MeterProvider::builder().with_reader(exporter).build();
-    let meter = provider.meter(SERVICE_NAME);
 
-    let metrics_handler = metrics_handler.layer(Extension(MetricsHandlerArgs { registry }));
+    let metrics_handler = metrics_handler.layer(Extension(MetricsHandlerArgs {
+        registry: registry.clone(),
+    }));
     let metrics_router = Router::new().route("/metrics", get(metrics_handler));
 
     // Task delays
@@ -243,7 +238,10 @@ async fn main() -> Result<(), Error> {
         )?)
     };
 
-    let resolver = WithMetrics(resolver, MetricParams::new(&meter, SERVICE_NAME, "resolve"));
+    let resolver = WithMetrics(
+        resolver,
+        MetricParams::new(&registry, SERVICE_NAME, "resolve"),
+    );
 
     // Encryption
     let cipher = Arc::new({
@@ -253,7 +251,10 @@ async fn main() -> Result<(), Error> {
     });
 
     let encoder = Encoder::new(cipher.clone());
-    let encoder = WithMetrics(encoder, MetricParams::new(&meter, SERVICE_NAME, "encrypt"));
+    let encoder = WithMetrics(
+        encoder,
+        MetricParams::new(&registry, SERVICE_NAME, "encrypt"),
+    );
     let encoder = Arc::new(encoder);
 
     let decoder = Decoder::new(cipher.clone());
@@ -267,7 +268,7 @@ async fn main() -> Result<(), Error> {
     );
     let registration_checker = WithMetrics(
         registration_checker,
-        MetricParams::new(&meter, SERVICE_NAME, "check_registration"),
+        MetricParams::new(&registry, SERVICE_NAME, "check_registration"),
     );
     let registration_checker = Arc::new(registration_checker);
 
@@ -275,7 +276,7 @@ async fn main() -> Result<(), Error> {
         registration::CanisterCreator(agent.clone(), cli.orchestrator_canister_id);
     let registration_creator = WithMetrics(
         registration_creator,
-        MetricParams::new(&meter, SERVICE_NAME, "create_registration"),
+        MetricParams::new(&registry, SERVICE_NAME, "create_registration"),
     );
     let registration_creator = Arc::new(registration_creator);
 
@@ -283,7 +284,7 @@ async fn main() -> Result<(), Error> {
         registration::CanisterUpdater(agent.clone(), cli.orchestrator_canister_id);
     let registration_updater = WithMetrics(
         registration_updater,
-        MetricParams::new(&meter, SERVICE_NAME, "update_registration"),
+        MetricParams::new(&registry, SERVICE_NAME, "update_registration"),
     );
     let registration_updater = Arc::new(registration_updater);
 
@@ -291,7 +292,7 @@ async fn main() -> Result<(), Error> {
         registration::CanisterRemover(agent.clone(), cli.orchestrator_canister_id);
     let registration_remover = WithMetrics(
         registration_remover,
-        MetricParams::new(&meter, SERVICE_NAME, "remove_registration"),
+        MetricParams::new(&registry, SERVICE_NAME, "remove_registration"),
     );
     let registration_remover = Arc::new(registration_remover);
 
@@ -299,7 +300,7 @@ async fn main() -> Result<(), Error> {
         registration::CanisterGetter(agent.clone(), cli.orchestrator_canister_id);
     let registration_getter = WithMetrics(
         registration_getter,
-        MetricParams::new(&meter, SERVICE_NAME, "get_registration"),
+        MetricParams::new(&registry, SERVICE_NAME, "get_registration"),
     );
     let registration_getter = Arc::new(registration_getter);
 
@@ -308,7 +309,7 @@ async fn main() -> Result<(), Error> {
         CertificateVerifier::new(agent.clone(), cli.orchestrator_canister_id);
     let certificate_verifier = WithMetrics(
         certificate_verifier,
-        MetricParams::new(&meter, SERVICE_NAME, "verify_certificates"),
+        MetricParams::new(&registry, SERVICE_NAME, "verify_certificates"),
     );
     let certificate_verifier = Arc::new(certificate_verifier);
 
@@ -317,7 +318,7 @@ async fn main() -> Result<(), Error> {
         CanisterCertGetter::new(agent.clone(), cli.orchestrator_canister_id, decoder.clone());
     let certificate_getter = WithMetrics(
         certificate_getter,
-        MetricParams::new(&meter, SERVICE_NAME, "get_certificate"),
+        MetricParams::new(&registry, SERVICE_NAME, "get_certificate"),
     );
     let certificate_getter = Arc::new(certificate_getter);
 
@@ -330,7 +331,7 @@ async fn main() -> Result<(), Error> {
     let certificate_exporter = WithDecode(certificate_exporter, decoder);
     let certificate_exporter = WithMetrics(
         certificate_exporter,
-        MetricParams::new(&meter, SERVICE_NAME, "export_certificates"),
+        MetricParams::new(&registry, SERVICE_NAME, "export_certificates"),
     );
     let certificate_exporter = WithPagination(
         certificate_exporter,
@@ -342,12 +343,12 @@ async fn main() -> Result<(), Error> {
         CanisterUploader::new(agent.clone(), cli.orchestrator_canister_id, encoder);
     let certificate_uploader = WithMetrics(
         certificate_uploader,
-        MetricParams::new(&meter, SERVICE_NAME, "upload_certificate"),
+        MetricParams::new(&registry, SERVICE_NAME, "upload_certificate"),
     );
 
     // Work
     let queuer = work::CanisterQueuer(agent.clone(), cli.orchestrator_canister_id);
-    let queuer = WithMetrics(queuer, MetricParams::new(&meter, SERVICE_NAME, "queue"));
+    let queuer = WithMetrics(queuer, MetricParams::new(&registry, SERVICE_NAME, "queue"));
     let queuer = Arc::new(queuer);
 
     // API
@@ -399,14 +400,16 @@ async fn main() -> Result<(), Error> {
     let api_router = api_router.layer(
         ServiceBuilder::new()
             .layer(Extension(MetricsMiddlewareArgs {
-                counter: meter
-                    .u64_counter("requests_total")
-                    .with_description("Counts occurrences of requests")
-                    .init(),
-                recorder: meter
-                    .f64_histogram("request_duration")
-                    .with_description("Duration of requests")
-                    .init(),
+                counter: CounterVec::new(
+                    prometheus::Opts::new("requests_total", "Counts occurrences of requests"),
+                    &["path", "method", "status_code"],
+                )
+                .unwrap(),
+                recorder: HistogramVec::new(
+                    prometheus::HistogramOpts::new("request_duration", "Duration of requests"),
+                    &["path", "method", "status_code"],
+                )
+                .unwrap(),
             }))
             .layer(middleware::from_fn(metrics_mw))
             .layer(middleware::from_fn(headers::middleware)),
@@ -470,19 +473,19 @@ async fn main() -> Result<(), Error> {
     let acme_order = WithIDNA(acme_client.clone());
     let acme_order = WithMetrics(
         acme_order,
-        MetricParams::new(&meter, SERVICE_NAME, "acme_create_order"),
+        MetricParams::new(&registry, SERVICE_NAME, "acme_create_order"),
     );
 
     let acme_ready = WithIDNA(acme_client.clone());
     let acme_ready = WithMetrics(
         acme_ready,
-        MetricParams::new(&meter, SERVICE_NAME, "acme_ready_order"),
+        MetricParams::new(&registry, SERVICE_NAME, "acme_ready_order"),
     );
 
     let acme_finalize = WithIDNA(acme_client.clone());
     let acme_finalize = WithMetrics(
         acme_finalize,
-        MetricParams::new(&meter, SERVICE_NAME, "acme_finalize_order"),
+        MetricParams::new(&registry, SERVICE_NAME, "acme_finalize_order"),
     );
 
     // Cloudflare
@@ -493,7 +496,7 @@ async fn main() -> Result<(), Error> {
     };
     let dns_creator = WithMetrics(
         dns_creator,
-        MetricParams::new(&meter, SERVICE_NAME, "dns_create"),
+        MetricParams::new(&registry, SERVICE_NAME, "dns_create"),
     );
 
     let dns_deleter = {
@@ -502,17 +505,17 @@ async fn main() -> Result<(), Error> {
     };
     let dns_deleter = WithMetrics(
         dns_deleter,
-        MetricParams::new(&meter, SERVICE_NAME, "dns_delete"),
+        MetricParams::new(&registry, SERVICE_NAME, "dns_delete"),
     );
 
     // Work
     let peeker = work::CanisterPeeker(agent.clone(), cli.orchestrator_canister_id);
-    let peeker = WithMetrics(peeker, MetricParams::new(&meter, SERVICE_NAME, "peek"));
+    let peeker = WithMetrics(peeker, MetricParams::new(&registry, SERVICE_NAME, "peek"));
 
     let dispenser = work::CanisterDispenser(agent.clone(), cli.orchestrator_canister_id);
     let dispenser = WithMetrics(
         dispenser,
-        MetricParams::new(&meter, SERVICE_NAME, "dispense"),
+        MetricParams::new(&registry, SERVICE_NAME, "dispense"),
     );
 
     let processor = work::Processor::new(
@@ -528,7 +531,7 @@ async fn main() -> Result<(), Error> {
     );
     let processor = WithMetrics(
         processor,
-        MetricParams::new(&meter, SERVICE_NAME, "process"),
+        MetricParams::new(&registry, SERVICE_NAME, "process"),
     );
     let processor = WithDetectRenewal::new(processor, certificate_getter.clone());
     let processor = WithDetectImportance::new(processor, cli.important_domains);
@@ -679,8 +682,8 @@ async fn metrics_handler(
 
 #[derive(Clone)]
 struct MetricsMiddlewareArgs {
-    counter: Counter<u64>,
-    recorder: Histogram<f64>,
+    counter: CounterVec,
+    recorder: HistogramVec,
 }
 
 async fn metrics_mw(req: Request<Body>, next: Next) -> impl IntoResponse {
@@ -708,14 +711,12 @@ async fn metrics_mw(req: Request<Body>, next: Next) -> impl IntoResponse {
 
     info!(path, method, status_code, request_duration);
 
-    let labels = &[
-        KeyValue::new("path", path),
-        KeyValue::new("method", method),
-        KeyValue::new("status_code", status_code),
-    ];
-
-    counter.add(1, labels);
-    recorder.record(request_duration, labels);
+    counter
+        .with_label_values(&[&path, &method, &status_code])
+        .inc();
+    recorder
+        .with_label_values(&[&path, &method, &status_code])
+        .observe(request_duration);
 
     response
 }

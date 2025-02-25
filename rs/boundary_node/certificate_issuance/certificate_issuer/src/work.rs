@@ -1,5 +1,9 @@
 use std::{
-    collections::HashSet, fmt, iter::once, sync::atomic::Ordering, sync::Arc, time::Duration,
+    cell::RefCell,
+    collections::HashSet,
+    fmt,
+    sync::{atomic::Ordering, Arc},
+    time::Duration,
 };
 
 use anyhow::{anyhow, Context};
@@ -7,7 +11,6 @@ use async_trait::async_trait;
 use candid::{Decode, Encode, Principal};
 use certificate_orchestrator_interface as ifc;
 use ic_agent::Agent;
-use opentelemetry::{baggage::BaggageExt, trace::FutureExt, KeyValue};
 use serde::Serialize;
 use trust_dns_resolver::{error::ResolveErrorKind, proto::rr::RecordType};
 
@@ -20,6 +23,11 @@ use crate::{
     registration::{Id, Registration, State},
     TASK_DELAY_SEC, TASK_ERROR_DELAY_SEC,
 };
+
+thread_local! {
+    pub static IS_RENEWAL: RefCell<String> = RefCell::new("unknown".to_string());
+    pub static IS_IMPORTANT: RefCell<String> = RefCell::new("unknown".to_string());
+}
 
 #[derive(Clone, Debug, Serialize)]
 pub enum Action {
@@ -419,15 +427,12 @@ impl<T: Process> WithDetectRenewal<T> {
 impl<T: Process> Process for WithDetectRenewal<T> {
     async fn process(&self, id: &Id, task: &Task) -> Result<(), ProcessError> {
         let is_renewal = match self.renewal_detector.get_cert(id).await {
-            Ok(_) => String::from("1"),
-            Err(GetCertError::NotFound) => String::from("0"),
+            Ok(_) => "1",
+            Err(GetCertError::NotFound) => "0",
             Err(err) => return Err(ProcessError::UnexpectedError(anyhow!(err))),
         };
-        let ctx = opentelemetry::Context::current_with_baggage(once(KeyValue::new(
-            "is_renewal",
-            is_renewal,
-        )));
-        self.processor.process(id, task).with_context(ctx).await
+        IS_RENEWAL.with(|cell| *cell.borrow_mut() = is_renewal.to_string());
+        self.processor.process(id, task).await
     }
 }
 
@@ -462,12 +467,9 @@ impl<T: Process> Process for WithDetectImportance<T> {
             true => "1",
         };
 
-        let ctx = opentelemetry::Context::current_with_baggage(once(KeyValue::new(
-            "is_important",
-            is_important,
-        )));
+        IS_IMPORTANT.with(|cell| *cell.borrow_mut() = is_important.to_string());
 
-        self.processor.process(id, task).with_context(ctx).await
+        self.processor.process(id, task).await
     }
 }
 
