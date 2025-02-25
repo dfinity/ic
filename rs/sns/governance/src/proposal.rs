@@ -5366,7 +5366,7 @@ Payload rendering here"#
 
         // At least one field must be set. Which one - doesn't matter for this test.
         let new_parameters = NervousSystemParameters {
-            automatically_advance_target_version: Some(true),
+            automatically_advance_target_version: Some(false),
             ..Default::default()
         };
 
@@ -5378,8 +5378,8 @@ Payload rendering here"#
 
         for keyword in [
             "change nervous system parameters",
-            "automatically_advance_target_version: Some(\n        false,\n    )",
             "automatically_advance_target_version: Some(\n        true,\n    )",
+            "automatically_advance_target_version: Some(\n        false,\n    )",
         ] {
             assert!(
                 render.contains(keyword),

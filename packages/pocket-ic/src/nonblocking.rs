@@ -246,7 +246,9 @@ impl PocketIc {
     /// List all instances and their status.
     #[instrument(ret)]
     pub async fn list_instances() -> Vec<String> {
-        let url = crate::start_or_reuse_server().join("instances").unwrap();
+        let url = crate::start_or_reuse_server(None)
+            .join("instances")
+            .unwrap();
         let instances: Vec<String> = reqwest::Client::new()
             .get(url)
             .send()
@@ -519,25 +521,16 @@ impl PocketIc {
     /// Panics if the canister does not exist.
     #[instrument(ret, skip(self), fields(instance_id=self.instance_id, canister_id = %canister_id.to_string()))]
     pub async fn get_controllers(&self, canister_id: CanisterId) -> Vec<Principal> {
-        self.try_get_controllers(canister_id).await.unwrap()
-    }
-
-    /// Get the controllers of a canister.
-    #[instrument(ret, skip(self), fields(instance_id=self.instance_id, canister_id = %canister_id.to_string()))]
-    pub async fn try_get_controllers(
-        &self,
-        canister_id: CanisterId,
-    ) -> Result<Vec<Principal>, (StatusCode, String)> {
         let endpoint = "read/get_controllers";
-        let result: Result<Vec<RawPrincipalId>, (StatusCode, String)> = self
-            .try_post(
+        let result: Vec<RawPrincipalId> = self
+            .post(
                 endpoint,
                 RawCanisterId {
                     canister_id: canister_id.as_slice().to_vec(),
                 },
             )
             .await;
-        result.map(|v| v.into_iter().map(|p| p.into()).collect())
+        result.into_iter().map(|p| p.into()).collect()
     }
 
     /// Get the current cycles balance of a canister.
