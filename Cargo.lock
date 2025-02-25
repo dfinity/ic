@@ -1887,6 +1887,7 @@ dependencies = [
  "ic-types",
  "on_wire",
  "rand 0.8.5",
+ "serde",
  "tokio",
  "wasmprinter",
  "wat",
