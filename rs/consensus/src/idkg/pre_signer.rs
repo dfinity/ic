@@ -283,8 +283,10 @@ impl IDkgPreSignerImpl {
                     self.metrics
                         .pre_sign_errors_inc("create_support_missing_transcript_params");
                     warn!(
-                        every_n_seconds => 15, self.log,
-                        "Dealing support creation: transcript_param not found: {}", signed_dealing,
+                        every_n_seconds => 15,
+                        self.log,
+                        "Dealing support creation: transcript_param not found: {}",
+                        signed_dealing
                     );
                     None
                 }
