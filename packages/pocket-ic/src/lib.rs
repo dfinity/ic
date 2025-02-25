@@ -1686,14 +1686,14 @@ pub(crate) async fn start_or_reuse_server(server_binary: Option<PathBuf>) -> Url
     });
 
     if let Err(e) = check_pocketic_server_version(&bin_path) {
-        bin_path = default_bin_path;
+        bin_path = default_bin_path.clone();
         std::fs::create_dir_all(&default_bin_dir)
             .expect("Failed to create PocketIC server directory");
         let mut options = OpenOptions::new();
         options.write(true).create_new(true);
         #[cfg(unix)]
         options.mode(0o777);
-        if let Ok(mut out) = options.open(default_bin_path) {
+        if let Ok(mut out) = options.open(&default_bin_path) {
             #[cfg(target_os = "macos")]
             let os = "darwin";
             #[cfg(not(target_os = "macos"))]
