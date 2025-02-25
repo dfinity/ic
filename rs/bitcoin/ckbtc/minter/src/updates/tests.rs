@@ -1,18 +1,21 @@
 mod update_balance {
+    use crate::management::{get_utxos, CallError, CallSource};
     use crate::metrics::LatencyHistogram;
+    use crate::metrics::{Histogram, NumUtxoPages};
     use crate::state::{audit, eventlog::EventType, mutate_state, read_state, SuspendedReason};
     use crate::test_fixtures::{
         ecdsa_public_key, get_uxos_response, ignored_utxo, init_args, init_state, ledger_account,
-        mock::MockCanisterRuntime, quarantined_utxo, BTC_CHECKER_CANISTER_ID, DAY,
+        mock::MockCanisterRuntime, quarantined_utxo, utxo, BTC_CHECKER_CANISTER_ID, DAY,
         MINTER_CANISTER_ID, NOW,
     };
+    use crate::updates::get_btc_address::account_to_p2wpkh_address_from_state;
     use crate::updates::update_balance;
     use crate::updates::update_balance::{
         SuspendedUtxo, UpdateBalanceArgs, UpdateBalanceError, UtxoStatus,
     };
     use crate::{storage, Timestamp};
     use ic_btc_checker::CheckTransactionResponse;
-    use ic_btc_interface::{GetUtxosResponse, Utxo};
+    use ic_btc_interface::{GetUtxosResponse, Page, Utxo};
     use icrc_ledger_types::icrc1::account::Account;
     use std::iter;
     use std::time::Duration;
@@ -286,7 +289,7 @@ mod update_balance {
     }
 
     #[tokio::test]
-    async fn should_observe_latency_metrics() {
+    async fn should_observe_update_balance_latency_metrics() {
         init_state_with_ecdsa_public_key();
 
         async fn update_balance_with_latency(
@@ -305,7 +308,9 @@ mod update_balance {
                 &mut runtime,
                 vec![
                     NOW,                         // start time of `update_balance` method
-                    NOW,                         // time used to triage processable UTXOs
+                    NOW,                         // start time of `get_utxos` method
+                    NOW.saturating_add(latency), // end time of `get_utxos` method
+                    NOW.saturating_add(latency), // time used to triage processable UTXOs
                     NOW.saturating_add(latency), // event timestamp
                     NOW.saturating_add(latency), // time used in `schedule_now` call at end of `update_balance`
                     NOW.saturating_add(latency), // end time of `update_balance` method
@@ -328,7 +333,7 @@ mod update_balance {
             .await
             .is_ok();
 
-        let histogram = get_latency_histogram(0);
+        let histogram = update_balance_latency_histogram(0);
         assert_eq!(
             histogram.iter().collect::<Vec<_>>(),
             vec![
@@ -347,7 +352,7 @@ mod update_balance {
             no_new_utxo_latencies_ms.iter().sum::<u64>()
         );
 
-        let histogram = get_latency_histogram(1);
+        let histogram = update_balance_latency_histogram(1);
         assert_eq!(
             histogram.iter().collect::<Vec<_>>(),
             vec![
@@ -364,11 +369,144 @@ mod update_balance {
         assert_eq!(histogram.sum(), 250);
     }
 
-    fn get_latency_histogram(num_new_utxos: usize) -> LatencyHistogram {
+    fn update_balance_latency_histogram(num_new_utxos: NumUtxoPages) -> Histogram<8> {
         crate::metrics::UPDATE_CALL_LATENCY.with_borrow(|histograms| {
-            *histograms
+            let &LatencyHistogram(histogram) = histograms
                 .get(&num_new_utxos)
-                .expect("No histogram for given number of new UTXOs")
+                .expect("No histogram for given number of new UTXOs");
+            histogram
+        })
+    }
+
+    #[tokio::test]
+    async fn should_observe_get_utxos_latency_metrics() {
+        init_state_with_ecdsa_public_key();
+
+        fn mock_get_utxos_for_account_with_num_pages(
+            runtime: &mut MockCanisterRuntime,
+            account: Account,
+            utxos: Vec<Utxo>,
+            num_pages: usize,
+        ) {
+            let mut responses =
+                std::iter::repeat(utxos)
+                    .take(num_pages)
+                    .enumerate()
+                    .map(move |(idx, utxos)| {
+                        let next_page = if idx == num_pages - 1 {
+                            None
+                        } else {
+                            Some(Page::new())
+                        };
+                        Ok(GetUtxosResponse {
+                            next_page: next_page.clone(),
+                            utxos: utxos.clone(),
+                            ..get_uxos_response()
+                        })
+                    });
+
+            runtime.expect_caller().return_const(account.owner);
+            runtime.expect_id().return_const(MINTER_CANISTER_ID);
+            runtime
+                .expect_bitcoin_get_utxos()
+                .times(num_pages)
+                .returning(move |_| responses.next().unwrap());
+        }
+
+        async fn get_utxos_with_latency(
+            latency: Duration,
+            account_utxos: Vec<Utxo>,
+            num_pages: usize,
+            call_source: CallSource,
+        ) -> Result<Vec<Utxo>, CallError> {
+            let account = ledger_account();
+            let (btc_network, min_confirmations) =
+                read_state(|s| (s.btc_network, s.min_confirmations));
+            let address = read_state(|s| account_to_p2wpkh_address_from_state(s, &account));
+            let mut runtime = MockCanisterRuntime::new();
+            mock_get_utxos_for_account_with_num_pages(
+                &mut runtime,
+                account,
+                account_utxos,
+                num_pages,
+            );
+            mock_increasing_time(&mut runtime, NOW, latency);
+            Ok(get_utxos(
+                btc_network,
+                &address,
+                min_confirmations,
+                call_source,
+                &runtime,
+            )
+            .await?
+            .utxos)
+        }
+
+        // get_utxos calls with 1 page
+        let get_utxos_latencies_ms = [0, 100, 499, 500, 2_250, 3_000, 3_400, 4_000, 8_000, 100_000];
+        for millis in &get_utxos_latencies_ms {
+            let result = get_utxos_with_latency(
+                Duration::from_millis(*millis),
+                vec![utxo()],
+                1,
+                CallSource::Minter,
+            )
+            .await;
+            assert_eq!(result, Ok(vec![utxo()]));
+        }
+
+        // get_utxos calls with 3 pages
+        let result = get_utxos_with_latency(
+            Duration::from_millis(3_500),
+            vec![utxo()],
+            3,
+            CallSource::Minter,
+        )
+        .await;
+        assert_eq!(result, Ok(vec![utxo(), utxo(), utxo()]));
+
+        let histogram = get_utxos_latency_histogram(1, CallSource::Minter);
+        assert_eq!(
+            histogram.iter().collect::<Vec<_>>(),
+            vec![
+                (500., 4.),
+                (1_000., 0.),
+                (2_000., 0.),
+                (4_000., 4.),
+                (8_000., 1.),
+                (16_000., 0.),
+                (32_000., 0.),
+                (f64::INFINITY, 1.)
+            ]
+        );
+        assert_eq!(histogram.sum(), get_utxos_latencies_ms.iter().sum::<u64>());
+
+        let histogram = get_utxos_latency_histogram(3, CallSource::Minter);
+        assert_eq!(
+            histogram.iter().collect::<Vec<_>>(),
+            vec![
+                (500., 0.),
+                (1_000., 0.),
+                (2_000., 0.),
+                (4_000., 1.),
+                (8_000., 0.),
+                (16_000., 0.),
+                (32_000., 0.),
+                (f64::INFINITY, 0.)
+            ]
+        );
+        assert_eq!(histogram.sum(), 3_500);
+    }
+
+    fn get_utxos_latency_histogram(
+        num_pages: NumUtxoPages,
+        call_source: CallSource,
+    ) -> Histogram<8> {
+        crate::metrics::GET_UTXOS_CALL_LATENCY.with_borrow(|histograms| {
+            let &LatencyHistogram(histogram) = histograms
+                .get(&(num_pages, call_source))
+                .expect("No histogram for given call source and number of pages");
+            histogram
         })
     }
 
@@ -379,7 +517,7 @@ mod update_balance {
         mock_constant_time(
             &mut runtime,
             NOW.checked_sub(Duration::from_secs(1)).unwrap(),
-            4,
+            8,
         );
 
         match &reason {
@@ -430,10 +568,7 @@ mod update_balance {
         runtime.checkpoint();
 
         mock_get_utxos_for_account(&mut runtime, account, vec![utxo.clone()]);
-        mock_time(
-            &mut runtime,
-            vec![NOW, NOW, NOW, NOW.saturating_add(Duration::from_secs(1))],
-        );
+        mock_constant_time(&mut runtime, NOW, 6);
         match &reason {
             SuspendedReason::ValueTooSmall => {}
             SuspendedReason::Quarantined => {
@@ -460,7 +595,7 @@ mod update_balance {
         runtime.checkpoint();
 
         mock_get_utxos_for_account(&mut runtime, account, vec![utxo.clone()]);
-        mock_constant_time(&mut runtime, NOW.saturating_add(Duration::from_secs(1)), 4);
+        mock_constant_time(&mut runtime, NOW.saturating_add(Duration::from_secs(1)), 8);
 
         let result = update_balance(update_balance_args.clone(), &runtime).await;
 

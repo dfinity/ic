@@ -709,13 +709,13 @@ impl BatchProcessorImpl {
     ///
     /// Returns the total memory usage of the canisters of this subnet.
     fn observe_canisters_memory_usage(&self, state: &ReplicatedState) -> NumBytes {
-        let mut total_memory_usage = NumBytes::from(0);
-        let mut wasm_custom_sections_memory_usage = NumBytes::from(0);
-        let mut canister_history_memory_usage = NumBytes::from(0);
+        let mut total_memory_usage = NumBytes::new(0);
+        let mut wasm_custom_sections_memory_usage = NumBytes::new(0);
+        let mut canister_history_memory_usage = NumBytes::new(0);
         for canister in state.canister_states.values() {
             // Export the total canister memory usage; execution and wasm custom section
             // memory are included in `memory_usage()`; message memory is added separately.
-            total_memory_usage += canister.memory_usage() + canister.message_memory_usage();
+            total_memory_usage += canister.memory_usage() + canister.message_memory_usage().total();
             wasm_custom_sections_memory_usage += canister
                 .execution_state
                 .as_ref()

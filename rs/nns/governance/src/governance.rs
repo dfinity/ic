@@ -403,9 +403,7 @@ impl NnsFunction {
     fn allowed_when_resources_are_low(&self) -> bool {
         matches!(
             self,
-            NnsFunction::NnsRootUpgrade
-                | NnsFunction::NnsCanisterUpgrade
-                | NnsFunction::HardResetNnsRootToVersion
+            NnsFunction::HardResetNnsRootToVersion
                 | NnsFunction::ReviseElectedGuestosVersions
                 | NnsFunction::DeployGuestosToAllSubnetNodes
         )
@@ -414,9 +412,7 @@ impl NnsFunction {
     fn can_have_large_payload(&self) -> bool {
         matches!(
             self,
-            NnsFunction::NnsCanisterUpgrade
-                | NnsFunction::NnsCanisterInstall
-                | NnsFunction::NnsRootUpgrade
+            NnsFunction::NnsCanisterInstall
                 | NnsFunction::HardResetNnsRootToVersion
                 | NnsFunction::AddSnsWasm
         )
@@ -448,6 +444,9 @@ impl NnsFunction {
                 Self::DeployGuestosToAllUnassignedNodes.as_str_name(),
                 Self::UpdateSshReadonlyAccessForAllUnassignedNodes.as_str_name()
             ))),
+            NnsFunction::NnsCanisterUpgrade | NnsFunction::NnsRootUpgrade => {
+                Err(format_obsolete_message("InstallCode"))
+            }
             NnsFunction::UpdateAllowedPrincipals => Err(
                 "NNS_FUNCTION_UPDATE_ALLOWED_PRINCIPALS is only used for the old SNS \
                 initialization mechanism, which is now obsolete. Use \
@@ -474,8 +473,6 @@ impl NnsFunction {
                 (REGISTRY_CANISTER_ID, "change_subnet_membership")
             }
             NnsFunction::NnsCanisterInstall => (ROOT_CANISTER_ID, "add_nns_canister"),
-            NnsFunction::NnsCanisterUpgrade => (ROOT_CANISTER_ID, "change_nns_canister"),
-            NnsFunction::NnsRootUpgrade => (LIFELINE_CANISTER_ID, "upgrade_root"),
             NnsFunction::HardResetNnsRootToVersion => {
                 (LIFELINE_CANISTER_ID, "hard_reset_root_to_version")
             }
@@ -563,7 +560,9 @@ impl NnsFunction {
             | NnsFunction::UpdateAllowedPrincipals
             | NnsFunction::UpdateApiBoundaryNodesVersion
             | NnsFunction::UpdateUnassignedNodesConfig
-            | NnsFunction::UpdateNodesHostosVersion => {
+            | NnsFunction::UpdateNodesHostosVersion
+            | NnsFunction::NnsCanisterUpgrade
+            | NnsFunction::NnsRootUpgrade => {
                 let error_message = match self.check_obsolete() {
                     Err(error_message) => error_message,
                     Ok(_) => unreachable!("Obsolete NnsFunction not handled"),
@@ -8243,7 +8242,7 @@ impl From<ic_nervous_system_clients::canister_status::CanisterStatusType>
 /// Affects the perception of time by users of CanisterEnv (i.e. Governance).
 ///
 /// Specifically, the time that Governance sees is the real time + delta.
-#[derive(Copy, Clone, Eq, PartialEq, Debug, candid::CandidType, serde::Deserialize)]
+#[derive(Copy, Clone, Default, Eq, PartialEq, Debug, candid::CandidType, serde::Deserialize)]
 pub struct TimeWarp {
     pub delta_s: i64,
 }

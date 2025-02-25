@@ -10,8 +10,7 @@ use ic_interfaces::execution_environment::{
 };
 use ic_logger::replica_logger::no_op_logger;
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::NumWasmPages;
-use ic_replicated_state::{Global, Memory, NetworkTopology, PageMap};
+use ic_replicated_state::{Global, Memory, NetworkTopology, NumWasmPages, PageMap};
 use ic_system_api::{
     sandbox_safe_system_state::SandboxSafeSystemState, ExecutionParameters, InstructionLimits,
     ModificationTracking, SystemApiImpl,
@@ -147,7 +146,7 @@ impl WasmtimeInstanceBuilder {
             self.api_type,
             sandbox_safe_system_state,
             ic_types::NumBytes::from(0),
-            ic_types::NumBytes::from(0),
+            ic_replicated_state::MessageMemoryUsage::ZERO,
             ExecutionParameters {
                 instruction_limits: InstructionLimits::new(
                     FlagStatus::Disabled,
