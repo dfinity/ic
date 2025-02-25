@@ -5,7 +5,6 @@ use ic_cdk::{
     api::{call::arg_data_raw, call_context_instruction_counter},
     caller as ic_cdk_caller, heartbeat, post_upgrade, pre_upgrade, println, query, spawn, update,
 };
-use ic_management_canister_types_private::IC_00;
 use ic_nervous_system_canisters::cmc::CMCCanister;
 use ic_nervous_system_common::{
     memory_manager_upgrade_storage::{load_protobuf, store_protobuf},
@@ -29,6 +28,7 @@ use ic_nns_governance::{
     is_prune_following_enabled,
     neuron_data_validation::NeuronDataValidationSummary,
     pb::v1::{self as gov_pb, Governance as InternalGovernanceProto},
+    recurring_tasks::schedule_tasks,
     storage::{grow_upgrades_memory_to, validate_stable_storage, with_upgrades_memory},
 };
 use ic_nns_governance_api::pb::v1::{
@@ -75,18 +75,15 @@ const WASM_PAGES_RESERVED_FOR_UPGRADES_MEMORY: u64 = 65_536;
 pub(crate) const LOG_PREFIX: &str = "[Governance] ";
 
 fn schedule_timers() {
-    schedule_seeding(Duration::from_nanos(0));
     schedule_adjust_neurons_storage(Duration::from_nanos(0), Bound::Unbounded);
     schedule_prune_following(Duration::from_secs(0), Bound::Unbounded);
     schedule_spawn_neurons();
     schedule_unstake_maturity_of_dissolved_neurons();
     schedule_neuron_data_validation();
     schedule_vote_processing();
+    schedule_tasks();
 }
 
-// Seeding interval seeks to find a balance between the need for rng secrecy, and
-// avoiding the overhead of frequent reseeding.
-const SEEDING_INTERVAL: Duration = Duration::from_secs(3600);
 const RETRY_SEEDING_INTERVAL: Duration = Duration::from_secs(30);
 const PRUNE_FOLLOWING_INTERVAL: Duration = Duration::from_secs(10);
 
@@ -108,31 +105,6 @@ const PRUNE_FOLLOWING_INTERVAL: Duration = Duration::from_secs(10);
 // prune_some_following. If we assume 1 terainstruction costs 1 XDR,
 // prune_some_following uses less than half an XDR per day.
 const MAX_PRUNE_SOME_FOLLOWING_INSTRUCTIONS: u64 = 50_000_000;
-
-fn schedule_seeding(delay: Duration) {
-    ic_cdk_timers::set_timer(delay, || {
-        spawn(async {
-            let result: Result<([u8; 32],), (i32, String)> =
-                CdkRuntime::call_with_cleanup(IC_00, "raw_rand", ()).await;
-
-            let seed = match result {
-                Ok((seed,)) => seed,
-                Err((code, msg)) => {
-                    println!(
-                        "{}Error seeding RNG. Error Code: {}. Error Message: {}",
-                        LOG_PREFIX, code, msg
-                    );
-                    schedule_seeding(RETRY_SEEDING_INTERVAL);
-                    return;
-                }
-            };
-
-            () = governance_mut().env.seed_rng(seed);
-            // Schedule reseeding on a timer with duration SEEDING_INTERVAL
-            schedule_seeding(SEEDING_INTERVAL);
-        })
-    });
-}
 
 fn schedule_prune_following(delay: Duration, original_begin: Bound<NeuronIdProto>) {
     if !is_prune_following_enabled() {
