@@ -15,7 +15,7 @@ mod update_balance {
     };
     use crate::{storage, Timestamp};
     use ic_btc_checker::CheckTransactionResponse;
-    use ic_btc_interface::{GetUtxosResponse, Utxo};
+    use ic_btc_interface::{GetUtxosResponse, Page, Utxo};
     use icrc_ledger_types::icrc1::account::Account;
     use std::iter;
     use std::time::Duration;
@@ -382,10 +382,41 @@ mod update_balance {
     async fn should_observe_get_utxos_latency_metrics() {
         init_state_with_ecdsa_public_key();
 
+        fn mock_get_utxos_for_account_with_num_pages(
+            runtime: &mut MockCanisterRuntime,
+            account: Account,
+            utxos: Vec<Utxo>,
+            num_pages: usize,
+        ) {
+            let mut responses =
+                std::iter::repeat(utxos)
+                    .take(num_pages)
+                    .enumerate()
+                    .map(move |(idx, utxos)| {
+                        let next_page = if idx == num_pages - 1 {
+                            None
+                        } else {
+                            Some(Page::new())
+                        };
+                        Ok(GetUtxosResponse {
+                            next_page: next_page.clone(),
+                            utxos: utxos.clone(),
+                            ..get_uxos_response()
+                        })
+                    });
+
+            runtime.expect_caller().return_const(account.owner);
+            runtime.expect_id().return_const(MINTER_CANISTER_ID);
+            runtime
+                .expect_bitcoin_get_utxos()
+                .times(num_pages)
+                .returning(move |_| responses.next().unwrap());
+        }
+
         async fn get_utxos_with_latency(
             latency: Duration,
             account_utxos: Vec<Utxo>,
-            _num_pages: usize,
+            num_pages: usize,
             call_source: CallSource,
         ) -> Result<Vec<Utxo>, CallError> {
             let account = ledger_account();
@@ -393,14 +424,13 @@ mod update_balance {
                 read_state(|s| (s.btc_network, s.min_confirmations));
             let address = read_state(|s| account_to_p2wpkh_address_from_state(s, &account));
             let mut runtime = MockCanisterRuntime::new();
-            mock_get_utxos_for_account(&mut runtime, account, account_utxos);
-            mock_time(
+            mock_get_utxos_for_account_with_num_pages(
                 &mut runtime,
-                vec![
-                    NOW,                         // start time of `get_utxos` method
-                    NOW.saturating_add(latency), // end time of `get_utxos` method
-                ],
+                account,
+                account_utxos,
+                num_pages,
             );
+            mock_increasing_time(&mut runtime, NOW, latency);
             Ok(get_utxos(
                 btc_network,
                 &address,
@@ -425,6 +455,16 @@ mod update_balance {
             assert_eq!(result, Ok(vec![utxo()]));
         }
 
+        // get_utxos calls with 3 pages
+        let result = get_utxos_with_latency(
+            Duration::from_millis(3_500),
+            vec![utxo()],
+            3,
+            CallSource::Minter,
+        )
+        .await;
+        assert_eq!(result, Ok(vec![utxo(), utxo(), utxo()]));
+
         let histogram = get_utxos_latency_histogram(1, "minter".to_string());
         assert_eq!(
             histogram.iter().collect::<Vec<_>>(),
@@ -441,8 +481,21 @@ mod update_balance {
         );
         assert_eq!(histogram.sum(), get_utxos_latencies_ms.iter().sum::<u64>());
 
-        // get_utxos calls with 2 pages
-        // TODO
+        let histogram = get_utxos_latency_histogram(3, "minter".to_string());
+        assert_eq!(
+            histogram.iter().collect::<Vec<_>>(),
+            vec![
+                (500., 0.),
+                (1_000., 0.),
+                (2_000., 0.),
+                (4_000., 1.),
+                (8_000., 0.),
+                (16_000., 0.),
+                (32_000., 0.),
+                (f64::INFINITY, 0.)
+            ]
+        );
+        assert_eq!(histogram.sum(), 3_500);
     }
 
     fn get_utxos_latency_histogram(num_pages: usize, call_source: String) -> Histogram<8> {
