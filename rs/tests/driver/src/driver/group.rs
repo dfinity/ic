@@ -809,7 +809,7 @@ impl SystemTestGroup {
         let logger = env.logger();
         info!(logger, "Registering with service discovery");
         let topology = env.maybe_topology_snapshot();
-        if let None = topology {
+        if topology.is_none() {
             warn!(
                 logger,
                 "Topology snapshot cannot be made for test: {}", test_name
