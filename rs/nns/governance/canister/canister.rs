@@ -1,5 +1,5 @@
 use candid::candid_method;
-use ic_base_types::{CanisterId, PrincipalId};
+use ic_base_types::PrincipalId;
 use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_cdk::{
     api::{call::arg_data_raw, call_context_instruction_counter},
@@ -16,43 +16,42 @@ use ic_nervous_system_time_helpers::now_seconds;
 use ic_nns_common::{
     access_control::{check_caller_is_gtc, check_caller_is_ledger},
     pb::v1::{NeuronId as NeuronIdProto, ProposalId as ProposalIdProto},
-    types::{CallCanisterProposal, NeuronId, ProposalId},
+    types::{NeuronId, ProposalId},
 };
 use ic_nns_constants::LEDGER_CANISTER_ID;
+#[cfg(feature = "test")]
+use ic_nns_governance::governance::TimeWarp as GovTimeWarp;
 use ic_nns_governance::{
     canister_state::CanisterEnv,
     canister_state::{governance, governance_mut, set_governance},
     encode_metrics,
-    governance::{Environment, Governance, HeapGrowthPotential, RngError, TimeWarp as GovTimeWarp},
+    governance::Governance,
     is_prune_following_enabled,
     neuron_data_validation::NeuronDataValidationSummary,
     pb::v1::{self as gov_pb, Governance as InternalGovernanceProto},
     storage::{grow_upgrades_memory_to, validate_stable_storage, with_upgrades_memory},
 };
+use ic_nns_governance_api::pb::v1::{
+    claim_or_refresh_neuron_from_account_response::Result as ClaimOrRefreshNeuronFromAccountResponseResult,
+    governance::{GovernanceCachedMetrics, Migrations},
+    governance_error::ErrorType,
+    manage_neuron::{
+        claim_or_refresh::{By, MemoAndController},
+        ClaimOrRefresh, NeuronIdOrSubaccount, RegisterVote,
+    },
+    manage_neuron_response, ClaimOrRefreshNeuronFromAccount,
+    ClaimOrRefreshNeuronFromAccountResponse, GetNeuronsFundAuditInfoRequest,
+    GetNeuronsFundAuditInfoResponse, Governance as ApiGovernanceProto, GovernanceError,
+    ListKnownNeuronsResponse, ListNeurons, ListNeuronsProto, ListNeuronsResponse,
+    ListNodeProviderRewardsRequest, ListNodeProviderRewardsResponse, ListNodeProvidersResponse,
+    ListProposalInfo, ListProposalInfoResponse, ManageNeuronCommandRequest, ManageNeuronRequest,
+    ManageNeuronResponse, MonthlyNodeProviderRewards, NetworkEconomics, Neuron, NeuronInfo,
+    NodeProvider, Proposal, ProposalInfo, RestoreAgingSummary, RewardEvent,
+    SettleCommunityFundParticipation, SettleNeuronsFundParticipationRequest,
+    SettleNeuronsFundParticipationResponse, UpdateNodeProvider, Vote,
+};
 #[cfg(feature = "test")]
 use ic_nns_governance_api::test_api::TimeWarp;
-use ic_nns_governance_api::{
-    bitcoin::{BitcoinNetwork, BitcoinSetConfigProposal},
-    pb::v1::{
-        claim_or_refresh_neuron_from_account_response::Result as ClaimOrRefreshNeuronFromAccountResponseResult,
-        governance::{GovernanceCachedMetrics, Migrations},
-        governance_error::ErrorType,
-        manage_neuron::{
-            claim_or_refresh::{By, MemoAndController},
-            ClaimOrRefresh, NeuronIdOrSubaccount, RegisterVote,
-        },
-        manage_neuron_response, ClaimOrRefreshNeuronFromAccount,
-        ClaimOrRefreshNeuronFromAccountResponse, GetNeuronsFundAuditInfoRequest,
-        GetNeuronsFundAuditInfoResponse, Governance as ApiGovernanceProto, GovernanceError,
-        ListKnownNeuronsResponse, ListNeurons, ListNeuronsProto, ListNeuronsResponse,
-        ListNodeProviderRewardsRequest, ListNodeProviderRewardsResponse, ListNodeProvidersResponse,
-        ListProposalInfo, ListProposalInfoResponse, ManageNeuronCommandRequest,
-        ManageNeuronRequest, ManageNeuronResponse, MonthlyNodeProviderRewards, NetworkEconomics,
-        Neuron, NeuronInfo, NodeProvider, Proposal, ProposalInfo, RestoreAgingSummary, RewardEvent,
-        SettleCommunityFundParticipation, SettleNeuronsFundParticipationRequest,
-        SettleNeuronsFundParticipationResponse, UpdateNodeProvider, Vote,
-    },
-};
 use prost::Message;
 use rand::{RngCore, SeedableRng};
 use rand_chacha::ChaCha20Rng;
