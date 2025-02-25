@@ -1679,13 +1679,14 @@ pub(crate) async fn start_or_reuse_server(server_binary: Option<PathBuf>) -> Url
     let default_bin_dir =
         std::env::temp_dir().join(format!("pocket-ic-server-{}", EXPECTED_SERVER_VERSION));
     let default_bin_path = default_bin_dir.join("pocket-ic");
-    let bin_path: PathBuf = server_binary.unwrap_or_else(|| {
+    let mut bin_path: PathBuf = server_binary.unwrap_or_else(|| {
         std::env::var_os("POCKET_IC_BIN")
             .unwrap_or_else(|| default_bin_path.clone().into())
             .into()
     });
 
     if let Err(e) = check_pocketic_server_version(&bin_path) {
+        bin_path = default_bin_path;
         std::fs::create_dir_all(&default_bin_dir)
             .expect("Failed to create PocketIC server directory");
         let mut options = OpenOptions::new();
@@ -1714,7 +1715,7 @@ pub(crate) async fn start_or_reuse_server(server_binary: Option<PathBuf>) -> Url
         } else {
             // PocketIC server has already been created: wait until it's fully downloaded.
             loop {
-                if check_pocketic_server_version(&bin_path).is_ok() {
+                if check_pocketic_server_version(&default_bin_path).is_ok() {
                     break;
                 }
                 std::thread::sleep(std::time::Duration::from_millis(100));
