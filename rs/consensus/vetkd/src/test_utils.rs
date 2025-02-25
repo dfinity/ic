@@ -119,7 +119,7 @@ pub(super) fn fake_dkg_id(key_id: VetKdKeyId) -> NiDkgId {
     }
 }
 
-pub(super) fn fake_signature_request_args(key_id: MasterPublicKeyId) -> ThresholdArguments {
+pub(super) fn fake_request_args(key_id: MasterPublicKeyId, complete: bool) -> ThresholdArguments {
     match key_id {
         MasterPublicKeyId::Ecdsa(key_id) => ThresholdArguments::Ecdsa(EcdsaArguments {
             key_id,
@@ -134,17 +134,18 @@ pub(super) fn fake_signature_request_args(key_id: MasterPublicKeyId) -> Threshol
             key_id: key_id.clone(),
             derivation_id: vec![1; 32],
             encryption_public_key: vec![1; 32],
-            matched_ni_dkg_id: Some((fake_dkg_id(key_id), Height::from(0))),
+            matched_ni_dkg_id: complete.then_some((fake_dkg_id(key_id), Height::from(0))),
         }),
     }
 }
 
-pub(super) fn fake_signature_request_context(
+pub(super) fn fake_request_context(
     key_id: MasterPublicKeyId,
+    complete: bool,
 ) -> SignWithThresholdContext {
     SignWithThresholdContext {
         request: RequestBuilder::new().build(),
-        args: fake_signature_request_args(key_id),
+        args: fake_request_args(key_id, complete),
         derivation_path: vec![],
         batch_time: UNIX_EPOCH,
         pseudo_random_id: [0; 32],
@@ -153,16 +154,25 @@ pub(super) fn fake_signature_request_context(
     }
 }
 
-/// Create a fake request context for each key ID in the given config.
+/// Create a fake completed request context for each key ID in the given config.
 /// Callback IDs are assigned sequentially starting at 0.
 pub(super) fn make_contexts(
     config: &ChainKeyConfig,
+) -> BTreeMap<CallbackId, SignWithThresholdContext> {
+    make_contexts_with_completion(config, true)
+}
+
+/// Create a fake request context for each key ID in the given config.
+/// Callback IDs are assigned sequentially starting at 0.
+pub(super) fn make_contexts_with_completion(
+    config: &ChainKeyConfig,
+    complete: bool,
 ) -> BTreeMap<CallbackId, SignWithThresholdContext> {
     let mut map = BTreeMap::new();
     for (i, key_id) in config.key_ids().into_iter().enumerate() {
         map.insert(
             CallbackId::new(i as u64),
-            fake_signature_request_context(key_id),
+            fake_request_context(key_id, complete),
         );
     }
     map

@@ -824,7 +824,7 @@ mod tests {
         for (key_id, id, batch_time, pre_sig) in parameters {
             let (callback_id, mut context) = fake_signature_request_context_with_pre_sig(
                 request_id(id, Height::from(0)),
-                key_id,
+                key_id.into(),
                 pre_sig,
             );
             context.batch_time = batch_time;

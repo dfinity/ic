@@ -95,7 +95,11 @@ pub(crate) fn empty_response() -> ic_types::batch::ConsensusResponse {
     )
 }
 
-fn fake_signature_request_args(key_id: MasterPublicKeyId, height: Height) -> ThresholdArguments {
+fn fake_signature_request_args(
+    key_id: MasterPublicKeyId,
+    height: Height,
+    matched_id: bool,
+) -> ThresholdArguments {
     match key_id {
         MasterPublicKeyId::Ecdsa(key_id) => ThresholdArguments::Ecdsa(EcdsaArguments {
             key_id,
@@ -110,7 +114,7 @@ fn fake_signature_request_args(key_id: MasterPublicKeyId, height: Height) -> Thr
             key_id: key_id.clone(),
             derivation_id: vec![1; 32],
             encryption_public_key: vec![1; 32],
-            matched_ni_dkg_id: Some((fake_dkg_id(key_id), height)),
+            matched_ni_dkg_id: matched_id.then_some((fake_dkg_id(key_id), height)),
         }),
     }
 }
@@ -128,7 +132,7 @@ pub fn fake_signature_request_context(
 ) -> SignWithThresholdContext {
     SignWithThresholdContext {
         request: RequestBuilder::new().build(),
-        args: fake_signature_request_args(key_id, Height::from(0)),
+        args: fake_signature_request_args(key_id, Height::from(0), false),
         derivation_path: vec![],
         batch_time: UNIX_EPOCH,
         pseudo_random_id,
@@ -139,13 +143,13 @@ pub fn fake_signature_request_context(
 
 pub fn fake_signature_request_context_with_pre_sig(
     request_id: RequestId,
-    key_id: IDkgMasterPublicKeyId,
+    key_id: MasterPublicKeyId,
     pre_signature: Option<PreSigId>,
 ) -> (CallbackId, SignWithThresholdContext) {
-    let height = Height::from(1);
+    let height = request_id.height;
     let context = SignWithThresholdContext {
         request: RequestBuilder::new().build(),
-        args: fake_signature_request_args(key_id.into(), height),
+        args: fake_signature_request_args(key_id, height, pre_signature.is_some()),
         derivation_path: vec![],
         batch_time: UNIX_EPOCH,
         pseudo_random_id: [request_id.callback_id.get() as u8; 32],
@@ -163,7 +167,7 @@ pub fn fake_signature_request_context_from_id(
     let height = request_id.height;
     let context = SignWithThresholdContext {
         request: RequestBuilder::new().build(),
-        args: fake_signature_request_args(key_id, height),
+        args: fake_signature_request_args(key_id, height, true),
         derivation_path: vec![],
         batch_time: UNIX_EPOCH,
         pseudo_random_id: [request_id.callback_id.get() as u8; 32],
@@ -1688,9 +1692,11 @@ pub(crate) fn fake_ecdsa_key_id() -> EcdsaKeyId {
 }
 
 pub(crate) fn fake_ecdsa_idkg_master_public_key_id() -> IDkgMasterPublicKeyId {
+    fake_ecdsa_master_public_key_id().try_into().unwrap()
+}
+
+pub(crate) fn fake_ecdsa_master_public_key_id() -> MasterPublicKeyId {
     MasterPublicKeyId::Ecdsa(fake_ecdsa_key_id())
-        .try_into()
-        .unwrap()
 }
 
 pub(crate) fn fake_schnorr_key_id(algorithm: SchnorrAlgorithm) -> SchnorrKeyId {
@@ -1703,9 +1709,13 @@ pub(crate) fn fake_schnorr_key_id(algorithm: SchnorrAlgorithm) -> SchnorrKeyId {
 pub(crate) fn fake_schnorr_idkg_master_public_key_id(
     algorithm: SchnorrAlgorithm,
 ) -> IDkgMasterPublicKeyId {
-    MasterPublicKeyId::Schnorr(fake_schnorr_key_id(algorithm))
+    fake_schnorr_master_public_key_id(algorithm)
         .try_into()
         .unwrap()
+}
+
+pub(crate) fn fake_schnorr_master_public_key_id(algorithm: SchnorrAlgorithm) -> MasterPublicKeyId {
+    MasterPublicKeyId::Schnorr(fake_schnorr_key_id(algorithm))
 }
 
 pub(crate) fn schnorr_algorithm(algorithm: AlgorithmId) -> SchnorrAlgorithm {

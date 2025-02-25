@@ -901,7 +901,11 @@ mod test {
         let signature_request_contexts = BTreeMap::from_iter([
             fake_signature_request_context_from_id(key_id.clone().into(), pre_sig_id1, ids[0]),
             fake_signature_request_context_from_id(key_id.clone().into(), pre_sig_id2, ids[1]),
-            fake_signature_request_context_with_pre_sig(ids[2], key_id.clone(), Some(pre_sig_id3)),
+            fake_signature_request_context_with_pre_sig(
+                ids[2],
+                key_id.clone().into(),
+                Some(pre_sig_id3),
+            ),
         ]);
         let snapshot =
             fake_state_with_signature_requests(height, signature_request_contexts.clone());
@@ -1054,7 +1058,11 @@ mod test {
         let id2 = request_id(2, height);
 
         let signature_request_contexts = BTreeMap::from_iter([
-            fake_signature_request_context_with_pre_sig(id1, key_id.clone(), Some(pre_sig_id)),
+            fake_signature_request_context_with_pre_sig(
+                id1,
+                key_id.clone().into(),
+                Some(pre_sig_id),
+            ),
             fake_signature_request_context_from_id(key_id.clone().into(), pre_sig_id2, id2),
         ]);
         let snapshot =

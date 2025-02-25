@@ -1115,7 +1115,7 @@ pub(super) mod tests {
         let contexts = BTreeMap::from_iter(pre_sig_ids.into_iter().map(|id| {
             fake_signature_request_context_with_pre_sig(
                 request_id(id.id(), Height::from(300)),
-                key_id.clone(),
+                key_id.clone().into(),
                 Some(id),
             )
         }));
@@ -1154,7 +1154,7 @@ pub(super) mod tests {
         // None of them are matched to a context
         let contexts = BTreeMap::from_iter([fake_signature_request_context_with_pre_sig(
             request_id(1, height),
-            key_id.clone(),
+            key_id.clone().into(),
             None,
         )]);
         let contexts = into_idkg_contexts(&contexts);
@@ -1211,7 +1211,7 @@ pub(super) mod tests {
         // The first one is matched to a context
         let contexts = BTreeMap::from_iter([fake_signature_request_context_with_pre_sig(
             request_id(1, Height::from(300)),
-            key_id.clone(),
+            key_id.clone().into(),
             Some(pre_sig_ids[0]),
         )]);
         let contexts = into_idkg_contexts(&contexts);

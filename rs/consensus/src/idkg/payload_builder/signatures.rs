@@ -284,11 +284,11 @@ mod tests {
             // insert request that was already completed
             fake_signature_request_context_from_id(key_id.clone().into(), pre_sig_ids[2], ids[2]),
             // insert request without a matched pre-signature
-            fake_signature_request_context_with_pre_sig(ids[3], key_id.clone(), None),
+            fake_signature_request_context_with_pre_sig(ids[3], key_id.clone().into(), None),
             // insert request matched to a non-existent pre-signature
             fake_signature_request_context_with_pre_sig(
                 ids[4],
-                key_id.clone(),
+                key_id.clone().into(),
                 Some(missing_pre_signature),
             ),
         ]);

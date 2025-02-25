@@ -405,17 +405,17 @@ mod tests {
             let contexts = vec![
                 fake_signature_request_context_with_pre_sig(
                     request_id(1, height),
-                    key_id.clone(),
+                    key_id.clone().into(),
                     Some(pre_sig_id1),
                 ),
                 fake_signature_request_context_with_pre_sig(
                     request_id(2, height),
-                    key_id.clone(),
+                    key_id.clone().into(),
                     None,
                 ),
                 fake_signature_request_context_with_pre_sig(
                     request_id(3, height),
-                    key_id.clone(),
+                    key_id.clone().into(),
                     Some(pre_sig_id3),
                 ),
             ];

@@ -835,6 +835,34 @@ mod tests {
     }
 
     #[test]
+    fn test_build_empty_payload_if_contexts_incomplete() {
+        let config = make_chain_key_config();
+        let contexts = make_contexts_with_completion(&config, false);
+        let shares = make_shares(&contexts);
+        let proposal_context = ProposalContext {
+            proposer: node_test_id(0),
+            validation_context: &VALIDATION_CONTEXT,
+        };
+        test_payload_builder(Some(config), contexts, shares, |builder| {
+            let payload = build_and_validate(&builder, MAX_SIZE, &[], &VALIDATION_CONTEXT);
+            assert!(payload.is_empty());
+
+            // payload with success responses for the same contexts should be rejected
+            let payload = as_bytes(make_vetkd_agreements_with_payload(
+                &[1, 2],
+                VetKdAgreement::Success(vec![1, 1, 1]),
+            ));
+            let validation = builder.validate_payload(HEIGHT, &proposal_context, &payload, &[]);
+            assert_matches!(
+                validation.unwrap_err(),
+                ValidationError::InvalidArtifact(InvalidPayloadReason::InvalidVetKdPayload(
+                    InvalidVetKdPayloadReason::ContextIncomplete(id)
+                )) if id.get() == 1
+            );
+        })
+    }
+
+    #[test]
     fn test_build_empty_payload_if_pool_is_empty() {
         let config = make_chain_key_config();
         let contexts = make_contexts(&config);

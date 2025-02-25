@@ -1131,27 +1131,25 @@ mod tests {
 
     // Tests that no signature shares for incomplete contexts are created
     #[test]
-    fn test_send_signature_shares_incomplete_contexts_all_idkg_algorithms() {
-        // Only test IDKG algorithms, as VetKD contexts don't require pre-signatures
-        // and therefore cannot be "incomplete".
-        for key_id in fake_master_public_key_ids_for_all_idkg_algorithms() {
+    fn test_send_signature_shares_incomplete_contexts_all_algorithms() {
+        for key_id in fake_master_public_key_ids_for_all_algorithms() {
             println!("Running test for key ID {key_id}");
             test_send_signature_shares_incomplete_contexts(key_id);
         }
     }
 
-    fn test_send_signature_shares_incomplete_contexts(key_id: IDkgMasterPublicKeyId) {
+    fn test_send_signature_shares_incomplete_contexts(key_id: MasterPublicKeyId) {
         let mut generator = IDkgUIDGenerator::new(subnet_test_id(1), Height::new(0));
         let height = Height::from(100);
         let ids: Vec<_> = (0..5).map(|i| request_id(i, height)).collect();
         let pids: Vec<_> = (0..5).map(|_| generator.next_pre_signature_id()).collect();
 
-        let wrong_key_id = match key_id.inner() {
+        let wrong_key_id = match key_id {
             MasterPublicKeyId::Ecdsa(_) => {
-                fake_schnorr_idkg_master_public_key_id(SchnorrAlgorithm::Ed25519)
+                fake_schnorr_master_public_key_id(SchnorrAlgorithm::Ed25519)
             }
-            MasterPublicKeyId::Schnorr(_) => fake_ecdsa_idkg_master_public_key_id(),
-            MasterPublicKeyId::VetKd(_) => panic!("not applicable to vetKD"),
+            MasterPublicKeyId::Schnorr(_) => fake_vetkd_master_public_key_id(),
+            MasterPublicKeyId::VetKd(_) => fake_ecdsa_master_public_key_id(),
         };
 
         // Set up the signature requests
@@ -1175,11 +1173,11 @@ mod tests {
                 // One context without nonce
                 fake_signature_request_context_with_pre_sig(ids[1], key_id.clone(), Some(pids[1])),
                 // One completed context
-                fake_signature_request_context_from_id(key_id.clone().into(), pids[2], ids[2]),
+                fake_signature_request_context_from_id(key_id.clone(), pids[2], ids[2]),
                 // One completed context matched to a pre-signature of the wrong scheme
-                fake_signature_request_context_from_id(key_id.clone().into(), pids[3], ids[3]),
+                fake_signature_request_context_from_id(key_id.clone(), pids[3], ids[3]),
                 // One completed context matched to a pre-signature that doesn't exist
-                fake_signature_request_context_from_id(key_id.clone().into(), pids[4], ids[4]),
+                fake_signature_request_context_from_id(key_id.clone(), pids[4], ids[4]),
             ],
         );
 
@@ -1196,12 +1194,26 @@ mod tests {
                     &state,
                 );
 
-                assert_eq!(change_set.len(), 1);
-                assert!(is_signature_share_added_to_validated(
-                    &change_set,
-                    &ids[2],
-                    block_reader.tip_height()
-                ));
+                if key_id.is_idkg_key() {
+                    assert_eq!(change_set.len(), 1);
+                    assert!(is_signature_share_added_to_validated(
+                        &change_set,
+                        &ids[2],
+                        block_reader.tip_height()
+                    ));
+                } else {
+                    println!("{change_set:?}");
+                    // additional contexts are valid, because nonce and pre-signature don't matter,
+                    // as long as the vetkd context was matched to an NiDkgId
+                    assert_eq!(change_set.len(), 4);
+                    for id in ids.iter().skip(1) {
+                        assert!(is_signature_share_added_to_validated(
+                            &change_set,
+                            id,
+                            block_reader.tip_height()
+                        ));
+                    }
+                }
             })
         });
     }
@@ -1636,15 +1648,13 @@ mod tests {
     // Tests that signature shares for incomplete contexts are not validated
     #[test]
     fn test_validate_signature_shares_incomplete_contexts_all_algorithms() {
-        // Only test IDKG algorithms, as VetKD contexts don't require pre-signatures
-        // and therefore cannot be "incomplete".
-        for key_id in fake_master_public_key_ids_for_all_idkg_algorithms() {
+        for key_id in fake_master_public_key_ids_for_all_algorithms() {
             println!("Running test for key ID {key_id}");
             test_validate_signature_shares_incomplete_contexts(key_id);
         }
     }
 
-    fn test_validate_signature_shares_incomplete_contexts(key_id: IDkgMasterPublicKeyId) {
+    fn test_validate_signature_shares_incomplete_contexts(key_id: MasterPublicKeyId) {
         let mut generator = IDkgUIDGenerator::new(subnet_test_id(1), Height::new(0));
         let height = Height::from(100);
         let ids: Vec<_> = (0..3).map(|i| request_id(i, height)).collect();
@@ -1668,7 +1678,7 @@ mod tests {
                 // One context without nonce
                 fake_signature_request_context_with_pre_sig(ids[1], key_id.clone(), Some(pids[1])),
                 // One completed context
-                fake_signature_request_context_from_id(key_id.clone().into(), pids[2], ids[2]),
+                fake_signature_request_context_from_id(key_id.clone(), pids[2], ids[2]),
             ],
         );
 
@@ -1684,6 +1694,7 @@ mod tests {
 
         // A share for the second incomplete context (deferred)
         let message = create_signature_share(&key_id, NODE_2, ids[1]);
+        let msg_id_2 = message.message_id();
         artifacts.push(UnvalidatedArtifact {
             message,
             peer_id: NODE_2,
@@ -1717,9 +1728,16 @@ mod tests {
 
                 let change_set =
                     signer.validate_signature_shares(&idkg_pool, &block_reader, &state);
-                assert_eq!(change_set.len(), 2);
-                assert!(is_moved_to_validated(&change_set, &msg_id_3));
-                assert!(is_removed_from_unvalidated(&change_set, &msg_id_4));
+                if key_id.is_idkg_key() {
+                    assert_eq!(change_set.len(), 2);
+                    assert!(is_moved_to_validated(&change_set, &msg_id_3));
+                    assert!(is_removed_from_unvalidated(&change_set, &msg_id_4));
+                } else {
+                    assert_eq!(change_set.len(), 3);
+                    assert!(is_moved_to_validated(&change_set, &msg_id_2));
+                    assert!(is_moved_to_validated(&change_set, &msg_id_3));
+                    assert!(is_removed_from_unvalidated(&change_set, &msg_id_4));
+                }
             })
         });
     }
