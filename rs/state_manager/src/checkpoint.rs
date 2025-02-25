@@ -755,7 +755,7 @@ pub fn load_canister_state(
 
     let into_checkpoint_error =
         |field: String, err: ic_protobuf::proxy::ProxyDecodeError| CheckpointError::ProtoError {
-            path: canister_layout.raw_path(),
+            path: checkpoint_layout.canister_path(canister_id),
             field,
             proto_err: err.to_string(),
         };
@@ -806,8 +806,7 @@ pub fn load_canister_state(
 
             let canister_root =
                 CheckpointLayout::<ReadOnly>::new_untracked("NOT_USED".into(), height)?
-                    .canister(canister_id)?
-                    .raw_path();
+                    .canister_path(canister_id);
             Some(ExecutionState {
                 canister_root,
                 wasm_binary,

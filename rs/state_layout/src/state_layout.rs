@@ -1581,6 +1581,13 @@ where
     ) -> Result<WasmFile<Permissions>, LayoutError> {
         Ok(self.snapshot(snapshot_id)?.wasm())
     }
+
+    pub fn canister_path(&self, canister_id: &CanisterId) -> PathBuf {
+        self.0
+            .root
+            .join(CANISTER_STATES_DIR)
+            .join(hex::encode(canister_id.get_ref().as_slice()))
+    }
     /// Removes the unverified checkpoint marker.
     /// If the marker does not exist, this function does nothing and returns `Ok(())`.
     ///
@@ -1890,7 +1897,7 @@ where
         })
     }
 
-    pub fn raw_path(&self) -> PathBuf {
+    fn raw_path(&self) -> PathBuf {
         self.canister_root.clone()
     }
 
