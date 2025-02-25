@@ -3,14 +3,14 @@ use dfn_candid::{candid, candid_one, CandidOne};
 #[allow(unused_imports)]
 use dfn_core::BytesS;
 use dfn_core::{
-    api::{data_certificate, set_certified_data},
+    api::set_certified_data,
     endpoint::reject_on_decode_error::{over, over_async, over_async_may_reject},
     over_init, printer, setup,
 };
 use dfn_protobuf::protobuf;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_canister_log::{LogEntry, Sink};
-use ic_cdk::api::{caller, instruction_counter, print, time, trap};
+use ic_cdk::api::{caller, data_certificate, instruction_counter, print, time, trap};
 use ic_icrc1::endpoints::{convert_transfer_error, StandardRecord};
 use ic_ledger_canister_core::ledger::LedgerContext;
 use ic_ledger_canister_core::runtime::heap_memory_size_bytes;
@@ -1390,7 +1390,7 @@ fn query_blocks(GetBlocksArgs { start, length }: GetBlocksArgs) -> QueryBlocksRe
 
     QueryBlocksResponse {
         chain_length,
-        certificate: dfn_core::api::data_certificate().map(serde_bytes::ByteBuf::from),
+        certificate: data_certificate().map(serde_bytes::ByteBuf::from),
         blocks,
         first_block_index: local_blocks.start as BlockIndex,
         archived_blocks,
@@ -1606,7 +1606,7 @@ fn query_encoded_blocks(
 
     QueryEncodedBlocksResponse {
         chain_length,
-        certificate: dfn_core::api::data_certificate().map(serde_bytes::ByteBuf::from),
+        certificate: data_certificate().map(serde_bytes::ByteBuf::from),
         blocks,
         first_block_index: local_blocks.start as BlockIndex,
         archived_blocks,
@@ -1716,7 +1716,11 @@ async fn icrc2_approve(arg: ApproveArgs) -> Result<Nat, ApproveError> {
 fn icrc2_approve_candid() {
     panic_if_not_ready();
     over_async_may_reject(candid_one, |arg: ApproveArgs| async {
-        if !LEDGER.read().unwrap().can_send(&PrincipalId::from(caller())) {
+        if !LEDGER
+            .read()
+            .unwrap()
+            .can_send(&PrincipalId::from(caller()))
+        {
             return Err(
                 "Anonymous principal cannot approve token transfers on the ledger.".to_string(),
             );
