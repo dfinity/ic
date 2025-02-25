@@ -15,8 +15,11 @@ Previous ckBTC minter proposal: https://dashboard.internetcomputer.org/proposal/
 ---
 
 ## Motivation
-TODO: THIS MUST BE FILLED OUT
 
+Update the ckBTC minter to include the latest code changes, notably:
+* Add new metrics regarding `get_utxos` latency and result size.
+* Use [mempool.space](https://mempool.space/) instead of [blockstream.info](https://blockstream.info/) in ckBTC dashboard URLs.
+* Use scope guard to prevent double minting.
 
 ## Upgrade args
 
