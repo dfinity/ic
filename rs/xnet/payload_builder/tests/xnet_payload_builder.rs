@@ -259,7 +259,7 @@ fn out_stream(in_stream: &Stream, messages_begin: StreamIndex) -> Stream {
         messages_begin,
     )
 }
-/*
+
 proptest! {
     #![proptest_config(ProptestConfig::with_cases(10))]
 
@@ -324,7 +324,7 @@ proptest! {
         });
     }
 }
-*/
+
 proptest! {
     /// Tests payload building with various alignments of expected indices to
     /// slice: just before the pooled slice, within the pooled slice, just
