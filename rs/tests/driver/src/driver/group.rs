@@ -5,8 +5,9 @@ use rand::distributions::Alphanumeric;
 use rand::Rng;
 #[rustfmt::skip]
 use walkdir::WalkDir;
+use crate::driver::boundary_node::BoundaryNodeVm;
 use crate::driver::constants;
-use crate::driver::test_env_api::{HasTopologySnapshot, IcNodeContainer};
+use crate::driver::test_env_api::{HasTopologySnapshot, HasVmName, IcNodeContainer};
 use crate::driver::{
     farm::{Farm, HostFeature},
     resource::AllocatedVm,
@@ -833,13 +834,49 @@ impl SystemTestGroup {
         );
         info!(logger, "Sending following body: {}", body);
         let client = reqwest::blocking::Client::new();
-        Self::register_with_backoff(&client, logger, body);
+        Self::register_with_backoff(&client, "", logger.clone(), body);
+
+        for bn in env.get_deployed_boundary_nodes() {
+            let name = bn.vm_name();
+            let snapshot = match bn.get_snapshot() {
+                Ok(s) => s,
+                Err(e) => {
+                    warn!(
+                        logger,
+                        "Couldn't get the snapshot of the boundary node {} due to: {:?}", name, e
+                    );
+                    continue;
+                }
+            };
+            let ipv6 = snapshot.ipv6().to_string();
+            let body = format!(
+                r#"
+                {{
+                    "name": "{}-guest",
+                    "ic_name": "{}",
+                    "targets": ["{}"],
+                    "job_type": "node_exporter",
+                }}
+            "#,
+                name, test_name, ipv6,
+            );
+
+            Self::register_with_backoff(&client, "add_boundary_node", logger.clone(), body);
+        }
     }
 
-    fn register_with_backoff(client: &reqwest::blocking::Client, logger: Logger, body: String) {
+    fn register_with_backoff(
+        client: &reqwest::blocking::Client,
+        path: &str,
+        logger: Logger,
+        body: String,
+    ) {
         let request = || {
             let response = client
-                .post("https://service-discovery.dm1-esmesh1.dfinity.network")
+                .post(format!(
+                    "https://service-discovery.dm1-esmesh1.dfinity.network/{}",
+                    path
+                ))
                 .header("Content-Type", "application/json")
                 .timeout(Duration::from_secs(30))
                 .body(body.clone())
