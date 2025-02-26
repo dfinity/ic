@@ -312,8 +312,9 @@ allow ic_canister_sandbox_t ic_replica_t : unix_stream_socket { setopt read writ
 # labelled differently eventually because allowing tmpfs is fairly broad.
 require { type tmpfs_t; }
 allow ic_canister_sandbox_t tmpfs_t : file { map read write getattr };
-# Also allow read-only access to checkpoint files (also given passed via
-# file descriptor from replica).
+# Also allow read and execute access to checkpoint files (also given passed via
+# file descriptor from replica). Execute is necessary to run the complied Wasm modules
+# stored in the tmp directory in ic_data_t.
 allow ic_canister_sandbox_t ic_data_t : file { map read execute getattr };
 # Allow read/write access to files that back the heap delta for both sandbox and replica
 # The workflow is that the replica creates the files but passes a file descriptor to the sandbox
