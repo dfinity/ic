@@ -13,7 +13,7 @@ use std::ops::Range;
 
 // There is a discrepancy in the way the trait uses indices for
 // adding and getting blocks - `add_block` uses global indices
-// while `get_blocks` uses 0-based indices (local).
+// while `get_blocks` uses indices relative to the first unarchived block.
 // This is due to the fact that `HeapBlockData` doesn't store
 // block indices. Once `HeapBlockData` is removed, the getters
 // can be switched to global indices and `Blockchain` code can
@@ -24,13 +24,11 @@ pub trait BlockData {
     // I.e. if there are 10 archived blocks and we add 11th block
     // to the ledger, it should be added with index 10.
     fn add_block(&mut self, index: u64, block: EncodedBlock);
-    // The `range` should be 0 based - independently of the number
-    // of archived blocks. I.e. `get_blocks(0..1)` should always return
-    // the first block stored in the ledger.
+    // The `range` should be relative to the first unarchived block.
+    // I.e. `get_blocks(0..1)` should always return the first block stored in the ledger.
     fn get_blocks(&self, range: Range<u64>) -> Vec<EncodedBlock>;
-    // The `index` should be 0 based - independently of the number
-    // of archived blocks. I.e. `get_block(0)` should always return
-    // the first block stored in the ledger.
+    // The `index` should be relative to the first unarchived block.
+    // I.e. `get_block(0)` should always return the first block stored in the ledger.
     fn get_block(&self, index: u64) -> Option<EncodedBlock>;
     /// Removes `num_blocks` with the smallest index.
     fn remove_oldest_blocks(&mut self, num_blocks: u64);
