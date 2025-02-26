@@ -781,6 +781,12 @@ impl<'a> Canister<'a> {
         execute_with_retries(|| self.set_controller(new_controller)).await
     }
 
+    /// Returns an ic00::CanisterIdRecord representing this canister. Useful
+    /// to communicate with the management canister.
+    pub fn as_record(&self) -> CanisterIdRecord {
+        CanisterIdRecord::from(self.canister_id())
+    }
+
     /// Tries to stop this canister, waits for it to reach the Stopped state.
     /// This is expected to work only when the canister's controller is an anonymous user
     pub async fn stop(&self) -> Result<(), String> {
