@@ -1,6 +1,6 @@
 use async_trait::async_trait;
 use ic_base_types::NumBytes;
-use ic_interfaces::messaging::XNetPayloadBuilder;
+use ic_interfaces::messaging::{XNetPayloadBuilder, XNetPayloadValidationError};
 use ic_interfaces_certified_stream_store::{CertifiedStreamStore, DecodeStreamError};
 use ic_interfaces_certified_stream_store_mocks::MockCertifiedStreamStore;
 use ic_interfaces_registry::RegistryClient;
@@ -99,21 +99,18 @@ impl XNetPayloadBuilderFixture {
         }
     }
 
-    /// Calls `get_xnet_payload()` on the wrapped `XNetPayloadBuilder` and
-    /// decodes all slices in the payload.
+    fn validation_context(&self) -> ValidationContext {
+        validation_context_at(self.certified_height)
+    }
+
+    /// Calls `get_xnet_payload()` on the wrapped `XNetPayloadBuilder`;
+    /// returns all slices decoded, encoded and the byte size.
     fn get_xnet_payload(
         &self,
         byte_limit: usize,
     ) -> (BTreeMap<SubnetId, StreamSlice>, XNetPayload, NumBytes) {
-        let time = UNIX_EPOCH;
-        let validation_context = ValidationContext {
-            registry_version: REGISTRY_VERSION,
-            certified_height: self.certified_height,
-            time,
-        };
-
         let (payload, byte_size) = self.xnet_payload_builder.get_xnet_payload(
-            &validation_context,
+            &self.validation_context(),
             &[],
             (byte_limit as u64).into(),
         );
@@ -121,14 +118,14 @@ impl XNetPayloadBuilderFixture {
         let decoded_payload = payload
             .stream_slices
             .iter()
-            .map(|(subnet_id, certified_slice)| {
+            .map(|(subnet_id, certified_stream_slice)| {
                 (
                     *subnet_id,
                     self.state_manager
                         .decode_certified_stream_slice(
                             *subnet_id,
                             REGISTRY_VERSION,
-                            certified_slice,
+                            certified_stream_slice,
                         )
                         .unwrap(),
                 )
@@ -136,6 +133,15 @@ impl XNetPayloadBuilderFixture {
             .collect();
 
         (decoded_payload, payload, byte_size)
+    }
+
+    /// Attempts to validate the provided `XNetPayload`.
+    fn validate_xnet_payload(
+        &self,
+        payload: &XNetPayload,
+    ) -> Result<NumBytes, XNetPayloadValidationError> {
+        self.xnet_payload_builder
+            .validate_xnet_payload(payload, &self.validation_context(), &[])
     }
 
     /// Pools the provided slice coming from a given subnet and returns its byte
@@ -175,6 +181,14 @@ impl XNetPayloadBuilderFixture {
     /// Fetches the `METRIC_SLICE_PAYLOAD_SIZE` histogram's stats.
     fn slice_payload_size_stats(&self) -> HistogramStats {
         fetch_histogram_stats(&self.metrics, METRIC_SLICE_PAYLOAD_SIZE).unwrap()
+    }
+}
+
+fn validation_context_at(certified_height: Height) -> ValidationContext {
+    ValidationContext {
+        registry_version: REGISTRY_VERSION,
+        certified_height,
+        time: UNIX_EPOCH,
     }
 }
 
@@ -316,7 +330,8 @@ proptest! {
 
             // Build the payload without a byte limit. Messages up to the signal limit should be
             // included.
-            let (payload, _, _) = xnet_payload_builder.get_xnet_payload(usize::MAX);
+            let (payload, raw_payload, byte_size) = xnet_payload_builder.get_xnet_payload(usize::MAX);
+            assert_eq!(byte_size, xnet_payload_builder.validate_xnet_payload(&raw_payload).unwrap());
 
             if signals_count_after_gc < MAX_SIGNALS {
                 let slice = payload.get(&SUBNET_1).unwrap();
@@ -694,12 +709,7 @@ proptest! {
             slice_bytes_sum += fixture.pool_slice(SUBNET_1, &stream1, from1, msg_count1, &log);
             slice_bytes_sum += fixture.pool_slice(SUBNET_2, &stream2, from2, msg_count2, &log);
 
-            let time = UNIX_EPOCH;
-            let validation_context = ValidationContext {
-                registry_version: REGISTRY_VERSION,
-                certified_height: fixture.certified_height,
-                time,
-            };
+            let validation_context = validation_context_at(fixture.certified_height);
 
             // Build a payload with a byte limit dictated by `size_limit_percentage`.
             let byte_size_limit = (slice_bytes_sum as u64 * size_limit_percentage / 100).into();
