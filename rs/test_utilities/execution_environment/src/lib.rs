@@ -21,7 +21,7 @@ use ic_execution_environment::{
     RoundInstructions, RoundLimits,
 };
 use ic_interfaces::execution_environment::{
-    ChainKeySettings, ExecutionMode, IngressHistoryWriter, RegistryExecutionSettings,
+    ChainKeyData, ChainKeySettings, ExecutionMode, IngressHistoryWriter, RegistryExecutionSettings,
     SubnetAvailableMemory,
 };
 use ic_interfaces_state_manager::Labeled;
@@ -55,7 +55,6 @@ use ic_replicated_state::{
 use ic_system_api::InstructionLimits;
 use ic_test_utilities::{crypto::mock_random_number_generator, state_manager::FakeStateManager};
 use ic_test_utilities_types::messages::{IngressBuilder, RequestBuilder, SignedIngressBuilder};
-use ic_types::ReplicaVersion;
 use ic_types::{
     batch::QueryStats,
     crypto::{canister_threshold_sig::MasterPublicKey, AlgorithmId},
@@ -67,6 +66,7 @@ use ic_types::{
     time::UNIX_EPOCH,
     CanisterId, Cycles, Height, NumInstructions, QueryStatsEpoch, Time, UserId,
 };
+use ic_types::{ExecutionRound, ReplicaVersion};
 use ic_types_test_utils::ids::{node_test_id, subnet_test_id, user_test_id};
 use ic_universal_canister::{UNIVERSAL_CANISTER_SERIALIZED_MODULE, UNIVERSAL_CANISTER_WASM};
 use ic_wasm_types::BinaryEncodedWasm;
@@ -209,6 +209,7 @@ pub struct ExecutionTest {
     // Mutable parameters of execution.
     time: Time,
     user_id: UserId,
+    current_round: ExecutionRound,
 
     // Read-only fields.
     dirty_heap_page_overhead: u64,
@@ -220,7 +221,7 @@ pub struct ExecutionTest {
     registry_settings: RegistryExecutionSettings,
     manual_execution: bool,
     caller_canister_id: Option<CanisterId>,
-    chain_key_subnet_public_keys: BTreeMap<MasterPublicKeyId, MasterPublicKey>,
+    chain_key_data: ChainKeyData,
     replica_version: ReplicaVersion,
 
     // The actual implementation.
@@ -1292,9 +1293,10 @@ impl ExecutionTest {
             state,
             self.install_code_instruction_limits.clone(),
             &mut mock_random_number_generator(),
-            &self.chain_key_subnet_public_keys,
+            &self.chain_key_data,
             &self.replica_version,
             &self.registry_settings,
+            self.current_round,
             &mut round_limits,
         );
         self.subnet_available_memory = round_limits.subnet_available_memory;
@@ -1744,6 +1746,7 @@ pub struct ExecutionTestBuilder {
     subnet_features: String,
     bitcoin_get_successors_follow_up_responses: BTreeMap<CanisterId, Vec<Vec<u8>>>,
     time: Time,
+    current_round: ExecutionRound,
     resource_saturation_scaling: usize,
     heap_delta_rate_limit: NumBytes,
     upload_wasm_chunk_instructions: NumInstructions,
@@ -1787,6 +1790,7 @@ impl Default for ExecutionTestBuilder {
             subnet_features: String::default(),
             bitcoin_get_successors_follow_up_responses: BTreeMap::default(),
             time: UNIX_EPOCH,
+            current_round: ExecutionRound::new(1),
             resource_saturation_scaling: 1,
             heap_delta_rate_limit: scheduler_config.heap_delta_rate_limit,
             upload_wasm_chunk_instructions: scheduler_config.upload_wasm_chunk_instructions,
@@ -2433,7 +2437,11 @@ impl ExecutionTestBuilder {
             metrics_registry,
             ingress_history_writer,
             manual_execution: self.manual_execution,
-            chain_key_subnet_public_keys,
+            chain_key_data: ChainKeyData {
+                master_public_keys: chain_key_subnet_public_keys,
+                ..Default::default()
+            },
+            current_round: self.current_round,
             log: self.log,
             checkpoint_files: vec![],
             replica_version: self.replica_version,
