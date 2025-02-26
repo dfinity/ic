@@ -3700,6 +3700,13 @@ impl ExecutionEnvironment {
     pub fn clear_compilation_cache_for_testing(&self) {
         (*self.hypervisor).clear_compilation_cache_for_testing()
     }
+
+    /// Used for tests where the test setup needs to be aware of the subnet
+    /// type.
+    #[doc(hidden)]
+    pub fn own_subnet_type(&self) -> SubnetType {
+        self.own_subnet_type
+    }
 }
 
 #[cfg(debug_assertions)]
