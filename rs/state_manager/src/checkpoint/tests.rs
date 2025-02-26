@@ -668,8 +668,6 @@ fn empty_protobufs_are_loaded_correctly() {
         .unwrap();
 
         let checkpoint_layout = layout.checkpoint_verified(HEIGHT).unwrap();
-        let canister_layout = checkpoint_layout.canister(&canister_id).unwrap();
-
         let empty_protobufs = vec![
             checkpoint_layout.subnet_queues().raw_path().to_owned(),
             checkpoint_layout.ingress_history().raw_path().to_owned(),
