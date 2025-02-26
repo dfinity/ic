@@ -3776,7 +3776,12 @@ impl SystemApi for SystemApiImpl {
         dst: usize,
         heap: &mut [u8],
     ) -> HypervisorResult<u32> {
-        let key_bytes = valid_subslice("ic0.cost_sign_with_ecdsa heap", src, size, heap)?;
+        let key_bytes = valid_subslice(
+            "ic0.cost_sign_with_ecdsa heap",
+            InternalAddress::new(src),
+            InternalAddress::new(size),
+            heap,
+        )?;
         let name = str::from_utf8(key_bytes)
             .map_err(|_| HypervisorError::ToolchainContractViolation {
                 error: format!(
@@ -3812,7 +3817,12 @@ impl SystemApi for SystemApiImpl {
         dst: usize,
         heap: &mut [u8],
     ) -> HypervisorResult<u32> {
-        let key_bytes = valid_subslice("ic0.cost_sign_with_schnorr heap", src, size, heap)?;
+        let key_bytes = valid_subslice(
+            "ic0.cost_sign_with_schnorr heap",
+            InternalAddress::new(src),
+            InternalAddress::new(size),
+            heap,
+        )?;
         let name = str::from_utf8(key_bytes)
             .map_err(|_| HypervisorError::ToolchainContractViolation {
                 error: format!(
@@ -3848,8 +3858,12 @@ impl SystemApi for SystemApiImpl {
         dst: usize,
         heap: &mut [u8],
     ) -> HypervisorResult<u32> {
-        let key_bytes =
-            valid_subslice("ic0.cost_vetkd_derive_encrypted_key heap", src, size, heap)?;
+        let key_bytes = valid_subslice(
+            "ic0.cost_vetkd_derive_encrypted_key heap",
+            InternalAddress::new(src),
+            InternalAddress::new(size),
+            heap,
+        )?;
         let name = str::from_utf8(key_bytes)
             .map_err(|_| HypervisorError::ToolchainContractViolation {
                 error: format!(
