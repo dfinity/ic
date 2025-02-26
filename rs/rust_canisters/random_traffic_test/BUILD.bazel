@@ -5,7 +5,7 @@ package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
     "//rs/types/base_types",
-    "//rs/types/error_types",
+    "//packages/ic-error-types",
     "//rs/types/types",
     "@crate_index//:candid",
     "@crate_index//:ic_cdk_next",

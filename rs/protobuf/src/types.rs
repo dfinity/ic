@@ -1,4 +1,5 @@
 pub mod v1 {
+    use ic_error_types::RejectCode as RejectCodePublic;
     use prost::Message;
     use std::fs::File;
     use std::io::Read;
@@ -35,4 +36,17 @@ pub mod v1 {
             buf
         }
     }
+
+    // impl From<RejectCodePublic> for RejectCode {
+    //     fn from(value: RejectCodePublic) -> Self {
+    //         match value {
+    //             RejectCodePublic::SysFatal => RejectCode::SysFatal,
+    //             RejectCodePublic::SysTransient => RejectCode::SysTransient,
+    //             RejectCodePublic::DestinationInvalid => RejectCode::DestinationInvalid,
+    //             RejectCodePublic::CanisterReject => RejectCode::CanisterReject,
+    //             RejectCodePublic::CanisterError => RejectCode::CanisterError,
+    //             RejectCodePublic::SysUnknown => RejectCode::SysUnknown,
+    //         }
+    //     }
+    // }
 }

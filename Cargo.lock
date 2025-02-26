@@ -8534,17 +8534,6 @@ dependencies = [
 
 [[package]]
 name = "ic-error-types"
-version = "0.9.0"
-dependencies = [
- "ic-protobuf",
- "ic-utils 0.9.0",
- "serde",
- "strum",
- "strum_macros",
-]
-
-[[package]]
-name = "ic-error-types2"
 version = "0.0.0"
 dependencies = [
  "serde",
@@ -11109,6 +11098,7 @@ dependencies = [
  "candid",
  "erased-serde",
  "hex",
+ "ic-error-types",
  "ic-protobuf-generator",
  "ic-test-utilities-compare-dirs",
  "maplit",

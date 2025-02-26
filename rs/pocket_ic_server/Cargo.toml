@@ -37,7 +37,7 @@ ic-crypto-iccsa = { path = "../crypto/iccsa" }
 ic-crypto-sha2 = { path = "../crypto/sha2" }
 ic-crypto-utils-threshold-sig-der = { path = "../crypto/utils/threshold_sig_der" }
 ic-ed25519 = { path = "../../packages/ic-ed25519" }
-ic-error-types = { path = "../types/error_types" }
+ic-error-types = { path = "../../packages/ic-error-types" }
 ic-http-gateway = { workspace = true }
 ic-http-endpoints-public = { path = "../http_endpoints/public" }
 ic-https-outcalls-adapter = { path = "../https_outcalls/adapter" }

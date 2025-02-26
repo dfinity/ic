@@ -17,6 +17,7 @@ slog = { workspace = true }
 
 [dev-dependencies]
 hex = { workspace = true }
+ic-error-types = { path = "../../packages/ic-error-types" }
 ic-protobuf-generator = { path = "./generator" }
 ic-test-utilities-compare-dirs = { path = "../test_utilities/compare_dirs" }
 maplit = "1.0.2"

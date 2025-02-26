@@ -1,5 +1,5 @@
 [package]
-name = "ic-error-types2"
+name = "ic-error-types"
 version = "0.0.0"
 license = "Apache-2.0"
 description = "Error types of the Internet Computer"

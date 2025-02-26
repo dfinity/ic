@@ -9,6 +9,7 @@ rust_library(
     version = "0.9.0",
     deps = [
         # Keep sorted.
+        "//packages/ic-error-types",
         "//rs/config",
         "//rs/cycles_account_manager",
         "//rs/interfaces",
@@ -20,7 +21,6 @@ rust_library(
         "//rs/replicated_state",
         "//rs/sys",
         "//rs/types/base_types",
-        "//rs/types/error_types",
         "//rs/types/management_canister_types",
         "//rs/types/types",
         "//rs/types/wasm_types",
@@ -49,6 +49,7 @@ rust_test(
 INTEGRATION_TEST_DEPS = [
     # Keep sorted.
     ":system_api",
+    "//packages/ic-error-types",
     "//rs/config",
     "//rs/cycles_account_manager",
     "//rs/interfaces",
@@ -64,7 +65,6 @@ INTEGRATION_TEST_DEPS = [
     "//rs/test_utilities/time",
     "//rs/test_utilities/types",
     "//rs/types/base_types",
-    "//rs/types/error_types",
     "//rs/types/management_canister_types",
     "//rs/types/types",
     "@crate_index//:maplit",

@@ -439,7 +439,80 @@ mod tests {
 
 // ========================================================================= //
 
-// Copy these internal traits, but keep them private.
+// Copy these internal traits, from rs/utils/src/str.rs, but keep them private.
+// include!() did not work with bazel.
 mod str_traits {
-    include!("../../../rs/utils/src/str.rs");
+    /// Trait, implemented for `str`, for truncating string slices at character
+    /// boundaries.
+    pub trait StrTruncate {
+        /// Returns a prefix of at most `max_len` bytes, cut at a character boundary.
+        ///
+        /// Calling this with a `max_len` greater than the slice length will return
+        /// the whole slice.
+        fn safe_truncate(&self, max_len: usize) -> &str;
+
+        /// Returns a suffix of at most `max_len` bytes, cut at a character boundary.
+        ///
+        /// Calling this with a `max_len` greater than the slice length will return
+        /// the whole slice.
+        fn safe_truncate_right(&self, max_len: usize) -> &str;
+    }
+
+    impl StrTruncate for str {
+        fn safe_truncate(&self, max_len: usize) -> &str {
+            if self.len() > max_len {
+                let mut len = max_len;
+                while len > 0 && !self.is_char_boundary(len) {
+                    len -= 1;
+                }
+                &self[..len]
+            } else {
+                self
+            }
+        }
+
+        fn safe_truncate_right(&self, max_len: usize) -> &str {
+            if self.len() > max_len {
+                let mut left = self.len() - max_len;
+                while left < self.len() && !self.is_char_boundary(left) {
+                    left += 1;
+                }
+                &self[left..]
+            } else {
+                self
+            }
+        }
+    }
+    /// Trait for strings that can be represented in an ellipsis format.
+    pub trait StrEllipsize {
+        /// Ellipsize the string with a max length and prefix percentage `[0, 100]`.
+        ///
+        /// Returns the original string if it's shorter or equal than the max length.
+        fn ellipsize(&self, max_len: usize, prefix_percentage: usize) -> String;
+    }
+
+    impl StrEllipsize for str {
+        fn ellipsize(&self, max_len: usize, prefix_percentage: usize) -> String {
+            if self.len() <= max_len {
+                return self.to_string();
+            }
+
+            const ELLIPSIS: &str = "...";
+            assert!(max_len >= ELLIPSIS.len());
+
+            // Deduct the ellipsis length to get the available space for prefix and suffix combined.
+            let budget = max_len.saturating_sub(ELLIPSIS.len());
+
+            // Calculate the length of the prefix based on the given percentage.
+            let prefix_len = (max_len * prefix_percentage.clamp(0, 100) / 100).min(budget);
+            let suffix_len = budget - prefix_len;
+
+            // Construct the ellipsized string.
+            let mut ellipsized = String::with_capacity(max_len);
+            ellipsized.push_str(self.safe_truncate(prefix_len));
+            ellipsized.push_str(ELLIPSIS);
+            ellipsized.push_str(self.safe_truncate_right(suffix_len));
+            ellipsized
+        }
+    }
 }
