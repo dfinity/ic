@@ -813,6 +813,7 @@ pub struct StateMachine {
     secret_key: SecretKeyBytes,
     is_ecdsa_signing_enabled: bool,
     is_schnorr_signing_enabled: bool,
+    is_vetkd_enabled: bool,
     registry_data_provider: Arc<ProtoRegistryDataProvider>,
     pub registry_client: Arc<FakeRegistryClient>,
     pub state_manager: Arc<StateManagerImpl>,
@@ -916,8 +917,10 @@ pub struct StateMachineBuilder {
     chain_keys_enabled_status: BTreeMap<MasterPublicKeyId, bool>,
     ecdsa_signature_fee: Option<Cycles>,
     schnorr_signature_fee: Option<Cycles>,
+    vetkd_fee: Option<Cycles>,
     is_ecdsa_signing_enabled: bool,
     is_schnorr_signing_enabled: bool,
+    is_vetkd_enabled: bool,
     features: SubnetFeatures,
     runtime: Option<Arc<Runtime>>,
     registry_data_provider: Arc<ProtoRegistryDataProvider>,
@@ -948,8 +951,10 @@ impl StateMachineBuilder {
             chain_keys_enabled_status: Default::default(),
             ecdsa_signature_fee: None,
             schnorr_signature_fee: None,
+            vetkd_fee: None,
             is_ecdsa_signing_enabled: true,
             is_schnorr_signing_enabled: true,
+            is_vetkd_enabled: true,
             features: SubnetFeatures {
                 http_requests: true,
                 ..SubnetFeatures::default()
@@ -1100,6 +1105,13 @@ impl StateMachineBuilder {
         }
     }
 
+    pub fn with_vetkd_fee(self, vetkd_fee: u128) -> Self {
+        Self {
+            vetkd_fee: Some(Cycles::new(vetkd_fee)),
+            ..self
+        }
+    }
+
     pub fn with_features(self, features: SubnetFeatures) -> Self {
         Self { features, ..self }
     }
@@ -1146,6 +1158,13 @@ impl StateMachineBuilder {
         }
     }
 
+    pub fn with_vetkd_enabled(self, is_vetkd_enabled: bool) -> Self {
+        Self {
+            is_vetkd_enabled,
+            ..self
+        }
+    }
+
     pub fn with_log_level(self, log_level: Option<Level>) -> Self {
         Self { log_level, ..self }
     }
@@ -1179,8 +1198,10 @@ impl StateMachineBuilder {
             self.chain_keys_enabled_status,
             self.ecdsa_signature_fee,
             self.schnorr_signature_fee,
+            self.vetkd_fee,
             self.is_ecdsa_signing_enabled,
             self.is_schnorr_signing_enabled,
+            self.is_vetkd_enabled,
             self.features,
             self.runtime.unwrap_or_else(|| {
                 tokio::runtime::Builder::new_current_thread()
@@ -1507,8 +1528,10 @@ impl StateMachine {
         chain_keys_enabled_status: BTreeMap<MasterPublicKeyId, bool>,
         ecdsa_signature_fee: Option<Cycles>,
         schnorr_signature_fee: Option<Cycles>,
+        vetkd_fee: Option<Cycles>,
         is_ecdsa_signing_enabled: bool,
         is_schnorr_signing_enabled: bool,
+        is_vetkd_enabled: bool,
         features: SubnetFeatures,
         runtime: Arc<Runtime>,
         registry_data_provider: Arc<ProtoRegistryDataProvider>,
@@ -1824,6 +1847,7 @@ impl StateMachine {
             public_key_der,
             is_ecdsa_signing_enabled,
             is_schnorr_signing_enabled,
+            is_vetkd_enabled,
             registry_data_provider,
             registry_client: registry_client.clone(),
             state_manager,
@@ -2332,6 +2356,11 @@ impl StateMachine {
     /// If set to true, the state machine will handle sign_with_schnorr calls during `tick()`.
     pub fn set_schnorr_signing_enabled(&mut self, value: bool) {
         self.is_schnorr_signing_enabled = value;
+    }
+
+    /// If set to true, the state machine will handle sign_with_schnorr calls during `tick()`.
+    pub fn set_vetkd_enabled(&mut self, value: bool) {
+        self.is_vetkd_enabled = value;
     }
 
     /// Triggers a single round of execution without any new inputs.  The state
@@ -3759,6 +3788,12 @@ impl StateMachine {
             .metadata
             .subnet_call_context_manager
             .sign_with_schnorr_contexts()
+    }
+
+    /// Returns `vetkd` contexts from internal subnet call context manager.
+    pub fn vetkd_contexts(&self) -> BTreeMap<CallbackId, SignWithThresholdContext> {
+        let state = self.state_manager.get_latest_state().take();
+        state.metadata.subnet_call_context_manager.vetkd_contexts()
     }
 
     /// Returns canister HTTP request contexts from internal subnet call context manager.
