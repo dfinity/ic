@@ -146,11 +146,19 @@ impl CanisterHttp {
         dl_result: &Result<http::Response<Incoming>, String>,
     ) {
         match (result, dl_result) {
-            (Ok(_), Ok(_)) => {
+            (Ok(result), Ok(dl_result)) => {
                 self.metrics
                     .socks_proxy_dl_requests
                     .with_label_values(&[LABEL_SOCKS_PROXY_OK, LABEL_SOCKS_PROXY_OK])
                     .inc();
+                if result.status() != dl_result.status() {
+                    info!(
+                        self.logger,
+                        "SOCKS_PROXY_DL: status code mismatch: {} vs {}",
+                        result.status(),
+                        dl_result.status(),
+                    );
+                }
             }
             (Err(_), Err(_)) => {
                 self.metrics
