@@ -2867,7 +2867,7 @@ impl ExecutionEnvironment {
                 ni_dkg_id: ni_dkg_id.clone(),
                 height: Height::new(current_round.get()),
             }),
-            args.derivation_path.into_inner(),
+            vec![args.derivation_domain],
             registry_settings
                 .chain_key_settings
                 .get(&key_id)
