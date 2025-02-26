@@ -12319,6 +12319,7 @@ dependencies = [
  "lazy_static",
  "maplit",
  "num-traits",
+ "pretty_assertions",
  "prost 0.13.4",
  "serde",
  "serde_yaml",
