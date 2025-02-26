@@ -278,6 +278,9 @@ impl VotingPowerEconomics {
         ),
     };
 
+    // [DEFAULT_START_REDUCING_VOTING_POWER_AFTER_SECONDS] represents the default time threshold (in seconds)
+    // after which voting power begins to decrease in the network economics configuration. This is a preset
+    // value for the system, but it should be updated to align with [MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS].
     pub const DEFAULT_MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS: u64 = 6 * ONE_MONTH_SECONDS;
     pub const DEFAULT_START_REDUCING_VOTING_POWER_AFTER_SECONDS: u64 = 6 * ONE_MONTH_SECONDS;
     pub const DEFAULT_CLEAR_FOLLOWING_AFTER_SECONDS: u64 = ONE_MONTH_SECONDS;
@@ -360,7 +363,11 @@ impl VotingPowerEconomics {
             let six_months = 6 * ONE_MONTH_SECONDS;
 
             if delay < three_months || delay > six_months {
-                defects.push("neuron_minimum_dissolve_delay_to_vote_seconds must be between three and six months.".to_string());
+                let defect = format!(
+                    "neuron_minimum_dissolve_delay_to_vote_seconds ({:?}) must be between three and six months.",
+                    self.neuron_minimum_dissolve_delay_to_vote_seconds
+                 );
+                defects.push(defect);
             }
         } else {
             defects.push("neuron_minimum_dissolve_delay_to_vote_seconds must be set.".to_string());

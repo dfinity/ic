@@ -90,48 +90,57 @@ fn test_network_economics_with_default_values_is_valid() {
 }
 
 #[test]
-fn test_neuron_minimum_dissolve_delay_to_vote_seconds_out_of_bounds_is_invalid() {
-    let mut economics = NetworkEconomics::with_default_values();
+fn test_neuron_minimum_dissolve_delay_to_vote_seconds_validation() {
+    // Define constants for better readability and maintainability
+    const LOWER_BOUND_SECONDS: u64 = MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS / 2; // 3 months
+    const UPPER_BOUND_SECONDS: u64 = MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS; // 6 months
+    const DEFAULT_SECONDS: u64 = LOWER_BOUND_SECONDS; // Assuming default is the minimum
 
-    // Test upper bound (above 6 months)
-    economics
-        .voting_power_economics
-        .as_mut()
-        .expect("bug: voting_power_economics missing")
-        .neuron_minimum_dissolve_delay_to_vote_seconds =
-        Some(MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS + 1);
+    // Test cases: (delay in seconds, expected result)
+    let test_cases = [
+        (
+            None,
+            Err(vec!["neuron_minimum_dissolve_delay_to_vote_seconds must be set.".to_string()]),
+        ),
+        (
+            Some(LOWER_BOUND_SECONDS - 1),
+            Err(vec![
+                format!("neuron_minimum_dissolve_delay_to_vote_seconds (Some({})) must be between three and six months.", LOWER_BOUND_SECONDS -1)
+            ]),
+        ),
+        (
+            Some(UPPER_BOUND_SECONDS + 1),
+            Err(vec![
+                format!("neuron_minimum_dissolve_delay_to_vote_seconds (Some({})) must be between three and six months.", UPPER_BOUND_SECONDS + 1)
+            ]),
+        ),
+        (
+            Some(DEFAULT_SECONDS),
+            Ok(()),
+        ),
+        (
+            Some(LOWER_BOUND_SECONDS),
+            Ok(()),
+        ),
+        (
+            Some(UPPER_BOUND_SECONDS),
+            Ok(()),
+        ),
+    ];
 
-    assert_eq!(
-        economics.validate(),
-        Err(vec![
-            "neuron_minimum_dissolve_delay_to_vote_seconds must be between three and six months."
-                .to_string()
-        ])
-    );
+    for (delay_seconds, expected_result) in test_cases {
+        let mut economics = NetworkEconomics::with_default_values();
+        economics
+            .voting_power_economics
+            .as_mut()
+            .expect("bug: voting_power_economics missing")
+            .neuron_minimum_dissolve_delay_to_vote_seconds = delay_seconds;
 
-    // Test lower bound (below 3 months)
-    economics
-        .voting_power_economics
-        .as_mut()
-        .expect("bug: voting_power_economics missing")
-        .neuron_minimum_dissolve_delay_to_vote_seconds =
-        Some(MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS / 2 - 1);
-
-    assert_eq!(
-        economics.validate(),
-        Err(vec![
-            "neuron_minimum_dissolve_delay_to_vote_seconds must be between three and six months."
-                .to_string()
-        ])
-    );
-
-    // Test valid case (at minimum threshold)
-    economics
-        .voting_power_economics
-        .as_mut()
-        .expect("bug: voting_power_economics missing")
-        .neuron_minimum_dissolve_delay_to_vote_seconds =
-        Some(MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS / 2);
-
-    assert_eq!(economics.validate(), Ok(()));
+        assert_eq!(
+            economics.validate(),
+            expected_result,
+            "Failed for delay: {:?}",
+            delay_seconds
+        );
+    }
 }
