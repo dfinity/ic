@@ -5631,7 +5631,11 @@ fn tip_is_initialized_correctly() {
         assert_eq!(tip_layout.canister_ids().unwrap().len(), 1);
         let canister_id = &tip_layout.canister_ids().unwrap()[0];
         let canister_layout = tip_layout.canister(canister_id).unwrap();
-        assert!(!canister_layout.queues().raw_path().exists());
+        assert!(!tip_layout
+            .canister_queues(canister_id)
+            .unwrap()
+            .raw_path()
+            .exists());
         assert!(tip_layout.wasm(canister_id).unwrap().raw_path().exists());
         assert!(
             canister_layout.vmemory_0().base().exists()
@@ -5657,7 +5661,11 @@ fn tip_is_initialized_correctly() {
         assert_eq!(checkpoint_layout.canister_ids().unwrap().len(), 1);
         let canister_id = &checkpoint_layout.canister_ids().unwrap()[0];
         let canister_layout = checkpoint_layout.canister(canister_id).unwrap();
-        assert!(!canister_layout.queues().raw_path().exists()); // empty
+        assert!(!checkpoint_layout
+            .canister_queues(canister_id)
+            .unwrap()
+            .raw_path()
+            .exists()); // empty
         assert!(canister_layout.canister().raw_path().exists());
         assert!(checkpoint_layout
             .wasm(canister_id)
@@ -5982,9 +5990,7 @@ fn can_create_and_delete_canister_snapshot() {
             .state_layout()
             .checkpoint_verified(height(1))
             .unwrap()
-            .snapshot(&snapshot_id)
-            .unwrap()
-            .raw_path();
+            .snapshot_path(&snapshot_id);
         assert!(std::fs::metadata(&snapshot_path).unwrap().is_dir());
 
         let (_height, state) = state_manager.take_tip();
@@ -5997,9 +6003,7 @@ fn can_create_and_delete_canister_snapshot() {
             .state_layout()
             .checkpoint_verified(height(2))
             .unwrap()
-            .snapshot(&snapshot_id)
-            .unwrap()
-            .raw_path();
+            .snapshot_path(&snapshot_id);
         assert!(std::fs::metadata(&snapshot_path).unwrap().is_dir());
 
         let (_height, mut state) = state_manager.take_tip();
@@ -6014,9 +6018,7 @@ fn can_create_and_delete_canister_snapshot() {
             .state_layout()
             .checkpoint_verified(height(3))
             .unwrap()
-            .snapshot(&snapshot_id)
-            .unwrap()
-            .raw_path();
+            .snapshot_path(&snapshot_id);
         assert!(!snapshot_path.exists());
         assert!(!snapshot_path.parent().unwrap().exists());
 

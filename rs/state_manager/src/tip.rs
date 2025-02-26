@@ -851,8 +851,7 @@ fn serialize_canister_to_tip(
 ) -> Result<(), CheckpointError> {
     let canister_id = canister_state.canister_id();
     let canister_layout = tip.canister(&canister_id)?;
-    canister_layout
-        .queues()
+    tip.canister_queues(&canister_id)?
         .serialize(canister_state.system_state.queues().into())?;
 
     let execution_state_bits = match &canister_state.execution_state {

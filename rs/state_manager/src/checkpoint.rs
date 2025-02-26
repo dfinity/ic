@@ -827,7 +827,9 @@ pub fn load_canister_state(
 
     let starting_time = Instant::now();
     let queues = ic_replicated_state::CanisterQueues::try_from((
-        canister_layout.queues().deserialize()?,
+        checkpoint_layout
+            .canister_queues(canister_id)?
+            .deserialize()?,
         metrics,
     ))
     .map_err(|err| {
@@ -936,7 +938,7 @@ fn load_snapshot(
 
     let into_checkpoint_error =
         |field: String, err: ic_protobuf::proxy::ProxyDecodeError| CheckpointError::ProtoError {
-            path: snapshot_layout.raw_path(),
+            path: checkpoint_layout.snapshot_path(snapshot_id),
             field,
             proto_err: err.to_string(),
         };

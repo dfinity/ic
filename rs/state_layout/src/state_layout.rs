@@ -1588,6 +1588,23 @@ where
             .join(CANISTER_STATES_DIR)
             .join(hex::encode(canister_id.get_ref().as_slice()))
     }
+
+    pub fn snapshot_path(&self, snapshot_id: &SnapshotId) -> PathBuf {
+        self.0
+            .root
+            .join(SNAPSHOTS_DIR)
+            .join(hex::encode(
+                snapshot_id.get_canister_id().get_ref().as_slice(),
+            ))
+            .join(hex::encode(snapshot_id.as_slice()))
+    }
+    pub fn canister_queues(
+        &self,
+        canister_id: &CanisterId,
+    ) -> Result<ProtoFileWith<pb_queues::CanisterQueues, Permissions>, LayoutError> {
+        Ok(self.canister(canister_id)?.queues())
+    }
+
     /// Removes the unverified checkpoint marker.
     /// If the marker does not exist, this function does nothing and returns `Ok(())`.
     ///
@@ -1901,7 +1918,7 @@ where
         self.canister_root.clone()
     }
 
-    pub fn queues(&self) -> ProtoFileWith<pb_queues::CanisterQueues, Permissions> {
+    fn queues(&self) -> ProtoFileWith<pb_queues::CanisterQueues, Permissions> {
         self.canister_root.join(QUEUES_FILE).into()
     }
 
@@ -1990,7 +2007,7 @@ where
             checkpoint: None,
         })
     }
-    pub fn raw_path(&self) -> PathBuf {
+    fn raw_path(&self) -> PathBuf {
         self.snapshot_root.clone()
     }
 

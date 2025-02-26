@@ -135,9 +135,8 @@ fn can_make_a_checkpoint() {
         let checkpoint = layout.checkpoint_verified(HEIGHT).unwrap();
         assert_eq!(checkpoint.canister_ids().unwrap(), vec![canister_id]);
         assert!(checkpoint
-            .canister(&canister_id)
+            .canister_queues(&canister_id)
             .unwrap()
-            .queues()
             .deserialize()
             .is_ok());
 
@@ -674,7 +673,11 @@ fn empty_protobufs_are_loaded_correctly() {
         let empty_protobufs = vec![
             checkpoint_layout.subnet_queues().raw_path().to_owned(),
             checkpoint_layout.ingress_history().raw_path().to_owned(),
-            canister_layout.queues().raw_path().to_owned(),
+            checkpoint_layout
+                .canister_queues(&canister_id)
+                .unwrap()
+                .raw_path()
+                .to_owned(),
         ];
 
         for path in empty_protobufs {
