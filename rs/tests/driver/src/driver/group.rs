@@ -1,8 +1,6 @@
 #![allow(dead_code)]
 use backon::{BlockingRetryable, ExponentialBuilder};
 use itertools::Itertools;
-use rand::distributions::Alphanumeric;
-use rand::Rng;
 #[rustfmt::skip]
 use walkdir::WalkDir;
 use crate::driver::boundary_node::BoundaryNodeVm;
@@ -682,10 +680,10 @@ impl SystemTestGroup {
                 TaskId::Test(String::from(SETUP_TASK_NAME)),
                 move || {
                     debug!(logger, ">>> setup_fn");
-                    let group_name = group_ctx.group_base_name.clone();
                     let env = ensure_setup_env(group_ctx);
                     setup_fn(env.clone());
-                    Self::register_with_service_disc(group_name, env.clone());
+                    let group_setup = GroupSetup::try_read_attribute(&env).unwrap();
+                    Self::register_with_service_disc(group_setup.infra_group_name, env.clone());
                     SetupResult {}.write_attribute(&env);
                 },
                 &mut compose_ctx,
@@ -798,15 +796,6 @@ impl SystemTestGroup {
     }
 
     fn register_with_service_disc(test_name: String, env: TestEnv) {
-        let test_name = format!(
-            "{}-{}",
-            test_name,
-            rand::thread_rng()
-                .sample_iter(&Alphanumeric)
-                .take(10)
-                .map(char::from)
-                .collect::<String>()
-        );
         let logger = env.logger();
         info!(logger, "Registering with service discovery");
         let topology = env.maybe_topology_snapshot();
