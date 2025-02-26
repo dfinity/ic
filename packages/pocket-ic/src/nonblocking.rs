@@ -16,7 +16,7 @@ use crate::management_canister::{
     TakeCanisterSnapshotArgs, UpdateSettingsArgs, UploadChunkArgs, UploadChunkResult,
 };
 pub use crate::DefaultEffectiveCanisterIdError;
-use crate::{IngressStatusResult, PocketIcBuilder, RejectResponse};
+use crate::{start_or_reuse_server, IngressStatusResult, PocketIcBuilder, RejectResponse};
 use backoff::backoff::Backoff;
 use backoff::{ExponentialBackoff, ExponentialBackoffBuilder};
 use candid::{
@@ -123,13 +123,20 @@ impl PocketIc {
 
     pub(crate) async fn from_components(
         subnet_config_set: impl Into<ExtendedSubnetConfigSet>,
-        server_url: Url,
+        server_url: Option<Url>,
+        server_binary: Option<PathBuf>,
         max_request_time_ms: Option<u64>,
         state_dir: Option<PathBuf>,
         nonmainnet_features: bool,
         log_level: Option<Level>,
         bitcoind_addr: Option<Vec<SocketAddr>>,
     ) -> Self {
+        let server_url = if let Some(server_url) = server_url {
+            server_url
+        } else {
+            start_or_reuse_server(server_binary).await
+        };
+
         let subnet_config_set = subnet_config_set.into();
         if state_dir.is_none()
             || File::open(state_dir.clone().unwrap().join("topology.json")).is_err()
@@ -246,7 +253,7 @@ impl PocketIc {
     /// List all instances and their status.
     #[instrument(ret)]
     pub async fn list_instances() -> Vec<String> {
-        let url = crate::start_or_reuse_server().join("instances").unwrap();
+        let url = start_or_reuse_server(None).await.join("instances").unwrap();
         let instances: Vec<String> = reqwest::Client::new()
             .get(url)
             .send()
@@ -519,25 +526,16 @@ impl PocketIc {
     /// Panics if the canister does not exist.
     #[instrument(ret, skip(self), fields(instance_id=self.instance_id, canister_id = %canister_id.to_string()))]
     pub async fn get_controllers(&self, canister_id: CanisterId) -> Vec<Principal> {
-        self.try_get_controllers(canister_id).await.unwrap()
-    }
-
-    /// Get the controllers of a canister.
-    #[instrument(ret, skip(self), fields(instance_id=self.instance_id, canister_id = %canister_id.to_string()))]
-    pub async fn try_get_controllers(
-        &self,
-        canister_id: CanisterId,
-    ) -> Result<Vec<Principal>, (StatusCode, String)> {
         let endpoint = "read/get_controllers";
-        let result: Result<Vec<RawPrincipalId>, (StatusCode, String)> = self
-            .try_post(
+        let result: Vec<RawPrincipalId> = self
+            .post(
                 endpoint,
                 RawCanisterId {
                     canister_id: canister_id.as_slice().to_vec(),
                 },
             )
             .await;
-        result.map(|v| v.into_iter().map(|p| p.into()).collect())
+        result.into_iter().map(|p| p.into()).collect()
     }
 
     /// Get the current cycles balance of a canister.

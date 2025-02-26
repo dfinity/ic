@@ -23,6 +23,7 @@ edition.workspace = true
 backoff = { workspace = true }
 base64 = { workspace = true }
 candid = { workspace = true }
+flate2 = { workspace = true }
 hex = { workspace = true }
 ic-certification = { workspace = true }
 ic-transport-types = { workspace = true }

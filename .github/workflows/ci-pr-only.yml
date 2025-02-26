@@ -54,8 +54,6 @@ jobs:
       options: >-
         -e NODE_NAME
     if: ${{ github.event_name != 'merge_group' }}
-    permissions:
-      pull-requests: write
     env:
       CI_EVENT_NAME: ${{ github.event_name }}
     steps:

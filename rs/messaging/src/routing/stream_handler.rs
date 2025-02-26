@@ -225,7 +225,7 @@ impl StreamHandlerImpl {
         Self {
             subnet_id,
             guaranteed_response_message_memory_capacity: hypervisor_config
-                .subnet_message_memory_capacity,
+                .guaranteed_response_message_memory_capacity,
             metrics: StreamHandlerMetrics::new(metrics_registry, message_routing_metrics),
             time_in_stream_metrics,
             time_in_backlog_metrics: RefCell::new(LatencyMetrics::new_time_in_backlog(
