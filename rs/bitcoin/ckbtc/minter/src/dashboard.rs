@@ -566,10 +566,10 @@ fn txid_link_on(txid: &Txid, btc_network: Network) -> String {
     let net_prefix = if btc_network == Network::Mainnet {
         ""
     } else {
-        "testnet/"
+        "testnet4/"
     };
     format!(
-        "<a target='_blank' href='https://blockstream.info/{0}tx/{1}'><code>{1}</code></a>",
+        "<a target='_blank' href='https://mempool.space/{0}tx/{1}'><code>{1}</code></a>",
         net_prefix, txid,
     )
 }
@@ -581,7 +581,7 @@ fn test_txid_link() {
             &[242, 194, 69, 195, 134, 114, 165, 216, 251, 165, 165, 202, 164, 77, 206, 242, 119, 165, 46, 145, 106, 6, 3, 39, 47, 145, 40, 111, 43, 5, 39, 6].into(),
             Network::Mainnet
         ),
-        "<a target='_blank' href='https://blockstream.info/tx/0627052b6f28912f2703066a912ea577f2ce4da4caa5a5fbd8a57286c345c2f2'><code>0627052b6f28912f2703066a912ea577f2ce4da4caa5a5fbd8a57286c345c2f2</code></a>"
+        "<a target='_blank' href='https://mempool.space/tx/0627052b6f28912f2703066a912ea577f2ce4da4caa5a5fbd8a57286c345c2f2'><code>0627052b6f28912f2703066a912ea577f2ce4da4caa5a5fbd8a57286c345c2f2</code></a>"
     );
 
     assert_eq!(
@@ -589,6 +589,6 @@ fn test_txid_link() {
             &[242, 194, 69, 195, 134, 114, 165, 216, 251, 165, 165, 202, 164, 77, 206, 242, 119, 165, 46, 145, 106, 6, 3, 39, 47, 145, 40, 111, 43, 5, 39, 6].into(),
             Network::Testnet
         ),
-        "<a target='_blank' href='https://blockstream.info/testnet/tx/0627052b6f28912f2703066a912ea577f2ce4da4caa5a5fbd8a57286c345c2f2'><code>0627052b6f28912f2703066a912ea577f2ce4da4caa5a5fbd8a57286c345c2f2</code></a>"
+        "<a target='_blank' href='https://mempool.space/testnet4/tx/0627052b6f28912f2703066a912ea577f2ce4da4caa5a5fbd8a57286c345c2f2'><code>0627052b6f28912f2703066a912ea577f2ce4da4caa5a5fbd8a57286c345c2f2</code></a>"
     );
 }

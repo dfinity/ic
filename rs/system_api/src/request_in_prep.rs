@@ -1,4 +1,5 @@
 use crate::{sandbox_safe_system_state::SandboxSafeSystemState, valid_subslice};
+use ic_base_types::InternalAddress;
 use ic_interfaces::execution_environment::{HypervisorError, HypervisorResult};
 use ic_logger::ReplicaLogger;
 use ic_types::Time;
@@ -108,15 +109,20 @@ impl RequestInPrep {
             }
             let method_name = valid_subslice(
                 "ic0.call_new method_name",
-                method_name_src,
-                method_name_len,
+                InternalAddress::new(method_name_src),
+                InternalAddress::new(method_name_len),
                 heap,
             )?;
             String::from_utf8_lossy(method_name).to_string()
         };
 
         let callee = {
-            let bytes = valid_subslice("ic0.call_new callee_src", callee_src, callee_size, heap)?;
+            let bytes = valid_subslice(
+                "ic0.call_new callee_src",
+                InternalAddress::new(callee_src),
+                InternalAddress::new(callee_size),
+                heap,
+            )?;
             PrincipalId::try_from(bytes).map_err(HypervisorError::InvalidPrincipalId)?
         };
 
@@ -173,7 +179,12 @@ impl RequestInPrep {
                 doc_link: doc_ref(PAYLOAD_SIZE_LINK),
             })
         } else {
-            let data = valid_subslice("ic0.call_data_append", src, size, heap)?;
+            let data = valid_subslice(
+                "ic0.call_data_append",
+                InternalAddress::new(src),
+                InternalAddress::new(size),
+                heap,
+            )?;
             self.method_payload.extend_from_slice(data);
             Ok(())
         }

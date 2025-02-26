@@ -1,6 +1,6 @@
 [package]
 name = "pocket-ic"
-version = "6.0.0"
+version = "7.0.0"
 license = "Apache-2.0"
 description = "PocketIC: A Canister Smart Contract Testing Platform"
 repository = "https://github.com/dfinity/ic"
@@ -23,6 +23,7 @@ edition.workspace = true
 backoff = { workspace = true }
 base64 = { workspace = true }
 candid = { workspace = true }
+flate2 = { workspace = true }
 hex = { workspace = true }
 ic-certification = { workspace = true }
 ic-management-canister-types = { workspace = true }

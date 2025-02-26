@@ -285,7 +285,7 @@ pub fn construct_ic_stack(
         rt_handle_main.clone(),
         metrics_registry,
         config.adapters_config,
-        execution_services.query_execution_service.clone(),
+        execution_services.https_outcalls_service,
         max_canister_http_requests_in_flight,
         log.clone(),
         subnet_type,

@@ -67,7 +67,7 @@ function join_by {
 export BUILD_BIN=false
 export BUILD_CAN=false
 export BUILD_IMG=false
-export RELEASE=true
+release_build=true
 
 if [ "$#" == 0 ]; then
     echo_red "ERROR: Please specify one of '-b', '-c' or '-i'" >&2
@@ -86,7 +86,7 @@ while getopts ':bcinh-:' OPT; do
         b | binaries) BUILD_BIN=true ;;
         c | canisters) BUILD_CAN=true ;;
         i | icos) BUILD_IMG=true ;;
-        n | non-release | no-release | norelease) RELEASE=false ;;
+        n | non-release | no-release | norelease) release_build=false ;;
         ??*) echo_red "Invalid option --$OPT" && usage && exit 1 ;;
         ?) echo_red "Invalid command option." && usage && exit 1 ;;
     esac
@@ -107,11 +107,17 @@ fi
 
 export VERSION="$(git rev-parse HEAD)"
 
-if "$RELEASE"; then
-    export IC_VERSION_RC_ONLY="$VERSION"
+BAZEL_TARGETS=()
+
+BAZEL_COMMON_ARGS=(
+    --config=local
+    --color=yes
+)
+
+if [[ $release_build == true ]]; then
     echo_red "Building release revision (master or rc--*)! Use '--no-release' for non-release revision!" && sleep 2
+    BAZEL_COMMON_ARGS+=(--config=stamped)
 else
-    export IC_VERSION_RC_ONLY="0000000000000000000000000000000000000000"
     echo_red "Building non-release revision!" && sleep 2
 fi
 
@@ -126,15 +132,6 @@ echo_blue "Purging artifact directories"
 rm -rf "$BINARIES_DIR_FULL"
 rm -rf "$CANISTERS_DIR_FULL"
 rm -rf "$DISK_DIR_FULL"
-
-BAZEL_TARGETS=()
-
-BAZEL_COMMON_ARGS=(
-    --config=local
-    --ic_version="$VERSION"
-    --ic_version_rc_only="$IC_VERSION_RC_ONLY"
-    --release_build="$RELEASE"
-)
 
 if "$BUILD_BIN"; then BAZEL_TARGETS+=("//publish/binaries:compute_checksums"); fi
 if "$BUILD_CAN"; then BAZEL_TARGETS+=("//publish/canisters:compute_checksums"); fi

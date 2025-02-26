@@ -24,7 +24,7 @@ runs:
 
           # freshly deployed k8s machines require ownership correctly set
           if [ -e /cache ]; then
-            sudo chown -RL 1001:1001 /cache
+            sudo find /cache \( -not -user 1001 -or -not -group 1001 \) -exec chown 1001:1001 {} +
           fi
 
           if [ -n "$SSH_PRIVATE_KEY_BACKUP_POD" ]; then
@@ -69,7 +69,6 @@ runs:
           BUILDEVENT_APIKEY: ${{ inputs.BUILDEVENT_APIKEY }}
           CI_EVENT_NAME: ${{ github.event_name }}
           CI_JOB_URL: "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-          CI_PULL_REQUEST_TARGET_BRANCH_NAME: ${{ github.event.pull_request.base.ref }}
           MERGE_BASE_SHA: ${{ github.event.pull_request.base.sha }}
           SSH_PRIVATE_KEY_BACKUP_POD: ${{ inputs.SSH_PRIVATE_KEY_BACKUP_POD }}
           GPG_PASSPHRASE: ${{ inputs.GPG_PASSPHRASE }}

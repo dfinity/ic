@@ -149,11 +149,12 @@ impl CallCanisters for PocketIcAgent<'_> {
     ) -> Result<CanisterInfo, Self::Error> {
         let canister_id = canister_id.into();
 
-        let controllers = self
-            .pocket_ic
-            .try_get_controllers(canister_id)
-            .await
-            .unwrap_or(vec![]);
+        let canister_exists = self.pocket_ic.canister_exists(canister_id).await;
+        let controllers = if canister_exists {
+            self.pocket_ic.get_controllers(canister_id).await
+        } else {
+            vec![]
+        };
 
         let Some(controller) = controllers.into_iter().last() else {
             return Err(Self::Error::BlackHole);

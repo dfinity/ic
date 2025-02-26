@@ -13,7 +13,7 @@ INSERT NEW RELEASES HERE
 
 # 2025-02-07: Proposal 135209
 
-http://dashboard.internetcomputer.org/proposals/135209
+http://dashboard.internetcomputer.org/proposal/135209
 
 ## Added
 
