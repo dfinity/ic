@@ -1368,7 +1368,7 @@ impl ExecutionEnvironment {
                     }
                 }
                 CanisterCall::Ingress(_) => {
-                    self.reject_unexpected_ingress(Ic00Method::SignWithSchnorr)
+                    self.reject_unexpected_ingress(Ic00Method::VetKdDeriveEncryptedKey)
                 }
             },
 
