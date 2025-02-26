@@ -26,7 +26,7 @@ use ic_test_utilities_types::ids::{
     NODE_1, NODE_2, NODE_3, NODE_4, NODE_42, NODE_5, SUBNET_1, SUBNET_2, SUBNET_3, SUBNET_4,
     SUBNET_5,
 };
-use ic_types::batch::ValidationContext;
+use ic_types::batch::{ValidationContext, XNetPayload};
 use ic_types::time::UNIX_EPOCH;
 use ic_types::xnet::{
     CertifiedStreamSlice, RejectReason, StreamIndex, StreamIndexedQueue, StreamSlice,
@@ -101,7 +101,10 @@ impl XNetPayloadBuilderFixture {
 
     /// Calls `get_xnet_payload()` on the wrapped `XNetPayloadBuilder` and
     /// decodes all slices in the payload.
-    fn get_xnet_payload(&self, byte_limit: usize) -> (BTreeMap<SubnetId, StreamSlice>, NumBytes) {
+    fn get_xnet_payload(
+        &self,
+        byte_limit: usize,
+    ) -> (BTreeMap<SubnetId, StreamSlice>, XNetPayload, NumBytes) {
         let time = UNIX_EPOCH;
         let validation_context = ValidationContext {
             registry_version: REGISTRY_VERSION,
@@ -115,20 +118,24 @@ impl XNetPayloadBuilderFixture {
             (byte_limit as u64).into(),
         );
 
-        let payload = payload
+        let decoded_payload = payload
             .stream_slices
-            .into_iter()
-            .map(|(k, v)| {
+            .iter()
+            .map(|(subnet_id, certified_slice)| {
                 (
-                    k,
+                    *subnet_id,
                     self.state_manager
-                        .decode_certified_stream_slice(k, REGISTRY_VERSION, &v)
+                        .decode_certified_stream_slice(
+                            *subnet_id,
+                            REGISTRY_VERSION,
+                            certified_slice,
+                        )
                         .unwrap(),
                 )
             })
             .collect();
 
-        (payload, byte_size)
+        (decoded_payload, payload, byte_size)
     }
 
     /// Pools the provided slice coming from a given subnet and returns its byte
@@ -261,6 +268,8 @@ fn out_stream(in_stream: &Stream, messages_begin: StreamIndex) -> Stream {
 }
 
 proptest! {
+    #![proptest_config(ProptestConfig::with_cases(10))]
+
     /// Tests that the payload builder does not include messages in a stream slice that
     /// would lead to more than `MAX_SIGNALS` amount of signals in the outgoing stream.
     ///
@@ -274,7 +283,6 @@ proptest! {
     /// If there is room for more signals, messages are expected to be included in the slice
     /// such that `slice.messages_end() - in_stream.begin()` == `MAX_SIGNALS`, i.e. after inducting
     /// the slice there would be exactly `MAX_SIGNALS` signals in the `out_stream`.
-    #![proptest_config(ProptestConfig::with_cases(10))]
     #[test]
     fn get_xnet_payload_respects_signal_limit(
         // `MAX_SIGNALS` <= signals_end()` <= `MAX_SIGNALS` + 20
@@ -308,7 +316,7 @@ proptest! {
 
             // Build the payload without a byte limit. Messages up to the signal limit should be
             // included.
-            let (payload, _) = xnet_payload_builder.get_xnet_payload(usize::MAX);
+            let (payload, _, _) = xnet_payload_builder.get_xnet_payload(usize::MAX);
 
             if signals_count_after_gc < MAX_SIGNALS {
                 let slice = payload.get(&SUBNET_1).unwrap();
@@ -489,7 +497,7 @@ proptest! {
             xnet_payload_builder.pool_slice(REMOTE_SUBNET, &stream, from, msg_count, &log);
 
             // Build a payload with a byte limit too small even for an empty slice.
-            let (payload, byte_size) = xnet_payload_builder.get_xnet_payload(1);
+            let (payload, _, byte_size) = xnet_payload_builder.get_xnet_payload(1);
 
             // Payload should contain no slices.
             assert!(
@@ -538,7 +546,7 @@ proptest! {
             xnet_payload_builder.pool_slice(REMOTE_SUBNET, &stream, from, 0, &log);
 
             // Build a payload.
-            let (payload, byte_size) = xnet_payload_builder
+            let (payload, _, byte_size) = xnet_payload_builder
                 .get_xnet_payload(usize::MAX);
 
             // Payload should be empty (we already have all signals in the slice).
