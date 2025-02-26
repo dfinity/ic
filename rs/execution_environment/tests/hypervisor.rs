@@ -47,6 +47,8 @@ use ic_universal_canister::{call_args, wasm, UNIVERSAL_CANISTER_WASM};
 use proptest::prelude::*;
 #[cfg(not(all(target_arch = "aarch64", target_vendor = "apple")))]
 use proptest::test_runner::{TestRng, TestRunner};
+#[cfg(not(all(target_arch = "aarch64", target_vendor = "apple")))]
+use rstest::rstest;
 use std::collections::BTreeSet;
 use std::mem::size_of;
 use std::time::Duration;
@@ -3096,7 +3098,7 @@ fn wasm_page_metrics_are_recorded_even_if_execution_fails() {
     let err = test.ingress(canister_id, "write", vec![]).unwrap_err();
     assert_eq!(ErrorCode::CanisterTrapped, err.code());
     assert_eq!(
-        fetch_histogram_vec_stats(test.metrics_registry(), "hypervisor_dirty_pages"),
+        fetch_histogram_vec_stats(test.metrics_registry(), "sandboxed_execution_dirty_pages"),
         metric_vec(&[
             (
                 &[("api_type", "update"), ("memory_type", "wasm")],
@@ -3108,8 +3110,11 @@ fn wasm_page_metrics_are_recorded_even_if_execution_fails() {
             ),
         ])
     );
-    for (labels, stats) in
-        fetch_histogram_vec_stats(test.metrics_registry(), "hypervisor_accessed_pages").iter()
+    for (labels, stats) in fetch_histogram_vec_stats(
+        test.metrics_registry(),
+        "sandboxed_execution_accessed_pages",
+    )
+    .iter()
     {
         let mem_type = labels.get("memory_type");
         match mem_type.as_ref().map(|a| String::as_ref(*a)) {
@@ -3126,6 +3131,51 @@ fn wasm_page_metrics_are_recorded_even_if_execution_fails() {
             _ => panic!("Unexpected memory type"),
         }
     }
+}
+
+#[cfg(not(all(target_arch = "aarch64", target_vendor = "apple")))]
+#[rstest]
+#[case::canister_does_not_trap("", ErrorCode::CanisterDidNotReply)]
+#[case::canister_traps("(unreachable)", ErrorCode::CanisterTrapped)]
+fn wasm_page_metrics_are_recorded_for_many_writes(
+    #[case] inject_trap: &str,
+    #[case] expected_error_code: ErrorCode,
+) {
+    let mut test = ExecutionTestBuilder::new().build();
+    let wat = format!(
+        r#"
+        (module
+            (func (export "canister_update write")
+                (local $i i32)
+                (local.set $i (i32.const 1073745920)) ;; 1GiB + 4096
+                (loop $loop
+                    (i32.store (local.get $i) (i32.const 1))
+                    (br_if $loop (local.tee $i (i32.sub (local.get $i) (i32.const 4096))))
+                )
+                {inject_trap}
+            )
+            (memory 16385) ;; 1GiB + 65536
+        )"#
+    );
+    let canister_id = test.canister_from_wat(wat).unwrap();
+    let err = test.ingress(canister_id, "write", vec![]).unwrap_err();
+    assert_eq!(expected_error_code, err.code());
+    assert_eq!(
+        fetch_histogram_vec_stats(test.metrics_registry(), "sandboxed_execution_dirty_pages"),
+        metric_vec(&[
+            (
+                &[("api_type", "update"), ("memory_type", "wasm")],
+                HistogramStats {
+                    count: 1,
+                    sum: 262145.0 // (1GiB + 4096) / 4096
+                }
+            ),
+            (
+                &[("api_type", "update"), ("memory_type", "stable")],
+                HistogramStats { count: 1, sum: 0.0 }
+            ),
+        ])
+    );
 }
 
 #[test]
@@ -3158,7 +3208,7 @@ fn query_stable_memory_metrics_are_recorded() {
         .unwrap();
     assert_eq!(WasmResult::Reply(vec![]), result);
     assert_eq!(
-        fetch_histogram_vec_stats(test.metrics_registry(), "hypervisor_dirty_pages"),
+        fetch_histogram_vec_stats(test.metrics_registry(), "sandboxed_execution_dirty_pages"),
         metric_vec(&[
             (
                 &[
@@ -3176,8 +3226,11 @@ fn query_stable_memory_metrics_are_recorded() {
             ),
         ])
     );
-    for (labels, stats) in
-        fetch_histogram_vec_stats(test.metrics_registry(), "hypervisor_accessed_pages").iter()
+    for (labels, stats) in fetch_histogram_vec_stats(
+        test.metrics_registry(),
+        "sandboxed_execution_accessed_pages",
+    )
+    .iter()
     {
         assert_eq!(
             labels.get("api_type"),
