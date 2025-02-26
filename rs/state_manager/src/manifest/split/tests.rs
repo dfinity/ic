@@ -344,9 +344,8 @@ fn canister_pbuf_path(canister_id: CanisterId) -> String {
         CheckpointLayout::<ReadOnly>::new_untracked("".into(), Height::new(0)).unwrap();
 
     checkpoint_layout
-        .canister(&canister_id)
+        .canister_state_bits(&canister_id)
         .unwrap()
-        .canister()
         .raw_path()
         .to_str()
         .unwrap()

@@ -1604,6 +1604,13 @@ where
     ) -> Result<ProtoFileWith<pb_queues::CanisterQueues, Permissions>, LayoutError> {
         Ok(self.canister(canister_id)?.queues())
     }
+    pub fn canister_state_bits(
+        &self,
+        canister_id: &CanisterId,
+    ) -> Result<ProtoFileWith<pb_canister_state_bits::CanisterStateBits, Permissions>, LayoutError>
+    {
+        Ok(self.canister(canister_id)?.canister())
+    }
 
     /// Removes the unverified checkpoint marker.
     /// If the marker does not exist, this function does nothing and returns `Ok(())`.
@@ -1926,9 +1933,7 @@ where
         self.canister_root.join(WASM_FILE).into()
     }
 
-    pub fn canister(
-        &self,
-    ) -> ProtoFileWith<pb_canister_state_bits::CanisterStateBits, Permissions> {
+    fn canister(&self) -> ProtoFileWith<pb_canister_state_bits::CanisterStateBits, Permissions> {
         self.canister_root.join(CANISTER_FILE).into()
     }
 

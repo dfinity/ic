@@ -921,7 +921,7 @@ fn serialize_canister_to_tip(
             metrics,
         )?;
 
-    canister_layout.canister().serialize(
+    tip.canister_state_bits(&canister_id)?.serialize(
         CanisterStateBits {
             controllers: canister_state.system_state.controllers.clone(),
             last_full_execution_round: canister_state.scheduler_state.last_full_execution_round,
