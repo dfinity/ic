@@ -325,13 +325,17 @@ pub(super) fn build_signature_inputs(
             Ok((request_id, inputs))
         }
         ThresholdArguments::VetKd(args) => {
+            let (ni_dkg_id, height) = args
+                .matched_ni_dkg_id
+                .as_ref()
+                .ok_or(BuildSignatureInputsError::ContextIncomplete)?;
             let request_id = RequestId {
                 callback_id,
-                height: args.height,
+                height: *height,
             };
             let inputs = ThresholdSigInputsRef::VetKd(VetKdArgs {
                 derivation_path: extended_derivation_path,
-                ni_dkg_id: args.ni_dkg_id.clone(),
+                ni_dkg_id: ni_dkg_id.clone(),
                 derivation_id: args.derivation_id.clone(),
                 encryption_public_key: args.encryption_public_key.clone(),
             });

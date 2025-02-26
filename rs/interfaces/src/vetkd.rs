@@ -17,6 +17,9 @@ pub enum InvalidVetKdPayloadReason {
     MissingContext(CallbackId),
     /// The payload contained a response for an IDkg context
     UnexpectedIDkgContext(CallbackId),
+    /// The payload contained a response for an context that wasn't
+    /// assigned a NiDkgId yet.
+    ContextIncomplete(CallbackId),
     /// The payload proposes the wrong type of agreement for a request context. For instance, the
     /// payload rejected a request that should have been accepted or vice versa.
     MismatchedAgreement {

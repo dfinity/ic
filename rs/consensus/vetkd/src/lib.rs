@@ -205,12 +205,15 @@ impl VetKdPayloadBuilderImpl {
                 let ThresholdArguments::VetKd(ctxt_args) = &context.args else {
                     continue;
                 };
+                let Some((ni_dkg_id, _)) = &ctxt_args.matched_ni_dkg_id else {
+                    continue;
+                };
                 let args = VetKdArgs {
                     derivation_path: ExtendedDerivationPath {
                         caller: context.request.sender.into(),
                         derivation_path: context.derivation_path.clone(),
                     },
-                    ni_dkg_id: ctxt_args.ni_dkg_id.clone(),
+                    ni_dkg_id: ni_dkg_id.clone(),
                     derivation_id: ctxt_args.derivation_id.clone(),
                     encryption_public_key: ctxt_args.encryption_public_key.clone(),
                 };
@@ -323,12 +326,15 @@ impl VetKdPayloadBuilderImpl {
         let ThresholdArguments::VetKd(ctxt_args) = &context.args else {
             return invalid_artifact_err(InvalidVetKdPayloadReason::UnexpectedIDkgContext(id));
         };
+        let Some((ni_dkg_id, _)) = &ctxt_args.matched_ni_dkg_id else {
+            return invalid_artifact_err(InvalidVetKdPayloadReason::ContextIncomplete(id));
+        };
         let args = VetKdArgs {
             derivation_path: ExtendedDerivationPath {
                 caller: context.request.sender.into(),
                 derivation_path: context.derivation_path.clone(),
             },
-            ni_dkg_id: ctxt_args.ni_dkg_id.clone(),
+            ni_dkg_id: ni_dkg_id.clone(),
             derivation_id: ctxt_args.derivation_id.clone(),
             encryption_public_key: ctxt_args.encryption_public_key.clone(),
         };
@@ -824,6 +830,34 @@ mod tests {
                         VetKdPayloadValidationFailure::StateUnavailable(_)
                     )
                 )
+            );
+        })
+    }
+
+    #[test]
+    fn test_build_empty_payload_if_contexts_incomplete() {
+        let config = make_chain_key_config();
+        let contexts = make_contexts_with_completion(&config, false);
+        let shares = make_shares(&contexts);
+        let proposal_context = ProposalContext {
+            proposer: node_test_id(0),
+            validation_context: &VALIDATION_CONTEXT,
+        };
+        test_payload_builder(Some(config), contexts, shares, |builder| {
+            let payload = build_and_validate(&builder, MAX_SIZE, &[], &VALIDATION_CONTEXT);
+            assert!(payload.is_empty());
+
+            // payload with success responses for the same contexts should be rejected
+            let payload = as_bytes(make_vetkd_agreements_with_payload(
+                &[1, 2],
+                VetKdAgreement::Success(vec![1, 1, 1]),
+            ));
+            let validation = builder.validate_payload(HEIGHT, &proposal_context, &payload, &[]);
+            assert_matches!(
+                validation.unwrap_err(),
+                ValidationError::InvalidArtifact(InvalidPayloadReason::InvalidVetKdPayload(
+                    InvalidVetKdPayloadReason::ContextIncomplete(id)
+                )) if id.get() == 1
             );
         })
     }
