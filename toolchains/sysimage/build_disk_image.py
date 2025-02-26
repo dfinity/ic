@@ -173,14 +173,16 @@ def main():
         # Skip over any partitions starting with "B_". These are empty in our
         # published images, and stay this way until a live system upgrades
         # into them.
-        if entry["name"].startswith("B_"):
-            continue
+        # if entry["name"].startswith("B_"):
+        #     continue
 
         # Remove the "A_" prefix from any partitions before doing a lookup.
-        prefix = "A_"
+        # prefix = "A_"
         name = entry["name"]
-        if name.startswith(prefix):
-            name = name[len(prefix) :]
+        if name.startswith("A_"):
+            name = name[len("A_") :]
+        if name.startswith("B_"):
+            name = name[len("B_") :]
 
         partition_file = select_partition_file(name, partition_files)
 

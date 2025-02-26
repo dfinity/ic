@@ -29,8 +29,8 @@ done
 
 echo "Root hash: ${ROOT_HASH}"
 
-veritysetup open "${ROOT}" vroot "${ROOT}" "${ROOT_HASH}" --hash-offset 10603200512
+# veritysetup open "${ROOT}" vroot "${ROOT}" "${ROOT_HASH}" --hash-offset 10603200512
 
-echo "ROOT=/dev/mapper/vroot" >/conf/param.conf
+#echo "ROOT=/dev/mapper/vroot" >/conf/param.conf
 
 exit 0

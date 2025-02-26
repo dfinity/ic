@@ -47,7 +47,7 @@ TYPE=$(blkid -o value --match-tag TYPE "${VAR_PARTITION}")
 # cf. the upgrade logic in "manageboot.sh": The target partition is wiped
 # clean as part of the upgrade procedure. We can therefore really rely
 # on having a clean slate here after first boot of an upgrade.
-if [ "${TYPE}" == "crypto_LUKS" ]; then
+if [ "${TYPE}" == "FOOBAR" ]; then
     echo "Found LUKS header in partition ${VAR_PARTITION} for /var."
     cryptsetup luksOpen "${VAR_PARTITION}" var_crypt --key-file /boot/config/store.keyfile
 else

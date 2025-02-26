@@ -1,0 +1,22 @@
+[Unit]
+Description=Cryptography Setup for vda10-crypt
+DefaultDependencies=no
+After=cryptsetup-pre.target systemd-udevd-kernel.socket systemd-tpm2-setup-early.service
+Before=blockdev@dev-mapper-vda10-crypt.target
+Wants=blockdev@dev-mapper-vda10-crypt.target
+IgnoreOnIsolate=true
+Conflicts=umount.target
+Before=umount.target
+Before=cryptsetup.target
+BindsTo=dev-vda10.device
+After=dev-vda10.device
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+TimeoutSec=infinity
+KeyringMode=shared
+OOMScoreAdjust=500
+ExecStart=/opt/ic/bin/open-store.sh
