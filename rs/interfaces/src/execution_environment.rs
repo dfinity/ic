@@ -1365,7 +1365,7 @@ pub struct ChainKeySettings {
     pub pre_signatures_to_create_in_advance: u32,
 }
 
-#[derive(Clone, Default)]
+#[derive(Clone, Eq, PartialEq, Debug, Default)]
 pub struct ChainKeyData {
     pub master_public_keys: BTreeMap<MasterPublicKeyId, MasterPublicKey>,
     pub idkg_pre_signature_ids: BTreeMap<MasterPublicKeyId, BTreeSet<PreSigId>>,

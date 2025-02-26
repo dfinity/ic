@@ -6,7 +6,6 @@ use crate::{
 };
 use ic_interfaces::execution_environment::{ChainKeyData, Scheduler};
 use ic_interfaces_state_manager::StateManager;
-use ic_management_canister_types_private::MasterPublicKeyId;
 use ic_metrics::MetricsRegistry;
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
@@ -18,9 +17,8 @@ use ic_test_utilities_metrics::fetch_int_counter_vec;
 use ic_test_utilities_types::{
     batch::BatchBuilder, ids::subnet_test_id, messages::SignedIngressBuilder,
 };
-use ic_types::consensus::idkg::PreSigId;
+use ic_types::batch::BatchMessages;
 use ic_types::messages::SignedIngress;
-use ic_types::{batch::BatchMessages, crypto::canister_threshold_sig::MasterPublicKey};
 use ic_types::{Height, PrincipalId, ReplicaVersion, SubnetId, Time};
 use maplit::btreemap;
 use mockall::{mock, predicate::*, Sequence};
