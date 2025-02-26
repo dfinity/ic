@@ -409,39 +409,68 @@ impl TNet {
         )
         .await?;
 
-        // create a job to download the image and extract it
-        let image_url = format!(
-            "http://server.bazel-remote.svc.cluster.local:8080/cas/{}",
-            match vm_req.primary_image {
-                ImageLocation::IcOsImageViaUrl { url: _, sha256 } => sha256,
-                _ => self.image_sha.clone(),
-            }
-        );
-        // TODO: only download it once and copy it if it's already downloaded
-        let args = format!(
-            "set -e; \
-            mkdir -p /tnet/{vm_name}; \
-            wget -O /tnet/{vm_name}/img.tar.zst {image_url}; \
-            tar -x --zstd -vf /tnet/{vm_name}/img.tar.zst -C /tnet/{vm_name}; \
-            chmod -R 777 /tnet/{vm_name}; \
-            rm -f /tnet/{vm_name}/img.tar.zst /tnet/{vm_name}/img.tar",
-            vm_name = vm_name,
-            image_url = image_url,
-        );
-        create_job(
-            &vm_name.clone(),
-            "dfinity/util:0.1",
-            vec!["/bin/sh", "-c"],
-            vec![&args],
-            "/srv/tnet".into(),
-            self.owner_reference(),
-            Some(vec![(
-                "tnet.internetcomputer.org/name".to_string(),
-                self.unique_name.clone().expect("missing unique name"),
-            )]),
-            Some(node.clone()),
-        )
-        .await?;
+        if vm_type == ImageType::IcOsImage {
+            // create a job to download the image and extract it
+            let image_url = format!(
+                "http://server.bazel-remote.svc.cluster.local:8080/cas/{}",
+                match vm_req.primary_image {
+                    ImageLocation::IcOsImageViaUrl { url: _, sha256 } => sha256,
+                    _ => self.image_sha.clone(),
+                }
+            );
+            // TODO: only download it once and copy it if it's already downloaded
+            let args = format!(
+                "set -e; \
+                mkdir -p /tnet/{vm_name}; \
+                wget -O /tnet/{vm_name}/img.tar.zst {image_url}; \
+                tar -x --zstd -vf /tnet/{vm_name}/img.tar.zst -C /tnet/{vm_name}; \
+                chmod -R 777 /tnet/{vm_name}; \
+                rm -f /tnet/{vm_name}/img.tar.zst /tnet/{vm_name}/img.tar",
+                vm_name = vm_name,
+                image_url = image_url,
+            );
+            create_job(
+                &vm_name.clone(),
+                "dfinity/util:0.1",
+                vec!["/bin/sh", "-c"],
+                vec![&args],
+                "/srv/tnet".into(),
+                self.owner_reference(),
+                Some(vec![(
+                    "tnet.internetcomputer.org/name".to_string(),
+                    self.unique_name.clone().expect("missing unique name"),
+                )]),
+                Some(node.clone()),
+            )
+            .await?;
+        } else {
+            let args = format!(
+                "set -e; \
+                 mkdir -p /tnet/{vm_name}; \
+                 cp /tnet/{image} /tnet/{vm_name}/disk.img; \
+                 chmod -R 777 /tnet/{vm_name}",
+                vm_name = vm_name,
+                image = match vm_type {
+                    ImageType::UniversalImage => "uvm.img".to_string(),
+                    ImageType::PrometheusImage => "pvm.img".to_string(),
+                    _ => "".to_string(),
+                },
+            );
+            create_job(
+                &vm_name.clone(),
+                "dfinity/util:0.1",
+                vec!["/bin/sh", "-c"],
+                vec![&args],
+                "/srv/tnet".into(),
+                self.owner_reference(),
+                Some(vec![(
+                    "tnet.internetcomputer.org/name".to_string(),
+                    self.unique_name.clone().expect("missing unique name"),
+                )]),
+                Some(node.clone()),
+            )
+            .await?;
+        }
 
         let mut ipam_pod: Pod = serde_yaml::from_str(&format!(
             r#"
