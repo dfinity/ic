@@ -8400,6 +8400,10 @@ fn test_network_economics_proposal() {
         Some(MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS),
     );
 
+    // A value that differs from the default, useful for testing that the proposal has the intended effect.
+    let non_default_neuron_minimum_dissolve_delay_to_vote_seconds =
+        MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS / 2;
+
     // Propose to change some, NetworkEconomics parameters.
     let pid = match gov
         .manage_neuron(
@@ -8417,7 +8421,7 @@ fn test_network_economics_proposal() {
                             start_reducing_voting_power_after_seconds: Some(42),
                             clear_following_after_seconds: Some(4242),
                             neuron_minimum_dissolve_delay_to_vote_seconds: Some(
-                                MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS / 2,
+                                non_default_neuron_minimum_dissolve_delay_to_vote_seconds,
                             ),
                         }),
                         ..Default::default()
@@ -8450,7 +8454,7 @@ fn test_network_economics_proposal() {
                 start_reducing_voting_power_after_seconds: Some(42),
                 clear_following_after_seconds: Some(4242),
                 neuron_minimum_dissolve_delay_to_vote_seconds: Some(
-                    MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS / 2
+                    non_default_neuron_minimum_dissolve_delay_to_vote_seconds
                 )
             }),
 
