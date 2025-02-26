@@ -1932,8 +1932,8 @@ impl SnsInitPayload {
 mod test {
     use crate::{
         pb::v1::{
-            AirdropDistribution, DappCanisters, DeveloperDistribution,
-            FractionalDeveloperVotingPower as FractionalDVP, NeuronDistribution, SwapDistribution,
+            DappCanisters, DeveloperDistribution, FractionalDeveloperVotingPower as FractionalDVP,
+            NeuronDistribution, SwapDistribution,
         },
         FractionalDeveloperVotingPower, MaxNeuronsFundParticipationValidationError,
         MinDirectParticipationThresholdValidationError,
