@@ -55,6 +55,9 @@ use ic_replicated_state::{
 use ic_system_api::InstructionLimits;
 use ic_test_utilities::{crypto::mock_random_number_generator, state_manager::FakeStateManager};
 use ic_test_utilities_types::messages::{IngressBuilder, RequestBuilder, SignedIngressBuilder};
+use ic_types::crypto::threshold_sig::ni_dkg::{
+    NiDkgId, NiDkgMasterPublicKeyId, NiDkgTag, NiDkgTargetSubnet,
+};
 use ic_types::{
     batch::QueryStats,
     crypto::{canister_threshold_sig::MasterPublicKey, AlgorithmId},
@@ -2309,7 +2312,26 @@ impl ExecutionTestBuilder {
                     },
                 ),
             })
-            .collect();
+            .collect::<BTreeMap<_, _>>();
+
+        let nidkg_ids = chain_key_subnet_public_keys
+            .keys()
+            .flat_map(|key_id| {
+                if let MasterPublicKeyId::VetKd(vetkd_key_id) = key_id {
+                    let nidkg_id = NiDkgId {
+                        start_block_height: Height::new(0),
+                        dealer_subnet: self.own_subnet_id,
+                        dkg_tag: NiDkgTag::HighThresholdForKey(NiDkgMasterPublicKeyId::VetKd(
+                            vetkd_key_id.clone(),
+                        )),
+                        target_subnet: NiDkgTargetSubnet::Local,
+                    };
+                    Some((key_id.clone(), nidkg_id))
+                } else {
+                    None
+                }
+            })
+            .collect::<BTreeMap<_, _>>();
 
         let cycles_account_manager = Arc::new(CyclesAccountManager::new(
             self.instruction_limit,
@@ -2439,6 +2461,7 @@ impl ExecutionTestBuilder {
             manual_execution: self.manual_execution,
             chain_key_data: ChainKeyData {
                 master_public_keys: chain_key_subnet_public_keys,
+                nidkg_ids,
                 ..Default::default()
             },
             current_round: self.current_round,
