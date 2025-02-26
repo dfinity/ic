@@ -682,9 +682,9 @@ impl SystemTestGroup {
                     debug!(logger, ">>> setup_fn");
                     let env = ensure_setup_env(group_ctx);
                     setup_fn(env.clone());
+                    SetupResult {}.write_attribute(&env);
                     let group_setup = GroupSetup::try_read_attribute(&env).unwrap();
                     Self::register_with_service_disc(group_setup.infra_group_name, env.clone());
-                    SetupResult {}.write_attribute(&env);
                 },
                 &mut compose_ctx,
             );
