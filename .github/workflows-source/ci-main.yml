@@ -210,6 +210,8 @@ jobs:
   python-ci-tests:
     name: Python CI Tests
     <<: *dind-small-setup
+    runs-on:
+      group: dm1
     steps:
       - <<: *checkout
       - <<: *python-setup
