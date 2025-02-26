@@ -1,25 +1,27 @@
 use backoff::backoff::Backoff;
-use candid::{CandidType, Deserialize};
 use core::future::Future;
 use dfn_candid::{candid, candid_multi_arity};
 use ic_canister_client::{Agent, Sender};
 use ic_config::Config;
-use ic_management_canister_types_private::CanisterStatusType::Stopped;
+use ic_management_canister_types::{
+    CanisterSettings, CanisterStatusArgs, CanisterStatusResult, CanisterStatusType,
+    CreateCanisterResult, DeleteCanisterArgs, ProvisionalCreateCanisterWithCyclesArgs,
+    StartCanisterArgs, StopCanisterArgs, UpdateSettingsArgs,
+};
+// The below should eventually be replaced with imports from the
+// public version of the crate above. For now, they're kept as
+// changing them would propagate to changes to state machine tests
+// which would be a bit more involved.
+use ic_management_canister_types_private::CanisterSettingsArgsBuilder;
 pub use ic_management_canister_types_private::{
-    self as ic00, CanisterIdRecord, CanisterInstallMode, InstallCodeArgs,
-    ProvisionalCreateCanisterWithCyclesArgs, IC_00,
+    self as ic00, CanisterIdRecord, CanisterInstallMode, InstallCodeArgs, IC_00,
 };
 use ic_registry_transport::pb::v1::RegistryMutation;
-pub use ic_types::{ingress::WasmResult, CanisterId, Cycles, PrincipalId};
-use on_wire::{FromWire, IntoWire, NewType};
-
-use ic_management_canister_types_private::{
-    CanisterSettingsArgsBuilder, CanisterStatusType, DefiniteCanisterSettingsArgs, QueryStats,
-    UpdateSettingsArgs,
-};
 use ic_replica_tests::{canister_test_async, LocalTestRuntime};
 pub use ic_replica_tests::{canister_test_with_config_async, get_ic_config};
 use ic_state_machine_tests::StateMachine;
+pub use ic_types::{ingress::WasmResult, CanisterId, Cycles, PrincipalId};
+use on_wire::{FromWire, IntoWire, NewType};
 use std::{
     convert::{AsRef, TryFrom},
     env, fmt,
@@ -28,33 +30,6 @@ use std::{
     path::Path,
     time::Duration,
 };
-
-// Temporary copy of `ic_management_canister_types_private::CanisterStatusResultV2`
-// without the new `memory_metrics` field until the change is rolled out to production.
-#[derive(Eq, PartialEq, Debug, CandidType, Deserialize)]
-pub struct CanisterStatusResultV2 {
-    status: CanisterStatusType,
-    module_hash: Option<Vec<u8>>,
-    controller: candid::Principal,
-    settings: DefiniteCanisterSettingsArgs,
-    memory_size: candid::Nat,
-    cycles: candid::Nat,
-    balance: Vec<(Vec<u8>, candid::Nat)>,
-    freezing_threshold: candid::Nat,
-    idle_cycles_burned_per_day: candid::Nat,
-    reserved_cycles: candid::Nat,
-    query_stats: QueryStats,
-}
-
-impl CanisterStatusResultV2 {
-    pub fn controllers(&self) -> Vec<PrincipalId> {
-        self.settings.controllers()
-    }
-
-    pub fn status(&self) -> CanisterStatusType {
-        self.status.clone()
-    }
-}
 
 const MIN_BACKOFF_INTERVAL: Duration = Duration::from_millis(250);
 // The value must be smaller than `ic_http_handler::MAX_TCP_PEEK_TIMEOUT_SECS`.
@@ -391,16 +366,18 @@ impl<'a> Runtime {
         num_cycles: Option<u128>,
         specified_id: Option<PrincipalId>,
     ) -> Result<Canister<'a>, String> {
-        let canister_id_record: Result<CanisterIdRecord, String> = match specified_id {
+        let create_canister_result: Result<CreateCanisterResult, String> = match specified_id {
             Some(canister_id) => {
                 self.get_management_canister_with_effective_canister_id(canister_id)
                     .update_(
                         ic00::Method::ProvisionalCreateCanisterWithCycles.to_string(),
                         candid,
-                        (ProvisionalCreateCanisterWithCyclesArgs::new(
-                            num_cycles,
-                            specified_id,
-                        ),),
+                        (ProvisionalCreateCanisterWithCyclesArgs {
+                            amount: num_cycles.map(candid::Nat::from),
+                            settings: None,
+                            specified_id: specified_id.map(|x| x.into()),
+                            sender_canister_version: None,
+                        },),
                     )
                     .await
             }
@@ -409,19 +386,21 @@ impl<'a> Runtime {
                     .update_(
                         ic00::Method::ProvisionalCreateCanisterWithCycles.to_string(),
                         candid,
-                        (ProvisionalCreateCanisterWithCyclesArgs::new(
-                            num_cycles,
-                            specified_id,
-                        ),),
+                        (ProvisionalCreateCanisterWithCyclesArgs {
+                            amount: num_cycles.map(candid::Nat::from),
+                            settings: None,
+                            specified_id: specified_id.map(|x| x.into()),
+                            sender_canister_version: None,
+                        },),
                     )
                     .await
             }
         };
-        let canister_id = canister_id_record?.get_canister_id();
+        let canister_id = create_canister_result?.canister_id;
         Ok(Canister {
             runtime: self,
             effective_canister_id: canister_id.into(),
-            canister_id,
+            canister_id: CanisterId::unchecked_from_principal(PrincipalId(canister_id)),
             wasm: None,
         })
     }
@@ -778,12 +757,19 @@ impl<'a> Canister<'a> {
             .update_(
                 ic00::Method::UpdateSettings.to_string(),
                 candid_multi_arity,
-                (UpdateSettingsArgs::new(
-                    self.canister_id,
-                    CanisterSettingsArgsBuilder::new()
-                        .with_controllers(new_controllers)
-                        .build(),
-                ),),
+                (UpdateSettingsArgs {
+                    canister_id: self.canister_id.into(),
+                    settings: CanisterSettings {
+                        controllers: Some(new_controllers.into_iter().map(|p| p.into()).collect()),
+                        compute_allocation: None,
+                        memory_allocation: None,
+                        freezing_threshold: None,
+                        reserved_cycles_limit: None,
+                        log_visibility: None,
+                        wasm_memory_limit: None,
+                    },
+                    sender_canister_version: None,
+                },),
             )
             .await
     }
@@ -795,29 +781,35 @@ impl<'a> Canister<'a> {
         execute_with_retries(|| self.set_controller(new_controller)).await
     }
 
-    /// Returns an ic00::CanisterIdRecord representing this canister. Useful
-    /// to communicate with the management canister.
-    pub fn as_record(&self) -> CanisterIdRecord {
-        CanisterIdRecord::from(self.canister_id())
-    }
-
     /// Tries to stop this canister, waits for it to reach the Stopped state.
     /// This is expected to work only when the canister's controller is an anonymous user
     pub async fn stop(&self) -> Result<(), String> {
         let stop_res: Result<(), String> = self
             .runtime
             .get_management_canister_with_effective_canister_id(self.canister_id().into())
-            .update_("stop_canister", candid_multi_arity, (self.as_record(),))
+            .update_(
+                "stop_canister",
+                candid_multi_arity,
+                (StopCanisterArgs {
+                    canister_id: self.canister_id().into(),
+                },),
+            )
             .await;
         stop_res?;
         loop {
-            let status_res: Result<CanisterStatusResultV2, String> = self
+            let status_res: Result<CanisterStatusResult, String> = self
                 .runtime
                 .get_management_canister_with_effective_canister_id(self.canister_id().into())
-                .update_("canister_status", candid, (self.as_record(),))
+                .update_(
+                    "canister_status",
+                    candid,
+                    (CanisterStatusArgs {
+                        canister_id: self.canister_id().into(),
+                    },),
+                )
                 .await;
             let status = status_res?;
-            if status.status() == Stopped {
+            if status.status == CanisterStatusType::Stopped {
                 break;
             }
         }
@@ -829,7 +821,13 @@ impl<'a> Canister<'a> {
         () = self
             .runtime
             .get_management_canister_with_effective_canister_id(self.canister_id().into())
-            .update_("delete_canister", candid_multi_arity, (self.as_record(),))
+            .update_(
+                "delete_canister",
+                candid_multi_arity,
+                (DeleteCanisterArgs {
+                    canister_id: self.canister_id().into(),
+                },),
+            )
             .await?;
         Ok(())
     }
@@ -854,7 +852,13 @@ impl<'a> Canister<'a> {
         let start_res: Result<(), String> = self
             .runtime
             .get_management_canister_with_effective_canister_id(self.canister_id().into())
-            .update_("start_canister", candid_multi_arity, (self.as_record(),))
+            .update_(
+                "start_canister",
+                candid_multi_arity,
+                (StartCanisterArgs {
+                    canister_id: self.canister_id().into(),
+                },),
+            )
             .await;
         start_res?;
         Ok(())
