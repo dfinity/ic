@@ -261,21 +261,20 @@ fn out_stream(in_stream: &Stream, messages_begin: StreamIndex) -> Stream {
 }
 
 proptest! {
-    #![proptest_config(ProptestConfig::with_cases(10))]
-
     /// Tests that the payload builder does not include messages in a stream slice that
     /// would lead to more than `MAX_SIGNALS` amount of signals in the outgoing stream.
     ///
     /// The input consists of
     /// - an outgoing stream that has already seen most of the messages coming
-    ///   from the incoming stream, i.e. it has close and up to `SIGNALS_MAX` signals.
-    /// - a very large incoming stream that has slightly more than `SIGNALS_MAX` messages in it.
+    ///   from the incoming stream, i.e. it has close and up to `MAX_SIGNALS` signals.
+    /// - a very large incoming stream that has slightly more than `MAX_SIGNALS` messages in it.
     ///
     /// The stream slice to include in the payload will start from `out_stream.signals_end()`.
     ///
     /// If there is room for more signals, messages are expected to be included in the slice
     /// such that `slice.messages_end() - in_stream.begin()` == `MAX_SIGNALS`, i.e. after inducting
     /// the slice there would be exactly `MAX_SIGNALS` signals in the `out_stream`.
+    #![proptest_config(ProptestConfig::with_cases(10))]
     #[test]
     fn get_xnet_payload_respects_signal_limit(
         // `MAX_SIGNALS` <= signals_end()` <= `MAX_SIGNALS` + 20

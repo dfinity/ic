@@ -931,7 +931,6 @@ prop_compose! {
             0..=10000,
             min_signal_count..=max_signal_count,
             RejectReason::all(),
-//            RejectReason::iter().collect(),
         )
     ) -> Stream {
         stream
