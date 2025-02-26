@@ -13,11 +13,12 @@ use ic_ledger_hash_of::{HashOf, HASH_LENGTH};
 use ic_ledger_suite_state_machine_tests::fee_collector::BlockRetrieval;
 use ic_ledger_suite_state_machine_tests::in_memory_ledger::verify_ledger_state;
 use ic_ledger_suite_state_machine_tests::{
-    send_approval, send_transfer_from, AllowanceProvider, ARCHIVE_TRIGGER_THRESHOLD, BLOB_META_KEY,
-    BLOB_META_VALUE, DECIMAL_PLACES, FEE, INT_META_KEY, INT_META_VALUE, MINTER, NAT_META_KEY,
-    NAT_META_VALUE, NUM_BLOCKS_TO_ARCHIVE, TEXT_META_KEY, TEXT_META_VALUE, TOKEN_NAME,
-    TOKEN_SYMBOL,
+    send_approval, send_transfer_from, AllowanceProvider, LedgerTestParameters,
+    ARCHIVE_TRIGGER_THRESHOLD, BLOB_META_KEY, BLOB_META_VALUE, DECIMAL_PLACES, FEE, INT_META_KEY,
+    INT_META_VALUE, MINTER, NAT_META_KEY, NAT_META_VALUE, NUM_BLOCKS_TO_ARCHIVE, TEXT_META_KEY,
+    TEXT_META_VALUE, TOKEN_NAME, TOKEN_SYMBOL,
 };
+use ic_registry_subnet_type::SubnetType;
 use ic_state_machine_tests::StateMachine;
 use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue;
 use icrc_ledger_types::icrc::generic_value::Value;
@@ -488,7 +489,13 @@ fn test_archive_duplicate_controllers() {
 
 #[test]
 fn test_icrc21_standard() {
-    ic_ledger_suite_state_machine_tests::test_icrc21_standard(ledger_wasm(), encode_init_args);
+    let ledger_test_parameters = LedgerTestParameters {
+        ledger_wasm: ledger_wasm(),
+        encode_init_args,
+        subnet_type: SubnetType::Application,
+        ledger_cycles: Some(1_000_000_000_000u64.into()),
+    };
+    ic_ledger_suite_state_machine_tests::test_icrc21_standard(ledger_test_parameters);
 }
 
 // #[test]

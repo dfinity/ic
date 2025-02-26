@@ -23,7 +23,9 @@ use ic_management_canister_types_private::{
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_rosetta_test_utils::test_http_request_decoding_quota;
-use ic_state_machine_tests::{ErrorCode, StateMachine, StateMachineConfig, WasmResult};
+use ic_state_machine_tests::{
+    ErrorCode, StateMachine, StateMachineBuilder, StateMachineConfig, WasmResult,
+};
 use ic_types::Cycles;
 use ic_universal_canister::{call_args, wasm, UNIVERSAL_CANISTER_WASM};
 use icp_ledger::{AccountIdentifier, BinaryAccountBalanceArgs, IcpAllowanceArgs};
@@ -70,6 +72,7 @@ pub const DECIMAL_PLACES: u8 = 8;
 pub const ARCHIVE_TRIGGER_THRESHOLD: u64 = 10;
 pub const NUM_BLOCKS_TO_ARCHIVE: u64 = 5;
 pub const TX_WINDOW: Duration = Duration::from_secs(24 * 60 * 60);
+pub const LEDGER_DEFAULT_CYCLES: Cycles = Cycles::new(u32::MAX as u128);
 
 pub const MINTER: Account = Account {
     owner: PrincipalId::new(0, [0u8; 29]).0,
@@ -908,6 +911,33 @@ where
     env.install_canister(ledger_wasm, args, None).unwrap()
 }
 
+fn install_ledger_with_cycles<T>(
+    env: &StateMachine,
+    ledger_test_parameters: LedgerTestParameters<T>,
+    initial_balances: Vec<(Account, u64)>,
+) -> CanisterId
+where
+    T: CandidType,
+{
+    let args = (ledger_test_parameters.encode_init_args)(init_args(initial_balances));
+    let args = Encode!(&args).unwrap();
+    match ledger_test_parameters.subnet_type {
+        SubnetType::Application | SubnetType::VerifiedApplication => env
+            .install_canister_with_cycles(
+                ledger_test_parameters.ledger_wasm,
+                args,
+                None,
+                ledger_test_parameters
+                    .ledger_cycles
+                    .unwrap_or(LEDGER_DEFAULT_CYCLES),
+            )
+            .unwrap(),
+        SubnetType::System => env
+            .install_canister(ledger_test_parameters.ledger_wasm, args, None)
+            .unwrap(),
+    }
+}
+
 // In order to implement FI-487 in steps we need to split the test
 // //rs/ledger_suite/icrc1/ledger/tests/tests.rs#test_metadata in two:
 //  1. the first part that setup ledger and environment and tests the
@@ -927,6 +957,22 @@ where
     let env = StateMachine::new();
 
     let canister_id = install_ledger(&env, ledger_wasm, encode_init_args, initial_balances);
+
+    (env, canister_id)
+}
+
+pub fn setup_with_cycles<T>(
+    ledger_test_parameters: LedgerTestParameters<T>,
+    initial_balances: Vec<(Account, u64)>,
+) -> (StateMachine, CanisterId)
+where
+    T: CandidType,
+{
+    let env = StateMachineBuilder::new()
+        .with_subnet_type(ledger_test_parameters.subnet_type)
+        .build();
+
+    let canister_id = install_ledger_with_cycles(&env, ledger_test_parameters, initial_balances);
 
     (env, canister_id)
 }
@@ -4544,11 +4590,18 @@ fn extract_icrc21_message_string(consent_message: &ConsentMessage) -> String {
     }
 }
 
-pub fn test_icrc21_standard<T>(ledger_wasm: Vec<u8>, encode_init_args: fn(InitArgs) -> T)
+pub struct LedgerTestParameters<T> {
+    pub ledger_wasm: Vec<u8>,
+    pub encode_init_args: fn(InitArgs) -> T,
+    pub subnet_type: SubnetType,
+    pub ledger_cycles: Option<Cycles>,
+}
+
+pub fn test_icrc21_standard<T>(ledger_test_parameters: LedgerTestParameters<T>)
 where
     T: CandidType,
 {
-    let (env, canister_id) = setup(ledger_wasm, encode_init_args, vec![]);
+    let (env, canister_id) = setup_with_cycles(ledger_test_parameters, vec![]);
     let receiver_account = Account {
         owner: PrincipalId::new_user_test_id(1).0,
         subaccount: Some([2; 32]),
