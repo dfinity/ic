@@ -3668,6 +3668,30 @@ fn test_vetkd_public_key_api_is_enabled() {
 }
 
 #[test]
+fn test_vetkd_derive_encrypted_key_api_is_disabled_without_key() {
+    let own_subnet = subnet_test_id(1);
+    let nns_subnet = subnet_test_id(2);
+    let nns_canister = canister_test_id(0x10);
+    let mut test = ExecutionTestBuilder::new()
+        .with_own_subnet_id(own_subnet)
+        .with_nns_subnet_id(nns_subnet)
+        .with_caller(nns_subnet, nns_canister)
+        .build();
+    let method = Method::VetKdDeriveEncryptedKey;
+    test.inject_call_to_ic00(
+        method,
+        sign_with_threshold_key_payload(method, make_vetkd_key("some_key")),
+        Cycles::new(0),
+    );
+    test.execute_all();
+    let response = test.xnet_messages()[0].clone();
+    assert_eq!(
+        get_reject_message(response),
+        "Subnet yndj2-3ybaa-aaaaa-aaaap-yai does not hold threshold key vetkd:Bls12_381_G2:some_key.",
+    )
+}
+
+#[test]
 fn test_vetkd_derive_encrypted_key_api_is_enabled() {
     // Arrange.
     let key_id = make_vetkd_key("some_key");
