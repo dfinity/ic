@@ -23,7 +23,7 @@ use ic_management_canister_types_private::{
 };
 use ic_metrics::MetricsRegistry;
 use ic_replicated_state::metadata_state::subnet_call_context_manager::{
-    EcdsaArguments, IDkgDealingsContext, IDkgSignWithThresholdContext, SchnorrArguments,
+    EcdsaArguments, IDkgSignWithThresholdContext, ReshareChainKeyContext, SchnorrArguments,
     SignWithThresholdContext, ThresholdArguments, VetKdArguments,
 };
 use ic_replicated_state::ReplicatedState;
@@ -80,8 +80,8 @@ use super::utils::algorithm_for_key_id;
 
 pub(crate) fn dealings_context_from_reshare_request(
     request: idkg::IDkgReshareRequest,
-) -> IDkgDealingsContext {
-    IDkgDealingsContext {
+) -> ReshareChainKeyContext {
+    ReshareChainKeyContext {
         request: RequestBuilder::new().build(),
         key_id: request.key_id(),
         nodes: request.receiving_node_ids.into_iter().collect(),

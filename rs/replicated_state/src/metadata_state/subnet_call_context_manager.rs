@@ -36,7 +36,7 @@ const NONCE_SIZE: usize = 32;
 pub enum SubnetCallContext {
     SetupInitialDKG(SetupInitialDkgContext),
     CanisterHttpRequest(CanisterHttpRequestContext),
-    IDkgDealings(IDkgDealingsContext),
+    IDkgDealings(ReshareChainKeyContext),
     BitcoinGetSuccessors(BitcoinGetSuccessorsContext),
     BitcoinSendTransactionInternal(BitcoinSendTransactionInternalContext),
     SignWithThreshold(SignWithThresholdContext),
@@ -213,7 +213,7 @@ pub struct SubnetCallContextManager {
     pub setup_initial_dkg_contexts: BTreeMap<CallbackId, SetupInitialDkgContext>,
     pub sign_with_threshold_contexts: BTreeMap<CallbackId, SignWithThresholdContext>,
     pub canister_http_request_contexts: BTreeMap<CallbackId, CanisterHttpRequestContext>,
-    pub idkg_dealings_contexts: BTreeMap<CallbackId, IDkgDealingsContext>,
+    pub reshare_chain_key_contexts: BTreeMap<CallbackId, ReshareChainKeyContext>,
     pub bitcoin_get_successors_contexts: BTreeMap<CallbackId, BitcoinGetSuccessorsContext>,
     pub bitcoin_send_transaction_internal_contexts:
         BTreeMap<CallbackId, BitcoinSendTransactionInternalContext>,
@@ -243,7 +243,7 @@ impl SubnetCallContextManager {
                     .insert(callback_id, context);
             }
             SubnetCallContext::IDkgDealings(context) => {
-                self.idkg_dealings_contexts.insert(callback_id, context);
+                self.reshare_chain_key_contexts.insert(callback_id, context);
             }
             SubnetCallContext::BitcoinGetSuccessors(context) => {
                 self.bitcoin_get_successors_contexts
@@ -287,7 +287,7 @@ impl SubnetCallContextManager {
                     })
             })
             .or_else(|| {
-                self.idkg_dealings_contexts
+                self.reshare_chain_key_contexts
                     .remove(&callback_id)
                     .map(|context| {
                         info!(
@@ -550,7 +550,7 @@ impl From<&SubnetCallContextManager> for pb_metadata::SubnetCallContextManager {
                 .map(|context| context.into())
                 .collect(),
             idkg_dealings_contexts: item
-                .idkg_dealings_contexts
+                .reshare_chain_key_contexts
                 .iter()
                 .map(
                     |(callback_id, context)| pb_metadata::IDkgDealingsContextTree {
@@ -592,11 +592,11 @@ impl TryFrom<(Time, pb_metadata::SubnetCallContextManager)> for SubnetCallContex
             canister_http_request_contexts.insert(CallbackId::new(entry.callback_id), context);
         }
 
-        let mut idkg_dealings_contexts = BTreeMap::<CallbackId, IDkgDealingsContext>::new();
+        let mut idkg_dealings_contexts = BTreeMap::<CallbackId, ReshareChainKeyContext>::new();
         for entry in item.idkg_dealings_contexts {
             let pb_context =
                 try_from_option_field(entry.context, "SystemMetadata::IDkgDealingsContext")?;
-            let context = IDkgDealingsContext::try_from((time, pb_context))?;
+            let context = ReshareChainKeyContext::try_from((time, pb_context))?;
             idkg_dealings_contexts.insert(CallbackId::new(entry.callback_id), context);
         }
 
@@ -672,7 +672,7 @@ impl TryFrom<(Time, pb_metadata::SubnetCallContextManager)> for SubnetCallContex
                 stop_canister_call_manager,
             },
             raw_rand_contexts,
-            idkg_dealings_contexts,
+            reshare_chain_key_contexts: idkg_dealings_contexts,
         })
     }
 }
@@ -1057,7 +1057,7 @@ impl TryFrom<pb_metadata::SignWithThresholdContext> for SignWithThresholdContext
 }
 
 #[derive(Clone, Eq, PartialEq, Debug)]
-pub struct IDkgDealingsContext {
+pub struct ReshareChainKeyContext {
     pub request: Request,
     pub key_id: IDkgMasterPublicKeyId,
     pub nodes: BTreeSet<NodeId>,
@@ -1065,8 +1065,8 @@ pub struct IDkgDealingsContext {
     pub time: Time,
 }
 
-impl From<&IDkgDealingsContext> for pb_metadata::IDkgDealingsContext {
-    fn from(context: &IDkgDealingsContext) -> Self {
+impl From<&ReshareChainKeyContext> for pb_metadata::IDkgDealingsContext {
+    fn from(context: &ReshareChainKeyContext) -> Self {
         Self {
             request: Some(pb_queues::Request::from(&context.request)),
             key_id: Some(pb_types::MasterPublicKeyId::from(context.key_id.inner())),
@@ -1083,7 +1083,7 @@ impl From<&IDkgDealingsContext> for pb_metadata::IDkgDealingsContext {
     }
 }
 
-impl TryFrom<(Time, pb_metadata::IDkgDealingsContext)> for IDkgDealingsContext {
+impl TryFrom<(Time, pb_metadata::IDkgDealingsContext)> for ReshareChainKeyContext {
     type Error = ProxyDecodeError;
     fn try_from(
         (time, context): (Time, pb_metadata::IDkgDealingsContext),
@@ -1396,7 +1396,7 @@ mod testing {
             setup_initial_dkg_contexts: Default::default(),
             sign_with_threshold_contexts: Default::default(),
             canister_http_request_contexts: Default::default(),
-            idkg_dealings_contexts: Default::default(),
+            reshare_chain_key_contexts: Default::default(),
             bitcoin_get_successors_contexts: Default::default(),
             bitcoin_send_transaction_internal_contexts: Default::default(),
             canister_management_calls,

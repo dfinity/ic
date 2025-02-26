@@ -1,7 +1,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use ic_logger::{warn, ReplicaLogger};
-use ic_replicated_state::metadata_state::subnet_call_context_manager::IDkgDealingsContext;
+use ic_replicated_state::metadata_state::subnet_call_context_manager::ReshareChainKeyContext;
 use ic_types::{
     consensus::idkg::{self, HasIDkgMasterPublicKeyId, IDkgBlockReader, IDkgReshareRequest},
     crypto::canister_threshold_sig::{
@@ -57,7 +57,7 @@ pub(crate) fn initiate_reshare_requests(
 fn make_reshare_dealings_response(
     request: &IDkgReshareRequest,
     initial_dealings: &InitialIDkgDealings,
-    idkg_dealings_contexts: &BTreeMap<CallbackId, IDkgDealingsContext>,
+    idkg_dealings_contexts: &BTreeMap<CallbackId, ReshareChainKeyContext>,
 ) -> Option<ic_types::batch::ConsensusResponse> {
     idkg_dealings_contexts
         .iter()
@@ -82,7 +82,7 @@ fn make_reshare_dealings_response(
 ///   [`idkg::CompletedReshareRequest::Unreported`].
 pub(crate) fn update_completed_reshare_requests(
     payload: &mut idkg::IDkgPayload,
-    idkg_dealings_contexts: &BTreeMap<CallbackId, IDkgDealingsContext>,
+    idkg_dealings_contexts: &BTreeMap<CallbackId, ReshareChainKeyContext>,
     resolver: &dyn IDkgBlockReader,
     transcript_builder: &dyn IDkgTranscriptBuilder,
     log: &ReplicaLogger,
@@ -157,7 +157,7 @@ pub(crate) fn update_completed_reshare_requests(
 
 /// Translates the reshare requests in the replicated state to the internal format
 pub(super) fn get_reshare_requests(
-    idkg_dealings_contexts: &BTreeMap<CallbackId, IDkgDealingsContext>,
+    idkg_dealings_contexts: &BTreeMap<CallbackId, ReshareChainKeyContext>,
 ) -> BTreeSet<idkg::IDkgReshareRequest> {
     idkg_dealings_contexts
         .values()
@@ -166,7 +166,7 @@ pub(super) fn get_reshare_requests(
 }
 
 fn reshare_request_from_dealings_context(
-    context: &IDkgDealingsContext,
+    context: &ReshareChainKeyContext,
 ) -> idkg::IDkgReshareRequest {
     idkg::IDkgReshareRequest {
         master_key_id: context.key_id.clone(),

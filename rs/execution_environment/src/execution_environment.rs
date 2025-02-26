@@ -52,7 +52,7 @@ use ic_replicated_state::{
     canister_state::system_state::PausedExecutionId,
     canister_state::{system_state::CyclesUseCase, NextExecution},
     metadata_state::subnet_call_context_manager::{
-        EcdsaArguments, IDkgDealingsContext, InstallCodeCall, InstallCodeCallId, SchnorrArguments,
+        EcdsaArguments, ReshareChainKeyContext, InstallCodeCall, InstallCodeCallId, SchnorrArguments,
         SetupInitialDkgContext, SignWithThresholdContext, StopCanisterCall, SubnetCallContext,
         ThresholdArguments,
     },
@@ -2899,7 +2899,7 @@ impl ExecutionEnvironment {
         state
             .metadata
             .subnet_call_context_manager
-            .push_context(SubnetCallContext::IDkgDealings(IDkgDealingsContext {
+            .push_context(SubnetCallContext::IDkgDealings(ReshareChainKeyContext {
                 request: request.clone(),
                 key_id,
                 nodes,

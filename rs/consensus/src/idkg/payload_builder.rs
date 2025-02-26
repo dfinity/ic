@@ -579,7 +579,7 @@ pub(crate) fn create_data_payload_helper_2(
     certified_height: CertifiedHeight,
     receivers: &[NodeId],
     all_signing_requests: BTreeMap<CallbackId, IDkgSignWithThresholdContext<'_>>,
-    idkg_dealings_contexts: &BTreeMap<CallbackId, IDkgDealingsContext>,
+    idkg_dealings_contexts: &BTreeMap<CallbackId, ReshareChainKeyContext>,
     block_reader: &dyn IDkgBlockReader,
     transcript_builder: &dyn IDkgTranscriptBuilder,
     signature_builder: &dyn ThresholdSignatureBuilder,
