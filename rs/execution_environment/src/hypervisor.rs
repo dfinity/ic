@@ -15,7 +15,6 @@ use ic_logger::ReplicaLogger;
 use ic_management_canister_types_private::LogVisibilityV2;
 use ic_metrics::buckets::{decimal_buckets_with_zero, exponential_buckets, linear_buckets};
 use ic_metrics::MetricsRegistry;
-use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::page_map::allocated_pages_count;
 use ic_replicated_state::{
     ExecutionState, MessageMemoryUsage, NetworkTopology, ReplicatedState, SystemState,
@@ -225,7 +224,6 @@ pub struct Hypervisor {
     wasm_executor: Arc<dyn WasmExecutor>,
     metrics: Arc<HypervisorMetrics>,
     own_subnet_id: SubnetId,
-    own_subnet_type: SubnetType,
     log: ReplicaLogger,
     cycles_account_manager: Arc<CyclesAccountManager>,
     compilation_cache: Arc<CompilationCache>,
@@ -238,10 +236,6 @@ pub struct Hypervisor {
 impl Hypervisor {
     pub(crate) fn subnet_id(&self) -> SubnetId {
         self.own_subnet_id
-    }
-
-    pub fn subnet_type(&self) -> SubnetType {
-        self.own_subnet_type
     }
 
     pub fn create_execution_state(
@@ -300,7 +294,6 @@ impl Hypervisor {
         config: Config,
         metrics_registry: &MetricsRegistry,
         own_subnet_id: SubnetId,
-        own_subnet_type: SubnetType,
         log: ReplicaLogger,
         cycles_account_manager: Arc<CyclesAccountManager>,
         dirty_page_overhead: NumInstructions,
@@ -311,7 +304,6 @@ impl Hypervisor {
         temp_dir: &Path,
     ) -> Self {
         let mut embedder_config = config.embedders_config.clone();
-        embedder_config.subnet_type = own_subnet_type;
         embedder_config.dirty_page_overhead = dirty_page_overhead;
 
         let wasm_executor: Arc<dyn WasmExecutor> = match config.canister_sandboxing_flag {
@@ -341,7 +333,6 @@ impl Hypervisor {
             wasm_executor,
             metrics: Arc::new(HypervisorMetrics::new(metrics_registry)),
             own_subnet_id,
-            own_subnet_type,
             log,
             cycles_account_manager,
             compilation_cache: Arc::new(CompilationCache::new(
@@ -361,7 +352,6 @@ impl Hypervisor {
     pub fn new_for_testing(
         metrics_registry: &MetricsRegistry,
         own_subnet_id: SubnetId,
-        own_subnet_type: SubnetType,
         log: ReplicaLogger,
         cycles_account_manager: Arc<CyclesAccountManager>,
         wasm_executor: Arc<dyn WasmExecutor>,
@@ -374,7 +364,6 @@ impl Hypervisor {
             wasm_executor,
             metrics: Arc::new(HypervisorMetrics::new(metrics_registry)),
             own_subnet_id,
-            own_subnet_type,
             log,
             cycles_account_manager,
             compilation_cache: Arc::new(CompilationCache::new(
