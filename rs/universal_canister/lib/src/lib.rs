@@ -64,7 +64,7 @@ pub fn call_args() -> CallArgs {
 ///
 /// Payloads for the UC encode `Ops` representing what instructions to
 /// execute.
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub struct PayloadBuilder(Vec<u8>);
 
 impl PayloadBuilder {
@@ -622,8 +622,8 @@ impl PayloadBuilder {
         self
     }
 
-    pub fn msg_cycles_accept128(mut self, max_amount_height: i64, max_amount_low: i64) -> Self {
-        self = self.push_int64(max_amount_height as u64);
+    pub fn msg_cycles_accept128(mut self, max_amount_high: i64, max_amount_low: i64) -> Self {
+        self = self.push_int64(max_amount_high as u64);
         self = self.push_int64(max_amount_low as u64);
         self.0.push(Ops::AcceptCycles128 as u8);
         self
@@ -655,6 +655,46 @@ impl PayloadBuilder {
 
     pub fn in_replicated_execution(mut self) -> Self {
         self.0.push(Ops::InReplicatedExecution as u8);
+        self
+    }
+
+    pub fn cost_call(mut self, method_name_size: u64, payload_size: u64) -> Self {
+        self = self.push_int64(method_name_size);
+        self = self.push_int64(payload_size);
+        self.0.push(Ops::CostCall as u8);
+        self
+    }
+
+    pub fn cost_create_canister(mut self) -> Self {
+        self.0.push(Ops::CostCreateCanister as u8);
+        self
+    }
+
+    pub fn cost_http_request(mut self, request_size: u64, max_res_bytes: u64) -> Self {
+        self = self.push_int64(request_size);
+        self = self.push_int64(max_res_bytes);
+        self.0.push(Ops::CostHttpRequest as u8);
+        self
+    }
+
+    pub fn cost_sign_with_ecdsa(mut self, data: &[u8], curve: u32) -> Self {
+        self = self.push_bytes(data);
+        self = self.push_int(curve);
+        self.0.push(Ops::CostSignWithEcdsa as u8);
+        self
+    }
+
+    pub fn cost_sign_with_schnorr(mut self, data: &[u8], algorithm: u32) -> Self {
+        self = self.push_bytes(data);
+        self = self.push_int(algorithm);
+        self.0.push(Ops::CostSignWithSchnorr as u8);
+        self
+    }
+
+    pub fn cost_vetkd_derive_encrypted_key(mut self, data: &[u8], curve: u32) -> Self {
+        self = self.push_bytes(data);
+        self = self.push_int(curve);
+        self.0.push(Ops::CostVetkdDeriveEncryptedKey as u8);
         self
     }
 

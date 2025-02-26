@@ -1,9 +1,9 @@
-##: claim_or_refresh
+##: nns_claim_or_refresh
 ## Usage: $1 <NETWORK> <NEURON_ID>
 ##  Claim or refresh an NNS neuron with a particular ID
 ##  NETWORK: The network to use.
 ##  NEURON_ID: The neuron id to claim or refresh.
-## Example: claim_or_refresh ic 1234567890
+## Example: nns_claim_or_refresh ic 1234567890
 nns_claim_or_refresh() {
     local network=$1
     local neuron_id=$2

@@ -349,6 +349,9 @@ pub struct Params2<P1, P2>(pub P1, pub P2);
 /// System API call with 3 parameters.
 pub struct Params3<P1, P2, P3>(pub P1, pub P2, pub P3);
 
+/// System API call with 4 parameters.
+pub struct Params4<P1, P2, P3, P4>(pub P1, pub P2, pub P3, pub P4);
+
 /// Trait to render System API call parameters.
 pub trait RenderParams {
     /// Render System API call parameter import.
@@ -423,6 +426,30 @@ impl<P1: RenderParams, P2: RenderParams, P3: RenderParams> RenderParams for Para
             P1 = self.0.call(),
             P2 = self.1.call(),
             P3 = self.2.call()
+        )
+    }
+}
+
+/// Implement RenderParams trait for a System API call with 4 parameters.
+impl<P1: RenderParams, P2: RenderParams, P3: RenderParams, P4: RenderParams> RenderParams
+    for Params4<P1, P2, P3, P4>
+{
+    fn import(&self) -> String {
+        format!(
+            "{P1} {P2} {P3} {P4}",
+            P1 = self.0.import(),
+            P2 = self.1.import(),
+            P3 = self.2.import(),
+            P4 = self.3.import(),
+        )
+    }
+    fn call(&self) -> String {
+        format!(
+            "{P1} {P2} {P3} {P4}",
+            P1 = self.0.call(),
+            P2 = self.1.call(),
+            P3 = self.2.call(),
+            P4 = self.3.call()
         )
     }
 }

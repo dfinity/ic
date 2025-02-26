@@ -275,6 +275,9 @@ message NervousSystemFunction {
     // The signature of the method must be equivalent to the following:
     // <method_name>(proposal_data: ProposalData) -> Result<String, String>
     optional string validator_method_name = 5;
+
+    // The topic this function belongs to
+    optional Topic topic = 6;
   }
 
   oneof function_type {
@@ -2343,4 +2346,23 @@ message Account {
   // The subaccount of the account. If not set then the default
   // subaccount (all bytes set to 0) is used.
   optional Subaccount subaccount = 2;
+}
+
+enum Topic {
+  // Unused, here for PB lint purposes.
+  TOPIC_UNSPECIFIED = 0;
+  // Proposals to set the direction of the DAO by tokenomics & branding
+  TOPIC_DAO_COMMUNITY_SETTINGS = 1;
+  // Proposals to upgrade and manage the SNS DAO framework
+  TOPIC_SNS_FRAMEWORK_MANAGEMENT = 2;
+  // Proposals to manage the dapp's canisters
+  TOPIC_DAPP_CANISTER_MANAGEMENT = 3;
+  // Proposals related to the dapp's business logic
+  TOPIC_APPLICATION_BUSINESS_LOGIC = 4;
+  // Proposals related to governance
+  TOPIC_GOVERNANCE = 5;
+  // Proposals related to treasury management
+  TOPIC_TREASURY_ASSET_MANAGEMENT = 6;
+  // Critical proposals related to dapp operations
+  TOPIC_CRITICAL_DAPP_OPERATIONS = 7;
 }

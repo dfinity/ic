@@ -11,10 +11,9 @@ on the process that this file is part of, see
 
 ## Changed
 
-* ManageNetworkEconomics proposals can now modify deep fields one at a time.
-  Previously, this was only possible for top level fields.
-
 ## Deprecated
+
+* NnsCanisterUpgrade/NnsRootUpgrade NNS funtions are made obsolete.
 
 ## Removed
 

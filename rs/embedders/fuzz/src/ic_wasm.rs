@@ -229,7 +229,7 @@ pub fn generate_exports(
     let mut types = TypeSection::new();
     let params = vec![];
     let results = vec![];
-    types.function(params, results);
+    types.ty().function(params, results);
     module.section(&types);
     let type_index = 0;
 

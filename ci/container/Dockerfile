@@ -62,7 +62,7 @@ RUN curl -fsSL https://github.com/bazelbuild/bazelisk/releases/download/v1.19.0/
     chmod 777 /usr/bin/bazel
 
 ARG nvm_version=v0.39.1
-ARG dependency_mgmt_nns_dapp_node_version=18.17.1
+ARG dependency_mgmt_nns_dapp_node_version=18.20.5
 ARG dependency_mgmt_default_node_version=20
 ARG dependency_mgmt_oisy_wallet_node_version=22.11.0
 ENV NVM_DIR=/opt/nvm

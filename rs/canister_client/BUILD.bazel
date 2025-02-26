@@ -2,7 +2,6 @@ load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 
 # The package is deprecated, NET-1274.
 package(default_visibility = [
-    "//rs/boundary_node/anonymization/client:__pkg__",
     "//rs/boundary_node/ic_boundary:__pkg__",
     "//rs/cup_explorer:__pkg__",
     "//rs/http_endpoints/public:__pkg__",

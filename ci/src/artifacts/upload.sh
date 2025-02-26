@@ -13,10 +13,6 @@ done <"$VERSION_FILE"
 
 VERSION="$(cat $VERSION_TXT)"
 
-if [ "${VERSION}" == "$FAKE_IC_VERSION" ]; then
-    echo "Attempt to upload an artifacts with fake ic version: ${VERSION}" >&2
-    exit 1
-fi
 # rclone reads the $(dirname $f) to get file attribuates.
 # Therefore symlink should be resolved.
 f="$1"
@@ -58,7 +54,6 @@ AWS_PROFILE=cf "$RCLONE" \
     --stats-one-line \
     --checksum \
     --immutable \
-    --s3-upload-cutoff=5G \
     copy \
     "$f" \
     "public-s3-cf:dfinity-download-public/ic/${VERSION}/$REMOTE_SUBDIR/"

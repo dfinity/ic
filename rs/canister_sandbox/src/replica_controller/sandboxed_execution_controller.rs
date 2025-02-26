@@ -1594,11 +1594,6 @@ impl SandboxedExecutionController {
         canister_id: CanisterId,
         sandbox_process: Arc<SandboxProcess>,
     ) -> CanisterStateChanges {
-        // If the execution has failed, then we don't apply any changes.
-        if exec_output.wasm.wasm_result.is_err() {
-            return CanisterStateChanges::default();
-        }
-
         let StateModifications {
             execution_state_modifications,
             system_state_modifications,

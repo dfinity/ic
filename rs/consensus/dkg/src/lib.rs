@@ -5,9 +5,9 @@
 use ic_consensus_utils::{bouncer_metrics::BouncerMetrics, crypto::ConsensusCrypto};
 use ic_interfaces::{
     consensus_pool::ConsensusPoolCache,
-    crypto::ErrorReproducibility,
     dkg::{ChangeAction, DkgPool, Mutations},
     p2p::consensus::{Bouncer, BouncerFactory, BouncerValue, PoolMutationsProducer},
+    validation::ValidationResult,
 };
 use ic_logger::{error, info, ReplicaLogger};
 use ic_metrics::{
@@ -22,6 +22,7 @@ use ic_types::{
     },
     Height, NodeId, ReplicaVersion,
 };
+use payload_validator::PayloadValidationError;
 use prometheus::Histogram;
 use rayon::prelude::*;
 use std::{
@@ -33,15 +34,18 @@ pub mod dkg_key_manager;
 pub mod payload_builder;
 pub mod payload_validator;
 
-pub use crate::payload_validator::{DkgPayloadValidationFailure, InvalidDkgPayloadReason};
+pub use crate::{
+    payload_validator::{DkgPayloadValidationFailure, InvalidDkgPayloadReason},
+    utils::get_vetkey_public_keys,
+};
 
 #[cfg(test)]
 mod test_utils;
 mod utils;
 
-pub use {
-    dkg_key_manager::DkgKeyManager,
-    payload_builder::{create_payload, make_genesis_summary, PayloadCreationError},
+pub use dkg_key_manager::DkgKeyManager;
+pub use payload_builder::{
+    create_payload, get_dkg_summary_from_cup_contents, PayloadCreationError,
 };
 
 // The maximal number of DKGs for other subnets we want to run in one interval.
@@ -230,15 +234,6 @@ impl DkgImpl {
             return Mutations::new();
         }
 
-        // If the dealing comes from a non-dealer, reject it.
-        if !config.dealers().get().contains(dealer_id) {
-            return get_handle_invalid_change_action(
-                message,
-                format!("Replica with Id={:?} is not a dealer.", dealer_id),
-            )
-            .into();
-        }
-
         // If we already have a dealing from this dealer, we simply remove the
         // message from the pool. Multiple distinguishable valid dealings can be
         // created by an honest node because dkg dealings are not deterministic,
@@ -249,47 +244,44 @@ impl DkgImpl {
             return Mutations::from(ChangeAction::RemoveFromUnvalidated((*message).clone()));
         }
 
-        // Verify the signature and reject if it's invalid, or skip, if there was an error.
-        match self.crypto.verify(message, config.registry_version()) {
-            Ok(()) => (),
-            Err(err) if err.is_reproducible() => {
-                return get_handle_invalid_change_action(
-                    message,
-                    format!("Invalid signature: {}", err),
-                )
-                .into()
-            }
-            Err(err) => {
-                error!(
-                    self.logger,
-                    "Couldn't verify the signature of a DKG dealing: {}", err
-                );
-
-                return Mutations::new();
-            }
-        }
-
         // Verify the dealing and move to validated if it was successful,
         // reject, if it was rejected, or skip, if there was an error.
-        match ic_interfaces::crypto::NiDkgAlgorithm::verify_dealing(
-            &*self.crypto,
-            config,
-            *dealer_id,
-            &message.content.dealing,
-        ) {
+        match crypto_validate_dealing(&*self.crypto, config, message) {
             Ok(()) => ChangeAction::MoveToValidated((*message).clone()).into(),
-            Err(err) if err.is_reproducible() => get_handle_invalid_change_action(
+            Err(PayloadValidationError::InvalidArtifact(err)) => get_handle_invalid_change_action(
                 message,
-                format!("Dealing verification failed: {}", err),
+                format!("Dealing verification failed: {:?}", err),
             )
             .into(),
-            Err(err) => {
-                error!(self.logger, "Couldn't verify a DKG dealing: {}", err);
-
+            Err(PayloadValidationError::ValidationFailed(err)) => {
+                error!(
+                    self.logger,
+                    "Couldn't verify a DKG dealing from the pool: {:?}", err
+                );
                 Mutations::new()
             }
         }
     }
+}
+
+/// Validate the signature and dealing of the given message against its config
+pub(crate) fn crypto_validate_dealing(
+    crypto: &dyn ConsensusCrypto,
+    config: &NiDkgConfig,
+    message: &Message,
+) -> ValidationResult<PayloadValidationError> {
+    let dealer = message.signature.signer;
+    if !config.dealers().get().contains(&dealer) {
+        return Err(InvalidDkgPayloadReason::InvalidDealer(dealer).into());
+    }
+    crypto.verify(message, config.registry_version())?;
+    ic_interfaces::crypto::NiDkgAlgorithm::verify_dealing(
+        crypto,
+        config,
+        dealer,
+        &message.content.dealing,
+    )?;
+    Ok(())
 }
 
 fn contains_dkg_messages(dkg_pool: &dyn DkgPool, config: &NiDkgConfig, replica_id: NodeId) -> bool {
@@ -1088,7 +1080,7 @@ mod tests {
                     assert_eq!(
                         reason,
                         &format!(
-                            "Replica with Id={:?} is not a dealer.",
+                            "Dealing verification failed: InvalidDealer({:?})",
                             invalid_dealing_message.signature.signer
                         )
                     );

@@ -11,7 +11,6 @@ use crate::{
         reassemble_governance_proto, split_governance_proto, HeapGovernanceData, XdrConversionRate,
     },
     migrations::maybe_run_migrations,
-    network_economics::InheritFrom,
     neuron::{DissolveStateAndAge, Neuron, NeuronBuilder, Visibility},
     neuron_data_validation::{NeuronDataValidationSummary, NeuronDataValidator},
     neuron_store::{
@@ -404,9 +403,7 @@ impl NnsFunction {
     fn allowed_when_resources_are_low(&self) -> bool {
         matches!(
             self,
-            NnsFunction::NnsRootUpgrade
-                | NnsFunction::NnsCanisterUpgrade
-                | NnsFunction::HardResetNnsRootToVersion
+            NnsFunction::HardResetNnsRootToVersion
                 | NnsFunction::ReviseElectedGuestosVersions
                 | NnsFunction::DeployGuestosToAllSubnetNodes
         )
@@ -415,25 +412,49 @@ impl NnsFunction {
     fn can_have_large_payload(&self) -> bool {
         matches!(
             self,
-            NnsFunction::NnsCanisterUpgrade
-                | NnsFunction::NnsCanisterInstall
-                | NnsFunction::NnsRootUpgrade
+            NnsFunction::NnsCanisterInstall
                 | NnsFunction::HardResetNnsRootToVersion
                 | NnsFunction::AddSnsWasm
         )
     }
 
-    fn is_obsolete(&self) -> bool {
-        matches!(
-            self,
-            NnsFunction::UpdateAllowedPrincipals
-                | NnsFunction::UpdateApiBoundaryNodesVersion
-                | NnsFunction::UpdateUnassignedNodesConfig
-                | NnsFunction::UpdateElectedHostosVersions
-                | NnsFunction::UpdateNodesHostosVersion
-                | NnsFunction::BlessReplicaVersion
-                | NnsFunction::RetireReplicaVersion
-        )
+    /// Checks if the function is obsolete and returns an error message if it is.
+    fn check_obsolete(&self) -> Result<(), String> {
+        let format_obsolete_message = |replacement: &str| -> String {
+            format!(
+                "{} is obsolete. Use {} instead.",
+                self.as_str_name(),
+                replacement,
+            )
+        };
+        match self {
+            NnsFunction::BlessReplicaVersion
+            | NnsFunction::RetireReplicaVersion
+            | NnsFunction::UpdateElectedHostosVersions => Err(format_obsolete_message(
+                Self::ReviseElectedHostosVersions.as_str_name(),
+            )),
+            NnsFunction::UpdateApiBoundaryNodesVersion => Err(format_obsolete_message(
+                Self::DeployGuestosToSomeApiBoundaryNodes.as_str_name(),
+            )),
+            NnsFunction::UpdateNodesHostosVersion => Err(format_obsolete_message(
+                Self::DeployHostosToSomeNodes.as_str_name(),
+            )),
+            NnsFunction::UpdateUnassignedNodesConfig => Err(format_obsolete_message(&format!(
+                "{}/{}",
+                Self::DeployGuestosToAllUnassignedNodes.as_str_name(),
+                Self::UpdateSshReadonlyAccessForAllUnassignedNodes.as_str_name()
+            ))),
+            NnsFunction::NnsCanisterUpgrade | NnsFunction::NnsRootUpgrade => {
+                Err(format_obsolete_message("InstallCode"))
+            }
+            NnsFunction::UpdateAllowedPrincipals => Err(
+                "NNS_FUNCTION_UPDATE_ALLOWED_PRINCIPALS is only used for the old SNS \
+                initialization mechanism, which is now obsolete. Use \
+                CREATE_SERVICE_NERVOUS_SYSTEM instead."
+                    .to_string(),
+            ),
+            _ => Ok(()),
+        }
     }
 
     pub fn canister_and_function(&self) -> Result<(CanisterId, &str), GovernanceError> {
@@ -452,8 +473,6 @@ impl NnsFunction {
                 (REGISTRY_CANISTER_ID, "change_subnet_membership")
             }
             NnsFunction::NnsCanisterInstall => (ROOT_CANISTER_ID, "add_nns_canister"),
-            NnsFunction::NnsCanisterUpgrade => (ROOT_CANISTER_ID, "change_nns_canister"),
-            NnsFunction::NnsRootUpgrade => (LIFELINE_CANISTER_ID, "upgrade_root"),
             NnsFunction::HardResetNnsRootToVersion => {
                 (LIFELINE_CANISTER_ID, "hard_reset_root_to_version")
             }
@@ -466,24 +485,6 @@ impl NnsFunction {
             }
             NnsFunction::DeployGuestosToAllSubnetNodes => {
                 (REGISTRY_CANISTER_ID, "deploy_guestos_to_all_subnet_nodes")
-            }
-            NnsFunction::UpdateElectedHostosVersions => {
-                return Err(GovernanceError::new_with_message(
-                    ErrorType::InvalidProposal,
-                    format!(
-                        "{:?} is an obsolete NnsFunction. Use ReviseElectedHostosVersions instead",
-                        self
-                    ),
-                ));
-            }
-            NnsFunction::UpdateNodesHostosVersion => {
-                return Err(GovernanceError::new_with_message(
-                    ErrorType::InvalidProposal,
-                    format!(
-                        "{:?} is an obsolete NnsFunction. Use DeployHostosToSomeNodes instead",
-                        self
-                    ),
-                ));
             }
             NnsFunction::ReviseElectedHostosVersions => {
                 (REGISTRY_CANISTER_ID, "revise_elected_hostos_versions")
@@ -514,9 +515,6 @@ impl NnsFunction {
             NnsFunction::AddOrRemoveDataCenters => {
                 (REGISTRY_CANISTER_ID, "add_or_remove_data_centers")
             }
-            NnsFunction::UpdateUnassignedNodesConfig => {
-                (REGISTRY_CANISTER_ID, "update_unassigned_nodes_config")
-            }
             NnsFunction::RemoveNodeOperators => (REGISTRY_CANISTER_ID, "remove_node_operators"),
             NnsFunction::RerouteCanisterRanges => (REGISTRY_CANISTER_ID, "reroute_canister_ranges"),
             NnsFunction::PrepareCanisterMigration => {
@@ -537,30 +535,9 @@ impl NnsFunction {
                 (SNS_WASM_CANISTER_ID, "insert_upgrade_path_entries")
             }
             NnsFunction::BitcoinSetConfig => (ROOT_CANISTER_ID, "call_canister"),
-            NnsFunction::BlessReplicaVersion
-            | NnsFunction::RetireReplicaVersion
-            | NnsFunction::UpdateAllowedPrincipals => {
-                return Err(GovernanceError::new_with_message(
-                    ErrorType::InvalidProposal,
-                    format!(
-                        "{:?} is an obsolete NnsFunction. Use ReviseElectedGuestosVersions instead",
-                        self
-                    ),
-                ));
-            }
             NnsFunction::AddApiBoundaryNodes => (REGISTRY_CANISTER_ID, "add_api_boundary_nodes"),
             NnsFunction::RemoveApiBoundaryNodes => {
                 (REGISTRY_CANISTER_ID, "remove_api_boundary_nodes")
-            }
-            NnsFunction::UpdateApiBoundaryNodesVersion => {
-                return Err(GovernanceError::new_with_message(
-                    ErrorType::InvalidProposal,
-                    format!(
-                        "{:?} is an obsolete NnsFunction. Use DeployGuestosToSomeApiBoundaryNodes \
-                        instead",
-                        self
-                    ),
-                ));
             }
             NnsFunction::DeployGuestosToSomeApiBoundaryNodes => (
                 REGISTRY_CANISTER_ID,
@@ -576,6 +553,24 @@ impl NnsFunction {
             ),
             NnsFunction::SubnetRentalRequest => {
                 (SUBNET_RENTAL_CANISTER_ID, "execute_rental_request_proposal")
+            }
+            NnsFunction::BlessReplicaVersion
+            | NnsFunction::RetireReplicaVersion
+            | NnsFunction::UpdateElectedHostosVersions
+            | NnsFunction::UpdateAllowedPrincipals
+            | NnsFunction::UpdateApiBoundaryNodesVersion
+            | NnsFunction::UpdateUnassignedNodesConfig
+            | NnsFunction::UpdateNodesHostosVersion
+            | NnsFunction::NnsCanisterUpgrade
+            | NnsFunction::NnsRootUpgrade => {
+                let error_message = match self.check_obsolete() {
+                    Err(error_message) => error_message,
+                    Ok(_) => unreachable!("Obsolete NnsFunction not handled"),
+                };
+                return Err(GovernanceError::new_with_message(
+                    ErrorType::InvalidProposal,
+                    error_message,
+                ));
             }
         };
         Ok((canister_id, method))
@@ -4356,8 +4351,7 @@ impl Governance {
                 }
             }
             Action::ManageNetworkEconomics(network_economics) => {
-                self.perform_manage_network_economics(network_economics);
-                self.set_proposal_execution_status(pid, Ok(()));
+                self.perform_manage_network_economics(pid, network_economics);
             }
             // A motion is not executed, just recorded for posterity.
             Action::Motion(_) => {
@@ -4522,20 +4516,40 @@ impl Governance {
         );
     }
 
-    fn perform_manage_network_economics(&mut self, new_network_economics: NetworkEconomics) {
-        let Some(original_network_economics) = &self.heap_data.economics else {
-            // This wouldn't happen in production, but if it does, we try to do
-            // the best we can, because doing nothing seems more catastrophic.
-            println!(
-                "{}ERROR: NetworkEconomics was not set. Setting to proposed NetworkEconomics:\n{:#?}",
-                LOG_PREFIX, new_network_economics,
-            );
-            self.heap_data.economics = Some(new_network_economics);
-            return;
-        };
+    fn perform_manage_network_economics(
+        &mut self,
+        proposal_id: u64,
+        proposed_network_economics: NetworkEconomics,
+    ) {
+        let result = self.perform_manage_network_economics_impl(proposed_network_economics);
+        self.set_proposal_execution_status(proposal_id, result);
+    }
 
-        self.heap_data.economics =
-            Some(new_network_economics.inherit_from(original_network_economics));
+    /// Only call this from perform_manage_network_economics.
+    fn perform_manage_network_economics_impl(
+        &mut self,
+        proposed_network_economics: NetworkEconomics,
+    ) -> Result<(), GovernanceError> {
+        let new_network_economics = self
+            .economics()
+            .apply_changes_and_validate(&proposed_network_economics)
+            .map_err(|defects| {
+                GovernanceError::new_with_message(
+                    ErrorType::InvalidProposal,
+                    format!(
+                        "The resulting NetworkEconomics is invalid for the following reason(s):\
+                         \n  - {}",
+                        defects.join("\n  - "),
+                    ),
+                )
+            })?;
+
+        println!(
+            "{}INFO: Committing new NetworkEconomics:\n{:#?}",
+            LOG_PREFIX, new_network_economics,
+        );
+        self.heap_data.economics = Some(new_network_economics);
+        Ok(())
     }
 
     async fn perform_install_code(&mut self, proposal_id: u64, install_code: InstallCode) {
@@ -4883,6 +4897,45 @@ impl Governance {
         Ok(())
     }
 
+    /// This verifies the following:
+    ///
+    ///     1. When the changes are applied, the resulting NetworkEconomics is
+    ///        valid. See NetworkEconomics::validate.
+    ///
+    /// Since self.heap_data.economics can be different when a proposal is
+    /// executed (compared to when it is created), this should be performed both
+    /// at proposal creation time AND execution time.
+    ///
+    /// Note that it is not considered "invalid" when the "modified" result is
+    /// the same as the original (i.e. setting F to V even though the current
+    /// value of F is ALREADY V). This is because such a proposal is not
+    /// actually harmful to the system; just maybe confusing to users.
+    fn validate_manage_network_economics(
+        &self,
+        // (Note that this is the value associated with ManageNetworkEconomics,
+        // not the resulting NetworkEconomics.)
+        proposed_network_economics: &NetworkEconomics,
+    ) -> Result<(), GovernanceError> {
+        // It maybe does not make sense to be able to set transaction_fee_e8s
+        // via proposal. What we probably want instead is to fetch this value
+        // from ledger.
+
+        self.economics()
+            .apply_changes_and_validate(proposed_network_economics)
+            .map_err(|defects| {
+                let message = format!(
+                    "The resulting settings would not be valid for the \
+                     following reason(s):\n\
+                     - {}",
+                    defects.join("\n  - "),
+                );
+
+                GovernanceError::new_with_message(ErrorType::InvalidProposal, message)
+            })?;
+
+        Ok(())
+    }
+
     pub(crate) fn economics(&self) -> &NetworkEconomics {
         self.heap_data
             .economics
@@ -4960,8 +5013,11 @@ impl Governance {
             Action::ManageNeuron(manage_neuron) => {
                 self.validate_manage_neuron_proposal(manage_neuron)
             }
-            Action::ManageNetworkEconomics(_)
-            | Action::ApproveGenesisKyc(_)
+            Action::ManageNetworkEconomics(network_economics) => {
+                self.validate_manage_network_economics(network_economics)
+            }
+
+            Action::ApproveGenesisKyc(_)
             | Action::AddOrRemoveNodeProvider(_)
             | Action::RewardNodeProvider(_)
             | Action::RewardNodeProviders(_)
@@ -4999,6 +5055,15 @@ impl Governance {
             GovernanceError::new_with_message(ErrorType::InvalidProposal, error_message)
         };
 
+        nns_function
+            .check_obsolete()
+            .map_err(|obsolete_error_message| {
+                invalid_proposal_error(format!(
+                    "Proposal is obsolete because {}",
+                    obsolete_error_message,
+                ))
+            })?;
+
         if !nns_function.can_have_large_payload()
             && update.payload.len() > PROPOSAL_EXECUTE_NNS_FUNCTION_PAYLOAD_BYTES_MAX
         {
@@ -5006,13 +5071,6 @@ impl Governance {
                 "The maximum NNS function payload size in a proposal action is {} bytes, this payload is: {} bytes",
                 PROPOSAL_EXECUTE_NNS_FUNCTION_PAYLOAD_BYTES_MAX,
                 update.payload.len(),
-            )));
-        }
-
-        if nns_function.is_obsolete() {
-            return Err(invalid_proposal_error(format!(
-                "{} proposal is obsolete",
-                nns_function.as_str_name()
             )));
         }
 
@@ -8184,7 +8242,7 @@ impl From<ic_nervous_system_clients::canister_status::CanisterStatusType>
 /// Affects the perception of time by users of CanisterEnv (i.e. Governance).
 ///
 /// Specifically, the time that Governance sees is the real time + delta.
-#[derive(Copy, Clone, Eq, PartialEq, Debug, candid::CandidType, serde::Deserialize)]
+#[derive(Copy, Clone, Default, Eq, PartialEq, Debug, candid::CandidType, serde::Deserialize)]
 pub struct TimeWarp {
     pub delta_s: i64,
 }

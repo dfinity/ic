@@ -397,12 +397,14 @@ impl State {
         &mut self,
         account: icp_ledger::AccountIdentifier,
         neuron_index: u64,
+        controller: Option<PrincipalId>,
     ) -> Result<(), ApiError> {
         self.flush()?;
         self.actions
             .push(Request::RefreshVotingPower(RefreshVotingPower {
                 account,
                 neuron_index,
+                controller,
             }));
         Ok(())
     }

@@ -370,6 +370,26 @@ async fn change_nns_canister_by_proposal(
     }
 }
 
+/// Installs the given root-controlled canister with the specified Wasm module and args.
+pub async fn install_nns_canister_by_proposal(
+    canister: &Canister<'_>,
+    governance: &Canister<'_>,
+    root: &Canister<'_>,
+    wasm: Wasm,
+    arg: Option<Vec<u8>>,
+) {
+    change_nns_canister_by_proposal(
+        CanisterInstallMode::Install,
+        canister,
+        governance,
+        root,
+        false,
+        wasm,
+        arg,
+    )
+    .await
+}
+
 /// Upgrade the given root-controlled canister to the specified Wasm module.
 /// This should only be called in NNS integration tests, where the NNS
 /// canisters have their expected IDs.
