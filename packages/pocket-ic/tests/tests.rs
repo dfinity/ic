@@ -2292,10 +2292,10 @@ fn test_custom_blockmaker_metrics() {
         .unwrap();
 
     assert_eq!(blockmaker_1_metrics.num_blocks_proposed_total, daily_blocks);
-    assert_eq!(blockmaker_1_metrics.num_blocks_failures_total, 0);
+    assert_eq!(blockmaker_1_metrics.num_block_failures_total, 0);
 
     assert_eq!(blockmaker_2_metrics.num_blocks_proposed_total, 0);
-    assert_eq!(blockmaker_2_metrics.num_blocks_failures_total, daily_blocks);
+    assert_eq!(blockmaker_2_metrics.num_block_failures_total, daily_blocks);
 }
 
 #[test]

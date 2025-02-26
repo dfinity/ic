@@ -72,7 +72,6 @@ use ic_management_canister_types::{
 use ic_transport_types::SubnetMetrics;
 use management_canister::CanisterLogRecord;
 use reqwest::Url;
-use reqwest::{StatusCode, Url};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use slog::Level;
