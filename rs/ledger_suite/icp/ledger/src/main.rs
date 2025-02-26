@@ -1323,15 +1323,13 @@ fn icrc1_total_supply_candid() {
 fn iter_blocks_() {
     over(protobuf, |IterBlocksArgs { start, length }| {
         let length = std::cmp::min(length, max_blocks_per_request(&caller())) as u64;
-        let blocks_len = LEDGER.read().unwrap().blockchain.num_unarchived_blocks();
-        let start = std::cmp::min(start as u64, blocks_len);
-        let end = std::cmp::min(start + length, blocks_len);
+        let start = start as u64;
         let blocks = LEDGER
             .read()
             .unwrap()
             .blockchain
             .blocks
-            .get_blocks(start..end);
+            .get_blocks(start..start + length);
         IterBlocksRes(blocks)
     });
 }

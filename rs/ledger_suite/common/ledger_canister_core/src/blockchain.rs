@@ -49,11 +49,9 @@ impl BlockData for HeapBlockData {
     }
 
     fn get_blocks(&self, range: Range<u64>) -> Vec<EncodedBlock> {
-        let range = Range {
-            start: range.start as usize,
-            end: range.end as usize,
-        };
-        self.blocks[range].to_vec()
+        let start = std::cmp::min(range.start, self.len()) as usize;
+        let end = std::cmp::min(range.end, self.len()) as usize;
+        self.blocks[start..end].to_vec()
     }
 
     fn get_block(&self, index: u64) -> Option<EncodedBlock> {
