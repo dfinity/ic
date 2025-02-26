@@ -83,7 +83,7 @@ pub(crate) fn dealings_context_from_reshare_request(
 ) -> ReshareChainKeyContext {
     ReshareChainKeyContext {
         request: RequestBuilder::new().build(),
-        key_id: request.key_id(),
+        key_id: request.key_id().into(),
         nodes: request.receiving_node_ids.into_iter().collect(),
         registry_version: request.registry_version,
         time: time::UNIX_EPOCH,

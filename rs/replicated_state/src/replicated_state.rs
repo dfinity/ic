@@ -710,7 +710,7 @@ impl ReplicatedState {
     }
 
     /// Returns all IDKG dealings contexts.
-    pub fn idkg_dealings_contexts(&self) -> &BTreeMap<CallbackId, ReshareChainKeyContext> {
+    pub fn reshare_chain_key_contexts(&self) -> &BTreeMap<CallbackId, ReshareChainKeyContext> {
         &self
             .metadata
             .subnet_call_context_manager

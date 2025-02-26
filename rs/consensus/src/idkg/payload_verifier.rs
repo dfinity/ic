@@ -617,6 +617,7 @@ mod test {
     use super::*;
     use crate::idkg::{
         payload_builder::{
+            filter_reshare_chain_key_contexts,
             resharing::{initiate_reshare_requests, update_completed_reshare_requests},
             signatures::update_signature_agreements,
         },
@@ -794,6 +795,7 @@ mod test {
                 dealings_context_from_reshare_request(req_2.clone()),
             ),
         ]);
+        let contexts = filter_reshare_chain_key_contexts(&contexts);
 
         let (key_transcript, key_transcript_ref) =
             payload.generate_current_key(&key_id, &env, &mut rng);

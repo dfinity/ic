@@ -39,6 +39,48 @@ mod pre_signatures;
 pub(super) mod resharing;
 pub(super) mod signatures;
 
+pub(crate) struct IDkgDealingContext<'a>(&'a ReshareChainKeyContext);
+
+impl<'a> TryFrom<&'a ReshareChainKeyContext> for IDkgDealingContext<'a> {
+    type Error = String;
+
+    fn try_from(value: &'a ReshareChainKeyContext) -> Result<Self, Self::Error> {
+        if value.key_id.is_idkg_key() {
+            Ok(Self(value))
+        } else {
+            Err(String::from("Cannot convert non-IDKG key"))
+        }
+    }
+}
+
+impl IDkgDealingContext<'_> {
+    fn key_id(&self) -> IDkgMasterPublicKeyId {
+        self.0.key_id.clone().try_into().unwrap()
+    }
+}
+
+impl Deref for IDkgDealingContext<'_> {
+    type Target = ReshareChainKeyContext;
+
+    fn deref(&self) -> &Self::Target {
+        self.0
+    }
+}
+
+pub(crate) fn filter_reshare_chain_key_contexts(
+    contexts: &BTreeMap<CallbackId, ReshareChainKeyContext>,
+) -> BTreeMap<CallbackId, IDkgDealingContext<'_>> {
+    contexts
+        .iter()
+        .filter_map(
+            |(&id, context)| match IDkgDealingContext::try_from(context) {
+                Ok(context) => Some((id, context)),
+                Err(_) => None,
+            },
+        )
+        .collect()
+}
+
 /// Builds the very first idkg summary block. This would trigger the subsequent
 /// data blocks to create the initial key transcript.
 pub(crate) fn make_bootstrap_summary(
@@ -539,7 +581,9 @@ pub(crate) fn create_data_payload_helper(
         .iter()
         .flat_map(|(id, ctxt)| IDkgSignWithThresholdContext::try_from(ctxt).map(|ctxt| (*id, ctxt)))
         .collect();
-    let idkg_dealings_contexts = state.get_ref().idkg_dealings_contexts();
+
+    let reshare_contexts = state.get_ref().reshare_chain_key_contexts();
+    let idkg_dealings_contexts = filter_reshare_chain_key_contexts(reshare_contexts);
 
     let certified_height = if context.certified_height >= summary_block.height() {
         CertifiedHeight::ReachedSummaryHeight
@@ -557,7 +601,7 @@ pub(crate) fn create_data_payload_helper(
         certified_height,
         &receivers,
         all_signing_requests,
-        idkg_dealings_contexts,
+        &idkg_dealings_contexts,
         block_reader,
         transcript_builder,
         signature_builder,
@@ -579,7 +623,7 @@ pub(crate) fn create_data_payload_helper_2(
     certified_height: CertifiedHeight,
     receivers: &[NodeId],
     all_signing_requests: BTreeMap<CallbackId, IDkgSignWithThresholdContext<'_>>,
-    idkg_dealings_contexts: &BTreeMap<CallbackId, ReshareChainKeyContext>,
+    idkg_dealings_contexts: &BTreeMap<CallbackId, IDkgDealingContext<'_>>,
     block_reader: &dyn IDkgBlockReader,
     transcript_builder: &dyn IDkgTranscriptBuilder,
     signature_builder: &dyn ThresholdSignatureBuilder,
