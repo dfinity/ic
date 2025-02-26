@@ -98,7 +98,7 @@ pub mod common;
 pub mod management_canister;
 pub mod nonblocking;
 
-const EXPECTED_SERVER_VERSION: &str = "7.0.0";
+const EXPECTED_SERVER_VERSION: &str = "8.0.0";
 
 // the default timeout of a PocketIC operation
 const DEFAULT_MAX_REQUEST_TIME_MS: u64 = 300_000;
