@@ -907,7 +907,6 @@ impl SchedulerTestBuilder {
         let hypervisor = Hypervisor::new_for_testing(
             &self.metrics_registry,
             self.own_subnet_id,
-            self.subnet_type,
             self.log.clone(),
             Arc::clone(&cycles_account_manager),
             Arc::<TestWasmExecutor>::clone(&wasm_executor),

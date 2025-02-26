@@ -2927,7 +2927,8 @@ impl ComputeInitialIDkgDealingsResponse {
 /// ```
 #[derive(Eq, PartialEq, Debug, CandidType, Deserialize)]
 pub struct VetKdDeriveEncryptedKeyArgs {
-    pub derivation_path: DerivationPath,
+    #[serde(with = "serde_bytes")]
+    pub derivation_domain: Vec<u8>,
     #[serde(with = "serde_bytes")]
     pub derivation_id: Vec<u8>,
     pub key_id: VetKdKeyId,
@@ -2962,7 +2963,8 @@ impl Payload<'_> for VetKdDeriveEncryptedKeyResult {}
 #[derive(Eq, PartialEq, Debug, CandidType, Deserialize)]
 pub struct VetKdPublicKeyArgs {
     pub canister_id: Option<CanisterId>,
-    pub derivation_path: DerivationPath,
+    #[serde(with = "serde_bytes")]
+    pub derivation_domain: Vec<u8>,
     pub key_id: VetKdKeyId,
 }
 

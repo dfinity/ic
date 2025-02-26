@@ -22,6 +22,7 @@ ic-state-machine-tests = { path = "../../state_machine_tests" }
 ic-types = { path = "../../types/types" }
 on_wire = { path = "../on_wire" }
 rand = { workspace = true }
+serde = { workspace = true }
 tokio = { workspace = true }
 wasmprinter = { workspace = true }
 wat = { workspace = true }

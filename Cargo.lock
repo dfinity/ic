@@ -1887,6 +1887,7 @@ dependencies = [
  "ic-types",
  "on_wire",
  "rand 0.8.5",
+ "serde",
  "tokio",
  "wasmprinter",
  "wat",
@@ -9586,6 +9587,7 @@ dependencies = [
  "candid",
  "ic-base-types",
  "ic-canister-log 0.2.0",
+ "ic-cdk 0.17.1",
  "ic-ledger-core",
  "ic-ledger-hash-of",
  "ic-limits",
@@ -10380,6 +10382,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-nervous-system-timer-task"
+version = "0.0.1"
+dependencies = [
+ "async-trait",
+ "candid",
+ "canister-test",
+ "ic-cdk 0.17.1",
+ "ic-cdk-timers",
+ "ic-config",
+ "ic-registry-subnet-type",
+ "ic-state-machine-tests",
+ "ic-types",
+ "serde",
+]
+
+[[package]]
 name = "ic-nervous-system-timestamp"
 version = "0.0.1"
 dependencies = [
@@ -10528,6 +10546,7 @@ dependencies = [
  "ic-nervous-system-runtime",
  "ic-nervous-system-temporary",
  "ic-nervous-system-time-helpers",
+ "ic-nervous-system-timer-task",
  "ic-neurons-fund",
  "ic-nns-common",
  "ic-nns-constants",

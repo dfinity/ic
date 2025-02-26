@@ -2358,7 +2358,6 @@ impl ExecutionTestBuilder {
             config.clone(),
             &metrics_registry,
             self.own_subnet_id,
-            self.subnet_type,
             self.log.clone(),
             Arc::clone(&cycles_account_manager),
             dirty_page_overhead,

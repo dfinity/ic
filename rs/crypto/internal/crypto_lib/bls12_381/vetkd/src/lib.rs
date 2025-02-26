@@ -13,17 +13,19 @@ use rand::{CryptoRng, RngCore};
 /// The index of a node
 pub type NodeIndex = u32;
 
-/// The derivation path
+/// The derivation domain
 #[derive(Clone)]
-pub struct DerivationPath {
+pub struct DerivationDomain {
     delta: Scalar,
 }
 
-const DERIVATION_PATH_DOMAIN_SEP: &[u8; 44] = b"ic-crypto-vetkd-bls12-381-g2-derivation-path";
+// Prefix-freeness is not required, as the domain separator is used with XMD,
+// which includes the domain separator's length as a distinct input.
+const DERIVATION_DOMAIN_DST: &[u8; 39] = b"ic-vetkd-bls12-381-g2-derivation-domain";
 
-impl DerivationPath {
-    /// Create a new derivation path
-    pub fn new<U: AsRef<[u8]>>(canister_id: &[u8], extra_paths: &[U]) -> Self {
+impl DerivationDomain {
+    /// Create a new derivation domain
+    pub fn new(canister_id: &[u8], domain: &[u8]) -> Self {
         let mut combined_inputs = vec![];
 
         // Each input is prefixed with an 8 byte length field
@@ -31,13 +33,11 @@ impl DerivationPath {
         combined_inputs.extend_from_slice(&len.to_be_bytes());
         combined_inputs.extend_from_slice(canister_id);
 
-        for input in extra_paths {
-            let len = input.as_ref().len() as u64;
-            combined_inputs.extend_from_slice(&len.to_be_bytes()); // 8 bytes length
-            combined_inputs.extend_from_slice(input.as_ref());
-        }
+        let len = domain.as_ref().len() as u64;
+        combined_inputs.extend_from_slice(&len.to_be_bytes()); // 8 bytes length
+        combined_inputs.extend_from_slice(domain.as_ref());
 
-        let delta = Scalar::hash(DERIVATION_PATH_DOMAIN_SEP, &combined_inputs);
+        let delta = Scalar::hash(DERIVATION_DOMAIN_DST, &combined_inputs);
 
         Self { delta }
     }
@@ -98,9 +98,9 @@ impl DerivedPublicKey {
     /// The length of the serialized encoding of this type
     pub const BYTES: usize = G2Affine::BYTES;
 
-    /// Derive a public key relative to another public key and a derivation path
-    pub fn compute_derived_key(pk: &G2Affine, derivation_path: &DerivationPath) -> Self {
-        let pt = G2Affine::from(G2Affine::generator() * derivation_path.delta() + pk);
+    /// Derive a public key relative to another public key and a derivation domain
+    pub fn compute_derived_key(pk: &G2Affine, derivation_domain: &DerivationDomain) -> Self {
+        let pt = G2Affine::from(G2Affine::generator() * derivation_domain.delta() + pk);
         Self { pt }
     }
 
@@ -229,11 +229,11 @@ impl EncryptedKey {
         reconstruction_threshold: usize,
         master_pk: &G2Affine,
         tpk: &TransportPublicKey,
-        derivation_path: &DerivationPath,
+        derivation_domain: &DerivationDomain,
         did: &[u8],
     ) -> Result<Self, EncryptedKeyCombinationError> {
         let c = Self::combine_unchecked(nodes, reconstruction_threshold)?;
-        if c.is_valid(master_pk, derivation_path, did, tpk) {
+        if c.is_valid(master_pk, derivation_domain, did, tpk) {
             Ok(c)
         } else {
             Err(EncryptedKeyCombinationError::InvalidShares)
@@ -251,7 +251,7 @@ impl EncryptedKey {
         reconstruction_threshold: usize,
         master_pk: &G2Affine,
         tpk: &TransportPublicKey,
-        derivation_path: &DerivationPath,
+        derivation_domain: &DerivationDomain,
         did: &[u8],
     ) -> Result<Self, EncryptedKeyCombinationError> {
         if nodes.len() < reconstruction_threshold {
@@ -262,7 +262,7 @@ impl EncryptedKey {
         let mut valid_shares = Vec::with_capacity(reconstruction_threshold);
 
         for (node_index, node_pk, node_eks) in nodes.iter() {
-            if node_eks.is_valid(master_pk, node_pk, derivation_path, did, tpk) {
+            if node_eks.is_valid(master_pk, node_pk, derivation_domain, did, tpk) {
                 valid_shares.push((*node_index, node_eks.clone()));
 
                 if valid_shares.len() >= reconstruction_threshold {
@@ -282,22 +282,22 @@ impl EncryptedKey {
         //
         // This check is mostly to catch the case where the reconstruction_threshold was
         // somehow incorrect.
-        if c.is_valid(master_pk, derivation_path, did, tpk) {
+        if c.is_valid(master_pk, derivation_domain, did, tpk) {
             Ok(c)
         } else {
             Err(EncryptedKeyCombinationError::ReconstructionFailed)
         }
     }
 
-    /// Check if this encrypted key is valid with respect to the provided derivation path
+    /// Check if this encrypted key is valid with respect to the provided derivation domain
     pub fn is_valid(
         &self,
         master_pk: &G2Affine,
-        derivation_path: &DerivationPath,
+        derivation_domain: &DerivationDomain,
         did: &[u8],
         tpk: &TransportPublicKey,
     ) -> bool {
-        let dpk = DerivedPublicKey::compute_derived_key(master_pk, derivation_path);
+        let dpk = DerivedPublicKey::compute_derived_key(master_pk, derivation_domain);
         let msg = G1Affine::augmented_hash(&dpk.pt, did);
         check_validity(&self.c1, &self.c2, &self.c3, tpk, &dpk.pt, &msg)
     }
@@ -379,10 +379,10 @@ impl EncryptedKeyShare {
         master_pk: &G2Affine,
         node_sk: &Scalar,
         transport_pk: &TransportPublicKey,
-        derivation_path: &DerivationPath,
+        derivation_domain: &DerivationDomain,
         did: &[u8],
     ) -> Self {
-        let delta = derivation_path.delta();
+        let delta = derivation_domain.delta();
 
         let dsk = delta + node_sk;
         let dpk = G2Affine::from(G2Affine::generator() * delta + master_pk);
@@ -403,12 +403,12 @@ impl EncryptedKeyShare {
         &self,
         master_pk: &G2Affine,
         master_pki: &G2Affine,
-        derivation_path: &DerivationPath,
+        derivation_domain: &DerivationDomain,
         did: &[u8],
         tpk: &TransportPublicKey,
     ) -> bool {
-        let dpki = DerivedPublicKey::compute_derived_key(master_pki, derivation_path);
-        let dpk = DerivedPublicKey::compute_derived_key(master_pk, derivation_path);
+        let dpki = DerivedPublicKey::compute_derived_key(master_pki, derivation_domain);
+        let dpk = DerivedPublicKey::compute_derived_key(master_pk, derivation_domain);
 
         let msg = G1Affine::augmented_hash(&dpk.pt, did);
 

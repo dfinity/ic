@@ -23,7 +23,7 @@ use std::cell::RefCell;
 use std::str::FromStr;
 
 thread_local! {
-    static GOVERNANCE: RefCell<Governance> = RefCell::new(Governance::new_uninitialized(
+    pub(crate) static GOVERNANCE: RefCell<Governance> = RefCell::new(Governance::new_uninitialized(
         Box::new(CanisterEnv::new()),
         Box::new(IcpLedgerCanister::<CdkRuntime>::new(LEDGER_CANISTER_ID)),
         Box::new(CMCCanister::<CdkRuntime>::new()),

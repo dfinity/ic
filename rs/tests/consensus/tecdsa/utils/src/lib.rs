@@ -429,7 +429,7 @@ pub async fn get_vetkd_public_key_with_retries(
 ) -> Result<Vec<u8>, AgentError> {
     let public_key_request = VetKdPublicKeyArgs {
         canister_id: None,
-        derivation_path: DerivationPath::new(vec![]),
+        derivation_domain: vec![],
         key_id: key_id.clone(),
     };
     info!(
