@@ -1,6 +1,7 @@
 use backoff::backoff::Backoff;
+use candid::Principal;
 use core::future::Future;
-use dfn_candid::{candid, candid_multi_arity};
+use dfn_candid::{candid, candid_multi_arity, candid_one};
 use ic_canister_client::{Agent, Sender};
 use ic_config::Config;
 use ic_management_canister_types::{
@@ -375,7 +376,7 @@ impl<'a> Runtime {
                         (ProvisionalCreateCanisterWithCyclesArgs {
                             amount: num_cycles.map(candid::Nat::from),
                             settings: None,
-                            specified_id: specified_id.map(|x| x.into()),
+                            specified_id: specified_id.map(Principal::from),
                             sender_canister_version: None,
                         },),
                     )
@@ -389,7 +390,7 @@ impl<'a> Runtime {
                         (ProvisionalCreateCanisterWithCyclesArgs {
                             amount: num_cycles.map(candid::Nat::from),
                             settings: None,
-                            specified_id: specified_id.map(|x| x.into()),
+                            specified_id: specified_id.map(Principal::from),
                             sender_canister_version: None,
                         },),
                     )
@@ -758,9 +759,11 @@ impl<'a> Canister<'a> {
                 ic00::Method::UpdateSettings.to_string(),
                 candid_multi_arity,
                 (UpdateSettingsArgs {
-                    canister_id: self.canister_id.into(),
+                    canister_id: Principal::from(self.canister_id),
                     settings: CanisterSettings {
-                        controllers: Some(new_controllers.into_iter().map(|p| p.into()).collect()),
+                        controllers: Some(
+                            new_controllers.into_iter().map(Principal::from).collect(),
+                        ),
                         compute_allocation: None,
                         memory_allocation: None,
                         freezing_threshold: None,
@@ -795,10 +798,10 @@ impl<'a> Canister<'a> {
             .get_management_canister_with_effective_canister_id(self.canister_id().into())
             .update_(
                 "stop_canister",
-                candid_multi_arity,
-                (StopCanisterArgs {
-                    canister_id: self.canister_id().into(),
-                },),
+                candid_one,
+                StopCanisterArgs {
+                    canister_id: Principal::from(self.canister_id()),
+                },
             )
             .await;
         stop_res?;
@@ -808,10 +811,10 @@ impl<'a> Canister<'a> {
                 .get_management_canister_with_effective_canister_id(self.canister_id().into())
                 .update_(
                     "canister_status",
-                    candid,
-                    (CanisterStatusArgs {
-                        canister_id: self.canister_id().into(),
-                    },),
+                    candid_one,
+                    CanisterStatusArgs {
+                        canister_id: Principal::from(self.canister_id()),
+                    },
                 )
                 .await;
             let status = status_res?;
@@ -829,10 +832,10 @@ impl<'a> Canister<'a> {
             .get_management_canister_with_effective_canister_id(self.canister_id().into())
             .update_(
                 "delete_canister",
-                candid_multi_arity,
-                (DeleteCanisterArgs {
-                    canister_id: self.canister_id().into(),
-                },),
+                candid_one,
+                DeleteCanisterArgs {
+                    canister_id: Principal::from(self.canister_id()),
+                },
             )
             .await?;
         Ok(())
@@ -860,10 +863,10 @@ impl<'a> Canister<'a> {
             .get_management_canister_with_effective_canister_id(self.canister_id().into())
             .update_(
                 "start_canister",
-                candid_multi_arity,
-                (StartCanisterArgs {
-                    canister_id: self.canister_id().into(),
-                },),
+                candid_one,
+                StartCanisterArgs {
+                    canister_id: Principal::from(self.canister_id()),
+                },
             )
             .await;
         start_res?;
