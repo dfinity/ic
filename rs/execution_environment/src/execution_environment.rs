@@ -52,9 +52,9 @@ use ic_replicated_state::{
     canister_state::system_state::PausedExecutionId,
     canister_state::{system_state::CyclesUseCase, NextExecution},
     metadata_state::subnet_call_context_manager::{
-        EcdsaArguments, ReshareChainKeyContext, InstallCodeCall, InstallCodeCallId, SchnorrArguments,
-        SetupInitialDkgContext, SignWithThresholdContext, StopCanisterCall, SubnetCallContext,
-        ThresholdArguments,
+        EcdsaArguments, InstallCodeCall, InstallCodeCallId, ReshareChainKeyContext,
+        SchnorrArguments, SetupInitialDkgContext, SignWithThresholdContext, StopCanisterCall,
+        SubnetCallContext, ThresholdArguments,
     },
     page_map::PageAllocatorFileDescriptor,
     CanisterState, ExecutionTask, NetworkTopology, ReplicatedState,
@@ -2896,16 +2896,15 @@ impl ExecutionEnvironment {
             .try_into()
             .map_err(|err| UserError::new(ErrorCode::CanisterRejectedMessage, err))?;
 
-        state
-            .metadata
-            .subnet_call_context_manager
-            .push_context(SubnetCallContext::IDkgDealings(ReshareChainKeyContext {
+        state.metadata.subnet_call_context_manager.push_context(
+            SubnetCallContext::ReshareChainKey(ReshareChainKeyContext {
                 request: request.clone(),
                 key_id,
                 nodes,
                 registry_version,
                 time: state.time(),
-            }));
+            }),
+        );
         Ok(())
     }
 
