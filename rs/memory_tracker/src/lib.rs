@@ -333,6 +333,35 @@ impl SigsegvMemoryTracker {
         }
     }
 
+    pub fn num_active_pages(&self) -> usize {
+        #[cfg(target_os = "linux")]
+        {
+            // This path should be Linux on x86_64 hardware.
+            // Use libc mincore() to get the number of pages that are present in memory.
+            // These can be either read or written to, which fits the replica definition
+            // of accessed pages.
+            let num_pages = unsafe {
+                let mut vec = vec![0u8; self.memory_area.size() / PAGE_SIZE];
+                let res = libc::mincore(
+                    self.memory_area.addr() as *mut libc::c_void,
+                    self.memory_area.size(),
+                    vec.as_mut_ptr(),
+                );
+                if res == 0 {
+                    vec.iter().filter(|&&x| x != 0).count()
+                } else {
+                    0
+                }
+            };
+            num_pages
+        }
+        #[cfg(not(target_os = "linux"))]
+        {
+            // This metric is not useful outside of mainnet environments.
+            0
+        }
+    }
+
     pub fn num_accessed_pages(&self) -> usize {
         self.accessed_bitmap.borrow().marked_count()
     }

@@ -3201,6 +3201,28 @@ fn query_stable_memory_metrics_are_recorded() {
 }
 
 #[test]
+#[cfg(not(all(target_arch = "aarch64", target_vendor = "apple")))]
+fn active_pages_metric_is_observable() {
+    use ic_test_utilities_metrics::fetch_histogram_stats;
+    let mut env = ExecutionTestBuilder::new().build();
+    let wat = r#"
+        (module
+            (import "ic0" "msg_reply" (func $msg_reply))
+            (func (export "canister_update go")
+                (i32.store (i32.const 0) (i32.const 4))
+                (call $msg_reply)
+            )
+            (memory 1)
+        )"#;
+    let canister_id = env.canister_from_wat(wat).unwrap();
+    env.ingress(canister_id, "go", vec![]).unwrap();
+
+    // Check if the metric reports 1 active page.
+    let active_pages = fetch_histogram_stats(env.metrics_registry(), "hypervisor_active_pages");
+    assert_eq!(Some(HistogramStats { sum: 1.0, count: 1 }), active_pages);
+}
+
+#[test]
 fn executing_non_existing_method_does_not_consume_cycles() {
     let mut test = ExecutionTestBuilder::new().build();
     let wat = "(module)";

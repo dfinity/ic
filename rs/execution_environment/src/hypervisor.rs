@@ -50,6 +50,7 @@ pub struct HypervisorMetrics {
     mprotect_count: HistogramVec,
     copy_page_count: HistogramVec,
     compilation_cache_size: IntGaugeVec,
+    active_pages: Histogram,
     code_section_size: Histogram,
 }
 
@@ -127,6 +128,11 @@ impl HypervisorMetrics {
             ),
             compilation_cache_size: metrics_registry.int_gauge_vec("hypervisor_compilation_cache_size", "Bytes in memory and on disk used by the compilation cache.", &["location"],
             ),
+            active_pages: metrics_registry.histogram(
+                "hypervisor_active_pages",
+                "Number of pages that are currently active (i.e., as reported by libc mincore()).",
+                exponential_buckets(1.0, 2.0, 22),
+            ),
             code_section_size: metrics_registry.histogram(
                 "hypervisor_code_section_size",
                 "Size of the code section in bytes for a canister Wasm. Only Wasms that successfully compile are counted (which implies the code sections are below the current limit).",
@@ -161,6 +167,9 @@ impl HypervisorMetrics {
             self.copy_page_count
                 .with_label_values(&[api_type, "wasm"])
                 .observe(output.instance_stats.wasm_copy_page_count as f64);
+
+            self.active_pages
+                .observe(output.instance_stats.wasm_active_pages as f64);
 
             // Additional metrics for the stable memory.
             self.accessed_pages
