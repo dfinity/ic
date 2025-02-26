@@ -48,7 +48,7 @@ rust_library(
     name = "pocket-ic",
     srcs = glob(["src/**/*.rs"]),
     proc_macro_deps = MACRO_DEPENDENCIES,
-    version = "6.0.0",
+    version = "7.0.0",
     deps = DEPENDENCIES,
 )
 
