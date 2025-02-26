@@ -14,7 +14,7 @@ fn vetkd_bench(c: &mut Criterion) {
         TransportPublicKey::deserialize(&(G1Affine::generator() * tsk).to_affine().serialize())
             .unwrap();
 
-    let derivation_path = DerivationPath::new(&[1, 2, 3, 4], &[&[1, 2, 3]]);
+    let derivation_domain = DerivationDomain::new(&[1, 2, 3, 4], &[1, 2, 3]);
     let did = rng.gen::<[u8; 32]>();
 
     for threshold in [9, 19] {
@@ -37,14 +37,20 @@ fn vetkd_bench(c: &mut Criterion) {
                         &master_pk,
                         &node_sk,
                         &tpk,
-                        &derivation_path,
+                        &derivation_domain,
                         &did,
                     )
                 })
             });
 
-            let eks =
-                EncryptedKeyShare::create(rng, &master_pk, &node_sk, &tpk, &derivation_path, &did);
+            let eks = EncryptedKeyShare::create(
+                rng,
+                &master_pk,
+                &node_sk,
+                &tpk,
+                &derivation_domain,
+                &did,
+            );
 
             group.bench_function("EncryptedKeyShare::serialize", |b| {
                 b.iter(|| eks.serialize())
@@ -59,7 +65,7 @@ fn vetkd_bench(c: &mut Criterion) {
             });
 
             group.bench_function("EncryptedKeyShare::is_valid", |b| {
-                b.iter(|| eks.is_valid(&master_pk, &node_pk, &derivation_path, &did, &tpk))
+                b.iter(|| eks.is_valid(&master_pk, &node_pk, &derivation_domain, &did, &tpk))
             });
         }
 
@@ -69,8 +75,14 @@ fn vetkd_bench(c: &mut Criterion) {
             let node_sk = poly.evaluate_at(&Scalar::from_node_index(node as u32));
             let node_pk = G2Affine::from(G2Affine::generator() * &node_sk);
 
-            let eks =
-                EncryptedKeyShare::create(rng, &master_pk, &node_sk, &tpk, &derivation_path, &did);
+            let eks = EncryptedKeyShare::create(
+                rng,
+                &master_pk,
+                &node_sk,
+                &tpk,
+                &derivation_domain,
+                &did,
+            );
 
             node_info.push((node as u32, node_pk, eks));
         }
@@ -84,7 +96,7 @@ fn vetkd_bench(c: &mut Criterion) {
                         threshold,
                         &master_pk,
                         &tpk,
-                        &derivation_path,
+                        &derivation_domain,
                         &did,
                     )
                     .unwrap()
