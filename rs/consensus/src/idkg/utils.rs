@@ -33,7 +33,7 @@ use ic_types::crypto::canister_threshold_sig::idkg::{
     IDkgTranscript, IDkgTranscriptOperation, InitialIDkgDealings,
 };
 use ic_types::crypto::canister_threshold_sig::MasterPublicKey;
-use ic_types::crypto::vetkd::VetKdArgs;
+use ic_types::crypto::vetkd::{VetKdArgs, VetKdDerivationDomain};
 use ic_types::crypto::{AlgorithmId, ExtendedDerivationPath};
 use ic_types::messages::CallbackId;
 use ic_types::registry::RegistryClientError;
@@ -256,10 +256,6 @@ pub(super) fn build_signature_inputs(
     context: &SignWithThresholdContext,
     block_reader: &dyn IDkgBlockReader,
 ) -> Result<(RequestId, ThresholdSigInputsRef), BuildSignatureInputsError> {
-    let extended_derivation_path = ExtendedDerivationPath {
-        caller: context.request.sender.into(),
-        derivation_path: context.derivation_path.clone(),
-    };
     match &context.args {
         ThresholdArguments::Ecdsa(args) => {
             let (pre_sig_id, height) = context
@@ -285,7 +281,10 @@ pub(super) fn build_signature_inputs(
                     .ok_or(BuildSignatureInputsError::ContextIncomplete)?,
             );
             let inputs = ThresholdSigInputsRef::Ecdsa(ThresholdEcdsaSigInputsRef::new(
-                extended_derivation_path,
+                ExtendedDerivationPath {
+                    caller: context.request.sender.into(),
+                    derivation_path: context.derivation_path.clone(),
+                },
                 args.message_hash,
                 nonce,
                 pre_sig,
@@ -316,7 +315,10 @@ pub(super) fn build_signature_inputs(
                     .ok_or(BuildSignatureInputsError::ContextIncomplete)?,
             );
             let inputs = ThresholdSigInputsRef::Schnorr(ThresholdSchnorrSigInputsRef::new(
-                extended_derivation_path,
+                ExtendedDerivationPath {
+                    caller: context.request.sender.into(),
+                    derivation_path: context.derivation_path.clone(),
+                },
                 args.message.clone(),
                 nonce,
                 pre_sig,
@@ -330,7 +332,10 @@ pub(super) fn build_signature_inputs(
                 height: args.height,
             };
             let inputs = ThresholdSigInputsRef::VetKd(VetKdArgs {
-                derivation_path: extended_derivation_path,
+                derivation_domain: VetKdDerivationDomain {
+                    caller: context.request.sender.into(),
+                    domain: context.derivation_path.iter().flatten().cloned().collect(),
+                },
                 ni_dkg_id: args.ni_dkg_id.clone(),
                 derivation_id: args.derivation_id.clone(),
                 encryption_public_key: args.encryption_public_key.clone(),

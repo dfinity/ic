@@ -556,7 +556,7 @@ mod tests {
     fn vetkd_derive_encrypted_key_request(key_id: VetKdKeyId) -> Vec<u8> {
         let args = VetKdDeriveEncryptedKeyArgs {
             key_id,
-            derivation_path: DerivationPath::new(vec![ByteBuf::from(vec![0; 10])]),
+            derivation_domain: vec![0; 10],
             derivation_id: vec![1; 32],
             encryption_public_key: [1; 48],
         };
@@ -584,7 +584,7 @@ mod tests {
     fn vetkd_public_key_request(key_id: VetKdKeyId) -> Vec<u8> {
         let args = VetKdPublicKeyArgs {
             canister_id: Some(canister_test_id(1)),
-            derivation_path: DerivationPath::new(vec![ByteBuf::from(vec![0; 10])]),
+            derivation_domain: vec![0; 10],
             key_id,
         };
         Encode!(&args).unwrap()

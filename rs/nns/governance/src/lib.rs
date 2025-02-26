@@ -174,6 +174,7 @@ pub mod proposals;
 mod reward;
 pub mod storage;
 mod subaccount_index;
+pub mod timer_tasks;
 mod voting;
 
 /// Limit the amount of work for skipping unneeded data on the wire when parsing Candid.

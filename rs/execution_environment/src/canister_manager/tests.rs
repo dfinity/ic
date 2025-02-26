@@ -251,7 +251,6 @@ impl CanisterManagerBuilder {
             Config::default(),
             &metrics_registry,
             self.subnet_id,
-            subnet_type,
             no_op_logger(),
             Arc::clone(&cycles_account_manager),
             SchedulerConfig::application_subnet().dirty_page_overhead,

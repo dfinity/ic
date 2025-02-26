@@ -278,41 +278,46 @@ fn bad_created_at_time() {
         amount: Tokens::from_e8s(1000),
     };
 
-    let now = dfn_core::api::now().into();
+    let now = SystemTime::now().into();
 
     assert_eq!(
         PaymentError::TransferError(TransferError::TxTooOld {
             allowed_window_nanos: Duration::from_secs(24 * 60 * 60).as_nanos() as u64,
         }),
         state
-            .add_payment(
+            .add_payment_with_timestamp(
                 Memo(1),
                 transfer.clone(),
-                Some(now - state.transaction_window - Duration::from_secs(1))
+                Some(now - state.transaction_window - Duration::from_secs(1)),
+                now
             )
             .unwrap_err()
     );
 
     state
-        .add_payment(
+        .add_payment_with_timestamp(
             Memo(2),
             transfer.clone(),
             Some(now - Duration::from_secs(1)),
+            now,
         )
         .unwrap();
 
     assert_eq!(
         PaymentError::TransferError(TransferError::TxCreatedInFuture),
         state
-            .add_payment(
+            .add_payment_with_timestamp(
                 Memo(3),
                 transfer.clone(),
-                Some(now + Duration::from_secs(120))
+                Some(now + Duration::from_secs(120)),
+                now
             )
             .unwrap_err()
     );
 
-    state.add_payment(Memo(4), transfer, Some(now)).unwrap();
+    state
+        .add_payment_with_timestamp(Memo(4), transfer, Some(now), now)
+        .unwrap();
 }
 
 /// Check that block timestamps don't go backwards.
@@ -328,9 +333,15 @@ fn monotonic_timestamps() {
         amount: Tokens::from_e8s(1000),
     };
 
-    state.add_payment(Memo(1), transfer.clone(), None).unwrap();
+    let now = TimeStamp::from_nanos_since_unix_epoch(1_000_000_000);
 
-    state.add_payment(Memo(2), transfer.clone(), None).unwrap();
+    state
+        .add_payment_with_timestamp(Memo(1), transfer.clone(), None, now)
+        .unwrap();
+
+    state
+        .add_payment_with_timestamp(Memo(2), transfer.clone(), None, now)
+        .unwrap();
 
     state
         .add_payment_with_timestamp(
@@ -366,11 +377,11 @@ fn duplicate_txns() {
         amount: Tokens::from_e8s(1000),
     };
 
-    let now = dfn_core::api::now().into();
+    let now = SystemTime::now().into();
 
     assert_eq!(
         state
-            .add_payment(Memo::default(), transfer.clone(), Some(now))
+            .add_payment_with_timestamp(Memo::default(), transfer.clone(), Some(now), now)
             .unwrap()
             .0,
         0
@@ -378,7 +389,7 @@ fn duplicate_txns() {
 
     assert_eq!(
         state
-            .add_payment(Memo(123), transfer.clone(), Some(now))
+            .add_payment_with_timestamp(Memo(123), transfer.clone(), Some(now), now)
             .unwrap()
             .0,
         1
@@ -386,10 +397,11 @@ fn duplicate_txns() {
 
     assert_eq!(
         state
-            .add_payment(
+            .add_payment_with_timestamp(
                 Memo::default(),
                 transfer.clone(),
-                Some(now - Duration::from_secs(1))
+                Some(now - Duration::from_secs(1)),
+                now
             )
             .unwrap()
             .0,
@@ -412,7 +424,7 @@ fn duplicate_txns() {
     assert_eq!(
         PaymentError::TransferError(TransferError::TxDuplicate { duplicate_of: 0 }),
         state
-            .add_payment(Memo::default(), transfer.clone(), Some(now))
+            .add_payment_with_timestamp(Memo::default(), transfer.clone(), Some(now), now)
             .unwrap_err()
     );
 
@@ -670,7 +682,7 @@ fn test_throttle_tx_per_second_nok() {
         amount: Tokens::from_e8s(1000),
     };
 
-    let now: TimeStamp = dfn_core::api::now().into();
+    let now = TimeStamp::from_nanos_since_unix_epoch(1000000);
 
     assert_eq!(apply_at(&mut ledger, &op, now + millis(1)), 0);
     assert_eq!(apply_at(&mut ledger, &op, now + millis(1002)), 1);
@@ -693,7 +705,7 @@ fn test_throttle_tx_per_second_ok() {
         to: PrincipalId::new_user_test_id(1).into(),
         amount: Tokens::from_e8s(1000),
     };
-    let now: TimeStamp = dfn_core::api::now().into();
+    let now = TimeStamp::from_nanos_since_unix_epoch(1000000);
 
     assert_eq!(apply_at(&mut ledger, &op, now + millis(1)), 0);
     assert_eq!(apply_at(&mut ledger, &op, now + millis(1002)), 1);
@@ -714,7 +726,7 @@ fn test_throttle_two_tx_per_second_after_soft_limit_ok() {
         to: PrincipalId::new_user_test_id(1).into(),
         amount: Tokens::from_e8s(1000),
     };
-    let now: TimeStamp = dfn_core::api::now().into();
+    let now = TimeStamp::from_nanos_since_unix_epoch(1000000);
 
     assert_eq!(apply_at(&mut ledger, &op, now + millis(1)), 0);
     assert_eq!(apply_at(&mut ledger, &op, now + millis(2)), 1);
@@ -741,7 +753,7 @@ fn test_throttle_two_tx_per_second_after_soft_limit_nok() {
         to: PrincipalId::new_user_test_id(1).into(),
         amount: Tokens::from_e8s(1000),
     };
-    let now: TimeStamp = dfn_core::api::now().into();
+    let now = TimeStamp::from_nanos_since_unix_epoch(1000000);
 
     assert_eq!(apply_at(&mut ledger, &op, now + millis(1)), 0);
     assert_eq!(apply_at(&mut ledger, &op, now + millis(2)), 1);
