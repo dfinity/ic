@@ -683,8 +683,26 @@ impl SystemTestGroup {
                     let env = ensure_setup_env(group_ctx);
                     setup_fn(env.clone());
                     SetupResult {}.write_attribute(&env);
-                    let group_setup = GroupSetup::try_read_attribute(&env).unwrap();
-                    Self::register_with_service_disc(group_setup.infra_group_name, env.clone());
+                    let mut tried_to_register = false;
+                    for _ in 0..5 {
+                        match GroupSetup::try_read_attribute(&env) {
+                            Ok(group_setup) => {
+                                Self::register_with_service_disc(
+                                    group_setup.infra_group_name,
+                                    env.clone(),
+                                );
+                                tried_to_register = true;
+                                break;
+                            }
+                            Err(e) => {
+                                warn!(logger, "Failed to get group setup: {:?}", e);
+                                std::thread::sleep(KEEPALIVE_INTERVAL);
+                            }
+                        }
+                    }
+                    if !tried_to_register {
+                        panic!("Didn't try to register with service discovery because setup group attribute couldn't be read");
+                    }
                 },
                 &mut compose_ctx,
             );
