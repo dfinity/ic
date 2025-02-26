@@ -202,24 +202,23 @@ impl CanisterHttp {
         }
     }
 
-    fn classify_uri_host(uri: &Uri) -> String {
-        let host = match uri.host() {
-            Some(h) => h,
-            None => return "empty".to_string(),
+    fn classify_uri_host(uri: &Uri) -> &str {
+        let Some(host) = uri.host() else {
+            return "empty";
         };
 
         if host.parse::<Ipv4Addr>().is_ok() {
-            return "v4".to_string();
+            return "v4";
         }
 
         if host.starts_with('[') && host.ends_with(']') {
             let inside = &host[1..host.len() - 1];
             if inside.parse::<Ipv6Addr>().is_ok() {
-                return "v6".to_string();
+                return "v6";
             }
         }
 
-        "domain_name".to_string()
+        "domain_name"
     }
 
     async fn do_https_outcall_socks_proxy(
@@ -261,7 +260,7 @@ impl CanisterHttp {
                             &tries.to_string(),
                             "success",
                             socks_proxy_addr,
-                            &url_format,
+                            url_format,
                         ])
                         .inc();
                     return Ok(resp);
@@ -273,7 +272,7 @@ impl CanisterHttp {
                             &tries.to_string(),
                             "failure",
                             socks_proxy_addr,
-                            &url_format,
+                            url_format,
                         ])
                         .inc();
                     debug!(
@@ -288,7 +287,7 @@ impl CanisterHttp {
         }
 
         if let Some(last_error) = last_error {
-            Err(last_error.to_string())
+            Err(format!("{:?}", last_error))
         } else {
             Err("No SOCKS proxy addresses provided".to_string())
         }
