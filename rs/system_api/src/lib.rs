@@ -1,4 +1,4 @@
-use ic_base_types::{InternalAddress, InternalAddressArithmetics, PrincipalIdBlobParseError};
+use ic_base_types::{InternalAddress, PrincipalIdBlobParseError};
 use ic_config::embedders::{
     BestEffortResponsesFeature, Config as EmbeddersConfig, StableMemoryPageLimit,
 };
@@ -4036,8 +4036,8 @@ pub(crate) fn valid_subslice<'a>(
                     error: format!(
                         "{}: src={} + length={} exceeds the slice size={}",
                         ctx,
-                        src,
-                        len,
+                        src.get(),
+                        len.get(),
                         slice.len()
                     ),
                 })
