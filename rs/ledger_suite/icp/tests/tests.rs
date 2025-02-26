@@ -2014,7 +2014,7 @@ fn test_archives_endpoint() {
                             max_message_size_bytes: None,
                             controller_id: minting_canister_id.into(),
                             more_controller_ids: None,
-                            cycles_for_archive_creation: None,
+                            cycles_for_archive_creation: Some(0),
                             max_transactions_per_response: None,
                         })
                         .build()

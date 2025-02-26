@@ -68,7 +68,7 @@ pub fn get_vetkey_public_keys(
                 (
                     key_id.clone().into(),
                     MasterPublicKey {
-                        algorithm_id: AlgorithmId::ThresBls12_381,
+                        algorithm_id: AlgorithmId::VetKD,
                         public_key: pubkey.into_bytes().to_vec(),
                     },
                 ),

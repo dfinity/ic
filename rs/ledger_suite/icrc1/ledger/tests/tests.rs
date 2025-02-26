@@ -219,16 +219,7 @@ fn encode_init_args(args: ic_ledger_suite_state_machine_tests::InitArgs) -> Ledg
             MetadataValue::entry(TEXT_META_KEY, TEXT_META_VALUE),
             MetadataValue::entry(BLOB_META_KEY, BLOB_META_VALUE),
         ],
-        archive_options: ArchiveOptions {
-            trigger_threshold: ARCHIVE_TRIGGER_THRESHOLD as usize,
-            num_blocks_to_archive: NUM_BLOCKS_TO_ARCHIVE as usize,
-            node_max_memory_size_bytes: None,
-            max_message_size_bytes: None,
-            controller_id: PrincipalId::new_user_test_id(100),
-            more_controller_ids: None,
-            cycles_for_archive_creation: None,
-            max_transactions_per_response: None,
-        },
+        archive_options: args.archive_options,
         max_memo_length: None,
         feature_flags: args.feature_flags,
     })
@@ -240,6 +231,20 @@ fn encode_init_args_with_small_sized_archive(
     match encode_init_args(args) {
         LedgerArgument::Init(mut init_args) => {
             init_args.archive_options.node_max_memory_size_bytes = Some(620);
+            LedgerArgument::Init(init_args)
+        }
+        LedgerArgument::Upgrade(_) => {
+            panic!("BUG: Expected Init argument")
+        }
+    }
+}
+
+fn encode_init_args_with_provided_metadata(
+    args: ic_ledger_suite_state_machine_tests::InitArgs,
+) -> LedgerArgument {
+    match encode_init_args(args.clone()) {
+        LedgerArgument::Init(mut init_args) => {
+            init_args.metadata = args.metadata;
             LedgerArgument::Init(init_args)
         }
         LedgerArgument::Upgrade(_) => {
@@ -698,6 +703,39 @@ fn icrc1_test_upgrade_from_v1_not_possible() {
     );
 }
 
+#[test]
+fn test_setting_forbidden_metadata_in_init_works_in_v3_ledger() {
+    ic_ledger_suite_state_machine_tests::metadata::test_setting_forbidden_metadata_works_in_v3_ledger(
+        ledger_mainnet_v3_wasm(),
+        encode_init_args_with_provided_metadata,
+    );
+}
+
+#[test]
+fn test_setting_forbidden_metadata_not_possible() {
+    ic_ledger_suite_state_machine_tests::metadata::test_setting_forbidden_metadata_not_possible(
+        ledger_wasm(),
+        encode_init_args_with_provided_metadata,
+    );
+}
+
+#[test]
+fn test_cycles_for_archive_creation_no_overwrite_of_none_in_upgrade() {
+    ic_ledger_suite_state_machine_tests::test_cycles_for_archive_creation_no_overwrite_of_none_in_upgrade(
+        ledger_mainnet_v2_wasm(),
+        ledger_wasm(),
+        encode_init_args,
+    );
+}
+
+#[test]
+fn test_cycles_for_archive_creation_default_spawns_archive() {
+    ic_ledger_suite_state_machine_tests::test_cycles_for_archive_creation_default_spawns_archive(
+        ledger_wasm(),
+        encode_init_args,
+    );
+}
+
 mod metrics {
     use crate::{encode_init_args, encode_upgrade_args, ledger_wasm};
     use ic_ledger_suite_state_machine_tests::metrics::LedgerSuiteType;
@@ -804,7 +842,7 @@ fn test_icrc2_feature_flag_doesnt_disable_icrc2_endpoints() {
             max_message_size_bytes: None,
             controller_id: PrincipalId::new_user_test_id(100),
             more_controller_ids: None,
-            cycles_for_archive_creation: None,
+            cycles_for_archive_creation: Some(0),
             max_transactions_per_response: None,
         },
         max_memo_length: None,
@@ -978,7 +1016,7 @@ fn test_icrc3_get_archives() {
             max_message_size_bytes: None,
             controller_id: PrincipalId(minting_account.owner),
             more_controller_ids: None,
-            cycles_for_archive_creation: None,
+            cycles_for_archive_creation: Some(0),
             max_transactions_per_response: None,
         },
         max_memo_length: None,
@@ -1053,7 +1091,7 @@ fn test_icrc3_get_blocks() {
             max_message_size_bytes: None,
             controller_id: PrincipalId(minting_account.owner),
             more_controller_ids: None,
-            cycles_for_archive_creation: None,
+            cycles_for_archive_creation: Some(0),
             max_transactions_per_response: None,
         },
         max_memo_length: None,
@@ -1327,7 +1365,7 @@ fn test_icrc3_get_blocks_number_of_blocks_limit() {
             max_message_size_bytes: None,
             controller_id: PrincipalId(minting_account.owner),
             more_controller_ids: None,
-            cycles_for_archive_creation: None,
+            cycles_for_archive_creation: Some(0),
             max_transactions_per_response: None,
         },
         max_memo_length: None,
@@ -1761,7 +1799,7 @@ mod verify_written_blocks {
                     max_message_size_bytes: None,
                     controller_id: PrincipalId::new_user_test_id(100),
                     more_controller_ids: None,
-                    cycles_for_archive_creation: None,
+                    cycles_for_archive_creation: Some(0),
                     max_transactions_per_response: None,
                 },
                 max_memo_length: None,
@@ -1977,7 +2015,7 @@ mod incompatible_token_type_upgrade {
                 max_message_size_bytes: None,
                 controller_id: PrincipalId::new_user_test_id(100),
                 more_controller_ids: None,
-                cycles_for_archive_creation: None,
+                cycles_for_archive_creation: Some(0),
                 max_transactions_per_response: None,
             },
             max_memo_length: None,

@@ -8,7 +8,7 @@ use ic_embedders::WasmtimeEmbedder;
 use ic_interfaces::execution_environment::{ExecutionMode, SubnetAvailableMemory};
 use ic_logger::{replica_logger::no_op_logger, ReplicaLogger};
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::{Memory, NetworkTopology, NumWasmPages};
+use ic_replicated_state::{Memory, MessageMemoryUsage, NetworkTopology, NumWasmPages};
 use ic_sys::PAGE_SIZE;
 use ic_system_api::{sandbox_safe_system_state::SandboxSafeSystemState, ApiType, SystemApiImpl};
 use ic_system_api::{DefaultOutOfInstructionsHandler, ExecutionParameters, InstructionLimits};
@@ -84,7 +84,7 @@ fn test_api_for_update(
     );
     let canister_memory_limit = NumBytes::from(4 << 30);
     let canister_current_memory_usage = NumBytes::from(0);
-    let canister_current_message_memory_usage = NumBytes::from(0);
+    let canister_current_message_memory_usage = MessageMemoryUsage::ZERO;
 
     SystemApiImpl::new(
         api_type,
@@ -882,6 +882,7 @@ mod tests {
                 setup_instruction_overhead()
                     + ic_embedders::wasmtime_embedder::system_api_complexity::overhead::STABLE_READ
                         .get()
+                    + STABLE_OP_BYTES
             );
         }
 
@@ -925,6 +926,7 @@ mod tests {
                 setup_instruction_overhead()
                     + ic_embedders::wasmtime_embedder::system_api_complexity::overhead::STABLE_WRITE
                         .get()
+                    + STABLE_OP_BYTES
                     + SchedulerConfig::system_subnet().dirty_page_overhead.get()
             );
         }
@@ -969,6 +971,7 @@ mod tests {
                 setup_instruction_overhead()
                     + ic_embedders::wasmtime_embedder::system_api_complexity::overhead::STABLE_WRITE
                         .get()
+                    + STABLE_OP_BYTES
                     + SchedulerConfig::system_subnet().dirty_page_overhead.get()
             );
         }
@@ -1073,7 +1076,6 @@ mod tests {
         let wasm = wat2wasm(&wat).unwrap();
 
         let config = EmbeddersConfig {
-            subnet_type,
             dirty_page_overhead: match subnet_type {
                 SubnetType::System => SchedulerConfig::system_subnet(),
                 SubnetType::Application => SchedulerConfig::application_subnet(),

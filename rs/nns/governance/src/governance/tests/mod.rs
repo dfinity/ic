@@ -1371,8 +1371,8 @@ fn test_validate_execute_nns_function() {
                 nns_function: NnsFunction::UpdateAllowedPrincipals as i32,
                 payload: vec![],
             },
-            "Proposal is obsolete because NNS_FUNCTION_UPDATE_ALLOWED_PRINCIPALS is only used for \
-            the old SNS initialization mechanism, which is now obsolete. Use \
+            "Proposal is obsolete because NNS_FUNCTION_UPDATE_ALLOWED_PRINCIPALS is only used \
+            for the old SNS initialization mechanism, which is now obsolete. Use \
             CREATE_SERVICE_NERVOUS_SYSTEM instead."
                 .to_string(),
         ),
@@ -1381,8 +1381,8 @@ fn test_validate_execute_nns_function() {
                 nns_function: NnsFunction::UpdateApiBoundaryNodesVersion as i32,
                 payload: vec![],
             },
-            "Proposal is obsolete because NNS_FUNCTION_UPDATE_API_BOUNDARY_NODES_VERSION is obsolete. \
-            Use NNS_FUNCTION_DEPLOY_GUESTOS_TO_SOME_API_BOUNDARY_NODES instead."
+            "Proposal is obsolete because NNS_FUNCTION_UPDATE_API_BOUNDARY_NODES_VERSION is \
+            obsolete. Use NNS_FUNCTION_DEPLOY_GUESTOS_TO_SOME_API_BOUNDARY_NODES instead."
                 .to_string(),
         ),
         (
@@ -1390,8 +1390,8 @@ fn test_validate_execute_nns_function() {
                 nns_function: NnsFunction::UpdateUnassignedNodesConfig as i32,
                 payload: vec![],
             },
-            "Proposal is obsolete because NNS_FUNCTION_UPDATE_UNASSIGNED_NODES_CONFIG is obsolete. \
-            Use NNS_FUNCTION_DEPLOY_GUESTOS_TO_ALL_UNASSIGNED_NODES/\
+            "Proposal is obsolete because NNS_FUNCTION_UPDATE_UNASSIGNED_NODES_CONFIG is \
+            obsolete. Use NNS_FUNCTION_DEPLOY_GUESTOS_TO_ALL_UNASSIGNED_NODES/\
             NNS_FUNCTION_UPDATE_SSH_READONLY_ACCESS_FOR_ALL_UNASSIGNED_NODES instead."
                 .to_string(),
         ),
@@ -1400,8 +1400,8 @@ fn test_validate_execute_nns_function() {
                 nns_function: NnsFunction::UpdateElectedHostosVersions as i32,
                 payload: vec![],
             },
-            "Proposal is obsolete because NNS_FUNCTION_UPDATE_ELECTED_HOSTOS_VERSIONS is obsolete. \
-            Use NNS_FUNCTION_REVISE_ELECTED_HOSTOS_VERSIONS instead."
+            "Proposal is obsolete because NNS_FUNCTION_UPDATE_ELECTED_HOSTOS_VERSIONS is \
+            obsolete. Use NNS_FUNCTION_REVISE_ELECTED_HOSTOS_VERSIONS instead."
                 .to_string(),
         ),
         (
@@ -1411,6 +1411,24 @@ fn test_validate_execute_nns_function() {
             },
             "Proposal is obsolete because NNS_FUNCTION_UPDATE_NODES_HOSTOS_VERSION is obsolete. \
             Use NNS_FUNCTION_DEPLOY_HOSTOS_TO_SOME_NODES instead."
+                .to_string(),
+        ),
+        (
+            ExecuteNnsFunction {
+                nns_function: NnsFunction::NnsCanisterUpgrade as i32,
+                payload: vec![],
+            },
+            "Proposal is obsolete because NNS_FUNCTION_NNS_CANISTER_UPGRADE is obsolete. \
+            Use InstallCode instead."
+                .to_string(),
+        ),
+        (
+            ExecuteNnsFunction {
+                nns_function: NnsFunction::NnsRootUpgrade as i32,
+                payload: vec![],
+            },
+            "Proposal is obsolete because NNS_FUNCTION_NNS_ROOT_UPGRADE is obsolete. \
+            Use InstallCode instead."
                 .to_string(),
         ),
     ];

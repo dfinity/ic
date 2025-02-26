@@ -380,8 +380,11 @@ impl ThresholdSignerImpl {
         match self.crypto_create_sig_share(request_id, sig_inputs) {
             Err(err) => {
                 warn!(
+                    every_n_seconds => 15,
                     self.log,
-                    "Failed to create sig share: request_id = {:?}, {:?}", request_id, err
+                    "Failed to create sig share: request_id = {:?}, {:?}",
+                    request_id,
+                    err
                 );
                 self.metrics.sign_errors_inc("create_sig_share");
                 Default::default()

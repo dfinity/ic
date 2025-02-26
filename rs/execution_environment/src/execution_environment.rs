@@ -241,7 +241,8 @@ pub struct RoundLimits {
 
     /// Keeps track of the available storage memory. It decreases if
     /// - Wasm execution grows the Wasm/stable memory.
-    /// - Wasm execution pushes a new request to the output queue.
+    /// - Wasm execution pushes a new guaranteed response request to the output
+    ///   queue.
     pub subnet_available_memory: SubnetAvailableMemory,
 
     /// The number of outgoing calls that can still be made across the subnet before
@@ -449,7 +450,9 @@ impl ExecutionEnvironment {
             self.config.subnet_memory_capacity.get() as i64
                 - self.config.subnet_memory_reservation.get() as i64
                 - memory_taken.execution().get() as i64,
-            self.config.subnet_message_memory_capacity.get() as i64
+            self.config
+                .guaranteed_response_message_memory_capacity
+                .get() as i64
                 - memory_taken.guaranteed_response_messages().get() as i64,
             self.config
                 .subnet_wasm_custom_sections_memory_capacity
@@ -458,14 +461,20 @@ impl ExecutionEnvironment {
         )
     }
 
-    /// Computes the current amount of message memory available on the subnet.
+    /// Computes the current amount of guaranteed response message memory available
+    /// on the subnet.
     ///
     /// This is a more efficient alternative to `memory_taken()` for cases when only
-    /// the message memory usage is necessary.
+    /// the guaranteed response message memory usage is necessary.
     ///
     /// Time complexity: `O(|canisters|)`.
-    pub fn subnet_available_message_memory(&self, state: &ReplicatedState) -> i64 {
-        self.config.subnet_message_memory_capacity.get() as i64
+    pub fn subnet_available_guaranteed_response_message_memory(
+        &self,
+        state: &ReplicatedState,
+    ) -> i64 {
+        self.config
+            .guaranteed_response_message_memory_capacity
+            .get() as i64
             - state.guaranteed_response_message_memory_taken().get() as i64
     }
 
@@ -3691,6 +3700,13 @@ impl ExecutionEnvironment {
     pub fn clear_compilation_cache_for_testing(&self) {
         (*self.hypervisor).clear_compilation_cache_for_testing()
     }
+
+    /// Used for tests where the test setup needs to be aware of the subnet
+    /// type.
+    #[doc(hidden)]
+    pub fn own_subnet_type(&self) -> SubnetType {
+        self.own_subnet_type
+    }
 }
 
 #[cfg(debug_assertions)]
@@ -3736,7 +3752,7 @@ impl CompilationCostHandling {
 pub(crate) fn subnet_memory_capacity(config: &ExecutionConfig) -> SubnetAvailableMemory {
     SubnetAvailableMemory::new(
         config.subnet_memory_capacity.get() as i64,
-        config.subnet_message_memory_capacity.get() as i64,
+        config.guaranteed_response_message_memory_capacity.get() as i64,
         config.subnet_wasm_custom_sections_memory_capacity.get() as i64,
     )
 }

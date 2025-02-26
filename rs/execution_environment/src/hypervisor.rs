@@ -13,23 +13,22 @@ use ic_interfaces::execution_environment::{
 use ic_interfaces_state_manager::StateReader;
 use ic_logger::ReplicaLogger;
 use ic_management_canister_types_private::LogVisibilityV2;
-use ic_metrics::buckets::{decimal_buckets_with_zero, linear_buckets};
-use ic_metrics::{buckets::exponential_buckets, MetricsRegistry};
-use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::{page_map::allocated_pages_count, ExecutionState, SystemState};
-use ic_replicated_state::{NetworkTopology, ReplicatedState};
-use ic_system_api::ExecutionParameters;
-use ic_system_api::{sandbox_safe_system_state::SandboxSafeSystemState, ApiType};
+use ic_metrics::buckets::{decimal_buckets_with_zero, exponential_buckets, linear_buckets};
+use ic_metrics::MetricsRegistry;
+use ic_replicated_state::page_map::allocated_pages_count;
+use ic_replicated_state::{
+    ExecutionState, MessageMemoryUsage, NetworkTopology, ReplicatedState, SystemState,
+};
+use ic_system_api::sandbox_safe_system_state::SandboxSafeSystemState;
+use ic_system_api::{ApiType, ExecutionParameters};
 use ic_types::{
     messages::RequestMetadata, methods::FuncRef, CanisterId, MemoryDiskBytes, NumBytes,
     NumInstructions, SubnetId, Time,
 };
 use ic_wasm_types::CanisterModule;
 use prometheus::{Histogram, HistogramVec, IntCounter, IntGauge, IntGaugeVec};
-use std::{
-    path::{Path, PathBuf},
-    sync::Arc,
-};
+use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 use crate::execution::common::{apply_canister_state_changes, update_round_limits};
 use crate::execution_environment::{as_round_instructions, CompilationCostHandling, RoundLimits};
@@ -225,7 +224,6 @@ pub struct Hypervisor {
     wasm_executor: Arc<dyn WasmExecutor>,
     metrics: Arc<HypervisorMetrics>,
     own_subnet_id: SubnetId,
-    own_subnet_type: SubnetType,
     log: ReplicaLogger,
     cycles_account_manager: Arc<CyclesAccountManager>,
     compilation_cache: Arc<CompilationCache>,
@@ -238,10 +236,6 @@ pub struct Hypervisor {
 impl Hypervisor {
     pub(crate) fn subnet_id(&self) -> SubnetId {
         self.own_subnet_id
-    }
-
-    pub fn subnet_type(&self) -> SubnetType {
-        self.own_subnet_type
     }
 
     pub fn create_execution_state(
@@ -300,7 +294,6 @@ impl Hypervisor {
         config: Config,
         metrics_registry: &MetricsRegistry,
         own_subnet_id: SubnetId,
-        own_subnet_type: SubnetType,
         log: ReplicaLogger,
         cycles_account_manager: Arc<CyclesAccountManager>,
         dirty_page_overhead: NumInstructions,
@@ -311,7 +304,6 @@ impl Hypervisor {
         _temp_dir: &Path,
     ) -> Self {
         let mut embedder_config = config.embedders_config.clone();
-        embedder_config.subnet_type = own_subnet_type;
         embedder_config.dirty_page_overhead = dirty_page_overhead;
 
         let wasm_executor: Arc<dyn WasmExecutor> = match config.canister_sandboxing_flag {
@@ -341,7 +333,6 @@ impl Hypervisor {
             wasm_executor,
             metrics: Arc::new(HypervisorMetrics::new(metrics_registry)),
             own_subnet_id,
-            own_subnet_type,
             log,
             cycles_account_manager,
             compilation_cache: Arc::new(CompilationCache::new(MAX_COMPILATION_CACHE_SIZE)),
@@ -358,7 +349,6 @@ impl Hypervisor {
     pub fn new_for_testing(
         metrics_registry: &MetricsRegistry,
         own_subnet_id: SubnetId,
-        own_subnet_type: SubnetType,
         log: ReplicaLogger,
         cycles_account_manager: Arc<CyclesAccountManager>,
         wasm_executor: Arc<dyn WasmExecutor>,
@@ -371,7 +361,6 @@ impl Hypervisor {
             wasm_executor,
             metrics: Arc::new(HypervisorMetrics::new(metrics_registry)),
             own_subnet_id,
-            own_subnet_type,
             log,
             cycles_account_manager,
             compilation_cache: Arc::new(CompilationCache::new(MAX_COMPILATION_CACHE_SIZE)),
@@ -397,7 +386,7 @@ impl Hypervisor {
         time: Time,
         mut system_state: SystemState,
         canister_current_memory_usage: NumBytes,
-        canister_current_message_memory_usage: NumBytes,
+        canister_current_message_memory_usage: MessageMemoryUsage,
         execution_parameters: ExecutionParameters,
         func_ref: FuncRef,
         mut execution_state: ExecutionState,
@@ -458,7 +447,7 @@ impl Hypervisor {
         execution_state: &ExecutionState,
         system_state: &SystemState,
         canister_current_memory_usage: NumBytes,
-        canister_current_message_memory_usage: NumBytes,
+        canister_current_message_memory_usage: MessageMemoryUsage,
         execution_parameters: ExecutionParameters,
         func_ref: FuncRef,
         request_metadata: RequestMetadata,
