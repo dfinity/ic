@@ -1,5 +1,3 @@
-use pb::v1::UpgradeJournal;
-
 pub mod pb;
 mod types;
 
@@ -9,9 +7,4 @@ pub fn format_full_hash(hash: &[u8]) -> String {
         .map(|b| format!("{:02x}", b))
         .collect::<Vec<_>>()
         .join("")
-}
-
-/// Formats `journal.entries` as JSON.
-pub fn serialize_journal_entries(journal: &UpgradeJournal) -> Result<String, String> {
-    serde_json::to_string(&journal.entries).map_err(|err| format!("{err:?}"))
 }

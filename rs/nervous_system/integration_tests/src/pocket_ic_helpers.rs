@@ -2038,13 +2038,7 @@ pub mod sns {
             .map_err(|err| format!("{err:?}"))
         }
 
-        /// Tries to assign the `automatically_advance_target_version` flag in the SNS specified
-        /// by `sns_governance_canister_id`.
-        ///
-        /// Works by using a super powerful neuron to make a proposal. This assumes that such
-        /// a neuron exists. Then, this waits for the proposal to execute successfully
-        /// before returning.
-        pub async fn set_automatically_advance_target_version_flag(
+        pub async fn propose_to_set_automatically_advance_target_version(
             pocket_ic: &PocketIc,
             sns_governance_canister_id: PrincipalId,
             automatically_advance_target_version: bool,
@@ -2067,10 +2061,7 @@ pub mod sns {
                 sns_neuron_principal_id,
                 sns_neuron_id.clone(),
                 sns_pb::Proposal {
-                    title: format!(
-                        "Set automatically_advance_target_version to {}.",
-                        automatically_advance_target_version,
-                    ),
+                    title: "Set propose_to_set_automatically_advance_target_version.".to_string(),
                     summary: "".to_string(),
                     url: "".to_string(),
                     action: Some(sns_pb::proposal::Action::ManageNervousSystemParameters(

@@ -5,7 +5,7 @@ use ic_nervous_system_integration_tests::{
         sns::{
             self,
             governance::{
-                set_automatically_advance_target_version_flag,
+                propose_to_set_automatically_advance_target_version,
                 EXPECTED_UPGRADE_DURATION_MAX_SECONDS, EXPECTED_UPGRADE_STEPS_REFRESH_MAX_SECONDS,
             },
         },
@@ -94,7 +94,7 @@ async fn test_advance_target_version_upgrades_all_canisters(
     .await;
 
     eprintln!("Step 0.4: Ensure the value of automatically_advance_target_version is correct ...");
-    set_automatically_advance_target_version_flag(
+    propose_to_set_automatically_advance_target_version(
         &pocket_ic,
         sns.governance.canister_id,
         automatically_advance_target_version,
