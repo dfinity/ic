@@ -11,7 +11,6 @@ This macro defines the overall build process for ICOS images, including:
 
 load("@bazel_skylib//rules:copy_file.bzl", "copy_file")
 load("//bazel:defs.bzl", "gzip_compress", "zstd_compress")
-load("//bazel:output_files.bzl", "output_files")
 load("//ci/src/artifacts:upload.bzl", "upload_artifacts")
 load("//ic-os/bootloader:defs.bzl", "build_grub_partition")
 load("//ic-os/components:boundary-guestos.bzl", boundary_component_files = "component_files")
@@ -61,7 +60,7 @@ def icos_build(
         src = ic_version,
         out = "version.txt",
         allow_symlink = True,
-        visibility = visibility,
+        visibility = ["//visibility:public"],
         tags = ["manual"],
     )
 
@@ -395,14 +394,6 @@ def icos_build(
             visibility = visibility,
         )
 
-        output_files(
-            name = "disk-img-url",
-            target = ":upload_disk-img",
-            basenames = ["upload_disk-img_disk-img.tar.zst.url"],
-            visibility = visibility,
-            tags = ["manual"],
-        )
-
         if upgrades:
             upload_artifacts(
                 name = "upload_update-img",
@@ -412,14 +403,6 @@ def icos_build(
                 ],
                 remote_subdir = upload_prefix + "/update-img" + upload_suffix,
                 visibility = visibility,
-            )
-
-            output_files(
-                name = "update-img-url",
-                target = ":upload_update-img",
-                basenames = ["upload_update-img_update-img.tar.zst.url"],
-                visibility = visibility,
-                tags = ["manual"],
             )
 
     # end if upload_prefix != None
@@ -806,14 +789,6 @@ EOF
         ],
         remote_subdir = "boundary-os/disk-img" + upload_suffix,
         visibility = visibility,
-    )
-
-    output_files(
-        name = "disk-img-url",
-        target = ":upload_disk-img",
-        basenames = ["upload_disk-img_disk-img.tar.zst.url"],
-        visibility = visibility,
-        tags = ["manual"],
     )
 
     native.filegroup(
