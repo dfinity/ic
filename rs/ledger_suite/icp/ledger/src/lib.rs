@@ -1,7 +1,7 @@
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_cdk::{api::time, trap};
 use ic_ledger_canister_core::archive::ArchiveCanisterWasm;
-use ic_ledger_canister_core::blockchain::Blockchain;
+use ic_ledger_canister_core::blockchain::{Blockchain, HeapBlockData};
 use ic_ledger_canister_core::ledger::{
     self as core_ledger, LedgerContext, LedgerData, TransactionInfo,
 };
@@ -192,7 +192,7 @@ pub struct Ledger {
     approvals: LedgerAllowances,
     #[serde(default)]
     stable_approvals: AllowanceTable<StableAllowancesData>,
-    pub blockchain: Blockchain<CdkRuntime, IcpLedgerArchiveWasm>,
+    pub blockchain: Blockchain<CdkRuntime, IcpLedgerArchiveWasm, HeapBlockData>,
     // DEPRECATED
     pub maximum_number_of_accounts: usize,
     // DEPRECATED
@@ -272,6 +272,7 @@ impl LedgerData for Ledger {
     type ArchiveWasm = IcpLedgerArchiveWasm;
     type Transaction = Transaction;
     type Block = Block;
+    type BlockData = HeapBlockData;
 
     fn transaction_window(&self) -> Duration {
         self.transaction_window
@@ -293,11 +294,13 @@ impl LedgerData for Ledger {
         &self.token_symbol
     }
 
-    fn blockchain(&self) -> &Blockchain<Self::Runtime, Self::ArchiveWasm> {
+    fn blockchain(&self) -> &Blockchain<Self::Runtime, Self::ArchiveWasm, Self::BlockData> {
         &self.blockchain
     }
 
-    fn blockchain_mut(&mut self) -> &mut Blockchain<Self::Runtime, Self::ArchiveWasm> {
+    fn blockchain_mut(
+        &mut self,
+    ) -> &mut Blockchain<Self::Runtime, Self::ArchiveWasm, Self::BlockData> {
         &mut self.blockchain
     }
 

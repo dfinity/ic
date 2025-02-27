@@ -3,19 +3,21 @@ use dfn_candid::{candid, candid_one, CandidOne};
 #[allow(unused_imports)]
 use dfn_core::BytesS;
 use dfn_core::{
-    api::{data_certificate, set_certified_data},
     endpoint::reject_on_decode_error::{over, over_async, over_async_may_reject},
-    over_init, printer, setup,
+    over_init,
 };
 use dfn_protobuf::protobuf;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_canister_log::{LogEntry, Sink};
-use ic_cdk::api::{caller, instruction_counter, print, time, trap};
+use ic_cdk::api::{
+    caller, data_certificate, instruction_counter, print, set_certified_data, time, trap,
+};
 use ic_icrc1::endpoints::{convert_transfer_error, StandardRecord};
 use ic_ledger_canister_core::ledger::LedgerContext;
 use ic_ledger_canister_core::runtime::heap_memory_size_bytes;
 use ic_ledger_canister_core::{
     archive::{Archive, ArchiveOptions},
+    blockchain::BlockData,
     ledger::{
         apply_transaction, archive_blocks, block_locations, find_block_in_archive, LedgerAccess,
         TransferError as CoreTransferError,
@@ -35,7 +37,7 @@ use icp_ledger::{
     max_blocks_per_request, protobuf, tokens_into_proto, AccountBalanceArgs, AccountIdBlob,
     AccountIdentifier, AccountIdentifierByteBuf, ArchiveInfo, ArchivedBlocksRange,
     ArchivedEncodedBlocksRange, Archives, BinaryAccountBalanceArgs, Block, BlockArg, BlockRes,
-    CandidBlock, Decimals, FeatureFlags, GetBlocksArgs, InitArgs, IterBlocksArgs,
+    CandidBlock, Decimals, FeatureFlags, GetBlocksArgs, InitArgs, IterBlocksArgs, IterBlocksRes,
     LedgerCanisterPayload, Memo, Name, Operation, PaymentError, QueryBlocksResponse,
     QueryEncodedBlocksResponse, SendArgs, Subaccount, Symbol, TipOfChainRes, TotalSupplyArgs,
     Transaction, TransferArgs, TransferError, TransferFee, TransferFeeArgs, MEMO_SIZE_BYTES,
@@ -122,7 +124,7 @@ fn init(
         initial_values,
         minting_account,
         icrc1_minting_account,
-        TimeStamp::from(dfn_core::api::now()),
+        TimeStamp::from_nanos_since_unix_epoch(time()),
         transaction_window,
         send_whitelist,
         transfer_fee,
@@ -581,7 +583,7 @@ fn block(block_index: BlockIndex) -> Option<Result<EncodedBlock, CanisterId>> {
             "[ledger] Checking the ledger for block [{}]",
             block_index
         ));
-        state.blockchain.get(block_index).cloned().map(Ok)
+        state.blockchain.get(block_index).map(Ok)
     }
 }
 
@@ -762,11 +764,8 @@ const MAX_INSTRUCTIONS_PER_UPGRADE: u64 = 5_000_000;
 const MAX_INSTRUCTIONS_PER_TIMER_CALL: u64 = 500_000;
 
 fn post_upgrade(args: Option<LedgerCanisterPayload>) {
-    let start = dfn_core::api::performance_counter(0);
+    let start = instruction_counter();
 
-    // In order to read the first bytes we need to use ic_cdk.
-    // dfn_core assumes the first 4 bytes store stable memory length
-    // and return bytes starting from the 5th byte.
     let mut magic_bytes_reader = ic_cdk::api::stable::StableReader::default();
     const MAGIC_BYTES: &[u8; 3] = b"MGR";
     let mut first_bytes = [0u8; 3];
@@ -851,7 +850,7 @@ fn post_upgrade(args: Option<LedgerCanisterPayload>) {
         );
     }
 
-    let end = dfn_core::api::performance_counter(0);
+    let end = instruction_counter();
     let post_upgrade_instructions_consumed = end - start;
     POST_UPGRADE_INSTRUCTIONS_CONSUMED
         .with(|n| *n.borrow_mut() = post_upgrade_instructions_consumed);
@@ -918,10 +917,7 @@ fn post_upgrade_() {
 
 #[export_name = "canister_pre_upgrade"]
 fn pre_upgrade() {
-    let start = dfn_core::api::performance_counter(0);
-    setup::START.call_once(|| {
-        printer::hook();
-    });
+    let start = instruction_counter();
 
     let ledger = LEDGER
         .read()
@@ -930,7 +926,7 @@ fn pre_upgrade() {
     if !is_ready() {
         // This means that migration did not complete and the correct state
         // of the ledger is still in UPGRADES_MEMORY.
-        print!("Ledger not ready, skipping write to UPGRADES_MEMORY.");
+        print("Ledger not ready, skipping write to UPGRADES_MEMORY.");
         return;
     }
     UPGRADES_MEMORY.with_borrow_mut(|bs| {
@@ -938,7 +934,7 @@ fn pre_upgrade() {
         let mut buffered_writer = BufferedWriter::new(BUFFER_SIZE, writer);
         ciborium::ser::into_writer(&*ledger, &mut buffered_writer)
             .expect("Failed to write the Ledger state to memory manager managed stable memory");
-        let end = dfn_core::api::performance_counter(0);
+        let end = instruction_counter();
         let instructions_consumed = end - start;
         let counter_bytes: [u8; 8] = instructions_consumed.to_le_bytes();
         buffered_writer
@@ -1329,9 +1325,16 @@ fn icrc1_total_supply_candid() {
 #[export_name = "canister_query iter_blocks_pb"]
 fn iter_blocks_() {
     over(protobuf, |IterBlocksArgs { start, length }| {
-        let blocks = &LEDGER.read().unwrap().blockchain.blocks;
-        let length = std::cmp::min(length, max_blocks_per_request(&PrincipalId::from(caller())));
-        icp_ledger::iter_blocks(blocks, start, length)
+        let length =
+            std::cmp::min(length, max_blocks_per_request(&PrincipalId::from(caller()))) as u64;
+        let start = start as u64;
+        let blocks = LEDGER
+            .read()
+            .unwrap()
+            .blockchain
+            .blocks
+            .get_blocks(start..start + length);
+        IterBlocksRes(blocks)
     });
 }
 
@@ -1346,7 +1349,7 @@ fn get_blocks_() {
         );
         let blockchain = &LEDGER.read().unwrap().blockchain;
         let start_offset = blockchain.num_archived_blocks();
-        icp_ledger::get_blocks(&blockchain.blocks, start_offset, start, length as usize)
+        icp_ledger::get_blocks_ledger(&blockchain.blocks, start_offset, start, length as usize)
     });
 }
 
@@ -1367,7 +1370,7 @@ fn query_blocks(GetBlocksArgs { start, length }: GetBlocksArgs) -> QueryBlocksRe
 
     let blocks: Vec<CandidBlock> = ledger
         .blockchain
-        .block_slice(local_blocks.clone())
+        .get_blocks(local_blocks.clone())
         .iter()
         .map(|enc_block| {
             CandidBlock::from(
@@ -1390,7 +1393,7 @@ fn query_blocks(GetBlocksArgs { start, length }: GetBlocksArgs) -> QueryBlocksRe
 
     QueryBlocksResponse {
         chain_length,
-        certificate: dfn_core::api::data_certificate().map(serde_bytes::ByteBuf::from),
+        certificate: data_certificate().map(serde_bytes::ByteBuf::from),
         blocks,
         first_block_index: local_blocks.start as BlockIndex,
         archived_blocks,
@@ -1469,12 +1472,12 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
     )?;
     w.encode_gauge(
         "ledger_stable_memory_pages",
-        dfn_core::api::stable_memory_size_in_pages() as f64,
+        ic_cdk::api::stable::stable_size() as f64,
         "Size of the stable memory allocated by this canister measured in 64K Wasm pages.",
     )?;
     w.encode_gauge(
         "stable_memory_bytes",
-        (dfn_core::api::stable_memory_size_in_pages() * 64 * 1024) as f64,
+        (ic_cdk::api::stable::stable_size() * 64 * 1024) as f64,
         "Size of the stable memory allocated by this canister measured in bytes.",
     )?;
     w.encode_gauge(
@@ -1494,7 +1497,7 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
     )?;
     w.encode_gauge(
         "ledger_blocks",
-        ledger.blockchain.blocks.len() as f64,
+        ledger.blockchain.num_unarchived_blocks() as f64,
         "Total number of blocks stored in the main memory.",
     )?;
     // This value can go down -- the number is increased before archiving, and if
@@ -1508,7 +1511,7 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
     // order to be able to accurately calculate the total block rate.
     w.encode_gauge(
         "ledger_total_blocks",
-        ledger.blockchain.num_archived_blocks.saturating_add(ledger.blockchain.blocks.len() as u64) as f64,
+        ledger.blockchain.num_archived_blocks.saturating_add(ledger.blockchain.num_unarchived_blocks()) as f64,
         "Total number of blocks stored in the main memory, plus total number of blocks sent to the archive.",
     )?;
     if is_ready() {
@@ -1587,7 +1590,7 @@ fn query_encoded_blocks(
         max_blocks_per_request(&PrincipalId::from(caller())),
     );
 
-    let blocks = ledger.blockchain.block_slice(local_blocks.clone()).to_vec();
+    let blocks = ledger.blockchain.get_blocks(local_blocks.clone()).to_vec();
 
     let archived_blocks = locations
         .archived_blocks
@@ -1606,7 +1609,7 @@ fn query_encoded_blocks(
 
     QueryEncodedBlocksResponse {
         chain_length,
-        certificate: dfn_core::api::data_certificate().map(serde_bytes::ByteBuf::from),
+        certificate: data_certificate().map(serde_bytes::ByteBuf::from),
         blocks,
         first_block_index: local_blocks.start as BlockIndex,
         archived_blocks,
