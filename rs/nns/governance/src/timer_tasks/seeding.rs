@@ -35,7 +35,7 @@ impl RecurringAsyncTask for SeedingTask {
             Ok(bytes) => {
                 let seed = Decode!(&bytes, [u8; 32]).unwrap();
                 self.governance.with_borrow_mut(|governance| {
-                    governance.randomness.seed_rng(seed);
+                    governance.seed_rng(seed);
                 });
                 SEEDING_INTERVAL
             }

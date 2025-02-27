@@ -1463,8 +1463,7 @@ pub struct Governance {
     cmc: Arc<dyn CMC>,
 
     /// Implementation of a randomness generator
-    /// TODO DO NOT MERGE -make this private again
-    pub randomness: Box<dyn RandomnessGenerator>,
+    randomness: Box<dyn RandomnessGenerator>,
 
     /// Timestamp, in seconds since the unix epoch, until which no proposal
     /// needs to be processed.
@@ -1791,6 +1790,10 @@ impl Governance {
             heap_governance_proto,
             rng_seed,
         )
+    }
+
+    pub fn seed_rng(&mut self, seed: [u8; 32]) {
+        self.randomness.seed_rng(seed);
     }
 
     /// Validates that the underlying protobuf is well formed.
