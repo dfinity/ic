@@ -126,6 +126,7 @@ fn test(env: TestEnv) {
     let log = env.logger();
 
     let mainnet_version = get_mainnet_nns_revision();
+    info!(log, "Continuing with mainnet version {mainnet_version}");
 
     let output_dir = PathBuf::from("cup_compatibility_test");
     let branch_test = get_dependency_path("rs/tests/cup_compatibility/binaries/types_test");
