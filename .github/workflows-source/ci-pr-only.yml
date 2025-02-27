@@ -159,7 +159,7 @@ jobs:
         run: |
           [ -n "${NODE_NAME:-}" ] && echo "Node: $NODE_NAME"
           ./ci/scripts/bazel-coverage.sh
-      - name: Upload bazel-bep
+      - name: Upload bazel-coverage
         uses: actions/upload-artifact@v4
         with:
           name: bazel-coverage
