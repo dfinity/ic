@@ -8625,6 +8625,7 @@ dependencies = [
  "proptest 1.6.0",
  "rand 0.8.5",
  "regex",
+ "rstest",
  "scoped_threadpool",
  "serde",
  "serde_bytes",
@@ -17690,7 +17691,7 @@ dependencies = [
 
 [[package]]
 name = "pocket-ic"
-version = "6.0.0"
+version = "7.0.0"
 dependencies = [
  "backoff",
  "base64 0.13.1",
@@ -17727,7 +17728,7 @@ dependencies = [
 
 [[package]]
 name = "pocket-ic-server"
-version = "7.0.0"
+version = "8.0.0"
 dependencies = [
  "aide",
  "askama",

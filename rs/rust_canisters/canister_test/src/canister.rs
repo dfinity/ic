@@ -768,32 +768,6 @@ impl<'a> Canister<'a> {
         self.wasm = Some(Wasm::from_bytes(wasm));
     }
 
-    pub async fn add_controller(&self, additional_controller: PrincipalId) -> Result<(), String> {
-        let status_res: CanisterStatusResultV2 = self
-            .runtime
-            .get_management_canister_with_effective_canister_id(self.canister_id().into())
-            .update_("canister_status", candid, (self.as_record(),))
-            .await?;
-
-        let mut controllers = status_res.controllers();
-        controllers.push(additional_controller);
-
-        self.runtime
-            .get_management_canister_with_effective_canister_id(self.canister_id().into())
-            .update_(
-                ic00::Method::UpdateSettings.to_string(),
-                dfn_candid::candid_multi_arity,
-                (UpdateSettingsArgs {
-                    canister_id: self.canister_id.into(),
-                    settings: CanisterSettingsArgsBuilder::new()
-                        .with_controllers(controllers)
-                        .build(),
-                    sender_canister_version: None,
-                },),
-            )
-            .await
-    }
-
     pub async fn set_controller(&self, new_controller: PrincipalId) -> Result<(), String> {
         self.set_controllers(vec![new_controller]).await
     }
