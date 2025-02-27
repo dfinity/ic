@@ -6314,6 +6314,10 @@ impl Governance {
             Some(Command::RefreshVotingPower(_)) => self
                 .refresh_voting_power(&id, caller)
                 .map(ManageNeuronResponse::refresh_voting_power_response),
+            Some(Command::DisburseMaturity(_)) => Err(GovernanceError::new_with_message(
+                ErrorType::Unavailable,
+                "Disbursing maturity is not implemented yet.",
+            )),
             None => panic!(),
         }
     }
