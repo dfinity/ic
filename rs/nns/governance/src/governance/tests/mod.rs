@@ -1180,6 +1180,9 @@ fn test_pre_and_post_upgrade_first_time() {
         Box::new(MockRandomness::new()),
     );
 
+    // Simulate seeding the randomness in a running governance canister.
+    governance.randomness.seed_rng([12; 32]);
+
     assert_eq!(governance.neuron_store.len(), 1);
     // On next pre-upgrade, we get the heap proto and store it in stable memory
     let mut extracted_proto = governance.take_heap_proto();
@@ -1210,6 +1213,7 @@ fn test_pre_and_post_upgrade_first_time() {
     // It should not rebuild during post_upgrade so it should still be mis-matched with neurons.
     let extracted_proto = governance.take_heap_proto();
     assert_eq!(extracted_proto.topic_followee_index.len(), 2);
+    assert_eq!(extracted_proto.rng_seed, Some(vec![12; 32]));
 }
 
 #[test]

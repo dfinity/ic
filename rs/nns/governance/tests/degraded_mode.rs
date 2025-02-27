@@ -11,8 +11,7 @@ use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_nns_governance::canister_state::CanisterRandomnessGenerator;
 use ic_nns_governance::{
     governance::{
-        Environment, Governance, HeapGrowthPotential, RngError,
-        HEAP_SIZE_SOFT_LIMIT_IN_WASM32_PAGES,
+        Environment, Governance, HeapGrowthPotential, HEAP_SIZE_SOFT_LIMIT_IN_WASM32_PAGES,
     },
     pb::v1::{
         governance_error::ErrorType,

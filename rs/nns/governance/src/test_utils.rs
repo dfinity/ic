@@ -135,10 +135,12 @@ impl ExpectedCallCanisterMethodCallArguments {
     }
 }
 
-pub(crate) struct MockRandomness {}
+pub(crate) struct MockRandomness {
+    seed: Option<[u8; 32]>,
+}
 impl MockRandomness {
     pub fn new() -> MockRandomness {
-        MockRandomness {}
+        MockRandomness { seed: None }
     }
 }
 
@@ -152,11 +154,11 @@ impl RandomnessGenerator for MockRandomness {
     }
 
     fn seed_rng(&mut self, seed: [u8; 32]) {
-        todo!()
+        self.seed = Some(seed);
     }
 
     fn get_rng_seed(&self) -> Option<[u8; 32]> {
-        todo!()
+        self.seed
     }
 }
 

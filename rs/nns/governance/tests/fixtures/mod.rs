@@ -514,19 +514,31 @@ impl IcpLedger for NNSFixture {
 
 impl RandomnessGenerator for NNSFixture {
     fn random_u64(&mut self) -> Result<u64, RngError> {
-        todo!()
+        self.nns_state.try_lock().unwrap().environment.random_u64()
     }
 
     fn random_byte_array(&mut self) -> Result<[u8; 32], RngError> {
-        todo!()
+        self.nns_state
+            .try_lock()
+            .unwrap()
+            .environment
+            .random_byte_array()
     }
 
     fn seed_rng(&mut self, seed: [u8; 32]) {
-        todo!()
+        self.nns_state
+            .try_lock()
+            .unwrap()
+            .environment
+            .seed_rng(seed)
     }
 
     fn get_rng_seed(&self) -> Option<[u8; 32]> {
-        todo!()
+        self.nns_state
+            .try_lock()
+            .unwrap()
+            .environment
+            .get_rng_seed()
     }
 }
 

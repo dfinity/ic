@@ -56,7 +56,7 @@ impl RandomnessGenerator for FakeRandomness {
         todo!()
     }
 
-    fn seed_rng(&mut self, seed: [u8; 32]) {
+    fn seed_rng(&mut self, _seed: [u8; 32]) {
         todo!()
     }
 

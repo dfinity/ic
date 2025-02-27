@@ -125,6 +125,7 @@ impl CanisterEnv {
     }
 }
 
+#[derive(Default)]
 pub struct CanisterRandomnessGenerator {
     rng: Option<ChaCha20Rng>,
 }

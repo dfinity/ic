@@ -197,3 +197,49 @@ impl Environment for EnvironmentFixture {
         }
     }
 }
+
+impl RandomnessGenerator for EnvironmentFixture {
+    fn random_u64(&mut self) -> Result<u64, RngError> {
+        match self
+            .environment_fixture_state
+            .try_lock()
+            .unwrap()
+            .rng
+            .as_mut()
+        {
+            Some(rand) => Ok(rand.next_u64()),
+            None => Err(RngError::RngNotInitialized),
+        }
+    }
+
+    fn random_byte_array(&mut self) -> Result<[u8; 32], RngError> {
+        match self
+            .environment_fixture_state
+            .try_lock()
+            .unwrap()
+            .rng
+            .as_mut()
+        {
+            Some(rand) => {
+                let mut bytes = [0u8; 32];
+                rand.fill_bytes(&mut bytes);
+                Ok(bytes)
+            }
+            // Kick the thing
+            None => Err(RngError::RngNotInitialized),
+        }
+    }
+
+    fn seed_rng(&mut self, _seed: [u8; 32]) {
+        unimplemented!()
+    }
+
+    fn get_rng_seed(&self) -> Option<[u8; 32]> {
+        self.environment_fixture_state
+            .try_lock()
+            .unwrap()
+            .rng
+            .as_ref()
+            .map(|r| r.get_seed())
+    }
+}
