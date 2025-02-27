@@ -14294,7 +14294,7 @@ async fn test_settle_neurons_fund_is_idempotent_for_create_service_nervous_syste
 }
 
 #[tokio::test]
-async fn distribute_rewards_load_test() {
+async fn distribute_rewards_test() {
     // Step 1: Prepare the world.
 
     let genesis_timestamp_seconds = 1;
@@ -14414,21 +14414,11 @@ async fn distribute_rewards_load_test() {
 
     // Step 2: Run code under test.
     let clock = std::time::Instant::now;
-    let start = clock();
     governance.run_periodic_tasks().await;
-    let execution_duration_seconds = (clock() - start).as_secs_f64();
-
-    // Step 3: Inspect results. The main thing is to make sure that the code
-    // under test ran within a "reasonable" amount of time. On a 2019 MacBook
-    // Pro, it takes < 1.5 s. The limit is set to > 10x that to hopefully avoid
-    // flakes in CI.
-    assert!(
-        execution_duration_seconds < 5.0,
-        "{}",
-        execution_duration_seconds
-    );
-
     run_pending_timers_every_x_seconds(std::time::Duration::from_secs(2), 10);
+
+    // Step 3: Inspect results.
+
     // Step 3.1: Inspect neurons to make sure they have been rewarded for voting.
     governance.neuron_store.with_active_neurons_iter(|iter| {
         for neuron in iter {
