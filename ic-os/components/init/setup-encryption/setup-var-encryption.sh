@@ -51,6 +51,7 @@ if [ "${TYPE}" == "FOOBAR" ]; then
     echo "Found LUKS header in partition ${VAR_PARTITION} for /var."
     cryptsetup luksOpen "${VAR_PARTITION}" var_crypt --key-file /boot/config/store.keyfile
 else
+    dd if=/dev/zero of=${VAR_PARTITION} count=16 bs=1M
     echo "No LUKS header found in partition ${VAR_PARTITION} for /var. Setting it up on first boot."
     # Set minimal iteration count -- we already use a random key with
     # maximal entropy, pbkdf doesn't gain anything (besides slowing

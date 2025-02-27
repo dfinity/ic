@@ -148,6 +148,8 @@ if [ -f /boot/config/CONFIGURED ]; then
     echo "Bootstrap completed already"
 fi
 
+mount -o remount,rw /boot/config
+
 while [ ! -f /boot/config/CONFIGURED ]; do
     echo "Locating CONFIG device"
     DEV="$(find_config_devices)"
@@ -158,7 +160,7 @@ while [ ! -f /boot/config/CONFIGURED ]; do
     # But even if nothing can be mounted, just try and see if something usable
     # is there already -- this might be useful when operating this thing as a
     # docker container instead of full-blown VM.
-    if [ "${DEV}" != "" ]; then
+    if [ ! -d /mnt ] && [ "${DEV}" != "" ]; then
         echo "Found CONFIG device at ${DEV}"
         mount -t vfat -o ro "${DEV}" /mnt
     fi
@@ -186,6 +188,8 @@ while [ ! -f /boot/config/CONFIGURED ]; do
         umount /mnt
     fi
 done
+
+mount -o remount,ro /boot/config
 
 node_operator_private_key_exists=0
 if [ -f "/var/lib/ic/data/node_operator_private_key.pem" ]; then
