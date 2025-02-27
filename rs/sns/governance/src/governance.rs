@@ -32,6 +32,7 @@ use crate::{
             manage_neuron_response::{
                 DisburseMaturityResponse, MergeMaturityResponse, StakeMaturityResponse,
             },
+            nervous_system_function::FunctionType,
             neuron::{DissolveState, Followees},
             proposal::Action,
             proposal_data::ActionAuxiliary as ActionAuxiliaryPb,
@@ -52,14 +53,15 @@ use crate::{
             MintTokensRequest, MintTokensResponse, NervousSystemFunction, NervousSystemParameters,
             Neuron, NeuronId, NeuronPermission, NeuronPermissionList, NeuronPermissionType,
             Proposal, ProposalData, ProposalDecisionStatus, ProposalId, ProposalRewardStatus,
-            RegisterDappCanisters, RewardEvent, SetCustomProposalTopics, Tally,
+            RegisterDappCanisters, RewardEvent, SetCustomProposalTopics, Tally, Topic,
             TransferSnsTreasuryFunds, UpgradeSnsControlledCanister, Vote, WaitForQuietState,
         },
     },
     proposal::{
         get_action_auxiliary,
         transfer_sns_treasury_funds_amount_is_small_enough_at_execution_time_or_err,
-        validate_and_render_proposal, ValidGenericNervousSystemFunction, MAX_LIST_PROPOSAL_RESULTS,
+        validate_and_render_proposal, validate_and_render_set_custom_proposal_topics,
+        ValidGenericNervousSystemFunction, MAX_LIST_PROPOSAL_RESULTS,
         MAX_NUMBER_OF_PROPOSALS_WITH_BALLOTS,
     },
     sns_upgrade::{
@@ -476,6 +478,51 @@ impl GovernanceProto {
                      the maturity modulation value from the Cycles Minting Canister.",
                 )
             })
+    }
+
+    pub fn custom_functions_to_topics(&self) -> BTreeMap<u64, Option<Topic>> {
+        self.id_to_nervous_system_functions
+            .iter()
+            .filter_map(|(function_id, function)| {
+                match &function.function_type {
+                    Some(FunctionType::GenericNervousSystemFunction(generic)) => {
+                        if let Some(topic) = generic.topic {
+                            let specific_topic = match Topic::try_from(topic) {
+                                Err(err) => {
+                                    log!(
+                                        ERROR,
+                                        "Custom proposal ID {function_id}: Cannot interpret \
+                                            {topic} as Topic: {err}",
+                                    );
+
+                                    // This should never happen; if it somehow does, treat this
+                                    // case as a custom function for which the topic is unknown.
+                                    None
+                                }
+                                Ok(Topic::Unspecified) => {
+                                    log!(
+                                        ERROR,
+                                        "Custom proposal ID {function_id}: topic Unspecified."
+                                    );
+
+                                    // This should never happen, but if it somehow does, treat this
+                                    // case as a custom function for which the topic is unknown.
+                                    None
+                                }
+                                Ok(topic) => Some(topic),
+                            };
+
+                            Some((*function_id, specific_topic))
+                        } else {
+                            // Topic not yet set for this custom function.
+                            Some((*function_id, None))
+                        }
+                    }
+                    // Not a custom function.
+                    _ => None,
+                }
+            })
+            .collect()
     }
 }
 
@@ -3129,16 +3176,38 @@ impl Governance {
         &mut self,
         set_custom_proposal_topics: SetCustomProposalTopics,
     ) -> Result<(), GovernanceError> {
-        // TODO: Validate set_custom_proposal_topics.topic_infos
-        // - all function are registered
-        // - topics can be decoded
+        // This proposal had already been validated at submission time, but the state may have
+        // change since then, which is why it is being validated again.
+        if let Err(message) = validate_and_render_set_custom_proposal_topics(
+            &set_custom_proposal_topics,
+            &self.proto.custom_functions_to_topics(),
+        ) {
+            return Err(GovernanceError::new_with_message(
+                ErrorType::InvalidProposal,
+                message,
+            ));
+        }
 
-        // for (custom_function_id, topic) in topic_infos.into_iter() {
-        //     // self.proto
-        //     //     .id_to_nervous_system_functions
-        //     //     .
-        //     todo!();
-        // }
+        let SetCustomProposalTopics {
+            custom_function_id_to_topic,
+        } = set_custom_proposal_topics;
+
+        for (custom_function_id, new_topic) in custom_function_id_to_topic.into_iter() {
+            let nervous_system_function = self
+                .proto
+                .id_to_nervous_system_functions
+                .get_mut(&custom_function_id);
+
+            if let Some(nervous_system_function) = nervous_system_function {
+                let proposal_type = nervous_system_function.function_type.as_mut();
+                if let Some(FunctionType::GenericNervousSystemFunction(custom_proposal_type)) =
+                    proposal_type
+                {
+                    custom_proposal_type.topic = Some(new_topic);
+                }
+            }
+        }
+
         Ok(())
     }
 
