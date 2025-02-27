@@ -1325,7 +1325,8 @@ fn icrc1_total_supply_candid() {
 #[export_name = "canister_query iter_blocks_pb"]
 fn iter_blocks_() {
     over(protobuf, |IterBlocksArgs { start, length }| {
-        let length = std::cmp::min(length, max_blocks_per_request(&caller())) as u64;
+        let length =
+            std::cmp::min(length, max_blocks_per_request(&PrincipalId::from(caller()))) as u64;
         let start = start as u64;
         let blocks = LEDGER
             .read()
