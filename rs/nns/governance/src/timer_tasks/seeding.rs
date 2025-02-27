@@ -41,10 +41,8 @@ impl RecurringAsyncTask for SeedingTask {
             }
             Err((code, msg)) => {
                 println!(
-                    "{}Error seeding RNG. Error Code: {}. Error Message: {}",
-                    LOG_PREFIX,
-                    code.unwrap_or_default(),
-                    msg
+                    "{}Error seeding RNG. Error Code: {:?}. Error Message: {}",
+                    LOG_PREFIX, code, msg
                 );
                 RETRY_SEEDING_INTERVAL
             }
