@@ -1611,6 +1611,15 @@ where
     {
         Ok(self.canister(canister_id)?.canister())
     }
+    pub fn snapshot_canister_bits(
+        &self,
+        snapshot_id: &SnapshotId,
+    ) -> Result<
+        ProtoFileWith<pb_canister_snapshot_bits::CanisterSnapshotBits, Permissions>,
+        LayoutError,
+    > {
+        Ok(self.snapshot(snapshot_id)?.snapshot())
+    }
 
     /// Removes the unverified checkpoint marker.
     /// If the marker does not exist, this function does nothing and returns `Ok(())`.
@@ -2020,7 +2029,7 @@ where
         self.snapshot_root.join(WASM_FILE).into()
     }
 
-    pub fn snapshot(
+    fn snapshot(
         &self,
     ) -> ProtoFileWith<pb_canister_snapshot_bits::CanisterSnapshotBits, Permissions> {
         self.snapshot_root.join(SNAPSHOT_FILE).into()

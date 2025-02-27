@@ -359,9 +359,8 @@ fn snapshot_pbuf_path(snapshot_id: SnapshotId) -> String {
         CheckpointLayout::<ReadOnly>::new_untracked("".into(), Height::new(0)).unwrap();
 
     checkpoint_layout
-        .snapshot(&snapshot_id)
+        .snapshot_canister_bits(&snapshot_id)
         .unwrap()
-        .snapshot()
         .raw_path()
         .to_str()
         .unwrap()

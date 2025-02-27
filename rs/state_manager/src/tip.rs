@@ -1009,7 +1009,7 @@ fn serialize_snapshot_to_tip(
     let snapshot_layout = tip.snapshot(snapshot_id)?;
 
     // The protobuf is written at each checkpoint.
-    snapshot_layout.snapshot().serialize(
+    tip.snapshot_canister_bits(snapshot_id)?.serialize(
         CanisterSnapshotBits {
             snapshot_id: *snapshot_id,
             canister_id: canister_snapshot.canister_id(),

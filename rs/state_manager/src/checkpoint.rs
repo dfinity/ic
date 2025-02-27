@@ -949,7 +949,9 @@ fn load_snapshot(
 
     let starting_time = Instant::now();
     let canister_snapshot_bits: CanisterSnapshotBits = CanisterSnapshotBits::try_from(
-        snapshot_layout.snapshot().deserialize()?,
+        checkpoint_layout
+            .snapshot_canister_bits(snapshot_id)?
+            .deserialize()?,
     )
     .map_err(|err| {
         into_checkpoint_error(
