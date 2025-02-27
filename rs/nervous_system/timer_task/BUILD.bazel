@@ -9,6 +9,7 @@ DEPENDENCIES = [
     "@crate_index//:candid",
     "@crate_index//:ic-cdk",
     "@crate_index//:ic-cdk-timers",
+    "@crate_index//:ic-metrics-encoder",
     "@crate_index//:serde",
 ]
 
