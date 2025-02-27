@@ -11495,6 +11495,8 @@ version = "0.9.0"
 dependencies = [
  "ic-base-types",
  "ic-protobuf",
+ "maplit",
+ "pretty_assertions",
 ]
 
 [[package]]
