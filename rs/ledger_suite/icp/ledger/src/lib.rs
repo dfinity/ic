@@ -680,6 +680,12 @@ pub fn clear_stable_balances_data() {
     });
 }
 
+pub fn clear_stable_blocks_data() {
+    BLOCKS_MEMORY.with_borrow_mut(|blocks| {
+        blocks.clear_new();
+    });
+}
+
 pub fn balances_len() -> u64 {
     BALANCES_MEMORY.with_borrow(|balances| balances.len())
 }

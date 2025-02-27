@@ -58,9 +58,9 @@ use icrc_ledger_types::{
     icrc21::{errors::Icrc21Error, requests::ConsentMessageRequest, responses::ConsentInfo},
 };
 use ledger_canister::{
-    balances_len, clear_stable_allowance_data, clear_stable_balances_data, is_ready, ledger_state,
-    panic_if_not_ready, set_ledger_state, Ledger, LedgerField, LedgerState, LEDGER, LEDGER_VERSION,
-    MAX_MESSAGE_SIZE_BYTES, UPGRADES_MEMORY,
+    balances_len, clear_stable_allowance_data, clear_stable_balances_data,
+    clear_stable_blocks_data, is_ready, ledger_state, panic_if_not_ready, set_ledger_state, Ledger,
+    LedgerField, LedgerState, LEDGER, LEDGER_VERSION, MAX_MESSAGE_SIZE_BYTES, UPGRADES_MEMORY,
 };
 use num_traits::cast::ToPrimitive;
 #[allow(unused_imports)]
@@ -830,6 +830,8 @@ fn post_upgrade(args: Option<LedgerCanisterPayload>) {
             .with(|n| *n.borrow_mut() = pre_upgrade_instructions_consumed);
         if upgrade_from_version < 3 {
             set_ledger_state(LedgerState::Migrating(LedgerField::Blocks));
+            print(format!("Upgrading from version {upgrade_from_version} which does not store blocks in stable structures, clearing stable blocks data.").as_str());
+            clear_stable_blocks_data();
         }
         if upgrade_from_version < 2 {
             set_ledger_state(LedgerState::Migrating(LedgerField::Balances));
