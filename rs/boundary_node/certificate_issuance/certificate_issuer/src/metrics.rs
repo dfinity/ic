@@ -36,7 +36,7 @@ impl MetricParams {
     pub fn new(registry: &Registry, namespace: &str, action: &str, labels: &[&str]) -> Self {
         let counter = CounterVec::new(
             prometheus::Opts::new(
-                format!("{namespace}_{action}"),
+                format!("{namespace}_{action}_total"),
                 format!("Counts occurrences of {action} calls"),
             ),
             labels,
