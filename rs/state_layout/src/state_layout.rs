@@ -38,10 +38,13 @@ use std::marker::PhantomData;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
-use std::time::Instant;
+use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
 use crate::error::LayoutError;
 use crate::utils::do_copy;
+
+use crossbeam_channel::{bounded, unbounded, Sender};
+use ic_utils_thread::JoinOnDrop;
 
 #[cfg(test)]
 mod tests;
@@ -341,6 +344,8 @@ pub struct StateLayout {
     metrics: StateLayoutMetrics,
     tip_handler_captured: Arc<AtomicBool>,
     checkpoint_ref_registry: Arc<Mutex<BTreeMap<Height, CheckpointRefData>>>,
+    checkpoint_removal_sender: Sender<CheckpointRemovalRequest>,
+    _checkpoint_removal_handle: Arc<JoinOnDrop<()>>,
 }
 
 pub struct TipHandler {
@@ -448,6 +453,46 @@ impl TipHandler {
     }
 }
 
+enum CheckpointRemovalRequest {
+    Remove(PathBuf),
+    Wait { sender: Sender<()> },
+}
+
+fn spawn_checkpoint_removal_thread(
+    log: ReplicaLogger,
+    metrics: StateLayoutMetrics,
+) -> (JoinOnDrop<()>, Sender<CheckpointRemovalRequest>) {
+    let (checkpoint_removal_sender, checkpoint_removal_receiver) =
+        unbounded::<CheckpointRemovalRequest>();
+    let checkpoint_removal_handle = JoinOnDrop::new(
+        std::thread::Builder::new()
+            .name("CheckpointRemovalThread".to_string())
+            .spawn(move || {
+                while let Ok(req) = checkpoint_removal_receiver.recv() {
+                    match req {
+                        CheckpointRemovalRequest::Remove(path) => {
+                            let start = Instant::now();
+                            if let Err(err) = std::fs::remove_dir_all(&path) {
+                                error!(
+                                    log,
+                                    "Failed to remove checkpoint directory. Error: {}.", err
+                                )
+                            }
+                            metrics
+                                .state_layout_remove_checkpoint_duration
+                                .observe(start.elapsed().as_secs_f64());
+                        }
+                        CheckpointRemovalRequest::Wait { sender } => {
+                            sender.send(()).expect("Failed to send completion signal");
+                        }
+                    }
+                }
+            })
+            .expect("failed to spawn checkpoint removal thread"),
+    );
+    (checkpoint_removal_handle, checkpoint_removal_sender)
+}
+
 impl StateLayout {
     /// Create a new StateLayout and initialize it by creating all necessary
     /// directories if they do not exist already and clear all tmp directories
@@ -472,12 +517,18 @@ impl StateLayout {
         root: PathBuf,
         metrics_registry: &MetricsRegistry,
     ) -> Self {
+        let metrics = StateLayoutMetrics::new(metrics_registry);
+        let (checkpoint_removal_handle, checkpoint_removal_sender) =
+            spawn_checkpoint_removal_thread(log.clone(), metrics.clone());
+
         Self {
             root,
             log,
-            metrics: StateLayoutMetrics::new(metrics_registry),
+            metrics,
             tip_handler_captured: Arc::new(false.into()),
             checkpoint_ref_registry: Arc::new(Mutex::new(BTreeMap::new())),
+            checkpoint_removal_sender,
+            _checkpoint_removal_handle: Arc::new(checkpoint_removal_handle),
         }
     }
 
@@ -882,6 +933,51 @@ impl StateLayout {
         self.backups().join(Self::checkpoint_name(h))
     }
 
+    fn remove_checkpoint_async<T>(
+        &self,
+        height: Height,
+        drop_after_rename: T,
+    ) -> Result<(), LayoutError> {
+        let start = Instant::now();
+        let cp_name = Self::checkpoint_name(height);
+        let cp_path = self.checkpoints().join(&cp_name);
+        let timestamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default();
+        let tmp_path = self
+            .fs_tmp()
+            .join(format!("{}_{}", cp_name, timestamp.as_millis()));
+
+        // Atomically removes the checkpoint by first renaming it into tmp_path, and then deleting tmp_path.
+        // This way maintains the invariant that <root>/checkpoints/<height> are always internally consistent.
+        self.atomically_rename_to_tmp_path(&cp_path, &tmp_path)
+            .map_err(|err| LayoutError::IoError {
+                path: cp_path.clone(),
+                message: format!(
+                    "failed to rename checkpoint {} to tmp path {} (err kind: {:?})",
+                    cp_name,
+                    tmp_path.display(),
+                    err.kind()
+                ),
+                io_err: err,
+            })?;
+
+        // Drops drop_after_rename once the checkpoint path is renamed to tmp_path.
+        std::mem::drop(drop_after_rename);
+        let elapsed = start.elapsed();
+        info!(
+            self.log,
+            "Moved checkpoint @{} to tmp path in {:?}", height, elapsed
+        );
+        self.checkpoint_removal_sender
+            .send(CheckpointRemovalRequest::Remove(tmp_path))
+            .expect("failed to send checkpoint removal");
+        self.metrics
+            .state_layout_remove_checkpoint_duration
+            .observe(elapsed.as_secs_f64());
+        Ok(())
+    }
+
     /// Removes a checkpoint for a given height if it exists.
     /// Drops drop_after_rename once the checkpoint is moved to tmp.
     ///
@@ -892,23 +988,55 @@ impl StateLayout {
         height: Height,
         drop_after_rename: T,
     ) -> Result<(), LayoutError> {
+        self.remove_checkpoint_async(height, drop_after_rename)
+    }
+
+    fn remove_checkpoint_sync<T>(
+        &self,
+        height: Height,
+        drop_after_rename: T,
+    ) -> Result<(), LayoutError> {
         let start = Instant::now();
         let cp_name = Self::checkpoint_name(height);
         let cp_path = self.checkpoints().join(&cp_name);
-        let tmp_path = self.fs_tmp().join(&cp_name);
+        let timestamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default();
+        let tmp_path = self
+            .fs_tmp()
+            .join(format!("{}_{}", cp_name, timestamp.as_millis()));
 
-        self.atomically_remove_via_path(&cp_path, &tmp_path, drop_after_rename)
+        // Atomically removes the checkpoint by first renaming it into tmp_path, and then deleting tmp_path.
+        // This way maintains the invariant that <root>/checkpoints/<height> are always internally consistent.
+        self.atomically_rename_to_tmp_path(&cp_path, &tmp_path)
             .map_err(|err| LayoutError::IoError {
-                path: cp_path,
+                path: cp_path.clone(),
                 message: format!(
-                    "failed to remove checkpoint {} (err kind: {:?})",
+                    "failed to rename checkpoint {} to tmp path {} (err kind: {:?})",
                     cp_name,
+                    tmp_path.display(),
                     err.kind()
                 ),
                 io_err: err,
             })?;
+
+        // Drops drop_after_rename once the checkpoint path is renamed to tmp_path.
+        std::mem::drop(drop_after_rename);
+        std::fs::remove_dir_all(&tmp_path).map_err(|err| LayoutError::IoError {
+            path: cp_path,
+            message: format!(
+                "failed to remove checkpoint {} from tmp path {} (err kind: {:?})",
+                cp_name,
+                tmp_path.display(),
+                err.kind()
+            ),
+            io_err: err,
+        })?;
         let elapsed = start.elapsed();
-        info!(self.log, "Removed checkpoint @{} in {:?}", height, elapsed);
+        info!(
+            self.log,
+            "Removed checkpoint synchronously @{} in {:?}", height, elapsed
+        );
         self.metrics
             .state_layout_remove_checkpoint_duration
             .observe(elapsed.as_secs_f64());
@@ -916,7 +1044,7 @@ impl StateLayout {
     }
 
     pub fn force_remove_checkpoint(&self, height: Height) -> Result<(), LayoutError> {
-        self.remove_checkpoint(height, ())
+        self.remove_checkpoint_sync(height, ())
     }
 
     /// Removes a checkpoint for a given height if it exists and it is not the latest checkpoint.
@@ -966,6 +1094,16 @@ impl StateLayout {
                 }
             }
         }
+    }
+
+    pub fn flush_checkpoint_removal_channel(&self) {
+        let (sender, receiver) = bounded::<()>(1);
+        self.checkpoint_removal_sender
+            .send(CheckpointRemovalRequest::Wait { sender })
+            .expect("failed to send completion signal");
+        receiver
+            .recv()
+            .expect("failed to receive completion signal");
     }
 
     /// Marks the checkpoint with the specified height as diverged.
@@ -1040,12 +1178,23 @@ impl StateLayout {
         let tmp_path = self
             .fs_tmp()
             .join(format!("diverged_checkpoint_{}", &checkpoint_name));
-        self.atomically_remove_via_path(&cp_path, &tmp_path, ())
+        self.atomically_rename_to_tmp_path(&cp_path, &tmp_path)
             .map_err(|err| LayoutError::IoError {
-                path: cp_path,
-                message: format!("failed to remove diverged checkpoint {}", height),
+                path: cp_path.clone(),
+                message: format!(
+                    "failed to rename diverged checkpoint {} to tmp path",
+                    height
+                ),
                 io_err: err,
-            })
+            })?;
+        std::fs::remove_dir_all(&tmp_path).map_err(|err| LayoutError::IoError {
+            path: cp_path,
+            message: format!(
+                "failed to remove diverged checkpoint {} from tmp path",
+                height
+            ),
+            io_err: err,
+        })
     }
 
     /// Creates a copy of the checkpoint with the specified height and places it
@@ -1085,12 +1234,17 @@ impl StateLayout {
         let backup_name = Self::checkpoint_name(height);
         let backup_path = self.backups().join(&backup_name);
         let tmp_path = self.fs_tmp().join(format!("backup_{}", &backup_name));
-        self.atomically_remove_via_path(backup_path.as_path(), tmp_path.as_path(), ())
+        self.atomically_rename_to_tmp_path(&backup_path, &tmp_path)
             .map_err(|err| LayoutError::IoError {
-                path: backup_path,
-                message: format!("failed to remove backup {}", height),
+                path: backup_path.clone(),
+                message: format!("failed to rename backup {} to tmp path", height),
                 io_err: err,
-            })
+            })?;
+        std::fs::remove_dir_all(&tmp_path).map_err(|err| LayoutError::IoError {
+            path: backup_path,
+            message: format!("failed to remove backup {} from tmp path", height),
+            io_err: err,
+        })
     }
 
     /// Moves the checkpoint with the specified height to backup location so
@@ -1209,15 +1363,7 @@ impl StateLayout {
         }
     }
 
-    /// Atomically removes path by first renaming it into tmp_path, and then
-    /// deleting tmp_path.
-    /// Drops drop_after_rename once the path is renamed to tmp_path.
-    fn atomically_remove_via_path<T>(
-        &self,
-        path: &Path,
-        tmp_path: &Path,
-        drop_after_rename: T,
-    ) -> std::io::Result<()> {
+    fn atomically_rename_to_tmp_path(&self, path: &Path, tmp_path: &Path) -> std::io::Result<()> {
         // We first move the checkpoint directory into a temporary directory to
         // maintain the invariant that <root>/checkpoints/<height> are always
         // internally consistent.
@@ -1242,8 +1388,7 @@ impl StateLayout {
             }
             Err(err) => return Err(err),
         }
-        std::mem::drop(drop_after_rename);
-        std::fs::remove_dir_all(tmp_path)
+        Ok(())
     }
 }
 
