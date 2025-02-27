@@ -1,4 +1,4 @@
-use crate::{query_handler::DISTRIKT_SUBNET_PRINCIPAL, InternalHttpQueryHandler};
+use crate::InternalHttpQueryHandler;
 use ic_base_types::{CanisterId, NumSeconds};
 use ic_config::execution_environment::INSTRUCTION_OVERHEAD_PER_QUERY_CALL;
 use ic_error_types::{ErrorCode, UserError};
@@ -8,9 +8,9 @@ use ic_test_utilities_types::ids::user_test_id;
 use ic_types::{
     ingress::WasmResult,
     messages::{Query, QuerySource},
-    Cycles, NumInstructions, PrincipalId,
+    Cycles, NumInstructions,
 };
-use std::{str::FromStr, sync::Arc};
+use std::sync::Arc;
 
 const CYCLES_BALANCE: Cycles = Cycles::new(100_000_000_000_000);
 
@@ -40,9 +40,7 @@ fn query_metrics_are_reported() {
     // In this test we have two canisters A and B.
     // Canister A handles the user query by calling canister B.
 
-    let mut test = ExecutionTestBuilder::new()
-        .with_subnet_id(PrincipalId::from_str(DISTRIKT_SUBNET_PRINCIPAL).unwrap())
-        .build();
+    let mut test = ExecutionTestBuilder::new().build();
 
     let canister_a = test.universal_canister_with_cycles(CYCLES_BALANCE).unwrap();
     let canister_b = test.universal_canister_with_cycles(CYCLES_BALANCE).unwrap();
@@ -55,7 +53,7 @@ fn query_metrics_are_reported() {
                 nonce: None,
             },
             receiver: canister_a,
-            method_name: "query".to_string(),
+            method_name: "composite_query".to_string(),
             method_payload: wasm()
                 .inter_query(
                     canister_b,
@@ -77,12 +75,11 @@ fn query_metrics_are_reported() {
     assert!(0 < query_handler.metrics.query.instructions.get_sample_sum() as u64);
     assert_eq!(1, query_handler.metrics.query.messages.get_sample_count());
     // We expect four messages:
-    // - canister_a.query() as pure
-    // - canister_a.query() as stateful
-    // - canister_b.query() as stateful
+    // - canister_a.query()
+    // - canister_b.query()
     // - canister_a.on_reply()
     assert_eq!(
-        4,
+        3,
         query_handler.metrics.query.messages.get_sample_sum() as u64
     );
     assert_eq!(
@@ -123,14 +120,6 @@ fn query_metrics_are_reported() {
             .query_initial_call
             .messages
             .get_sample_sum() as u64
-    );
-    assert_eq!(
-        1,
-        query_handler
-            .metrics
-            .query_retry_call
-            .duration
-            .get_sample_count()
     );
     assert_eq!(
         1,
@@ -180,11 +169,6 @@ fn query_metrics_are_reported() {
             .get_sample_sum() as u64
             + query_handler
                 .metrics
-                .query_retry_call
-                .instructions
-                .get_sample_sum() as u64
-            + query_handler
-                .metrics
                 .query_spawned_calls
                 .instructions
                 .get_sample_sum() as u64
@@ -197,10 +181,7 @@ fn legacy_query_call_with_side_effects() {
     // Canister A does a side-effectful operation (stable_grow) and then
     // calls canister B. The side effect must happen once and only once.
 
-    let mut test = ExecutionTestBuilder::new()
-        // Legacy ICQC only enabled on Distrikt's subnet.
-        .with_subnet_id(PrincipalId::from_str(DISTRIKT_SUBNET_PRINCIPAL).unwrap())
-        .build();
+    let mut test = ExecutionTestBuilder::new().build();
 
     let canister_a = test.universal_canister_with_cycles(CYCLES_BALANCE).unwrap();
     let canister_b = test.universal_canister_with_cycles(CYCLES_BALANCE).unwrap();
@@ -213,7 +194,7 @@ fn legacy_query_call_with_side_effects() {
                 nonce: None,
             },
             receiver: canister_a,
-            method_name: "query".to_string(),
+            method_name: "composite_query".to_string(),
             method_payload: wasm()
                 .stable_grow(10)
                 .inter_query(
@@ -270,11 +251,8 @@ fn query_calls_disabled_for_application_subnet() {
 }
 
 #[test]
-fn legacy_query_callgraph_depth_is_enforced() {
-    let mut test = ExecutionTestBuilder::new()
-        // Legacy ICQC only enabled on Distrikt's subnet.
-        .with_subnet_id(PrincipalId::from_str(DISTRIKT_SUBNET_PRINCIPAL).unwrap())
-        .build();
+fn query_callgraph_depth_is_enforced() {
+    let mut test = ExecutionTestBuilder::new().build();
 
     const NUM_CANISTERS: usize = 20;
 
@@ -321,7 +299,7 @@ fn legacy_query_callgraph_depth_is_enforced() {
                     nonce: None,
                 },
                 receiver: canisters[0],
-                method_name: "query".to_string(),
+                method_name: "composite_query".to_string(),
                 method_payload: generate_call_to(canisters, num_calls).build(),
             },
             Arc::new(test.state().clone()),
@@ -360,8 +338,6 @@ fn legacy_query_callgraph_max_instructions_is_enforced() {
     const NUM_SUCCESSFUL_QUERIES: u64 = 5; // Number of calls expected to succeed
 
     let mut test = ExecutionTestBuilder::new()
-        // Legacy ICQC only enabled on Distrikt's subnet.
-        .with_subnet_id(PrincipalId::from_str(DISTRIKT_SUBNET_PRINCIPAL).unwrap())
         .with_max_query_call_graph_instructions(NumInstructions::from(
             NUM_SUCCESSFUL_QUERIES * INSTRUCTION_OVERHEAD_PER_QUERY_CALL,
         ))
@@ -406,7 +382,7 @@ fn legacy_query_callgraph_max_instructions_is_enforced() {
                     nonce: None,
                 },
                 receiver: canisters[0],
-                method_name: "query".to_string(),
+                method_name: "composite_query".to_string(),
                 method_payload: generate_call_to(&canisters, num_calls as usize).build(),
             },
             Arc::new(test.state().clone()),
@@ -429,7 +405,7 @@ fn legacy_query_callgraph_max_instructions_is_enforced() {
                     nonce: None,
                 },
                 receiver: canisters[0],
-                method_name: "query".to_string(),
+                method_name: "composite_query".to_string(),
                 method_payload: generate_call_to(&canisters, num_calls as usize).build(),
             },
             Arc::new(test.state().clone()),
@@ -447,7 +423,7 @@ fn legacy_query_callgraph_max_instructions_is_enforced() {
 
 #[test]
 fn composite_query_callgraph_depth_is_enforced() {
-    let mut test = ExecutionTestBuilder::new().with_composite_queries().build();
+    let mut test = ExecutionTestBuilder::new().build();
 
     const NUM_CANISTERS: usize = 20;
 
@@ -529,7 +505,7 @@ fn composite_query_callgraph_depth_is_enforced() {
 
 #[test]
 fn composite_query_recursive_calls() {
-    let mut test = ExecutionTestBuilder::new().with_composite_queries().build();
+    let mut test = ExecutionTestBuilder::new().build();
 
     const NUM_CALLS: usize = 3;
     let canister = test.universal_canister_with_cycles(CYCLES_BALANCE).unwrap();
@@ -581,7 +557,6 @@ fn composite_query_callgraph_max_instructions_is_enforced() {
     const NUM_SUCCESSFUL_QUERIES: u64 = 5; // Number of calls expected to succeed
 
     let mut test = ExecutionTestBuilder::new()
-        .with_composite_queries() // For now, query calls are only allowed in system subnets
         .with_max_query_call_graph_instructions(NumInstructions::from(
             NUM_SUCCESSFUL_QUERIES * INSTRUCTION_OVERHEAD_PER_QUERY_CALL,
         ))
@@ -826,7 +801,7 @@ const COMPOSITE_QUERY_WAT: &str = r#"
 
 #[test]
 fn composite_query_works_in_non_replicated_mode() {
-    let mut test = ExecutionTestBuilder::new().with_composite_queries().build();
+    let mut test = ExecutionTestBuilder::new().build();
 
     let canister = test.canister_from_wat(COMPOSITE_QUERY_WAT).unwrap();
 
@@ -852,7 +827,9 @@ fn composite_query_works_in_non_replicated_mode() {
 
 #[test]
 fn composite_query_fails_if_disabled() {
-    let mut test = ExecutionTestBuilder::new().build();
+    let mut test = ExecutionTestBuilder::new()
+        .without_composite_queries()
+        .build();
 
     let canister = test.canister_from_wat(COMPOSITE_QUERY_WAT).unwrap();
 
@@ -902,7 +879,7 @@ fn composite_query_fails_in_replicated_mode() {
 fn composite_query_single_user_response() {
     // In this test canister 0 calls canisters 1, 2, 3 and produces a reply
     // only when handling the response from canister 2.
-    let mut test = ExecutionTestBuilder::new().with_composite_queries().build();
+    let mut test = ExecutionTestBuilder::new().build();
 
     let mut canisters = vec![];
     for _ in 0..4 {
@@ -947,7 +924,7 @@ fn composite_query_single_canister_response() {
     // In this test canister 0 calls canister 1 which in turn calls canisters
     // 2, 3, 4 and produces a reply only when handling the response from
     // canister 2. That reply should propagate to the user.
-    let mut test = ExecutionTestBuilder::new().with_composite_queries().build();
+    let mut test = ExecutionTestBuilder::new().build();
 
     let mut canisters = vec![];
     for _ in 0..5 {
@@ -992,7 +969,7 @@ fn composite_query_single_canister_response() {
 #[test]
 fn composite_query_no_user_response() {
     // In this test canister 0 calls canisters 1, 2, 3 and does not reply.
-    let mut test = ExecutionTestBuilder::new().with_composite_queries().build();
+    let mut test = ExecutionTestBuilder::new().build();
 
     let mut canisters = vec![];
     for _ in 0..4 {
@@ -1042,9 +1019,7 @@ fn composite_query_no_user_response() {
 fn composite_query_no_canister_response() {
     // In this test canister 0 calls canister 1 which in turn calls canisters
     // 2, 3, 4 and does not reply.
-    let mut test = ExecutionTestBuilder::new()
-        .with_composite_queries() // For now, query calls are only allowed in system subnets
-        .build();
+    let mut test = ExecutionTestBuilder::new().build();
 
     let mut canisters = vec![];
     for _ in 0..5 {
@@ -1102,7 +1077,7 @@ fn composite_query_no_canister_response() {
 
 #[test]
 fn composite_query_chained_calls() {
-    let mut test = ExecutionTestBuilder::new().with_composite_queries().build();
+    let mut test = ExecutionTestBuilder::new().build();
 
     let canister_a = test.universal_canister_with_cycles(CYCLES_BALANCE).unwrap();
     let canister_b = test.universal_canister_with_cycles(CYCLES_BALANCE).unwrap();
@@ -1138,7 +1113,7 @@ fn composite_query_chained_calls() {
 #[test]
 fn composite_query_syscalls_from_reply_reject_callback() {
     // In this test canister 0 calls canisters 1 and attempts syscalls from reply callback.
-    let mut test = ExecutionTestBuilder::new().with_composite_queries().build();
+    let mut test = ExecutionTestBuilder::new().build();
 
     // Install two universal canisters
     let mut canisters = vec![];
@@ -1222,7 +1197,7 @@ fn composite_query_syscalls_from_reply_reject_callback() {
 
 #[test]
 fn composite_query_state_preserved_across_sequential_calls() {
-    let mut test = ExecutionTestBuilder::new().with_composite_queries().build();
+    let mut test = ExecutionTestBuilder::new().build();
 
     const NUM_CANISTERS: usize = 5;
 
@@ -1291,7 +1266,7 @@ fn composite_query_state_preserved_across_sequential_calls() {
 
 #[test]
 fn composite_query_state_preserved_across_parallel_calls() {
-    let mut test = ExecutionTestBuilder::new().with_composite_queries().build();
+    let mut test = ExecutionTestBuilder::new().build();
 
     const NUM_CANISTERS: usize = 5;
 
@@ -1361,10 +1336,7 @@ fn composite_query_state_preserved_across_parallel_calls() {
 
 #[test]
 fn query_stats_are_collected() {
-    let mut test = ExecutionTestBuilder::new()
-        .with_composite_queries()
-        .with_query_stats()
-        .build();
+    let mut test = ExecutionTestBuilder::new().with_query_stats().build();
 
     const NUM_CANISTERS: usize = 5;
 
@@ -1477,7 +1449,7 @@ fn test_incorrect_query_name() {
 
 #[test]
 fn test_call_context_performance_counter_correctly_reported_on_query() {
-    let mut test = ExecutionTestBuilder::new().with_composite_queries().build();
+    let mut test = ExecutionTestBuilder::new().build();
     let a_id = test.universal_canister().unwrap();
     let b_id = test.universal_canister().unwrap();
 
@@ -1529,7 +1501,7 @@ fn test_call_context_performance_counter_correctly_reported_on_query() {
 
 #[test]
 fn test_call_context_performance_counter_correctly_reported_on_composite_query() {
-    let mut test = ExecutionTestBuilder::new().with_composite_queries().build();
+    let mut test = ExecutionTestBuilder::new().build();
     let a_id = test.universal_canister().unwrap();
     let b_id = test.universal_canister().unwrap();
 
