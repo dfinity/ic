@@ -34,7 +34,7 @@ fn new_signal_handler_available() -> bool {
 pub struct MemoryArea {
     // Base address of the tracked memory area.
     addr: usize,
-    // Size of the tracked memory area.
+    // Size of the tracked memory area in bytes.
     size: NumBytes,
 }
 
