@@ -1,10 +1,11 @@
-use dfn_core::api::{now, trap_with};
 use ic_base_types::{CanisterId, PrincipalId};
+use ic_cdk::{api::time, trap};
 use ic_ledger_canister_core::archive::ArchiveCanisterWasm;
 use ic_ledger_canister_core::blockchain::{BlockData, Blockchain};
 use ic_ledger_canister_core::ledger::{
     self as core_ledger, LedgerContext, LedgerData, TransactionInfo,
 };
+use ic_ledger_canister_core::runtime::CdkRuntime;
 use ic_ledger_core::balances::BalancesStore;
 use ic_ledger_core::{
     approvals::{Allowance, AllowanceTable, AllowancesData},
@@ -32,8 +33,6 @@ use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
 use std::ops::Range;
 use std::sync::RwLock;
 use std::time::Duration;
-
-mod dfn_runtime;
 
 #[cfg(test)]
 mod tests;
@@ -201,7 +200,7 @@ pub struct Ledger {
     approvals: LedgerAllowances,
     #[serde(default)]
     stable_approvals: AllowanceTable<StableAllowancesData>,
-    pub blockchain: Blockchain<dfn_runtime::DfnRuntime, IcpLedgerArchiveWasm, StableBlockData>,
+    pub blockchain: Blockchain<CdkRuntime, IcpLedgerArchiveWasm, StableBlockData>,
     // DEPRECATED
     pub maximum_number_of_accounts: usize,
     // DEPRECATED
@@ -277,7 +276,7 @@ impl LedgerContext for Ledger {
 }
 
 impl LedgerData for Ledger {
-    type Runtime = dfn_runtime::DfnRuntime;
+    type Runtime = CdkRuntime;
     type ArchiveWasm = IcpLedgerArchiveWasm;
     type Transaction = Transaction;
     type Block = Block;
@@ -384,7 +383,7 @@ impl Ledger {
         operation: Operation,
         created_at_time: Option<TimeStamp>,
     ) -> Result<(BlockIndex, HashOf<EncodedBlock>), PaymentError> {
-        let now = TimeStamp::from(dfn_core::api::now());
+        let now = TimeStamp::from_nanos_since_unix_epoch(time());
         self.add_payment_with_timestamp(memo, operation, created_at_time, now)
     }
 
@@ -565,7 +564,7 @@ impl Ledger {
     pub fn upgrade(&mut self, args: UpgradeArgs) {
         if let Some(icrc1_minting_account) = args.icrc1_minting_account {
             if Some(AccountIdentifier::from(icrc1_minting_account)) != self.minting_account_id {
-                trap_with(
+                trap(
                     "The icrc1 minting account is not the same as the minting account set during initialization",
                 );
             }
@@ -644,7 +643,7 @@ pub fn change_notification_state(
         height,
         block_timestamp,
         new_state,
-        TimeStamp::from(now()),
+        TimeStamp::from_nanos_since_unix_epoch(time()),
     )
 }
 
@@ -848,14 +847,6 @@ impl BlockData for StableBlockData {
 
     fn is_empty(&self) -> bool {
         BLOCKS_MEMORY.with_borrow(|blocks| blocks.is_empty())
-    }
-
-    fn last(&self) -> Option<EncodedBlock> {
-        BLOCKS_MEMORY.with_borrow(|blocks| {
-            blocks
-                .last_key_value()
-                .map(|kv| EncodedBlock::from_vec(kv.1))
-        })
     }
 
     fn migrate_one_block(&mut self, num_archived_blocks: u64) -> bool {

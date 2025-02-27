@@ -706,7 +706,7 @@ fn list_proposals_benchmark() -> BenchResult {
 
     let proposal_actions = vec![
         Action::ExecuteNnsFunction(ExecuteNnsFunction {
-            nns_function: NnsFunction::NnsCanisterUpgrade as i32,
+            nns_function: NnsFunction::HardResetNnsRootToVersion as i32,
             payload: vec![0u8; 1 << 20], // 1 MiB
         }),
         Action::InstallCode(InstallCode {

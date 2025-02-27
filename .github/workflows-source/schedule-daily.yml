@@ -30,12 +30,6 @@ anchors:
   checkout: &checkout
     name: Checkout
     uses: actions/checkout@v4
-  before-script: &before-script
-    name: Before script
-    id: before-script
-    shell: bash
-    run: |
-      [ -n "${NODE_NAME:-}" ] && echo "Node: $NODE_NAME"
   bazel-bep: &bazel-bep
     name: Upload bazel-bep
     # runs only if previous step succeeded or failed;
@@ -62,13 +56,11 @@ jobs:
       labels: dind-large
     steps:
       - <<: *checkout
-      - <<: *before-script
       - name: Run Bazel Launch Bare Metal
         shell: bash
         run: |
           echo "$ZH2_DLL01_CSV_SECRETS" > file1
           echo "$ZH2_FILE_SHARE_KEY" > file2 && chmod 400 file2
-          [ -n "${NODE_NAME:-}" ] && echo "Node: $NODE_NAME"
 
           # Run bare metal installation test
           # shellcheck disable=SC2046,SC2086
@@ -105,7 +97,6 @@ jobs:
     timeout-minutes: 720 # 12 hours
     steps:
       - <<: *checkout
-      - <<: *before-script
       - name: Run FI Tests Nightly
         id: bazel-test-all
         uses: ./.github/actions/bazel-test-all/
@@ -126,7 +117,6 @@ jobs:
     timeout-minutes: 20
     steps:
       - <<: *checkout
-      - <<: *before-script
       - name: Run NNS Tests Nightly
         id: bazel-test-all
         uses: ./.github/actions/bazel-test-all/
@@ -147,7 +137,6 @@ jobs:
     timeout-minutes: 480
     steps:
       - <<: *checkout
-      - <<: *before-script
       - name: Set Benchmark Targets
         shell: bash
         run: |
@@ -228,9 +217,7 @@ jobs:
       - <<: *checkout
       - name: Run Bazel Test Coverage
         shell: bash
-        run: |
-          [ -n "${NODE_NAME:-}" ] && echo "Node: $NODE_NAME"
-          ./ci/scripts/bazel-coverage.sh
+        run: ./ci/scripts/bazel-coverage.sh
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}

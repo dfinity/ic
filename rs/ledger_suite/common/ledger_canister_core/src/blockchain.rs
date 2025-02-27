@@ -24,7 +24,6 @@ pub trait BlockData {
     /// The number of blocks stored in the ledger, i.e. excluding archived blocks.
     fn len(&self) -> u64;
     fn is_empty(&self) -> bool;
-    fn last(&self) -> Option<EncodedBlock>;
     fn migrate_one_block(&mut self, num_archived_blocks: u64) -> bool;
 }
 
@@ -103,10 +102,6 @@ where
 
     pub fn get(&self, height: BlockIndex) -> Option<EncodedBlock> {
         self.blocks.get_block(height)
-    }
-
-    pub fn last(&self) -> Option<EncodedBlock> {
-        self.blocks.last()
     }
 
     pub fn num_archived_blocks(&self) -> u64 {

@@ -1,4 +1,4 @@
-use ic_base_types::PrincipalIdBlobParseError;
+use ic_base_types::{InternalAddress, PrincipalIdBlobParseError};
 use ic_config::embedders::{
     BestEffortResponsesFeature, Config as EmbeddersConfig, StableMemoryPageLimit,
 };
@@ -13,10 +13,15 @@ use ic_interfaces::execution_environment::{
     TrapCode::{self, CyclesAmountTooBigFor64Bit},
 };
 use ic_logger::{error, ReplicaLogger};
+use ic_management_canister_types_private::{
+    EcdsaCurve, EcdsaKeyId, MasterPublicKeyId, SchnorrAlgorithm, SchnorrKeyId, VetKdCurve,
+    VetKdKeyId,
+};
 use ic_registry_subnet_type::SubnetType;
+use ic_replicated_state::canister_state::execution_state::WasmExecutionMode;
 use ic_replicated_state::{
-    canister_state::WASM_PAGE_SIZE_IN_BYTES, memory_required_to_push_request, Memory, NumWasmPages,
-    PageIndex,
+    canister_state::WASM_PAGE_SIZE_IN_BYTES, memory_usage_of_request, Memory, MessageMemoryUsage,
+    NumWasmPages, PageIndex,
 };
 use ic_sys::PageBytes;
 use ic_types::{
@@ -38,6 +43,7 @@ use std::{
     collections::BTreeMap,
     convert::{From, TryFrom},
     rc::Rc,
+    str,
 };
 
 pub mod cycles_balance_change;
@@ -706,6 +712,14 @@ enum ExecutionMemoryType {
     StableMemory,
 }
 
+#[derive(Debug, Clone, Copy)]
+/// Some cost API endpoints can fail in various ways. A return value of this
+/// type must be used by the caller to determine success or failure.
+pub enum CostReturnCode {
+    Success = 0,
+    UnknownCurveOrAlgorithm = 1,
+    UnknownKey = 2,
+}
 /// A struct to gather the relevant fields that correspond to a canister's
 /// memory consumption.
 struct MemoryUsage {
@@ -725,7 +739,7 @@ struct MemoryUsage {
     wasm_memory_usage: NumBytes,
 
     /// The current amount of message memory that the canister is using.
-    current_message_usage: NumBytes,
+    current_message_usage: MessageMemoryUsage,
 
     // This is the amount of memory that the subnet has available. Any
     // expansions in the canister's memory need to be deducted from here.
@@ -736,7 +750,7 @@ struct MemoryUsage {
     allocated_execution_memory: NumBytes,
 
     /// Message memory allocated during this message execution.
-    allocated_message_memory: NumBytes,
+    allocated_message_memory: MessageMemoryUsage,
 
     /// The memory allocation of the canister.
     memory_allocation: MemoryAllocation,
@@ -751,7 +765,7 @@ impl MemoryUsage {
         current_usage: NumBytes,
         stable_memory_usage: NumBytes,
         wasm_memory_usage: NumBytes,
-        current_message_usage: NumBytes,
+        current_message_usage: MessageMemoryUsage,
         subnet_available_memory: SubnetAvailableMemory,
         memory_allocation: MemoryAllocation,
     ) -> Self {
@@ -777,8 +791,8 @@ impl MemoryUsage {
             wasm_memory_usage,
             current_message_usage,
             subnet_available_memory,
-            allocated_execution_memory: NumBytes::from(0),
-            allocated_message_memory: NumBytes::from(0),
+            allocated_execution_memory: NumBytes::new(0),
+            allocated_message_memory: MessageMemoryUsage::ZERO,
             memory_allocation,
         }
     }
@@ -866,8 +880,8 @@ impl MemoryUsage {
             MemoryAllocation::BestEffort => {
                 match self.subnet_available_memory.check_available_memory(
                     execution_bytes,
-                    NumBytes::from(0),
-                    NumBytes::from(0),
+                    NumBytes::new(0),
+                    NumBytes::new(0),
                 ) {
                     Ok(()) => {
                         sandbox_safe_system_state.reserve_storage_cycles(
@@ -878,12 +892,12 @@ impl MemoryUsage {
                         // All state changes after this point should not fail
                         // because the cycles have already been reserved.
                         self.subnet_available_memory
-                            .try_decrement(execution_bytes, NumBytes::from(0), NumBytes::from(0))
+                            .try_decrement(execution_bytes, NumBytes::new(0), NumBytes::new(0))
                             .expect(
                                 "Decrementing subnet available memory is \
                                  guaranteed to succeed by check_available_memory().",
                             );
-                        self.current_usage = NumBytes::from(new_usage);
+                        self.current_usage = NumBytes::new(new_usage);
                         self.allocated_execution_memory += execution_bytes;
 
                         self.add_execution_memory(execution_bytes, execution_memory_type)?;
@@ -912,7 +926,7 @@ impl MemoryUsage {
                     // keep code robust, we repeat the check here again.
                     return Err(HypervisorError::OutOfMemory);
                 }
-                self.current_usage = NumBytes::from(new_usage);
+                self.current_usage = NumBytes::new(new_usage);
                 self.add_execution_memory(execution_bytes, execution_memory_type)?;
 
                 sandbox_safe_system_state.update_status_of_low_wasm_memory_hook_condition(
@@ -944,7 +958,7 @@ impl MemoryUsage {
     /// Tries to allocate the requested amount of message memory.
     ///
     /// Returns `Err(HypervisorError::OutOfMemory)` and leaves `self` unchanged
-    /// if the message memory limit would be exceeded.
+    /// if the guaranteed response message memory limit would be exceeded.
     ///
     /// Returns `Err(HypervisorError::InsufficientCyclesInMessageMemoryGrow)`
     /// and leaves `self` unchanged if freezing threshold check is needed
@@ -952,14 +966,13 @@ impl MemoryUsage {
     /// allocation.
     fn allocate_message_memory(
         &mut self,
-        message_bytes: NumBytes,
+        message_memory_usage: MessageMemoryUsage,
         api_type: &ApiType,
         sandbox_safe_system_state: &SandboxSafeSystemState,
     ) -> HypervisorResult<()> {
-        let (new_usage, overflow) = self
+        let (new_message_usage, overflow) = self
             .current_message_usage
-            .get()
-            .overflowing_add(message_bytes.get());
+            .overflowing_add(&message_memory_usage);
         if overflow {
             return Err(HypervisorError::OutOfMemory);
         }
@@ -968,43 +981,48 @@ impl MemoryUsage {
             api_type,
             self.current_usage,
             self.current_message_usage,
-            NumBytes::new(new_usage),
+            new_message_usage,
         )?;
 
-        match self.subnet_available_memory.try_decrement(
-            NumBytes::from(0),
-            message_bytes,
-            NumBytes::from(0),
-        ) {
-            Ok(()) => {
-                self.allocated_message_memory += message_bytes;
-                self.current_message_usage = NumBytes::from(new_usage);
-                Ok(())
+        if message_memory_usage.guaranteed_response.get() != 0 {
+            if let Err(_err) = self.subnet_available_memory.try_decrement(
+                NumBytes::new(0),
+                message_memory_usage.guaranteed_response,
+                NumBytes::new(0),
+            ) {
+                return Err(HypervisorError::OutOfMemory);
             }
-            Err(_err) => Err(HypervisorError::OutOfMemory),
         }
+
+        self.allocated_message_memory += message_memory_usage;
+        self.current_message_usage = new_message_usage;
+        Ok(())
     }
 
-    /// Deallocates the given number of message bytes.
+    /// Deallocates the given amount of message memory.
+    ///
     /// Should only be called immediately after `allocate_message_memory()`, with the
     /// same number of bytes, in case allocation failed.
-    fn deallocate_message_memory(&mut self, message_bytes: NumBytes) {
+    fn deallocate_message_memory(&mut self, message_memory_usage: MessageMemoryUsage) {
         assert!(
-            self.allocated_message_memory >= message_bytes,
-            "Precondition of self.allocated_message_memory in deallocate_message_memory failed: {} >= {}",
+            self.allocated_message_memory.ge(message_memory_usage),
+            "Precondition of self.allocated_message_memory in deallocate_message_memory failed: {:?} >= {:?}",
             self.allocated_message_memory,
-            message_bytes
+            message_memory_usage
         );
         assert!(
-            self.current_message_usage >= message_bytes,
-            "Precondition of self.current_message_usage in deallocate_message_memory failed: {} >= {}",
+            self.current_message_usage.ge(message_memory_usage),
+            "Precondition of self.current_message_usage in deallocate_message_memory failed: {:?} >= {:?}",
             self.current_message_usage,
-            message_bytes
+            message_memory_usage
         );
-        self.subnet_available_memory
-            .increment(NumBytes::from(0), message_bytes, NumBytes::from(0));
-        self.allocated_message_memory -= message_bytes;
-        self.current_message_usage -= message_bytes;
+        self.subnet_available_memory.increment(
+            NumBytes::new(0),
+            message_memory_usage.guaranteed_response,
+            NumBytes::new(0),
+        );
+        self.allocated_message_memory -= message_memory_usage;
+        self.current_message_usage -= message_memory_usage;
     }
 }
 
@@ -1088,7 +1106,7 @@ impl SystemApiImpl {
         api_type: ApiType,
         sandbox_safe_system_state: SandboxSafeSystemState,
         canister_current_memory_usage: NumBytes,
-        canister_current_message_memory_usage: NumBytes,
+        canister_current_message_memory_usage: MessageMemoryUsage,
         execution_parameters: ExecutionParameters,
         subnet_available_memory: SubnetAvailableMemory,
         embedders_config: &EmbeddersConfig,
@@ -1231,9 +1249,11 @@ impl SystemApiImpl {
         self.memory_usage.allocated_execution_memory
     }
 
-    /// Bytes allocated in messages.
-    pub fn get_allocated_message_bytes(&self) -> NumBytes {
-        self.memory_usage.allocated_message_memory
+    /// Bytes used by or reserved for for guaranteed response messages.
+    pub fn get_allocated_guaranteed_response_message_bytes(&self) -> NumBytes {
+        self.memory_usage
+            .allocated_message_memory
+            .guaranteed_response
     }
 
     fn error_for(&self, method_name: &str) -> HypervisorError {
@@ -1684,14 +1704,15 @@ impl SystemApiImpl {
             sandbox_safe_system_state.unregister_callback(request.sender_reply_callback);
         };
 
-        let reservation_bytes = if self.execution_parameters.subnet_type == SubnetType::System {
+        let memory_usage_of_request = if self.execution_parameters.subnet_type == SubnetType::System
+        {
             // Effectively disable the memory limit checks on system subnets.
-            NumBytes::from(0)
+            MessageMemoryUsage::ZERO
         } else {
-            (memory_required_to_push_request(&req) as u64).into()
+            memory_usage_of_request(&req)
         };
         if let Err(_err) = self.memory_usage.allocate_message_memory(
-            reservation_bytes,
+            memory_usage_of_request,
             &self.api_type,
             &self.sandbox_safe_system_state,
         ) {
@@ -1711,7 +1732,7 @@ impl SystemApiImpl {
             Ok(()) => Ok(0),
             Err(request) => {
                 self.memory_usage
-                    .deallocate_message_memory(reservation_bytes);
+                    .deallocate_message_memory(memory_usage_of_request);
                 abort(request, &mut self.sandbox_safe_system_state);
                 Ok(RejectCode::SysTransient as i32)
             }
@@ -1743,13 +1764,18 @@ impl SystemApiImpl {
     pub fn save_log_message(&mut self, src: usize, size: usize, heap: &[u8]) {
         self.sandbox_safe_system_state.append_canister_log(
             self.api_type.time(),
-            valid_subslice("save_log_message", src, size, heap)
-                .unwrap_or(
-                    // Do not trap here!
-                    // If the specified memory range is invalid, ignore it and log the error message.
-                    b"(debug_print message out of memory bounds)",
-                )
-                .to_vec(),
+            valid_subslice(
+                "save_log_message",
+                InternalAddress::new(src),
+                InternalAddress::new(size),
+                heap,
+            )
+            .unwrap_or(
+                // Do not trap here!
+                // If the specified memory range is invalid, ignore it and log the error message.
+                b"(debug_print message out of memory bounds)",
+            )
+            .to_vec(),
         );
     }
 
@@ -1900,8 +1926,18 @@ impl SystemApi for SystemApiImpl {
         let result = match self.get_msg_caller_id("ic0_msg_caller_copy") {
             Ok(caller_id) => {
                 let id_bytes = caller_id.as_slice();
-                valid_subslice("ic0.msg_caller_copy heap", dst, size, heap)?;
-                let slice = valid_subslice("ic0.msg_caller_copy id", offset, size, id_bytes)?;
+                valid_subslice(
+                    "ic0.msg_caller_copy heap",
+                    InternalAddress::new(dst),
+                    InternalAddress::new(size),
+                    heap,
+                )?;
+                let slice = valid_subslice(
+                    "ic0.msg_caller_copy id",
+                    InternalAddress::new(offset),
+                    InternalAddress::new(size),
+                    id_bytes,
+                )?;
                 deterministic_copy_from_slice(&mut heap[dst..dst + size], slice);
                 Ok(())
             }
@@ -1980,11 +2016,16 @@ impl SystemApi for SystemApiImpl {
             | ApiType::NonReplicatedQuery {
                 incoming_payload, ..
             } => {
-                valid_subslice("ic0.msg_arg_data_copy heap", dst, size, heap)?;
+                valid_subslice(
+                    "ic0.msg_arg_data_copy heap",
+                    InternalAddress::new(dst),
+                    InternalAddress::new(size),
+                    heap,
+                )?;
                 let payload_subslice = valid_subslice(
                     "ic0.msg_arg_data_copy payload",
-                    offset,
-                    size,
+                    InternalAddress::new(offset),
+                    InternalAddress::new(size),
                     incoming_payload,
                 )?;
                 deterministic_copy_from_slice(&mut heap[dst..dst + size], payload_subslice);
@@ -2040,11 +2081,16 @@ impl SystemApi for SystemApiImpl {
             | ApiType::NonReplicatedQuery { .. }
             | ApiType::Init { .. } => Err(self.error_for("ic0_msg_method_name_copy")),
             ApiType::InspectMessage { method_name, .. } => {
-                valid_subslice("ic0.msg_method_name_copy heap", dst, size, heap)?;
+                valid_subslice(
+                    "ic0.msg_method_name_copy heap",
+                    InternalAddress::new(dst),
+                    InternalAddress::new(size),
+                    heap,
+                )?;
                 let payload_subslice = valid_subslice(
                     "ic0.msg_method_name_copy payload",
-                    offset,
-                    size,
+                    InternalAddress::new(offset),
+                    InternalAddress::new(size),
                     method_name.as_bytes(),
                 )?;
                 deterministic_copy_from_slice(&mut heap[dst..dst + size], payload_subslice);
@@ -2139,7 +2185,12 @@ impl SystemApi for SystemApiImpl {
                             doc_link: doc_ref("msg_reply_data_append-payload-too-large"),
                         });
                     }
-                    data.extend_from_slice(valid_subslice("msg.reply", src, size, heap)?);
+                    data.extend_from_slice(valid_subslice(
+                        "msg.reply",
+                        InternalAddress::new(src),
+                        InternalAddress::new(size),
+                        heap,
+                    )?);
                     Ok(())
                 }
                 ResponseStatus::AlreadyReplied | ResponseStatus::JustRepliedWith(_) => {
@@ -2178,7 +2229,12 @@ impl SystemApi for SystemApiImpl {
                             doc_link: doc_ref("msg_reject-payload-too-large"),
                         });
                     }
-                    let msg_bytes = valid_subslice("ic0.msg_reject", src, size, heap)?;
+                    let msg_bytes = valid_subslice(
+                        "ic0.msg_reject",
+                        InternalAddress::new(src),
+                        InternalAddress::new(size),
+                        heap,
+                    )?;
                     let msg = String::from_utf8(msg_bytes.to_vec()).map_err(|_| {
                         ToolchainContractViolation {
                             error: "ic0.msg_reject: invalid UTF-8 string provided".to_string(),
@@ -2234,11 +2290,20 @@ impl SystemApi for SystemApiImpl {
             let reject_context = self
                 .get_reject_context()
                 .ok_or_else(|| self.error_for("ic0_msg_reject_msg_copy"))?;
-            valid_subslice("ic0.msg_reject_msg_copy heap", dst, size, heap)?;
+            valid_subslice(
+                "ic0.msg_reject_msg_copy heap",
+                InternalAddress::new(dst),
+                InternalAddress::new(size),
+                heap,
+            )?;
 
             let msg = reject_context.message();
-            let msg_bytes =
-                valid_subslice("ic0.msg_reject_msg_copy msg", offset, size, msg.as_bytes())?;
+            let msg_bytes = valid_subslice(
+                "ic0.msg_reject_msg_copy msg",
+                InternalAddress::new(offset),
+                InternalAddress::new(size),
+                msg.as_bytes(),
+            )?;
             deterministic_copy_from_slice(&mut heap[dst..dst + size], msg_bytes);
             Ok(())
         };
@@ -2296,10 +2361,20 @@ impl SystemApi for SystemApiImpl {
             | ApiType::ReplyCallback { .. }
             | ApiType::RejectCallback { .. }
             | ApiType::InspectMessage { .. } => {
-                valid_subslice("ic0.canister_self_copy heap", dst, size, heap)?;
+                valid_subslice(
+                    "ic0.canister_self_copy heap",
+                    InternalAddress::new(dst),
+                    InternalAddress::new(size),
+                    heap,
+                )?;
                 let canister_id = self.sandbox_safe_system_state.canister_id;
                 let id_bytes = canister_id.get_ref().as_slice();
-                let slice = valid_subslice("ic0.canister_self_copy id", offset, size, id_bytes)?;
+                let slice = valid_subslice(
+                    "ic0.canister_self_copy id",
+                    InternalAddress::new(offset),
+                    InternalAddress::new(size),
+                    id_bytes,
+                )?;
                 deterministic_copy_from_slice(&mut heap[dst..dst + size], slice);
                 Ok(())
             }
@@ -3404,7 +3479,12 @@ impl SystemApi for SystemApiImpl {
     fn ic0_debug_print(&self, src: usize, size: usize, heap: &[u8]) -> HypervisorResult<()> {
         const MAX_DEBUG_MESSAGE_SIZE: usize = 32 * 1024;
         let size = size.min(MAX_DEBUG_MESSAGE_SIZE);
-        let msg = match valid_subslice("ic0.debug_print", src, size, heap) {
+        let msg = match valid_subslice(
+            "ic0.debug_print",
+            InternalAddress::new(src),
+            InternalAddress::new(size),
+            heap,
+        ) {
             Ok(bytes) => String::from_utf8_lossy(bytes).to_string(),
             // Do not trap here! `ic0_debug_print` should never fail!
             // If the specified memory range is invalid, ignore it and print the error message.
@@ -3434,9 +3514,14 @@ impl SystemApi for SystemApiImpl {
         const MAX_ERROR_MESSAGE_SIZE: usize = 16 * 1024;
         let size = size.min(MAX_ERROR_MESSAGE_SIZE);
         let result = {
-            let message = valid_subslice("trap", src, size, heap)
-                .map(|bytes| String::from_utf8_lossy(bytes).to_string())
-                .unwrap_or_else(|_| "(trap message out of memory bounds)".to_string());
+            let message = valid_subslice(
+                "trap",
+                InternalAddress::new(src),
+                InternalAddress::new(size),
+                heap,
+            )
+            .map(|bytes| String::from_utf8_lossy(bytes).to_string())
+            .unwrap_or_else(|_| "(trap message out of memory bounds)".to_string());
             CalledTrap {
                 message,
                 backtrace: None,
@@ -3459,7 +3544,12 @@ impl SystemApi for SystemApiImpl {
             | ApiType::ReplyCallback { .. }
             | ApiType::RejectCallback { .. }
             | ApiType::InspectMessage { .. } => {
-                let msg_bytes = valid_subslice("ic0.is_controller", src, size, heap)?;
+                let msg_bytes = valid_subslice(
+                    "ic0.is_controller",
+                    InternalAddress::new(src),
+                    InternalAddress::new(size),
+                    heap,
+                )?;
                 PrincipalId::try_from(msg_bytes)
                     .map(|principal_id| {
                         self.sandbox_safe_system_state
@@ -3629,6 +3719,178 @@ impl SystemApi for SystemApiImpl {
         result
     }
 
+    fn ic0_cost_call(
+        &self,
+        method_name_size: u64,
+        payload_size: u64,
+        dst: usize,
+        heap: &mut [u8],
+    ) -> HypervisorResult<()> {
+        let execution_mode =
+            WasmExecutionMode::from_is_wasm64(self.sandbox_safe_system_state.is_wasm64_execution);
+        let cost = self
+            .sandbox_safe_system_state
+            .get_cycles_account_manager()
+            .xnet_call_total_fee(
+                (method_name_size.saturating_add(payload_size)).into(),
+                execution_mode,
+            );
+        copy_cycles_to_heap(cost, dst, heap, "ic0_cost_call")?;
+        trace_syscall!(self, CostCall, cost);
+        Ok(())
+    }
+
+    fn ic0_cost_create_canister(&self, dst: usize, heap: &mut [u8]) -> HypervisorResult<()> {
+        let subnet_size = self.sandbox_safe_system_state.subnet_size;
+        let cost = self
+            .sandbox_safe_system_state
+            .get_cycles_account_manager()
+            .canister_creation_fee(subnet_size);
+        copy_cycles_to_heap(cost, dst, heap, "ic0_cost_create_canister")?;
+        trace_syscall!(self, CostCreateCanister, cost);
+        Ok(())
+    }
+
+    fn ic0_cost_http_request(
+        &self,
+        request_size: u64,
+        max_res_bytes: u64,
+        dst: usize,
+        heap: &mut [u8],
+    ) -> HypervisorResult<()> {
+        let subnet_size = self.sandbox_safe_system_state.subnet_size;
+        let cost = self
+            .sandbox_safe_system_state
+            .get_cycles_account_manager()
+            .http_request_fee(request_size.into(), Some(max_res_bytes.into()), subnet_size);
+        copy_cycles_to_heap(cost, dst, heap, "ic0_cost_http_request")?;
+        trace_syscall!(self, CostHttpRequest, cost);
+        Ok(())
+    }
+
+    fn ic0_cost_sign_with_ecdsa(
+        &self,
+        src: usize,
+        size: usize,
+        curve: u32,
+        dst: usize,
+        heap: &mut [u8],
+    ) -> HypervisorResult<u32> {
+        let key_bytes = valid_subslice(
+            "ic0.cost_sign_with_ecdsa heap",
+            InternalAddress::new(src),
+            InternalAddress::new(size),
+            heap,
+        )?;
+        let name = str::from_utf8(key_bytes)
+            .map_err(|_| HypervisorError::ToolchainContractViolation {
+                error: format!(
+                    "Failed to decode key name {}",
+                    String::from_utf8_lossy(key_bytes)
+                ),
+            })?
+            .to_string();
+        let Ok(curve) = EcdsaCurve::try_from(curve) else {
+            return Ok(CostReturnCode::UnknownCurveOrAlgorithm as u32);
+        };
+        let key = MasterPublicKeyId::Ecdsa(EcdsaKeyId { curve, name });
+        let Some(subnet_size) = self
+            .sandbox_safe_system_state
+            .get_key_replication_factor(key)
+        else {
+            return Ok(CostReturnCode::UnknownKey as u32);
+        };
+        let cost = self
+            .sandbox_safe_system_state
+            .get_cycles_account_manager()
+            .ecdsa_signature_fee(subnet_size);
+        copy_cycles_to_heap(cost, dst, heap, "ic0_cost_sign_with_ecdsa")?;
+        trace_syscall!(self, CostSignWithEcdsa, cost);
+        Ok(CostReturnCode::Success as u32)
+    }
+
+    fn ic0_cost_sign_with_schnorr(
+        &self,
+        src: usize,
+        size: usize,
+        algorithm: u32,
+        dst: usize,
+        heap: &mut [u8],
+    ) -> HypervisorResult<u32> {
+        let key_bytes = valid_subslice(
+            "ic0.cost_sign_with_schnorr heap",
+            InternalAddress::new(src),
+            InternalAddress::new(size),
+            heap,
+        )?;
+        let name = str::from_utf8(key_bytes)
+            .map_err(|_| HypervisorError::ToolchainContractViolation {
+                error: format!(
+                    "Failed to decode key name {}",
+                    String::from_utf8_lossy(key_bytes)
+                ),
+            })?
+            .to_string();
+        let Ok(algorithm) = SchnorrAlgorithm::try_from(algorithm) else {
+            return Ok(CostReturnCode::UnknownCurveOrAlgorithm as u32);
+        };
+        let key = MasterPublicKeyId::Schnorr(SchnorrKeyId { algorithm, name });
+        let Some(subnet_size) = self
+            .sandbox_safe_system_state
+            .get_key_replication_factor(key)
+        else {
+            return Ok(CostReturnCode::UnknownKey as u32);
+        };
+        let cost = self
+            .sandbox_safe_system_state
+            .get_cycles_account_manager()
+            .schnorr_signature_fee(subnet_size);
+        copy_cycles_to_heap(cost, dst, heap, "ic0_cost_sign_with_schnorr")?;
+        trace_syscall!(self, CostSignWithSchnorr, cost);
+        Ok(CostReturnCode::Success as u32)
+    }
+
+    fn ic0_cost_vetkd_derive_encrypted_key(
+        &self,
+        src: usize,
+        size: usize,
+        curve: u32,
+        dst: usize,
+        heap: &mut [u8],
+    ) -> HypervisorResult<u32> {
+        let key_bytes = valid_subslice(
+            "ic0.cost_vetkd_derive_encrypted_key heap",
+            InternalAddress::new(src),
+            InternalAddress::new(size),
+            heap,
+        )?;
+        let name = str::from_utf8(key_bytes)
+            .map_err(|_| HypervisorError::ToolchainContractViolation {
+                error: format!(
+                    "Failed to decode key name {}",
+                    String::from_utf8_lossy(key_bytes)
+                ),
+            })?
+            .to_string();
+        let Ok(curve) = VetKdCurve::try_from(curve) else {
+            return Ok(CostReturnCode::UnknownCurveOrAlgorithm as u32);
+        };
+        let key = MasterPublicKeyId::VetKd(VetKdKeyId { curve, name });
+        let Some(subnet_size) = self
+            .sandbox_safe_system_state
+            .get_key_replication_factor(key)
+        else {
+            return Ok(CostReturnCode::UnknownKey as u32);
+        };
+        let cost = self
+            .sandbox_safe_system_state
+            .get_cycles_account_manager()
+            .vetkd_fee(subnet_size);
+        copy_cycles_to_heap(cost, dst, heap, "ic0_cost_vetkd_derive_encrypted_key")?;
+        trace_syscall!(self, CostVetkdDeriveEncryptedKey, cost);
+        Ok(CostReturnCode::Success as u32)
+    }
+
     fn ic0_subnet_self_size(&self) -> HypervisorResult<usize> {
         let result = match &self.api_type {
             ApiType::Start { .. } => Err(self.error_for("ic0_subnet_self_size")),
@@ -3670,10 +3932,20 @@ impl SystemApi for SystemApiImpl {
             | ApiType::ReplyCallback { .. }
             | ApiType::RejectCallback { .. }
             | ApiType::InspectMessage { .. } => {
-                valid_subslice("ic0.subnet_self_copy heap", dst, size, heap)?;
+                valid_subslice(
+                    "ic0.subnet_self_copy heap",
+                    InternalAddress::new(dst),
+                    InternalAddress::new(size),
+                    heap,
+                )?;
                 let subnet_id = self.sandbox_safe_system_state.get_subnet_id();
                 let id_bytes = subnet_id.get_ref().as_slice();
-                let slice = valid_subslice("ic0.subnet_self_copy id", offset, size, id_bytes)?;
+                let slice = valid_subslice(
+                    "ic0.subnet_self_copy id",
+                    InternalAddress::new(offset),
+                    InternalAddress::new(size),
+                    id_bytes,
+                )?;
                 deterministic_copy_from_slice(&mut heap[dst..dst + size], slice);
 
                 Ok(())
@@ -3751,22 +4023,37 @@ pub(crate) fn copy_cycles_to_heap(
 
 pub(crate) fn valid_subslice<'a>(
     ctx: &str,
-    src: usize,
-    len: usize,
+    src: InternalAddress,
+    len: InternalAddress,
     slice: &'a [u8],
 ) -> HypervisorResult<&'a [u8]> {
-    if slice.len() < src + len {
-        return Err(ToolchainContractViolation {
+    let result_address = src.checked_add(len);
+
+    match result_address {
+        Ok(addr) => {
+            if slice.len() < addr.get() {
+                Err(ToolchainContractViolation {
+                    error: format!(
+                        "{}: src={} + length={} exceeds the slice size={}",
+                        ctx,
+                        src.get(),
+                        len.get(),
+                        slice.len()
+                    ),
+                })
+            } else {
+                Ok(&slice[src.get()..addr.get()])
+            }
+        }
+        Err(_) => Err(ToolchainContractViolation {
             error: format!(
-                "{}: src={} + length={} exceeds the slice size={}",
+                "{}: src={} + length={} is an invalid address",
                 ctx,
-                src,
-                len,
-                slice.len()
+                src.get(),
+                len.get()
             ),
-        });
+        }),
     }
-    Ok(&slice[src..src + len])
 }
 
 #[cfg(test)]
@@ -3776,20 +4063,56 @@ mod test {
     #[test]
     fn test_valid_subslice() {
         // empty slice
-        assert!(valid_subslice("", 0, 0, &[]).is_ok());
+        assert!(valid_subslice("", InternalAddress::new(0), InternalAddress::new(0), &[]).is_ok());
         // the only possible non-empty slice
-        assert!(valid_subslice("", 0, 1, &[1]).is_ok());
+        assert!(valid_subslice("", InternalAddress::new(0), InternalAddress::new(1), &[1]).is_ok());
         // valid empty slice
-        assert!(valid_subslice("", 1, 0, &[1]).is_ok());
+        assert!(valid_subslice("", InternalAddress::new(1), InternalAddress::new(0), &[1]).is_ok());
 
         // just some valid cases
-        assert!(valid_subslice("", 0, 4, &[1, 2, 3, 4]).is_ok());
-        assert!(valid_subslice("", 1, 3, &[1, 2, 3, 4]).is_ok());
-        assert!(valid_subslice("", 2, 2, &[1, 2, 3, 4]).is_ok());
+        assert!(valid_subslice(
+            "",
+            InternalAddress::new(0),
+            InternalAddress::new(4),
+            &[1, 2, 3, 4]
+        )
+        .is_ok());
+        assert!(valid_subslice(
+            "",
+            InternalAddress::new(1),
+            InternalAddress::new(3),
+            &[1, 2, 3, 4]
+        )
+        .is_ok());
+        assert!(valid_subslice(
+            "",
+            InternalAddress::new(2),
+            InternalAddress::new(2),
+            &[1, 2, 3, 4]
+        )
+        .is_ok());
 
         // invalid longer-than-the-heap subslices
-        assert!(valid_subslice("", 3, 2, &[1, 2, 3, 4]).is_err());
-        assert!(valid_subslice("", 0, 5, &[1, 2, 3, 4]).is_err());
-        assert!(valid_subslice("", 4, 1, &[1, 2, 3, 4]).is_err());
+        assert!(valid_subslice(
+            "",
+            InternalAddress::new(3),
+            InternalAddress::new(2),
+            &[1, 2, 3, 4]
+        )
+        .is_err());
+        assert!(valid_subslice(
+            "",
+            InternalAddress::new(0),
+            InternalAddress::new(5),
+            &[1, 2, 3, 4]
+        )
+        .is_err());
+        assert!(valid_subslice(
+            "",
+            InternalAddress::new(4),
+            InternalAddress::new(1),
+            &[1, 2, 3, 4]
+        )
+        .is_err());
     }
 }
