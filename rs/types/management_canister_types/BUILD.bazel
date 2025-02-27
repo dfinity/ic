@@ -53,7 +53,6 @@ temporary_whitelist = [
     "//rs/test_utilities:__subpackages__",  # some subpackages permanent?
     "//rs/tests:__subpackages__",  # some subpackages permanent?
     "//rs/types:__subpackages__",
-    "//rs/workload_generator:__subpackages__",
 ]
 
 package(default_visibility = permanent_whitelist + temporary_whitelist)

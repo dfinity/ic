@@ -433,7 +433,6 @@ members = [
     "rs/validator/http_request_arbitrary",
     "rs/validator/ingress_message",
     "rs/validator/ingress_message/test_canister",
-    "rs/workload_generator",
     "rs/xnet/hyper",
     "rs/xnet/payload_builder",
     "rs/xnet/uri",
