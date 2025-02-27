@@ -1348,36 +1348,6 @@ pub trait Environment: Send + Sync {
     ) -> Result<Vec<u8>, (Option<i32>, String)>;
 }
 
-#[async_trait]
-impl<E: Environment + Send + Sync> Environment for Arc<E> {
-    fn now(&self) -> u64 {
-        self.as_ref().now()
-    }
-
-    fn execute_nns_function(
-        &self,
-        proposal_id: u64,
-        update: &ExecuteNnsFunction,
-    ) -> Result<(), GovernanceError> {
-        self.as_ref().execute_nns_function(proposal_id, update)
-    }
-
-    fn heap_growth_potential(&self) -> HeapGrowthPotential {
-        self.as_ref().heap_growth_potential()
-    }
-
-    async fn call_canister_method(
-        &self,
-        target: CanisterId,
-        method_name: &str,
-        request: Vec<u8>,
-    ) -> Result<Vec<u8>, (Option<i32>, String)> {
-        self.as_ref()
-            .call_canister_method(target, method_name, request)
-            .await
-    }
-}
-
 /// Rough buckets for how much the heap can still grow.
 pub enum HeapGrowthPotential {
     /// The heap can grow without issue.
