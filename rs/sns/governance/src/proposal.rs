@@ -2726,6 +2726,9 @@ mod minting_tests;
 mod advance_sns_target_version;
 
 #[cfg(test)]
+mod set_custom_proposal_topics;
+
+#[cfg(test)]
 mod tests {
     use super::*;
     use crate::{

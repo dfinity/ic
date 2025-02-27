@@ -477,7 +477,7 @@ pub struct AdvanceSnsTargetVersion {
     candid::CandidType, candid::Deserialize, comparable::Comparable, Clone, Debug, PartialEq,
 )]
 pub struct SetCustomProposalTopics {
-    pub custom_function_id_to_topic: ::prost::alloc::collections::BTreeMap<u64, i32>,
+    pub custom_function_id_to_topic: BTreeMap<u64, topics::Topic>,
 }
 /// A proposal is the immutable input of a proposal submission.
 #[derive(Default, candid::CandidType, candid::Deserialize, Debug, Clone, PartialEq)]

@@ -577,14 +577,37 @@ impl From<pb::AdvanceSnsTargetVersion> for pb_api::AdvanceSnsTargetVersion {
 impl From<pb_api::SetCustomProposalTopics> for pb::SetCustomProposalTopics {
     fn from(item: pb_api::SetCustomProposalTopics) -> Self {
         Self {
-            custom_function_id_to_topic: item.custom_function_id_to_topic.into_iter().collect(),
+            custom_function_id_to_topic: item
+                .custom_function_id_to_topic
+                .into_iter()
+                .map(|(custom_function_id, topic)| {
+                    let topic = i32::from(pb::Topic::from(topic));
+                    (custom_function_id, topic)
+                })
+                .collect(),
         }
     }
 }
 impl From<pb::SetCustomProposalTopics> for pb_api::SetCustomProposalTopics {
     fn from(item: pb::SetCustomProposalTopics) -> Self {
+        let custom_function_id_to_topic = item
+            .custom_function_id_to_topic
+            .into_iter()
+            .filter_map(|(custom_function_id, topic)| {
+                let Ok(topic) = pb::Topic::try_from(topic) else {
+                    return None;
+                };
+
+                let Ok(topic) = pb_api::topics::Topic::try_from(topic) else {
+                    return None;
+                };
+
+                Some((custom_function_id, topic))
+            })
+            .collect();
+
         Self {
-            custom_function_id_to_topic: item.custom_function_id_to_topic.into_iter().collect(),
+            custom_function_id_to_topic,
         }
     }
 }
