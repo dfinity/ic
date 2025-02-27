@@ -225,7 +225,7 @@ impl RandomnessGenerator for EnvironmentFixture {
                 rand.fill_bytes(&mut bytes);
                 Ok(bytes)
             }
-            // Kick the thing
+
             None => Err(RngError::RngNotInitialized),
         }
     }
