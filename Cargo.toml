@@ -38,6 +38,7 @@ members = [
     "rs/boundary_node/rate_limits",
     "rs/boundary_node/rate_limits/api",
     "rs/boundary_node/rate_limits/canister_client",
+    "rs/boundary_node/rate_limits/integration_tests",
     "rs/boundary_node/salt_sharing",
     "rs/boundary_node/salt_sharing/api",
     "rs/boundary_node/salt_sharing/integration_tests",
