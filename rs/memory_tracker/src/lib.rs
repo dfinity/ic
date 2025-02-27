@@ -11,7 +11,7 @@ use nix::{
     sys::mman::{mmap, mprotect, MapFlags, ProtFlags},
 };
 use std::{
-    cell::RefCell,
+    cell::{Cell, RefCell},
     ops::Range,
     sync::atomic::{AtomicUsize, Ordering},
 };
@@ -35,7 +35,7 @@ pub struct MemoryArea {
     // Base address of the tracked memory area.
     addr: usize,
     // Size of the tracked memory area in bytes.
-    size: NumBytes,
+    size: Cell<NumBytes>,
 }
 
 impl MemoryArea {
@@ -46,13 +46,14 @@ impl MemoryArea {
             size.get() % PAGE_SIZE as u64 == 0,
             "size is a multiple of page size"
         );
+        let size = Cell::new(size);
         MemoryArea { addr, size }
     }
 
     #[inline]
     pub fn is_within(&self, a: *const libc::c_void) -> bool {
         let a = a as usize;
-        (self.addr <= a) && (a < self.addr + self.size.get() as usize)
+        (self.addr <= a) && (a < self.addr + self.size.get().get() as usize)
     }
 
     #[inline]
@@ -62,7 +63,7 @@ impl MemoryArea {
 
     #[inline]
     pub fn size(&self) -> NumBytes {
-        self.size
+        self.size.get()
     }
 }
 
@@ -307,9 +308,9 @@ impl SigsegvMemoryTracker {
         &self.memory_area
     }
 
-    pub fn expand(&mut self, delta: NumBytes) {
-        let old_size = self.memory_area.size;
-        self.memory_area.size = old_size + delta;
+    pub fn expand(&self, delta: NumBytes) {
+        let old_size = self.memory_area.size.get();
+        self.memory_area.size.set(old_size + delta);
         let delta_pages = NumOsPages::new(delta.get() / PAGE_SIZE as u64);
         debug_assert_eq!(
             delta_pages.get() * PAGE_SIZE as u64,
