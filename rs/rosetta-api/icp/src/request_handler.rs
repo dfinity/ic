@@ -327,8 +327,10 @@ impl RosettaRequestHandler {
             }
             _ => {
                 if self.is_rosetta_blocks_mode_enabled().await {
-                    let blocks = self.ledger.read_blocks().await;
-                    let highest_block_index = blocks
+                    let highest_block_index = self
+                        .ledger
+                        .read_blocks()
+                        .await
                         .get_highest_rosetta_block_index()
                         .map_err(ApiError::from)?
                         .ok_or_else(|| ApiError::BlockchainEmpty(false, Default::default()))?;
