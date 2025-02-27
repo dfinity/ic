@@ -69,8 +69,6 @@ jobs:
     name: Lock Generate
     <<: *dind-small-setup
     <<: *skip-merge-group
-    permissions:
-      pull-requests: write
     env:
       CI_EVENT_NAME: ${{ github.event_name }}
     steps:

@@ -110,7 +110,6 @@ impl ExecutionServices {
             config.clone(),
             metrics_registry,
             own_subnet_id,
-            own_subnet_type,
             logger.clone(),
             Arc::clone(&cycles_account_manager),
             scheduler_config.dirty_page_overhead,

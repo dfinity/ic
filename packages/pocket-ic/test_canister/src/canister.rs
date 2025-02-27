@@ -66,9 +66,9 @@ fn http_request(request: HttpGatewayRequest) -> HttpGatewayResponse {
         }
     } else {
         HttpGatewayResponse {
-            status_code: 404,
+            status_code: 400,
             headers: vec![],
-            body: ByteBuf::from(b"Not Found."),
+            body: ByteBuf::from(b"The request is not supported by the test canister."),
             upgrade: None,
             streaming_strategy: None,
         }
