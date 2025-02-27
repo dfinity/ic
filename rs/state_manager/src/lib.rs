@@ -2305,6 +2305,10 @@ impl StateManagerImpl {
             //   1) We need it it speed up the next manifest computation using ManifestDelta
             //   2) We don't want to run too much ahead of the latest ready manifest.
             self.flush_tip_channel();
+
+            // We need the asynchronous checkpoint removal to complete before creating a new checkpoint.
+            // Otherwise, we may accumulate too many checkpoints in fs_tmp and use too much disk space.
+            self.state_layout.flush_checkpoint_removal_channel();
         }
 
         let previous_checkpoint_info = {
