@@ -15,7 +15,7 @@ mod test {
     use once_cell::sync::OnceCell;
     use rstest::rstest;
     use rustls::{pki_types::Ipv6Addr, ServerConfig};
-    use std::{convert::TryFrom, env, io::Write, path::Path, sync::Arc};
+    use std::{collections::HashSet, convert::TryFrom, env, io::Write, path::Path, sync::Arc};
     use tempfile::TempDir;
     use tokio::{io::AsyncWriteExt, net::{TcpListener, TcpSocket, TcpStream, UnixStream}};
     use tokio_rustls::TlsAcceptor;
@@ -23,9 +23,7 @@ mod test {
     use tower::service_fn;
     use uuid::Uuid;
     use warp::{
-        filters::BoxedFilter,
-        http::{header::HeaderValue, Response, StatusCode},
-        Filter,
+        filters::BoxedFilter, http::{header::HeaderValue, Response, StatusCode}, reject::Rejection, Filter
     };
     use socks5_impl::protocol::{handshake, Address, AsyncStreamOperation, AuthMethod, Command, Reply, Request as Socks5Request, Response as Socks5Response};
     use std::io;
@@ -136,6 +134,7 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
     /// Spawns a minimal SOCKS5 server on `bind_addr` in the background (via `tokio::spawn`).
     /// Returns the actual local address (which includes the ephemeral port) that the server
     /// ended up binding to.  You can then pass `socks5://127.0.0.1:<port>` to your code.
+    #[cfg(feature = "http")]
     pub async fn spawn_socks5_server(bind_addr: &str, url: String) -> io::Result<SocketAddr> {
         let listener = TcpListener::bind(bind_addr).await?;
         let local_addr = listener.local_addr()?;
@@ -163,6 +162,7 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
         Ok(local_addr)
     }
 
+    #[cfg(feature = "http")]
     pub async fn handle_client(stream: TcpStream, url: String) -> io::Result<()> {
         // 1) Perform SOCKS5 handshake
         let mut stream = stream; // We'll do the handshake before splitting.
@@ -187,7 +187,7 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
         println!("debuggg 11");
 
         // 2) Read the SOCKS request (command + target)
-        let req = match Socks5Request::retrieve_from_async_stream(&mut stream).await {
+        let _req = match Socks5Request::retrieve_from_async_stream(&mut stream).await {
             Ok(req) => req,
             Err(e) => {
                 Socks5Response::new(Reply::GeneralFailure, Address::unspecified())
@@ -197,80 +197,12 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
                 return Err(e);
             }
         };
-        println!("debuggg 12");
 
-        // 3) Only handle CONNECT in this minimal example
-        if req.command != Command::Connect {
-            Socks5Response::new(Reply::CommandNotSupported, Address::unspecified())
-                .write_to_async_stream(&mut stream)
-                .await?;
-            stream.shutdown().await?;
-            return Err(io::Error::new(
-                io::ErrorKind::Unsupported,
-                "Only CONNECT command is supported",
-            ));
-        }
-        println!("debuggg 13 {}", req.address.clone());
+        println!("debuggg 14 {} {}", _req.address, url);
 
-        // 4) Convert the Address to a SocketAddr (or do DNS for domain names).
-        //    socks5_impl::protocol::Address can contain:
-        //      - SocketAddress(SocketAddr)
-        //      - IpV4([u8;4], port)
-        //      - IpV6([u8;16], port)
-        //      - DomainName { domain, port }
-        //    but let's handle a couple common variants:
-        let mut target_addrs: Vec<SocketAddr> = match req.address.clone() {
-            // If it's already SocketAddr(127.0.0.1:8080), just use it
-            Address::SocketAddress(sock) => vec![sock],
-
-            // If the library gives us "DomainName { domain, port }",
-            // do a DNS lookup to convert to an IP
-            Address::DomainAddress(domain, port) => {
-                println!("debuggg need dns");
-                tokio::net::lookup_host((domain.as_str(), port)).await?.collect()
-            }
-        };
-        println!("debuggg 13.5");
-
-        target_addrs = tokio::net::lookup_host(url.clone()).await?.collect();
-
-        println!("debuggg 14 {} {:?} {}", req.address, target_addrs, url);
-
-        let mut remote_stream = None;
-        let mut last_err = None;
-
-        for target_addr in target_addrs {
-
-            // 5) Attempt to connect to target
-             match TcpStream::connect(target_addr).await {
-                Ok(s) => {
-                    remote_stream = Some(s);
-                    break;        
-                },
-                Err(e) => {
-                    last_err = Some(e);
-                }
-            };
-        }
-        remote_stream = Some(TcpStream::connect(url.clone()).await?);
+        let remote_stream = TcpStream::connect(url.clone()).await?;
+        
         println!("debuggg 15");
-
-        let remote_stream = match remote_stream {
-            Some(s) => s,
-            None => {
-                // All addresses failed, pick whatever last error we got
-                let e = last_err.unwrap_or_else(|| {
-                    std::io::Error::new(std::io::ErrorKind::Other, "No addresses from DNS")
-                });
-
-                Socks5Response::new(Reply::HostUnreachable, Address::unspecified())
-                    .write_to_async_stream(&mut stream)
-                    .await?;
-                stream.shutdown().await?;
-
-                return Err(e);
-            }
-        };
 
         // 6) Send "Succeeded" to the client
         let local_sock = remote_stream.local_addr()?;
@@ -326,11 +258,13 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
         format!("{}:{}", ip, addr.port())
     }
 
+    #[cfg(feature = "http")]
     #[tokio::test]
     async fn test_canister_http_socks_server() {
-        let url = start_server(CERT_INIT.get_or_init(generate_certs));
-
+        //TODO(mihailjianu): explain why we need http and not https. 
+        let url = start_http_server("127.0.0.1".parse().unwrap());
         println!("debuggg url {}", url);
+
         let socks_addr = spawn_socks5_server("127.0.0.1:0", url.clone())
             .await
             .expect("Failed to bind socks");
@@ -345,9 +279,23 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
         let mut client = spawn_grpc_server(server_config);
         let unreachable_url = "10.255.255.1:9999";
 
+        // Make request to unreachable url, and socks proxy is disabled. Request should fail.
+        let application_subnet_request = tonic::Request::new(HttpsOutcallRequest {
+            url: format!("http://{}/get", &unreachable_url),
+            headers: Vec::new(),
+            method: HttpMethod::Get as i32,
+            body: "hello".to_string().as_bytes().to_vec(),
+            max_response_size_bytes: 512,
+            socks_proxy_allowed: false,
+            ..Default::default()
+        });
+        let response = client.https_outcall(application_subnet_request).await;
+        assert!(response.is_err());
+
         // Make direct request to unreachable url. Need to rely on the socks proxy to make the correct request. 
-        let request = tonic::Request::new(HttpsOutcallRequest {
-            url: format!("https://{}/get", &url),
+        // Socks proxy is enabled
+        let system_subnet_request = tonic::Request::new(HttpsOutcallRequest {
+            url: format!("http://{}/get", &unreachable_url),
             headers: Vec::new(),
             method: HttpMethod::Get as i32,
             body: "hello".to_string().as_bytes().to_vec(),
@@ -355,9 +303,10 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
             socks_proxy_allowed: true,
             ..Default::default()
         });
-        let response = client.https_outcall(request).await;
+        let response = client.https_outcall(system_subnet_request).await;
         let http_response = response.unwrap().into_inner();
         assert_eq!(http_response.status, StatusCode::OK.as_u16() as u32);
+        //TODO(mihailjianu): also add IT for the new socks proxy. 
     }
 
     #[tokio::test]

@@ -356,10 +356,10 @@ impl HttpsOutcallsService for CanisterHttp {
             let http_req_clone = http_req.clone();
             println!("debuggg 0");
 
-            match true {
+            match self.client.request(http_req).await {
                 // If we fail we try with the socks proxy. For destinations that are ipv4 only this should
                 // fail fast because our interface does not have an ipv4 assigned.
-                true => {
+                Err(direct_err) => {
                     self.metrics.requests_socks.inc();
 
                     let result = self.socks_client.request(http_req_clone.clone()).await.map_err(|e| {
@@ -375,7 +375,7 @@ impl HttpsOutcallsService for CanisterHttp {
 
                     result
                 }
-                false => Err("f".to_string()),
+                Ok(resp)=> Ok(resp),
             }
         } else {
             let mut http_req = hyper::Request::new(Full::new(Bytes::from(req.body)));
