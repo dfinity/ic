@@ -22,6 +22,18 @@ fn test_xmd_test_vector() {
 }
 
 #[test]
+fn test_second_level_public_key_derivation() {
+    let canister_key = DerivedPublicKey::deserialize(&hex::decode("972c4c6cc184b56121a1d27ef1ca3a2334d1a51be93573bd18e168f78f8fe15ce44fb029ffe8e9c3ee6bea2660f4f35e0774a35a80d6236c050fd8f831475b5e145116d3e83d26c533545f64b08464e4bcc755f990a381efa89804212d4eef5f").unwrap()).unwrap();
+
+    let context = hex::decode("f00fee").unwrap();
+
+    let derived_key = canister_key.derive_sub_key(&context);
+
+    assert_eq!(hex::encode(derived_key.serialize()),
+               "b7da9e6f50a9484735256b9abf45c4c809d43e45b28b1845ff487704726a9de0bee4fbc3b8af7dfc85574c1d48c2411e09ecded5907a11760e6707a7a2f24a3457225d4bd68bc1fcfb1d1713031c7f5708eba28dcdf6ed10ffbc4268c9a8a567");
+}
+
+#[test]
 fn protocol_flow_with_emulated_server_side() {
     use test_utils::*;
 

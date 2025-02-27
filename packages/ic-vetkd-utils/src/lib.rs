@@ -53,6 +53,13 @@ fn hash_to_scalar(input: &[u8], domain_sep: &str) -> ic_bls12_381::Scalar {
     s[0]
 }
 
+fn prefix_with_len(bytes: &[u8]) -> Vec<u8> {
+    let mut out = Vec::with_capacity(bytes.len() + 8);
+    out.extend_from_slice(&(bytes.len() as u64).to_be_bytes());
+    out.extend_from_slice(bytes);
+    out
+}
+
 #[cfg_attr(feature = "js", wasm_bindgen)]
 impl TransportSecretKey {
     #[cfg_attr(feature = "js", wasm_bindgen(constructor))]
@@ -113,6 +120,31 @@ impl DerivedPublicKey {
         let dpk = option_from_ctoption(G2Affine::from_compressed(dpk_bytes))
             .ok_or(DerivedPublicKeyDeserializationError::InvalidPublicKey)?;
         Ok(Self { point: dpk })
+    }
+
+    /// Perform second-stage derivation of a public key
+    ///
+    /// To create the derived public key in VetKD, a two step derivation is performed. The first step
+    /// creates a key that is specific to the canister that is making VetKD requests to the
+    /// management canister, sometimes called canister master key. The second step incorporates the
+    /// "derivation context" value provided to the `vetkd_public_key` management canister interface.
+    ///
+    /// If `vetkd_public_key` is invoked with an empty derivation context, it simply returns the
+    /// canister master key. Then the second derivation step can be done offline, using this
+    /// function. This is useful if you wish to derive multiple keys without having to interact with
+    /// the IC each time.
+    pub fn derive_sub_key(&self, context: &[u8]) -> Self {
+        let dst = "ic-vetkd-bls12-381-g2-derivation-domain";
+
+        let offset = hash_to_scalar(&prefix_with_len(context), dst);
+
+        let derived_key = G2Affine::from(self.point + G2Affine::generator() * offset);
+        Self { point: derived_key }
+    }
+
+    /// Return the byte encoding of this derived public key
+    pub fn serialize(&self) -> Vec<u8> {
+        self.point.to_compressed().to_vec()
     }
 }
 
