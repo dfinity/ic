@@ -38,8 +38,8 @@ ic-sys = { path = "../sys" }
 ic-system-api = { path = "../system_api" }
 ic-types = { path = "../types/types" }
 ic-utils = { path = "../utils" }
-ic-utils-thread = { path = "../utils/thread" }
 ic-utils-lru-cache = { path = "../utils/lru_cache" }
+ic-utils-thread = { path = "../utils/thread" }
 ic-wasm-transform = { path = "../wasm_transform" }
 ic-wasm-types = { path = "../types/wasm_types" }
 lazy_static = { workspace = true }
@@ -84,6 +84,7 @@ libflate = { workspace = true }
 maplit = "1.0.2"
 proptest = { workspace = true }
 regex = { workspace = true }
+rstest = { workspace = true }
 test-strategy = "0.3.1"
 wasmparser = { workspace = true }
 wat = { workspace = true }
