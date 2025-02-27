@@ -192,7 +192,7 @@ pub struct Ledger {
     approvals: LedgerAllowances,
     #[serde(default)]
     stable_approvals: AllowanceTable<StableAllowancesData>,
-    pub blockchain: Blockchain<CdkRuntime, IcpLedgerArchiveWasm>,
+    pub blockchain: Blockchain<CdkRuntime, IcpLedgerArchiveWasm, HeapBlockData>,
     // DEPRECATED
     pub maximum_number_of_accounts: usize,
     // DEPRECATED
