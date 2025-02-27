@@ -30,7 +30,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   nor the environment variable `POCKET_IC_BIN` provide the path to the PocketIC server binary.
 - The current working directory is ignored when looking for the PocketIC server binary.
 
-
+### Removed
+- The module `management_canister` used to contain interface types of the IC management canister. Those types have since been published on crates.io as `ic-management-canister-types`, so PocketIC can depend on that and remove the redundant types.
 
 ## 6.0.0 - 2024-11-13
 

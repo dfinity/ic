@@ -24,6 +24,7 @@ clap = { workspace = true }
 futures = { workspace = true }
 ic-base-types = { path = "../../types/base_types" }
 ic-cdk = { workspace = true }
+ic-management-canister-types = { workspace = true }
 ic-management-canister-types-private = { path = "../../types/management_canister_types" }
 ic-nervous-system-agent = { path = "../../nervous_system/agent" }
 ic-nervous-system-integration-tests = { path = "../../nervous_system/integration_tests" }
@@ -36,4 +37,3 @@ pocket-ic = { path = "../../../packages/pocket-ic" }
 reqwest = { workspace = true }
 serde = { workspace = true }
 tokio = { workspace = true }
-
