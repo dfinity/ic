@@ -22,7 +22,7 @@ use ic_replicated_state::{
     page_map::{MergeCandidate, StorageMetrics, StorageResult, MAX_NUMBER_OF_FILES},
 };
 use ic_replicated_state::{
-    page_map::{StorageLayout, PAGE_SIZE},
+    page_map::{StorageLayoutR, PAGE_SIZE},
     CanisterState, NumWasmPages, PageMap, ReplicatedState,
 };
 use ic_state_layout::{
@@ -561,11 +561,12 @@ fn merge_candidates_and_storage_info(
                     .layout(layout)
                     .map_err(|err| Box::new(err) as Box<dyn std::error::Error + Send>)?;
                 storage_info.disk_size +=
-                    (&pm_layout as &dyn StorageLayout).storage_size_bytes()?;
-                let num_pages = (&pm_layout as &dyn StorageLayout).memory_size_pages()?;
+                    (&pm_layout as &dyn StorageLayoutR).storage_size_bytes()?;
+                let num_pages = (&pm_layout as &dyn StorageLayoutR).memory_size_pages()?;
                 storage_info.mem_size += (num_pages * PAGE_SIZE) as u64;
                 Ok((
                     MergeCandidate::new(
+                        &pm_layout,
                         &pm_layout,
                         height,
                         num_pages as u64,
