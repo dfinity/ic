@@ -909,12 +909,14 @@ pub struct ShardTag {}
 pub type Shard = AmountOf<ShardTag, u64>;
 pub type StorageResult<T> = Result<T, Box<dyn std::error::Error + Send>>;
 
+/// Provide information from `StateLayout` needed for writing new files.
 pub trait StorageLayoutW {
     /// Path for overlay of given height.
     fn overlay(&self, height: Height, shard: Shard) -> PathBuf;
 }
 
-/// Provide information from `StateLayout` about paths of a specific `PageMap`.
+/// Provide information from `StateLayout` about paths of a specific `PageMap` needed for reading
+/// existing files.
 pub trait StorageLayoutR {
     /// Base file path.
     fn base(&self) -> PathBuf;
