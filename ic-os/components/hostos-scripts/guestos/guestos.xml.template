@@ -14,11 +14,23 @@
     <partition>/machine</partition>
   </resource>
   <os>
-    <type arch='x86_64' machine='pc-q35-5.0'>hvm</type>
-    <loader readonly='yes' type='pflash'>/usr/share/OVMF/OVMF_CODE_4M.fd</loader>
-    <nvram>/var/lib/libvirt/qemu/nvram/guestos_VARS.fd</nvram>
-    <boot dev='hd'/>
+    <type arch='x86_64' machine='pc-q35-6.2'>hvm</type>
+    <loader readonly='yes'>/usr/share/ovmf/OVMF.fd</loader>
+    <kernel>/tmp/sev-boot-components/vmlinuz</kernel>
+    <initrd>/tmp/sev-boot-components/initrd.img</initrd>
+    <cmdline>BOOT_IMAGE=/vmlinuz root=/dev/vda5 console=ttyS0 dfinity.system=A dfinity.boot_state=stable security=selinux selinux=1 enforcing=1 root_hash=XXXTODOXXX</cmdline>
   </os>
+  <launchSecurity type='sev-snp'>
+      <kernelHashes/>
+      <cbitpos>51</cbitpos>
+      <reducedPhysBits>1</reducedPhysBits>
+      <policy>30000</policy>
+    </launchSecurity>
+    <memoryBacking>
+      <source type="memfd"/>
+      <access mode="shared"/>
+      <allocation mode="ondemand"/>
+    </memoryBacking>
   <features>
     <acpi/>
     <apic/>
@@ -36,7 +48,7 @@
     <suspend-to-disk enabled='no'/>
   </pm>
   <devices>
-    <emulator>/usr/local/bin/qemu-system-x86_64</emulator>
+    <emulator>/usr/bin/qemu-system-x86_64</emulator>
     <disk type='block' device='disk'>
       <driver name='qemu' type='raw' cache='none' discard='unmap'/>
       <source dev='/dev/hostlvm/guestos' index='1'/>

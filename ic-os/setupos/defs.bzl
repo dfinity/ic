@@ -83,7 +83,7 @@ def _custom_partitions(mode):
         host_image = Label("//ic-os/hostos/envs/dev:disk-img.tar.zst")
         nns_url = "https://cloudflare.com/cdn-cgi/trace"
     elif mode == "local-base-dev":
-        guest_image = Label("//ic-os/guestos/envs/local-base-dev:disk-img.tar.zst")
+        guest_image = Label("//ic-os/guestos/envs/dev:disk-img.tar.zst")
         host_image = Label("//ic-os/hostos/envs/local-base-dev:disk-img.tar.zst")
         nns_url = "https://cloudflare.com/cdn-cgi/trace"
     elif mode == "local-base-prod":
