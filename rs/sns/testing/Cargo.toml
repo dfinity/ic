@@ -43,6 +43,7 @@ ic-registry-transport = { path = "../../registry/transport" }
 ic-sns-cli = { path = "../cli" }
 ic-sns-governance-api = { path = "../../sns/governance/api" }
 ic-sns-swap = { path = "../swap" }
+ic-sns-wasm = { path = "../../nns/sns-wasm" }
 icp-ledger = { path = "../../ledger_suite/icp" }
 k256 = { workspace = true }
 pocket-ic = { path = "../../../packages/pocket-ic" }
@@ -52,5 +53,6 @@ rand = { workspace = true }
 rand_chacha = { workspace = true }
 slog ={ workspace = true }
 tempfile = { workspace = true }
+thiserror = { workspace = true }
 tokio = { workspace = true }
 url = { workspace = true }

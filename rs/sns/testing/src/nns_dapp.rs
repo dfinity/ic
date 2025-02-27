@@ -1,32 +1,20 @@
 use candid::{CandidType, Encode};
 use canister_test::Wasm;
 use futures::future::join_all;
-use ic_base_types::{CanisterId, PrincipalId};
-use ic_nervous_system_agent::CallCanisters;
+use ic_base_types::PrincipalId;
 use ic_nervous_system_integration_tests::pocket_ic_helpers::{
     add_wasms_to_sns_wasm, install_canister_with_controllers, NnsInstaller,
 };
 use ic_nns_constants::{
-    CYCLES_LEDGER_CANISTER_ID, CYCLES_MINTING_CANISTER_ID, GOVERNANCE_CANISTER_ID,
-    IDENTITY_CANISTER_ID, LEDGER_CANISTER_ID, LEDGER_INDEX_CANISTER_ID, LIFELINE_CANISTER_ID,
-    NNS_UI_CANISTER_ID, REGISTRY_CANISTER_ID, ROOT_CANISTER_ID, SNS_AGGREGATOR_CANISTER_ID,
+    CYCLES_MINTING_CANISTER_ID, GOVERNANCE_CANISTER_ID, IDENTITY_CANISTER_ID, LEDGER_CANISTER_ID,
+    LEDGER_INDEX_CANISTER_ID, NNS_UI_CANISTER_ID, ROOT_CANISTER_ID, SNS_AGGREGATOR_CANISTER_ID,
     SNS_WASM_CANISTER_ID,
 };
 use ic_registry_transport::pb::v1::RegistryAtomicMutateRequest;
 use icp_ledger::{AccountIdentifier, Tokens};
 use pocket_ic::nonblocking::PocketIc;
 
-const ALL_NNS_CANISTER_IDS: [&CanisterId; 9] = [
-    &GOVERNANCE_CANISTER_ID,
-    &LEDGER_CANISTER_ID,
-    &ROOT_CANISTER_ID,
-    &LIFELINE_CANISTER_ID,
-    &SNS_WASM_CANISTER_ID,
-    &REGISTRY_CANISTER_ID,
-    &CYCLES_MINTING_CANISTER_ID,
-    &LEDGER_INDEX_CANISTER_ID,
-    &CYCLES_LEDGER_CANISTER_ID,
-];
+use crate::utils::{check_canister_installed, ALL_NNS_CANISTER_IDS};
 
 async fn validate_subnet_setup(pocket_ic: &PocketIc) {
     let topology = pocket_ic.topology().await;
@@ -35,14 +23,6 @@ async fn validate_subnet_setup(pocket_ic: &PocketIc) {
     let _ii_subnet_id = topology.get_ii().expect("II subnet not found");
     let app_subnet_ids = topology.get_app_subnets();
     assert!(!app_subnet_ids.is_empty(), "No application subnets found");
-}
-
-async fn check_canister_exists(pocket_ic: &PocketIc, canister_id: &CanisterId) -> bool {
-    pocket_ic
-        .canister_info(*canister_id)
-        .await
-        .map(|_| true)
-        .unwrap_or(false)
 }
 
 pub async fn bootstrap_nns(
@@ -56,16 +36,15 @@ pub async fn bootstrap_nns(
     // with all the required subnets. However, in the future, we might want to be able to check externally provided
     // networks.
     validate_subnet_setup(pocket_ic).await;
-
     // Check if all NNS canisters are already installed
-    let canisters_exist = join_all(
+    let canisters_installed = join_all(
         ALL_NNS_CANISTER_IDS
             .iter()
-            .map(|canister_id| async { check_canister_exists(pocket_ic, canister_id).await }),
+            .map(|canister_id| async { check_canister_installed(pocket_ic, canister_id).await }),
     )
     .await;
 
-    if !canisters_exist.iter().any(|exists| *exists) {
+    if !canisters_installed.iter().any(|exists| *exists) {
         // TODO @rvem: at some point in the future we might want to use
         // non-default 'neurons_fund_hotkeys' to provide
         // neuron hotkeys for user-provided indentities.
@@ -80,7 +59,7 @@ pub async fn bootstrap_nns(
         nns_installer.with_neurons_fund_hotkeys(neuron_hotkeys);
         nns_installer.install(pocket_ic).await;
         add_wasms_to_sns_wasm(pocket_ic, false).await.unwrap();
-    } else if !canisters_exist.iter().all(|exists| *exists) {
+    } else if !canisters_installed.iter().all(|exists| *exists) {
         panic!("Some NNS canisters are missing, we cannot fix this automatically at the moment");
     }
 
@@ -107,7 +86,7 @@ async fn install_frontend_nns_canisters(pocket_ic: &PocketIc) {
     let internet_identity_wasm =
         Wasm::from_location_specified_by_env_var("internet_identity", features).unwrap();
 
-    if !check_canister_exists(pocket_ic, &SNS_AGGREGATOR_CANISTER_ID).await {
+    if !check_canister_installed(pocket_ic, &SNS_AGGREGATOR_CANISTER_ID).await {
         // Refresh every second so that the NNS dapp is as up-to-date as possible
         let sns_aggregator_payload = SnsAggregatorPayload {
             update_interval_ms: 1000,
@@ -125,7 +104,7 @@ async fn install_frontend_nns_canisters(pocket_ic: &PocketIc) {
         .await;
     }
 
-    if !check_canister_exists(pocket_ic, &IDENTITY_CANISTER_ID).await {
+    if !check_canister_installed(pocket_ic, &IDENTITY_CANISTER_ID).await {
         let internet_identity_payload: Option<()> = None;
 
         install_canister_with_controllers(
@@ -139,7 +118,7 @@ async fn install_frontend_nns_canisters(pocket_ic: &PocketIc) {
         .await;
     }
 
-    if !check_canister_exists(pocket_ic, &NNS_UI_CANISTER_ID).await {
+    if !check_canister_installed(pocket_ic, &NNS_UI_CANISTER_ID).await {
         // TODO @rvem: perhaps, we may start using configurable endpoint for the IC http interface
         // which should be considered in NNS dapp configuration.
         let endpoint = "localhost:8080";
