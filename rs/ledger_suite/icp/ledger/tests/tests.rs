@@ -10,8 +10,9 @@ use ic_ledger_core::{block::BlockType, Tokens};
 use ic_ledger_suite_state_machine_tests::{
     balance_of, default_approve_args, default_transfer_from_args, expect_icrc2_disabled,
     send_approval, send_transfer_from, setup, supported_standards, total_supply, transfer,
-    AllowanceProvider, FEE, MINTER,
+    AllowanceProvider, LedgerTestParameters, FEE, MINTER,
 };
+use ic_registry_subnet_type::SubnetType;
 use ic_state_machine_tests::{ErrorCode, StateMachine, UserError};
 use icp_ledger::{
     AccountIdBlob, AccountIdentifier, AccountIdentifierByteBuf, ArchiveOptions,
@@ -1772,7 +1773,16 @@ fn test_query_archived_blocks() {
 
 #[test]
 fn test_icrc21_standard() {
-    ic_ledger_suite_state_machine_tests::test_icrc21_standard(ledger_wasm(), encode_init_args);
+    ic_ledger_suite_state_machine_tests::test_icrc21_standard(default_ledger_test_parameters());
+}
+
+fn default_ledger_test_parameters() -> LedgerTestParameters<LedgerCanisterInitPayload> {
+    LedgerTestParameters {
+        ledger_wasm: ledger_wasm(),
+        encode_init_args,
+        subnet_type: SubnetType::System,
+        ledger_cycles: None,
+    }
 }
 
 #[test]
