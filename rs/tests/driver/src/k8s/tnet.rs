@@ -451,9 +451,8 @@ impl TNet {
                  chmod -R 777 /tnet/{vm_name}",
                 vm_name = vm_name,
                 image = match vm_type {
-                    ImageType::UniversalImage => "uvm.img".to_string(),
                     ImageType::PrometheusImage => "pvm.img".to_string(),
-                    _ => "".to_string(),
+                    _ => "uvm.img".to_string(),
                 },
             );
             create_job(
