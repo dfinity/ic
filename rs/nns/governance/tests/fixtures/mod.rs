@@ -52,6 +52,7 @@ use std::{
 use ic_nns_governance::governance::tla::{
     self, account_to_tla, Destination, ToTla, TLA_INSTRUMENTATION_STATE,
 };
+use ic_nns_governance::governance::RandomnessGenerator;
 use ic_nns_governance::{tla_log_request, tla_log_response};
 
 pub mod environment_fixture;
@@ -511,38 +512,28 @@ impl IcpLedger for NNSFixture {
     }
 }
 
+impl RandomnessGenerator for NNSFixture {
+    fn random_u64(&mut self) -> Result<u64, RngError> {
+        todo!()
+    }
+
+    fn random_byte_array(&mut self) -> Result<[u8; 32], RngError> {
+        todo!()
+    }
+
+    fn seed_rng(&mut self, seed: [u8; 32]) {
+        todo!()
+    }
+
+    fn get_rng_seed(&self) -> Option<[u8; 32]> {
+        todo!()
+    }
+}
+
 #[async_trait]
 impl Environment for NNSFixture {
     fn now(&self) -> u64 {
         self.nns_state.try_lock().unwrap().environment.now()
-    }
-
-    fn random_u64(&mut self) -> Result<u64, RngError> {
-        self.nns_state.try_lock().unwrap().environment.random_u64()
-    }
-
-    fn random_byte_array(&mut self) -> Result<[u8; 32], RngError> {
-        self.nns_state
-            .try_lock()
-            .unwrap()
-            .environment
-            .random_byte_array()
-    }
-
-    fn seed_rng(&mut self, seed: [u8; 32]) {
-        self.nns_state
-            .try_lock()
-            .unwrap()
-            .environment
-            .seed_rng(seed)
-    }
-
-    fn get_rng_seed(&self) -> Option<[u8; 32]> {
-        self.nns_state
-            .try_lock()
-            .unwrap()
-            .environment
-            .get_rng_seed()
     }
 
     fn execute_nns_function(
@@ -583,7 +574,7 @@ impl Environment for NNSFixture {
 
 #[async_trait]
 impl CMC for NNSFixture {
-    async fn neuron_maturity_modulation(&mut self) -> Result<i32, String> {
+    async fn neuron_maturity_modulation(&self) -> Result<i32, String> {
         Ok(100)
     }
 }
@@ -991,12 +982,7 @@ impl IcpLedger for NNS {
     }
 }
 
-#[async_trait]
-impl Environment for NNS {
-    fn now(&self) -> u64 {
-        self.fixture.now()
-    }
-
+impl RandomnessGenerator for NNS {
     fn random_u64(&mut self) -> Result<u64, RngError> {
         self.fixture.random_u64()
     }
@@ -1011,6 +997,12 @@ impl Environment for NNS {
 
     fn get_rng_seed(&self) -> Option<[u8; 32]> {
         unimplemented!()
+    }
+}
+#[async_trait]
+impl Environment for NNS {
+    fn now(&self) -> u64 {
+        self.fixture.now()
     }
 
     fn execute_nns_function(
@@ -1035,8 +1027,8 @@ impl Environment for NNS {
     }
 }
 
-pub type LedgerTransform = Box<dyn FnOnce(Box<dyn IcpLedger>) -> Box<dyn IcpLedger>>;
-pub type EnvironmentTransform = Box<dyn FnOnce(Box<dyn Environment>) -> Box<dyn Environment>>;
+pub type LedgerTransform = Box<dyn FnOnce(Arc<dyn IcpLedger>) -> Arc<dyn IcpLedger>>;
+pub type EnvironmentTransform = Box<dyn FnOnce(Arc<dyn Environment>) -> Arc<dyn Environment>>;
 
 /// The NNSBuilder permits the declarative construction of an NNS fixture. All
 /// of the methods concern setting or querying what this initial state will
@@ -1077,18 +1069,19 @@ impl NNSBuilder {
             ledger: self.ledger_builder.create(),
             environment: self.environment_builder.create(),
         });
-        let cmc: Box<dyn CMC> = Box::new(fixture.clone());
-        let mut ledger: Box<dyn IcpLedger> = Box::new(fixture.clone());
+        let cmc: Arc<dyn CMC> = Arc::new(fixture.clone());
+        let mut ledger: Arc<dyn IcpLedger> = Arc::new(fixture.clone());
         for t in self.ledger_transforms {
             ledger = t(ledger);
         }
-        let mut environment: Box<dyn Environment> = Box::new(fixture.clone());
+        let mut environment: Arc<dyn Environment> = Arc::new(fixture.clone());
         for t in self.environment_transforms {
             environment = t(environment);
         }
+        let randomness = Box::new(fixture.clone());
         let mut nns = NNS {
             fixture: fixture.clone(),
-            governance: Governance::new(self.governance, environment, ledger, cmc),
+            governance: Governance::new(self.governance, environment, ledger, cmc, randomness),
             initial_state: None,
         };
         nns.capture_state();

@@ -1,5 +1,7 @@
 use crate::decoder_config;
-use crate::governance::{Environment, Governance, HeapGrowthPotential, RngError};
+use crate::governance::{
+    Environment, Governance, HeapGrowthPotential, RandomnessGenerator, RngError,
+};
 use async_trait::async_trait;
 use candid::{Decode, Encode};
 use ic_base_types::CanisterId;
@@ -21,12 +23,16 @@ use rand::{RngCore, SeedableRng};
 use rand_chacha::ChaCha20Rng;
 use std::cell::RefCell;
 use std::str::FromStr;
+use std::sync::Arc;
+#[cfg(any(test, feature = "test"))]
+use std::sync::RwLock;
 
 thread_local! {
     pub(crate) static GOVERNANCE: RefCell<Governance> = RefCell::new(Governance::new_uninitialized(
-        Box::new(CanisterEnv::new()),
-        Box::new(IcpLedgerCanister::<CdkRuntime>::new(LEDGER_CANISTER_ID)),
-        Box::new(CMCCanister::<CdkRuntime>::new()),
+        Arc::new(CanisterEnv::new()),
+        Arc::new(IcpLedgerCanister::<CdkRuntime>::new(LEDGER_CANISTER_ID)),
+        Arc::new(CMCCanister::<CdkRuntime>::new()),
+        Box::new(CanisterRandomnessGenerator::new()),
     ));
 }
 /*
@@ -106,29 +112,30 @@ pub fn set_governance(gov: Governance) {
 
 #[derive(Default)]
 pub struct CanisterEnv {
-    rng: Option<ChaCha20Rng>,
-    time_warp: crate::governance::TimeWarp,
+    #[cfg(any(test, feature = "test"))]
+    time_warp: RwLock<crate::governance::TimeWarp>,
 }
 
 impl CanisterEnv {
     pub fn new() -> Self {
         CanisterEnv {
-            rng: None,
-            time_warp: crate::governance::TimeWarp { delta_s: 0 },
+            #[cfg(any(test, feature = "test"))]
+            time_warp: RwLock::new(crate::governance::TimeWarp { delta_s: 0 }),
         }
     }
 }
 
-#[async_trait]
-impl Environment for CanisterEnv {
-    fn now(&self) -> u64 {
-        self.time_warp.apply(now_seconds())
-    }
+pub struct CanisterRandomnessGenerator {
+    rng: Option<ChaCha20Rng>,
+}
 
-    fn set_time_warp(&mut self, new_time_warp: crate::governance::TimeWarp) {
-        self.time_warp = new_time_warp;
+impl CanisterRandomnessGenerator {
+    pub fn new() -> Self {
+        CanisterRandomnessGenerator { rng: None }
     }
+}
 
+impl RandomnessGenerator for CanisterRandomnessGenerator {
     fn random_u64(&mut self) -> Result<u64, RngError> {
         match self.rng.as_mut() {
             Some(rand) => Ok(rand.next_u64()),
@@ -153,6 +160,24 @@ impl Environment for CanisterEnv {
 
     fn get_rng_seed(&self) -> Option<[u8; 32]> {
         self.rng.as_ref().map(|rng| rng.get_seed())
+    }
+}
+
+#[async_trait]
+impl Environment for CanisterEnv {
+    #[cfg(any(test, feature = "test"))]
+    fn now(&self) -> u64 {
+        self.time_warp.read().unwrap().apply(now_seconds())
+    }
+
+    #[cfg(not(any(test, feature = "test")))]
+    fn now(&self) -> u64 {
+        now_seconds()
+    }
+
+    #[cfg(any(test, feature = "test"))]
+    fn set_time_warp(&self, new_time_warp: crate::governance::TimeWarp) {
+        *self.time_warp.write().unwrap() = new_time_warp;
     }
 
     fn execute_nns_function(
@@ -420,7 +445,7 @@ mod tests {
     use candid::{Decode, Encode};
     #[test]
     fn test_set_time_warp() {
-        let mut environment = CanisterEnv::new();
+        let environment = CanisterEnv::new();
 
         let start = environment.now();
         environment.set_time_warp(crate::governance::TimeWarp { delta_s: 1_000 });

@@ -1,6 +1,7 @@
 // This allow(dead_code) is necessary because some parts of this file
 // are not used in canbench-rs, but are used elsewhere.  Otherwise we get annoying clippy warnings.
 #![allow(dead_code)]
+use crate::governance::RandomnessGenerator;
 use crate::{
     governance::{Environment, HeapGrowthPotential, RngError},
     pb::v1::{ExecuteNnsFunction, GovernanceError, OpenSnsTokenSwap},
@@ -108,7 +109,7 @@ impl IcpLedger for StubIcpLedger {
 pub(crate) struct StubCMC {}
 #[async_trait]
 impl CMC for StubCMC {
-    async fn neuron_maturity_modulation(&mut self) -> Result<i32, String> {
+    async fn neuron_maturity_modulation(&self) -> Result<i32, String> {
         unimplemented!()
     }
 }
@@ -131,6 +132,31 @@ impl ExpectedCallCanisterMethodCallArguments {
             method_name: method_name.to_string(),
             request,
         }
+    }
+}
+
+pub(crate) struct MockRandomness {}
+impl MockRandomness {
+    pub fn new() -> MockRandomness {
+        MockRandomness {}
+    }
+}
+
+impl RandomnessGenerator for MockRandomness {
+    fn random_u64(&mut self) -> Result<u64, RngError> {
+        todo!()
+    }
+
+    fn random_byte_array(&mut self) -> Result<[u8; 32], RngError> {
+        todo!()
+    }
+
+    fn seed_rng(&mut self, seed: [u8; 32]) {
+        todo!()
+    }
+
+    fn get_rng_seed(&self) -> Option<[u8; 32]> {
+        todo!()
     }
 }
 
@@ -202,20 +228,6 @@ impl Default for MockEnvironment {
 impl Environment for MockEnvironment {
     fn now(&self) -> u64 {
         *self.now.lock().unwrap()
-    }
-
-    fn random_u64(&mut self) -> Result<u64, RngError> {
-        unimplemented!();
-    }
-
-    fn random_byte_array(&mut self) -> Result<[u8; 32], RngError> {
-        unimplemented!();
-    }
-
-    fn seed_rng(&mut self, _seed: [u8; 32]) {}
-
-    fn get_rng_seed(&self) -> Option<[u8; 32]> {
-        Some([0; 32])
     }
 
     fn execute_nns_function(
