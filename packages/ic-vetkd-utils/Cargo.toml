@@ -31,3 +31,8 @@ hex = { workspace = true }
 [features]
 default = ["js"]
 js = ["dep:wasm-bindgen", "dep:getrandom"]
+
+[profile.release.target.'cfg(target_arch = "wasm32")']
+lto = true
+opt-level = 'z'
+panic = 'abort'
