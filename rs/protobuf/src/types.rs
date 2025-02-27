@@ -69,4 +69,20 @@ pub mod v1 {
             }
         }
     }
+
+    #[cfg(test)]
+    mod tests {
+        use super::RejectCode as RejectCodeProto;
+        use ic_error_types::RejectCode;
+        use strum::IntoEnumIterator;
+
+        #[test]
+        fn reject_code_round_trip() {
+            for initial in RejectCode::iter() {
+                let encoded = RejectCodeProto::from(initial);
+                let round_trip = RejectCode::try_from(encoded).unwrap();
+                assert_eq!(initial, round_trip);
+            }
+        }
+    }
 }

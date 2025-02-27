@@ -373,16 +373,6 @@ mod tests {
         );
     }
 
-    // #[test]
-    // fn error_code_round_trip() {
-    //     for initial in ErrorCode::iter() {
-    //         let encoded = ErrorCodeProto::from(initial);
-    //         let round_trip = ErrorCode::try_from(encoded).unwrap();
-
-    //         assert_eq!(initial, round_trip);
-    //     }
-    // }
-
     #[test]
     #[rustfmt::skip]
     fn compatibility_for_error_code() {
@@ -402,16 +392,6 @@ mod tests {
             ]
         );
     }
-
-    // #[test]
-    // fn reject_code_round_trip() {
-    //     for initial in RejectCode::iter() {
-    //         let encoded = RejectCodeProto::from(initial);
-    //         let round_trip = RejectCode::try_from(encoded).unwrap();
-
-    //         assert_eq!(initial, round_trip);
-    //     }
-    // }
 
     #[test]
     fn compatibility_for_reject_code() {

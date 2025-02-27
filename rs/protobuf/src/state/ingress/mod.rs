@@ -239,4 +239,21 @@ pub mod v1 {
             }
         }
     }
+
+    #[cfg(test)]
+    mod tests {
+        use super::ErrorCode as ErrorCodeProto;
+        use ic_error_types::ErrorCode;
+        use strum::IntoEnumIterator;
+
+        #[test]
+        fn error_code_round_trip() {
+            for initial in ErrorCode::iter() {
+                let encoded = ErrorCodeProto::from(initial);
+                let round_trip = ErrorCode::try_from(encoded).unwrap();
+
+                assert_eq!(initial, round_trip);
+            }
+        }
+    }
 }

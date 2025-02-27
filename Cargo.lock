@@ -8534,7 +8534,7 @@ dependencies = [
 
 [[package]]
 name = "ic-error-types"
-version = "0.0.0"
+version = "0.1.0"
 dependencies = [
  "serde",
  "strum",
@@ -11106,6 +11106,7 @@ dependencies = [
  "serde",
  "serde_json",
  "slog",
+ "strum",
  "tempfile",
 ]
 
