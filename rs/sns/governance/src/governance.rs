@@ -52,8 +52,8 @@ use crate::{
             MintTokensRequest, MintTokensResponse, NervousSystemFunction, NervousSystemParameters,
             Neuron, NeuronId, NeuronPermission, NeuronPermissionList, NeuronPermissionType,
             Proposal, ProposalData, ProposalDecisionStatus, ProposalId, ProposalRewardStatus,
-            RegisterDappCanisters, RewardEvent, Tally, TransferSnsTreasuryFunds,
-            UpgradeSnsControlledCanister, Vote, WaitForQuietState,
+            RegisterDappCanisters, RewardEvent, SetCustomProposalTopics, Tally,
+            TransferSnsTreasuryFunds, UpgradeSnsControlledCanister, Vote, WaitForQuietState,
         },
     },
     proposal::{
@@ -2140,6 +2140,9 @@ impl Governance {
                     })
                     .and_then(|new_target| self.perform_advance_target_version(new_target))
             }
+            Action::SetCustomProposalTopics(set_custom_proposal_topics) => {
+                self.perform_set_custom_proposal_topics(set_custom_proposal_topics)
+            }
             // This should not be possible, because Proposal validation is performed when
             // a proposal is first made.
             Action::Unspecified(_) => Err(GovernanceError::new_with_message(
@@ -3118,6 +3121,24 @@ impl Governance {
 
         self.proto.target_version = Some(target_version);
 
+        Ok(())
+    }
+
+    // Make a change to the mapping from custom proposal types to topics.
+    fn perform_set_custom_proposal_topics(
+        &mut self,
+        set_custom_proposal_topics: SetCustomProposalTopics,
+    ) -> Result<(), GovernanceError> {
+        // TODO: Validate set_custom_proposal_topics.topic_infos
+        // - all function are registered
+        // - topics can be decoded
+
+        // for (custom_function_id, topic) in topic_infos.into_iter() {
+        //     // self.proto
+        //     //     .id_to_nervous_system_functions
+        //     //     .
+        //     todo!();
+        // }
         Ok(())
     }
 

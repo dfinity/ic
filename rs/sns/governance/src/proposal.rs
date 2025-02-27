@@ -1,5 +1,5 @@
 use crate::cached_upgrade_steps::render_two_versions_as_markdown_table;
-use crate::pb::v1::AdvanceSnsTargetVersion;
+use crate::pb::v1::{AdvanceSnsTargetVersion, SetCustomProposalTopics, Topic};
 use crate::types::Wasm;
 use crate::{
     canister_control::perform_execute_generic_nervous_system_function_validate_and_render_call,
@@ -491,6 +491,55 @@ pub(crate) async fn validate_and_render_action(
                 governance_proto,
                 advance_sns_target_version,
             );
+        }
+        proposal::Action::SetCustomProposalTopics(set_custom_proposal_topics) => {
+            let existing_custom_functions = existing_functions
+                .iter()
+                .filter_map(|(function_id, function)| {
+                    match &function.function_type {
+                        Some(FunctionType::GenericNervousSystemFunction(generic)) => {
+                            if let Some(topic) = generic.topic {
+                                let specific_topic = match Topic::try_from(topic) {
+                                    Err(err) => {
+                                        log!(
+                                            ERROR,
+                                            "Custom proposal ID {function_id}: Cannot interpret \
+                                             {topic} as Topic: {err}",
+                                        );
+
+                                        // This should never happen; if it somehow does, treat this
+                                        // case as a custom function for which the topic is unknown.
+                                        None
+                                    }
+                                    Ok(Topic::Unspecified) => {
+                                        log!(
+                                            ERROR,
+                                            "Custom proposal ID {function_id}: topic Unspecified."
+                                        );
+
+                                        // This should never happen, but if it somehow does, treat this
+                                        // case as a custom function for which the topic is unknown.
+                                        None
+                                    }
+                                    Ok(topic) => Some(topic),
+                                };
+
+                                Some((*function_id, specific_topic))
+                            } else {
+                                // Topic not yet set for this custom function.
+                                Some((*function_id, None))
+                            }
+                        }
+                        // Not a custom function.
+                        _ => None,
+                    }
+                })
+                .collect();
+
+            validate_and_render_set_custom_proposal_topics(
+                set_custom_proposal_topics,
+                &existing_custom_functions,
+            )
         }
     }
     .map(|rendering| (rendering, ActionAuxiliary::None))
@@ -1824,6 +1873,120 @@ fn validate_and_render_advance_sns_target_version_proposal(
         render,
         ActionAuxiliary::AdvanceSnsTargetVersion(target_version),
     ))
+}
+
+fn topic_to_str(topic: &Topic) -> &'static str {
+    match topic {
+        Topic::Unspecified => "Unspecified",
+        Topic::DaoCommunitySettings => "DaoCommunitySettings",
+        Topic::SnsFrameworkManagement => "SnsFrameworkManagement",
+        Topic::DappCanisterManagement => "DappCanisterManagement",
+        Topic::ApplicationBusinessLogic => "ApplicationBusinessLogic",
+        Topic::Governance => "Governance",
+        Topic::TreasuryAssetManagement => "TreasuryAssetManagement",
+        Topic::CriticalDappOperations => "CriticalDappOperations",
+    }
+}
+
+fn validate_and_render_set_custom_proposal_topics(
+    set_custom_proposal_topics: &SetCustomProposalTopics,
+    existing_custom_functions: &BTreeMap<u64, Option<Topic>>,
+) -> Result<String, String> {
+    let SetCustomProposalTopics {
+        custom_function_id_to_topic,
+    } = set_custom_proposal_topics;
+
+    if custom_function_id_to_topic.is_empty() {
+        return Err(
+            "SetCustomProposalTopics.custom_function_id_to_topic must not be empty.".to_string(),
+        );
+    }
+
+    let mut table = vec![];
+    let mut functions_with_unknown_topics = vec![];
+    let mut functions_with_unspecified_topics = vec![];
+    let mut not_registered_as_custom_functions = vec![];
+
+    for (custom_function_id, proposed_topic) in set_custom_proposal_topics
+        .custom_function_id_to_topic
+        .iter()
+    {
+        let Ok(proposed_topic) = Topic::try_from(*proposed_topic) else {
+            functions_with_unknown_topics.push(format!(
+                "function ID: {custom_function_id}, invalid topic: {proposed_topic}"
+            ));
+            continue;
+        };
+
+        if matches!(proposed_topic, Topic::Unspecified) {
+            functions_with_unspecified_topics.push(format!("{custom_function_id}"));
+            continue;
+        }
+
+        let Some(current_topic) = existing_custom_functions.get(custom_function_id) else {
+            not_registered_as_custom_functions.push(format!("{custom_function_id}"));
+            continue;
+        };
+
+        let proposed_topic_str = topic_to_str(&proposed_topic);
+
+        let table_row = if let Some(current_topic) = current_topic {
+            // Is this proposal trying to modify a previously set topic?
+
+            if proposed_topic == *current_topic {
+                format!("{proposed_topic_str} (keeping unchanged)")
+            } else {
+                let existing_topic_str = topic_to_str(current_topic);
+
+                format!("{proposed_topic_str} (changing from {existing_topic_str})")
+            }
+        } else {
+            format!("{proposed_topic_str} (topic not currently set)")
+        };
+
+        table.push(table_row);
+    }
+
+    if !functions_with_unknown_topics.is_empty() {
+        return Err(format!(
+            "Invalid topics detected: {}.\
+                 To list available topics, please query `SnsGovernance.list_topics`.",
+            functions_with_unspecified_topics.join("; "),
+        ));
+    }
+
+    if !functions_with_unspecified_topics.is_empty() {
+        return Err(format!(
+            "Cannot set the unspecified topic ({}) for proposal(s) with ID(s) {}.\
+                 To list available topics, please query `SnsGovernance.list_topics`.",
+            Topic::Unspecified as i32,
+            functions_with_unspecified_topics.join(", "),
+        ));
+    }
+
+    if !not_registered_as_custom_functions.is_empty() {
+        return Err(format!(
+            "Cannot set topic for proposal(s) with ID(s) {} since they have not been registered
+                 as custom proposals in this SNS yet. Please use `AddGenericNervousSystemFunction` \
+                 proposals to register new custom SNS proposals.",
+            not_registered_as_custom_functions.join(", "),
+        ));
+    }
+
+    let render = table.join(" - \n  ");
+
+    let render = format!(
+        "### If adopted, the following custom functions will be categorized under \
+         the specified topics:\n\n\
+         {render}"
+    );
+
+    let render = format!(
+        "# Proposal to set topics for custom SNS proposal types\n\n\
+         {render}"
+    );
+
+    Ok(render)
 }
 
 impl ProposalData {

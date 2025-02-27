@@ -574,6 +574,21 @@ impl From<pb::AdvanceSnsTargetVersion> for pb_api::AdvanceSnsTargetVersion {
     }
 }
 
+impl From<pb_api::SetCustomProposalTopics> for pb::SetCustomProposalTopics {
+    fn from(item: pb_api::SetCustomProposalTopics) -> Self {
+        Self {
+            custom_function_id_to_topic: item.custom_function_id_to_topic.into_iter().collect(),
+        }
+    }
+}
+impl From<pb::SetCustomProposalTopics> for pb_api::SetCustomProposalTopics {
+    fn from(item: pb::SetCustomProposalTopics) -> Self {
+        Self {
+            custom_function_id_to_topic: item.custom_function_id_to_topic.into_iter().collect(),
+        }
+    }
+}
+
 impl From<pb::Proposal> for pb_api::Proposal {
     fn from(item: pb::Proposal) -> Self {
         Self {
@@ -642,6 +657,9 @@ impl From<pb::proposal::Action> for pb_api::proposal::Action {
             pb::proposal::Action::AdvanceSnsTargetVersion(v) => {
                 pb_api::proposal::Action::AdvanceSnsTargetVersion(v.into())
             }
+            pb::proposal::Action::SetCustomProposalTopics(v) => {
+                pb_api::proposal::Action::SetCustomProposalTopics(v.into())
+            }
         }
     }
 }
@@ -691,6 +709,9 @@ impl From<pb_api::proposal::Action> for pb::proposal::Action {
             }
             pb_api::proposal::Action::AdvanceSnsTargetVersion(v) => {
                 pb::proposal::Action::AdvanceSnsTargetVersion(v.into())
+            }
+            pb_api::proposal::Action::SetCustomProposalTopics(v) => {
+                pb::proposal::Action::SetCustomProposalTopics(v.into())
             }
         }
     }
