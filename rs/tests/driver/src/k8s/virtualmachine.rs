@@ -61,8 +61,9 @@ spec:
       - name: default
         pod: {}
       volumes:
-        - dataVolume:
-            name: "{name}-guestos"
+        - hostDisk:
+            type: Disk
+            path: /srv/tnet/{name}/disk.img
           name: disk0
         - name: cloudinitdisk
           cloudInitNoCloud:
