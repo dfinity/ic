@@ -9,7 +9,9 @@ use ic_sys::{PageBytes, PAGE_SIZE};
 use ic_types::Height;
 use libc::c_void;
 use nix::sys::mman::{mmap, MapFlags, ProtFlags};
-use std::sync::{Arc, LazyLock, Mutex};
+use std::sync::Arc;
+#[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+use std::sync::{LazyLock, Mutex};
 
 use crate::{
     new_signal_handler_available, AccessKind, DirtyPageTracking, PageBitmap, SigsegvMemoryTracker,
