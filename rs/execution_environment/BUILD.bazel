@@ -83,6 +83,7 @@ DEV_DEPENDENCIES = [
     "@crate_index//:maplit",
     "@crate_index//:proptest",
     "@crate_index//:regex",
+    "@crate_index//:rstest",
     "@crate_index//:wasmparser",
     "@crate_index//:wat",
 ]

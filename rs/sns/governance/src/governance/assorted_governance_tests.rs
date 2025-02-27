@@ -16,9 +16,9 @@ use crate::{
         governance::{CachedUpgradeSteps as CachedUpgradeStepsPb, Versions},
         manage_neuron_response,
         nervous_system_function::{FunctionType, GenericNervousSystemFunction},
-        neuron, Account as AccountProto, Motion, NeuronPermissionType, ProposalData, ProposalId,
-        Tally, UpgradeJournalEntry, UpgradeSnsControlledCanister, UpgradeSnsToNextVersion,
-        VotingRewardsParameters, WaitForQuietState,
+        neuron, Account as AccountProto, Motion, NervousSystemFunction, NeuronPermissionType,
+        ProposalData, ProposalId, Tally, UpgradeJournalEntry, UpgradeSnsControlledCanister,
+        UpgradeSnsToNextVersion, VotingRewardsParameters, WaitForQuietState,
     },
     reward,
     sns_upgrade::{
@@ -27,6 +27,7 @@ use crate::{
         GetWasmResponse, ListUpgradeStep, ListUpgradeStepsRequest, ListUpgradeStepsResponse,
         SnsCanisterType, SnsVersion, SnsWasm,
     },
+    topics::{ListTopicsResponse, NervousSystemFunctions, TopicInfo},
     types::test_helpers::NativeEnvironment,
 };
 use assert_matches::assert_matches;
@@ -45,6 +46,7 @@ use ic_nervous_system_common_test_keys::{
     TEST_NEURON_1_OWNER_PRINCIPAL, TEST_NEURON_2_OWNER_PRINCIPAL, TEST_USER1_KEYPAIR,
 };
 use ic_nns_constants::SNS_WASM_CANISTER_ID;
+use ic_sns_governance_api::pb::v1::topics::Topic;
 use ic_sns_governance_token_valuation::{Token, ValuationFactors};
 use ic_sns_test_utils::itest_helpers::UserInfo;
 use ic_test_utilities_types::ids::canister_test_id;
@@ -55,7 +57,6 @@ use std::{
     sync::{Arc, Mutex},
     time::{Duration, SystemTime},
 };
-
 struct AlwaysSucceedingLedger {}
 
 #[async_trait]
@@ -452,6 +453,7 @@ fn test_governance_proto_ids_in_nervous_system_functions_match() {
             description: None,
             function_type: Some(FunctionType::GenericNervousSystemFunction(
                 GenericNervousSystemFunction {
+                    topic: None,
                     target_canister_id: Some(CanisterId::from_u64(1).get()),
                     target_method_name: Some("test_method".to_string()),
                     validator_canister_id: Some(CanisterId::from_u64(1).get()),
@@ -1502,8 +1504,8 @@ fn setup_env_for_sns_upgrade_to_next_version_test(
             env.require_call_canister_invocation(
                 CanisterId::ic_00(),
                 "install_code",
-                Encode!(&ic_management_canister_types::InstallCodeArgs {
-                    mode: ic_management_canister_types::CanisterInstallMode::Upgrade,
+                Encode!(&ic_management_canister_types_private::InstallCodeArgs {
+                    mode: ic_management_canister_types_private::CanisterInstallMode::Upgrade,
                     canister_id: canister_id.get(),
                     wasm_module: vec![9, 8, 7, 6, 5, 4, 3, 2],
                     arg: Encode!().unwrap(),
@@ -2475,7 +2477,24 @@ fn test_no_target_version_fails_check_upgrade_status() {
 }
 
 #[test]
-fn test_check_upgrade_fails_and_sets_deployed_version_if_deployed_version_missing() {
+fn test_check_upgrade_fails_and_sets_deployed_version_if_deployed_version_missing_auto() {
+    let automatically_advance_target_version = true;
+    test_check_upgrade_fails_and_sets_deployed_version_if_deployed_version_missing(
+        automatically_advance_target_version,
+    );
+}
+
+#[test]
+fn test_check_upgrade_fails_and_sets_deployed_version_if_deployed_version_missing_no_auto() {
+    let automatically_advance_target_version = false;
+    test_check_upgrade_fails_and_sets_deployed_version_if_deployed_version_missing(
+        automatically_advance_target_version,
+    );
+}
+
+fn test_check_upgrade_fails_and_sets_deployed_version_if_deployed_version_missing(
+    automatically_advance_target_version: bool,
+) {
     let root_canister_id = *TEST_ROOT_CANISTER_ID;
     let governance_canister_id = *TEST_GOVERNANCE_CANISTER_ID;
     let next_version = SnsVersion {
@@ -2596,6 +2615,9 @@ fn test_check_upgrade_fails_and_sets_deployed_version_if_deployed_version_missin
         Box::new(DoNothingLedger {}),
         Box::new(FakeCmc::new()),
     );
+    if let Some(parameters) = governance.proto.parameters.as_mut() {
+        parameters.automatically_advance_target_version = Some(automatically_advance_target_version)
+    };
 
     let expected_running_version_before_upgrade = Some(running_version.clone().into());
     let expected_running_version_after_upgrade = Some(next_version.clone().into());
@@ -2666,43 +2688,93 @@ fn test_check_upgrade_fails_and_sets_deployed_version_if_deployed_version_missin
     // Check that the upgrade journal reflects the succeeded upgrade.
     let upgrade_journal = governance.proto.upgrade_journal.clone().unwrap();
 
-    let (reset_upgrade_steps, refreshed_versions) = assert_matches!(
-        &upgrade_journal.entries[..],
-        [
-            UpgradeJournalEntry {
-                timestamp_seconds: _,
-                event: Some(upgrade_journal_entry::Event::UpgradeStepsReset(
-                    upgrade_journal_entry::UpgradeStepsReset {
-                        human_readable: Some(_),
-                        upgrade_steps: Some(reset_upgrade_steps),
-                    },
-                )),
-            },
-            UpgradeJournalEntry {
-                timestamp_seconds: Some(_),
-                event: Some(upgrade_journal_entry::Event::UpgradeStepsRefreshed(
-                    upgrade_journal_entry::UpgradeStepsRefreshed {
-                        upgrade_steps: Some(
-                            Versions {
-                                versions: refreshed_versions,
-                            },
-                        ),
-                    },
-                )),
-            },
-            UpgradeJournalEntry {
-                timestamp_seconds: _,
-                event: Some(upgrade_journal_entry::Event::UpgradeOutcome(
-                    upgrade_journal_entry::UpgradeOutcome {
-                        human_readable: Some(_),
-                        status: Some(
-                            upgrade_journal_entry::upgrade_outcome::Status::Success(Empty {})
-                        ),
-                    }
-                )),
-            }
-        ] => (reset_upgrade_steps, refreshed_versions)
-    );
+    let (reset_upgrade_steps, refreshed_versions) = if automatically_advance_target_version {
+        assert_matches!(
+            &upgrade_journal.entries[..],
+            [
+                UpgradeJournalEntry {
+                    timestamp_seconds: _,
+                    event: Some(upgrade_journal_entry::Event::UpgradeStepsReset(
+                        upgrade_journal_entry::UpgradeStepsReset {
+                            human_readable: Some(_),
+                            upgrade_steps: Some(reset_upgrade_steps),
+                        },
+                    )),
+                },
+                UpgradeJournalEntry {
+                    timestamp_seconds: Some(_),
+                    event: Some(upgrade_journal_entry::Event::TargetVersionSet(
+                        upgrade_journal_entry::TargetVersionSet {
+                            old_target_version: None,
+                            new_target_version: Some(_),
+                            is_advanced_automatically: Some(true),
+                        },
+                    )),
+                },
+                UpgradeJournalEntry {
+                    timestamp_seconds: Some(_),
+                    event: Some(upgrade_journal_entry::Event::UpgradeStepsRefreshed(
+                        upgrade_journal_entry::UpgradeStepsRefreshed {
+                            upgrade_steps: Some(
+                                Versions {
+                                    versions: refreshed_versions,
+                                },
+                            ),
+                        },
+                    )),
+                },
+                UpgradeJournalEntry {
+                    timestamp_seconds: _,
+                    event: Some(upgrade_journal_entry::Event::UpgradeOutcome(
+                        upgrade_journal_entry::UpgradeOutcome {
+                            human_readable: Some(_),
+                            status: Some(
+                                upgrade_journal_entry::upgrade_outcome::Status::Success(Empty {})
+                            ),
+                        }
+                    )),
+                }
+            ] => (reset_upgrade_steps, refreshed_versions)
+        )
+    } else {
+        assert_matches!(
+            &upgrade_journal.entries[..],
+            [
+                UpgradeJournalEntry {
+                    timestamp_seconds: _,
+                    event: Some(upgrade_journal_entry::Event::UpgradeStepsReset(
+                        upgrade_journal_entry::UpgradeStepsReset {
+                            human_readable: Some(_),
+                            upgrade_steps: Some(reset_upgrade_steps),
+                        },
+                    )),
+                },
+                UpgradeJournalEntry {
+                    timestamp_seconds: Some(_),
+                    event: Some(upgrade_journal_entry::Event::UpgradeStepsRefreshed(
+                        upgrade_journal_entry::UpgradeStepsRefreshed {
+                            upgrade_steps: Some(
+                                Versions {
+                                    versions: refreshed_versions,
+                                },
+                            ),
+                        },
+                    )),
+                },
+                UpgradeJournalEntry {
+                    timestamp_seconds: _,
+                    event: Some(upgrade_journal_entry::Event::UpgradeOutcome(
+                        upgrade_journal_entry::UpgradeOutcome {
+                            human_readable: Some(_),
+                            status: Some(
+                                upgrade_journal_entry::upgrade_outcome::Status::Success(Empty {})
+                            ),
+                        }
+                    )),
+                }
+            ] => (reset_upgrade_steps, refreshed_versions)
+        )
+    };
 
     assert_eq!(
         reset_upgrade_steps.versions,
@@ -3425,12 +3497,14 @@ fn test_add_generic_nervous_system_function_succeeds() {
         Box::new(FakeCmc::new()),
     );
 
+    let id = 1000;
     let valid = NervousSystemFunction {
-        id: 1000,
+        id,
         name: "a".to_string(),
         description: None,
         function_type: Some(FunctionType::GenericNervousSystemFunction(
             GenericNervousSystemFunction {
+                topic: Some(Topic::ApplicationBusinessLogic as i32),
                 target_canister_id: Some(CanisterId::from(200).get()),
                 target_method_name: Some("test_method".to_string()),
                 validator_canister_id: Some(CanisterId::from(100).get()),
@@ -3438,7 +3512,108 @@ fn test_add_generic_nervous_system_function_succeeds() {
             },
         )),
     };
-    assert_is_ok!(governance.perform_add_generic_nervous_system_function(valid));
+    assert_is_ok!(governance.perform_add_generic_nervous_system_function(valid.clone()));
+
+    assert_eq!(governance.proto.id_to_nervous_system_functions.len(), 1);
+    assert_eq!(governance.proto.id_to_nervous_system_functions[&id], valid);
+}
+
+// TODO(NNS1-3625): Remove this test once proposal criticality is determined by the topic
+#[test]
+fn test_cant_add_generic_nervous_system_functions_to_critical_topics() {
+    let root_canister_id = *TEST_ROOT_CANISTER_ID;
+    let governance_canister_id = *TEST_GOVERNANCE_CANISTER_ID;
+    let ledger_canister_id = *TEST_LEDGER_CANISTER_ID;
+    let swap_canister_id = *TEST_SWAP_CANISTER_ID;
+
+    let env = NativeEnvironment::new(Some(governance_canister_id));
+    let mut governance = Governance::new(
+        GovernanceProto {
+            proposals: btreemap! {},
+            root_canister_id: Some(root_canister_id.get()),
+            ledger_canister_id: Some(ledger_canister_id.get()),
+            swap_canister_id: Some(swap_canister_id.get()),
+            ..basic_governance_proto()
+        }
+        .try_into()
+        .unwrap(),
+        Box::new(env),
+        Box::new(DoNothingLedger {}),
+        Box::new(DoNothingLedger {}),
+        Box::new(FakeCmc::new()),
+    );
+
+    let critical_topics = governance
+        .list_topics()
+        .topics
+        .into_iter()
+        .filter_map(|topic_info| {
+            if topic_info.is_critical {
+                Some(topic_info.topic)
+            } else {
+                None
+            }
+        })
+        .collect::<Vec<Topic>>();
+
+    for topic in critical_topics {
+        let id = 1000;
+        let valid = NervousSystemFunction {
+            id,
+            name: "a".to_string(),
+            description: None,
+            function_type: Some(FunctionType::GenericNervousSystemFunction(
+                GenericNervousSystemFunction {
+                    topic: Some(topic as i32),
+                    target_canister_id: Some(CanisterId::from(200).get()),
+                    target_method_name: Some("test_method".to_string()),
+                    validator_canister_id: Some(CanisterId::from(100).get()),
+                    validator_method_name: Some("test_validator_method".to_string()),
+                },
+            )),
+        };
+
+        match governance.perform_add_generic_nervous_system_function(valid.clone()) {
+            Ok(_) => panic!(
+                "Should not be able to add generic nervous system functions to critical topics, but was able to add it for topic {:?}",
+                topic
+            ),
+            Err(err) => assert_eq!(
+                ErrorType::try_from(err.error_type).unwrap(),
+                ErrorType::PreconditionFailed,
+                "Should not be able to add generic nervous system functions to critical topics on the basis that it's precondition failed.",
+            ),
+        }
+    }
+}
+
+#[test]
+fn test_cant_add_generic_nervous_system_function_without_topic() {
+    let id = 1000;
+    let valid = NervousSystemFunction {
+        id,
+        name: "a".to_string(),
+        description: None,
+        function_type: Some(FunctionType::GenericNervousSystemFunction(
+            GenericNervousSystemFunction {
+                topic: None, // No topic specified
+                target_canister_id: Some(CanisterId::from(200).get()),
+                target_method_name: Some("test_method".to_string()),
+                validator_canister_id: Some(CanisterId::from(100).get()),
+                validator_method_name: Some("test_validator_method".to_string()),
+            },
+        )),
+    };
+
+    match crate::proposal::validate_and_render_add_generic_nervous_system_function(&Default::default(), &valid, &Default::default()) {
+        Ok(_) => panic!(
+            "Should not be able to add generic nervous system functions without a topic, but was able to add it."
+        ),
+        Err(err) => assert_eq!(
+            err,
+            "NervousSystemFunction must have a topic",
+        ),
+    }
 }
 
 fn default_governance_with_proto(governance_proto: GovernanceProto) -> Governance {
@@ -4401,6 +4576,7 @@ fn assert_adding_generic_nervous_system_function_fails_for_target_and_validator(
         description: None,
         function_type: Some(FunctionType::GenericNervousSystemFunction(
             GenericNervousSystemFunction {
+                topic: None,
                 target_canister_id: Some(invalid_canister_target.get()),
                 target_method_name: Some("test_method".to_string()),
                 validator_canister_id: Some(CanisterId::from(1).get()),
@@ -4423,6 +4599,7 @@ fn assert_adding_generic_nervous_system_function_fails_for_target_and_validator(
         description: None,
         function_type: Some(FunctionType::GenericNervousSystemFunction(
             GenericNervousSystemFunction {
+                topic: None,
                 target_canister_id: Some(CanisterId::from(1).get()),
                 target_method_name: Some("test_method".to_string()),
                 validator_canister_id: Some(invalid_canister_target.get()),
@@ -4739,4 +4916,332 @@ fn test_cast_vote_and_cascade_follow_critical_vs_normal_proposals() {
             }
         );
     }
+}
+
+#[test]
+fn test_list_topics() {
+    use crate::pb::v1::NervousSystemFunction;
+
+    // Set up the environment
+    let function_1 = NervousSystemFunction {
+        id: 1000,
+        name: "Test1".to_string(),
+        description: None,
+        function_type: Some(FunctionType::GenericNervousSystemFunction(
+            GenericNervousSystemFunction {
+                topic: Some(Topic::DaoCommunitySettings as i32),
+                target_canister_id: Some(CanisterId::from_u64(1).get()),
+                target_method_name: Some("test_method".to_string()),
+                validator_canister_id: Some(CanisterId::from_u64(1).get()),
+                validator_method_name: Some("test_validator_method".to_string()),
+            },
+        )),
+    };
+    let function_2 = NervousSystemFunction {
+        id: 1001,
+        name: "Test2".to_string(),
+        description: None,
+        function_type: Some(FunctionType::GenericNervousSystemFunction(
+            GenericNervousSystemFunction {
+                topic: Some(Topic::SnsFrameworkManagement as i32),
+                target_canister_id: Some(CanisterId::from_u64(1).get()),
+                target_method_name: Some("test_method".to_string()),
+                validator_canister_id: Some(CanisterId::from_u64(1).get()),
+                validator_method_name: Some("test_validator_method".to_string()),
+            },
+        )),
+    };
+    let function_3 = NervousSystemFunction {
+        id: 1003,
+        name: "Test3".to_string(),
+        description: None,
+        function_type: Some(FunctionType::GenericNervousSystemFunction(
+            GenericNervousSystemFunction {
+                topic: None,
+                target_canister_id: Some(CanisterId::from_u64(1).get()),
+                target_method_name: Some("test_method".to_string()),
+                validator_canister_id: Some(CanisterId::from_u64(1).get()),
+                validator_method_name: Some("test_validator_method".to_string()),
+            },
+        )),
+    };
+    let governance_proto = basic_governance_proto();
+    let governance_proto = GovernanceProto {
+        id_to_nervous_system_functions: {
+            let mut id_to_nervous_system_functions = BTreeMap::new();
+            id_to_nervous_system_functions.insert(1000, function_1.clone());
+            id_to_nervous_system_functions.insert(1001, function_2.clone());
+            id_to_nervous_system_functions.insert(1003, function_3.clone());
+            id_to_nervous_system_functions
+        },
+        ..governance_proto
+    };
+
+    let governance = Governance::new(
+        ValidGovernanceProto::try_from(governance_proto).unwrap(),
+        Box::new(NativeEnvironment::new(None)),
+        Box::new(DoNothingLedger {}),
+        Box::new(DoNothingLedger {}),
+        Box::new(FakeCmc::new()),
+    );
+
+    // Call the API under test
+    let ListTopicsResponse {
+        topics: topic_infos,
+        uncategorized_functions,
+    } = governance.list_topics();
+
+    // Assert the results are as expected
+    assert_eq!(uncategorized_functions, vec![function_3]);
+    let expected_topic_infos = vec![
+        TopicInfo {
+            topic: Topic::DaoCommunitySettings,
+            name: "DAO community settings".to_string(),
+            description: "Proposals to set the direction of the DAO by tokenomics & branding, such as the name and description, token name etc".to_string(),
+            functions: NervousSystemFunctions {
+                native_functions: vec![
+                    NervousSystemFunction {
+                        id: 2,
+                        name: "Manage nervous system parameters".to_string(),
+                        description: Some(
+                            "Proposal to change the core parameters of SNS governance.".to_string(),
+                        ),
+                        function_type: Some(
+                            FunctionType::NativeNervousSystemFunction(
+                                Empty {},
+                            ),
+                        ),
+                    },
+                    NervousSystemFunction {
+                        id: 13,
+                        name: "Manage ledger parameters".to_string(),
+                        description: Some(
+                            "Proposal to change some parameters in the ledger canister.".to_string(),
+                        ),
+                        function_type: Some(
+                            FunctionType::NativeNervousSystemFunction(
+                                Empty {},
+                            ),
+                        ),
+                    },
+                    NervousSystemFunction {
+                        id: 8,
+                        name: "Manage SNS metadata".to_string(),
+                        description: Some(
+                            "Proposal to change the metadata associated with an SNS.".to_string(),
+                        ),
+                        function_type: Some(
+                            FunctionType::NativeNervousSystemFunction(
+                                Empty {},
+                            ),
+                        ),
+                    },
+                ],
+                custom_functions: vec![
+                    function_1,
+                ],
+            },
+            is_critical: false,
+        },
+        TopicInfo {
+            topic: Topic::SnsFrameworkManagement,
+            name: "SNS framework management".to_string(),
+            description: "Proposals to upgrade and manage the SNS DAO framework.".to_string(),
+            functions: NervousSystemFunctions {
+                native_functions: vec![
+                    NervousSystemFunction {
+                        id: 7,
+                        name: "Upgrade SNS to next version".to_string(),
+                        description: Some(
+                            "Proposal to upgrade the WASM of a core SNS canister.".to_string(),
+                        ),
+                        function_type: Some(
+                            FunctionType::NativeNervousSystemFunction(
+                                Empty {},
+                            ),
+                        ),
+                    },
+                    NervousSystemFunction {
+                        id: 15,
+                        name: "Advance SNS target version".to_string(),
+                        description: Some(
+                            "Proposal to advance the target version of this SNS.".to_string(),
+                        ),
+                        function_type: Some(
+                            FunctionType::NativeNervousSystemFunction(
+                                Empty {},
+                            ),
+                        ),
+                    },
+                ],
+                custom_functions: vec![
+                    function_2
+                ],
+            },
+            is_critical: false,
+        },
+        TopicInfo {
+            topic: Topic::DappCanisterManagement,
+            name: "Dapp canister management".to_string(),
+            description: "Proposals to upgrade the registered dapp canisters and dapp upgrades via built-in or custom logic and updates to frontend assets.".to_string(),
+            functions: NervousSystemFunctions {
+                native_functions: vec![
+                    NervousSystemFunction {
+                        id: 3,
+                        name: "Upgrade SNS controlled canister".to_string(),
+                        description: Some(
+                            "Proposal to upgrade the wasm of an SNS controlled canister.".to_string(),
+                        ),
+                        function_type: Some(
+                            FunctionType::NativeNervousSystemFunction(
+                                Empty {},
+                            ),
+                        ),
+                    },
+                    NervousSystemFunction {
+                        id: 10,
+                        name: "Register dapp canisters".to_string(),
+                        description: Some(
+                            "Proposal to register a dapp canister with the SNS.".to_string(),
+                        ),
+                        function_type: Some(
+                            FunctionType::NativeNervousSystemFunction(
+                                Empty {},
+                            ),
+                        ),
+                    },
+                    NervousSystemFunction {
+                        id: 14,
+                        name: "Manage dapp canister settings".to_string(),
+                        description: Some(
+                            "Proposal to change canister settings for some dapp canisters.".to_string(),
+                        ),
+                        function_type: Some(
+                            FunctionType::NativeNervousSystemFunction(
+                                Empty {},
+                            ),
+                        ),
+                    },
+                ],
+                custom_functions: vec![],
+            },
+            is_critical: false,
+        },
+        TopicInfo {
+            topic: Topic::ApplicationBusinessLogic,
+            name: "Application Business Logic".to_string(),
+            description: "Proposals that are custom to what the governed dapp requires.".to_string(),
+            functions: NervousSystemFunctions {
+                native_functions: vec![],
+                custom_functions: vec![],
+            },
+            is_critical: false,
+        },
+        TopicInfo {
+            topic: Topic::Governance,
+            name: "Governance".to_string(),
+            description: "Proposals that represent community polls or other forms of community opinion but don’t have any immediate effect in terms of code changes.".to_string(),
+            functions: NervousSystemFunctions {
+                native_functions: vec![
+                    NervousSystemFunction {
+                        id: 1,
+                        name: "Motion".to_string(),
+                        description: Some(
+                            "Side-effect-less proposals to set general governance direction.".to_string(),
+                        ),
+                        function_type: Some(
+                            FunctionType::NativeNervousSystemFunction(
+                                Empty {},
+                            ),
+                        ),
+                    },
+                ],
+                custom_functions: vec![],
+            },
+            is_critical: false,
+        },
+        TopicInfo {
+            topic: Topic::TreasuryAssetManagement,
+            name: "Treasury & asset management".to_string(),
+            description: "Proposals to move and manage assets that are DAO-owned, including tokens in the treasury, tokens in liquidity pools, or DAO-owned neurons.".to_string(),
+            functions: NervousSystemFunctions {
+                native_functions: vec![
+                    NervousSystemFunction {
+                        id: 9,
+                        name: "Transfer SNS treasury funds".to_string(),
+                        description: Some(
+                            "Proposal to transfer funds from an SNS Governance controlled treasury account".to_string(),
+                        ),
+                        function_type: Some(
+                            FunctionType::NativeNervousSystemFunction(
+                                Empty {},
+                            ),
+                        ),
+                    },
+                    NervousSystemFunction {
+                        id: 12,
+                        name: "Mint SNS tokens".to_string(),
+                        description: Some(
+                            "Proposal to mint SNS tokens to a specified recipient.".to_string(),
+                        ),
+                        function_type: Some(
+                            FunctionType::NativeNervousSystemFunction(
+                                Empty {},
+                            ),
+                        ),
+                    },
+                ],
+                custom_functions: vec![],
+            },
+            is_critical: true,
+        },
+        TopicInfo {
+            topic: Topic::CriticalDappOperations,
+            name: "Critical Dapp Operations".to_string(),
+            description: "Proposals to execute critical operations on dapps, such as adding or removing dapps from the SNS, or executing custom logic on dapps.".to_string(),
+            functions: NervousSystemFunctions {
+                native_functions: vec![
+                    NervousSystemFunction {
+                        id: 11,
+                        name: "Deregister Dapp Canisters".to_string(),
+                        description: Some(
+                            "Proposal to deregister a previously-registered dapp canister from the SNS.".to_string(),
+                        ),
+                        function_type: Some(
+                            FunctionType::NativeNervousSystemFunction(
+                                Empty {},
+                            ),
+                        ),
+                    },
+                    NervousSystemFunction {
+                        id: 4,
+                        name: "Add nervous system function".to_string(),
+                        description: Some(
+                            "Proposal to add a new, user-defined, nervous system function: a canister call which can then be executed by proposal.".to_string(),
+                        ),
+                        function_type: Some(
+                            FunctionType::NativeNervousSystemFunction(
+                                Empty {},
+                            ),
+                        ),
+                    },
+                    NervousSystemFunction {
+                        id: 5,
+                        name: "Remove nervous system function".to_string(),
+                        description: Some(
+                            "Proposal to remove a user-defined nervous system function, which will be no longer executable by proposal.".to_string(),
+                        ),
+                        function_type: Some(
+                            FunctionType::NativeNervousSystemFunction(
+                                Empty {},
+                            ),
+                        ),
+                    },
+                ],
+                custom_functions: vec![],
+            },
+            is_critical: true,
+        },
+    ];
+    assert_eq!(topic_infos, expected_topic_infos);
 }

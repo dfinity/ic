@@ -162,7 +162,7 @@ pub async fn test_async(env: TestEnv) {
         // while the long running test is running we are generous
         // with error thresholds.
         75.0,
-        40,
+        60,
     );
 
     let mainnet_version = read_dependency_to_string("mainnet_nns_subnet_revision.txt").unwrap();

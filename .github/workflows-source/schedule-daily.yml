@@ -6,7 +6,6 @@ on:
   workflow_dispatch:
 
 env:
-  BAZEL_STARTUP_ARGS: "--output_base=/var/tmp/bazel-output/"
   BRANCH_NAME: ${{ github.head_ref || github.ref_name }}
   CI_COMMIT_SHA: ${{ github.sha }}
   CI_JOB_NAME: ${{ github.job }}
@@ -16,7 +15,7 @@ env:
 
 anchors:
   image: &image
-    image: ghcr.io/dfinity/ic-build@sha256:2e8185171700872d48fdfb4b08e175fca5be27b3fbbc4d7bed681ec8486f8b1d
+    image: ghcr.io/dfinity/ic-build@sha256:908c9b2abe0647cd54a2485117c263b0dae4a8aba8f25bc073813b09be9b1d59
   dind-large-setup: &dind-large-setup
     runs-on:
       group: zh1
@@ -31,12 +30,6 @@ anchors:
   checkout: &checkout
     name: Checkout
     uses: actions/checkout@v4
-  before-script: &before-script
-    name: Before script
-    id: before-script
-    shell: bash
-    run: |
-      [ -n "${NODE_NAME:-}" ] && echo "Node: $NODE_NAME"
   bazel-bep: &bazel-bep
     name: Upload bazel-bep
     # runs only if previous step succeeded or failed;
@@ -63,17 +56,15 @@ jobs:
       labels: dind-large
     steps:
       - <<: *checkout
-      - <<: *before-script
       - name: Run Bazel Launch Bare Metal
         shell: bash
         run: |
           echo "$ZH2_DLL01_CSV_SECRETS" > file1
           echo "$ZH2_FILE_SHARE_KEY" > file2 && chmod 400 file2
-          [ -n "${NODE_NAME:-}" ] && echo "Node: $NODE_NAME"
 
           # Run bare metal installation test
           # shellcheck disable=SC2046,SC2086
-          bazel ${BAZEL_STARTUP_ARGS} run ${BAZEL_CI_CONFIG} \
+          bazel --output_base=/var/tmp/bazel-output run ${BAZEL_CI_CONFIG} \
             //ic-os/setupos/envs/dev:launch_bare_metal -- \
               --config_path "$(realpath  ./ic-os/dev-tools/bare_metal_deployment/zh2-dll01.yaml)" \
               --csv_filename "$(realpath file1)" \
@@ -85,7 +76,7 @@ jobs:
 
           # Run bare metal node performance benchmarks
           # shellcheck disable=SC2046,SC2086
-          bazel ${BAZEL_STARTUP_ARGS} run ${BAZEL_CI_CONFIG} \
+          bazel --output_base=/var/tmp/bazel-output run ${BAZEL_CI_CONFIG} \
             //ic-os/setupos/envs/dev:launch_bare_metal -- \
               --config_path "$(realpath  ./ic-os/dev-tools/bare_metal_deployment/zh2-dll01.yaml)" \
               --csv_filename "$(realpath file1)" \
@@ -96,8 +87,7 @@ jobs:
               --benchmark
           bazel clean
         env:
-          BAZEL_STARTUP_ARGS: "--output_base=/var/tmp/bazel-output/"
-          BAZEL_CI_CONFIG: "--config=ci --repository_cache=/cache/bazel"
+          BAZEL_CI_CONFIG: "--config=ci"
           ZH2_DLL01_CSV_SECRETS: "${{ secrets.ZH2_DLL01_CSV_SECRETS }}"
           ZH2_FILE_SHARE_KEY: "${{ secrets.ZH2_FILE_SHARE_KEY }}"
 
@@ -107,15 +97,15 @@ jobs:
     timeout-minutes: 720 # 12 hours
     steps:
       - <<: *checkout
-      - <<: *before-script
       - name: Run FI Tests Nightly
         id: bazel-test-all
         uses: ./.github/actions/bazel-test-all/
         with:
-          BAZEL_COMMAND: "test"
-          BAZEL_TARGETS: "//rs/ledger_suite/..."
-          BAZEL_CI_CONFIG: "--config=ci --repository_cache=/cache/bazel"
-          BAZEL_EXTRA_ARGS: "--keep_going --test_tag_filters=fi_tests_nightly --test_env=SSH_AUTH_SOCK --test_timeout=43200"
+          BAZEL_COMMAND: >-
+            test
+              --config=ci --keep_going
+              --test_tag_filters=fi_tests_nightly --test_env=SSH_AUTH_SOCK --test_timeout=43200
+          BAZEL_TARGETS: //rs/ledger_suite/...
           BUILDEVENT_APIKEY: ${{ secrets.HONEYCOMB_TOKEN }}
           SSH_PRIVATE_KEY_BACKUP_POD: ${{ secrets.SSH_PRIVATE_KEY_BACKUP_POD }}
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
@@ -127,15 +117,15 @@ jobs:
     timeout-minutes: 20
     steps:
       - <<: *checkout
-      - <<: *before-script
       - name: Run NNS Tests Nightly
         id: bazel-test-all
         uses: ./.github/actions/bazel-test-all/
         with:
-          BAZEL_COMMAND: "test"
-          BAZEL_TARGETS: "//rs/nns/..."
-          BAZEL_CI_CONFIG: "--config=ci --repository_cache=/cache/bazel"
-          BAZEL_EXTRA_ARGS: "--keep_going --test_tag_filters=nns_tests_nightly --test_env=SSH_AUTH_SOCK --test_env=NNS_CANISTER_UPGRADE_SEQUENCE=all"
+          BAZEL_COMMAND: >-
+            test
+              --config=ci --keep_going
+              --test_tag_filters=nns_tests_nightly --test_env=SSH_AUTH_SOCK --test_env=NNS_CANISTER_UPGRADE_SEQUENCE=all
+          BAZEL_TARGETS: //rs/nns/...
           BUILDEVENT_APIKEY: ${{ secrets.HONEYCOMB_TOKEN }}
           SSH_PRIVATE_KEY_BACKUP_POD: ${{ secrets.SSH_PRIVATE_KEY_BACKUP_POD }}
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
@@ -147,7 +137,6 @@ jobs:
     timeout-minutes: 480
     steps:
       - <<: *checkout
-      - <<: *before-script
       - name: Set Benchmark Targets
         shell: bash
         run: |
@@ -157,11 +146,12 @@ jobs:
         id: bazel-system-test-benchmarks
         uses: ./.github/actions/bazel-test-all/
         with:
-          BAZEL_COMMAND: "test"
-          BAZEL_TARGETS: ${{ env.BENCHMARK_TARGETS }}
-          BAZEL_CI_CONFIG: "--config=ci --repository_cache=/cache/bazel"
           # note: there's just one performance cluster, so the job can't be parallelized
-          BAZEL_EXTRA_ARGS: "--test_tag_filters=system_test_benchmark --//bazel:enable_upload_perf_systest_results=True --keep_going --jobs 1"
+          BAZEL_COMMAND: >-
+            test
+              --config=ci
+              --test_tag_filters=system_test_benchmark --//bazel:enable_upload_perf_systest_results=True --keep_going --jobs 1
+          BAZEL_TARGETS: ${{ env.BENCHMARK_TARGETS }}
           BUILDEVENT_APIKEY: ${{ secrets.HONEYCOMB_TOKEN }}
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
       - <<: *bazel-bep
@@ -227,9 +217,7 @@ jobs:
       - <<: *checkout
       - name: Run Bazel Test Coverage
         shell: bash
-        run: |
-          [ -n "${NODE_NAME:-}" ] && echo "Node: $NODE_NAME"
-          ./ci/scripts/bazel-coverage.sh
+        run: ./ci/scripts/bazel-coverage.sh
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}

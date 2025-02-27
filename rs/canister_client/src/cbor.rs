@@ -293,7 +293,7 @@ mod tests {
         // Set up an arbitrary legal input
         let (sk, pk) = {
             let mut rng = ChaChaRng::seed_from_u64(89_u64);
-            let sk = ic_crypto_secp256k1::PrivateKey::generate_using_rng(&mut rng);
+            let sk = ic_secp256k1::PrivateKey::generate_using_rng(&mut rng);
             let pk = sk.public_key();
             (sk, pk)
         };
@@ -412,7 +412,7 @@ mod tests {
         // Set up an arbitrary legal input
         let (sk, pk) = {
             let mut rng = ChaChaRng::seed_from_u64(89_u64);
-            let sk = ic_crypto_secp256k1::PrivateKey::generate_using_rng(&mut rng);
+            let sk = ic_secp256k1::PrivateKey::generate_using_rng(&mut rng);
             let pk = sk.public_key();
             (sk, pk)
         };

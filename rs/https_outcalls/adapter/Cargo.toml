@@ -34,7 +34,6 @@ tokio = { workspace = true }
 tonic = { workspace = true }
 tower = { workspace = true }
 
-
 [dev-dependencies]
 async-stream = { workspace = true }
 bytes = { workspace = true }

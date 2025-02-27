@@ -30,7 +30,7 @@ jobs:
       - name: Sync changes from public ic
         run: |
           git config --global user.name "IDX GitHub Automation"
-          git config --global user.email "idx@dfinity.org"
+          git config --global user.email "<>"
   
           git remote add public https://github.com/dfinity/ic.git
           git fetch public master

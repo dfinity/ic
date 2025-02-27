@@ -9,7 +9,7 @@ use ic_config::{
     flag_status::FlagStatus,
     subnet_config::{SchedulerConfig, SubnetConfig},
 };
-use ic_management_canister_types::{
+use ic_management_canister_types_private::{
     CanisterIdRecord, CanisterInfoRequest, CanisterInstallMode, CanisterInstallModeV2,
     CanisterSettingsArgsBuilder, ClearChunkStoreArgs, DeleteCanisterSnapshotArgs, EmptyBlob,
     InstallChunkedCodeArgs, InstallCodeArgs, ListCanisterSnapshotArgs, LoadCanisterSnapshotArgs,
@@ -341,13 +341,16 @@ const INSTALL_CODE_INGRESS_COST: u128 = 1_952_000;
 const INSTALL_CODE_EXECUTION_COST: u128 = 5_986_224;
 const NORMAL_INGRESS_COST: u128 = 1_224_000;
 const MAX_EXECUTION_COST: u128 = 6_000_000;
-const ACTUAL_EXECUTION_COST: u128 = match EmbeddersConfig::new()
-    .feature_flags
-    .wasm_native_stable_memory
-{
-    FlagStatus::Enabled => 5_985_224,
-    FlagStatus::Disabled => 5_685_230,
-};
+
+fn actual_execution_cost() -> Cycles {
+    match EmbeddersConfig::new()
+        .feature_flags
+        .wasm_native_stable_memory
+    {
+        FlagStatus::Enabled => Cycles::new(5_985_224),
+        FlagStatus::Disabled => Cycles::new(5_685_230),
+    }
+}
 
 #[test]
 fn dts_install_code_with_concurrent_ingress_sufficient_cycles() {
@@ -359,7 +362,6 @@ fn dts_install_code_with_concurrent_ingress_sufficient_cycles() {
     let install_code_execution_cost = Cycles::new(INSTALL_CODE_EXECUTION_COST);
     let normal_ingress_cost = Cycles::new(NORMAL_INGRESS_COST);
     let max_execution_cost = Cycles::new(MAX_EXECUTION_COST);
-    let actual_execution_cost = Cycles::new(ACTUAL_EXECUTION_COST);
 
     // The initial balance is sufficient to run `install_code` and to send an
     // ingress message concurrently.
@@ -432,7 +434,7 @@ fn dts_install_code_with_concurrent_ingress_sufficient_cycles() {
             - install_code_execution_cost
             - install_code_ingress_cost
             - normal_ingress_cost
-            - actual_execution_cost
+            - actual_execution_cost()
             - config.dirty_page_overhead_cycles(1))
         .get()
     );
@@ -447,7 +449,6 @@ fn dts_install_code_with_concurrent_ingress_insufficient_cycles() {
     let install_code_ingress_cost = Cycles::new(INSTALL_CODE_INGRESS_COST);
     let normal_ingress_cost = Cycles::new(NORMAL_INGRESS_COST);
     let max_execution_cost = Cycles::new(MAX_EXECUTION_COST);
-    let actual_execution_cost = Cycles::new(ACTUAL_EXECUTION_COST);
 
     // The initial balance is not sufficient for both execution and concurrent ingress message.
     let initial_balance = install_code_ingress_cost + normal_ingress_cost.max(max_execution_cost);
@@ -485,7 +486,7 @@ fn dts_install_code_with_concurrent_ingress_insufficient_cycles() {
         env.cycle_balance(canister_id),
         (initial_balance
             - install_code_ingress_cost
-            - actual_execution_cost
+            - actual_execution_cost()
             - config.dirty_page_overhead_cycles(1))
         .get()
     );
@@ -500,7 +501,6 @@ fn dts_install_code_with_concurrent_ingress_and_freezing_threshold_insufficient_
     let install_code_ingress_cost = Cycles::new(INSTALL_CODE_INGRESS_COST);
     let normal_ingress_cost = Cycles::new(NORMAL_INGRESS_COST);
     let max_execution_cost = Cycles::new(MAX_EXECUTION_COST);
-    let actual_execution_cost = Cycles::new(ACTUAL_EXECUTION_COST);
     let freezing_threshold = Cycles::new(10000000);
 
     // The initial balance is not sufficient for both execution and concurrent ingress message.
@@ -540,7 +540,7 @@ fn dts_install_code_with_concurrent_ingress_and_freezing_threshold_insufficient_
         env.cycle_balance(canister_id),
         (initial_balance
             - install_code_ingress_cost
-            - actual_execution_cost
+            - actual_execution_cost()
             - config.dirty_page_overhead_cycles(1))
         .get()
     );

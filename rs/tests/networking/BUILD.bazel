@@ -87,12 +87,16 @@ system_test_nns(
         UNIVERSAL_VM_RUNTIME_DEPS +
         CANISTER_HTTP_RUNTIME_DEPS + PROXY_CANISTER_RUNTIME_DEPS,
     deps = CANISTER_HTTP_BASE_DEPS + [
+        "//rs/registry/subnet_type",
         "//rs/rust_canisters/canister_test",
         "//rs/test_utilities",
         "//rs/test_utilities/types",
         "//rs/types/base_types",
         "//rs/types/types",
         "@crate_index//:assert_matches",
+        "@crate_index//:ic-agent",
+        "@crate_index//:serde",
+        "@crate_index//:serde_json",
         "@crate_index//:tokio",
     ],
 )
@@ -197,6 +201,7 @@ system_test_nns(
     extra_head_nns_tags = ["manual"],  # only run this test with the mainnet NNS canisters.
     flaky = True,
     tags = [
+        "experimental_system_test_colocation",
         "k8s",
         "system_test_nightly",
     ],
@@ -230,6 +235,7 @@ system_test_nns(
     name = "query_workload_long_test",
     flaky = True,
     tags = [
+        "experimental_system_test_colocation",
         "k8s",
         "system_test_hourly",
     ],
@@ -245,6 +251,7 @@ system_test_nns(
     name = "update_workload_large_payload",
     flaky = True,
     tags = [
+        "experimental_system_test_colocation",
         "system_test_hourly",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS

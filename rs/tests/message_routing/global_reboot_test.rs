@@ -189,7 +189,10 @@ pub fn start_all_canisters(
             let input = StartArgs {
                 network_topology: topology.clone(),
                 canister_to_subnet_rate,
-                payload_size_bytes,
+                request_payload_size_bytes: payload_size_bytes,
+                // A mix of guaranteed response and best-effort calls.
+                call_timeouts_seconds: vec![None, Some(u32::MAX)],
+                response_payload_size_bytes: payload_size_bytes,
             };
             let _: String = canister
                 .update_("start", candid, (input,))
