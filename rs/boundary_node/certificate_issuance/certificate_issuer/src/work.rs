@@ -25,8 +25,8 @@ use crate::{
 };
 
 thread_local! {
-    pub static IS_RENEWAL: RefCell<String> = RefCell::new("unknown".to_string());
-    pub static IS_IMPORTANT: RefCell<String> = RefCell::new("unknown".to_string());
+    pub static IS_RENEWAL: RefCell<String> = RefCell::new("0".to_string());
+    pub static IS_IMPORTANT: RefCell<String> = RefCell::new("0".to_string());
 }
 
 #[derive(Clone, Debug, Serialize)]
