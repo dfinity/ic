@@ -40,6 +40,7 @@ members = [
     "rs/boundary_node/rate_limits/canister_client",
     "rs/boundary_node/salt_sharing",
     "rs/boundary_node/salt_sharing/api",
+    "rs/boundary_node/salt_sharing/integration_tests",
     "rs/boundary_node/systemd_journal_gatewayd_shim",
     "rs/canister_client",
     "rs/canister_client/read_state_response_parser",
