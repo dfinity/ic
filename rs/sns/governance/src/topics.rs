@@ -1,9 +1,11 @@
+use crate::logs::ERROR;
 use crate::pb::v1::{self as pb, NervousSystemFunction};
 use crate::types::native_action_ids;
 use crate::{governance::Governance, pb::v1::nervous_system_function::FunctionType};
+use ic_canister_log::log;
 use ic_sns_governance_api::pb::v1::topics::Topic;
 use itertools::Itertools;
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 
 /// Each topic has some information associated with it. This information is for the benefit of the user but has
 /// no effect on the behavior of the SNS.
@@ -198,6 +200,56 @@ impl Governance {
             topics,
             uncategorized_functions,
         }
+    }
+}
+
+impl pb::Governance {
+    /// For each custom function ID, returns a pair (`function_name`, `topic`).
+    pub fn custom_functions_to_topics(&self) -> BTreeMap<u64, (String, Option<pb::Topic>)> {
+        self.id_to_nervous_system_functions
+            .iter()
+            .filter_map(|(function_id, function)| {
+                match &function.function_type {
+                    Some(FunctionType::GenericNervousSystemFunction(generic)) => {
+                        let function_name = function.name.clone();
+
+                        if let Some(topic) = generic.topic {
+                            let specific_topic = match pb::Topic::try_from(topic) {
+                                Err(err) => {
+                                    log!(
+                                        ERROR,
+                                        "Custom proposal ID {function_id}: Cannot interpret \
+                                            {topic} as Topic: {err}",
+                                    );
+
+                                    // This should never happen; if it somehow does, treat this
+                                    // case as a custom function for which the topic is unknown.
+                                    None
+                                }
+                                Ok(pb::Topic::Unspecified) => {
+                                    log!(
+                                        ERROR,
+                                        "Custom proposal ID {function_id}: topic Unspecified."
+                                    );
+
+                                    // This should never happen, but if it somehow does, treat this
+                                    // case as a custom function for which the topic is unknown.
+                                    None
+                                }
+                                Ok(topic) => Some(topic),
+                            };
+
+                            Some((*function_id, (function_name, specific_topic)))
+                        } else {
+                            // Topic not yet set for this custom function.
+                            Some((*function_id, (function_name, None)))
+                        }
+                    }
+                    // Not a custom function.
+                    _ => None,
+                }
+            })
+            .collect()
     }
 }
 

@@ -1847,7 +1847,7 @@ fn topic_to_str(topic: &Topic) -> &'static str {
 
 pub(crate) fn validate_and_render_set_custom_proposal_topics(
     set_custom_proposal_topics: &SetCustomProposalTopics,
-    existing_custom_functions: &BTreeMap<u64, Option<Topic>>,
+    existing_custom_functions: &BTreeMap<u64, (String, Option<Topic>)>,
 ) -> Result<String, String> {
     let SetCustomProposalTopics {
         custom_function_id_to_topic,
@@ -1859,15 +1859,12 @@ pub(crate) fn validate_and_render_set_custom_proposal_topics(
         );
     }
 
-    let mut table = vec![];
+    let mut table = vec!["".to_string()]; // "" ensures joining this string works well.
     let mut functions_with_unknown_topics = vec![];
     let mut functions_with_unspecified_topics = vec![];
     let mut not_registered_as_custom_functions = vec![];
 
-    for (custom_function_id, proposed_topic) in set_custom_proposal_topics
-        .custom_function_id_to_topic
-        .iter()
-    {
+    for (custom_function_id, proposed_topic) in custom_function_id_to_topic.iter() {
         let Ok(proposed_topic) = Topic::try_from(*proposed_topic) else {
             functions_with_unknown_topics.push(format!(
                 "function ID: {custom_function_id}, invalid topic: {proposed_topic}"
@@ -1880,14 +1877,16 @@ pub(crate) fn validate_and_render_set_custom_proposal_topics(
             continue;
         }
 
-        let Some(current_topic) = existing_custom_functions.get(custom_function_id) else {
+        let Some((function_name, current_topic)) =
+            existing_custom_functions.get(custom_function_id)
+        else {
             not_registered_as_custom_functions.push(format!("{custom_function_id}"));
             continue;
         };
 
         let proposed_topic_str = topic_to_str(&proposed_topic);
 
-        let table_row = if let Some(current_topic) = current_topic {
+        let topic_change_str = if let Some(current_topic) = current_topic {
             // Is this proposal trying to modify a previously set topic?
 
             if proposed_topic == *current_topic {
@@ -1901,7 +1900,7 @@ pub(crate) fn validate_and_render_set_custom_proposal_topics(
             format!("{proposed_topic_str} (topic not currently set)")
         };
 
-        table.push(table_row);
+        table.push(format!("{function_name} under topic {topic_change_str}"));
     }
 
     if !functions_with_unknown_topics.is_empty() {
@@ -1923,23 +1922,23 @@ pub(crate) fn validate_and_render_set_custom_proposal_topics(
 
     if !not_registered_as_custom_functions.is_empty() {
         return Err(format!(
-            "Cannot set topic for proposal(s) with ID(s) {} since they have not been registered
-                 as custom proposals in this SNS yet. Please use `AddGenericNervousSystemFunction` \
-                 proposals to register new custom SNS proposals.",
+            "Cannot set topic for proposal(s) with ID(s) {} since they have not been registered \
+             as custom proposals in this SNS yet. Please use `AddGenericNervousSystemFunction` \
+             proposals to register new custom SNS proposals.",
             not_registered_as_custom_functions.join(", "),
         ));
     }
 
-    let render = table.join(" - \n  ");
+    let render = table.join("\n  - ");
 
     let render = format!(
-        "### If adopted, the following custom functions will be categorized under \
-         the specified topics:\n\n\
+        "### If adopted, the following proposals will be categorized under \
+         the specified topics:\n\
          {render}"
     );
 
     let render = format!(
-        "# Proposal to set topics for custom SNS proposal types\n\n\
+        "# Set topics for custom SNS proposal types\n\n\
          {render}"
     );
 

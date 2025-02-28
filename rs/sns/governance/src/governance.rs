@@ -53,7 +53,7 @@ use crate::{
             MintTokensRequest, MintTokensResponse, NervousSystemFunction, NervousSystemParameters,
             Neuron, NeuronId, NeuronPermission, NeuronPermissionList, NeuronPermissionType,
             Proposal, ProposalData, ProposalDecisionStatus, ProposalId, ProposalRewardStatus,
-            RegisterDappCanisters, RewardEvent, SetCustomProposalTopics, Tally, Topic,
+            RegisterDappCanisters, RewardEvent, SetCustomProposalTopics, Tally,
             TransferSnsTreasuryFunds, UpgradeSnsControlledCanister, Vote, WaitForQuietState,
         },
     },
@@ -478,51 +478,6 @@ impl GovernanceProto {
                      the maturity modulation value from the Cycles Minting Canister.",
                 )
             })
-    }
-
-    pub fn custom_functions_to_topics(&self) -> BTreeMap<u64, Option<Topic>> {
-        self.id_to_nervous_system_functions
-            .iter()
-            .filter_map(|(function_id, function)| {
-                match &function.function_type {
-                    Some(FunctionType::GenericNervousSystemFunction(generic)) => {
-                        if let Some(topic) = generic.topic {
-                            let specific_topic = match Topic::try_from(topic) {
-                                Err(err) => {
-                                    log!(
-                                        ERROR,
-                                        "Custom proposal ID {function_id}: Cannot interpret \
-                                            {topic} as Topic: {err}",
-                                    );
-
-                                    // This should never happen; if it somehow does, treat this
-                                    // case as a custom function for which the topic is unknown.
-                                    None
-                                }
-                                Ok(Topic::Unspecified) => {
-                                    log!(
-                                        ERROR,
-                                        "Custom proposal ID {function_id}: topic Unspecified."
-                                    );
-
-                                    // This should never happen, but if it somehow does, treat this
-                                    // case as a custom function for which the topic is unknown.
-                                    None
-                                }
-                                Ok(topic) => Some(topic),
-                            };
-
-                            Some((*function_id, specific_topic))
-                        } else {
-                            // Topic not yet set for this custom function.
-                            Some((*function_id, None))
-                        }
-                    }
-                    // Not a custom function.
-                    _ => None,
-                }
-            })
-            .collect()
     }
 }
 
