@@ -55,9 +55,9 @@ use ic_replicated_state::{
         NextExecution,
     },
     metadata_state::subnet_call_context_manager::{
-        EcdsaArguments, IDkgDealingsContext, InstallCodeCall, InstallCodeCallId,
-        ReshareChainKeyContext, SchnorrArguments, SetupInitialDkgContext, SignWithThresholdContext,
-        StopCanisterCall, SubnetCallContext, ThresholdArguments, VetKdArguments,
+        EcdsaArguments, InstallCodeCall, InstallCodeCallId, ReshareChainKeyContext,
+        SchnorrArguments, SetupInitialDkgContext, SignWithThresholdContext, StopCanisterCall,
+        SubnetCallContext, ThresholdArguments, VetKdArguments,
     },
     page_map::PageAllocatorFileDescriptor,
     CanisterState, ExecutionTask, NetworkTopology, ReplicatedState,
