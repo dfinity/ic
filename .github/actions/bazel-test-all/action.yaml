@@ -42,16 +42,15 @@ runs:
             echo -e "Host *\nUser github-runner\n" > ~/.ssh/config
           fi
 
-          # unset honeycomb api key but use it later for exporter
           # TODO: remove exporter when users can use superset
-          env -u BUILDEVENT_APIKEY ${GITHUB_WORKSPACE}/ci/bazel-scripts/main.sh
+          ${GITHUB_WORKSPACE}/ci/bazel-scripts/main.sh
           BAZEL_EXIT_CODE="$?"
 
-          if [ -n "$BUILDEVENT_APIKEY" ] && [ -f ./bazel-bep.pb ]; then
+          if [ -n '${{ inputs.BUILDEVENT_APIKEY }}' ] && [ -f ./bazel-bep.pb ]; then
               # avoid output unless an error occurs during bes export. This ensures
               # only the (more relevant) output from the main bazel command is shown.
               exportout=$(mktemp)
-              if ! bazel run //bazel/exporter:exporter --build_event_binary_file= -- -f "$(pwd)/bazel-bep.pb" 2> "$exportout" >&2; then
+              if ! BUILDEVENT_APIKEY='${{ inputs.BUILDEVENT_APIKEY }}' bazel run //bazel/exporter:exporter --build_event_binary_file= -- -f "$(pwd)/bazel-bep.pb" 2> "$exportout" >&2; then
                 echo "bes export failed:"
                 cat "$exportout"
               fi
@@ -72,7 +71,6 @@ runs:
           BAZEL_COMMAND: ${{ inputs.BAZEL_COMMAND }}
           BAZEL_TARGETS: ${{ inputs.BAZEL_TARGETS }}
           BRANCH_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-          BUILDEVENT_APIKEY: ${{ inputs.BUILDEVENT_APIKEY }}
           CI_EVENT_NAME: ${{ github.event_name }}
           CI_JOB_URL: "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
           MERGE_BASE_SHA: ${{ github.event.pull_request.base.sha }}
