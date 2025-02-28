@@ -407,7 +407,7 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
     )?;
     w.encode_counter(
         "total_volume",
-        TOTAL_VOLUME.with(|n| *n.borrow()) as f64,
+        TOTAL_VOLUME.with(|n| *n.borrow()),
         "Total volume of ledger transactions.",
     )?;
 
