@@ -39,6 +39,10 @@ mod pre_signatures;
 pub(super) mod resharing;
 pub(super) mod signatures;
 
+/// A helper wrapper around [`ReshareChainKeyContext`], that guarantees,
+/// that the context is about an IDKG key.
+///
+/// Since the wrapper is borrowing, no additional clones are necessary.
 pub(crate) struct IDkgDealingContext<'a>(&'a ReshareChainKeyContext);
 
 impl<'a> TryFrom<&'a ReshareChainKeyContext> for IDkgDealingContext<'a> {
@@ -54,6 +58,10 @@ impl<'a> TryFrom<&'a ReshareChainKeyContext> for IDkgDealingContext<'a> {
 }
 
 impl IDkgDealingContext<'_> {
+    /// Return the [`IDkgMasterPublicKeyId`] of this context
+    ///
+    /// Since we already established that this is an IDKG key, we can avoid
+    /// the error handling.
     fn key_id(&self) -> IDkgMasterPublicKeyId {
         self.0.key_id.clone().try_into().unwrap()
     }
@@ -67,7 +75,9 @@ impl Deref for IDkgDealingContext<'_> {
     }
 }
 
-pub(crate) fn filter_reshare_chain_key_contexts(
+/// Filter a map of [`ReshareChainKeyContext`] for contexts that contain IDKG keys
+/// and convert them to a map of [`IDkgDealingContext`]
+pub(crate) fn filter_idkg_reshare_chain_key_contexts(
     contexts: &BTreeMap<CallbackId, ReshareChainKeyContext>,
 ) -> BTreeMap<CallbackId, IDkgDealingContext<'_>> {
     contexts
@@ -583,7 +593,7 @@ pub(crate) fn create_data_payload_helper(
         .collect();
 
     let reshare_contexts = state.get_ref().reshare_chain_key_contexts();
-    let idkg_dealings_contexts = filter_reshare_chain_key_contexts(reshare_contexts);
+    let idkg_dealings_contexts = filter_idkg_reshare_chain_key_contexts(reshare_contexts);
 
     let certified_height = if context.certified_height >= summary_block.height() {
         CertifiedHeight::ReachedSummaryHeight

@@ -188,7 +188,7 @@ mod tests {
     use ic_types::consensus::idkg::IDkgMasterPublicKeyId;
     use ic_types::consensus::idkg::IDkgPayload;
 
-    use crate::idkg::payload_builder::filter_reshare_chain_key_contexts;
+    use crate::idkg::payload_builder::filter_idkg_reshare_chain_key_contexts;
     use crate::idkg::{
         test_utils::{
             create_reshare_request, dealings_context_from_reshare_request,
@@ -250,7 +250,7 @@ mod tests {
                 ),
             );
         }
-        let contexts = filter_reshare_chain_key_contexts(&contexts);
+        let contexts = filter_idkg_reshare_chain_key_contexts(&contexts);
 
         for (i, key_id) in fake_master_public_key_ids_for_all_idkg_algorithms()
             .iter()
@@ -413,7 +413,7 @@ mod tests {
                 dealings_context_from_reshare_request(request_2.clone()),
             ),
         ]);
-        let mut contexts = filter_reshare_chain_key_contexts(&contexts);
+        let mut contexts = filter_idkg_reshare_chain_key_contexts(&contexts);
 
         // Request 1 dealings are created, it should be moved from in
         // progress -> completed (unreported)
