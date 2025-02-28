@@ -56,6 +56,19 @@ mod metrics;
 mod test_utils;
 mod utils;
 
+/// In addition to a timeout, we expire request contexts that were created more than one entire
+/// DKG interval ago. VetKD NiDkgTranscripts are reshared during every interval. However, it is
+/// important that for any given request, we use the same transcript to create, validate and
+/// combine vetKD shares. Consequently, once the NiDkgTranscript that was paired with a request
+/// context disappears from the summary block, the outstanding request should be rejected.
+///
+/// Request contexts are paired with the summary's "next transcript", if such a transcript exists,
+/// otherwise the "current transcript" is used.
+/// This guarantees that the transcript will exist for at least one DKG interval starting with the
+/// creation of the context: If it was a "next transcript", then it will still exist as a "current
+/// transcript" in the subsequent interval. If it was a "current transcript", then this implies
+/// that there was no "next transcript". Therefore the "current transcript" will remain a "current
+/// transcript" during the next interval, as well.
 #[derive(Debug)]
 struct RequestExpiry {
     time: Option<Time>,
