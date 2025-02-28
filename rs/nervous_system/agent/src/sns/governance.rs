@@ -1,10 +1,12 @@
 use crate::{null_request::NullRequest, CallCanisters};
 use ic_base_types::PrincipalId;
 use ic_sns_governance_api::pb::v1::{
-    manage_neuron, manage_neuron_response, GetMetadataRequest, GetMetadataResponse, GetMode,
-    GetModeResponse, GetProposal, GetProposalResponse, GetRunningSnsVersionRequest,
-    GetRunningSnsVersionResponse, GovernanceError, ManageNeuron, ManageNeuronResponse,
-    NervousSystemParameters, NeuronId, Proposal, ProposalId,
+    manage_neuron, manage_neuron_response,
+    topics::{ListTopicsRequest, ListTopicsResponse},
+    GetMetadataRequest, GetMetadataResponse, GetMode, GetModeResponse, GetProposal,
+    GetProposalResponse, GetRunningSnsVersionRequest, GetRunningSnsVersionResponse,
+    GovernanceError, ManageNeuron, ManageNeuronResponse, NervousSystemParameters, NeuronId,
+    Proposal, ProposalId,
 };
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -119,6 +121,13 @@ impl GovernanceCanister {
             proposal_id: Some(proposal_id),
         };
         agent.call(self.canister_id, request).await
+    }
+
+    pub async fn list_topics<C: CallCanisters>(
+        &self,
+        agent: &C,
+    ) -> Result<ListTopicsResponse, C::Error> {
+        agent.call(self.canister_id, ListTopicsRequest {}).await
     }
 }
 
