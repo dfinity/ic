@@ -3003,6 +3003,7 @@ impl ExecutionEnvironment {
                 nodes,
                 registry_version,
                 time: state.time(),
+                target_id: NiDkgTargetId::new([0; 32]),
             }),
         );
         Ok(())
