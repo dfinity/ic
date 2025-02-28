@@ -3668,7 +3668,7 @@ fn test_vetkd_public_key_api_is_enabled() {
 }
 
 #[test]
-fn test_vetkd_derive_encrypted_key_api_is_disabled() {
+fn test_vetkd_derive_encrypted_key_api_is_disabled_without_key() {
     let own_subnet = subnet_test_id(1);
     let nns_subnet = subnet_test_id(2);
     let nns_canister = canister_test_id(0x10);
@@ -3687,8 +3687,66 @@ fn test_vetkd_derive_encrypted_key_api_is_disabled() {
     let response = test.xnet_messages()[0].clone();
     assert_eq!(
         get_reject_message(response),
-        "vetkd_derive_encrypted_key API is not yet implemented.",
+        "Subnet yndj2-3ybaa-aaaaa-aaaap-yai does not hold threshold key vetkd:Bls12_381_G2:some_key.",
     )
+}
+
+#[test]
+fn test_vetkd_derive_encrypted_key_api_is_enabled() {
+    // Arrange.
+    let key_id = make_vetkd_key("some_key");
+    let own_subnet = subnet_test_id(1);
+    let nns_subnet = subnet_test_id(2);
+    let nns_canister = canister_test_id(0x10);
+    let mut test = ExecutionTestBuilder::new()
+        .with_own_subnet_id(own_subnet)
+        .with_nns_subnet_id(nns_subnet)
+        .with_caller(nns_subnet, nns_canister)
+        .with_chain_key(key_id.clone())
+        .build();
+    let canister_id = test.universal_canister().unwrap();
+    // Check that the SubnetCallContextManager is empty.
+    assert_eq!(
+        test.state()
+            .metadata
+            .subnet_call_context_manager
+            .sign_with_threshold_contexts_count(&key_id),
+        0
+    );
+
+    // Act.
+    let method = Method::VetKdDeriveEncryptedKey;
+    let run = wasm()
+        .call_with_cycles(
+            ic00::IC_00,
+            method,
+            call_args()
+                .other_side(sign_with_threshold_key_payload(method, key_id.clone()))
+                .on_reject(wasm().reject_message().reject()),
+            Cycles::from(100_000_000_000u128),
+        )
+        .build();
+    let (_, ingress_status) = test.ingress_raw(canister_id, "update", run);
+
+    // Assert.
+    // Check that the request is accepted and processing.
+    assert_eq!(
+        ingress_status,
+        IngressStatus::Known {
+            receiver: canister_id.get(),
+            user_id: test.user_id(),
+            time: test.time(),
+            state: IngressState::Processing,
+        }
+    );
+    // Check that the SubnetCallContextManager contains the request.
+    assert_eq!(
+        test.state()
+            .metadata
+            .subnet_call_context_manager
+            .sign_with_threshold_contexts_count(&key_id),
+        1
+    );
 }
 
 #[test]

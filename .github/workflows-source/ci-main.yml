@@ -295,9 +295,13 @@ jobs:
 
       - name: Build Determinism Test
         run: |
-          n_lines=$(cat shasums-nocache/SHA256SUMS | wc -l)
-          echo "comparing $n_lines lines"
-          if [ "$n_lines" -eq 0 ]; then
+          n_lines_cache=$(cat shasums-cache/SHA256SUMS | wc -l)
+          n_lines_nocache=$(cat shasums-nocache/SHA256SUMS | wc -l)
+          echo "comparing $n_lines_cache (cache) and $n_lines_nocache (nocache) lines"
+
+          # running tests may not pull all targets locally. If that's the case,
+          # there will be 0 lines and nothing to compare.
+          if [ "$n_lines_cache" -eq 0 ] || [ "$n_lines_nocache" -eq 0 ]; then
             echo "No lines to compare"
             exit 0
           fi
