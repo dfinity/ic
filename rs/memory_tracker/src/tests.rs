@@ -6,7 +6,7 @@ use ic_replicated_state::{
     PageIndex, PageMap,
 };
 use ic_sys::{PageBytes, PAGE_SIZE};
-use ic_types::Height;
+use ic_types::{Height, NumBytes, NumOsPages};
 use libc::c_void;
 use nix::sys::mman::{mmap, MapFlags, ProtFlags};
 use std::sync::Arc;
@@ -69,7 +69,7 @@ fn setup(
 
     let tracker = SigsegvMemoryTracker::new(
         memory,
-        memory_pages * PAGE_SIZE,
+        NumBytes::new((memory_pages * PAGE_SIZE) as u64),
         no_op_logger(),
         dirty_page_tracking,
         page_map.clone(),
@@ -629,7 +629,7 @@ fn prefetch_for_write_after_read_unordered() {
 
 #[test]
 fn page_bitmap_restrict_to_unaccessed() {
-    let mut bitmap = PageBitmap::new(10);
+    let mut bitmap = PageBitmap::new(NumOsPages::new(10));
     bitmap.mark(PageIndex::new(5));
     assert_eq!(
         Range {
@@ -662,7 +662,7 @@ fn page_bitmap_restrict_to_unaccessed() {
 
 #[test]
 fn page_bitmap_restrict_to_predicted() {
-    let mut bitmap = PageBitmap::new(10);
+    let mut bitmap = PageBitmap::new(NumOsPages::new(10));
     bitmap.mark(PageIndex::new(5));
     assert_eq!(
         Range {
@@ -695,7 +695,7 @@ fn page_bitmap_restrict_to_predicted() {
 
 #[test]
 fn page_bitmap_restrict_to_predicted_stops_at_end() {
-    let mut bitmap = PageBitmap::new(10);
+    let mut bitmap = PageBitmap::new(NumOsPages::new(10));
     bitmap.mark(PageIndex::new(0));
     bitmap.mark(PageIndex::new(1));
     bitmap.mark(PageIndex::new(2));
@@ -716,7 +716,7 @@ fn page_bitmap_restrict_to_predicted_stops_at_end() {
 
 #[test]
 fn page_bitmap_restrict_to_predicted_stops_at_start() {
-    let mut bitmap = PageBitmap::new(10);
+    let mut bitmap = PageBitmap::new(NumOsPages::new(10));
     bitmap.mark(PageIndex::new(0));
     bitmap.mark(PageIndex::new(1));
     bitmap.mark(PageIndex::new(2));

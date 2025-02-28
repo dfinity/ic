@@ -259,8 +259,8 @@ fn serialize() {
         state_decoded.blockchain.last_hash
     );
     assert_eq!(
-        state.blockchain.blocks.len(),
-        state_decoded.blockchain.blocks.len()
+        state.blockchain.num_unarchived_blocks(),
+        state_decoded.blockchain.num_unarchived_blocks()
     );
     assert_eq!(state.balances.store, state_decoded.balances.store);
 }
@@ -574,13 +574,13 @@ fn get_blocks_returns_correct_blocks() {
 
     let blocks = &state.blockchain.blocks;
 
-    let first_blocks = icp_ledger::get_blocks(blocks, 0, 1, 5).0.unwrap();
+    let first_blocks = icp_ledger::get_blocks_ledger(blocks, 0, 1, 5).0.unwrap();
     for i in 0..first_blocks.len() {
         let block = Block::decode(first_blocks.get(i).unwrap().clone()).unwrap();
         assert_eq!(block.transaction.memo.0, i as u64);
     }
 
-    let last_blocks = icp_ledger::get_blocks(blocks, 0, 6, 5).0.unwrap();
+    let last_blocks = icp_ledger::get_blocks_ledger(blocks, 0, 6, 5).0.unwrap();
     for i in 0..last_blocks.len() {
         let block = Block::decode(last_blocks.get(i).unwrap().clone()).unwrap();
         assert_eq!(block.transaction.memo.0, 5 + i as u64);

@@ -8,12 +8,7 @@ use crate::common::rest::{
     RawTime, RawVerifyCanisterSigArg, SubnetId, TickConfigs, Topology,
 };
 use crate::management_canister::{
-    CanisterId, CanisterIdRecord, CanisterInstallMode, CanisterInstallModeUpgradeInner,
-    CanisterInstallModeUpgradeInnerWasmMemoryPersistenceInner, CanisterLogRecord, CanisterSettings,
-    CanisterStatusResult, ChunkHash, DeleteCanisterSnapshotArgs, FetchCanisterLogsResult,
-    InstallChunkedCodeArgs, InstallCodeArgs, LoadCanisterSnapshotArgs,
-    ProvisionalCreateCanisterWithCyclesArgs, Snapshot, StoredChunksResult,
-    TakeCanisterSnapshotArgs, UpdateSettingsArgs, UploadChunkArgs, UploadChunkResult,
+    CanisterId, CanisterIdRecord, CanisterLogRecord, FetchCanisterLogsResult,
 };
 pub use crate::DefaultEffectiveCanisterIdError;
 use crate::{start_or_reuse_server, IngressStatusResult, PocketIcBuilder, RejectResponse};
@@ -25,6 +20,14 @@ use candid::{
     Principal,
 };
 use ic_certification::{Certificate, Label, LookupResult};
+use ic_management_canister_types::{
+    CanisterInstallMode, CanisterSettings, CanisterStatusResult, ChunkHash,
+    DeleteCanisterSnapshotArgs, InstallChunkedCodeArgs, InstallCodeArgs, LoadCanisterSnapshotArgs,
+    ProvisionalCreateCanisterWithCyclesArgs, Snapshot, StoredChunksResult,
+    TakeCanisterSnapshotArgs, UpdateSettingsArgs, UpgradeFlags as CanisterInstallModeUpgradeInner,
+    UploadChunkArgs, UploadChunkResult,
+    WasmMemoryPersistence as CanisterInstallModeUpgradeInnerWasmMemoryPersistenceInner,
+};
 use ic_transport_types::Envelope;
 use ic_transport_types::EnvelopeContent::ReadState;
 use ic_transport_types::{ReadStateResponse, SubnetMetrics};

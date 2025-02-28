@@ -16,7 +16,7 @@ use crate::{
             governance::{
                 self,
                 neuron_in_flight_command::{self, SyncCommand},
-                SnsMetadata, Version,
+                Mode, SnsMetadata, Version,
             },
             governance_error::ErrorType,
             manage_neuron,
@@ -274,17 +274,20 @@ impl governance::Mode {
                 );
         }
 
+        let nervous_system_function = NervousSystemFunction::from(action.clone());
+
         let is_action_disallowed = Self::functions_disallowed_in_pre_initialization_swap()
             .into_iter()
-            .any(|t| t.id == NervousSystemFunction::from(action.clone()).id);
+            .any(|t| t.id == nervous_system_function.id);
 
         if is_action_disallowed {
             Err(GovernanceError::new_with_message(
                 ErrorType::PreconditionFailed,
                 format!(
-                    "This proposal type is not allowed while governance is in \
-                     PreInitializationSwap mode: {:#?}",
-                    action,
+                    "Proposal type for {:?} is not allowed while governance is in \
+                     PreInitializationSwap ({}) mode.",
+                    nervous_system_function,
+                    Mode::PreInitializationSwap as i32,
                 ),
             ))
         } else {

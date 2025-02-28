@@ -1,14 +1,15 @@
 use candid::{decode_one, encode_one, CandidType, Decode, Deserialize, Encode, Principal};
 use ic_certification::Label;
+use ic_management_canister_types::{
+    Bip341, CanisterInstallMode, CanisterSettings, EcdsaPublicKeyResult, HttpRequestResult,
+    NodeMetricsHistoryArgs, NodeMetricsHistoryRecord as NodeMetricsHistoryResultItem,
+    ProvisionalCreateCanisterWithCyclesArgs, SchnorrAlgorithm, SchnorrAux,
+    SchnorrKeyId as SchnorrPublicKeyArgsKeyId, SchnorrPublicKeyResult,
+};
 use ic_transport_types::Envelope;
 use ic_transport_types::EnvelopeContent::ReadState;
 use pocket_ic::common::rest::{BlockmakerConfigs, RawSubnetBlockmaker, TickConfigs};
-use pocket_ic::management_canister::{
-    CanisterIdRecord, CanisterInstallMode, CanisterSettings, EcdsaPublicKeyResult,
-    HttpRequestResult, NodeMetricsHistoryArgs, NodeMetricsHistoryResultItem,
-    ProvisionalCreateCanisterWithCyclesArgs, SchnorrAlgorithm, SchnorrPublicKeyArgsKeyId,
-    SchnorrPublicKeyResult, SignWithBip341Aux, SignWithSchnorrAux,
-};
+use pocket_ic::management_canister::CanisterIdRecord;
 use pocket_ic::{
     common::rest::{
         BlobCompression, CanisterHttpReply, CanisterHttpResponse, MockCanisterHttpResponse,
@@ -925,15 +926,14 @@ fn test_schnorr() {
     // We define the message, derivation path, and ECDSA key ID to use in this test.
     let message = b"Hello, world!==================="; // must be of length 32 bytes for BIP340
     let derivation_path = vec!["my message".as_bytes().to_vec()];
-    let some_aux: Option<SignWithSchnorrAux> =
-        Some(SignWithSchnorrAux::Bip341(SignWithBip341Aux {
-            merkle_root_hash: b"Hello, aux!=====================".to_vec(),
-        }));
-    for algorithm in [SchnorrAlgorithm::Bip340Secp256K1, SchnorrAlgorithm::Ed25519] {
+    let some_aux: Option<SchnorrAux> = Some(SchnorrAux::Bip341(Bip341 {
+        merkle_root_hash: b"Hello, aux!=====================".to_vec(),
+    }));
+    for algorithm in [SchnorrAlgorithm::Bip340secp256k1, SchnorrAlgorithm::Ed25519] {
         for name in ["key_1", "test_key_1", "dfx_test_key"] {
             for aux in [None, some_aux.clone()] {
                 let key_id = SchnorrPublicKeyArgsKeyId {
-                    algorithm: algorithm.clone(),
+                    algorithm,
                     name: name.to_string(),
                 };
 
@@ -966,13 +966,13 @@ fn test_schnorr() {
 
                 // We verify the Schnorr signature.
                 match key_id.algorithm {
-                    SchnorrAlgorithm::Bip340Secp256K1 => {
+                    SchnorrAlgorithm::Bip340secp256k1 => {
                         use k256::ecdsa::signature::hazmat::PrehashVerifier;
                         use k256::schnorr::{Signature, VerifyingKey};
                         let bip340_public_key = schnorr_public_key.public_key[1..].to_vec();
                         let public_key = match aux {
                             None => bip340_public_key,
-                            Some(SignWithSchnorrAux::Bip341(bip341_aux)) => {
+                            Some(SchnorrAux::Bip341(bip341_aux)) => {
                                 use bitcoin::hashes::Hash;
                                 use bitcoin::schnorr::TapTweak;
                                 let xonly = bitcoin::util::key::XOnlyPublicKey::from_slice(

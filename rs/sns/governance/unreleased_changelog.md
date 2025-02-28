@@ -43,6 +43,9 @@ for newly deployed SNSs. To opt out, please submit a `ManageNervousSystemParamet
 
 ## Fixed
 
-`ManageNervousSystemParameters` proposals now enforce that at least one field is set.
+* `ManageNervousSystemParameters` proposals now enforce that at least one field is set.
+
+* Errors caused by trying to submit proposals restricted in pre-initialization mode should no
+  longer overflow.
 
 ## Security

@@ -17,6 +17,7 @@ use ic_ledger_canister_core::ledger::LedgerContext;
 use ic_ledger_canister_core::runtime::heap_memory_size_bytes;
 use ic_ledger_canister_core::{
     archive::{Archive, ArchiveOptions},
+    blockchain::BlockData,
     ledger::{
         apply_transaction, archive_blocks, block_locations, find_block_in_archive, LedgerAccess,
         TransferError as CoreTransferError,
@@ -36,7 +37,7 @@ use icp_ledger::{
     max_blocks_per_request, protobuf, tokens_into_proto, AccountBalanceArgs, AccountIdBlob,
     AccountIdentifier, AccountIdentifierByteBuf, ArchiveInfo, ArchivedBlocksRange,
     ArchivedEncodedBlocksRange, Archives, BinaryAccountBalanceArgs, Block, BlockArg, BlockRes,
-    CandidBlock, Decimals, FeatureFlags, GetBlocksArgs, InitArgs, IterBlocksArgs,
+    CandidBlock, Decimals, FeatureFlags, GetBlocksArgs, InitArgs, IterBlocksArgs, IterBlocksRes,
     LedgerCanisterPayload, Memo, Name, Operation, PaymentError, QueryBlocksResponse,
     QueryEncodedBlocksResponse, SendArgs, Subaccount, Symbol, TipOfChainRes, TotalSupplyArgs,
     Transaction, TransferArgs, TransferError, TransferFee, TransferFeeArgs, MEMO_SIZE_BYTES,
@@ -582,7 +583,7 @@ fn block(block_index: BlockIndex) -> Option<Result<EncodedBlock, CanisterId>> {
             "[ledger] Checking the ledger for block [{}]",
             block_index
         ));
-        state.blockchain.get(block_index).cloned().map(Ok)
+        state.blockchain.get(block_index).map(Ok)
     }
 }
 
@@ -1324,9 +1325,16 @@ fn icrc1_total_supply_candid() {
 #[export_name = "canister_query iter_blocks_pb"]
 fn iter_blocks_() {
     over(protobuf, |IterBlocksArgs { start, length }| {
-        let blocks = &LEDGER.read().unwrap().blockchain.blocks;
-        let length = std::cmp::min(length, max_blocks_per_request(&PrincipalId::from(caller())));
-        icp_ledger::iter_blocks(blocks, start, length)
+        let length =
+            std::cmp::min(length, max_blocks_per_request(&PrincipalId::from(caller()))) as u64;
+        let start = start as u64;
+        let blocks = LEDGER
+            .read()
+            .unwrap()
+            .blockchain
+            .blocks
+            .get_blocks(start..start + length);
+        IterBlocksRes(blocks)
     });
 }
 
@@ -1341,7 +1349,7 @@ fn get_blocks_() {
         );
         let blockchain = &LEDGER.read().unwrap().blockchain;
         let start_offset = blockchain.num_archived_blocks();
-        icp_ledger::get_blocks(&blockchain.blocks, start_offset, start, length as usize)
+        icp_ledger::get_blocks_ledger(&blockchain.blocks, start_offset, start, length as usize)
     });
 }
 
@@ -1362,7 +1370,7 @@ fn query_blocks(GetBlocksArgs { start, length }: GetBlocksArgs) -> QueryBlocksRe
 
     let blocks: Vec<CandidBlock> = ledger
         .blockchain
-        .block_slice(local_blocks.clone())
+        .get_blocks(local_blocks.clone())
         .iter()
         .map(|enc_block| {
             CandidBlock::from(
@@ -1489,7 +1497,7 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
     )?;
     w.encode_gauge(
         "ledger_blocks",
-        ledger.blockchain.blocks.len() as f64,
+        ledger.blockchain.num_unarchived_blocks() as f64,
         "Total number of blocks stored in the main memory.",
     )?;
     // This value can go down -- the number is increased before archiving, and if
@@ -1503,7 +1511,7 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
     // order to be able to accurately calculate the total block rate.
     w.encode_gauge(
         "ledger_total_blocks",
-        ledger.blockchain.num_archived_blocks.saturating_add(ledger.blockchain.blocks.len() as u64) as f64,
+        ledger.blockchain.num_archived_blocks.saturating_add(ledger.blockchain.num_unarchived_blocks()) as f64,
         "Total number of blocks stored in the main memory, plus total number of blocks sent to the archive.",
     )?;
     if is_ready() {
@@ -1582,7 +1590,7 @@ fn query_encoded_blocks(
         max_blocks_per_request(&PrincipalId::from(caller())),
     );
 
-    let blocks = ledger.blockchain.block_slice(local_blocks.clone()).to_vec();
+    let blocks = ledger.blockchain.get_blocks(local_blocks.clone()).to_vec();
 
     let archived_blocks = locations
         .archived_blocks

@@ -142,6 +142,7 @@ jobs:
       - name: Create Pull Request
         uses: peter-evans/create-pull-request@6d6857d36972b65feb161a90e484f2984215f83e # v6.0.5
         with:
+          token: ${{ steps.app-token.outputs.token }}
           base: master
           branch: base-image-refs-update-${{ env.DATE }}
           delete-branch: true
