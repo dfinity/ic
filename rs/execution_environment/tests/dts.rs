@@ -121,27 +121,6 @@ fn wat2wasm(wat: &str) -> Vec<u8> {
     wat::parse_str(wat).unwrap()
 }
 
-/// This is a tentative workaround for the issue that `StateMachine` disables DTS
-/// and sandboxing if it cannot find the sandboxing binaries, which happens in
-/// local builds with `cargo`.
-fn should_skip_test_due_to_disabled_dts() -> bool {
-    if !(std::env::var("SANDBOX_BINARY").is_ok()
-        && std::env::var("LAUNCHER_BINARY").is_ok()
-        && std::env::var("COMPILER_BINARY").is_ok())
-    {
-        eprintln!(
-            "Skipping the test because DTS is not supported without \
-             canister sandboxing binaries.\n\
-             To fix this:\n\
-             - either run the test with `bazel test`\n\
-             - or define the SANDBOX_BINARY and LAUNCHER_BINARY and COMPILER_BINARY environment variables \
-             with the paths to the corresponding binaries."
-        );
-        return true;
-    }
-    false
-}
-
 fn dts_subnet_config(
     message_instruction_limit: NumInstructions,
     slice_instruction_limit: NumInstructions,
@@ -354,10 +333,6 @@ fn actual_execution_cost() -> Cycles {
 
 #[test]
 fn dts_install_code_with_concurrent_ingress_sufficient_cycles() {
-    if should_skip_test_due_to_disabled_dts() {
-        // Skip this test if DTS is not supported.
-        return;
-    }
     let install_code_ingress_cost = Cycles::new(INSTALL_CODE_INGRESS_COST);
     let install_code_execution_cost = Cycles::new(INSTALL_CODE_EXECUTION_COST);
     let normal_ingress_cost = Cycles::new(NORMAL_INGRESS_COST);
@@ -442,10 +417,6 @@ fn dts_install_code_with_concurrent_ingress_sufficient_cycles() {
 
 #[test]
 fn dts_install_code_with_concurrent_ingress_insufficient_cycles() {
-    if should_skip_test_due_to_disabled_dts() {
-        // Skip this test if DTS is not supported.
-        return;
-    }
     let install_code_ingress_cost = Cycles::new(INSTALL_CODE_INGRESS_COST);
     let normal_ingress_cost = Cycles::new(NORMAL_INGRESS_COST);
     let max_execution_cost = Cycles::new(MAX_EXECUTION_COST);
@@ -494,10 +465,6 @@ fn dts_install_code_with_concurrent_ingress_insufficient_cycles() {
 
 #[test]
 fn dts_install_code_with_concurrent_ingress_and_freezing_threshold_insufficient_cycles() {
-    if should_skip_test_due_to_disabled_dts() {
-        // Skip this test if DTS is not supported.
-        return;
-    }
     let install_code_ingress_cost = Cycles::new(INSTALL_CODE_INGRESS_COST);
     let normal_ingress_cost = Cycles::new(NORMAL_INGRESS_COST);
     let max_execution_cost = Cycles::new(MAX_EXECUTION_COST);
@@ -548,11 +515,6 @@ fn dts_install_code_with_concurrent_ingress_and_freezing_threshold_insufficient_
 
 #[test]
 fn dts_pending_upgrade_with_heartbeat() {
-    if should_skip_test_due_to_disabled_dts() {
-        // Skip this test if DTS is not supported.
-        return;
-    }
-
     let env = dts_env(
         NumInstructions::from(1_000_000_000),
         NumInstructions::from(30_000),
@@ -645,11 +607,6 @@ fn dts_pending_upgrade_with_heartbeat() {
 ///   for the canister on which the code install is running.
 #[test]
 fn dts_scheduling_of_install_code() {
-    if should_skip_test_due_to_disabled_dts() {
-        // Skip this test if DTS is not supported.
-        return;
-    }
-
     let (env, _) = dts_install_code_env(
         NumInstructions::from(5_000_000_000),
         NumInstructions::from(10_000),
@@ -807,11 +764,6 @@ fn dts_scheduling_of_install_code() {
 /// long-running install code messages.
 #[test]
 fn dts_pending_install_code_does_not_block_subnet_messages_of_other_canisters() {
-    if should_skip_test_due_to_disabled_dts() {
-        // Skip this test if DTS is not supported.
-        return;
-    }
-
     let (env, _) = dts_install_code_env(
         NumInstructions::from(5_000_000_000),
         NumInstructions::from(10_000),
@@ -938,11 +890,6 @@ fn dts_pending_install_code_does_not_block_subnet_messages_of_other_canisters() 
 /// long-running update message.
 #[test]
 fn dts_pending_execution_blocks_subnet_messages_to_the_same_canister() {
-    if should_skip_test_due_to_disabled_dts() {
-        // Skip this test if DTS is not supported.
-        return;
-    }
-
     let env = dts_env(
         NumInstructions::from(1_000_000_000),
         NumInstructions::from(10_000),
@@ -1358,11 +1305,6 @@ fn dts_paused_execution_blocks_deposit_cycles() {
 /// The expectation is that the update message is blocked.
 #[test]
 fn dts_pending_install_code_blocks_update_messages_to_the_same_canister() {
-    if should_skip_test_due_to_disabled_dts() {
-        // Skip this test if DTS is not supported.
-        return;
-    }
-
     let env = dts_env(
         NumInstructions::from(1_000_000_000),
         NumInstructions::from(10_000),
@@ -1436,11 +1378,6 @@ fn dts_pending_install_code_blocks_update_messages_to_the_same_canister() {
 /// The expectation that all messages eventually complete.
 #[test]
 fn dts_long_running_install_and_update() {
-    if should_skip_test_due_to_disabled_dts() {
-        // Skip this test if DTS is not supported.
-        return;
-    }
-
     let slice_instruction_limit = 15_000_000;
     let env = dts_env(
         NumInstructions::from(100_000_000),
@@ -1569,11 +1506,6 @@ fn dts_long_running_install_and_update() {
 /// The expectation that all messages eventually complete.
 #[test]
 fn dts_long_running_calls() {
-    if should_skip_test_due_to_disabled_dts() {
-        // Skip this test if DTS is not supported.
-        return;
-    }
-
     let env = dts_env(
         NumInstructions::from(100_000_000),
         NumInstructions::from(1_000_000),
@@ -1657,11 +1589,6 @@ fn dts_long_running_calls() {
 
 #[test]
 fn dts_unrelated_subnet_messages_make_progress() {
-    if should_skip_test_due_to_disabled_dts() {
-        // Skip this test if DTS is not supported.
-        return;
-    }
-
     let env = dts_env(
         NumInstructions::from(1_000_000_000),
         NumInstructions::from(10_000),
@@ -1731,11 +1658,6 @@ fn dts_unrelated_subnet_messages_make_progress() {
 
 #[test]
 fn dts_ingress_status_of_update_is_correct() {
-    if should_skip_test_due_to_disabled_dts() {
-        // Skip this test if DTS is not supported.
-        return;
-    }
-
     let env = dts_env(
         NumInstructions::from(1_000_000_000),
         NumInstructions::from(10_000),
@@ -1803,11 +1725,6 @@ fn dts_ingress_status_of_update_is_correct() {
 
 #[test]
 fn dts_ingress_status_of_install_is_correct() {
-    if should_skip_test_due_to_disabled_dts() {
-        // Skip this test if DTS is not supported.
-        return;
-    }
-
     let env = dts_env(
         NumInstructions::from(1_000_000_000),
         NumInstructions::from(10_000),
@@ -1886,11 +1803,6 @@ fn dts_ingress_status_of_install_is_correct() {
 
 #[test]
 fn dts_ingress_status_of_upgrade_is_correct() {
-    if should_skip_test_due_to_disabled_dts() {
-        // Skip this test if DTS is not supported.
-        return;
-    }
-
     let env = dts_env(
         NumInstructions::from(1_000_000_000),
         NumInstructions::from(10_000),
@@ -1969,11 +1881,6 @@ fn dts_ingress_status_of_upgrade_is_correct() {
 
 #[test]
 fn dts_ingress_status_of_update_with_call_is_correct() {
-    if should_skip_test_due_to_disabled_dts() {
-        // Skip this test if DTS is not supported.
-        return;
-    }
-
     let env = dts_env(
         NumInstructions::from(1_000_000_000),
         NumInstructions::from(10_000),
@@ -2068,11 +1975,6 @@ fn dts_ingress_status_of_update_with_call_is_correct() {
 
 #[test]
 fn dts_canister_uninstalled_due_to_resource_charges_with_aborted_updrade() {
-    if should_skip_test_due_to_disabled_dts() {
-        // Skip this test if DTS is not supported.
-        return;
-    }
-
     let env = dts_env(
         NumInstructions::from(1_000_000_000),
         NumInstructions::from(10_000),
@@ -2128,11 +2030,6 @@ fn dts_canister_uninstalled_due_to_resource_charges_with_aborted_updrade() {
 
 #[test]
 fn dts_canister_uninstalled_due_resource_charges_with_aborted_update() {
-    if should_skip_test_due_to_disabled_dts() {
-        // Skip this test if DTS is not supported.
-        return;
-    }
-
     let env = dts_env(
         NumInstructions::from(1_000_000_000),
         NumInstructions::from(10_000),
@@ -2210,11 +2107,6 @@ fn dts_canister_uninstalled_due_resource_charges_with_aborted_update() {
 
 #[test]
 fn dts_serialized_and_runtime_states_are_equal() {
-    if should_skip_test_due_to_disabled_dts() {
-        // Skip this test if DTS is not supported.
-        return;
-    }
-
     fn run(restart_node: bool) -> CryptoHashOfState {
         let subnet_config = dts_subnet_config(
             NumInstructions::from(1_000_000_000),
@@ -2287,11 +2179,6 @@ fn get_canister_version(env: &StateMachine, canister_id: CanisterId) -> u64 {
 
 #[test]
 fn dts_heartbeat_works() {
-    if should_skip_test_due_to_disabled_dts() {
-        // Skip this test if DTS is not supported.
-        return;
-    }
-
     let env = dts_env(
         NumInstructions::from(1_000_000_000),
         NumInstructions::from(50_000),
@@ -2340,11 +2227,6 @@ fn dts_heartbeat_works() {
 
 #[test]
 fn dts_heartbeat_resume_after_abort() {
-    if should_skip_test_due_to_disabled_dts() {
-        // Skip this test if DTS is not supported.
-        return;
-    }
-
     let env = dts_env(
         NumInstructions::from(1_000_000_000),
         NumInstructions::from(50_000),
@@ -2406,11 +2288,6 @@ fn dts_heartbeat_resume_after_abort() {
 
 #[test]
 fn dts_heartbeat_with_trap() {
-    if should_skip_test_due_to_disabled_dts() {
-        // Skip this test if DTS is not supported.
-        return;
-    }
-
     let env = dts_env(
         NumInstructions::from(1_000_000_000),
         NumInstructions::from(50_000),
@@ -2459,11 +2336,6 @@ fn dts_heartbeat_with_trap() {
 
 #[test]
 fn dts_heartbeat_does_not_prevent_canister_from_stopping() {
-    if should_skip_test_due_to_disabled_dts() {
-        // Skip this test if DTS is not supported.
-        return;
-    }
-
     let env = dts_env(
         NumInstructions::from(1_000_000_000),
         NumInstructions::from(50_000),
@@ -2508,11 +2380,6 @@ fn dts_heartbeat_does_not_prevent_canister_from_stopping() {
 
 #[test]
 fn dts_heartbeat_does_not_prevent_upgrade() {
-    if should_skip_test_due_to_disabled_dts() {
-        // Skip this test if DTS is not supported.
-        return;
-    }
-
     let env = dts_env(
         NumInstructions::from(1_000_000_000),
         NumInstructions::from(50_000),
@@ -2556,11 +2423,6 @@ fn dts_heartbeat_does_not_prevent_upgrade() {
 
 #[test]
 fn dts_global_timer_one_shot_works() {
-    if should_skip_test_due_to_disabled_dts() {
-        // Skip this test if DTS is not supported.
-        return;
-    }
-
     let env = dts_env(
         NumInstructions::from(1_000_000_000),
         NumInstructions::from(50_000),
@@ -2625,11 +2487,6 @@ fn dts_global_timer_one_shot_works() {
 
 #[test]
 fn dts_heartbeat_does_not_starve_when_global_timer_is_long() {
-    if should_skip_test_due_to_disabled_dts() {
-        // Skip this test if DTS is not supported.
-        return;
-    }
-
     let env = dts_env(
         NumInstructions::from(1_000_000_000),
         NumInstructions::from(75_000),
@@ -2713,11 +2570,6 @@ fn dts_heartbeat_does_not_starve_when_global_timer_is_long() {
 
 #[test]
 fn dts_global_timer_resume_after_abort() {
-    if should_skip_test_due_to_disabled_dts() {
-        // Skip this test if DTS is not supported.
-        return;
-    }
-
     let env = dts_env(
         NumInstructions::from(1_000_000_000),
         NumInstructions::from(60_000),
@@ -2768,11 +2620,6 @@ fn dts_global_timer_resume_after_abort() {
 
 #[test]
 fn dts_global_timer_does_not_prevent_canister_from_stopping() {
-    if should_skip_test_due_to_disabled_dts() {
-        // Skip this test if DTS is not supported.
-        return;
-    }
-
     let env = dts_env(
         NumInstructions::from(1_000_000_000),
         NumInstructions::from(60_000),
@@ -2821,11 +2668,6 @@ fn dts_global_timer_does_not_prevent_canister_from_stopping() {
 
 #[test]
 fn dts_global_timer_with_trap() {
-    if should_skip_test_due_to_disabled_dts() {
-        // Skip this test if DTS is not supported.
-        return;
-    }
-
     let env = dts_env(
         NumInstructions::from(1_000_000_000),
         NumInstructions::from(50_000),
@@ -2881,11 +2723,6 @@ fn dts_global_timer_with_trap() {
 
 #[test]
 fn dts_global_timer_does_not_prevent_upgrade() {
-    if should_skip_test_due_to_disabled_dts() {
-        // Skip this test if DTS is not supported.
-        return;
-    }
-
     let env = dts_env(
         NumInstructions::from(1_000_000_000),
         NumInstructions::from(60_000),
@@ -2933,11 +2770,6 @@ fn dts_global_timer_does_not_prevent_upgrade() {
 
 #[test]
 fn dts_abort_paused_execution_on_state_switch() {
-    if should_skip_test_due_to_disabled_dts() {
-        // Skip this test if DTS is not supported.
-        return;
-    }
-
     let env = dts_env(
         NumInstructions::from(1_000_000_000),
         NumInstructions::from(50_000),
@@ -2986,11 +2818,6 @@ fn dts_abort_paused_execution_on_state_switch() {
 
 #[test]
 fn dts_abort_after_dropping_memory_on_state_switch() {
-    if should_skip_test_due_to_disabled_dts() {
-        // Skip this test if DTS is not supported.
-        return;
-    }
-
     let env = dts_env(
         NumInstructions::from(1_000_000_000),
         NumInstructions::from(100_000_000),
