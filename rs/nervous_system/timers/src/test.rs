@@ -161,3 +161,88 @@ pub fn run_pending_timers_every_x_seconds(interval: Duration, count: u64) {
 pub fn has_timer_task(timer_id: TimerId) -> bool {
     TIMER_TASKS.with(|timers| timers.borrow().contains_key(timer_id))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_timers_setting_running_and_clearing() {
+        thread_local! {
+            static TIMER_1_COUNT: RefCell<u64> = RefCell::new(0);
+            static TIMER_2_COUNT: RefCell<u64> = RefCell::new(0);
+        }
+
+        let timer_1_id = set_timer(Duration::from_secs(10), || {
+            TIMER_1_COUNT.with(|count| {
+                *count.borrow_mut() += 1;
+            });
+        });
+        let timer_2_id = set_timer_interval(Duration::from_secs(5), || {
+            TIMER_2_COUNT.with(|count| {
+                *count.borrow_mut() += 1;
+            });
+        });
+        assert!(has_timer_task(timer_1_id));
+        assert!(has_timer_task(timer_2_id));
+
+        let current_time = get_time_for_timers();
+
+        // Run the timers
+        run_pending_timers();
+
+        // Check nothing ran yet
+        TIMER_1_COUNT.with(|count| {
+            assert_eq!(*count.borrow(), 0);
+        });
+        TIMER_2_COUNT.with(|count| {
+            assert_eq!(*count.borrow(), 0);
+        });
+
+        // Advance time by 5 seconds
+        set_time_for_timers(current_time + Duration::from_secs(1));
+        advance_time_for_timers(Duration::from_secs(4));
+
+        // Run the timers
+        run_pending_timers();
+
+        // Check that the second timer ran
+        TIMER_1_COUNT.with(|count| {
+            assert_eq!(*count.borrow(), 0);
+        });
+        TIMER_2_COUNT.with(|count| {
+            assert_eq!(*count.borrow(), 1);
+        });
+
+        run_pending_timers_every_x_seconds(Duration::from_secs(5), 2);
+
+        // Check that the first timer ran
+        TIMER_1_COUNT.with(|count| {
+            assert_eq!(*count.borrow(), 1);
+        });
+        TIMER_2_COUNT.with(|count| {
+            assert_eq!(*count.borrow(), 3);
+        });
+
+        // Timer 1 should no longer exist, but timer 2 is an interval.
+        assert!(!has_timer_task(timer_1_id));
+        assert!(has_timer_task(timer_2_id));
+
+        clear_timer(timer_2_id);
+
+        assert!(!has_timer_task(timer_2_id));
+
+        run_pending_timers_every_x_seconds(Duration::from_secs(5), 2);
+
+        // Check that second timer is in fact not running
+        TIMER_2_COUNT.with(|count| {
+            assert_eq!(*count.borrow(), 3);
+        });
+
+        // Time internally advances as expected
+        assert_eq!(
+            get_time_for_timers(),
+            current_time + Duration::from_secs(25)
+        );
+    }
+}

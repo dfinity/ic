@@ -1,4 +1,4 @@
-load("@rules_rust//rust:defs.bzl", "rust_doc_test", "rust_library", "rust_test_suite")
+load("@rules_rust//rust:defs.bzl", "rust_doc_test", "rust_library", "rust_test", "rust_test_suite")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -8,7 +8,7 @@ DEPENDENCIES = [
     "@crate_index//:slotmap",
 ]
 
-DEV_DEPENDENCIES = [
+DEV_DEPENDENCIES = DEPENDENCIES + [
 ]
 
 LIB_SRCS = glob(
@@ -28,4 +28,10 @@ rust_test_suite(
     name = "timers_integration_test",
     srcs = glob(["tests/**/*.rs"]),
     deps = [":timers"] + DEPENDENCIES + DEV_DEPENDENCIES,
+)
+
+rust_test(
+    name = "timers_test",
+    srcs = glob(["src/**/*.rs"]),
+    deps = DEV_DEPENDENCIES,
 )
