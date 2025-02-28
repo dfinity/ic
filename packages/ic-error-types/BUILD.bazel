@@ -1,6 +1,19 @@
 load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 
-package(default_visibility = ["//visibility:public"])
+# This library is private to the execution environment.
+# These crates are considered direct users of the error
+# types and may always depend on this crate directly.
+#
+# If your crate needs these types, consider using the
+# published version on crates.io.
+whitelist = [
+    "//rs/execution_environment:__subpackages__",
+    "//rs/cycles_account_manager:__subpackages__",
+    "//rs/messaging:__subpackages__",
+    "//rs/management_canister_types/fuzz:__subpackages__",
+]
+
+package(default_visibility = whitelist)
 
 DEPENDENCIES = [
     # Keep sorted.
