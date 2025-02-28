@@ -7,6 +7,7 @@ use ic_nervous_system_linear_map::LinearMap;
 use ic_nervous_system_proto::pb::v1::{Decimal as DecimalProto, Percentage};
 use icp_ledger::DEFAULT_TRANSFER_FEE;
 use rust_decimal::Decimal;
+use std::ops::RangeInclusive;
 use std::time::Duration;
 
 impl NetworkEconomics {
@@ -274,14 +275,15 @@ impl VotingPowerEconomics {
         ),
         clear_following_after_seconds: Some(Self::DEFAULT_CLEAR_FOLLOWING_AFTER_SECONDS),
         neuron_minimum_dissolve_delay_to_vote_seconds: Some(
-            Self::DEFAULT_MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS,
+            Self::MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS,
         ),
     };
 
-    // [DEFAULT_START_REDUCING_VOTING_POWER_AFTER_SECONDS] represents the default time threshold (in seconds)
+    // [MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS] represents the default time threshold (in seconds)
     // after which voting power begins to decrease in the network economics configuration. This is a preset
     // value for the system, but it should be updated to align with [MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS].
-    pub const DEFAULT_MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS: u64 = 6 * ONE_MONTH_SECONDS;
+    pub const MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS: u64 =
+        crate::governance::MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS;
     pub const DEFAULT_START_REDUCING_VOTING_POWER_AFTER_SECONDS: u64 = 6 * ONE_MONTH_SECONDS;
     pub const DEFAULT_CLEAR_FOLLOWING_AFTER_SECONDS: u64 = ONE_MONTH_SECONDS;
 
@@ -359,10 +361,10 @@ impl VotingPowerEconomics {
         }
 
         if let Some(delay) = self.neuron_minimum_dissolve_delay_to_vote_seconds {
-            let three_months = 3 * ONE_MONTH_SECONDS;
-            let six_months = 6 * ONE_MONTH_SECONDS;
+            pub const MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS_BOUNDS: RangeInclusive<u64> =
+                (3 * ONE_MONTH_SECONDS)..=(6 * ONE_MONTH_SECONDS);
 
-            if delay < three_months || delay > six_months {
+            if !MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS_BOUNDS.contains(&delay) {
                 let defect = format!(
                     "neuron_minimum_dissolve_delay_to_vote_seconds ({:?}) must be between three and six months.",
                     self.neuron_minimum_dissolve_delay_to_vote_seconds
