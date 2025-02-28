@@ -1809,11 +1809,20 @@ fn test_canister_snapshots() {
         second_snapshot.taken_at_timestamp
     );
 
-    // Finally, we delete the current snapshot which leaves the canister without any other snapshots.
+    // Attempt to take another snapshot without providing a replace_id. The second snapshot
+    // should be still there.
+    pic.stop_canister(canister_id, None).unwrap();
+    let third_snapshot = pic.take_canister_snapshot(canister_id, None, None).unwrap();
+    pic.start_canister(canister_id, None).unwrap();
+    assert_eq!(snapshots[0].id, second_snapshot.id);
+
+    // Finally, we delete the second snapshot which leaves the canister with the third snapshot
+    // only.
     pic.delete_canister_snapshot(canister_id, None, second_snapshot.id)
         .unwrap();
     let snapshots = pic.list_canister_snapshots(canister_id, None).unwrap();
-    assert_eq!(snapshots.len(), 0);
+    assert_eq!(snapshots.len(), 1);
+    assert_eq!(snapshots[0].id, third_snapshot.id);
 }
 
 #[test]
