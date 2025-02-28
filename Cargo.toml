@@ -9,6 +9,7 @@ members = [
     "packages/ic-dummy-getrandom-for-wasm",
     "packages/ic-ed25519",
     "packages/ic-ethereum-types",
+    "packages/ic-error-types",
     "packages/ic-metrics-assert",
     "packages/ic-secp256k1",
     "packages/ic-sha3",
@@ -32,16 +33,16 @@ members = [
     "rs/bitcoin/replica_types",
     "rs/bitcoin/validation",
     "rs/boundary_node/canary_proxy",
-    "rs/boundary_node/anonymization/backend",
-    "rs/boundary_node/anonymization/client",
     "rs/boundary_node/certificate_issuance/certificate_issuer",
     "rs/boundary_node/certificate_issuance/certificate_orchestrator",
     "rs/boundary_node/ic_boundary",
     "rs/boundary_node/rate_limits",
     "rs/boundary_node/rate_limits/api",
     "rs/boundary_node/rate_limits/canister_client",
+    "rs/boundary_node/rate_limits/integration_tests",
     "rs/boundary_node/salt_sharing",
     "rs/boundary_node/salt_sharing/api",
+    "rs/boundary_node/salt_sharing/integration_tests",
     "rs/boundary_node/systemd_journal_gatewayd_shim",
     "rs/canister_client",
     "rs/canister_client/read_state_response_parser",
@@ -201,6 +202,7 @@ members = [
     "rs/nervous_system/runtime",
     "rs/nervous_system/string",
     "rs/nervous_system/temporary",
+    "rs/nervous_system/time_helpers",
     "rs/nervous_system/tools/release-runscript",
     "rs/nervous_system/tools/sync-with-released-nervous-system-wasms",
     "rs/nns/constants",
@@ -422,7 +424,6 @@ members = [
     "rs/types/types_test_utils",
     "rs/types/base_types",
     "rs/types/base_types/protobuf_generator",
-    "rs/types/error_types",
     "rs/types/management_canister_types",
     "rs/types/wasm_types",
     "rs/universal_canister/lib",
@@ -572,7 +573,7 @@ ic-certificate-verification = "3"
 ic-certification = "3"
 ic-http-certification = "3"
 ic-http-gateway = "0.1"
-ic-management-canister-types = "0.1.0"
+ic-management-canister-types = "0.2.0"
 ic-response-verification = "3"
 ic-sha3 = "1.0.0"
 ic-stable-structures = "0.6.5"

@@ -5,7 +5,7 @@ use crate::sign::BasicSignerInternal;
 use crate::sign::ThresholdSigDataStore;
 use crate::{CryptoComponentImpl, LockableThresholdSigDataStore};
 use ic_crypto_internal_bls12_381_vetkd::{
-    DerivationPath, EncryptedKeyCombinationError, EncryptedKeyShare,
+    DerivationDomain, EncryptedKeyCombinationError, EncryptedKeyShare,
     EncryptedKeyShareDeserializationError, G2Affine, NodeIndex, PairingInvalidPoint,
     TransportPublicKey, TransportPublicKeyDeserializationError,
 };
@@ -239,7 +239,7 @@ fn create_encrypted_key_share_internal<S: CspSigner>(
             key_id,
             master_public_key.as_bytes().to_vec(),
             args.encryption_public_key,
-            args.derivation_path,
+            args.derivation_domain,
             args.derivation_id,
         )
         .map_err(vetkd_key_share_creation_error_from_vault_error)?;
@@ -380,9 +380,9 @@ fn combine_encrypted_key_shares_internal<C: ThresholdSignatureCspClient>(
         .iter()
         .map(|(_node_id, node_index, clib_share)| (*node_index, clib_share.clone()))
         .collect();
-    let derivation_path = DerivationPath::new(
-        args.derivation_path.caller.as_slice(),
-        &args.derivation_path.derivation_path,
+    let derivation_domain = DerivationDomain::new(
+        args.derivation_domain.caller.as_slice(),
+        &args.derivation_domain.domain,
     );
 
     match ic_crypto_internal_bls12_381_vetkd::EncryptedKey::combine_all(
@@ -390,7 +390,7 @@ fn combine_encrypted_key_shares_internal<C: ThresholdSignatureCspClient>(
         reconstruction_threshold,
         &master_public_key,
         &transport_public_key,
-        &derivation_path,
+        &derivation_domain,
         &args.derivation_id,
     ) {
         Ok(encrypted_key) => Ok(encrypted_key),
@@ -434,7 +434,7 @@ fn combine_encrypted_key_shares_internal<C: ThresholdSignatureCspClient>(
                 reconstruction_threshold,
                 &master_public_key,
                 &transport_public_key,
-                &derivation_path,
+                &derivation_domain,
                 &args.derivation_id,
             )
             .map_err(|e| {
@@ -501,9 +501,9 @@ fn verify_encrypted_key_internal(
 
     match encrypted_key.is_valid(
         &master_public_key,
-        &DerivationPath::new(
-            args.derivation_path.caller.as_slice(),
-            &args.derivation_path.derivation_path,
+        &DerivationDomain::new(
+            args.derivation_domain.caller.as_slice(),
+            &args.derivation_domain.domain,
         ),
         &args.derivation_id,
         &transport_public_key,

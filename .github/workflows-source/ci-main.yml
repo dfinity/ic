@@ -52,12 +52,6 @@ anchors:
     container:
       <<: *image
     timeout-minutes: 30
-  before-script: &before-script
-    name: Before script
-    id: before-script
-    shell: bash
-    run: |
-      [ -n "${NODE_NAME:-}" ] && echo "Node: $NODE_NAME"
   checkout: &checkout
     name: Checkout
     uses: actions/checkout@v4
@@ -98,7 +92,6 @@ jobs:
       RUN_ON_DIFF_ONLY: ${{ github.event_name == 'pull_request' && !contains(github.event.pull_request.labels.*.name, 'CI_ALL_BAZEL_TARGETS') }}
     steps:
       - <<: *checkout
-      - <<: *before-script
       - name: Set BAZEL_EXTRA_ARGS
         shell: bash
         run: |
@@ -145,6 +138,12 @@ jobs:
           BAZEL_TARGETS: //...
           BUILDEVENT_APIKEY: ${{ secrets.HONEYCOMB_TOKEN }}
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+
+      - name: Upload SHA256SUMS (cache)
+        uses: actions/upload-artifact@v4
+        with:
+          name: shasums-cache
+          path: SHA256SUMS
       - <<: *bazel-bep
 
   bazel-test-macos-intel:
@@ -247,33 +246,32 @@ jobs:
     if: ${{ github.event_name != 'merge_group' }}
     steps:
       - <<: *checkout
-      - <<: *before-script
       - name: Run Build IC
         id: build-ic
         shell: bash
         run: |
-          set -eExuo pipefail
-          [ -n "${NODE_NAME:-}" ] && echo "Run on node: $NODE_NAME" >>$GITHUB_STEP_SUMMARY
+          set -euo pipefail
           REPO_NAME="${GITHUB_REPOSITORY##*/}"
           rm -rf "/cache/job/${CI_JOB_NAME}/${CI_RUN_ID}"
           mkdir -p "/cache/job/${CI_JOB_NAME}/${CI_RUN_ID}/artifacts"
           ln -s "/cache/job/${CI_JOB_NAME}/${CI_RUN_ID}/artifacts" /__w/$REPO_NAME/$REPO_NAME/artifacts
           "$CI_PROJECT_DIR"/ci/scripts/run-build-ic.sh
           rm -rf "/cache/job/${CI_JOB_NAME}/${CI_RUN_ID}"
+
+          # List and aggregate all SHA256SUMS files.
+          find -L bazel-out -name SHA256SUMS | xargs cat | sort | uniq > SHA256SUMS
+
         env:
           BAZEL_COMMAND: build --config=ci
           BAZEL_TARGETS: //...
           MERGE_BASE_SHA: ${{ github.event.pull_request.base.sha }}
           BRANCH_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           RUN_ON_DIFF_ONLY: ${{ github.event_name == 'pull_request' && !contains(github.event.pull_request.labels.*.name, 'CI_ALL_BAZEL_TARGETS') }}
-      - name: Upload build-ic.tar
+      - name: Upload SHA256SUMS (nocache)
         uses: actions/upload-artifact@v4
         with:
-          name: build-ic
-          retention-days: 1
-          if-no-files-found: error
-          path: |
-            build-ic.tar
+          name: shasums-nocache
+          path: SHA256SUMS
 
   build-determinism:
     name: Build Determinism
@@ -282,45 +280,43 @@ jobs:
     # NOTE: this expects "build-ic" to have built the same set of targets
     # as "bazel-test-all"
     needs: [build-ic, bazel-test-all]
-    strategy:
-      matrix:
-        include:
-          - TARGET: "//publish/binaries:upload"
-            PATH0: "release"
-            PATH1: "build-ic/release"
-            SETUPOS_FLAG: "false"
-          - TARGET: "//publish/canisters:upload"
-            PATH0: "canisters"
-            PATH1: "build-ic/canisters"
-            SETUPOS_FLAG: "false"
-          - TARGET: "//ic-os/guestos/envs/prod:upload_disk-img"
-            PATH0: "guest-os/update-img"
-            PATH1: "build-ic/icos/guestos"
-            SETUPOS_FLAG: "false"
-          - TARGET: "//ic-os/hostos/envs/prod:upload_update-img"
-            PATH0: "host-os/update-img"
-            PATH1: "build-ic/icos/hostos"
-            SETUPOS_FLAG: "false"
-          - TARGET: "//ic-os/setupos/envs/prod:upload_disk-img"
-            PATH0: "setup-os/disk-img"
-            PATH1: "build-ic/icos/setupos"
-            SETUPOS_FLAG: "true"
     steps:
       - <<: *checkout
-      - name: Download build-ic.tar [build-ic]
+      - name: Download SHA256SUMS (cache)
         uses: actions/download-artifact@v4
         with:
-          name: build-ic
+          name: shasums-cache
+          path: shasums-cache
+      - name: Download SHA256SUMS (nocache)
+        uses: actions/download-artifact@v4
+        with:
+          name: shasums-nocache
+          path: shasums-nocache
+
       - name: Build Determinism Test
-        id: build-determinism
         run: |
-          tar -xf build-ic.tar # build-determinism.sh expects ./build-ic/
-          "$CI_PROJECT_DIR"/ci/scripts/build-determinism.sh
-        env:
-          TARGET: ${{ matrix.TARGET }}
-          PATH0: ${{ matrix.PATH0 }}
-          PATH1: ${{ matrix.PATH1 }}
-          SETUPOS_FLAG: ${{ matrix.SETUPOS_FLAG }}
+          n_lines_cache=$(cat shasums-cache/SHA256SUMS | wc -l)
+          n_lines_nocache=$(cat shasums-nocache/SHA256SUMS | wc -l)
+          echo "comparing $n_lines_cache (cache) and $n_lines_nocache (nocache) lines"
+
+          # running tests may not pull all targets locally. If that's the case,
+          # there will be 0 lines and nothing to compare.
+          if [ "$n_lines_cache" -eq 0 ] || [ "$n_lines_nocache" -eq 0 ]; then
+            echo "No lines to compare"
+            exit 0
+          fi
+
+          # this checks that all lines in the first argument (subset) are identical
+          # in the second argument (set)
+          difference=$(comm -23 <(sort shasums-nocache/SHA256SUMS | uniq) <(sort shasums-cache/SHA256SUMS | uniq))
+          if [ -n "$difference" ]; then
+            echo "Build Determinism Check Failed! Please contact IDX."
+            echo "The following artifacts were different:"
+            echo "$difference"
+            exit 1
+          fi
+
+          echo "Build Determinism Check Successful"
 
   cargo-clippy-linux:
     name: Cargo Clippy Linux

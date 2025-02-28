@@ -1,5 +1,5 @@
 {
-  "checksum": "75df61e4f04e2dc30f0d5adb752314a2fe27a6db702aca1666ee12e21120d256",
+  "checksum": "1e8bffe24652db11f439e8104fd2a22890550692ac65d2158f6bf76b10cf8a04",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -10999,14 +10999,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "candid_parser 0.1.2": {
+    "candid_parser 0.1.4": {
       "name": "candid_parser",
-      "version": "0.1.2",
+      "version": "0.1.4",
       "package_url": "https://github.com/dfinity/candid",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/candid_parser/0.1.2/download",
-          "sha256": "36381de3ba8a312deb028552c0d63f7c7fe6e204f44bae4c58a3643308cfa9d5"
+          "url": "https://static.crates.io/crates/candid_parser/0.1.4/download",
+          "sha256": "48a3da76f989cd350b7342c64c6c6008341bb6186f6832ef04e56dc50ba0fd76"
         }
       },
       "targets": [
@@ -11051,7 +11051,7 @@
               "target": "candid"
             },
             {
-              "id": "candid_parser 0.1.2",
+              "id": "candid_parser 0.1.4",
               "target": "build_script_build"
             },
             {
@@ -11090,7 +11090,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.1.2"
+        "version": "0.1.4"
       },
       "build_script_attrs": {
         "compile_data_glob": [
@@ -19675,7 +19675,7 @@
               "target": "candid"
             },
             {
-              "id": "candid_parser 0.1.2",
+              "id": "candid_parser 0.1.4",
               "target": "candid_parser"
             },
             {
@@ -19968,7 +19968,7 @@
               "target": "ic_http_gateway"
             },
             {
-              "id": "ic-management-canister-types 0.1.0",
+              "id": "ic-management-canister-types 0.2.0",
               "target": "ic_management_canister_types"
             },
             {
@@ -33389,14 +33389,14 @@
       ],
       "license_file": null
     },
-    "ic-management-canister-types 0.1.0": {
+    "ic-management-canister-types 0.2.0": {
       "name": "ic-management-canister-types",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "package_url": "https://github.com/dfinity/cdk-rs",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/ic-management-canister-types/0.1.0/download",
-          "sha256": "eadff40906491c8c61a3c886cce4ee02f48a4798684d8a10e4a14891a217a284"
+          "url": "https://static.crates.io/crates/ic-management-canister-types/0.2.0/download",
+          "sha256": "4ce1cdd2b6df9eac37cd2dcf5d40cf9427a24aed9b0751cbe5b09ae116eb4de3"
         }
       },
       "targets": [
@@ -33425,6 +33425,10 @@
               "target": "candid"
             },
             {
+              "id": "candid_parser 0.1.4",
+              "target": "candid_parser"
+            },
+            {
               "id": "serde 1.0.217",
               "target": "serde"
             },
@@ -33436,7 +33440,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.1.0"
+        "version": "0.2.0"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -91236,7 +91240,7 @@
     "canbench 0.1.9",
     "canbench-rs 0.1.9",
     "candid 0.10.13",
-    "candid_parser 0.1.2",
+    "candid_parser 0.1.4",
     "cargo_metadata 0.14.2",
     "cc 1.1.37",
     "cddl 0.9.4",
@@ -91312,7 +91316,7 @@
     "ic-certified-map 0.3.4",
     "ic-http-certification 3.0.3",
     "ic-http-gateway 0.2.0",
-    "ic-management-canister-types 0.1.0",
+    "ic-management-canister-types 0.2.0",
     "ic-metrics-encoder 1.1.1",
     "ic-response-verification 3.0.3",
     "ic-sha3 1.0.0",
