@@ -209,7 +209,7 @@ fn encode_init_args(args: ic_ledger_suite_state_machine_tests::InitArgs) -> Ledg
         minting_account: MINTER,
         fee_collector_account: args.fee_collector_account,
         initial_balances: args.initial_balances,
-        transfer_fee: FEE.into(),
+        transfer_fee: args.transfer_fee,
         token_name: TOKEN_NAME.to_string(),
         decimals: Some(DECIMAL_PLACES),
         token_symbol: TOKEN_SYMBOL.to_string(),
@@ -733,6 +733,14 @@ mod metrics {
             ledger_wasm(),
             encode_init_args,
             encode_upgrade_args,
+        );
+    }
+
+    #[test]
+    fn should_compute_and_export_total_volume_metric() {
+        ic_ledger_suite_state_machine_tests::metrics::should_compute_and_export_total_volume_metric(
+            ledger_wasm(),
+            encode_init_args,
         );
     }
 }
