@@ -1063,6 +1063,7 @@ pub struct ReshareChainKeyContext {
     pub nodes: BTreeSet<NodeId>,
     pub registry_version: RegistryVersion,
     pub time: Time,
+    pub target_id: NiDkgTargetId,
 }
 
 impl From<&ReshareChainKeyContext> for pb_metadata::ReshareChainKeyContext {
@@ -1079,6 +1080,7 @@ impl From<&ReshareChainKeyContext> for pb_metadata::ReshareChainKeyContext {
             time: Some(pb_metadata::Time {
                 time_nanos: context.time.as_nanos_since_unix_epoch(),
             }),
+            target_id: context.target_id.to_vec(),
         }
     }
 }
@@ -1103,6 +1105,23 @@ impl TryFrom<(Time, pb_metadata::ReshareChainKeyContext)> for ReshareChainKeyCon
             time: context
                 .time
                 .map_or(time, |t| Time::from_nanos_since_unix_epoch(t.time_nanos)),
+            target_id: {
+                // The target id is empty, if we have a legacy IDkgDealingContext
+                // Since we don't need the target id for Idkg, this is safe
+                // TODO(CRP-2613): remove this case
+                if context.target_id.is_empty() {
+                    NiDkgTargetId::new([0; 32])
+                } else {
+                    match ni_dkg_target_id(context.target_id.as_slice()) {
+                        Ok(target_id) => target_id,
+                        Err(_) => {
+                            return Err(Self::Error::Other(
+                                "target_id is not 32 bytes.".to_string(),
+                            ))
+                        }
+                    }
+                }
+            },
         })
     }
 }

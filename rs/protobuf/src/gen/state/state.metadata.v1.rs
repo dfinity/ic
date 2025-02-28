@@ -204,6 +204,8 @@ pub struct ReshareChainKeyContext {
     pub registry_version: u64,
     #[prost(message, optional, tag = "5")]
     pub time: ::core::option::Option<Time>,
+    #[prost(bytes = "vec", tag = "6")]
+    pub target_id: ::prost::alloc::vec::Vec<u8>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ReshareChainKeyContextTree {
