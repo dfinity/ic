@@ -41,9 +41,6 @@ fn delay_until_next_run(
     Duration::from_secs(next.saturating_sub(now))
 }
 
-const REWARD_DISTRIBUTION_INTERVAL: Duration =
-    Duration::from_secs(REWARD_DISTRIBUTION_PERIOD_SECONDS);
-
 #[async_trait]
 impl RecurringAsyncTask for CalculateDistributableRewardsTask {
     async fn execute(self) -> (Duration, Self) {
@@ -72,7 +69,8 @@ impl RecurringAsyncTask for CalculateDistributableRewardsTask {
     }
 
     fn initial_delay(&self) -> Duration {
-        self.next_reward_task_from_now()
+        // TODO DO NOT MERGE - we need to understand the governance initialization
+        Duration::from_secs(0)
     }
 
     const NAME: &'static str = "RewardDistribution";

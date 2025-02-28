@@ -6758,16 +6758,6 @@ impl Governance {
         self.heap_data.spawning_neurons = Some(false);
     }
 
-    /// Return `true` if rewards should be distributed, `false` otherwise
-    fn should_distribute_rewards(&self) -> bool {
-        let latest_distribution_nominal_end_timestamp_seconds =
-            self.latest_reward_event().day_after_genesis * REWARD_DISTRIBUTION_PERIOD_SECONDS
-                + self.heap_data.genesis_timestamp_seconds;
-
-        self.most_recent_fully_elapsed_reward_round_end_timestamp_seconds()
-            > latest_distribution_nominal_end_timestamp_seconds
-    }
-
     /// Create a reward event.
     ///
     /// This method:
