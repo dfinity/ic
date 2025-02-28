@@ -90,7 +90,7 @@ fn test_network_economics_with_default_values_is_valid() {
 }
 
 #[test]
-fn test_neuron_minimum_dissolve_delay_to_vote_seconds_validation() {
+fn test_neuron_minimum_dissolve_delay_to_vote_seconds_bounds() {
     // Define constants for better readability and maintainability
     const LOWER_BOUND_SECONDS: u64 = MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS / 2; // 3 months
     const UPPER_BOUND_SECONDS: u64 = MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS; // 6 months
