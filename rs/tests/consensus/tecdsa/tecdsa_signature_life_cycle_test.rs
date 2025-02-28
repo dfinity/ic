@@ -177,8 +177,8 @@ fn test(env: TestEnv) {
         );
         let key_ids = all_key_ids
             .iter()
-            .cloned()
             .filter(|id| id.is_idkg_key())
+            .cloned()
             .collect::<Vec<_>>();
 
         let registry_client = RegistryCanister::new_with_query_timeout(
