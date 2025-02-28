@@ -9,7 +9,11 @@ use ic_sys::{PageBytes, PAGE_SIZE};
 use ic_types::{Height, NumBytes, NumOsPages};
 use libc::c_void;
 use nix::sys::mman::{mmap, MapFlags, ProtFlags};
+#[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+use std::ops::{Deref, DerefMut};
 use std::sync::Arc;
+#[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+use std::sync::Mutex;
 
 use crate::{
     new_signal_handler_available, AccessKind, DirtyPageTracking, PageBitmap, SigsegvMemoryTracker,
@@ -739,13 +743,7 @@ mod random_ops {
 
     use super::*;
 
-    use std::{
-        cell::RefCell,
-        collections::BTreeSet,
-        io,
-        mem::{self, MaybeUninit},
-        rc::Rc,
-    };
+    use std::{cell::RefCell, collections::BTreeSet, io, mem, rc::Rc};
 
     use proptest::prelude::*;
 
@@ -777,7 +775,7 @@ mod random_ops {
         final_tracker_checks(handler.take_tracker().unwrap());
     }
 
-    static mut PREV_SIGSEGV: MaybeUninit<libc::sigaction> = MaybeUninit::uninit();
+    static PREV_SIGSEGV: Mutex<libc::sigaction> = Mutex::new(unsafe { std::mem::zeroed() });
 
     struct RegisteredHandler();
 
@@ -798,9 +796,7 @@ mod random_ops {
             if libc::sigaction(
                 libc::SIGSEGV,
                 &handler,
-                // TODO: EXC-1841
-                #[allow(static_mut_refs)]
-                PREV_SIGSEGV.as_mut_ptr(),
+                PREV_SIGSEGV.lock().unwrap().deref_mut(),
             ) != 0
             {
                 panic!(
@@ -818,9 +814,7 @@ mod random_ops {
                 unsafe {
                     if libc::sigaction(
                         libc::SIGSEGV,
-                        // TODO: EXC-1841
-                        #[allow(static_mut_refs)]
-                        PREV_SIGSEGV.as_ptr(),
+                        PREV_SIGSEGV.lock().unwrap().deref(),
                         std::ptr::null_mut(),
                     ) != 0
                     {
@@ -858,9 +852,7 @@ mod random_ops {
 
             unsafe {
                 if !handled {
-                    // TODO: EXC-1841
-                    #[allow(static_mut_refs)]
-                    let previous = *PREV_SIGSEGV.as_ptr();
+                    let previous = *PREV_SIGSEGV.lock().unwrap().deref();
                     if previous.sa_flags & libc::SA_SIGINFO != 0 {
                         mem::transmute::<
                             usize,
