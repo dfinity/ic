@@ -61,9 +61,6 @@ pub(crate) const DEFAULT_MAX_SANDBOXES_RSS: NumBytes = NumBytes::new(50 * 1024 *
 /// This default is 1 GiB.
 pub(crate) const DEFAULT_MAX_DIRTY_PAGES_WITHOUT_OPTIMIZATION: usize = (GiB as usize) / PAGE_SIZE;
 
-/// Scheduling overhead for copying dirty pages, in instructions.
-pub(crate) const DIRTY_PAGE_COPY_OVERHEAD: NumInstructions = NumInstructions::new(3_000);
-
 /// The overhead for dirty pages in Wasm64.
 pub const WASM64_DIRTY_PAGE_OVERHEAD_MULTIPLIER: u64 = 4;
 
@@ -275,9 +272,6 @@ pub struct Config {
     /// page copying by triggering a new execution slice for copying and using prefaulting.
     pub max_dirty_pages_without_optimization: usize,
 
-    /// The dirty page copying overhead, in instructions.
-    pub dirty_page_copy_overhead: NumInstructions,
-
     /// The dirty page overhead factor for Wasm64.
     pub wasm64_dirty_page_overhead_multiplier: u64,
 
@@ -325,7 +319,6 @@ impl Config {
             dirty_page_overhead: NumInstructions::new(0),
             trace_execution: FlagStatus::Disabled,
             max_dirty_pages_without_optimization: DEFAULT_MAX_DIRTY_PAGES_WITHOUT_OPTIMIZATION,
-            dirty_page_copy_overhead: DIRTY_PAGE_COPY_OVERHEAD,
             wasm_max_size: WASM_MAX_SIZE,
             max_wasm_memory_size: NumBytes::new(MAX_WASM_MEMORY_IN_BYTES),
             max_wasm64_memory_size: NumBytes::new(MAX_WASM64_MEMORY_IN_BYTES),
