@@ -189,7 +189,7 @@ pub fn should_compute_and_export_total_volume_metric<T>(
     let denominator = 10f64.powf(DECIMAL_PLACES as f64);
 
     let mut increase_expected_total_volume_and_assert = |amount: u64| {
-        expected_total = expected_total + (amount as f64 / denominator);
+        expected_total += amount as f64 / denominator;
         assert_eq!(
             format!("{:.0}", expected_total),
             format!(
