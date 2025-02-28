@@ -3,13 +3,14 @@ use canister_test::{Canister, Cycles};
 use ic_agent::AgentError;
 use ic_base_types::{NodeId, SubnetId};
 use ic_canister_client::Sender;
-use ic_config::subnet_config::{ECDSA_SIGNATURE_FEE, SCHNORR_SIGNATURE_FEE};
+use ic_config::subnet_config::{ECDSA_SIGNATURE_FEE, SCHNORR_SIGNATURE_FEE, VETKD_FEE};
 use ic_limits::SMALL_APP_SUBNET_MAX_SIZE;
 use ic_management_canister_types_private::{
     DerivationPath, ECDSAPublicKeyArgs, ECDSAPublicKeyResponse, EcdsaCurve, EcdsaKeyId,
     MasterPublicKeyId, Payload, SchnorrAlgorithm, SchnorrKeyId, SchnorrPublicKeyArgs,
     SchnorrPublicKeyResponse, SignWithECDSAArgs, SignWithECDSAReply, SignWithSchnorrArgs,
-    SignWithSchnorrReply, VetKdKeyId, VetKdPublicKeyArgs, VetKdPublicKeyResult,
+    SignWithSchnorrReply, VetKdCurve, VetKdDeriveEncryptedKeyArgs, VetKdDeriveEncryptedKeyResult,
+    VetKdKeyId, VetKdPublicKeyArgs, VetKdPublicKeyResult,
 };
 use ic_message::ForwardParams;
 use ic_nervous_system_common_test_keys::{TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_KEYPAIR};
@@ -78,11 +79,19 @@ pub fn make_bip340_key_id() -> MasterPublicKeyId {
     })
 }
 
+pub fn make_vetkd_key_id() -> MasterPublicKeyId {
+    MasterPublicKeyId::VetKd(VetKdKeyId {
+        curve: VetKdCurve::Bls12_381_G2,
+        name: "some_vetkd_key".to_string(),
+    })
+}
+
 pub fn make_key_ids_for_all_schemes() -> Vec<MasterPublicKeyId> {
     vec![
         make_ecdsa_key_id(),
         make_bip340_key_id(),
         make_eddsa_key_id(),
+        make_vetkd_key_id(),
     ]
 }
 
@@ -556,7 +565,9 @@ pub async fn get_signature_with_logger(
         MasterPublicKeyId::Schnorr(key_id) => {
             get_schnorr_signature_with_logger(message, cycles, key_id, msg_can, logger).await
         }
-        MasterPublicKeyId::VetKd(_) => panic!("not applicable to vetKD"),
+        MasterPublicKeyId::VetKd(key_id) => {
+            get_vetkd_with_logger(message, cycles, key_id, msg_can, logger).await
+        }
     }
 }
 
@@ -669,6 +680,63 @@ pub async fn get_schnorr_signature_with_logger(
     info!(logger, "sign_with_schnorr returns {:?}", signature);
 
     Ok(signature)
+}
+
+pub async fn get_vetkd_with_logger(
+    input: Vec<u8>,
+    cycles: Cycles,
+    key_id: &VetKdKeyId,
+    msg_can: &MessageCanister<'_>,
+    logger: &Logger,
+) -> Result<Vec<u8>, AgentError> {
+    let vetkd_request = VetKdDeriveEncryptedKeyArgs {
+        derivation_domain: input,
+        derivation_id: vec![],
+        key_id: key_id.clone(),
+        encryption_public_key: [1; 48],
+    };
+    info!(
+        logger,
+        "Sending a {} request of size: {}",
+        key_id,
+        vetkd_request.derivation_domain.len(),
+    );
+
+    let mut count = 0;
+    let result = loop {
+        let res = msg_can
+            .forward_with_cycles_to(
+                &Principal::management_canister(),
+                "vetkd_derive_encrypted_key",
+                Encode!(&vetkd_request).unwrap(),
+                cycles,
+            )
+            .await;
+        match res {
+            Ok(reply) => {
+                let result = VetKdDeriveEncryptedKeyResult::decode(&reply)
+                    .expect("failed to decode VetKdDeriveEncryptedKeyResult")
+                    .encrypted_key;
+                break result;
+            }
+            Err(err) => {
+                count += 1;
+                if count < 5 {
+                    debug!(
+                        logger,
+                        "vetkd_derive_encrypted_key returns `{}`. Trying again in 2 seconds...",
+                        err
+                    );
+                    tokio::time::sleep(Duration::from_secs(2)).await;
+                } else {
+                    return Err(err);
+                }
+            }
+        }
+    };
+    info!(logger, "vetkd_derive_encrypted_key returns {:?}", result);
+
+    Ok(result)
 }
 
 pub async fn enable_chain_key_signing(
@@ -850,6 +918,10 @@ pub fn verify_ecdsa_signature(pk: &[u8], sig: &[u8], msg: &[u8]) -> bool {
     pk.verify_prehash(msg, &signature).is_ok()
 }
 
+pub fn verify_vetkd(_pk: &[u8], _sig: &[u8], _msg: &[u8]) -> bool {
+    true
+}
+
 pub fn verify_signature(key_id: &MasterPublicKeyId, msg: &[u8], pk: &[u8], sig: &[u8]) {
     let res = match key_id {
         MasterPublicKeyId::Ecdsa(key_id) => match key_id.curve {
@@ -859,7 +931,9 @@ pub fn verify_signature(key_id: &MasterPublicKeyId, msg: &[u8], pk: &[u8], sig: 
             SchnorrAlgorithm::Bip340Secp256k1 => verify_bip340_signature(pk, sig, msg),
             SchnorrAlgorithm::Ed25519 => verify_ed25519_signature(pk, sig, msg),
         },
-        MasterPublicKeyId::VetKd(_) => panic!("not applicable to vetKD"),
+        MasterPublicKeyId::VetKd(key_id) => match key_id.curve {
+            VetKdCurve::Bls12_381_G2 => verify_vetkd(pk, sig, msg),
+        },
     };
     assert!(res);
 }
@@ -868,6 +942,7 @@ pub fn verify_signature(key_id: &MasterPublicKeyId, msg: &[u8], pk: &[u8], sig: 
 pub enum SignWithChainKeyReply {
     Ecdsa(SignWithECDSAReply),
     Schnorr(SignWithSchnorrReply),
+    VetKd(VetKdDeriveEncryptedKeyResult),
 }
 
 #[derive(Clone)]
@@ -888,7 +963,7 @@ impl ChainSignatureRequest {
             MasterPublicKeyId::Schnorr(schnorr_key_id) => {
                 Self::schnorr_params(schnorr_key_id, schnorr_message_size)
             }
-            MasterPublicKeyId::VetKd(_) => panic!("not applicable to vetKD"),
+            MasterPublicKeyId::VetKd(vetkd_key_id) => Self::vetkd_params(vetkd_key_id),
         };
         let payload = Encode!(&params).unwrap();
 
@@ -927,6 +1002,21 @@ impl ChainSignatureRequest {
             payload: Encode!(&signature_request).unwrap(),
         }
     }
+
+    fn vetkd_params(vetkd_key_id: VetKdKeyId) -> ForwardParams {
+        let vetkd_request = VetKdDeriveEncryptedKeyArgs {
+            derivation_domain: vec![],
+            derivation_id: vec![],
+            key_id: vetkd_key_id,
+            encryption_public_key: [1; 48],
+        };
+        ForwardParams {
+            receiver: Principal::management_canister(),
+            method: "vetkd_derive_encrypted_key".to_string(),
+            cycles: VETKD_FEE.get() * 2,
+            payload: Encode!(&vetkd_request).unwrap(),
+        }
+    }
 }
 
 impl Request<SignWithChainKeyReply> for ChainSignatureRequest {
@@ -954,7 +1044,9 @@ impl Request<SignWithChainKeyReply> for ChainSignatureRequest {
             MasterPublicKeyId::Schnorr(_) => {
                 SignWithChainKeyReply::Schnorr(SignWithSchnorrReply::decode(raw_response)?)
             }
-            MasterPublicKeyId::VetKd(_) => panic!("not applicable to vetKD"),
+            MasterPublicKeyId::VetKd(_) => {
+                SignWithChainKeyReply::VetKd(VetKdDeriveEncryptedKeyResult::decode(raw_response)?)
+            }
         })
     }
 }
