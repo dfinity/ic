@@ -1814,6 +1814,7 @@ fn test_canister_snapshots() {
     pic.stop_canister(canister_id, None).unwrap();
     let third_snapshot = pic.take_canister_snapshot(canister_id, None, None).unwrap();
     pic.start_canister(canister_id, None).unwrap();
+    let snapshots = pic.list_canister_snapshots(canister_id, None).unwrap();
     assert_eq!(snapshots[0].id, second_snapshot.id);
 
     // Finally, we delete the second snapshot which leaves the canister with the third snapshot
