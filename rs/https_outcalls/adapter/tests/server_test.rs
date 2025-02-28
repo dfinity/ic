@@ -14,23 +14,36 @@ mod test {
     use ic_metrics::MetricsRegistry;
     use once_cell::sync::OnceCell;
     use rstest::rstest;
-    use rustls::{pki_types::Ipv6Addr, ServerConfig};
-    use std::{collections::HashSet, convert::TryFrom, env, io::Write, path::Path, sync::Arc};
+    use rustls::ServerConfig;
+    use std::{convert::TryFrom, env, io::Write, path::Path, sync::Arc};
     use tempfile::TempDir;
-    use tokio::{io::AsyncWriteExt, net::{TcpListener, TcpSocket, TcpStream, UnixStream}};
+    use tokio::net::{TcpSocket, UnixStream};
     use tokio_rustls::TlsAcceptor;
     use tonic::transport::{Channel, Endpoint, Uri};
     use tower::service_fn;
     use uuid::Uuid;
     use warp::{
-        filters::BoxedFilter, http::{header::HeaderValue, Response, StatusCode}, reject::Rejection, Filter
+        filters::BoxedFilter,
+        http::{header::HeaderValue, Response, StatusCode},
+        Filter,
     };
-    use socks5_impl::protocol::{handshake, Address, AsyncStreamOperation, AuthMethod, Command, Reply, Request as Socks5Request, Response as Socks5Response};
-    use std::io;
-    use std::net::SocketAddr;
 
     #[cfg(feature = "http")]
+    use socks5_impl::protocol::{
+        handshake, Address, AsyncStreamOperation, AuthMethod, Reply, Request as Socks5Request,
+        Response as Socks5Response,
+    };
+    #[cfg(feature = "http")]
+    use std::io;
+    #[cfg(feature = "http")]
     use std::net::IpAddr;
+    #[cfg(feature = "http")]
+    use std::net::SocketAddr;
+    #[cfg(feature = "http")]
+    use tokio::{
+        io::AsyncWriteExt,
+        net::{TcpListener, TcpStream},
+    };
 
     // Selfsigned localhost cert
     const CERT: &str = "
@@ -131,15 +144,21 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
         cert_dir.path().join("key.pem")
     }
 
-    /// Spawns a minimal SOCKS5 server on `bind_addr` in the background (via `tokio::spawn`).
-    /// Returns the actual local address (which includes the ephemeral port) that the server
-    /// ended up binding to.  You can then pass `socks5://127.0.0.1:<port>` to your code.
+    /// Spawns a minimal forwarding SOCKS5 server on `bind_addr` in the background.
+    /// All requests will be forwarded to `url`, regardless of the destination in the request.
+    /// Returns the actual local address that the server ended up binding to.
+    /// This is not an actual proxy because setting up an IT environment where direct requests
+    /// fail, but the ones through the proxy succeed is infeasible.
+    /// The general testing setup is to make direct request to an unreachable URL, which fail,
+    /// and that makes the adapter try the socks proxy, which always connects to the "good" URL.
     #[cfg(feature = "http")]
-    pub async fn spawn_socks5_server(bind_addr: &str, url: String) -> io::Result<SocketAddr> {
+    pub async fn spawn_forward_socks5_server(
+        bind_addr: &str,
+        url: String,
+    ) -> io::Result<SocketAddr> {
         let listener = TcpListener::bind(bind_addr).await?;
         let local_addr = listener.local_addr()?;
 
-        // Spawn the server in the background
         tokio::spawn(async move {
             loop {
                 match listener.accept().await {
@@ -165,8 +184,7 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
     #[cfg(feature = "http")]
     pub async fn handle_client(stream: TcpStream, url: String) -> io::Result<()> {
         // 1) Perform SOCKS5 handshake
-        let mut stream = stream; // We'll do the handshake before splitting.
-        println!("debuggg 10");
+        let mut stream = stream;
         let handshake_req = handshake::Request::retrieve_from_async_stream(&mut stream).await?;
         if handshake_req.evaluate_method(AuthMethod::NoAuth) {
             // Accept "no auth"
@@ -184,9 +202,9 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
                 "No supported authentication method",
             ));
         }
-        println!("debuggg 11");
 
-        // 2) Read the SOCKS request (command + target)
+        // 2) Read the SOCKS request
+        // Even though we don't use it, this is necessary to unstuck the client.
         let _req = match Socks5Request::retrieve_from_async_stream(&mut stream).await {
             Ok(req) => req,
             Err(e) => {
@@ -198,21 +216,16 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
             }
         };
 
-        println!("debuggg 14 {} {}", _req.address, url);
-
+        // Connect to the target server (constant  url, not the one from the request)
         let remote_stream = TcpStream::connect(url.clone()).await?;
-        
-        println!("debuggg 15");
 
-        // 6) Send "Succeeded" to the client
+        // 3) Send "Succeeded" to the client
         let local_sock = remote_stream.local_addr()?;
         Socks5Response::new(Reply::Succeeded, Address::SocketAddress(local_sock))
             .write_to_async_stream(&mut stream)
             .await?;
-        println!("debuggg 16");
-        // 7) Split both streams with `into_split()`, not `split()`.
-        //    `into_split()` consumes the `TcpStream` and returns owned halves.
-        //    Owned halves implement `Send + 'static`, so they can be moved into spawn tasks.
+
+        // Perform "proxying":
         let (client_read, client_write) = stream.into_split();
         let (remote_read, remote_write) = remote_stream.into_split();
 
@@ -223,17 +236,13 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
             let _ = tokio::io::copy(&mut client_read, &mut remote_write).await;
             let _ = remote_write.shutdown().await;
         });
-        println!("debuggg 17");
 
         // Forward remote -> client in the current task
         {
             let mut remote_read = remote_read;
             let mut client_write = client_write;
-            println!("debuggg 18");
             let _ = tokio::io::copy(&mut remote_read, &mut client_write).await;
-            println!("debuggg 19");
             let _ = client_write.shutdown().await;
-            println!("debuggg 20");
         }
 
         Ok(())
@@ -260,12 +269,69 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
 
     #[cfg(feature = "http")]
     #[tokio::test]
-    async fn test_canister_http_socks_server() {
-        //TODO(mihailjianu): explain why we need http and not https. 
+    async fn test_canister_http_api_bn_socks_server() {
+        // This test sets up an http server at 127.0.0.1, and a socks server that forwards all requests to the http server.
+        // The direct request is made to an unreachable URL and thus fallsback to using the sock proxy.
+        // This tests the socks proxy passed to the adapter via the request.
         let url = start_http_server("127.0.0.1".parse().unwrap());
-        println!("debuggg url {}", url);
 
-        let socks_addr = spawn_socks5_server("127.0.0.1:0", url.clone())
+        // ipv6 socks proxy.
+        let socks_addr = spawn_forward_socks5_server("[::1]:0", url.clone())
+            .await
+            .expect("Failed to bind socks");
+
+        let path = "/tmp/canister-http-test-".to_string() + &Uuid::new_v4().to_string();
+        // Suppose the server does not have a socks client set.
+        let server_config = Config {
+            incoming_source: IncomingSource::Path(path.into()),
+            ..Default::default()
+        };
+        let mut client = spawn_grpc_server(server_config);
+        let unreachable_url = "10.255.255.1:9999";
+
+        // Make a request without socks proxy.
+        let request = tonic::Request::new(HttpsOutcallRequest {
+            url: format!("http://{}/get", &unreachable_url),
+            headers: Vec::new(),
+            method: HttpMethod::Get as i32,
+            body: "hello".to_string().as_bytes().to_vec(),
+            max_response_size_bytes: 512,
+            socks_proxy_allowed: true,
+            ..Default::default()
+        });
+        // Everything should fail.
+        let response = client.https_outcall(request).await;
+        assert!(response.is_err());
+
+        // Make a request with socks proxy/
+        let request = tonic::Request::new(HttpsOutcallRequest {
+            url: format!("http://{}/get", &unreachable_url),
+            headers: Vec::new(),
+            method: HttpMethod::Get as i32,
+            body: "hello".to_string().as_bytes().to_vec(),
+            max_response_size_bytes: 512,
+            socks_proxy_allowed: true,
+            // Suppose there are two socks proxies passed, one broken, and one working.
+            socks_proxy_addrs: vec![
+                format!("socks5://{}", unreachable_url),
+                format!("socks5://[{0}]:{1}", socks_addr.ip(), socks_addr.port()),
+            ],
+        });
+        // The requests succeeds.
+        let response = client.https_outcall(request).await;
+        let http_response = response.unwrap().into_inner();
+        assert_eq!(http_response.status, StatusCode::OK.as_u16() as u32);
+    }
+
+    #[cfg(feature = "http")]
+    #[tokio::test]
+    async fn test_canister_http_socks_server() {
+        // This test sets up an http server at 127.0.0.1, and a socks server that forwards all requests to the http server.
+        // The direct request is made to an unreachable URL and thus fallsback to using the sock proxy.
+        // This tests the socks proxy passed to the adapter via the config.
+        let url = start_http_server("127.0.0.1".parse().unwrap());
+
+        let socks_addr = spawn_forward_socks5_server("127.0.0.1:0", url.clone())
             .await
             .expect("Failed to bind socks");
 
@@ -273,7 +339,7 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
         let server_config = Config {
             incoming_source: IncomingSource::Path(path.into()),
             socks_proxy: format!("socks5://{}", socks_addr),
-            //TODO(mihailjianu): start the socks server, and add it here. 
+            //TODO(mihailjianu): start the socks server, and add it here.
             ..Default::default()
         };
         let mut client = spawn_grpc_server(server_config);
@@ -292,7 +358,7 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
         let response = client.https_outcall(application_subnet_request).await;
         assert!(response.is_err());
 
-        // Make direct request to unreachable url. Need to rely on the socks proxy to make the correct request. 
+        // Make direct request to unreachable url. Need to rely on the socks proxy to make the correct request.
         // Socks proxy is enabled
         let system_subnet_request = tonic::Request::new(HttpsOutcallRequest {
             url: format!("http://{}/get", &unreachable_url),
@@ -306,7 +372,7 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
         let response = client.https_outcall(system_subnet_request).await;
         let http_response = response.unwrap().into_inner();
         assert_eq!(http_response.status, StatusCode::OK.as_u16() as u32);
-        //TODO(mihailjianu): also add IT for the new socks proxy. 
+        //TODO(mihailjianu): also add IT for the new socks proxy.
     }
 
     #[tokio::test]
@@ -318,27 +384,6 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
         };
         let url = start_server(CERT_INIT.get_or_init(generate_certs));
         let mut client = spawn_grpc_server(server_config);
-
-        let ips: Vec<SocketAddr> = tokio::net::lookup_host(url.clone()).await.unwrap().collect();
-        let mut ipv4_addr = None;
-        let mut ipv6_addr = None;
-        for ip in ips {
-            println!("debuggg ip {}", ip);
-            match ip {
-                SocketAddr::V4(ipv4) => {
-                    ipv4_addr = Some(ipv4.clone());
-                }
-                SocketAddr::V6(ipv6) => {
-                    ipv6_addr = Some(ipv6.clone());
-                }
-            }
-        }
-        if ipv6_addr.is_none() {
-            panic!("No ipv6 address found");
-        }
-
-        let ipv6_addr = ipv6_addr.unwrap();
-        let ipv4_addr = ipv4_addr.unwrap();
 
         let request = tonic::Request::new(HttpsOutcallRequest {
             url: format!("https://{}/get", url),

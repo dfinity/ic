@@ -249,6 +249,10 @@ impl CanisterHttp {
                         socks_proxy_addr,
                         socks_err
                     );
+                    println!(
+                        "Failed to connect through SOCKS with address {}: {:?} <> {:?}",
+                        socks_proxy_addr, socks_err, request
+                    );
                     last_error = Some(socks_err);
                 }
             }
@@ -268,12 +272,9 @@ impl HttpsOutcallsService for CanisterHttp {
         &self,
         request: Request<HttpsOutcallRequest>,
     ) -> Result<Response<HttpsOutcallResponse>, Status> {
-        println!("debuggg -1");
         self.metrics.requests.inc();
 
         let req = request.into_inner();
-
-        println!("debuggg url is {}", req.url);
 
         let uri = req.url.parse::<Uri>().map_err(|err| {
             debug!(self.logger, "Failed to parse URL: {}", err);
@@ -343,7 +344,6 @@ impl HttpsOutcallsService for CanisterHttp {
             .iter()
             .map(|(name, value)| name.as_str().len() + value.len())
             .sum::<usize>();
-        
 
         // If we are allowed to use socks and condition described in `should_use_socks_proxy` hold,
         // we do the requests through the socks proxy. If not we use the default IPv6 route.
@@ -354,7 +354,6 @@ impl HttpsOutcallsService for CanisterHttp {
             *http_req.method_mut() = method;
             *http_req.uri_mut() = uri.clone();
             let http_req_clone = http_req.clone();
-            println!("debuggg 0");
 
             match self.client.request(http_req).await {
                 // If we fail we try with the socks proxy. For destinations that are ipv4 only this should
@@ -362,27 +361,43 @@ impl HttpsOutcallsService for CanisterHttp {
                 Err(direct_err) => {
                     self.metrics.requests_socks.inc();
 
-                    let result = self.socks_client.request(http_req_clone.clone()).await.map_err(|e| {
-                        format!("Request failed direct connect and connect through socks {:?}", e)
-                    });
+                    let mut result = self
+                        .socks_client
+                        .request(http_req_clone.clone())
+                        .await
+                        .map_err(|socks_err| {
+                            format!(
+                                "Request failed direct connect {:?} and connect through socks {:?}",
+                                direct_err, socks_err
+                            )
+                        });
 
                     //TODO(SOCKS_PROXY_DL): Remove the compare_results once we are confident in the SOCKS proxy implementation.
                     if !req.socks_proxy_addrs.is_empty() {
-                        let dl_result = self.do_https_outcall_socks_proxy(req.socks_proxy_addrs, http_req_clone).await;
+                        let dl_result = self
+                            .do_https_outcall_socks_proxy(req.socks_proxy_addrs, http_req_clone)
+                            .await;
 
                         self.compare_results(&result, &dl_result);
+                        if result.is_err() && dl_result.is_ok() {
+                            // Id dl found something, return that.
+                            result = dl_result;
+                        }
                     }
 
                     result
                 }
-                Ok(resp)=> Ok(resp),
+                Ok(resp) => Ok(resp),
             }
         } else {
             let mut http_req = hyper::Request::new(Full::new(Bytes::from(req.body)));
             *http_req.headers_mut() = headers;
             *http_req.method_mut() = method;
             *http_req.uri_mut() = uri.clone();
-            self.client.request(http_req).await.map_err(|e| format!("Failed to directly connect: {:?}", e))
+            self.client
+                .request(http_req)
+                .await
+                .map_err(|e| format!("Failed to directly connect: {:?}", e))
         }
         .map_err(|err| {
             debug!(self.logger, "Failed to connect: {}", err);
