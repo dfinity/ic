@@ -54,7 +54,7 @@ use tokio::{
     sync::mpsc::Receiver,
     sync::{mpsc, Mutex, RwLock},
     task::{spawn, spawn_blocking, JoinHandle, JoinSet},
-    time::{self, sleep, Instant},
+    time::{self, sleep},
 };
 use tower::ServiceExt;
 use tower_http::cors::{Any, CorsLayer};
@@ -1019,7 +1019,6 @@ impl ApiState {
                 debug!("Starting auto progress for instance {}.", instance_id);
                 let mut now = SystemTime::now();
                 loop {
-                    let start = Instant::now();
                     let old = std::mem::replace(&mut now, SystemTime::now());
                     let op = AdvanceTimeAndTick(now.duration_since(old).unwrap_or_default());
                     if Self::execute_operation(
@@ -1047,12 +1046,8 @@ impl ApiState {
                     {
                         break;
                     }
-                    let duration = start.elapsed();
-                    sleep(std::cmp::max(
-                        duration,
-                        std::cmp::max(artificial_delay, MIN_OPERATION_DELAY),
-                    ))
-                    .await;
+                    let sleep_duration = std::cmp::max(artificial_delay, MIN_OPERATION_DELAY);
+                    sleep(sleep_duration).await;
                     if received_stop_signal(&mut rx) {
                         break;
                     }
