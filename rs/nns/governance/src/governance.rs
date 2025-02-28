@@ -6393,7 +6393,6 @@ impl Governance {
     }
 
     pub fn get_ledger(&self) -> Arc<dyn IcpLedger + Send + Sync> {
-        //  async fn total_supply(&self) -> Result<Tokens, NervousSystemError>;
         self.ledger.clone()
     }
     /// Triggers a reward distribution event if enough time has passed since
@@ -6420,7 +6419,7 @@ impl Governance {
                     LOG_PREFIX, e,
                 ),
             }
-        // Second try to distribute voting rewards (once per day).
+            // Second try to compute cached metrics (once per day).
         } else if self.should_compute_cached_metrics() {
             match self.ledger.total_supply().await {
                 Ok(supply) => {

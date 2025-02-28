@@ -116,7 +116,6 @@
 use async_trait::async_trait;
 #[cfg(not(target_arch = "wasm32"))]
 use futures::FutureExt;
-use ic_cdk::spawn;
 use std::future::Future;
 use std::time::Duration;
 
