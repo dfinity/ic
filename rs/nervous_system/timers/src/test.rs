@@ -1,4 +1,4 @@
-use ic_cdk_timers::TimerId;
+pub use ic_cdk_timers::TimerId;
 use slotmap::SlotMap;
 use std::cell::RefCell;
 use std::collections::BTreeMap;
