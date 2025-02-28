@@ -37,7 +37,7 @@ fn next_reward_task_from_now(
         + genesis_timestamp_seconds;
 
     let next =
-        latest_distribution_nominal_end_timestamp_seconds + REWARD_DISTRIBUTION_PERIOD_SECONDS + 1;
+        latest_distribution_nominal_end_timestamp_seconds + REWARD_DISTRIBUTION_PERIOD_SECONDS;
 
     Duration::from_secs(next.saturating_sub(now) + 1)
 }

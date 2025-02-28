@@ -3532,13 +3532,17 @@ async fn test_reward_event_proposals_last_longer_than_reward_period() {
     // Proposals last longer than the reward period
     let wait_for_quiet_threshold_seconds = 5 * REWARD_DISTRIBUTION_PERIOD_SECONDS;
     fixture.wait_for_quiet_threshold_seconds = wait_for_quiet_threshold_seconds;
-    let mut gov = Governance::new(
+    let gov = Governance::new(
         fixture,
         fake_driver.get_fake_env(),
         fake_driver.get_fake_ledger(),
         fake_driver.get_fake_cmc(),
         fake_driver.get_fake_randomness_generator(),
     );
+    set_governance_for_tests(gov);
+    let gov = governance_mut();
+    schedule_tasks();
+
     let expected_initial_event = RewardEvent {
         day_after_genesis: 0,
         actual_timestamp_seconds: genesis_timestamp_seconds,
@@ -3551,12 +3555,14 @@ async fn test_reward_event_proposals_last_longer_than_reward_period() {
 
     assert_eq!(*gov.latest_reward_event(), expected_initial_event);
     fake_driver.advance_time_by(REWARD_DISTRIBUTION_PERIOD_SECONDS / 2);
+    run_pending_timers();
     gov.run_periodic_tasks().now_or_never();
 
     // Too early: nothing should have changed
     assert_eq!(*gov.latest_reward_event(), expected_initial_event);
     fake_driver.advance_time_by(REWARD_DISTRIBUTION_PERIOD_SECONDS);
-    // We are now 1.5 reward periods (1.5 days) past genesis.
+    // We are now 1.5 reward periods (1.5 days) past genesis.1
+    run_pending_timers();
     gov.run_periodic_tasks().now_or_never();
     // A reward event should have happened, albeit an empty one, i.e.,
     // given that no voting took place, no rewards were distributed.
@@ -3599,6 +3605,7 @@ async fn test_reward_event_proposals_last_longer_than_reward_period() {
     // total_available_e8s_equivalent is equal to 199 maturity.
     fake_driver.advance_time_by(2 * REWARD_DISTRIBUTION_PERIOD_SECONDS);
     // We are now at +3.5 reward periods.
+    run_pending_timers();
     gov.run_periodic_tasks().now_or_never();
     {
         let fully_elapsed_reward_rounds = 3;
@@ -3624,6 +3631,7 @@ async fn test_reward_event_proposals_last_longer_than_reward_period() {
     fake_driver.advance_time_by(3 * REWARD_DISTRIBUTION_PERIOD_SECONDS - 5);
     // We are now at +6.5 - epsilon reward periods. Notice that at 6.5 reward
     // periods, the proposal become rewardable.
+    run_pending_timers();
     gov.run_periodic_tasks().now_or_never();
     // This should have triggered an empty reward event
     assert_eq!(gov.latest_reward_event().day_after_genesis, 6);
@@ -3633,10 +3641,12 @@ async fn test_reward_event_proposals_last_longer_than_reward_period() {
 
     // This should generate a RewardEvent, because we now have a rewardable
     // proposal (i.e. the proposal has reward_status ReadyToSettle).
+    run_pending_timers();
     gov.run_periodic_tasks().now_or_never();
     assert_eq!(gov.latest_reward_event().day_after_genesis, 6);
     // let's advance far enough to trigger a reward event
     fake_driver.advance_time_by(REWARD_DISTRIBUTION_PERIOD_SECONDS);
+    run_pending_timers();
     gov.run_periodic_tasks().now_or_never();
 
     // Inspect latest_reward_event.
@@ -3695,6 +3705,7 @@ async fn test_reward_event_proposals_last_longer_than_reward_period() {
 
     // Now let's advance again -- a new empty reward event should happen
     fake_driver.advance_time_by(REWARD_DISTRIBUTION_PERIOD_SECONDS);
+    run_pending_timers();
     gov.run_periodic_tasks().now_or_never();
     assert_eq!(
         *gov.latest_reward_event(),
@@ -3737,14 +3748,18 @@ async fn test_restricted_proposals_are_not_eligible_for_voting_rewards() {
     fixture.wait_for_quiet_threshold_seconds = wait_for_quiet_threshold_seconds;
     fixture.short_voting_period_seconds = wait_for_quiet_threshold_seconds;
     fixture.neuron_management_voting_period_seconds = Some(wait_for_quiet_threshold_seconds);
-    let mut gov = Governance::new(
+    let gov = Governance::new(
         fixture,
         fake_driver.get_fake_env(),
         fake_driver.get_fake_ledger(),
         fake_driver.get_fake_cmc(),
         fake_driver.get_fake_randomness_generator(),
     );
-    gov.run_periodic_tasks().now_or_never();
+    set_governance_for_tests(gov);
+    let gov = governance_mut();
+    schedule_tasks();
+
+    run_pending_timers();
     // Initial reward event
     assert_eq!(
         *gov.latest_reward_event(),
@@ -3794,8 +3809,9 @@ async fn test_restricted_proposals_are_not_eligible_for_voting_rewards() {
     // for the reward event.
     // total_available_e8s_equivalent is equal to reward function * total supply / 365.25,
     // which is 10% * 1234567890/365.25 = 338006
-    fake_driver.advance_time_by(REWARD_DISTRIBUTION_PERIOD_SECONDS);
-    gov.run_periodic_tasks().now_or_never();
+    fake_driver.advance_time_by(REWARD_DISTRIBUTION_PERIOD_SECONDS + 1);
+    run_pending_timers();
+
     assert_eq!(
         *gov.latest_reward_event(),
         RewardEvent {
@@ -3811,6 +3827,7 @@ async fn test_restricted_proposals_are_not_eligible_for_voting_rewards() {
 
     {
         gov.run_periodic_tasks().now_or_never();
+        run_pending_timers();
         let info = gov.get_proposal_data(ProposalId { id: 1 }).unwrap();
         assert_eq!(info.status(), ProposalStatus::Rejected);
         assert_eq!(
@@ -3890,7 +3907,6 @@ fn test_reward_distribution_skips_deleted_neurons() {
     }), Err(e) if e.error_type == NotFound as i32);
 
     // The proposal at genesis time is not ready to be settled
-    gov.run_periodic_tasks().now_or_never();
     run_pending_timers();
     assert_eq!(
         *gov.latest_reward_event(),
@@ -3905,8 +3921,7 @@ fn test_reward_distribution_skips_deleted_neurons() {
         }
     );
 
-    fake_driver.advance_time_by(REWARD_DISTRIBUTION_PERIOD_SECONDS);
-    gov.run_periodic_tasks().now_or_never();
+    fake_driver.advance_time_by(REWARD_DISTRIBUTION_PERIOD_SECONDS + 1);
     run_pending_timers();
 
     assert_eq!(
@@ -3956,13 +3971,17 @@ async fn test_genesis_in_the_future_in_supported() {
     // Let's set genesis
     let genesis_timestamp_seconds = fake_driver.now() + 3 * REWARD_DISTRIBUTION_PERIOD_SECONDS / 2;
     fixture.genesis_timestamp_seconds = genesis_timestamp_seconds;
-    let mut gov = Governance::new(
+    let gov = Governance::new(
         fixture,
         fake_driver.get_fake_env(),
         fake_driver.get_fake_ledger(),
         fake_driver.get_fake_cmc(),
         fake_driver.get_fake_randomness_generator(),
     );
+    set_governance_for_tests(gov);
+    let gov = governance_mut();
+    schedule_tasks();
+
     gov.run_periodic_tasks().now_or_never();
     // At genesis, we should create an empty reward event
     assert_eq!(
@@ -4020,7 +4039,7 @@ async fn test_genesis_in_the_future_in_supported() {
         .unwrap();
 
     fake_driver.advance_time_by(REWARD_DISTRIBUTION_PERIOD_SECONDS);
-    gov.run_periodic_tasks().now_or_never();
+    run_pending_timers();
     // We're still pre-genesis at that point
     assert!(fake_driver.now() < genesis_timestamp_seconds);
     // No new reward event should have been created...
@@ -4086,7 +4105,7 @@ async fn test_genesis_in_the_future_in_supported() {
         .unwrap();
 
     fake_driver.advance_time_by(REWARD_DISTRIBUTION_PERIOD_SECONDS);
-    gov.run_periodic_tasks().now_or_never();
+    run_pending_timers();
     // Now we're 0.5 reward period after genesis. Still no new reward event
     // expected.
     assert_eq!(
@@ -4117,11 +4136,11 @@ async fn test_genesis_in_the_future_in_supported() {
     );
 
     // Let's go just at the time we should create the first reward event
-    fake_driver.advance_time_by(REWARD_DISTRIBUTION_PERIOD_SECONDS / 2);
-    gov.run_periodic_tasks().now_or_never();
+    fake_driver.advance_time_by(REWARD_DISTRIBUTION_PERIOD_SECONDS / 2 + 1);
+    run_pending_timers();
     assert_eq!(
         fake_driver.now(),
-        genesis_timestamp_seconds + REWARD_DISTRIBUTION_PERIOD_SECONDS
+        genesis_timestamp_seconds + REWARD_DISTRIBUTION_PERIOD_SECONDS + 1
     );
     // Given that the second neuron is much bigger (stake 953) compared to the
     // the first neuron (stake 23) and only the first neuron voted,
@@ -4142,7 +4161,7 @@ async fn test_genesis_in_the_future_in_supported() {
 
     // Let's go just at the time we should create the first reward event
     fake_driver.advance_time_by(REWARD_DISTRIBUTION_PERIOD_SECONDS);
-    gov.run_periodic_tasks().now_or_never();
+    run_pending_timers();
     // This time, the other long proposal submitted before genesis should be
     // considered
     assert_eq!(
@@ -4203,8 +4222,9 @@ fn compute_maturities(
     let proposals: Vec<fake::ProposalNeuronBehavior> =
         proposals.into_iter().map(|x| x.into()).collect();
 
-    let mut fake_driver =
-        fake::FakeDriver::default().with_supply(Tokens::from_e8s(365_250 * reward_pot_e8s / 100));
+    let mut fake_driver = fake::FakeDriver::default()
+        .at(DEFAULT_TEST_START_TIMESTAMP_SECONDS)
+        .with_supply(Tokens::from_e8s(365_250 * reward_pot_e8s / 100));
 
     let neurons = stakes_e8s
         .iter()
@@ -4266,9 +4286,9 @@ fn compute_maturities(
         }
     }
     gov.run_periodic_tasks().now_or_never();
-    run_pending_timers();
 
-    run_pending_timers_every_x_seconds(core::time::Duration::from_secs(10), 3);
+    fake_driver.advance_time_by(1);
+    run_pending_timers();
 
     // Inspect latest_reward_event.
     let actual_reward_event = gov.latest_reward_event();
@@ -4277,7 +4297,8 @@ fn compute_maturities(
         RewardEvent {
             day_after_genesis: 1,
             actual_timestamp_seconds: DEFAULT_TEST_START_TIMESTAMP_SECONDS
-                + REWARD_DISTRIBUTION_PERIOD_SECONDS,
+                + REWARD_DISTRIBUTION_PERIOD_SECONDS
+                + 1,
             settled_proposals: (1_u64..=proposals.len() as u64)
                 .map(|id| ProposalId { id })
                 .collect(),
@@ -4295,8 +4316,6 @@ fn compute_maturities(
         "{:#?}",
         actual_reward_event,
     );
-
-    run_pending_timers_every_x_seconds(core::time::Duration::from_secs(10), 3);
 
     (0_u64..stakes_e8s.len() as u64)
         .map(|id| {
@@ -7008,13 +7027,17 @@ fn test_staked_maturity() {
     let dissolve_delay_seconds = MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS;
     let neuron_stake_e8s = 10 * 100_000_000; // 10 ICP
 
-    let (mut driver, mut gov, id, _to_subaccount) = governance_with_staked_neuron(
+    let (mut driver, gov, id, _to_subaccount) = governance_with_staked_neuron(
         dissolve_delay_seconds,
         neuron_stake_e8s,
         block_height,
         from,
         nonce,
     );
+
+    set_governance_for_tests(gov);
+    let gov = governance_mut();
+    schedule_tasks();
 
     gov.neuron_store
         .with_neuron_mut(&id, |neuron| {
@@ -7066,6 +7089,7 @@ fn test_staked_maturity() {
 
     // Advance time by 5 days and run periodic tasks so that the neuron is granted (staked) maturity.
     driver.advance_time_by(5 * 24 * 3600);
+    run_pending_timers();
     gov.run_periodic_tasks().now_or_never();
 
     let neuron = gov
@@ -7127,6 +7151,7 @@ fn test_staked_maturity() {
         .expect("Configuring neuron failed");
 
     driver.advance_time_by(MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS);
+    run_pending_timers();
     gov.unstake_maturity_of_dissolved_neurons();
 
     // All the maturity should now be regular maturity
@@ -9572,13 +9597,17 @@ async fn test_max_number_of_proposals_with_ballots() {
         wait_for_quiet_threshold_seconds: 5,
         ..fixture_two_neurons_second_is_bigger()
     };
-    let mut gov = Governance::new(
+    let gov = Governance::new(
         proto,
         fake_driver.get_fake_env(),
         fake_driver.get_fake_ledger(),
         fake_driver.get_fake_cmc(),
         fake_driver.get_fake_randomness_generator(),
     );
+    set_governance_for_tests(gov);
+    let gov = governance_mut();
+    schedule_tasks();
+
     // Vote with neuron 1. It is smaller, so proposals are not auto-accepted.
     for i in 0..MAX_NUMBER_OF_PROPOSALS_WITH_BALLOTS {
         gov.make_proposal(
@@ -9644,7 +9673,8 @@ async fn test_max_number_of_proposals_with_ballots() {
     );
 
     fake_driver.advance_time_by(10);
-    gov.run_periodic_tasks().now_or_never();
+    gov.run_periodic_tasks().now_or_never().unwrap();
+    run_pending_timers();
 
     // Now all proposals should have been rejected.
     for i in 1_u64..MAX_NUMBER_OF_PROPOSALS_WITH_BALLOTS as u64 + 2 {
@@ -9674,7 +9704,8 @@ async fn test_max_number_of_proposals_with_ballots() {
 
     // Let's make a reward event happen
     fake_driver.advance_time_by(REWARD_DISTRIBUTION_PERIOD_SECONDS);
-    gov.run_periodic_tasks().now_or_never();
+    gov.run_periodic_tasks().now_or_never().unwrap();
+    run_pending_timers();
 
     // Now it should be allowed to submit a new one
     gov.make_proposal(
@@ -14402,13 +14433,16 @@ async fn distribute_rewards_test() {
 
         ..Default::default()
     };
-    let mut governance = Governance::new(
+    let governance = Governance::new(
         proto,
         helper.get_fake_env(),
         helper.get_fake_ledger(),
         helper.get_fake_cmc(),
         helper.get_fake_randomness_generator(),
     );
+    set_governance_for_tests(governance);
+    let governance = governance_mut();
+    schedule_tasks();
     // Prevent gc.
     governance.latest_gc_timestamp_seconds = now;
 

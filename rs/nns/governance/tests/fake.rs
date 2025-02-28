@@ -117,10 +117,14 @@ pub struct FakeDriver {
 /// Create a default mock driver.
 impl Default for FakeDriver {
     fn default() -> Self {
-        Self {
+        let ret = Self {
             state: Arc::new(Mutex::new(Default::default())),
             error_on_next_ledger_call: Arc::new(Mutex::new(None)),
-        }
+        };
+        set_time_for_timers(std::time::Duration::from_secs(
+            ret.state.try_lock().unwrap().now,
+        ));
+        ret
     }
 }
 
@@ -422,12 +426,12 @@ impl RandomnessGenerator for FakeDriver {
         Ok(bytes)
     }
 
-    fn seed_rng(&mut self, _seed: [u8; 32]) {
-        todo!()
+    fn seed_rng(&mut self, seed: [u8; 32]) {
+        self.state.try_lock().unwrap().rng = ChaCha20Rng::from_seed(seed);
     }
 
     fn get_rng_seed(&self) -> Option<[u8; 32]> {
-        todo!()
+        Some(self.state.try_lock().unwrap().rng.get_seed())
     }
 }
 
@@ -591,6 +595,12 @@ impl Environment for FakeDriver {
                 certificate: vec![],
             })
             .unwrap());
+        }
+
+        if method_name == "raw_rand" {
+            let mut bytes = [0u8; 32];
+            self.state.try_lock().unwrap().rng.fill_bytes(&mut bytes);
+            return Ok(Encode!(&bytes).unwrap());
         }
 
         println!(
