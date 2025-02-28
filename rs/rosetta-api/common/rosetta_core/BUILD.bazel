@@ -18,6 +18,9 @@ DEPENDENCIES = [
     "@crate_index//:serde_bytes",
     "@crate_index//:serde_json",
     "@crate_index//:serde_with",
+    "@crate_index//:rusqlite",
+    "@crate_index//:thiserror",
+    "@crate_index//:tokio",
 ]
 
 MACRO_DEPENDENCIES = [

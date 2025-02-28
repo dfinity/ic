@@ -1,4 +1,5 @@
 pub mod convert;
+pub mod db_pool;
 pub mod identifiers;
 pub mod miscellaneous;
 pub mod models;
