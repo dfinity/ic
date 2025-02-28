@@ -1,5 +1,5 @@
 {
-  "checksum": "1e8bffe24652db11f439e8104fd2a22890550692ac65d2158f6bf76b10cf8a04",
+  "checksum": "99cadd3ef0b9b21ca889c34ae5fe6ac55c14427625b90a4e5081d99d8b147e63",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -1304,6 +1304,7 @@
         "crate_features": {
           "common": [
             "alloc",
+            "default",
             "getrandom",
             "rand_core"
           ],
@@ -19875,6 +19876,10 @@
               "target": "hmac"
             },
             {
+              "id": "hpke 0.12.0",
+              "target": "hpke"
+            },
+            {
               "id": "http 1.2.0",
               "target": "http"
             },
@@ -22326,6 +22331,7 @@
             "arithmetic",
             "default",
             "digest",
+            "ecdh",
             "ff",
             "group",
             "hazmat",
@@ -22361,6 +22367,10 @@
             {
               "id": "group 0.13.0",
               "target": "group"
+            },
+            {
+              "id": "hkdf 0.12.4",
+              "target": "hkdf"
             },
             {
               "id": "pem-rfc7468 0.7.0",
@@ -29779,6 +29789,105 @@
         "MIT"
       ],
       "license_file": "LICENSE"
+    },
+    "hpke 0.12.0": {
+      "name": "hpke",
+      "version": "0.12.0",
+      "package_url": "https://github.com/rozbb/rust-hpke",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/hpke/0.12.0/download",
+          "sha256": "4917627a14198c3603282c5158b815ad5534795451d3c074b53cf3cee0960b11"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "hpke",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "hpke",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "alloc",
+            "p384"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "aead 0.5.2",
+              "target": "aead"
+            },
+            {
+              "id": "aes-gcm 0.10.3",
+              "target": "aes_gcm"
+            },
+            {
+              "id": "chacha20poly1305 0.10.1",
+              "target": "chacha20poly1305"
+            },
+            {
+              "id": "digest 0.10.7",
+              "target": "digest"
+            },
+            {
+              "id": "generic-array 0.14.7",
+              "target": "generic_array"
+            },
+            {
+              "id": "hkdf 0.12.4",
+              "target": "hkdf"
+            },
+            {
+              "id": "hmac 0.12.1",
+              "target": "hmac"
+            },
+            {
+              "id": "p384 0.13.1",
+              "target": "p384"
+            },
+            {
+              "id": "rand_core 0.6.4",
+              "target": "rand_core"
+            },
+            {
+              "id": "sha2 0.10.8",
+              "target": "sha2"
+            },
+            {
+              "id": "subtle 2.6.1",
+              "target": "subtle"
+            },
+            {
+              "id": "zeroize 1.8.1",
+              "target": "zeroize"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.12.0"
+      },
+      "license": "MIT/Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE"
     },
     "html5ever 0.26.0": {
       "name": "html5ever",
@@ -49863,6 +49972,65 @@
           "selects": {}
         },
         "version": "0.13.2"
+      },
+      "license": "Apache-2.0 OR MIT",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE"
+    },
+    "p384 0.13.1": {
+      "name": "p384",
+      "version": "0.13.1",
+      "package_url": "https://github.com/RustCrypto/elliptic-curves/tree/master/p384",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/p384/0.13.1/download",
+          "sha256": "fe42f1670a52a47d448f14b6a5c61dd78fce51856e68edaa38f7ae3a46b8d6b6"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "p384",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "p384",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "arithmetic",
+            "ecdh"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "elliptic-curve 0.13.8",
+              "target": "elliptic_curve"
+            },
+            {
+              "id": "primeorder 0.13.2",
+              "target": "primeorder"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.13.1"
       },
       "license": "Apache-2.0 OR MIT",
       "license_ids": [
@@ -91291,6 +91459,7 @@
     "hex-literal 0.4.1",
     "hkdf 0.12.4",
     "hmac 0.12.1",
+    "hpke 0.12.0",
     "http 1.2.0",
     "http-body 1.0.1",
     "http-body-util 0.1.2",
