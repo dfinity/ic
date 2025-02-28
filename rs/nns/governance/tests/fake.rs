@@ -5,10 +5,7 @@ use futures::future::FutureExt;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_ledger_core::tokens::CheckedSub;
 use ic_nervous_system_common::{cmc::CMC, ledger::IcpLedger, NervousSystemError};
-use ic_nervous_system_proto::pb::v1::Duration;
-use ic_nervous_system_timers::test::{
-    advance_time_for_timers, run_pending_timers, set_time_for_timers,
-};
+use ic_nervous_system_timers::test::{advance_time_for_timers, set_time_for_timers};
 use ic_nns_common::{
     pb::v1::{NeuronId, ProposalId},
     types::UpdateIcpXdrConversionRatePayload,
