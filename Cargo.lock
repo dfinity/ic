@@ -10402,6 +10402,7 @@ dependencies = [
  "async-trait",
  "candid",
  "canister-test",
+ "futures",
  "ic-cdk 0.17.1",
  "ic-config",
  "ic-nervous-system-timers",
