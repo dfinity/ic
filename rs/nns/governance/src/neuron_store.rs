@@ -1,8 +1,6 @@
 use crate::{
     allow_active_neurons_in_stable_memory,
-    governance::{
-        Environment, TimeWarp, LOG_PREFIX, MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS,
-    },
+    governance::{TimeWarp, LOG_PREFIX, MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS},
     migrate_active_neurons_to_stable_memory,
     neuron::types::Neuron,
     neurons_fund::neurons_fund_neuron::pick_most_important_hotkeys,
@@ -37,6 +35,7 @@ use std::{
 };
 
 pub mod metrics;
+use crate::governance::RandomnessGenerator;
 use crate::pb::v1::{Ballot, Vote};
 pub(crate) use metrics::NeuronMetrics;
 
@@ -434,9 +433,12 @@ impl NeuronStore {
         self.clock.set_time_warp(new_time_warp);
     }
 
-    pub fn new_neuron_id(&self, env: &mut dyn Environment) -> Result<NeuronId, NeuronStoreError> {
+    pub fn new_neuron_id(
+        &self,
+        random: &mut dyn RandomnessGenerator,
+    ) -> Result<NeuronId, NeuronStoreError> {
         loop {
-            let id = env
+            let id = random
                 .random_u64()
                 .map_err(|_| NeuronStoreError::NeuronIdGenerationUnavailable)?
                 // Let there be no question that id was chosen

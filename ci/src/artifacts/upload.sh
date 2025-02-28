@@ -27,7 +27,8 @@ fi
 
 if [ "${UPLOAD_BUILD_ARTIFACTS:-}" == "1" ]; then
     echo "uploading $f"
-    # Multipart upload does not work trough the proxy for some reasons. Just disabling it for now.
+    # Multipart upload does not work trough the proxy or through Cloudflare for some
+    # reason. Just disabling it with `--s3-upload-cutoff` for now.
     "$RCLONE" \
         --config="$RCLONE_CONFIG" \
         --stats-one-line \
@@ -45,6 +46,7 @@ if [ "${UPLOAD_BUILD_ARTIFACTS:-}" == "1" ]; then
         --stats-one-line \
         --checksum \
         --immutable \
+        --s3-upload-cutoff=5G \
         copy \
         "$f" \
         "public-s3-cf:dfinity-download-public/ic/${VERSION}/$REMOTE_SUBDIR/"

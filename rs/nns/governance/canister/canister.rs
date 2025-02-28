@@ -55,11 +55,12 @@ use ic_nns_governance_api::test_api::TimeWarp;
 use prost::Message;
 use rand::{RngCore, SeedableRng};
 use rand_chacha::ChaCha20Rng;
+use std::sync::Arc;
 use std::{boxed::Box, ops::Bound, time::Duration};
 
 #[cfg(not(feature = "tla"))]
 use ic_nervous_system_canisters::ledger::IcpLedgerCanister;
-use ic_nns_governance::canister_state::with_governance;
+use ic_nns_governance::canister_state::{with_governance, CanisterRandomnessGenerator};
 
 #[cfg(feature = "tla")]
 mod tla_ledger;
@@ -230,9 +231,10 @@ fn canister_init_(init_payload: ApiGovernanceProto) {
     let governance_proto = InternalGovernanceProto::from(init_payload);
     set_governance(Governance::new(
         governance_proto,
-        Box::new(CanisterEnv::new()),
-        Box::new(IcpLedgerCanister::<CdkRuntime>::new(LEDGER_CANISTER_ID)),
-        Box::new(CMCCanister::<CdkRuntime>::new()),
+        Arc::new(CanisterEnv::new()),
+        Arc::new(IcpLedgerCanister::<CdkRuntime>::new(LEDGER_CANISTER_ID)),
+        Arc::new(CMCCanister::<CdkRuntime>::new()),
+        Box::new(CanisterRandomnessGenerator::new()),
     ));
 }
 
@@ -274,9 +276,10 @@ fn canister_post_upgrade() {
     schedule_timers();
     set_governance(Governance::new_restored(
         restored_state,
-        Box::new(CanisterEnv::new()),
-        Box::new(IcpLedgerCanister::<CdkRuntime>::new(LEDGER_CANISTER_ID)),
-        Box::new(CMCCanister::<CdkRuntime>::new()),
+        Arc::new(CanisterEnv::new()),
+        Arc::new(IcpLedgerCanister::<CdkRuntime>::new(LEDGER_CANISTER_ID)),
+        Arc::new(CMCCanister::<CdkRuntime>::new()),
+        Box::new(CanisterRandomnessGenerator::new()),
     ));
 
     validate_stable_storage();

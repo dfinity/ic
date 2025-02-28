@@ -6,7 +6,7 @@ use mockall::automock;
 #[async_trait]
 pub trait CMC: Send + Sync {
     /// Returns the current neuron maturity modulation.
-    async fn neuron_maturity_modulation(&mut self) -> Result<i32, String>;
+    async fn neuron_maturity_modulation(&self) -> Result<i32, String>;
 }
 
 pub struct FakeCmc {}
@@ -25,7 +25,7 @@ impl Default for FakeCmc {
 
 #[async_trait]
 impl CMC for FakeCmc {
-    async fn neuron_maturity_modulation(&mut self) -> Result<i32, String> {
+    async fn neuron_maturity_modulation(&self) -> Result<i32, String> {
         Ok(0)
     }
 }
