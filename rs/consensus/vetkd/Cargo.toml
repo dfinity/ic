@@ -9,7 +9,7 @@ documentation.workspace = true
 [dependencies]
 ic-consensus-utils = { path = "../utils" }
 ic-crypto = { path = "../../crypto" }
-ic-error-types = { path = "../../types/error_types" }
+ic-error-types = { path = "../../../packages/ic-error-types" }
 ic-interfaces = { path = "../../interfaces" }
 ic-interfaces-registry = { path = "../../interfaces/registry" }
 ic-interfaces-state-manager = { path = "../../interfaces/state_manager" }
