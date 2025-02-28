@@ -9,6 +9,7 @@ use ic_sys::{PageBytes, PAGE_SIZE};
 use ic_types::Height;
 use libc::c_void;
 use nix::sys::mman::{mmap, MapFlags, ProtFlags};
+use std::ops::{Deref, DerefMut};
 use std::sync::Arc;
 #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
 use std::sync::{LazyLock, Mutex};
@@ -741,13 +742,7 @@ mod random_ops {
 
     use super::*;
 
-    use std::{
-        cell::RefCell,
-        collections::BTreeSet,
-        io,
-        mem::{self, MaybeUninit},
-        rc::Rc,
-    };
+    use std::{cell::RefCell, collections::BTreeSet, io, mem, rc::Rc};
 
     use proptest::prelude::*;
 
@@ -779,8 +774,8 @@ mod random_ops {
         final_tracker_checks(handler.take_tracker().unwrap());
     }
 
-    static PREV_SIGSEGV: LazyLock<Arc<Mutex<MaybeUninit<libc::sigaction>>>> =
-        LazyLock::new(|| Arc::new(Mutex::new(MaybeUninit::uninit())));
+    static PREV_SIGSEGV: LazyLock<Mutex<libc::sigaction>> =
+        LazyLock::new(|| Mutex::new(unsafe { std::mem::zeroed() }));
 
     struct RegisteredHandler();
 
@@ -801,7 +796,7 @@ mod random_ops {
             if libc::sigaction(
                 libc::SIGSEGV,
                 &handler,
-                LazyLock::force(&PREV_SIGSEGV).lock().unwrap().as_mut_ptr(),
+                LazyLock::force(&PREV_SIGSEGV).lock().unwrap().deref_mut(),
             ) != 0
             {
                 panic!(
@@ -819,7 +814,7 @@ mod random_ops {
                 unsafe {
                     if libc::sigaction(
                         libc::SIGSEGV,
-                        LazyLock::force(&PREV_SIGSEGV).lock().unwrap().as_ptr(),
+                        LazyLock::force(&PREV_SIGSEGV).lock().unwrap().deref(),
                         std::ptr::null_mut(),
                     ) != 0
                     {
@@ -857,7 +852,7 @@ mod random_ops {
 
             unsafe {
                 if !handled {
-                    let previous = *LazyLock::force(&PREV_SIGSEGV).lock().unwrap().as_ptr();
+                    let previous = *LazyLock::force(&PREV_SIGSEGV).lock().unwrap().deref();
                     if previous.sa_flags & libc::SA_SIGINFO != 0 {
                         mem::transmute::<
                             usize,
