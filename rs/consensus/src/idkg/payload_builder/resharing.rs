@@ -1,12 +1,16 @@
 use super::IDkgDealingContext;
 use crate::idkg::pre_signer::IDkgTranscriptBuilder;
 use ic_logger::{warn, ReplicaLogger};
+use ic_management_canister_types_private::{
+    ComputeInitialIDkgDealingsResponse, ReshareChainKeyResponse,
+};
 use ic_types::{
+    batch::ConsensusResponse,
     consensus::idkg::{self, HasIDkgMasterPublicKeyId, IDkgBlockReader, IDkgReshareRequest},
     crypto::canister_threshold_sig::{
         error::InitialIDkgDealingsValidationError, idkg::InitialIDkgDealings,
     },
-    messages::CallbackId,
+    messages::{CallbackId, Payload},
 };
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -56,20 +60,24 @@ fn make_reshare_dealings_response(
     request: &IDkgReshareRequest,
     initial_dealings: &InitialIDkgDealings,
     idkg_dealings_contexts: &BTreeMap<CallbackId, IDkgDealingContext<'_>>,
-) -> Option<ic_types::batch::ConsensusResponse> {
+) -> Option<ConsensusResponse> {
     idkg_dealings_contexts
         .iter()
         .find(|(_, context)| *request == reshare_request_from_dealings_context(context))
-        .map(|(callback_id, _)| {
-            ic_types::batch::ConsensusResponse::new(
-                *callback_id,
-                ic_types::messages::Payload::Data(
-                    ic_management_canister_types_private::ComputeInitialIDkgDealingsResponse {
-                        initial_dkg_dealings: initial_dealings.into(),
-                    }
-                    .encode(),
-                ),
-            )
+        .map(|(callback_id, context)| {
+            let inner = ComputeInitialIDkgDealingsResponse {
+                initial_dkg_dealings: initial_dealings.into(),
+            };
+
+            // TODO(CRP-2613): Remove the `compute_initial_i_dkg_dealings` case once registry is mirgrated
+            let data = match &context.request.method_name {
+                "compute_initial_i_dkg_dealings" => inner.encode(),
+                "reshare_chain_key" => ReshareChainKeyResponse::IDkg(inner).encode(),
+                // TODO: Remove this case
+                _ => panic!(),
+            };
+
+            ConsensusResponse::new(*callback_id, Payload::Data(data))
         })
 }
 
