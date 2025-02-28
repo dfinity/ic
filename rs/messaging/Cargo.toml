@@ -7,8 +7,6 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
-ic-error-types = { workspace = true }
-ic-interfaces = { path = "../interfaces" }
 ic-base-types = { path = "../types/base_types" }
 ic-certification-version = { path = "../canonical_state/certification_version" }
 ic-config = { path = "../config" }
@@ -16,6 +14,8 @@ ic-limits = { path = "../limits" }
 ic-crypto-utils-threshold-sig-der = { path = "../crypto/utils/threshold_sig_der" }
 ic-cycles-account-manager = { path = "../cycles_account_manager" }
 ic-ed25519 = { path = "../../packages/ic-ed25519" }
+ic-error-types = { path = "../../packages/ic-error-types" }                              # whitelisted
+ic-interfaces = { path = "../interfaces" }
 ic-interfaces-certified-stream-store = { path = "../interfaces/certified_stream_store" }
 ic-interfaces-registry = { path = "../interfaces/registry" }
 ic-interfaces-state-manager = { path = "../interfaces/state_manager" }
