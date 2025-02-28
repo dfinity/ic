@@ -65,16 +65,16 @@ fn make_reshare_dealings_response(
         .iter()
         .find(|(_, context)| *request == reshare_request_from_dealings_context(context))
         .map(|(callback_id, context)| {
-            let inner = ComputeInitialIDkgDealingsResponse {
-                initial_dkg_dealings: initial_dealings.into(),
-            };
-
-            // TODO(CRP-2613): Remove the `compute_initial_i_dkg_dealings` case once registry is mirgrated
-            let data = match &context.request.method_name {
-                "compute_initial_i_dkg_dealings" => inner.encode(),
-                "reshare_chain_key" => ReshareChainKeyResponse::IDkg(inner).encode(),
-                // TODO: Remove this case
-                _ => panic!(),
+            let data = match context.request.method_name.as_str() {
+                // TODO(CRP-2613): Remove the different cases and always return a ReshareChainKeyResponse
+                // once the registry has been migrated
+                "reshare_chain_key" => {
+                    ReshareChainKeyResponse::IDkg(initial_dealings.into()).encode()
+                }
+                _ => ComputeInitialIDkgDealingsResponse {
+                    initial_dkg_dealings: initial_dealings.into(),
+                }
+                .encode(),
             };
 
             ConsensusResponse::new(*callback_id, Payload::Data(data))
