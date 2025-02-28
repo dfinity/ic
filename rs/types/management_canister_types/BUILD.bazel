@@ -8,7 +8,6 @@ permanent_whitelist = [
     "//rs/execution_environment:__subpackages__",
     "//rs/cycles_account_manager:__subpackages__",
     "//rs/messaging:__subpackages__",
-    "//rs/management_canister_types/fuzz:__subpackages__",
 ]
 
 # These crates depend on this library directly for historical reasons

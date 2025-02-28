@@ -5,6 +5,7 @@ package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
     # Keep sorted.
+    "//packages/ic-error-types",
     "//rs/canister_sandbox:backend_lib",
     "//rs/config",
     "//rs/crypto/prng",
@@ -40,7 +41,6 @@ DEPENDENCIES = [
     "@crate_index//:candid",
     "@crate_index//:hex",
     "@crate_index//:ic-btc-interface",
-    "@crate_index//:ic-error-types",
     "@crate_index//:lazy_static",
     "@crate_index//:more-asserts",
     "@crate_index//:num-rational",
