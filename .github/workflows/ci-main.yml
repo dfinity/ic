@@ -294,8 +294,12 @@ jobs:
           "$CI_PROJECT_DIR"/ci/scripts/run-build-ic.sh
           rm -rf "/cache/job/${CI_JOB_NAME}/${CI_RUN_ID}"
 
-          # List and aggregate all SHA256SUMS files.
-          find -L bazel-out -name SHA256SUMS | xargs cat | sort | uniq > SHA256SUMS
+          # List and aggregate all SHA256SUMS files (if bazel-out exists)
+          if [ -e bazel-out]; then
+            find -L bazel-out -name SHA256SUMS | xargs cat | sort | uniq > SHA256SUMS
+          else
+            touch SHA256SUMS
+          fi
         env:
           BAZEL_COMMAND: build --config=ci
           BAZEL_TARGETS: //...
