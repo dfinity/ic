@@ -58,6 +58,7 @@ DEPENDENCIES = [
     "//rs/nervous_system/temporary",
     "//rs/nervous_system/time_helpers",
     "//rs/nervous_system/timer_task",
+    "//rs/nervous_system/timers",
     "//rs/nns/cmc",
     "//rs/nns/common",
     "//rs/nns/constants",

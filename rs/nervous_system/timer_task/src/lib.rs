@@ -114,16 +114,44 @@
 //! ```
 
 use async_trait::async_trait;
+#[cfg(not(target_arch = "wasm32"))]
+use futures::FutureExt;
+#[cfg(target_arch = "wasm32")]
 use ic_cdk::spawn;
-use ic_cdk_timers::{set_timer, set_timer_interval};
+use std::future::Future;
 use std::time::Duration;
+
+/// This function is used to spawn a future in a way that is compatible with both the WASM and
+/// non-WASM environments that are used for testing.  This only actually spawns in the case where
+/// the WASM is running in the IC, or has some other source of asynchrony.  Otherwise, it
+/// immediately executes.s
+fn spawn_in_canister_env(future: impl Future<Output = ()> + Sized + 'static) {
+    #[cfg(target_arch = "wasm32")]
+    {
+        spawn(future);
+    }
+    // This is needed for tests
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        future
+            .now_or_never()
+            .expect("Future could not execute in non-WASM environment");
+    }
+}
+
+pub(crate) mod timers {
+    #[cfg(target_arch = "wasm32")]
+    pub use ic_nervous_system_timers::real::{set_timer, set_timer_interval};
+    #[cfg(not(target_arch = "wasm32"))]
+    pub use ic_nervous_system_timers::test::{set_timer, set_timer_interval};
+}
 
 pub trait RecurringSyncTask: Sized + 'static {
     fn execute(self) -> (Duration, Self);
     fn initial_delay(&self) -> Duration;
 
     fn schedule_with_delay(self, delay: Duration) {
-        set_timer(delay, move || {
+        timers::set_timer(delay, move || {
             let (new_delay, new_task) = self.execute();
             new_task.schedule_with_delay(new_delay);
         });
@@ -143,8 +171,8 @@ pub trait RecurringAsyncTask: Sized + 'static {
     fn initial_delay(&self) -> Duration;
 
     fn schedule_with_delay(self, delay: Duration) {
-        set_timer(delay, move || {
-            spawn(async move {
+        timers::set_timer(delay, move || {
+            spawn_in_canister_env(async move {
                 let (new_delay, new_task) = self.execute().await;
                 new_task.schedule_with_delay(new_delay);
             });
@@ -164,7 +192,7 @@ pub trait PeriodicSyncTask: Copy + Sized + 'static {
     fn execute(self);
 
     fn schedule(self) {
-        set_timer_interval(Self::INTERVAL, move || {
+        timers::set_timer_interval(Self::INTERVAL, move || {
             self.execute();
         });
     }
@@ -178,8 +206,8 @@ pub trait PeriodicAsyncTask: Copy + Sized + 'static {
     async fn execute(self);
 
     fn schedule(self) {
-        set_timer_interval(Self::INTERVAL, move || {
-            spawn(async move {
+        timers::set_timer_interval(Self::INTERVAL, move || {
+            spawn_in_canister_env(async move {
                 self.execute().await;
             });
         });
