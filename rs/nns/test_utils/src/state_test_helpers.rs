@@ -2098,7 +2098,7 @@ pub fn setup_cycles_ledger(state_machine: &StateMachine) {
     }
     #[derive(Clone, Eq, PartialEq, Debug, CandidType, Serialize)]
     struct Config {
-        pub max_transactions_per_request: u64,
+        pub max_blocks_per_request: u64,
         pub index_id: Option<candid::Principal>,
     }
 
@@ -2119,7 +2119,7 @@ pub fn setup_cycles_ledger(state_machine: &StateMachine) {
     )
     .unwrap();
     let arg = Encode!(&LedgerArgs::Init(Config {
-        max_transactions_per_request: 50,
+        max_blocks_per_request: 50,
         index_id: None,
     }))
     .unwrap();

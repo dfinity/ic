@@ -34,15 +34,18 @@ pub mod dkg_key_manager;
 pub mod payload_builder;
 pub mod payload_validator;
 
-pub use crate::payload_validator::{DkgPayloadValidationFailure, InvalidDkgPayloadReason};
+pub use crate::{
+    payload_validator::{DkgPayloadValidationFailure, InvalidDkgPayloadReason},
+    utils::get_vetkey_public_keys,
+};
 
 #[cfg(test)]
 mod test_utils;
 mod utils;
 
-pub use {
-    dkg_key_manager::DkgKeyManager,
-    payload_builder::{create_payload, make_genesis_summary, PayloadCreationError},
+pub use dkg_key_manager::DkgKeyManager;
+pub use payload_builder::{
+    create_payload, get_dkg_summary_from_cup_contents, PayloadCreationError,
 };
 
 // The maximal number of DKGs for other subnets we want to run in one interval.

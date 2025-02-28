@@ -13,7 +13,7 @@ INSERT NEW RELEASES HERE
 
 # 2025-02-15: Proposal 135316
 
-http://dashboard.internetcomputer.org/proposals/135316
+http://dashboard.internetcomputer.org/proposal/135316
 
 ## Added
 
@@ -22,7 +22,7 @@ http://dashboard.internetcomputer.org/proposals/135316
 
 # 2025-01-20: Proposal 134907
 
-http://dashboard.internetcomputer.org/proposals/134907
+http://dashboard.internetcomputer.org/proposal/134907
 
 No behavior changes. This was just a maintenance release.
 
