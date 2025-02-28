@@ -1675,7 +1675,7 @@ message VotingPowerEconomics {
 
   // The minimum dissolve delay a neuron must have in order to be eligible to vote.
   //
-  // Neurons with a dissolve delay lower than this threshold will not have 
+  // Neurons with a dissolve delay lower than this threshold will not have
   // voting power, even if they are otherwise active.
   //
   // This value is an essential part of the staking mechanism, promoting
