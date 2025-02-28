@@ -537,6 +537,11 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "hmac": crate.spec(
                 version = "^0.12",
             ),
+            "hpke": crate.spec(
+                version = "^0.12",
+                default_features = False,
+                features = ["p384", "alloc"],
+            ),
             "humantime": crate.spec(
                 version = "^2.1.0",
             ),
