@@ -124,6 +124,35 @@ impl TaskQueue {
         queue
     }
 
+    fn from_checkpoint_v2(item: pb::TaskQueue, canister_id: &CanisterId) -> Self {
+        let queue = Self {
+            paused_or_aborted_task: item
+                .paused_or_aborted_task
+                .map(|task| task.try_into().unwrap()),
+            on_low_wasm_memory_hook_status: pb::OnLowWasmMemoryHookStatus::try_from(
+                item.on_low_wasm_memory_hook_status,
+            )
+            .unwrap()
+            .try_into()
+            .unwrap(),
+            queue: item
+                .queue
+                .into_iter()
+                .map(|task| task.try_into().unwrap())
+                .collect(),
+        };
+
+        // Because paused tasks are not allowed in checkpoint rounds when
+        // checking dts invariants that is equivalent to disabling dts.
+        queue.check_dts_invariants(
+            FlagStatus::Disabled,
+            ExecutionRoundType::CheckpointRound,
+            canister_id,
+        );
+
+        queue
+    }
+
     pub fn front(&self) -> Option<&ExecutionTask> {
         self.paused_or_aborted_task.as_ref().or_else(|| {
             if self.on_low_wasm_memory_hook_status.is_ready() {

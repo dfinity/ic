@@ -2395,7 +2395,10 @@ impl From<CanisterStateBits> for pb_canister_state_bits::CanisterStateBitsV2 {
 impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
     type Error = ProxyDecodeError;
 
-    fn try_from(value: pb_canister_state_bits::CanisterStateBits) -> Result<Self, Self::Error> {
+    fn try_from(
+        value: pb_canister_state_bits::CanisterStateBits,
+        canister_id: &CanisterId,
+    ) -> Result<Self, Self::Error> {
         let execution_state_bits = value
             .execution_state_bits
             .map(|b| b.try_into())
