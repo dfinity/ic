@@ -691,7 +691,7 @@ pub async fn get_vetkd_with_logger(
     msg_can: &MessageCanister<'_>,
     logger: &Logger,
 ) -> Result<Vec<u8>, AgentError> {
-    let transport_public_key = G1Affine::from(G1Affine::generator());
+    let transport_public_key = G1Affine::generator();
     let vetkd_request = VetKdDeriveEncryptedKeyArgs {
         derivation_domain: input,
         derivation_id: vec![],
@@ -922,7 +922,7 @@ pub fn verify_ecdsa_signature(pk: &[u8], sig: &[u8], msg: &[u8]) -> bool {
 }
 
 pub fn verify_vetkd(pk: &[u8], sig: &[u8], msg: &[u8]) -> bool {
-    pk.len() > 0 && sig.len() > 0 && msg.len() > 0
+    !pk.is_empty() && !sig.is_empty() && !msg.is_empty()
 }
 
 pub fn verify_signature(key_id: &MasterPublicKeyId, msg: &[u8], pk: &[u8], sig: &[u8]) {

@@ -12,7 +12,7 @@ use ic_consensus_threshold_sig_system_test_utils::{
     get_signature_with_logger, make_bip340_key_id, make_ecdsa_key_id, make_eddsa_key_id,
     scale_cycles, setup_without_ecdsa_on_nns,
 };
-use ic_management_canister_types_private::MasterPublicKeyId;
+use ic_management_canister_types_private::{MasterPublicKeyId, VetKdCurve, VetKdKeyId};
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_registry_nns_data_provider::registry::RegistryCanister;
 use ic_registry_subnet_type::SubnetType;
@@ -41,6 +41,13 @@ const XNET_RESHARE_AGREEMENTS: &str = "xnet_reshare_agreements";
 const LIFE_CYCLE_OVERALL_TIMEOUT: Duration = Duration::from_secs(15 * 60);
 const LIFE_CYCLE_PER_TEST_TIMEOUT: Duration = Duration::from_secs(11 * 60);
 
+fn make_vetkd_key_id(name: &str) -> MasterPublicKeyId {
+    MasterPublicKeyId::VetKd(VetKdKeyId {
+        curve: VetKdCurve::Bls12_381_G2,
+        name: name.to_string(),
+    })
+}
+
 fn test(env: TestEnv) {
     let topology_snapshot = &env.topology_snapshot();
     let log = &env.logger();
@@ -54,10 +61,13 @@ fn test(env: TestEnv) {
         let key_id1 = make_ecdsa_key_id();
         let key_id2 = make_eddsa_key_id();
         let key_id3 = make_bip340_key_id();
+        let key_id4 = make_vetkd_key_id("initial");
+        let key_id5 = make_vetkd_key_id("later");
         let nns = runtime_from_url(nns_node.get_public_url(), nns_node.effective_canister_id());
         let governance = Canister::new(&nns, GOVERNANCE_CANISTER_ID);
-        let initial_key_ids = vec![key_id1.clone(), key_id2.clone()];
-        let initial_key_ids_as_string = format!("[{}, {}]", key_id1, key_id2);
+        let initial_key_ids = vec![key_id1.clone(), key_id2.clone(), key_id4.clone()];
+        let initial_key_ids_as_string = format!("[{}, {}, {}]", key_id1, key_id2, key_id4);
+        let later_key_ids = vec![key_id3.clone(), key_id5.clone()];
 
         enable_chain_key_signing(
             &governance,
@@ -87,50 +97,66 @@ fn test(env: TestEnv) {
             log,
             "1. Verifying that signature and public key requests fail before signing is enabled."
         );
-
         let message_hash = vec![0xabu8; 32];
-        assert_eq!(
-            get_public_key_with_retries(&key_id3, &msg_can, log, 20)
+        for key_id in &later_key_ids {
+            let method_name = match key_id {
+                MasterPublicKeyId::Ecdsa(_) => "ecdsa_public_key",
+                MasterPublicKeyId::Schnorr(_) => "schnorr_public_key",
+                MasterPublicKeyId::VetKd(_) => "vetkd_public_key",
+            };
+            assert_eq!(
+                get_public_key_with_retries(key_id, &msg_can, log, 20)
+                    .await
+                    .unwrap_err(),
+                AgentError::CertifiedReject(RejectResponse {
+                    reject_code: RejectCode::CanisterReject,
+                    reject_message: format!(
+                        "Unable to route management canister request {}: \
+                        ChainKeyError(\"Requested unknown threshold key: {}, existing keys: {}\")",
+                        method_name, key_id, initial_key_ids_as_string,
+                    ),
+                    error_code: Some("IC0406".to_string()),
+                })
+            );
+            let method_name = match key_id {
+                MasterPublicKeyId::Ecdsa(_) => "sign_with_ecdsa",
+                MasterPublicKeyId::Schnorr(_) => "sign_with_schnorr",
+                MasterPublicKeyId::VetKd(_) => "vetkd_derive_encrypted_key",
+            };
+            assert_eq!(
+                get_signature_with_logger(
+                    message_hash.clone(),
+                    scale_cycles(ECDSA_SIGNATURE_FEE),
+                    key_id,
+                    &msg_can,
+                    log,
+                )
                 .await
                 .unwrap_err(),
-            AgentError::CertifiedReject(RejectResponse {
-                reject_code: RejectCode::CanisterReject,
-                reject_message: format!(
-                    "Unable to route management canister request schnorr_public_key: \
-                    ChainKeyError(\"Requested unknown threshold key: {}, existing keys: {}\")",
-                    key_id3, initial_key_ids_as_string,
-                ),
-                error_code: Some("IC0406".to_string()),
-            })
-        );
-        assert_eq!(
-            get_signature_with_logger(
-                message_hash.clone(),
-                scale_cycles(ECDSA_SIGNATURE_FEE),
-                &key_id3,
-                &msg_can,
-                log,
-            )
-            .await
-            .unwrap_err(),
-            AgentError::CertifiedReject(RejectResponse {
-                reject_code: RejectCode::CanisterReject,
-                reject_message: format!(
-                    "Unable to route management canister request sign_with_schnorr: \
-                    ChainKeyError(\"Requested unknown or disabled threshold key: {}, \
-                    existing enabled keys: {}\")",
-                    key_id3, initial_key_ids_as_string,
-                ),
-                error_code: Some("IC0406".to_string()),
-            })
-        );
+                AgentError::CertifiedReject(RejectResponse {
+                    reject_code: RejectCode::CanisterReject,
+                    reject_message: format!(
+                        "Unable to route management canister request {}: \
+                        ChainKeyError(\"Requested unknown or disabled threshold key: {}, \
+                        existing enabled keys: {}\")",
+                        method_name, key_id, initial_key_ids_as_string,
+                    ),
+                    error_code: Some("IC0406".to_string()),
+                })
+            );
+        }
 
         info!(log, "2. Enabling signing and verifying that it works.");
+        let all_key_ids = vec![
+            key_id5.clone(),
+            key_id4.clone(),
+            key_id3.clone(),
+            key_id2.clone(),
+            key_id1.clone(),
+        ];
+        enable_chain_key_signing(&governance, app_subnet.subnet_id, all_key_ids.clone(), log).await;
 
-        let key_ids = vec![key_id3.clone(), key_id2.clone(), key_id1.clone()];
-        enable_chain_key_signing(&governance, app_subnet.subnet_id, key_ids.clone(), log).await;
-
-        for key_id in &key_ids {
+        for key_id in &all_key_ids {
             let public_key = get_public_key_and_test_signature(key_id, &msg_can, false, log)
                 .await
                 .expect(
@@ -149,6 +175,11 @@ fn test(env: TestEnv) {
             disabling signing on old app subnet, \
             and then verifying signing no longer works."
         );
+        let key_ids = all_key_ids
+            .iter()
+            .cloned()
+            .filter(|id| id.is_idkg_key())
+            .collect::<Vec<_>>();
 
         let registry_client = RegistryCanister::new_with_query_timeout(
             vec![nns_node.get_public_url()],
@@ -225,8 +256,8 @@ fn test(env: TestEnv) {
                             reject_message: format!(
                                 "Unable to route management canister request {}: \
                                 ChainKeyError(\"Requested unknown or disabled threshold key: {}, \
-                                existing enabled keys: []\")",
-                                method_name, key_id
+                                existing enabled keys: [{}, {}]\")",
+                                method_name, key_id, key_id4, key_id5,
                             ),
                             error_code: Some("IC0406".to_string())
                         })
@@ -279,7 +310,7 @@ fn test(env: TestEnv) {
         })
         .await;
 
-        for key_id in &key_ids {
+        for key_id in &all_key_ids {
             let new_public_key = get_public_key_and_test_signature(key_id, &msg_can, false, log)
                 .await
                 .expect(
@@ -287,6 +318,10 @@ fn test(env: TestEnv) {
                     for the pre-existing key",
                 );
             assert_eq!(public_keys.get(key_id).unwrap(), &new_public_key);
+
+            if !key_id.is_idkg_key() {
+                continue;
+            }
 
             // Reshare agreement on original App subnet should be purged
             let metric_with_label = format!(
