@@ -313,6 +313,7 @@ type Governance = record {
   target_version : opt Version;
   timers : opt Timers;
   upgrade_journal : opt UpgradeJournal;
+  topic : opt Topic;
 };
 
 type Timers = record {

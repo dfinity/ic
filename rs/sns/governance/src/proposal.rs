@@ -2439,6 +2439,7 @@ impl ProposalData {
             minimum_yes_proportion_of_total,
             minimum_yes_proportion_of_exercised,
             action_auxiliary,
+            topic,
         } = self;
 
         let limited_ballots: BTreeMap<_, _> = ballots
@@ -2468,6 +2469,7 @@ impl ProposalData {
             minimum_yes_proportion_of_total: *minimum_yes_proportion_of_total,
             minimum_yes_proportion_of_exercised: *minimum_yes_proportion_of_exercised,
             action_auxiliary: action_auxiliary.clone(),
+            topic: *topic,
 
             // The following fields are truncated:
             payload_text_rendering: None,
@@ -2735,7 +2737,7 @@ mod tests {
         pb::v1::{
             governance::{self, Version},
             Ballot, ChunkedCanisterWasm, Empty, Governance as GovernanceProto, NeuronId, Proposal,
-            ProposalId, Subaccount, WaitForQuietState,
+            ProposalId, Subaccount, Topic, WaitForQuietState,
         },
         sns_upgrade::{
             CanisterSummary, GetNextSnsVersionRequest, GetNextSnsVersionResponse,
@@ -4781,6 +4783,7 @@ Version {
             // This is because the proposal was rejected (see the latest_tally field).
             executed_timestamp_seconds: 0,
             action_auxiliary: None,
+            topic: Some(Topic::Governance as i32),
         };
     }
 
