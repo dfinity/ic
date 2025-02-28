@@ -12,7 +12,8 @@ use std::fmt::Debug;
 ///
 /// ```rust
 /// use ic_metrics_assert::{MetricsAssert, PocketIcHttpQuery};
-/// use pocket_ic::{management_canister::CanisterId, PocketIc};
+/// use pocket_ic::PocketIc;
+/// use ic_management_canister_types::CanisterId;
 ///
 /// struct Setup {
 ///     env: PocketIc,
