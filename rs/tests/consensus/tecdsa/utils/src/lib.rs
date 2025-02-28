@@ -2,6 +2,7 @@ use candid::{CandidType, Deserialize, Encode, Principal};
 use canister_test::{Canister, Cycles};
 use ic_agent::AgentError;
 use ic_base_types::{NodeId, SubnetId};
+use ic_bls12_381::G1Affine;
 use ic_canister_client::Sender;
 use ic_config::subnet_config::{ECDSA_SIGNATURE_FEE, SCHNORR_SIGNATURE_FEE, VETKD_FEE};
 use ic_limits::SMALL_APP_SUBNET_MAX_SIZE;
@@ -476,6 +477,7 @@ pub async fn get_vetkd_public_key_with_retries(
         }
     };
 
+    info!(logger, "vetkd_public_key returns {:?}", public_key);
     Ok(public_key)
 }
 
@@ -689,11 +691,12 @@ pub async fn get_vetkd_with_logger(
     msg_can: &MessageCanister<'_>,
     logger: &Logger,
 ) -> Result<Vec<u8>, AgentError> {
+    let transport_public_key = G1Affine::from(G1Affine::generator());
     let vetkd_request = VetKdDeriveEncryptedKeyArgs {
         derivation_domain: input,
         derivation_id: vec![],
         key_id: key_id.clone(),
-        encryption_public_key: [1; 48],
+        encryption_public_key: transport_public_key.to_compressed(),
     };
     info!(
         logger,
@@ -918,8 +921,8 @@ pub fn verify_ecdsa_signature(pk: &[u8], sig: &[u8], msg: &[u8]) -> bool {
     pk.verify_prehash(msg, &signature).is_ok()
 }
 
-pub fn verify_vetkd(_pk: &[u8], _sig: &[u8], _msg: &[u8]) -> bool {
-    true
+pub fn verify_vetkd(pk: &[u8], sig: &[u8], msg: &[u8]) -> bool {
+    pk.len() > 0 && sig.len() > 0 && msg.len() > 0
 }
 
 pub fn verify_signature(key_id: &MasterPublicKeyId, msg: &[u8], pk: &[u8], sig: &[u8]) {
