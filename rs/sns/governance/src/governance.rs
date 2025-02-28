@@ -3147,7 +3147,7 @@ impl Governance {
             custom_function_id_to_topic,
         } = set_custom_proposal_topics;
 
-        for (custom_function_id, new_topic) in custom_function_id_to_topic.into_iter() {
+        for (custom_function_id, new_topic) in custom_function_id_to_topic {
             let nervous_system_function = self
                 .proto
                 .id_to_nervous_system_functions
@@ -3155,10 +3155,17 @@ impl Governance {
 
             if let Some(nervous_system_function) = nervous_system_function {
                 let proposal_type = nervous_system_function.function_type.as_mut();
+
                 if let Some(FunctionType::GenericNervousSystemFunction(custom_proposal_type)) =
                     proposal_type
                 {
                     custom_proposal_type.topic = Some(new_topic);
+                } else {
+                    log!(
+                        ERROR,
+                        "Unexpected situation: Cannot change the topic of a native proposal type: \
+                        {proposal_type:?}",
+                    )
                 }
             }
         }

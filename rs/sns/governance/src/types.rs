@@ -1732,7 +1732,7 @@ impl Action {
             DeregisterDappCanisters(_)
             | TransferSnsTreasuryFunds(_)
             | MintSnsTokens(_)
-            | Action::SetCustomProposalTopics(_) => ProposalCriticality::Critical,
+            | SetCustomProposalTopics(_) => ProposalCriticality::Critical,
 
             Unspecified(_)
             | ManageNervousSystemParameters(_)

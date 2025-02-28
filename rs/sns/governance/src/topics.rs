@@ -209,45 +209,46 @@ impl pb::Governance {
         self.id_to_nervous_system_functions
             .iter()
             .filter_map(|(function_id, function)| {
-                match &function.function_type {
-                    Some(FunctionType::GenericNervousSystemFunction(generic)) => {
-                        let function_name = function.name.clone();
+                let Some(FunctionType::GenericNervousSystemFunction(generic)) =
+                    &function.function_type
+                else {
+                    // Skip native proposals.
+                    return None;
+                };
 
-                        if let Some(topic) = generic.topic {
-                            let specific_topic = match pb::Topic::try_from(topic) {
-                                Err(err) => {
-                                    log!(
-                                        ERROR,
-                                        "Custom proposal ID {function_id}: Cannot interpret \
-                                            {topic} as Topic: {err}",
-                                    );
+                let function_name = function.name.clone();
 
-                                    // This should never happen; if it somehow does, treat this
-                                    // case as a custom function for which the topic is unknown.
-                                    None
-                                }
-                                Ok(pb::Topic::Unspecified) => {
-                                    log!(
-                                        ERROR,
-                                        "Custom proposal ID {function_id}: topic Unspecified."
-                                    );
+                let Some(topic) = generic.topic else {
+                    // Topic not yet set for this custom function.
+                    return Some((*function_id, (function_name, None)));
+                };
 
-                                    // This should never happen, but if it somehow does, treat this
-                                    // case as a custom function for which the topic is unknown.
-                                    None
-                                }
-                                Ok(topic) => Some(topic),
-                            };
+                let specific_topic = match pb::Topic::try_from(topic) {
+                    Err(err) => {
+                        log!(
+                            ERROR,
+                            "Custom proposal ID {function_id}: Cannot interpret \
+                                {topic} as Topic: {err}",
+                        );
 
-                            Some((*function_id, (function_name, specific_topic)))
-                        } else {
-                            // Topic not yet set for this custom function.
-                            Some((*function_id, (function_name, None)))
-                        }
+                        // This should never happen; if it somehow does, treat this
+                        // case as a custom function for which the topic is unknown.
+                        None
                     }
-                    // Not a custom function.
-                    _ => None,
-                }
+                    Ok(pb::Topic::Unspecified) => {
+                        log!(
+                            ERROR,
+                            "Custom proposal ID {function_id}: topic Unspecified."
+                        );
+
+                        // This should never happen, but if it somehow does, treat this
+                        // case as a custom function for which the topic is unknown.
+                        None
+                    }
+                    Ok(topic) => Some(topic),
+                };
+
+                Some((*function_id, (function_name, specific_topic)))
             })
             .collect()
     }
