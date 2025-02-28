@@ -27,6 +27,7 @@ use http::{
     HeaderName, Method, StatusCode,
 };
 use ic_bn_lib::http::body::buffer_body;
+use ic_bn_lib::http::headers::{X_IC_CANISTER_ID, X_REQUESTED_WITH, X_REQUEST_ID};
 use ic_bn_lib::http::proxy::proxy;
 use ic_bn_lib::http::{Client, Error as IcBnError};
 use ic_http_gateway::{CanisterRequest, HttpGatewayClient, HttpGatewayRequestArgs};
@@ -423,9 +424,11 @@ fn received_stop_signal(rx: &mut Receiver<()>) -> bool {
 
 // ADAPTED from ic-gateway
 
-const X_IC_CANISTER_ID: HeaderName = HeaderName::from_static("x-ic-canister-id");
 const MAX_REQUEST_BODY_SIZE: usize = 10 * 1_048_576;
 const MINUTE: Duration = Duration::from_secs(60);
+
+const X_OC_JWT: HeaderName = HeaderName::from_static("x-oc-jwt");
+const X_OC_API_KEY: HeaderName = HeaderName::from_static("x-oc-api-key");
 
 fn layer(methods: &[Method]) -> CorsLayer {
     CorsLayer::new()
@@ -435,6 +438,7 @@ fn layer(methods: &[Method]) -> CorsLayer {
             ACCEPT_RANGES,
             CONTENT_LENGTH,
             CONTENT_RANGE,
+            X_REQUEST_ID,
             X_IC_CANISTER_ID,
         ])
         .allow_headers([
@@ -446,7 +450,36 @@ fn layer(methods: &[Method]) -> CorsLayer {
             CONTENT_TYPE,
             RANGE,
             COOKIE,
+            X_REQUESTED_WITH,
             X_IC_CANISTER_ID,
+        ])
+        .max_age(10 * MINUTE)
+}
+
+fn http_gw_layer(methods: &[Method]) -> CorsLayer {
+    CorsLayer::new()
+        .allow_origin(Any)
+        .allow_methods(methods.to_vec())
+        .expose_headers([
+            ACCEPT_RANGES,
+            CONTENT_LENGTH,
+            CONTENT_RANGE,
+            X_REQUEST_ID,
+            X_IC_CANISTER_ID,
+        ])
+        .allow_headers([
+            USER_AGENT,
+            DNT,
+            IF_NONE_MATCH,
+            IF_MODIFIED_SINCE,
+            CACHE_CONTROL,
+            CONTENT_TYPE,
+            RANGE,
+            COOKIE,
+            X_REQUESTED_WITH,
+            X_IC_CANISTER_ID,
+            X_OC_JWT,
+            X_OC_API_KEY,
         ])
         .max_age(10 * MINUTE)
 }
@@ -890,7 +923,7 @@ impl ApiState {
                     .put(handler)
                     .delete(handler)
                     .patch(handler)
-                    .layer(layer(&[
+                    .layer(http_gw_layer(&[
                         Method::HEAD,
                         Method::GET,
                         Method::POST,
