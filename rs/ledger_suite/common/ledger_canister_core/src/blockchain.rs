@@ -11,7 +11,7 @@ use ic_ledger_core::timestamp::TimeStamp;
 use ic_ledger_hash_of::HashOf;
 use std::ops::Range;
 
-// All incides used to add and retrieve blocks should be global,
+// All indices used to add and retrieve blocks should be global,
 // taking into account archived blocks. E.g. if there are 10 archived
 // blocks and no blocks in the ledger, the next block should be added
 // with index 10, and retrieved with `get_block(10)` or `get_blocks(10..11)`.
