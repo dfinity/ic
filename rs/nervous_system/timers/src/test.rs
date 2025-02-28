@@ -168,8 +168,8 @@ mod tests {
     #[test]
     fn test_timers_setting_running_and_clearing() {
         thread_local! {
-            static TIMER_1_COUNT: RefCell<u64> = RefCell::new(0);
-            static TIMER_2_COUNT: RefCell<u64> = RefCell::new(0);
+            static TIMER_1_COUNT: RefCell<u64> = const { RefCell::new(0) };
+            static TIMER_2_COUNT: RefCell<u64> = const { RefCell::new(0) };
         }
 
         let timer_1_id = set_timer(Duration::from_secs(10), || {
