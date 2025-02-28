@@ -16,6 +16,12 @@ inputs:
 runs:
   using: "composite"
   steps:
+
+      - name: Check for val
+        shell: bash
+        if: inputs.BUILDEVENT_APIKEY != ''
+        run: echo BUIDLEVENT is set
+
       - name: Run Bazel Test All
         id: bazel-test-all
         shell: bash
