@@ -69,8 +69,7 @@ impl RecurringAsyncTask for CalculateDistributableRewardsTask {
     }
 
     fn initial_delay(&self) -> Duration {
-        // TODO DO NOT MERGE - we need to understand the governance initialization
-        Duration::from_secs(0)
+        self.next_reward_task_from_now()
     }
 
     const NAME: &'static str = "RewardDistribution";
