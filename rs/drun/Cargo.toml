@@ -7,6 +7,8 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
+ic-error-types = { workspace = true }
+ic-execution-environment = { path = "../execution_environment" }
 clap = { workspace = true }
 futures.workspace = true
 hex = { workspace = true }
@@ -14,8 +16,6 @@ ic-canister-sandbox-backend-lib = { path = "../canister_sandbox" }
 ic-config = { path = "../config" }
 ic-crypto-test-utils-ni-dkg = { path = "../crypto/test_utils/ni-dkg" }
 ic-cycles-account-manager = { path = "../cycles_account_manager" }
-ic-error-types = { path = "../../packages/ic-error-types" }
-ic-execution-environment = { path = "../execution_environment" }
 ic-http-endpoints-metrics = { path = "../http_endpoints/metrics" }
 ic-interfaces = { path = "../interfaces" }
 ic-interfaces-state-manager = { path = "../interfaces/state_manager" }

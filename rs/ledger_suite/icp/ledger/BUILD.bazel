@@ -136,7 +136,6 @@ rust_ic_test(
     deps = [
         # Keep sorted.
         ":ledger",
-        "//packages/ic-error-types",
         "//packages/icrc-ledger-types:icrc_ledger_types",
         "//rs/ledger_suite/common/ledger_core",
         "//rs/ledger_suite/icp:icp_ledger",
@@ -152,6 +151,7 @@ rust_ic_test(
         "@crate_index//:candid",
         "@crate_index//:hex",
         "@crate_index//:ic-agent",
+        "@crate_index//:ic-error-types",
         "@crate_index//:num-traits",
         "@crate_index//:serde_bytes",
     ],

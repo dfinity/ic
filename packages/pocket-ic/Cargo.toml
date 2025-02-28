@@ -49,12 +49,12 @@ wslpath = "0.0.2"
 
 [dev-dependencies]
 #TODO: try upgrading this to the latest bitcion crate
+ic-error-types = { workspace = true }
+k256 = { workspace = true }
 bitcoin = { version = "0.28.2" }
 candid_parser = { workspace = true }
 ed25519-dalek = { workspace = true }
 flate2 = { workspace = true }
 ic-cdk = { workspace = true }
-ic-error-types = { path = "../../packages/ic-error-types" }
-k256 = { workspace = true }
 lazy_static = { workspace = true }
 wat = { workspace = true }

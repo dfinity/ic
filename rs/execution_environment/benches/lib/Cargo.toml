@@ -7,12 +7,12 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
+ic-error-types = { workspace = true }
+ic-execution-environment = { path = "../../" }
 criterion = { workspace = true }
 ic-config = { path = "../../../config" }
 ic-limits = { path = "../../../limits" }
 ic-cycles-account-manager = { path = "../../../cycles_account_manager" }
-ic-error-types = { path = "../../../../packages/ic-error-types" }
-ic-execution-environment = { path = "../../" }
 ic-interfaces = { path = "../../../interfaces" }
 ic-logger = { path = "../../../monitoring/logger" }
 ic-metrics = { path = "../../../monitoring/metrics" }

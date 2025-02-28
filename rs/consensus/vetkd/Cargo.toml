@@ -7,10 +7,10 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
+ic-error-types = { workspace = true }
+ic-interfaces = { path = "../../interfaces" }
 ic-consensus-utils = { path = "../utils" }
 ic-crypto = { path = "../../crypto" }
-ic-error-types = { path = "../../../packages/ic-error-types" }
-ic-interfaces = { path = "../../interfaces" }
 ic-interfaces-registry = { path = "../../interfaces/registry" }
 ic-interfaces-state-manager = { path = "../../interfaces/state_manager" }
 ic-logger = { path = "../../monitoring/logger" }

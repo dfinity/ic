@@ -15,7 +15,6 @@ rust_library(
     deps = [
         # Keep sorted.
         "//packages/ic-ed25519",
-        "//packages/ic-error-types",
         "//rs/canonical_state/certification_version",
         "//rs/config",
         "//rs/crypto/utils/threshold_sig_der",
@@ -40,6 +39,7 @@ rust_library(
         "//rs/types/management_canister_types",
         "//rs/types/types",
         "//rs/utils/thread",
+        "@crate_index//:ic-error-types",
         "@crate_index//:prometheus",
         "@crate_index//:slog",
         "@crate_index//:tracing",

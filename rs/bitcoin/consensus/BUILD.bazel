@@ -4,7 +4,7 @@ package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
     # Keep sorted.
-    "//packages/ic-error-types",
+    "@crate_index//:ic-error-types",
     "//rs/bitcoin/replica_types",
     "//rs/config",
     "//rs/interfaces",

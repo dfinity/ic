@@ -7,11 +7,11 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
+ic-error-types = { workspace = true }
+ic-interfaces = { path = "../../interfaces" }
 ic-btc-interface = { workspace = true }
 ic-btc-replica-types = { path = "../replica_types" }
 ic-config = { path = "../../config" }
-ic-error-types = { path = "../../../packages/ic-error-types" }
-ic-interfaces = { path = "../../interfaces" }
 ic-interfaces-adapter-client = { path = "../../interfaces/adapter_client" }
 ic-interfaces-registry = { path = "../../interfaces/registry" }
 ic-interfaces-state-manager = { path = "../../interfaces/state_manager" }

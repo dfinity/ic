@@ -4,7 +4,6 @@ package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
     # Keep sorted.
-    "//packages/ic-error-types",
     "//rs/canonical_state/certification_version",
     "//rs/canonical_state/tree_hash",
     "//rs/crypto/tree_hash",
@@ -15,6 +14,7 @@ DEPENDENCIES = [
     "//rs/replicated_state",
     "//rs/types/base_types",
     "//rs/types/types",
+    "@crate_index//:ic-error-types",
     "@crate_index//:leb128",
     "@crate_index//:serde",
     "@crate_index//:serde_bytes",

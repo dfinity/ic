@@ -5,7 +5,6 @@ package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
     # Keep sorted.
-    "//packages/ic-error-types",
     "//rs/bitcoin/replica_types",
     "//rs/crypto/internal/crypto_lib/types",
     "//rs/crypto/sha2",
@@ -21,6 +20,7 @@ DEPENDENCIES = [
     "@crate_index//:bincode",
     "@crate_index//:candid",
     "@crate_index//:hex",
+    "@crate_index//:ic-error-types",
     "@crate_index//:maplit",
     "@crate_index//:once_cell",
     "@crate_index//:prost",

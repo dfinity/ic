@@ -21,7 +21,6 @@ MACRO_DEPENDENCIES = [
 
 DEV_DEPENDENCIES = [
     # Keep sorted.
-    "//packages/ic-error-types",
     "//rs/canister_client/sender",
     "//rs/rust_canisters/canister_test",
     "//rs/rust_canisters/dfn_candid",
@@ -32,6 +31,7 @@ DEV_DEPENDENCIES = [
     "@crate_index//:assert_matches",
     "@crate_index//:candid",
     "@crate_index//:criterion",
+    "@crate_index//:ic-error-types",
 ]
 
 MACRO_DEV_DEPENDENCIES = []

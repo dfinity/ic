@@ -6,7 +6,6 @@ MACRO_DEPENDENCIES = []
 
 CALLSERVICE_FUZZER_DEPENDENCIES = [
     # Keep sorted.
-    "//packages/ic-error-types",
     "//rs/config",
     "//rs/http_endpoints/public",
     "//rs/interfaces",
@@ -32,6 +31,7 @@ CALLSERVICE_FUZZER_DEPENDENCIES = [
     "@crate_index//:hyper",
     "@crate_index//:hyper-util",
     "@crate_index//:ic-agent",
+    "@crate_index//:ic-error-types",
     "@crate_index//:libfuzzer-sys",
     "@crate_index//:mockall",
     "@crate_index//:prost",

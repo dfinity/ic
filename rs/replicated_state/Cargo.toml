@@ -7,6 +7,8 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
+ic-error-types = { workspace = true }
+ic-interfaces = { path = "../interfaces" }
 bit-vec = "0.6.3"
 cvt = "0.1.1"
 ic-base-types = { path = "../types/base_types" }
@@ -16,8 +18,6 @@ ic-certification-version = { path = "../canonical_state/certification_version" }
 ic-config = { path = "../config" }
 ic-limits = { path = "../limits" }
 ic-crypto-sha2 = { path = "../crypto/sha2" }
-ic-error-types = { path = "../../packages/ic-error-types" }
-ic-interfaces = { path = "../interfaces" }
 ic-logger = { path = "../monitoring/logger" }
 ic-management-canister-types-private = { path = "../types/management_canister_types" }
 ic-metrics = { path = "../monitoring/metrics" }

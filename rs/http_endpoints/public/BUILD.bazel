@@ -12,7 +12,6 @@ package(default_visibility = [
 
 DEPENDENCIES = [
     # Keep sorted.
-    "//packages/ic-error-types",
     "//rs/certification",
     "//rs/config",
     "//rs/crypto/interfaces/sig_verification",
@@ -47,6 +46,7 @@ DEPENDENCIES = [
     "@crate_index//:http-body-util",
     "@crate_index//:hyper",
     "@crate_index//:hyper-util",
+    "@crate_index//:ic-error-types",
     "@crate_index//:inferno",
     "@crate_index//:mockall",
     "@crate_index//:prometheus",

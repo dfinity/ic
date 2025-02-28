@@ -7,10 +7,10 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
+ic-error-types = { workspace = true }
+ic-interfaces = { path = "../../interfaces" }
 hex = { workspace = true }
 ic-consensus-utils = { path = "../../consensus/utils" }
-ic-error-types = { path = "../../../packages/ic-error-types" }
-ic-interfaces = { path = "../../interfaces" }
 ic-interfaces-adapter-client = { path = "../../interfaces/adapter_client" }
 ic-interfaces-registry = { path = "../../interfaces/registry" }
 ic-interfaces-state-manager = { path = "../../interfaces/state_manager" }
@@ -25,10 +25,10 @@ rand = { workspace = true }
 slog = { workspace = true }
 
 [dev-dependencies]
+ic-error-types = { workspace = true }
+ic-registry-subnet-features = { path = "../../registry/subnet_features" }
 ic-artifact-pool = { path = "../../artifact_pool" }
 ic-consensus-mocks = { path = "../../consensus/mocks" }
-ic-error-types = { path = "../../../packages/ic-error-types" }
-ic-registry-subnet-features = { path = "../../registry/subnet_features" }
 ic-registry-subnet-type = { path = "../../registry/subnet_type" }
 ic-test-utilities = { path = "../../test_utilities" }
 ic-test-utilities-logger = { path = "../../test_utilities/logger" }
