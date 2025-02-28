@@ -1106,6 +1106,9 @@ impl TryFrom<(Time, pb_metadata::ReshareChainKeyContext)> for ReshareChainKeyCon
                 .time
                 .map_or(time, |t| Time::from_nanos_since_unix_epoch(t.time_nanos)),
             target_id: {
+                // The target id is empty, if we have a legacy IDkgDealingContext
+                // Since we don't need the target id for Idkg, this is safe
+                // TODO(CRP-2613): remove this case
                 if context.target_id.is_empty() {
                     NiDkgTargetId::new([0; 32])
                 } else {

@@ -40,10 +40,10 @@ use ic_management_canister_types_private::{
     EmptyBlob, InstallChunkedCodeArgs, InstallCodeArgsV2, ListCanisterSnapshotArgs,
     LoadCanisterSnapshotArgs, MasterPublicKeyId, Method as Ic00Method, NodeMetricsHistoryArgs,
     Payload as Ic00Payload, ProvisionalCreateCanisterWithCyclesArgs, ProvisionalTopUpCanisterArgs,
-    SchnorrPublicKeyArgs, SchnorrPublicKeyResponse, SetupInitialDKGArgs, SignWithECDSAArgs,
-    SignWithSchnorrArgs, SignWithSchnorrAux, StoredChunksArgs, SubnetInfoArgs, SubnetInfoResponse,
-    TakeCanisterSnapshotArgs, UninstallCodeArgs, UpdateSettingsArgs, UploadChunkArgs,
-    VetKdDeriveEncryptedKeyArgs, VetKdPublicKeyArgs, VetKdPublicKeyResult, IC_00,
+    ReshareChainKeyArgs, SchnorrPublicKeyArgs, SchnorrPublicKeyResponse, SetupInitialDKGArgs,
+    SignWithECDSAArgs, SignWithSchnorrArgs, SignWithSchnorrAux, StoredChunksArgs, SubnetInfoArgs,
+    SubnetInfoResponse, TakeCanisterSnapshotArgs, UninstallCodeArgs, UpdateSettingsArgs,
+    UploadChunkArgs, VetKdDeriveEncryptedKeyArgs, VetKdPublicKeyArgs, VetKdPublicKeyResult, IC_00,
 };
 use ic_metrics::MetricsRegistry;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
@@ -1312,13 +1312,45 @@ impl ExecutionEnvironment {
                     }
                 }
             }
-            Ok(Ic00Method::ReshareChainKey) => ExecuteSubnetMessageResult::Finished {
-                response: Err(UserError::new(
-                    ErrorCode::CanisterRejectedMessage,
-                    format!("{} API is not yet implemented.", msg.method_name()),
-                )),
-                refund: msg.take_cycles(),
-            },
+            Ok(Ic00Method::ReshareChainKey) => {
+                let cycles = msg.take_cycles();
+                match &msg {
+                    CanisterCall::Request(request) => {
+                        match ReshareChainKeyArgs::decode(request.method_payload()) {
+                            Ok(args) => match get_master_public_key(
+                                &chain_key_data.master_public_keys,
+                                self.own_subnet_id,
+                                &args.key_id,
+                            ) {
+                                Ok(_) => {
+                                    let mut target_id = [0u8; 32];
+                                    rng.fill_bytes(&mut target_id);
+
+                                    self.reshare_chain_key(&mut state, args, request, target_id)
+                                        .map_or_else(
+                                            |err| ExecuteSubnetMessageResult::Finished {
+                                                response: Err(err),
+                                                refund: cycles,
+                                            },
+                                            |()| ExecuteSubnetMessageResult::Processing,
+                                        )
+                                }
+                                Err(err) => ExecuteSubnetMessageResult::Finished {
+                                    response: Err(err),
+                                    refund: cycles,
+                                },
+                            },
+                            Err(err) => ExecuteSubnetMessageResult::Finished {
+                                response: Err(err),
+                                refund: cycles,
+                            },
+                        }
+                    }
+                    CanisterCall::Ingress(_) => {
+                        self.reject_unexpected_ingress(Ic00Method::ComputeInitialIDkgDealings)
+                    }
+                }
+            }
 
             Ok(Ic00Method::VetKdDeriveEncryptedKey) => match &msg {
                 CanisterCall::Request(request) => {
@@ -2980,6 +3012,7 @@ impl ExecutionEnvironment {
         Ok(())
     }
 
+    // TODO(CRP-2613): Remove this function after migrating registry to `reshare_chain_key`
     fn compute_initial_idkg_dealings(
         &self,
         state: &mut ReplicatedState,
@@ -3004,6 +3037,29 @@ impl ExecutionEnvironment {
                 registry_version,
                 time: state.time(),
                 target_id: NiDkgTargetId::new([0; 32]),
+            }),
+        );
+        Ok(())
+    }
+
+    fn reshare_chain_key(
+        &self,
+        state: &mut ReplicatedState,
+        args: ReshareChainKeyArgs,
+        request: &Request,
+        target_id: [u8; 32],
+    ) -> Result<(), UserError> {
+        let nodes = args.get_set_of_nodes()?;
+        let registry_version = args.get_registry_version();
+
+        state.metadata.subnet_call_context_manager.push_context(
+            SubnetCallContext::ReshareChainKey(ReshareChainKeyContext {
+                request: request.clone(),
+                key_id: args.key_id,
+                nodes,
+                registry_version,
+                time: state.time(),
+                target_id: NiDkgTargetId::new(target_id),
             }),
         );
         Ok(())
