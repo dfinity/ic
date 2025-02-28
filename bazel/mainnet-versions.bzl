@@ -8,17 +8,11 @@ def _mainnet_versions_impl(repository_ctx):
     # Read and decode mainnet version data
     versions = json.decode(repository_ctx.read(repository_ctx.attr.path))
 
-    # Map the json content into bazel
-    content = """
-mainnet_versions = {versions}
-    """.format(versions = versions)
+    # Create a minimal BUILD.bazel file (Bazel requires it)
+    repository_ctx.file("BUILD.bazel", content = "\n")
 
-    repository_ctx.file("BUILD.bazel", content = "\n", executable = False)
-    repository_ctx.file(
-        "defs.bzl",
-        content = content,
-        executable = False,
-    )
+    content = "mainnet_versions = %s" % versions
+    repository_ctx.file("defs.bzl", content = content)
 
 mainnet_versions = repository_rule(
     implementation = _mainnet_versions_impl,
