@@ -47,6 +47,7 @@ MACRO_DEPENDENCIES = []
 
 DEV_DEPENDENCIES = [
     # Keep sorted.
+    "//packages/ic-error-types",
     "//rs/registry/routing_table",
     "//rs/rust_canisters/canister_test",
     "//rs/test_utilities",
@@ -57,7 +58,6 @@ DEV_DEPENDENCIES = [
     "//rs/test_utilities/time",
     "//rs/test_utilities/types",
     "//rs/types/base_types",
-    "//rs/types/error_types",
     "@crate_index//:assert_matches",
     "@crate_index//:criterion",
     "@crate_index//:insta",

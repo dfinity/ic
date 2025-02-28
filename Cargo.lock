@@ -8535,10 +8535,8 @@ dependencies = [
 
 [[package]]
 name = "ic-error-types"
-version = "0.9.0"
+version = "0.1.0"
 dependencies = [
- "ic-protobuf",
- "ic-utils 0.9.0",
  "serde",
  "strum",
  "strum_macros",
@@ -9733,6 +9731,7 @@ dependencies = [
  "ic-base-types",
  "ic-icp-index",
  "ic-ledger-core",
+ "ic-management-canister-types",
  "ic-nns-constants",
  "ic-state-machine-tests",
  "icp-ledger",
@@ -9988,6 +9987,7 @@ dependencies = [
  "cycles-minting-canister",
  "ic-agent",
  "ic-base-types",
+ "ic-management-canister-types",
  "ic-nervous-system-clients",
  "ic-nns-common",
  "ic-nns-constants",
@@ -10228,6 +10228,7 @@ dependencies = [
  "ic-icrc1-tokens-u64",
  "ic-interfaces-registry",
  "ic-ledger-core",
+ "ic-management-canister-types",
  "ic-management-canister-types-private",
  "ic-nervous-system-agent",
  "ic-nervous-system-clients",
@@ -11131,6 +11132,7 @@ dependencies = [
  "candid",
  "erased-serde",
  "hex",
+ "ic-error-types",
  "ic-protobuf-generator",
  "ic-test-utilities-compare-dirs",
  "maplit",
@@ -11138,6 +11140,7 @@ dependencies = [
  "serde",
  "serde_json",
  "slog",
+ "strum",
  "tempfile",
 ]
 
@@ -11495,6 +11498,8 @@ version = "0.9.0"
 dependencies = [
  "ic-base-types",
  "ic-protobuf",
+ "maplit",
+ "pretty_assertions",
 ]
 
 [[package]]
@@ -11941,6 +11946,7 @@ dependencies = [
  "ic-ledger-hash-of",
  "ic-ledger-test-utils",
  "ic-limits",
+ "ic-management-canister-types",
  "ic-nns-common",
  "ic-nns-constants",
  "ic-nns-governance-api",
@@ -12584,6 +12590,7 @@ dependencies = [
  "futures",
  "ic-base-types",
  "ic-cdk 0.17.1",
+ "ic-management-canister-types",
  "ic-management-canister-types-private",
  "ic-nervous-system-agent",
  "ic-nervous-system-integration-tests",
@@ -17716,6 +17723,7 @@ dependencies = [
  "ic-cdk 0.17.1",
  "ic-certification 3.0.2",
  "ic-error-types",
+ "ic-management-canister-types",
  "ic-transport-types",
  "k256 0.13.4",
  "lazy_static",
@@ -18708,6 +18716,7 @@ dependencies = [
  "canister-test",
  "ic-base-types",
  "ic-crypto-sha2",
+ "ic-management-canister-types",
  "ic-nervous-system-integration-tests",
  "ic-nns-constants",
  "ic-nns-test-utils",
@@ -19828,6 +19837,29 @@ version = "0.9.0"
 dependencies = [
  "candid",
  "serde",
+]
+
+[[package]]
+name = "salt-sharing-canister-integration-tests"
+version = "0.9.0"
+dependencies = [
+ "assert_matches",
+ "candid",
+ "canister-test",
+ "chrono",
+ "ic-base-types",
+ "ic-canisters-http-types",
+ "ic-crypto-sha2",
+ "ic-management-canister-types",
+ "ic-nervous-system-integration-tests",
+ "ic-nns-constants",
+ "ic-nns-test-utils",
+ "ic-registry-keys",
+ "ic-registry-transport",
+ "pocket-ic",
+ "salt-sharing-api",
+ "serde",
+ "tokio",
 ]
 
 [[package]]
