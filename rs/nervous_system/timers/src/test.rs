@@ -5,7 +5,7 @@ use std::collections::BTreeMap;
 use std::mem;
 use std::time::{Duration, SystemTime};
 
-pub enum TimerTask {
+enum TimerTask {
     OneShot(OneShotTimerTask),
     Recurring(RecurringTimerTask),
 }
