@@ -687,7 +687,7 @@ pub fn process(
     // Capping at the limit to preserve the existing behaviour. It should be
     // possible to remove capping after ensuring that all callers can handle
     // instructions executed being larger than the limit.
-    let mut slice_instructions_executed = system_api
+    let slice_instructions_executed = system_api
         .slice_instructions_executed(instruction_counter)
         .min(slice_instruction_limit);
     // Capping at the limit to avoid an underflow when computing the remaining
@@ -699,7 +699,7 @@ pub fn process(
 
     // In case the message dirtied too many pages, as a performance optimization we will
     // yield the control to the replica and then resume copying dirty pages in a new execution slice.
-    let num_dirty_pages = if let Ok(ref res) = run_result {
+    if let Ok(ref res) = run_result {
         let dirty_pages = NumOsPages::from(res.wasm_dirty_pages.len() as u64);
         // Do not perform this optimization for subnets where DTS is not enabled.
         if execution_parameters.instruction_limits.slicing_enabled()
@@ -727,18 +727,9 @@ pub fn process(
                     Ok(instance),
                 );
             }
-            // The optimization was performed. The slice instructions have been accounted
-            // for in the first slice. At the end of this function we will only account
-            // for dirty pages.
-            slice_instructions_executed = NumInstructions::from(0);
-            dirty_pages
-        } else {
-            // The optimization wasn't performed.
-            NumOsPages::from(0)
+            // The optimization was performed. At the end of this function
+            // the round will be finished due to the `MAX_HEAP_DELTA_PER_ITERATION`.
         }
-    } else {
-        // The optimization wasn't performed because the message execution failed.
-        NumOsPages::from(0)
     };
 
     // Has the side effect of deallocating memory if message failed and
@@ -817,10 +808,7 @@ pub fn process(
     // If the optimization wasn't triggered, then num_dirty_pages = 0, therefore the overhead is 0
     // and the number of instructions is the one accounted for at the beginning of this function.
     let output_slice = SliceExecutionOutput {
-        executed_instructions: NumInstructions::from(
-            slice_instructions_executed.get()
-                + num_dirty_pages.get() * embedder.config().dirty_page_copy_overhead.get(),
-        ),
+        executed_instructions: NumInstructions::from(slice_instructions_executed.get()),
     };
 
     (
