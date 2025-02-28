@@ -1,8 +1,10 @@
 use std::{
-    cell::RefCell,
     collections::HashSet,
     fmt,
-    sync::{atomic::Ordering, Arc},
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc,
+    },
     time::Duration,
 };
 
@@ -23,11 +25,6 @@ use crate::{
     registration::{Id, Registration, State},
     TASK_DELAY_SEC, TASK_ERROR_DELAY_SEC,
 };
-
-thread_local! {
-    pub static IS_RENEWAL: RefCell<String> = RefCell::new("0".to_string());
-    pub static IS_IMPORTANT: RefCell<String> = RefCell::new("0".to_string());
-}
 
 #[derive(Clone, Debug, Serialize)]
 pub enum Action {
@@ -142,6 +139,10 @@ impl From<&ProcessError> for Duration {
 #[async_trait]
 pub trait Process: Sync + Send {
     async fn process(&self, id: &Id, task: &Task) -> Result<(), ProcessError>;
+    async fn set_importance(&self, value: bool);
+    async fn set_renewal(&self, value: bool);
+    async fn get_importance(&self) -> bool;
+    async fn get_renewal(&self) -> bool;
 }
 
 pub struct CanisterQueuer(pub Arc<Agent>, pub Principal);
@@ -286,6 +287,8 @@ pub struct Processor {
     dns_creator: Box<dyn dns::Create>,
     dns_deleter: Box<dyn dns::Delete>,
     certificate_uploader: Box<dyn certificate::Upload>,
+    is_important: AtomicBool,
+    is_renewal: AtomicBool,
 }
 
 impl Processor {
@@ -310,12 +313,30 @@ impl Processor {
             dns_creator,
             dns_deleter,
             certificate_uploader,
+            is_important: AtomicBool::new(false),
+            is_renewal: AtomicBool::new(false),
         }
     }
 }
 
 #[async_trait]
 impl Process for Processor {
+    async fn set_importance(&self, value: bool) {
+        self.is_important.store(value, Ordering::SeqCst);
+    }
+
+    async fn set_renewal(&self, value: bool) {
+        self.is_renewal.store(value, Ordering::SeqCst);
+    }
+
+    async fn get_importance(&self) -> bool {
+        self.is_important.load(Ordering::SeqCst)
+    }
+
+    async fn get_renewal(&self) -> bool {
+        self.is_renewal.load(Ordering::SeqCst)
+    }
+
     async fn process(&self, id: &Id, task: &Task) -> Result<(), ProcessError> {
         match task.action {
             Action::Order => {
@@ -425,13 +446,29 @@ impl<T: Process> WithDetectRenewal<T> {
 
 #[async_trait]
 impl<T: Process> Process for WithDetectRenewal<T> {
+    async fn set_importance(&self, is_important: bool) {
+        self.processor.set_importance(is_important).await;
+    }
+
+    async fn set_renewal(&self, is_renewal: bool) {
+        self.processor.set_renewal(is_renewal).await;
+    }
+
+    async fn get_importance(&self) -> bool {
+        self.processor.get_importance().await
+    }
+
+    async fn get_renewal(&self) -> bool {
+        self.processor.get_renewal().await
+    }
+
     async fn process(&self, id: &Id, task: &Task) -> Result<(), ProcessError> {
         let is_renewal = match self.renewal_detector.get_cert(id).await {
-            Ok(_) => "1",
-            Err(GetCertError::NotFound) => "0",
+            Ok(_) => true,
+            Err(GetCertError::NotFound) => false,
             Err(err) => return Err(ProcessError::UnexpectedError(anyhow!(err))),
         };
-        IS_RENEWAL.with(|cell| *cell.borrow_mut() = is_renewal.to_string());
+        self.processor.set_renewal(is_renewal).await;
         self.processor.process(id, task).await
     }
 }
@@ -459,15 +496,28 @@ pub fn extract_domain(name: &str) -> &str {
 
 #[async_trait]
 impl<T: Process> Process for WithDetectImportance<T> {
+    async fn set_importance(&self, is_important: bool) {
+        self.processor.set_importance(is_important).await;
+    }
+
+    async fn set_renewal(&self, is_renewal: bool) {
+        self.processor.set_renewal(is_renewal).await;
+    }
+
+    async fn get_importance(&self) -> bool {
+        self.processor.get_importance().await
+    }
+
+    async fn get_renewal(&self) -> bool {
+        self.processor.get_renewal().await
+    }
+
     async fn process(&self, id: &Id, task: &Task) -> Result<(), ProcessError> {
         let domain = extract_domain(&task.name);
 
-        let is_important = match self.domains.contains(domain) {
-            false => "0",
-            true => "1",
-        };
+        let is_important = self.domains.contains(domain);
 
-        IS_IMPORTANT.with(|cell| *cell.borrow_mut() = is_important.to_string());
+        self.processor.set_importance(is_important).await;
 
         self.processor.process(id, task).await
     }

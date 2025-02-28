@@ -21,7 +21,7 @@ use crate::{
     verification::{Verify, VerifyError},
     work::{
         extract_domain, Dispense, DispenseError, Peek, PeekError, Process, ProcessError, Queue,
-        QueueError, Task, IS_IMPORTANT, IS_RENEWAL,
+        QueueError, Task,
     },
 };
 
@@ -350,12 +350,12 @@ impl<T: Process> Process for WithMetrics<T> {
 
         let duration = start_time.elapsed().as_secs_f64();
 
-        let is_renewal = IS_RENEWAL.with(|cell| cell.borrow().clone());
-        let is_important = IS_IMPORTANT.with(|cell| cell.borrow().clone());
+        let is_renewal = self.0.get_renewal().await;
+        let is_important = self.0.get_importance().await;
 
-        let apex_domain = match is_important.as_str() {
-            "1" => extract_domain(&task.name),
-            _ => "N/A",
+        let apex_domain = match is_important {
+            true => extract_domain(&task.name),
+            false => "N/A",
         };
 
         let MetricParams {
@@ -368,8 +368,8 @@ impl<T: Process> Process for WithMetrics<T> {
             .with_label_values(&[
                 status,
                 &task.action.to_string(),
-                &is_renewal,
-                &is_important,
+                &is_renewal.to_string(),
+                &is_important.to_string(),
                 apex_domain,
             ])
             .inc();
@@ -377,8 +377,8 @@ impl<T: Process> Process for WithMetrics<T> {
             .with_label_values(&[
                 status,
                 &task.action.to_string(),
-                &is_renewal,
-                &is_important,
+                &is_renewal.to_string(),
+                &is_important.to_string(),
                 apex_domain,
             ])
             .observe(duration);
@@ -386,6 +386,22 @@ impl<T: Process> Process for WithMetrics<T> {
         info!(action = action.as_str(), id, name = task.name, task = task.action.to_string(), is_renewal, is_important, status, duration, error = ?out.as_ref().err());
 
         out
+    }
+
+    async fn set_importance(&self, value: bool) {
+        self.0.set_importance(value).await;
+    }
+
+    async fn set_renewal(&self, value: bool) {
+        self.0.set_renewal(value).await;
+    }
+
+    async fn get_importance(&self) -> bool {
+        self.0.get_importance().await
+    }
+
+    async fn get_renewal(&self) -> bool {
+        self.0.get_renewal().await
     }
 }
 
