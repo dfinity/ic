@@ -30,11 +30,6 @@ if [[ "${CI_EVENT_NAME:-}" == "merge_group" ]]; then
     RUN_ON_DIFF_ONLY="false"
 fi
 
-if [[ "${RUN_ON_DIFF_ONLY:-}" == "true" ]]; then
-    # get bazel targets that changed within the MR
-    BAZEL_TARGETS=$("${CI_PROJECT_DIR:-}"/ci/bazel-scripts/diff.sh)
-fi
-
 # if bazel targets is empty we don't need to run any tests
 if [ -z "${BAZEL_TARGETS:-}" ]; then
     echo "No bazel targets to build"
