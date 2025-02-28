@@ -838,7 +838,7 @@ pub mod proposal {
         /// Id = 15.
         #[prost(message, tag = "19")]
         AdvanceSnsTargetVersion(super::AdvanceSnsTargetVersion),
-        /// SetCustomProposalTopics
+        /// Change the mapping from custom proposal types to topics.
         ///
         /// Id = 16;
         #[prost(message, tag = "20")]
