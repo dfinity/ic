@@ -567,17 +567,37 @@ impl ExecutionState {
             .expect("could not convert from wasm memory number of pages to bytes")
     }
 
-    /// Returns the memory currently used by the `ExecutionState`.
-    pub fn memory_usage(&self) -> NumBytes {
+    /// Returns the stable memory currently used by the `ExecutionState`.
+    pub fn stable_memory_usage(&self) -> NumBytes {
+        num_bytes_try_from(self.stable_memory.size)
+            .expect("could not convert from stable memory number of pages to bytes")
+    }
+
+    // Returns the global memory currently used by the `ExecutionState`.
+    pub fn global_memory_usage(&self) -> NumBytes {
         // We use 8 bytes per global.
         let globals_size_bytes = 8 * self.exported_globals.len() as u64;
+        NumBytes::from(globals_size_bytes)
+    }
+
+    // Returns the memory size of the Wasm binary currently used by the `ExecutionState`.
+    pub fn wasm_binary_memory_usage(&self) -> NumBytes {
         let wasm_binary_size_bytes = self.wasm_binary.binary.len() as u64;
+        NumBytes::from(wasm_binary_size_bytes)
+    }
+
+    // Returns the memory size of the custom sections currently used by the `ExecutionState`.
+    pub fn custom_sections_memory_size(&self) -> NumBytes {
+        self.metadata.memory_usage()
+    }
+
+    /// Returns the memory currently used by the `ExecutionState`.
+    pub fn memory_usage(&self) -> NumBytes {
         self.wasm_memory_usage()
-            + num_bytes_try_from(self.stable_memory.size)
-                .expect("could not convert from stable memory number of pages to bytes")
-            + NumBytes::from(globals_size_bytes)
-            + NumBytes::from(wasm_binary_size_bytes)
-            + self.metadata.memory_usage()
+            + self.stable_memory_usage()
+            + self.global_memory_usage()
+            + self.wasm_binary_memory_usage()
+            + self.custom_sections_memory_size()
     }
 
     /// Returns the number of global variables in the Wasm module.
@@ -815,6 +835,12 @@ impl WasmExecutionMode {
             WasmExecutionMode::Wasm64
         } else {
             WasmExecutionMode::Wasm32
+        }
+    }
+    pub fn as_str(&self) -> &str {
+        match self {
+            WasmExecutionMode::Wasm32 => "wasm32",
+            WasmExecutionMode::Wasm64 => "wasm64",
         }
     }
 }

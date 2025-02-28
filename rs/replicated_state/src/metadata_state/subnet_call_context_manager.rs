@@ -1,6 +1,8 @@
 use ic_btc_replica_types::{GetSuccessorsRequestInitial, SendTransactionRequest};
 use ic_logger::{info, ReplicaLogger};
-use ic_management_canister_types::{EcdsaKeyId, MasterPublicKeyId, SchnorrKeyId, VetKdKeyId};
+use ic_management_canister_types_private::{
+    EcdsaKeyId, MasterPublicKeyId, SchnorrKeyId, VetKdKeyId,
+};
 use ic_protobuf::{
     proxy::{try_from_option_field, ProxyDecodeError},
     state::queues::v1 as pb_queues,

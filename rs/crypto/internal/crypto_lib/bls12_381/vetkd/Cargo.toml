@@ -8,7 +8,6 @@ documentation.workspace = true
 
 [dependencies]
 ic-crypto-internal-bls12-381-type = { path = "../type" }
-ic-sha3 = { path = "../../../../../../packages/ic-sha3" }
 rand = { workspace = true }
 
 [dev-dependencies]

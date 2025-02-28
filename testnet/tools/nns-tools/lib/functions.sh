@@ -145,7 +145,7 @@ get_nns_canister_code_location() {
     code_location__governance="$RUST_DIR/nns/governance $SNS_INIT"
     code_location__ledger="$RUST_DIR/rosetta-api/ledger_canister/ledger $LEDGER_COMMON"
     code_location__icp_ledger_archive="$RUST_DIR/ledger_suite/icp/archive $LEDGER_COMMON"
-    code_location__root="$RUST_DIR/nns/handlers/root/impl"
+    code_location__root="$RUST_DIR/nns/handlers/root"
     code_location__cycles_minting="$RUST_DIR/nns/cmc"
     code_location__lifeline="$RUST_DIR/nns/handlers/lifeline"
     code_location__genesis_token="$RUST_DIR/nns/gtc"

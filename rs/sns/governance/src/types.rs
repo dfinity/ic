@@ -16,7 +16,7 @@ use crate::{
             governance::{
                 self,
                 neuron_in_flight_command::{self, SyncCommand},
-                SnsMetadata, Version,
+                Mode, SnsMetadata, Version,
             },
             governance_error::ErrorType,
             manage_neuron,
@@ -45,7 +45,9 @@ use ic_canister_log::log;
 use ic_crypto_sha2::Sha256;
 use ic_icrc1_ledger::UpgradeArgs as LedgerUpgradeArgs;
 use ic_ledger_core::tokens::TOKEN_SUBDIVIDABLE_BY;
-use ic_management_canister_types::{CanisterIdRecord, CanisterInstallModeError, StoredChunksReply};
+use ic_management_canister_types_private::{
+    CanisterIdRecord, CanisterInstallModeError, StoredChunksReply,
+};
 use ic_nervous_system_common::{
     hash_to_hex_string, ledger_validation::MAX_LOGO_LENGTH, NervousSystemError,
     DEFAULT_TRANSFER_FEE, ONE_DAY_SECONDS, ONE_MONTH_SECONDS, ONE_YEAR_SECONDS,
@@ -83,6 +85,8 @@ pub const MAX_INSTALL_CODE_WASM_AND_ARG_SIZE: usize = 2_000_000; // 2MB
 /// The Governance spec gives each Action a u64 equivalent identifier. This module gives
 /// those u64 values a human-readable const variable for use in the SNS.
 pub mod native_action_ids {
+    use crate::pb::v1::NervousSystemFunction;
+
     /// Unspecified Action.
     pub const UNSPECIFIED: u64 = 0;
 
@@ -130,6 +134,27 @@ pub mod native_action_ids {
 
     /// AdvanceSnsTargetVersion Action.
     pub const ADVANCE_SNS_TARGET_VERSION: u64 = 15;
+
+    // When adding something to this list, make sure to update the below function.
+    pub fn native_functions() -> Vec<NervousSystemFunction> {
+        vec![
+            NervousSystemFunction::motion(),
+            NervousSystemFunction::manage_nervous_system_parameters(),
+            NervousSystemFunction::upgrade_sns_controlled_canister(),
+            NervousSystemFunction::add_generic_nervous_system_function(),
+            NervousSystemFunction::remove_generic_nervous_system_function(),
+            NervousSystemFunction::execute_generic_nervous_system_function(),
+            NervousSystemFunction::upgrade_sns_to_next_version(),
+            NervousSystemFunction::manage_sns_metadata(),
+            NervousSystemFunction::transfer_sns_treasury_funds(),
+            NervousSystemFunction::register_dapp_canisters(),
+            NervousSystemFunction::deregister_dapp_canisters(),
+            NervousSystemFunction::mint_sns_tokens(),
+            NervousSystemFunction::manage_ledger_parameters(),
+            NervousSystemFunction::manage_dapp_canister_settings(),
+            NervousSystemFunction::advance_sns_target_version(),
+        ]
+    }
 }
 
 impl governance::Mode {
@@ -249,17 +274,20 @@ impl governance::Mode {
                 );
         }
 
+        let nervous_system_function = NervousSystemFunction::from(action.clone());
+
         let is_action_disallowed = Self::functions_disallowed_in_pre_initialization_swap()
             .into_iter()
-            .any(|t| t.id == NervousSystemFunction::from(action.clone()).id);
+            .any(|t| t.id == nervous_system_function.id);
 
         if is_action_disallowed {
             Err(GovernanceError::new_with_message(
                 ErrorType::PreconditionFailed,
                 format!(
-                    "This proposal type is not allowed while governance is in \
-                     PreInitializationSwap mode: {:#?}",
-                    action,
+                    "Proposal type for {:?} is not allowed while governance is in \
+                     PreInitializationSwap ({}) mode.",
+                    nervous_system_function,
+                    Mode::PreInitializationSwap as i32,
                 ),
             ))
         } else {
@@ -458,7 +486,7 @@ impl NervousSystemParameters {
             max_dissolve_delay_bonus_percentage: Some(100),
             max_age_bonus_percentage: Some(25),
             maturity_modulation_disabled: Some(false),
-            automatically_advance_target_version: Some(false),
+            automatically_advance_target_version: Some(true),
         }
     }
 

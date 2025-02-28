@@ -971,6 +971,16 @@ pub struct QueryStats {
 ///     module_hash: opt blob;
 ///     controller: principal;
 ///     memory_size: nat;
+///     memory_metrics: record {
+///         wasm_memory_size : nat;
+///         stable_memory_size : nat;
+///         global_memory_size : nat;
+///         wasm_binary_size : nat;
+///         custom_sections_size : nat;
+///         canister_history_size : nat;
+///         wasm_chunk_store_size : nat;
+///         snapshots_size : nat;
+///     };
 ///     cycles: nat;
 ///     freezing_threshold: nat,
 ///     idle_cycles_burned_per_day: nat;
@@ -989,6 +999,7 @@ pub struct CanisterStatusResultV2 {
     controller: candid::Principal,
     settings: DefiniteCanisterSettingsArgs,
     memory_size: candid::Nat,
+    memory_metrics: MemoryMetrics,
     cycles: candid::Nat,
     // this is for compat with Spec 0.12/0.13
     balance: Vec<(Vec<u8>, candid::Nat)>,
@@ -996,6 +1007,18 @@ pub struct CanisterStatusResultV2 {
     idle_cycles_burned_per_day: candid::Nat,
     reserved_cycles: candid::Nat,
     query_stats: QueryStats,
+}
+
+#[derive(Eq, PartialEq, Debug, CandidType, Deserialize)]
+pub struct MemoryMetrics {
+    wasm_memory_size: candid::Nat,
+    stable_memory_size: candid::Nat,
+    global_memory_size: candid::Nat,
+    wasm_binary_size: candid::Nat,
+    custom_sections_size: candid::Nat,
+    canister_history_size: candid::Nat,
+    wasm_chunk_store_size: candid::Nat,
+    snapshots_size: candid::Nat,
 }
 
 impl CanisterStatusResultV2 {
@@ -1006,6 +1029,14 @@ impl CanisterStatusResultV2 {
         controller: PrincipalId,
         controllers: Vec<PrincipalId>,
         memory_size: NumBytes,
+        wasm_memory_size: NumBytes,
+        stable_memory_size: NumBytes,
+        global_memory_size: NumBytes,
+        wasm_binary_size: NumBytes,
+        custom_sections_size: NumBytes,
+        canister_history_size: NumBytes,
+        wasm_chunk_store_size: NumBytes,
+        snapshots_size: NumBytes,
         cycles: u128,
         compute_allocation: u64,
         memory_allocation: Option<u64>,
@@ -1026,6 +1057,16 @@ impl CanisterStatusResultV2 {
             module_hash,
             controller: candid::Principal::from_text(controller.to_string()).unwrap(),
             memory_size: candid::Nat::from(memory_size.get()),
+            memory_metrics: MemoryMetrics {
+                wasm_memory_size: candid::Nat::from(wasm_memory_size.get()),
+                stable_memory_size: candid::Nat::from(stable_memory_size.get()),
+                global_memory_size: candid::Nat::from(global_memory_size.get()),
+                wasm_binary_size: candid::Nat::from(wasm_binary_size.get()),
+                custom_sections_size: candid::Nat::from(custom_sections_size.get()),
+                canister_history_size: candid::Nat::from(canister_history_size.get()),
+                wasm_chunk_store_size: candid::Nat::from(wasm_chunk_store_size.get()),
+                snapshots_size: candid::Nat::from(snapshots_size.get()),
+            },
             cycles: candid::Nat::from(cycles),
             // the following is spec 0.12/0.13 compat;
             // "\x00" denotes cycles
@@ -1071,6 +1112,50 @@ impl CanisterStatusResultV2 {
 
     pub fn memory_size(&self) -> NumBytes {
         NumBytes::from(self.memory_size.0.to_u64().unwrap())
+    }
+
+    pub fn wasm_memory_size(&self) -> NumBytes {
+        NumBytes::from(self.memory_metrics.wasm_memory_size.0.to_u64().unwrap())
+    }
+
+    pub fn stable_memory_size(&self) -> NumBytes {
+        NumBytes::from(self.memory_metrics.stable_memory_size.0.to_u64().unwrap())
+    }
+
+    pub fn global_memory_size(&self) -> NumBytes {
+        NumBytes::from(self.memory_metrics.global_memory_size.0.to_u64().unwrap())
+    }
+
+    pub fn wasm_binary_size(&self) -> NumBytes {
+        NumBytes::from(self.memory_metrics.wasm_binary_size.0.to_u64().unwrap())
+    }
+
+    pub fn custom_sections_size(&self) -> NumBytes {
+        NumBytes::from(self.memory_metrics.custom_sections_size.0.to_u64().unwrap())
+    }
+
+    pub fn canister_history_size(&self) -> NumBytes {
+        NumBytes::from(
+            self.memory_metrics
+                .canister_history_size
+                .0
+                .to_u64()
+                .unwrap(),
+        )
+    }
+
+    pub fn wasm_chunk_store_size(&self) -> NumBytes {
+        NumBytes::from(
+            self.memory_metrics
+                .wasm_chunk_store_size
+                .0
+                .to_u64()
+                .unwrap(),
+        )
+    }
+
+    pub fn snapshots_size(&self) -> NumBytes {
+        NumBytes::from(self.memory_metrics.snapshots_size.0.to_u64().unwrap())
     }
 
     pub fn cycles(&self) -> u128 {
@@ -2010,6 +2095,19 @@ pub enum EcdsaCurve {
     Secp256k1,
 }
 
+impl TryFrom<u32> for EcdsaCurve {
+    type Error = String;
+
+    fn try_from(value: u32) -> Result<Self, Self::Error> {
+        match value {
+            0 => Ok(EcdsaCurve::Secp256k1),
+            _ => Err(format!(
+                "{value} is not a recognized EcdsaCurve variant identifier."
+            )),
+        }
+    }
+}
+
 impl From<&EcdsaCurve> for pb_types::EcdsaCurve {
     fn from(item: &EcdsaCurve) -> Self {
         match item {
@@ -2129,6 +2227,20 @@ pub enum SchnorrAlgorithm {
     Bip340Secp256k1,
     #[serde(rename = "ed25519")]
     Ed25519,
+}
+
+impl TryFrom<u32> for SchnorrAlgorithm {
+    type Error = String;
+
+    fn try_from(value: u32) -> Result<Self, Self::Error> {
+        match value {
+            0 => Ok(SchnorrAlgorithm::Bip340Secp256k1),
+            1 => Ok(SchnorrAlgorithm::Ed25519),
+            _ => Err(format!(
+                "{value} is not a recognized SchnorrAlgorithm variant identifier."
+            )),
+        }
+    }
 }
 
 impl From<&SchnorrAlgorithm> for pb_types::SchnorrAlgorithm {
@@ -2252,6 +2364,19 @@ pub enum VetKdCurve {
     #[serde(rename = "bls12_381_g2")]
     #[allow(non_camel_case_types)]
     Bls12_381_G2,
+}
+
+impl TryFrom<u32> for VetKdCurve {
+    type Error = String;
+
+    fn try_from(value: u32) -> Result<Self, Self::Error> {
+        match value {
+            0 => Ok(VetKdCurve::Bls12_381_G2),
+            _ => Err(format!(
+                "{value} is not a recognized VetKdCurve variant identifier."
+            )),
+        }
+    }
 }
 
 impl From<&VetKdCurve> for pb_types::VetKdCurve {
@@ -2802,12 +2927,13 @@ impl ComputeInitialIDkgDealingsResponse {
 /// ```
 #[derive(Eq, PartialEq, Debug, CandidType, Deserialize)]
 pub struct VetKdDeriveEncryptedKeyArgs {
-    pub derivation_path: DerivationPath,
+    #[serde(with = "serde_bytes")]
+    pub derivation_domain: Vec<u8>,
     #[serde(with = "serde_bytes")]
     pub derivation_id: Vec<u8>,
     pub key_id: VetKdKeyId,
     #[serde(with = "serde_bytes")]
-    pub encryption_public_key: Vec<u8>,
+    pub encryption_public_key: [u8; 48],
 }
 
 impl Payload<'_> for VetKdDeriveEncryptedKeyArgs {}
@@ -2837,7 +2963,8 @@ impl Payload<'_> for VetKdDeriveEncryptedKeyResult {}
 #[derive(Eq, PartialEq, Debug, CandidType, Deserialize)]
 pub struct VetKdPublicKeyArgs {
     pub canister_id: Option<CanisterId>,
-    pub derivation_path: DerivationPath,
+    #[serde(with = "serde_bytes")]
+    pub derivation_domain: Vec<u8>,
     pub key_id: VetKdKeyId,
 }
 
@@ -3503,6 +3630,44 @@ impl Payload<'_> for ListCanisterSnapshotArgs {}
 mod tests {
     use super::*;
     use strum::IntoEnumIterator;
+
+    #[test]
+    fn ecdsa_from_u32_exhaustive() {
+        // If this test fails, make sure this trait impl covers all variants:
+        // `impl TryFrom<u32> for EcdsaCurve`
+        for curve in EcdsaCurve::iter() {
+            match curve {
+                EcdsaCurve::Secp256k1 => assert_eq!(EcdsaCurve::try_from(0).unwrap(), curve),
+            }
+        }
+    }
+
+    #[test]
+    fn schnorr_from_u32_exhaustive() {
+        // If this test fails, make sure this trait impl covers all variants:
+        // `impl TryFrom<u32> for SchnorrAlgorithm`
+        for algorithm in SchnorrAlgorithm::iter() {
+            match algorithm {
+                SchnorrAlgorithm::Bip340Secp256k1 => {
+                    assert_eq!(SchnorrAlgorithm::try_from(0).unwrap(), algorithm)
+                }
+                SchnorrAlgorithm::Ed25519 => {
+                    assert_eq!(SchnorrAlgorithm::try_from(1).unwrap(), algorithm)
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn vetkd_from_u32_exhaustive() {
+        // If this test fails, make sure this trait impl covers all variants:
+        // `impl TryFrom<u32> for VetKdCurve`
+        for curve in VetKdCurve::iter() {
+            match curve {
+                VetKdCurve::Bls12_381_G2 => assert_eq!(VetKdCurve::try_from(0).unwrap(), curve),
+            }
+        }
+    }
 
     #[test]
     fn canister_install_mode_round_trip() {

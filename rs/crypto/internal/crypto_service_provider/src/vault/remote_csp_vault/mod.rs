@@ -29,7 +29,7 @@ use ic_types::crypto::canister_threshold_sig::error::{
 use ic_types::crypto::canister_threshold_sig::idkg::{
     BatchSignedIDkgDealing, IDkgTranscriptOperation,
 };
-use ic_types::crypto::vetkd::VetKdEncryptedKeyShareContent;
+use ic_types::crypto::vetkd::{VetKdDerivationDomain, VetKdEncryptedKeyShareContent};
 use ic_types::crypto::ExtendedDerivationPath;
 use ic_types::crypto::{AlgorithmId, CurrentNodePublicKeys};
 use ic_types::{NodeId, NodeIndex, NumberOfNodes, Randomness};
@@ -249,7 +249,7 @@ pub trait TarpcCspVault {
         key_id: KeyId,
         master_public_key: ByteBuf,
         encryption_public_key: ByteBuf,
-        derivation_path: ExtendedDerivationPath,
+        derivation_domain: VetKdDerivationDomain,
         derivation_id: ByteBuf,
     ) -> Result<VetKdEncryptedKeyShareContent, VetKdEncryptedKeyShareCreationVaultError>;
 

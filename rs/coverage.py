@@ -28,7 +28,6 @@ excluded_packages = [
     "registry-canister",  # Run from wrong directory
     "rust-canister-tests",  # Runs too slow
     "ledger-canister",  # Runs too slow
-    "pmap",  # Can not be compiled natively
     "dfn_core",  # Can not be compiled natively
 ]
 

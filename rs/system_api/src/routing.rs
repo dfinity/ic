@@ -4,7 +4,7 @@ use std::str::FromStr;
 use ic_base_types::{CanisterId, PrincipalId, SubnetId};
 use ic_btc_interface::NetworkInRequest as BitcoinNetwork;
 use ic_error_types::UserError;
-use ic_management_canister_types::{
+use ic_management_canister_types_private::{
     BitcoinGetBalanceArgs, BitcoinGetBlockHeadersArgs, BitcoinGetCurrentFeePercentilesArgs,
     BitcoinGetUtxosArgs, BitcoinSendTransactionArgs, CanisterIdRecord, CanisterInfoRequest,
     ClearChunkStoreArgs, ComputeInitialIDkgDealingsArgs, DeleteCanisterSnapshotArgs,
@@ -422,7 +422,7 @@ mod tests {
     use assert_matches::assert_matches;
     use candid::Encode;
     use ic_base_types::RegistryVersion;
-    use ic_management_canister_types::{
+    use ic_management_canister_types_private::{
         DerivationPath, EcdsaCurve, EcdsaKeyId, SchnorrAlgorithm, SchnorrKeyId, SignWithECDSAArgs,
         VetKdCurve, VetKdKeyId,
     };
@@ -556,9 +556,9 @@ mod tests {
     fn vetkd_derive_encrypted_key_request(key_id: VetKdKeyId) -> Vec<u8> {
         let args = VetKdDeriveEncryptedKeyArgs {
             key_id,
-            derivation_path: DerivationPath::new(vec![ByteBuf::from(vec![0; 10])]),
+            derivation_domain: vec![0; 10],
             derivation_id: vec![1; 32],
-            encryption_public_key: vec![1; 32],
+            encryption_public_key: [1; 48],
         };
         Encode!(&args).unwrap()
     }
@@ -584,7 +584,7 @@ mod tests {
     fn vetkd_public_key_request(key_id: VetKdKeyId) -> Vec<u8> {
         let args = VetKdPublicKeyArgs {
             canister_id: Some(canister_test_id(1)),
-            derivation_path: DerivationPath::new(vec![ByteBuf::from(vec![0; 10])]),
+            derivation_domain: vec![0; 10],
             key_id,
         };
         Encode!(&args).unwrap()

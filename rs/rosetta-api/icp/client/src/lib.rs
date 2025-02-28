@@ -214,9 +214,12 @@ impl RosettaClient {
             amount: None,
             coin_change: None,
             metadata: Some(
-                NeuronIdentifierMetadata { neuron_index }
-                    .try_into()
-                    .map_err(|e| anyhow::anyhow!("Failed to convert metadata: {:?}", e))?,
+                NeuronIdentifierMetadata {
+                    neuron_index,
+                    controller: None,
+                }
+                .try_into()
+                .map_err(|e| anyhow::anyhow!("Failed to convert metadata: {:?}", e))?,
             ),
         }])
     }
@@ -275,9 +278,12 @@ impl RosettaClient {
             amount: None,
             coin_change: None,
             metadata: Some(
-                NeuronIdentifierMetadata { neuron_index }
-                    .try_into()
-                    .map_err(|e| anyhow::anyhow!("Failed to convert metadata: {:?}", e))?,
+                NeuronIdentifierMetadata {
+                    neuron_index,
+                    controller: None,
+                }
+                .try_into()
+                .map_err(|e| anyhow::anyhow!("Failed to convert metadata: {:?}", e))?,
             ),
         }])
     }
@@ -300,9 +306,12 @@ impl RosettaClient {
             amount: None,
             coin_change: None,
             metadata: Some(
-                NeuronIdentifierMetadata { neuron_index }
-                    .try_into()
-                    .map_err(|e| anyhow::anyhow!("Failed to convert metadata: {:?}", e))?,
+                NeuronIdentifierMetadata {
+                    neuron_index,
+                    controller: None,
+                }
+                .try_into()
+                .map_err(|e| anyhow::anyhow!("Failed to convert metadata: {:?}", e))?,
             ),
         }])
     }
@@ -596,6 +605,7 @@ impl RosettaClient {
     pub fn build_refresh_voting_power_operations(
         signer_principal: Principal,
         neuron_index: u64,
+        principal_id: Option<PrincipalId>,
     ) -> anyhow::Result<Vec<Operation>> {
         Ok(vec![Operation {
             operation_identifier: OperationIdentifier {
@@ -611,9 +621,12 @@ impl RosettaClient {
             amount: None,
             coin_change: None,
             metadata: Some(
-                NeuronIdentifierMetadata { neuron_index }
-                    .try_into()
-                    .map_err(|e| anyhow::anyhow!("Failed to convert metadata: {:?}", e))?,
+                NeuronIdentifierMetadata {
+                    neuron_index,
+                    controller: principal_id.map(PublicKeyOrPrincipal::Principal),
+                }
+                .try_into()
+                .map_err(|e| anyhow::anyhow!("Failed to convert metadata: {:?}", e))?,
             ),
         }])
     }
@@ -769,15 +782,14 @@ impl RosettaClient {
                     };
                 }
                 CurveType::Secp256K1 => {
-                    let verification_key = ic_crypto_secp256k1::PublicKey::deserialize_sec1(
-                        &signer_keypair.get_pb_key(),
-                    )
-                    .with_context(|| {
-                        format!(
-                            "Failed to convert public key to verification key: {:?}",
-                            signer_keypair.get_pb_key()
-                        )
-                    })?;
+                    let verification_key =
+                        ic_secp256k1::PublicKey::deserialize_sec1(&signer_keypair.get_pb_key())
+                            .with_context(|| {
+                                format!(
+                                    "Failed to convert public key to verification key: {:?}",
+                                    signer_keypair.get_pb_key()
+                                )
+                            })?;
                     if !verification_key
                         .verify_signature(signable_bytes.as_slice(), signed_bytes.as_slice())
                     {
@@ -1434,6 +1446,7 @@ impl RosettaClient {
         network_identifier: NetworkIdentifier,
         signer_keypair: &T,
         neuron_index: u64,
+        controller_principal_id: Option<PrincipalId>,
     ) -> anyhow::Result<ConstructionSubmitResponse>
     where
         T: RosettaSupportedKeyPair,
@@ -1441,6 +1454,7 @@ impl RosettaClient {
         let refresh_voting_power_operations = RosettaClient::build_refresh_voting_power_operations(
             signer_keypair.generate_principal_id()?.0,
             neuron_index,
+            controller_principal_id,
         )?;
         self.make_submit_and_wait_for_transaction(
             signer_keypair,

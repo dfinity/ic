@@ -13,4 +13,4 @@ task_local! {
 }
 
 #[cfg(feature = "tla")]
-pub static TLA_TRACES_MUTEX: RwLock<Vec<UpdateTrace>> = RwLock::new(Vec::new());
+pub static TLA_TRACES_MUTEX: Option<RwLock<Vec<UpdateTrace>>> = None;

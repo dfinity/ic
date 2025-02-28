@@ -11,6 +11,15 @@ here were moved from the adjacent `unreleased_changelog.md` file.
 INSERT NEW RELEASES HERE
 
 
+# 2025-02-07: Proposal 135209
+
+http://dashboard.internetcomputer.org/proposal/135209
+
+## Added
+
+* Added the `query_stats` field for `canister_status`/`get_sns_canisters_summary` methods.
+
+
 # 2025-02-03: Proposal 135066
 
 http://dashboard.internetcomputer.org/proposal/135066

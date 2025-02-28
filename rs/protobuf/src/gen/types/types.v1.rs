@@ -377,10 +377,6 @@ pub struct Summary {
     pub next_interval_length: u64,
     #[prost(uint64, tag = "4")]
     pub height: u64,
-    #[prost(message, repeated, tag = "5")]
-    pub current_transcripts_deprecated: ::prost::alloc::vec::Vec<TaggedNiDkgTranscript>,
-    #[prost(message, repeated, tag = "6")]
-    pub next_transcripts_deprecated: ::prost::alloc::vec::Vec<TaggedNiDkgTranscript>,
     #[prost(message, repeated, tag = "7")]
     pub configs: ::prost::alloc::vec::Vec<NiDkgConfig>,
     #[prost(message, repeated, tag = "9")]
@@ -388,18 +384,9 @@ pub struct Summary {
     #[prost(message, repeated, tag = "10")]
     pub transcripts_for_remote_subnets: ::prost::alloc::vec::Vec<CallbackIdedNiDkgTranscript>,
     #[prost(message, repeated, tag = "11")]
-    pub current_transcripts_new: ::prost::alloc::vec::Vec<NiDkgTranscript>,
+    pub current_transcripts: ::prost::alloc::vec::Vec<NiDkgTranscript>,
     #[prost(message, repeated, tag = "12")]
-    pub next_transcripts_new: ::prost::alloc::vec::Vec<NiDkgTranscript>,
-}
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct TaggedNiDkgTranscript {
-    #[prost(message, optional, tag = "1")]
-    pub transcript: ::core::option::Option<NiDkgTranscript>,
-    #[prost(enumeration = "NiDkgTag", tag = "2")]
-    pub tag: i32,
-    #[prost(message, optional, tag = "3")]
-    pub key_id: ::core::option::Option<MasterPublicKeyId>,
+    pub next_transcripts: ::prost::alloc::vec::Vec<NiDkgTranscript>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CallbackIdedNiDkgTranscript {

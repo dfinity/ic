@@ -14,13 +14,13 @@ ic-limits = { path = "../limits" }
 ic-crypto-utils-threshold-sig-der = { path = "../crypto/utils/threshold_sig_der" }
 ic-cycles-account-manager = { path = "../cycles_account_manager" }
 ic-ed25519 = { path = "../../packages/ic-ed25519" }
-ic-error-types = { path = "../types/error_types" }
+ic-error-types = { path = "../../packages/ic-error-types" }
 ic-interfaces = { path = "../interfaces" }
 ic-interfaces-certified-stream-store = { path = "../interfaces/certified_stream_store" }
 ic-interfaces-registry = { path = "../interfaces/registry" }
 ic-interfaces-state-manager = { path = "../interfaces/state_manager" }
 ic-logger = { path = "../monitoring/logger" }
-ic-management-canister-types = { path = "../types/management_canister_types" }
+ic-management-canister-types-private = { path = "../types/management_canister_types" }
 ic-metrics = { path = "../monitoring/metrics" }
 ic-protobuf = { path = "../protobuf" }
 ic-query-stats = { path = "../query_stats" }

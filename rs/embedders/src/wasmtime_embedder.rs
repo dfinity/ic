@@ -33,7 +33,7 @@ use ic_replicated_state::{
 use ic_sys::PAGE_SIZE;
 use ic_types::{
     methods::{FuncRef, WasmMethod},
-    CanisterId, NumInstructions, NumOsPages, MAX_STABLE_MEMORY_IN_BYTES,
+    CanisterId, NumBytes, NumInstructions, NumOsPages, MAX_STABLE_MEMORY_IN_BYTES,
 };
 use ic_wasm_types::{BinaryEncodedWasm, WasmEngineError};
 use memory_tracker::{DirtyPageTracking, PageBitmap, SigsegvMemoryTracker};
@@ -276,7 +276,7 @@ impl WasmtimeEmbedder {
             WasmMemoryType::Wasm32 => {
                 system_api::syscalls::<u32>(
                     &mut linker,
-                    self.config.feature_flags,
+                    self.config.feature_flags.clone(),
                     self.config.stable_memory_dirty_page_limit,
                     self.config.stable_memory_accessed_page_limit,
                     main_memory_type,
@@ -285,7 +285,7 @@ impl WasmtimeEmbedder {
             WasmMemoryType::Wasm64 => {
                 system_api::syscalls::<u64>(
                     &mut linker,
-                    self.config.feature_flags,
+                    self.config.feature_flags.clone(),
                     self.config.stable_memory_dirty_page_limit,
                     self.config.stable_memory_accessed_page_limit,
                     main_memory_type,
@@ -739,8 +739,14 @@ fn sigsegv_memory_tracker<S>(
             }
 
             Arc::new(Mutex::new(
-                SigsegvMemoryTracker::new(base, size, log.clone(), dirty_page_tracking, page_map)
-                    .expect("failed to instantiate SIGSEGV memory tracker"),
+                SigsegvMemoryTracker::new(
+                    base,
+                    NumBytes::new(size as u64),
+                    log.clone(),
+                    dirty_page_tracking,
+                    page_map,
+                )
+                .expect("failed to instantiate SIGSEGV memory tracker"),
             ))
         };
         result.insert(mem_type, Arc::clone(&sigsegv_memory_tracker));

@@ -24,7 +24,7 @@ pub use self::{
 };
 use crate::{
     consensus::idkg::PreSigId,
-    crypto::canister_threshold_sig::MasterPublicKey,
+    crypto::{canister_threshold_sig::MasterPublicKey, threshold_sig::ni_dkg::NiDkgId},
     messages::{CallbackId, Payload, SignedIngress},
     xnet::CertifiedStreamSlice,
     Height, Randomness, RegistryVersion, ReplicaVersion, SubnetId, Time,
@@ -33,7 +33,7 @@ use ic_base_types::{NodeId, NumBytes};
 use ic_btc_replica_types::BitcoinAdapterResponse;
 #[cfg(test)]
 use ic_exhaustive_derive::ExhaustiveSet;
-use ic_management_canister_types::MasterPublicKeyId;
+use ic_management_canister_types_private::MasterPublicKeyId;
 use ic_protobuf::{proxy::ProxyDecodeError, types::v1 as pb};
 use prost::{bytes::BufMut, DecodeError, Message};
 use serde::{Deserialize, Serialize};
@@ -62,6 +62,8 @@ pub struct Batch {
     pub chain_key_subnet_public_keys: BTreeMap<MasterPublicKeyId, MasterPublicKey>,
     /// The pre-signature Ids available to be matched with signature requests.
     pub idkg_pre_signature_ids: BTreeMap<MasterPublicKeyId, BTreeSet<PreSigId>>,
+    /// The NiDKG Ids corresponding to available transcripts to be used to answer vetkd requests
+    pub ni_dkg_ids: BTreeMap<MasterPublicKeyId, NiDkgId>,
     /// The version of the registry to be referenced when processing the batch.
     pub registry_version: RegistryVersion,
     /// A clock time to be used for processing messages.

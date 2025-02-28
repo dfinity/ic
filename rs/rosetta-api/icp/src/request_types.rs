@@ -106,7 +106,10 @@ pub enum RequestType {
     },
     #[serde(rename = "REFRESH_VOTING_POWER")]
     #[serde(alias = "RefreshVotingPower")]
-    RefreshVotingPower { neuron_index: u64 },
+    RefreshVotingPower {
+        neuron_index: u64,
+        controller: Option<PublicKeyOrPrincipal>,
+    },
 }
 
 impl RequestType {
@@ -388,6 +391,7 @@ pub struct Follow {
 pub struct RefreshVotingPower {
     pub account: icp_ledger::AccountIdentifier,
     pub neuron_index: u64,
+    pub controller: Option<PrincipalId>,
 }
 
 #[derive(Clone, Eq, Ord, PartialOrd, Debug, Deserialize, Serialize)]
@@ -496,6 +500,7 @@ impl TryFrom<Option<ObjectMap>> for SetDissolveTimestampMetadata {
 pub struct NeuronIdentifierMetadata {
     #[serde(default)]
     pub neuron_index: u64,
+    pub controller: Option<PublicKeyOrPrincipal>,
 }
 
 impl TryFrom<Option<ObjectMap>> for NeuronIdentifierMetadata {
@@ -1093,6 +1098,7 @@ impl TransactionBuilder {
             metadata: Some(
                 NeuronIdentifierMetadata {
                     neuron_index: *neuron_index,
+                    controller: None,
                 }
                 .try_into()?,
             ),
@@ -1176,6 +1182,7 @@ impl TransactionBuilder {
             metadata: Some(
                 NeuronIdentifierMetadata {
                     neuron_index: *neuron_index,
+                    controller: None,
                 }
                 .try_into()?,
             ),
@@ -1200,6 +1207,7 @@ impl TransactionBuilder {
             metadata: Some(
                 NeuronIdentifierMetadata {
                     neuron_index: *neuron_index,
+                    controller: None,
                 }
                 .try_into()?,
             ),
@@ -1481,6 +1489,7 @@ impl TransactionBuilder {
         let RefreshVotingPower {
             neuron_index,
             account,
+            controller,
         } = refresh_voting_power;
         let operation_identifier = self.allocate_op_id();
         self.ops.push(Operation {
@@ -1494,6 +1503,7 @@ impl TransactionBuilder {
             metadata: Some(
                 NeuronIdentifierMetadata {
                     neuron_index: *neuron_index,
+                    controller: pkp_from_principal(controller),
                 }
                 .try_into()?,
             ),

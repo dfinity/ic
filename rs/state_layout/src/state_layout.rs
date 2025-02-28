@@ -1,6 +1,6 @@
 use ic_base_types::{NumBytes, NumSeconds};
 use ic_logger::{error, info, warn, ReplicaLogger};
-use ic_management_canister_types::LogVisibilityV2;
+use ic_management_canister_types_private::LogVisibilityV2;
 use ic_metrics::{buckets::decimal_buckets, MetricsRegistry};
 use ic_protobuf::{
     proxy::{try_from_option_field, ProxyDecodeError},
@@ -213,8 +213,6 @@ pub struct CanisterSnapshotBits {
 struct StateLayoutMetrics {
     state_layout_error_count: IntCounterVec,
     state_layout_remove_checkpoint_duration: Histogram,
-    #[cfg(target_os = "linux")]
-    state_layout_syncfs_duration: Histogram,
 }
 
 impl StateLayoutMetrics {
@@ -229,12 +227,6 @@ impl StateLayoutMetrics {
                 "state_layout_remove_checkpoint_duration",
                 "Time elapsed in removing checkpoint.",
                 decimal_buckets(-3, 1),
-            ),
-            #[cfg(target_os = "linux")]
-            state_layout_syncfs_duration: metric_registry.histogram(
-                "state_layout_syncfs_duration_seconds",
-                "Time elapsed in syncfs.",
-                decimal_buckets(-2, 2),
             ),
         }
     }
@@ -336,7 +328,7 @@ struct CheckpointRefData {
 ///   1. Create state files directly in
 ///      "<state_root>/fs_tmp/state_sync_scratchpad_<height>".
 ///
-///   2. When all the writes are complete, call sync_and_mark_files_readonly()
+///   2. When all the writes are complete, call mark_files_readonly_and_sync()
 ///      on "<state_root>/fs_tmp/state_sync_scratchpad_<height>".  This function
 ///      syncs all the files and directories under the scratchpad directory,
 ///      including the scratchpad directory itself.
@@ -531,12 +523,13 @@ impl StateLayout {
     ) -> Result<(), LayoutError> {
         for height in self.checkpoint_heights()? {
             let path = self.checkpoint_verified(height)?.raw_path().to_path_buf();
-            sync_and_mark_files_readonly(&self.log, &path, &self.metrics, thread_pool.as_mut())
-                .map_err(|err| LayoutError::IoError {
+            mark_files_readonly_and_sync(&path, thread_pool.as_mut()).map_err(|err| {
+                LayoutError::IoError {
                     path,
                     message: format!("Could not sync and mark readonly checkpoint {}", height),
                     io_err: err,
-                })?;
+                }
+            })?;
         }
         Ok(())
     }
@@ -646,26 +639,31 @@ impl StateLayout {
         }
     }
 
-    pub fn scratchpad_to_checkpoint<T>(
+    /// Creates an unverified marker in the scratchpad and promotes it to a checkpoint.
+    ///
+    /// This function maintains the integrity of the checkpointing process by ensuring that
+    /// the scratchpad is properly marked as unverified before transitioning it into a checkpoint.
+    pub fn promote_scratchpad_to_unverified_checkpoint<T>(
+        &self,
+        scratchpad_layout: CheckpointLayout<RwPolicy<'_, T>>,
+        height: Height,
+    ) -> Result<CheckpointLayout<ReadOnly>, LayoutError> {
+        scratchpad_layout.create_unverified_checkpoint_marker()?;
+        self.scratchpad_to_checkpoint(scratchpad_layout, height)
+    }
+
+    fn scratchpad_to_checkpoint<T>(
         &self,
         layout: CheckpointLayout<RwPolicy<'_, T>>,
         height: Height,
-        thread_pool: Option<&mut scoped_threadpool::Pool>,
     ) -> Result<CheckpointLayout<ReadOnly>, LayoutError> {
+        // The scratchpad must have an unverified marker before it is promoted to a checkpoint.
+        debug_assert!(!layout.is_checkpoint_verified());
         debug_assert_eq!(height, layout.height());
         let scratchpad = layout.raw_path();
         let checkpoints_path = self.checkpoints();
         let cp_path = checkpoints_path.join(Self::checkpoint_name(height));
-        sync_and_mark_files_readonly(&self.log, scratchpad, &self.metrics, thread_pool).map_err(
-            |err| LayoutError::IoError {
-                path: scratchpad.to_path_buf(),
-                message: format!(
-                    "Could not sync and mark readonly scratchpad for checkpoint {}",
-                    height
-                ),
-                io_err: err,
-            },
-        )?;
+
         std::fs::rename(scratchpad, cp_path).map_err(|err| {
             if is_already_exists_err(&err) {
                 LayoutError::AlreadyExists(height)
@@ -1553,6 +1551,22 @@ impl<Permissions: AccessPolicy> CheckpointLayout<Permissions> {
     pub fn is_checkpoint_verified(&self) -> bool {
         !self.unverified_checkpoint_marker().exists()
     }
+
+    pub fn mark_files_readonly_and_sync(
+        &self,
+        thread_pool: Option<&mut scoped_threadpool::Pool>,
+    ) -> Result<(), LayoutError> {
+        mark_files_readonly_and_sync(self.raw_path(), thread_pool).map_err(|err| {
+            LayoutError::IoError {
+                path: self.raw_path().to_path_buf(),
+                message: format!(
+                    "Could not mark files readonly and sync for checkpoint {}",
+                    self.height()
+                ),
+                io_err: err,
+            }
+        })
+    }
 }
 
 impl<P> CheckpointLayout<P>
@@ -1585,7 +1599,7 @@ impl CheckpointLayout<ReadOnly> {
     /// A readonly checkpoint typically prevents modification to the files in the checkpoint.
     /// However, the removal of the unverified checkpoint marker is allowed as
     /// the marker is not part the checkpoint conceptually.
-    pub fn remove_unverified_checkpoint_marker(&self) -> Result<(), LayoutError> {
+    fn remove_unverified_checkpoint_marker(&self) -> Result<(), LayoutError> {
         let marker = self.unverified_checkpoint_marker();
         if !marker.exists() {
             return Ok(());
@@ -1608,6 +1622,20 @@ impl CheckpointLayout<ReadOnly> {
             message: "Failed to sync checkpoint directory for the creation of the unverified checkpoint marker".to_string(),
             io_err: err,
         })
+    }
+
+    /// Finalizes the checkpoint by marking all files as read-only, ensuring
+    /// they are fully synchronized to disk, and then removing the unverified checkpoint marker.
+    ///
+    /// This function is necessary due to the asynchronous checkpoint writing.
+    /// Marking the files as read-only and performing a sync operation should be the last step
+    /// before removing the unverified checkpoint marker to prevent data inconsistencies.
+    pub fn finalize_and_remove_unverified_marker(
+        &self,
+        thread_pool: Option<&mut scoped_threadpool::Pool>,
+    ) -> Result<(), LayoutError> {
+        self.mark_files_readonly_and_sync(thread_pool)?;
+        self.remove_unverified_checkpoint_marker()
     }
 }
 
@@ -2723,10 +2751,8 @@ fn dir_list_recursive(path: &Path) -> std::io::Result<Vec<PathBuf>> {
 
 /// Recursively set permissions to readonly for all files under the given
 /// `path`.
-fn sync_and_mark_files_readonly(
-    #[allow(unused)] log: &ReplicaLogger,
+fn mark_files_readonly_and_sync(
     path: &Path,
-    #[allow(unused)] metrics: &StateLayoutMetrics,
     mut thread_pool: Option<&mut scoped_threadpool::Pool>,
 ) -> std::io::Result<()> {
     let paths = dir_list_recursive(path)?;
@@ -2742,17 +2768,11 @@ fn sync_and_mark_files_readonly(
     {
         let f = std::fs::File::open(path)?;
         use std::os::fd::AsRawFd;
-        let start = Instant::now();
         unsafe {
             if libc::syncfs(f.as_raw_fd()) == -1 {
                 return Err(std::io::Error::last_os_error());
             }
         }
-        let elapsed = start.elapsed();
-        metrics
-            .state_layout_syncfs_duration
-            .observe(elapsed.as_secs_f64());
-        info!(log, "syncfs took {:?}", elapsed);
     }
     Ok(())
 }

@@ -107,7 +107,7 @@ impl TransportSecretKey {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 /// A derived public key
-struct DerivedPublicKey {
+pub struct DerivedPublicKey {
     point: G2Affine,
 }
 
@@ -119,16 +119,25 @@ impl From<DerivedPublicKey> for G2Affine {
 
 #[derive(Copy, Clone, Debug)]
 /// Error indicating deserializing a derived public key failed
-enum DerivedPublicKeyDeserializationError {
-    /// The public key was invalid
+pub enum DerivedPublicKeyDeserializationError {
+    /// The public key is invalid
     InvalidPublicKey,
 }
 
 impl DerivedPublicKey {
     const BYTES: usize = G2AFFINE_BYTES;
 
-    /// Deserialize a derived public key
-    fn deserialize(bytes: &[u8]) -> Result<Self, DerivedPublicKeyDeserializationError> {
+    /// Deserializes a (derived) public key.
+    ///
+    /// Only compressed points are supported.
+    ///
+    /// Normally the bytes provided here will have been returned by the
+    /// Internet Computer's `vetkd_public_key`` management canister interface.
+    ///
+    /// Returns an error if the key is invalid (e.g., it has invalid length,
+    /// i.e., not 96 bytes, it is not in compressed format, is is not a point
+    /// on the curve, it is not torsion-free).
+    pub fn deserialize(bytes: &[u8]) -> Result<Self, DerivedPublicKeyDeserializationError> {
         let dpk_bytes: &[u8; Self::BYTES] = bytes.try_into().map_err(|_e: TryFromSliceError| {
             DerivedPublicKeyDeserializationError::InvalidPublicKey
         })?;
