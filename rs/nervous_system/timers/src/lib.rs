@@ -23,7 +23,7 @@
 //! These functions will allow you to test everything thoroughly.
 //!
 pub mod real {
-    pub use ic_cdk_timers::{clear_timer, set_timer, set_timer_interval};
+    pub use ic_cdk_timers::{clear_timer, set_timer, set_timer_interval, TimerId};
 }
 
 pub mod test;

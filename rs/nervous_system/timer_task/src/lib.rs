@@ -113,6 +113,7 @@
 //! }
 //! ```
 
+use crate::timers::TimerId;
 use async_trait::async_trait;
 #[cfg(not(target_arch = "wasm32"))]
 use futures::FutureExt;
@@ -141,9 +142,9 @@ fn spawn_in_canister_env(future: impl Future<Output = ()> + Sized + 'static) {
 
 pub(crate) mod timers {
     #[cfg(target_arch = "wasm32")]
-    pub use ic_nervous_system_timers::real::{set_timer, set_timer_interval};
+    pub use ic_nervous_system_timers::real::{set_timer, set_timer_interval, TimerId};
     #[cfg(not(target_arch = "wasm32"))]
-    pub use ic_nervous_system_timers::test::{set_timer, set_timer_interval};
+    pub use ic_nervous_system_timers::test::{set_timer, set_timer_interval, TimerId};
 }
 
 pub trait RecurringSyncTask: Sized + 'static {
@@ -191,10 +192,10 @@ pub trait PeriodicSyncTask: Copy + Sized + 'static {
     // TODO: can periodic tasks have a state that is mutable across invocations?
     fn execute(self);
 
-    fn schedule(self) {
+    fn schedule(self) -> TimerId {
         timers::set_timer_interval(Self::INTERVAL, move || {
             self.execute();
-        });
+        })
     }
 
     const NAME: &'static str;
@@ -205,12 +206,12 @@ pub trait PeriodicSyncTask: Copy + Sized + 'static {
 pub trait PeriodicAsyncTask: Copy + Sized + 'static {
     async fn execute(self);
 
-    fn schedule(self) {
+    fn schedule(self) -> TimerId {
         timers::set_timer_interval(Self::INTERVAL, move || {
             spawn_in_canister_env(async move {
                 self.execute().await;
             });
-        });
+        })
     }
 
     const NAME: &'static str;
