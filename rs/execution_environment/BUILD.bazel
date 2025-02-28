@@ -168,7 +168,6 @@ rust_doc_test(
 BENCH_DEPENDENCIES = [
     # Keep sorted.
     ":execution_environment",
-    "//packages/ic-error-types",
     "//rs/config",
     "//rs/cycles_account_manager",
     "//rs/interfaces",
@@ -191,6 +190,7 @@ BENCH_DEPENDENCIES = [
     "//rs/types/wasm_types",
     "//rs/universal_canister/lib",
     "@crate_index//:criterion",
+    "@crate_index//:ic-error-types",
     "@crate_index//:lazy_static",
     "@crate_index//:tokio",
     "@crate_index//:wat",

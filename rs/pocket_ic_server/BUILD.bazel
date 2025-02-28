@@ -7,7 +7,6 @@ BUILD_DEPENDENCIES = []
 LIB_DEPENDENCIES = [
     # Keep sorted.
     "//packages/ic-ed25519",
-    "//packages/ic-error-types",
     "//packages/pocket-ic:pocket-ic",
     "//rs/bitcoin/adapter",
     "//rs/boundary_node/ic_boundary",
@@ -63,6 +62,7 @@ LIB_DEPENDENCIES = [
     "@crate_index//:ic-agent",
     "@crate_index//:ic-bn-lib",
     "@crate_index//:ic-cdk",
+    "@crate_index//:ic-error-types",
     "@crate_index//:ic-http-gateway",
     "@crate_index//:ic-utils",
     "@crate_index//:itertools",

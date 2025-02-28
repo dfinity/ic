@@ -9,7 +9,6 @@ rust_library(
     version = "0.9.0",
     deps = [
         # Keep sorted.
-        "//packages/ic-error-types",
         "//rs/config",
         "//rs/cycles_account_manager",
         "//rs/interfaces",
@@ -27,6 +26,7 @@ rust_library(
         "//rs/utils",
         "@crate_index//:candid",
         "@crate_index//:ic-btc-interface",
+        "@crate_index//:ic-error-types",
         "@crate_index//:itertools",
         "@crate_index//:prometheus",
         "@crate_index//:serde",
@@ -49,7 +49,6 @@ rust_test(
 INTEGRATION_TEST_DEPS = [
     # Keep sorted.
     ":system_api",
-    "//packages/ic-error-types",
     "//rs/config",
     "//rs/cycles_account_manager",
     "//rs/interfaces",
@@ -67,6 +66,7 @@ INTEGRATION_TEST_DEPS = [
     "//rs/types/base_types",
     "//rs/types/management_canister_types",
     "//rs/types/types",
+    "@crate_index//:ic-error-types",
     "@crate_index//:maplit",
     "@crate_index//:more-asserts",
     "@crate_index//:strum",

@@ -4,7 +4,6 @@ package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
     # Keep sorted.
-    "//packages/ic-error-types",
     "//packages/ic-ledger-hash-of:ic_ledger_hash_of",
     "//packages/icrc-ledger-types:icrc_ledger_types",
     "//rs/config",
@@ -29,6 +28,7 @@ DEPENDENCIES = [
     "@crate_index//:futures",
     "@crate_index//:hex",
     "@crate_index//:ic-agent",
+    "@crate_index//:ic-error-types",
     "@crate_index//:icrc1-test-env",
     "@crate_index//:icrc1-test-suite",
     "@crate_index//:num-traits",

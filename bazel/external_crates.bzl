@@ -618,6 +618,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "ic-certificate-verification": crate.spec(
                 version = "3.0.3",
             ),
+            "ic-error-types": crate.spec(
+                version = "0.1.0",
+            ),
             "ic-http-certification": crate.spec(
                 version = "3.0.3",
             ),

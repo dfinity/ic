@@ -46,11 +46,11 @@ url = { workspace = true }
 
 # Dependencies required to compile the tests.
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+ic-error-types = { workspace = true }
+ic-icrc1 = { path = "../../ledger_suite/icrc1/" }
 assert_matches = { workspace = true }
 canister-test = { path = "../../rust_canisters/canister_test" }
 ic-crypto-sha2 = { path = "../../crypto/sha2" }
-ic-error-types = { path = "../../../packages/ic-error-types" }
-ic-icrc1 = { path = "../../ledger_suite/icrc1/" }
 ic-icrc1-index-ng = { path = "../../ledger_suite/icrc1/index-ng" }
 ic-icrc1-tokens-u64 = { path = "../../ledger_suite/icrc1/tokens_u64" }
 ic-management-canister-types-private = { path = "../../types/management_canister_types" }

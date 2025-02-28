@@ -7,10 +7,10 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
+ic-error-types = { workspace = true }
+ic-interfaces-state-manager = { path = "./state_manager" }
 ic-base-types = { path = "../types/base_types" }
 ic-crypto-interfaces-sig-verification = { path = "../crypto/interfaces/sig_verification" }
-ic-error-types = { path = "../../packages/ic-error-types" }
-ic-interfaces-state-manager = { path = "./state_manager" }
 ic-management-canister-types-private = { path = "../types/management_canister_types" }
 ic-protobuf = { path = "../protobuf" }
 ic-registry-provisional-whitelist = { path = "../registry/provisional_whitelist" }
