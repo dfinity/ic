@@ -586,6 +586,7 @@ fn retain_neurons_with_castable_ballots(
 
 #[cfg(test)]
 mod test {
+    use crate::test_utils::MockRandomness;
     use crate::{
         governance::{
             Governance, MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS,
@@ -618,6 +619,7 @@ mod test {
     use icp_ledger::Subaccount;
     use maplit::{btreemap, hashmap};
     use std::collections::{BTreeMap, BTreeSet, HashMap};
+    use std::sync::Arc;
 
     fn make_ballot(voting_power: u64, vote: Vote) -> Ballot {
         Ballot {
@@ -730,9 +732,10 @@ mod test {
         };
         let mut governance = Governance::new(
             governance_proto,
-            Box::new(MockEnvironment::new(Default::default(), 0)),
-            Box::new(StubIcpLedger {}),
-            Box::new(StubCMC {}),
+            Arc::new(MockEnvironment::new(Default::default(), 0)),
+            Arc::new(StubIcpLedger {}),
+            Arc::new(StubCMC {}),
+            Box::new(MockRandomness::new()),
         );
 
         governance
@@ -829,9 +832,10 @@ mod test {
         };
         let mut governance = Governance::new(
             governance_proto,
-            Box::new(MockEnvironment::new(Default::default(), 234)),
-            Box::new(StubIcpLedger {}),
-            Box::new(StubCMC {}),
+            Arc::new(MockEnvironment::new(Default::default(), 234)),
+            Arc::new(StubIcpLedger {}),
+            Arc::new(StubCMC {}),
+            Box::new(MockRandomness::new()),
         );
 
         governance
@@ -1120,9 +1124,10 @@ mod test {
         };
         let mut governance = Governance::new(
             governance_proto,
-            Box::new(MockEnvironment::new(Default::default(), 0)),
-            Box::new(StubIcpLedger {}),
-            Box::new(StubCMC {}),
+            Arc::new(MockEnvironment::new(Default::default(), 0)),
+            Arc::new(StubIcpLedger {}),
+            Arc::new(StubCMC {}),
+            Box::new(MockRandomness::new()),
         );
 
         // In our test configuration, we always return "true" for is_over_instructions_limit()
@@ -1195,9 +1200,10 @@ mod test {
         };
         let mut governance = Governance::new(
             governance_proto,
-            Box::new(MockEnvironment::new(Default::default(), 0)),
-            Box::new(StubIcpLedger {}),
-            Box::new(StubCMC {}),
+            Arc::new(MockEnvironment::new(Default::default(), 0)),
+            Arc::new(StubIcpLedger {}),
+            Arc::new(StubCMC {}),
+            Box::new(MockRandomness::new()),
         );
 
         let _e = temporarily_set_over_soft_message_limit(true);
@@ -1255,9 +1261,10 @@ mod test {
         };
         let mut governance = Governance::new(
             governance_proto,
-            Box::new(MockEnvironment::new(Default::default(), 0)),
-            Box::new(StubIcpLedger {}),
-            Box::new(StubCMC {}),
+            Arc::new(MockEnvironment::new(Default::default(), 0)),
+            Arc::new(StubIcpLedger {}),
+            Arc::new(StubCMC {}),
+            Box::new(MockRandomness::new()),
         );
 
         // In test mode, we are always saying we're over the soft-message limit, so we know that
@@ -1363,9 +1370,10 @@ mod test {
         };
         let mut governance = Governance::new(
             governance_proto,
-            Box::new(MockEnvironment::new(Default::default(), 1234)),
-            Box::new(StubIcpLedger {}),
-            Box::new(StubCMC {}),
+            Arc::new(MockEnvironment::new(Default::default(), 1234)),
+            Arc::new(StubIcpLedger {}),
+            Arc::new(StubCMC {}),
+            Box::new(MockRandomness::new()),
         );
 
         governance.record_neuron_vote(ProposalId { id: 1 }, NeuronId { id: 1 }, Vote::Yes, topic);
@@ -1494,9 +1502,10 @@ mod test {
 
         let mut governance = Governance::new(
             governance_proto,
-            Box::new(environment),
-            Box::new(StubIcpLedger {}),
-            Box::new(StubCMC {}),
+            Arc::new(environment),
+            Arc::new(StubIcpLedger {}),
+            Arc::new(StubCMC {}),
+            Box::new(MockRandomness::new()),
         );
 
         assert_eq!(

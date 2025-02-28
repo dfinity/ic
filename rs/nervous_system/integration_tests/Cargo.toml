@@ -15,6 +15,7 @@ futures = { workspace = true }
 ic-base-types = { path = "../../types/base_types" }
 ic-interfaces-registry = { path = "../../interfaces/registry" }
 ic-ledger-core = { path = "../../ledger_suite/common/ledger_core" }
+ic-management-canister-types = { workspace = true }
 ic-nervous-system-agent = { path = "../agent" }
 ic-nervous-system-clients = { path = "../clients" }
 ic-nervous-system-common = { path = "../common" }

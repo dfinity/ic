@@ -215,7 +215,7 @@ impl CmcFixture {
 
 #[async_trait]
 impl CMC for CmcFixture {
-    async fn neuron_maturity_modulation(&mut self) -> Result<i32, String> {
+    async fn neuron_maturity_modulation(&self) -> Result<i32, String> {
         Ok(*self.maturity_modulation.try_lock().unwrap())
     }
 }
