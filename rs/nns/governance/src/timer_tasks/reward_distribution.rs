@@ -16,18 +16,17 @@ impl CalculateDistributableRewardsTask {
     }
 
     fn next_reward_task_from_now(&self) -> Duration {
-        // TODO DO NOT MERGE, test this logic, and think about edge cases for it.
         self.governance.with_borrow(|governance| {
             let latest_day_after_genesis = governance.latest_reward_event().day_after_genesis;
             let now = governance.env.now();
             let genesis_timestamp_seconds = governance.heap_data.genesis_timestamp_seconds;
 
-            next_reward_task_from_now(now, genesis_timestamp_seconds, latest_day_after_genesis)
+            delay_until_next_run(now, genesis_timestamp_seconds, latest_day_after_genesis)
         })
     }
 }
 
-fn next_reward_task_from_now(
+fn delay_until_next_run(
     now: u64,
     genesis_timestamp_seconds: u64,
     latest_reward_day_after_genesis: u64,
@@ -37,9 +36,9 @@ fn next_reward_task_from_now(
         + genesis_timestamp_seconds;
 
     let next =
-        latest_distribution_nominal_end_timestamp_seconds + REWARD_DISTRIBUTION_PERIOD_SECONDS;
+        latest_distribution_nominal_end_timestamp_seconds + REWARD_DISTRIBUTION_PERIOD_SECONDS + 1;
 
-    Duration::from_secs(next.saturating_sub(now) + 1)
+    Duration::from_secs(next.saturating_sub(now))
 }
 
 const REWARD_DISTRIBUTION_INTERVAL: Duration =
@@ -73,12 +72,120 @@ impl RecurringAsyncTask for CalculateDistributableRewardsTask {
     }
 
     fn initial_delay(&self) -> Duration {
-        println!(
-            "Calling Initial delay {:?}",
-            self.next_reward_task_from_now()
-        );
         self.next_reward_task_from_now()
     }
 
     const NAME: &'static str = "RewardDistribution";
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::canister_state::{set_governance_for_tests, CanisterRandomnessGenerator};
+    use crate::governance::Governance;
+    use crate::test_utils::{MockEnvironment, StubCMC, StubIcpLedger};
+    use std::sync::Arc;
+
+    fn test_delay_until_next_run(
+        now: u64,
+        genesis_timestamp_seconds: u64,
+        latest_reward_day_after_genesis: u64,
+        expected: Duration,
+    ) {
+        let next = delay_until_next_run(
+            now,
+            genesis_timestamp_seconds,
+            latest_reward_day_after_genesis,
+        );
+        assert_eq!(next, expected);
+    }
+
+    #[test]
+    fn test_delay_until_next_run_all_zero() {
+        let now = 0;
+        let genesis_timestamp_seconds = 0;
+        let latest_reward_day_after_genesis = 0;
+
+        test_delay_until_next_run(
+            now,
+            genesis_timestamp_seconds,
+            latest_reward_day_after_genesis,
+            Duration::from_secs(REWARD_DISTRIBUTION_PERIOD_SECONDS + 1),
+        );
+    }
+
+    #[test]
+    fn test_delay_until_next_run_missed_days() {
+        let now = REWARD_DISTRIBUTION_PERIOD_SECONDS * 3;
+        let genesis_timestamp_seconds = 0;
+        let latest_reward_day_after_genesis = 1;
+
+        test_delay_until_next_run(
+            now,
+            genesis_timestamp_seconds,
+            latest_reward_day_after_genesis,
+            Duration::from_secs(0),
+        );
+    }
+
+    #[test]
+    fn test_delay_until_next_run_exactly_at_event() {
+        let now = REWARD_DISTRIBUTION_PERIOD_SECONDS + 1;
+        let genesis_timestamp_seconds = 0;
+        let latest_reward_day_after_genesis = 1;
+
+        test_delay_until_next_run(
+            now,
+            genesis_timestamp_seconds,
+            latest_reward_day_after_genesis,
+            Duration::from_secs(REWARD_DISTRIBUTION_PERIOD_SECONDS),
+        );
+    }
+
+    #[test]
+    fn test_delay_until_next_run_with_positive_genesis_value() {
+        let now = 10_000 + REWARD_DISTRIBUTION_PERIOD_SECONDS * 5 + 500;
+        let genesis_timestamp_seconds = 10_000;
+        let latest_reward_day_after_genesis = 5;
+
+        test_delay_until_next_run(
+            now,
+            genesis_timestamp_seconds,
+            latest_reward_day_after_genesis,
+            Duration::from_secs(REWARD_DISTRIBUTION_PERIOD_SECONDS - 500 + 1),
+        );
+    }
+
+    #[test]
+    fn test_governance_integration_with_delay_calculation() {
+        let now = 10_000 + REWARD_DISTRIBUTION_PERIOD_SECONDS * 5 + 500;
+        let genesis_timestamp_seconds = 10_000;
+        let latest_reward_day_after_genesis = 5;
+
+        let governance_proto = crate::pb::v1::Governance {
+            genesis_timestamp_seconds: 10_000,
+            latest_reward_event: Some(crate::pb::v1::RewardEvent {
+                day_after_genesis: latest_reward_day_after_genesis,
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+
+        let gov = Governance::new(
+            governance_proto,
+            Arc::new(MockEnvironment::new(vec![], now)),
+            Arc::new(StubIcpLedger {}),
+            Arc::new(StubCMC {}),
+            Box::new(CanisterRandomnessGenerator::new()),
+        );
+        set_governance_for_tests(gov);
+
+        let task = CalculateDistributableRewardsTask::new(&crate::canister_state::GOVERNANCE);
+
+        let next = task.next_reward_task_from_now();
+        assert_eq!(
+            next,
+            Duration::from_secs(REWARD_DISTRIBUTION_PERIOD_SECONDS - 500 + 1)
+        );
+    }
 }

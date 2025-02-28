@@ -112,7 +112,6 @@ pub fn advance_time_for_timers(duration: Duration) {
     });
 }
 
-// TODO should we have this run intervals more than once if enough time has elapsed?
 pub fn run_pending_timers() {
     let current_time = CURRENT_TIME.with(|current_time| *current_time.borrow());
 
