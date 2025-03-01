@@ -486,7 +486,7 @@ message AdvanceSnsTargetVersion {
   optional SnsVersion new_target = 1;
 }
 
-message SetCustomProposalTopics {
+message SetTopicsForCustomProposals {
   map<uint64, Topic> custom_function_id_to_topic = 1;
 }
 
@@ -606,7 +606,7 @@ message Proposal {
     // Change the mapping from custom proposal types to topics.
     //
     // Id = 16;
-    SetCustomProposalTopics set_custom_proposal_topics = 20;
+    SetTopicsForCustomProposals set_topics_for_custom_proposals = 20;
   }
 }
 
@@ -801,7 +801,7 @@ message ProposalData {
   // Id 13 - ManageLedgerParameters proposals.
   // Id 14 - ManageDappCanisterSettings proposals.
   // Id 15 - AdvanceSnsTargetVersion proposals.
-  // Id 16 - SetCustomProposalTopics proposals.
+  // Id 16 - SetTopicsForCustomProposals proposals.
   uint64 action = 1;
 
   // This is stored here temporarily. It is also stored on the map
