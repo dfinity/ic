@@ -1008,10 +1008,10 @@ impl ChainSignatureRequest {
 
     fn vetkd_params(vetkd_key_id: VetKdKeyId) -> ForwardParams {
         let vetkd_request = VetKdDeriveEncryptedKeyArgs {
-            derivation_domain: vec![],
+            derivation_domain: vec![1; 32],
             derivation_id: vec![],
             key_id: vetkd_key_id,
-            encryption_public_key: [1; 48],
+            encryption_public_key: G1Affine::generator().to_compressed(),
         };
         ForwardParams {
             receiver: Principal::management_canister(),
