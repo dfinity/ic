@@ -1,5 +1,5 @@
 use crate::cached_upgrade_steps::render_two_versions_as_markdown_table;
-use crate::pb::v1::{AdvanceSnsTargetVersion, SetCustomProposalTopics, Topic};
+use crate::pb::v1::{AdvanceSnsTargetVersion, SetTopicsForCustomProposals, Topic};
 use crate::types::Wasm;
 use crate::{
     canister_control::perform_execute_generic_nervous_system_function_validate_and_render_call,
@@ -492,9 +492,9 @@ pub(crate) async fn validate_and_render_action(
                 advance_sns_target_version,
             );
         }
-        proposal::Action::SetCustomProposalTopics(set_custom_proposal_topics) => {
-            validate_and_render_set_custom_proposal_topics(
-                set_custom_proposal_topics,
+        proposal::Action::SetTopicsForCustomProposals(set_topics_for_custom_proposals) => {
+            validate_and_render_set_topics_for_custom_proposals(
+                set_topics_for_custom_proposals,
                 &governance_proto.custom_functions_to_topics(),
             )
         }
@@ -1845,17 +1845,17 @@ fn topic_to_str(topic: &Topic) -> &'static str {
     }
 }
 
-pub(crate) fn validate_and_render_set_custom_proposal_topics(
-    set_custom_proposal_topics: &SetCustomProposalTopics,
+pub(crate) fn validate_and_render_set_topics_for_custom_proposals(
+    set_topics_for_custom_proposals: &SetTopicsForCustomProposals,
     existing_custom_functions: &BTreeMap<u64, (String, Option<Topic>)>,
 ) -> Result<String, String> {
-    let SetCustomProposalTopics {
+    let SetTopicsForCustomProposals {
         custom_function_id_to_topic,
-    } = set_custom_proposal_topics;
+    } = set_topics_for_custom_proposals;
 
     if custom_function_id_to_topic.is_empty() {
         return Err(
-            "SetCustomProposalTopics.custom_function_id_to_topic must not be empty.".to_string(),
+            "SetTopicsForCustomProposals.custom_function_id_to_topic must not be empty.".to_string(),
         );
     }
 
@@ -2725,7 +2725,7 @@ mod minting_tests;
 mod advance_sns_target_version;
 
 #[cfg(test)]
-mod set_custom_proposal_topics;
+mod set_topics_for_custom_proposals;
 
 #[cfg(test)]
 mod tests {

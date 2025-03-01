@@ -135,8 +135,8 @@ pub mod native_action_ids {
     /// AdvanceSnsTargetVersion Action.
     pub const ADVANCE_SNS_TARGET_VERSION: u64 = 15;
 
-    /// SetCustomProposalTopics Action.
-    pub const SET_CUSTOM_PROPOSAL_ACTION: u64 = 16;
+    /// SetTopicsForCustomProposals Action.
+    pub const SET_CUSTOM_TOPICS_FOR_CUSTOM_PROPOSALS_ACTION: u64 = 16;
 
     // When adding something to this list, make sure to update the below function.
     pub fn native_functions() -> Vec<NervousSystemFunction> {
@@ -156,7 +156,7 @@ pub mod native_action_ids {
             NervousSystemFunction::manage_ledger_parameters(),
             NervousSystemFunction::manage_dapp_canister_settings(),
             NervousSystemFunction::advance_sns_target_version(),
-            NervousSystemFunction::set_custom_proposal_topics(),
+            NervousSystemFunction::set_topics_for_custom_proposals(),
         ]
     }
 }
@@ -1236,11 +1236,11 @@ impl NervousSystemFunction {
         }
     }
 
-    fn set_custom_proposal_topics() -> NervousSystemFunction {
+    fn set_topics_for_custom_proposals() -> NervousSystemFunction {
         NervousSystemFunction {
-            id: native_action_ids::SET_CUSTOM_PROPOSAL_ACTION,
-            name: "Set custom proposal topics".to_string(),
-            description: Some("Proposal to set the topics of custom SNS proposals.".to_string()),
+            id: native_action_ids::SET_CUSTOM_TOPICS_FOR_CUSTOM_PROPOSALS_ACTION,
+            name: "Set topics for custom proposals".to_string(),
+            description: Some("Proposal to set the topics for custom SNS proposals.".to_string()),
             function_type: Some(FunctionType::NativeNervousSystemFunction(Empty {})),
         }
     }
@@ -1287,8 +1287,8 @@ impl From<Action> for NervousSystemFunction {
             Action::AdvanceSnsTargetVersion(_) => {
                 NervousSystemFunction::advance_sns_target_version()
             }
-            Action::SetCustomProposalTopics(_) => {
-                NervousSystemFunction::set_custom_proposal_topics()
+            Action::SetTopicsForCustomProposals(_) => {
+                NervousSystemFunction::set_topics_for_custom_proposals()
             }
         }
     }
@@ -1732,7 +1732,7 @@ impl Action {
             DeregisterDappCanisters(_)
             | TransferSnsTreasuryFunds(_)
             | MintSnsTokens(_)
-            | SetCustomProposalTopics(_) => ProposalCriticality::Critical,
+            | SetTopicsForCustomProposals(_) => ProposalCriticality::Critical,
 
             Unspecified(_)
             | ManageNervousSystemParameters(_)
@@ -1932,7 +1932,7 @@ impl From<&Action> for u64 {
                 native_action_ids::MANAGE_DAPP_CANISTER_SETTINGS
             }
             Action::AdvanceSnsTargetVersion(_) => native_action_ids::ADVANCE_SNS_TARGET_VERSION,
-            Action::SetCustomProposalTopics(_) => native_action_ids::SET_CUSTOM_PROPOSAL_ACTION,
+            Action::SetTopicsForCustomProposals(_) => native_action_ids::SET_CUSTOM_TOPICS_FOR_CUSTOM_PROPOSALS_ACTION,
         }
     }
 }

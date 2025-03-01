@@ -574,8 +574,8 @@ impl From<pb::AdvanceSnsTargetVersion> for pb_api::AdvanceSnsTargetVersion {
     }
 }
 
-impl From<pb_api::SetCustomProposalTopics> for pb::SetCustomProposalTopics {
-    fn from(item: pb_api::SetCustomProposalTopics) -> Self {
+impl From<pb_api::SetTopicsForCustomProposals> for pb::SetTopicsForCustomProposals {
+    fn from(item: pb_api::SetTopicsForCustomProposals) -> Self {
         Self {
             custom_function_id_to_topic: item
                 .custom_function_id_to_topic
@@ -588,8 +588,8 @@ impl From<pb_api::SetCustomProposalTopics> for pb::SetCustomProposalTopics {
         }
     }
 }
-impl From<pb::SetCustomProposalTopics> for pb_api::SetCustomProposalTopics {
-    fn from(item: pb::SetCustomProposalTopics) -> Self {
+impl From<pb::SetTopicsForCustomProposals> for pb_api::SetTopicsForCustomProposals {
+    fn from(item: pb::SetTopicsForCustomProposals) -> Self {
         let custom_function_id_to_topic = item
             .custom_function_id_to_topic
             .into_iter()
@@ -680,8 +680,8 @@ impl From<pb::proposal::Action> for pb_api::proposal::Action {
             pb::proposal::Action::AdvanceSnsTargetVersion(v) => {
                 pb_api::proposal::Action::AdvanceSnsTargetVersion(v.into())
             }
-            pb::proposal::Action::SetCustomProposalTopics(v) => {
-                pb_api::proposal::Action::SetCustomProposalTopics(v.into())
+            pb::proposal::Action::SetTopicsForCustomProposals(v) => {
+                pb_api::proposal::Action::SetTopicsForCustomProposals(v.into())
             }
         }
     }
@@ -733,8 +733,8 @@ impl From<pb_api::proposal::Action> for pb::proposal::Action {
             pb_api::proposal::Action::AdvanceSnsTargetVersion(v) => {
                 pb::proposal::Action::AdvanceSnsTargetVersion(v.into())
             }
-            pb_api::proposal::Action::SetCustomProposalTopics(v) => {
-                pb::proposal::Action::SetCustomProposalTopics(v.into())
+            pb_api::proposal::Action::SetTopicsForCustomProposals(v) => {
+                pb::proposal::Action::SetTopicsForCustomProposals(v.into())
             }
         }
     }
