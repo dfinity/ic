@@ -1,5 +1,6 @@
 use candid::{decode_one, encode_one, CandidType, Decode, Deserialize, Encode, Principal};
 use ic_certification::Label;
+use ic_management_canister_types::CanisterIdRecord;
 use ic_management_canister_types::{
     Bip341, CanisterInstallMode, CanisterSettings, EcdsaPublicKeyResult, HttpRequestResult,
     NodeMetricsHistoryArgs, NodeMetricsHistoryRecord as NodeMetricsHistoryResultItem,
@@ -9,7 +10,6 @@ use ic_management_canister_types::{
 use ic_transport_types::Envelope;
 use ic_transport_types::EnvelopeContent::ReadState;
 use pocket_ic::common::rest::{BlockmakerConfigs, RawSubnetBlockmaker, TickConfigs};
-use pocket_ic::management_canister::CanisterIdRecord;
 use pocket_ic::{
     common::rest::{
         BlobCompression, CanisterHttpReply, CanisterHttpResponse, MockCanisterHttpResponse,
