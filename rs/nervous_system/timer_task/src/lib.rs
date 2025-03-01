@@ -120,6 +120,7 @@ pub use metrics::MetricsRegistry as TimerTaskMetricsRegistry;
 use async_trait::async_trait;
 use ic_cdk::spawn;
 use ic_cdk_timers::{set_timer, set_timer_interval};
+use ic_nervous_system_time_helpers::now_seconds;
 use metrics::{with_async_metrics, with_sync_metrics, MetricsRegistryRef};
 use std::time::Duration;
 
@@ -227,9 +228,4 @@ pub trait PeriodicAsyncTask: Copy + Sized + 'static {
 
     const NAME: &'static str;
     const INTERVAL: Duration;
-}
-
-fn now_seconds() -> u64 {
-    const NANOS_PER_SECOND: u64 = 1_000_000_000;
-    ic_cdk::api::time() / NANOS_PER_SECOND
 }

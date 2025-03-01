@@ -10390,6 +10390,7 @@ dependencies = [
  "ic-cdk-timers",
  "ic-config",
  "ic-metrics-encoder",
+ "ic-nervous-system-time-helpers",
  "ic-registry-subnet-type",
  "ic-state-machine-tests",
  "ic-types",
