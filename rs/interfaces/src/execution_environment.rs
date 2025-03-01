@@ -21,6 +21,7 @@ use std::{
     convert::{Infallible, TryFrom},
     fmt, ops,
     sync::Arc,
+    time::Duration,
 };
 use strum_macros::EnumIter;
 use thiserror::Error;
@@ -60,6 +61,9 @@ pub struct InstanceStats {
     /// Number of pages loaded by copying the data.
     pub wasm_copy_page_count: usize,
 
+    /// Total time spent in SIGSEGV handler.
+    pub wasm_sigsegv_handler_duration: Duration,
+
     /// Number of accessed OS pages (4KiB) in stable memory.
     pub stable_accessed_pages: usize,
 
@@ -85,6 +89,9 @@ pub struct InstanceStats {
 
     /// Number of pages loaded by copying the data in stable memory.
     pub stable_copy_page_count: usize,
+
+    /// Total time spent in SIGSEGV handler for stable memory.
+    pub stable_sigsegv_handler_duration: Duration,
 }
 
 impl InstanceStats {
