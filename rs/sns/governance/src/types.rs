@@ -1932,7 +1932,9 @@ impl From<&Action> for u64 {
                 native_action_ids::MANAGE_DAPP_CANISTER_SETTINGS
             }
             Action::AdvanceSnsTargetVersion(_) => native_action_ids::ADVANCE_SNS_TARGET_VERSION,
-            Action::SetTopicsForCustomProposals(_) => native_action_ids::SET_CUSTOM_TOPICS_FOR_CUSTOM_PROPOSALS_ACTION,
+            Action::SetTopicsForCustomProposals(_) => {
+                native_action_ids::SET_CUSTOM_TOPICS_FOR_CUSTOM_PROPOSALS_ACTION
+            }
         }
     }
 }

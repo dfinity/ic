@@ -1855,7 +1855,8 @@ pub(crate) fn validate_and_render_set_topics_for_custom_proposals(
 
     if custom_function_id_to_topic.is_empty() {
         return Err(
-            "SetTopicsForCustomProposals.custom_function_id_to_topic must not be empty.".to_string(),
+            "SetTopicsForCustomProposals.custom_function_id_to_topic must not be empty."
+                .to_string(),
         );
     }
 
