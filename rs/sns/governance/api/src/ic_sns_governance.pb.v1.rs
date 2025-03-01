@@ -590,7 +590,7 @@ pub mod proposal {
         ///
         /// Id = 15.
         AdvanceSnsTargetVersion(super::AdvanceSnsTargetVersion),
-        /// SetTopicsForCustomProposals
+        /// Set mapping from custom proposal types to topics.
         ///
         /// Id = 16;
         SetTopicsForCustomProposals(super::SetTopicsForCustomProposals),
