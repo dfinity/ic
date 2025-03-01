@@ -19,6 +19,15 @@ message ChangelogEntry {
     bytes encoded_mutation = 2;
 }
 
+// A version of the registry and the time when it was created.
+message VersionTimestamp {
+    // The version of the registry.
+    uint64 version = 1;
+    // The nanoseconds since unix epoch; time when the version was
+    // created.
+    uint64 timestamp_nanoseconds = 2;
+}
+
 // Just a container for a set of RegistryDelta that can be used to
 // serialize/deserialize the content of the registry.
 message RegistryStableStorage {
@@ -68,11 +77,17 @@ message RegistryStableStorage {
     // details.
     Version version = 2;
 
-    // Only present if version == VERSION_UNSPECIFIED.
-    repeated ic_registry_transport.pb.v1.RegistryDelta deltas = 1;
-
     // Only present if version == VERSION_1.
     repeated ChangelogEntry changelog = 3;
+
+    // This allows us to correlate registry versions with when they happened.
+    // It is not present for all registry versions.  It is kept purposefully detached
+    // from the rest of the registry data, until a need is shown that deeper integration is needed
+    // in which case a migration can be performed.
+    repeated VersionTimestamp version_timestamps = 4;
+
+    reserved 1;
+
 }
 
 // A container for the what gets written to stable storage,
