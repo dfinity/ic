@@ -54,11 +54,11 @@
 //! let recovered_msg = a_sk.decrypt(&ctext, associated_data, &b_pk).unwrap();
 //! assert_eq!(recovered_msg, msg, "failed to decrypt message");
 //!
-//! // If recipient accidentally tries to decrypt without authentication, it does not work
+//! // If recipient accidentally tries to decrypt without authentication, decryption fails
 //! assert!(a_sk.decrypt_noauth(&ctext, associated_data).is_err());
-//! // If associated data is incorrect decryption fails
+//! // If associated data is incorrect, decryption fails
 //! assert!(a_sk.decrypt(&ctext, b"wrong-associated-data", &b_pk).is_err());
-//! // If the wrong public key is used decryption fails
+//! // If the wrong public key is used, decryption fails
 //! assert!(a_sk.decrypt(&ctext, associated_data, &a_pk).is_err());
 //! ```
 //!
@@ -84,7 +84,7 @@
 //! let recovered_msg = sk.decrypt_noauth(&ctext, associated_data).unwrap();
 //! assert_eq!(recovered_msg, msg, "failed to decrypt message");
 //!
-//! // If associated data is incorrect decryption fails
+//! // If associated data is incorrect, decryption fails
 //! assert!(sk.decrypt_noauth(&ctext, b"wrong-associated-data").is_err());
 //! ```
 
@@ -100,8 +100,7 @@ use hpke::{
  * The header starts with a 56 bit long "magic" field. This makes the values
  * easy to identity - someone searching for this hex string will likely find
  * this crate right away. It also ensures that values we accept were intended
- * specifically for us. This is the first 56 bits of the SHA-256 of the string
- * "Internet Computer HPKE".
+ * specifically for us. The string is the ASCII bytes of "IC HPKE".
  *
  * The next part is a 8 bit version field. This is currently 1; we only
  * implement this one version. The field allows us extensibility in the future if
@@ -110,7 +109,7 @@ use hpke::{
 
 // An arbitrary magic number that is prefixed to all artifacts to identify them
 // plus our initial version (01)
-const MAGIC: u64 = 0x64e4f9efb76abc01;
+const MAGIC: u64 = 0x49432048504b4501;
 
 // Current header is just the magic + version field
 const HEADER_SIZE: usize = 8;
@@ -227,16 +226,13 @@ impl PublicKey {
     /// The decrypting side must know the recipients public key in order to
     /// decrypt the message.
     ///
-    /// This encrypts a message to the public key such that whoever
-    /// knows the associated private key can decrypt the message.
-    ///
-    /// The associated_data field is information which is not encrypted, nor is
+    /// The `associated_data` field is information which is not encrypted, nor is
     /// it included in the returned blob. However it is implicitly authenticated
     /// by a successful decryption; that is, if the decrypting side uses the
-    /// same associated_data parameter during decryption, then decryption will
+    /// same `associated_data` parameter during decryption, then decryption will
     /// succeed and the decryptor knows that this field is also authentic.  If
-    /// the encryptor and decryptor disagree on the associated_data field, then
-    /// decryption will fail. If not needed, associated_data can be set to an
+    /// the encryptor and decryptor disagree on the `associated_data` field, then
+    /// decryption will fail. If not needed, `associated_data` can be set to an
     /// empty slice
     ///
     /// The recipient must use [`PrivateKey::decrypt`] to decrypt
@@ -293,13 +289,13 @@ impl PublicKey {
     /// This encrypts a message to the public key such that whoever
     /// knows the associated private key can decrypt the message.
     ///
-    /// The associated_data field is information which is not encrypted, nor is
+    /// The `associated_data` field is information which is not encrypted, nor is
     /// it included in the returned blob. However it is implicitly authenticated
     /// by a successful decryption; that is, if the decrypting side uses the
-    /// same associated_data parameter during decryption, then decryption will
+    /// same `associated_data` parameter during decryption, then decryption will
     /// succeed and the decryptor knows that this field is also authentic.  If
-    /// the encryptor and decryptor disagree on the associated_data field, then
-    /// decryption will fail. If not needed, associated_data can be set to an
+    /// the encryptor and decryptor disagree on the `associated_data` field, then
+    /// decryption will fail. If not needed, `associated_data` can be set to an
     /// empty slice.
     ///
     /// This function provides no guarantees to the recipient about who sent it;
@@ -398,7 +394,7 @@ impl PrivateKey {
     ///
     /// This is the counterpart to [`PublicKey::encrypt_noauth`]
     ///
-    /// This function cannot decrypt messages sent using [`PublicKey::encrypt`]
+    /// This function *cannot* decrypt messages created using [`PublicKey::encrypt`]
     ///
     /// # Warning
     ///
