@@ -208,3 +208,23 @@ index 50cc881..0549c26 100644
          toolchain = "@zig_sdk//:%s_cc" % zigtarget,
          toolchain_type = "@bazel_tools//tools/cpp:toolchain_type",
      )
+diff --git a/toolchain/zig-wrapper.zig b/toolchain/zig-wrapper.zig
+index d1d59f9..7eb41fc 100644
+--- a/toolchain/zig-wrapper.zig
++++ b/toolchain/zig-wrapper.zig
+@@ -235,8 +235,13 @@ fn parseArgs(
+         }),
+     }
+ 
+-    while (argv_it.next()) |arg|
+-        try args.append(arena, arg);
++    while (argv_it.next()) |arg| {
++        if (mem.eql(u8, "-Wl,--dynamic-list=/usr/local/bin/../lib/afl/dynamic_list.txt", arg)) {
++            try args.append(arena, "-Wl,--export-dynamic");
++        } else {
++            try args.append(arena, arg);
++        }
++    }
+ 
+     return ParseResults{ .exec = .{ .args = args, .env = env } };
+ }

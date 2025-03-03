@@ -109,6 +109,7 @@ build:fuzzing --build_tag_filters=fuzz_test
 build:fuzzing --//bazel:enable_fuzzing_code=True
 
 # AFL configuration
+build:afl --action_env="AFL_ENABLED=1"
 build:afl --action_env="AR=llvm-ar-18"
 build:afl --action_env="AS=llvm-as-18"
 build:afl --action_env="CC=afl-clang-lto"

@@ -1,0 +1,17 @@
+# Add path to link with AFL
+diff --git a/rust/private/rustc.bzl b/rust/private/rustc.bzl
+index d2a810f0..1a5f297a 100644
+--- a/rust/private/rustc.bzl
++++ b/rust/private/rustc.bzl
+@@ -1008,7 +1008,10 @@ def construct_arguments(
+             ld, link_args, link_env = get_linker_and_args(ctx, crate_info.type, cc_toolchain, feature_configuration, rpaths, add_flags_for_binary = add_flags_for_binary)
+ 
+             env.update(link_env)
+-            rustc_flags.add(ld, format = "--codegen=linker=%s")
++
++            if any([x.startswith("AFL") for x in crate_info.rustc_env]):
++                env.update({"AFL_CXX": ld})
++                rustc_flags.add("--codegen=linker=afl-clang-fast++")
+ 
+             # Split link args into individual "--codegen=link-arg=" flags to handle nested spaces.
+             # Additional context: https://github.com/rust-lang/rust/pull/36574
