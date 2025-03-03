@@ -7204,7 +7204,7 @@ dependencies = [
  "ic-types",
  "ic-types-test-utils",
  "prometheus",
- "prost 0.13.5",
+ "prost 0.13.4",
  "slog",
  "strum",
  "strum_macros",
