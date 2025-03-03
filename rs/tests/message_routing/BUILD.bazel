@@ -1,4 +1,4 @@
-load("//rs/tests:common.bzl", "GRAFANA_RUNTIME_DEPS", "GUESTOS_RUNTIME_DEPS", "STATESYNC_TEST_CANISTER_RUNTIME_DEPS", "UNIVERSAL_CANISTER_ENV", "UNIVERSAL_CANISTER_RUNTIME_DEPS", "XNET_TEST_CANISTER_RUNTIME_DEPS")
+load("//rs/tests:common.bzl", "GRAFANA_RUNTIME_DEPS", "GUESTOS_RUNTIME_DEPS", "MAINNET_ENV", "STATESYNC_TEST_CANISTER_RUNTIME_DEPS", "UNIVERSAL_CANISTER_ENV", "UNIVERSAL_CANISTER_RUNTIME_DEPS", "XNET_TEST_CANISTER_RUNTIME_DEPS")
 load("//rs/tests:system_tests.bzl", "system_test", "system_test_nns")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
@@ -134,9 +134,9 @@ system_test_nns(
 
 system_test(
     name = "queues_compatibility_test",
+    env = MAINNET_ENV,
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = [
-        "//:mainnet_subnet_revisions",
         "//rs/replicated_state:replicated_state_test_binary",
     ],
     deps = [

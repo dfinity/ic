@@ -266,7 +266,3 @@ sns_quill(name = "sns_quill")
 load("//bazel:idl2json.bzl", "idl_to_json")
 
 idl_to_json(name = "idl2json")
-
-load("//bazel:jq.bzl", "jq_repository")
-
-jq_repository(name = "jq")
