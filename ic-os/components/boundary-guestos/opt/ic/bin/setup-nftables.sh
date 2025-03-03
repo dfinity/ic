@@ -17,6 +17,7 @@ ipv4_http_ips=("0.0.0.0/32")
 ipv6_http_ips=("::/128")
 ipv6_debug_ips=("::/128")
 ipv6_monitoring_ips=("::/128")
+ipv6_system_replica_ips=("::/128")
 
 function csv() {
     local -r arr=("$@")
@@ -49,6 +50,7 @@ function read_variables() {
             "ipv6_http_ips") ipv6_http_ips+=("${value}") ;;
             "ipv6_debug_ips") ipv6_debug_ips+=("${value}") ;;
             "ipv6_monitoring_ips") ipv6_monitoring_ips+=("${value}") ;;
+            "ipv6_system_replica_ips") ipv6_system_replica_ips+=("${value}") ;;
             "canary_proxy_port") canary_proxy_port="${value}" ;;
         esac
     done <"${BN_CONFIG}"
@@ -74,7 +76,7 @@ define canary_proxy_port   = ${canary_proxy_port:-0}
 EOF
 
     cat >"${SYSTEM_REPLICAS_FILE}" <<EOF
-define ipv6_system_replica_ips = { ::/128 }
+define ipv6_system_replica_ips = { $(csv "${ipv6_system_replica_ips[@]}") }
 EOF
 }
 
