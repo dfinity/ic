@@ -41,7 +41,7 @@ use signal_stack::WasmtimeSignalStack;
 
 use crate::wasm_utils::instrumentation::{
     WasmMemoryType, ACCESSED_PAGES_COUNTER_GLOBAL_NAME, DIRTY_PAGES_COUNTER_GLOBAL_NAME,
-    INSTRUCTIONS_COUNTER_GLOBAL_NAME,
+    INSTRUCTIONS_COUNTER_GLOBAL_NAME, PREV_RESIDENT_PAGES,
 };
 use crate::{
     serialized_module::SerializedModuleBytes, wasm_utils::validation::wasmtime_validation_config,
@@ -446,6 +446,7 @@ impl WasmtimeEmbedder {
                     .table_elements(MAX_STORE_TABLE_ELEMENTS)
                     .build(),
                 canister_backtrace: self.config.feature_flags.canister_backtrace,
+                num_prev_resident_pages: None,
             },
         );
         store.limiter(|state| &mut state.limits);
@@ -468,6 +469,10 @@ impl WasmtimeEmbedder {
 
         store.data_mut().num_instructions_global =
             instance.get_global(&mut store, INSTRUCTIONS_COUNTER_GLOBAL_NAME);
+
+        // Set the resident pages global.
+        store.data_mut().num_prev_resident_pages =
+            instance.get_global(&mut store, PREV_RESIDENT_PAGES);
 
         if let Some(exported_globals) = exported_globals {
             let instance_globals = get_exported_globals(
@@ -770,6 +775,7 @@ pub struct StoreData {
     pub num_stable_dirty_pages_from_non_native_writes: NumOsPages,
     pub limits: StoreLimits,
     pub canister_backtrace: FlagStatus,
+    pub num_prev_resident_pages: Option<wasmtime::Global>,
 }
 
 impl StoreData {
