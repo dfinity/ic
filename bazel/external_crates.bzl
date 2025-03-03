@@ -70,12 +70,6 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 "opt-level=3",
             ],
         )],
-        "rustix": [crate.annotation(
-            # Patch for determinism issues
-            # https://github.com/bytecodealliance/rustix/issues/1199
-            patch_args = ["-p1"],
-            patches = ["@rustix-patch//file:downloaded"],
-        )],
         "tikv-jemalloc-sys": [crate.annotation(
             # Avoid building jemalloc from rust (in part bc it creates builder-specific config files)
             build_script_data = crate.select([], {

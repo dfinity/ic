@@ -1,5 +1,5 @@
 {
-  "checksum": "2f4e24feb69f1138498a5cd1a5a74e2b56e0b4175d97c03efe911b557e4c4629",
+  "checksum": "000ce436502b45802945c2ef7ec8727aa1428280fe47334145eca3e8428aacb1",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -64362,13 +64362,7 @@
       "repository": {
         "Http": {
           "url": "https://static.crates.io/crates/rustix/0.38.44/download",
-          "sha256": "fdb5bc1ae2baa591800df16c9ca78619bf65c0488b41b96ccec5d11220d8c154",
-          "patch_args": [
-            "-p1"
-          ],
-          "patches": [
-            "@rustix-patch//file:downloaded"
-          ]
+          "sha256": "fdb5bc1ae2baa591800df16c9ca78619bf65c0488b41b96ccec5d11220d8c154"
         }
       },
       "targets": [
