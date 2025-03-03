@@ -576,8 +576,8 @@ fn test_all_existing_pagemaps() {
 #[test_strategy::proptest]
 fn read_back_wasm_memory_overlay_file_names(
     #[strategy(random_sorted_unique_heights(
-            10, // max_length
-        ))]
+        10, // max_length
+    ))]
     heights: Vec<Height>,
 ) {
     let tmp = tmpdir("canister");
@@ -618,8 +618,8 @@ fn read_back_wasm_memory_overlay_file_names(
 #[test_strategy::proptest]
 fn read_back_stable_memory_overlay_file_names(
     #[strategy(random_sorted_unique_heights(
-            10, // max_length
-        ))]
+        10, // max_length
+    ))]
     heights: Vec<Height>,
 ) {
     let tmp = tmpdir("canister");
@@ -660,8 +660,8 @@ fn read_back_stable_memory_overlay_file_names(
 #[test_strategy::proptest]
 fn read_back_wasm_chunk_store_overlay_file_names(
     #[strategy(random_sorted_unique_heights(
-            10, // max_length
-        ))]
+        10, // max_length
+    ))]
     heights: Vec<Height>,
 ) {
     let tmp = tmpdir("canister");
@@ -709,8 +709,8 @@ fn read_back_wasm_chunk_store_overlay_file_names(
 #[test_strategy::proptest]
 fn read_back_checkpoint_directory_names(
     #[strategy(random_sorted_unique_heights(
-            10, // max_length
-        ))]
+        10, // max_length
+    ))]
     heights: Vec<Height>,
 ) {
     with_test_replica_logger(|log| {
@@ -743,10 +743,10 @@ fn read_back_checkpoint_directory_names(
 #[test_strategy::proptest]
 fn read_back_canister_snapshot_ids(
     #[strategy(random_unique_snapshot_ids(
-            10, // max_length
-            10, // canister_count
-            10, // snapshots_per_canister_count
-        ))]
+        10, // max_length
+        10, // canister_count
+        10, // snapshots_per_canister_count
+    ))]
     mut snapshot_ids: Vec<SnapshotId>,
 ) {
     let tmp = tmpdir("checkpoint");
@@ -765,10 +765,10 @@ fn read_back_canister_snapshot_ids(
 #[test_strategy::proptest]
 fn can_add_and_delete_canister_snapshots(
     #[strategy(random_unique_snapshot_ids(
-            10, // max_length
-            10, // canister_count
-            10, // snapshots_per_canister_count
-        ))]
+        10, // max_length
+        10, // canister_count
+        10, // snapshots_per_canister_count
+    ))]
     snapshot_ids: Vec<SnapshotId>,
 ) {
     let tmp = tmpdir("checkpoint");
