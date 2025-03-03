@@ -22,8 +22,13 @@
 //!
 //! These functions will allow you to test everything thoroughly.
 //!
-pub mod real {
-    pub use ic_cdk_timers::{clear_timer, set_timer, set_timer_interval};
-}
+
+pub use ic_cdk_timers::TimerId;
+
+#[cfg(target_arch = "wasm32")]
+pub use ic_cdk_timers::{clear_timer, set_timer, set_timer_interval};
+
+#[cfg(not(target_arch = "wasm32"))]
+pub use test::{clear_timer, set_timer, set_timer_interval};
 
 pub mod test;

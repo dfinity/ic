@@ -123,6 +123,7 @@ use futures::FutureExt;
 #[cfg(target_arch = "wasm32")]
 use ic_cdk::spawn;
 use ic_nervous_system_time_helpers::now_seconds;
+pub use ic_nervous_system_timers::{set_timer, set_timer_interval};
 use metrics::{with_async_metrics, with_sync_metrics, MetricsRegistryRef};
 use std::future::Future;
 use std::time::Duration;
@@ -171,19 +172,12 @@ fn call_context_instruction_counter() -> u64 {
     }
 }
 
-pub(crate) mod timers {
-    #[cfg(target_arch = "wasm32")]
-    pub use ic_nervous_system_timers::real::{set_timer, set_timer_interval};
-    #[cfg(not(target_arch = "wasm32"))]
-    pub use ic_nervous_system_timers::test::{set_timer, set_timer_interval};
-}
-
 pub trait RecurringSyncTask: Sized + 'static {
     fn execute(self) -> (Duration, Self);
     fn initial_delay(&self) -> Duration;
 
     fn schedule_with_delay(self, delay: Duration, metrics_registry: MetricsRegistryRef) {
-        timers::set_timer(delay, move || {
+        set_timer(delay, move || {
             let instructions_before = instruction_counter();
 
             let (new_delay, new_task) = self.execute();
@@ -211,7 +205,7 @@ pub trait RecurringAsyncTask: Sized + 'static {
     fn initial_delay(&self) -> Duration;
 
     fn schedule_with_delay(self, delay: Duration, metrics_registry: MetricsRegistryRef) {
-        timers::set_timer(delay, move || {
+        set_timer(delay, move || {
             spawn_in_canister_env(async move {
                 let instructions_before = call_context_instruction_counter();
                 with_async_metrics(metrics_registry, Self::NAME, |metrics| {
@@ -242,7 +236,7 @@ pub trait PeriodicSyncTask: Copy + Sized + 'static {
     fn execute(self);
 
     fn schedule(self, metrics_registry: MetricsRegistryRef) {
-        timers::set_timer_interval(Self::INTERVAL, move || {
+        set_timer_interval(Self::INTERVAL, move || {
             let instructions_before = instruction_counter();
 
             self.execute();
@@ -263,7 +257,7 @@ pub trait PeriodicAsyncTask: Copy + Sized + 'static {
     async fn execute(self);
 
     fn schedule(self, metrics_registry: MetricsRegistryRef) {
-        timers::set_timer_interval(Self::INTERVAL, move || {
+        set_timer_interval(Self::INTERVAL, move || {
             spawn_in_canister_env(async move {
                 let instructions_before = call_context_instruction_counter();
                 with_async_metrics(metrics_registry, Self::NAME, |metrics| {

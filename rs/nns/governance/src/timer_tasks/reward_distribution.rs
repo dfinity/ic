@@ -76,7 +76,7 @@ impl RecurringAsyncTask for CalculateDistributableRewardsTask {
         self.next_reward_task_from_now()
     }
 
-    const NAME: &'static str = "RewardDistribution";
+    const NAME: &'static str = "calculate_distributable_rewards";
 }
 
 #[cfg(test)]
