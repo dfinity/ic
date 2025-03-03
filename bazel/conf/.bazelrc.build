@@ -72,10 +72,6 @@ test:systest --test_output=streamed --test_tag_filters=
 build:testnet --build_tag_filters=
 test:testnet --test_output=streamed --test_tag_filters=
 
-# For sandboxed actions, mount an empty, writable directory at this absolute path
-# (if supported by the sandboxing implementation, ignored otherwise).
-test --sandbox_tmpfs_path=/tmp
-
 # TODO(IDX-2374): enable alltests in CI when we will have actual system tests.
 #test:ci --config=alltests
 
