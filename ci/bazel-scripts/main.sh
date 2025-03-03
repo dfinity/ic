@@ -23,16 +23,6 @@ done
 # (with versioning)
 if [[ "${IS_PROTECTED_BRANCH:-}" == "true" ]]; then
     release_build="true"
-    RUN_ON_DIFF_ONLY="false"
-fi
-
-if [[ "${CI_EVENT_NAME:-}" == "merge_group" ]]; then
-    RUN_ON_DIFF_ONLY="false"
-fi
-
-if [[ "${RUN_ON_DIFF_ONLY:-}" == "true" ]]; then
-    # get bazel targets that changed within the MR
-    BAZEL_TARGETS=$("${CI_PROJECT_DIR:-}"/ci/bazel-scripts/diff.sh)
 fi
 
 # if bazel targets is empty we don't need to run any tests
