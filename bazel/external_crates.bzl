@@ -1475,7 +1475,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 ],
             ),
             "wasmtime-environ": crate.spec(
-                version = "^29.0.0",
+                version = "^30.0.2",
             ),
             "wast": crate.spec(
                 version = "^221.0.0",
