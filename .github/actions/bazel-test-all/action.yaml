@@ -12,6 +12,7 @@ inputs:
     required: false
   GPG_PASSPHRASE:
     required: false
+    description: "GPG key to encrypt build events. If the key is not set, events won't be uploaded."
 
 runs:
   using: "composite"
