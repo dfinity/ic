@@ -3647,9 +3647,8 @@ async fn test_reward_event_proposals_last_longer_than_reward_period() {
     gov.run_periodic_tasks().now_or_never();
     assert_eq!(gov.latest_reward_event().day_after_genesis, 6);
     // let's advance far enough to trigger a reward event
-    fake_driver.advance_time_by(REWARD_DISTRIBUTION_PERIOD_SECONDS);
-    run_pending_timers();
-    gov.run_periodic_tasks().now_or_never();
+    fake_driver.advance_time_by(REWARD_DISTRIBUTION_PERIOD_SECONDS + 1);
+    run_pending_timers_every_interval_for_count(std::time::Duration::from_secs(3), 3);
 
     // Inspect latest_reward_event.
     let fully_elapsed_reward_rounds = 7;
@@ -3708,7 +3707,7 @@ async fn test_reward_event_proposals_last_longer_than_reward_period() {
     // Now let's advance again -- a new empty reward event should happen
     fake_driver.advance_time_by(REWARD_DISTRIBUTION_PERIOD_SECONDS);
     run_pending_timers();
-    gov.run_periodic_tasks().now_or_never();
+
     assert_eq!(
         *gov.latest_reward_event(),
         RewardEvent {

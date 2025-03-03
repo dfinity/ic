@@ -2458,11 +2458,6 @@ pub struct RewardEvent {
     /// In both of these cases, the rewards purse rolls over into the next round.
     #[prost(uint64, optional, tag = "6")]
     pub rounds_since_last_distribution: Option<u64>,
-
-    /// Whether or not the asynchronous distribution of rewards has completed.  Rewards are
-    /// calculated once a day, but are distributed after the calculation in batches.
-    #[prost(bool, optional, tag = "8")]
-    pub distribution_complete: Option<bool>,
 }
 #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
 #[allow(clippy::derive_partial_eq_without_eq)]

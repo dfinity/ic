@@ -1985,7 +1985,6 @@ impl From<pb::RewardEvent> for pb_api::RewardEvent {
             total_available_e8s_equivalent: item.total_available_e8s_equivalent,
             latest_round_available_e8s_equivalent: item.latest_round_available_e8s_equivalent,
             rounds_since_last_distribution: item.rounds_since_last_distribution,
-            distribution_complete: None,
         }
     }
 }

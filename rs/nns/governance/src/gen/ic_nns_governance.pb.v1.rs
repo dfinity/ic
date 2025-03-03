@@ -4273,6 +4273,9 @@ pub struct Account {
     #[prost(message, optional, tag = "2")]
     pub subaccount: ::core::option::Option<Subaccount>,
 }
+/// A reward disbribution that has been calculated but not fully disbursed.
+/// This supports large reward distributions that may need to be split into multiple
+/// messages.
 #[derive(
     candid::CandidType,
     candid::Deserialize,

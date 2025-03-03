@@ -54,3 +54,46 @@ impl PeriodicSyncTask for DistributeRewardsTask {
     const NAME: &'static str = "distribute_rewards";
     const INTERVAL: Duration = Duration::from_secs(2);
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::canister_state::{governance_mut, set_governance_for_tests};
+    use crate::governance::Governance;
+    use crate::reward::distribution::RewardsDistribution;
+    use crate::test_utils::{MockEnvironment, MockRandomness, StubCMC, StubIcpLedger};
+    use crate::timer_tasks::distribute_rewards::REWARDS_TIMER_ID;
+    use ic_nervous_system_timers::test::run_pending_timers_every_interval_for_count;
+    use ic_nns_common::pb::v1::NeuronId;
+    use std::sync::Arc;
+
+    #[test]
+    fn test_reward_scheduling_and_cancelling() {
+        let governance_proto = crate::pb::v1::Governance::default();
+
+        let governance = Governance::new(
+            governance_proto,
+            Arc::new(MockEnvironment::new(Default::default(), 0)),
+            Arc::new(StubIcpLedger {}),
+            Arc::new(StubCMC {}),
+            Box::new(MockRandomness::new()),
+        );
+
+        set_governance_for_tests(governance);
+        let governance = governance_mut();
+
+        // In this test, we don't care that rewards are actually distributed, only that the
+        // timer is scheduled and then cancelled.  Other tests cover that the rewards are distributed.
+        let mut distribution = RewardsDistribution::new();
+        for id in 0..10 {
+            distribution.add_reward(NeuronId { id }, 10);
+        }
+        // create 2 distributions
+        governance.schedule_pending_rewards_distribution(1, distribution.clone());
+        assert!(REWARDS_TIMER_ID.with(|id| id.borrow().is_some()));
+
+        run_pending_timers_every_interval_for_count(DistributeRewardsTask::INTERVAL, 3);
+
+        assert!(REWARDS_TIMER_ID.with(|id| id.borrow().is_none()));
+    }
+}
