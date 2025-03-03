@@ -70,12 +70,6 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 "opt-level=3",
             ],
         )],
-        "rustix": [crate.annotation(
-            # Patch for determinism issues
-            # https://github.com/bytecodealliance/rustix/issues/1199
-            patch_args = ["-p1"],
-            patches = ["@rustix-patch//file:downloaded"],
-        )],
         "tikv-jemalloc-sys": [crate.annotation(
             # Avoid building jemalloc from rust (in part bc it creates builder-specific config files)
             build_script_data = crate.select([], {
@@ -89,16 +83,6 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                     "x86_64-unknown-linux-gnu": {"JEMALLOC_OVERRIDE": "$(location @jemalloc//:libjemalloc)"},
                 },
             ),
-        )],
-        "cranelift-isle": [crate.annotation(
-            # Patch for determinism issues
-            patch_args = ["-p4"],
-            patches = ["@@//bazel:cranelift-isle.patch"],
-        )],
-        "cranelift-codegen-meta": [crate.annotation(
-            # Patch for determinism issues
-            patch_args = ["-p4"],
-            patches = ["@@//bazel:cranelift-codegen-meta.patch"],
         )],
         "secp256k1-sys": [crate.annotation(
             # This specific version is used by ic-btc-kyt canister, which
@@ -790,12 +774,6 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "memmap2": crate.spec(
                 version = "^0.9.5",
             ),
-            "mach2": crate.spec(
-                # Wasmtime depends on 0.4.2 but specifies 0.4.1.
-                # Enforce 0.4.2 using a dummy dependency until
-                # the upstream issue is fixed.
-                version = "^0.4.2",
-            ),
             "maplit": crate.spec(
                 version = "^1.0.2",
             ),
@@ -1464,7 +1442,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.221.0",
             ),
             "wasmtime": crate.spec(
-                version = "^29.0.0",
+                version = "^30.0.2",
                 default_features = False,
                 features = [
                     "cranelift",
@@ -1475,7 +1453,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 ],
             ),
             "wasmtime-environ": crate.spec(
-                version = "^29.0.0",
+                version = "^30.0.2",
             ),
             "wast": crate.spec(
                 version = "^221.0.0",
