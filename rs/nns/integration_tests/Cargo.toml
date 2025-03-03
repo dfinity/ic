@@ -26,6 +26,10 @@ path = "test_canisters/unstoppable_sns_root_canister.rs"
 name = "canister-playground-canister"
 path = "test_canisters/canister_playground_canister.rs"
 
+[[bin]]
+name = "upgrade-canisters-with-golden-nns-state"
+path = "src/upgrade_canisters_with_golden_nns_state.rs"
+
 
 # Dependencies required to compile the test canisters.
 [dependencies]

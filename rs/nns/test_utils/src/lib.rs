@@ -7,6 +7,7 @@ pub mod governance;
 pub mod gtc_helpers;
 pub mod itest_helpers;
 pub mod neuron_helpers;
+pub mod nns_canister_upgrade;
 pub mod registry;
 pub mod sns_wasm;
 pub mod state_test_helpers;

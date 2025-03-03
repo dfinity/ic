@@ -1,3 +1,7 @@
+use ic_management_canister_types_private::{
+    CanisterInstallMode::Install, CreateCanisterArgs, InstallCodeArgs,
+};
+
 use crate::common::{
     build_cmc_wasm, build_genesis_token_wasm, build_governance_wasm_with_features,
     build_ledger_wasm, build_lifeline_wasm, build_registry_wasm, build_root_wasm,
@@ -47,7 +51,7 @@ use ic_nns_governance_api::pb::v1::{
     Governance, GovernanceError, InstallCodeRequest, ListNeurons, ListNeuronsResponse,
     ListNodeProviderRewardsRequest, ListNodeProviderRewardsResponse, ListProposalInfo,
     ListProposalInfoResponse, MakeProposalRequest, ManageNeuronCommandRequest, ManageNeuronRequest,
-    ManageNeuronResponse, MonthlyNodeProviderRewards, NetworkEconomics, NnsFunction,
+    ManageNeuronResponse, MonthlyNodeProviderRewards, NetworkEconomics, Neuron, NnsFunction,
     ProposalActionRequest, ProposalInfo, RewardNodeProviders, Topic, Vote,
 };
 use ic_nns_handler_root::init::RootCanisterInitPayload;
@@ -74,6 +78,7 @@ use icrc_ledger_types::icrc1::{
 };
 use num_traits::ToPrimitive;
 use prost::Message;
+use registry_canister::mutations::do_update_node_operator_config::UpdateNodeOperatorConfigPayload;
 use serde::Serialize;
 use std::{convert::TryInto, env, time::Duration};
 
@@ -854,6 +859,58 @@ fn manage_neuron(
     Decode!(&result, ManageNeuronResponse).unwrap()
 }
 
+/// This function allows directly modifying most neuron fields, but it only works in testing.
+pub fn update_neuron(
+    state_machine: &StateMachine,
+    sender: PrincipalId,
+    neuron: Neuron,
+) -> Result<(), GovernanceError> {
+    let result = state_machine
+        .execute_ingress_as(
+            sender,
+            GOVERNANCE_CANISTER_ID,
+            "update_neuron",
+            Encode!(&neuron).unwrap(),
+        )
+        .unwrap();
+
+    let result = match result {
+        WasmResult::Reply(result) => result,
+        WasmResult::Reject(s) => panic!("Call to update_neuron failed: {:#?}", s),
+    };
+
+    if let Some(err) = Decode!(&result, Option<GovernanceError>).unwrap() {
+        Err(err)
+    } else {
+        Ok(())
+    }
+}
+
+pub fn adopt_proposal(
+    state_machine: &StateMachine,
+    proposal_id: ProposalId,
+) -> Result<(), GovernanceError> {
+    let result = state_machine
+        .execute_ingress_as(
+            PrincipalId::new_anonymous(),
+            GOVERNANCE_CANISTER_ID,
+            "adopt_proposal",
+            Encode!(&proposal_id).unwrap(),
+        )
+        .unwrap();
+
+    let result = match result {
+        WasmResult::Reply(result) => result,
+        WasmResult::Reject(s) => panic!("Call to adopt_proposal failed: {:#?}", s),
+    };
+
+    if let Some(err) = Decode!(&result, Option<GovernanceError>).unwrap() {
+        Err(err)
+    } else {
+        Ok(())
+    }
+}
+
 trait NnsManageNeuronConfigureOperation {
     fn into_operation(self) -> Operation;
 }
@@ -904,10 +961,10 @@ fn nns_configure_neuron(
     }
 }
 
-#[must_use]
-pub fn nns_create_super_powerful_neuron(
+pub fn nns_create_neuron_with_stake(
     state_machine: &StateMachine,
     controller: PrincipalId,
+    stake: Tokens,
 ) -> NeuronId {
     let memo = 0xCAFE_F00D;
 
@@ -916,9 +973,8 @@ pub fn nns_create_super_powerful_neuron(
         PrincipalId::from(GOVERNANCE_CANISTER_ID),
         Some(compute_neuron_staking_subaccount(controller, memo)),
     );
-    // "Overwhelmingly" large, but still small enough to avoid addition overflow.
-    let amount = Tokens::from_e8s(u64::MAX / 4);
-    mint_icp(state_machine, destination, amount);
+
+    mint_icp(state_machine, destination, stake);
 
     // Create the Neuron.
     let neuron_id = nns_claim_or_refresh_neuron(state_machine, controller, memo);
@@ -937,6 +993,16 @@ pub fn nns_create_super_powerful_neuron(
     }
 
     neuron_id
+}
+
+#[must_use]
+pub fn nns_create_super_powerful_neuron(
+    state_machine: &StateMachine,
+    controller: PrincipalId,
+) -> NeuronId {
+    // "Overwhelmingly" large, but still small enough to avoid addition overflow.
+    let amount = Tokens::from_e8s(u64::MAX / 4);
+    nns_create_neuron_with_stake(state_machine, controller, amount)
 }
 
 #[must_use]
@@ -1094,6 +1160,29 @@ fn slice_to_hex(slice: &[u8]) -> String {
         .map(|b| format!("{:02X}", *b))
         .collect::<Vec<String>>()
         .join("")
+}
+
+pub fn install_code(
+    state_machine: &StateMachine,
+    installee: PrincipalId,
+    wasm: &Vec<u8>,
+    arg: &Vec<u8>,
+) {
+    let _: Result<(), _> = update_with_sender(
+        state_machine,
+        CanisterId::ic_00(),
+        "install_code",
+        InstallCodeArgs {
+            mode: CanisterInstallMode::Upgrade,
+            canister_id: installee,
+            wasm_module: wasm.clone(),
+            arg: arg.clone(),
+            sender_canister_version: None,
+            compute_allocation: None,
+            memory_allocation: None,
+        },
+        ROOT_CANISTER_ID.into(),
+    );
 }
 
 pub fn wait_for_canister_upgrade_to_succeed(
@@ -1255,6 +1344,20 @@ pub fn nns_governance_make_proposal(
     manage_neuron(state_machine, sender, neuron_id, command)
 }
 
+pub fn nns_governance_adopt_proposal(
+    state_machine: &StateMachine,
+    sender: PrincipalId,
+    neuron_id: NeuronId,
+    proposal_id: ProposalId,
+) -> ManageNeuronResponse {
+    let command = ManageNeuronCommandRequest::RegisterVote(manage_neuron::RegisterVote {
+        proposal: Some(proposal_id),
+        vote: Vote::Yes as i32,
+    });
+
+    manage_neuron(state_machine, sender, neuron_id, command)
+}
+
 pub fn nns_add_hot_key(
     state_machine: &StateMachine,
     sender: PrincipalId,
@@ -1405,6 +1508,27 @@ pub fn nns_get_monthly_node_provider_rewards(
     };
 
     Decode!(&result, Result<RewardNodeProviders, GovernanceError>).unwrap()
+}
+
+pub fn nns_update_node_operator_config(
+    state_machine: &StateMachine,
+    payload: &UpdateNodeOperatorConfigPayload,
+) {
+    let result = state_machine
+        .execute_ingress_as(
+            GOVERNANCE_CANISTER_ID.into(),
+            REGISTRY_CANISTER_ID,
+            "update_node_operator_config",
+            Encode!(payload).unwrap(),
+        )
+        .unwrap();
+
+    match result {
+        WasmResult::Reply(result) => result,
+        WasmResult::Reject(s) => {
+            panic!("Call to update_node_operator_config failed: {:#?}", s)
+        }
+    };
 }
 
 /// Return the most recent monthly Node Provider rewards

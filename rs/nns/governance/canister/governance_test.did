@@ -1219,5 +1219,6 @@ service : (Governance) -> {
   simulate_manage_neuron : (ManageNeuronRequest) -> (ManageNeuronResponse);
   transfer_gtc_neuron : (NeuronId, NeuronId) -> (Result);
   update_neuron : (Neuron) -> (opt GovernanceError);
+  adopt_proposal : (ProposalId) -> (opt GovernanceError);
   update_node_provider : (UpdateNodeProvider) -> (Result);
 }

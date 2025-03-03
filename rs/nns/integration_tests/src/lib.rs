@@ -143,3 +143,9 @@ mod stop_or_start_canister;
 
 #[cfg(test)]
 mod api_boundary_node_queries;
+
+#[cfg(test)]
+mod test_proposal_with_golden_nns_state;
+
+#[cfg(test)]
+mod upgrade_canisters_with_golden_nns_state;

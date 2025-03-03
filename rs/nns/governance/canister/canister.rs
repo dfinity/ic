@@ -404,6 +404,30 @@ fn update_neuron(neuron: Neuron) -> Option<GovernanceError> {
         .map(GovernanceError::from)
 }
 
+#[cfg(feature = "test")]
+#[update]
+/// Adopt the (currently open) proposal with `proposal_id` in a testing environment.
+///
+/// This function simulates a 100% YES vote rate for a given proposal.
+///
+/// ### Applicability
+///
+/// Testing with the golden state often involves open proposals that had been created
+/// before the state snapshot was taken. This function allows observing the effect that such
+/// proposals would have.
+///
+/// When possible, it is recommended to avoid using this function, instead creating a powerful
+/// neuron that gets proposals adopted in testing. Calling this function may result in a less
+/// realistic scenario, e.g., it does not guaranteed that the tally and the ballots will remain
+/// synchronized for `proposal_id`.
+fn adopt_proposal(proposal_id: ProposalIdProto) -> Option<GovernanceError> {
+    debug_log("adopt_proposal");
+    governance_mut()
+        .adopt_proposal(proposal_id)
+        .err()
+        .map(GovernanceError::from)
+}
+
 #[update]
 fn simulate_manage_neuron(manage_neuron: ManageNeuronRequest) -> ManageNeuronResponse {
     debug_log("simulate_manage_neuron");

@@ -1613,6 +1613,102 @@ fn test_update_neuron_errors_out_expectedly() {
     );
 }
 
+#[cfg(feature = "test")]
+#[test]
+fn test_adopt_proposal() {
+    // Prepare the world.
+    let test_start_timestamp_seconds = 1436954400; // Wed Jul 15 2015 10:00:00 GMT+0000
+
+    let old_economics = NetworkEconomics {
+        reject_cost_e8s: 2_500_000_000,
+        neuron_minimum_stake_e8s: 100_000_000,
+        neuron_management_fee_per_proposal_e8s: 1_000_000,
+        minimum_icp_xdr_rate: 100,
+        neuron_spawn_dissolve_delay_seconds: 604_800,
+        maximum_node_provider_rewards_e8s: 10_000_000_000_000,
+        transaction_fee_e8s: 10_000,
+        max_proposals_to_keep_per_topic: 100,
+        neurons_fund_economics: Some(Default::default()),
+        voting_power_economics: Some(Default::default()),
+    };
+
+    // As an example, use a `NetworkEconomics` proposal, as it it expected to have a clearly defined
+    // effect on the NNS Governance in case it gets adopted.
+    // Note: `0` and `None` values indicate that the respective fields are not to be updated.
+    let new_economics = NetworkEconomics {
+        reject_cost_e8s: 8_888_888_000,
+        neuron_minimum_stake_e8s: 0,
+        neuron_management_fee_per_proposal_e8s: 0,
+        minimum_icp_xdr_rate: 0,
+        neuron_spawn_dissolve_delay_seconds: 0,
+        maximum_node_provider_rewards_e8s: 0,
+        transaction_fee_e8s: 0,
+        max_proposals_to_keep_per_topic: 0,
+        neurons_fund_economics: None,
+        voting_power_economics: None,
+    };
+    let manage_network_economics_action =
+        proposal::Action::ManageNetworkEconomics(new_economics.clone());
+
+    let open_proposal = ProposalData {
+        id: Some(ProposalId { id: 1 }),
+        proposal: Some(Proposal {
+            title: Some("Change Network Economics reject_cost_e8s".to_string()),
+            action: Some(manage_network_economics_action),
+            ..Proposal::default()
+        }),
+        latest_tally: Some(Tally {
+            timestamp_seconds: test_start_timestamp_seconds - 100,
+            yes: 20,
+            no: 50,
+            total: 100,
+        }),
+        ..ProposalData::default()
+    };
+
+    let mut governance = Governance::new(
+        GovernanceProto {
+            proposals: btreemap! {
+                1 =>  open_proposal.clone(),
+            },
+            economics: Some(old_economics.clone()),
+            ..GovernanceProto::default()
+        },
+        Box::new(MockEnvironment::new(vec![], test_start_timestamp_seconds)),
+        Box::new(StubIcpLedger {}),
+        Box::new(StubCMC {}),
+    );
+
+    // Run code under test.
+    governance.adopt_proposal(ProposalId { id: 1 }).unwrap();
+    governance.process_proposals();
+
+    // Check that the proposal got adopted.
+    let proposal = governance.get_proposal_data(ProposalId { id: 1 }).unwrap();
+    assert_eq!(
+        proposal.latest_tally,
+        Some(Tally {
+            timestamp_seconds: governance.env.now(),
+            yes: 100,
+            no: 0,
+            total: 100,
+        })
+    );
+    assert_eq!(proposal.failed_timestamp_seconds, 0);
+    assert_eq!(proposal.failure_reason, None);
+    assert_eq!(proposal.decided_timestamp_seconds, governance.env.now());
+    assert_eq!(proposal.executed_timestamp_seconds, governance.env.now());
+
+    // Check that the proposal had the expected effect.
+    assert_eq!(
+        *governance.economics(),
+        NetworkEconomics {
+            reject_cost_e8s: 8_888_888_000,
+            ..old_economics
+        }
+    );
+}
+
 #[test]
 fn test_compute_ballots_for_new_proposal() {
     const CREATED_TIMESTAMP_SECONDS: u64 = 1729791574;
