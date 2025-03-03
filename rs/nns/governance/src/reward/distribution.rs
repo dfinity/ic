@@ -1,62 +1,14 @@
-use crate::canister_state::with_governance_mut;
 use crate::governance::{Governance, LOG_PREFIX};
 use crate::neuron_store::NeuronStore;
 use crate::pb::v1::RewardsDistributionInProgress;
 use crate::storage::with_rewards_distribution_state_machine_mut;
-use ic_cdk_timers::TimerId;
-use ic_nervous_system_timers::{clear_timer, set_timer_interval};
+use crate::timer_tasks::run_distribute_rewards_periodic_task;
 use ic_nns_common::pb::v1::NeuronId;
 use ic_stable_structures::storable::Bound;
 use ic_stable_structures::{StableBTreeMap, Storable};
 use prost::Message;
 use std::borrow::Cow;
-use std::cell::RefCell;
 use std::collections::BTreeMap;
-
-const PENDING_REWARDS_TIMER_FREQUENCY_SECONDS: u64 = 2;
-
-thread_local! {
-    static REWARDS_TIMER_ID: RefCell<Option<TimerId>> = RefCell::new(None);
-}
-
-/// TODO DO NOT MERGE how to test this in context of integration test
-fn cancel_distribute_pending_rewards_timer() {
-    REWARDS_TIMER_ID.with(|id| {
-        if let Some(timer_id) = id.borrow_mut().take() {
-            clear_timer(timer_id);
-        }
-    });
-}
-
-/// This begins the background interval task to distribute rewards for voting.
-/// This function is NOT intended to be called before Governance is initialized.
-///
-/// TODO DO NOT MERGE How to test this?  There's a different governance in here in unit tests
-/// unless the unit test uses set_governance...
-///
-/// POSSIBLE APPROACH: Conditionally compile the ugly trick for moving governance across the
-/// barrier?
-pub fn run_distribute_rewards_timer_interval() {
-    REWARDS_TIMER_ID.with(|id| {
-        if id.borrow().is_none() {
-            let timer_id = set_timer_interval(
-                std::time::Duration::from_secs(PENDING_REWARDS_TIMER_FREQUENCY_SECONDS),
-                || {
-                    with_governance_mut(|governance| {
-                        println!(
-                            "{}Distributing pending rewards {:?}",
-                            LOG_PREFIX, governance.heap_data
-                        );
-                        // This is safe to call after initialization, which is when this timer would be scheduled
-                        governance.distribute_pending_rewards();
-                    });
-                },
-            );
-
-            id.borrow_mut().replace(timer_id);
-        }
-    });
-}
 
 // TODO DO NOT MERGE Note: When should this be scheduled?
 // Do we need a simple way to only do this after rewards are
@@ -77,26 +29,22 @@ impl Governance {
             println!("{}Error scheduling rewards distribution: {}", LOG_PREFIX, e);
         }
 
-        run_distribute_rewards_timer_interval();
+        run_distribute_rewards_periodic_task();
     }
 
-    pub fn distribute_pending_rewards(&mut self) {
+    // Returns if there is work left to do
+    pub fn distribute_pending_rewards(&mut self) -> bool {
         // TODO DO NOT MERGE get the test functions from voting state machine tests into
         // a common part of this crate
         let is_over_instructions_limit = || false;
-        let work_left =
-            with_rewards_distribution_state_machine_mut(|rewards_distribution_state_machine| {
-                rewards_distribution_state_machine.with_next_distribution(|(_, distribution)| {
-                    distribution
-                        .continue_processing(&mut self.neuron_store, is_over_instructions_limit);
-                });
-                // Work left?
-                !rewards_distribution_state_machine.distributions.is_empty()
+        with_rewards_distribution_state_machine_mut(|rewards_distribution_state_machine| {
+            rewards_distribution_state_machine.with_next_distribution(|(_, distribution)| {
+                distribution
+                    .continue_processing(&mut self.neuron_store, is_over_instructions_limit);
             });
-
-        if !work_left {
-            cancel_distribute_pending_rewards_timer();
-        }
+            // Work left?
+            !rewards_distribution_state_machine.distributions.is_empty()
+        })
     }
 }
 
@@ -435,10 +383,7 @@ mod test {
         governance.schedule_pending_rewards_distribution(1, distribution.clone());
         governance.schedule_pending_rewards_distribution(2, distribution);
 
-        run_pending_timers_every_interval_for_count(
-            std::time::Duration::from_secs(PENDING_REWARDS_TIMER_FREQUENCY_SECONDS),
-            2,
-        );
+        run_pending_timers_every_interval_for_count(std::time::Duration::from_secs(2), 2);
 
         with_rewards_distribution_state_machine_mut(|rewards_distribution_state_machine| {
             assert!(rewards_distribution_state_machine.distributions.is_empty())
