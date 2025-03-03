@@ -4292,7 +4292,7 @@ fn compute_maturities(
     fake_driver.advance_time_by(1);
     run_pending_timers();
 
-    run_pending_timers_every_x_seconds(core::time::Duration::from_secs(10), 3);
+    run_pending_timers_every_interval_for_count(core::time::Duration::from_secs(10), 3);
 
     // Inspect latest_reward_event.
     let actual_reward_event = gov.latest_reward_event();

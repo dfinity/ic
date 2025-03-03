@@ -177,13 +177,6 @@ mod subaccount_index;
 pub mod timer_tasks;
 mod voting;
 
-pub mod timers {
-    #[cfg(target_arch = "wasm32")]
-    pub use ic_nervous_system_timers::real::{clear_timer, set_timer, set_timer_interval};
-    #[cfg(not(target_arch = "wasm32"))]
-    pub use ic_nervous_system_timers::test::{clear_timer, set_timer, set_timer_interval};
-}
-
 /// Limit the amount of work for skipping unneeded data on the wire when parsing Candid.
 /// The value of 10_000 follows the Candid recommendation.
 const DEFAULT_SKIPPING_QUOTA: usize = 10_000;

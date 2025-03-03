@@ -610,7 +610,7 @@ fn distribute_rewards_with_stable_neurons() -> BenchResult {
         Arc::new(MockEnvironment::new(vec![], now_seconds)),
         Arc::new(StubIcpLedger {}),
         Arc::new(StubCMC {}),
-        Box::new(CanisterRandomnessGenerator::new()),
+        Box::new(MockRandomness::new()),
     );
 
     bench_fn(|| governance.distribute_rewards(Tokens::new(10_000_000, 0).unwrap()))

@@ -586,9 +586,7 @@ fn retain_neurons_with_castable_ballots(
 
 #[cfg(test)]
 mod test {
-    use crate::canister_state::{
-        set_governance, set_governance_no_validation, with_governance, with_governance_mut,
-    };
+    use crate::canister_state::{governance_mut, set_governance_for_tests};
     use crate::test_utils::MockRandomness;
     use crate::{
         governance::{
@@ -616,8 +614,7 @@ mod test {
     use ic_base_types::PrincipalId;
     use ic_ledger_core::Tokens;
     use ic_nervous_system_long_message::in_test_temporarily_set_call_context_over_threshold;
-    use ic_nervous_system_proto::pb::v1::Duration;
-    use ic_nervous_system_timers::test::run_pending_timers_every_x_seconds;
+    use ic_nervous_system_timers::test::run_pending_timers_every_interval_for_count;
     use ic_nns_common::pb::v1::{NeuronId, ProposalId};
     use ic_nns_constants::GOVERNANCE_CANISTER_ID;
     use ic_stable_structures::DefaultMemoryImpl;
@@ -1539,36 +1536,35 @@ mod test {
 
         // Because of how the timers work, we need to shift governance into global state
         // to make this work, so that the timer accesses the same value of governance.
-        set_governance_no_validation(governance);
-        with_governance_mut(|g| g.distribute_rewards(Tokens::from_e8s(100_000_000)));
-        run_pending_timers_every_x_seconds(core::time::Duration::from_secs(2), 2);
+        set_governance_for_tests(governance);
+        let governance = governance_mut();
+        governance.distribute_rewards(Tokens::from_e8s(100_000_000));
+        run_pending_timers_every_interval_for_count(core::time::Duration::from_secs(2), 2);
 
         assert_eq!(
-            with_governance(|governance| {
-                governance
-                    .neuron_store
-                    .with_neuron(&NeuronId { id: 1 }, |n| n.maturity_e8s_equivalent)
-                    .unwrap()
-            }),
+            governance
+                .neuron_store
+                .with_neuron(&NeuronId { id: 1 }, |n| n.maturity_e8s_equivalent)
+                .unwrap(),
             0
         );
 
         now_setter(now + REWARD_DISTRIBUTION_PERIOD_SECONDS + 1);
         // Finish processing the vote
-        with_governance_mut(|g| {
-            g.process_voting_state_machines().now_or_never().unwrap();
-            g.distribute_rewards(Tokens::from_e8s(100_000_000));
-        });
+
+        governance
+            .process_voting_state_machines()
+            .now_or_never()
+            .unwrap();
+        governance.distribute_rewards(Tokens::from_e8s(100_000_000));
         // Now rewards should be able to be distributed
-        run_pending_timers_every_x_seconds(core::time::Duration::from_secs(2), 2);
+        run_pending_timers_every_interval_for_count(core::time::Duration::from_secs(2), 2);
 
         assert_eq!(
-            with_governance(|governance| {
-                governance
-                    .neuron_store
-                    .with_neuron(&NeuronId { id: 1 }, |n| n.maturity_e8s_equivalent)
-                    .unwrap()
-            }),
+            governance
+                .neuron_store
+                .with_neuron(&NeuronId { id: 1 }, |n| n.maturity_e8s_equivalent)
+                .unwrap(),
             5474
         );
     }

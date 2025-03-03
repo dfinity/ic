@@ -1,11 +1,10 @@
-use crate::canister_state::{governance_mut, with_governance_mut};
+use crate::canister_state::with_governance_mut;
 use crate::governance::{Governance, LOG_PREFIX};
 use crate::neuron_store::NeuronStore;
 use crate::pb::v1::RewardsDistributionInProgress;
 use crate::storage::with_rewards_distribution_state_machine_mut;
-use crate::timers::clear_timer;
-use crate::timers::set_timer_interval;
 use ic_cdk_timers::TimerId;
+use ic_nervous_system_timers::{clear_timer, set_timer_interval};
 use ic_nns_common::pb::v1::NeuronId;
 use ic_stable_structures::storable::Bound;
 use ic_stable_structures::{StableBTreeMap, Storable};
@@ -155,6 +154,7 @@ impl<Memory: ic_stable_structures::Memory> RewardsDistributionStateMachine<Memor
         Ok(())
     }
 
+    #[cfg(test)]
     pub(crate) fn with_distribution_for_event<R>(
         &mut self,
         day_after_genesis: u64,
@@ -282,12 +282,13 @@ mod test {
     use crate::neuron::{DissolveStateAndAge, Neuron, NeuronBuilder};
     use crate::pb::v1::Governance as GovernanceProto;
     use crate::test_utils::{
-        test_subaccount_for_neuron_id, MockEnvironment, StubCMC, StubIcpLedger,
+        test_subaccount_for_neuron_id, MockEnvironment, MockRandomness, StubCMC, StubIcpLedger,
     };
     use ic_base_types::PrincipalId;
-    use ic_nervous_system_timers::test::run_pending_timers_every_x_seconds;
+    use ic_nervous_system_timers::test::run_pending_timers_every_interval_for_count;
     use ic_stable_structures::DefaultMemoryImpl;
     use icp_ledger::Subaccount;
+    use std::sync::Arc;
 
     fn make_neuron(id: u64, maturity_e8s: u64, staked_maturity_e8s: u64) -> Neuron {
         let subaccount =
@@ -418,11 +419,12 @@ mod test {
             ..Default::default()
         };
 
-        let mut governance = Governance::new(
+        let governance = Governance::new(
             governance_proto,
-            Box::new(MockEnvironment::new(Default::default(), 0)),
-            Box::new(StubIcpLedger {}),
-            Box::new(StubCMC {}),
+            Arc::new(MockEnvironment::new(Default::default(), 0)),
+            Arc::new(StubIcpLedger {}),
+            Arc::new(StubCMC {}),
+            Box::new(MockRandomness::new()),
         );
 
         let mut distribution = RewardsDistribution::new();
@@ -433,7 +435,7 @@ mod test {
         governance.schedule_pending_rewards_distribution(1, distribution.clone());
         governance.schedule_pending_rewards_distribution(2, distribution);
 
-        run_pending_timers_every_x_seconds(
+        run_pending_timers_every_interval_for_count(
             std::time::Duration::from_secs(PENDING_REWARDS_TIMER_FREQUENCY_SECONDS),
             2,
         );
