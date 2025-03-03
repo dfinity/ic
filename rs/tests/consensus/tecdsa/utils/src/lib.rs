@@ -704,6 +704,7 @@ pub async fn get_vetkd_with_logger(
 
     let mut count = 0;
     let result = loop {
+        // Ask for a signature.
         let res = msg_can
             .forward_with_cycles_to(
                 &Principal::management_canister(),
@@ -715,7 +716,7 @@ pub async fn get_vetkd_with_logger(
         match res {
             Ok(reply) => {
                 let result = VetKdDeriveEncryptedKeyResult::decode(&reply)
-                    .expect("failed to decode VetKdDeriveEncryptedKeyResult")
+                    .expect("failed to decode SignWithSchnorrReply")
                     .encrypted_key;
                 break result;
             }
