@@ -15,3 +15,4 @@ thiserror = { workspace = true }
 
 [dev-dependencies]
 ic-crypto-test-utils-reproducible-rng = { path = "../../test_utils/reproducible_rng" }
+test-strategy = "0.4.0"
