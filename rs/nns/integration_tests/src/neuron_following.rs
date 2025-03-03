@@ -200,9 +200,6 @@ fn follow_same_neuron_multiple_times() {
     );
 }
 
-// This test is failing because of timing issues. We disable it until the NNS team
-// has a fix.
-#[ignore]
 #[test]
 fn vote_propagation_with_following() {
     let state_machine = setup_state_machine_with_nns_canisters();
