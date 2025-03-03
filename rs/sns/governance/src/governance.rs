@@ -3489,6 +3489,8 @@ impl Governance {
         let proposal_num = self.next_proposal_id();
         let proposal_id = ProposalId { id: proposal_num };
 
+        let proposal_topic = todo!("DO NOT MERGE!");
+
         // Create the proposal.
         let mut proposal_data = ProposalData {
             action: u64::from(action),
@@ -3520,6 +3522,7 @@ impl Governance {
             // TODO(NNS1-2731): Delete this.
             is_eligible_for_rewards: true,
             action_auxiliary,
+            topic: Some(i32::from(proposal_topic)),
         };
 
         proposal_data.wait_for_quiet_state = Some(WaitForQuietState {

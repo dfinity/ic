@@ -310,7 +310,7 @@ pub mod nervous_system_function {
         /// <method_name>(proposal_data: ProposalData) -> Result<String, String>
         #[prost(string, optional, tag = "5")]
         pub validator_method_name: ::core::option::Option<::prost::alloc::string::String>,
-        /// The topic this function belongs to
+        /// The topic this proposal belongs to.
         #[prost(enumeration = "super::Topic", optional, tag = "6")]
         pub topic: ::core::option::Option<i32>,
     }
@@ -1198,6 +1198,9 @@ pub struct ProposalData {
     #[prost(message, optional, tag = "21")]
     pub minimum_yes_proportion_of_exercised:
         ::core::option::Option<::ic_nervous_system_proto::pb::v1::Percentage>,
+    /// This proposal's topic.
+    #[prost(enumeration = "Topic", optional, tag = "25")]
+    pub topic: ::core::option::Option<i32>,
     /// In general, this holds data retrieved at proposal submission/creation time and used later
     /// during execution. This varies based on the action of the proposal.
     #[prost(oneof = "proposal_data::ActionAuxiliary", tags = "22, 23, 24")]

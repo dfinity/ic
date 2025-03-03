@@ -772,7 +772,7 @@ pub struct WaitForQuietState {
 }
 /// The ProposalData that contains everything related to a proposal:
 /// the proposal itself (immutable), as well as mutable data such as ballots.
-#[derive(Default, candid::CandidType, candid::Deserialize, Debug, Clone, PartialEq)]
+#[derive(candid::CandidType, candid::Deserialize, Debug, Clone, PartialEq)]
 pub struct ProposalData {
     /// The proposal's action.
     /// Types 0-999 are reserved for current (and future) core governance
@@ -897,6 +897,8 @@ pub struct ProposalData {
     /// In general, this holds data retrieved at proposal submission/creation time and used later
     /// during execution. This varies based on the action of the proposal.
     pub action_auxiliary: Option<proposal_data::ActionAuxiliary>,
+    /// This proposal's topic.
+    pub topic: Option<topics::Topic>,
 }
 /// Nested message and enum types in `ProposalData`.
 pub mod proposal_data {

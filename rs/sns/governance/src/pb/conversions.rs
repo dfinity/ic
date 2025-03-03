@@ -968,6 +968,12 @@ impl From<pb::ProposalData> for pb_api::ProposalData {
             minimum_yes_proportion_of_total: item.minimum_yes_proportion_of_total,
             minimum_yes_proportion_of_exercised: item.minimum_yes_proportion_of_exercised,
             action_auxiliary: item.action_auxiliary.map(|x| x.into()),
+            topic: item.topic.and_then(|topic| {
+                let Ok(topic) = pb::Topic::try_from(topic) else {
+                    return None;
+                };
+                pb_api::topics::Topic::try_from(topic).ok()
+            }),
         }
     }
 }
@@ -1000,6 +1006,7 @@ impl From<pb_api::ProposalData> for pb::ProposalData {
             minimum_yes_proportion_of_total: item.minimum_yes_proportion_of_total,
             minimum_yes_proportion_of_exercised: item.minimum_yes_proportion_of_exercised,
             action_auxiliary: item.action_auxiliary.map(|x| x.into()),
+            topic: item.topic.map(|topic| i32::from(pb::Topic::from(topic))),
         }
     }
 }

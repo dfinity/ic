@@ -276,7 +276,7 @@ message NervousSystemFunction {
     // <method_name>(proposal_data: ProposalData) -> Result<String, String>
     optional string validator_method_name = 5;
 
-    // The topic this function belongs to
+    // The topic this proposal belongs to.
     optional Topic topic = 6;
   }
 
@@ -942,6 +942,9 @@ message ProposalData {
     MintSnsTokensActionAuxiliary mint_sns_tokens = 23;
     AdvanceSnsTargetVersionActionAuxiliary advance_sns_target_version = 24;
   }
+
+  // This proposal's topic.
+  optional Topic topic = 25;
 }
 
 message Valuation {
