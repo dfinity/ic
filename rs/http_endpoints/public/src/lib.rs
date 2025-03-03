@@ -10,6 +10,7 @@ mod common;
 mod dashboard;
 mod health_status_refresher;
 pub mod metrics;
+mod nns_delegation_manager;
 mod pprof;
 mod query;
 mod read_state;
@@ -26,6 +27,8 @@ cfg_if::cfg_if! {
 
 pub use call::{call_v2, call_v3, IngressValidatorBuilder, IngressWatcher, IngressWatcherHandle};
 pub use common::cors_layer;
+use metrics::DelegationManagerMetrics;
+pub use nns_delegation_manager::start_nns_delegation_manager;
 pub use query::QueryServiceBuilder;
 pub use read_state::canister::{CanisterReadStateService, CanisterReadStateServiceBuilder};
 pub use read_state::subnet::SubnetReadStateServiceBuilder;
@@ -110,10 +113,8 @@ use tempfile::NamedTempFile;
 use tokio::{
     io::{AsyncRead, AsyncWrite},
     net::TcpStream,
-    sync::{
-        mpsc::{Receiver, UnboundedSender},
-        watch, OnceCell,
-    },
+    sync::mpsc::{Receiver, UnboundedSender},
+    sync::watch,
     time::{sleep, timeout, Instant},
 };
 use tokio_rustls::TlsConnector;
@@ -161,19 +162,13 @@ struct HttpHandler {
 // Crates a detached tokio blocking task that initializes the server (reading
 // required state, etc).
 fn start_server_initialization(
-    config: Config,
     log: ReplicaLogger,
     metrics: HttpHandlerMetrics,
-    subnet_id: SubnetId,
-    nns_subnet_id: SubnetId,
-    registry_client: Arc<dyn RegistryClient>,
     state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
-    delegation_from_nns: Arc<OnceCell<CertificateDelegation>>,
     health_status: Arc<AtomicCell<ReplicaHealthStatus>>,
     rt_handle: tokio::runtime::Handle,
-    tls_config: Arc<dyn TlsConfig + Send + Sync>,
+    mut delegation_from_nns: watch::Receiver<Option<CertificateDelegation>>,
 ) {
-    let rt_handle_clone = rt_handle.clone();
     rt_handle.spawn(async move {
         info!(log, "Initializing HTTP server...");
         // Sleep one second between retries, only log every 10th round.
@@ -199,28 +194,9 @@ fn start_server_initialization(
         // Fetch the delegation from the NNS for this subnet to be
         // able to issue certificates.
         health_status.store(ReplicaHealthStatus::WaitingForRootDelegation);
-
-        let delegation_timer = metrics.nns_delegation_metrics.update_duration.start_timer();
-        let loaded_delegation = load_root_delegation(
-            &config,
-            &log,
-            rt_handle_clone,
-            subnet_id,
-            nns_subnet_id,
-            registry_client.as_ref(),
-            tls_config.as_ref(),
-        )
-        .await;
-        delegation_timer.observe_duration();
-
-        if let Some(delegation) = loaded_delegation {
-            metrics
-                .nns_delegation_metrics
-                .delegation_size
-                .observe(delegation.certificate.len() as f64);
-
-            let _ = delegation_from_nns.set(delegation);
-        }
+        info!(log, "Waiting for the NNS certificate delegation...");
+        let _ = delegation_from_nns.changed().await;
+        info!(log, "NNS certificate delegation is now available.");
 
         metrics
             .health_status_transitions_total
@@ -306,11 +282,12 @@ pub fn start_server(
     consensus_pool_cache: Arc<dyn ConsensusPoolCache>,
     subnet_type: SubnetType,
     malicious_flags: MaliciousFlags,
-    delegation_from_nns: Arc<OnceCell<CertificateDelegation>>,
+    delegation_from_nns: watch::Receiver<Option<CertificateDelegation>>,
     pprof_collector: Arc<dyn PprofCollector>,
     tracing_handle: ReloadHandles,
     certified_height_watcher: watch::Receiver<Height>,
     completed_execution_messages_rx: Receiver<(MessageId, Height)>,
+    cancellation_token: CancellationToken,
 ) {
     info!(log, "Starting HTTP server...");
     let tcp_listener = start_tcp_listener(config.listen_addr, &rt_handle);
@@ -343,7 +320,7 @@ pub fn start_server(
         metrics.clone(),
         certified_height_watcher,
         completed_execution_messages_rx,
-        CancellationToken::new(),
+        cancellation_token,
     );
 
     let call_router =
@@ -412,17 +389,12 @@ pub fn start_server(
     );
 
     start_server_initialization(
-        config.clone(),
         log.clone(),
         metrics.clone(),
-        subnet_id,
-        nns_subnet_id,
-        registry_client.clone(),
         state_reader,
-        Arc::clone(&delegation_from_nns),
         Arc::clone(&health_status),
         rt_handle.clone(),
-        tls_config.clone(),
+        delegation_from_nns,
     );
 
     let http_handler = HttpHandler {
@@ -792,20 +764,22 @@ async fn collect_timer_metric(
     resp
 }
 
-// Fetches a delegation from the NNS subnet to allow this subnet to issue
-// certificates on its behalf. On the NNS subnet this method is a no-op.
-async fn load_root_delegation(
+/// Fetches a delegation from the NNS subnet to allow this subnet to issue
+/// certificates on its behalf. On the NNS subnet this method is a no-op.
+// TODO(kpop): move this to nns_delegation_manager.rs
+pub(crate) async fn load_root_delegation(
     config: &Config,
     log: &ReplicaLogger,
-    rt_handle: tokio::runtime::Handle,
+    rt_handle: &tokio::runtime::Handle,
     subnet_id: SubnetId,
     nns_subnet_id: SubnetId,
     registry_client: &dyn RegistryClient,
     tls_config: &(dyn TlsConfig + Send + Sync),
+    metrics: &DelegationManagerMetrics,
 ) -> Option<CertificateDelegation> {
+    // On the NNS subnet. No delegation needs to be fetched.
     if subnet_id == nns_subnet_id {
         info!(log, "On the NNS subnet. Skipping fetching the delegation.");
-        // On the NNS subnet. No delegation needs to be fetched.
         return None;
     }
 
@@ -824,7 +798,7 @@ async fn load_root_delegation(
         match try_fetch_delegation_from_nns(
             config,
             log,
-            &rt_handle,
+            rt_handle,
             &subnet_id,
             &nns_subnet_id,
             registry_client,
@@ -836,11 +810,13 @@ async fn load_root_delegation(
             Err(err) => {
                 warn!(
                     log,
-                    "Fetching delegation from nns subnet failed. Retrying again in {} seconds...\n\
-                        Error received: {}",
+                    "Fetching delegation from nns subnet failed. Retrying again in {} seconds...\
+                    Error received: {}",
                     backoff.as_secs(),
                     err
                 );
+
+                metrics.errors.inc();
             }
         }
 
@@ -1090,7 +1066,7 @@ async fn get_random_node_from_nns_subnet(
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
 
     use crate::read_state::subnet::SubnetReadStateService;
@@ -1442,8 +1418,8 @@ mod tests {
         assert_eq!(resp.status(), StatusCode::OK);
     }
 
-    const NNS_SUBNET_ID: SubnetId = ic_test_utilities_types::ids::SUBNET_1;
-    const NON_NNS_SUBNET_ID: SubnetId = ic_test_utilities_types::ids::SUBNET_2;
+    pub(crate) const NNS_SUBNET_ID: SubnetId = ic_test_utilities_types::ids::SUBNET_1;
+    pub(crate) const NON_NNS_SUBNET_ID: SubnetId = ic_test_utilities_types::ids::SUBNET_2;
     const NNS_NODE_ID: NodeId = ic_test_utilities_types::ids::NODE_1;
     const NON_NNS_NODE_ID: NodeId = ic_test_utilities_types::ids::NODE_2;
 
@@ -1468,7 +1444,7 @@ mod tests {
     }
 
     /// Sets up all the dependencies.
-    fn set_up_nns_delegation_dependencies(
+    pub(crate) fn set_up_nns_delegation_dependencies(
         rt_handle: tokio::runtime::Handle,
     ) -> (Arc<FakeRegistryClient>, MockTlsConfig) {
         let registry_version = 1;
@@ -1539,7 +1515,8 @@ mod tests {
 
         registry_client.update_to_latest_version();
 
-        let (_certificate, _root_pk, cbor) =
+        let create_certificate = move |time| {
+            let (_certificate, _root_pk, cbor) =
                 CertificateBuilder::new(CertificateData::CustomTree(LabeledTree::SubTree(flatmap![
                     Label::from("subnet") => LabeledTree::SubTree(flatmap![
                         Label::from(NON_NNS_SUBNET_ID.get_ref().to_vec()) => LabeledTree::SubTree(flatmap![
@@ -1547,17 +1524,26 @@ mod tests {
                             Label::from("public_key") => LabeledTree::Leaf(public_key_to_der(&non_nns_public_key.into_bytes()).unwrap()),
                         ])
                     ]),
-                    Label::from("time") => LabeledTree::Leaf(encoded_time(42))
+                    Label::from("time") => LabeledTree::Leaf(encoded_time(time))
                 ])))
                 .with_root_of_trust(nns_public_key, nns_secret_key)
                 .build();
 
-        rt_handle.spawn(async move {
-            let http_response = HttpReadStateResponse {
-                certificate: Blob(cbor),
-            };
+            cbor
+        };
 
-            let router = axum::routing::any(move || async { Cbor(http_response).into_response() });
+        rt_handle.spawn(async move {
+            let time = Arc::new(RwLock::new(42));
+
+            let router = axum::routing::any(move || async move {
+                let mut time = time.write().unwrap();
+                *time += 1;
+
+                Cbor(HttpReadStateResponse {
+                    certificate: Blob(create_certificate(*time)),
+                })
+                .into_response()
+            });
 
             axum_server::bind_rustls(addr, generate_self_signed_cert().await)
                 .serve(router.into_make_service())
@@ -1622,11 +1608,12 @@ mod tests {
         let delegation = load_root_delegation(
             &Config::default(),
             &no_op_logger(),
-            rt_handle,
+            &rt_handle,
             NNS_SUBNET_ID,
             NNS_SUBNET_ID,
             registry_client.as_ref(),
             &tls_config,
+            &DelegationManagerMetrics::new(&MetricsRegistry::new()),
         )
         .await;
 
@@ -1641,11 +1628,12 @@ mod tests {
         let delegation = load_root_delegation(
             &Config::default(),
             &no_op_logger(),
-            rt_handle,
+            &rt_handle,
             NON_NNS_SUBNET_ID,
             NNS_SUBNET_ID,
             registry_client.as_ref(),
             &tls_config,
+            &DelegationManagerMetrics::new(&MetricsRegistry::new()),
         )
         .await;
 
