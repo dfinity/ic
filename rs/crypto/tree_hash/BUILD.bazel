@@ -61,6 +61,7 @@ rust_test_suite(
 rust_doc_test(
     name = "tree_hash_doc_test",
     crate = ":tree_hash",
+    proc_macro_deps = MACRO_DEV_DEPENDENCIES,
     deps = DEV_DEPENDENCIES + ["@crate_index//:rand_chacha"],
 )
 
