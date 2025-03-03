@@ -3,9 +3,9 @@ use seeding::SeedingTask;
 use std::cell::RefCell;
 
 use crate::canister_state::GOVERNANCE;
-use crate::timer_tasks::reward_distribution::CalculateDistributableRewardsTask;
+use crate::timer_tasks::calculate_distributable_rewards::CalculateDistributableRewardsTask;
 
-mod reward_distribution;
+mod calculate_distributable_rewards;
 mod seeding;
 
 thread_local! {
