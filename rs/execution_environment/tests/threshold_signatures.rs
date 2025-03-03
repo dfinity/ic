@@ -772,7 +772,7 @@ fn test_sign_with_threshold_key_queue_fills_up() {
         assert_eq!(
             result,
             Ok(WasmResult::Reject(format!(
-                "{} request failed: signature queue for key {} is full.",
+                "{} request failed: request queue for key {} is full.",
                 method, key_id,
             )))
         );

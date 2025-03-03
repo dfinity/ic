@@ -45,6 +45,7 @@ pub const NODE_PROVIDER_REWARD: u64 = 10_000;
 use ic_nns_governance::governance::tla::{
     self, account_to_tla, tla_function, Destination, ToTla, TLA_INSTRUMENTATION_STATE,
 };
+use ic_nns_governance::governance::RandomnessGenerator;
 use ic_nns_governance::{tla_log_request, tla_log_response};
 
 lazy_static! {
@@ -181,22 +182,29 @@ impl FakeDriver {
     }
 
     /// Constructs an `Environment` that interacts with this driver.
-    pub fn get_fake_env(&self) -> Box<dyn Environment> {
-        Box::new(FakeDriver {
+    pub fn get_fake_env(&self) -> Arc<dyn Environment> {
+        Arc::new(FakeDriver {
             state: Arc::clone(&self.state),
             error_on_next_ledger_call: Arc::clone(&self.error_on_next_ledger_call),
         })
     }
 
     /// Constructs a `Ledger` that interacts with this driver.
-    pub fn get_fake_ledger(&self) -> Box<dyn IcpLedger> {
-        Box::new(FakeDriver {
+    pub fn get_fake_ledger(&self) -> Arc<dyn IcpLedger> {
+        Arc::new(FakeDriver {
             state: Arc::clone(&self.state),
             error_on_next_ledger_call: Arc::clone(&self.error_on_next_ledger_call),
         })
     }
 
-    pub fn get_fake_cmc(&self) -> Box<dyn CMC> {
+    pub fn get_fake_cmc(&self) -> Arc<dyn CMC> {
+        Arc::new(FakeDriver {
+            state: Arc::clone(&self.state),
+            error_on_next_ledger_call: Arc::clone(&self.error_on_next_ledger_call),
+        })
+    }
+
+    pub fn get_fake_randomness_generator(&self) -> Box<dyn RandomnessGenerator> {
         Box::new(FakeDriver {
             state: Arc::clone(&self.state),
             error_on_next_ledger_call: Arc::clone(&self.error_on_next_ledger_call),
@@ -392,17 +400,12 @@ impl IcpLedger for FakeDriver {
 
 #[async_trait]
 impl CMC for FakeDriver {
-    async fn neuron_maturity_modulation(&mut self) -> Result<i32, String> {
+    async fn neuron_maturity_modulation(&self) -> Result<i32, String> {
         Ok(100)
     }
 }
 
-#[async_trait]
-impl Environment for FakeDriver {
-    fn now(&self) -> u64 {
-        self.state.try_lock().unwrap().now
-    }
-
+impl RandomnessGenerator for FakeDriver {
     fn random_u64(&mut self) -> Result<u64, RngError> {
         Ok(self.state.try_lock().unwrap().rng.next_u64())
     }
@@ -419,6 +422,13 @@ impl Environment for FakeDriver {
 
     fn get_rng_seed(&self) -> Option<[u8; 32]> {
         todo!()
+    }
+}
+
+#[async_trait]
+impl Environment for FakeDriver {
+    fn now(&self) -> u64 {
+        self.state.try_lock().unwrap().now
     }
 
     fn execute_nns_function(

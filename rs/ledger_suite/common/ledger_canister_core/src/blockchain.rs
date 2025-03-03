@@ -4,18 +4,86 @@ use crate::{
 };
 use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
-use std::convert::TryFrom;
 use std::sync::{Arc, RwLock};
 
 use ic_ledger_core::block::{BlockIndex, BlockType, EncodedBlock};
 use ic_ledger_core::timestamp::TimeStamp;
 use ic_ledger_hash_of::HashOf;
+use std::ops::Range;
+
+// There is a discrepancy in the way the trait uses indices for
+// adding and getting blocks - `add_block` uses global indices
+// while `get_blocks` uses indices relative to the first unarchived block.
+// This is due to the fact that `HeapBlockData` doesn't store
+// block indices. Once `HeapBlockData` is removed, the getters
+// can be switched to global indices and `Blockchain` code can
+// be simplified - it currently needs to offset indices passed
+// to getters.
+pub trait BlockData {
+    // The `index` should take into account archived blocks.
+    // I.e. if there are 10 archived blocks and we add 11th block
+    // to the ledger, it should be added with index 10.
+    fn add_block(&mut self, index: u64, block: EncodedBlock);
+    // The `range` should be relative to the first unarchived block.
+    // I.e. `get_blocks(0..1)` should always return the first block stored in the ledger.
+    fn get_blocks(&self, range: Range<u64>) -> Vec<EncodedBlock>;
+    // The `index` should be relative to the first unarchived block.
+    // I.e. `get_block(0)` should always return the first block stored in the ledger.
+    fn get_block(&self, index: u64) -> Option<EncodedBlock>;
+    /// Removes `num_blocks` with the smallest index.
+    fn remove_oldest_blocks(&mut self, num_blocks: u64);
+    fn len(&self) -> u64;
+    fn is_empty(&self) -> bool;
+    fn migrate_one_block(&mut self, num_archived_blocks: u64) -> bool;
+}
+
+#[derive(Debug, Deserialize, Serialize, Default)]
+#[serde(transparent)]
+pub struct HeapBlockData {
+    blocks: Vec<EncodedBlock>,
+}
+
+impl BlockData for HeapBlockData {
+    fn add_block(&mut self, _index: u64, block: EncodedBlock) {
+        self.blocks.push(block);
+    }
+
+    fn get_blocks(&self, range: Range<u64>) -> Vec<EncodedBlock> {
+        let start = std::cmp::min(range.start, self.len()) as usize;
+        let end = std::cmp::min(range.end, self.len()) as usize;
+        self.blocks[start..end].to_vec()
+    }
+
+    fn get_block(&self, index: u64) -> Option<EncodedBlock> {
+        self.blocks.get(index as usize).cloned()
+    }
+
+    fn remove_oldest_blocks(&mut self, num_blocks: u64) {
+        self.blocks = self.blocks.split_off(num_blocks as usize);
+    }
+
+    fn len(&self) -> u64 {
+        self.blocks.len() as u64
+    }
+
+    fn is_empty(&self) -> bool {
+        self.blocks.is_empty()
+    }
+
+    fn migrate_one_block(&mut self, _num_archived_blocks: u64) -> bool {
+        panic!("HeapBlockData cannot perform migration!");
+    }
+}
 
 /// Stores a chain of transactions with their metadata
 #[derive(Debug, Deserialize, Serialize)]
-#[serde(bound = "")]
-pub struct Blockchain<Rt: Runtime, Wasm: ArchiveCanisterWasm> {
-    pub blocks: Vec<EncodedBlock>,
+#[serde(bound = "BD: Serialize, for<'a> BD: Deserialize<'a>")]
+pub struct Blockchain<Rt: Runtime, Wasm: ArchiveCanisterWasm, BD>
+where
+    BD: BlockData + Serialize + Default,
+    for<'a> BD: Deserialize<'a>,
+{
+    pub blocks: BD,
     pub last_hash: Option<HashOf<EncodedBlock>>,
 
     /// The timestamp of the most recent block. Must be monotonically
@@ -32,10 +100,14 @@ pub struct Blockchain<Rt: Runtime, Wasm: ArchiveCanisterWasm> {
     pub num_archived_blocks: u64,
 }
 
-impl<Rt: Runtime, Wasm: ArchiveCanisterWasm> Default for Blockchain<Rt, Wasm> {
+impl<Rt: Runtime, Wasm: ArchiveCanisterWasm, BD> Default for Blockchain<Rt, Wasm, BD>
+where
+    BD: BlockData + Serialize + Default,
+    for<'a> BD: Deserialize<'a>,
+{
     fn default() -> Self {
         Self {
-            blocks: vec![],
+            blocks: Default::default(),
             last_hash: None,
             last_timestamp: TimeStamp::from_nanos_since_unix_epoch(0),
             archive: Arc::new(RwLock::new(None)),
@@ -44,7 +116,11 @@ impl<Rt: Runtime, Wasm: ArchiveCanisterWasm> Default for Blockchain<Rt, Wasm> {
     }
 }
 
-impl<Rt: Runtime, Wasm: ArchiveCanisterWasm> Blockchain<Rt, Wasm> {
+impl<Rt: Runtime, Wasm: ArchiveCanisterWasm, BD> Blockchain<Rt, Wasm, BD>
+where
+    BD: BlockData + Serialize + Default,
+    for<'a> BD: Deserialize<'a>,
+{
     pub fn new_with_archive(archive_options: ArchiveOptions) -> Self {
         Self {
             archive: Arc::new(RwLock::new(Some(Archive::new(archive_options)))),
@@ -68,21 +144,17 @@ impl<Rt: Runtime, Wasm: ArchiveCanisterWasm> Blockchain<Rt, Wasm> {
         self.last_timestamp = block.timestamp();
         let encoded_block = block.encode();
         self.last_hash = Some(B::block_hash(&encoded_block));
-        self.blocks.push(encoded_block);
+        self.blocks.add_block(self.chain_length(), encoded_block);
         Ok(self.chain_length().checked_sub(1).unwrap())
     }
 
-    pub fn get(&self, height: BlockIndex) -> Option<&EncodedBlock> {
+    pub fn get(&self, height: BlockIndex) -> Option<EncodedBlock> {
         if height < self.num_archived_blocks() {
             None
         } else {
             self.blocks
-                .get(usize::try_from(height - self.num_archived_blocks()).unwrap())
+                .get_block(height.checked_sub(self.num_archived_blocks()).unwrap())
         }
-    }
-
-    pub fn last(&self) -> Option<&EncodedBlock> {
-        self.blocks.last()
     }
 
     pub fn num_archived_blocks(&self) -> u64 {
@@ -90,20 +162,20 @@ impl<Rt: Runtime, Wasm: ArchiveCanisterWasm> Blockchain<Rt, Wasm> {
     }
 
     pub fn num_unarchived_blocks(&self) -> u64 {
-        self.blocks.len() as u64
+        self.blocks.len()
     }
 
     /// The range of block indices that are not archived yet.
     pub fn local_block_range(&self) -> std::ops::Range<u64> {
-        self.num_archived_blocks..self.num_archived_blocks + self.blocks.len() as u64
+        self.num_archived_blocks..self.num_archived_blocks + self.blocks.len()
     }
 
-    /// Returns the slice of blocks stored locally.
+    /// Returns the blocks stored locally.
     ///
     /// # Panic
     ///
     /// This function panics if the specified range is not a subset of locally available blocks.
-    pub fn block_slice(&self, local_blocks: std::ops::Range<u64>) -> &[EncodedBlock] {
+    pub fn get_blocks(&self, local_blocks: std::ops::Range<u64>) -> Vec<EncodedBlock> {
         use crate::range_utils::{is_subrange, offset};
 
         assert!(
@@ -113,7 +185,8 @@ impl<Rt: Runtime, Wasm: ArchiveCanisterWasm> Blockchain<Rt, Wasm> {
             self.local_block_range()
         );
 
-        &self.blocks[offset(&local_blocks, self.num_archived_blocks)]
+        self.blocks
+            .get_blocks(offset(&local_blocks, self.num_archived_blocks))
     }
 
     pub fn chain_length(&self) -> BlockIndex {
@@ -121,16 +194,14 @@ impl<Rt: Runtime, Wasm: ArchiveCanisterWasm> Blockchain<Rt, Wasm> {
     }
 
     pub fn remove_archived_blocks(&mut self, len: usize) {
-        // redundant since split_off would panic, but here we can give a more
-        // descriptive message
-        if len > self.blocks.len() {
+        if len as u64 > self.blocks.len() {
             panic!(
                 "Asked to remove more blocks than present. Present: {}, to remove: {}",
                 self.blocks.len(),
                 len
             );
         }
-        self.blocks = self.blocks.split_off(len);
+        self.blocks.remove_oldest_blocks(len as u64);
         self.num_archived_blocks += len as u64;
     }
 
@@ -142,16 +213,18 @@ impl<Rt: Runtime, Wasm: ArchiveCanisterWasm> Blockchain<Rt, Wasm> {
         // Upon reaching the `trigger_threshold` we will archive
         // `num_blocks_to_archive`. For example, when set to (2000, 1000)
         // archiving will trigger when there are 2000 blocks in the ledger and
-        // the 1000 oldest bocks will be archived, leaving the remaining 1000
+        // the 1000 oldest blocks will be archived, leaving the remaining 1000
         // blocks in place.
-        let num_blocks_before = self.num_unarchived_blocks() as usize;
+        let num_blocks_before = self.num_unarchived_blocks();
 
-        if num_blocks_before < trigger_threshold {
+        if num_blocks_before < trigger_threshold as u64 {
             return VecDeque::new();
         }
 
-        let blocks_to_archive: VecDeque<EncodedBlock> =
-            VecDeque::from(self.blocks[0..num_blocks_to_archive.min(num_blocks_before)].to_vec());
+        let blocks_to_archive: VecDeque<EncodedBlock> = VecDeque::from(
+            self.blocks
+                .get_blocks(0..(num_blocks_to_archive as u64).min(num_blocks_before)),
+        );
 
         println!(
             "get_blocks_for_archiving(): trigger_threshold: {}, num_blocks: {}, blocks before archiving: {}, blocks to archive: {}",
@@ -162,5 +235,9 @@ impl<Rt: Runtime, Wasm: ArchiveCanisterWasm> Blockchain<Rt, Wasm> {
         );
 
         blocks_to_archive
+    }
+
+    pub fn migrate_one_block(&mut self) -> bool {
+        self.blocks.migrate_one_block(self.num_archived_blocks)
     }
 }

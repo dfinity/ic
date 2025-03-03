@@ -1,5 +1,5 @@
 {
-  "checksum": "bdcbdf21b5cda7470290bfa053f648ac6bd22c5ca394d196b9d1c7029e9284f3",
+  "checksum": "df8f83940c75aa96f2b7ddeddf586c11aacb29401985b0424589fccd6f5125de",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -19796,7 +19796,7 @@
               "target": "ic_http_gateway"
             },
             {
-              "id": "ic-management-canister-types 0.2.0",
+              "id": "ic-management-canister-types 0.2.1",
               "target": "ic_management_canister_types"
             },
             {
@@ -33244,14 +33244,14 @@
       ],
       "license_file": null
     },
-    "ic-management-canister-types 0.2.0": {
+    "ic-management-canister-types 0.2.1": {
       "name": "ic-management-canister-types",
-      "version": "0.2.0",
+      "version": "0.2.1",
       "package_url": "https://github.com/dfinity/cdk-rs",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/ic-management-canister-types/0.2.0/download",
-          "sha256": "4ce1cdd2b6df9eac37cd2dcf5d40cf9427a24aed9b0751cbe5b09ae116eb4de3"
+          "url": "https://static.crates.io/crates/ic-management-canister-types/0.2.1/download",
+          "sha256": "1a23527ab5e2ede1aae270cdb79ef0491479c8b5c2de9fd393048ca907cac5e1"
         }
       },
       "targets": [
@@ -33295,7 +33295,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.2.0"
+        "version": "0.2.1"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -91229,7 +91229,7 @@
     "ic-certified-map 0.3.4",
     "ic-http-certification 3.0.3",
     "ic-http-gateway 0.2.0",
-    "ic-management-canister-types 0.2.0",
+    "ic-management-canister-types 0.2.1",
     "ic-metrics-encoder 1.1.1",
     "ic-response-verification 3.0.3",
     "ic-sha3 1.0.0",

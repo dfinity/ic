@@ -10,6 +10,7 @@ DEPENDENCIES = [
     "@crate_index//:flate2",
     "@crate_index//:hex",
     "@crate_index//:ic-certification",
+    "@crate_index//:ic-management-canister-types",
     "@crate_index//:ic-transport-types",
     "@crate_index//:reqwest",
     "@crate_index//:schemars",
@@ -33,7 +34,7 @@ MACRO_DEPENDENCIES = [
 
 TEST_DEPENDENCIES = [
     # Keep sorted.
-    "//rs/types/error_types",
+    "//packages/ic-error-types",
     #TODO: try upgrading this to the latest bitcion crate
     "@crate_index//:bitcoin_0_28",
     "@crate_index//:candid_parser",
@@ -62,17 +63,6 @@ rust_test(
     srcs = glob(["src/**/*.rs"]),
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES + TEST_DEPENDENCIES,
-)
-
-rust_test(
-    name = "management-canister-test",
-    srcs = ["tests/management_canister.rs"],
-    data = ["@management_canister_did//file"],
-    env = {
-        "IC_DID": "$(rootpath @management_canister_did//file)",
-    },
-    proc_macro_deps = MACRO_DEPENDENCIES,
-    deps = [":pocket-ic"] + DEPENDENCIES + TEST_DEPENDENCIES,
 )
 
 rust_test_suite(
