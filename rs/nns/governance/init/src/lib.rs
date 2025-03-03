@@ -104,7 +104,7 @@ impl GovernanceCanisterInitPayloadBuilder {
             SystemTime::now()
                 .duration_since(SystemTime::UNIX_EPOCH)
                 .unwrap()
-                .as_secs()
+                .as_secs(),
         );
 
         let mut neuron1 = {
