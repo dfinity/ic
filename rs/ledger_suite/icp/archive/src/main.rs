@@ -1,87 +1,176 @@
-use candid::candid_method;
+use candid::{candid_method, Decode};
 use dfn_candid::candid_one;
 use dfn_core::api::{caller, print, stable_memory_size_in_pages};
 use dfn_core::{over_init, stable, BytesS};
 use dfn_protobuf::protobuf;
+use ic_base_types::CanisterId;
 use ic_ledger_canister_core::range_utils;
 use ic_ledger_canister_core::runtime::heap_memory_size_bytes;
 use ic_ledger_core::block::{BlockIndex, BlockType, EncodedBlock};
 use ic_metrics_encoder::MetricsEncoder;
+use ic_stable_structures::memory_manager::{MemoryId, VirtualMemory};
+use ic_stable_structures::{
+    cell::Cell as StableCell, log::Log as StableLog, memory_manager::MemoryManager,
+    DefaultMemoryImpl,
+};
 use icp_ledger::{
-    Block, BlockRange, BlockRes, CandidBlock, GetBlocksArgs, GetBlocksError, GetBlocksResult,
-    GetEncodedBlocksResult, IterBlocksArgs,
+    Block, BlockRange, BlockRes, CandidBlock, GetBlocksArgs, GetBlocksError, GetBlocksRes,
+    GetBlocksResult, GetEncodedBlocksResult, IterBlocksArgs, IterBlocksRes,
 };
 use serde::{Deserialize, Serialize};
-use std::sync::RwLock;
+use std::cell::RefCell;
+use std::io::Read;
 
-lazy_static::lazy_static! {
-    // This is a bad default, but it works for the incident on 8/05/21 since that is the first
-    // archive canister
-    static ref ARCHIVE_STATE: RwLock<ArchiveNodeState> = RwLock::new(ArchiveNodeState::new(ic_nns_constants::LEDGER_CANISTER_ID, 0, None));
-}
-
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 struct ArchiveNodeState {
     pub max_memory_size_bytes: usize,
     pub block_height_offset: u64,
     pub blocks: Vec<EncodedBlock>,
     pub total_block_size: usize,
-    pub ledger_canister_id: ic_base_types::CanisterId,
-    #[serde(skip)]
-    pub last_upgrade_timestamp: u64,
+    pub ledger_canister_id: CanisterId,
 }
 
-const DEFAULT_MAX_MEMORY_SIZE: usize = 1024 * 1024 * 1024;
+const DEFAULT_MAX_MEMORY_SIZE: u64 = 10 * 1024 * 1024 * 1024;
 
-impl ArchiveNodeState {
-    pub fn new(
-        archive_main_canister_id: ic_base_types::CanisterId,
-        block_height_offset: u64,
-        max_memory_size_bytes: Option<usize>,
-    ) -> Self {
-        Self {
-            max_memory_size_bytes: max_memory_size_bytes.unwrap_or(DEFAULT_MAX_MEMORY_SIZE),
-            block_height_offset,
-            blocks: Vec::new(),
-            total_block_size: 0,
-            ledger_canister_id: archive_main_canister_id,
-            last_upgrade_timestamp: 0,
-        }
+const MAX_MEMORY_SIZE_BYTES_MEMORY_ID: MemoryId = MemoryId::new(0);
+const BLOCK_HEIGHT_OFFSET_MEMORY_ID: MemoryId = MemoryId::new(1);
+const LEDGER_CANISTER_ID_MEMORY_ID: MemoryId = MemoryId::new(2);
+const BLOCK_LOG_INDEX_MEMORY_ID: MemoryId = MemoryId::new(3);
+const BLOCK_LOG_DATA_MEMORY_ID: MemoryId = MemoryId::new(4);
+
+thread_local! {
+    /// Static memory manager to manage the memory available for stable structures.
+    static MEMORY_MANAGER: RefCell<MemoryManager<DefaultMemoryImpl>> = RefCell::new(MemoryManager::init(DefaultMemoryImpl::default()));
+
+    static LEDGER_CANISTER_ID_CACHE: RefCell<Option<CanisterId>> = const { RefCell::new(None) };
+
+    static LAST_UPGRADE_TIMESTAMP: RefCell<u64> = const { RefCell::new(0) };
+
+    // Max memory size
+    static MAX_MEMORY_SIZE_BYTES: RefCell<StableCell<u64, VirtualMemory<DefaultMemoryImpl>>> =
+        MEMORY_MANAGER.with(|memory_manager|  RefCell::new(StableCell::init(memory_manager.borrow().get(MAX_MEMORY_SIZE_BYTES_MEMORY_ID), 0)
+        .expect("failed to initialize stable cell")));
+
+    // Block height offset
+    static BLOCK_HEIGHT_OFFSET: RefCell<StableCell<u64, VirtualMemory<DefaultMemoryImpl>>> =
+        MEMORY_MANAGER.with(|memory_manager|  RefCell::new(StableCell::init(memory_manager.borrow().get(BLOCK_HEIGHT_OFFSET_MEMORY_ID), 0)
+        .expect("failed to initialize stable cell")));
+
+    // Ledger canister id.
+    static LEDGER_CANISTER_ID: RefCell<StableCell<Vec<u8>, VirtualMemory<DefaultMemoryImpl>>> =
+        MEMORY_MANAGER.with(|memory_manager|  RefCell::new(StableCell::init(memory_manager.borrow().get(LEDGER_CANISTER_ID_MEMORY_ID), vec![])
+        .expect("failed to initialize stable cell")));
+
+    // Log of blocks.
+    static BLOCKS: RefCell<StableLog<Vec<u8>, VirtualMemory<DefaultMemoryImpl>, VirtualMemory<DefaultMemoryImpl>>> =
+        MEMORY_MANAGER.with(|memory_manager| RefCell::new(StableLog::init(memory_manager.borrow().get(BLOCK_LOG_INDEX_MEMORY_ID),
+        memory_manager.borrow().get(BLOCK_LOG_DATA_MEMORY_ID)).expect("failed to initialize blocks stable memory")));
+}
+
+fn max_memory_size_bytes() -> u64 {
+    MAX_MEMORY_SIZE_BYTES.with(|cell| *cell.borrow().get())
+}
+
+fn set_max_memory_size_bytes(max_memory_size_bytes: u64) {
+    if max_memory_size_bytes < total_block_size() {
+        ic_cdk::trap(&format!(
+            "Cannot set max_memory_size_bytes to {}, because it is lower than total_block_size {}.",
+            max_memory_size_bytes,
+            total_block_size()
+        ));
     }
+    assert!(MAX_MEMORY_SIZE_BYTES
+        .with(|cell| cell.borrow_mut().set(max_memory_size_bytes))
+        .is_ok());
+}
+
+fn block_height_offset() -> u64 {
+    BLOCK_HEIGHT_OFFSET.with(|cell| *cell.borrow().get())
+}
+
+fn set_block_height_offset(block_height_offset: u64) {
+    assert!(BLOCK_HEIGHT_OFFSET
+        .with(|cell| cell.borrow_mut().set(block_height_offset))
+        .is_ok());
+}
+
+fn total_block_size() -> u64 {
+    BLOCKS.with_borrow(|b| b.log_size_bytes())
+}
+
+fn ledger_canister_id() -> CanisterId {
+    if let Some(ledger_canister_id) = LEDGER_CANISTER_ID_CACHE.with(|l| *l.borrow()) {
+        return ledger_canister_id;
+    }
+    let id_bytes = LEDGER_CANISTER_ID.with(|cell| cell.borrow().get().clone());
+    let principal = candid::Principal::from_slice(id_bytes.as_slice());
+    let ledger_canister_id = CanisterId::try_from_principal_id(principal.into())
+        .expect("failed to convert PrincipalId to CanisterId");
+    LEDGER_CANISTER_ID_CACHE.with(|l| *l.borrow_mut() = Some(ledger_canister_id));
+    ledger_canister_id
+}
+
+fn set_ledger_canister_id(ledger_canister_id: CanisterId) {
+    assert!(LEDGER_CANISTER_ID
+        .with(|cell| cell.borrow_mut().set(ledger_canister_id.get().into_vec()))
+        .is_ok());
+    LEDGER_CANISTER_ID_CACHE.with(|l| *l.borrow_mut() = Some(ledger_canister_id));
+}
+
+fn last_upgrade_timestamp() -> u64 {
+    LAST_UPGRADE_TIMESTAMP.with(|t| *t.borrow())
+}
+
+fn set_last_upgrade_timestamp(timestamp: u64) {
+    LAST_UPGRADE_TIMESTAMP.with(|t| *t.borrow_mut() = timestamp)
 }
 
 // Append the Blocks to the internal Vec
-fn append_blocks(mut blocks: Vec<EncodedBlock>) {
-    let mut archive_state = ARCHIVE_STATE.write().unwrap();
+fn append_blocks(blocks: Vec<EncodedBlock>) {
     assert_eq!(
         dfn_core::api::caller(),
-        archive_state.ledger_canister_id.get(),
+        ledger_canister_id().get(),
         "Only Ledger canister is allowed to append blocks to an Archive Node"
     );
     print(format!(
         "[archive node] append_blocks(): archive size: {} blocks, appending {} blocks",
-        archive_state.blocks.len(),
+        blocks_len(),
         blocks.len()
     ));
     for block in &blocks {
-        archive_state.total_block_size += block.size_bytes();
+        append_block(block);
     }
-    if archive_state.total_block_size > archive_state.max_memory_size_bytes {
+    if total_block_size() > max_memory_size_bytes() {
         ic_cdk::trap("No space left");
     }
-    archive_state.blocks.append(&mut blocks);
     print(format!(
         "[archive node] append_blocks(): done. archive size: {} blocks",
-        archive_state.blocks.len()
+        blocks_len()
     ));
 }
 
+fn blocks_len() -> u64 {
+    BLOCKS.with_borrow(|blocks| blocks.len())
+}
+
+fn append_block(block: &EncodedBlock) {
+    BLOCKS.with_borrow_mut(|blocks| match blocks.append(&block.0) {
+        Ok(_) => {}
+        Err(e) => ic_cdk::trap(&format!(
+            "Could not append block to stable block log: {:?}",
+            e
+        )),
+    });
+}
+
+fn get_block_stable(index: u64) -> Option<EncodedBlock> {
+    BLOCKS.with_borrow(|blocks| blocks.get(index).map(EncodedBlock::from_vec))
+}
+
 // Return the number of bytes the canister can still accommodate
-fn remaining_capacity() -> usize {
-    let archive_state = ARCHIVE_STATE.read().unwrap();
-    let remaining_capacity = archive_state
-        .max_memory_size_bytes
-        .checked_sub(archive_state.total_block_size)
+fn remaining_capacity() -> u64 {
+    let remaining_capacity = max_memory_size_bytes()
+        .checked_sub(total_block_size())
         .unwrap();
     print(format!(
         "[archive node] remaining_capacity: {} bytes",
@@ -91,9 +180,9 @@ fn remaining_capacity() -> usize {
 }
 
 fn init(
-    archive_main_canister_id: ic_base_types::CanisterId,
+    archive_main_canister_id: CanisterId,
     block_height_offset: u64,
-    max_memory_size_bytes: Option<usize>,
+    max_memory_size_bytes: Option<u64>,
 ) {
     match max_memory_size_bytes {
         None => {
@@ -111,19 +200,16 @@ fn init(
         }
     }
 
-    *ARCHIVE_STATE.write().unwrap() = ArchiveNodeState::new(
-        archive_main_canister_id,
-        block_height_offset,
-        max_memory_size_bytes,
-    );
+    set_block_height_offset(block_height_offset);
+    set_max_memory_size_bytes(max_memory_size_bytes.unwrap_or(DEFAULT_MAX_MEMORY_SIZE));
+    set_ledger_canister_id(archive_main_canister_id);
 }
 
 /// Get Block by BlockIndex. If the BlockIndex is outside the range stored in
 /// this Node the result is None
 fn get_block(block_height: BlockIndex) -> BlockRes {
-    let archive_state = ARCHIVE_STATE.read().unwrap();
-    let adjusted_height = block_height - archive_state.block_height_offset;
-    let block: Option<EncodedBlock> = archive_state.blocks.get(adjusted_height as usize).cloned();
+    let adjusted_height = block_height - block_height_offset();
+    let block: Option<EncodedBlock> = get_block_stable(adjusted_height);
     // Will never return CanisterId like its counterpart in Ledger. Want to
     // keep the same signature though
     BlockRes(block.map(Ok))
@@ -162,10 +248,15 @@ fn append_blocks_() {
 #[export_name = "canister_query iter_blocks_pb"]
 fn iter_blocks_() {
     dfn_core::over(protobuf, |IterBlocksArgs { start, length }| {
-        let archive_state = ARCHIVE_STATE.read().unwrap();
-        let blocks = &archive_state.blocks;
         let length = length.min(icp_ledger::max_blocks_per_request(&caller()));
-        icp_ledger::iter_blocks(blocks, start, length)
+        let blocks_len = blocks_len() as usize;
+        let start = start.min(blocks_len);
+        let end = std::cmp::min(start + length, blocks_len);
+        let mut blocks = vec![];
+        for index in start..end {
+            blocks.push(get_block_stable(index as u64).unwrap());
+        }
+        IterBlocksRes(blocks)
     });
 }
 
@@ -174,14 +265,23 @@ fn iter_blocks_() {
 #[export_name = "canister_query get_blocks_pb"]
 fn get_blocks_() {
     dfn_core::over(protobuf, |GetBlocksArgs { start, length }| {
-        let archive_state = ARCHIVE_STATE.read().unwrap();
-        let blocks = &archive_state.blocks;
-        let from_offset = archive_state.block_height_offset;
+        let from_offset = block_height_offset();
         let length = length
             .min(usize::MAX as u64)
-            .min(icp_ledger::max_blocks_per_request(&caller()) as u64)
-            as usize;
-        icp_ledger::get_blocks(blocks, from_offset, start, length)
+            .min(icp_ledger::max_blocks_per_request(&caller()) as u64);
+        let local_blocks_range = from_offset..from_offset + blocks_len();
+        let requested_range = start..start + length;
+        if !range_utils::is_subrange(&requested_range, &local_blocks_range) {
+            return GetBlocksRes(Err(format!("Requested blocks outside the range stored in the ledger node. Requested [{} .. {}]. Available [{} .. {}].",
+                requested_range.start, requested_range.end, local_blocks_range.start, local_blocks_range.end)));
+        }
+        let mut blocks = vec![];
+        let offset_requested_range =
+            requested_range.start - from_offset..requested_range.end - from_offset;
+        for index in offset_requested_range {
+            blocks.push(get_block_stable(index).unwrap());
+        }
+        GetBlocksRes(Ok(blocks))
     });
 }
 
@@ -203,49 +303,86 @@ fn get_blocks_candid_() {
 
 #[export_name = "canister_post_upgrade"]
 fn post_upgrade() {
-    over_init(|_: BytesS| {
+    over_init(|args: BytesS| {
+        set_last_upgrade_timestamp(dfn_core::api::time_nanos());
+
+        let arg_max_memory_size_bytes = if args.0.is_empty() {
+            print("Upgrading archive without an upgrade argument.");
+            None
+        } else {
+            match Decode!(&args.0, u64) {
+                Ok(max_memory_size_bytes) => Some(max_memory_size_bytes),
+                Err(e) => {
+                    ic_cdk::trap(&format!("Unable to decode archive upgrade argument: {}", e));
+                }
+            }
+        };
+
+        if memory_manager_installed() {
+            if let Some(max_memory_size_bytes) = arg_max_memory_size_bytes {
+                print(format!(
+                    "Changing the max_memory_size_bytes to {}",
+                    max_memory_size_bytes
+                ));
+                set_max_memory_size_bytes(max_memory_size_bytes);
+            }
+            print("Archive state already migrated to stable structures, exiting post_upgrade.");
+            return;
+        }
+
         let bytes = stable::get();
-        let mut state = ARCHIVE_STATE.write().unwrap();
-        *state = ciborium::de::from_reader(std::io::Cursor::new(&bytes))
+        let state: ArchiveNodeState = ciborium::de::from_reader(std::io::Cursor::new(&bytes))
             .expect("Decoding stable memory failed");
-        state.last_upgrade_timestamp = dfn_core::api::time_nanos();
+
+        for block in &state.blocks {
+            append_block(block);
+        }
+
+        set_ledger_canister_id(state.ledger_canister_id);
+        set_block_height_offset(state.block_height_offset);
+        match arg_max_memory_size_bytes {
+            Some(max_memory_size_bytes) => {
+                print(format!(
+                    "Changing the max_memory_size_bytes to {}",
+                    max_memory_size_bytes
+                ));
+                set_max_memory_size_bytes(max_memory_size_bytes);
+            }
+            None => set_max_memory_size_bytes(state.max_memory_size_bytes as u64),
+        }
     });
 }
 
-#[export_name = "canister_pre_upgrade"]
-fn pre_upgrade() {
-    dfn_core::setup::START.call_once(|| {
-        dfn_core::printer::hook();
-    });
-
-    let archive_state = ARCHIVE_STATE
-        .read()
-        // This should never happen, but it's better to be safe than sorry
-        .unwrap_or_else(|poisoned| poisoned.into_inner());
-    ciborium::ser::into_writer(&*archive_state, stable::StableWriter::new()).unwrap();
+fn memory_manager_installed() -> bool {
+    let mut magic_bytes_reader = ic_cdk::api::stable::StableReader::default();
+    const MAGIC_BYTES: &[u8; 3] = b"MGR";
+    let mut first_bytes = [0u8; 3];
+    match magic_bytes_reader.read_exact(&mut first_bytes) {
+        Ok(_) => first_bytes == *MAGIC_BYTES,
+        Err(_) => false,
+    }
 }
 
 fn encode_metrics(w: &mut MetricsEncoder<Vec<u8>>) -> std::io::Result<()> {
-    let state = ARCHIVE_STATE.read().unwrap();
     w.encode_gauge(
         "archive_node_block_height_offset",
-        state.block_height_offset as f64,
+        block_height_offset() as f64,
         "Block height offset assigned to this instance of the archive canister.",
     )?;
     w.encode_gauge(
         "archive_node_max_memory_size_bytes",
-        state.max_memory_size_bytes as f64,
+        max_memory_size_bytes() as f64,
         "Maximum amount of memory this canister is allowed to use for blocks.",
     )?;
     // This value can increase/decrease in the current implementation.
     w.encode_gauge(
         "archive_node_blocks",
-        state.blocks.len() as f64,
+        blocks_len() as f64,
         "Number of blocks stored by this canister.",
     )?;
     w.encode_gauge(
         "archive_node_blocks_bytes",
-        state.total_block_size as f64,
+        total_block_size() as f64,
         "Total amount of memory consumed by the blocks stored by this canister.",
     )?;
     w.encode_gauge(
@@ -265,7 +402,7 @@ fn encode_metrics(w: &mut MetricsEncoder<Vec<u8>>) -> std::io::Result<()> {
     )?;
     w.encode_gauge(
         "archive_node_last_upgrade_time_seconds",
-        state.last_upgrade_timestamp as f64 / 1_000_000_000.0,
+        last_upgrade_timestamp() as f64 / 1_000_000_000.0,
         "IC timestamp of the last upgrade performed on this canister.",
     )?;
     Ok(())
@@ -282,10 +419,7 @@ fn get_encoded_blocks(GetBlocksArgs { start, length }: GetBlocksArgs) -> GetEnco
 }
 
 fn read_encoded_blocks(start: u64, length: usize) -> Result<Vec<EncodedBlock>, GetBlocksError> {
-    let archive_state = ARCHIVE_STATE.read().unwrap();
-    let blocks = &archive_state.blocks;
-
-    let block_range = range_utils::make_range(archive_state.block_height_offset, blocks.len());
+    let block_range = range_utils::make_range(block_height_offset(), blocks_len() as usize);
 
     if start < block_range.start {
         return Err(GetBlocksError::BadFirstBlockIndex {
@@ -308,7 +442,7 @@ fn read_encoded_blocks(start: u64, length: usize) -> Result<Vec<EncodedBlock>, G
 
     let mut encoded_blocks = Vec::with_capacity(range_utils::range_len(&effective_range) as usize);
     for i in effective_range {
-        encoded_blocks.push(blocks[(i - block_range.start) as usize].clone());
+        encoded_blocks.push(get_block_stable(i - block_range.start).unwrap());
     }
     Ok(encoded_blocks)
 }
