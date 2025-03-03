@@ -18,7 +18,7 @@ use ic_replicated_state::{
             OnLowWasmMemoryHookStatus,
         },
     },
-    page_map::{Shard, StorageLayout, StorageResult},
+    page_map::{Shard, StorageLayoutR, StorageLayoutW, StorageResult},
     CallContextManager, CanisterStatus, ExecutionTask, ExportedFunctions, Global, NumWasmPages,
 };
 use ic_sys::{fs::sync_path, mmap::ScopedMmap};
@@ -1451,6 +1451,13 @@ impl<Permissions: AccessPolicy> CheckpointLayout<Permissions> {
             permissions_tag: PhantomData,
         })))
     }
+    pub fn height(&self) -> Height {
+        self.0.height
+    }
+
+    pub fn raw_path(&self) -> &Path {
+        &self.0.root
+    }
 
     pub fn system_metadata(&self) -> ProtoFileWith<pb_metadata::SystemMetadata, Permissions> {
         self.0.root.join(SYSTEM_METADATA_FILE).into()
@@ -1476,6 +1483,32 @@ impl<Permissions: AccessPolicy> CheckpointLayout<Permissions> {
         self.0.root.join(UNVERIFIED_CHECKPOINT_MARKER)
     }
 
+    /// Returns if the checkpoint is marked as unverified or not.
+    pub fn is_checkpoint_verified(&self) -> bool {
+        !self.unverified_checkpoint_marker().exists()
+    }
+
+    pub fn mark_files_readonly_and_sync(
+        &self,
+        thread_pool: Option<&mut scoped_threadpool::Pool>,
+    ) -> Result<(), LayoutError> {
+        mark_files_readonly_and_sync(self.raw_path(), thread_pool).map_err(|err| {
+            LayoutError::IoError {
+                path: self.raw_path().to_path_buf(),
+                message: format!(
+                    "Could not mark files readonly and sync for checkpoint {}",
+                    self.height()
+                ),
+                io_err: err,
+            }
+        })
+    }
+}
+
+impl<Permissions: AccessPolicy> CheckpointLayout<Permissions>
+where
+    Permissions: ReadPolicy,
+{
     pub fn canister_ids(&self) -> Result<Vec<CanisterId>, LayoutError> {
         let states_dir = self.0.root.join(CANISTER_STATES_DIR);
         Permissions::check_dir(&states_dir)?;
@@ -1538,61 +1571,6 @@ impl<Permissions: AccessPolicy> CheckpointLayout<Permissions> {
             self,
         )
     }
-
-    pub fn height(&self) -> Height {
-        self.0.height
-    }
-
-    pub fn raw_path(&self) -> &Path {
-        &self.0.root
-    }
-
-    /// Returns if the checkpoint is marked as unverified or not.
-    pub fn is_checkpoint_verified(&self) -> bool {
-        !self.unverified_checkpoint_marker().exists()
-    }
-
-    pub fn mark_files_readonly_and_sync(
-        &self,
-        thread_pool: Option<&mut scoped_threadpool::Pool>,
-    ) -> Result<(), LayoutError> {
-        mark_files_readonly_and_sync(self.raw_path(), thread_pool).map_err(|err| {
-            LayoutError::IoError {
-                path: self.raw_path().to_path_buf(),
-                message: format!(
-                    "Could not mark files readonly and sync for checkpoint {}",
-                    self.height()
-                ),
-                io_err: err,
-            }
-        })
-    }
-}
-
-impl<P> CheckpointLayout<P>
-where
-    P: WritePolicy,
-{
-    /// Creates the unverified checkpoint marker.
-    /// If the marker already exists, this function does nothing and returns `Ok(())`.
-    ///
-    /// Only the checkpoint layout with write policy can create the unverified checkpoint marker,
-    /// e.g. state sync scratchpad and tip.
-    pub fn create_unverified_checkpoint_marker(&self) -> Result<(), LayoutError> {
-        let marker = self.unverified_checkpoint_marker();
-        if marker.exists() {
-            return Ok(());
-        }
-        open_for_write(&marker)?;
-        sync_path(&self.0.root).map_err(|err| LayoutError::IoError {
-            path: self.0.root.clone(),
-            message: "Failed to sync checkpoint directory for the creation of the unverified checkpoint marker".to_string(),
-            io_err: err,
-        })
-    }
-}
-
-impl CheckpointLayout<ReadOnly> {
     /// Removes the unverified checkpoint marker.
     /// If the marker does not exist, this function does nothing and returns `Ok(())`.
     ///
@@ -1639,6 +1617,29 @@ impl CheckpointLayout<ReadOnly> {
     }
 }
 
+impl<P> CheckpointLayout<P>
+where
+    P: WritePolicy,
+{
+    /// Creates the unverified checkpoint marker.
+    /// If the marker already exists, this function does nothing and returns `Ok(())`.
+    ///
+    /// Only the checkpoint layout with write policy can create the unverified checkpoint marker,
+    /// e.g. state sync scratchpad and tip.
+    pub fn create_unverified_checkpoint_marker(&self) -> Result<(), LayoutError> {
+        let marker = self.unverified_checkpoint_marker();
+        if marker.exists() {
+            return Ok(());
+        }
+        open_for_write(&marker)?;
+        sync_path(&self.0.root).map_err(|err| LayoutError::IoError {
+            path: self.0.root.clone(),
+            message: "Failed to sync checkpoint directory for the creation of the unverified checkpoint marker".to_string(),
+            io_err: err,
+        })
+    }
+}
+
 pub struct PageMapLayout<Permissions: AccessPolicy> {
     root: PathBuf,
     name_stem: String,
@@ -1649,7 +1650,7 @@ pub struct PageMapLayout<Permissions: AccessPolicy> {
 
 impl<P> PageMapLayout<P>
 where
-    P: WritePolicy,
+    P: ReadPolicy + WritePolicy,
 {
     /// Remove the base file and all overlay files.
     pub fn delete_files(&self) -> Result<(), LayoutError> {
@@ -1674,7 +1675,10 @@ where
     }
 }
 
-impl<Permissions: AccessPolicy> PageMapLayout<Permissions> {
+impl<P> PageMapLayout<P>
+where
+    P: ReadPolicy,
+{
     /// List of overlay files on disk.
     ///
     /// All overlay files have the format {numbers}{name_stem}.overlay`, where `name_stem` distinguises
@@ -1682,9 +1686,9 @@ impl<Permissions: AccessPolicy> PageMapLayout<Permissions> {
     /// overlay files, with later alphabetically denoting a higher-priority overlay. The numbers are
     /// typically the height when the overlay was written and a shard number.
     ///
-    /// Note that this function returns a `LayoutError`. There is a function implementing the `StorageLayout` trait
+    /// Note that this function returns a `LayoutError`. There is a function implementing the `StorageLayoutR` trait
     /// with the same name, return a `Box<dyn Error>`. Calling `existing_overlays()` on a `PageMapLayout` will call
-    /// this function, calling it on a `dyn StorageLayout` will call the trait function. This simplifies error propagation.
+    /// this function, calling it on a `dyn StorageLayoutR` will call the trait function. This simplifies error propagation.
     pub fn existing_overlays(&self) -> Result<Vec<PathBuf>, LayoutError> {
         let map_error = |err| LayoutError::IoError {
             path: self.root.clone(),
@@ -1713,13 +1717,13 @@ impl<Permissions: AccessPolicy> PageMapLayout<Permissions> {
     /// Helper function to copy the files from `PageMapsLayout` `src` to another `PageMapLayout` `dst`.
     /// This is used in the context of canister snapshots, where files need to be copied from a canister
     /// to a snaphsot or vice versa.
-    pub fn copy_or_hardlink_files<W>(
+    pub fn copy_or_hardlink_files<RW>(
         log: &ReplicaLogger,
-        src: &PageMapLayout<Permissions>,
-        dst: &PageMapLayout<W>,
+        src: &PageMapLayout<P>,
+        dst: &PageMapLayout<RW>,
     ) -> Result<(), LayoutError>
     where
-        W: WritePolicy,
+        RW: ReadPolicy + WritePolicy,
     {
         debug_assert_eq!(src.name_stem, dst.name_stem);
 
@@ -1759,12 +1763,7 @@ impl<Permissions: AccessPolicy> PageMapLayout<Permissions> {
     }
 }
 
-impl<Permissions: AccessPolicy> StorageLayout for PageMapLayout<Permissions> {
-    // The path to the base file.
-    fn base(&self) -> PathBuf {
-        self.root.join(format!("{}.bin", self.name_stem))
-    }
-
+impl<Permissions: AccessPolicy> StorageLayoutW for PageMapLayout<Permissions> {
     /// Overlay path encoding, consistent with `overlay_height()` and `overlay_shard()`
     fn overlay(&self, height: Height, shard: Shard) -> PathBuf {
         self.root.join(format!(
@@ -1773,6 +1772,16 @@ impl<Permissions: AccessPolicy> StorageLayout for PageMapLayout<Permissions> {
             shard.get(),
             self.name_stem,
         ))
+    }
+}
+
+impl<P> StorageLayoutR for PageMapLayout<P>
+where
+    P: ReadPolicy,
+{
+    // The path to the base file.
+    fn base(&self) -> PathBuf {
+        self.root.join(format!("{}.bin", self.name_stem))
     }
 
     /// List of overlay files on disk.
@@ -1846,7 +1855,10 @@ pub struct CanisterLayout<Permissions: AccessPolicy> {
     checkpoint: Option<CheckpointLayout<Permissions>>,
 }
 
-impl<Permissions: AccessPolicy> CanisterLayout<Permissions> {
+impl<Permissions> CanisterLayout<Permissions>
+where
+    Permissions: ReadPolicy,
+{
     pub fn new(
         canister_root: PathBuf,
         checkpoint: &CheckpointLayout<Permissions>,
@@ -1937,7 +1949,10 @@ pub struct SnapshotLayout<Permissions: AccessPolicy> {
     checkpoint: Option<CheckpointLayout<Permissions>>,
 }
 
-impl<Permissions: AccessPolicy> SnapshotLayout<Permissions> {
+impl<Permissions> SnapshotLayout<Permissions>
+where
+    Permissions: ReadPolicy,
+{
     pub fn new(
         snapshot_root: PathBuf,
         checkpoint: &CheckpointLayout<Permissions>,
@@ -2019,7 +2034,7 @@ impl<Permissions: AccessPolicy> SnapshotLayout<Permissions> {
 
 impl<P> SnapshotLayout<P>
 where
-    P: WritePolicy,
+    P: ReadPolicy + WritePolicy,
 {
     /// Remove the entire directory for the snapshot.
     pub fn delete_dir(&self) -> Result<(), LayoutError> {

@@ -475,7 +475,7 @@ fn random_unique_snapshot_ids(
 
 #[test]
 fn overlay_height_test() {
-    let page_map_layout = PageMapLayout::<WriteOnly> {
+    let page_map_layout = PageMapLayout::<RwPolicy<()>> {
         root: PathBuf::new(),
         name_stem: "42".into(),
         permissions_tag: PhantomData,
@@ -495,7 +495,7 @@ fn overlay_height_test() {
         .is_err());
     // Test that parsing is consistent with encoding.
     let tmp = tmpdir("canister");
-    let canister_layout: CanisterLayout<WriteOnly> =
+    let canister_layout: CanisterLayout<RwPolicy<()>> =
         CanisterLayout::new_untracked(tmp.path().to_owned()).unwrap();
     assert_eq!(
         page_map_layout
@@ -511,7 +511,7 @@ fn overlay_height_test() {
 
 #[test]
 fn overlay_shard_test() {
-    let page_map_layout = PageMapLayout::<WriteOnly> {
+    let page_map_layout = PageMapLayout::<RwPolicy<()>> {
         root: PathBuf::new(),
         name_stem: "42".into(),
         permissions_tag: PhantomData,
@@ -533,7 +533,7 @@ fn overlay_shard_test() {
         .is_err());
     // Test that parsing is consistent with encoding.
     let tmp = tmpdir("canister");
-    let canister_layout: CanisterLayout<WriteOnly> =
+    let canister_layout: CanisterLayout<RwPolicy<()>> =
         CanisterLayout::new_untracked(tmp.path().to_owned()).unwrap();
     assert_eq!(
         page_map_layout
@@ -577,7 +577,7 @@ proptest! {
 #[test]
 fn read_back_wasm_memory_overlay_file_names(heights in random_sorted_unique_heights(10)) {
     let tmp = tmpdir("canister");
-    let canister_layout: CanisterLayout<WriteOnly> =
+    let canister_layout: CanisterLayout<RwPolicy<()>> =
         CanisterLayout::new_untracked(tmp.path().to_owned()).unwrap();
     let overlay_names: Vec<PathBuf> = heights
         .iter()
@@ -604,7 +604,7 @@ fn read_back_wasm_memory_overlay_file_names(heights in random_sorted_unique_heig
 #[test]
 fn read_back_stable_memory_overlay_file_names(heights in random_sorted_unique_heights(10)) {
     let tmp = tmpdir("canister");
-    let canister_layout: CanisterLayout<WriteOnly> =
+    let canister_layout: CanisterLayout<RwPolicy<()>> =
         CanisterLayout::new_untracked(tmp.path().to_owned()).unwrap();
     let overlay_names: Vec<PathBuf> = heights
         .iter()
@@ -631,7 +631,7 @@ fn read_back_stable_memory_overlay_file_names(heights in random_sorted_unique_he
 #[test]
 fn read_back_wasm_chunk_store_overlay_file_names(heights in random_sorted_unique_heights(10)) {
     let tmp = tmpdir("canister");
-    let canister_layout: CanisterLayout<WriteOnly> =
+    let canister_layout: CanisterLayout<RwPolicy<()>> =
         CanisterLayout::new_untracked(tmp.path().to_owned()).unwrap();
     let overlay_names: Vec<PathBuf> = heights
         .iter()
@@ -682,7 +682,7 @@ fn read_back_checkpoint_directory_names(heights in random_sorted_unique_heights(
 #[test]
 fn read_back_canister_snapshot_ids(mut snapshot_ids in random_unique_snapshot_ids(10, 10, 10)) {
     let tmp = tmpdir("checkpoint");
-    let checkpoint_layout: CheckpointLayout<WriteOnly> =
+    let checkpoint_layout: CheckpointLayout<RwPolicy<()>> =
         CheckpointLayout::new_untracked(tmp.path().to_owned(), Height::new(0)).unwrap();
     for snapshot_id in &snapshot_ids {
         checkpoint_layout.snapshot(snapshot_id).unwrap(); // Creates the directory as side effect.
@@ -697,10 +697,10 @@ fn read_back_canister_snapshot_ids(mut snapshot_ids in random_unique_snapshot_id
 #[test]
 fn can_add_and_delete_canister_snapshots(snapshot_ids in random_unique_snapshot_ids(10, 10, 10)) {
     let tmp = tmpdir("checkpoint");
-    let checkpoint_layout: CheckpointLayout<WriteOnly> =
+    let checkpoint_layout: CheckpointLayout<RwPolicy<()>> =
         CheckpointLayout::new_untracked(tmp.path().to_owned(), Height::new(0)).unwrap();
 
-    fn check_snapshot_layout(checkpoint_layout: &CheckpointLayout<WriteOnly>, expected_snapshot_ids: &[SnapshotId]) {
+    fn check_snapshot_layout(checkpoint_layout: &CheckpointLayout<RwPolicy<()>>, expected_snapshot_ids: &[SnapshotId]) {
         let actual_snapshot_ids = checkpoint_layout.snapshot_ids().unwrap();
         let mut expected_snapshot_ids = expected_snapshot_ids.to_vec();
         expected_snapshot_ids.sort();

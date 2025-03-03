@@ -14,8 +14,8 @@ use ic_replicated_state::{
 };
 use ic_replicated_state::{CheckpointLoadingMetrics, Memory};
 use ic_state_layout::{
-    error::LayoutError, AccessPolicy, CanisterLayout, CanisterSnapshotBits, CanisterStateBits,
-    CheckpointLayout, PageMapLayout, ReadOnly, SnapshotLayout,
+    error::LayoutError, CanisterLayout, CanisterSnapshotBits, CanisterStateBits, CheckpointLayout,
+    PageMapLayout, ReadOnly, ReadPolicy, SnapshotLayout,
 };
 use ic_types::batch::RawQueryStats;
 use ic_types::{CanisterTimer, Height, Time};
@@ -220,7 +220,7 @@ impl PageMapType {
         layout: &CheckpointLayout<Access>,
     ) -> Result<PageMapLayout<Access>, LayoutError>
     where
-        Access: AccessPolicy,
+        Access: ReadPolicy,
     {
         match &self {
             PageMapType::WasmMemory(id) => Ok(layout.canister(id)?.vmemory_0()),

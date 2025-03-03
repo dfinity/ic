@@ -21,7 +21,7 @@ use ic_replicated_state::{
     canister_snapshots::CanisterSnapshot,
     canister_state::{execution_state::WasmBinary, system_state::wasm_chunk_store::WasmChunkStore},
     metadata_state::ApiBoundaryNodeEntry,
-    page_map::{PageIndex, Shard, StorageLayout},
+    page_map::{PageIndex, Shard, StorageLayoutR, StorageLayoutW},
     testing::ReplicatedStateTesting,
     ExecutionState, ExportedFunctions, Memory, NetworkTopology, NumWasmPages, PageMap,
     ReplicatedState, Stream, SubnetTopology,
