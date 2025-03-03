@@ -56,7 +56,7 @@ The function `PocketIc::make_live()` also creates an HTTP gateway serving
   - and the ICP's HTTP gateway interface (as defined in the [HTTP Gateway Protocol Specification](https://internetcomputer.org/docs/references/http-gateway-protocol-spec))
 and returns its URL.
 
-**Attention**: Enabling the "live" mode makes the PocketIC instance non-deterministic! For instance, there is no way to tell in which order messages are gonna be executed.
+**Attention**: Enabling the "live" mode makes the PocketIC instance non-deterministic! For instance, there is no way to tell in which order messages are going to be executed.
 The function `PocketIc::stop_live` can be used to disable the "live" mode: it stops the HTTP gateway and the background thread ensuring progress on the PocketIC instance.
 However, the non-deterministic state changes during the "live" mode (e.g., time changes) could affect the PocketIC instance even after disabling the "live" mode.
 
