@@ -44,7 +44,7 @@ use ic_consensus_system_test_utils::{
     },
 };
 use ic_consensus_threshold_sig_system_test_utils::{
-    create_new_subnet_with_keys, make_key_ids_for_all_schemes, run_chain_key_signature_test,
+    create_new_subnet_with_keys, run_chain_key_signature_test,
 };
 use ic_management_canister_types_private::MasterPublicKeyId;
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
@@ -83,6 +83,13 @@ const NNS_NODES_LARGE: usize = 40;
 const APP_NODES_LARGE: usize = 37;
 
 pub const CHAIN_KEY_SUBNET_RECOVERY_TIMEOUT: Duration = Duration::from_secs(15 * 60);
+
+fn make_key_ids_for_all_schemes() -> Vec<MasterPublicKeyId> {
+    ic_consensus_threshold_sig_system_test_utils::make_key_ids_for_all_schemes()
+        .into_iter()
+        .filter(|key_id| key_id.is_idkg_key())
+        .collect()
+}
 
 /// Setup an IC with the given number of unassigned nodes and
 /// an app subnet with the given number of nodes
