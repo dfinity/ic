@@ -1,4 +1,5 @@
 use crate::benches_util::check_projected_instructions;
+use crate::canister_state::CanisterRandomnessGenerator;
 use crate::governance::REWARD_DISTRIBUTION_PERIOD_SECONDS;
 use crate::pb::v1::{RewardEvent, WaitForQuietState};
 use crate::test_utils::MockRandomness;
@@ -606,9 +607,10 @@ fn distribute_rewards_with_stable_neurons() -> BenchResult {
 
     let mut governance = Governance::new(
         governance_proto,
-        Box::new(MockEnvironment::new(vec![], now_seconds)),
-        Box::new(StubIcpLedger {}),
-        Box::new(StubCMC {}),
+        Arc::new(MockEnvironment::new(vec![], now_seconds)),
+        Arc::new(StubIcpLedger {}),
+        Arc::new(StubCMC {}),
+        Box::new(CanisterRandomnessGenerator::new()),
     );
 
     bench_fn(|| governance.distribute_rewards(Tokens::new(10_000_000, 0).unwrap()))

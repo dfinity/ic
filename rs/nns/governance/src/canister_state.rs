@@ -114,11 +114,6 @@ pub fn set_governance_for_tests(gov: Governance) {
     GOVERNANCE.set(gov);
 }
 
-#[cfg(test)]
-pub fn set_governance_no_validation(gov: Governance) {
-    GOVERNANCE.set(gov);
-}
-
 #[derive(Default)]
 pub struct CanisterEnv {
     #[cfg(any(test, feature = "test"))]

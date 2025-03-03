@@ -6875,6 +6875,8 @@ impl Governance {
         } else {
             let mut reward_distribution = RewardsDistribution::new();
             for (neuron_id, used_voting_rights) in voters_to_used_voting_right {
+                // TODO DO NOT MERGE - should we do this check here at all, or just defer
+                // to distribution
                 if self.neuron_store.contains(neuron_id) {
                     let reward = (used_voting_rights * total_available_e8s_equivalent_float
                         / total_voting_rights) as u64;
