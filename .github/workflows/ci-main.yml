@@ -144,7 +144,6 @@ jobs:
           BAZEL_COMMAND: >-
             test --config=ci --config=macos_ci --test_tag_filters=test_macos
           BAZEL_TARGETS: //rs/... //publish/binaries/...
-          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
       - name: Upload bazel-bep
         # runs only if previous step succeeded or failed;
         # we avoid collecting artifacts of jobs that were cancelled
