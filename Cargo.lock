@@ -12764,6 +12764,7 @@ dependencies = [
  "prost 0.13.4",
  "scoped_threadpool",
  "slog",
+ "test-strategy 0.4.0",
 ]
 
 [[package]]
