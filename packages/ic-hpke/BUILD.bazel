@@ -11,7 +11,9 @@ MACRO_DEPENDENCIES = []
 
 DEV_DEPENDENCIES = [
     # Keep sorted.
+    "@crate_index//:hex",
     "@crate_index//:rand",
+    "@crate_index//:rand_chacha",
 ]
 
 MACRO_DEV_DEPENDENCIES = []
@@ -22,7 +24,6 @@ rust_library(
     name = "ic-hpke",
     srcs = glob(["src/**/*.rs"]),
     aliases = ALIASES,
-    crate_features = ["rand"],
     crate_name = "ic_hpke",
     proc_macro_deps = MACRO_DEPENDENCIES,
     version = "0.1.0",

@@ -3,35 +3,64 @@
 
 //! Public Key Encryption Utility
 //!
-//! This crate offers functionality for encrypting messages using a public key.
-//! First a key is created using the recipients public key (and, if source
-//! authentication is being used, also the senders private key). Then the message
-//! is encrypted and authenticated using a standard cipher.
+//! This crate offers functionality for encrypting messages using a public key,
+//! with optional sender authentication.
 //!
-//! All binary strings produced by this crate include a protocol/version
+//! All binary strings produced by this crate include protocol and version
 //! identifiers, which will allow algorithm rotation in the future should this
 //! be necessary (for example to support a post quantum scheme)
 //!
-//! Two different modes are offered, namely non-authenticated and authenticated.
-//!
-//! A non-authenticated message encrypts the message to the public key, but does not
-//! provide any kind of source authentication. Thus the receiver can decrypt the message,
-//! but does not have any idea who it came from; anyone can encrypt a message to the
-//! recipients public key.
+//! Two different modes are offered, namely authenticated and non-authenticated.
 //!
 //! When sending an authenticated message, the sender also uses their private key.
 //! Decrypting the message takes as input both the recipients private key and the
 //! purported senders public key. Decryption will only succeed if the sender of that
 //! ciphertext did in fact have access to the associated private key.
 //!
-//! Both modes can make use of an associated_data parameter. The associated_data field is
+//! A non-authenticated message encrypts the message to the public key, but does not
+//! provide any kind of source authentication. Thus the receiver can decrypt the message,
+//! but does not have any idea who it came from; anyone can encrypt a message to the
+//! recipients public key.
+//!
+//! Both modes can make use of an `associated_data` parameter. The `associated_data` field is
 //! information which is not encrypted, nor is it included in the returned ciphertext
 //! blob. However it is implicitly authenticated by a successful decryption; that is, if
-//! the decrypting side uses the same associated_data parameter during decryption, then
-//! decryption will succeed and the decryptor knows that the associated_data field they
-//! used is also authentic, and is associated with the ciphertext message. If the
-//! encryptor and decryptor disagree on the associated_data field, then decryption will
-//! fail. If not needed, associated_data can be set to an empty slice.
+//! the decrypting side uses the same `associated_data` parameter during decryption, then
+//! decryption will succeed and the decryptor knows that the `associated_data` field they
+//! used is also authentic, and is associated with that ciphertext message. If the
+//! encryptor and decryptor disagree on the `associated_data` field, then decryption will
+//! fail. Commonly, the `associated_data` is used to bind additional information about the
+//! context which both the sender and receiver will know, for example a protocol identifer.
+//! If no such information is available, the associated data can be set to an empty slice.
+//!
+//! # Example (Authenticated Encryption)
+//!
+//! ```
+//! let mut rng = rand::rngs::OsRng;
+//!
+//! let a_sk = ic_hpke::PrivateKey::generate(&mut rng);
+//! let a_pk = a_sk.public_key();
+//!
+//! let b_sk = ic_hpke::PrivateKey::generate(&mut rng);
+//! let b_pk = b_sk.public_key();
+//!
+//! // We assume the two public keys can be exchanged in a trusted way beforehand
+//!
+//! let msg = b"this is only a test";
+//! let associated_data = b"example-protocol-v2-with-auth";
+//!
+//! let ctext = a_pk.encrypt(msg, associated_data, &b_sk, &mut rng).unwrap();
+//!
+//! let recovered_msg = a_sk.decrypt(&ctext, associated_data, &b_pk).unwrap();
+//! assert_eq!(recovered_msg, msg, "failed to decrypt message");
+//!
+//! // If recipient accidentally tries to decrypt without authentication, it does not work
+//! assert!(a_sk.decrypt_noauth(&ctext, associated_data).is_err());
+//! // If associated data is incorrect decryption fails
+//! assert!(a_sk.decrypt(&ctext, b"wrong-associated-data", &b_pk).is_err());
+//! // If the wrong public key is used decryption fails
+//! assert!(a_sk.decrypt(&ctext, associated_data, &a_pk).is_err());
+//! ```
 //!
 //! # Example (Non-Authenticated Encryption)
 //!
@@ -53,39 +82,10 @@
 //!
 //! // Upon receipt, decrypt the ciphertext:
 //! let recovered_msg = sk.decrypt_noauth(&ctext, associated_data).unwrap();
-//! assert_eq!(recovered_msg, msg, "decryption worked");
+//! assert_eq!(recovered_msg, msg, "failed to decrypt message");
 //!
 //! // If associated data is incorrect decryption fails
 //! assert!(sk.decrypt_noauth(&ctext, b"wrong-associated-data").is_err());
-//! ```
-//!
-//! # Example (Authenticated Encryption)
-//!
-//! ```
-//! let mut rng = rand::rngs::OsRng;
-//!
-//! let a_sk = ic_hpke::PrivateKey::generate(&mut rng);
-//! let a_pk = a_sk.public_key();
-//!
-//! let b_sk = ic_hpke::PrivateKey::generate(&mut rng);
-//! let b_pk = b_sk.public_key();
-//!
-//! // We assume the two public keys can be exchanged in a trusted way beforehand
-//!
-//! let msg = b"this is only a test";
-//! let associated_data = b"example-protocol-v2-with-auth";
-//!
-//! let ctext = a_pk.encrypt(msg, associated_data, &b_sk, &mut rng).unwrap();
-//!
-//! let recovered_msg = a_sk.decrypt(&ctext, associated_data, &b_pk).unwrap();
-//! assert_eq!(recovered_msg, msg, "decryption worked");
-//!
-//! // If recipient accidentally tries to decrypt noauth, it does not work
-//! assert!(a_sk.decrypt_noauth(&ctext, associated_data).is_err());
-//! // If associated data is incorrect decryption fails
-//! assert!(a_sk.decrypt(&ctext, b"wrong-associated-data", &b_pk).is_err());
-//! // If the wrong public key is used decryption fails
-//! assert!(a_sk.decrypt(&ctext, associated_data, &a_pk).is_err());
 //! ```
 
 use hpke::rand_core::{CryptoRng, RngCore};
@@ -115,9 +115,21 @@ const MAGIC: u64 = 0x64e4f9efb76abc01;
 // Current header is just the magic + version field
 const HEADER_SIZE: usize = 8;
 
+/*
+ * V1 KEM
+ * ========
+ *
+ * The V1 kem uses HPKE from RFC 9180 using P-384 with HKDF-SHA-384
+ * and AES-256 in GCM mode.
+ */
 type V1Kem = DhP384HkdfSha384;
 type V1Kdf = HkdfSha384;
 type V1Aead = AesGcm256;
+
+// The amount of random material which is used to derive a secret key
+//
+// RFC 9180 requires this be at least 48 bytes (for P-384), we somewhat arbitrarily use 64
+const V1_IKM_LENGTH: usize = 64;
 
 type V1PublicKey = <V1Kem as hpke::Kem>::PublicKey;
 type V1PrivateKey = <V1Kem as hpke::Kem>::PrivateKey;
@@ -125,7 +137,7 @@ type V1PrivateKey = <V1Kem as hpke::Kem>::PrivateKey;
 #[derive(Copy, Clone, Debug)]
 /// An error occured while deserializing a key
 pub enum KeyDeserializationError {
-    /// The protocol identifier/version field did not match
+    /// The protocol identifier or version field was unknown to us
     UnknownMagic,
     /// The key was of a length that is not possibly valid
     InvalidLength,
@@ -152,35 +164,47 @@ pub struct PublicKey {
 }
 
 impl PublicKey {
-    /// Encrypt a message without sender authentication
-    ///
-    /// This encrypts a message to the public key such that whoever
-    /// knows the associated private key can decrypt the message.
-    ///
-    /// The associated_data field is information which is not encrypted, nor is
-    /// it included in the returned blob. However it is implicitly authenticated
-    /// by a successful decryption; that is, if the decrypting side uses the
-    /// same associated_data parameter during decryption, then decryption will
-    /// succeed and the decryptor knows that this field is also authentic.  If
-    /// the encryptor and decryptor disagree on the associated_data field, then
-    /// decryption will fail. If not needed, associated_data can be set to an
-    /// empty slice.
-    ///
-    /// This function provides no guarantees to the recipient about who sent it;
-    /// anyone can encrypt a message with this function.
-    pub fn encrypt_noauth<R: RngCore + CryptoRng>(
-        &self,
-        msg: &[u8],
-        associated_data: &[u8],
-        rng: &mut R,
-    ) -> Result<Vec<u8>, EncryptionError> {
-        let opmode = hpke::OpModeS::<V1Kem>::Base;
-        self._v1_encrypt(&opmode, msg, associated_data, rng)
+    /// Serialize the public key to a bytestring
+    pub fn serialize(&self) -> Vec<u8> {
+        let len = <V1PublicKey as Serializable>::size();
+        let mut buf = vec![0u8; HEADER_SIZE + len];
+        buf[0..HEADER_SIZE].copy_from_slice(&MAGIC.to_be_bytes());
+        self.pk.write_exact(&mut buf[HEADER_SIZE..]);
+        buf
+    }
+
+    /// Deserialize a public key
+    pub fn deserialize(bytes: &[u8]) -> Result<Self, KeyDeserializationError> {
+        if bytes.len() < HEADER_SIZE {
+            return Err(KeyDeserializationError::InvalidLength);
+        }
+
+        let magic = u64::from_be_bytes(
+            bytes[0..HEADER_SIZE]
+                .try_into()
+                .expect("Conversion cannot fail"),
+        );
+        if magic != MAGIC {
+            return Err(KeyDeserializationError::UnknownMagic);
+        }
+
+        let len = <V1PublicKey as Serializable>::size();
+        if bytes.len() != HEADER_SIZE + len {
+            return Err(KeyDeserializationError::InvalidLength);
+        }
+
+        match V1PublicKey::from_bytes(&bytes[HEADER_SIZE..]) {
+            Ok(pk) => Ok(Self { pk }),
+            Err(_) => Err(KeyDeserializationError::InvalidKey),
+        }
     }
 
     /// Encrypt a message with sender authentication
     ///
-    /// This encrypts a message using the recipients public key
+    /// This encrypts a message using the recipients public key, and
+    /// additionally authenticates the message using the provided private key.
+    /// The decrypting side must know the recipients public key in order to
+    /// decrypt the message.
     ///
     /// This encrypts a message to the public key such that whoever
     /// knows the associated private key can decrypt the message.
@@ -194,9 +218,7 @@ impl PublicKey {
     /// decryption will fail. If not needed, associated_data can be set to an
     /// empty slice
     ///
-    /// This function also authenticates the message using the provided private key.
-    /// The decrypting side must know the recipients public key in order to decrypt
-    /// the message.
+    /// The recipient must use [`PrivateKey::decrypt`] to decrypt
     pub fn encrypt<R: RngCore + CryptoRng>(
         &self,
         msg: &[u8],
@@ -239,44 +261,38 @@ impl PublicKey {
         .map_err(|_| EncryptionError::InternalError)?;
 
         buf.extend_from_slice(&hpke_key.to_bytes());
+
         buf.extend_from_slice(&hpke_ctext);
 
         Ok(buf)
     }
 
-    /// Serialize the public key to a bytestring
-    pub fn serialize(&self) -> Vec<u8> {
-        let len = <V1PublicKey as Serializable>::size();
-        let mut buf = vec![0u8; HEADER_SIZE + len];
-        buf[0..HEADER_SIZE].copy_from_slice(&MAGIC.to_be_bytes());
-        self.pk.write_exact(&mut buf[HEADER_SIZE..]);
-        buf
-    }
-
-    /// Deserialize a public key
-    pub fn deserialize(bytes: &[u8]) -> Result<Self, KeyDeserializationError> {
-        if bytes.len() < HEADER_SIZE {
-            return Err(KeyDeserializationError::InvalidLength);
-        }
-
-        let magic = u64::from_be_bytes(
-            bytes[0..HEADER_SIZE]
-                .try_into()
-                .expect("Conversion cannot fail"),
-        );
-        if magic != MAGIC {
-            return Err(KeyDeserializationError::UnknownMagic);
-        }
-
-        let len = <V1PublicKey as Serializable>::size();
-        if bytes.len() != HEADER_SIZE + len {
-            return Err(KeyDeserializationError::InvalidLength);
-        }
-
-        match V1PublicKey::from_bytes(&bytes[HEADER_SIZE..]) {
-            Ok(pk) => Ok(Self { pk }),
-            Err(_) => Err(KeyDeserializationError::InvalidKey),
-        }
+    /// Encrypt a message without sender authentication
+    ///
+    /// This encrypts a message to the public key such that whoever
+    /// knows the associated private key can decrypt the message.
+    ///
+    /// The associated_data field is information which is not encrypted, nor is
+    /// it included in the returned blob. However it is implicitly authenticated
+    /// by a successful decryption; that is, if the decrypting side uses the
+    /// same associated_data parameter during decryption, then decryption will
+    /// succeed and the decryptor knows that this field is also authentic.  If
+    /// the encryptor and decryptor disagree on the associated_data field, then
+    /// decryption will fail. If not needed, associated_data can be set to an
+    /// empty slice.
+    ///
+    /// This function provides no guarantees to the recipient about who sent it;
+    /// anyone can encrypt a message with this function.
+    ///
+    /// The recipient must use [`PrivateKey::decrypt_noauth`] to decrypt
+    pub fn encrypt_noauth<R: RngCore + CryptoRng>(
+        &self,
+        msg: &[u8],
+        associated_data: &[u8],
+        rng: &mut R,
+    ) -> Result<Vec<u8>, EncryptionError> {
+        let opmode = hpke::OpModeS::<V1Kem>::Base;
+        self._v1_encrypt(&opmode, msg, associated_data, rng)
     }
 
     fn new(pk: V1PublicKey) -> Self {
@@ -305,22 +321,54 @@ pub struct PrivateKey {
 impl PrivateKey {
     /// Generate a new random private key
     pub fn generate<R: RngCore + CryptoRng>(rng: &mut R) -> Self {
-        let mut ikm = vec![0; 64];
+        let mut ikm = [0; V1_IKM_LENGTH];
         rng.fill_bytes(&mut ikm);
         let (sk, pk) = <V1Kem as Kem>::derive_keypair(&ikm);
         Self { sk, pk }
     }
 
-    /// Decrypt a message without sender authentication
-    ///
-    /// This is the counterpart to [`PublicKey::encrypt_noauth`]
-    pub fn decrypt_noauth(
-        &self,
-        msg: &[u8],
-        associated_data: &[u8],
-    ) -> Result<Vec<u8>, DecryptionError> {
-        let opmode = hpke::OpModeR::<V1Kem>::Base;
-        self._v1_decrypt(&opmode, msg, associated_data)
+    /// Return the associated public key
+    pub fn public_key(&self) -> PublicKey {
+        PublicKey::new(self.pk.clone())
+    }
+
+    /// Serialize this private key
+    pub fn serialize(&self) -> Vec<u8> {
+        let len = <V1PrivateKey as Serializable>::size();
+        let mut buf = vec![0u8; HEADER_SIZE + len];
+        buf[0..HEADER_SIZE].copy_from_slice(&MAGIC.to_be_bytes());
+        self.sk.write_exact(&mut buf[HEADER_SIZE..]);
+        buf
+    }
+
+    /// Deserialize a private key previously serialized with [`PrivateKey::serialize`]
+    pub fn deserialize(bytes: &[u8]) -> Result<Self, KeyDeserializationError> {
+        let len = <V1PrivateKey as Serializable>::size();
+
+        if bytes.len() < HEADER_SIZE {
+            return Err(KeyDeserializationError::InvalidLength);
+        }
+
+        let magic = u64::from_be_bytes(
+            bytes[0..HEADER_SIZE]
+                .try_into()
+                .expect("Conversion cannot fail"),
+        );
+        if magic != MAGIC {
+            return Err(KeyDeserializationError::UnknownMagic);
+        }
+
+        if bytes.len() != HEADER_SIZE + len {
+            return Err(KeyDeserializationError::InvalidLength);
+        }
+
+        match V1PrivateKey::from_bytes(&bytes[HEADER_SIZE..]) {
+            Ok(sk) => {
+                let pk = <V1Kem as Kem>::sk_to_pk(&sk);
+                Ok(Self { sk, pk })
+            }
+            Err(_) => Err(KeyDeserializationError::InvalidKey),
+        }
     }
 
     /// Decrypt a message with sender authentication
@@ -337,6 +385,26 @@ impl PrivateKey {
         sender: &PublicKey,
     ) -> Result<Vec<u8>, DecryptionError> {
         let opmode = hpke::OpModeR::<V1Kem>::Auth(sender.pk.clone());
+        self._v1_decrypt(&opmode, msg, associated_data)
+    }
+
+    /// Decrypt a message without sender authentication
+    ///
+    /// This is the counterpart to [`PublicKey::encrypt_noauth`]
+    ///
+    /// This function cannot decrypt messages sent using [`PublicKey::encrypt`]
+    ///
+    /// # Warning
+    ///
+    /// Remember that without sender authentication there is no guarantee that the message
+    /// you decrypt was sent by anyone in particular. Using this function safely requires
+    /// some out of band authentication mechanism.
+    pub fn decrypt_noauth(
+        &self,
+        msg: &[u8],
+        associated_data: &[u8],
+    ) -> Result<Vec<u8>, DecryptionError> {
+        let opmode = hpke::OpModeR::<V1Kem>::Base;
         self._v1_decrypt(&opmode, msg, associated_data)
     }
 
@@ -383,50 +451,6 @@ impl PrivateKey {
         ) {
             Ok(ptext) => Ok(ptext),
             Err(_) => Err(DecryptionError::InvalidCiphertext),
-        }
-    }
-
-    /// Return the associated public key
-    pub fn public_key(&self) -> PublicKey {
-        PublicKey::new(self.pk.clone())
-    }
-
-    /// Serialize this private key
-    pub fn serialize(&self) -> Vec<u8> {
-        let len = <V1PrivateKey as Serializable>::size();
-        let mut buf = vec![0u8; HEADER_SIZE + len];
-        buf[0..HEADER_SIZE].copy_from_slice(&MAGIC.to_be_bytes());
-        self.sk.write_exact(&mut buf[HEADER_SIZE..]);
-        buf
-    }
-
-    /// Deserialize a private key previously serialized with [`PrivateKey::serialize`]
-    pub fn deserialize(bytes: &[u8]) -> Result<Self, KeyDeserializationError> {
-        let len = <V1PrivateKey as Serializable>::size();
-
-        if bytes.len() < HEADER_SIZE {
-            return Err(KeyDeserializationError::InvalidLength);
-        }
-
-        let magic = u64::from_be_bytes(
-            bytes[0..HEADER_SIZE]
-                .try_into()
-                .expect("Conversion cannot fail"),
-        );
-        if magic != MAGIC {
-            return Err(KeyDeserializationError::UnknownMagic);
-        }
-
-        if bytes.len() != HEADER_SIZE + len {
-            return Err(KeyDeserializationError::InvalidLength);
-        }
-
-        match V1PrivateKey::from_bytes(&bytes[HEADER_SIZE..]) {
-            Ok(sk) => {
-                let pk = <V1Kem as Kem>::sk_to_pk(&sk);
-                Ok(Self { sk, pk })
-            }
-            Err(_) => Err(KeyDeserializationError::InvalidKey),
         }
     }
 }
