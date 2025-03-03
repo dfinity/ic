@@ -160,7 +160,7 @@ mod tests {
         let latest_reward_day_after_genesis = 5;
 
         let governance_proto = crate::pb::v1::Governance {
-            genesis_timestamp_seconds: 10_000,
+            genesis_timestamp_seconds,
             latest_reward_event: Some(crate::pb::v1::RewardEvent {
                 day_after_genesis: latest_reward_day_after_genesis,
                 ..Default::default()

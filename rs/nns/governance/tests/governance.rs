@@ -14447,7 +14447,6 @@ async fn distribute_rewards_test() {
     governance.latest_gc_timestamp_seconds = now;
 
     // Step 2: Run code under test.
-    let clock = std::time::Instant::now;
     governance.run_periodic_tasks().await;
     run_pending_timers_every_x_seconds(std::time::Duration::from_secs(2), 10);
 
