@@ -93,6 +93,8 @@ fn smoke_test_auth() {
         let ctext = a_pk.encrypt(&ptext, &aad, &b_sk, &mut rng).unwrap();
         let rec = a_sk.decrypt(&ctext, &aad, &b_pk).unwrap();
         assert_eq!(rec, ptext);
+
+        assert!(a_sk.decrypt_noauth(&ctext, &aad).is_err());
     }
 }
 
@@ -103,7 +105,7 @@ fn any_bit_flip_causes_rejection_noauth() {
     let a_sk = PrivateKey::generate(&mut rng);
     let a_pk = a_sk.public_key();
 
-    let ptext = rng.gen::<[u8; 16]>();
+    let ptext = rng.gen::<[u8; 16]>().to_vec();
     let aad = rng.gen::<[u8; 32]>();
 
     let mut ctext = a_pk.encrypt_noauth(&ptext, &aad, &mut rng).unwrap();
@@ -118,7 +120,7 @@ fn any_bit_flip_causes_rejection_noauth() {
         ctext[bit / 8] ^= 1 << (bit % 8);
     }
 
-    assert_eq!(a_sk.decrypt_noauth(&ctext, &aad).unwrap(), ptext);
+    assert_eq!(a_sk.decrypt_noauth(&ctext, &aad), Ok(ptext));
 }
 
 #[test]
@@ -131,7 +133,7 @@ fn any_bit_flip_causes_rejection_auth() {
     let b_sk = PrivateKey::generate(&mut rng);
     let b_pk = b_sk.public_key();
 
-    let ptext = rng.gen::<[u8; 16]>();
+    let ptext = rng.gen::<[u8; 16]>().to_vec();
     let aad = rng.gen::<[u8; 32]>();
 
     let mut ctext = a_pk.encrypt(&ptext, &aad, &b_sk, &mut rng).unwrap();
@@ -146,7 +148,7 @@ fn any_bit_flip_causes_rejection_auth() {
         ctext[bit / 8] ^= 1 << (bit % 8);
     }
 
-    assert_eq!(a_sk.decrypt(&ctext, &aad, &b_pk).unwrap(), ptext);
+    assert_eq!(a_sk.decrypt(&ctext, &aad, &b_pk), Ok(ptext));
 }
 
 #[test]
@@ -156,12 +158,12 @@ fn any_truncation_causes_rejection_noauth() {
     let a_sk = PrivateKey::generate(&mut rng);
     let a_pk = a_sk.public_key();
 
-    let ptext = rng.gen::<[u8; 16]>();
+    let ptext = rng.gen::<[u8; 16]>().to_vec();
     let aad = rng.gen::<[u8; 32]>();
 
     let mut ctext = a_pk.encrypt_noauth(&ptext, &aad, &mut rng).unwrap();
 
-    assert_eq!(a_sk.decrypt_noauth(&ctext, &aad).unwrap(), ptext);
+    assert_eq!(a_sk.decrypt_noauth(&ctext, &aad), Ok(ptext));
 
     loop {
         ctext.pop();
@@ -184,12 +186,12 @@ fn any_truncation_causes_rejection_auth() {
     let b_sk = PrivateKey::generate(&mut rng);
     let b_pk = b_sk.public_key();
 
-    let ptext = rng.gen::<[u8; 16]>();
+    let ptext = rng.gen::<[u8; 16]>().to_vec();
     let aad = rng.gen::<[u8; 32]>();
 
     let mut ctext = a_pk.encrypt(&ptext, &aad, &b_sk, &mut rng).unwrap();
 
-    assert_eq!(a_sk.decrypt(&ctext, &aad, &b_pk).unwrap(), ptext);
+    assert_eq!(a_sk.decrypt(&ctext, &aad, &b_pk), Ok(ptext));
 
     loop {
         ctext.pop();

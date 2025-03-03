@@ -169,7 +169,7 @@ macro_rules! check_header {
     }
 }
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
 /// An error occured while deserializing a key
 pub enum KeyDeserializationError {
     /// The protocol identifier or version field was unknown to us
@@ -180,7 +180,7 @@ pub enum KeyDeserializationError {
     InvalidKey,
 }
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
 /// An error occurred during encryption
 ///
 /// Logically there is no reason for encryption to fail in this
@@ -321,7 +321,7 @@ impl PublicKey {
     }
 }
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
 /// An error occured while decrypting a message
 pub enum DecryptionError {
     /// The protocol identifier/version field did not match
