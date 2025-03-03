@@ -1464,7 +1464,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.221.0",
             ),
             "wasmtime": crate.spec(
-                version = "^29.0.0",
+                version = "^30.0.2",
                 default_features = False,
                 features = [
                     "cranelift",
