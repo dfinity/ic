@@ -94,7 +94,8 @@ fn test_encode_decode_empty_controllers() {
     let canister_state_bits = default_canister_state_bits();
 
     let pb_bits = pb_canister_state_bits::CanisterStateBits::from(canister_state_bits);
-    let canister_state_bits = CanisterStateBits::try_from(pb_bits).unwrap();
+    let canister_state_bits =
+        CanisterStateBits::try_from(pb_bits, CanisterId::from_u64(1)).unwrap();
 
     // Controllers are still empty, as expected.
     assert_eq!(canister_state_bits.controllers, BTreeSet::new());
@@ -113,7 +114,8 @@ fn test_encode_decode_non_empty_controllers() {
     };
 
     let pb_bits = pb_canister_state_bits::CanisterStateBits::from(canister_state_bits);
-    let canister_state_bits = CanisterStateBits::try_from(pb_bits).unwrap();
+    let canister_state_bits =
+        CanisterStateBits::try_from(pb_bits, CanisterId::from_u64(1)).unwrap();
 
     let mut expected_controllers = BTreeSet::new();
     expected_controllers.insert(canister_test_id(0).get());
@@ -132,7 +134,8 @@ fn test_encode_decode_empty_history() {
     };
 
     let pb_bits = pb_canister_state_bits::CanisterStateBits::from(canister_state_bits);
-    let canister_state_bits = CanisterStateBits::try_from(pb_bits).unwrap();
+    let canister_state_bits =
+        CanisterStateBits::try_from(pb_bits, CanisterId::from_u64(1)).unwrap();
 
     assert_eq!(canister_state_bits.canister_history, canister_history);
 }
@@ -196,7 +199,8 @@ fn test_encode_decode_non_empty_history() {
     };
 
     let pb_bits = pb_canister_state_bits::CanisterStateBits::from(canister_state_bits);
-    let canister_state_bits = CanisterStateBits::try_from(pb_bits).unwrap();
+    let canister_state_bits =
+        CanisterStateBits::try_from(pb_bits, CanisterId::from_u64(1)).unwrap();
 
     assert_eq!(canister_state_bits.canister_history, canister_history);
 }
@@ -265,7 +269,8 @@ fn test_encode_decode_task_queue() {
         };
 
         let pb_bits = pb_canister_state_bits::CanisterStateBits::from(canister_state_bits);
-        let canister_state_bits = CanisterStateBits::try_from(pb_bits).unwrap();
+        let canister_state_bits =
+            CanisterStateBits::try_from(pb_bits, CanisterId::from_u64(1)).unwrap();
         assert_eq!(canister_state_bits.task_queue, task_queue);
     }
 }
