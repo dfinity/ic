@@ -16,7 +16,7 @@ use crate::{
             governance::{
                 self,
                 neuron_in_flight_command::{self, SyncCommand},
-                SnsMetadata, Version,
+                Mode, SnsMetadata, Version,
             },
             governance_error::ErrorType,
             manage_neuron,
@@ -135,6 +135,9 @@ pub mod native_action_ids {
     /// AdvanceSnsTargetVersion Action.
     pub const ADVANCE_SNS_TARGET_VERSION: u64 = 15;
 
+    /// SetTopicsForCustomProposals Action.
+    pub const SET_CUSTOM_TOPICS_FOR_CUSTOM_PROPOSALS_ACTION: u64 = 16;
+
     // When adding something to this list, make sure to update the below function.
     pub fn native_functions() -> Vec<NervousSystemFunction> {
         vec![
@@ -153,6 +156,7 @@ pub mod native_action_ids {
             NervousSystemFunction::manage_ledger_parameters(),
             NervousSystemFunction::manage_dapp_canister_settings(),
             NervousSystemFunction::advance_sns_target_version(),
+            NervousSystemFunction::set_topics_for_custom_proposals(),
         ]
     }
 }
@@ -274,17 +278,20 @@ impl governance::Mode {
                 );
         }
 
+        let nervous_system_function = NervousSystemFunction::from(action.clone());
+
         let is_action_disallowed = Self::functions_disallowed_in_pre_initialization_swap()
             .into_iter()
-            .any(|t| t.id == NervousSystemFunction::from(action.clone()).id);
+            .any(|t| t.id == nervous_system_function.id);
 
         if is_action_disallowed {
             Err(GovernanceError::new_with_message(
                 ErrorType::PreconditionFailed,
                 format!(
-                    "This proposal type is not allowed while governance is in \
-                     PreInitializationSwap mode: {:#?}",
-                    action,
+                    "Proposal type for {:?} is not allowed while governance is in \
+                     PreInitializationSwap ({}) mode.",
+                    nervous_system_function,
+                    Mode::PreInitializationSwap as i32,
                 ),
             ))
         } else {
@@ -483,7 +490,7 @@ impl NervousSystemParameters {
             max_dissolve_delay_bonus_percentage: Some(100),
             max_age_bonus_percentage: Some(25),
             maturity_modulation_disabled: Some(false),
-            automatically_advance_target_version: Some(false),
+            automatically_advance_target_version: Some(true),
         }
     }
 
@@ -1228,6 +1235,15 @@ impl NervousSystemFunction {
             function_type: Some(FunctionType::NativeNervousSystemFunction(Empty {})),
         }
     }
+
+    fn set_topics_for_custom_proposals() -> NervousSystemFunction {
+        NervousSystemFunction {
+            id: native_action_ids::SET_CUSTOM_TOPICS_FOR_CUSTOM_PROPOSALS_ACTION,
+            name: "Set topics for custom proposals".to_string(),
+            description: Some("Proposal to set the topics for custom SNS proposals.".to_string()),
+            function_type: Some(FunctionType::NativeNervousSystemFunction(Empty {})),
+        }
+    }
 }
 
 impl From<Action> for NervousSystemFunction {
@@ -1270,6 +1286,9 @@ impl From<Action> for NervousSystemFunction {
             }
             Action::AdvanceSnsTargetVersion(_) => {
                 NervousSystemFunction::advance_sns_target_version()
+            }
+            Action::SetTopicsForCustomProposals(_) => {
+                NervousSystemFunction::set_topics_for_custom_proposals()
             }
         }
     }
@@ -1710,9 +1729,10 @@ impl Action {
     fn proposal_criticality(&self) -> ProposalCriticality {
         use Action::*;
         match self {
-            DeregisterDappCanisters(_) | TransferSnsTreasuryFunds(_) | MintSnsTokens(_) => {
-                ProposalCriticality::Critical
-            }
+            DeregisterDappCanisters(_)
+            | TransferSnsTreasuryFunds(_)
+            | MintSnsTokens(_)
+            | SetTopicsForCustomProposals(_) => ProposalCriticality::Critical,
 
             Unspecified(_)
             | ManageNervousSystemParameters(_)
@@ -1912,6 +1932,9 @@ impl From<&Action> for u64 {
                 native_action_ids::MANAGE_DAPP_CANISTER_SETTINGS
             }
             Action::AdvanceSnsTargetVersion(_) => native_action_ids::ADVANCE_SNS_TARGET_VERSION,
+            Action::SetTopicsForCustomProposals(_) => {
+                native_action_ids::SET_CUSTOM_TOPICS_FOR_CUSTOM_PROPOSALS_ACTION
+            }
         }
     }
 }

@@ -251,50 +251,54 @@ fn induct_messages_to_self_in_stopping_status_does_not_work() {
 
 #[test]
 fn induct_messages_to_self_respects_subnet_memory_limit() {
-    let mut subnet_available_memory = 0;
+    let mut subnet_available_guaranteed_response_memory = 0;
 
     induct_messages_to_self_memory_limit_test_impl(
-        &mut subnet_available_memory,
+        &mut subnet_available_guaranteed_response_memory,
         SubnetType::Application,
         0,
         true,
     );
 
-    assert_eq!(0, subnet_available_memory);
+    assert_eq!(0, subnet_available_guaranteed_response_memory);
 }
 
 #[test]
 fn application_subnet_induct_messages_to_self_best_effort_ignores_subnet_memory_limit() {
-    let mut subnet_available_memory = 0;
+    let mut subnet_available_guaranteed_response_memory = 0;
 
     induct_messages_to_self_memory_limit_test_impl(
-        &mut subnet_available_memory,
+        &mut subnet_available_guaranteed_response_memory,
         SubnetType::Application,
         1,
         false,
     );
 
-    assert_eq!(0, subnet_available_memory);
+    assert_eq!(0, subnet_available_guaranteed_response_memory);
 }
 
 #[test]
 fn system_subnet_induct_messages_to_self_ignores_subnet_memory_limit() {
-    let mut subnet_available_memory = 0;
-    let mut expected_subnet_available_memory = subnet_available_memory;
+    let mut subnet_available_guaranteed_response_memory = 0;
+    let mut expected_subnet_available_guaranteed_response_memory =
+        subnet_available_guaranteed_response_memory;
 
     induct_messages_to_self_memory_limit_test_impl(
-        &mut subnet_available_memory,
+        &mut subnet_available_guaranteed_response_memory,
         SubnetType::System,
         0,
         false,
     );
-    expected_subnet_available_memory -= MAX_RESPONSE_COUNT_BYTES as i64;
+    expected_subnet_available_guaranteed_response_memory -= MAX_RESPONSE_COUNT_BYTES as i64;
 
-    assert_eq!(expected_subnet_available_memory, subnet_available_memory);
+    assert_eq!(
+        expected_subnet_available_guaranteed_response_memory,
+        subnet_available_guaranteed_response_memory
+    );
 }
 
 fn induct_messages_to_self_memory_limit_test_impl(
-    subnet_available_memory: &mut i64,
+    subnet_available_guaranteed_response_memory: &mut i64,
     own_subnet_type: SubnetType,
     deadline: u32,
     should_enforce_limit: bool,
@@ -331,7 +335,7 @@ fn induct_messages_to_self_memory_limit_test_impl(
 
     fixture
         .system_state
-        .induct_messages_to_self(subnet_available_memory, own_subnet_type);
+        .induct_messages_to_self(subnet_available_guaranteed_response_memory, own_subnet_type);
 
     // Expect the response and first request to have been inducted.
     assert_eq!(

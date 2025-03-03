@@ -1,6 +1,6 @@
 use async_trait::async_trait;
 use ic_base_types::NumBytes;
-use ic_interfaces::messaging::XNetPayloadBuilder;
+use ic_interfaces::messaging::{XNetPayloadBuilder, XNetPayloadValidationError};
 use ic_interfaces_certified_stream_store::{CertifiedStreamStore, DecodeStreamError};
 use ic_interfaces_certified_stream_store_mocks::MockCertifiedStreamStore;
 use ic_interfaces_registry::RegistryClient;
@@ -21,19 +21,21 @@ use ic_test_utilities_metrics::{
     HistogramStats, MetricVec,
 };
 use ic_test_utilities_registry::SubnetRecordBuilder;
-use ic_test_utilities_state::{arb_stream, arb_stream_slice};
+use ic_test_utilities_state::{arb_stream, arb_stream_slice, arb_stream_with_config};
 use ic_test_utilities_types::ids::{
     NODE_1, NODE_2, NODE_3, NODE_4, NODE_42, NODE_5, SUBNET_1, SUBNET_2, SUBNET_3, SUBNET_4,
     SUBNET_5,
 };
-use ic_types::batch::ValidationContext;
+use ic_types::batch::{ValidationContext, XNetPayload};
 use ic_types::time::UNIX_EPOCH;
-use ic_types::xnet::{CertifiedStreamSlice, StreamIndex, StreamIndexedQueue, StreamSlice};
+use ic_types::xnet::{
+    CertifiedStreamSlice, RejectReason, StreamIndex, StreamIndexedQueue, StreamSlice,
+};
 use ic_types::{CountBytes, Height, NodeId, RegistryVersion, SubnetId};
 use ic_xnet_payload_builder::certified_slice_pool::{CertifiedSlicePool, UnpackedStreamSlice};
 use ic_xnet_payload_builder::testing::*;
 use ic_xnet_payload_builder::{
-    ExpectedIndices, XNetPayloadBuilderImpl, XNetSlicePoolImpl, LABEL_STATUS,
+    ExpectedIndices, XNetPayloadBuilderImpl, XNetSlicePoolImpl, LABEL_STATUS, MAX_SIGNALS,
     METRIC_PULL_ATTEMPT_COUNT,
 };
 use maplit::btreemap;
@@ -97,36 +99,49 @@ impl XNetPayloadBuilderFixture {
         }
     }
 
-    /// Calls `get_xnet_payload()` on the wrapped `XNetPayloadBuilder` and
-    /// decodes all slices in the payload.
-    fn get_xnet_payload(&self, byte_limit: usize) -> (BTreeMap<SubnetId, StreamSlice>, NumBytes) {
-        let time = UNIX_EPOCH;
-        let validation_context = ValidationContext {
-            registry_version: REGISTRY_VERSION,
-            certified_height: self.certified_height,
-            time,
-        };
+    fn validation_context(&self) -> ValidationContext {
+        validation_context_at(self.certified_height)
+    }
 
+    /// Calls `get_xnet_payload()` on the wrapped `XNetPayloadBuilder`;
+    /// returns all slices decoded, encoded and the byte size.
+    fn get_xnet_payload(
+        &self,
+        byte_limit: usize,
+    ) -> (BTreeMap<SubnetId, StreamSlice>, XNetPayload, NumBytes) {
         let (payload, byte_size) = self.xnet_payload_builder.get_xnet_payload(
-            &validation_context,
+            &self.validation_context(),
             &[],
             (byte_limit as u64).into(),
         );
 
-        let payload = payload
+        let decoded_payload = payload
             .stream_slices
-            .into_iter()
-            .map(|(k, v)| {
+            .iter()
+            .map(|(subnet_id, certified_stream_slice)| {
                 (
-                    k,
+                    *subnet_id,
                     self.state_manager
-                        .decode_certified_stream_slice(k, REGISTRY_VERSION, &v)
+                        .decode_certified_stream_slice(
+                            *subnet_id,
+                            REGISTRY_VERSION,
+                            certified_stream_slice,
+                        )
                         .unwrap(),
                 )
             })
             .collect();
 
-        (payload, byte_size)
+        (decoded_payload, payload, byte_size)
+    }
+
+    /// Attempts to validate the provided `XNetPayload`.
+    fn validate_xnet_payload(
+        &self,
+        payload: &XNetPayload,
+    ) -> Result<NumBytes, XNetPayloadValidationError> {
+        self.xnet_payload_builder
+            .validate_xnet_payload(payload, &self.validation_context(), &[])
     }
 
     /// Pools the provided slice coming from a given subnet and returns its byte
@@ -166,6 +181,14 @@ impl XNetPayloadBuilderFixture {
     /// Fetches the `METRIC_SLICE_PAYLOAD_SIZE` histogram's stats.
     fn slice_payload_size_stats(&self) -> HistogramStats {
         fetch_histogram_stats(&self.metrics, METRIC_SLICE_PAYLOAD_SIZE).unwrap()
+    }
+}
+
+fn validation_context_at(certified_height: Height) -> ValidationContext {
+    ValidationContext {
+        registry_version: REGISTRY_VERSION,
+        certified_height,
+        time: UNIX_EPOCH,
     }
 }
 
@@ -256,6 +279,78 @@ fn out_stream(in_stream: &Stream, messages_begin: StreamIndex) -> Stream {
         StreamIndexedQueue::with_begin(in_stream.signals_end()),
         messages_begin,
     )
+}
+
+proptest! {
+    #![proptest_config(ProptestConfig::with_cases(10))]
+
+    /// Tests that the payload builder does not include messages in a stream slice that
+    /// would lead to more than `MAX_SIGNALS` amount of signals in the outgoing stream.
+    ///
+    /// The input consists of
+    /// - an outgoing stream that has already seen most of the messages coming
+    ///   from the incoming stream, i.e. it has close and up to `MAX_SIGNALS` signals.
+    /// - a very large incoming stream that has slightly more than `MAX_SIGNALS` messages in it.
+    ///
+    /// The stream slice to include in the payload will start from `out_stream.signals_end()`.
+    ///
+    /// If there is room for more signals, messages are expected to be included in the slice
+    /// such that `slice.messages_end() - in_stream.begin()` == `MAX_SIGNALS`, i.e. after inducting
+    /// the slice there would be exactly `MAX_SIGNALS` signals in the `out_stream`.
+    #[test]
+    fn get_xnet_payload_respects_signal_limit(
+        // `MAX_SIGNALS` <= signals_end()` <= `MAX_SIGNALS` + 20
+        out_stream in arb_stream_with_config(
+            0..=10, // msg_start_range
+            30..=40, // size_range
+            10..=20, // signal_start_range
+            (MAX_SIGNALS - 10)..=MAX_SIGNALS, // signal_count_range
+            RejectReason::all(),
+        ),
+        // `MAX_SIGNALS` + 20 <= `messages_end() <= `MAX_SIGNALS` + 40
+        in_stream in arb_stream_with_config(
+            0..=10, // msg_start_range
+            (MAX_SIGNALS + 20)..=(MAX_SIGNALS + 30), // size_range
+            10..=20, // signal_start_range
+            0..=10, // signal_count_range
+            RejectReason::all(),
+        ),
+    ) {
+        with_test_replica_logger(|log| {
+            let from = out_stream.signals_end();
+            let msg_count = (in_stream.messages_end() - from).get() as usize;
+            let signals_count_after_gc = (out_stream.signals_end() - in_stream.messages_begin()).get() as usize;
+
+            let mut state_manager =
+                StateManagerFixture::with_subnet_type(SubnetType::Application, log.clone());
+            state_manager = state_manager.with_stream(SUBNET_1, out_stream);
+
+            let xnet_payload_builder = XNetPayloadBuilderFixture::new(state_manager);
+            xnet_payload_builder.pool_slice(SUBNET_1, &in_stream, from, msg_count, &log);
+
+            // Build the payload without a byte limit. Messages up to the signal limit should be
+            // included.
+            let (payload, raw_payload, byte_size) = xnet_payload_builder.get_xnet_payload(usize::MAX);
+            assert_eq!(byte_size, xnet_payload_builder.validate_xnet_payload(&raw_payload).unwrap());
+
+            if signals_count_after_gc < MAX_SIGNALS {
+                let slice = payload.get(&SUBNET_1).unwrap();
+                let messages = slice.messages().unwrap();
+
+                let signals_count = messages.end().get() - in_stream.messages_begin().get();
+                assert_eq!(
+                    MAX_SIGNALS,
+                    signals_count as usize,
+                    "inducting payload would lead to signals_count > MAX_SIGNALS",
+                );
+            } else {
+                assert!(payload.len() <= 1, "at most one slice expected in the payload");
+                if let Some(slice) = payload.get(&SUBNET_1) {
+                    assert!(slice.messages().is_none(), "no messages expected in the slice");
+                }
+            }
+        });
+    }
 }
 
 proptest! {
@@ -417,7 +512,7 @@ proptest! {
             xnet_payload_builder.pool_slice(REMOTE_SUBNET, &stream, from, msg_count, &log);
 
             // Build a payload with a byte limit too small even for an empty slice.
-            let (payload, byte_size) = xnet_payload_builder.get_xnet_payload(1);
+            let (payload, _, byte_size) = xnet_payload_builder.get_xnet_payload(1);
 
             // Payload should contain no slices.
             assert!(
@@ -466,7 +561,7 @@ proptest! {
             xnet_payload_builder.pool_slice(REMOTE_SUBNET, &stream, from, 0, &log);
 
             // Build a payload.
-            let (payload, byte_size) = xnet_payload_builder
+            let (payload, _, byte_size) = xnet_payload_builder
                 .get_xnet_payload(usize::MAX);
 
             // Payload should be empty (we already have all signals in the slice).
@@ -614,12 +709,7 @@ proptest! {
             slice_bytes_sum += fixture.pool_slice(SUBNET_1, &stream1, from1, msg_count1, &log);
             slice_bytes_sum += fixture.pool_slice(SUBNET_2, &stream2, from2, msg_count2, &log);
 
-            let time = UNIX_EPOCH;
-            let validation_context = ValidationContext {
-                registry_version: REGISTRY_VERSION,
-                certified_height: fixture.certified_height,
-                time,
-            };
+            let validation_context = validation_context_at(fixture.certified_height);
 
             // Build a payload with a byte limit dictated by `size_limit_percentage`.
             let byte_size_limit = (slice_bytes_sum as u64 * size_limit_percentage / 100).into();

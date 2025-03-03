@@ -111,6 +111,7 @@ BAZEL_TARGETS=()
 
 BAZEL_COMMON_ARGS=(
     --config=local
+    --color=yes
 )
 
 if [[ $release_build == true ]]; then
