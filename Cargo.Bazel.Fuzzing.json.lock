@@ -1,5 +1,5 @@
 {
-  "checksum": "812df84858ad5683d4a6299eb82ca026561ad7ea0ead11685a602bb48161bc6b",
+  "checksum": "2f4e24feb69f1138498a5cd1a5a74e2b56e0b4175d97c03efe911b557e4c4629",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -20323,10 +20323,6 @@
             {
               "id": "macaddr 1.0.1",
               "target": "macaddr"
-            },
-            {
-              "id": "mach2 0.4.2",
-              "target": "mach2"
             },
             {
               "id": "maplit 1.0.2",
@@ -91545,7 +91541,6 @@
     "local-ip-address 0.5.6",
     "lru 0.7.8",
     "macaddr 1.0.1",
-    "mach2 0.4.2",
     "maplit 1.0.2",
     "maxminddb 0.24.0",
     "memmap2 0.9.5",

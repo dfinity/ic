@@ -3371,7 +3371,6 @@ dependencies = [
  "local-ip-address",
  "lru",
  "macaddr",
- "mach2",
  "maplit",
  "maxminddb",
  "memmap2 0.9.5",
