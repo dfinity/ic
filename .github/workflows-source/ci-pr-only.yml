@@ -159,6 +159,12 @@ jobs:
         run: |
           [ -n "${NODE_NAME:-}" ] && echo "Node: $NODE_NAME"
           ./ci/scripts/bazel-coverage.sh
-        env:
-          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      - name: Upload bazel-coverage
+        uses: actions/upload-artifact@v4
+        with:
+          name: bazel-coverage
+          retention-days: 1
+          if-no-files-found: ignore
+          compression-level: 9
+          path: |
+            cov_html.zip

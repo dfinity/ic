@@ -12,10 +12,12 @@ path = "src/lib.rs"
 
 [dependencies]
 async-trait = { workspace = true }
-ic-cdk = { workspace = true }
 candid = { workspace = true }
-serde = { workspace = true }
+ic-cdk = { workspace = true }
 ic-cdk-timers = { workspace = true }
+ic-metrics-encoder = "1.1.1"
+ic-nervous-system-time-helpers = { path = "../time_helpers" }
+serde = { workspace = true }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
 ic-config = { path = "../../config" }

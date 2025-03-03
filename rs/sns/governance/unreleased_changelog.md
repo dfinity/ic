@@ -9,7 +9,7 @@ on the process that this file is part of, see
 
 ## Added
 
-* New type of SNS proposals `SetCustomProposalTopics` can be used to batch-set topics for all custom proposals (or any non-empty subset thereof) at once.
+* New type of SNS proposals `SetTopicsForCustomProposals` can be used to batch-set topics for all custom proposals (or any non-empty subset thereof) at once.
 
     Example usage:
 
@@ -22,7 +22,7 @@ on the process that this file is part of, see
                     url = "https://forum.dfinity.org/t/sns-topics-plan";
                     title = "Set topics for custom SNS proposals";
                     action = opt variant {
-                        SetCustomProposalTopics = record {
+                        SetTopicsForCustomProposals = record {
                             custom_function_id_to_topic = vec {
                                 record {
                                     42; variant { ApplicationBusinessLogic }

@@ -3,10 +3,10 @@ use maplit::btreemap;
 use pretty_assertions::assert_eq;
 
 #[test]
-fn test_validate_and_render_set_custom_proposal_topics() {
-    for (set_custom_proposal_topics, existing_custom_functions, expected) in [
+fn test_validate_and_render_set_topics_for_custom_proposals() {
+    for (set_topics_for_custom_proposals, existing_custom_functions, expected) in [
         (
-            SetCustomProposalTopics {
+            SetTopicsForCustomProposals {
                 custom_function_id_to_topic: btreemap! {
                     111_u64 => Topic::DaoCommunitySettings as i32,
                 },
@@ -24,7 +24,7 @@ fn test_validate_and_render_set_custom_proposal_topics() {
             ),
         ),
         (
-            SetCustomProposalTopics {
+            SetTopicsForCustomProposals {
                 custom_function_id_to_topic: btreemap! {
                     222_u64 => Topic::DaoCommunitySettings as i32,
                     111_u64 => Topic::DaoCommunitySettings as i32,
@@ -49,19 +49,19 @@ fn test_validate_and_render_set_custom_proposal_topics() {
             ),
         ),
         (
-            SetCustomProposalTopics {
+            SetTopicsForCustomProposals {
                 custom_function_id_to_topic: btreemap! {},
             },
             btreemap! {
                 111 => ("AAA".to_string(), Some(Topic::Governance)),
             },
             Err::<String, String>(
-                "SetCustomProposalTopics.custom_function_id_to_topic must not be empty."
+                "SetTopicsForCustomProposals.custom_function_id_to_topic must not be empty."
                     .to_string(),
             ),
         ),
         (
-            SetCustomProposalTopics {
+            SetTopicsForCustomProposals {
                 custom_function_id_to_topic: btreemap! {
                     111_u64 => Topic::DaoCommunitySettings as i32,
                 },
@@ -77,8 +77,8 @@ fn test_validate_and_render_set_custom_proposal_topics() {
             ),
         ),
     ] {
-        let observed = validate_and_render_set_custom_proposal_topics(
-            &set_custom_proposal_topics,
+        let observed = validate_and_render_set_topics_for_custom_proposals(
+            &set_topics_for_custom_proposals,
             &existing_custom_functions,
         );
         assert_eq!(observed, expected);

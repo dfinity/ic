@@ -6271,6 +6271,7 @@ dependencies = [
  "ic-canister-log 0.2.0",
  "ic-canisters-http-types",
  "ic-cdk 0.17.1",
+ "ic-management-canister-types",
  "ic-metrics-assert",
  "ic-metrics-encoder",
  "ic-stable-structures",
@@ -7012,6 +7013,7 @@ dependencies = [
  "ic-consensus-dkg",
  "ic-consensus-mocks",
  "ic-consensus-utils",
+ "ic-consensus-vetkd",
  "ic-crypto",
  "ic-crypto-prng",
  "ic-crypto-temp-crypto",
@@ -7192,6 +7194,41 @@ dependencies = [
  "prometheus",
  "rand 0.8.5",
  "slog",
+]
+
+[[package]]
+name = "ic-consensus-vetkd"
+version = "0.9.0"
+dependencies = [
+ "assert_matches",
+ "ic-artifact-pool",
+ "ic-consensus-mocks",
+ "ic-consensus-utils",
+ "ic-crypto",
+ "ic-error-types",
+ "ic-interfaces",
+ "ic-interfaces-registry",
+ "ic-interfaces-state-manager",
+ "ic-logger",
+ "ic-management-canister-types-private",
+ "ic-metrics",
+ "ic-protobuf",
+ "ic-registry-client-fake",
+ "ic-registry-client-helpers",
+ "ic-registry-keys",
+ "ic-registry-subnet-features",
+ "ic-replicated-state",
+ "ic-test-utilities",
+ "ic-test-utilities-registry",
+ "ic-test-utilities-state",
+ "ic-test-utilities-types",
+ "ic-types",
+ "ic-types-test-utils",
+ "prometheus",
+ "prost 0.13.4",
+ "slog",
+ "strum",
+ "strum_macros",
 ]
 
 [[package]]
@@ -9845,9 +9882,9 @@ dependencies = [
 
 [[package]]
 name = "ic-management-canister-types"
-version = "0.2.0"
+version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4ce1cdd2b6df9eac37cd2dcf5d40cf9427a24aed9b0751cbe5b09ae116eb4de3"
+checksum = "1a23527ab5e2ede1aae270cdb79ef0491479c8b5c2de9fd393048ca907cac5e1"
 dependencies = [
  "candid",
  "candid_parser",
@@ -9989,6 +10026,7 @@ name = "ic-metrics-assert"
 version = "0.1.0"
 dependencies = [
  "candid",
+ "ic-management-canister-types",
  "pocket-ic",
  "regex",
  "serde",
@@ -10436,6 +10474,8 @@ dependencies = [
  "ic-cdk 0.17.1",
  "ic-cdk-timers",
  "ic-config",
+ "ic-metrics-encoder",
+ "ic-nervous-system-time-helpers",
  "ic-registry-subnet-type",
  "ic-state-machine-tests",
  "ic-types",
@@ -11770,6 +11810,7 @@ dependencies = [
  "ic-consensus-dkg",
  "ic-consensus-manager",
  "ic-consensus-utils",
+ "ic-consensus-vetkd",
  "ic-crypto-interfaces-sig-verification",
  "ic-crypto-tls-interfaces",
  "ic-cycles-account-manager",
@@ -12895,6 +12936,7 @@ dependencies = [
  "strum",
  "strum_macros",
  "tempfile",
+ "test-strategy 0.4.0",
  "tree-deserializer",
  "uuid",
 ]
@@ -14059,6 +14101,7 @@ dependencies = [
  "reqwest 0.12.12",
  "slog",
  "tempfile",
+ "test-strategy 0.4.0",
  "thiserror 2.0.11",
  "tokio",
  "url",

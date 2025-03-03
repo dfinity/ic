@@ -6,9 +6,11 @@ package(default_visibility = ["//rs/nervous_system:default_visibility"])
 
 DEPENDENCIES = [
     # Keep sorted.
+    "//rs/nervous_system/time_helpers",
     "@crate_index//:candid",
     "@crate_index//:ic-cdk",
     "@crate_index//:ic-cdk-timers",
+    "@crate_index//:ic-metrics-encoder",
     "@crate_index//:serde",
 ]
 

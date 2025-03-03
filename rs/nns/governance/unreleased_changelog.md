@@ -9,6 +9,8 @@ on the process that this file is part of, see
 
 ## Added
 
+* Collect metrics about timer tasks defined using ic_nervous_system_timer_task library.
+
 ## Changed
 
 ## Deprecated
