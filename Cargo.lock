@@ -12866,6 +12866,7 @@ dependencies = [
  "strum",
  "strum_macros",
  "tempfile",
+ "test-strategy 0.4.0",
  "tree-deserializer",
  "uuid",
 ]
