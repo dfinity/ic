@@ -49,7 +49,7 @@
 //!    }
 //!   fn initial_delay(&self) -> Duration { Duration::from_secs(0) }
 //!   
-//!   const NAME: &'static str = "SomeRecurringSyncTask";
+//!   const NAME: &'static str = "some_recurring_sync_task";
 //! }
 //!
 //!
@@ -62,7 +62,7 @@
 //!    self.state.with_borrow_mut(|state| state.do_something());
 //!   }
 //!
-//!   const NAME: &'static str = "SomePeriodicTask";
+//!   const NAME: &'static str = "some_periodic_sync_task";
 //!   const INTERVAL: Duration = Duration::from_secs(10);
 //! }
 //!
@@ -83,7 +83,7 @@
 //!
 //!   fn initial_delay(&self) -> Duration { Duration::from_secs(0) }
 //!
-//!   const NAME: &'static str = "SomeRecurringAsyncTask";
+//!   const NAME: &'static str = "some_recurring_async_task";
 //! }
 //!
 //! struct SomePeriodicAsyncTask {
@@ -96,7 +96,7 @@
 //!     self.state.with_borrow_mut(|state| state.do_something()).await;
 //!   }
 //!
-//!   const NAME: &'static str = "SomePeriodicAsyncTask";
+//!   const NAME: &'static str = "some_periodic_async_task";
 //!   const INTERVAL: Duration = Duration::from_secs(10);
 //! }
 //!
@@ -113,25 +113,39 @@
 //! }
 //! ```
 
+mod metrics;
+
+pub use metrics::MetricsRegistry as TimerTaskMetricsRegistry;
+
 use async_trait::async_trait;
 use ic_cdk::spawn;
 use ic_cdk_timers::{set_timer, set_timer_interval};
+use ic_nervous_system_time_helpers::now_seconds;
+use metrics::{with_async_metrics, with_sync_metrics, MetricsRegistryRef};
 use std::time::Duration;
 
 pub trait RecurringSyncTask: Sized + 'static {
     fn execute(self) -> (Duration, Self);
     fn initial_delay(&self) -> Duration;
 
-    fn schedule_with_delay(self, delay: Duration) {
+    fn schedule_with_delay(self, delay: Duration, metrics_registry: MetricsRegistryRef) {
         set_timer(delay, move || {
+            let instructions_before = ic_cdk::api::instruction_counter();
+
             let (new_delay, new_task) = self.execute();
-            new_task.schedule_with_delay(new_delay);
+
+            let instructions_used = ic_cdk::api::instruction_counter() - instructions_before;
+            with_sync_metrics(metrics_registry, Self::NAME, |metrics| {
+                metrics.record(instructions_used, now_seconds());
+            });
+
+            new_task.schedule_with_delay(new_delay, metrics_registry);
         });
     }
 
-    fn schedule(self) {
+    fn schedule(self, metrics_registry: MetricsRegistryRef) {
         let initial_delay = self.initial_delay();
-        self.schedule_with_delay(initial_delay);
+        self.schedule_with_delay(initial_delay, metrics_registry);
     }
 
     const NAME: &'static str;
@@ -142,18 +156,28 @@ pub trait RecurringAsyncTask: Sized + 'static {
     async fn execute(self) -> (Duration, Self);
     fn initial_delay(&self) -> Duration;
 
-    fn schedule_with_delay(self, delay: Duration) {
+    fn schedule_with_delay(self, delay: Duration, metrics_registry: MetricsRegistryRef) {
         set_timer(delay, move || {
             spawn(async move {
+                let instructions_before = ic_cdk::api::instruction_counter();
+                with_async_metrics(metrics_registry, Self::NAME, |metrics| {
+                    metrics.record_start(now_seconds());
+                });
+
                 let (new_delay, new_task) = self.execute().await;
-                new_task.schedule_with_delay(new_delay);
+
+                let instructions_used = ic_cdk::api::instruction_counter() - instructions_before;
+                with_async_metrics(metrics_registry, Self::NAME, |metrics| {
+                    metrics.record_finish(instructions_used, now_seconds());
+                });
+                new_task.schedule_with_delay(new_delay, metrics_registry);
             });
         });
     }
 
-    fn schedule(self) {
+    fn schedule(self, metrics_registry: MetricsRegistryRef) {
         let initial_delay = self.initial_delay();
-        self.schedule_with_delay(initial_delay);
+        self.schedule_with_delay(initial_delay, metrics_registry);
     }
 
     const NAME: &'static str;
@@ -163,9 +187,16 @@ pub trait PeriodicSyncTask: Copy + Sized + 'static {
     // TODO: can periodic tasks have a state that is mutable across invocations?
     fn execute(self);
 
-    fn schedule(self) {
+    fn schedule(self, metrics_registry: MetricsRegistryRef) {
         set_timer_interval(Self::INTERVAL, move || {
+            let instructions_before = ic_cdk::api::instruction_counter();
+
             self.execute();
+
+            let instructions_used = ic_cdk::api::instruction_counter() - instructions_before;
+            with_sync_metrics(metrics_registry, Self::NAME, |metrics| {
+                metrics.record(instructions_used, now_seconds());
+            });
         });
     }
 
@@ -177,10 +208,20 @@ pub trait PeriodicSyncTask: Copy + Sized + 'static {
 pub trait PeriodicAsyncTask: Copy + Sized + 'static {
     async fn execute(self);
 
-    fn schedule(self) {
+    fn schedule(self, metrics_registry: MetricsRegistryRef) {
         set_timer_interval(Self::INTERVAL, move || {
             spawn(async move {
+                let instructions_before = ic_cdk::api::instruction_counter();
+                with_async_metrics(metrics_registry, Self::NAME, |metrics| {
+                    metrics.record_start(now_seconds());
+                });
+
                 self.execute().await;
+
+                let instructions_used = ic_cdk::api::instruction_counter() - instructions_before;
+                with_async_metrics(metrics_registry, Self::NAME, |metrics| {
+                    metrics.record_finish(instructions_used, now_seconds());
+                });
             });
         });
     }
