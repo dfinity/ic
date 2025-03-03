@@ -6572,6 +6572,7 @@ dependencies = [
  "strum",
  "strum_macros",
  "tempfile",
+ "test-strategy 0.4.0",
 ]
 
 [[package]]
@@ -6589,6 +6590,7 @@ dependencies = [
  "rand 0.8.5",
  "rand_chacha 0.3.1",
  "scoped_threadpool",
+ "test-strategy 0.4.0",
  "thiserror 2.0.11",
 ]
 
