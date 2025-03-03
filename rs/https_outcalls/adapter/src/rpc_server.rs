@@ -143,20 +143,20 @@ impl CanisterHttp {
     fn compare_results(
         &self,
         result: &Result<http::Response<Incoming>, String>,
-        dl_result: &Result<http::Response<Incoming>, String>,
+        dark_launch_result: &Result<http::Response<Incoming>, String>,
     ) {
-        match (result, dl_result) {
-            (Ok(result), Ok(dl_result)) => {
+        match (result, dark_launch_result) {
+            (Ok(result), Ok(dark_launch_result)) => {
                 self.metrics
                     .socks_proxy_dl_requests
                     .with_label_values(&[LABEL_SOCKS_PROXY_OK, LABEL_SOCKS_PROXY_OK])
                     .inc();
-                if result.status() != dl_result.status() {
+                if result.status() != dark_launch_result.status() {
                     info!(
                         self.logger,
                         "SOCKS_PROXY_DL: status code mismatch: {} vs {}",
                         result.status(),
-                        dl_result.status(),
+                        dark_launch_result.status(),
                     );
                 }
             }
@@ -397,27 +397,43 @@ impl HttpsOutcallsService for CanisterHttp {
                 Err(direct_err) => {
                     self.metrics.requests_socks.inc();
 
-                    let result = self.socks_client.request(http_req_clone.clone()).await.map_err(|e| {
-                        format!("Request failed direct connect {direct_err} and connect through socks {e}")
-                    });
+                    let mut result = self
+                        .socks_client
+                        .request(http_req_clone.clone())
+                        .await
+                        .map_err(|socks_err| {
+                            format!(
+                                "Request failed direct connect {:?} and connect through socks {:?}",
+                                direct_err, socks_err
+                            )
+                        });
 
                     //TODO(SOCKS_PROXY_DL): Remove the compare_results once we are confident in the SOCKS proxy implementation.
                     if !req.socks_proxy_addrs.is_empty() {
-                        let dl_result = self.do_https_outcall_socks_proxy(req.socks_proxy_addrs, http_req_clone).await;
+                        let dark_launch_result = self
+                            .do_https_outcall_socks_proxy(req.socks_proxy_addrs, http_req_clone)
+                            .await;
 
-                        self.compare_results(&result, &dl_result);
+                        self.compare_results(&result, &dark_launch_result);
+                        if result.is_err() && dark_launch_result.is_ok() {
+                            // Id dl found something, return that.
+                            result = dark_launch_result;
+                        }
                     }
 
                     result
                 }
-                Ok(resp)=> Ok(resp),
+                Ok(resp) => Ok(resp),
             }
         } else {
             let mut http_req = hyper::Request::new(Full::new(Bytes::from(req.body)));
             *http_req.headers_mut() = headers;
             *http_req.method_mut() = method;
             *http_req.uri_mut() = uri.clone();
-            self.client.request(http_req).await.map_err(|e| format!("Failed to directly connect: {:?}", e))
+            self.client
+                .request(http_req)
+                .await
+                .map_err(|e| format!("Failed to directly connect: {:?}", e))
         }
         .map_err(|err| {
             debug!(self.logger, "Failed to connect: {}", err);
