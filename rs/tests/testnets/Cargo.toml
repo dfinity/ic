@@ -42,6 +42,10 @@ name = "single_app_large_node"
 path = "single_app_large_node.rs"
 
 [[bin]]
+name = "single_app_small_node"
+path = "single_app_small_node.rs"
+
+[[bin]]
 name = "single_large_node"
 path = "single_large_node.rs"
 

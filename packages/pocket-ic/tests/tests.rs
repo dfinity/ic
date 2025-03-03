@@ -1792,20 +1792,38 @@ fn test_canister_snapshots() {
     let reply = call_counter_canister(&pic, canister_id, "read");
     assert_eq!(reply, 2_u32.to_le_bytes().to_vec());
 
-    // We take one more snapshot: since we already have an active snapshot,
-    // taking another snapshot fails unless we specify the active snapshot to be replaced.
     pic.stop_canister(canister_id, None).unwrap();
-    pic.take_canister_snapshot(canister_id, None, None)
-        .unwrap_err();
+    // We take another snapshot replacing the first one.
     let second_snapshot = pic
         .take_canister_snapshot(canister_id, None, Some(first_snapshot.id))
         .unwrap();
     pic.start_canister(canister_id, None).unwrap();
 
-    // Finally, we delete the current snapshot which allows us to take a snapshot without specifying any snapshot to be replaced.
+    // There should only be the second snapshot in the list of canister snapshots.
+    let snapshots = pic.list_canister_snapshots(canister_id, None).unwrap();
+    assert_eq!(snapshots.len(), 1);
+    assert_eq!(snapshots[0].id, second_snapshot.id);
+    assert_eq!(snapshots[0].total_size, second_snapshot.total_size);
+    assert_eq!(
+        snapshots[0].taken_at_timestamp,
+        second_snapshot.taken_at_timestamp
+    );
+
+    // Attempt to take another snapshot without providing a replace_id. The second snapshot
+    // should be still there.
+    pic.stop_canister(canister_id, None).unwrap();
+    let third_snapshot = pic.take_canister_snapshot(canister_id, None, None).unwrap();
+    pic.start_canister(canister_id, None).unwrap();
+    let snapshots = pic.list_canister_snapshots(canister_id, None).unwrap();
+    assert_eq!(snapshots[0].id, second_snapshot.id);
+
+    // Finally, we delete the second snapshot which leaves the canister with the third snapshot
+    // only.
     pic.delete_canister_snapshot(canister_id, None, second_snapshot.id)
         .unwrap();
-    pic.take_canister_snapshot(canister_id, None, None).unwrap();
+    let snapshots = pic.list_canister_snapshots(canister_id, None).unwrap();
+    assert_eq!(snapshots.len(), 1);
+    assert_eq!(snapshots[0].id, third_snapshot.id);
 }
 
 #[test]
