@@ -120,6 +120,7 @@ pub struct BatchPayload {
     pub self_validating: SelfValidatingPayload,
     pub canister_http: Vec<u8>,
     pub query_stats: Vec<u8>,
+    pub vetkd: Vec<u8>,
 }
 
 /// Batch properties collected form the last DKG summary block.
@@ -179,6 +180,7 @@ impl BatchPayload {
             self_validating,
             canister_http,
             query_stats,
+            vetkd,
         } = &self;
 
         ingress.is_empty()
@@ -186,6 +188,7 @@ impl BatchPayload {
             && self_validating.is_empty()
             && canister_http.is_empty()
             && query_stats.is_empty()
+            && vetkd.is_empty()
     }
 }
 
@@ -306,12 +309,14 @@ mod tests {
             self_validating,
             canister_http,
             query_stats,
+            vetkd,
         } = BatchPayload::default();
 
         assert_eq!(ingress.count_bytes(), 0);
         assert_eq!(self_validating.count_bytes(), 0);
         assert_eq!(canister_http.len(), 0);
         assert_eq!(query_stats.len(), 0);
+        assert_eq!(vetkd.len(), 0);
     }
 
     /// This is a quick test to check the invariant, that the [`Default`] implementation
@@ -327,6 +332,7 @@ mod tests {
             self_validating,
             canister_http,
             query_stats,
+            vetkd,
         } = &payload;
 
         assert!(ingress.is_empty());
@@ -334,6 +340,7 @@ mod tests {
         assert!(self_validating.is_empty());
         assert!(canister_http.is_empty());
         assert!(query_stats.is_empty());
+        assert!(vetkd.is_empty());
     }
 
     #[test]

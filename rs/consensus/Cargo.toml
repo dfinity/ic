@@ -10,6 +10,7 @@ documentation.workspace = true
 ic-config = { path = "../config" }
 ic-consensus-dkg = { path = "./dkg" }
 ic-consensus-utils = { path = "./utils" }
+ic-consensus-vetkd = { path = "./vetkd" }
 ic-crypto = { path = "../crypto" }
 ic-crypto-prng = { path = "../crypto/prng" }
 ic-crypto-test-utils-canister-threshold-sigs = { path = "../crypto/test_utils/canister_threshold_sigs" }
