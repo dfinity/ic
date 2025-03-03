@@ -33,3 +33,4 @@ ic-test-utilities-tmpdir = { path = "../test_utilities/tmpdir" }
 ic-test-utilities-types = { path = "../test_utilities/types" }
 itertools = { workspace = true }
 proptest = { workspace = true }
+test-strategy = "0.4.0"

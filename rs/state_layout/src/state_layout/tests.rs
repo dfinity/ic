@@ -573,9 +573,13 @@ fn test_all_existing_pagemaps() {
     );
 }
 
-proptest! {
-#[test]
-fn read_back_wasm_memory_overlay_file_names(heights in random_sorted_unique_heights(10)) {
+#[test_strategy::proptest]
+fn read_back_wasm_memory_overlay_file_names(
+    #[strategy(random_sorted_unique_heights(
+            10, // max_length
+        ))]
+    heights: Vec<Height>,
+) {
     let tmp = tmpdir("canister");
     let canister_layout: CanisterLayout<WriteOnly> =
         CanisterLayout::new_untracked(tmp.path().to_owned()).unwrap();
@@ -591,8 +595,18 @@ fn read_back_wasm_memory_overlay_file_names(heights in random_sorted_unique_heig
 
     // Create some other files that should be ignored.
     File::create(canister_layout.raw_path().join("otherfile")).unwrap();
-    File::create(canister_layout.stable_memory().overlay(Height::new(42), Shard::new(0))).unwrap();
-    File::create(canister_layout.wasm_chunk_store().overlay(Height::new(42), Shard::new(0))).unwrap();
+    File::create(
+        canister_layout
+            .stable_memory()
+            .overlay(Height::new(42), Shard::new(0)),
+    )
+    .unwrap();
+    File::create(
+        canister_layout
+            .wasm_chunk_store()
+            .overlay(Height::new(42), Shard::new(0)),
+    )
+    .unwrap();
     File::create(canister_layout.vmemory_0().base()).unwrap();
 
     let existing_overlays = canister_layout.vmemory_0().existing_overlays().unwrap();
@@ -601,8 +615,13 @@ fn read_back_wasm_memory_overlay_file_names(heights in random_sorted_unique_heig
     prop_assert_eq!(overlay_names, existing_overlays);
 }
 
-#[test]
-fn read_back_stable_memory_overlay_file_names(heights in random_sorted_unique_heights(10)) {
+#[test_strategy::proptest]
+fn read_back_stable_memory_overlay_file_names(
+    #[strategy(random_sorted_unique_heights(
+            10, // max_length
+        ))]
+    heights: Vec<Height>,
+) {
     let tmp = tmpdir("canister");
     let canister_layout: CanisterLayout<WriteOnly> =
         CanisterLayout::new_untracked(tmp.path().to_owned()).unwrap();
@@ -618,8 +637,18 @@ fn read_back_stable_memory_overlay_file_names(heights in random_sorted_unique_he
 
     // Create some other files that should be ignored.
     File::create(canister_layout.raw_path().join("otherfile")).unwrap();
-    File::create(canister_layout.vmemory_0().overlay(Height::new(42), Shard::new(0))).unwrap();
-    File::create(canister_layout.wasm_chunk_store().overlay(Height::new(42), Shard::new(0))).unwrap();
+    File::create(
+        canister_layout
+            .vmemory_0()
+            .overlay(Height::new(42), Shard::new(0)),
+    )
+    .unwrap();
+    File::create(
+        canister_layout
+            .wasm_chunk_store()
+            .overlay(Height::new(42), Shard::new(0)),
+    )
+    .unwrap();
     File::create(canister_layout.stable_memory().base()).unwrap();
 
     let existing_overlays = canister_layout.stable_memory().existing_overlays().unwrap();
@@ -628,14 +657,23 @@ fn read_back_stable_memory_overlay_file_names(heights in random_sorted_unique_he
     prop_assert_eq!(overlay_names, existing_overlays);
 }
 
-#[test]
-fn read_back_wasm_chunk_store_overlay_file_names(heights in random_sorted_unique_heights(10)) {
+#[test_strategy::proptest]
+fn read_back_wasm_chunk_store_overlay_file_names(
+    #[strategy(random_sorted_unique_heights(
+            10, // max_length
+        ))]
+    heights: Vec<Height>,
+) {
     let tmp = tmpdir("canister");
     let canister_layout: CanisterLayout<WriteOnly> =
         CanisterLayout::new_untracked(tmp.path().to_owned()).unwrap();
     let overlay_names: Vec<PathBuf> = heights
         .iter()
-        .map(|h| canister_layout.wasm_chunk_store().overlay(*h, Shard::new(0)))
+        .map(|h| {
+            canister_layout
+                .wasm_chunk_store()
+                .overlay(*h, Shard::new(0))
+        })
         .collect();
 
     // Create the overlay files in the directory.
@@ -645,26 +683,49 @@ fn read_back_wasm_chunk_store_overlay_file_names(heights in random_sorted_unique
 
     // Create some other files that should be ignored.
     File::create(canister_layout.raw_path().join("otherfile")).unwrap();
-    File::create(canister_layout.vmemory_0().overlay(Height::new(42), Shard::new(0))).unwrap();
-    File::create(canister_layout.stable_memory().overlay(Height::new(42), Shard::new(0))).unwrap();
+    File::create(
+        canister_layout
+            .vmemory_0()
+            .overlay(Height::new(42), Shard::new(0)),
+    )
+    .unwrap();
+    File::create(
+        canister_layout
+            .stable_memory()
+            .overlay(Height::new(42), Shard::new(0)),
+    )
+    .unwrap();
     File::create(canister_layout.wasm_chunk_store().base()).unwrap();
 
-    let existing_overlays = canister_layout.wasm_chunk_store().existing_overlays().unwrap();
+    let existing_overlays = canister_layout
+        .wasm_chunk_store()
+        .existing_overlays()
+        .unwrap();
 
     // We expect the list of paths to be the same including ordering.
     prop_assert_eq!(overlay_names, existing_overlays);
 }
 
-#[test]
-fn read_back_checkpoint_directory_names(heights in random_sorted_unique_heights(10)) {
+#[test_strategy::proptest]
+fn read_back_checkpoint_directory_names(
+    #[strategy(random_sorted_unique_heights(
+            10, // max_length
+        ))]
+    heights: Vec<Height>,
+) {
     with_test_replica_logger(|log| {
         let tmp = tmpdir("state_layout");
         let metrics_registry = ic_metrics::MetricsRegistry::new();
-        let state_layout = StateLayout::try_new(log, tmp.path().to_owned(), &metrics_registry).unwrap();
+        let state_layout =
+            StateLayout::try_new(log, tmp.path().to_owned(), &metrics_registry).unwrap();
 
         let checkpoint_names: Vec<PathBuf> = heights
             .iter()
-            .map(|h| state_layout.checkpoints().join(StateLayout::checkpoint_name(*h)))
+            .map(|h| {
+                state_layout
+                    .checkpoints()
+                    .join(StateLayout::checkpoint_name(*h))
+            })
             .collect();
 
         // Create the (empty) checkpoint directories.
@@ -679,8 +740,15 @@ fn read_back_checkpoint_directory_names(heights in random_sorted_unique_heights(
     });
 }
 
-#[test]
-fn read_back_canister_snapshot_ids(mut snapshot_ids in random_unique_snapshot_ids(10, 10, 10)) {
+#[test_strategy::proptest]
+fn read_back_canister_snapshot_ids(
+    #[strategy(random_unique_snapshot_ids(
+            10, // max_length
+            10, // canister_count
+            10, // snapshots_per_canister_count
+        ))]
+    mut snapshot_ids: Vec<SnapshotId>,
+) {
     let tmp = tmpdir("checkpoint");
     let checkpoint_layout: CheckpointLayout<WriteOnly> =
         CheckpointLayout::new_untracked(tmp.path().to_owned(), Height::new(0)).unwrap();
@@ -694,36 +762,55 @@ fn read_back_canister_snapshot_ids(mut snapshot_ids in random_unique_snapshot_id
     prop_assert_eq!(snapshot_ids, actual_snapshot_ids);
 }
 
-#[test]
-fn can_add_and_delete_canister_snapshots(snapshot_ids in random_unique_snapshot_ids(10, 10, 10)) {
+#[test_strategy::proptest]
+fn can_add_and_delete_canister_snapshots(
+    #[strategy(random_unique_snapshot_ids(
+            10, // max_length
+            10, // canister_count
+            10, // snapshots_per_canister_count
+        ))]
+    snapshot_ids: Vec<SnapshotId>,
+) {
     let tmp = tmpdir("checkpoint");
     let checkpoint_layout: CheckpointLayout<WriteOnly> =
         CheckpointLayout::new_untracked(tmp.path().to_owned(), Height::new(0)).unwrap();
 
-    fn check_snapshot_layout(checkpoint_layout: &CheckpointLayout<WriteOnly>, expected_snapshot_ids: &[SnapshotId]) {
+    fn check_snapshot_layout(
+        checkpoint_layout: &CheckpointLayout<WriteOnly>,
+        expected_snapshot_ids: &[SnapshotId],
+    ) {
         let actual_snapshot_ids = checkpoint_layout.snapshot_ids().unwrap();
         let mut expected_snapshot_ids = expected_snapshot_ids.to_vec();
         expected_snapshot_ids.sort();
 
         assert_eq!(expected_snapshot_ids, actual_snapshot_ids);
 
-        let num_unique_canisters = actual_snapshot_ids.iter().map(|snapshot_id| snapshot_id.get_canister_id()).unique().count();
+        let num_unique_canisters = actual_snapshot_ids
+            .iter()
+            .map(|snapshot_id| snapshot_id.get_canister_id())
+            .unique()
+            .count();
 
-        let num_canister_directories = std::fs::read_dir(checkpoint_layout.raw_path().join(SNAPSHOTS_DIR)).unwrap().count();
+        let num_canister_directories =
+            std::fs::read_dir(checkpoint_layout.raw_path().join(SNAPSHOTS_DIR))
+                .unwrap()
+                .count();
         assert_eq!(num_unique_canisters, num_canister_directories);
     }
 
     for i in 0..snapshot_ids.len() {
         check_snapshot_layout(&checkpoint_layout, &snapshot_ids[..i]);
         checkpoint_layout.snapshot(&snapshot_ids[i]).unwrap(); // Creates the directory as side effect.
-        check_snapshot_layout(&checkpoint_layout, &snapshot_ids[..(i+1)]);
+        check_snapshot_layout(&checkpoint_layout, &snapshot_ids[..(i + 1)]);
     }
 
     for i in 0..snapshot_ids.len() {
         check_snapshot_layout(&checkpoint_layout, &snapshot_ids[i..]);
-        checkpoint_layout.snapshot(&snapshot_ids[i]).unwrap().delete_dir().unwrap();
-        check_snapshot_layout(&checkpoint_layout, &snapshot_ids[(i+1)..]);
+        checkpoint_layout
+            .snapshot(&snapshot_ids[i])
+            .unwrap()
+            .delete_dir()
+            .unwrap();
+        check_snapshot_layout(&checkpoint_layout, &snapshot_ids[(i + 1)..]);
     }
-}
-
 }

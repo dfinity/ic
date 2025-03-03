@@ -36,7 +36,10 @@ DEV_DEPENDENCIES = [
     "@crate_index//:proptest",
 ]
 
-MACRO_DEV_DEPENDENCIES = []
+MACRO_DEV_DEPENDENCIES = [
+    # Keep sorted.
+    "@crate_index//:test-strategy",
+]
 
 rust_library(
     name = "state_layout",
