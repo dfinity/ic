@@ -87,6 +87,7 @@ where
 {
     let own_subnet_id = subnet_test_id(1);
     let nns_subnet_id = subnet_test_id(2);
+    let subnet_type = exec_env.own_subnet_type();
     let hypervisor = exec_env.hypervisor_for_testing();
 
     let tmpdir = tempfile::Builder::new().prefix("test").tempdir().unwrap();
@@ -166,7 +167,7 @@ where
         memory_allocation: canister_state.memory_allocation(),
         canister_guaranteed_callback_quota: CANISTER_GUARANTEED_CALLBACK_QUOTA as u64,
         compute_allocation: canister_state.compute_allocation(),
-        subnet_type: hypervisor.subnet_type(),
+        subnet_type,
         execution_mode: ExecutionMode::Replicated,
         subnet_memory_saturation: ResourceSaturation::default(),
     };
@@ -176,7 +177,7 @@ where
         SMALL_APP_SUBNET_MAX_SIZE,
         own_subnet_id,
         nns_subnet_id,
-        hypervisor.subnet_type(),
+        subnet_type,
         subnets,
         None,
     ));
@@ -293,7 +294,6 @@ where
         config.clone(),
         &metrics_registry,
         own_subnet_id,
-        own_subnet_type,
         log.clone(),
         Arc::clone(&cycles_account_manager),
         SchedulerConfig::application_subnet().dirty_page_overhead,

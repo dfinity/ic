@@ -42,7 +42,7 @@ pub const RESERVED_SYMBOLS: [&str; 6] = [
 
 const WASM_FUNCTION_COMPLEXITY_LIMIT: Complexity = Complexity(1_000_000);
 pub const WASM_FUNCTION_SIZE_LIMIT: usize = 1_000_000;
-pub const MAX_CODE_SECTION_SIZE_IN_BYTES: u32 = 10 * 1024 * 1024;
+pub const MAX_CODE_SECTION_SIZE_IN_BYTES: u32 = 11 * 1024 * 1024;
 
 // Represents the expected function signature for any System APIs the Internet
 // Computer provides or any special exported user functions.
@@ -654,6 +654,66 @@ fn get_valid_system_apis_common(I: ValType) -> HashMap<String, HashMap<String, F
                 FunctionSignature {
                     param_types: vec![I, I, I],
                     return_type: vec![],
+                },
+            )],
+        ),
+        (
+            "cost_call",
+            vec![(
+                API_VERSION_IC0,
+                FunctionSignature {
+                    param_types: vec![ValType::I64, ValType::I64, I],
+                    return_type: vec![],
+                },
+            )],
+        ),
+        (
+            "cost_create_canister",
+            vec![(
+                API_VERSION_IC0,
+                FunctionSignature {
+                    param_types: vec![I],
+                    return_type: vec![],
+                },
+            )],
+        ),
+        (
+            "cost_http_request",
+            vec![(
+                API_VERSION_IC0,
+                FunctionSignature {
+                    param_types: vec![ValType::I64, ValType::I64, I],
+                    return_type: vec![],
+                },
+            )],
+        ),
+        (
+            "cost_sign_with_ecdsa",
+            vec![(
+                API_VERSION_IC0,
+                FunctionSignature {
+                    param_types: vec![I, I, ValType::I32, I],
+                    return_type: vec![ValType::I32],
+                },
+            )],
+        ),
+        (
+            "cost_sign_with_schnorr",
+            vec![(
+                API_VERSION_IC0,
+                FunctionSignature {
+                    param_types: vec![I, I, ValType::I32, I],
+                    return_type: vec![ValType::I32],
+                },
+            )],
+        ),
+        (
+            "cost_vetkd_derive_encrypted_key",
+            vec![(
+                API_VERSION_IC0,
+                FunctionSignature {
+                    param_types: vec![I, I, ValType::I32, I],
+                    return_type: vec![ValType::I32],
                 },
             )],
         ),

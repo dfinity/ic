@@ -18,6 +18,7 @@ use http_body_util::BodyExt;
 use hyper::{Request, StatusCode, Uri};
 use hyper_util::client::legacy::Client;
 use hyper_util::rt::{TokioExecutor, TokioTimer};
+use ic_config::message_routing::MAX_STREAM_MESSAGES;
 use ic_crypto_tls_interfaces::TlsConfig;
 use ic_interfaces::messaging::{
     InvalidXNetPayload, XNetPayloadBuilder, XNetPayloadValidationError,
@@ -224,9 +225,19 @@ impl XNetPayloadBuilderMetrics {
     }
 }
 
-// TODO(MR-636): Consider making this an argument to allow for testing without generating so many
-// messages; or else at least unify this constant and `MAX_STREAM_MESSAGES` in the stream builder.
-pub const MAX_STREAM_MESSAGES: usize = 10_000;
+/// The maximum number of signals a stream header can have before pulling messages from the reverse
+/// stream stops. This limit prevents one-sided traffic by insisting the other subnet make progress
+/// after at most `MAX_SIGNALS` have been pulled.
+///
+/// More than `MAX_STREAM_MESSAGES` doesn't make sense because an honest subnet needs to garbage
+/// collect messages before it can push more messages into a stream, which it can only do by
+/// observing the signals in the reverse direction, thus advancing its `begin` and allowing for
+/// garbage collecting the signals in turn.
+///
+/// For the case of `MAX_STREAM_MESSAGES` this acts as a dishonest subnet guard, for a smaller number
+/// it acts as an ensurance that the flow of incoming traffic and that of outgoing traffic does not
+/// diverge too far.
+pub const MAX_SIGNALS: usize = MAX_STREAM_MESSAGES;
 
 /// Implementation of `XNetPayloadBuilder` that uses a `StateManager`,
 /// `RegistryClient` and `XNetClient` to build and validate `XNetPayloads`.
@@ -530,23 +541,16 @@ impl XNetPayloadBuilderImpl {
         }
 
         if !reject_signals.is_empty() {
-            // TODO(MR-635): Change this check to use the same mechanism used for capping
-            // the number of signals in streams instead.
-            // Given the minimum message size (zero-length sender and receiver, no cycles,
-            // no payload) of 17 bytes; plus 16 bytes for `LabelTree` encoding plus label;
-            // and 16+6 bytes for a `Witness::Known` and a `Witness::Fork` node; we have
-            // a minimum of 55 bytes per encoded message.
-            //
-            // With a `TARGET_STREAM_SIZE_BYTES` of 10 MiB, that means a maximum of just
-            // over 190K messages in a stream. 200K to be conservative.
-            const MAX_STREAM_MESSAGES: u64 = 200_000;
-
-            // An honest subnet will only produce signals for the messages in the incoming
-            // stream (i.e. no signals for future messages; and all signals for past
-            // messages have been GC-ed). Meaning we can never have signals going back
-            // farther than the maximum number of messages in a stream.
+            // A stream can never have more than `MAX_SIGNALS` signals by design,
+            // since we stop pulling messages after reaching this limit. Any subnet with
+            // more than this number of signals can therefore be classified as dishonest.
+            // The factor of 2 allows for wiggle room in increasing this constant without
+            // touching this, but is still good enough as a guard against dishonest subnets.
+            // Furthermore, an honest subnet will only produce signals for the messages in
+            // the incoming stream (i.e. no signals for future messages; and all signals for
+            // past messages have been GC-ed).
             let signals_begin = reject_signals.front().unwrap();
-            if signals_end.get() - signals_begin.index.get() > MAX_STREAM_MESSAGES {
+            if signals_end.get() - signals_begin.index.get() > 2 * MAX_SIGNALS as u64 {
                 warn!(
                     self.log,
                     "Too old reject signal in stream from {}: signals_begin {}, signals_end {}",
@@ -924,13 +928,13 @@ pub fn get_msg_limit(subnet_id: SubnetId, state: &ReplicatedState) -> Option<usi
 }
 
 /// The stream index up to which messages can be inducted while limiting the
-/// number of signals in the reverse stream to `MAX_STREAM_MESSAGES`.
+/// number of signals in the reverse stream to `MAX_SIGNALS`.
 ///
 /// `stream_begin` is the `begin` in the `StreamHeader` contained in the (same) stream slice.
 ///  It reflects the status on the remote subnet as far as we know at present. Up to this index
 ///  signals can be gc'ed in the reverse stream.
 pub fn max_message_index(stream_begin: StreamIndex) -> StreamIndex {
-    stream_begin + (MAX_STREAM_MESSAGES as u64).into()
+    stream_begin + (MAX_SIGNALS as u64).into()
 }
 
 /// Resolves a stream index and byte limit to an `EndpointLocator`, consisting

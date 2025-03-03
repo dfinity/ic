@@ -22,6 +22,7 @@ impl Default for BatchBuilder {
                 randomness: Randomness::from([0; 32]),
                 chain_key_subnet_public_keys: BTreeMap::new(),
                 idkg_pre_signature_ids: BTreeMap::new(),
+                ni_dkg_ids: BTreeMap::new(),
                 registry_version: RegistryVersion::from(1),
                 time: UNIX_EPOCH,
                 consensus_responses: vec![],

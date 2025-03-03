@@ -7,6 +7,7 @@ BUILD_DEPENDENCIES = []
 LIB_DEPENDENCIES = [
     # Keep sorted.
     "//packages/ic-ed25519",
+    "//packages/ic-error-types",
     "//packages/pocket-ic:pocket-ic",
     "//rs/bitcoin/adapter",
     "//rs/boundary_node/ic_boundary",
@@ -34,7 +35,6 @@ LIB_DEPENDENCIES = [
     "//rs/state_machine_tests",
     "//rs/test_utilities",
     "//rs/test_utilities/registry",
-    "//rs/types/error_types",
     "//rs/types/management_canister_types",
     "//rs/types/types",
     "//rs/utils/thread",
@@ -72,6 +72,7 @@ LIB_DEPENDENCIES = [
     "@crate_index//:serde_cbor",
     "@crate_index//:serde_json",
     "@crate_index//:slog",
+    "@crate_index//:strum",
     "@crate_index//:tempfile",
     "@crate_index//:time",
     "@crate_index//:tokio",
@@ -158,7 +159,7 @@ rust_library(
     ]),
     crate_name = "pocket_ic_server",
     proc_macro_deps = MACRO_DEPENDENCIES,
-    version = "7.0.0",
+    version = "8.0.0",
     deps = LIB_DEPENDENCIES + [":build_script"],
 )
 

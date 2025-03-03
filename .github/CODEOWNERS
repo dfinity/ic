@@ -49,6 +49,7 @@ go_deps.bzl               @dfinity/idx
 /packages/icrc-ledger-types/            @dfinity/finint
 /packages/ic-ledger-hash-of/            @dfinity/finint
 /packages/pocket-ic/                    @dfinity/pocket-ic
+/packages/ic-error-types/               @dfinity/execution
 /packages/ic-dummy-getrandom-for-wasm/  @dfinity/crypto-team
 /packages/ic-ed25519/                   @dfinity/crypto-team
 /packages/ic-ethereum-types/            @dfinity/cross-chain-team
@@ -113,6 +114,7 @@ go_deps.bzl               @dfinity/idx
 /rs/config/                                             @dfinity/consensus
 /rs/config/src/embedders.rs                             @dfinity/execution
 /rs/config/src/execution_environment.rs                 @dfinity/execution
+/rs/config/src/message_routing.rs                       @dfinity/ic-message-routing-owners
 /rs/config/src/state_manager.rs                         @dfinity/ic-message-routing-owners
 /rs/config/src/subnet_config.rs                         @dfinity/execution
 /rs/consensus/                                          @dfinity/consensus

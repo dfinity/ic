@@ -108,9 +108,10 @@ impl RosettaRequestHandler {
                     neuron_index,
                     controller,
                 } => follow(&mut requests, arg, from, neuron_index, controller)?,
-                RequestType::RefreshVotingPower { neuron_index } => {
-                    refresh_voting_power(&mut requests, arg, from, neuron_index)?
-                }
+                RequestType::RefreshVotingPower {
+                    neuron_index,
+                    controller,
+                } => refresh_voting_power(&mut requests, arg, from, neuron_index, controller)?,
             }
         }
 
@@ -610,15 +611,26 @@ fn refresh_voting_power(
     arg: Blob,
     from: AccountIdentifier,
     neuron_index: u64,
+    controller: Option<PublicKeyOrPrincipal>,
 ) -> Result<(), ApiError> {
     let manage: ManageNeuron = candid::decode_one(arg.0.as_ref()).map_err(|e| {
         ApiError::internal_error(format!("Could not decode ManageNeuron argument: {:?}", e))
     })?;
     if let Some(Command::RefreshVotingPower(manage_neuron::RefreshVotingPower {})) = manage.command
     {
+        let pid = match controller.map(convert::principal_id_from_public_key_or_principal) {
+            None => None,
+            Some(Ok(pid)) => Some(pid),
+            _ => {
+                return Err(ApiError::invalid_request(
+                    "Invalid refresh voting power request.",
+                ));
+            }
+        };
         requests.push(Request::RefreshVotingPower(RefreshVotingPower {
             neuron_index,
             account: from,
+            controller: pid,
         }));
     } else {
         return Err(ApiError::internal_error(

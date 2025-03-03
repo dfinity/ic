@@ -220,7 +220,6 @@ fn validate_and_instrument(
         config.feature_flags.write_barrier,
         config.feature_flags.wasm_native_stable_memory,
         config.metering_type,
-        config.subnet_type,
         config.dirty_page_overhead,
         max_wasm_memory_size,
         config.max_stable_memory_size,

@@ -27,6 +27,7 @@ use ic_metrics::MetricsRegistry;
 use parking_lot::{RwLock, RwLockUpgradableReadGuard};
 use rand::{seq::SliceRandom, thread_rng};
 use std::collections::BTreeMap;
+use std::net::{Ipv4Addr, Ipv6Addr};
 use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Duration;
@@ -150,6 +151,14 @@ impl CanisterHttp {
                     .socks_proxy_dl_requests
                     .with_label_values(&[LABEL_SOCKS_PROXY_OK, LABEL_SOCKS_PROXY_OK])
                     .inc();
+                if result.status() != dl_result.status() {
+                    info!(
+                        self.logger,
+                        "SOCKS_PROXY_DL: status code mismatch: {} vs {}",
+                        result.status(),
+                        dl_result.status(),
+                    );
+                }
             }
             (Err(_), Err(_)) => {
                 self.metrics
@@ -201,6 +210,25 @@ impl CanisterHttp {
         }
     }
 
+    fn classify_uri_host(uri: &Uri) -> &str {
+        let Some(host) = uri.host() else {
+            return "empty";
+        };
+
+        if host.parse::<Ipv4Addr>().is_ok() {
+            return "v4";
+        }
+
+        if host.starts_with('[') && host.ends_with(']') {
+            let inside = &host[1..host.len() - 1];
+            if inside.parse::<Ipv6Addr>().is_ok() {
+                return "v6";
+            }
+        }
+
+        "domain_name"
+    }
+
     async fn do_https_outcall_socks_proxy(
         &self,
         socks_proxy_addrs: Vec<String>,
@@ -230,18 +258,30 @@ impl CanisterHttp {
 
             let socks_client = self.get_socks_client(socks_proxy_uri);
 
+            let url_format = Self::classify_uri_host(request.uri());
+
             match socks_client.request(request.clone()).await {
                 Ok(resp) => {
                     self.metrics
                         .socks_connection_attempts
-                        .with_label_values(&[&tries.to_string(), "success", socks_proxy_addr])
+                        .with_label_values(&[
+                            &tries.to_string(),
+                            "success",
+                            socks_proxy_addr,
+                            url_format,
+                        ])
                         .inc();
                     return Ok(resp);
                 }
                 Err(socks_err) => {
                     self.metrics
                         .socks_connection_attempts
-                        .with_label_values(&[&tries.to_string(), "failure", socks_proxy_addr])
+                        .with_label_values(&[
+                            &tries.to_string(),
+                            "failure",
+                            socks_proxy_addr,
+                            url_format,
+                        ])
                         .inc();
                     debug!(
                         self.logger,
@@ -255,7 +295,7 @@ impl CanisterHttp {
         }
 
         if let Some(last_error) = last_error {
-            Err(last_error.to_string())
+            Err(format!("{:?}", last_error))
         } else {
             Err("No SOCKS proxy addresses provided".to_string())
         }
@@ -642,5 +682,30 @@ mod tests {
         ];
         let headers = validate_headers(header_vec).unwrap();
         assert_eq!(headers.len(), 3);
+    }
+
+    #[test]
+    fn test_classify_uri_host() {
+        let ipv4_url = "http://127.0.0.1/path";
+        let ipv6_url = "http://[2001:db8::1]/path";
+        let domain_name_url = "http://example.com/something";
+        let empty_hostname_url = "/hello/world";
+
+        assert_eq!(
+            CanisterHttp::classify_uri_host(&Uri::from_str(ipv4_url).unwrap()),
+            "v4"
+        );
+        assert_eq!(
+            CanisterHttp::classify_uri_host(&Uri::from_str(ipv6_url).unwrap()),
+            "v6"
+        );
+        assert_eq!(
+            CanisterHttp::classify_uri_host(&Uri::from_str(domain_name_url).unwrap()),
+            "domain_name"
+        );
+        assert_eq!(
+            CanisterHttp::classify_uri_host(&Uri::from_str(empty_hostname_url).unwrap()),
+            "empty"
+        );
     }
 }
