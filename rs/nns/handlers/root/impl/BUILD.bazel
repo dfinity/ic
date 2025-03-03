@@ -29,7 +29,6 @@ BASE_DEPENDENCIES = [
     "//rs/registry/keys",
     "//rs/registry/routing_table",
     "//rs/registry/transport",
-    "//rs/rust_canisters/dfn_candid",
     "//rs/rust_canisters/http_types",
     "//rs/rust_canisters/on_wire",
     "//rs/types/base_types",
@@ -66,6 +65,7 @@ ALIASES = {}
 
 DEV_DEPENDENCIES = [
     # Keep sorted.
+    "//rs/rust_canisters/dfn_candid",
     "//rs/state_machine_tests",
     "@crate_index//:candid_parser",
     "@crate_index//:pretty_assertions",
