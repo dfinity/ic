@@ -145,6 +145,32 @@ fn spawn_in_canister_env(future: impl Future<Output = ()> + Sized + 'static) {
     }
 }
 
+/// Returns the number of instructions executed in the current message. Returns 0 if not running in
+/// a WASM.
+fn instruction_counter() -> u64 {
+    #[cfg(target_arch = "wasm32")]
+    {
+        ic_cdk::api::instruction_counter()
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        0
+    }
+}
+
+/// Returns the number of instructions executed in the current call context. Useful for measuring
+/// instructions across multiple messages. Returns 0 if not running in a WASM.
+fn call_context_instruction_counter() -> u64 {
+    #[cfg(target_arch = "wasm32")]
+    {
+        ic_cdk::api::call_context_instruction_counter()
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        0
+    }
+}
+
 pub(crate) mod timers {
     #[cfg(target_arch = "wasm32")]
     pub use ic_nervous_system_timers::real::{set_timer, set_timer_interval};
@@ -158,11 +184,11 @@ pub trait RecurringSyncTask: Sized + 'static {
 
     fn schedule_with_delay(self, delay: Duration, metrics_registry: MetricsRegistryRef) {
         timers::set_timer(delay, move || {
-            let instructions_before = ic_cdk::api::instruction_counter();
+            let instructions_before = instruction_counter();
 
             let (new_delay, new_task) = self.execute();
 
-            let instructions_used = ic_cdk::api::instruction_counter() - instructions_before;
+            let instructions_used = instruction_counter() - instructions_before;
             with_sync_metrics(metrics_registry, Self::NAME, |metrics| {
                 metrics.record(instructions_used, now_seconds());
             });
@@ -187,14 +213,14 @@ pub trait RecurringAsyncTask: Sized + 'static {
     fn schedule_with_delay(self, delay: Duration, metrics_registry: MetricsRegistryRef) {
         timers::set_timer(delay, move || {
             spawn_in_canister_env(async move {
-                let instructions_before = ic_cdk::api::instruction_counter();
+                let instructions_before = call_context_instruction_counter();
                 with_async_metrics(metrics_registry, Self::NAME, |metrics| {
                     metrics.record_start(now_seconds());
                 });
 
                 let (new_delay, new_task) = self.execute().await;
 
-                let instructions_used = ic_cdk::api::instruction_counter() - instructions_before;
+                let instructions_used = call_context_instruction_counter() - instructions_before;
                 with_async_metrics(metrics_registry, Self::NAME, |metrics| {
                     metrics.record_finish(instructions_used, now_seconds());
                 });
@@ -217,11 +243,11 @@ pub trait PeriodicSyncTask: Copy + Sized + 'static {
 
     fn schedule(self, metrics_registry: MetricsRegistryRef) {
         timers::set_timer_interval(Self::INTERVAL, move || {
-            let instructions_before = ic_cdk::api::instruction_counter();
+            let instructions_before = instruction_counter();
 
             self.execute();
 
-            let instructions_used = ic_cdk::api::instruction_counter() - instructions_before;
+            let instructions_used = instruction_counter() - instructions_before;
             with_sync_metrics(metrics_registry, Self::NAME, |metrics| {
                 metrics.record(instructions_used, now_seconds());
             });
@@ -239,14 +265,14 @@ pub trait PeriodicAsyncTask: Copy + Sized + 'static {
     fn schedule(self, metrics_registry: MetricsRegistryRef) {
         timers::set_timer_interval(Self::INTERVAL, move || {
             spawn_in_canister_env(async move {
-                let instructions_before = ic_cdk::api::instruction_counter();
+                let instructions_before = call_context_instruction_counter();
                 with_async_metrics(metrics_registry, Self::NAME, |metrics| {
                     metrics.record_start(now_seconds());
                 });
 
                 self.execute().await;
 
-                let instructions_used = ic_cdk::api::instruction_counter() - instructions_before;
+                let instructions_used = call_context_instruction_counter() - instructions_before;
                 with_async_metrics(metrics_registry, Self::NAME, |metrics| {
                     metrics.record_finish(instructions_used, now_seconds());
                 });
