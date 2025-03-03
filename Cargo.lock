@@ -8295,6 +8295,7 @@ dependencies = [
  "ic-crypto-tree-hash",
  "proptest 1.6.0",
  "rand 0.8.5",
+ "test-strategy 0.4.0",
  "thiserror 2.0.11",
 ]
 
