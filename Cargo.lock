@@ -8282,6 +8282,7 @@ dependencies = [
  "serde",
  "serde_bytes",
  "serde_cbor",
+ "test-strategy 0.4.0",
  "thiserror 2.0.11",
 ]
 

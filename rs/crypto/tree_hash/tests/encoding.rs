@@ -57,61 +57,76 @@ fn arbitrary_valid_cbor_encoding() -> impl Strategy<Value = Cbor> {
     )
 }
 
-proptest! {
-    #[test]
-    fn prop_tree_to_cbor_roundtrip(t in arbitrary_mixed_hash_tree()) {
-        let cbor = serde_cbor::to_vec(&t).expect("failed to encode into CBOR");
-        let decoded: MixedHashTree = serde_cbor::from_slice(&cbor[..]).expect("failed to decode CBOR");
-        assert_eq!(t, decoded);
-    }
+#[test_strategy::proptest]
+fn prop_tree_to_cbor_roundtrip(#[strategy(arbitrary_mixed_hash_tree())] t: MixedHashTree) {
+    let cbor = serde_cbor::to_vec(&t).expect("failed to encode into CBOR");
+    let decoded: MixedHashTree = serde_cbor::from_slice(&cbor[..]).expect("failed to decode CBOR");
+    assert_eq!(t, decoded);
+}
 
-    #[test]
-    fn prop_cbor_to_tree_roundtrip(v in arbitrary_valid_cbor_encoding()) {
-        let t: MixedHashTree = serde_cbor::value::from_value(v.clone()).expect("failed to decode CBOR");
-        let v_encoded = serde_cbor::value::to_value(&t).expect("failed to encode into CBOR");
-        assert_eq!(v, v_encoded);
-    }
+#[test_strategy::proptest]
+fn prop_cbor_to_tree_roundtrip(#[strategy(arbitrary_valid_cbor_encoding())] v: Cbor) {
+    let t: MixedHashTree = serde_cbor::value::from_value(v.clone()).expect("failed to decode CBOR");
+    let v_encoded = serde_cbor::value::to_value(&t).expect("failed to encode into CBOR");
+    assert_eq!(v, v_encoded);
+}
 
+#[test_strategy::proptest]
+fn prop_encoding_fails_on_invalid_cbor(#[strategy(arbitrary_invalid_cbor_encoding())] v: Cbor) {
+    let r: Result<MixedHashTree, _> = serde_cbor::value::from_value(v.clone());
 
-    #[test]
-    fn prop_encoding_fails_on_invalid_cbor(v in arbitrary_invalid_cbor_encoding()) {
+    assert!(
+        r.is_err(),
+        "Successfully parsed a MixedHashTree {:?} from invalid CBOR {:?}",
+        r.unwrap(),
+        v
+    );
+}
+
+#[test_strategy::proptest]
+fn prop_fails_on_extra_array_items(#[strategy(arbitrary_valid_cbor_encoding())] v: Cbor) {
+    use std::string::ToString;
+
+    if let Cbor::Array(mut vec) = v {
+        vec.push(Cbor::Array(vec![]));
+
+        let v = Cbor::Array(vec);
         let r: Result<MixedHashTree, _> = serde_cbor::value::from_value(v.clone());
-
-        assert!(r.is_err(), "Successfully parsed a MixedHashTree {:?} from invalid CBOR {:?}", r.unwrap(), v);
-    }
-
-    #[test]
-    fn prop_fails_on_extra_array_items(v in arbitrary_valid_cbor_encoding()) {
-        use std::string::ToString;
-
-        if let Cbor::Array(mut vec) = v {
-            vec.push(Cbor::Array(vec![]));
-
-            let v = Cbor::Array(vec);
-            let r: Result<MixedHashTree, _> = serde_cbor::value::from_value(v.clone());
-            match r {
-                Ok(_) => panic!("Successfully parsed a MixedHashTree from invalid CBOR {:?}", v),
-                Err(err) => assert!(err.to_string().contains("length"), "Expected invalid length error, got {:?}", err),
-            }
+        match r {
+            Ok(_) => panic!(
+                "Successfully parsed a MixedHashTree from invalid CBOR {:?}",
+                v
+            ),
+            Err(err) => assert!(
+                err.to_string().contains("length"),
+                "Expected invalid length error, got {:?}",
+                err
+            ),
         }
     }
+}
 
-    #[test]
-    fn prop_fails_on_missing_array_items(v in arbitrary_valid_cbor_encoding()) {
-        use std::string::ToString;
+#[test_strategy::proptest]
+fn prop_fails_on_missing_array_items(#[strategy(arbitrary_valid_cbor_encoding())] v: Cbor) {
+    use std::string::ToString;
 
-        if let Cbor::Array(mut vec) = v {
-            vec.pop();
+    if let Cbor::Array(mut vec) = v {
+        vec.pop();
 
-            let v = Cbor::Array(vec);
-            let r: Result<MixedHashTree, _> = serde_cbor::value::from_value(v.clone());
-            match r {
-                Ok(_) => panic!("Successfully parsed a MixedHashTree from invalid CBOR {:?}", v),
-                Err(err) => assert!(err.to_string().contains("length"), "Expected invalid length error, got {:?}", err),
-            }
+        let v = Cbor::Array(vec);
+        let r: Result<MixedHashTree, _> = serde_cbor::value::from_value(v.clone());
+        match r {
+            Ok(_) => panic!(
+                "Successfully parsed a MixedHashTree from invalid CBOR {:?}",
+                v
+            ),
+            Err(err) => assert!(
+                err.to_string().contains("length"),
+                "Expected invalid length error, got {:?}",
+                err
+            ),
         }
     }
-
 }
 
 #[test]
