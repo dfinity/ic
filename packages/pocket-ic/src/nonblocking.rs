@@ -7,9 +7,6 @@ use crate::common::rest::{
     RawMockCanisterHttpResponse, RawPrincipalId, RawSetStableMemory, RawStableMemory, RawSubnetId,
     RawTime, RawVerifyCanisterSigArg, SubnetId, TickConfigs, Topology,
 };
-use crate::management_canister::{
-    CanisterId, CanisterIdRecord, CanisterLogRecord, FetchCanisterLogsResult,
-};
 pub use crate::DefaultEffectiveCanisterIdError;
 use crate::{start_or_reuse_server, IngressStatusResult, PocketIcBuilder, RejectResponse};
 use backoff::backoff::Backoff;
@@ -21,8 +18,9 @@ use candid::{
 };
 use ic_certification::{Certificate, Label, LookupResult};
 use ic_management_canister_types::{
-    CanisterInstallMode, CanisterSettings, CanisterStatusResult, ChunkHash,
-    DeleteCanisterSnapshotArgs, InstallChunkedCodeArgs, InstallCodeArgs, LoadCanisterSnapshotArgs,
+    CanisterId, CanisterIdRecord, CanisterInstallMode, CanisterLogRecord, CanisterSettings,
+    CanisterStatusResult, ChunkHash, DeleteCanisterSnapshotArgs, FetchCanisterLogsResult,
+    InstallChunkedCodeArgs, InstallCodeArgs, LoadCanisterSnapshotArgs,
     ProvisionalCreateCanisterWithCyclesArgs, Snapshot, StoredChunksResult,
     TakeCanisterSnapshotArgs, UpdateSettingsArgs, UpgradeFlags as CanisterInstallModeUpgradeInner,
     UploadChunkArgs, UploadChunkResult,
