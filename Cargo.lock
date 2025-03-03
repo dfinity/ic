@@ -12838,6 +12838,7 @@ dependencies = [
  "slog",
  "slog-term",
  "tempfile",
+ "test-strategy 0.4.0",
  "tokio",
  "tokio-util",
  "tower 0.5.2",
