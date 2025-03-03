@@ -28,7 +28,7 @@ impl<Rt: Runtime> Default for CMCCanister<Rt> {
 #[async_trait]
 impl<Rt: Runtime + Send + Sync> CMC for CMCCanister<Rt> {
     /// Returns the maturity_modulation from the CMC in basis points.
-    async fn neuron_maturity_modulation(&mut self) -> Result<i32, String> {
+    async fn neuron_maturity_modulation(&self) -> Result<i32, String> {
         let result: Result<(Result<i32, String>,), (i32, String)> =
             Rt::call_with_cleanup(self.canister_id, "neuron_maturity_modulation", ()).await;
         match result {

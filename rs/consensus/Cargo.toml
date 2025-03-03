@@ -15,7 +15,7 @@ ic-crypto = { path = "../crypto" }
 ic-crypto-prng = { path = "../crypto/prng" }
 ic-crypto-test-utils-canister-threshold-sigs = { path = "../crypto/test_utils/canister_threshold_sigs" }
 ic-crypto-utils-threshold-sig-der = { path = "../crypto/utils/threshold_sig_der" }
-ic-error-types = { path = "../types/error_types" }
+ic-error-types = { path = "../../packages/ic-error-types" }
 ic-https-outcalls-consensus = { path = "../https_outcalls/consensus" }
 ic-interfaces = { path = "../interfaces" }
 ic-interfaces-registry = { path = "../interfaces/registry" }

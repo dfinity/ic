@@ -541,23 +541,16 @@ impl XNetPayloadBuilderImpl {
         }
 
         if !reject_signals.is_empty() {
-            // TODO(MR-635): Change this check to use the same mechanism used for capping
-            // the number of signals in streams instead.
-            // Given the minimum message size (zero-length sender and receiver, no cycles,
-            // no payload) of 17 bytes; plus 16 bytes for `LabelTree` encoding plus label;
-            // and 16+6 bytes for a `Witness::Known` and a `Witness::Fork` node; we have
-            // a minimum of 55 bytes per encoded message.
-            //
-            // With a `TARGET_STREAM_SIZE_BYTES` of 10 MiB, that means a maximum of just
-            // over 190K messages in a stream. 200K to be conservative.
-            const MAX_STREAM_MESSAGES: u64 = 200_000;
-
-            // An honest subnet will only produce signals for the messages in the incoming
-            // stream (i.e. no signals for future messages; and all signals for past
-            // messages have been GC-ed). Meaning we can never have signals going back
-            // farther than the maximum number of messages in a stream.
+            // A stream can never have more than `MAX_SIGNALS` signals by design,
+            // since we stop pulling messages after reaching this limit. Any subnet with
+            // more than this number of signals can therefore be classified as dishonest.
+            // The factor of 2 allows for wiggle room in increasing this constant without
+            // touching this, but is still good enough as a guard against dishonest subnets.
+            // Furthermore, an honest subnet will only produce signals for the messages in
+            // the incoming stream (i.e. no signals for future messages; and all signals for
+            // past messages have been GC-ed).
             let signals_begin = reject_signals.front().unwrap();
-            if signals_end.get() - signals_begin.index.get() > MAX_STREAM_MESSAGES {
+            if signals_end.get() - signals_begin.index.get() > 2 * MAX_SIGNALS as u64 {
                 warn!(
                     self.log,
                     "Too old reject signal in stream from {}: signals_begin {}, signals_end {}",

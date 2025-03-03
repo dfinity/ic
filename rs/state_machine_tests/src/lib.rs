@@ -2446,6 +2446,7 @@ impl StateMachine {
             randomness: Randomness::from(seed),
             chain_key_subnet_public_keys: self.chain_key_subnet_public_keys.clone(),
             idkg_pre_signature_ids: BTreeMap::new(),
+            ni_dkg_ids: BTreeMap::new(),
             registry_version: self.registry_client.get_latest_version(),
             time: time_of_next_round,
             consensus_responses: payload.consensus_responses,

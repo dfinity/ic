@@ -86,7 +86,7 @@ function afl_env() {
         AFL_DRIVER_DONT_DEFER=1 \
         AFL_EXPAND_HAVOC_NOW=1 \
         AFL_FAST_CAL=1 \
-        AFL_FORKSRV_INIT_TMOUT=100 \
+        AFL_FORKSRV_INIT_TMOUT=1000 \
         AFL_IGNORE_PROBLEMS=1 \
         AFL_IGNORE_TIMEOUTS=1 \
         AFL_KEEP_TIMEOUTS=1 \
