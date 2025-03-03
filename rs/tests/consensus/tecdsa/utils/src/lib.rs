@@ -682,7 +682,7 @@ pub async fn get_schnorr_signature_with_logger(
     Ok(signature)
 }
 
-pub async fn get_vetkd_with_logger(
+pub async fn get_schnorr_signature_with_logger(
     input: Vec<u8>,
     cycles: Cycles,
     key_id: &VetKdKeyId,
@@ -717,7 +717,7 @@ pub async fn get_vetkd_with_logger(
             Ok(reply) => {
                 let result = VetKdDeriveEncryptedKeyResult::decode(&reply)
                     .expect("failed to decode SignWithSchnorrReply")
-                    .encrypted_key;
+                    .signature;
                 break result;
             }
             Err(err) => {
