@@ -854,12 +854,12 @@ enum FakeXNetClientError {
 /// Tests refilling an empty pool.
 #[test_strategy::proptest]
 fn refill_pool_empty(
-    #[strategy((arb_stream_slice(
+    #[strategy(arb_stream_slice(
         10, // min_size
         15, // max_size
         0, // min_signal_count
         10, // max_signal_count
-    )))]
+    ))]
     test_slice: (Stream, StreamIndex, usize),
 ) {
     let (stream, from, msg_count) = test_slice;
