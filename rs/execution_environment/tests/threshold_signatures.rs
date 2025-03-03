@@ -249,7 +249,7 @@ fn test_compute_initial_idkg_dealings_sender_on_nns() {
             env.get_latest_state()
                 .metadata
                 .subnet_call_context_manager
-                .idkg_dealings_contexts
+                .reshare_chain_key_contexts
                 .len(),
             0
         );
@@ -280,7 +280,7 @@ fn test_compute_initial_idkg_dealings_sender_on_nns() {
             env.get_latest_state()
                 .metadata
                 .subnet_call_context_manager
-                .idkg_dealings_contexts
+                .reshare_chain_key_contexts
                 .len(),
             1
         );
