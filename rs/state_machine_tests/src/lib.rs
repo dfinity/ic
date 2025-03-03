@@ -843,7 +843,7 @@ pub struct StateMachine {
     pub log_level: Option<Level>,
     pub nodes: Vec<StateMachineNode>,
     pub batch_summary: Option<BatchSummary>,
-    time_source: Arc<FastForwardTimeSource>,
+    pub time_source: Arc<FastForwardTimeSource>,
     consensus_pool_cache: Arc<FakeConsensusPoolCache>,
     canister_http_pool: Arc<RwLock<CanisterHttpPoolImpl>>,
     canister_http_payload_builder: Arc<CanisterHttpPayloadBuilderImpl>,

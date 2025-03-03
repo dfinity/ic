@@ -2040,6 +2040,7 @@ impl Operation for CallRequest {
                     Arc::new(RwLock::new(PocketIngressPoolThrottler)),
                     s,
                 )
+                .with_time_source(subnet.time_source.clone())
                 .build();
 
                 // Task that waits for call service to submit the ingress message, and
@@ -2170,6 +2171,7 @@ impl Operation for QueryRequest {
                     Arc::new(OnceCell::new_with(delegation)),
                     query_handler,
                 )
+                .with_time_source(subnet.time_source.clone())
                 .build_service();
 
                 let request = axum::http::Request::builder()
@@ -2225,6 +2227,7 @@ impl Operation for CanisterReadStateRequest {
                     Arc::new(StandaloneIngressSigVerifier),
                     Arc::new(OnceCell::new_with(delegation)),
                 )
+                .with_time_source(subnet.time_source.clone())
                 .build_service();
 
                 let request = axum::http::Request::builder()
