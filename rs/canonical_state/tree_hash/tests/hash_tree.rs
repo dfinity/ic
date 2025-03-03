@@ -174,10 +174,11 @@ fn test_non_existence_proof() {
     );
 }
 
-proptest! {
-    #[test]
-    fn same_witness(t in arbitrary_labeled_tree(), seed in prop::array::uniform32(any::<u8>())) {
-        let rng = &mut ChaCha20Rng::from_seed(seed);
-        test_membership_witness(&t, rng);
-    }
+#[test_strategy::proptest]
+fn same_witness(
+    #[strategy(arbitrary_labeled_tree())] t: LabeledTree<Vec<u8>>,
+    #[strategy(prop::array::uniform32(any::<u8>()))] seed: [u8; 32],
+) {
+    let rng = &mut ChaCha20Rng::from_seed(seed);
+    test_membership_witness(&t, rng);
 }

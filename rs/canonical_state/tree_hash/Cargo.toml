@@ -21,3 +21,4 @@ ic-crypto-tree-hash-test-utils = { path = "../../crypto/tree_hash/test_utils" }
 proptest = { workspace = true }
 rand = { workspace = true }
 rand_chacha = { workspace = true }
+test-strategy = "0.4.0"
