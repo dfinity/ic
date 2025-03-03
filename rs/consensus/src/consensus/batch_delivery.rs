@@ -13,6 +13,7 @@ use ic_consensus_dkg::get_vetkey_public_keys;
 use ic_consensus_utils::{
     crypto_hashable_to_seed, membership::Membership, pool_reader::PoolReader,
 };
+use ic_consensus_vetkd::VetKdPayloadBuilderImpl;
 use ic_https_outcalls_consensus::payload_builder::CanisterHttpPayloadBuilderImpl;
 use ic_interfaces::{
     batch_payload::IntoMessages,
@@ -285,6 +286,10 @@ pub fn generate_responses_to_subnet_calls(
             CanisterHttpPayloadBuilderImpl::into_messages(&block_payload.batch.canister_http);
         consensus_responses.append(&mut http_responses);
         stats.canister_http = http_stats;
+
+        let mut vetkd_responses =
+            VetKdPayloadBuilderImpl::into_messages(&block_payload.batch.vetkd);
+        consensus_responses.append(&mut vetkd_responses);
     }
     consensus_responses
 }
