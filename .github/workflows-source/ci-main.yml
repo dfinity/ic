@@ -175,7 +175,6 @@ jobs:
             test --config=ci --config=macos_ci
             --test_tag_filters=test_macos
           BAZEL_TARGETS: //rs/... //publish/binaries/...
-          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
       - <<: *bazel-bep
       - name: Purge Bazel Output
         if: always()
