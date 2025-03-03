@@ -8691,8 +8691,10 @@ dependencies = [
 name = "ic-hpke"
 version = "0.1.0"
 dependencies = [
+ "hex",
  "hpke",
  "rand 0.8.5",
+ "rand_chacha 0.3.1",
 ]
 
 [[package]]
