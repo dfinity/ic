@@ -97,7 +97,8 @@ if [[ ! " ${bazel_args[*]} " =~ [[:space:]]--repository_cache[[:space:]] ]] && [
     bazel_args+=(--repository_cache=/cache/bazel)
 fi
 
-bazel "${bazel_args[@]}" 2>&1 | awk -v url_out="$url_out" "$stream_awk_program"
+bazel_exitcode="0"
+bazel "${bazel_args[@]}" 2>&1 | awk -v url_out="$url_out" "$stream_awk_program" || bazel_exitcode="$?"
 
 # Write the bes link & summary
 echo "Build results uploaded to $(<"$url_out")"
@@ -108,8 +109,15 @@ fi
 rm "$url_out"
 
 # List and aggregate all SHA256SUMS files.
-for shafile in $(find bazel-out/ -name SHA256SUMS); do
-    if [ -f "$shafile" ]; then
-        echo "$shafile"
-    fi
-done | xargs cat | sort | uniq >SHA256SUMS
+if [ -e ./bazel-out/ ]; then
+    for shafile in $(find bazel-out/ -name SHA256SUMS); do
+        if [ -f "$shafile" ]; then
+            echo "$shafile"
+        fi
+    done | xargs cat | sort | uniq >SHA256SUMS
+else
+    # if no bazel-out, assume no targets were built
+    touch SHA256SUMS
+fi
+
+exit "$bazel_exitcode"

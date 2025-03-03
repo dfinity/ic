@@ -117,6 +117,7 @@ use registry_canister::{
 };
 use rust_decimal::Decimal;
 use rust_decimal_macros::dec;
+use std::sync::Arc;
 use std::{
     borrow::Cow,
     cmp::{max, Ordering},
@@ -1291,16 +1292,7 @@ impl From<RngError> for GovernanceError {
     }
 }
 
-/// A general trait for the environment in which governance is running.
-#[async_trait]
-pub trait Environment: Send + Sync {
-    /// Returns the current time, in seconds since the epoch.
-    fn now(&self) -> u64;
-
-    fn set_time_warp(&mut self, _new_time_warp: TimeWarp) {
-        panic!("Not implemented.");
-    }
-
+pub trait RandomnessGenerator: Send + Sync {
     /// Returns a random number.
     ///
     /// This number is the same in all replicas.
@@ -1316,6 +1308,18 @@ pub trait Environment: Send + Sync {
 
     // Get the current RNG seed (used in pre-upgrade)
     fn get_rng_seed(&self) -> Option<[u8; 32]>;
+}
+
+/// A general trait for the environment in which governance is running.
+#[async_trait]
+pub trait Environment: Send + Sync {
+    /// Returns the current time, in seconds since the epoch.
+    fn now(&self) -> u64;
+
+    #[cfg(any(test, feature = "test"))]
+    fn set_time_warp(&self, _new_time_warp: TimeWarp) {
+        panic!("Not implemented.");
+    }
 
     /// Executes a `ExecuteNnsFunction`. The standard implementation is
     /// expected to call out to another canister and eventually report the
@@ -1420,13 +1424,16 @@ pub struct Governance {
     pub neuron_store: NeuronStore,
 
     /// Implementation of Environment to make unit testing easier.
-    pub env: Box<dyn Environment>,
+    pub env: Arc<dyn Environment>,
 
     /// Implementation of the interface with the Ledger canister.
-    ledger: Box<dyn IcpLedger>,
+    ledger: Arc<dyn IcpLedger>,
 
     /// Implementation of the interface with the CMC canister.
-    cmc: Box<dyn CMC>,
+    cmc: Arc<dyn CMC>,
+
+    /// Implementation of a randomness generator
+    randomness: Box<dyn RandomnessGenerator>,
 
     /// Timestamp, in seconds since the unix epoch, until which no proposal
     /// needs to be processed.
@@ -1599,9 +1606,10 @@ impl Governance {
     /// initialized in init. In any other case, the `Governance` object should be initialized with
     /// either `new` or `new_restored`.
     pub fn new_uninitialized(
-        env: Box<dyn Environment>,
-        ledger: Box<dyn IcpLedger>,
-        cmc: Box<dyn CMC>,
+        env: Arc<dyn Environment>,
+        ledger: Arc<dyn IcpLedger>,
+        cmc: Arc<dyn CMC>,
+        randomness: Box<dyn RandomnessGenerator>,
     ) -> Self {
         Self {
             heap_data: HeapGovernanceData::default(),
@@ -1609,6 +1617,7 @@ impl Governance {
             env,
             ledger,
             cmc,
+            randomness,
             closest_proposal_deadline_timestamp_seconds: 0,
             latest_gc_timestamp_seconds: 0,
             latest_gc_num_proposals: 0,
@@ -1622,9 +1631,10 @@ impl Governance {
     /// with its persisted state, `Governance::new_restored` should be called instead.
     pub fn new(
         mut governance_proto: GovernanceProto,
-        env: Box<dyn Environment>,
-        ledger: Box<dyn IcpLedger>,
-        cmc: Box<dyn CMC>,
+        env: Arc<dyn Environment>,
+        ledger: Arc<dyn IcpLedger>,
+        cmc: Arc<dyn CMC>,
+        randomness: Box<dyn RandomnessGenerator>,
     ) -> Self {
         // Step 1: Populate some fields governance_proto if they are blank.
 
@@ -1681,6 +1691,7 @@ impl Governance {
             env,
             ledger,
             cmc,
+            randomness,
             closest_proposal_deadline_timestamp_seconds: 0,
             latest_gc_timestamp_seconds: 0,
             latest_gc_num_proposals: 0,
@@ -1693,9 +1704,10 @@ impl Governance {
     /// Restores Governance after an upgrade from its persisted state.
     pub fn new_restored(
         governance_proto: GovernanceProto,
-        mut env: Box<dyn Environment>,
-        ledger: Box<dyn IcpLedger>,
-        cmc: Box<dyn CMC>,
+        env: Arc<dyn Environment>,
+        ledger: Arc<dyn IcpLedger>,
+        cmc: Arc<dyn CMC>,
+        mut randomness: Box<dyn RandomnessGenerator>,
     ) -> Self {
         let (heap_neurons, topic_followee_map, heap_governance_proto, maybe_rng_seed) =
             split_governance_proto(governance_proto);
@@ -1703,7 +1715,7 @@ impl Governance {
         // Carry over the previous rng seed to avoid race conditions in handling queued ingress
         // messages that may require a functioning RNG.
         if let Some(rng_seed) = maybe_rng_seed {
-            env.seed_rng(rng_seed);
+            randomness.seed_rng(rng_seed);
         }
 
         Self {
@@ -1712,6 +1724,7 @@ impl Governance {
             env,
             ledger,
             cmc,
+            randomness,
             closest_proposal_deadline_timestamp_seconds: 0,
             latest_gc_timestamp_seconds: 0,
             latest_gc_num_proposals: 0,
@@ -1727,7 +1740,7 @@ impl Governance {
         let neuron_store = std::mem::take(&mut self.neuron_store);
         let (neurons, heap_topic_followee_index) = neuron_store.take();
         let heap_governance_proto = std::mem::take(&mut self.heap_data);
-        let rng_seed = self.env.get_rng_seed();
+        let rng_seed = self.randomness.get_rng_seed();
         reassemble_governance_proto(
             neurons,
             heap_topic_followee_index,
@@ -1740,13 +1753,17 @@ impl Governance {
         let neurons = self.neuron_store.__get_neurons_for_tests();
         let heap_topic_followee_index = self.neuron_store.clone_topic_followee_index();
         let heap_governance_proto = self.heap_data.clone();
-        let rng_seed = self.env.get_rng_seed();
+        let rng_seed = self.randomness.get_rng_seed();
         reassemble_governance_proto(
             neurons,
             heap_topic_followee_index,
             heap_governance_proto,
             rng_seed,
         )
+    }
+
+    pub fn seed_rng(&mut self, seed: [u8; 32]) {
+        self.randomness.seed_rng(seed);
     }
 
     /// Validates that the underlying protobuf is well formed.
@@ -1783,6 +1800,7 @@ impl Governance {
         Ok(())
     }
 
+    #[cfg(any(test, feature = "test"))]
     pub fn set_time_warp(&mut self, new_time_warp: TimeWarp) {
         // This is not very DRY, because we have to keep a couple copies of TimeWarp in sync.
         // However, trying to share one copy of TimeWarp seems difficult. Seems like you would have
@@ -2598,11 +2616,11 @@ impl Governance {
         }
 
         let created_timestamp_seconds = self.env.now();
-        let child_nid = self.neuron_store.new_neuron_id(&mut *self.env)?;
+        let child_nid = self.neuron_store.new_neuron_id(&mut *self.randomness)?;
 
         let from_subaccount = parent_neuron.subaccount();
 
-        let to_subaccount = Subaccount(self.env.random_byte_array()?);
+        let to_subaccount = Subaccount(self.randomness.random_byte_array()?);
 
         // Make sure there isn't already a neuron with the same sub-account.
         if self.neuron_store.has_neuron_with_subaccount(to_subaccount) {
@@ -3036,11 +3054,11 @@ impl Governance {
             ));
         }
 
-        let child_nid = self.neuron_store.new_neuron_id(&mut *self.env)?;
+        let child_nid = self.neuron_store.new_neuron_id(&mut *self.randomness)?;
 
         // use provided sub-account if any, otherwise generate a random one.
         let to_subaccount = match spawn.nonce {
-            None => Subaccount(self.env.random_byte_array()?),
+            None => Subaccount(self.randomness.random_byte_array()?),
             Some(nonce_val) => {
                 ledger::compute_neuron_staking_subaccount(child_controller, nonce_val)
             }
@@ -3318,7 +3336,7 @@ impl Governance {
             )
         })?;
 
-        let child_nid = self.neuron_store.new_neuron_id(&mut *self.env)?;
+        let child_nid = self.neuron_store.new_neuron_id(&mut *self.randomness)?;
         let from_subaccount = parent_neuron.subaccount();
 
         // The account is derived from the new owner's principal so it can be found by
@@ -4050,7 +4068,7 @@ impl Governance {
                 "Reward node provider proposal must have a reward mode.",
             )),
             Some(RewardMode::RewardToNeuron(reward_to_neuron)) => {
-                let to_subaccount = Subaccount(self.env.random_byte_array()?);
+                let to_subaccount = Subaccount(self.randomness.random_byte_array()?);
                 let _block_height = self
                     .ledger
                     .transfer_funds(
@@ -4061,7 +4079,7 @@ impl Governance {
                         now,
                     )
                     .await?;
-                let nid = self.neuron_store.new_neuron_id(&mut *self.env)?;
+                let nid = self.neuron_store.new_neuron_id(&mut *self.randomness)?;
                 let dissolve_delay_seconds = std::cmp::min(
                     reward_to_neuron.dissolve_delay_seconds,
                     MAX_DISSOLVE_DELAY_SECONDS,
@@ -4798,7 +4816,7 @@ impl Governance {
         // Do NOT return Err right away using the ? operator, because we must refund maturity to the
         // Neurons' Fund before returning.
         let mut deploy_new_sns_response: Result<DeployNewSnsResponse, GovernanceError> =
-            call_deploy_new_sns(&mut self.env, sns_init_payload).await;
+            call_deploy_new_sns(&self.env, sns_init_payload).await;
 
         // Step 3: React to response from deploy_new_sns (Ok or Err).
 
@@ -6060,7 +6078,7 @@ impl Governance {
         controller: PrincipalId,
         claim_or_refresh: &ClaimOrRefresh,
     ) -> Result<NeuronId, GovernanceError> {
-        let nid = self.neuron_store.new_neuron_id(&mut *self.env)?;
+        let nid = self.neuron_store.new_neuron_id(&mut *self.randomness)?;
         let now = self.env.now();
         let neuron = NeuronBuilder::new(
             nid,
@@ -6314,6 +6332,10 @@ impl Governance {
             Some(Command::RefreshVotingPower(_)) => self
                 .refresh_voting_power(&id, caller)
                 .map(ManageNeuronResponse::refresh_voting_power_response),
+            Some(Command::DisburseMaturity(_)) => Err(GovernanceError::new_with_message(
+                ErrorType::Unavailable,
+                "Disbursing maturity is not implemented yet.",
+            )),
             None => panic!(),
         }
     }
@@ -6540,30 +6562,11 @@ impl Governance {
         xdr_permyriad_per_icp / dec!(10_000)
     }
 
-    /// When a neuron is finally dissolved, if there is any staked maturity it is moved to regular maturity
-    /// which can be spawned (and is modulated).
+    /// Unstakes the maturity of neurons that have dissolved.
     pub fn unstake_maturity_of_dissolved_neurons(&mut self) {
         let now_seconds = self.env.now();
-        // Filter all the neurons that are currently in "dissolved" state and have some staked maturity.
-        // No neuron in stable storage should have staked maturity.
-        for neuron_id in self
-            .neuron_store
-            .list_neurons_ready_to_unstake_maturity(now_seconds)
-        {
-            let unstake_result = self
-                .neuron_store
-                .with_neuron_mut(&neuron_id, |neuron| neuron.unstake_maturity(now_seconds));
-
-            match unstake_result {
-                Ok(_) => {}
-                Err(e) => {
-                    println!(
-                        "{}Error in heartbeat when moving staked maturity for neuron {:?}: {:?}",
-                        LOG_PREFIX, neuron_id, e
-                    );
-                }
-            };
-        }
+        self.neuron_store
+            .unstake_maturity_of_dissolved_neurons(now_seconds);
     }
 
     fn can_spawn_neurons(&self) -> bool {
@@ -7154,7 +7157,7 @@ impl Governance {
             )
         })?;
         if let Err(err_msg) =
-            is_canister_id_valid_swap_canister_id(target_canister_id, &mut *self.env).await
+            is_canister_id_valid_swap_canister_id(target_canister_id, &*self.env).await
         {
             return Err(GovernanceError::new_with_message(
                 ErrorType::NotAuthorized,
@@ -7818,7 +7821,7 @@ impl Governance {
     pub fn randomly_pick_swap_start(&mut self) -> GlobalTimeOfDay {
         // It's not critical that we have perfect randomness here, so we can default to a fixed value
         // for the edge case where the RNG is not initialized (which should never happen in practice).
-        let time_of_day_seconds = self.env.random_u64().unwrap_or(10_000) % ONE_DAY_SECONDS;
+        let time_of_day_seconds = self.randomness.random_u64().unwrap_or(10_000) % ONE_DAY_SECONDS;
 
         // Round down to nearest multiple of 15 min.
         let remainder_seconds = time_of_day_seconds % (15 * 60);
@@ -8027,7 +8030,7 @@ impl From<NeuronSubsetMetrics> for NeuronSubsetMetricsPb {
 ///
 /// If Ok is returned, it can be assumed that the error field is not populated.
 async fn call_deploy_new_sns(
-    env: &mut Box<dyn Environment>,
+    env: &Arc<dyn Environment>,
     sns_init_payload: SnsInitPayload,
 ) -> Result<DeployNewSnsResponse, GovernanceError> {
     // Step 2.1: Construct request
@@ -8097,7 +8100,7 @@ fn validate_motion(motion: &Motion) -> Result<(), GovernanceError> {
 /// the SNS-W canister.
 async fn is_canister_id_valid_swap_canister_id(
     target_canister_id: CanisterId,
-    env: &mut dyn Environment,
+    env: &dyn Environment,
 ) -> Result<(), String> {
     let list_deployed_snses_response = env
         .call_canister_method(

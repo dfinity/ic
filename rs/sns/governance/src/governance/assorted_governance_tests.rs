@@ -801,8 +801,17 @@ async fn test_disallow_enabling_voting_rewards_while_in_pre_initialization_swap(
     };
 
     let err = err.error_message.to_lowercase();
-    assert!(err.contains("mode"), "{:#?}", err);
-    assert!(err.contains("vot"), "{:#?}", err);
+    assert!(
+        err.contains("manage nervous system parameters"),
+        "{:#?}",
+        err
+    );
+    assert!(err.contains("not allowed"), "{:#?}", err);
+    assert!(
+        err.contains("in preinitializationswap (2) mode"),
+        "{:#?}",
+        err
+    );
 }
 
 #[tokio::test]

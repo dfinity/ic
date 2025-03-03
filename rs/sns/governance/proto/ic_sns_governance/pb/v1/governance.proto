@@ -486,6 +486,10 @@ message AdvanceSnsTargetVersion {
   optional SnsVersion new_target = 1;
 }
 
+message SetTopicsForCustomProposals {
+  map<uint64, Topic> custom_function_id_to_topic = 1;
+}
+
 // A proposal is the immutable input of a proposal submission.
 message Proposal {
   // The proposal's title as a text, which can be at most 256 bytes.
@@ -598,6 +602,11 @@ message Proposal {
     //
     // Id = 15.
     AdvanceSnsTargetVersion advance_sns_target_version = 19;
+
+    // Change the mapping from custom proposal types to topics.
+    //
+    // Id = 16;
+    SetTopicsForCustomProposals set_topics_for_custom_proposals = 20;
   }
 }
 
@@ -792,6 +801,7 @@ message ProposalData {
   // Id 13 - ManageLedgerParameters proposals.
   // Id 14 - ManageDappCanisterSettings proposals.
   // Id 15 - AdvanceSnsTargetVersion proposals.
+  // Id 16 - SetTopicsForCustomProposals proposals.
   uint64 action = 1;
 
   // This is stored here temporarily. It is also stored on the map
