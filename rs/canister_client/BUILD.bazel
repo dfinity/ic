@@ -12,7 +12,6 @@ package(default_visibility = [
     "//rs/replay:__pkg__",
     "//rs/rust_canisters/canister_test:__pkg__",
     "//rs/tests:__subpackages__",
-    "//rs/workload_generator:__pkg__",
 ])
 
 DEPENDENCIES = [
