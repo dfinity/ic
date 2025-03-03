@@ -12,6 +12,7 @@ package(default_visibility = [
 
 DEPENDENCIES = [
     # Keep sorted.
+    "//packages/ic-error-types",
     "//rs/certification",
     "//rs/config",
     "//rs/crypto/interfaces/sig_verification",
@@ -30,7 +31,6 @@ DEPENDENCIES = [
     "//rs/registry/provisional_whitelist",
     "//rs/registry/subnet_type",
     "//rs/replicated_state",
-    "//rs/types/error_types",
     "//rs/types/types",
     "//rs/validator",
     "@crate_index//:askama",
