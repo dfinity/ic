@@ -17,7 +17,7 @@ use ic_base_types::{NumSeconds, PrincipalId};
 use ic_config::{
     execution_environment::{
         Config, CANISTER_GUARANTEED_CALLBACK_QUOTA, DEFAULT_WASM_MEMORY_LIMIT,
-        SUBNET_CALLBACK_SOFT_LIMIT,
+        MAX_NUMBER_OF_SNAPSHOTS_PER_CANISTER, SUBNET_CALLBACK_SOFT_LIMIT,
     },
     flag_status::FlagStatus,
     subnet_config::SchedulerConfig,
@@ -309,6 +309,7 @@ fn canister_manager_config(
         ic_config::embedders::Config::default().wasm_max_size,
         SchedulerConfig::application_subnet().canister_snapshot_baseline_instructions,
         DEFAULT_WASM_MEMORY_LIMIT,
+        MAX_NUMBER_OF_SNAPSHOTS_PER_CANISTER,
     )
 }
 
