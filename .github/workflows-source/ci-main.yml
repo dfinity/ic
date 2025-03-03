@@ -258,8 +258,12 @@ jobs:
           "$CI_PROJECT_DIR"/ci/scripts/run-build-ic.sh
           rm -rf "/cache/job/${CI_JOB_NAME}/${CI_RUN_ID}"
 
-          # List and aggregate all SHA256SUMS files.
-          find -L bazel-out -name SHA256SUMS | xargs cat | sort | uniq > SHA256SUMS
+          # List and aggregate all SHA256SUMS files (if bazel-out exists)
+          if [ -e bazel-out]; then
+            find -L bazel-out -name SHA256SUMS | xargs cat | sort | uniq > SHA256SUMS
+          else
+            touch SHA256SUMS
+          fi
 
         env:
           BAZEL_COMMAND: build --config=ci
@@ -295,9 +299,13 @@ jobs:
 
       - name: Build Determinism Test
         run: |
-          n_lines=$(cat shasums-nocache/SHA256SUMS | wc -l)
-          echo "comparing $n_lines lines"
-          if [ "$n_lines" -eq 0 ]; then
+          n_lines_cache=$(cat shasums-cache/SHA256SUMS | wc -l)
+          n_lines_nocache=$(cat shasums-nocache/SHA256SUMS | wc -l)
+          echo "comparing $n_lines_cache (cache) and $n_lines_nocache (nocache) lines"
+
+          # running tests may not pull all targets locally. If that's the case,
+          # there will be 0 lines and nothing to compare.
+          if [ "$n_lines_cache" -eq 0 ] || [ "$n_lines_nocache" -eq 0 ]; then
             echo "No lines to compare"
             exit 0
           fi

@@ -4,6 +4,7 @@ use futures::{stream, StreamExt};
 use ic_base_types::{CanisterId, PrincipalId, SubnetId};
 use ic_interfaces_registry::{RegistryDataProvider, ZERO_REGISTRY_VERSION};
 use ic_ledger_core::Tokens;
+use ic_management_canister_types::CanisterSettings;
 use ic_nervous_system_agent::{
     pocketic_impl::{PocketIcAgent, PocketIcCallError},
     sns::Sns,
@@ -70,10 +71,7 @@ use icrc_ledger_types::icrc1::{
 };
 use itertools::{EitherOrBoth, Itertools};
 use maplit::btreemap;
-use pocket_ic::{
-    management_canister::CanisterSettings, nonblocking::PocketIc, ErrorCode, PocketIcBuilder,
-    RejectResponse,
-};
+use pocket_ic::{nonblocking::PocketIc, ErrorCode, PocketIcBuilder, RejectResponse};
 use prost::Message;
 use rust_decimal::prelude::ToPrimitive;
 use std::{collections::BTreeMap, fmt::Write, ops::Range, path::Path, time::Duration};

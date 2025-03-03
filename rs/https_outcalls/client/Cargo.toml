@@ -14,7 +14,7 @@ hyper-util = { workspace = true }
 ic-adapter-metrics-client = { path = "../../monitoring/adapter_metrics/client" }
 ic-http-endpoints-async-utils = { path = "../../http_endpoints/async_utils" }
 ic-config = { path = "../../config" }
-ic-error-types = { path = "../../types/error_types" }
+ic-error-types = { path = "../../../packages/ic-error-types" }
 ic-https-outcalls-service = { path = "../service" }
 ic-management-canister-types-private = { path = "../../types/management_canister_types" }
 ic-interfaces = { path = "../../interfaces" }

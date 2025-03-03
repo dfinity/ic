@@ -7,6 +7,7 @@ use crate::pb::v1::NervousSystemFunction;
     Debug,
     candid::CandidType,
     candid::Deserialize,
+    comparable::Comparable,
     Ord,
     PartialOrd,
     Eq,

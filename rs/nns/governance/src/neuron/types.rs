@@ -1706,7 +1706,7 @@ pub struct NeuronBuilder {
     recent_ballots_next_entry_index: Option<usize>,
     #[cfg(test)]
     transfer: Option<NeuronStakeTransfer>,
-    #[cfg(test)]
+    #[cfg(any(test, feature = "canbench-rs"))]
     staked_maturity_e8s_equivalent: Option<u64>,
     #[cfg(test)]
     known_neuron_data: Option<KnownNeuronData>,
@@ -1748,7 +1748,7 @@ impl NeuronBuilder {
             recent_ballots_next_entry_index: Some(0),
             #[cfg(test)]
             transfer: None,
-            #[cfg(test)]
+            #[cfg(any(test, feature = "canbench-rs"))]
             staked_maturity_e8s_equivalent: None,
             #[cfg(test)]
             known_neuron_data: None,
@@ -1850,7 +1850,7 @@ impl NeuronBuilder {
         self
     }
 
-    #[cfg(test)]
+    #[cfg(any(test, feature = "canbench-rs"))]
     pub fn with_staked_maturity_e8s_equivalent(
         mut self,
         staked_maturity_e8s_equivalent: u64,
@@ -1906,7 +1906,7 @@ impl NeuronBuilder {
             recent_ballots_next_entry_index,
             #[cfg(test)]
             transfer,
-            #[cfg(test)]
+            #[cfg(any(test, feature = "canbench-rs"))]
             staked_maturity_e8s_equivalent,
             #[cfg(test)]
             known_neuron_data,
@@ -1937,7 +1937,7 @@ impl NeuronBuilder {
         let recent_ballots_next_entry_index = Some(0);
         #[cfg(not(test))]
         let transfer = None;
-        #[cfg(not(test))]
+        #[cfg(not(any(test, feature = "canbench-rs")))]
         let staked_maturity_e8s_equivalent = None;
         #[cfg(not(test))]
         let known_neuron_data = None;

@@ -108,8 +108,13 @@ fi
 rm "$url_out"
 
 # List and aggregate all SHA256SUMS files.
-for shafile in $(find bazel-out/ -name SHA256SUMS); do
-    if [ -f "$shafile" ]; then
-        echo "$shafile"
-    fi
-done | xargs cat | sort | uniq >SHA256SUMS
+if [ -e ./bazel-out/ ]; then
+    for shafile in $(find bazel-out/ -name SHA256SUMS); do
+        if [ -f "$shafile" ]; then
+            echo "$shafile"
+        fi
+    done | xargs cat | sort | uniq >SHA256SUMS
+else
+    # if no bazel-out, assume no targets were built
+    touch SHA256SUMS
+fi
