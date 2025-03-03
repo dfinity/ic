@@ -22349,6 +22349,7 @@ dependencies = [
  "proptest 1.6.0",
  "proptest-derive",
  "serde",
+ "test-strategy 0.4.0",
 ]
 
 [[package]]
