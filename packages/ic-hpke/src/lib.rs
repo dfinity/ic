@@ -134,6 +134,41 @@ const V1_IKM_LENGTH: usize = 64;
 type V1PublicKey = <V1Kem as hpke::Kem>::PublicKey;
 type V1PrivateKey = <V1Kem as hpke::Kem>::PrivateKey;
 
+/*
+ * A helper macro for reading the header and optionally checking the length
+ */
+macro_rules! check_header {
+    (@common $err:ty, $val:expr) => {
+        if $val.len() < HEADER_SIZE {
+            Err(<$err>::InvalidLength)
+        } else {
+            let magic = u64::from_be_bytes(
+                <[u8; 8]>::try_from(&$val[0..HEADER_SIZE]).expect("Conversion cannot fail"),
+            );
+            if magic != MAGIC {
+                Err(<$err>::UnknownMagic)
+            } else {
+                Ok($val.len() - HEADER_SIZE)
+            }
+        }
+    };
+    ($err:ty, $val:expr) => {
+        check_header!(@common $err, $val)
+    };
+    ($err:ty, $val:expr, $req_len:expr) => {
+        match check_header!(@common $err, $val) {
+            Ok(len) => {
+                if len == $req_len {
+                    Ok(())
+                } else {
+                    Err(<$err>::InvalidLength)
+                }
+            }
+            Err(e) => Err(e),
+        }
+    }
+}
+
 #[derive(Copy, Clone, Debug)]
 /// An error occured while deserializing a key
 pub enum KeyDeserializationError {
@@ -175,23 +210,9 @@ impl PublicKey {
 
     /// Deserialize a public key
     pub fn deserialize(bytes: &[u8]) -> Result<Self, KeyDeserializationError> {
-        if bytes.len() < HEADER_SIZE {
-            return Err(KeyDeserializationError::InvalidLength);
-        }
-
-        let magic = u64::from_be_bytes(
-            bytes[0..HEADER_SIZE]
-                .try_into()
-                .expect("Conversion cannot fail"),
-        );
-        if magic != MAGIC {
-            return Err(KeyDeserializationError::UnknownMagic);
-        }
-
         let len = <V1PublicKey as Serializable>::size();
-        if bytes.len() != HEADER_SIZE + len {
-            return Err(KeyDeserializationError::InvalidLength);
-        }
+
+        check_header!(KeyDeserializationError, bytes, len)?;
 
         match V1PublicKey::from_bytes(&bytes[HEADER_SIZE..]) {
             Ok(pk) => Ok(Self { pk }),
@@ -345,22 +366,7 @@ impl PrivateKey {
     pub fn deserialize(bytes: &[u8]) -> Result<Self, KeyDeserializationError> {
         let len = <V1PrivateKey as Serializable>::size();
 
-        if bytes.len() < HEADER_SIZE {
-            return Err(KeyDeserializationError::InvalidLength);
-        }
-
-        let magic = u64::from_be_bytes(
-            bytes[0..HEADER_SIZE]
-                .try_into()
-                .expect("Conversion cannot fail"),
-        );
-        if magic != MAGIC {
-            return Err(KeyDeserializationError::UnknownMagic);
-        }
-
-        if bytes.len() != HEADER_SIZE + len {
-            return Err(KeyDeserializationError::InvalidLength);
-        }
+        check_header!(KeyDeserializationError, bytes, len)?;
 
         match V1PrivateKey::from_bytes(&bytes[HEADER_SIZE..]) {
             Ok(sk) => {
@@ -414,24 +420,9 @@ impl PrivateKey {
         msg: &[u8],
         associated_data: &[u8],
     ) -> Result<Vec<u8>, DecryptionError> {
-        if msg.len() < HEADER_SIZE {
-            return Err(DecryptionError::InvalidLength);
-        }
-
-        let header = &msg[0..HEADER_SIZE];
-
-        let magic = u64::from_be_bytes(
-            msg[0..HEADER_SIZE]
-                .try_into()
-                .expect("Conversion cannot fail"),
-        );
-        if magic != MAGIC {
-            return Err(DecryptionError::UnknownMagic);
-        }
-
         let encap_key_len = <V1Kem as Kem>::EncappedKey::size();
 
-        if msg.len() < HEADER_SIZE + encap_key_len {
+        if check_header!(DecryptionError, msg)? < encap_key_len {
             return Err(DecryptionError::InvalidLength);
         }
 
@@ -445,7 +436,7 @@ impl PrivateKey {
             opmode,
             &self.sk,
             &encap_key,
-            header,
+            &msg[0..HEADER_SIZE],
             ciphertext,
             associated_data,
         ) {
