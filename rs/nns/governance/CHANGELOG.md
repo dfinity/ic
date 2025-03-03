@@ -11,6 +11,20 @@ here were moved from the adjacent `unreleased_changelog.md` file.
 INSERT NEW RELEASES HERE
 
 
+# 2025-03-01: Proposal 135613
+
+http://dashboard.internetcomputer.org/proposal/135613
+
+## Added
+
+* Define API for disburse maturity. While disburse maturity is not yet enabled, clients may already
+  start preparing for this new NNS neuron operation.
+
+## Deprecated
+
+* NnsCanisterUpgrade/NnsRootUpgrade NNS funtions are made obsolete.
+
+
 # 2025-02-21: Proposal 135436
 
 http://dashboard.internetcomputer.org/proposal/135436
