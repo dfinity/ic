@@ -255,13 +255,11 @@ impl BasicSignatureCspVault for RemoteCspVault {
         &self,
         algorithm_id: AlgorithmId,
         message: Vec<u8>,
-        key_id: KeyId,
     ) -> Result<CspSignature, CspBasicSignatureError> {
         self.tokio_block_on(self.tarpc_csp_client.sign(
             context_with_timeout(self.rpc_timeout),
             algorithm_id,
             ByteBuf::from(message),
-            key_id,
         ))
         .unwrap_or_else(|rpc_error: tarpc::client::RpcError| {
             Err(CspBasicSignatureError::TransientInternalError {
@@ -290,13 +288,11 @@ impl MultiSignatureCspVault for RemoteCspVault {
         &self,
         algorithm_id: AlgorithmId,
         message: Vec<u8>,
-        key_id: KeyId,
     ) -> Result<CspSignature, CspMultiSignatureError> {
         self.tokio_block_on(self.tarpc_csp_client.multi_sign(
             context_with_timeout(self.rpc_timeout),
             algorithm_id,
             ByteBuf::from(message),
-            key_id,
         ))
         .unwrap_or_else(|rpc_error: tarpc::client::RpcError| {
             Err(CspMultiSignatureError::TransientInternalError {
