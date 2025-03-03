@@ -8388,6 +8388,22 @@ fn test_network_economics_proposal() {
         .unwrap()
         .neuron_minimum_stake_e8s = 1234;
 
+    // Verify that neuron_minimum_dissolve_delay_to_vote_seconds is set to 6 months by default.
+    assert_eq!(
+        gov.heap_data
+            .economics
+            .as_ref()
+            .unwrap()
+            .voting_power_economics
+            .unwrap()
+            .neuron_minimum_dissolve_delay_to_vote_seconds,
+        Some(MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS),
+    );
+
+    // A value that differs from the default, useful for testing that the proposal has the intended effect.
+    let non_default_neuron_minimum_dissolve_delay_to_vote_seconds =
+        MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS / 2;
+
     // Propose to change some, NetworkEconomics parameters.
     let pid = match gov
         .manage_neuron(
@@ -8404,6 +8420,9 @@ fn test_network_economics_proposal() {
                         voting_power_economics: Some(VotingPowerEconomics {
                             start_reducing_voting_power_after_seconds: Some(42),
                             clear_following_after_seconds: Some(4242),
+                            neuron_minimum_dissolve_delay_to_vote_seconds: Some(
+                                non_default_neuron_minimum_dissolve_delay_to_vote_seconds,
+                            ),
                         }),
                         ..Default::default()
                     })),
@@ -8434,6 +8453,9 @@ fn test_network_economics_proposal() {
             voting_power_economics: Some(VotingPowerEconomics {
                 start_reducing_voting_power_after_seconds: Some(42),
                 clear_following_after_seconds: Some(4242),
+                neuron_minimum_dissolve_delay_to_vote_seconds: Some(
+                    non_default_neuron_minimum_dissolve_delay_to_vote_seconds
+                )
             }),
 
             // No changes to the rest.
