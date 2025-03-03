@@ -142,9 +142,9 @@ impl CanisterHttp {
     fn compare_results(
         &self,
         result: &Result<http::Response<Incoming>, String>,
-        dl_result: &Result<http::Response<Incoming>, String>,
+        dark_launch_result: &Result<http::Response<Incoming>, String>,
     ) {
-        match (result, dl_result) {
+        match (result, dark_launch_result) {
             (Ok(_), Ok(_)) => {
                 self.metrics
                     .socks_proxy_dl_requests
@@ -248,10 +248,6 @@ impl CanisterHttp {
                         "Failed to connect through SOCKS with address {}: {}",
                         socks_proxy_addr,
                         socks_err
-                    );
-                    println!(
-                        "Failed to connect through SOCKS with address {}: {:?} <> {:?}",
-                        socks_proxy_addr, socks_err, request
                     );
                     last_error = Some(socks_err);
                 }
@@ -374,14 +370,14 @@ impl HttpsOutcallsService for CanisterHttp {
 
                     //TODO(SOCKS_PROXY_DL): Remove the compare_results once we are confident in the SOCKS proxy implementation.
                     if !req.socks_proxy_addrs.is_empty() {
-                        let dl_result = self
+                        let dark_launch_result = self
                             .do_https_outcall_socks_proxy(req.socks_proxy_addrs, http_req_clone)
                             .await;
 
-                        self.compare_results(&result, &dl_result);
-                        if result.is_err() && dl_result.is_ok() {
+                        self.compare_results(&result, &dark_launch_result);
+                        if result.is_err() && dark_launch_result.is_ok() {
                             // Id dl found something, return that.
-                            result = dl_result;
+                            result = dark_launch_result;
                         }
                     }
 

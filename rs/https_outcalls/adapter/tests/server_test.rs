@@ -269,10 +269,10 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
 
     #[cfg(feature = "http")]
     #[tokio::test]
+    /// This test sets up an http server at 127.0.0.1, and a socks server that forwards all requests to the http server.
+    /// The direct request is made to an unreachable URL and thus fallsback to using the sock proxy.
+    /// This tests the socks proxy passed to the adapter via the request.
     async fn test_canister_http_api_bn_socks_server() {
-        // This test sets up an http server at 127.0.0.1, and a socks server that forwards all requests to the http server.
-        // The direct request is made to an unreachable URL and thus fallsback to using the sock proxy.
-        // This tests the socks proxy passed to the adapter via the request.
         let url = start_http_server("127.0.0.1".parse().unwrap());
 
         // ipv6 socks proxy.
@@ -325,10 +325,10 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
 
     #[cfg(feature = "http")]
     #[tokio::test]
+    /// This test sets up an http server at 127.0.0.1, and a socks server that forwards all requests to the http server.
+    /// The direct request is made to an unreachable URL and thus fallsback to using the sock proxy.
+    /// This tests the socks proxy passed to the adapter via the request.
     async fn test_canister_http_socks_server() {
-        // This test sets up an http server at 127.0.0.1, and a socks server that forwards all requests to the http server.
-        // The direct request is made to an unreachable URL and thus fallsback to using the sock proxy.
-        // This tests the socks proxy passed to the adapter via the config.
         let url = start_http_server("127.0.0.1".parse().unwrap());
 
         let socks_addr = spawn_forward_socks5_server("127.0.0.1:0", url.clone())
@@ -339,7 +339,6 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
         let server_config = Config {
             incoming_source: IncomingSource::Path(path.into()),
             socks_proxy: format!("socks5://{}", socks_addr),
-            //TODO(mihailjianu): start the socks server, and add it here.
             ..Default::default()
         };
         let mut client = spawn_grpc_server(server_config);
@@ -372,7 +371,6 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
         let response = client.https_outcall(system_subnet_request).await;
         let http_response = response.unwrap().into_inner();
         assert_eq!(http_response.status, StatusCode::OK.as_u16() as u32);
-        //TODO(mihailjianu): also add IT for the new socks proxy.
     }
 
     #[tokio::test]
