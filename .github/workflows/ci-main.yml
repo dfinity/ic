@@ -44,7 +44,6 @@ jobs:
       # Only run ci/bazel-scripts/diff.sh on PRs that are not labeled with "CI_ALL_BAZEL_TARGETS".
       OVERRIDE_DIDC_CHECK: ${{ contains(github.event.pull_request.labels.*.name, 'CI_OVERRIDE_DIDC_CHECK') }}
       CI_OVERRIDE_BUF_BREAKING: ${{ contains(github.event.pull_request.labels.*.name, 'CI_OVERRIDE_BUF_BREAKING') }}
-      RUN_ON_DIFF_ONLY: ${{ github.event_name == 'pull_request' && !contains(github.event.pull_request.labels.*.name, 'CI_ALL_BAZEL_TARGETS') }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -67,7 +66,7 @@ jobs:
               nns_tests_nightly
           )
           if [[ "$CI_EVENT_NAME" =~ ^(pull_request|merge_group)$ ]]; then
-              if [[ "$CI_EVENT_NAME" == "merge_group" || "${RUN_ON_DIFF_ONLY:-}" == "true" ]]; then
+              if [[ "$CI_EVENT_NAME" == "merge_group" ]]; then
                   EXCLUDED_TEST_TAGS+=(long_test)
               fi
           elif [[ "$CI_EVENT_NAME" == "push" ]] && [[ "$BRANCH_NAME" =~ ^dev-gh-.* ]]; then
@@ -304,7 +303,6 @@ jobs:
           BAZEL_TARGETS: //...
           MERGE_BASE_SHA: ${{ github.event.pull_request.base.sha }}
           BRANCH_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-          RUN_ON_DIFF_ONLY: ${{ github.event_name == 'pull_request' && !contains(github.event.pull_request.labels.*.name, 'CI_ALL_BAZEL_TARGETS') }}
       - name: Upload SHA256SUMS (nocache)
         uses: actions/upload-artifact@v4
         with:
