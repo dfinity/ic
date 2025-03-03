@@ -33,7 +33,9 @@ use ic_nervous_system_common_test_keys::{
 };
 use ic_nervous_system_common_test_utils::{LedgerReply, SpyLedger};
 use ic_nervous_system_proto::pb::v1::{Decimal, Duration, GlobalTimeOfDay, Image, Percentage};
-use ic_nervous_system_timers::test::{run_pending_timers, run_pending_timers_every_x_seconds};
+use ic_nervous_system_timers::test::{
+    run_pending_timers, run_pending_timers_every_interval_for_count,
+};
 use ic_neurons_fund::{
     NeuronsFundParticipationLimits, PolynomialMatchingFunction, SerializableFunction,
 };
@@ -14448,7 +14450,7 @@ async fn distribute_rewards_test() {
 
     // Step 2: Run code under test.
     governance.run_periodic_tasks().await;
-    run_pending_timers_every_x_seconds(std::time::Duration::from_secs(2), 10);
+    run_pending_timers_every_interval_for_count(std::time::Duration::from_secs(2), 10);
 
     // Step 3: Inspect results.
 

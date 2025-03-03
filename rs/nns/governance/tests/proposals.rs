@@ -1,6 +1,6 @@
 use ic_base_types::PrincipalId;
 use ic_nervous_system_common::{E8, ONE_DAY_SECONDS};
-use ic_nervous_system_timers::test::run_pending_timers_every_x_seconds;
+use ic_nervous_system_timers::test::run_pending_timers_every_interval_for_count;
 use ic_nns_common::pb::v1::{NeuronId, ProposalId};
 use ic_nns_governance::canister_state::{governance_mut, set_governance_for_tests};
 use ic_nns_governance::timer_tasks::schedule_tasks;
@@ -230,7 +230,10 @@ async fn test_distribute_rewards_with_total_potential_voting_power() {
     schedule_tasks();
 
     // Step 2: Call code under test.
-    run_pending_timers_every_x_seconds(Duration::from_secs(REWARD_DISTRIBUTION_PERIOD_SECONDS), 1);
+    run_pending_timers_every_interval_for_count(
+        Duration::from_secs(REWARD_DISTRIBUTION_PERIOD_SECONDS),
+        1,
+    );
 
     // Step 3: Inspect result(s).
     let get_neuron_rewards = |neuron_id| {

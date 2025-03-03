@@ -150,7 +150,7 @@ pub fn run_pending_timers() {
     }
 }
 
-pub fn run_pending_timers_every_x_seconds(interval: Duration, count: u64) {
+pub fn run_pending_timers_every_interval_for_count(interval: Duration, count: u64) {
     for _ in 0..count {
         advance_time_for_timers(interval);
         run_pending_timers();
@@ -213,7 +213,7 @@ mod tests {
             assert_eq!(*count.borrow(), 1);
         });
 
-        run_pending_timers_every_x_seconds(Duration::from_secs(5), 2);
+        run_pending_timers_every_interval_for_count(Duration::from_secs(5), 2);
 
         // Check that the first timer ran
         TIMER_1_COUNT.with(|count| {
@@ -231,7 +231,7 @@ mod tests {
 
         assert!(!has_timer_task(timer_2_id));
 
-        run_pending_timers_every_x_seconds(Duration::from_secs(5), 2);
+        run_pending_timers_every_interval_for_count(Duration::from_secs(5), 2);
 
         // Check that second timer is in fact not running
         TIMER_2_COUNT.with(|count| {
