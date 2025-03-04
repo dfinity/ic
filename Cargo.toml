@@ -564,7 +564,7 @@ hyper-rustls = { version = "0.27.3", default-features = false, features = [
 hyper-socks2 = { version = "0.9.1", default-features = false }
 hyper-util = { version = "0.1.10", features = ["full"] }
 ic-agent = { version = "0.39.2", features = ["pem", "ring"] }
-ic-bn-lib = { git = "https://github.com/dfinity/ic-bn-lib", rev = "d74a6527fbaf8a2c1a7076983cc84f5c5a727923" }
+ic-bn-lib = { git = "https://github.com/dfinity/ic-bn-lib", rev = "1e733b13ad9458a792012e7824d458570569cb6e" }
 ic-btc-interface = "0.2.2"
 ic-canister-sig-creation = { git = "https://github.com/dfinity/ic-canister-sig-creation", rev = "7f9e931954637526295269155881207f6c832d6d" }
 ic-cbor = "3"

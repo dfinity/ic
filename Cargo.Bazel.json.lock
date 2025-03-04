@@ -1,5 +1,5 @@
 {
-  "checksum": "037dd2d1f57d709d043f8f53e56b4a491cb4191b044e28f17b373dcf7fb3ccf9",
+  "checksum": "a2f3f509b1c70a917ebbb3ef2b013199b668c3669a751723feaea312b95b27b6",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -32142,6 +32142,10 @@
             {
               "id": "strum 0.26.3",
               "target": "strum"
+            },
+            {
+              "id": "sync_wrapper 1.0.1",
+              "target": "sync_wrapper"
             },
             {
               "id": "systemstat 0.2.3",
