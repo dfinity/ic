@@ -61,5 +61,5 @@ def rust_ledger_canister(name, extra_deps = [":ledger"], crate_features = None):
         proc_macro_deps = [
             # Keep sorted.
             "@crate_index//:ic-cdk-macros",
-        ],        
+        ],
     )
