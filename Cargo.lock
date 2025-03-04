@@ -12882,7 +12882,6 @@ dependencies = [
  "ic-test-utilities-logger",
  "ic-test-utilities-metrics",
  "ic-test-utilities-state",
- "ic-test-utilities-time",
  "ic-test-utilities-tmpdir",
  "ic-test-utilities-types",
  "ic-types",
