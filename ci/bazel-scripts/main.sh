@@ -97,6 +97,8 @@ if [[ ! " ${bazel_args[*]} " =~ [[:space:]]--repository_cache[[:space:]] ]] && [
     bazel_args+=(--repository_cache=/cache/bazel)
 fi
 
+echo "running build command 'bazel ${bazel_args[@]}'"
+
 bazel_exitcode="0"
 bazel "${bazel_args[@]}" 2>&1 | awk -v url_out="$url_out" "$stream_awk_program" || bazel_exitcode="$?"
 
