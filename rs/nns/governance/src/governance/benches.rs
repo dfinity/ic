@@ -1,8 +1,9 @@
+use crate::benches_util::check_projected_instructions;
 use crate::test_utils::MockRandomness;
 use crate::{
     governance::{
         test_data::CREATE_SERVICE_NERVOUS_SYSTEM_WITH_MATCHED_FUNDING, Governance,
-        MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS,
+        MAX_NUMBER_OF_NEURONS, MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS,
     },
     neuron::{DissolveStateAndAge, Neuron, NeuronBuilder},
     neuron_store::NeuronStore,
@@ -491,10 +492,11 @@ fn centralized_following_all_stable() -> BenchResult {
 #[bench(raw)]
 fn compute_ballots_for_new_proposal_with_stable_neurons() -> BenchResult {
     let now_seconds = 1732817584;
+    let num_neurons = 100;
 
     let _a = temporarily_enable_allow_active_neurons_in_stable_memory();
     let _b = temporarily_enable_migrate_active_neurons_to_stable_memory();
-    let neurons = (0..100)
+    let neurons = (0..num_neurons)
         .map(|id| {
             (
                 id,
@@ -521,7 +523,7 @@ fn compute_ballots_for_new_proposal_with_stable_neurons() -> BenchResult {
         Box::new(MockRandomness::new()),
     );
 
-    bench_fn(|| {
+    let bench_result = bench_fn(|| {
         governance
             .compute_ballots_for_new_proposal(
                 &Action::RegisterKnownNeuron(KnownNeuron {
@@ -532,11 +534,19 @@ fn compute_ballots_for_new_proposal_with_stable_neurons() -> BenchResult {
                 123_456_789,
             )
             .expect("Failed!");
-    })
+    });
+
+    check_projected_instructions(
+        bench_result,
+        num_neurons,
+        MAX_NUMBER_OF_NEURONS as u64,
+        25_000_000_000,
+    )
 }
 
 fn list_neurons_by_subaccount_benchmark() -> BenchResult {
-    let neurons = (0..100)
+    let num_neurons = 100;
+    let neurons = (0..num_neurons)
         .map(|id| {
             (id, {
                 let mut neuron: NeuronProto = make_neuron(
