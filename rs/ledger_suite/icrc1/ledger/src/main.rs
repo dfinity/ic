@@ -786,6 +786,10 @@ fn supported_standards() -> Vec<StandardRecord> {
             url: "https://github.com/dfinity/ICRC-1/tree/main/standards/ICRC-3".to_string(),
         },
         StandardRecord {
+            name: "ICRC-10".to_string(),
+            url: "https://github.com/dfinity/ICRC/blob/main/ICRCs/ICRC-10/ICRC-10.md".to_string(),
+        },
+        StandardRecord {
             name: "ICRC-21".to_string(),
             url: "https://github.com/dfinity/wg-identity-authentication/blob/main/topics/ICRC-21/icrc_21_consent_msg.md".to_string(),
         },

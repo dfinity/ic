@@ -53,6 +53,7 @@ go_deps.bzl               @dfinity/idx
 /packages/ic-dummy-getrandom-for-wasm/  @dfinity/crypto-team
 /packages/ic-ed25519/                   @dfinity/crypto-team
 /packages/ic-ethereum-types/            @dfinity/cross-chain-team
+/packages/ic-hpke/                      @dfinity/crypto-team
 /packages/ic-metrics-assert/            @dfinity/cross-chain-team
 /packages/ic-secp256k1/                 @dfinity/crypto-team
 /packages/ic-sha3/                      @dfinity/crypto-team
@@ -162,7 +163,6 @@ go_deps.bzl               @dfinity/idx
 /rs/memory_tracker/                                     @dfinity/execution
 /rs/messaging/                                          @dfinity/ic-message-routing-owners
 /rs/monitoring/                                         @dfinity/consensus
-/rs/monitoring/backtrace/                               @dfinity/consensus @dfinity/ic-message-routing-owners
 /rs/monitoring/metrics                                  @dfinity/consensus @dfinity/ic-message-routing-owners
 /rs/monitoring/pprof/                                   @dfinity/consensus @dfinity/ic-message-routing-owners
 /rs/nervous_system/                                     @dfinity/nns-team

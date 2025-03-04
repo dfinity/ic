@@ -226,8 +226,6 @@ fn canister_init_(init_payload: ApiGovernanceProto) {
         init_payload.neurons.len()
     );
 
-    schedule_timers();
-
     let governance_proto = InternalGovernanceProto::from(init_payload);
     set_governance(Governance::new(
         governance_proto,
@@ -236,6 +234,10 @@ fn canister_init_(init_payload: ApiGovernanceProto) {
         Arc::new(CMCCanister::<CdkRuntime>::new()),
         Box::new(CanisterRandomnessGenerator::new()),
     ));
+
+    // Timers etc should not be scheduled until after Governance has been initialized, since
+    // some of them may rely on Governance state to determine when they should run.
+    schedule_timers();
 }
 
 #[pre_upgrade]
@@ -273,7 +275,6 @@ fn canister_post_upgrade() {
         restored_state.xdr_conversion_rate,
     );
 
-    schedule_timers();
     set_governance(Governance::new_restored(
         restored_state,
         Arc::new(CanisterEnv::new()),
@@ -283,6 +284,10 @@ fn canister_post_upgrade() {
     ));
 
     validate_stable_storage();
+
+    // Timers etc should not be scheduled until after Governance has been initialized, since
+    // some of them may rely on Governance state to determine when they should run.
+    schedule_timers();
 }
 
 #[cfg(feature = "test")]
