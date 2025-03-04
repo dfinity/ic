@@ -1,5 +1,6 @@
 use candid::Principal;
 use ic_interfaces_registry::{
+    empty_zero_registry_record, RegistryClient, RegistryClientVersionedResult,
     RegistryDataProvider, RegistryTransportRecord, ZERO_REGISTRY_VERSION,
 };
 use ic_nns_constants::REGISTRY_CANISTER_ID;
@@ -10,8 +11,8 @@ use ic_registry_transport::{
 use ic_stable_structures::memory_manager::VirtualMemory;
 use ic_stable_structures::storable::Bound;
 use ic_stable_structures::{DefaultMemoryImpl, StableBTreeMap, Storable};
-use ic_types::registry::RegistryDataProviderError;
-use ic_types::RegistryVersion;
+use ic_types::registry::{RegistryClientError, RegistryDataProviderError};
+use ic_types::{RegistryVersion, Time};
 use itertools::Itertools;
 use std::borrow::Cow;
 use std::cmp::Ordering;
@@ -32,10 +33,15 @@ impl Storable for StorableRegistryValue {
     const BOUND: Bound = Bound::Unbounded;
 }
 
-#[derive(Clone, Ord, PartialOrd, Eq, PartialEq, Default)]
+#[derive(Clone, Ord, PartialOrd, Eq, PartialEq)]
 pub struct StorableRegistryKey {
     version: u64,
     key: String,
+}
+impl StorableRegistryKey {
+    pub fn new(version: u64, key: String) -> Self {
+        Self { version, key }
+    }
 }
 
 // This value is set as 2 times the max key size present in the registry
@@ -56,9 +62,9 @@ impl Storable for StorableRegistryKey {
     fn from_bytes(bytes: Cow<[u8]>) -> Self {
         let bytes = bytes.as_ref();
         let (version_bytes, key_bytes) = bytes.split_at(8);
+
         let version = u64::from_be_bytes(version_bytes.try_into().expect("Invalid version bytes"));
         let key = String::from_utf8(key_bytes.to_vec()).expect("Invalid UTF-8 in key");
-
         Self { version, key }
     }
     const BOUND: Bound = Bound::Bounded {
@@ -84,12 +90,12 @@ pub trait StableMemoryBorrower: Send + Sync {
 /// - If `keys_to_keep` is `Some(keys)`, only the specified `keys` will be stored in stable memory,
 ///   while all other keys from the registry will be discarded.
 /// - If `keys_to_keep` is `None`, all keys from the registry will be retained in stable memory.
-pub struct CanisterDataProvider<S: StableMemoryBorrower> {
+pub struct CanisterRegistryReplicator<S: StableMemoryBorrower> {
     keys_to_keep: Option<HashSet<String>>,
     _store: PhantomData<S>,
 }
 
-impl<S: StableMemoryBorrower> CanisterDataProvider<S> {
+impl<S: StableMemoryBorrower> CanisterRegistryReplicator<S> {
     pub fn new(keys_to_retain: Option<HashSet<String>>) -> Self {
         Self {
             keys_to_keep: keys_to_retain,
@@ -147,7 +153,7 @@ impl<S: StableMemoryBorrower> CanisterDataProvider<S> {
     }
 
     // This function can be called in a timer to periodically update the registry stored
-    pub async fn sync_registry_stored(&self) -> anyhow::Result<()> {
+    pub async fn sync_local_registry(&self) -> anyhow::Result<()> {
         let mut update_registry_version = self
             .get_latest_version()
             .unwrap_or(ZERO_REGISTRY_VERSION.get());
@@ -202,28 +208,90 @@ impl<S: StableMemoryBorrower> CanisterDataProvider<S> {
     }
 }
 
-impl<S: StableMemoryBorrower> RegistryDataProvider for CanisterDataProvider<S> {
+impl<S: StableMemoryBorrower> RegistryDataProvider for CanisterRegistryReplicator<S> {
     fn get_updates_since(
         &self,
         version: RegistryVersion,
     ) -> Result<Vec<RegistryTransportRecord>, RegistryDataProviderError> {
-        S::with_borrow(|local_registry| {
-            let start_key = StorableRegistryKey {
-                version: version.get(),
-                ..Default::default()
-            };
+        let next_version = version.increment();
+        let start_key = StorableRegistryKey {
+            version: next_version.get(),
+            ..Default::default()
+        };
 
-            let from_start_key = local_registry
+        let from_start_key = S::with_borrow(|local_registry| {
+            local_registry
                 .range(start_key..)
                 .map(|(storable_key, value)| RegistryTransportRecord {
                     version: RegistryVersion::from(storable_key.version),
                     key: storable_key.key,
                     value: value.0,
                 })
-                .collect_vec();
+                .collect_vec()
+        });
 
-            Ok(from_start_key)
+        Ok(from_start_key)
+    }
+}
+
+impl<S: StableMemoryBorrower> RegistryClient for CanisterRegistryReplicator<S> {
+    fn get_versioned_value(
+        &self,
+        key: &str,
+        version: RegistryVersion,
+    ) -> RegistryClientVersionedResult<Vec<u8>> {
+        if version == ZERO_REGISTRY_VERSION {
+            return Ok(empty_zero_registry_record(key));
+        }
+        let search_key = StorableRegistryKey::new(version.get(), key.to_string());
+        let value = S::with_borrow(|local_registry| local_registry.get(&search_key));
+        if let Some(value) = value {
+            let record = RegistryTransportRecord {
+                version: RegistryVersion::from(search_key.version),
+                key: search_key.key,
+                value: value.0,
+            };
+            Ok(record)
+        } else {
+            Err(RegistryClientError::VersionNotAvailable { version })
+        }
+    }
+
+    fn get_key_family(
+        &self,
+        key_prefix: &str,
+        version: RegistryVersion,
+    ) -> Result<Vec<String>, RegistryClientError> {
+        if version == ZERO_REGISTRY_VERSION {
+            return Ok(vec![]);
+        }
+        let search_key = StorableRegistryKey {
+            version: version.get(),
+            ..Default::default()
+        };
+
+        let result = S::with_borrow(|local_registry| {
+            local_registry
+                .range(search_key..)
+                .take_while(|(storable_key, _)| storable_key.key.starts_with(key_prefix))
+                .filter_map(|(key, value)| value.0.is_some().then_some(key.key))
+                .collect()
+        });
+        Ok(result)
+    }
+
+    fn get_latest_version(&self) -> RegistryVersion {
+        S::with_borrow(|local_registry| {
+            local_registry
+                .last_key_value()
+                .map(|(k, _)| RegistryVersion::from(k.version))
+                .unwrap_or(ZERO_REGISTRY_VERSION)
         })
+    }
+
+    fn get_version_timestamp(&self, _registry_version: RegistryVersion) -> Option<Time> {
+        // Just used in cached version of the registry client
+        None
     }
 }
 

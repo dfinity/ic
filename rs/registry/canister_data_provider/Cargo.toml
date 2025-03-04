@@ -17,4 +17,3 @@ ic-nns-common = { path = "../../nns/common" }
 anyhow = { workspace = true }
 ic-cdk = { workspace = true }
 candid = { workspace = true }
-ic-registry-canister-client = { path = "../canister-client" }

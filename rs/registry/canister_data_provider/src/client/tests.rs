@@ -1,56 +1,96 @@
+use std::collections::HashSet;
+
 use super::*;
+use ic_interfaces_registry::RegistryVersionedRecord;
 use ic_registry_keys::NODE_RECORD_KEY_PREFIX;
-use ic_stable_structures::memory_manager::{MemoryId, MemoryManager, VirtualMemory};
-use ic_types::PrincipalId;
-use std::cell::RefCell;
-
-thread_local! {
-    static MEMORY_MANAGER: RefCell<MemoryManager<DefaultMemoryImpl>> =
-        RefCell::new(MemoryManager::init(DefaultMemoryImpl::default()));
-    static REGISTRY: RefCell<StableBTreeMap<StorableRegistryKey, StorableRegistryValue, Memory>> =
-        RefCell::new(StableBTreeMap::init(
-        MEMORY_MANAGER.with(|m| m.borrow().get(MemoryId::new(0)))
-    ));
-}
-
-struct StableMemoryStore;
-
-impl StableMemoryBorrower for StableMemoryStore {
-    fn with_borrow<R>(
-        f: impl FnOnce(
-            &StableBTreeMap<
-                StorableRegistryKey,
-                StorableRegistryValue,
-                VirtualMemory<DefaultMemoryImpl>,
-            >,
-        ) -> R,
-    ) -> R {
-        REGISTRY.with_borrow(|registry_stored| f(registry_stored))
-    }
-    fn with_borrow_mut<R>(
-        f: impl FnOnce(
-            &mut StableBTreeMap<
-                StorableRegistryKey,
-                StorableRegistryValue,
-                VirtualMemory<DefaultMemoryImpl>,
-            >,
-        ) -> R,
-    ) -> R {
-        REGISTRY.with_borrow_mut(|registry_stored| f(registry_stored))
-    }
-}
+use ic_types::{registry::RegistryDataProviderError, PrincipalId};
 
 const DELETED_KEY: &str = "\
     node_record_\
     2hkvg-f3qgx-b5zoa-nz4k4-7q5v2-fiohf-x7o45-v6hds-5gf6w-o6lf6-gae";
 
-pub fn add_record_helper(key: &str, version: u64, value: Option<u64>) {
-    REGISTRY.with_borrow_mut(|registry| {
-        registry.insert(
-            StorableRegistryKey::new(key.to_string(), v(version)),
-            StorableRegistryValue(value.map(|v| vec![v as u8])),
-        );
-    });
+struct DummyRegistryDataProvider {
+    data: Arc<RwLock<Vec<RegistryTransportRecord>>>,
+}
+
+impl DummyRegistryDataProvider {
+    pub fn new() -> Self {
+        Self {
+            data: Arc::new(RwLock::new(vec![])),
+        }
+    }
+
+    pub fn add_dummy_data(&self) {
+        let mut data_mut = self.data.write().unwrap();
+        *data_mut = vec![
+            RegistryVersionedRecord {
+                key: DELETED_KEY.to_string(),
+                version: RegistryVersion::new(39662),
+                value: Some(vec![42]),
+            },
+            RegistryVersionedRecord {
+                key: DELETED_KEY.to_string(),
+                version: RegistryVersion::new(39663),
+                value: None,
+            },
+            RegistryVersionedRecord {
+                key: DELETED_KEY.to_string(),
+                version: RegistryVersion::new(39664),
+                value: Some(vec![42]),
+            },
+            RegistryVersionedRecord {
+                key: DELETED_KEY.to_string(),
+                version: RegistryVersion::new(39779),
+                value: Some(vec![42]),
+            },
+            RegistryVersionedRecord {
+                key: DELETED_KEY.to_string(),
+                version: RegistryVersion::new(39801),
+                value: None,
+            },
+            // Just so that the result set is not empty.
+            RegistryVersionedRecord {
+                key: format!(
+                    "{}{}",
+                    NODE_RECORD_KEY_PREFIX,
+                    PrincipalId::new_user_test_id(42),
+                ),
+                version: RegistryVersion::new(39_972),
+                value: Some(vec![0xCA, 0xFE]),
+            },
+        ];
+    }
+
+    pub fn add(&self, key: &str, version: u64, value: Option<u64>) {
+        let mut data_mut = self.data.write().unwrap();
+
+        data_mut.push(RegistryVersionedRecord {
+            key: key.to_string(),
+            version: RegistryVersion::new(version),
+            value: value.map(|v| vec![v as u8]),
+        });
+    }
+}
+
+impl RegistryDataProvider for DummyRegistryDataProvider {
+    fn get_updates_since(
+        &self,
+        registry_version: RegistryVersion,
+    ) -> Result<Vec<RegistryTransportRecord>, RegistryDataProviderError> {
+        let records = self.data.read().unwrap();
+
+        let records = records
+            .iter()
+            .filter(|r| r.version > registry_version)
+            .map(|r| RegistryTransportRecord {
+                key: r.key.clone(),
+                version: r.version,
+                value: r.value.to_owned(),
+            })
+            .collect();
+
+        Ok(records)
+    }
 }
 
 #[derive(PartialEq, Eq, Debug)]
@@ -70,23 +110,11 @@ fn v(v: u64) -> RegistryVersion {
 
 #[test]
 fn test_absent_after_delete() {
-    add_record_helper(DELETED_KEY, 39662, Some(42));
-    add_record_helper(DELETED_KEY, 39663, None);
-    add_record_helper(DELETED_KEY, 39664, Some(42));
-    add_record_helper(DELETED_KEY, 39779, Some(42));
-    add_record_helper(DELETED_KEY, 39801, None);
-    add_record_helper(
-        &format!(
-            "{}{}",
-            NODE_RECORD_KEY_PREFIX,
-            PrincipalId::new_user_test_id(42),
-        ),
-        39_972,
-        Some(32),
-    );
+    let dummy_registry = Arc::new(DummyRegistryDataProvider::new());
+    let client = CanisterRegistryClient::new(dummy_registry.clone());
+    dummy_registry.add_dummy_data();
+    client.update_to_latest_version();
 
-    let client: CanisterRegistryReplicator<StableMemoryStore> =
-        CanisterRegistryReplicator::new(None);
     let result = client.get_key_family(NODE_RECORD_KEY_PREFIX, RegistryVersion::new(39_972));
 
     assert_eq!(
@@ -101,19 +129,18 @@ fn test_absent_after_delete() {
 
 #[test]
 fn empty_registry_should_report_zero_as_latest_version() {
-    let client: CanisterRegistryReplicator<StableMemoryStore> =
-        CanisterRegistryReplicator::new(None);
+    let client = CanisterRegistryClient::new(Arc::new(DummyRegistryDataProvider::new()));
 
     assert_eq!(client.get_latest_version(), ZERO_REGISTRY_VERSION);
 }
 
 #[test]
 fn can_retrieve_entries_correctly() {
-    let client: CanisterRegistryReplicator<StableMemoryStore> =
-        CanisterRegistryReplicator::new(None);
+    let dummy_registry = Arc::new(DummyRegistryDataProvider::new());
+    let client = CanisterRegistryClient::new(dummy_registry.clone());
 
-    let set = |key: &str, ver: u64| add_record_helper(key, ver, Some(ver));
-    let rem = |key: &str, ver: u64| add_record_helper(key, ver, None);
+    let set = |key: &str, ver: u64| dummy_registry.add(key, ver, Some(ver));
+    let rem = |key: &str, ver: u64| dummy_registry.add(key, ver, None);
     let get = |key: &str, ver: u64| {
         client
             .get_versioned_value(key, v(ver))
@@ -147,6 +174,7 @@ fn can_retrieve_entries_correctly() {
         set("FB_1", v);
     }
 
+    client.update_to_latest_version();
     let latest_version = 8;
     assert_eq!(client.get_latest_version(), v(latest_version));
 

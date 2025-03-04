@@ -1,5 +1,5 @@
 [package]
-name = "ic-registry-canister-client"
+name = "ic-registry-replicator-canister"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
@@ -10,6 +10,11 @@ documentation.workspace = true
 ic-interfaces-registry = { path = "../../interfaces/registry" }
 ic-types = { path = "../../types/types" }
 ic-cdk = { workspace = true }
-
-[dev-dependencies]
+ic-registry-transport = { path = "../transport" }
+ic-stable-structures = { workspace = true }
+ic-nns-constants = { path = "../../nns/constants" }
+itertools = { workspace = true }
+ic-nns-common = { path = "../../nns/common" }
+anyhow = { workspace = true }
+candid = { workspace = true }
 ic-registry-keys = { path = "../keys" }
