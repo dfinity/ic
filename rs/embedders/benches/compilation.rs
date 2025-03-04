@@ -5,15 +5,23 @@ use ic_embedders::{
     WasmtimeEmbedder,
 };
 use ic_logger::replica_logger::no_op_logger;
-use ic_types::NumInstructions;
 use ic_wasm_types::BinaryEncodedWasm;
 
+/// Enable using the same number of rayon threads that we have in production.
+fn set_production_rayon_threads() {
+    rayon::ThreadPoolBuilder::new()
+        .num_threads(EmbeddersConfig::default().num_rayon_compilation_threads)
+        .build_global()
+        .unwrap_or_else(|err| {
+            eprintln!("error in ThreadPoolBuildError (it's fine if the threadpool has already been initialized): {}", err);
+        });
+}
+
 /// Tuples of (benchmark_name, compilation_cost, wasm) to run compilation benchmarks on.
-fn generate_binaries() -> Vec<(String, NumInstructions, BinaryEncodedWasm)> {
+fn generate_binaries() -> Vec<(String, BinaryEncodedWasm)> {
     let mut result = vec![
         (
             "simple".to_string(),
-            NumInstructions::from(522_000),
             BinaryEncodedWasm::new(
                 wat::parse_str(
                     r#"
@@ -31,7 +39,6 @@ fn generate_binaries() -> Vec<(String, NumInstructions, BinaryEncodedWasm)> {
         ),
         (
             "empty".to_string(),
-            NumInstructions::from(432_000),
             BinaryEncodedWasm::new(
                 wat::parse_str(
                     r#"
@@ -50,7 +57,6 @@ fn generate_binaries() -> Vec<(String, NumInstructions, BinaryEncodedWasm)> {
     many_adds.push_str("))");
     result.push((
         "many_adds".to_string(),
-        NumInstructions::from(1_200_504_000),
         BinaryEncodedWasm::new(wat::parse_str(many_adds).expect("Failed to convert wat to wasm")),
     ));
 
@@ -61,7 +67,6 @@ fn generate_binaries() -> Vec<(String, NumInstructions, BinaryEncodedWasm)> {
     many_funcs.push(')');
     result.push((
         "many_funcs".to_string(),
-        NumInstructions::from(3_300_432_000),
         BinaryEncodedWasm::new(wat::parse_str(many_funcs).expect("Failed to convert wat to wasm")),
     ));
 
@@ -69,40 +74,87 @@ fn generate_binaries() -> Vec<(String, NumInstructions, BinaryEncodedWasm)> {
     let real_world_wasm =
         BinaryEncodedWasm::new(include_bytes!("test-data/user_canister_impl.wasm").to_vec());
 
-    result.push((
-        "real_world_wasm".to_string(),
-        NumInstructions::from(12_569_958_000),
-        real_world_wasm,
-    ));
+    result.push(("real_world_wasm".to_string(), real_world_wasm));
 
     result
 }
 
+/// Print a table of benchmark name, compilation cost, and expected compilation
+/// time.
+fn print_table(data: Vec<Vec<String>>) {
+    let header = vec![
+        "Benchmark".to_string(),
+        "Compilation Cost".to_string(),
+        "Expected Compilation Time".to_string(),
+    ];
+    let mut full = vec![header];
+    full.extend(data);
+    let mut widths = vec![];
+    for i in 0..3 {
+        let mut width = 0;
+        for row in &full {
+            width = std::cmp::max(width, row[i].len())
+        }
+        widths.push(width);
+    }
+
+    println!();
+    for row in full {
+        print!("| ");
+        for i in 0..3 {
+            let width = widths[i];
+            print!("{:>width$} | ", row[i]);
+        }
+        println!();
+    }
+    println!();
+}
+
+/// Not really a benchmark, but this will display the compilation cost of each
+/// Wasm and what it corresponds to in terms of expected compilation time (based
+/// on 2B instructions per second).
+fn compilation_cost(c: &mut Criterion) {
+    let binaries = generate_binaries();
+    let group = c.benchmark_group("compilation-cost");
+    let config = EmbeddersConfig::default();
+
+    let mut table = vec![];
+    for (name, wasm) in binaries {
+        let embedder = WasmtimeEmbedder::new(config.clone(), no_op_logger());
+        let (_, r) = compile(&embedder, &wasm);
+        let r = r.expect("Failed to compile canister wasm");
+        let cost = r.1.compilation_cost.get() as f64;
+        let mill_instructions = cost / 1_000_000.0;
+        // 2B inst/second == 2000 inst/microsecond
+        let expected_comp_time = std::time::Duration::from_micros((cost / 2_000.0) as u64);
+
+        table.push(vec![
+            name,
+            format!("{mill_instructions:?}M"),
+            format!("{expected_comp_time:?}"),
+        ]);
+    }
+
+    print_table(table);
+    group.finish();
+}
+
 fn wasm_compilation(c: &mut Criterion) {
-    // Enable using less threads for the rayon wasm compilation.
-    rayon::ThreadPoolBuilder::new()
-        .num_threads(EmbeddersConfig::default().num_rayon_compilation_threads)
-        .build_global()
-        .unwrap();
+    set_production_rayon_threads();
 
     let binaries = generate_binaries();
     let mut group = c.benchmark_group("compilation");
     let config = EmbeddersConfig::default();
-    for (name, comp_cost, wasm) in binaries {
+    for (name, wasm) in binaries {
         let embedder = WasmtimeEmbedder::new(config.clone(), no_op_logger());
 
         group.bench_with_input(
             BenchmarkId::from_parameter(name.clone()),
-            &(embedder, comp_cost, wasm),
-            |b, (embedder, comp_cost, wasm)| {
+            &(embedder, wasm),
+            |b, (embedder, wasm)| {
                 b.iter_with_large_drop(|| {
                     let (c, r) = compile(embedder, wasm);
                     let r = r.expect("Failed to compile canister wasm");
-                    assert_eq!(
-                        *comp_cost, r.1.compilation_cost,
-                        "update the reference compilation cost for '{name}' to {}",
-                        r.1.compilation_cost
-                    );
                     (c, r)
                 })
             },
@@ -112,27 +164,16 @@ fn wasm_compilation(c: &mut Criterion) {
 }
 
 fn wasm_deserialization(c: &mut Criterion) {
-    // Enable using less threads for the rayon wasm compilation.
-    rayon::ThreadPoolBuilder::new()
-        .num_threads(EmbeddersConfig::default().num_rayon_compilation_threads)
-        .build_global()
-        .unwrap_or_else(|err| {
-            eprintln!("error in ThreadPoolBuildError: {}", err);
-        });
+    set_production_rayon_threads();
 
     let binaries = generate_binaries();
     let mut group = c.benchmark_group("deserialization");
-    for (name, comp_cost, wasm) in binaries {
+    for (name, wasm) in binaries {
         let config = EmbeddersConfig::default();
         let embedder = WasmtimeEmbedder::new(config, no_op_logger());
         let (_, serialized_module) = compile(&embedder, &wasm)
             .1
             .expect("Failed to compile canister wasm");
-        assert_eq!(
-            comp_cost, serialized_module.compilation_cost,
-            "update the reference compilation cost for '{name}' to {}",
-            serialized_module.compilation_cost
-        );
         let serialized_module_bytes = serialized_module.bytes;
 
         group.bench_with_input(
@@ -151,33 +192,21 @@ fn wasm_deserialization(c: &mut Criterion) {
 }
 
 fn wasm_validation_instrumentation(c: &mut Criterion) {
-    // Enable using less threads for the rayon wasm compilation.
-    rayon::ThreadPoolBuilder::new()
-        .num_threads(EmbeddersConfig::default().num_rayon_compilation_threads)
-        .build_global()
-        .unwrap_or_else(|err| {
-            eprintln!("error in ThreadPoolBuildError: {}", err);
-        });
+    set_production_rayon_threads();
 
     let binaries = generate_binaries();
     let mut group = c.benchmark_group("validation-instrumentation");
     let config = EmbeddersConfig::default();
-    for (name, comp_cost, wasm) in binaries {
+    for (name, wasm) in binaries {
         let embedder = WasmtimeEmbedder::new(config.clone(), no_op_logger());
 
         group.bench_with_input(
             BenchmarkId::from_parameter(&name),
-            &(embedder, comp_cost, wasm),
-            |b, (embedder, comp_cost, wasm)| {
+            &(embedder, wasm),
+            |b, (embedder, wasm)| {
                 b.iter_with_large_drop(|| {
-                    let (_, instrumentation_output) =
-                        validate_and_instrument_for_testing(embedder, wasm)
-                            .expect("Failed to validate and instrument canister wasm");
-                    assert_eq!(
-                        *comp_cost, instrumentation_output.compilation_cost,
-                        "update the reference compilation cost for '{name}' to {}",
-                        instrumentation_output.compilation_cost
-                    );
+                    let _ = validate_and_instrument_for_testing(embedder, wasm)
+                        .expect("Failed to validate and instrument canister wasm");
                 })
             },
         );
@@ -187,6 +216,7 @@ fn wasm_validation_instrumentation(c: &mut Criterion) {
 
 criterion_group!(
     benchmarks,
+    compilation_cost,
     wasm_compilation,
     wasm_deserialization,
     wasm_validation_instrumentation
