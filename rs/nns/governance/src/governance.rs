@@ -6550,9 +6550,15 @@ impl Governance {
 
     /// Unstakes the maturity of neurons that have dissolved.
     pub fn unstake_maturity_of_dissolved_neurons(&mut self) {
+        // We assume that modifying a neuron can use <400 StableBTreeMap read operations and <400
+        // write operations (100 recent ballots + 270 followees entries + others), and one read + one
+        // write operation takes 400K instructions in total, unstaking 100 neurons should take less
+        // than 16B instructions. Note that this is the worst case scenario, and the actual number
+        // of instructions should be much less.
+        const MAX_NEURONS_TO_UNSTAKE: usize = 100;
         let now_seconds = self.env.now();
         self.neuron_store
-            .unstake_maturity_of_dissolved_neurons(now_seconds);
+            .unstake_maturity_of_dissolved_neurons(now_seconds, MAX_NEURONS_TO_UNSTAKE);
     }
 
     fn can_spawn_neurons(&self) -> bool {
