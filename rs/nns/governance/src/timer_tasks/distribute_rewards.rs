@@ -57,17 +57,22 @@ impl PeriodicSyncTask for DistributeRewardsTask {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::canister_state::{governance_mut, set_governance_for_tests};
+    use crate::canister_state::{governance_mut, set_governance_for_tests, GOVERNANCE};
     use crate::governance::Governance;
     use crate::reward::distribution::RewardsDistribution;
     use crate::test_utils::{MockEnvironment, MockRandomness, StubCMC, StubIcpLedger};
     use crate::timer_tasks::distribute_rewards::REWARDS_TIMER_ID;
-    use ic_nervous_system_timers::test::run_pending_timers_every_interval_for_count;
+    use ic_nervous_system_timers::test::{
+        existing_timer_ids, has_timer_task, run_pending_timers_every_interval_for_count,
+    };
     use ic_nns_common::pb::v1::NeuronId;
     use std::sync::Arc;
 
     #[test]
     fn test_reward_scheduling_and_cancelling() {
+        thread_local! {
+            static METRICS_REGISTRY: RefCell<TimerTaskMetricsRegistry> = RefCell::new(TimerTaskMetricsRegistry::default());
+        }
         let governance_proto = crate::pb::v1::Governance::default();
 
         let governance = Governance::new(
@@ -87,14 +92,25 @@ mod tests {
         for id in 0..10 {
             distribution.add_reward(NeuronId { id }, 10);
         }
-        // create 2 distributions
+
+        // Schedule the rewards distribution
         governance.schedule_pending_rewards_distribution(1, distribution.clone());
-        assert!(REWARDS_TIMER_ID.with(|id| id.borrow().is_some()));
+        let timer_id = REWARDS_TIMER_ID.with(|id| id.borrow().clone().unwrap());
+        assert_eq!(existing_timer_ids().len(), 1);
+
+        // Attempt to schedule the task again, which should fail
+        run_distribute_rewards_periodic_task(&GOVERNANCE, &METRICS_REGISTRY);
+
+        // Another timer should not be scheduled
+        assert_eq!(existing_timer_ids().len(), 1);
+        // Existing timer should be the only one scheduled.
+        assert!(has_timer_task(timer_id));
 
         // We run this 10x b/c test version of is_over_instructions_limit returns true every
         // other time it's called.
         run_pending_timers_every_interval_for_count(DistributeRewardsTask::INTERVAL, 10);
 
         assert!(REWARDS_TIMER_ID.with(|id| id.borrow().is_none()));
+        assert_eq!(existing_timer_ids().len(), 0);
     }
 }
