@@ -11,7 +11,7 @@ use ic_sns_governance_api::pb::v1::nervous_system_function::{
 };
 use ic_sns_governance_api::pb::v1::proposal::Action;
 use ic_sns_governance_api::pb::v1::topics::{ListTopicsResponse, Topic};
-use ic_sns_governance_api::pb::v1::{NervousSystemFunction, Proposal, SetCustomProposalTopics};
+use ic_sns_governance_api::pb::v1::{NervousSystemFunction, Proposal, SetTopicsForCustomProposals};
 use ic_sns_swap::pb::v1::Lifecycle;
 use maplit::btreemap;
 use pocket_ic::PocketIcBuilder;
@@ -107,7 +107,7 @@ async fn test_set_custom_sns_topics() {
         ..initial_function.clone()
     };
 
-    // AddGenericNervousSystemFunction
+    // Add a generic SNS proposal under the initial topic (`DaoCommunitySettings`).
     {
         let response = governance_canister
             .submit_proposal(
@@ -134,7 +134,7 @@ async fn test_set_custom_sns_topics() {
             .unwrap();
     }
 
-    // SetCustomProposalTopics
+    // Run code under test (change the custom SNS proposal's topic to `ApplicationBusinessLogic`).
     {
         let response = governance_canister
             .submit_proposal(
@@ -144,11 +144,13 @@ async fn test_set_custom_sns_topics() {
                     title: "Set custom SNS proposal topics.".to_string(),
                     summary: "Set custom SNS proposal topics.".to_string(),
                     url: DUMMY_URL_FOR_PROPOSALS.to_string(),
-                    action: Some(Action::SetCustomProposalTopics(SetCustomProposalTopics {
-                        custom_function_id_to_topic: btreemap! {
-                            1111_u64 => Topic::ApplicationBusinessLogic,
+                    action: Some(Action::SetTopicsForCustomProposals(
+                        SetTopicsForCustomProposals {
+                            custom_function_id_to_topic: btreemap! {
+                                1111 => Topic::ApplicationBusinessLogic,
+                            },
                         },
-                    })),
+                    )),
                 },
             )
             .await
