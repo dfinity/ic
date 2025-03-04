@@ -7,7 +7,6 @@ use ic_consensus_threshold_sig_system_test_utils::{
     enable_chain_key_signing_with_timeout_and_rotation_period, get_public_key_with_logger,
     make_key_ids_for_all_idkg_schemes, setup_without_ecdsa_on_nns,
 };
-use ic_management_canister_types_private::MasterPublicKeyId;
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::{
