@@ -627,6 +627,14 @@ type VotingPowerEconomics = record {
   //
   // Initially, set to 1/12 years.
   clear_following_after_seconds : opt nat64;
+  // The minimum dissolve delay a neuron must have in order to be eligible to vote.
+  //
+  // Neurons with a dissolve delay lower than this threshold will not have 
+  // voting power, even if they are otherwise active.
+  //
+  // This value is an essential part of the staking mechanism, promoting
+  // long-term alignment with the network's governance.
+  neuron_minimum_dissolve_delay_to_vote_seconds : opt nat64;
 };
 
 type Neuron = record {
