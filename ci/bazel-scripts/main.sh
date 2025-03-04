@@ -38,6 +38,9 @@ fi
 # if bazel targets is empty we don't need to run any tests
 if [ -z "${BAZEL_TARGETS:-}" ]; then
     echo "No bazel targets to build"
+    # create empty SHA256SUMS for build determinism
+    # (not ideal but temporary until we can improve or get rid of diff.sh)
+    touch SHA256SUMS
     exit 0
 fi
 

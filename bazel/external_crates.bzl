@@ -1254,6 +1254,12 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                     "all",
                 ],
             ),
+            "socks5-impl": crate.spec(
+                version = "0.6",
+                features = [
+                    "tokio",
+                ],
+            ),
             "ssh2": crate.spec(
                 version = "0.9.4",
             ),
