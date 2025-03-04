@@ -36,9 +36,10 @@ use ic_system_test_driver::{
 };
 use ic_types::Height;
 use ic_vetkd_utils::{DerivedPublicKey, IBECiphertext, TransportSecretKey};
+use slog::info;
 
 const NODES_COUNT: usize = 4;
-const DKG_INTERVAL: u64 = 50;
+const DKG_INTERVAL: u64 = 20;
 
 const MSG: &str = "Secret message that is totally important";
 const DERIVATION_ID: &str = "secret_message";
@@ -107,6 +108,7 @@ fn test(env: TestEnv) {
             let transport_key = TransportSecretKey::from_seed(SEED.to_vec())
                 .expect("Failed to generate transport secret key");
 
+            info!(log, "Trying to fetch the key");
             let encrypted_priv_key = vetkd_encrypted_derive_key(
                 transport_key.public_key().try_into().unwrap(),
                 vet_key.clone(),
