@@ -593,7 +593,8 @@ fn account_balance(account: AccountIdentifier) -> Tokens {
     LEDGER.read().unwrap().balances().account_balance(&account)
 }
 
-#[candid_method(query, rename = "icrc1_balance_of")]
+#[query]
+#[candid_method(query)]
 fn icrc1_balance_of(acc: Account) -> Nat {
     Nat::from(account_balance(AccountIdentifier::from(acc)).get_e8s())
 }
@@ -627,7 +628,8 @@ fn icrc1_minting_account() -> Option<Account> {
     LEDGER.read().unwrap().icrc1_minting_account
 }
 
-#[candid_method(query, rename = "transfer_fee")]
+#[query]
+#[candid_method(query)]
 fn transfer_fee(_: TransferFeeArgs) -> TransferFee {
     LEDGER.read().unwrap().transfer_fee()
 }
@@ -646,7 +648,8 @@ fn icrc1_metadata() -> Vec<(String, Value)> {
     ]
 }
 
-#[candid_method(query, rename = "icrc1_fee")]
+#[query]
+#[candid_method(query)]
 fn icrc1_fee() -> Nat {
     Nat::from(LEDGER.read().unwrap().transfer_fee.get_e8s())
 }
@@ -669,7 +672,8 @@ fn token_symbol() -> Symbol {
     }
 }
 
-#[candid_method(query, rename = "name")]
+#[query]
+#[candid_method(query)]
 fn token_name() -> Name {
     Name {
         name: LEDGER.read().unwrap().token_name.clone(),
@@ -1195,6 +1199,7 @@ fn account_balance_() {
     })
 }
 
+#[query(name = "account_balance")]
 #[candid_method(query, rename = "account_balance")]
 fn account_balance_candid_(arg: AccountIdentifierByteBuf) -> Tokens {
     match BinaryAccountBalanceArgs::try_from(arg) {
@@ -1208,11 +1213,6 @@ fn account_balance_candid_(arg: AccountIdentifierByteBuf) -> Tokens {
     }
 }
 
-#[export_name = "canister_query account_balance"]
-fn account_balance_candid() {
-    over(candid_one, account_balance_candid_)
-}
-
 #[candid_method(query, rename = "account_balance_dfx")]
 fn account_balance_dfx_(args: AccountBalanceArgs) -> Tokens {
     account_balance(args.account)
@@ -1224,29 +1224,10 @@ fn account_balance_dfx() {
     over(candid_one, account_balance_dfx_);
 }
 
+#[query(name = "account_identifier")]
 #[candid_method(query, rename = "account_identifier")]
 fn compute_account_identifier(arg: Account) -> AccountIdBlob {
     AccountIdentifier::from(arg).to_address()
-}
-
-#[export_name = "canister_query account_identifier"]
-fn compute_account_identifier_candid() {
-    over(candid_one, compute_account_identifier)
-}
-
-#[export_name = "canister_query icrc1_balance_of"]
-fn icrc1_balance_of_candid() {
-    over(candid_one, icrc1_balance_of)
-}
-
-#[export_name = "canister_query transfer_fee"]
-fn transfer_fee_candid() {
-    over(candid_one, transfer_fee)
-}
-
-#[export_name = "canister_query icrc1_fee"]
-fn icrc1_fee_candid() {
-    over(candid_one, |()| icrc1_fee())
 }
 
 #[export_name = "canister_query transfer_fee_pb"]
@@ -1257,11 +1238,6 @@ fn transfer_fee_() {
 #[export_name = "canister_query symbol"]
 fn token_symbol_candid() {
     over(candid_one, |()| token_symbol())
-}
-
-#[export_name = "canister_query name"]
-fn token_name_candid() {
-    over(candid_one, |()| token_name())
 }
 
 #[export_name = "canister_query total_supply_pb"]
