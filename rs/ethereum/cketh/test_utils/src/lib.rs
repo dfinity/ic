@@ -20,7 +20,7 @@ use ic_cketh_minter::{
 };
 use ic_ethereum_types::Address;
 use ic_icrc1_ledger::{InitArgsBuilder as LedgerInitArgsBuilder, LedgerArgument};
-use ic_management_canister_types::{CanisterHttpResponsePayload, CanisterStatusType};
+use ic_management_canister_types_private::{CanisterHttpResponsePayload, CanisterStatusType};
 use ic_state_machine_tests::{
     PayloadBuilder, StateMachine, StateMachineBuilder, UserError, WasmResult,
 };

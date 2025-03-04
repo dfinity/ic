@@ -6,6 +6,7 @@ package(default_visibility = ["//visibility:public"])
 # See rs/nervous_system/feature_test.md
 BASE_DEPENDENCIES = [
     # Keep sorted.
+    "//rs/interfaces/registry",
     "//rs/ledger_suite/common/ledger_core",
     "//rs/ledger_suite/icp:icp_ledger",
     "//rs/ledger_suite/icrc1",
@@ -16,10 +17,14 @@ BASE_DEPENDENCIES = [
     "//rs/nervous_system/common",
     "//rs/nervous_system/proto",
     "//rs/nervous_system/root",
+    "//rs/nns/cmc",
     "//rs/nns/common",
     "//rs/nns/governance/api",
     "//rs/nns/sns-wasm",
+    "//rs/registry/proto_data_provider",
+    "//rs/sns/cli",
     "//rs/sns/governance",
+    "//rs/sns/governance/api",
     "//rs/sns/init",
     "//rs/sns/root",
     "//rs/sns/swap",
@@ -29,11 +34,14 @@ BASE_DEPENDENCIES = [
     "@crate_index//:assert_matches",
     "@crate_index//:candid",
     "@crate_index//:futures",
+    "@crate_index//:ic-management-canister-types",
     "@crate_index//:itertools",
     "@crate_index//:lazy_static",
     "@crate_index//:prost",
     "@crate_index//:rust_decimal",
+    "@crate_index//:tempfile",
     "@crate_index//:tokio",
+    "@crate_index//:url",
 ] + select({
     "@rules_rust//rust/platform:wasm32-unknown-unknown": [],
     "//conditions:default": [
@@ -182,6 +190,7 @@ rust_test_suite_with_extra_srcs(
             "tests/sns_release_qualification_legacy.rs",
             "tests/sns_upgrade_test_utils_legacy.rs",
             "tests/upgrade_sns_controlled_canister_with_large_wasm.rs",
+            "tests/custom_upgrade_path.rs",
         ],
     ),
     aliases = ALIASES,
@@ -294,6 +303,23 @@ rust_test(
     data = DEV_DATA,
     env = DEV_ENV | {"RUST_TEST_NOCAPTURE": "1"},
     flaky = True,
+    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    tags = [
+        "cpu:4",
+    ],
+    deps = [":nervous_system_integration_tests"] + DEPENDENCIES_WITH_TEST_FEATURES + DEV_DEPENDENCIES,
+)
+
+rust_test(
+    name = "custom_upgrade_path",
+    timeout = "long",
+    srcs = [
+        "tests/custom_upgrade_path.rs",
+    ],
+    aliases = ALIASES,
+    data = DEV_DATA,
+    env = DEV_ENV | {"RUST_TEST_NOCAPTURE": "1"},
+    flaky = False,
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     tags = [
         "cpu:4",

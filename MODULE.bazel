@@ -622,8 +622,8 @@ http_file(
 
 http_file(
     name = "cycles-ledger.wasm.gz",
-    sha256 = "4f26aae9edef5b4e2c785c1dc6f312163af055f22954dd99d515d8a862bd59bd",
-    url = "https://github.com/dfinity/cycles-ledger/releases/download/cycles-ledger-v0.2.3/cycles-ledger.wasm.gz",
+    sha256 = "d2aacbd214f20d752fd1696c2e36d7eceaafe07b932b3ae9e7e5564d1bda0178",
+    url = "https://github.com/dfinity/cycles-ledger/releases/download/cycles-ledger-v1.0.3/cycles-ledger.wasm.gz",
 )
 
 # Subnet Rental Canister
@@ -846,6 +846,11 @@ http_file(
 
 http_file(
     name = "pocket-ic-mainnet-gz",
+    # Calculate this hash using:
+    # git checkout $revision
+    # ci/container/container-run.sh
+    # bazel build //publish/binaries:pocket-ic.gz
+    # sha256sum bazel-bin/publish/binaries/pocket-ic.gz
     sha256 = "0935ee6ece312719aae4eabddec2dfc6af34d5edbddf4d3af53bccd1b3636044",
     url = "https://download.dfinity.systems/ic/172f8c78653c93ad101af75b94251439b4ccf098/binaries/x86_64-linux/pocket-ic.gz",
 )

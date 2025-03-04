@@ -114,7 +114,7 @@ impl ServerCertVerifier for TlsVerifier {
             .map_err(|_x| RustlsError::InvalidCertificate(CertificateError::BadEncoding))?;
 
         // Verify the provided self-signed certificate using the public key from registry
-        let node_tls_pubkey_from_registry = ic_crypto_ed25519::PublicKey::deserialize_raw(
+        let node_tls_pubkey_from_registry = ic_ed25519::PublicKey::deserialize_raw(
             &node_cert
                 .tbs_certificate
                 .subject_pki

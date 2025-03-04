@@ -3,6 +3,16 @@ load("//bazel:defs.bzl", "rust_bench", "rust_ic_test")
 
 package(default_visibility = ["//visibility:public"])
 
+MACRO_DEPENDENCIES = [
+    # Keep sorted.
+    "@crate_index//:strum_macros",
+]
+
+MACRO_DEV_DEPENDENCIES = [
+    # Keep sorted.
+    "@crate_index//:test-strategy",
+]
+
 rust_library(
     name = "state_manager",
     srcs = glob(["src/**"]),
@@ -11,13 +21,11 @@ rust_library(
         "//conditions:default": [],
     }),
     crate_name = "ic_state_manager",
-    proc_macro_deps = [
-        # Keep sorted.
-        "@crate_index//:strum_macros",
-    ],
+    proc_macro_deps = MACRO_DEPENDENCIES,
     version = "0.9.0",
     deps = [
         # Keep sorted.
+        "//packages/ic-error-types",
         "//rs/canonical_state",
         "//rs/canonical_state/tree_hash",
         "//rs/config",
@@ -36,7 +44,6 @@ rust_library(
         "//rs/sys",
         "//rs/tree_deserializer",
         "//rs/types/base_types",
-        "//rs/types/error_types",
         "//rs/types/types",
         "//rs/utils",
         "//rs/utils/thread",
@@ -64,8 +71,10 @@ rust_test(
     name = "state_manager_lib_tests",
     timeout = "long",
     crate = ":state_manager",
+    proc_macro_deps = MACRO_DEV_DEPENDENCIES,
     deps = [
         # Keep sorted.
+        "//packages/ic-error-types",
         "//rs/registry/routing_table",
         "//rs/registry/subnet_features",
         "//rs/registry/subnet_type",
@@ -75,7 +84,6 @@ rust_test(
         "//rs/test_utilities/time",
         "//rs/test_utilities/tmpdir",
         "//rs/test_utilities/types",
-        "//rs/types/error_types",
         "//rs/types/management_canister_types",
         "//rs/types/wasm_types",
         "@crate_index//:assert_matches",
@@ -94,6 +102,7 @@ rust_ic_test(
         "tests/state_manager.rs",
     ],
     crate_root = "tests/state_manager.rs",
+    proc_macro_deps = MACRO_DEV_DEPENDENCIES,
     deps = [
         # Keep sorted.
         ":state_manager",
@@ -139,6 +148,7 @@ rust_bench(
     deps = [
         # Keep sorted.
         ":state_manager",
+        "//packages/ic-error-types",
         "//rs/canonical_state",
         "//rs/canonical_state/certification_version",
         "//rs/canonical_state/tree_hash",
@@ -151,7 +161,6 @@ rust_bench(
         "//rs/test_utilities/time",
         "//rs/test_utilities/types",
         "//rs/types/base_types",
-        "//rs/types/error_types",
         "//rs/types/types",
         "@crate_index//:criterion",
         "@crate_index//:maplit",

@@ -283,8 +283,10 @@ impl IDkgPreSignerImpl {
                     self.metrics
                         .pre_sign_errors_inc("create_support_missing_transcript_params");
                     warn!(
+                        every_n_seconds => 15,
                         self.log,
-                        "Dealing support creation: transcript_param not found: {}", signed_dealing,
+                        "Dealing support creation: transcript_param not found: {}",
+                        signed_dealing
                     );
                     None
                 }
@@ -1428,7 +1430,7 @@ mod tests {
     // in progress are filtered out.
     #[test]
     fn test_send_dealings_all_algorithms() {
-        for key_id in fake_master_public_key_ids_for_all_algorithms() {
+        for key_id in fake_master_public_key_ids_for_all_idkg_algorithms() {
             println!("Running test for key ID {key_id}");
             test_send_dealings(key_id);
         }
@@ -1530,7 +1532,7 @@ mod tests {
     // specified by the transcript params
     #[test]
     fn test_non_dealers_dont_send_dealings_all_algorithms() {
-        for key_id in fake_master_public_key_ids_for_all_algorithms() {
+        for key_id in fake_master_public_key_ids_for_all_idkg_algorithms() {
             println!("Running test for key ID {key_id}");
             test_non_dealers_dont_send_dealings(key_id);
         }
@@ -1590,7 +1592,7 @@ mod tests {
     // results in complaints.
     #[test]
     fn test_send_dealings_with_complaints_all_algorithms() {
-        for key_id in fake_master_public_key_ids_for_all_algorithms() {
+        for key_id in fake_master_public_key_ids_for_all_idkg_algorithms() {
             println!("Running test for key ID {key_id}");
             test_send_dealings_with_complaints(key_id);
         }
@@ -1668,7 +1670,7 @@ mod tests {
     // requests, and others dealings are either deferred or dropped.
     #[test]
     fn test_validate_dealings_all_algorithms() {
-        for key_id in fake_master_public_key_ids_for_all_algorithms() {
+        for key_id in fake_master_public_key_ids_for_all_idkg_algorithms() {
             println!("Running test for key ID {key_id}");
             test_validate_dealings(key_id);
         }
@@ -1837,7 +1839,7 @@ mod tests {
     // are dropped.
     #[test]
     fn test_duplicate_dealing_all_algorithms() {
-        for key_id in fake_master_public_key_ids_for_all_algorithms() {
+        for key_id in fake_master_public_key_ids_for_all_idkg_algorithms() {
             println!("Running test for key ID {key_id}");
             test_duplicate_dealing(key_id);
         }
@@ -1882,7 +1884,7 @@ mod tests {
     // in the unvalidated pool are dropped.
     #[test]
     fn test_duplicate_dealing_in_batch_all_algorithms() {
-        for key_id in fake_master_public_key_ids_for_all_algorithms() {
+        for key_id in fake_master_public_key_ids_for_all_idkg_algorithms() {
             println!("Running test for key ID {key_id}");
             test_duplicate_dealing_in_batch(key_id);
         }
@@ -1949,7 +1951,7 @@ mod tests {
     // transcript are dropped.
     #[test]
     fn test_unexpected_dealing_all_algorithms() {
-        for key_id in fake_master_public_key_ids_for_all_algorithms() {
+        for key_id in fake_master_public_key_ids_for_all_idkg_algorithms() {
             println!("Running test for key ID {key_id}");
             test_unexpected_dealing(key_id);
         }
@@ -1986,7 +1988,7 @@ mod tests {
     // Tests that support shares are sent to eligible dealings
     #[test]
     fn test_send_support_all_algorithms() {
-        for key_id in fake_master_public_key_ids_for_all_algorithms() {
+        for key_id in fake_master_public_key_ids_for_all_idkg_algorithms() {
             println!("Running test for key ID {key_id}");
             test_send_support(key_id);
         }
@@ -2029,7 +2031,7 @@ mod tests {
     // Tests that sending support shares is deferred if crypto returns transient error.
     #[test]
     fn test_defer_sending_dealing_support_all_algorithms() {
-        for key_id in fake_master_public_key_ids_for_all_algorithms() {
+        for key_id in fake_master_public_key_ids_for_all_idkg_algorithms() {
             println!("Running test for key ID {key_id}");
             test_defer_sending_dealing_support(key_id);
         }
@@ -2077,7 +2079,7 @@ mod tests {
     // Tests that invalid dealings are handled invalid when creating new dealing support.
     #[test]
     fn test_dont_send_support_for_invalid_all_algorithms() {
-        for key_id in fake_master_public_key_ids_for_all_algorithms() {
+        for key_id in fake_master_public_key_ids_for_all_idkg_algorithms() {
             println!("Running test for key ID {key_id}");
             test_dont_send_support_for_invalid(key_id);
         }
@@ -2118,7 +2120,7 @@ mod tests {
     // the transcript
     #[test]
     fn test_non_receivers_dont_send_support_all_algorithms() {
-        for key_id in fake_master_public_key_ids_for_all_algorithms() {
+        for key_id in fake_master_public_key_ids_for_all_idkg_algorithms() {
             println!("Running test for key ID {key_id}");
             test_non_receivers_dont_send_support(key_id);
         }
@@ -2211,7 +2213,7 @@ mod tests {
     // transcript requests, and others dealings are either deferred or dropped.
     #[test]
     fn test_validate_dealing_support_all_algorithms() {
-        for key_id in fake_master_public_key_ids_for_all_algorithms() {
+        for key_id in fake_master_public_key_ids_for_all_idkg_algorithms() {
             println!("Running test for key ID {key_id}");
             test_validate_dealing_support(key_id);
         }
@@ -2741,7 +2743,7 @@ mod tests {
     // Tests transcript builder failures and success
     #[test]
     fn test_transcript_builder_all_algorithms() {
-        for key_id in fake_master_public_key_ids_for_all_algorithms() {
+        for key_id in fake_master_public_key_ids_for_all_idkg_algorithms() {
             println!("Running test for key ID {key_id}");
             test_transcript_builder(key_id);
         }

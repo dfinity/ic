@@ -6,7 +6,7 @@ use crate::{
 use ic_error_types::{RejectCode, UserError};
 #[cfg(test)]
 use ic_exhaustive_derive::ExhaustiveSet;
-use ic_management_canister_types::{
+use ic_management_canister_types_private::{
     CanisterIdRecord, CanisterInfoRequest, ClearChunkStoreArgs, DeleteCanisterSnapshotArgs,
     InstallChunkedCodeArgs, InstallCodeArgsV2, ListCanisterSnapshotArgs, LoadCanisterSnapshotArgs,
     Method, Payload as _, ProvisionalTopUpCanisterArgs, StoredChunksArgs, TakeCanisterSnapshotArgs,
@@ -135,6 +135,12 @@ impl Request {
     pub fn payload_size_bytes(&self) -> NumBytes {
         let bytes = self.method_name.len() + self.method_payload.len();
         NumBytes::from(bytes as u64)
+    }
+
+    /// Returns `true` if this is the request of a best-effort call
+    /// (i.e. if it has a non-zero deadline).
+    pub fn is_best_effort(&self) -> bool {
+        self.deadline != NO_DEADLINE
     }
 
     /// Helper function to extract the effective canister id from the payload.

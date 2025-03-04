@@ -3,7 +3,7 @@ use super::*;
 use assert_matches::assert_matches;
 use ic_limits::SMALL_APP_SUBNET_MAX_SIZE;
 use ic_logger::replica_logger::no_op_logger;
-use ic_management_canister_types::{
+use ic_management_canister_types_private::{
     CanisterSettingsArgsBuilder, Payload, UpdateSettingsArgs, IC_00,
 };
 use ic_registry_subnet_type::SubnetType;

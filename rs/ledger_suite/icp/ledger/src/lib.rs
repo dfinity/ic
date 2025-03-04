@@ -1,10 +1,12 @@
-use dfn_core::api::{now, trap_with};
 use ic_base_types::{CanisterId, PrincipalId};
+use ic_cdk::{api::time, trap};
 use ic_ledger_canister_core::archive::ArchiveCanisterWasm;
-use ic_ledger_canister_core::blockchain::Blockchain;
+use ic_ledger_canister_core::blockchain::{Blockchain, HeapBlockData};
 use ic_ledger_canister_core::ledger::{
     self as core_ledger, LedgerContext, LedgerData, TransactionInfo,
 };
+use ic_ledger_canister_core::runtime::CdkRuntime;
+use ic_ledger_core::balances::BalancesStore;
 use ic_ledger_core::{
     approvals::{Allowance, AllowanceTable, AllowancesData},
     balances::Balances,
@@ -30,8 +32,6 @@ use std::cell::RefCell;
 use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
 use std::sync::RwLock;
 use std::time::Duration;
-
-mod dfn_runtime;
 
 #[cfg(test)]
 mod tests;
@@ -75,6 +75,7 @@ fn default_ledger_version() -> u64 {
 const UPGRADES_MEMORY_ID: MemoryId = MemoryId::new(0);
 const ALLOWANCES_MEMORY_ID: MemoryId = MemoryId::new(1);
 const ALLOWANCES_EXPIRATIONS_MEMORY_ID: MemoryId = MemoryId::new(2);
+const BALANCES_MEMORY_ID: MemoryId = MemoryId::new(3);
 
 #[derive(Clone, Debug, Encode, Decode)]
 struct StorableAllowance {
@@ -142,12 +143,17 @@ thread_local! {
     #[allow(clippy::type_complexity)]
     pub static ALLOWANCES_EXPIRATIONS_MEMORY: RefCell<StableBTreeMap<(TimeStamp, (AccountIdentifier, AccountIdentifier)), (), VirtualMemory<DefaultMemoryImpl>>> =
         MEMORY_MANAGER.with(|memory_manager| RefCell::new(StableBTreeMap::init(memory_manager.borrow().get(ALLOWANCES_EXPIRATIONS_MEMORY_ID))));
+
+    // account -> tokens - map storing ledger balances.
+    pub static BALANCES_MEMORY: RefCell<StableBTreeMap<AccountIdentifier, Tokens, VirtualMemory<DefaultMemoryImpl>>> =
+        MEMORY_MANAGER.with(|memory_manager| RefCell::new(StableBTreeMap::init(memory_manager.borrow().get(BALANCES_MEMORY_ID))));
 }
 
 #[derive(Copy, Clone, Serialize, Deserialize, Debug)]
 pub enum LedgerField {
     Allowances,
     AllowancesExpirations,
+    Balances,
 }
 
 #[derive(Copy, Clone, Serialize, Deserialize, Debug)]
@@ -168,24 +174,28 @@ impl Default for LedgerState {
 /// We have the following ledger versions:
 ///   * 0 - the whole ledger state is stored on the heap.
 ///   * 1 - the allowances are stored in stable structures.
+///   * 2 - the balances are stored in stable structures.
 #[cfg(not(feature = "next-ledger-version"))]
-pub const LEDGER_VERSION: u64 = 1;
+pub const LEDGER_VERSION: u64 = 2;
 
 #[cfg(feature = "next-ledger-version")]
-pub const LEDGER_VERSION: u64 = 2;
+pub const LEDGER_VERSION: u64 = 3;
+
+type StableLedgerBalances = Balances<StableBalances>;
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct Ledger {
     balances: LedgerBalances,
     #[serde(default)]
+    stable_balances: StableLedgerBalances,
+    #[serde(default)]
     approvals: LedgerAllowances,
     #[serde(default)]
     stable_approvals: AllowanceTable<StableAllowancesData>,
-    pub blockchain: Blockchain<dfn_runtime::DfnRuntime, IcpLedgerArchiveWasm>,
-    // A cap on the maximum number of accounts.
+    pub blockchain: Blockchain<CdkRuntime, IcpLedgerArchiveWasm, HeapBlockData>,
+    // DEPRECATED
     pub maximum_number_of_accounts: usize,
-    // When maximum number of accounts is exceeded, a specified number of
-    // accounts with lowest balances are removed.
+    // DEPRECATED
     accounts_overflow_trim_quantity: usize,
     pub minting_account_id: Option<AccountIdentifier>,
     pub icrc1_minting_account: Option<Account>,
@@ -229,17 +239,17 @@ pub struct Ledger {
 impl LedgerContext for Ledger {
     type AccountId = AccountIdentifier;
     type AllowancesData = StableAllowancesData;
-    type BalancesStore = BTreeMap<AccountIdentifier, Tokens>;
+    type BalancesStore = StableBalances;
     type Tokens = Tokens;
 
     fn balances(&self) -> &Balances<Self::BalancesStore> {
         panic_if_not_ready();
-        &self.balances
+        &self.stable_balances
     }
 
     fn balances_mut(&mut self) -> &mut Balances<Self::BalancesStore> {
         panic_if_not_ready();
-        &mut self.balances
+        &mut self.stable_balances
     }
 
     fn approvals(&self) -> &AllowanceTable<Self::AllowancesData> {
@@ -258,10 +268,11 @@ impl LedgerContext for Ledger {
 }
 
 impl LedgerData for Ledger {
-    type Runtime = dfn_runtime::DfnRuntime;
+    type Runtime = CdkRuntime;
     type ArchiveWasm = IcpLedgerArchiveWasm;
     type Transaction = Transaction;
     type Block = Block;
+    type BlockData = HeapBlockData;
 
     fn transaction_window(&self) -> Duration {
         self.transaction_window
@@ -275,14 +286,6 @@ impl LedgerData for Ledger {
         Self::MAX_TRANSACTIONS_TO_PURGE
     }
 
-    fn max_number_of_accounts(&self) -> usize {
-        self.maximum_number_of_accounts
-    }
-
-    fn accounts_overflow_trim_quantity(&self) -> usize {
-        self.accounts_overflow_trim_quantity
-    }
-
     fn token_name(&self) -> &str {
         &self.token_name
     }
@@ -291,11 +294,13 @@ impl LedgerData for Ledger {
         &self.token_symbol
     }
 
-    fn blockchain(&self) -> &Blockchain<Self::Runtime, Self::ArchiveWasm> {
+    fn blockchain(&self) -> &Blockchain<Self::Runtime, Self::ArchiveWasm, Self::BlockData> {
         &self.blockchain
     }
 
-    fn blockchain_mut(&mut self) -> &mut Blockchain<Self::Runtime, Self::ArchiveWasm> {
+    fn blockchain_mut(
+        &mut self,
+    ) -> &mut Blockchain<Self::Runtime, Self::ArchiveWasm, Self::BlockData> {
         &mut self.blockchain
     }
 
@@ -330,11 +335,12 @@ impl Default for Ledger {
     fn default() -> Self {
         Self {
             approvals: Default::default(),
+            stable_balances: StableLedgerBalances::default(),
             stable_approvals: Default::default(),
             balances: LedgerBalances::default(),
             blockchain: Blockchain::default(),
-            maximum_number_of_accounts: 28_000_000,
-            accounts_overflow_trim_quantity: 100_000,
+            maximum_number_of_accounts: 0,
+            accounts_overflow_trim_quantity: 0,
             minting_account_id: None,
             icrc1_minting_account: None,
             blocks_notified: IntMap::new(),
@@ -369,7 +375,7 @@ impl Ledger {
         operation: Operation,
         created_at_time: Option<TimeStamp>,
     ) -> Result<(BlockIndex, HashOf<EncodedBlock>), PaymentError> {
-        let now = TimeStamp::from(dfn_core::api::now());
+        let now = TimeStamp::from_nanos_since_unix_epoch(time());
         self.add_payment_with_timestamp(memo, operation, created_at_time, now)
     }
 
@@ -450,8 +456,6 @@ impl Ledger {
         token_symbol: Option<String>,
         token_name: Option<String>,
         feature_flags: Option<FeatureFlags>,
-        maximum_number_of_accounts: Option<usize>,
-        accounts_overflow_trim_quantity: Option<usize>,
     ) {
         self.token_symbol = token_symbol.unwrap_or_else(|| "ICP".to_string());
         self.token_name = token_name.unwrap_or_else(|| "Internet Computer".to_string());
@@ -478,12 +482,6 @@ impl Ledger {
         }
         if let Some(feature_flags) = feature_flags {
             self.feature_flags = feature_flags;
-        }
-        if let Some(maximum_number_of_accounts) = maximum_number_of_accounts {
-            self.maximum_number_of_accounts = maximum_number_of_accounts;
-        }
-        if let Some(accounts_overflow_trim_quantity) = accounts_overflow_trim_quantity {
-            self.accounts_overflow_trim_quantity = accounts_overflow_trim_quantity;
         }
     }
 
@@ -558,7 +556,7 @@ impl Ledger {
     pub fn upgrade(&mut self, args: UpgradeArgs) {
         if let Some(icrc1_minting_account) = args.icrc1_minting_account {
             if Some(AccountIdentifier::from(icrc1_minting_account)) != self.minting_account_id {
-                trap_with(
+                trap(
                     "The icrc1 minting account is not the same as the minting account set during initialization",
                 );
             }
@@ -593,8 +591,22 @@ impl Ledger {
         }
     }
 
+    pub fn migrate_one_balance(&mut self) -> bool {
+        match self.balances.store.pop_first() {
+            Some((account, tokens)) => {
+                self.stable_balances.credit(&account, tokens);
+                true
+            }
+            None => false,
+        }
+    }
+
     pub fn clear_arrivals(&mut self) {
         self.approvals.allowances_data.clear_arrivals();
+    }
+
+    pub fn copy_token_pool(&mut self) {
+        self.stable_balances.token_pool = self.balances.token_pool;
     }
 }
 
@@ -619,7 +631,7 @@ pub fn change_notification_state(
         height,
         block_timestamp,
         new_state,
-        TimeStamp::from(now()),
+        TimeStamp::from_nanos_since_unix_epoch(time()),
     )
 }
 
@@ -648,6 +660,16 @@ pub fn clear_stable_allowance_data() {
     ALLOWANCES_EXPIRATIONS_MEMORY.with_borrow_mut(|expirations| {
         expirations.clear_new();
     });
+}
+
+pub fn clear_stable_balances_data() {
+    BALANCES_MEMORY.with_borrow_mut(|balances| {
+        balances.clear_new();
+    });
+}
+
+pub fn balances_len() -> u64 {
+    BALANCES_MEMORY.with_borrow(|balances| balances.len())
 }
 
 #[derive(Serialize, Deserialize, Debug, Default)]
@@ -731,5 +753,42 @@ impl AllowancesData for StableAllowancesData {
 
     fn clear_arrivals(&mut self) {
         panic!("The method `clear_arrivals` should not be called for StableAllowancesData")
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug, Default, PartialEq)]
+pub struct StableBalances {}
+
+impl BalancesStore for StableBalances {
+    type AccountId = AccountIdentifier;
+    type Tokens = Tokens;
+
+    fn get_balance(&self, k: &AccountIdentifier) -> Option<Tokens> {
+        BALANCES_MEMORY.with_borrow(|balances| balances.get(k))
+    }
+
+    fn update<F, E>(&mut self, k: AccountIdentifier, mut f: F) -> Result<Tokens, E>
+    where
+        F: FnMut(Option<&Tokens>) -> Result<Tokens, E>,
+    {
+        let entry = BALANCES_MEMORY.with_borrow(|balances| balances.get(&k));
+        match entry {
+            Some(v) => {
+                let new_v = f(Some(&v))?;
+                if new_v != Tokens::ZERO {
+                    BALANCES_MEMORY.with_borrow_mut(|balances| balances.insert(k, new_v));
+                } else {
+                    BALANCES_MEMORY.with_borrow_mut(|balances| balances.remove(&k));
+                }
+                Ok(new_v)
+            }
+            None => {
+                let new_v = f(None)?;
+                if new_v != Tokens::ZERO {
+                    BALANCES_MEMORY.with_borrow_mut(|balances| balances.insert(k, new_v));
+                }
+                Ok(new_v)
+            }
+        }
     }
 }

@@ -10,7 +10,7 @@ use ic_btc_interface::{
     GetUtxosRequest, GetUtxosResponse, MillisatoshiPerByte, Network, OutPoint, Satoshi, Txid, Utxo,
 };
 use ic_canister_log::log;
-use ic_management_canister_types::DerivationPath;
+use ic_management_canister_types_private::DerivationPath;
 use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc1::transfer::Memo;
 use scopeguard::{guard, ScopeGuard};

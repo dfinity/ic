@@ -3,7 +3,6 @@
 # Build event upload configuration
 build:bes --bes_results_url=https://dash.idx.dfinity.network/invocation/
 build:bes --bes_backend=bes.idx.dfinity.network
-build:bes --bes_upload_mode=wait_for_upload_complete
 build:bes --bes_timeout=180s # Default is no timeout.
 build:bes --remote_build_event_upload=minimal
 

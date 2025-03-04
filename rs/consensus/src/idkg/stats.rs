@@ -3,7 +3,7 @@
 use crate::idkg::metrics::{
     IDkgPreSignatureMetrics, IDkgTranscriptMetrics, ThresholdSignatureMetrics,
 };
-use ic_management_canister_types::MasterPublicKeyId;
+use ic_management_canister_types_private::MasterPublicKeyId;
 use ic_types::consensus::idkg::{IDkgBlockReader, IDkgStats, PreSigId, RequestId};
 use ic_types::crypto::canister_threshold_sig::idkg::{
     IDkgDealingSupport, IDkgTranscriptId, IDkgTranscriptParams,

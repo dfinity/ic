@@ -19,13 +19,6 @@ pub trait BalancesStore {
         F: FnMut(Option<&Self::Tokens>) -> Result<Self::Tokens, E>;
 }
 
-#[allow(clippy::len_without_is_empty)]
-pub trait InspectableBalancesStore: BalancesStore {
-    fn iter(&self) -> Box<dyn Iterator<Item = (&Self::AccountId, &Self::Tokens)> + '_>;
-
-    fn len(&self) -> usize;
-}
-
 impl<AccountId, Tokens> BalancesStore for BTreeMap<AccountId, Tokens>
 where
     AccountId: Eq + Clone + std::cmp::Ord,
@@ -60,20 +53,6 @@ where
                 Ok(new_v)
             }
         }
-    }
-}
-
-impl<AccountId, Tokens> InspectableBalancesStore for BTreeMap<AccountId, Tokens>
-where
-    AccountId: Eq + Clone + std::cmp::Ord,
-    Tokens: TokensType,
-{
-    fn len(&self) -> usize {
-        self.len()
-    }
-
-    fn iter(&self) -> Box<dyn Iterator<Item = (&Self::AccountId, &Self::Tokens)> + '_> {
-        Box::new(self.iter())
     }
 }
 
@@ -129,7 +108,7 @@ where
         fee_collector: Option<&S::AccountId>,
     ) -> Result<(), BalanceError<S::Tokens>> {
         let debit_amount = amount.checked_add(&fee).ok_or_else(|| {
-            // No account can hold more than u64::MAX.
+            // No account can hold more than Tokens::max_value().
             let balance = self.account_balance(from);
             BalanceError::InsufficientFunds { balance }
         })?;
@@ -139,7 +118,7 @@ where
             None => {
                 // NB. integer overflow is not possible here unless there is a
                 // severe bug in the system: total amount of tokens in the
-                // circulation cannot exceed u64::MAX.
+                // circulation cannot exceed Tokens::max_value().
                 self.token_pool = self
                     .token_pool
                     .checked_add(&fee)
@@ -176,8 +155,8 @@ where
         Ok(())
     }
 
-    // Debiting an account will automatically remove it from the `inner`
-    // HashMap if the balance reaches zero.
+    // Debiting an account will automatically remove it from the inner
+    // `BalancesStore` if the balance reaches zero.
     pub fn debit(
         &mut self,
         from: &S::AccountId,
@@ -212,8 +191,8 @@ where
                 |prev| -> Result<S::Tokens, std::convert::Infallible> {
                     // NB. credit cannot overflow unless there is a bug in the
                     // system: the total amount of tokens in the circulation cannot
-                    // exceed u64::MAX, so it's impossible to have more than
-                    // u64::MAX tokens on a single account.
+                    // exceed Tokens::max_value(), so it's impossible to have more than
+                    // Tokens::max_value() tokens on a single account.
                     Ok(amount
                         .checked_add(prev.unwrap_or(&S::Tokens::zero()))
                         .expect("bug: overflow in credit"))

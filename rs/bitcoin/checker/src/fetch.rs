@@ -8,8 +8,8 @@ use bitcoin::Transaction;
 use futures::future::try_join_all;
 use ic_btc_checker::{
     blocklist::is_blocked, get_tx_cycle_cost, CheckTransactionIrrecoverableError,
-    CheckTransactionResponse, CheckTransactionRetriable, CheckTransactionStatus,
-    INITIAL_MAX_RESPONSE_BYTES, RETRY_MAX_RESPONSE_BYTES,
+    CheckTransactionQueryResponse, CheckTransactionResponse, CheckTransactionRetriable,
+    CheckTransactionStatus, INITIAL_MAX_RESPONSE_BYTES, RETRY_MAX_RESPONSE_BYTES,
 };
 use ic_btc_interface::Txid;
 use ic_canister_log::log;
@@ -183,23 +183,10 @@ pub trait FetchEnv {
     ///
     /// Pre-condition: `txid` already exists in state with a `Fetched` status.
     async fn check_fetched(&self, txid: Txid, fetched: &FetchedTx) -> CheckTransactionResponse {
-        // Return Passed or Failed when all checks are complete, or None otherwise.
-        fn check_completed(fetched: &FetchedTx) -> Option<CheckTransactionResponse> {
-            if fetched.input_addresses.iter().all(|x| x.is_some()) {
-                // We have obtained all input addresses.
-                for address in fetched.input_addresses.iter().flatten() {
-                    if is_blocked(address) {
-                        return Some(CheckTransactionResponse::Failed(vec![address.to_string()]));
-                    }
-                }
-                Some(CheckTransactionResponse::Passed)
-            } else {
-                None
-            }
-        }
-
-        if let Some(result) = check_completed(fetched) {
-            return result;
+        match check_for_blocked_input_addresses(fetched) {
+            // If some input addresses are missing, try to fetch them and try again.
+            Err(CheckTxInputsError::MissingInputAddresses) => (),
+            result => return result.into(),
         }
 
         let mut futures = vec![];
@@ -279,12 +266,58 @@ pub trait FetchEnv {
             return err;
         }
         // Check again to see if we have completed
-        match state::get_fetch_status(txid).and_then(|result| match result {
-            FetchTxStatus::Fetched(fetched) => check_completed(&fetched),
-            _ => None,
-        }) {
-            Some(result) => result,
-            None => CheckTransactionRetriable::Pending.into(),
+        if let Some(FetchTxStatus::Fetched(fetched)) = state::get_fetch_status(txid) {
+            check_for_blocked_input_addresses(&fetched).into()
+        } else {
+            CheckTransactionRetriable::Pending.into()
         }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub enum CheckTxInputsError {
+    MissingInputAddresses,
+    BlockedInputAddresses(Vec<String>),
+}
+
+impl From<CheckTxInputsError> for CheckTransactionResponse {
+    fn from(error: CheckTxInputsError) -> Self {
+        match error {
+            CheckTxInputsError::MissingInputAddresses => CheckTransactionRetriable::Pending.into(),
+            CheckTxInputsError::BlockedInputAddresses(blocked) => {
+                CheckTransactionResponse::Failed(blocked)
+            }
+        }
+    }
+}
+
+impl From<CheckTxInputsError> for CheckTransactionQueryResponse {
+    fn from(error: CheckTxInputsError) -> Self {
+        match error {
+            CheckTxInputsError::MissingInputAddresses => CheckTransactionQueryResponse::Unknown,
+            CheckTxInputsError::BlockedInputAddresses(blocked) => {
+                CheckTransactionQueryResponse::Failed(blocked)
+            }
+        }
+    }
+}
+
+/// Return `Ok` if no input address is blocked, and an `Err` if either one of the input
+/// addresses is blocked, or one of the input addresses is not available.
+pub fn check_for_blocked_input_addresses(fetched: &FetchedTx) -> Result<(), CheckTxInputsError> {
+    if fetched.input_addresses.iter().any(|x| x.is_none()) {
+        return Err(CheckTxInputsError::MissingInputAddresses);
+    }
+    let blocked: Vec<String> = fetched
+        .input_addresses
+        .iter()
+        .flatten()
+        .filter(|address| is_blocked(address))
+        .map(|address| address.to_string())
+        .collect();
+    if blocked.is_empty() {
+        Ok(())
+    } else {
+        Err(CheckTxInputsError::BlockedInputAddresses(blocked))
     }
 }

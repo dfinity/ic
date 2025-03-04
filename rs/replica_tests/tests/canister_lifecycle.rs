@@ -4,7 +4,7 @@ use ic_config::execution_environment::DEFAULT_WASM_MEMORY_LIMIT;
 use ic_config::subnet_config::CyclesAccountManagerConfig;
 use ic_config::Config;
 use ic_error_types::{ErrorCode, RejectCode};
-use ic_management_canister_types::{
+use ic_management_canister_types_private::{
     self as ic00, CanisterChange, CanisterIdRecord, CanisterInstallMode,
     CanisterSettingsArgsBuilder, CanisterStatusResultV2, CanisterStatusType, EmptyBlob,
     InstallCodeArgs, Method, Payload, UpdateSettingsArgs, IC_00,
@@ -689,6 +689,8 @@ fn can_get_canister_information() {
             Ok(WasmResult::Reply(EmptyBlob.encode()))
         );
 
+        let canister_history_size =
+            NumBytes::from((2 * size_of::<CanisterChange>() + 2 * size_of::<PrincipalId>()) as u64);
         // Request the status of canister_b.
         assert_matches!(
             test.ingress(
@@ -707,7 +709,15 @@ fn can_get_canister_information() {
                 None,
                 canister_a.get(),
                 vec![canister_a.get()],
-                NumBytes::from((2 * size_of::<CanisterChange>() + 2 * size_of::<PrincipalId>()) as u64),
+                canister_history_size,
+                NumBytes::from(0),
+                NumBytes::from(0),
+                NumBytes::from(0),
+                NumBytes::from(0),
+                NumBytes::from(0),
+                canister_history_size,
+                NumBytes::from(0),
+                NumBytes::from(0),
                 num_cycles.get(),
                 ComputeAllocation::default().as_percent(),
                 None,
@@ -766,6 +776,14 @@ fn can_get_canister_information() {
                     vec![canister_a.get()],
                     // We don't assert a specific memory size since the universal canister's
                     // size changes between updates.
+                    NumBytes::from(0),
+                    NumBytes::from(0),
+                    NumBytes::from(0),
+                    NumBytes::from(0),
+                    NumBytes::from(0),
+                    NumBytes::from(0),
+                    NumBytes::from(0),
+                    NumBytes::from(0),
                     NumBytes::from(0),
                     num_cycles.get(),
                     ComputeAllocation::default().as_percent(),

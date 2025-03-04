@@ -6,11 +6,10 @@ pub mod test_utils;
 
 use bit_vec::BitVec;
 pub use checkpoint::{CheckpointSerialization, MappingSerialization};
-use ic_config::flag_status::FlagStatus;
 use ic_config::state_manager::LsmtConfig;
 use ic_metrics::buckets::{decimal_buckets, linear_buckets};
 use ic_metrics::MetricsRegistry;
-use ic_sys::{fs::write_all_vectored, PageBytes};
+use ic_sys::PageBytes;
 pub use ic_sys::{PageIndex, PAGE_SIZE};
 use ic_utils::deterministic_operations::deterministic_copy_from_slice;
 pub use page_allocator::{
@@ -32,14 +31,9 @@ use page_allocator::Page;
 use prometheus::{Histogram, HistogramVec, IntCounter, IntCounterVec};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::fs::{File, OpenOptions};
 use std::ops::Range;
 use std::os::unix::io::RawFd;
-use std::path::Path;
 use std::sync::Arc;
-
-// When persisting data we expand dirty pages to an aligned bucket of given size.
-const WRITE_BUCKET_PAGES: u64 = 16;
 
 const LABEL_OP: &str = "op";
 const LABEL_TYPE: &str = "type";
@@ -125,39 +119,6 @@ impl StorageMetrics {
             num_files_by_shard,
             storage_overhead_by_shard,
         }
-    }
-}
-
-struct WriteBuffer<'a> {
-    content: Vec<&'a [u8]>,
-    start_index: PageIndex,
-}
-
-impl WriteBuffer<'_> {
-    fn apply_to_file(&mut self, file: &mut File, path: &Path) -> Result<(), PersistenceError> {
-        use std::io::{Seek, SeekFrom};
-
-        let offset = self.start_index.get() * PAGE_SIZE as u64;
-        file.seek(SeekFrom::Start(offset))
-            .map_err(|err| PersistenceError::FileSystemError {
-                path: path.display().to_string(),
-                context: format!("Failed to seek to {}", offset),
-                internal_error: err.to_string(),
-            })?;
-
-        write_all_vectored(file, &self.content).map_err(|err| {
-            PersistenceError::FileSystemError {
-                path: path.display().to_string(),
-                context: format!(
-                    "Failed to copy page range #{}..{}",
-                    self.start_index,
-                    self.start_index.get() + self.content.len() as u64
-                ),
-                internal_error: err.to_string(),
-            }
-        })?;
-
-        Ok(())
     }
 }
 
@@ -590,16 +551,13 @@ impl PageMap {
         lsmt_config: &LsmtConfig,
         metrics: &StorageMetrics,
     ) -> Result<(), PersistenceError> {
-        match lsmt_config.lsmt_status {
-            FlagStatus::Disabled => self.persist_to_file(&self.page_delta, &storage_layout.base()),
-            FlagStatus::Enabled => self.persist_to_overlay(
-                &self.page_delta,
-                storage_layout,
-                height,
-                lsmt_config,
-                metrics,
-            ),
-        }
+        self.persist_to_overlay(
+            &self.page_delta,
+            storage_layout,
+            height,
+            lsmt_config,
+            metrics,
+        )
     }
 
     /// Persists the unflushed delta contained in this page map to the specified
@@ -611,18 +569,13 @@ impl PageMap {
         lsmt_config: &LsmtConfig,
         metrics: &StorageMetrics,
     ) -> Result<(), PersistenceError> {
-        match lsmt_config.lsmt_status {
-            FlagStatus::Disabled => {
-                self.persist_to_file(&self.unflushed_delta, &storage_layout.base())
-            }
-            FlagStatus::Enabled => self.persist_to_overlay(
-                &self.unflushed_delta,
-                storage_layout,
-                height,
-                lsmt_config,
-                metrics,
-            ),
-        }
+        self.persist_to_overlay(
+            &self.unflushed_delta,
+            storage_layout,
+            height,
+            lsmt_config,
+            metrics,
+        )
     }
 
     fn persist_to_overlay(
@@ -901,66 +854,6 @@ impl PageMap {
         // Delta is a persistent data structure and is cheap to clone.
         self.page_delta.update(delta.clone());
         self.unflushed_delta.update(delta)
-    }
-
-    /// Persists the given delta to the specified destination.
-    fn persist_to_file(&self, page_delta: &PageDelta, dst: &Path) -> Result<(), PersistenceError> {
-        let mut file = OpenOptions::new()
-            .write(true)
-            .create(true)
-            .truncate(false)
-            .open(dst)
-            .map_err(|err| PersistenceError::FileSystemError {
-                path: dst.display().to_string(),
-                context: "Failed to open file".to_string(),
-                internal_error: err.to_string(),
-            })?;
-        self.apply_delta_to_file(&mut file, page_delta, dst)?;
-        Ok(())
-    }
-
-    /// Applies the given delta to the specified file.
-    /// Precondition: `file` is seekable and writeable.
-    fn apply_delta_to_file(
-        &self,
-        file: &mut File,
-        page_delta: &PageDelta,
-        path: &Path,
-    ) -> Result<(), PersistenceError> {
-        // Empty delta
-        if page_delta.max_page_index().is_none() {
-            return Ok(());
-        }
-
-        let mut last_applied_index: Option<PageIndex> = None;
-        let num_host_pages = self.num_host_pages() as u64;
-        for (index, _) in page_delta.iter() {
-            debug_assert!(self.page_delta.0.get(index).is_some());
-            assert!(*index < num_host_pages.into());
-
-            if last_applied_index.is_some() && last_applied_index.unwrap() >= *index {
-                continue;
-            }
-
-            let bucket_start_index =
-                PageIndex::from((index.get() / WRITE_BUCKET_PAGES) * WRITE_BUCKET_PAGES);
-            let mut buffer = WriteBuffer {
-                content: vec![],
-                start_index: bucket_start_index,
-            };
-            for i in 0..WRITE_BUCKET_PAGES {
-                let index_to_apply = PageIndex::from(bucket_start_index.get() + i);
-                // We don't expand past the end of file to make bucketing transparent.
-                if index_to_apply.get() < num_host_pages {
-                    let content = self.get_page(index_to_apply);
-                    buffer.content.push(content);
-                    last_applied_index = Some(index_to_apply);
-                }
-            }
-            buffer.apply_to_file(file, path)?;
-        }
-
-        Ok(())
     }
 
     /// Returns the number of delta pages included in this PageMap.

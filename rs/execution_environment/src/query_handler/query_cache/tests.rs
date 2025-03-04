@@ -1479,6 +1479,12 @@ fn query_cache_future_proof_test() {
         | SystemApiCallId::CanisterStatus
         | SystemApiCallId::CanisterVersion
         | SystemApiCallId::CertifiedDataSet
+        | SystemApiCallId::CostCall
+        | SystemApiCallId::CostCreateCanister
+        | SystemApiCallId::CostHttpRequest
+        | SystemApiCallId::CostSignWithEcdsa
+        | SystemApiCallId::CostSignWithSchnorr
+        | SystemApiCallId::CostVetkdDeriveEncryptedKey
         | SystemApiCallId::CyclesBurn128
         | SystemApiCallId::DataCertificateCopy
         | SystemApiCallId::DataCertificatePresent
@@ -1510,6 +1516,8 @@ fn query_cache_future_proof_test() {
         | SystemApiCallId::MsgReplyDataAppend
         | SystemApiCallId::OutOfInstructions
         | SystemApiCallId::PerformanceCounter
+        | SystemApiCallId::SubnetSelfSize
+        | SystemApiCallId::SubnetSelfCopy
         | SystemApiCallId::Stable64Grow
         | SystemApiCallId::Stable64Read
         | SystemApiCallId::Stable64Size

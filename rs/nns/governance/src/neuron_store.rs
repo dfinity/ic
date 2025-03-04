@@ -1,8 +1,6 @@
 use crate::{
     allow_active_neurons_in_stable_memory,
-    governance::{
-        Environment, TimeWarp, LOG_PREFIX, MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS,
-    },
+    governance::{TimeWarp, LOG_PREFIX, MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS},
     migrate_active_neurons_to_stable_memory,
     neuron::types::Neuron,
     neurons_fund::neurons_fund_neuron::pick_most_important_hotkeys,
@@ -37,6 +35,7 @@ use std::{
 };
 
 pub mod metrics;
+use crate::governance::RandomnessGenerator;
 use crate::pb::v1::{Ballot, Vote};
 pub(crate) use metrics::NeuronMetrics;
 
@@ -416,17 +415,10 @@ impl NeuronStore {
 
     /// Takes the neuron store state which should be persisted through upgrades.
     pub fn take(self) -> NeuronStoreState {
-        let now_seconds = self.now();
-
         (
             self.heap_neurons
                 .into_iter()
-                .map(|(id, neuron)| {
-                    (
-                        id,
-                        neuron.into_proto(&VotingPowerEconomics::DEFAULT, now_seconds),
-                    )
-                })
+                .map(|(id, neuron)| (id, NeuronProto::from(neuron.clone())))
                 .collect(),
             heap_topic_followee_index_to_proto(self.topic_followee_index),
         )
@@ -441,9 +433,12 @@ impl NeuronStore {
         self.clock.set_time_warp(new_time_warp);
     }
 
-    pub fn new_neuron_id(&self, env: &mut dyn Environment) -> Result<NeuronId, NeuronStoreError> {
+    pub fn new_neuron_id(
+        &self,
+        random: &mut dyn RandomnessGenerator,
+    ) -> Result<NeuronId, NeuronStoreError> {
         loop {
-            let id = env
+            let id = random
                 .random_u64()
                 .map_err(|_| NeuronStoreError::NeuronIdGenerationUnavailable)?
                 // Let there be no question that id was chosen
@@ -470,30 +465,16 @@ impl NeuronStore {
     /// Clones all the neurons. This is only used for testing.
     /// TODO(NNS-2474) clean it up after NNSState stop using GovernanceProto.
     pub fn __get_neurons_for_tests(&self) -> BTreeMap<u64, NeuronProto> {
-        let now_seconds = self.now();
-
         let mut stable_neurons = with_stable_neuron_store(|stable_store| {
             stable_store
                 .range_neurons(..)
-                .map(|neuron| {
-                    (
-                        neuron.id().id,
-                        neuron.into_proto(&VotingPowerEconomics::DEFAULT, now_seconds),
-                    )
-                })
+                .map(|neuron| (neuron.id().id, NeuronProto::from(neuron.clone())))
                 .collect::<BTreeMap<u64, NeuronProto>>()
         });
         let heap_neurons = self
             .heap_neurons
             .iter()
-            .map(|(id, neuron)| {
-                (
-                    *id,
-                    neuron
-                        .clone()
-                        .into_proto(&VotingPowerEconomics::DEFAULT, now_seconds),
-                )
-            })
+            .map(|(id, neuron)| (*id, NeuronProto::from(neuron.clone())))
             .collect::<BTreeMap<u64, NeuronProto>>();
 
         stable_neurons.extend(heap_neurons);
@@ -926,7 +907,7 @@ impl NeuronStore {
     }
 
     /// List all neuron ids whose neurons have staked maturity greater than 0.
-    pub fn list_neurons_ready_to_unstake_maturity(&self, now_seconds: u64) -> Vec<NeuronId> {
+    fn list_neurons_ready_to_unstake_maturity(&self, now_seconds: u64) -> Vec<NeuronId> {
         self.with_active_neurons_iter_sections(
             |iter| {
                 iter.filter(|neuron| neuron.ready_to_unstake_maturity(now_seconds))
@@ -998,6 +979,35 @@ impl NeuronStore {
         );
 
         (ballots, deciding_voting_power, potential_voting_power)
+    }
+
+    /// When a neuron is finally dissolved, if there is any staked maturity it is moved to regular maturity
+    /// which can be spawned (and is modulated).
+    pub fn unstake_maturity_of_dissolved_neurons(&mut self, now_seconds: u64) {
+        let neuron_ids = {
+            #[cfg(feature = "canbench-rs")]
+            let _scope_list = canbench_rs::bench_scope("list_neuron_ids");
+            self.list_neurons_ready_to_unstake_maturity(now_seconds)
+        };
+
+        #[cfg(feature = "canbench-rs")]
+        let _scope_unstake = canbench_rs::bench_scope("unstake_maturity");
+        // Filter all the neurons that are currently in "dissolved" state and have some staked maturity.
+        // No neuron in stable storage should have staked maturity.
+        for neuron_id in neuron_ids {
+            let unstake_result =
+                self.with_neuron_mut(&neuron_id, |neuron| neuron.unstake_maturity(now_seconds));
+
+            match unstake_result {
+                Ok(_) => {}
+                Err(e) => {
+                    println!(
+                        "{}Error when moving staked maturity for neuron {:?}: {:?}",
+                        LOG_PREFIX, neuron_id, e
+                    );
+                }
+            };
+        }
     }
 
     /// Returns the full neuron if the given principal is authorized - either it can vote for the
@@ -1417,19 +1427,6 @@ pub fn groom_some_neurons(
             return next;
         }
     }
-}
-
-pub fn backfill_some_voting_power_refreshed_timestamps(
-    neuron_store: &mut NeuronStore,
-    next: Bound<NeuronId>,
-    carry_on: impl FnMut() -> bool,
-) -> Bound<NeuronId> {
-    groom_some_neurons(
-        neuron_store,
-        |neuron| neuron.backfill_voting_power_refreshed_timestamp(),
-        next,
-        carry_on,
-    )
 }
 
 /// Number of entries for each neuron indexes (in stable storage)

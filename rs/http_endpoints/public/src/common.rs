@@ -91,7 +91,6 @@ pub(crate) async fn map_box_error_to_response(err: BoxError) -> Response<Body> {
     }
 }
 
-// TODO: NET-1667
 pub fn cors_layer() -> CorsLayer {
     CorsLayer::new()
         .allow_methods([Method::GET, Method::POST])

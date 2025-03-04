@@ -84,6 +84,9 @@ use std::ptr::addr_of_mut;
 
 #[cfg(target_arch = "wasm32")]
 use dfn_core::println;
+use dfn_core::stable::stable64_read;
+use ic_nervous_system_common::memory_manager_upgrade_storage::{load_protobuf, store_protobuf};
+use registry_canister::storage::with_upgrades_memory;
 
 static mut REGISTRY: Option<Registry> = None;
 
@@ -163,14 +166,12 @@ fn canister_init() {
 fn canister_pre_upgrade() {
     println!("{}canister_pre_upgrade", LOG_PREFIX);
     let registry = registry();
-    let mut serialized = Vec::new();
     let ss = RegistryCanisterStableStorage {
         registry: Some(registry.serializable_form()),
         pre_upgrade_version: Some(registry.latest_version()),
     };
-    ss.encode(&mut serialized)
-        .expect("Error serializing to stable.");
-    stable::set(&serialized);
+    with_upgrades_memory(|memory| store_protobuf(memory, &ss))
+        .expect("Failed to encode protobuf pre-upgrade");
 }
 
 #[export_name = "canister_post_upgrade"]
@@ -178,10 +179,24 @@ fn canister_post_upgrade() {
     dfn_core::printer::hook();
     println!("{}canister_post_upgrade", LOG_PREFIX);
     // call stable_storage APIs and get registry instance in canister context
-    let registry = registry_mut();
-    let stable_storage = stable::get();
+    // Look for MemoryManager magic bytes
+    let mut magic_bytes = [0u8; 3];
+    stable64_read(&mut magic_bytes, 0, 3);
+    let mut mgr_version_byte = [0u8; 1];
+    stable64_read(&mut mgr_version_byte, 3, 1);
+
+    let registry_storage: RegistryCanisterStableStorage =
+        if &magic_bytes == b"MGR" && mgr_version_byte[0] == 1 {
+            with_upgrades_memory(load_protobuf).expect("Failed to decode protobuf post-upgrade")
+        } else {
+            let stable_storage = stable::get();
+            RegistryCanisterStableStorage::decode(stable_storage.as_slice())
+                .expect("Error decoding from stable.")
+        };
     // delegate real work to more testable function
-    registry_lifecycle::canister_post_upgrade(registry, stable_storage.as_slice());
+
+    let registry = registry_mut();
+    registry_lifecycle::canister_post_upgrade(registry, registry_storage);
 }
 
 ic_nervous_system_common_build_metadata::define_get_build_metadata_candid_method! {}

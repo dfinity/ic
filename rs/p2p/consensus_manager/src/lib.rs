@@ -16,7 +16,7 @@ use phantom_newtype::AmountOf;
 use tokio::{
     runtime::Handle,
     sync::{
-        mpsc::{Receiver, Sender, UnboundedReceiver, UnboundedSender},
+        mpsc::{Receiver, Sender},
         watch,
     },
 };
@@ -29,10 +29,12 @@ type StartConsensusManagerFn =
     Box<dyn FnOnce(Arc<dyn Transport>, watch::Receiver<SubnetTopology>) -> Vec<Shutdown>>;
 
 /// Same order of magnitude as the number of active artifacts.
-const MAX_OUTBOUND_CHANNEL_SIZE: usize = 100_000;
+/// Please note that we put fairly big number mainly for perfomance reasons so either side of a channel doesn't await.
+/// The replica code should be designed in such a way that if we put a channel of size 1, the protocol should still work.
+const MAX_IO_CHANNEL_SIZE: usize = 100_000;
 
 pub type AbortableBroadcastSender<T> = Sender<ArtifactTransmit<T>>;
-pub type AbortableBroadcastReceiver<T> = UnboundedReceiver<UnvalidatedArtifactMutation<T>>;
+pub type AbortableBroadcastReceiver<T> = Receiver<UnvalidatedArtifactMutation<T>>;
 
 pub struct AbortableBroadcastChannel<T: IdentifiableArtifact> {
     pub outbound_tx: AbortableBroadcastSender<T>,
@@ -69,15 +71,8 @@ impl AbortableBroadcastChannelBuilder {
         (assembler, assembler_router): (F, Router),
         slot_limit: usize,
     ) -> AbortableBroadcastChannel<Artifact> {
-        let (outbound_tx, outbound_rx) = tokio::sync::mpsc::channel(MAX_OUTBOUND_CHANNEL_SIZE);
-        // Making this channel bounded can be problematic since we don't have true multiplexing
-        // of P2P messages.
-        // Possible scenario is - adverts+chunks arrive on the same channel, slow consensus
-        // will result on slow consuption of chunks. Slow consumption of chunks will in turn
-        // result in slower consumptions of adverts. Ideally adverts are consumed at rate
-        // independent of consensus.
-        #[allow(clippy::disallowed_methods)]
-        let (inbound_tx, inbound_rx) = tokio::sync::mpsc::unbounded_channel();
+        let (outbound_tx, outbound_rx) = tokio::sync::mpsc::channel(MAX_IO_CHANNEL_SIZE);
+        let (inbound_tx, inbound_rx) = tokio::sync::mpsc::channel(MAX_IO_CHANNEL_SIZE);
 
         assert!(uri_prefix::<WireArtifact>()
             .chars()
@@ -141,9 +136,9 @@ fn start_consensus_manager<Artifact, WireArtifact, Assembler>(
     rt_handle: Handle,
     // Locally produced adverts to send to the node's peers.
     outbound_transmits: Receiver<ArtifactTransmit<Artifact>>,
-    // Adverts received from peers
-    adverts_received: Receiver<(SlotUpdate<WireArtifact>, NodeId, ConnId)>,
-    sender: UnboundedSender<UnvalidatedArtifactMutation<Artifact>>,
+    // Slot updates received from peers
+    slot_updates_rx: Receiver<(SlotUpdate<WireArtifact>, NodeId, ConnId)>,
+    sender: Sender<UnvalidatedArtifactMutation<Artifact>>,
     assembler: Assembler,
     transport: Arc<dyn Transport>,
     topology_watcher: watch::Receiver<SubnetTopology>,
@@ -169,7 +164,7 @@ where
         log,
         metrics,
         rt_handle,
-        adverts_received,
+        slot_updates_rx,
         assembler,
         sender,
         topology_watcher,

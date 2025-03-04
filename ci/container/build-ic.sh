@@ -1,6 +1,24 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Check if the script is nested (more than once). If so,
+# something went wrong with the "inside container" detection
+# and we abort to avoid an infinite loop.
+if [ "${BUILD_IC_NESTED:-}" == 1 ]; then
+    echo "$0 nested, aborting"
+    exit 1
+fi
+export BUILD_IC_NESTED=1
+
+export ROOT_DIR="$(git rev-parse --show-toplevel)"
+
+# Drop into the container if we're not already inside it. This ensures
+# we run in a predictable environment (Ubuntu with known deps).
+if ! ([ -e /home/ubuntu/.DFINITY-TAG ] && ([ -e /.dockerenv ] || [ -e /run/.containerenv ] || [ -n "${CI_JOB_NAME:-}" ])); then
+    echo dropping into container
+    exec "$ROOT_DIR"/ci/container/container-run.sh bash "$0" "$@"
+fi
+
 [ -n "${DEBUG:-}" ] && set -x
 
 usage() {
@@ -20,19 +38,36 @@ Non-Release Build, is for non-protected branches (revision is not in rc--* or ma
 EOF
 }
 
-RED='\033[0;31m'
-BLUE='\033[0;34m'
-GREEN='\033[0;32m'
-NOCOLOR='\033[0m'
+# Color helpers
+tp() { tput -T xterm "$@"; }
+echo_red() {
+    tp setaf 1
+    echo "$1"
+    tp sgr0
+}
+echo_green() {
+    tp setaf 2
+    echo "$1"
+    tp sgr0
+}
+echo_blue() {
+    tp setaf 4
+    echo "$1"
+    tp sgr0
+}
 
-echo_red() { echo -e "${RED}${1}${NOCOLOR}"; }
-echo_blue() { echo -e "${BLUE}${1}${NOCOLOR}"; }
-echo_green() { echo -e "${GREEN}${1}${NOCOLOR}"; }
+# Join a bash array with a string
+# https://stackoverflow.com/a/17841619
+function join_by {
+    local IFS="$1"
+    shift
+    echo "$*"
+}
 
 export BUILD_BIN=false
 export BUILD_CAN=false
 export BUILD_IMG=false
-export RELEASE=true
+release_build=true
 
 if [ "$#" == 0 ]; then
     echo_red "ERROR: Please specify one of '-b', '-c' or '-i'" >&2
@@ -51,9 +86,9 @@ while getopts ':bcinh-:' OPT; do
         b | binaries) BUILD_BIN=true ;;
         c | canisters) BUILD_CAN=true ;;
         i | icos) BUILD_IMG=true ;;
-        n | non-release | no-release | norelease) RELEASE=false ;;
+        n | non-release | no-release | norelease) release_build=false ;;
         ??*) echo_red "Invalid option --$OPT" && usage && exit 1 ;;
-        ?) echo_red "Invalid command option.\n" && usage && exit 1 ;;
+        ?) echo_red "Invalid command option." && usage && exit 1 ;;
     esac
 done
 shift "$(($OPTIND - 1))"
@@ -64,15 +99,26 @@ if ! "$BUILD_BIN" && ! "$BUILD_CAN" && ! "$BUILD_IMG"; then
     usage && exit 1
 fi
 
-export ROOT_DIR="$(git rev-parse --show-toplevel)"
+# Ensure working dir is clean
+if [ -n "$(git status --porcelain)" ]; then
+    echo_red "Git working directory is not clean! Clean it and retry."
+    exit 1
+fi
+
 export VERSION="$(git rev-parse HEAD)"
 
-if "$RELEASE"; then
-    export IC_VERSION_RC_ONLY="$VERSION"
-    echo_red "\nBuilding release revision (master or rc--*)! Use '--no-release' for non-release revision!\n" && sleep 2
+BAZEL_TARGETS=()
+
+BAZEL_COMMON_ARGS=(
+    --config=local
+    --color=yes
+)
+
+if [[ $release_build == true ]]; then
+    echo_red "Building release revision (master or rc--*)! Use '--no-release' for non-release revision!" && sleep 2
+    BAZEL_COMMON_ARGS+=(--config=stamped)
 else
-    export IC_VERSION_RC_ONLY="0000000000000000000000000000000000000000"
-    echo_red "\nBuilding non-release revision!\n" && sleep 2
+    echo_red "Building non-release revision!" && sleep 2
 fi
 
 export BINARIES_DIR=artifacts/release
@@ -82,136 +128,80 @@ export BINARIES_DIR_FULL="$ROOT_DIR/$BINARIES_DIR"
 export CANISTERS_DIR_FULL="$ROOT_DIR/$CANISTERS_DIR"
 export DISK_DIR_FULL="$ROOT_DIR/$DISK_DIR"
 
-is_inside_DFINITY_container() {
-    [ -e /home/ubuntu/.DFINITY-TAG ] && ([ -e /.dockerenv ] || [ -e /run/.containerenv ] || [ -n "${CI_JOB_NAME:-}" ])
-}
-
-validate_build_env() {
-    function not_supported_prompt() {
-        echo_red "$1"
-        read -t 7 -r -s -p $'Press ENTER to continue the build anyway...\n'
-    }
-
-    if [ -n "$(git status --porcelain)" ]; then
-        echo_red "Git working directory is not clean! Clean it and retry."
-        exit 1
-    fi
-
-    if [ "$(uname)" != "Linux" ]; then
-        not_supported_prompt "This script is only supported on Linux!"
-    elif ! grep -q 'Ubuntu' /etc/os-release; then
-        not_supported_prompt "Build reproducibility is only supported on Ubuntu!"
-    fi
-}
-
-echo_green "Validating build environment"
-validate_build_env
-
 echo_blue "Purging artifact directories"
 rm -rf "$BINARIES_DIR_FULL"
 rm -rf "$CANISTERS_DIR_FULL"
 rm -rf "$DISK_DIR_FULL"
 
-echo_green "Building selected IC artifacts"
-BAZEL_CMD="bazel build --config=local --ic_version='$VERSION' --ic_version_rc_only='$IC_VERSION_RC_ONLY' \
-           --release_build=$RELEASE"
+if "$BUILD_BIN"; then BAZEL_TARGETS+=("//publish/binaries:compute_checksums"); fi
+if "$BUILD_CAN"; then BAZEL_TARGETS+=("//publish/canisters:compute_checksums"); fi
+if "$BUILD_IMG"; then BAZEL_TARGETS+=(
+    "//ic-os/guestos/envs/prod:compute_checksums"
+    "//ic-os/hostos/envs/prod:compute_checksums"
+    "//ic-os/setupos/envs/prod:compute_checksums"
+); fi
 
-BAZEL_CLEAN_CMD=$(
-    cat <<-END
-    # clear bazel cache
-    bazel clean
-END
-)
+echo_blue "Bazel targets: ${BAZEL_TARGETS[*]}"
 
-BUILD_BINARIES_CMD=$(
-    cat <<-END
-    # build binaries
-    mkdir -p "$BINARIES_DIR"
-    $BAZEL_CMD //publish/binaries
-    bazel cquery --config=local --output=files //publish/binaries | xargs -I {} cp {} "$BINARIES_DIR"
-END
-)
+bazel build "${BAZEL_COMMON_ARGS[@]}" "${BAZEL_TARGETS[@]}"
 
-BUILD_CANISTERS_CMD=$(
-    cat <<-END
-    # build canisters
-    mkdir -p "$CANISTERS_DIR"
-    $BAZEL_CMD //publish/canisters
-    bazel cquery --config=local --output=files //publish/canisters | xargs -I {} cp {} "$CANISTERS_DIR"
-END
-)
+query="$(join_by "+" "${BAZEL_TARGETS[@]}")"
 
-BUILD_IMAGES_CMD=$(
-    cat <<-END
-    # build guestos images
-    mkdir -p "${DISK_DIR}/guestos"
-    $BAZEL_CMD //ic-os/guestos/envs/prod
-    bazel cquery --config=local --output=files //ic-os/guestos/envs/prod | xargs -I {} cp {} "${DISK_DIR}/guestos"
-    # build hostos images
-    mkdir -p "${DISK_DIR}/hostos"
-    $BAZEL_CMD //ic-os/hostos/envs/prod
-    bazel cquery --config=local --output=files //ic-os/hostos/envs/prod | xargs -I {} cp {} "${DISK_DIR}/hostos"
-    # build setupos images
-    mkdir -p "${DISK_DIR}/setupos"
-    $BAZEL_CMD //ic-os/setupos/envs/prod
-    bazel cquery --config=local --output=files //ic-os/setupos/envs/prod | xargs -I {} cp {} "${DISK_DIR}/setupos"
-END
-)
-BUILD_CMD="${BAZEL_CLEAN_CMD}"
+for artifact in $(bazel cquery "${BAZEL_COMMON_ARGS[@]}" --output=files "$query"); do
+    target_dir=
+    case "$artifact" in
+        *guestos*)
+            target_dir="$DISK_DIR/guestos"
+            ;;
+        *hostos*)
+            target_dir="$DISK_DIR/hostos"
+            ;;
+        *setupos*)
+            target_dir="$DISK_DIR/setupos"
+            ;;
+        *binaries*)
+            target_dir="$BINARIES_DIR"
+            ;;
+        *canisters*)
+            target_dir="$CANISTERS_DIR"
+            ;;
+        *)
+            echo "don't know where to put artifact '$artifact'"
+            exit 1
+            ;;
+    esac
 
-if "$BUILD_BIN"; then BUILD_CMD="${BUILD_CMD}${BUILD_BINARIES_CMD}"; fi
-if "$BUILD_CAN"; then BUILD_CMD="${BUILD_CMD}${BUILD_CANISTERS_CMD}"; fi
-if "$BUILD_IMG"; then BUILD_CMD="${BUILD_CMD}${BUILD_IMAGES_CMD}"; fi
-
-if is_inside_DFINITY_container; then
-    echo_blue "Building already inside a DFINITY container or CI"
-    eval "$BUILD_CMD"
-else
-    echo_blue "Building by using a new DFINITY container"
-    "$ROOT_DIR"/ci/container/container-run.sh bash -c "$BUILD_CMD"
-fi
+    mkdir -p "$target_dir"
+    cp "$artifact" "$target_dir"
+done
 
 if "$BUILD_BIN"; then
     echo_green "##### Binaries SHA256SUMS #####"
-    pushd "$BINARIES_DIR_FULL"
-    GLOBIGNORE="SHA256SUMS"
-    # shellcheck disable=SC2035
-    sha256sum -b *.gz | tee SHA256SUMS
-    popd
+    pushd "$BINARIES_DIR_FULL" >/dev/null
+    cat SHA256SUMS
+    popd >/dev/null
 fi
 
 if "$BUILD_CAN"; then
     echo_green "##### Canisters SHA256SUMS #####"
     pushd "$CANISTERS_DIR_FULL"
-    # shellcheck disable=SC2035
-    sha256sum -b *.gz | tee SHA256SUMS
-    # neuron voters need to verify against the unzipped SHA256SUM
-    TMP="$(mktemp -d)"
-    cp *.gz "$TMP/"
-    cd "$TMP"
-    gunzip *
-    # shellcheck disable=SC2035
-    sha256sum *
+    cat SHA256SUMS
     popd
-    rm -fr "$TMP"
 fi
 
 if "$BUILD_IMG"; then
     echo_green "##### GUESTOS SHA256SUMS #####"
-    pushd "$DISK_DIR_FULL/guestos"
-    # shellcheck disable=SC2035
-    sha256sum -b *.tar.* | tee SHA256SUMS
-    popd
+    pushd "$DISK_DIR_FULL/guestos" >/dev/null
+    cat SHA256SUMS
+    popd >/dev/null
     echo_green "##### HOSTOS SHA256SUMS #####"
-    pushd "$DISK_DIR_FULL/hostos"
-    # shellcheck disable=SC2035
-    sha256sum -b *.tar.* | tee SHA256SUMS
-    popd
+    pushd "$DISK_DIR_FULL/hostos" >/dev/null
+    cat SHA256SUMS
+    popd >/dev/null
     echo_green "##### SETUPOS SHA256SUMS #####"
-    pushd "$DISK_DIR_FULL/setupos"
-    # shellcheck disable=SC2035
-    sha256sum -b *.tar.* | tee SHA256SUMS
-    popd
+    pushd "$DISK_DIR_FULL/setupos" >/dev/null
+    cat SHA256SUMS
+    popd >/dev/null
 fi
 
-echo_green "Build complete for revision $(git rev-parse HEAD)"
+echo_green "Build complete for revision $VERSION"

@@ -5,7 +5,7 @@ use crate::metadata_state::subnet_call_context_manager::{
 use assert_matches::assert_matches;
 use ic_error_types::{ErrorCode, UserError};
 use ic_limits::MAX_INGRESS_TTL;
-use ic_management_canister_types::{EcdsaCurve, EcdsaKeyId, MasterPublicKeyId, IC_00};
+use ic_management_canister_types_private::{EcdsaCurve, EcdsaKeyId, MasterPublicKeyId, IC_00};
 use ic_registry_routing_table::CanisterIdRange;
 use ic_test_utilities_types::{
     ids::{
@@ -329,10 +329,9 @@ fn system_metadata_roundtrip_encoding() {
     system_metadata.network_topology = network_topology;
 
     use ic_crypto_test_utils_keys::public_keys::valid_node_signing_public_key;
-    let pk_der =
-        ic_crypto_ed25519::PublicKey::deserialize_raw(&valid_node_signing_public_key().key_value)
-            .unwrap()
-            .serialize_rfc8410_der();
+    let pk_der = ic_ed25519::PublicKey::deserialize_raw(&valid_node_signing_public_key().key_value)
+        .unwrap()
+        .serialize_rfc8410_der();
 
     system_metadata.node_public_keys = btreemap! {
         node_test_id(1) => pk_der,

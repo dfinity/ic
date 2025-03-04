@@ -1,6 +1,6 @@
 use candid::{CandidType, Nat};
 // TODO(EXC-1687): remove temporary alias `Ic00CanisterSettingsArgs`.
-use ic_management_canister_types::{
+use ic_management_canister_types_private::{
     BoundedControllers, CanisterSettingsArgs as Ic00CanisterSettingsArgs, LogVisibilityV2,
 };
 use ic_nns_common::types::UpdateIcpXdrConversionRatePayload;
@@ -11,8 +11,6 @@ use icp_ledger::{
 };
 use icrc_ledger_types::icrc1::account::Account;
 use serde::{Deserialize, Serialize};
-
-pub const IS_AUTOMATIC_REFUND_ENABLED: bool = false;
 
 pub const DEFAULT_CYCLES_PER_XDR: u128 = 1_000_000_000_000u128; // 1T cycles = 1 XDR
 

@@ -1,6 +1,6 @@
 use candid::Decode;
 use ic_base_types::PrincipalId;
-use ic_management_canister_types::{
+use ic_management_canister_types_private::{
     self as ic00, CanisterInstallMode, DerivationPath, ECDSAPublicKeyResponse, EcdsaCurve,
     EcdsaKeyId, MasterPublicKeyId, Method, Payload as Ic00Payload, SchnorrAlgorithm, SchnorrKeyId,
     SchnorrPublicKeyResponse, SignWithBip341Aux, SignWithECDSAReply, SignWithSchnorrAux,
@@ -772,7 +772,7 @@ fn test_sign_with_threshold_key_queue_fills_up() {
         assert_eq!(
             result,
             Ok(WasmResult::Reject(format!(
-                "{} request failed: signature queue for key {} is full.",
+                "{} request failed: request queue for key {} is full.",
                 method, key_id,
             )))
         );

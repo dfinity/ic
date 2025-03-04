@@ -42,6 +42,10 @@ lazy_static! {
                 constants
                     .constants
                     .insert("Account_Ids".to_string(), all_accounts.to_tla_value());
+                constants.constants.insert(
+                    "POSSIBLE_DISBURSE_AMOUNTS(_neurons, neuronId)".to_string(),
+                    TlaValue::Constant("Nat".to_string()),
+                );
                 constants
             },
         }

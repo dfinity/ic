@@ -7,8 +7,7 @@ use ic_crypto_internal_bls12_381_vetkd::{G1Affine, G2Affine, Scalar};
 use ic_crypto_internal_multi_sig_bls12381::types as multi_types;
 use ic_crypto_internal_threshold_sig_bls12381::types as threshold_types;
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
-use ic_types::crypto::vetkd::VetKdEncryptedKeyShareContent;
-use ic_types::crypto::ExtendedDerivationPath;
+use ic_types::crypto::vetkd::{VetKdDerivationDomain, VetKdEncryptedKeyShareContent};
 use ic_types_test_utils::ids::canister_test_id;
 use rand::{CryptoRng, Rng, SeedableRng};
 use rand_chacha::ChaCha20Rng;
@@ -36,9 +35,9 @@ fn should_correctly_create_encrypted_vetkd_key_share_for_smoke_test_vector() {
                 f3e68e13f62604d027660883213c90ea72810bcecee58b883fb62118e538243\
                 03718e6876ea400d083beb0439d3934122a4c4b2e58e3f145305b9a0c0a00e3\
                 2dd808574dec2605dbc7f122fe593ca0c07ca92720d0f17b7d53c9c68dbb93d\
-                489078859e5e5fe2b6612ac9536fe7f8b463cac948e6db97908b7f5a67b33b3\
-                e60a1c160889ef49448519a84be1aba0611829a7cca180cbbdf94f7b2cda2db\
-                6b14c65",
+                489078859e5e5fe2b6612ac9536fe7f8b463ca70dbe0a05098e6146d1006383\
+                c94396ac185aed853d5ab2d6ff04b6d239d10a81f782ef60ec2762d208b3631\
+                373597e",
             )
             .expect("invalid test vector")
         ))
@@ -63,8 +62,8 @@ fn should_fail_to_create_key_share_with_invalid_master_public_key() {
     let result = test_env.create_encrypted_vetkd_key_share();
 
     assert_matches!(
-        result, Err(VetKdEncryptedKeyShareCreationVaultError::InvalidArgument(error))
-        if error.contains("invalid master public key")
+        result,
+        Err(VetKdEncryptedKeyShareCreationVaultError::InvalidArgumentMasterPublicKey)
     );
 }
 
@@ -79,8 +78,8 @@ fn should_fail_to_create_key_share_with_invalid_encryption_public_key() {
     let result = test_env.create_encrypted_vetkd_key_share();
 
     assert_matches!(
-        result, Err(VetKdEncryptedKeyShareCreationVaultError::InvalidArgument(error))
-        if error.contains("invalid encryption public key")
+        result,
+        Err(VetKdEncryptedKeyShareCreationVaultError::InvalidArgumentEncryptionPublicKey)
     );
 }
 
@@ -94,7 +93,7 @@ fn should_fail_to_create_key_share_if_key_is_missing_in_secret_key_store() {
     let result = test_env.create_encrypted_vetkd_key_share();
 
     assert_matches!(
-        result, Err(VetKdEncryptedKeyShareCreationVaultError::InvalidArgument(error))
+        result, Err(VetKdEncryptedKeyShareCreationVaultError::SecretKeyMissingOrWrongType(error))
         if error.contains("missing key with ID")
     );
 }
@@ -111,7 +110,7 @@ fn should_fail_to_create_key_share_if_key_in_secret_key_store_has_wrong_type() {
     let result = test_env.create_encrypted_vetkd_key_share();
 
     assert_matches!(
-        result, Err(VetKdEncryptedKeyShareCreationVaultError::InvalidArgument(error))
+        result, Err(VetKdEncryptedKeyShareCreationVaultError::SecretKeyMissingOrWrongType(error))
         if error.contains("wrong secret key type")
     );
 }
@@ -120,7 +119,7 @@ struct CreateVetKdKeyShareTestSetup {
     key_id: KeyId,
     master_public_key: Vec<u8>,
     transport_public_key: Vec<u8>,
-    derivation_path: ExtendedDerivationPath,
+    derivation_domain: VetKdDerivationDomain,
     derivation_id: Vec<u8>,
     master_secret_key: Scalar,
     rng: ChaCha20Rng,
@@ -134,9 +133,9 @@ impl CreateVetKdKeyShareTestSetup {
         let master_public_key = G2Affine::from(G2Affine::generator() * &master_secret_key);
         let transport_public_key = G1Affine::from(G1Affine::generator() * Scalar::random(rng));
         let key_id = KeyId::from([123; 32]);
-        let derivation_path = ExtendedDerivationPath {
+        let derivation_domain = VetKdDerivationDomain {
             caller: canister_test_id(234).get(),
-            derivation_path: vec![b"some".to_vec(), b"derivation".to_vec(), b"path".to_vec()],
+            domain: b"domain-123".to_vec(),
         };
         let derivation_id = b"some-derivation-id".to_vec();
         let rng = ChaCha20Rng::from_seed(rng.gen());
@@ -146,7 +145,7 @@ impl CreateVetKdKeyShareTestSetup {
             master_public_key: master_public_key.serialize().to_vec(),
             transport_public_key: transport_public_key.serialize().to_vec(),
             key_id,
-            derivation_path,
+            derivation_domain,
             derivation_id,
             rng,
             secret_key_store_override: None,
@@ -189,7 +188,7 @@ impl CreateVetKdKeyShareTestSetup {
             self.key_id,
             self.master_public_key.clone(),
             self.transport_public_key.clone(),
-            self.derivation_path.clone(),
+            self.derivation_domain.clone(),
             self.derivation_id.clone(),
         )
     }

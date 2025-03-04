@@ -2,14 +2,12 @@ use assert_matches::assert_matches;
 use ic_base_types::PrincipalId;
 use ic_nervous_system_common_test_keys::{TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_PRINCIPAL};
 use ic_nns_common::{pb::v1::NeuronId, types::ProposalId};
-use ic_nns_governance::pb::v1::{
-    neuron::{DissolveState, Followees},
-    Neuron, Topic,
-};
 use ic_nns_governance_api::pb::v1::{
+    self as api,
     governance_error::ErrorType,
     manage_neuron_response::{Command, RegisterVoteResponse},
-    BallotInfo, ListNeurons, Vote,
+    neuron::{DissolveState, Followees},
+    BallotInfo, ListNeurons, Topic, Vote,
 };
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
@@ -349,7 +347,7 @@ fn neuron_with_followees(
     }
     let subaccount = Subaccount::try_from(account.as_slice()).unwrap();
 
-    Neuron {
+    api::Neuron {
         id: Some(neuron_id),
         controller: Some(PrincipalId::new_user_test_id(id)),
         hot_keys: vec![*TEST_NEURON_1_OWNER_PRINCIPAL],
@@ -360,7 +358,6 @@ fn neuron_with_followees(
         followees,
         ..Default::default()
     }
-    .into()
 }
 
 #[test]
@@ -405,6 +402,7 @@ fn test_voting_can_span_multiple_rounds() {
             include_public_neurons_in_full_neurons: None,
             page_number: None,
             page_size: None,
+            neuron_subaccounts: Some(vec![]),
         },
     );
 
@@ -432,6 +430,7 @@ fn test_voting_can_span_multiple_rounds() {
             include_public_neurons_in_full_neurons: None,
             page_number: None,
             page_size: None,
+            neuron_subaccounts: Some(vec![]),
         },
     );
 

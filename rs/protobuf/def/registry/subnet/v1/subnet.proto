@@ -61,13 +61,6 @@ message SubnetRecord {
   // to make sure the NNS can be backed up.
   repeated string ssh_backup_access = 26;
 
-  // ECDSA Config. This field cannot be set back to `None` once it has been set
-  // to `Some`. To remove a key, the list of `key_ids` can be set to not include a particular key.
-  // If a removed key is not held by another subnet, it will be lost.
-  //
-  // Deprecated; please use chain_key_config instead.
-  EcdsaConfig ecdsa_config = 27;
-
   // If `true`, the subnet will be halted after reaching the next cup height: it will no longer
   // create or execute blocks.
   //
@@ -81,7 +74,7 @@ message SubnetRecord {
   // key. If the removed key is not held by another subnet, it will be lost.
   optional ChainKeyConfig chain_key_config = 29;
 
-  reserved 1, 2, 4, 6, 13, 20, 21, 22;
+  reserved 1, 2, 4, 6, 13, 20, 21, 22, 27;
   reserved "ic_version_id";
   reserved "initial_dkg_transcript";
   reserved "ingress_bytes_per_block_soft_cap";
@@ -89,6 +82,7 @@ message SubnetRecord {
   reserved "max_instructions_per_message";
   reserved "max_instructions_per_round";
   reserved "max_instructions_per_install_code";
+  reserved "ecdsa_config";
 }
 
 message EcdsaInitialization {

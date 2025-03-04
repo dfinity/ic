@@ -3,7 +3,7 @@ end::catalog[] */
 
 use ic_agent::{agent::RejectCode, Agent};
 use ic_base_types::PrincipalId;
-use ic_management_canister_types::{self as ic00, EmptyBlob, Method, Payload};
+use ic_management_canister_types_private::{self as ic00, EmptyBlob, Method, Payload};
 use ic_system_test_driver::driver::test_env::TestEnv;
 use ic_system_test_driver::driver::test_env_api::GetFirstHealthyNodeSnapshot;
 use ic_system_test_driver::driver::test_env_api::HasPublicApiUrl;

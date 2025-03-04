@@ -96,8 +96,8 @@ fn test_node_operator_records_can_be_added_and_removed() {
         assert_eq!(
             wait_for_final_state(&nns_canisters.governance, ProposalId::from(pid))
                 .await
-                .status(),
-            ProposalStatus::Executed
+                .status,
+            ProposalStatus::Executed as i32
         );
 
         add_node_operator(&nns_canisters, &TEST_NEURON_1_OWNER_PRINCIPAL).await;
@@ -151,8 +151,8 @@ fn test_node_operator_records_can_be_added_and_removed() {
         assert_eq!(
             wait_for_final_state(&nns_canisters.governance, proposal_id)
                 .await
-                .status(),
-            ProposalStatus::Executed
+                .status,
+            ProposalStatus::Executed as i32
         );
 
         // Node Operator 1 is not removed because it has associated node records
@@ -214,8 +214,8 @@ async fn add_node_operator(nns_canisters: &NnsCanisters<'_>, node_operator_id: &
     assert_eq!(
         wait_for_final_state(&nns_canisters.governance, proposal_id)
             .await
-            .status(),
-        ProposalStatus::Executed
+            .status,
+        ProposalStatus::Executed as i32
     );
 
     // Assert that the executed proposal had the expected result

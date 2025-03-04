@@ -2,7 +2,9 @@ use async_trait::async_trait;
 use axum::http::{Request, Response};
 use bytes::Bytes;
 use ic_interfaces::p2p::{
-    consensus::{Aborted, ArtifactAssembler, Bouncer, BouncerFactory, Peers, ValidatedPoolReader},
+    consensus::{
+        ArtifactAssembler, AssembleResult, Bouncer, BouncerFactory, Peers, ValidatedPoolReader,
+    },
     state_sync::{AddChunkError, Chunk, ChunkId, Chunkable, StateSyncArtifactId, StateSyncClient},
 };
 use ic_quic_transport::{ConnId, Transport};
@@ -101,6 +103,6 @@ mock! {
             id: u64,
             artifact: Option<(U64Artifact, NodeId)>,
             peers: P,
-        ) -> impl std::future::Future<Output = Result<(U64Artifact, NodeId), Aborted>> + Send;
+        ) -> impl std::future::Future<Output = AssembleResult<U64Artifact>> + Send;
     }
 }

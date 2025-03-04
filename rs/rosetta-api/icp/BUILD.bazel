@@ -38,6 +38,7 @@ DEPENDENCIES = [
     "@crate_index//:clap",
     "@crate_index//:hex",
     "@crate_index//:ic-agent",
+    "@crate_index//:ic-management-canister-types",
     "@crate_index//:lazy_static",
     "@crate_index//:num-bigint",
     "@crate_index//:prometheus",
@@ -66,10 +67,10 @@ MACRO_DEPENDENCIES = [
 
 DEV_DEPENDENCIES = [
     # Keep sorted.
+    "//packages/ic-ed25519",
     "//packages/icrc-ledger-agent:icrc_ledger_agent",
     "//packages/icrc-ledger-types:icrc_ledger_types",
     "//packages/pocket-ic",
-    "//rs/crypto/ed25519",
     "//rs/ledger_suite/icp/test_utils",
     "//rs/ledger_suite/icrc1",
     "//rs/ledger_suite/icrc1/test_utils",
@@ -98,7 +99,7 @@ MACRO_DEV_DEPENDENCIES = []
 ALIASES = {
 }
 
-ROSETTA_VERSION = "2.1.1"
+ROSETTA_VERSION = "2.1.2"
 
 rust_library(
     name = "rosetta-api",

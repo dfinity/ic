@@ -2185,6 +2185,11 @@ fn wasm64_import_system_api_functions() {
       (import "ic0" "is_controller"
         (func $ic0_is_controller (param i64) (param i64) (result i32)))
 
+      (import "ic0" "subnet_self_size"
+        (func $ic0_subnet_self_size (result i64)))
+      (import "ic0" "subnet_self_copy"
+        (func $ic0_subnet_self_copy (param i64) (param i64) (param i64)))
+
         (global $g1 (export "g1") (mut i64) (i64.const 0))
         (func $test (export "canister_update test")
             (i64.store (i64.const 0) (memory.grow (i64.const 1)))
@@ -2693,6 +2698,130 @@ fn wasm64_canister_self_copy() {
 }
 
 #[test]
+fn wasm64_subnet_self_size() {
+    let wat = r#"
+    (module
+      (import "ic0" "subnet_self_size"
+        (func $ic0_subnet_self_size (result i64)))
+
+      (global $g1 (export "g1") (mut i64) (i64.const 0))
+      (func $test (export "canister_update test")
+        (call $ic0_subnet_self_size)
+        global.set $g1
+      )
+
+      (memory (export "memory") i64 1)
+    )"#;
+
+    let caller = user_test_id(24).get();
+    let payload: Vec<u8> = vec![1, 3, 5, 7];
+    let api = ic_system_api::ApiType::update(
+        UNIX_EPOCH,
+        payload.clone(),
+        Cycles::zero(),
+        caller,
+        call_context_test_id(13),
+    );
+
+    let mut config = ic_config::embedders::Config::default();
+    config.feature_flags.wasm64 = FlagStatus::Enabled;
+    let mut instance = WasmtimeInstanceBuilder::new()
+        .with_config(config)
+        .with_wat(wat)
+        .with_api_type(api)
+        .build();
+
+    let res = instance
+        .run(FuncRef::Method(WasmMethod::Update("test".to_string())))
+        .unwrap();
+
+    assert_eq!(
+        res.exported_globals[0],
+        Global::I64(
+            instance
+                .store_data()
+                .system_api()
+                .unwrap()
+                .ic0_subnet_self_size()
+                .unwrap() as i64
+        )
+    );
+}
+
+#[test]
+fn wasm64_subnet_self_copy() {
+    let wat = r#"
+    (module
+      (import "ic0" "subnet_self_copy"
+        (func $ic0_subnet_self_copy (param i64) (param i64) (param i64)))
+      (import "ic0" "subnet_self_size"
+        (func $ic0_subnet_self_size (result i64)))
+
+      (global $g1 (export "g1") (mut i64) (i64.const 0))
+      (func $test (export "canister_update test")
+        (call $ic0_subnet_self_size)
+        global.set $g1
+        (call $ic0_subnet_self_copy (i64.const 0) (i64.const 0) (call $ic0_subnet_self_size))
+      )
+
+      (memory (export "memory") i64 1)
+    )"#;
+
+    let caller = user_test_id(24).get();
+    let payload: Vec<u8> = vec![1, 3, 5, 7];
+    let api = ic_system_api::ApiType::update(
+        UNIX_EPOCH,
+        payload.clone(),
+        Cycles::zero(),
+        caller,
+        call_context_test_id(13),
+    );
+
+    let mut config = ic_config::embedders::Config::default();
+    config.feature_flags.wasm64 = FlagStatus::Enabled;
+    let mut instance = WasmtimeInstanceBuilder::new()
+        .with_config(config)
+        .with_wat(wat)
+        .with_api_type(api)
+        .build();
+
+    let res = instance
+        .run(FuncRef::Method(WasmMethod::Update("test".to_string())))
+        .unwrap();
+
+    // Only first os page should have been touched.
+    assert_eq!(res.wasm_dirty_pages, vec![ic_sys::PageIndex::new(0)]);
+
+    // Actual heap is larger, but we can only access first os page, the rest is protected.
+    let dirty_heap_size = ic_sys::PAGE_SIZE;
+
+    let wasm_heap: &[u8] = unsafe {
+        let addr = instance.heap_addr(CanisterMemoryType::Heap);
+        let size_in_bytes =
+            instance.heap_size(CanisterMemoryType::Heap).get() * WASM_PAGE_SIZE_IN_BYTES;
+        assert!(size_in_bytes >= dirty_heap_size);
+        std::slice::from_raw_parts_mut(addr as *mut _, dirty_heap_size)
+    };
+
+    let mut expected_heap = vec![0; dirty_heap_size];
+    let subnet_id_size = instance
+        .store_data()
+        .system_api()
+        .unwrap()
+        .ic0_subnet_self_size()
+        .unwrap();
+
+    instance
+        .store_data()
+        .system_api()
+        .unwrap()
+        .ic0_subnet_self_copy(0, 0, subnet_id_size, &mut expected_heap)
+        .unwrap();
+
+    assert_eq!(wasm_heap, expected_heap);
+}
+
+#[test]
 fn wasm64_trap() {
     let wat = r#"
     (module
@@ -2948,7 +3077,7 @@ fn large_wasm64_memory_allocation_test() {
 
     let mut config = ic_config::embedders::Config::default();
     config.feature_flags.wasm64 = FlagStatus::Enabled;
-    let max_heap_size_in_pages = config.max_wasm_memory_size.get() / WASM_PAGE_SIZE as u64;
+    let max_heap_size_in_pages = config.max_wasm64_memory_size.get() / WASM_PAGE_SIZE as u64;
     let wat = format!(
         r#"
     (module

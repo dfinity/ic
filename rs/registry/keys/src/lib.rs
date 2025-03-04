@@ -6,7 +6,7 @@
 use candid::{CandidType, Deserialize};
 use core::fmt;
 use ic_base_types::{NodeId, SubnetId};
-use ic_management_canister_types::{EcdsaKeyId, MasterPublicKeyId};
+use ic_management_canister_types_private::{EcdsaKeyId, MasterPublicKeyId};
 use ic_types::crypto::KeyPurpose;
 use ic_types::registry::RegistryClientError;
 use ic_types::PrincipalId;
@@ -372,7 +372,7 @@ pub fn make_nns_canister_records_key() -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ic_management_canister_types::{EcdsaCurve, SchnorrAlgorithm, SchnorrKeyId};
+    use ic_management_canister_types_private::{EcdsaCurve, SchnorrAlgorithm, SchnorrKeyId};
     use rand::Rng;
     use strum::IntoEnumIterator;
 

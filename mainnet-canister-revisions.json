@@ -60,22 +60,34 @@
     "sha256": "9637743e1215a4db376a62ee807a0986faf20833be2b332df09b3d5dbdd7339e"
   },
   "cycles-minting": {
-    "rev": "b5192581ccd35b67fe5a1f795ead9cbcd25956d6",
-    "sha256": "11c8dedd11741f05990498c90f925e9e37ad60647a65ef47caa59cdba234be6f"
+    "rev": "2d4bcba47ea10520ff21ce54a8acb9cdb0629317",
+    "sha256": "4e4a6f907a3b4720bfeb4c45c5027d9b1379deb840e4ba0217876df9a4c5b193"
   },
   "genesis-token": {
     "rev": "4bed17bfc82cddc5691743db6228992cdc2740f4",
     "sha256": "fd25a4e2e283b498c3be1aaf63cc9b2726264d78a12b12f43ad453ceeb575e7c"
   },
   "governance": {
-    "rev": "b5192581ccd35b67fe5a1f795ead9cbcd25956d6",
-    "sha256": "5b67e1d273afb691a74ff29e0a495fb2ce7ee31196af58d801a8ce86a7dc4320"
+    "rev": "2f17dd8c0203b12ac9d5a9c7a43534624d412728",
+    "sha256": "fb4f2abad21680b1894a8bfbb6d280f9d4cc19fe2038480beaf50aad40d85df8"
   },
   "index": {
     "rev": "7c6309cb5bec7ab28ed657ac7672af08a59fc1ba",
     "sha256": "7b884231f230f5fc66ad18e0baaec0c14921bd5da742db5dbaf51f824b8dfc63"
   },
   "ledger": {
+    "rev": "6bc1943fc5bcff846959025c5f3f2f7f510489cf",
+    "sha256": "6dae518b33ef5814462ff921e81d13acd5e7a8f4e383ab849d87a33b0a608b08"
+  },
+  "ledger_v1": {
+    "rev": "6dcfafb491092704d374317d9a72a7ad2475d7c9",
+    "sha256": "4fe38a91a3130e9d8b39e3413ae3b3f46c40d3fbd507df1b6092f962d970a7ea"
+  },
+  "ledger_v2": {
+    "rev": "dac2f36f96d7549d82fa8e3c714979255ce57afd",
+    "sha256": "50c05fd687883fe788c0bb91996de358d8f856ba56088c6ff47767ea853001d7"
+  },
+  "ledger_v3": {
     "rev": "7c6309cb5bec7ab28ed657ac7672af08a59fc1ba",
     "sha256": "a9ed1cb9dda555e0fc1038825eb7b3a6b366f17aa4b88575184c7537e864e551"
   },
@@ -84,43 +96,43 @@
     "sha256": "8c8eb285de53ca5609abd7dc41ba3ec8eeb67708b81469311fd670e6738d7d0a"
   },
   "registry": {
-    "rev": "a5878586e47536d4cd47f0aadb66b73df8131d2b",
-    "sha256": "f0fb8fa545b2cc68f030b040e1182a8d004c4d4f4bb4341c9f1b432642c85bef"
+    "rev": "4f60863183c418782800fc8ffacf41be494a9a15",
+    "sha256": "c0e70561a26bcb4a2acee50c487335640bab9e7301f9970b08ac345a59075748"
   },
   "root": {
-    "rev": "b5192581ccd35b67fe5a1f795ead9cbcd25956d6",
-    "sha256": "d3c702648ca4fb232f349bad7533c400c474a528abf62c05d4b100b4cdb91ce2"
+    "rev": "00b04a892dfb2fee1459f1de9d4a731aa04f1ca3",
+    "sha256": "36188e425f4d6d9c0e89252ed6028f6735f1911a4bbdc02312fd009a86d039b8"
   },
   "sns-wasm": {
-    "rev": "25c1bb0227d9970f5673b908817d7c4962b29911",
-    "sha256": "68f9fb37341d14a35735e10a0eb2471721b4cd75b6552ac11124aac559b05736"
+    "rev": "2f17dd8c0203b12ac9d5a9c7a43534624d412728",
+    "sha256": "a9af59d2dd667f312d116449a446ffb6bee05a1502212d504ecea275beb90e25"
   },
   "sns_archive": {
-    "rev": "2190613d3b5bcd9b74c382b22d151580b8ac271a",
-    "sha256": "f94cf1db965b7042197e5894fef54f5f413bb2ebc607ff0fb59c9d4dfd3babea"
+    "rev": "c741e349451edf0c9792149ad439bb32a0161371",
+    "sha256": "2b0970a84976bc2eb9591b68d44501566937994fa5594972f8aac9c8b058672f"
   },
   "sns_governance": {
-    "rev": "a5878586e47536d4cd47f0aadb66b73df8131d2b",
-    "sha256": "5e0547725b033e689f6c7381ca9555fbf09e5ed884178c8286b72e6b2c09e863"
+    "rev": "00b04a892dfb2fee1459f1de9d4a731aa04f1ca3",
+    "sha256": "5129b3142d6bef7425fd1a88df417bbbd70edd4240eda017758e409d4f2f624c"
   },
   "sns_index": {
-    "rev": "2190613d3b5bcd9b74c382b22d151580b8ac271a",
-    "sha256": "2adc74fe5667f26ea4c4006309d99b1dfa71787aa43a5c168cb08ec725677996"
+    "rev": "c741e349451edf0c9792149ad439bb32a0161371",
+    "sha256": "e155db9d06b6147ece4f9defe599844f132a7db21693265671aa6ac60912935f"
   },
   "sns_ledger": {
-    "rev": "2190613d3b5bcd9b74c382b22d151580b8ac271a",
-    "sha256": "25071c2c55ad4571293e00d8e277f442aec7aed88109743ac52df3125209ff45"
+    "rev": "c741e349451edf0c9792149ad439bb32a0161371",
+    "sha256": "3b03d1bb1145edbcd11101ab2788517bc0f427c3bd7b342b9e3e7f42e29d5822"
   },
   "sns_ledger_v2": {
     "rev": "e54d3fa34ded227c885d04e64505fa4b5d564743",
     "sha256": "3d808fa63a3d8ebd4510c0400aa078e99a31afaa0515f0b68778f929ce4b2a46"
   },
   "sns_root": {
-    "rev": "a5878586e47536d4cd47f0aadb66b73df8131d2b",
-    "sha256": "dc243135057d13c48f71d2f0a4b8f5fc43ed525d579d97dde23e052dca15bf96"
+    "rev": "2d4bcba47ea10520ff21ce54a8acb9cdb0629317",
+    "sha256": "cbbc1ffdd911c58692409e942fafbddcf3e3445e1df99b26d83ae8ed5383af9a"
   },
   "swap": {
-    "rev": "a5878586e47536d4cd47f0aadb66b73df8131d2b",
-    "sha256": "45408ed654561dfb17c84b86948dda9498aa0ba8ee669ae774e5faca830c4c24"
+    "rev": "00b04a892dfb2fee1459f1de9d4a731aa04f1ca3",
+    "sha256": "9289cf5b79e8e4341175fd4bcad3412f57faf2f49a67b8ace6fa113028a515f7"
   }
 }
