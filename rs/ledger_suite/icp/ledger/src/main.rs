@@ -1,7 +1,7 @@
 use candid::{candid_method, Nat, Principal};
+use dfn_candid::candid_one;
 #[cfg(feature = "notify-method")]
 use dfn_candid::CandidOne;
-use dfn_candid::{candid, candid_one};
 use dfn_core::endpoint::reject_on_decode_error::{over, over_async, over_async_may_reject};
 #[allow(unused_imports)]
 use dfn_core::BytesS;
@@ -665,6 +665,7 @@ fn icrc1_total_supply() -> Nat {
     Nat::from(LEDGER.read().unwrap().balances().total_supply().get_e8s())
 }
 
+#[query(name = "symbol")]
 #[candid_method(query, rename = "symbol")]
 fn token_symbol() -> Symbol {
     Symbol {
@@ -1213,15 +1214,11 @@ fn account_balance_candid_(arg: AccountIdentifierByteBuf) -> Tokens {
     }
 }
 
+/// See caveats of use on send_dfx
+#[query(name = "account_balance_dfx")]
 #[candid_method(query, rename = "account_balance_dfx")]
 fn account_balance_dfx_(args: AccountBalanceArgs) -> Tokens {
     account_balance(args.account)
-}
-
-/// See caveats of use on send_dfx
-#[export_name = "canister_query account_balance_dfx"]
-fn account_balance_dfx() {
-    over(candid_one, account_balance_dfx_);
 }
 
 #[query(name = "account_identifier")]
@@ -1233,11 +1230,6 @@ fn compute_account_identifier(arg: Account) -> AccountIdBlob {
 #[export_name = "canister_query transfer_fee_pb"]
 fn transfer_fee_() {
     over(protobuf, transfer_fee)
-}
-
-#[export_name = "canister_query symbol"]
-fn token_symbol_candid() {
-    over(candid_one, |()| token_symbol())
 }
 
 #[export_name = "canister_query total_supply_pb"]
@@ -1344,15 +1336,14 @@ fn archives() -> Archives {
     Archives { archives }
 }
 
-#[export_name = "canister_query get_nodes"]
-fn get_nodes_() {
-    over(candid, |()| {
-        archives()
-            .archives
-            .iter()
-            .map(|archive| archive.canister_id)
-            .collect::<Vec<CanisterId>>()
-    });
+#[query]
+#[candid_method(query)]
+fn get_nodes() -> Vec<CanisterId> {
+    archives()
+        .archives
+        .iter()
+        .map(|archive| archive.canister_id)
+        .collect::<Vec<CanisterId>>()
 }
 
 fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::io::Result<()> {
