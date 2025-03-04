@@ -1,5 +1,4 @@
 use crate::benches_util::check_projected_instructions;
-use crate::canister_state::CanisterRandomnessGenerator;
 use crate::governance::REWARD_DISTRIBUTION_PERIOD_SECONDS;
 use crate::pb::v1::{RewardEvent, WaitForQuietState};
 use crate::test_utils::MockRandomness;

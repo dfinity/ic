@@ -95,7 +95,7 @@ mod tests {
 
         // Schedule the rewards distribution
         governance.schedule_pending_rewards_distribution(1, distribution.clone());
-        let timer_id = REWARDS_TIMER_ID.with(|id| id.borrow().clone().unwrap());
+        let timer_id = REWARDS_TIMER_ID.with(|id| (*id.borrow()).unwrap());
         assert_eq!(existing_timer_ids().len(), 1);
 
         // Attempt to schedule the task again, which should fail
