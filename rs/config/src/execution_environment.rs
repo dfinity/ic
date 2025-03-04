@@ -149,7 +149,7 @@ pub const MAX_COMPILATION_CACHE_SIZE: NumBytes = NumBytes::new(10 * GIB);
 pub const MAX_ALLOWED_CONTROLLERS_COUNT: usize = 10;
 
 /// Maximum number of canister snapshots that can be stored for a single canister.
-pub const MAX_NUMBER_OF_SNAPSHOTS_PER_CANISTER: usize = 1;
+pub const MAX_NUMBER_OF_SNAPSHOTS_PER_CANISTER: usize = 10;
 
 /// Maximum number of http outcall requests in-flight on a subnet.
 /// To support 100 req/s with a worst case request latency of 30s the queue size needs buffer 100 req/s * 30s = 3000 req.
@@ -317,6 +317,9 @@ pub struct Config {
     ///   - let `halfway_to_max = (memory_usage + 4GiB) / 2`
     ///   - use the maximum of `default_wasm_memory_limit` and `halfway_to_max`.
     pub default_wasm_memory_limit: NumBytes,
+
+    /// The maximum number of snapshots allowed per canister.
+    pub max_number_of_snapshots_per_canister: usize,
 }
 
 impl Default for Config {
@@ -395,6 +398,7 @@ impl Default for Config {
             dirty_page_logging: FlagStatus::Disabled,
             max_canister_http_requests_in_flight: MAX_CANISTER_HTTP_REQUESTS_IN_FLIGHT,
             default_wasm_memory_limit: DEFAULT_WASM_MEMORY_LIMIT,
+            max_number_of_snapshots_per_canister: MAX_NUMBER_OF_SNAPSHOTS_PER_CANISTER,
         }
     }
 }

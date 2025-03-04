@@ -1165,3 +1165,6 @@ impl NeuronSubsetMetricsPb {
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(feature = "canbench-rs")]
+mod benches_util;

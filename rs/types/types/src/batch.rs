@@ -24,7 +24,7 @@ pub use self::{
 };
 use crate::{
     consensus::idkg::PreSigId,
-    crypto::canister_threshold_sig::MasterPublicKey,
+    crypto::{canister_threshold_sig::MasterPublicKey, threshold_sig::ni_dkg::NiDkgId},
     messages::{CallbackId, Payload, SignedIngress},
     xnet::CertifiedStreamSlice,
     Height, Randomness, RegistryVersion, ReplicaVersion, SubnetId, Time,
@@ -62,6 +62,8 @@ pub struct Batch {
     pub chain_key_subnet_public_keys: BTreeMap<MasterPublicKeyId, MasterPublicKey>,
     /// The pre-signature Ids available to be matched with signature requests.
     pub idkg_pre_signature_ids: BTreeMap<MasterPublicKeyId, BTreeSet<PreSigId>>,
+    /// The NiDKG Ids corresponding to available transcripts to be used to answer vetkd requests
+    pub ni_dkg_ids: BTreeMap<MasterPublicKeyId, NiDkgId>,
     /// The version of the registry to be referenced when processing the batch.
     pub registry_version: RegistryVersion,
     /// A clock time to be used for processing messages.
@@ -118,6 +120,7 @@ pub struct BatchPayload {
     pub self_validating: SelfValidatingPayload,
     pub canister_http: Vec<u8>,
     pub query_stats: Vec<u8>,
+    pub vetkd: Vec<u8>,
 }
 
 /// Batch properties collected form the last DKG summary block.
@@ -177,6 +180,7 @@ impl BatchPayload {
             self_validating,
             canister_http,
             query_stats,
+            vetkd,
         } = &self;
 
         ingress.is_empty()
@@ -184,6 +188,7 @@ impl BatchPayload {
             && self_validating.is_empty()
             && canister_http.is_empty()
             && query_stats.is_empty()
+            && vetkd.is_empty()
     }
 }
 
@@ -304,12 +309,14 @@ mod tests {
             self_validating,
             canister_http,
             query_stats,
+            vetkd,
         } = BatchPayload::default();
 
         assert_eq!(ingress.count_bytes(), 0);
         assert_eq!(self_validating.count_bytes(), 0);
         assert_eq!(canister_http.len(), 0);
         assert_eq!(query_stats.len(), 0);
+        assert_eq!(vetkd.len(), 0);
     }
 
     /// This is a quick test to check the invariant, that the [`Default`] implementation
@@ -325,6 +332,7 @@ mod tests {
             self_validating,
             canister_http,
             query_stats,
+            vetkd,
         } = &payload;
 
         assert!(ingress.is_empty());
@@ -332,6 +340,7 @@ mod tests {
         assert!(self_validating.is_empty());
         assert!(canister_http.is_empty());
         assert!(query_stats.is_empty());
+        assert!(vetkd.is_empty());
     }
 
     #[test]

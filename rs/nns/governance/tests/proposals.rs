@@ -1,6 +1,9 @@
 use ic_base_types::PrincipalId;
 use ic_nervous_system_common::{E8, ONE_DAY_SECONDS};
+use ic_nervous_system_timers::test::run_pending_timers_every_interval_for_count;
 use ic_nns_common::pb::v1::{NeuronId, ProposalId};
+use ic_nns_governance::canister_state::{governance_mut, set_governance_for_tests};
+use ic_nns_governance::timer_tasks::schedule_tasks;
 use ic_nns_governance::{
     governance::{Governance, REWARD_DISTRIBUTION_PERIOD_SECONDS},
     pb::v1::{
@@ -14,6 +17,7 @@ use icp_ledger::Tokens;
 use lazy_static::lazy_static;
 use maplit::{btreemap, hashmap};
 use std::collections::BTreeMap;
+use std::time::Duration;
 
 pub mod fake;
 
@@ -213,15 +217,23 @@ async fn test_distribute_rewards_with_total_potential_voting_power() {
         .at(NOW_SECONDS)
         .with_supply(Tokens::from_tokens(100).unwrap());
 
-    let mut governance = Governance::new(
+    let governance = Governance::new(
         GOVERNANCE_PROTO.clone(),
         fake_driver.get_fake_env(),
         fake_driver.get_fake_ledger(),
         fake_driver.get_fake_cmc(),
+        fake_driver.get_fake_randomness_generator(),
     );
 
+    set_governance_for_tests(governance);
+    let governance = governance_mut();
+    schedule_tasks();
+
     // Step 2: Call code under test.
-    governance.run_periodic_tasks().await;
+    run_pending_timers_every_interval_for_count(
+        Duration::from_secs(REWARD_DISTRIBUTION_PERIOD_SECONDS),
+        1,
+    );
 
     // Step 3: Inspect result(s).
     let get_neuron_rewards = |neuron_id| {

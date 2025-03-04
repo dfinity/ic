@@ -1,5 +1,6 @@
 use crate::wasmtime_embedder::host_memory::MemoryPageSize;
 
+use ic_types::NumBytes;
 use libc::c_void;
 use memory_tracker::{signal_access_kind_and_address, SigsegvMemoryTracker};
 use std::convert::TryFrom;
@@ -81,7 +82,7 @@ pub(crate) fn sigsegv_memory_tracker_handler(
         } else if let Some(heap_size) =
             check_if_expanded(&mut memory_tracker, si_addr, memory_page_size)
         {
-            let delta = heap_size - memory_tracker.area().size();
+            let delta = NumBytes::new(heap_size as u64) - memory_tracker.area().size();
             memory_tracker.expand(delta);
             true
         } else {

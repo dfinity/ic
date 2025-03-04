@@ -15,6 +15,7 @@ escargot = "0.5.2"
 ic-canister-client = { path = "../../canister_client" }
 ic-config = { path = "../../config" }
 ic-crypto-sha2 = { path = "../../crypto/sha2" }
+ic-management-canister-types = { workspace = true }
 ic-management-canister-types-private = { path = "../../types/management_canister_types" }
 ic-registry-transport = { path = "../../registry/transport" }
 ic-replica-tests = { path = "../../replica_tests" }

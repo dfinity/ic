@@ -39,6 +39,16 @@ fn get_counter(state_machine: &StateMachine, canister_id: CanisterId, name: &str
     Decode!(&reply, u64).unwrap()
 }
 
+fn get_metrics(state_machine: &StateMachine, canister_id: CanisterId) -> String {
+    let result = state_machine
+        .query(canister_id, "get_metrics", Encode!(&()).unwrap())
+        .unwrap();
+    let WasmResult::Reply(reply) = result else {
+        panic!("Query failed: {:?}", result);
+    };
+    Decode!(&reply, String).unwrap()
+}
+
 fn set_up_canister_with_tasks(state_machine: &StateMachine, task_names: Vec<String>) -> CanisterId {
     let timer_task_canister_wasm = Project::cargo_bin_maybe_from_env("timer-task-canister", &[]);
     state_machine
@@ -51,104 +61,13 @@ fn set_up_canister_with_tasks(state_machine: &StateMachine, task_names: Vec<Stri
 }
 
 #[test]
-fn test_incremental_delay() {
-    let state_machine = state_machine_for_test();
-    let canister_id = set_up_canister_with_tasks(
-        &state_machine,
-        vec!["IncrementalDelayRecurringSyncTask".to_string()],
-    );
-
-    for _ in 0..10 {
-        state_machine.advance_time(std::time::Duration::from_secs(1));
-        state_machine.tick();
-    }
-
-    let counter = get_counter(
-        &state_machine,
-        canister_id,
-        "IncrementalDelayRecurringSyncTask",
-    );
-    assert_eq!(counter, 5);
-}
-
-#[test]
-fn test_out_of_instruction_tasks() {
-    let state_machine = state_machine_for_test();
-    let canister_id = set_up_canister_with_tasks(
-        &state_machine,
-        vec![
-            "SuccessRecurringSyncTask".to_string(),
-            "OutOfInstructionsRecurringSyncTask".to_string(),
-            "OutOfInstructionsBeforeCallRecurringAsyncTask".to_string(),
-            "OutOfInstructionsAfterCallRecurringAsyncTask".to_string(),
-        ],
-    );
-
-    for _ in 0..100 {
-        state_machine.advance_time(std::time::Duration::from_secs(1));
-        state_machine.tick();
-    }
-
-    let successful_counter = get_counter(&state_machine, canister_id, "SuccessRecurringSyncTask");
-    assert!(
-        successful_counter > 20,
-        "successful_counter {}",
-        successful_counter
-    );
-
-    let out_of_instructions_sync_counter = get_counter(
-        &state_machine,
-        canister_id,
-        "OutOfInstructionsRecurringSyncTask",
-    );
-    assert_eq!(out_of_instructions_sync_counter, 0);
-
-    let out_of_instructions_after_call_async_counter = get_counter(
-        &state_machine,
-        canister_id,
-        "OutOfInstructionsAfterCallRecurringAsyncTask",
-    );
-    assert_eq!(out_of_instructions_after_call_async_counter, 1);
-}
-
-#[test]
-fn test_panic_recurring_sync_task() {
-    let state_machine = state_machine_for_test();
-    let canister_id =
-        set_up_canister_with_tasks(&state_machine, vec!["PanicRecurringSyncTask".to_string()]);
-
-    for _ in 0..100 {
-        state_machine.advance_time(std::time::Duration::from_secs(1));
-        state_machine.tick();
-    }
-
-    let counter = get_counter(&state_machine, canister_id, "PanicRecurringSyncTask");
-    assert_eq!(counter, 0);
-}
-
-#[test]
-fn test_panic_recurring_async_task() {
-    let state_machine = state_machine_for_test();
-    let canister_id =
-        set_up_canister_with_tasks(&state_machine, vec!["PanicRecurringAsyncTask".to_string()]);
-
-    for _ in 0..100 {
-        state_machine.advance_time(std::time::Duration::from_secs(1));
-        state_machine.tick();
-    }
-
-    let counter = get_counter(&state_machine, canister_id, "PanicRecurringAsyncTask");
-    assert_eq!(counter, 1);
-}
-
-#[test]
 fn test_success_tasks() {
     let state_machine = state_machine_for_test();
     let task_names = vec![
-        "SuccessRecurringSyncTask".to_string(),
-        "SuccessRecurringAsyncTask".to_string(),
-        "SuccessPeriodicSyncTask".to_string(),
-        "SuccessPeriodicAsyncTask".to_string(),
+        "success_recurring_sync_task".to_string(),
+        "success_recurring_async_task".to_string(),
+        "success_periodic_sync_task".to_string(),
+        "success_periodic_async_task".to_string(),
     ];
     let canister_id = set_up_canister_with_tasks(&state_machine, task_names.clone());
 
@@ -161,19 +80,149 @@ fn test_success_tasks() {
         let counter = get_counter(&state_machine, canister_id, &name);
         assert!(counter >= 100, "{} counter {}", name, counter);
     }
+
+    // We just make sure that the metrics are present without checking the values, to prevent
+    // the test from becoming too brittle.
+    let metrics = get_metrics(&state_machine, canister_id);
+    for metric_snippet in &[
+        "test_canister_task_instruction_bucket{task_name=\"success_recurring_sync_task\",le=\"10000\"}",
+        "test_canister_task_instruction_bucket{task_name=\"success_recurring_async_task\",le=\"10000\"}",
+        "test_canister_task_instruction_bucket{task_name=\"success_periodic_sync_task\",le=\"10000\"}",
+        "test_canister_task_instruction_bucket{task_name=\"success_periodic_async_task\",le=\"10000\"}",
+        "test_canister_task_instruction_sum{task_name=\"success_recurring_sync_task\"}",
+        "test_canister_task_instruction_sum{task_name=\"success_recurring_async_task\"}",
+        "test_canister_task_instruction_sum{task_name=\"success_periodic_sync_task\"}",
+        "test_canister_task_instruction_sum{task_name=\"success_periodic_async_task\"}",
+        "test_canister_task_instruction_count{task_name=\"success_recurring_sync_task\"}",
+        "test_canister_task_instruction_count{task_name=\"success_recurring_async_task\"}",
+        "test_canister_task_instruction_count{task_name=\"success_periodic_sync_task\"}",
+        "test_canister_task_instruction_count{task_name=\"success_periodic_async_task\"}",
+        "test_canister_sync_task_last_executed{task_name=\"success_recurring_sync_task\"}",
+        "test_canister_sync_task_last_executed{task_name=\"success_periodic_sync_task\"}",
+        "test_canister_async_task_outstanding_count{task_name=\"success_recurring_async_task\"}",
+        "test_canister_async_task_outstanding_count{task_name=\"success_periodic_async_task\"}",
+        "test_canister_async_task_last_started{task_name=\"success_recurring_async_task\"}",
+        "test_canister_async_task_last_started{task_name=\"success_periodic_async_task\"}",
+        "test_canister_async_task_last_finished{task_name=\"success_recurring_async_task\"}",
+        "test_canister_async_task_last_finished{task_name=\"success_periodic_async_task\"}",
+    ] {
+        assert!(
+            metrics.contains(metric_snippet),
+            "Metrics missing snippet: {}",
+            metric_snippet
+        );
+    }
 }
 
 #[test]
-fn test_panic_periodic_async_task() {
+fn test_incremental_delay() {
     let state_machine = state_machine_for_test();
-    let canister_id =
-        set_up_canister_with_tasks(&state_machine, vec!["PanicPeriodicAsyncTask".to_string()]);
+    let canister_id = set_up_canister_with_tasks(
+        &state_machine,
+        vec!["incremental_delay_recurring_sync_task".to_string()],
+    );
+
+    for _ in 0..10 {
+        state_machine.advance_time(std::time::Duration::from_secs(1));
+        state_machine.tick();
+    }
+
+    let counter = get_counter(
+        &state_machine,
+        canister_id,
+        "incremental_delay_recurring_sync_task",
+    );
+    assert_eq!(counter, 5);
+}
+
+#[test]
+fn test_out_of_instruction_tasks() {
+    // In this test, we make sure out-of-instruction tasks of various types don't
+    // prevent other tasks from executing.
+    let state_machine = state_machine_for_test();
+    let canister_id = set_up_canister_with_tasks(
+        &state_machine,
+        vec![
+            "success_periodic_sync_task".to_string(),
+            "out_of_instructions_recurring_sync_task".to_string(),
+            "out_of_instructions_before_call_recurring_async_task".to_string(),
+            "out_of_instructions_after_call_recurring_async_task".to_string(),
+        ],
+    );
 
     for _ in 0..100 {
         state_machine.advance_time(std::time::Duration::from_secs(1));
         state_machine.tick();
     }
 
-    let counter = get_counter(&state_machine, canister_id, "PanicPeriodicAsyncTask");
+    let successful_counter = get_counter(&state_machine, canister_id, "success_periodic_sync_task");
+    assert!(
+        successful_counter > 20,
+        "successful_counter {}",
+        successful_counter
+    );
+
+    let out_of_instructions_sync_counter = get_counter(
+        &state_machine,
+        canister_id,
+        "out_of_instructions_recurring_sync_task",
+    );
+    assert_eq!(out_of_instructions_sync_counter, 0);
+
+    let out_of_instructions_after_call_async_counter = get_counter(
+        &state_machine,
+        canister_id,
+        "out_of_instructions_after_call_recurring_async_task",
+    );
+    assert_eq!(out_of_instructions_after_call_async_counter, 1);
+}
+
+#[test]
+fn test_panic_recurring_sync_task() {
+    let state_machine = state_machine_for_test();
+    let canister_id = set_up_canister_with_tasks(
+        &state_machine,
+        vec!["panic_recurring_sync_task".to_string()],
+    );
+
+    for _ in 0..100 {
+        state_machine.advance_time(std::time::Duration::from_secs(1));
+        state_machine.tick();
+    }
+
+    let counter = get_counter(&state_machine, canister_id, "panic_recurring_sync_task");
+    assert_eq!(counter, 0);
+}
+
+#[test]
+fn test_panic_recurring_async_task() {
+    let state_machine = state_machine_for_test();
+    let canister_id = set_up_canister_with_tasks(
+        &state_machine,
+        vec!["panic_recurring_async_task".to_string()],
+    );
+    for _ in 0..100 {
+        state_machine.advance_time(std::time::Duration::from_secs(1));
+        state_machine.tick();
+    }
+
+    let counter = get_counter(&state_machine, canister_id, "panic_recurring_async_task");
+    assert_eq!(counter, 1);
+}
+
+#[test]
+fn test_panic_periodic_async_task() {
+    let state_machine = state_machine_for_test();
+    let canister_id = set_up_canister_with_tasks(
+        &state_machine,
+        vec!["panic_periodic_async_task".to_string()],
+    );
+
+    for _ in 0..100 {
+        state_machine.advance_time(std::time::Duration::from_secs(1));
+        state_machine.tick();
+    }
+
+    let counter = get_counter(&state_machine, canister_id, "panic_periodic_async_task");
     assert!(counter >= 100, "counter {}", counter);
 }

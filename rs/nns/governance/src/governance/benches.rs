@@ -1,7 +1,9 @@
+use crate::benches_util::check_projected_instructions;
+use crate::test_utils::MockRandomness;
 use crate::{
     governance::{
         test_data::CREATE_SERVICE_NERVOUS_SYSTEM_WITH_MATCHED_FUNDING, Governance,
-        MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS,
+        MAX_NUMBER_OF_NEURONS, MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS,
     },
     neuron::{DissolveStateAndAge, Neuron, NeuronBuilder},
     neuron_store::NeuronStore,
@@ -36,6 +38,7 @@ use maplit::hashmap;
 use rand::{Rng, SeedableRng};
 use rand_chacha::ChaCha20Rng;
 use std::collections::{BTreeMap, HashMap};
+use std::sync::Arc;
 
 enum SetUpStrategy {
     // Every neuron follows a single neuron.
@@ -329,9 +332,10 @@ fn cast_vote_cascade_helper(strategy: SetUpStrategy, topic: Topic) -> BenchResul
     };
     let mut governance = Governance::new(
         governance_proto,
-        Box::new(MockEnvironment::new(Default::default(), 0)),
-        Box::new(StubIcpLedger {}),
-        Box::new(StubCMC {}),
+        Arc::new(MockEnvironment::new(Default::default(), 0)),
+        Arc::new(StubIcpLedger {}),
+        Arc::new(StubCMC {}),
+        Box::new(MockRandomness::new()),
     );
 
     let neuron_id = set_up(strategy, &mut rng, &mut governance, topic);
@@ -488,10 +492,11 @@ fn centralized_following_all_stable() -> BenchResult {
 #[bench(raw)]
 fn compute_ballots_for_new_proposal_with_stable_neurons() -> BenchResult {
     let now_seconds = 1732817584;
+    let num_neurons = 100;
 
     let _a = temporarily_enable_allow_active_neurons_in_stable_memory();
     let _b = temporarily_enable_migrate_active_neurons_to_stable_memory();
-    let neurons = (0..100)
+    let neurons = (0..num_neurons)
         .map(|id| {
             (
                 id,
@@ -512,12 +517,13 @@ fn compute_ballots_for_new_proposal_with_stable_neurons() -> BenchResult {
 
     let mut governance = Governance::new(
         governance_proto,
-        Box::new(MockEnvironment::new(vec![], now_seconds)),
-        Box::new(StubIcpLedger {}),
-        Box::new(StubCMC {}),
+        Arc::new(MockEnvironment::new(vec![], now_seconds)),
+        Arc::new(StubIcpLedger {}),
+        Arc::new(StubCMC {}),
+        Box::new(MockRandomness::new()),
     );
 
-    bench_fn(|| {
+    let bench_result = bench_fn(|| {
         governance
             .compute_ballots_for_new_proposal(
                 &Action::RegisterKnownNeuron(KnownNeuron {
@@ -528,11 +534,19 @@ fn compute_ballots_for_new_proposal_with_stable_neurons() -> BenchResult {
                 123_456_789,
             )
             .expect("Failed!");
-    })
+    });
+
+    check_projected_instructions(
+        bench_result,
+        num_neurons,
+        MAX_NUMBER_OF_NEURONS as u64,
+        25_000_000_000,
+    )
 }
 
 fn list_neurons_by_subaccount_benchmark() -> BenchResult {
-    let neurons = (0..100)
+    let num_neurons = 100;
+    let neurons = (0..num_neurons)
         .map(|id| {
             (id, {
                 let mut neuron: NeuronProto = make_neuron(
@@ -562,9 +576,10 @@ fn list_neurons_by_subaccount_benchmark() -> BenchResult {
 
     let governance = Governance::new(
         governance_proto,
-        Box::new(MockEnvironment::new(Default::default(), 0)),
-        Box::new(StubIcpLedger {}),
-        Box::new(StubCMC {}),
+        Arc::new(MockEnvironment::new(Default::default(), 0)),
+        Arc::new(StubIcpLedger {}),
+        Arc::new(StubCMC {}),
+        Box::new(MockRandomness::new()),
     );
 
     let request = ListNeurons {
@@ -605,9 +620,10 @@ fn list_neurons_benchmark() -> BenchResult {
 
     let governance = Governance::new(
         governance_proto,
-        Box::new(MockEnvironment::new(Default::default(), 0)),
-        Box::new(StubIcpLedger {}),
-        Box::new(StubCMC {}),
+        Arc::new(MockEnvironment::new(Default::default(), 0)),
+        Arc::new(StubIcpLedger {}),
+        Arc::new(StubCMC {}),
+        Box::new(MockRandomness::new()),
     );
 
     let request = ListNeurons {
@@ -693,9 +709,10 @@ fn list_proposals_benchmark() -> BenchResult {
 
     let mut governance = Governance::new(
         governance_proto,
-        Box::new(MockEnvironment::new(Default::default(), 0)),
-        Box::new(StubIcpLedger {}),
-        Box::new(StubCMC {}),
+        Arc::new(MockEnvironment::new(Default::default(), 0)),
+        Arc::new(StubIcpLedger {}),
+        Arc::new(StubCMC {}),
+        Box::new(MockRandomness::new()),
     );
 
     let request = ListProposalInfo {

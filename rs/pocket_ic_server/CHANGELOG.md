@@ -11,10 +11,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## 8.0.0 - 2025-02-26
+
 ### Added
 - New endpoint `/instances/<instance_id>/read/ingress_status` to fetch the status of an update call submitted through an ingress message.
   If an optional caller is provided, the status of the update call is known, but the update call was submitted by a different caller, then an error is returned.
 - New endpoint `/instances/<instance_id>/update/set_certified_time` to set the current certified time on all subnets of the PocketIC instance.
+- The endpoint `/instances/<instance_id>/update/tick` takes an argument optionally containing the blockmaker and failed blockmakers
+  for every subnet used by the endpoint `node_metrics_history` of the management canister.
 
 ### Fixed
 - Canisters created via `provisional_create_canister_with_cycles` with the management canister ID as the effective canister ID

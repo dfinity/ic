@@ -33,6 +33,9 @@ use ic_nervous_system_common_test_keys::{
 };
 use ic_nervous_system_common_test_utils::{LedgerReply, SpyLedger};
 use ic_nervous_system_proto::pb::v1::{Decimal, Duration, GlobalTimeOfDay, Image, Percentage};
+use ic_nervous_system_timers::test::{
+    run_pending_timers, run_pending_timers_every_interval_for_count,
+};
 use ic_neurons_fund::{
     NeuronsFundParticipationLimits, PolynomialMatchingFunction, SerializableFunction,
 };
@@ -43,13 +46,15 @@ use ic_nns_common::{
 use ic_nns_constants::{
     GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID as ICP_LEDGER_CANISTER_ID, SNS_WASM_CANISTER_ID,
 };
+use ic_nns_governance::canister_state::{governance_mut, set_governance_for_tests};
+use ic_nns_governance::governance::RandomnessGenerator;
 use ic_nns_governance::{
     governance::{
         get_node_provider_reward,
         test_data::{
             CREATE_SERVICE_NERVOUS_SYSTEM, CREATE_SERVICE_NERVOUS_SYSTEM_WITH_MATCHED_FUNDING,
         },
-        Environment, Governance, HeapGrowthPotential, RngError,
+        Environment, Governance, HeapGrowthPotential,
         EXECUTE_NNS_FUNCTION_PAYLOAD_LISTING_BYTES_MAX, INITIAL_NEURON_DISSOLVE_DELAY,
         MAX_DISSOLVE_DELAY_SECONDS, MAX_NEURON_AGE_FOR_AGE_BONUS, MAX_NEURON_CREATION_SPIKE,
         MAX_NUMBER_OF_PROPOSALS_WITH_BALLOTS, MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS,
@@ -140,6 +145,7 @@ use std::{
 #[cfg(feature = "tla")]
 use ic_nns_governance::governance::tla::{check_traces as tla_check_traces, TLA_TRACES_LKEY};
 use ic_nns_governance::storage::reset_stable_memory;
+use ic_nns_governance::timer_tasks::schedule_tasks;
 #[cfg(feature = "tla")]
 use tla_instrumentation_proc_macros::with_tla_trace_check;
 
@@ -632,6 +638,7 @@ fn check_proposal_status_after_voting_and_after_expiration(
         fake_driver.get_fake_env(),
         fake_driver.get_fake_ledger(),
         fake_driver.get_fake_cmc(),
+        fake_driver.get_fake_randomness_generator(),
     );
 
     let pid = behavior
@@ -1482,6 +1489,7 @@ async fn test_cascade_following() {
         driver.get_fake_env(),
         driver.get_fake_ledger(),
         driver.get_fake_cmc(),
+        driver.get_fake_randomness_generator(),
     );
     gov.make_proposal(
         &NeuronId { id: 1 },
@@ -1597,6 +1605,7 @@ async fn test_minimum_icp_xdr_conversion_rate() {
         driver.get_fake_env(),
         driver.get_fake_ledger(),
         driver.get_fake_cmc(),
+        driver.get_fake_randomness_generator(),
     );
     // Set minimum conversion rate.
     gov.heap_data
@@ -1663,6 +1672,7 @@ async fn test_minimum_icp_xdr_conversion_rate_limits_monthly_node_provider_rewar
         driver.get_fake_env(),
         driver.get_fake_ledger(),
         driver.get_fake_cmc(),
+        driver.get_fake_randomness_generator(),
     );
     // Set minimum conversion rate.
     let minimum_icp_xdr_rate = 100;
@@ -1722,6 +1732,7 @@ async fn test_manage_network_economics_change_one_deep_subfield() {
         driver.get_fake_env(),
         driver.get_fake_ledger(),
         driver.get_fake_cmc(),
+        driver.get_fake_randomness_generator(),
     );
 
     // Step 2: Call the code under test. Make a ManageNetworkEconomics proposal.
@@ -1835,6 +1846,7 @@ async fn test_manage_network_economics_reject_invalid() {
         driver.get_fake_env(),
         driver.get_fake_ledger(),
         driver.get_fake_cmc(),
+        driver.get_fake_randomness_generator(),
     );
 
     // Step 2: Call the code under test. Make a ManageNetworkEconomics proposal.
@@ -2072,6 +2084,7 @@ async fn test_manage_network_economics_revalidate_at_execution_time(
         driver.get_fake_env(),
         driver.get_fake_ledger(),
         driver.get_fake_cmc(),
+        driver.get_fake_randomness_generator(),
     );
 
     // Step 1.2: Make a couple of proposals.
@@ -2239,6 +2252,7 @@ async fn test_mint_monthly_node_provider_rewards() {
         driver.get_fake_env(),
         driver.get_fake_ledger(),
         driver.get_fake_cmc(),
+        driver.get_fake_randomness_generator(),
     );
 
     // Step 2: Run twice heartbeat so that minting rewards is reached.
@@ -2285,6 +2299,7 @@ async fn test_node_provider_must_be_registered() {
         driver.get_fake_env(),
         driver.get_fake_ledger(),
         driver.get_fake_cmc(),
+        driver.get_fake_randomness_generator(),
     );
     let node_provider = NodeProvider {
         id: Some(PrincipalId::try_from(b"SID2".to_vec()).unwrap()),
@@ -2349,6 +2364,7 @@ async fn test_sufficient_stake() {
         driver.get_fake_env(),
         driver.get_fake_ledger(),
         driver.get_fake_cmc(),
+        driver.get_fake_randomness_generator(),
     );
     // Set stake to 0.5 ICP.
     gov.neuron_store
@@ -2411,6 +2427,7 @@ async fn test_all_follow_proposer() {
         driver.get_fake_env(),
         driver.get_fake_ledger(),
         driver.get_fake_cmc(),
+        driver.get_fake_randomness_generator(),
     );
 
     // Later, we'll inspect the same field again to verify that voting power
@@ -2513,6 +2530,7 @@ async fn test_follow_negative() {
         driver.get_fake_env(),
         driver.get_fake_ledger(),
         driver.get_fake_cmc(),
+        driver.get_fake_randomness_generator(),
     );
     gov.make_proposal(
         &NeuronId { id: 1 },
@@ -2601,6 +2619,7 @@ async fn test_no_default_follow_for_governance() {
         driver.get_fake_env(),
         driver.get_fake_ledger(),
         driver.get_fake_cmc(),
+        driver.get_fake_randomness_generator(),
     );
     gov.make_proposal(
         &NeuronId { id: 1 },
@@ -2670,6 +2689,7 @@ async fn test_no_voting_after_deadline() {
         driver.get_fake_env(),
         driver.get_fake_ledger(),
         driver.get_fake_cmc(),
+        driver.get_fake_randomness_generator(),
     );
     let proposal_id = gov
         .make_proposal(
@@ -2790,6 +2810,7 @@ fn test_enforce_private_neuron() {
         driver.get_fake_env(),
         driver.get_fake_ledger(),
         driver.get_fake_cmc(),
+        driver.get_fake_randomness_generator(),
     );
 
     // Step 2: Call code under test.
@@ -2842,6 +2863,7 @@ fn test_query_for_manage_neuron() {
         driver.get_fake_env(),
         driver.get_fake_ledger(),
         driver.get_fake_cmc(),
+        driver.get_fake_randomness_generator(),
     );
     // Test that anybody can call `get_neuron_info` as long as the
     // neuron exists.
@@ -2981,6 +3003,7 @@ async fn test_manage_neuron() {
         driver.get_fake_env(),
         driver.get_fake_ledger(),
         driver.get_fake_cmc(),
+        driver.get_fake_randomness_generator(),
     );
     // Make a proposal to replace the list of followees (2-4) with just 2.
     gov.make_proposal(
@@ -3164,6 +3187,7 @@ async fn test_sufficient_stake_for_manage_neuron() {
         driver.get_fake_env(),
         driver.get_fake_ledger(),
         driver.get_fake_cmc(),
+        driver.get_fake_randomness_generator(),
     );
     // Set stake to less than 0.01 ICP (same as
     // neuron_management_fee_per_proposal_e8s).
@@ -3285,6 +3309,7 @@ async fn test_invalid_proposals_fail() {
         fake_driver.get_fake_env(),
         fake_driver.get_fake_ledger(),
         fake_driver.get_fake_cmc(),
+        fake_driver.get_fake_randomness_generator(),
     );
 
     let long_string = (0..(PROPOSAL_MOTION_TEXT_BYTES_MAX + 1))
@@ -3327,6 +3352,7 @@ async fn test_compute_tally_while_open() {
         fake_driver.get_fake_env(),
         fake_driver.get_fake_ledger(),
         fake_driver.get_fake_cmc(),
+        fake_driver.get_fake_randomness_generator(),
     );
 
     // Make the proposal from the smaller neuron.
@@ -3371,6 +3397,7 @@ async fn test_compute_tally_after_decided() {
         fake_driver.get_fake_env(),
         fake_driver.get_fake_ledger(),
         fake_driver.get_fake_cmc(),
+        fake_driver.get_fake_randomness_generator(),
     );
 
     // Make the proposal from the larger neuron.
@@ -3436,6 +3463,7 @@ async fn test_no_compute_tally_after_deadline() {
         fake_driver.get_fake_env(),
         fake_driver.get_fake_ledger(),
         fake_driver.get_fake_cmc(),
+        fake_driver.get_fake_randomness_generator(),
     );
 
     // Make the proposal from the larger neuron and let the smaller neuron vote no.
@@ -3506,12 +3534,17 @@ async fn test_reward_event_proposals_last_longer_than_reward_period() {
     // Proposals last longer than the reward period
     let wait_for_quiet_threshold_seconds = 5 * REWARD_DISTRIBUTION_PERIOD_SECONDS;
     fixture.wait_for_quiet_threshold_seconds = wait_for_quiet_threshold_seconds;
-    let mut gov = Governance::new(
+    let gov = Governance::new(
         fixture,
         fake_driver.get_fake_env(),
         fake_driver.get_fake_ledger(),
         fake_driver.get_fake_cmc(),
+        fake_driver.get_fake_randomness_generator(),
     );
+    set_governance_for_tests(gov);
+    let gov = governance_mut();
+    schedule_tasks();
+
     let expected_initial_event = RewardEvent {
         day_after_genesis: 0,
         actual_timestamp_seconds: genesis_timestamp_seconds,
@@ -3524,12 +3557,14 @@ async fn test_reward_event_proposals_last_longer_than_reward_period() {
 
     assert_eq!(*gov.latest_reward_event(), expected_initial_event);
     fake_driver.advance_time_by(REWARD_DISTRIBUTION_PERIOD_SECONDS / 2);
+    run_pending_timers();
     gov.run_periodic_tasks().now_or_never();
 
     // Too early: nothing should have changed
     assert_eq!(*gov.latest_reward_event(), expected_initial_event);
     fake_driver.advance_time_by(REWARD_DISTRIBUTION_PERIOD_SECONDS);
-    // We are now 1.5 reward periods (1.5 days) past genesis.
+    // We are now 1.5 reward periods (1.5 days) past genesis.1
+    run_pending_timers();
     gov.run_periodic_tasks().now_or_never();
     // A reward event should have happened, albeit an empty one, i.e.,
     // given that no voting took place, no rewards were distributed.
@@ -3572,6 +3607,7 @@ async fn test_reward_event_proposals_last_longer_than_reward_period() {
     // total_available_e8s_equivalent is equal to 199 maturity.
     fake_driver.advance_time_by(2 * REWARD_DISTRIBUTION_PERIOD_SECONDS);
     // We are now at +3.5 reward periods.
+    run_pending_timers();
     gov.run_periodic_tasks().now_or_never();
     {
         let fully_elapsed_reward_rounds = 3;
@@ -3597,6 +3633,7 @@ async fn test_reward_event_proposals_last_longer_than_reward_period() {
     fake_driver.advance_time_by(3 * REWARD_DISTRIBUTION_PERIOD_SECONDS - 5);
     // We are now at +6.5 - epsilon reward periods. Notice that at 6.5 reward
     // periods, the proposal become rewardable.
+    run_pending_timers();
     gov.run_periodic_tasks().now_or_never();
     // This should have triggered an empty reward event
     assert_eq!(gov.latest_reward_event().day_after_genesis, 6);
@@ -3606,10 +3643,12 @@ async fn test_reward_event_proposals_last_longer_than_reward_period() {
 
     // This should generate a RewardEvent, because we now have a rewardable
     // proposal (i.e. the proposal has reward_status ReadyToSettle).
+    run_pending_timers();
     gov.run_periodic_tasks().now_or_never();
     assert_eq!(gov.latest_reward_event().day_after_genesis, 6);
     // let's advance far enough to trigger a reward event
     fake_driver.advance_time_by(REWARD_DISTRIBUTION_PERIOD_SECONDS);
+    run_pending_timers();
     gov.run_periodic_tasks().now_or_never();
 
     // Inspect latest_reward_event.
@@ -3668,6 +3707,7 @@ async fn test_reward_event_proposals_last_longer_than_reward_period() {
 
     // Now let's advance again -- a new empty reward event should happen
     fake_driver.advance_time_by(REWARD_DISTRIBUTION_PERIOD_SECONDS);
+    run_pending_timers();
     gov.run_periodic_tasks().now_or_never();
     assert_eq!(
         *gov.latest_reward_event(),
@@ -3710,13 +3750,18 @@ async fn test_restricted_proposals_are_not_eligible_for_voting_rewards() {
     fixture.wait_for_quiet_threshold_seconds = wait_for_quiet_threshold_seconds;
     fixture.short_voting_period_seconds = wait_for_quiet_threshold_seconds;
     fixture.neuron_management_voting_period_seconds = Some(wait_for_quiet_threshold_seconds);
-    let mut gov = Governance::new(
+    let gov = Governance::new(
         fixture,
         fake_driver.get_fake_env(),
         fake_driver.get_fake_ledger(),
         fake_driver.get_fake_cmc(),
+        fake_driver.get_fake_randomness_generator(),
     );
-    gov.run_periodic_tasks().now_or_never();
+    set_governance_for_tests(gov);
+    let gov = governance_mut();
+    schedule_tasks();
+
+    run_pending_timers();
     // Initial reward event
     assert_eq!(
         *gov.latest_reward_event(),
@@ -3766,8 +3811,9 @@ async fn test_restricted_proposals_are_not_eligible_for_voting_rewards() {
     // for the reward event.
     // total_available_e8s_equivalent is equal to reward function * total supply / 365.25,
     // which is 10% * 1234567890/365.25 = 338006
-    fake_driver.advance_time_by(REWARD_DISTRIBUTION_PERIOD_SECONDS);
-    gov.run_periodic_tasks().now_or_never();
+    fake_driver.advance_time_by(REWARD_DISTRIBUTION_PERIOD_SECONDS + 1);
+    run_pending_timers();
+
     assert_eq!(
         *gov.latest_reward_event(),
         RewardEvent {
@@ -3783,6 +3829,7 @@ async fn test_restricted_proposals_are_not_eligible_for_voting_rewards() {
 
     {
         gov.run_periodic_tasks().now_or_never();
+        run_pending_timers();
         let info = gov.get_proposal_data(ProposalId { id: 1 }).unwrap();
         assert_eq!(info.status(), ProposalStatus::Rejected);
         assert_eq!(
@@ -3843,12 +3890,17 @@ fn test_reward_distribution_skips_deleted_neurons() {
     // Let's set genesis
     let genesis_timestamp_seconds = fake_driver.now();
     fixture.genesis_timestamp_seconds = genesis_timestamp_seconds;
-    let mut gov = Governance::new(
+    let gov = Governance::new(
         fixture,
         fake_driver.get_fake_env(),
         fake_driver.get_fake_ledger(),
         fake_driver.get_fake_cmc(),
+        fake_driver.get_fake_randomness_generator(),
     );
+
+    set_governance_for_tests(gov);
+    let gov = governance_mut();
+    schedule_tasks();
 
     // Make sure that the fixture function indeed did not create a neuron 999.
     assert_matches!(gov.neuron_store.with_neuron(&NeuronId { id: 999 }, |n| n.clone()).map_err(|e| {
@@ -3857,7 +3909,7 @@ fn test_reward_distribution_skips_deleted_neurons() {
     }), Err(e) if e.error_type == NotFound as i32);
 
     // The proposal at genesis time is not ready to be settled
-    gov.run_periodic_tasks().now_or_never();
+    run_pending_timers();
     assert_eq!(
         *gov.latest_reward_event(),
         RewardEvent {
@@ -3871,8 +3923,9 @@ fn test_reward_distribution_skips_deleted_neurons() {
         }
     );
 
-    fake_driver.advance_time_by(REWARD_DISTRIBUTION_PERIOD_SECONDS);
-    gov.run_periodic_tasks().now_or_never();
+    fake_driver.advance_time_by(REWARD_DISTRIBUTION_PERIOD_SECONDS + 1);
+    run_pending_timers();
+
     assert_eq!(
         *gov.latest_reward_event(),
         RewardEvent {
@@ -3920,12 +3973,17 @@ async fn test_genesis_in_the_future_in_supported() {
     // Let's set genesis
     let genesis_timestamp_seconds = fake_driver.now() + 3 * REWARD_DISTRIBUTION_PERIOD_SECONDS / 2;
     fixture.genesis_timestamp_seconds = genesis_timestamp_seconds;
-    let mut gov = Governance::new(
+    let gov = Governance::new(
         fixture,
         fake_driver.get_fake_env(),
         fake_driver.get_fake_ledger(),
         fake_driver.get_fake_cmc(),
+        fake_driver.get_fake_randomness_generator(),
     );
+    set_governance_for_tests(gov);
+    let gov = governance_mut();
+    schedule_tasks();
+
     gov.run_periodic_tasks().now_or_never();
     // At genesis, we should create an empty reward event
     assert_eq!(
@@ -3983,7 +4041,7 @@ async fn test_genesis_in_the_future_in_supported() {
         .unwrap();
 
     fake_driver.advance_time_by(REWARD_DISTRIBUTION_PERIOD_SECONDS);
-    gov.run_periodic_tasks().now_or_never();
+    run_pending_timers();
     // We're still pre-genesis at that point
     assert!(fake_driver.now() < genesis_timestamp_seconds);
     // No new reward event should have been created...
@@ -4049,7 +4107,7 @@ async fn test_genesis_in_the_future_in_supported() {
         .unwrap();
 
     fake_driver.advance_time_by(REWARD_DISTRIBUTION_PERIOD_SECONDS);
-    gov.run_periodic_tasks().now_or_never();
+    run_pending_timers();
     // Now we're 0.5 reward period after genesis. Still no new reward event
     // expected.
     assert_eq!(
@@ -4080,11 +4138,11 @@ async fn test_genesis_in_the_future_in_supported() {
     );
 
     // Let's go just at the time we should create the first reward event
-    fake_driver.advance_time_by(REWARD_DISTRIBUTION_PERIOD_SECONDS / 2);
-    gov.run_periodic_tasks().now_or_never();
+    fake_driver.advance_time_by(REWARD_DISTRIBUTION_PERIOD_SECONDS / 2 + 1);
+    run_pending_timers();
     assert_eq!(
         fake_driver.now(),
-        genesis_timestamp_seconds + REWARD_DISTRIBUTION_PERIOD_SECONDS
+        genesis_timestamp_seconds + REWARD_DISTRIBUTION_PERIOD_SECONDS + 1
     );
     // Given that the second neuron is much bigger (stake 953) compared to the
     // the first neuron (stake 23) and only the first neuron voted,
@@ -4105,7 +4163,7 @@ async fn test_genesis_in_the_future_in_supported() {
 
     // Let's go just at the time we should create the first reward event
     fake_driver.advance_time_by(REWARD_DISTRIBUTION_PERIOD_SECONDS);
-    gov.run_periodic_tasks().now_or_never();
+    run_pending_timers();
     // This time, the other long proposal submitted before genesis should be
     // considered
     assert_eq!(
@@ -4166,8 +4224,9 @@ fn compute_maturities(
     let proposals: Vec<fake::ProposalNeuronBehavior> =
         proposals.into_iter().map(|x| x.into()).collect();
 
-    let mut fake_driver =
-        fake::FakeDriver::default().with_supply(Tokens::from_e8s(365_250 * reward_pot_e8s / 100));
+    let mut fake_driver = fake::FakeDriver::default()
+        .at(DEFAULT_TEST_START_TIMESTAMP_SECONDS)
+        .with_supply(Tokens::from_e8s(365_250 * reward_pot_e8s / 100));
 
     let neurons = stakes_e8s
         .iter()
@@ -4193,12 +4252,16 @@ fn compute_maturities(
         .with_wait_for_quiet_threshold(10)
         .build();
 
-    let mut gov = Governance::new(
+    let gov = Governance::new(
         governance_proto,
         fake_driver.get_fake_env(),
         fake_driver.get_fake_ledger(),
         fake_driver.get_fake_cmc(),
+        fake_driver.get_fake_randomness_generator(),
     );
+    set_governance_for_tests(gov);
+    let gov = governance_mut();
+    schedule_tasks();
 
     let expected_initial_event = RewardEvent {
         day_after_genesis: 0,
@@ -4209,11 +4272,10 @@ fn compute_maturities(
         rounds_since_last_distribution: Some(0),
         latest_round_available_e8s_equivalent: Some(0),
     };
-
     assert_eq!(*gov.latest_reward_event(), expected_initial_event);
 
     for (i, behavior) in (1_u64..).zip(proposals.iter()) {
-        behavior.propose_and_vote(&mut gov, format!("proposal {}", i));
+        behavior.propose_and_vote(gov, format!("proposal {}", i));
     }
 
     // Let's advance time by one reward periods. All proposals should be considered
@@ -4227,6 +4289,9 @@ fn compute_maturities(
     }
     gov.run_periodic_tasks().now_or_never();
 
+    fake_driver.advance_time_by(1);
+    run_pending_timers();
+
     // Inspect latest_reward_event.
     let actual_reward_event = gov.latest_reward_event();
     assert_eq!(
@@ -4234,7 +4299,8 @@ fn compute_maturities(
         RewardEvent {
             day_after_genesis: 1,
             actual_timestamp_seconds: DEFAULT_TEST_START_TIMESTAMP_SECONDS
-                + REWARD_DISTRIBUTION_PERIOD_SECONDS,
+                + REWARD_DISTRIBUTION_PERIOD_SECONDS
+                + 1,
             settled_proposals: (1_u64..=proposals.len() as u64)
                 .map(|id| ProposalId { id })
                 .collect(),
@@ -4725,6 +4791,7 @@ fn test_approve_kyc() {
         driver.get_fake_env(),
         driver.get_fake_ledger(),
         driver.get_fake_cmc(),
+        driver.get_fake_randomness_generator(),
     );
     let neuron_a = gov
         .neuron_store
@@ -4911,6 +4978,7 @@ fn test_get_neuron_ids_by_principal() {
         driver.get_fake_env(),
         driver.get_fake_ledger(),
         driver.get_fake_cmc(),
+        driver.get_fake_randomness_generator(),
     );
 
     assert_eq!(
@@ -5004,6 +5072,7 @@ fn governance_with_staked_neuron(
         driver.get_fake_env(),
         driver.get_fake_ledger(),
         driver.get_fake_cmc(),
+        driver.get_fake_randomness_generator(),
     );
 
     // Add a stake transfer for this neuron, emulating a ledger call.
@@ -5351,6 +5420,7 @@ fn governance_with_staked_unclaimed_neuron(
         driver.get_fake_env(),
         driver.get_fake_ledger(),
         driver.get_fake_cmc(),
+        driver.get_fake_randomness_generator(),
     );
 
     (driver, gov, to_subaccount)
@@ -6959,13 +7029,17 @@ fn test_staked_maturity() {
     let dissolve_delay_seconds = MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS;
     let neuron_stake_e8s = 10 * 100_000_000; // 10 ICP
 
-    let (mut driver, mut gov, id, _to_subaccount) = governance_with_staked_neuron(
+    let (mut driver, gov, id, _to_subaccount) = governance_with_staked_neuron(
         dissolve_delay_seconds,
         neuron_stake_e8s,
         block_height,
         from,
         nonce,
     );
+
+    set_governance_for_tests(gov);
+    let gov = governance_mut();
+    schedule_tasks();
 
     gov.neuron_store
         .with_neuron_mut(&id, |neuron| {
@@ -7017,6 +7091,7 @@ fn test_staked_maturity() {
 
     // Advance time by 5 days and run periodic tasks so that the neuron is granted (staked) maturity.
     driver.advance_time_by(5 * 24 * 3600);
+    run_pending_timers();
     gov.run_periodic_tasks().now_or_never();
 
     let neuron = gov
@@ -7078,6 +7153,7 @@ fn test_staked_maturity() {
         .expect("Configuring neuron failed");
 
     driver.advance_time_by(MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS);
+    run_pending_timers();
     gov.unstake_maturity_of_dissolved_neurons();
 
     // All the maturity should now be regular maturity
@@ -7124,6 +7200,7 @@ async fn test_neuron_with_non_self_authenticating_controller_is_now_allowed() {
         driver.get_fake_env(),
         driver.get_fake_ledger(),
         driver.get_fake_cmc(),
+        driver.get_fake_randomness_generator(),
     );
 
     // Step 2: Call code under test.
@@ -7347,6 +7424,7 @@ fn governance_with_neurons(neurons: &[Neuron]) -> (fake::FakeDriver, Governance)
         driver.get_fake_env(),
         driver.get_fake_ledger(),
         driver.get_fake_cmc(),
+        driver.get_fake_randomness_generator(),
     );
     assert_eq!(gov.neuron_store.len(), neurons.len());
     (driver, gov)
@@ -8474,6 +8552,7 @@ fn test_get_proposal_info() {
         driver.get_fake_env(),
         driver.get_fake_ledger(),
         driver.get_fake_cmc(),
+        driver.get_fake_randomness_generator(),
     );
     let caller = &principal(1);
 
@@ -8502,6 +8581,7 @@ fn test_list_proposals_removes_execute_nns_function_payload() {
         driver.get_fake_env(),
         driver.get_fake_ledger(),
         driver.get_fake_cmc(),
+        driver.get_fake_randomness_generator(),
     );
     let caller = &principal(1);
 
@@ -8540,6 +8620,7 @@ fn test_list_proposals_retains_execute_nns_function_payload() {
         driver.get_fake_env(),
         driver.get_fake_ledger(),
         driver.get_fake_cmc(),
+        driver.get_fake_randomness_generator(),
     );
     let caller = &principal(1);
 
@@ -8580,6 +8661,7 @@ fn test_get_pending_proposals_removes_execute_nns_function_payload() {
         driver.get_fake_env(),
         driver.get_fake_ledger(),
         driver.get_fake_cmc(),
+        driver.get_fake_randomness_generator(),
     );
     let caller = &principal(1);
 
@@ -8635,6 +8717,7 @@ fn test_list_proposals() {
         driver.get_fake_env(),
         driver.get_fake_ledger(),
         driver.get_fake_cmc(),
+        driver.get_fake_randomness_generator(),
     );
     let caller = &principal(1);
 
@@ -8766,6 +8849,7 @@ fn test_filter_proposals_neuron_visibility() {
         driver.get_fake_env(),
         driver.get_fake_ledger(),
         driver.get_fake_cmc(),
+        driver.get_fake_randomness_generator(),
     );
 
     // Principal 1 is a manager of the neuron 3 which is managed by proposal 1.
@@ -8857,6 +8941,7 @@ fn test_filter_proposals_include_all_manage_neuron_ignores_visibility() {
         driver.get_fake_env(),
         driver.get_fake_ledger(),
         driver.get_fake_cmc(),
+        driver.get_fake_randomness_generator(),
     );
 
     // Without the include_all_manage_neuron_proposals option, principal2 will
@@ -8970,6 +9055,7 @@ fn test_filter_proposals_by_status() {
         driver.get_fake_env(),
         driver.get_fake_ledger(),
         driver.get_fake_cmc(),
+        driver.get_fake_randomness_generator(),
     );
 
     assert_eq!(
@@ -9061,6 +9147,7 @@ fn test_filter_proposals_by_reward_status() {
         driver.get_fake_env(),
         driver.get_fake_ledger(),
         driver.get_fake_cmc(),
+        driver.get_fake_randomness_generator(),
     );
 
     assert_eq!(
@@ -9161,6 +9248,7 @@ fn test_filter_proposals_excluding_topics() {
         driver.get_fake_env(),
         driver.get_fake_ledger(),
         driver.get_fake_cmc(),
+        driver.get_fake_randomness_generator(),
     );
 
     assert_eq!(
@@ -9247,6 +9335,7 @@ fn test_filter_proposal_ballots() {
         driver.get_fake_env(),
         driver.get_fake_ledger(),
         driver.get_fake_cmc(),
+        driver.get_fake_randomness_generator(),
     );
 
     // Principal1 should only see its own ballot.
@@ -9324,6 +9413,7 @@ async fn test_make_proposal_message() {
         driver.get_fake_env(),
         driver.get_fake_ledger(),
         driver.get_fake_cmc(),
+        driver.get_fake_randomness_generator(),
     );
 
     // submit proposal
@@ -9426,6 +9516,7 @@ fn test_omit_large_fields() {
         driver.get_fake_env(),
         driver.get_fake_ledger(),
         driver.get_fake_cmc(),
+        driver.get_fake_randomness_generator(),
     );
 
     fn get_logo(list_proposals_response: ListProposalInfoResponse) -> Option<Image> {
@@ -9508,12 +9599,17 @@ async fn test_max_number_of_proposals_with_ballots() {
         wait_for_quiet_threshold_seconds: 5,
         ..fixture_two_neurons_second_is_bigger()
     };
-    let mut gov = Governance::new(
+    let gov = Governance::new(
         proto,
         fake_driver.get_fake_env(),
         fake_driver.get_fake_ledger(),
         fake_driver.get_fake_cmc(),
+        fake_driver.get_fake_randomness_generator(),
     );
+    set_governance_for_tests(gov);
+    let gov = governance_mut();
+    schedule_tasks();
+
     // Vote with neuron 1. It is smaller, so proposals are not auto-accepted.
     for i in 0..MAX_NUMBER_OF_PROPOSALS_WITH_BALLOTS {
         gov.make_proposal(
@@ -9579,7 +9675,8 @@ async fn test_max_number_of_proposals_with_ballots() {
     );
 
     fake_driver.advance_time_by(10);
-    gov.run_periodic_tasks().now_or_never();
+    gov.run_periodic_tasks().now_or_never().unwrap();
+    run_pending_timers();
 
     // Now all proposals should have been rejected.
     for i in 1_u64..MAX_NUMBER_OF_PROPOSALS_WITH_BALLOTS as u64 + 2 {
@@ -9609,7 +9706,8 @@ async fn test_max_number_of_proposals_with_ballots() {
 
     // Let's make a reward event happen
     fake_driver.advance_time_by(REWARD_DISTRIBUTION_PERIOD_SECONDS);
-    gov.run_periodic_tasks().now_or_never();
+    gov.run_periodic_tasks().now_or_never().unwrap();
+    run_pending_timers();
 
     // Now it should be allowed to submit a new one
     gov.make_proposal(
@@ -9671,6 +9769,7 @@ fn test_proposal_gc() {
         driver.get_fake_env(),
         driver.get_fake_ledger(),
         driver.get_fake_cmc(),
+        driver.get_fake_randomness_generator(),
     );
     assert_eq!(999, gov.heap_data.proposals.len());
     // First check GC does not take place if
@@ -9748,6 +9847,7 @@ fn test_gc_ignores_exempt_proposals() {
         driver.get_fake_env(),
         driver.get_fake_ledger(),
         driver.get_fake_cmc(),
+        driver.get_fake_randomness_generator(),
     );
     assert_eq!(999, gov.heap_data.proposals.len());
     gov.latest_gc_timestamp_seconds = driver.now() - 60;
@@ -9765,6 +9865,7 @@ async fn test_id_v1_works() {
         driver.get_fake_env(),
         driver.get_fake_ledger(),
         driver.get_fake_cmc(),
+        driver.get_fake_randomness_generator(),
     );
     // Make a proposal to replace the list of followees (2-4) with just 2.
     gov.make_proposal(
@@ -9804,6 +9905,7 @@ fn test_can_follow_by_subaccount_and_neuron_id() {
             driver.get_fake_env(),
             driver.get_fake_ledger(),
             driver.get_fake_cmc(),
+            driver.get_fake_randomness_generator(),
         );
 
         let nid = NeuronId { id: 2 };
@@ -9895,6 +9997,7 @@ fn test_manage_neuron_merge_maturity_returns_expected_error() {
         fake_driver.get_fake_env(),
         fake_driver.get_fake_ledger(),
         fake_driver.get_fake_cmc(),
+        fake_driver.get_fake_randomness_generator(),
     );
 
     let response = gov
@@ -9965,6 +10068,7 @@ fn test_start_dissolving() {
         fake_driver.get_fake_env(),
         fake_driver.get_fake_ledger(),
         fake_driver.get_fake_cmc(),
+        fake_driver.get_fake_randomness_generator(),
     );
 
     // Advance time so that the neuron has age.
@@ -10024,6 +10128,7 @@ fn test_start_dissolving_panics() {
         fake_driver.get_fake_env(),
         fake_driver.get_fake_ledger(),
         fake_driver.get_fake_cmc(),
+        fake_driver.get_fake_randomness_generator(),
     );
 
     let neuron_info = gov
@@ -10069,6 +10174,7 @@ fn test_stop_dissolving() {
         fake_driver.get_fake_env(),
         fake_driver.get_fake_ledger(),
         fake_driver.get_fake_cmc(),
+        fake_driver.get_fake_randomness_generator(),
     );
 
     let neuron_info = gov
@@ -10131,6 +10237,7 @@ fn test_stop_dissolving_panics() {
         fake_driver.get_fake_env(),
         fake_driver.get_fake_ledger(),
         fake_driver.get_fake_cmc(),
+        fake_driver.get_fake_randomness_generator(),
     );
 
     let neuron_info = gov
@@ -10304,6 +10411,7 @@ fn test_increase_dissolve_delay() {
         fake_driver.get_fake_env(),
         fake_driver.get_fake_ledger(),
         fake_driver.get_fake_cmc(),
+        fake_driver.get_fake_randomness_generator(),
     );
     // Tests for neuron 1. Non-dissolving.
     increase_dissolve_delay(&mut gov, principal_id, 1, 1);
@@ -10452,6 +10560,7 @@ fn test_join_neurons_fund() {
         driver.get_fake_env(),
         driver.get_fake_ledger(),
         driver.get_fake_cmc(),
+        driver.get_fake_randomness_generator(),
     );
     {
         let actual_metrics = gov.compute_cached_metrics(now, total_icp_suppply);
@@ -10800,6 +10909,7 @@ fn test_neuron_set_visibility() {
         driver.get_fake_env(),
         driver.get_fake_ledger(),
         driver.get_fake_cmc(),
+        driver.get_fake_randomness_generator(),
     );
 
     // Step 2: Call the code under test.
@@ -10909,6 +11019,7 @@ fn test_deciding_and_potential_voting_power() {
         driver.get_fake_env(),
         driver.get_fake_ledger(),
         driver.get_fake_cmc(),
+        driver.get_fake_randomness_generator(),
     );
 
     let original_potential_voting_power = governance
@@ -11117,6 +11228,7 @@ fn test_include_public_neurons_in_full_neurons() {
         driver.get_fake_env(),
         driver.get_fake_ledger(),
         driver.get_fake_cmc(),
+        driver.get_fake_randomness_generator(),
     );
 
     // Step 2: Call the code under test.
@@ -11207,6 +11319,7 @@ async fn test_refresh_voting_power() {
         driver.get_fake_env(),
         driver.get_fake_ledger(),
         driver.get_fake_cmc(),
+        driver.get_fake_randomness_generator(),
     );
 
     let delta_seconds = 99;
@@ -11350,6 +11463,7 @@ fn wait_for_quiet_test_helper(
         fake_driver.get_fake_env(),
         fake_driver.get_fake_ledger(),
         fake_driver.get_fake_cmc(),
+        fake_driver.get_fake_randomness_generator(),
     );
     let pid = gov
         .make_proposal(
@@ -12264,6 +12378,7 @@ async fn test_known_neurons() {
         driver.get_fake_env(),
         driver.get_fake_ledger(),
         driver.get_fake_cmc(),
+        driver.get_fake_randomness_generator(),
     );
 
     gov.make_proposal(
@@ -12519,22 +12634,6 @@ impl Environment for MockEnvironment<'_> {
 
     fn now(&self) -> u64 {
         DEFAULT_TEST_START_TIMESTAMP_SECONDS
-    }
-
-    fn random_u64(&mut self) -> Result<u64, RngError> {
-        Ok(RANDOM_U64)
-    }
-
-    fn random_byte_array(&mut self) -> Result<[u8; 32], RngError> {
-        panic!("Unexpected call to Environment::random_byte_array");
-    }
-
-    fn seed_rng(&mut self, _seed: [u8; 32]) {
-        unimplemented!()
-    }
-
-    fn get_rng_seed(&self) -> Option<[u8; 32]> {
-        unimplemented!()
     }
 
     fn execute_nns_function(
@@ -13303,12 +13402,13 @@ async fn test_settle_neurons_fund_participation_restores_lifecycle_on_sns_w_fail
     let driver = fake::FakeDriver::default();
     let mut gov = Governance::new(
         governance_proto,
-        Box::new(MockEnvironment {
+        Arc::new(MockEnvironment {
             expected_call_canister_method_calls: Arc::clone(&expected_call_canister_method_calls),
             call_canister_method_min_duration: None,
         }),
         driver.get_fake_ledger(),
         driver.get_fake_cmc(),
+        driver.get_fake_randomness_generator(),
     );
 
     // Step 2: Run code under test.
@@ -13438,12 +13538,13 @@ async fn test_settle_neurons_fund_participation_restores_lifecycle_on_ledger_fai
     ))]);
     let mut gov = Governance::new(
         governance_proto,
-        Box::new(MockEnvironment {
+        Arc::new(MockEnvironment {
             expected_call_canister_method_calls: Arc::clone(&expected_call_canister_method_calls),
             call_canister_method_min_duration: None,
         }),
-        Box::new(icp_ledger),
+        Arc::new(icp_ledger),
         driver.get_fake_cmc(),
+        driver.get_fake_randomness_generator(),
     );
 
     // Step 2: Run code under test.
@@ -13577,12 +13678,13 @@ async fn test_create_service_nervous_system_failure_due_to_swap_deployment_error
     let driver = fake::FakeDriver::default().with_ledger_accounts(vec![]); // Initialize the minting account
     let mut gov = Governance::new(
         governance_proto,
-        Box::new(MockEnvironment {
+        Arc::new(MockEnvironment {
             expected_call_canister_method_calls: Arc::clone(&expected_call_canister_method_calls),
             call_canister_method_min_duration: None,
         }),
         driver.get_fake_ledger(),
         driver.get_fake_cmc(),
+        driver.get_fake_randomness_generator(),
     );
 
     // Step 2: Run code under test. This is done indirectly via proposal. The
@@ -13679,12 +13781,13 @@ async fn test_create_service_nervous_system_settles_neurons_fund_commit() {
     let driver = fake::FakeDriver::default().with_ledger_accounts(vec![]); // Initialize the minting account
     let mut gov = Governance::new(
         governance_proto,
-        Box::new(MockEnvironment {
+        Arc::new(MockEnvironment {
             expected_call_canister_method_calls: Arc::clone(&expected_call_canister_method_calls),
             call_canister_method_min_duration: None,
         }),
         driver.get_fake_ledger(),
         driver.get_fake_cmc(),
+        driver.get_fake_randomness_generator(),
     );
 
     // Step 2: Run code under test. This is done indirectly via proposal. The
@@ -13826,12 +13929,13 @@ async fn test_create_service_nervous_system_settles_neurons_fund_abort() {
     let driver = fake::FakeDriver::default().with_ledger_accounts(vec![]); // Initialize the minting account
     let mut gov = Governance::new(
         governance_proto,
-        Box::new(MockEnvironment {
+        Arc::new(MockEnvironment {
             expected_call_canister_method_calls: Arc::clone(&expected_call_canister_method_calls),
             call_canister_method_min_duration: None,
         }),
         driver.get_fake_ledger(),
         driver.get_fake_cmc(),
+        driver.get_fake_randomness_generator(),
     );
 
     // Step 2: Run code under test. This is done indirectly via proposal. The
@@ -13984,12 +14088,13 @@ async fn test_create_service_nervous_system_proposal_execution_fails() {
         // This is where the main expectation is set. To wit, we expect that
         // execution of the proposal will cause governance to call out to the
         // swap canister.
-        Box::new(MockEnvironment {
+        Arc::new(MockEnvironment {
             expected_call_canister_method_calls: Arc::clone(&expected_call_canister_method_calls),
             call_canister_method_min_duration: None,
         }),
         driver.get_fake_ledger(),
         driver.get_fake_cmc(),
+        driver.get_fake_randomness_generator(),
     );
 
     // Step 2: Run code under test. This is done indirectly via proposal. The
@@ -14086,12 +14191,13 @@ async fn test_settle_neurons_fund_is_idempotent_for_create_service_nervous_syste
     let driver = fake::FakeDriver::default().with_ledger_accounts(vec![]); // Initialize the minting account
     let mut gov = Governance::new(
         governance_proto,
-        Box::new(MockEnvironment {
+        Arc::new(MockEnvironment {
             expected_call_canister_method_calls: Arc::clone(&expected_call_canister_method_calls),
             call_canister_method_min_duration: None,
         }),
         driver.get_fake_ledger(),
         driver.get_fake_cmc(),
+        driver.get_fake_randomness_generator(),
     );
 
     // Step 2: Run code under test.
@@ -14221,7 +14327,7 @@ async fn test_settle_neurons_fund_is_idempotent_for_create_service_nervous_syste
 }
 
 #[tokio::test]
-async fn distribute_rewards_load_test() {
+async fn distribute_rewards_test() {
     // Step 1: Prepare the world.
 
     let genesis_timestamp_seconds = 1;
@@ -14329,30 +14435,24 @@ async fn distribute_rewards_load_test() {
 
         ..Default::default()
     };
-    let mut governance = Governance::new(
+    let governance = Governance::new(
         proto,
         helper.get_fake_env(),
         helper.get_fake_ledger(),
         helper.get_fake_cmc(),
+        helper.get_fake_randomness_generator(),
     );
+    set_governance_for_tests(governance);
+    let governance = governance_mut();
+    schedule_tasks();
     // Prevent gc.
     governance.latest_gc_timestamp_seconds = now;
 
     // Step 2: Run code under test.
-    let clock = std::time::Instant::now;
-    let start = clock();
     governance.run_periodic_tasks().await;
-    let execution_duration_seconds = (clock() - start).as_secs_f64();
+    run_pending_timers_every_interval_for_count(std::time::Duration::from_secs(2), 10);
 
-    // Step 3: Inspect results. The main thing is to make sure that the code
-    // under test ran within a "reasonable" amount of time. On a 2019 MacBook
-    // Pro, it takes < 1.5 s. The limit is set to > 10x that to hopefully avoid
-    // flakes in CI.
-    assert!(
-        execution_duration_seconds < 5.0,
-        "{}",
-        execution_duration_seconds
-    );
+    // Step 3: Inspect results.
 
     // Step 3.1: Inspect neurons to make sure they have been rewarded for voting.
     governance.neuron_store.with_active_neurons_iter(|iter| {
@@ -14430,6 +14530,7 @@ async fn test_proposal_url_not_on_list_fails() {
         fake_driver.get_fake_env(),
         fake_driver.get_fake_ledger(),
         fake_driver.get_fake_cmc(),
+        fake_driver.get_fake_randomness_generator(),
     );
 
     // Submit a proposal with a url not on the whitelist
@@ -14504,6 +14605,7 @@ fn test_ready_to_be_settled_proposals_ids() {
         fake_driver.get_fake_env(),
         fake_driver.get_fake_ledger(),
         fake_driver.get_fake_cmc(),
+        fake_driver.get_fake_randomness_generator(),
     );
     let rewardable_proposal_ids = |now_timestamp_seconds| -> Vec<u64> {
         governance
@@ -14679,6 +14781,7 @@ async fn test_metrics() {
         driver.get_fake_env(),
         driver.get_fake_ledger(),
         driver.get_fake_cmc(),
+        driver.get_fake_randomness_generator(),
     );
 
     let actual_metrics = gov.compute_cached_metrics(now, Tokens::new(0, 0).unwrap());
@@ -14893,6 +14996,7 @@ fn randomly_pick_swap_start() {
         fake_driver.get_fake_env(),
         fake_driver.get_fake_ledger(),
         fake_driver.get_fake_cmc(),
+        fake_driver.get_fake_randomness_generator(),
     );
 
     // Generate "zillions" of outputs, and count their occurrences.
@@ -14972,6 +15076,7 @@ fn compute_closest_proposal_deadline_timestamp_seconds_no_wfq_fallback() {
         fake_driver.get_fake_env(),
         fake_driver.get_fake_ledger(),
         fake_driver.get_fake_cmc(),
+        fake_driver.get_fake_randomness_generator(),
     );
 
     // Check that the closest deadline is the one for the proposal we injected.
@@ -15022,6 +15127,7 @@ fn compute_closest_proposal_deadline_timestamp_seconds_incorporates_wfq() {
         fake_driver.get_fake_env(),
         fake_driver.get_fake_ledger(),
         fake_driver.get_fake_cmc(),
+        fake_driver.get_fake_randomness_generator(),
     );
 
     // Check that the closest deadline is the one for the proposal we injected,
@@ -15051,6 +15157,7 @@ fn voting_period_seconds_topic_dependency() {
         driver.get_fake_env(),
         driver.get_fake_ledger(),
         driver.get_fake_cmc(),
+        driver.get_fake_randomness_generator(),
     );
 
     let voting_period_fun = gov.voting_period_seconds();
@@ -15178,6 +15285,7 @@ fn test_neuron_info_private_enforcement() {
         driver.get_fake_env(),
         driver.get_fake_ledger(),
         driver.get_fake_cmc(),
+        driver.get_fake_randomness_generator(),
     );
 
     let main = |neuron_id_to_expect_redact: Vec<(NeuronId, bool)>| {
@@ -15346,7 +15454,7 @@ impl IcpLedger for StubIcpLedger {
 struct StubCMC {}
 #[async_trait]
 impl CMC for StubCMC {
-    async fn neuron_maturity_modulation(&mut self) -> Result<i32, String> {
+    async fn neuron_maturity_modulation(&self) -> Result<i32, String> {
         unimplemented!()
     }
 }
