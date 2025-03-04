@@ -114,8 +114,8 @@ impl<Memory: ic_stable_structures::Memory> RewardsDistributionStateMachine<Memor
         let mut distribution = self
             .distributions
             .remove(&day_after_genesis)
-            .map(|proto| RewardsDistribution::from(proto))
-            .unwrap_or(RewardsDistribution::new());
+            .map(RewardsDistribution::from)
+            .unwrap_or_default();
 
         let result = callback(&mut distribution);
 
@@ -310,7 +310,7 @@ mod test {
             rewards_distribution_state_machine.with_distribution_for_event(
                 day_after_genesis,
                 |distribution| {
-                    for (id, _neuron) in &neurons {
+                    for id in neurons.keys() {
                         distribution.add_reward(NeuronId { id: *id }, 10);
                     }
                 },
@@ -368,7 +368,7 @@ mod test {
             RewardsDistributionStateMachine::new(DefaultMemoryImpl::default());
 
         rewards_distribution_state_machine.with_distribution_for_event(1, |distribution| {
-            for (id, _neuron) in &neurons {
+            for id in neurons.keys() {
                 distribution.add_reward(NeuronId { id: *id }, 10);
             }
         });
