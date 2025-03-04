@@ -87,9 +87,9 @@ pub struct CanisterDataProvider<S: StableMemoryBorrower> {
 }
 
 impl<S: StableMemoryBorrower> CanisterDataProvider<S> {
-    /// - If `keys_to_retain` is `Some(keys)`, only the specified `keys` will be stored in stable memory,
-    ///   while all other keys from the registry will be discarded.
-    /// - If `keys_to_retain` is `None`, all keys from the registry will be retained in stable memory.
+    /// Create a new instance of `CanisterDataProvider`.
+    ///
+    /// Only `keys_to_retain` will be stored in the local registry
     pub fn with_keys_filter(self, keys_to_retain: HashSet<String>) -> Self {
         Self {
             keys_to_retain: Some(keys_to_retain),
