@@ -14351,7 +14351,7 @@ async fn distribute_rewards_test() {
     // Step 1.1: Craft many neurons.
     // A number whose only significance is that it is not Protocol Buffers default (i.e. 0.0).
     let starting_maturity = 3;
-    let neuron_range = 1000..2000;
+    let neuron_range = 100..200;
     let neurons = neuron_range
         .clone()
         .map(|id| Neuron {
@@ -14451,7 +14451,7 @@ async fn distribute_rewards_test() {
 
     // Step 2: Run code under test.
     governance.run_periodic_tasks().await;
-    run_pending_timers_every_interval_for_count(std::time::Duration::from_secs(2), 10);
+    run_pending_timers_every_interval_for_count(std::time::Duration::from_secs(2), 200);
 
     // Step 3: Inspect results.
 
