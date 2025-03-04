@@ -33,6 +33,7 @@ runs:
           if [ -z "${SSH_AUTH_SOCK:-}" ]; then
             eval "$(ssh-agent -s)"
             ssh-add - <<< '${{ inputs.SSH_PRIVATE_KEY_BACKUP_POD }}'
+            echo "SSH_AUTH_SOCK=$SSH_AUTH_SOCK" >> "$GITHUB_ENV"
           fi
 
           rm -rf ~/.ssh

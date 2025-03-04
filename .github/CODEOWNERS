@@ -163,7 +163,6 @@ go_deps.bzl               @dfinity/idx
 /rs/memory_tracker/                                     @dfinity/execution
 /rs/messaging/                                          @dfinity/ic-message-routing-owners
 /rs/monitoring/                                         @dfinity/consensus
-/rs/monitoring/backtrace/                               @dfinity/consensus @dfinity/ic-message-routing-owners
 /rs/monitoring/metrics                                  @dfinity/consensus @dfinity/ic-message-routing-owners
 /rs/monitoring/pprof/                                   @dfinity/consensus @dfinity/ic-message-routing-owners
 /rs/nervous_system/                                     @dfinity/nns-team
