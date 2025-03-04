@@ -40,10 +40,10 @@ use ic_management_canister_types_private::{
     EmptyBlob, InstallChunkedCodeArgs, InstallCodeArgsV2, ListCanisterSnapshotArgs,
     LoadCanisterSnapshotArgs, MasterPublicKeyId, Method as Ic00Method, NodeMetricsHistoryArgs,
     Payload as Ic00Payload, ProvisionalCreateCanisterWithCyclesArgs, ProvisionalTopUpCanisterArgs,
-    SchnorrPublicKeyArgs, SchnorrPublicKeyResponse, SetupInitialDKGArgs, SignWithECDSAArgs,
-    SignWithSchnorrArgs, SignWithSchnorrAux, StoredChunksArgs, SubnetInfoArgs, SubnetInfoResponse,
-    TakeCanisterSnapshotArgs, UninstallCodeArgs, UpdateSettingsArgs, UploadChunkArgs,
-    VetKdDeriveEncryptedKeyArgs, VetKdPublicKeyArgs, VetKdPublicKeyResult, IC_00,
+    SchnorrAlgorithm, SchnorrPublicKeyArgs, SchnorrPublicKeyResponse, SetupInitialDKGArgs,
+    SignWithECDSAArgs, SignWithSchnorrArgs, SignWithSchnorrAux, StoredChunksArgs, SubnetInfoArgs,
+    SubnetInfoResponse, TakeCanisterSnapshotArgs, UninstallCodeArgs, UpdateSettingsArgs,
+    UploadChunkArgs, VetKdDeriveEncryptedKeyArgs, VetKdPublicKeyArgs, VetKdPublicKeyResult, IC_00,
 };
 use ic_metrics::MetricsRegistry;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
@@ -2900,6 +2900,27 @@ impl ExecutionEnvironment {
         rng: &mut dyn RngCore,
         subnet_size: usize,
     ) -> Result<(), UserError> {
+        if let ThresholdArguments::Schnorr(ref schnorr) = args {
+            let alg = schnorr.key_id.algorithm;
+            match (alg, &schnorr.taproot_tree_root) {
+                (SchnorrAlgorithm::Bip340Secp256k1, Some(aux)) => {
+                    if aux.len() != 0 && aux.len() != 32 {
+                        return Err(UserError::new(
+                            ErrorCode::CanisterRejectedMessage,
+                            format!("Invalid aux field for {}", alg),
+                        ));
+                    }
+                }
+                (_, None) => {}
+                (_, Some(_)) => {
+                    return Err(UserError::new(
+                        ErrorCode::CanisterRejectedMessage,
+                        format!("Schnorr algorithm {} does not support aux input", alg),
+                    ));
+                }
+            }
+        }
+
         let topology = &state.metadata.network_topology;
         // If the request isn't from the NNS, then we need to charge for it.
         let source_subnet = topology.routing_table.route(request.sender.get());
