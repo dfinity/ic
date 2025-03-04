@@ -565,7 +565,7 @@ hyper-socks2 = { version = "0.9.1", default-features = false }
 hyper-util = { version = "0.1.10", features = ["full"] }
 ic-agent = { version = "0.39.2", features = ["pem", "ring"] }
 ic-bn-lib = { git = "https://github.com/dfinity/ic-bn-lib", rev = "1e733b13ad9458a792012e7824d458570569cb6e" }
-ic-gateway = { git = "https://github.com/dfinity/ic-gateway", rev = "864608b04a2d199a29f7ec2de3191a5f425a0896" }
+ic-gateway = { git = "https://github.com/dfinity/ic-gateway", rev = "b0b40ea88c4e4f1f39cc1fea2f0fa8ef5f121d6f" }
 ic-btc-interface = "0.2.2"
 ic-canister-sig-creation = { git = "https://github.com/dfinity/ic-canister-sig-creation", rev = "7f9e931954637526295269155881207f6c832d6d" }
 ic-cbor = "3"
