@@ -35,9 +35,13 @@ use ic_system_test_driver::{
     util::{block_on, runtime_from_url, MessageCanister},
 };
 use ic_types::Height;
-use ic_vetkd_utils::DerivedPublicKey;
+use ic_vetkd_utils::{DerivedPublicKey, IBECiphertext, TransportSecretKey};
 
 const NODES_COUNT: usize = 4;
+
+const MSG: &str = "Secret message that is totally important";
+const DERIVATION_ID: &str = "secret_message";
+const SEED: [u8; 32] = [13; 32];
 
 fn setup(env: TestEnv) {
     InternetComputer::new()
@@ -97,6 +101,13 @@ fn test(env: TestEnv) {
 
             let _key =
                 DerivedPublicKey::deserialize(&key).expect("Failed to parse vetkd public key");
+
+            let enc_msg =
+                IBECiphertext::encrypt(&key, DERIVATION_ID.as_bytes(), MSG.as_bytes(), &SEED)
+                    .expect("Failed to encrypt message");
+
+            let transport_key = TransportSecretKey::from_seed(&SEED)
+                .expect("Failed to generate transport secret key");
         }
     });
 }
