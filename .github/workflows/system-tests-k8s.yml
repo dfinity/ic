@@ -86,7 +86,7 @@ jobs:
           BAZEL_COMMAND: >-
             test
               --config=ci
-              --strategy=Testing=local
+              --strategy=Test=local
               --local_test_jobs=${{ env.JOBS }} --test_tag_filters=k8s,-manual,-colocated,-long_test,-system_test_hourly,-system_test_nightly --k8s
           BAZEL_TARGETS: ${{ env.TARGETS }}
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
@@ -159,7 +159,7 @@ jobs:
           BAZEL_COMMAND: >-
             test
               --config=ci
-              --strategy=Testing=local
+              --strategy=Test=local
               --local_test_jobs=${{ env.JOBS }} --test_tag_filters=k8s --k8s --flaky_test_attempts=3
           BAZEL_TARGETS: ${{ env.TARGETS }}
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
