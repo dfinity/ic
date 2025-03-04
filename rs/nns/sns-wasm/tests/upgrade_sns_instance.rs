@@ -24,7 +24,7 @@ use ic_sns_governance::{
     types::E8S_PER_TOKEN,
 };
 use ic_sns_init::pb::v1::{
-    sns_init_payload::InitialTokenDistribution, AirdropDistribution, DeveloperDistribution,
+    sns_init_payload::InitialTokenDistribution, DeveloperDistribution,
     FractionalDeveloperVotingPower, NeuronDistribution, SnsInitPayload, SwapDistribution,
     TreasuryDistribution,
 };
@@ -102,7 +102,13 @@ fn test_governance_restarts_root_if_root_cannot_stop_during_upgrade() {
         initial_token_distribution: Some(InitialTokenDistribution::FractionalDeveloperVotingPower(
             FractionalDeveloperVotingPower {
                 developer_distribution: Some(DeveloperDistribution {
-                    developer_neurons: Default::default(),
+                    developer_neurons: vec![NeuronDistribution {
+                        controller: Some(user),
+                        stake_e8s: 10_000_000_000,
+                        memo: 0,
+                        dissolve_delay_seconds: 15780000, // 6 months
+                        vesting_period_seconds: None,
+                    }],
                 }),
                 treasury_distribution: Some(TreasuryDistribution {
                     total_e8s: 500_000_000,
@@ -111,15 +117,7 @@ fn test_governance_restarts_root_if_root_cannot_stop_during_upgrade() {
                     total_e8s: 10_000_000_000,
                     initial_swap_amount_e8s: 10_000_000_000,
                 }),
-                airdrop_distribution: Some(AirdropDistribution {
-                    airdrop_neurons: vec![NeuronDistribution {
-                        controller: Some(user),
-                        stake_e8s: 2_000_000_000_000,
-                        memo: 0,
-                        dissolve_delay_seconds: 15780000, // 6 months
-                        vesting_period_seconds: None,
-                    }],
-                }),
+                airdrop_distribution: None,
             },
         )),
         ..SnsInitPayload::with_valid_values_for_testing_post_execution()
@@ -127,7 +125,7 @@ fn test_governance_restarts_root_if_root_cannot_stop_during_upgrade() {
 
     // Will be used to make proposals and such. Fortunately, this guy has lots
     // of money -> he'll be able to push proposals though.
-    let airdrop_sns_neuron_id = sns_governance_pb::NeuronId {
+    let developer_sns_neuron_id = sns_governance_pb::NeuronId {
         id: compute_neuron_staking_subaccount(user, /* memo */ 0)
             .0
             .to_vec(),
@@ -167,7 +165,7 @@ fn test_governance_restarts_root_if_root_cannot_stop_during_upgrade() {
         &machine,
         governance,
         user,
-        airdrop_sns_neuron_id,
+        developer_sns_neuron_id,
         Proposal {
             title: "Upgrade Canister.".into(),
             action: Some(Action::UpgradeSnsToNextVersion(UpgradeSnsToNextVersion {})),
@@ -242,24 +240,22 @@ fn run_upgrade_test(canister_type: SnsCanisterType) {
         initial_token_distribution: Some(InitialTokenDistribution::FractionalDeveloperVotingPower(
             FractionalDeveloperVotingPower {
                 developer_distribution: Some(DeveloperDistribution {
-                    developer_neurons: Default::default(),
-                }),
-                treasury_distribution: Some(TreasuryDistribution {
-                    total_e8s: 500_000_000,
-                }),
-                swap_distribution: Some(SwapDistribution {
-                    total_e8s: 10_000_000_000,
-                    initial_swap_amount_e8s: 10_000_000_000,
-                }),
-                airdrop_distribution: Some(AirdropDistribution {
-                    airdrop_neurons: vec![NeuronDistribution {
+                    developer_neurons: vec![NeuronDistribution {
                         controller: Some(user),
-                        stake_e8s: 2_000_000_000_000,
+                        stake_e8s: 100_000_000_000,
                         memo: 0,
                         dissolve_delay_seconds: 15780000, // 6 months
                         vesting_period_seconds: None,
                     }],
                 }),
+                treasury_distribution: Some(TreasuryDistribution {
+                    total_e8s: 500_000_000,
+                }),
+                swap_distribution: Some(SwapDistribution {
+                    total_e8s: 100_000_000_000,
+                    initial_swap_amount_e8s: 10_000_000_000,
+                }),
+                airdrop_distribution: None,
             },
         )),
         ..SnsInitPayload::with_valid_values_for_testing_post_execution()
@@ -485,18 +481,26 @@ fn upgrade_archive_sns_canister_via_sns_wasms() {
 
     let wasm_map = sns_wasm::add_real_wasms_to_sns_wasms(&machine);
 
-    // To get an SNS neuron, we airdrop our new tokens to this user.
+    // This user will act as the fallback controller and the big developer neuron controller.
     let user = PrincipalId::new_user_test_id(0);
 
-    let airdrop_neuron = |number| NeuronDistribution {
+    let mut developer_neurons = vec![NeuronDistribution {
+        controller: Some(user),
+        stake_e8s: 80_000_000_000,
+        memo: 0,
+        dissolve_delay_seconds: 15780000, // 6 months
+        vesting_period_seconds: None,
+    }];
+
+    // We make these to create some extra transactions so an archive will spawn.
+    let make_neuron_distribution = |number| NeuronDistribution {
         controller: Some(PrincipalId::new_user_test_id(number)),
         stake_e8s: 100_000_000,
         memo: 0,
         dissolve_delay_seconds: 15780000, // 6 months
         vesting_period_seconds: None,
     };
-    // We make these to create some extra transactions so an archive will spawn.
-    let airdrop_neurons: Vec<NeuronDistribution> = (1..20_u64).map(airdrop_neuron).collect();
+    developer_neurons.extend((1..20_u64).map(make_neuron_distribution));
 
     let payload = SnsInitPayload {
         transaction_fee_e8s: Some(DEFAULT_TRANSFER_FEE.get_e8s()),
@@ -507,28 +511,15 @@ fn upgrade_archive_sns_canister_via_sns_wasms() {
         fallback_controller_principal_ids: vec![user.to_string()],
         initial_token_distribution: Some(InitialTokenDistribution::FractionalDeveloperVotingPower(
             FractionalDeveloperVotingPower {
-                developer_distribution: Some(DeveloperDistribution {
-                    developer_neurons: Default::default(),
-                }),
+                developer_distribution: Some(DeveloperDistribution { developer_neurons }),
                 treasury_distribution: Some(TreasuryDistribution {
                     total_e8s: 500_000_000,
                 }),
                 swap_distribution: Some(SwapDistribution {
-                    total_e8s: 10_000_000_000,
+                    total_e8s: 100_000_000_000,
                     initial_swap_amount_e8s: 10_000_000_000,
                 }),
-                airdrop_distribution: Some(AirdropDistribution {
-                    airdrop_neurons: vec![NeuronDistribution {
-                        controller: Some(user),
-                        stake_e8s: 2_000_000_000_000,
-                        memo: 0,
-                        dissolve_delay_seconds: 15780000, // 6 months
-                        vesting_period_seconds: None,
-                    }]
-                    .into_iter()
-                    .chain(airdrop_neurons)
-                    .collect(),
-                }),
+                airdrop_distribution: None,
             },
         )),
         ..SnsInitPayload::with_valid_values_for_testing_post_execution()
@@ -739,18 +730,26 @@ fn test_out_of_sync_version_still_allows_upgrade_to_succeed() {
     }
     let wasm_map = sns_wasm::add_freshly_built_sns_wasms(&machine, filter_wasm);
 
-    // To get an SNS neuron, we airdrop our new tokens to this user.
+    // This user will act as the fallback controller and the big developer neuron controller.
     let user = PrincipalId::new_user_test_id(0);
 
-    let airdrop_neuron = |number| NeuronDistribution {
+    let mut developer_neurons = vec![NeuronDistribution {
+        controller: Some(user),
+        stake_e8s: 80_000_000_000,
+        memo: 0,
+        dissolve_delay_seconds: 15780000, // 6 months
+        vesting_period_seconds: None,
+    }];
+
+    // We make these to create some extra transactions so an archive will spawn.
+    let make_neuron_distribution = |number| NeuronDistribution {
         controller: Some(PrincipalId::new_user_test_id(number)),
         stake_e8s: 100_000_000,
         memo: 0,
         dissolve_delay_seconds: 15780000, // 6 months
         vesting_period_seconds: None,
     };
-    // We make these to create some extra transactions so an archive will spawn.
-    let airdrop_neurons: Vec<NeuronDistribution> = (1..20_u64).map(airdrop_neuron).collect();
+    developer_neurons.extend((1..20_u64).map(make_neuron_distribution));
 
     let payload = SnsInitPayload {
         transaction_fee_e8s: Some(DEFAULT_TRANSFER_FEE.get_e8s()),
@@ -761,28 +760,15 @@ fn test_out_of_sync_version_still_allows_upgrade_to_succeed() {
         fallback_controller_principal_ids: vec![user.to_string()],
         initial_token_distribution: Some(InitialTokenDistribution::FractionalDeveloperVotingPower(
             FractionalDeveloperVotingPower {
-                developer_distribution: Some(DeveloperDistribution {
-                    developer_neurons: Default::default(),
-                }),
+                developer_distribution: Some(DeveloperDistribution { developer_neurons }),
                 treasury_distribution: Some(TreasuryDistribution {
                     total_e8s: 500_000_000,
                 }),
                 swap_distribution: Some(SwapDistribution {
-                    total_e8s: 10_000_000_000,
-                    initial_swap_amount_e8s: 10_000_000_000,
+                    total_e8s: 100_000_000_000,
+                    initial_swap_amount_e8s: 100_000_000_000,
                 }),
-                airdrop_distribution: Some(AirdropDistribution {
-                    airdrop_neurons: vec![NeuronDistribution {
-                        controller: Some(user),
-                        stake_e8s: 2_000_000_000_000,
-                        memo: 0,
-                        dissolve_delay_seconds: 15780000, // 6 months
-                        vesting_period_seconds: None,
-                    }]
-                    .into_iter()
-                    .chain(airdrop_neurons)
-                    .collect(),
-                }),
+                airdrop_distribution: None,
             },
         )),
         ..SnsInitPayload::with_valid_values_for_testing_post_execution()
