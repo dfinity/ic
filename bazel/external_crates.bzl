@@ -575,7 +575,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             ),
             "ic-bn-lib": crate.spec(
                 git = "https://github.com/dfinity/ic-bn-lib",
-                rev = "d74a6527fbaf8a2c1a7076983cc84f5c5a727923",
+                rev = "1e733b13ad9458a792012e7824d458570569cb6e",
             ),
             "ic-btc-interface": crate.spec(
                 version = "^0.2.2",
@@ -618,6 +618,10 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "ic-certificate-verification": crate.spec(
                 version = "3.0.3",
             ),
+            "ic-gateway": crate.spec(
+                git = "https://github.com/dfinity/ic-gateway",
+                rev = "864608b04a2d199a29f7ec2de3191a5f425a0896",
+            ),
             "ic-http-certification": crate.spec(
                 version = "3.0.3",
             ),
@@ -655,7 +659,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^3.0.0",
             ),
             "ic-transport-types": crate.spec(
-                version = "^0.39.2",
+                version = "^0.39.3",
             ),
             "ic-utils": crate.spec(
                 version = "^0.39.0",
@@ -1302,10 +1306,11 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^1.8.1",
             ),
             "tikv-jemalloc-ctl": crate.spec(
-                version = "^0.5",
+                version = "^0.6",
+                features = ["stats"],
             ),
             "tikv-jemallocator": crate.spec(
-                version = "^0.5",
+                version = "^0.6",
             ),
             "time": crate.spec(
                 version = "^0.3.36",
