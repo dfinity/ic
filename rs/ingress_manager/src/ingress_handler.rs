@@ -1,3 +1,5 @@
+use std::ops::RangeInclusive;
+
 use crate::IngressManager;
 use ic_interfaces::{
     ingress_pool::{
@@ -21,107 +23,41 @@ impl<T: IngressPool> PoolMutationsProducer<T> for IngressManager {
     type Mutations = Mutations;
 
     fn on_state_change(&self, pool: &T) -> Mutations {
-        // Skip on_state_change when ingress_message_setting is not available in
-        // registry.
+        // Skip on_state_change when ingress_message_setting is not available in registry.
         let registry_version = self.registry_client.get_latest_version();
         let Some(ingress_message_settings) = self.get_ingress_message_settings(registry_version)
         else {
             return Mutations::new();
         };
 
-        let _timer = self.metrics.ingress_handler_time.start_timer();
-        let get_status = self.ingress_hist_reader.get_latest_status();
-
         // Do not run on_state_change if consensus_time is not initialized yet.
         let Some(consensus_time) = self.consensus_time.consensus_time() else {
             return Mutations::new();
         };
 
-        let mut change_set = Vec::new();
+        let _timer = self.metrics.ingress_handler_time.start_timer();
+        let get_status = self.ingress_hist_reader.get_latest_status();
 
-        // Purge only when consensus_time has changed.
-        let mut last_purge_time = self.last_purge_time.write().unwrap();
-        if consensus_time != *last_purge_time {
-            *last_purge_time = consensus_time;
-            change_set.push(PurgeBelowExpiry(consensus_time));
-        }
+        let mut change_set = Vec::new();
 
         let current_time = self.time_source.get_relative_time();
         let expiry_range = current_time..=(current_time + MAX_INGRESS_TTL);
 
-        // looks at the unvalidated ingress messages and
-        // 1. either discards them
-        // 2. or moves them to validated.
-        let unvalidated_artifacts_changeset = pool
-            .unvalidated()
-            .get_all_by_expiry_range(expiry_range.clone())
-            .map(|artifact| {
-                let ingress_object = &artifact.message;
+        self.purge_expired_messages(consensus_time, &mut change_set);
 
-                // If the ingress pool is full, discard the message.
-                // Note: since here we don't remove ingress messages from the ingress pool directly,
-                // if `exceeds_limit` returns `true` for a peer `p`, we will remove *all*
-                // unvalidated ingress messages originating from that peer. Conversely, we will
-                // add all unvalidated ingress message from that peer. This should be okay, as
-                // we don't expect to have many unvalidated ingress messages in the pool at any
-                // time, because we call `on_state_change` at most every 200ms and every time we
-                // receive an ingress message from a peer. Historically, we have had at most 2
-                // unvalidated ingress messages in the pool.
-                // Since we plan(IC-1718) to have only one section in the Ingress Pool and to
-                // validate ingress messages on-the-fly, this problem will eventually go away.
-                if pool.exceeds_limit(&ingress_object.originator_id) {
-                    return RemoveFromUnvalidated(IngressMessageId::from(ingress_object));
-                }
+        self.validate_messages(
+            consensus_time,
+            pool,
+            expiry_range.clone(),
+            &ingress_message_settings,
+            &get_status,
+            registry_version,
+            &mut change_set,
+        );
 
-                match self.validate_ingress_pool_object(
-                    ingress_object,
-                    &ingress_message_settings,
-                    get_status.as_ref(),
-                    consensus_time,
-                    registry_version,
-                ) {
-                    Ok(()) => MoveToValidated(IngressMessageId::from(ingress_object)),
-                    Err(err) => {
-                        debug!(
-                            self.log,
-                            "ingress_message_remove_unvalidated";
-                            ingress_message.message_id => ingress_object.message_id.to_string(),
-                            ingress_message.reason => err.to_string(),
-                        );
+        self.purge_known_messages(pool, expiry_range, &get_status, &mut change_set);
 
-                        RemoveFromUnvalidated(IngressMessageId::from(ingress_object))
-                    }
-                }
-            });
-
-        change_set.extend(unvalidated_artifacts_changeset);
-
-        // Check validated messages and remove if they are not required anymore (i.e.
-        // IngressHistoryReader returns status other than Unknown).
-        for validated_artifact in pool.validated().get_all_by_expiry_range(expiry_range) {
-            let ingress_object = &validated_artifact.msg;
-
-            // Check status of the ingress message against IngressHistoryReader,
-            // If Unknown, consider the ingress message valid
-            let status = get_status(&ingress_object.message_id);
-            if status != IngressStatus::Unknown {
-                debug!(
-                    self.log,
-                    "ingress_message_remove_validated";
-                    ingress_message.message_id => format!("{}", ingress_object.message_id),
-                    ingress_message.reason => format!("{:?}", status),
-                );
-                change_set.push(RemoveFromValidated(IngressMessageId::from(ingress_object)));
-            }
-        }
-
-        // Also include finalized messages that were requested to purge.
-        let mut to_purge = self.messages_to_purge.write().unwrap();
-        while let Some(message_ids) = to_purge.pop() {
-            message_ids
-                .into_iter()
-                .for_each(|id| change_set.push(RemoveFromValidated(id)))
-        }
+        self.purge_delivered_messages(&mut change_set);
 
         change_set
     }
@@ -189,6 +125,112 @@ impl IngressManager {
         }
 
         Ok(())
+    }
+
+    /// Purges ingress messages, from both pools, whose expiration time is below the
+    /// `consensus_time`.
+    fn purge_expired_messages(&self, consensus_time: Time, change_set: &mut Mutations) {
+        // Purge only when consensus_time has changed.
+        let mut last_purge_time = self.last_purge_time.write().unwrap();
+        if consensus_time != *last_purge_time {
+            *last_purge_time = consensus_time;
+            change_set.push(PurgeBelowExpiry(consensus_time));
+        }
+    }
+
+    /// Check validated messages and remove if they are not required anymore (i.e.
+    /// [`IngressHistoryReader`] returns status other than [`IngressStatus::Unknown`]).
+    fn purge_known_messages(
+        &self,
+        pool: &impl IngressPool,
+        expiry_range: RangeInclusive<Time>,
+        get_status: &dyn Fn(&MessageId) -> IngressStatus,
+        change_set: &mut Mutations,
+    ) {
+        for validated_artifact in pool.validated().get_all_by_expiry_range(expiry_range) {
+            let ingress_object = &validated_artifact.msg;
+
+            // Check status of the ingress message against IngressHistoryReader,
+            // If Unknown, consider the ingress message valid
+            let status = get_status(&ingress_object.message_id);
+            if status != IngressStatus::Unknown {
+                debug!(
+                    self.log,
+                    "ingress_message_remove_validated";
+                    ingress_message.message_id => format!("{}", ingress_object.message_id),
+                    ingress_message.reason => format!("{:?}", status),
+                );
+                change_set.push(RemoveFromValidated(IngressMessageId::from(ingress_object)));
+            }
+        }
+    }
+
+    /// Remove finalized messages that were requested to purge.
+    fn purge_delivered_messages(&self, change_set: &mut Mutations) {
+        let mut to_purge = self.messages_to_purge.write().unwrap();
+        while let Some(message_ids) = to_purge.pop() {
+            message_ids
+                .into_iter()
+                .for_each(|id| change_set.push(RemoveFromValidated(id)))
+        }
+    }
+
+    /// looks at the unvalidated ingress messages and
+    /// 1. either discards them
+    /// 2. or moves them to validated.
+    fn validate_messages(
+        &self,
+        consensus_time: Time,
+        pool: &impl IngressPool,
+        expiry_range: RangeInclusive<Time>,
+        ingress_message_settings: &IngressMessageSettings,
+        get_status: &dyn Fn(&MessageId) -> IngressStatus,
+        registry_version: RegistryVersion,
+        change_set: &mut Mutations,
+    ) {
+        let unvalidated_artifacts_changeset = pool
+            .unvalidated()
+            .get_all_by_expiry_range(expiry_range)
+            .map(|artifact| {
+                let ingress_object = &artifact.message;
+
+                // If the ingress pool is full, discard the message.
+                // Note: since here we don't remove ingress messages from the ingress pool directly,
+                // if `exceeds_limit` returns `true` for a peer `p`, we will remove *all*
+                // unvalidated ingress messages originating from that peer. Conversely, we will
+                // add all unvalidated ingress message from that peer. This should be okay, as
+                // we don't expect to have many unvalidated ingress messages in the pool at any
+                // time, because we call `on_state_change` at most every 200ms and every time we
+                // receive an ingress message from a peer. Historically, we have had at most 2
+                // unvalidated ingress messages in the pool.
+                // Since we plan(IC-1718) to have only one section in the Ingress Pool and to
+                // validate ingress messages on-the-fly, this problem will eventually go away.
+                if pool.exceeds_limit(&ingress_object.originator_id) {
+                    return RemoveFromUnvalidated(IngressMessageId::from(ingress_object));
+                }
+
+                match self.validate_ingress_pool_object(
+                    ingress_object,
+                    ingress_message_settings,
+                    get_status,
+                    consensus_time,
+                    registry_version,
+                ) {
+                    Ok(()) => MoveToValidated(IngressMessageId::from(ingress_object)),
+                    Err(err) => {
+                        debug!(
+                            self.log,
+                            "ingress_message_remove_unvalidated";
+                            ingress_message.message_id => ingress_object.message_id.to_string(),
+                            ingress_message.reason => err.to_string(),
+                        );
+
+                        RemoveFromUnvalidated(IngressMessageId::from(ingress_object))
+                    }
+                }
+            });
+
+        change_set.extend(unvalidated_artifacts_changeset);
     }
 }
 
