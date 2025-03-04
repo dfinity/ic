@@ -17,7 +17,7 @@ use icp_ledger::{
     AccountIdBlob, AccountIdentifier, AccountIdentifierByteBuf, ArchiveOptions,
     ArchivedBlocksRange, Block, CandidBlock, CandidOperation, CandidTransaction, FeatureFlags,
     GetBlocksArgs, GetBlocksRes, GetBlocksResult, GetEncodedBlocksResult, IcpAllowanceArgs,
-    InitArgs, IterBlocksArgs, IterBlocksRes, LedgerCanisterInitPayload, LedgerCanisterPayload,
+    IterBlocksArgs, IterBlocksRes, LedgerCanisterInitPayload, LedgerCanisterPayload,
     LedgerCanisterUpgradePayload, Operation, QueryBlocksResponse, QueryEncodedBlocksResponse,
     SendArgs, TimeStamp, UpgradeArgs, DEFAULT_TRANSFER_FEE,
     MAX_BLOCKS_PER_INGRESS_REPLICATED_QUERY_REQUEST, MAX_BLOCKS_PER_REQUEST,
@@ -31,7 +31,7 @@ use icrc_ledger_types::icrc2::approve::ApproveArgs;
 use num_traits::cast::ToPrimitive;
 use on_wire::{FromWire, IntoWire};
 use serde_bytes::ByteBuf;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 
@@ -502,27 +502,6 @@ fn test_ledger_http_request_decoding_quota() {
         ledger_wasm(),
         encode_init_args,
     );
-}
-
-#[test]
-fn check_old_init() {
-    let env = StateMachine::new();
-    let old_init = Encode!(&InitArgs {
-        archive_options: None,
-        minting_account: AccountIdentifier::new(PrincipalId::new_user_test_id(1), None),
-        icrc1_minting_account: None,
-        initial_values: HashMap::new(),
-        max_message_size_bytes: None,
-        transaction_window: None,
-        send_whitelist: HashSet::new(),
-        transfer_fee: None,
-        token_symbol: Some("ICP".into()),
-        token_name: Some("Internet Computer".into()),
-        feature_flags: None,
-    })
-    .unwrap();
-    env.install_canister(ledger_wasm(), old_init, None)
-        .expect("Unable to install the Ledger canister with the old init");
 }
 
 #[test]

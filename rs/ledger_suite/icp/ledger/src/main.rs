@@ -1,4 +1,4 @@
-use candid::{candid_method, Decode, Nat, Principal};
+use candid::{candid_method, Nat, Principal};
 use dfn_candid::{candid, candid_one, CandidOne};
 #[allow(unused_imports)]
 use dfn_core::BytesS;
@@ -12,6 +12,7 @@ use ic_canister_log::{LogEntry, Sink};
 use ic_cdk::api::{
     caller, data_certificate, instruction_counter, print, set_certified_data, time, trap,
 };
+use ic_cdk_macros::init;
 use ic_icrc1::endpoints::{convert_transfer_error, StandardRecord};
 use ic_ledger_canister_core::ledger::LedgerContext;
 use ic_ledger_canister_core::runtime::heap_memory_size_bytes;
@@ -37,7 +38,7 @@ use icp_ledger::{
     max_blocks_per_request, protobuf, tokens_into_proto, AccountBalanceArgs, AccountIdBlob,
     AccountIdentifier, AccountIdentifierByteBuf, ArchiveInfo, ArchivedBlocksRange,
     ArchivedEncodedBlocksRange, Archives, BinaryAccountBalanceArgs, Block, BlockArg, BlockRes,
-    CandidBlock, Decimals, FeatureFlags, GetBlocksArgs, InitArgs, IterBlocksArgs, IterBlocksRes,
+    CandidBlock, Decimals, FeatureFlags, GetBlocksArgs, IterBlocksArgs, IterBlocksRes,
     LedgerCanisterPayload, Memo, Name, Operation, PaymentError, QueryBlocksResponse,
     QueryEncodedBlocksResponse, SendArgs, Subaccount, Symbol, TipOfChainRes, TotalSupplyArgs,
     Transaction, TransferArgs, TransferError, TransferFee, TransferFeeArgs, MEMO_SIZE_BYTES,
@@ -696,6 +697,7 @@ fn icrc1_decimals() -> u8 {
 }
 
 #[candid_method(init)]
+#[init]
 fn canister_init(arg: LedgerCanisterPayload) {
     match arg {
         LedgerCanisterPayload::Init(arg) => init(
@@ -717,38 +719,7 @@ fn canister_init(arg: LedgerCanisterPayload) {
     }
 }
 
-#[export_name = "canister_init"]
-fn main() {
-    over_init(|bytes: BytesS| {
-        // We support the old init argument for backward
-        // compatibility. If decoding the bytes as the new
-        // init arguments fails then we fallback to the old
-        // init arguments.
-        match Decode!(&bytes.0, LedgerCanisterPayload) {
-            Ok(arg) => canister_init(arg),
-            Err(new_err) => {
-                // fallback to old init
-                match Decode!(&bytes.0, InitArgs) {
-                    Ok(arg) => init(
-                        arg.minting_account,
-                        arg.icrc1_minting_account,
-                        arg.initial_values,
-                        arg.max_message_size_bytes,
-                        arg.transaction_window,
-                        arg.archive_options,
-                        arg.send_whitelist,
-                        arg.transfer_fee,
-                        arg.token_symbol,
-                        arg.token_name,
-                        arg.feature_flags,
-                    ),
-                    Err(old_err) =>
-                    trap(&format!("Unable to decode init argument.\nDecode as new init returned the error {}\nDecode as old init returned the error {}", new_err, old_err))
-                }
-            }
-        }
-    })
-}
+fn main() {}
 
 // We use 8MiB buffer
 const BUFFER_SIZE: usize = 8388608;
