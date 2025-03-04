@@ -8597,7 +8597,7 @@ dependencies = [
  "wasmprinter",
  "wasmtime",
  "wasmtime-environ",
- "wast 221.0.2",
+ "wast 221.0.3",
  "wat",
 ]
 
@@ -11814,6 +11814,7 @@ dependencies = [
  "tikv-jemalloc-ctl",
  "tikv-jemallocator",
  "tokio",
+ "tokio-util",
  "tracing",
  "tracing-subscriber",
  "wat",
@@ -23248,9 +23249,9 @@ dependencies = [
 
 [[package]]
 name = "wast"
-version = "221.0.2"
+version = "221.0.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fcc4470b9de917ba199157d1f0ae104f2ae362be728c43e68c571c7715bd629e"
+checksum = "7e0d10d282261b825ffb3d49f46e8309e60a8b608328b6a0b0578e80f3f98e57"
 dependencies = [
  "bumpalo",
  "leb128",
