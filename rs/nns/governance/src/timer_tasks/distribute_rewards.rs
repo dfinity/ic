@@ -9,7 +9,6 @@ thread_local! {
     static REWARDS_TIMER_ID: RefCell<Option<TimerId>> = RefCell::new(None);
 }
 
-/// TODO DO NOT MERGE how to test this in context of integration test
 fn cancel_distribute_pending_rewards_timer() {
     REWARDS_TIMER_ID.with(|id| {
         if let Some(timer_id) = id.borrow_mut().take() {
@@ -92,7 +91,9 @@ mod tests {
         governance.schedule_pending_rewards_distribution(1, distribution.clone());
         assert!(REWARDS_TIMER_ID.with(|id| id.borrow().is_some()));
 
-        run_pending_timers_every_interval_for_count(DistributeRewardsTask::INTERVAL, 3);
+        // We run this 10x b/c test version of is_over_instructions_limit returns true every
+        // other time it's called.
+        run_pending_timers_every_interval_for_count(DistributeRewardsTask::INTERVAL, 10);
 
         assert!(REWARDS_TIMER_ID.with(|id| id.borrow().is_none()));
     }

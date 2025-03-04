@@ -4,6 +4,7 @@ use crate::pb::v1::RewardsDistributionInProgress;
 use crate::storage::with_rewards_distribution_state_machine_mut;
 #[cfg(not(feature = "canbench-rs"))]
 use crate::timer_tasks::run_distribute_rewards_periodic_task;
+use ic_nervous_system_long_message::is_message_over_threshold;
 use ic_nns_common::pb::v1::NeuronId;
 use ic_stable_structures::storable::Bound;
 use ic_stable_structures::{StableBTreeMap, Storable};
@@ -11,9 +12,9 @@ use prost::Message;
 use std::borrow::Cow;
 use std::collections::BTreeMap;
 
-// TODO DO NOT MERGE Note: When should this be scheduled?
-// Do we need a simple way to only do this after rewards are
-// created, so that it doesn't run very much, but always runs to completion?
+const BILLION: u64 = 1_000_000_000;
+const DISTRIBUTION_MESSAGE_LIMIT: u64 = BILLION;
+
 impl Governance {
     pub(crate) fn schedule_pending_rewards_distribution(
         &self,
@@ -30,15 +31,15 @@ impl Governance {
             println!("{}Error scheduling rewards distribution: {}", LOG_PREFIX, e);
         }
 
+        // TODO(NNS1-3643) Determine if there is a way we can refactor this so that
+        // canbench can call timer setting function stubs (or even immediately execute the work)
         #[cfg(not(feature = "canbench-rs"))]
         run_distribute_rewards_periodic_task();
     }
 
     // Returns if there is work left to do
     pub fn distribute_pending_rewards(&mut self) -> bool {
-        // TODO DO NOT MERGE get the test functions from voting state machine tests into
-        // a common part of this crate
-        let is_over_instructions_limit = || false;
+        let is_over_instructions_limit = || is_message_over_threshold(DISTRIBUTION_MESSAGE_LIMIT);
         with_rewards_distribution_state_machine_mut(|rewards_distribution_state_machine| {
             rewards_distribution_state_machine.with_next_distribution(|(_, distribution)| {
                 distribution
@@ -347,6 +348,44 @@ mod test {
     }
 
     #[test]
+    fn test_distributions_always_at_least_distributes_one() {
+        // We are testing recoverability of the system (i.e. it got stalled, but we didnt' lose data, and now
+        // it is able to finish processing)
+
+        let mut neurons = BTreeMap::new();
+        for i in 0..5 {
+            neurons.insert(i, make_neuron(i, 1000, 1000));
+        }
+        for i in 5..10 {
+            let mut neuron = make_neuron(i, 1000, 1000);
+            neuron.auto_stake_maturity = Some(true);
+            neurons.insert(i, neuron);
+        }
+
+        let mut neuron_store = NeuronStore::new(neurons.clone());
+
+        let mut rewards_distribution_state_machine =
+            RewardsDistributionStateMachine::new(DefaultMemoryImpl::default());
+
+        rewards_distribution_state_machine.with_distribution_for_event(1, |distribution| {
+            for (id, _neuron) in &neurons {
+                distribution.add_reward(NeuronId { id: *id }, 10);
+            }
+        });
+
+        for i in 0..10 {
+            rewards_distribution_state_machine.with_next_distribution(
+                |(_day_after_genesis, distribution)| {
+                    distribution.continue_processing(&mut neuron_store, || true);
+                    assert_eq!(distribution.rewards.len(), 9 - i);
+                },
+            );
+        }
+
+        assert!(rewards_distribution_state_machine.distributions.is_empty());
+    }
+
+    #[test]
     fn test_distribute_pending_rewards() {
         // We are testing recoverability of the system (i.e. it got stalled, but we didnt' lose data, and now
         // it is able to finish processing)
@@ -385,7 +424,9 @@ mod test {
         governance.schedule_pending_rewards_distribution(1, distribution.clone());
         governance.schedule_pending_rewards_distribution(2, distribution);
 
-        run_pending_timers_every_interval_for_count(std::time::Duration::from_secs(2), 2);
+        // We have to run this more times b/c the test version of is_over_instructions_limit returns true every
+        // other time it's called.
+        run_pending_timers_every_interval_for_count(std::time::Duration::from_secs(2), 10);
 
         with_rewards_distribution_state_machine_mut(|rewards_distribution_state_machine| {
             assert!(rewards_distribution_state_machine.distributions.is_empty())
@@ -393,15 +434,9 @@ mod test {
     }
 
     #[test]
-    fn test_timer_distributes_all_rewards() {}
-
-    #[test]
     fn todo() {
         // DO NOT MERGE
         // Tests that are still needed:
-        // Integration test that the rewards are fully distributed
-        // a benchmark for the rewards distribution function (so expectations can be set about timing of rewards)
-        // A test that the rewards distribution is scheduled after rewards are created
         // A test that rewards aren't lost across upgrades.
     }
 }
