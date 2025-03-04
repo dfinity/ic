@@ -16,7 +16,6 @@ end::catalog[] */
 
 use anyhow::Result;
 use canister_test::Canister;
-use ic_bls12_381::G2Affine;
 use ic_consensus_threshold_sig_system_test_utils::{
     enable_chain_key_signing, get_public_key_with_logger, DKG_INTERVAL,
 };
@@ -36,6 +35,7 @@ use ic_system_test_driver::{
     util::{block_on, runtime_from_url, MessageCanister},
 };
 use ic_types::Height;
+use ic_vetkd_utils::DerivedPublicKey;
 
 const NODES_COUNT: usize = 4;
 
@@ -94,7 +94,9 @@ fn test(env: TestEnv) {
             let key: [u8; 96] = key
                 .try_into()
                 .expect("Unexpected vetkd key length returned from IC");
-            let _key = G2Affine::from_compressed(&key).expect("Failed to parse vetkd key");
+
+            let _key =
+                DerivedPublicKey::deserialize(&key).expect("Failed to parse vetkd public key");
         }
     });
 }
