@@ -8,12 +8,12 @@ use ic_management_canister_types::{
     SchnorrKeyId as SchnorrPublicKeyArgsKeyId, SchnorrPublicKeyResult,
 };
 use ic_transport_types::Envelope;
-use ic_transport_types::EnvelopeContent::ReadState;
+use ic_transport_types::EnvelopeContent::{Call, ReadState};
 use pocket_ic::common::rest::{BlockmakerConfigs, RawSubnetBlockmaker, TickConfigs};
 use pocket_ic::{
     common::rest::{
         BlobCompression, CanisterHttpReply, CanisterHttpResponse, MockCanisterHttpResponse,
-        RawEffectivePrincipal, SubnetKind,
+        RawEffectivePrincipal, RawMessageId, SubnetKind,
     },
     query_candid, update_candid, DefaultEffectiveCanisterIdError, ErrorCode, IngressStatusResult,
     PocketIc, PocketIcBuilder, RejectCode,
@@ -2131,6 +2131,95 @@ fn read_state_request_status(
         .body(serialized_bytes)
         .send()
         .unwrap()
+}
+
+#[test]
+fn call_ingress_expiry() {
+    let pic = PocketIcBuilder::new()
+        .with_nns_subnet()
+        .with_application_subnet()
+        .build();
+    let canister_id = pic.create_canister();
+    pic.add_cycles(canister_id, INIT_CYCLES);
+    pic.install_canister(canister_id, test_canister_wasm(), vec![], None);
+
+    // submit an update call via /api/v2/canister/.../call using an ingress expiry in the future
+    let unix_time_secs = 2272143600; // Wed Jan 01 2042 00:00:00 GMT+0100
+    let time = SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(unix_time_secs);
+    pic.set_certified_time(time);
+    let ingress_expiry = pic
+        .get_time()
+        .duration_since(std::time::SystemTime::UNIX_EPOCH)
+        .unwrap()
+        .as_nanos() as u64
+        + 240_000_000_000;
+    let (resp, msg_id) = call_request(&pic, ingress_expiry, canister_id);
+    assert_eq!(resp.status(), reqwest::StatusCode::ACCEPTED);
+
+    // execute a round on the PocketIC instance to process that update call
+    pic.tick();
+
+    // check the update call status
+    let raw_message_id = RawMessageId {
+        effective_principal: RawEffectivePrincipal::CanisterId(canister_id.as_slice().to_vec()),
+        message_id: msg_id.to_vec(),
+    };
+    let reply = pic.ingress_status(raw_message_id).unwrap().unwrap();
+    let principal = Decode!(&reply, String).unwrap();
+    assert_eq!(principal, canister_id.to_string());
+
+    // use an invalid ingress expiry
+    let ingress_expiry = SystemTime::now()
+        .duration_since(std::time::SystemTime::UNIX_EPOCH)
+        .unwrap()
+        .as_nanos() as u64
+        + 240_000_000_000;
+    let (resp, _msg_id) = call_request(&pic, ingress_expiry, canister_id);
+    assert_eq!(resp.status(), reqwest::StatusCode::BAD_REQUEST);
+    let err = String::from_utf8(resp.bytes().unwrap().to_vec()).unwrap();
+    assert!(
+        err.contains("Invalid request expiry: Specified ingress_expiry not within expected range")
+    );
+}
+
+fn call_request(
+    pic: &PocketIc,
+    ingress_expiry: u64,
+    canister_id: Principal,
+) -> (reqwest::blocking::Response, [u8; 32]) {
+    let content = Call {
+        nonce: None,
+        ingress_expiry,
+        sender: Principal::anonymous(),
+        canister_id,
+        method_name: "whoami".to_string(),
+        arg: Encode!(&()).unwrap(),
+    };
+    let envelope = Envelope {
+        content: std::borrow::Cow::Borrowed(&content),
+        sender_pubkey: None,
+        sender_sig: None,
+        sender_delegation: None,
+    };
+
+    let mut serialized_bytes = Vec::new();
+    let mut serializer = serde_cbor::Serializer::new(&mut serialized_bytes);
+    serializer.self_describe().unwrap();
+    envelope.serialize(&mut serializer).unwrap();
+
+    let endpoint = format!(
+        "instances/{}/api/v2/canister/{}/call",
+        pic.instance_id(),
+        canister_id.to_text()
+    );
+    let client = reqwest::blocking::Client::new();
+    let resp = client
+        .post(pic.get_server_url().join(&endpoint).unwrap())
+        .header(reqwest::header::CONTENT_TYPE, "application/cbor")
+        .body(serialized_bytes)
+        .send()
+        .unwrap();
+    (resp, *content.to_request_id())
 }
 
 #[test]
