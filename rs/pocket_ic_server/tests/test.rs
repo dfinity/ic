@@ -429,7 +429,7 @@ fn test_specified_id() {
         .unwrap();
     let canister_id = rt.block_on(async {
         let agent = ic_agent::Agent::builder()
-            .with_url(endpoint.clone())
+            .with_url(endpoint)
             .build()
             .unwrap();
         agent.fetch_root_key().await.unwrap();

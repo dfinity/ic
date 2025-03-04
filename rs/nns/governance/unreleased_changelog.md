@@ -9,11 +9,12 @@ on the process that this file is part of, see
 
 ## Added
 
+* Collect metrics about timer tasks defined using ic_nervous_system_timer_task library.
+
 ## Changed
-
+* Voting Rewards will be scheduled by a timer instead of by heartbeats.
+* 
 ## Deprecated
-
-* NnsCanisterUpgrade/NnsRootUpgrade NNS funtions are made obsolete.
 
 ## Removed
 

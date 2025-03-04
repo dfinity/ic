@@ -3920,6 +3920,7 @@ dependencies = [
  "ff 0.13.0",
  "generic-array",
  "group 0.13.0",
+ "hkdf",
  "pem-rfc7468 0.7.0",
  "pkcs8 0.10.2",
  "rand_core 0.6.4",
@@ -5254,6 +5255,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "hpke"
+version = "0.12.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4917627a14198c3603282c5158b815ad5534795451d3c074b53cf3cee0960b11"
+dependencies = [
+ "aead",
+ "aes-gcm",
+ "chacha20poly1305",
+ "digest 0.10.7",
+ "generic-array",
+ "hkdf",
+ "hmac",
+ "p384",
+ "rand_core 0.6.4",
+ "sha2 0.10.8",
+ "subtle",
+ "zeroize",
+]
+
+[[package]]
 name = "html5ever"
 version = "0.26.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6551,6 +6572,7 @@ dependencies = [
  "strum",
  "strum_macros",
  "tempfile",
+ "test-strategy 0.4.0",
 ]
 
 [[package]]
@@ -6568,6 +6590,7 @@ dependencies = [
  "rand 0.8.5",
  "rand_chacha 0.3.1",
  "scoped_threadpool",
+ "test-strategy 0.4.0",
  "thiserror 2.0.11",
 ]
 
@@ -8283,6 +8306,7 @@ dependencies = [
  "serde",
  "serde_bytes",
  "serde_cbor",
+ "test-strategy 0.4.0",
  "thiserror 2.0.11",
 ]
 
@@ -8295,6 +8319,7 @@ dependencies = [
  "ic-crypto-tree-hash",
  "proptest 1.6.0",
  "rand 0.8.5",
+ "test-strategy 0.4.0",
  "thiserror 2.0.11",
 ]
 
@@ -8702,6 +8727,16 @@ dependencies = [
  "rand 0.8.5",
  "regex",
  "tempfile",
+]
+
+[[package]]
+name = "ic-hpke"
+version = "0.1.0"
+dependencies = [
+ "hex",
+ "hpke",
+ "rand 0.8.5",
+ "rand_chacha 0.3.1",
 ]
 
 [[package]]
@@ -10441,13 +10476,24 @@ dependencies = [
  "async-trait",
  "candid",
  "canister-test",
+ "futures",
  "ic-cdk 0.17.1",
- "ic-cdk-timers",
  "ic-config",
+ "ic-metrics-encoder",
+ "ic-nervous-system-time-helpers",
+ "ic-nervous-system-timers",
  "ic-registry-subnet-type",
  "ic-state-machine-tests",
  "ic-types",
  "serde",
+]
+
+[[package]]
+name = "ic-nervous-system-timers"
+version = "0.9.0"
+dependencies = [
+ "ic-cdk-timers",
+ "slotmap",
 ]
 
 [[package]]
@@ -10600,6 +10646,7 @@ dependencies = [
  "ic-nervous-system-temporary",
  "ic-nervous-system-time-helpers",
  "ic-nervous-system-timer-task",
+ "ic-nervous-system-timers",
  "ic-neurons-fund",
  "ic-nns-common",
  "ic-nns-constants",
@@ -12765,6 +12812,7 @@ dependencies = [
  "prost 0.13.4",
  "scoped_threadpool",
  "slog",
+ "test-strategy 0.4.0",
 ]
 
 [[package]]
@@ -12837,6 +12885,7 @@ dependencies = [
  "slog",
  "slog-term",
  "tempfile",
+ "test-strategy 0.4.0",
  "tokio",
  "tokio-util",
  "tower 0.5.2",
@@ -12904,6 +12953,7 @@ dependencies = [
  "strum",
  "strum_macros",
  "tempfile",
+ "test-strategy 0.4.0",
  "tree-deserializer",
  "uuid",
 ]
@@ -14068,6 +14118,7 @@ dependencies = [
  "reqwest 0.12.12",
  "slog",
  "tempfile",
+ "test-strategy 0.4.0",
  "thiserror 2.0.11",
  "tokio",
  "url",
@@ -17265,6 +17316,16 @@ dependencies = [
  "elliptic-curve 0.13.8",
  "primeorder",
  "sha2 0.10.8",
+]
+
+[[package]]
+name = "p384"
+version = "0.13.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fe42f1670a52a47d448f14b6a5c61dd78fce51856e68edaa38f7ae3a46b8d6b6"
+dependencies = [
+ "elliptic-curve 0.13.8",
+ "primeorder",
 ]
 
 [[package]]
@@ -22306,6 +22367,7 @@ dependencies = [
  "proptest 1.6.0",
  "proptest-derive",
  "serde",
+ "test-strategy 0.4.0",
 ]
 
 [[package]]

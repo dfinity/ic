@@ -1199,6 +1199,44 @@ fn test_canister_http() {
 }
 
 #[test]
+fn test_canister_http_in_live_mode() {
+    // We create a PocketIC instance with an NNS subnet
+    // (the "live" mode requires the NNS subnet).
+    let mut pic = PocketIcBuilder::new()
+        .with_nns_subnet()
+        .with_application_subnet()
+        .build();
+
+    // Enable the "live" mode.
+    let _ = pic.make_live(None);
+
+    // Create a canister and charge it with 2T cycles.
+    let canister_id = pic.create_canister();
+    pic.add_cycles(canister_id, INIT_CYCLES);
+
+    // Install the test canister wasm file on the canister.
+    let test_wasm = test_canister_wasm();
+    pic.install_canister(canister_id, test_wasm, vec![], None);
+
+    // Submit an update call to the test canister making a canister http outcall.
+    let call_id = pic
+        .submit_call(
+            canister_id,
+            Principal::anonymous(),
+            "canister_http",
+            encode_one(()).unwrap(),
+        )
+        .unwrap();
+
+    // Await the update call without making additional progress (the PocketIC instance
+    // is already in the "live" mode making progress automatically).
+    let reply = pic.await_call_no_ticks(call_id).unwrap();
+    let http_response: Result<HttpRequestResult, (RejectionCode, String)> =
+        decode_one(&reply).unwrap();
+    http_response.unwrap();
+}
+
+#[test]
 fn test_canister_http_with_transform() {
     let pic = PocketIc::new();
 
