@@ -1,4 +1,6 @@
 use crate::benches_util::check_projected_instructions;
+use crate::governance::REWARD_DISTRIBUTION_PERIOD_SECONDS;
+use crate::pb::v1::{RewardEvent, WaitForQuietState};
 use crate::test_utils::MockRandomness;
 use crate::{
     governance::{
@@ -25,6 +27,7 @@ use canbench_rs::{bench, bench_fn, BenchResult};
 use futures::FutureExt;
 use ic_base_types::PrincipalId;
 use ic_crypto_sha2::Sha256;
+use ic_ledger_core::Tokens;
 use ic_nervous_system_proto::pb::v1::Image;
 use ic_nns_common::{
     pb::v1::{NeuronId as NeuronIdProto, ProposalId},
@@ -34,7 +37,7 @@ use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_nns_governance_api::pb::v1::list_neurons::NeuronSubaccount;
 use ic_nns_governance_api::pb::v1::ListNeurons;
 use icp_ledger::Subaccount;
-use maplit::hashmap;
+use maplit::{btreemap, hashmap};
 use rand::{Rng, SeedableRng};
 use rand_chacha::ChaCha20Rng;
 use std::collections::{BTreeMap, HashMap};
@@ -542,6 +545,74 @@ fn compute_ballots_for_new_proposal_with_stable_neurons() -> BenchResult {
         MAX_NUMBER_OF_NEURONS as u64,
         25_000_000_000,
     )
+}
+
+#[bench(raw)]
+fn distribute_rewards_with_stable_neurons() -> BenchResult {
+    let now_seconds = 1732817584;
+
+    let _a = temporarily_enable_allow_active_neurons_in_stable_memory();
+    let _b = temporarily_enable_migrate_active_neurons_to_stable_memory();
+    let neurons = (0..100)
+        .map(|id| {
+            (
+                id,
+                NeuronProto::from(make_neuron(
+                    id,
+                    PrincipalId::new_user_test_id(id),
+                    1_000_000_000,
+                    hashmap! {}, // get the default followees
+                )),
+            )
+        })
+        .collect::<BTreeMap<u64, NeuronProto>>();
+
+    let ballots = neurons
+        .iter()
+        .map(|n| {
+            (
+                *n.0,
+                Ballot {
+                    vote: Vote::Yes.into(),
+                    voting_power: n.1.cached_neuron_stake_e8s,
+                },
+            )
+        })
+        .collect();
+    let governance_proto = GovernanceProto {
+        genesis_timestamp_seconds: now_seconds - REWARD_DISTRIBUTION_PERIOD_SECONDS * 101,
+        latest_reward_event: Some(RewardEvent {
+            day_after_genesis: 100,
+            actual_timestamp_seconds: now_seconds - REWARD_DISTRIBUTION_PERIOD_SECONDS - 1,
+            settled_proposals: vec![],
+            distributed_e8s_equivalent: 0,
+            total_available_e8s_equivalent: 0,
+            latest_round_available_e8s_equivalent: None,
+            rounds_since_last_distribution: Some(0),
+        }),
+        neurons,
+        proposals: btreemap! {
+            1 => ProposalData {
+                id: Some(ProposalId { id: 1 }),
+                wait_for_quiet_state: Some(WaitForQuietState {current_deadline_timestamp_seconds: now_seconds - 200}),
+                decided_timestamp_seconds: now_seconds - 100,
+                executed_timestamp_seconds: now_seconds - 100,
+                ballots ,
+                ..Default::default()
+            }
+        },
+        ..GovernanceProto::default()
+    };
+
+    let mut governance = Governance::new(
+        governance_proto,
+        Arc::new(MockEnvironment::new(vec![], now_seconds)),
+        Arc::new(StubIcpLedger {}),
+        Arc::new(StubCMC {}),
+        Box::new(MockRandomness::new()),
+    );
+
+    bench_fn(|| governance.distribute_rewards(Tokens::new(10_000_000, 0).unwrap()))
 }
 
 fn list_neurons_by_subaccount_benchmark() -> BenchResult {
