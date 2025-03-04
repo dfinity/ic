@@ -318,7 +318,7 @@ fn add_neuron_ready_to_unstake_maturity(
 ) {
     let id = rng.next_u64();
     let subaccount = subaccount_from_id(id);
-    let mut neuron = NeuronBuilder::new(
+    let neuron = NeuronBuilder::new(
         NeuronId { id: rng.next_u64() },
         subaccount,
         PrincipalId::new_user_test_id(id),
@@ -327,32 +327,36 @@ fn add_neuron_ready_to_unstake_maturity(
         },
         123_456_789,
     )
+    .with_staked_maturity_e8s_equivalent(1_000_000_000)
     .build();
-    neuron.staked_maturity_e8s_equivalent = Some(1_000_000_000);
     neuron_store.add_neuron(neuron).unwrap();
 }
 
 #[bench(raw)]
-fn list_neurons_ready_to_unstake_maturity_heap() -> BenchResult {
+fn unstake_maturity_of_dissolved_neurons_heap() -> BenchResult {
     let _a = temporarily_disable_allow_active_neurons_in_stable_memory();
     let _b = temporarily_disable_migrate_active_neurons_to_stable_memory();
     let mut rng = new_rng();
     let mut neuron_store = set_up_neuron_store(&mut rng, 1_000, 2_000);
-    add_neuron_ready_to_unstake_maturity(now_seconds(), &mut rng, &mut neuron_store);
+    for _ in 0..100 {
+        add_neuron_ready_to_unstake_maturity(now_seconds(), &mut rng, &mut neuron_store);
+    }
 
-    bench_fn(|| neuron_store.list_neurons_ready_to_unstake_maturity(now_seconds()))
+    bench_fn(|| neuron_store.unstake_maturity_of_dissolved_neurons(now_seconds()))
 }
 
 #[bench(raw)]
-fn list_neurons_ready_to_unstake_maturity_stable() -> BenchResult {
+fn unstake_maturity_of_dissolved_neurons_stable() -> BenchResult {
     let _a = temporarily_enable_allow_active_neurons_in_stable_memory();
     let _b = temporarily_enable_migrate_active_neurons_to_stable_memory();
     let mut rng = new_rng();
     let mut neuron_store = set_up_neuron_store(&mut rng, 1_000, 2_000);
-    add_neuron_ready_to_unstake_maturity(now_seconds(), &mut rng, &mut neuron_store);
+    for _ in 0..100 {
+        add_neuron_ready_to_unstake_maturity(now_seconds(), &mut rng, &mut neuron_store);
+    }
 
     bench_fn(|| {
-        neuron_store.list_neurons_ready_to_unstake_maturity(now_seconds());
+        neuron_store.unstake_maturity_of_dissolved_neurons(now_seconds());
     })
 }
 

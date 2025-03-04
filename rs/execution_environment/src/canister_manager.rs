@@ -13,9 +13,7 @@ use crate::{
 };
 use ic_base_types::NumSeconds;
 use ic_config::embedders::Config as EmbeddersConfig;
-use ic_config::{
-    execution_environment::MAX_NUMBER_OF_SNAPSHOTS_PER_CANISTER, flag_status::FlagStatus,
-};
+use ic_config::flag_status::FlagStatus;
 use ic_cycles_account_manager::{CyclesAccountManager, ResourceSaturation};
 use ic_embedders::wasm_utils::decoding::decode_wasm;
 use ic_error_types::{ErrorCode, RejectCode, UserError};
@@ -43,7 +41,8 @@ use ic_replicated_state::{
     },
     metadata_state::subnet_call_context_manager::InstallCodeCallId,
     page_map::PageAllocatorFileDescriptor,
-    CallOrigin, CanisterState, NetworkTopology, ReplicatedState, SchedulerState, SystemState,
+    CallOrigin, CanisterState, MessageMemoryUsage, NetworkTopology, ReplicatedState,
+    SchedulerState, SystemState,
 };
 use ic_system_api::ExecutionParameters;
 use ic_types::{
@@ -130,6 +129,7 @@ pub(crate) struct CanisterMgrConfig {
     wasm_chunk_store_max_size: NumBytes,
     canister_snapshot_baseline_instructions: NumInstructions,
     default_wasm_memory_limit: NumBytes,
+    max_number_of_snapshots_per_canister: usize,
 }
 
 impl CanisterMgrConfig {
@@ -152,6 +152,7 @@ impl CanisterMgrConfig {
         wasm_chunk_store_max_size: NumBytes,
         canister_snapshot_baseline_instructions: NumInstructions,
         default_wasm_memory_limit: NumBytes,
+        max_number_of_snapshots_per_canister: usize,
     ) -> Self {
         Self {
             subnet_memory_capacity,
@@ -171,6 +172,7 @@ impl CanisterMgrConfig {
             wasm_chunk_store_max_size,
             canister_snapshot_baseline_instructions,
             default_wasm_memory_limit,
+            max_number_of_snapshots_per_canister,
         }
     }
 }
@@ -569,7 +571,7 @@ impl CanisterManager {
         validate_canister_settings(
             settings,
             NumBytes::new(0),
-            NumBytes::new(0),
+            MessageMemoryUsage::ZERO,
             MemoryAllocation::BestEffort,
             subnet_available_memory,
             subnet_memory_saturation,
@@ -643,9 +645,6 @@ impl CanisterManager {
         if let Some(wasm_memory_limit) = settings.wasm_memory_limit() {
             canister.system_state.wasm_memory_limit = Some(wasm_memory_limit);
         }
-        // Change of `wasm_memory_limit` or `new_wasm_memory_threshold` or `memory_allocation`,
-        // can influence the satisfaction of the condition for `low_wasm_memory` hook.
-        canister.update_on_low_wasm_memory_hook_condition();
     }
 
     /// Tries to apply the requested settings on the canister identified by
@@ -709,7 +708,7 @@ impl CanisterManager {
             round_limits
                 .subnet_available_memory
                 .try_decrement(new_mem - old_mem, NumBytes::from(0), NumBytes::from(0))
-                .ok();
+                .expect("Error: Cannot fail to decrement SubnetAvailableMemory after validating the canister's settings");
         } else {
             round_limits.subnet_available_memory.increment(
                 old_mem - new_mem,
@@ -808,86 +807,6 @@ impl CanisterManager {
                     Err(err) => return (Err(err), cycles),
                 };
                 (Ok(canister_id), Cycles::zero())
-            }
-        }
-    }
-
-    #[doc(hidden)]
-    /// This function is a wrapper on install_code_dts, which allows to perform
-    /// canister installation or upgrade with an assumption that Pause doesn't happen.
-    /// Currently CanisterManager tests use it extensively.
-    #[cfg(test)]
-    pub(crate) fn install_code(
-        &self,
-        context: InstallCodeContext,
-        message: CanisterCall,
-        call_id: InstallCodeCallId,
-        state: &mut ReplicatedState,
-        mut execution_parameters: ExecutionParameters,
-        round_limits: &mut RoundLimits,
-        round_counters: RoundCounters,
-        subnet_size: usize,
-        log_dirty_pages: FlagStatus,
-    ) -> (
-        Result<InstallCodeResult, CanisterManagerError>,
-        NumInstructions,
-        Option<CanisterState>,
-    ) {
-        let time = state.time();
-        let network_topology = state.metadata.network_topology.clone();
-
-        let old_canister = match state.take_canister_state(&context.canister_id) {
-            None => {
-                return (
-                    Err(CanisterManagerError::CanisterNotFound(context.canister_id)),
-                    NumInstructions::from(0),
-                    None,
-                );
-            }
-            Some(canister) => canister,
-        };
-        execution_parameters.compute_allocation = old_canister.scheduler_state.compute_allocation;
-        execution_parameters.canister_memory_limit = match old_canister.memory_allocation() {
-            MemoryAllocation::Reserved(bytes) => bytes,
-            MemoryAllocation::BestEffort => execution_parameters.canister_memory_limit,
-        };
-
-        let dts_result = self.install_code_dts(
-            context,
-            message,
-            call_id,
-            None,
-            old_canister,
-            time,
-            "NOT_USED".into(),
-            &network_topology,
-            execution_parameters,
-            round_limits,
-            CompilationCostHandling::CountFullAmount,
-            round_counters,
-            subnet_size,
-            log_dirty_pages,
-        );
-        match dts_result {
-            DtsInstallCodeResult::Finished {
-                mut canister,
-                call_id: _,
-                message: _,
-                instructions_used,
-                result,
-            } => {
-                canister.update_on_low_wasm_memory_hook_condition();
-                (result, instructions_used, Some(canister))
-            }
-            DtsInstallCodeResult::Paused {
-                canister: _,
-                paused_execution,
-                ingress_status: _,
-            } => {
-                unreachable!(
-                    "Unexpected paused execution in canister manager tests: {:?}",
-                    paused_execution
-                );
             }
         }
     }
@@ -1178,6 +1097,14 @@ impl CanisterManager {
             .collect::<Vec<PrincipalId>>();
 
         let canister_memory_usage = canister.memory_usage();
+        let canister_wasm_memory_usage = canister.wasm_memory_usage();
+        let canister_stable_memory_usage = canister.stable_memory_usage();
+        let canister_global_memory_usage = canister.global_memory_usage();
+        let canister_wasm_binary_memory_usage = canister.wasm_binary_memory_usage();
+        let canister_custom_sections_memory_usage = canister.wasm_custom_sections_memory_usage();
+        let canister_history_memory_usage = canister.canister_history_memory_usage();
+        let canister_wasm_chunk_store_memory_usage = canister.wasm_chunk_store_memory_usage();
+        let canister_snapshots_memory_usage = canister.snapshots_memory_usage();
         let canister_message_memory_usage = canister.message_memory_usage();
         let compute_allocation = canister.scheduler_state.compute_allocation;
         let memory_allocation = canister.memory_allocation();
@@ -1196,6 +1123,14 @@ impl CanisterManager {
             *controller,
             controllers,
             canister_memory_usage,
+            canister_wasm_memory_usage,
+            canister_stable_memory_usage,
+            canister_global_memory_usage,
+            canister_wasm_binary_memory_usage,
+            canister_custom_sections_memory_usage,
+            canister_history_memory_usage,
+            canister_wasm_chunk_store_memory_usage,
+            canister_snapshots_memory_usage,
             canister.system_state.balance().get(),
             compute_allocation.as_percent(),
             Some(memory_allocation.bytes().get()),
@@ -1462,7 +1397,7 @@ impl CanisterManager {
         round_limits
             .subnet_available_memory
             .try_decrement(new_mem, NumBytes::from(0), NumBytes::from(0))
-            .ok();
+            .expect("Error: Cannot fail to decrement SubnetAvailableMemory after validating canister's settings");
 
         round_limits.compute_allocation_used = round_limits
             .compute_allocation_used
@@ -1608,8 +1543,8 @@ impl CanisterManager {
             });
         }
 
-        let current_memory_usage = canister.memory_usage();
-        let message_memory = canister.message_memory_usage();
+        let memory_usage = canister.memory_usage();
+        let message_memory_usage = canister.message_memory_usage();
         let compute_allocation = canister.compute_allocation();
         let reveal_top_up = canister.controllers().contains(&sender);
 
@@ -1618,8 +1553,8 @@ impl CanisterManager {
             .cycles_account_manager
             .prepay_execution_cycles(
                 &mut canister.system_state,
-                current_memory_usage,
-                message_memory,
+                memory_usage,
+                message_memory_usage,
                 compute_allocation,
                 instructions,
                 subnet_size,
@@ -1940,12 +1875,12 @@ impl CanisterManager {
                 if state
                     .canister_snapshots
                     .count_by_canister(&canister.canister_id())
-                    >= MAX_NUMBER_OF_SNAPSHOTS_PER_CANISTER
+                    >= self.config.max_number_of_snapshots_per_canister
                 {
                     return (
                         Err(CanisterManagerError::CanisterSnapshotLimitExceeded {
                             canister_id: canister.canister_id(),
-                            limit: MAX_NUMBER_OF_SNAPSHOTS_PER_CANISTER,
+                            limit: self.config.max_number_of_snapshots_per_canister,
                         }),
                         NumInstructions::new(0),
                     );

@@ -16,25 +16,25 @@ use ic_embedders::{
     wasm_utils::WasmImportsDetails, CompilationCache, CompilationResult, StoredCompilation,
     WasmExecutionInput,
 };
-use ic_interfaces::execution_environment::{HypervisorError, HypervisorResult};
+use ic_interfaces::execution_environment::{HypervisorError, HypervisorResult, InstanceStats};
 use ic_interfaces_state_manager::StateReader;
 #[cfg(target_os = "linux")]
 use ic_logger::warn;
 use ic_logger::{error, info, ReplicaLogger};
-use ic_metrics::buckets::decimal_buckets_with_zero;
+use ic_metrics::buckets::{decimal_buckets_with_zero, exponential_buckets};
 use ic_metrics::MetricsRegistry;
 use ic_replicated_state::canister_state::execution_state::{
     SandboxMemory, SandboxMemoryHandle, SandboxMemoryOwner, WasmBinary, WasmExecutionMode,
 };
 use ic_replicated_state::{
-    EmbedderCache, ExecutionState, ExportedFunctions, Memory, PageMap, ReplicatedState,
+    page_map::allocated_pages_count, EmbedderCache, ExecutionState, ExportedFunctions, Memory,
+    PageMap, ReplicatedState,
 };
 use ic_types::ingress::WasmResult;
 use ic_types::methods::{FuncRef, WasmMethod};
 use ic_types::{AccumulatedPriority, CanisterId, NumBytes, NumInstructions};
 use ic_wasm_types::CanisterModule;
 use num_traits::SaturatingSub;
-#[cfg(target_os = "linux")]
 use prometheus::IntGauge;
 use prometheus::{Histogram, HistogramVec, IntCounter, IntCounterVec};
 use std::collections::{HashMap, VecDeque};
@@ -138,6 +138,16 @@ struct SandboxedExecutionMetrics {
     sandboxed_execution_wasm_imports_mint_cycles: IntCounter,
     // Critical error for left execution instructions above the maximum limit allowed.
     sandboxed_execution_instructions_left_error: IntCounter,
+    // Instance stats
+    accessed_pages: HistogramVec,
+    dirty_pages: HistogramVec,
+    read_before_write_count: HistogramVec,
+    direct_write_count: HistogramVec,
+    allocated_pages: IntGauge,
+    sigsegv_count: HistogramVec,
+    mmap_count: HistogramVec,
+    mprotect_count: HistogramVec,
+    copy_page_count: HistogramVec,
 }
 
 impl SandboxedExecutionMetrics {
@@ -176,7 +186,8 @@ impl SandboxedExecutionMetrics {
 
             sandboxed_execution_sandbox_execute_run_duration: metrics_registry.histogram_vec(
                 "sandboxed_execution_sandbox_execute_run_duration_seconds",
-                "The time spent in the sandbox's worker thread responsible for actually performing the executions",
+                "The time spent in the sandbox's worker thread responsible \
+                    for actually performing the executions",
                 decimal_buckets_with_zero(-4, 1),
                 &["api_type"],
             ),
@@ -193,7 +204,7 @@ impl SandboxedExecutionMetrics {
             #[cfg(target_os = "linux")]
             sandboxed_execution_subprocess_memfd_rss_total: metrics_registry.int_gauge(
                 "sandboxed_execution_subprocess_memfd_rss_total_kib",
-                "The resident shared memory for all canister sandbox processes in KiB"
+                "The resident shared memory for all canister sandbox processes in KiB",
             ),
             #[cfg(target_os = "linux")]
             sandboxed_execution_subprocess_anon_rss: metrics_registry.histogram(
@@ -223,42 +234,60 @@ impl SandboxedExecutionMetrics {
                 "Time since the last usage of an evicted sandbox process in seconds",
                 decimal_buckets_with_zero(-1, 4), // 0.1s - 13h.
             ),
-            sandboxed_execution_critical_error_invalid_memory_size: metrics_registry.error_counter(
-                SANDBOXED_EXECUTION_INVALID_MEMORY_SIZE),
+            sandboxed_execution_critical_error_invalid_memory_size: metrics_registry
+                .error_counter(SANDBOXED_EXECUTION_INVALID_MEMORY_SIZE),
             sandboxed_execution_replica_create_exe_state_duration: metrics_registry.histogram(
                 "sandboxed_execution_replica_create_exe_state_duration_seconds",
                 "The total create execution state duration in the replica controller",
                 decimal_buckets_with_zero(-4, 1),
             ),
-            sandboxed_execution_replica_create_exe_state_wait_compile_duration: metrics_registry.histogram(
-                "sandboxed_execution_replica_create_exe_state_wait_compile_duration_seconds",
-                "Time taken to send a create execution state request and get a response when compiling",
-                decimal_buckets_with_zero(-4, 1),
-            ),
-            sandboxed_execution_replica_create_exe_state_wait_deserialize_duration: metrics_registry.histogram(
-                "sandboxed_execution_replica_create_exe_state_wait_deserialize_duration_seconds",
-                "Time taken to send a create execution state request and get a response when deserializing",
-                decimal_buckets_with_zero(-4, 1),
-            ),
-            sandboxed_execution_replica_create_exe_state_finish_duration: metrics_registry.histogram(
-                "sandboxed_execution_replica_create_exe_finish_duration_seconds",
-                "Time to create an execution state after getting the response from the sandbox",
-                decimal_buckets_with_zero(-4, 1),
-            ),
-            sandboxed_execution_sandbox_create_exe_state_deserialize_duration: metrics_registry.histogram(
-                "sandboxed_execution_sandbox_create_exe_state_deserialize_duration_seconds",
-                "Time taken to deserialize a wasm module when creating the execution state from a serialized module",
-                decimal_buckets_with_zero(-4, 1),
-            ),
-            sandboxed_execution_sandbox_create_exe_state_deserialize_total_duration: metrics_registry.histogram(
-                "sandboxed_execution_sandbox_create_exe_state_deserialize_total_duration_seconds",
-                "Total time spent in the sandbox when creating an execution state from a serialized module",
-                decimal_buckets_with_zero(-4, 1),
-            ),
+            sandboxed_execution_replica_create_exe_state_wait_compile_duration: metrics_registry
+                .histogram(
+                    "sandboxed_execution_replica_create_exe_state_wait_compile_duration_seconds",
+                    "Time taken to send a create execution state request \
+                        and get a response when compiling",
+                    decimal_buckets_with_zero(-4, 1),
+                ),
+            sandboxed_execution_replica_create_exe_state_wait_deserialize_duration:
+                metrics_registry.histogram(
+                    concat!(
+                        "sandboxed_execution_replica_create_exe_state_wait_deserialize",
+                        "_duration_seconds"
+                    ),
+                    "Time taken to send a create execution state request \
+                    and get a response when deserializing",
+                    decimal_buckets_with_zero(-4, 1),
+                ),
+            sandboxed_execution_replica_create_exe_state_finish_duration: metrics_registry
+                .histogram(
+                    "sandboxed_execution_replica_create_exe_finish_duration_seconds",
+                    "Time to create an execution state after getting the response \
+                    from the sandbox",
+                    decimal_buckets_with_zero(-4, 1),
+                ),
+            sandboxed_execution_sandbox_create_exe_state_deserialize_duration: metrics_registry
+                .histogram(
+                    "sandboxed_execution_sandbox_create_exe_state_deserialize_duration_seconds",
+                    "Time taken to deserialize a wasm module when creating the execution state \
+                    from a serialized module",
+                    decimal_buckets_with_zero(-4, 1),
+                ),
+            sandboxed_execution_sandbox_create_exe_state_deserialize_total_duration:
+                metrics_registry.histogram(
+                    concat!(
+                        "sandboxed_execution_sandbox_create_exe_state_deserialize",
+                        "_total_duration_seconds"
+                    ),
+                    "Total time spent in the sandbox when creating an execution state \
+                        from a serialized module",
+                    decimal_buckets_with_zero(-4, 1),
+                ),
             sandboxed_execution_replica_cache_lookups: metrics_registry.int_counter_vec(
                 "sandboxed_execution_replica_cache_lookups",
-                "Results from looking up a wasm module in the embedder cache or compilation cache",
-                &["lookup_result"]),
+                "Results from looking up a wasm module in the embedder cache \
+                    or compilation cache",
+                &["lookup_result"],
+            ),
             sandboxed_execution_wasm_imports_call_cycles_add: metrics_registry.int_counter(
                 "sandboxed_execution_wasm_imports_call_cycles_add",
                 "The number of Wasm modules that import ic0.call_cycles_add",
@@ -288,7 +317,70 @@ impl SandboxedExecutionMetrics {
                 "Number of executed message slices by type and status.",
                 &["api_type", "status", "wasm_execution_mode"],
             ),
-            sandboxed_execution_instructions_left_error: metrics_registry.error_counter("sandboxed_execution_invalid_instructions_left"),
+            sandboxed_execution_instructions_left_error: metrics_registry
+                .error_counter("sandboxed_execution_invalid_instructions_left"),
+            // Instance stats
+            accessed_pages: metrics_registry.histogram_vec(
+                "sandboxed_execution_accessed_pages",
+                "Number of pages accessed by type of memory (wasm, stable) \
+                        and api type.",
+                // 1 page, 2 pages, …, 2^21 (8GiB worth of) pages
+                exponential_buckets(1.0, 2.0, 22),
+                &["api_type", "memory_type"],
+            ),
+            dirty_pages: metrics_registry.histogram_vec(
+                "sandboxed_execution_dirty_pages",
+                "Number of pages modified (dirtied) by type of memory (wasm, stable) \
+                    and api type.",
+                exponential_buckets(1.0, 2.0, 22),
+                &["api_type", "memory_type"],
+            ),
+            read_before_write_count: metrics_registry.histogram_vec(
+                "sandboxed_execution_read_before_write_count",
+                "Number of write accesses handled where the page had already been read \
+                    by type of memory (wasm, stable) and api type.",
+                exponential_buckets(1.0, 2.0, 22),
+                &["api_type", "memory_type"],
+            ),
+            direct_write_count: metrics_registry.histogram_vec(
+                "sandboxed_execution_direct_write_count",
+                "Number of write accesses handled where the page had not yet been read \
+                    by type of memory (wasm, stable) and api type.",
+                exponential_buckets(1.0, 2.0, 22),
+                &["api_type", "memory_type"],
+            ),
+            allocated_pages: metrics_registry.int_gauge(
+                "sandboxed_execution_allocated_pages",
+                "Total number of currently allocated pages.",
+            ),
+            sigsegv_count: metrics_registry.histogram_vec(
+                "sandboxed_execution_sigsegv_count",
+                "Number of signal faults handled during the execution \
+                    by type of memory (wasm, stable) and api type.",
+                decimal_buckets_with_zero(0, 8),
+                &["api_type", "memory_type"],
+            ),
+            mmap_count: metrics_registry.histogram_vec(
+                "sandboxed_execution_mmap_count",
+                "Number of calls to mmap during the execution \
+                    by type of memory (wasm, stable) and api type.",
+                decimal_buckets_with_zero(0, 8),
+                &["api_type", "memory_type"],
+            ),
+            mprotect_count: metrics_registry.histogram_vec(
+                "sandboxed_execution_mprotect_count",
+                "Number of calls to mprotect during the execution \
+                    by type of memory (wasm, stable) and api type.",
+                decimal_buckets_with_zero(0, 8),
+                &["api_type", "memory_type"],
+            ),
+            copy_page_count: metrics_registry.histogram_vec(
+                "sandboxed_execution_copy_page_count",
+                "Number of calls to pages memcopied during the execution \
+                    by type of memory (wasm, stable) and api type.",
+                decimal_buckets_with_zero(0, 8),
+                &["api_type", "memory_type"],
+            ),
         }
     }
 
@@ -308,6 +400,61 @@ impl SandboxedExecutionMetrics {
         self.sandboxed_execution_executed_message_slices
             .with_label_values(&[api_type_label, execution_status, wasm_execution_mode])
             .inc();
+    }
+
+    fn observe_instance_stats(&self, instance_stats: &InstanceStats, api_type_label: &str) {
+        self.accessed_pages
+            .with_label_values(&[api_type_label, "wasm"])
+            .observe(instance_stats.wasm_accessed_pages as f64);
+        self.dirty_pages
+            .with_label_values(&[api_type_label, "wasm"])
+            .observe(instance_stats.wasm_dirty_pages as f64);
+        self.read_before_write_count
+            .with_label_values(&[api_type_label, "wasm"])
+            .observe(instance_stats.wasm_read_before_write_count as f64);
+        self.direct_write_count
+            .with_label_values(&[api_type_label, "wasm"])
+            .observe(instance_stats.wasm_direct_write_count as f64);
+        self.sigsegv_count
+            .with_label_values(&[api_type_label, "wasm"])
+            .observe(instance_stats.wasm_sigsegv_count as f64);
+        self.mmap_count
+            .with_label_values(&[api_type_label, "wasm"])
+            .observe(instance_stats.wasm_mmap_count as f64);
+        self.mprotect_count
+            .with_label_values(&[api_type_label, "wasm"])
+            .observe(instance_stats.wasm_mprotect_count as f64);
+        self.copy_page_count
+            .with_label_values(&[api_type_label, "wasm"])
+            .observe(instance_stats.wasm_copy_page_count as f64);
+
+        // Additional metrics for the stable memory.
+        self.accessed_pages
+            .with_label_values(&[api_type_label, "stable"])
+            .observe(instance_stats.stable_accessed_pages as f64);
+        self.dirty_pages
+            .with_label_values(&[api_type_label, "stable"])
+            .observe(instance_stats.stable_dirty_pages as f64);
+        self.read_before_write_count
+            .with_label_values(&[api_type_label, "stable"])
+            .observe(instance_stats.stable_read_before_write_count as f64);
+        self.direct_write_count
+            .with_label_values(&[api_type_label, "stable"])
+            .observe(instance_stats.stable_direct_write_count as f64);
+        self.sigsegv_count
+            .with_label_values(&[api_type_label, "stable"])
+            .observe(instance_stats.stable_sigsegv_count as f64);
+        self.mmap_count
+            .with_label_values(&[api_type_label, "stable"])
+            .observe(instance_stats.stable_mmap_count as f64);
+        self.mprotect_count
+            .with_label_values(&[api_type_label, "stable"])
+            .observe(instance_stats.stable_mprotect_count as f64);
+        self.copy_page_count
+            .with_label_values(&[api_type_label, "stable"])
+            .observe(instance_stats.stable_copy_page_count as f64);
+
+        self.allocated_pages.set(allocated_pages_count() as i64);
     }
 }
 
@@ -1546,6 +1693,8 @@ impl SandboxedExecutionController {
                     execution_status,
                     execution_state.wasm_execution_mode.as_str(),
                 );
+                self.metrics
+                    .observe_instance_stats(&exec_output.wasm.instance_stats, api_type_label);
                 exec_output
             }
         };
@@ -1594,11 +1743,6 @@ impl SandboxedExecutionController {
         canister_id: CanisterId,
         sandbox_process: Arc<SandboxProcess>,
     ) -> CanisterStateChanges {
-        // If the execution has failed, then we don't apply any changes.
-        if exec_output.wasm.wasm_result.is_err() {
-            return CanisterStateChanges::default();
-        }
-
         let StateModifications {
             execution_state_modifications,
             system_state_modifications,
@@ -2160,7 +2304,10 @@ mod tests {
                 canister_module,
                 PathBuf::new(),
                 canister_id,
-                Arc::new(CompilationCache::new(MAX_COMPILATION_CACHE_SIZE)),
+                Arc::new(CompilationCache::new(
+                    MAX_COMPILATION_CACHE_SIZE,
+                    tempfile::tempdir().unwrap(),
+                )),
             )
             .unwrap();
         let sandbox_pid = match controller

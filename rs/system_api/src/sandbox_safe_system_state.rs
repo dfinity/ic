@@ -11,7 +11,7 @@ use ic_limits::{LOG_CANISTER_OPERATION_CYCLES_THRESHOLD, SMALL_APP_SUBNET_MAX_SI
 use ic_logger::{info, ReplicaLogger};
 use ic_management_canister_types_private::{
     CanisterStatusType, CreateCanisterArgs, InstallChunkedCodeArgs, InstallCodeArgsV2,
-    LoadCanisterSnapshotArgs, Method as Ic00Method, Payload,
+    LoadCanisterSnapshotArgs, MasterPublicKeyId, Method as Ic00Method, Payload,
     ProvisionalCreateCanisterWithCyclesArgs, UninstallCodeArgs, UpdateSettingsArgs, IC_00,
 };
 use ic_nns_constants::CYCLES_MINTING_CANISTER_ID;
@@ -21,7 +21,7 @@ use ic_replicated_state::canister_state::system_state::{
 };
 use ic_replicated_state::{
     canister_state::execution_state::WasmExecutionMode, canister_state::DEFAULT_QUEUE_CAPACITY,
-    CallOrigin, ExecutionTask, NetworkTopology, SystemState,
+    CallOrigin, ExecutionTask, MessageMemoryUsage, NetworkTopology, SystemState,
 };
 use ic_types::{
     messages::{CallContextId, CallbackId, RejectContext, Request, RequestMetadata, NO_DEADLINE},
@@ -77,6 +77,7 @@ pub struct SystemStateModifications {
     pub(super) new_global_timer: Option<CanisterTimer>,
     pub(super) canister_log: CanisterLog,
     pub on_low_wasm_memory_hook_condition_check_result: Option<bool>,
+    pub(super) should_bump_canister_version: bool,
 }
 
 impl Default for SystemStateModifications {
@@ -93,6 +94,7 @@ impl Default for SystemStateModifications {
             new_global_timer: None,
             canister_log: Default::default(),
             on_low_wasm_memory_hook_condition_check_result: None,
+            should_bump_canister_version: false,
         }
     }
 }
@@ -304,7 +306,7 @@ impl SystemStateModifications {
     /// Verify that the changes to the system state are sound and apply them to
     /// the system state if they are.
     pub fn apply_changes(
-        self,
+        mut self,
         time: Time,
         system_state: &mut SystemState,
         network_topology: &NetworkTopology,
@@ -359,7 +361,7 @@ impl SystemStateModifications {
         let best_effort_request_count = self
             .requests
             .iter()
-            .filter(|req| req.deadline != NO_DEADLINE)
+            .filter(|req| req.is_best_effort())
             .count() as u64;
         let request_stats = RequestMetadataStats {
             metadata: self
@@ -488,6 +490,14 @@ impl SystemStateModifications {
             system_state.global_timer = new_global_timer;
         }
 
+        // Append canister log.
+        system_state.canister_log.append(&mut self.canister_log);
+
+        // Bump the canister version after all changes have been applied.
+        if self.should_bump_canister_version {
+            system_state.canister_version += 1;
+        }
+
         Ok(request_stats)
     }
 
@@ -602,6 +612,7 @@ pub struct SandboxSafeSystemState {
     pub(super) request_metadata: RequestMetadata,
     caller: Option<PrincipalId>,
     pub is_wasm64_execution: bool,
+    network_topology: NetworkTopology,
 }
 
 impl SandboxSafeSystemState {
@@ -636,6 +647,7 @@ impl SandboxSafeSystemState {
         caller: Option<PrincipalId>,
         next_canister_log_record_idx: u64,
         is_wasm64_execution: bool,
+        network_topology: NetworkTopology,
     ) -> Self {
         Self {
             canister_id,
@@ -671,6 +683,7 @@ impl SandboxSafeSystemState {
             request_metadata,
             caller,
             is_wasm64_execution,
+            network_topology,
         }
     }
 
@@ -785,6 +798,7 @@ impl SandboxSafeSystemState {
             caller,
             system_state.canister_log.next_idx(),
             is_wasm64_execution,
+            network_topology.clone(),
         )
     }
 
@@ -910,7 +924,7 @@ impl SandboxSafeSystemState {
         &mut self,
         amount_to_burn: Cycles,
         canister_current_memory_usage: NumBytes,
-        canister_current_message_memory_usage: NumBytes,
+        canister_current_message_memory_usage: MessageMemoryUsage,
     ) -> Cycles {
         let mut new_balance = self.cycles_balance();
         let burned_cycles = self.cycles_account_manager.cycles_burn(
@@ -993,7 +1007,7 @@ impl SandboxSafeSystemState {
     pub(super) fn withdraw_cycles_for_transfer(
         &mut self,
         canister_current_memory_usage: NumBytes,
-        canister_current_message_memory_usage: NumBytes,
+        canister_current_message_memory_usage: MessageMemoryUsage,
         amount: Cycles,
         reveal_top_up: bool,
     ) -> HypervisorResult<()> {
@@ -1022,7 +1036,7 @@ impl SandboxSafeSystemState {
     pub fn push_output_request(
         &mut self,
         canister_current_memory_usage: NumBytes,
-        canister_current_message_memory_usage: NumBytes,
+        canister_current_message_memory_usage: MessageMemoryUsage,
         msg: Request,
         prepayment_for_response_execution: Cycles,
         prepayment_for_response_transmission: Cycles,
@@ -1110,7 +1124,7 @@ impl SandboxSafeSystemState {
     pub(super) fn check_freezing_threshold_for_memory_grow(
         &self,
         api_type: &ApiType,
-        current_message_memory_usage: NumBytes,
+        current_message_memory_usage: MessageMemoryUsage,
         old_memory_usage: NumBytes,
         new_memory_usage: NumBytes,
     ) -> HypervisorResult<()> {
@@ -1148,8 +1162,9 @@ impl SandboxSafeSystemState {
         }
     }
 
-    /// Checks the cycles balance against the freezing threshold with the new
-    /// message memory usage if that's needed for the given API type.
+    /// Checks the cycles balance against the freezing threshold with the new total
+    /// (guaranteed response plus best-effort) message memory usage if that's needed
+    /// for the given API type.
     ///
     /// If the old message memory usage is higher than the new message memory usage,
     /// then no check is performed.
@@ -1161,11 +1176,11 @@ impl SandboxSafeSystemState {
         &self,
         api_type: &ApiType,
         current_memory_usage: NumBytes,
-        old_message_memory_usage: NumBytes,
-        new_message_memory_usage: NumBytes,
+        old_message_memory_usage: MessageMemoryUsage,
+        new_message_memory_usage: MessageMemoryUsage,
     ) -> HypervisorResult<()> {
         let should_check = self.should_check_freezing_threshold_for_memory_grow(api_type);
-        if !should_check || old_message_memory_usage >= new_message_memory_usage {
+        if !should_check || old_message_memory_usage.total() >= new_message_memory_usage.total() {
             return Ok(());
         }
 
@@ -1182,7 +1197,7 @@ impl SandboxSafeSystemState {
             Ok(())
         } else {
             Err(HypervisorError::InsufficientCyclesInMessageMemoryGrow {
-                bytes: new_message_memory_usage - old_message_memory_usage,
+                bytes: new_message_memory_usage.total() - old_message_memory_usage.total(),
                 available: self.cycles_balance(),
                 threshold,
                 reveal_top_up: self.caller_is_controller(),
@@ -1357,6 +1372,22 @@ impl SandboxSafeSystemState {
     pub fn get_subnet_id(&self) -> SubnetId {
         self.cycles_account_manager.get_subnet_id()
     }
+
+    pub fn get_cycles_account_manager(&self) -> &CyclesAccountManager {
+        &self.cycles_account_manager
+    }
+
+    /// Look up key in `chain_key_enabled_subnets`, then extract all subnets
+    /// for that key and return the replication factor of the biggest one.
+    pub fn get_key_replication_factor(&self, key: MasterPublicKeyId) -> Option<usize> {
+        let subnets_with_key = self.network_topology.chain_key_enabled_subnets(&key);
+        subnets_with_key
+            .iter()
+            .map(|subnet_id| {
+                self.network_topology.get_subnet_size(subnet_id).unwrap() // we got the subnet_id from the same collection
+            })
+            .max()
+    }
 }
 
 /// Holds the metadata and the number of downstream requests. Requests created during the same
@@ -1379,7 +1410,9 @@ mod tests {
     use ic_cycles_account_manager::CyclesAccountManager;
     use ic_limits::SMALL_APP_SUBNET_MAX_SIZE;
     use ic_registry_subnet_type::SubnetType;
-    use ic_replicated_state::{canister_state::system_state::CyclesUseCase, SystemState};
+    use ic_replicated_state::{
+        canister_state::system_state::CyclesUseCase, NetworkTopology, SystemState,
+    };
     use ic_test_utilities_types::ids::{canister_test_id, subnet_test_id, user_test_id};
     use ic_types::{
         messages::{RequestMetadata, NO_DEADLINE},
@@ -1492,6 +1525,7 @@ mod tests {
             0,
             // Wasm32 execution environment. Sufficient in testing.
             false,
+            NetworkTopology::default(),
         );
         sandbox_state.msg_deadline()
     }
@@ -1542,6 +1576,7 @@ mod tests {
             0,
             // Wasm32 execution environment. Sufficient in testing.
             false,
+            NetworkTopology::default(),
         )
     }
 

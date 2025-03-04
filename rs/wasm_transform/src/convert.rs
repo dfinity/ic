@@ -114,6 +114,8 @@ pub(super) mod parser_to_internal {
 
 /// Conversion from internal to [`wasm_encoder`] types.
 pub(super) mod internal_to_encoder {
+    use std::borrow::Cow;
+
     use super::*;
 
     pub(crate) fn block_type(ty: wasmparser::BlockType) -> Result<wasm_encoder::BlockType> {
@@ -141,6 +143,19 @@ pub(super) mod internal_to_encoder {
             wasmparser::Ordering::SeqCst => wasm_encoder::Ordering::SeqCst,
             wasmparser::Ordering::AcqRel => wasm_encoder::Ordering::AcqRel,
         }
+    }
+
+    fn handle(handle: wasmparser::Handle) -> wasm_encoder::Handle {
+        match handle {
+            wasmparser::Handle::OnLabel { tag, label } => {
+                wasm_encoder::Handle::OnLabel { tag, label }
+            }
+            wasmparser::Handle::OnSwitch { tag } => wasm_encoder::Handle::OnSwitch { tag },
+        }
+    }
+
+    fn resume_table(resume_table: wasmparser::ResumeTable) -> Cow<'static, [wasm_encoder::Handle]> {
+        Cow::Owned(resume_table.handlers.into_iter().map(handle).collect())
     }
 
     pub(crate) fn const_expr(expr: &wasmparser::Operator) -> Result<wasm_encoder::ConstExpr> {
@@ -174,7 +189,7 @@ pub(super) mod internal_to_encoder {
         use wasm_encoder::Instruction as I;
 
         macro_rules! convert {
-            ($( @$proposal:ident $op:ident $({ $($arg:ident: $argty:ty),* })? => $visit:ident)*) => {
+            ($( @$proposal:ident $op:ident $({ $($arg:ident: $argty:ty),* })? => $visit:ident ($($ann:tt)*))*) => {
                 match op {
                     $(
                         wasmparser::Operator::$op $({ $($arg),* })? => {
@@ -183,7 +198,10 @@ pub(super) mod internal_to_encoder {
                             )?
                             convert!(build $op $($($arg)*)?)
                         }
-                    )*
+                    )*,
+                    // TODO put the operator there.
+                    op => Err(Error::UnknownInstruction),
+
                 }
             };
 
@@ -230,6 +248,7 @@ pub(super) mod internal_to_encoder {
             (map $arg:ident table_byte) => (());
             (map $arg:ident mem_byte) => (());
             (map $arg:ident flags) => (());
+            (map $arg:ident resume_table) => (resume_table($arg));
 
 
             // All other arguments are kept the same.

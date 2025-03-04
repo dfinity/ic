@@ -146,6 +146,7 @@ pub mod test_utils;
 
 mod account_id_index;
 mod audit_event;
+pub mod canister_state;
 pub mod data_migration;
 mod garbage_collection;
 /// The 'governance' module contains the canister (smart contract)
@@ -173,6 +174,7 @@ pub mod proposals;
 mod reward;
 pub mod storage;
 mod subaccount_index;
+pub mod timer_tasks;
 mod voting;
 
 /// Limit the amount of work for skipping unneeded data on the wire when parsing Candid.
@@ -205,7 +207,7 @@ thread_local! {
 
     static USE_STABLE_MEMORY_FOLLOWING_INDEX: Cell<bool> = const { Cell::new(true) };
 
-    static MIGRATE_ACTIVE_NEURONS_TO_STABLE_MEMORY: Cell<bool> = const { Cell::new(true) };
+    static MIGRATE_ACTIVE_NEURONS_TO_STABLE_MEMORY: Cell<bool> = const { Cell::new(cfg!(feature = "test")) };
 }
 
 thread_local! {

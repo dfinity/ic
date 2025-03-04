@@ -4,9 +4,10 @@ use crate::management_canister::requests::{
 use crate::Request;
 use crate::{CallCanisters, CanisterInfo};
 use candid::Principal;
+use ic_management_canister_types::{CanisterStatusResult, DefiniteCanisterSettings};
 use pocket_ic::common::rest::RawEffectivePrincipal;
-use pocket_ic::management_canister::DefiniteCanisterSettings;
-use pocket_ic::{management_canister::CanisterStatusResult, nonblocking::PocketIc};
+use pocket_ic::nonblocking::PocketIc;
+
 use thiserror::Error;
 
 /// A wrapper around PocketIc that specifies a sender for the requests.
@@ -148,7 +149,12 @@ impl CallCanisters for PocketIcAgent<'_> {
     ) -> Result<CanisterInfo, Self::Error> {
         let canister_id = canister_id.into();
 
-        let controllers = self.pocket_ic.get_controllers(canister_id).await;
+        let canister_exists = self.pocket_ic.canister_exists(canister_id).await;
+        let controllers = if canister_exists {
+            self.pocket_ic.get_controllers(canister_id).await
+        } else {
+            vec![]
+        };
 
         let Some(controller) = controllers.into_iter().last() else {
             return Err(Self::Error::BlackHole);

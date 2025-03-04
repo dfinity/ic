@@ -33,7 +33,7 @@ use ic_types::crypto::canister_threshold_sig::idkg::{
     IDkgTranscript, IDkgTranscriptOperation, InitialIDkgDealings,
 };
 use ic_types::crypto::canister_threshold_sig::MasterPublicKey;
-use ic_types::crypto::vetkd::VetKdArgs;
+use ic_types::crypto::vetkd::{VetKdArgs, VetKdDerivationDomain};
 use ic_types::crypto::{AlgorithmId, ExtendedDerivationPath};
 use ic_types::messages::CallbackId;
 use ic_types::registry::RegistryClientError;
@@ -256,10 +256,6 @@ pub(super) fn build_signature_inputs(
     context: &SignWithThresholdContext,
     block_reader: &dyn IDkgBlockReader,
 ) -> Result<(RequestId, ThresholdSigInputsRef), BuildSignatureInputsError> {
-    let extended_derivation_path = ExtendedDerivationPath {
-        caller: context.request.sender.into(),
-        derivation_path: context.derivation_path.clone(),
-    };
     match &context.args {
         ThresholdArguments::Ecdsa(args) => {
             let (pre_sig_id, height) = context
@@ -285,7 +281,10 @@ pub(super) fn build_signature_inputs(
                     .ok_or(BuildSignatureInputsError::ContextIncomplete)?,
             );
             let inputs = ThresholdSigInputsRef::Ecdsa(ThresholdEcdsaSigInputsRef::new(
-                extended_derivation_path,
+                ExtendedDerivationPath {
+                    caller: context.request.sender.into(),
+                    derivation_path: context.derivation_path.clone(),
+                },
                 args.message_hash,
                 nonce,
                 pre_sig,
@@ -316,7 +315,10 @@ pub(super) fn build_signature_inputs(
                     .ok_or(BuildSignatureInputsError::ContextIncomplete)?,
             );
             let inputs = ThresholdSigInputsRef::Schnorr(ThresholdSchnorrSigInputsRef::new(
-                extended_derivation_path,
+                ExtendedDerivationPath {
+                    caller: context.request.sender.into(),
+                    derivation_path: context.derivation_path.clone(),
+                },
                 args.message.clone(),
                 nonce,
                 pre_sig,
@@ -330,7 +332,10 @@ pub(super) fn build_signature_inputs(
                 height: args.height,
             };
             let inputs = ThresholdSigInputsRef::VetKd(VetKdArgs {
-                derivation_path: extended_derivation_path,
+                derivation_domain: VetKdDerivationDomain {
+                    caller: context.request.sender.into(),
+                    domain: context.derivation_path.iter().flatten().cloned().collect(),
+                },
                 ni_dkg_id: args.ni_dkg_id.clone(),
                 derivation_id: args.derivation_id.clone(),
                 encryption_public_key: args.encryption_public_key.clone(),
@@ -532,31 +537,25 @@ pub(crate) fn get_pre_signature_ids_to_deliver(
 }
 
 /// This function returns the subnet master public keys to be added to the batch, if required.
-/// We return `Ok(Some(key))`, if
+/// We return the keys, if
 /// - The block contains an IDKG payload with current key transcript ref, and
 /// - the corresponding transcript exists in past blocks, and
 /// - we can extract the threshold master public key from the transcript.
 ///
-/// Otherwise `Ok(None)` is returned.
-/// Additionally, we return `Err(string)` if we were unable to find a dkg summary block for the height
-/// of the given block (as the lower bound for past blocks to lookup the transcript in). In that case
-/// a newer CUP is already present in the pool and we should continue from there.
+/// Otherwise no keys are returned.
 pub(crate) fn get_idkg_subnet_public_keys(
-    block: &Block,
+    current_block: &Block,
+    last_dkg_summary_block: &Block,
     pool: &PoolReader<'_>,
     log: &ReplicaLogger,
-) -> Result<BTreeMap<MasterPublicKeyId, MasterPublicKey>, String> {
-    let Some(idkg_payload) = block.payload.as_ref().as_idkg() else {
-        return Ok(BTreeMap::new());
+) -> BTreeMap<MasterPublicKeyId, MasterPublicKey> {
+    let Some(idkg_payload) = current_block.payload.as_ref().as_idkg() else {
+        return BTreeMap::new();
     };
 
-    let Some(summary) = pool.dkg_summary_block_for_finalized_height(block.height) else {
-        return Err(format!(
-            "Failed to find dkg summary block for height {}",
-            block.height
-        ));
-    };
-    let chain = pool.pool().build_block_chain(&summary, block);
+    let chain = pool
+        .pool()
+        .build_block_chain(last_dkg_summary_block, current_block);
     let block_reader = IDkgBlockReaderImpl::new(chain);
 
     let mut public_keys = BTreeMap::new();
@@ -587,7 +586,7 @@ pub(crate) fn get_idkg_subnet_public_keys(
         }
     }
 
-    Ok(public_keys)
+    public_keys
 }
 
 fn get_subnet_master_public_key(

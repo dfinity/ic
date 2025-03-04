@@ -310,6 +310,9 @@ pub mod nervous_system_function {
         /// <method_name>(proposal_data: ProposalData) -> Result<String, String>
         #[prost(string, optional, tag = "5")]
         pub validator_method_name: ::core::option::Option<::prost::alloc::string::String>,
+        /// The topic this function belongs to
+        #[prost(enumeration = "super::Topic", optional, tag = "6")]
+        pub topic: ::core::option::Option<i32>,
     }
     #[derive(
         candid::CandidType,
@@ -685,6 +688,18 @@ pub struct AdvanceSnsTargetVersion {
     #[prost(message, optional, tag = "1")]
     pub new_target: ::core::option::Option<SnsVersion>,
 }
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct SetTopicsForCustomProposals {
+    #[prost(btree_map = "uint64, enumeration(Topic)", tag = "1")]
+    pub custom_function_id_to_topic: ::prost::alloc::collections::BTreeMap<u64, i32>,
+}
 /// A proposal is the immutable input of a proposal submission.
 #[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]
 #[compare_default]
@@ -713,7 +728,7 @@ pub struct Proposal {
     /// of this mapping.
     #[prost(
         oneof = "proposal::Action",
-        tags = "4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19"
+        tags = "4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20"
     )]
     pub action: ::core::option::Option<proposal::Action>,
 }
@@ -823,6 +838,11 @@ pub mod proposal {
         /// Id = 15.
         #[prost(message, tag = "19")]
         AdvanceSnsTargetVersion(super::AdvanceSnsTargetVersion),
+        /// Change the mapping from custom proposal types to topics.
+        ///
+        /// Id = 16;
+        #[prost(message, tag = "20")]
+        SetTopicsForCustomProposals(super::SetTopicsForCustomProposals),
     }
 }
 #[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]
@@ -1056,6 +1076,7 @@ pub struct ProposalData {
     /// Id 13 - ManageLedgerParameters proposals.
     /// Id 14 - ManageDappCanisterSettings proposals.
     /// Id 15 - AdvanceSnsTargetVersion proposals.
+    /// Id 16 - SetTopicsForCustomProposals proposals.
     #[prost(uint64, tag = "1")]
     pub action: u64,
     /// This is stored here temporarily. It is also stored on the map
@@ -4214,6 +4235,71 @@ impl ClaimSwapNeuronsError {
             "CLAIM_SWAP_NEURONS_ERROR_UNSPECIFIED" => Some(Self::Unspecified),
             "CLAIM_SWAP_NEURONS_ERROR_UNAUTHORIZED" => Some(Self::Unauthorized),
             "CLAIM_SWAP_NEURONS_ERROR_INTERNAL" => Some(Self::Internal),
+            _ => None,
+        }
+    }
+}
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    comparable::Comparable,
+    Clone,
+    Copy,
+    Debug,
+    PartialEq,
+    Eq,
+    Hash,
+    PartialOrd,
+    Ord,
+    ::prost::Enumeration,
+)]
+#[repr(i32)]
+pub enum Topic {
+    /// Unused, here for PB lint purposes.
+    Unspecified = 0,
+    /// Proposals to set the direction of the DAO by tokenomics & branding
+    DaoCommunitySettings = 1,
+    /// Proposals to upgrade and manage the SNS DAO framework
+    SnsFrameworkManagement = 2,
+    /// Proposals to manage the dapp's canisters
+    DappCanisterManagement = 3,
+    /// Proposals related to the dapp's business logic
+    ApplicationBusinessLogic = 4,
+    /// Proposals related to governance
+    Governance = 5,
+    /// Proposals related to treasury management
+    TreasuryAssetManagement = 6,
+    /// Critical proposals related to dapp operations
+    CriticalDappOperations = 7,
+}
+impl Topic {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            Self::Unspecified => "TOPIC_UNSPECIFIED",
+            Self::DaoCommunitySettings => "TOPIC_DAO_COMMUNITY_SETTINGS",
+            Self::SnsFrameworkManagement => "TOPIC_SNS_FRAMEWORK_MANAGEMENT",
+            Self::DappCanisterManagement => "TOPIC_DAPP_CANISTER_MANAGEMENT",
+            Self::ApplicationBusinessLogic => "TOPIC_APPLICATION_BUSINESS_LOGIC",
+            Self::Governance => "TOPIC_GOVERNANCE",
+            Self::TreasuryAssetManagement => "TOPIC_TREASURY_ASSET_MANAGEMENT",
+            Self::CriticalDappOperations => "TOPIC_CRITICAL_DAPP_OPERATIONS",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "TOPIC_UNSPECIFIED" => Some(Self::Unspecified),
+            "TOPIC_DAO_COMMUNITY_SETTINGS" => Some(Self::DaoCommunitySettings),
+            "TOPIC_SNS_FRAMEWORK_MANAGEMENT" => Some(Self::SnsFrameworkManagement),
+            "TOPIC_DAPP_CANISTER_MANAGEMENT" => Some(Self::DappCanisterManagement),
+            "TOPIC_APPLICATION_BUSINESS_LOGIC" => Some(Self::ApplicationBusinessLogic),
+            "TOPIC_GOVERNANCE" => Some(Self::Governance),
+            "TOPIC_TREASURY_ASSET_MANAGEMENT" => Some(Self::TreasuryAssetManagement),
+            "TOPIC_CRITICAL_DAPP_OPERATIONS" => Some(Self::CriticalDappOperations),
             _ => None,
         }
     }

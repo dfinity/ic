@@ -13,15 +13,13 @@ use ic_crypto_prng::{Csprng, RandomnessPurpose::ExecutionThread};
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_error_types::{ErrorCode, UserError};
 use ic_interfaces::execution_environment::{
-    ExecutionRoundSummary, ExecutionRoundType, RegistryExecutionSettings,
+    ChainKeyData, ExecutionRoundSummary, ExecutionRoundType, RegistryExecutionSettings,
 };
 use ic_interfaces::execution_environment::{
     IngressHistoryWriter, Scheduler, SubnetAvailableMemory,
 };
 use ic_logger::{debug, error, fatal, info, new_logger, warn, ReplicaLogger};
-use ic_management_canister_types_private::{
-    CanisterStatusType, MasterPublicKeyId, Method as Ic00Method,
-};
+use ic_management_canister_types_private::{CanisterStatusType, Method as Ic00Method};
 use ic_metrics::MetricsRegistry;
 use ic_replicated_state::{
     canister_state::{
@@ -35,8 +33,6 @@ use ic_replicated_state::{
 };
 use ic_system_api::InstructionLimits;
 use ic_types::{
-    consensus::idkg::PreSigId,
-    crypto::canister_threshold_sig::MasterPublicKey,
     ingress::{IngressState, IngressStatus},
     messages::{CanisterMessage, Ingress, MessageId, Response, NO_DEADLINE},
     CanisterId, ComputeAllocation, Cycles, ExecutionRound, MemoryAllocation, NumBytes,
@@ -234,7 +230,7 @@ impl SchedulerImpl {
 
             // Break when round limits are reached or found a canister
             // that has a long install code message in progress.
-            if round_limits.reached() || ongoing_long_install_code {
+            if round_limits.instructions_reached() || ongoing_long_install_code {
                 break;
             }
         }
@@ -246,11 +242,12 @@ impl SchedulerImpl {
         &self,
         mut state: ReplicatedState,
         csprng: &mut Csprng,
+        current_round: ExecutionRound,
         round_limits: &mut RoundLimits,
         measurement_scope: &MeasurementScope,
         registry_settings: &RegistryExecutionSettings,
         replica_version: &ReplicaVersion,
-        chain_key_subnet_public_keys: &BTreeMap<MasterPublicKeyId, MasterPublicKey>,
+        chain_key_data: &ChainKeyData,
     ) -> ReplicatedState {
         let ongoing_long_install_code =
             state
@@ -284,11 +281,12 @@ impl SchedulerImpl {
                     msg,
                     state,
                     csprng,
+                    current_round,
                     round_limits,
                     registry_settings,
                     replica_version,
                     measurement_scope,
-                    chain_key_subnet_public_keys,
+                    chain_key_data,
                 );
                 state = new_state;
 
@@ -302,7 +300,7 @@ impl SchedulerImpl {
                     break;
                 }
 
-                if round_limits.reached() {
+                if round_limits.instructions_reached() {
                     break;
                 }
             }
@@ -316,11 +314,12 @@ impl SchedulerImpl {
         msg: CanisterMessage,
         state: ReplicatedState,
         csprng: &mut Csprng,
+        current_round: ExecutionRound,
         round_limits: &mut RoundLimits,
         registry_settings: &RegistryExecutionSettings,
         replica_version: &ReplicaVersion,
         measurement_scope: &MeasurementScope,
-        chain_key_subnet_public_keys: &BTreeMap<MasterPublicKeyId, MasterPublicKey>,
+        chain_key_data: &ChainKeyData,
     ) -> (ReplicatedState, Option<NumInstructions>) {
         let instruction_limits = get_instructions_limits_for_subnet_message(
             self.deterministic_time_slicing,
@@ -334,9 +333,10 @@ impl SchedulerImpl {
             state,
             instruction_limits,
             csprng,
-            chain_key_subnet_public_keys,
+            chain_key_data,
             replica_version,
             registry_settings,
+            current_round,
             round_limits,
         );
         let round_instructions_executed =
@@ -417,7 +417,7 @@ impl SchedulerImpl {
         scheduler_round_limits: &mut SchedulerRoundLimits,
         registry_settings: &RegistryExecutionSettings,
         replica_version: &ReplicaVersion,
-        chain_key_subnet_public_keys: &BTreeMap<MasterPublicKeyId, MasterPublicKey>,
+        chain_key_data: &ChainKeyData,
     ) -> (ReplicatedState, BTreeSet<CanisterId>, BTreeSet<CanisterId>) {
         let measurement_scope =
             MeasurementScope::nested(&self.metrics.round_inner, root_measurement_scope);
@@ -450,15 +450,16 @@ impl SchedulerImpl {
 
                 // TODO(EXC-1517): Improve inner loop preparation.
                 let mut subnet_round_limits = scheduler_round_limits.subnet_round_limits();
-                if !subnet_round_limits.reached() {
+                if !subnet_round_limits.instructions_reached() {
                     state = self.drain_subnet_queues(
                         state,
                         csprng,
+                        current_round,
                         &mut subnet_round_limits,
                         &subnet_measurement_scope,
                         registry_settings,
                         replica_version,
-                        chain_key_subnet_public_keys,
+                        chain_key_data,
                     );
                     scheduler_round_limits.update_subnet_round_limits(&subnet_round_limits);
                 }
@@ -566,7 +567,7 @@ impl SchedulerImpl {
                     .inc();
             }
 
-            if round_limits.reached() {
+            if round_limits.instructions_reached() {
                 self.metrics
                     .inner_round_loop_consumed_max_instructions
                     .inc();
@@ -685,7 +686,7 @@ impl SchedulerImpl {
 
         // If there are no more instructions left, then skip execution and
         // return unchanged canisters.
-        if round_limits.reached() {
+        if round_limits.instructions_reached() {
             return (
                 canisters_by_thread.into_iter().flatten().collect(),
                 BTreeSet::new(),
@@ -977,7 +978,9 @@ impl SchedulerImpl {
     /// through message routing.
     pub fn induct_messages_on_same_subnet(&self, state: &mut ReplicatedState) {
         // Compute subnet available memory *before* taking out the canisters.
-        let mut subnet_available_memory = self.exec_env.subnet_available_message_memory(state);
+        let mut subnet_available_guaranteed_response_memory = self
+            .exec_env
+            .subnet_available_guaranteed_response_message_memory(state);
 
         // Get a list of canisters in the map before we iterate over the map.
         // This is because we cannot hold an immutable reference to the map
@@ -1008,7 +1011,7 @@ impl SchedulerImpl {
                 .queues()
                 .output_queues_message_count();
             source_canister.induct_messages_to_self(
-                &mut subnet_available_memory,
+                &mut subnet_available_guaranteed_response_memory,
                 state.metadata.own_subnet_type,
             );
             let messages_after_induction = source_canister
@@ -1029,7 +1032,7 @@ impl SchedulerImpl {
                         Some(dest_canister) => dest_canister
                             .push_input(
                                 (*msg).clone(),
-                                &mut subnet_available_memory,
+                                &mut subnet_available_guaranteed_response_memory,
                                 state.metadata.own_subnet_type,
                                 InputQueueType::LocalSubnet,
                             )
@@ -1215,8 +1218,7 @@ impl Scheduler for SchedulerImpl {
         &self,
         mut state: ReplicatedState,
         randomness: Randomness,
-        chain_key_subnet_public_keys: BTreeMap<MasterPublicKeyId, MasterPublicKey>,
-        idkg_pre_signature_ids: BTreeMap<MasterPublicKeyId, BTreeSet<PreSigId>>,
+        chain_key_data: ChainKeyData,
         replica_version: &ReplicaVersion,
         current_round: ExecutionRound,
         round_summary: Option<ExecutionRoundSummary>,
@@ -1378,11 +1380,12 @@ impl Scheduler for SchedulerImpl {
                     ),
                     state,
                     &mut csprng,
+                    current_round,
                     &mut subnet_round_limits,
                     registry_settings,
                     replica_version,
                     &measurement_scope,
-                    &chain_key_subnet_public_keys,
+                    &chain_key_data,
                 );
                 state = new_state;
             }
@@ -1437,11 +1440,12 @@ impl Scheduler for SchedulerImpl {
                     CanisterMessage::Request(raw_rand_context.request.into()),
                     state,
                     &mut csprng,
+                    current_round,
                     &mut subnet_round_limits,
                     registry_settings,
                     replica_version,
                     &measurement_scope,
-                    &chain_key_subnet_public_keys,
+                    &chain_key_data,
                 );
                 state = new_state;
             }
@@ -1500,7 +1504,7 @@ impl Scheduler for SchedulerImpl {
             &mut scheduler_round_limits,
             registry_settings,
             replica_version,
-            &chain_key_subnet_public_keys,
+            &chain_key_data,
         );
 
         // Update [`SignWithThresholdContext`]s by assigning randomness and matching pre-signatures.
@@ -1514,7 +1518,7 @@ impl Scheduler for SchedulerImpl {
 
             update_signature_request_contexts(
                 current_round,
-                idkg_pre_signature_ids,
+                chain_key_data.idkg_pre_signature_ids,
                 contexts,
                 &mut csprng,
                 registry_settings,
@@ -1785,7 +1789,9 @@ fn execute_canisters_on_thread(
     for (rank, mut canister) in canisters_to_execute.into_iter().enumerate() {
         // If no more instructions are left or if heap delta is already too
         // large, then skip execution of the canister and keep its old state.
-        if round_limits.reached() || total_heap_delta >= config.max_heap_delta_per_iteration {
+        if round_limits.instructions_reached()
+            || total_heap_delta >= config.max_heap_delta_per_iteration
+        {
             canisters.push(canister);
             continue;
         }
@@ -1804,7 +1810,7 @@ fn execute_canisters_on_thread(
                 NextExecution::StartNew | NextExecution::ContinueLong => {}
             }
 
-            if round_limits.reached() {
+            if round_limits.instructions_reached() {
                 canister
                     .system_state
                     .canister_metrics

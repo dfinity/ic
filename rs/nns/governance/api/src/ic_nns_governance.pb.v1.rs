@@ -1081,6 +1081,29 @@ pub mod manage_neuron {
     )]
     pub struct RefreshVotingPower {}
 
+    /// Disburse the maturity of a neuron to any ledger account. If an account
+    /// is not specified, the caller's account will be used. The caller can choose
+    /// a percentage of the current maturity to disburse to the ledger account. The
+    /// resulting amount to disburse must be greater than or equal to the
+    /// transaction fee.
+    #[derive(
+        candid::CandidType,
+        candid::Deserialize,
+        serde::Serialize,
+        comparable::Comparable,
+        Clone,
+        PartialEq,
+        ::prost::Message,
+    )]
+    pub struct DisburseMaturity {
+        /// The percentage to disburse, from 1 to 100
+        #[prost(uint32, tag = "1")]
+        pub percentage_to_disburse: u32,
+        /// The (optional) principal to which to transfer the stake.
+        #[prost(message, optional, tag = "2")]
+        pub to_account: ::core::option::Option<super::Account>,
+    }
+
     /// The ID of the neuron to manage. This can either be a subaccount or a neuron ID.
     #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
     #[allow(clippy::derive_partial_eq_without_eq)]
@@ -1124,6 +1147,8 @@ pub mod manage_neuron {
         StakeMaturity(StakeMaturity),
         #[prost(message, tag = "16")]
         RefreshVotingPower(RefreshVotingPower),
+        #[prost(message, tag = "17")]
+        DisburseMaturity(DisburseMaturity),
         // KEEP THIS IN SYNC WITH ManageNeuronCommandRequest!
     }
 }
@@ -1254,6 +1279,21 @@ pub mod manage_neuron_response {
     )]
     pub struct RefreshVotingPowerResponse {}
 
+    #[derive(
+        candid::CandidType,
+        candid::Deserialize,
+        serde::Serialize,
+        comparable::Comparable,
+        Clone,
+        Copy,
+        PartialEq,
+        ::prost::Message,
+    )]
+    pub struct DisburseMaturityResponse {
+        #[prost(uint64, optional, tag = "1")]
+        amount_disbursed_e8s: Option<u64>,
+    }
+
     #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
     #[allow(clippy::derive_partial_eq_without_eq)]
     #[derive(Clone, PartialEq, ::prost::Oneof)]
@@ -1286,6 +1326,8 @@ pub mod manage_neuron_response {
         StakeMaturity(StakeMaturityResponse),
         #[prost(message, tag = "14")]
         RefreshVotingPower(RefreshVotingPowerResponse),
+        #[prost(message, tag = "15")]
+        DisburseMaturity(DisburseMaturityResponse),
     }
 
     // Below, we should remove `manage_neuron_response::`, but that should be
@@ -1545,6 +1587,8 @@ pub enum ManageNeuronCommandRequest {
     StakeMaturity(manage_neuron::StakeMaturity),
     #[prost(message, tag = "16")]
     RefreshVotingPower(manage_neuron::RefreshVotingPower),
+    #[prost(message, tag = "17")]
+    DisburseMaturity(manage_neuron::DisburseMaturity),
     // KEEP THIS IN SYNC WITH manage_neuron::Command!
 }
 
@@ -4181,6 +4225,30 @@ pub mod restore_aging_summary {
         }
     }
 }
+
+/// A Ledger account identified by the owner of the account `of` and
+/// the `subaccount`. If the `subaccount` is not specified then the default
+/// one is used.
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    serde::Serialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct Account {
+    /// The owner of the account.
+    #[prost(message, optional, tag = "1")]
+    pub owner: ::core::option::Option<::ic_base_types::PrincipalId>,
+    /// The subaccount of the account. If not set then the default
+    /// subaccount (all bytes set to 0) is used.
+    #[prost(message, optional, tag = "2")]
+    #[serde(deserialize_with = "ic_utils::deserialize::deserialize_option_blob")]
+    pub subaccount: ::core::option::Option<Vec<u8>>,
+}
+
 /// Proposal types are organized into topics. Neurons can automatically
 /// vote based on following other neurons, and these follow
 /// relationships are defined per topic.

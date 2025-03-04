@@ -9,11 +9,11 @@ on the process that this file is part of, see
 
 ## Added
 
+* Collect metrics about timer tasks defined using ic_nervous_system_timer_task library.
+
 ## Changed
-
-* ManageNetworkEconomics proposals can now modify deep fields one at a time.
-  Previously, this was only possible for top level fields.
-
+* Voting Rewards will be scheduled by a timer instead of by heartbeats.
+* 
 ## Deprecated
 
 ## Removed

@@ -24,8 +24,8 @@ ic-canister-log = { path = "../../../rust_canisters/canister_log" }
 ic-canisters-http-types = { path = "../../../rust_canisters/http_types" }
 ic-cdk = { workspace = true }
 ic-cdk-macros = { workspace = true }
-ic-crypto-getrandom-for-wasm = { path = "../../../crypto/getrandom_for_wasm" }
 ic-crypto-sha2 = { path = "../../../crypto/sha2" }
+ic-dummy-getrandom-for-wasm = { path = "../../../../packages/ic-dummy-getrandom-for-wasm" }
 ic-icrc1 = { path = "../../../ledger_suite/icrc1" }
 ic-ledger-core = { path = "../../../ledger_suite/common/ledger_core" }
 ic-management-canister-types-private = { path = "../../../types/management_canister_types" }

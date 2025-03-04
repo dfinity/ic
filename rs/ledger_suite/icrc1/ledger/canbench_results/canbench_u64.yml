@@ -1,54 +1,54 @@
 benches:
   bench_icrc1_transfers:
     total:
-      instructions: 56837535933
-      heap_increase: 271
+      instructions: 65467206107
+      heap_increase: 263
       stable_memory_increase: 256
     scopes:
       icrc1_transfer:
-        instructions: 13071791984
-        heap_increase: 42
+        instructions: 15887391603
+        heap_increase: 34
         stable_memory_increase: 0
       icrc2_approve:
-        instructions: 19627513485
-        heap_increase: 29
+        instructions: 22551561638
+        heap_increase: 25
         stable_memory_increase: 128
       icrc2_transfer_from:
-        instructions: 23404082941
-        heap_increase: 18
+        instructions: 26286355650
+        heap_increase: 3
         stable_memory_increase: 0
       icrc3_get_blocks:
-        instructions: 7540214
+        instructions: 8189132
         heap_increase: 0
         stable_memory_increase: 0
       post_upgrade:
-        instructions: 353134588
-        heap_increase: 53
+        instructions: 352257721
+        heap_increase: 72
         stable_memory_increase: 0
       pre_upgrade:
-        instructions: 149315334
+        instructions: 149186270
         heap_increase: 129
         stable_memory_increase: 128
       upgrade:
-        instructions: 502451986
-        heap_increase: 182
+        instructions: 501446055
+        heap_increase: 201
         stable_memory_increase: 128
   bench_upgrade_baseline:
     total:
-      instructions: 8683414
+      instructions: 8683207
       heap_increase: 258
       stable_memory_increase: 128
     scopes:
       post_upgrade:
-        instructions: 8604304
+        instructions: 8604229
         heap_increase: 129
         stable_memory_increase: 0
       pre_upgrade:
-        instructions: 76703
+        instructions: 76586
         heap_increase: 129
         stable_memory_increase: 128
       upgrade:
-        instructions: 8682725
+        instructions: 8682518
         heap_increase: 258
         stable_memory_increase: 128
-version: 0.1.8
+version: 0.1.9
