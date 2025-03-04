@@ -696,7 +696,7 @@ pub struct AdvanceSnsTargetVersion {
     PartialEq,
     ::prost::Message,
 )]
-pub struct SetCustomProposalTopics {
+pub struct SetTopicsForCustomProposals {
     #[prost(btree_map = "uint64, enumeration(Topic)", tag = "1")]
     pub custom_function_id_to_topic: ::prost::alloc::collections::BTreeMap<u64, i32>,
 }
@@ -838,11 +838,11 @@ pub mod proposal {
         /// Id = 15.
         #[prost(message, tag = "19")]
         AdvanceSnsTargetVersion(super::AdvanceSnsTargetVersion),
-        /// SetCustomProposalTopics
+        /// Change the mapping from custom proposal types to topics.
         ///
         /// Id = 16;
         #[prost(message, tag = "20")]
-        SetCustomProposalTopics(super::SetCustomProposalTopics),
+        SetTopicsForCustomProposals(super::SetTopicsForCustomProposals),
     }
 }
 #[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]
@@ -1076,7 +1076,7 @@ pub struct ProposalData {
     /// Id 13 - ManageLedgerParameters proposals.
     /// Id 14 - ManageDappCanisterSettings proposals.
     /// Id 15 - AdvanceSnsTargetVersion proposals.
-    /// Id 16 - SetCustomProposalTopics proposals.
+    /// Id 16 - SetTopicsForCustomProposals proposals.
     #[prost(uint64, tag = "1")]
     pub action: u64,
     /// This is stored here temporarily. It is also stored on the map

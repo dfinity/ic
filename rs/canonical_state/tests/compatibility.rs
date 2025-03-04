@@ -149,71 +149,104 @@ lazy_static! {
     ];
 }
 
-proptest! {
-    /// Tests that given a `StreamHeader` that is valid for a given certification
-    /// version range (e.g. no `reject_signals` before certification version 8) all
-    /// supported canonical type (e.g. `StreamHeaderV6` or `StreamHeader`) and
-    /// certification version combinations produce the exact same encoding.
-    #[test]
-    fn stream_header_unique_encoding((header, version_range) in arb_valid_versioned_stream_header(100)) {
-        let mut results = vec![];
-        for version in iter(version_range) {
-            let results_before = results.len();
-            for encoding in &*STREAM_HEADER_ENCODINGS {
-                if encoding.version_range.contains(&version) {
-                    let bytes = (encoding.encode)((&header, version))
-                        .unwrap_or_else(|_| panic!("Failed to encode {}@{:?}", encoding.name, version));
-                    results.push((version, encoding.name, bytes));
-                }
-            }
-            assert!(results.len() > results_before, "No supported encodings for certification version {:?}", version);
-        }
+/// Tests that given a `StreamHeader` that is valid for a given certification
+/// version range (e.g. no `reject_signals` before certification version 8) all
+/// supported canonical type (e.g. `StreamHeaderV6` or `StreamHeader`) and
+/// certification version combinations produce the exact same encoding.
+#[test_strategy::proptest]
+fn stream_header_unique_encoding(
+    #[strategy(arb_valid_versioned_stream_header(
+        100, // max_signal_count
+    ))]
+    test_header: (StreamHeader, RangeInclusive<CertificationVersion>),
+) {
+    let (header, version_range) = test_header;
 
-        if results.len() > 1 {
-            let (current_version, current_name, current_bytes) = results.pop().unwrap();
-            for (version, name, bytes) in &results {
-                assert_eq!(&current_bytes, bytes, "Different encodings: {}@{:?} and {}@{:?}", current_name, current_version, name, version);
+    let mut results = vec![];
+    for version in iter(version_range) {
+        let results_before = results.len();
+        for encoding in &*STREAM_HEADER_ENCODINGS {
+            if encoding.version_range.contains(&version) {
+                let bytes = (encoding.encode)((&header, version))
+                    .unwrap_or_else(|_| panic!("Failed to encode {}@{:?}", encoding.name, version));
+                results.push((version, encoding.name, bytes));
+            }
+        }
+        assert!(
+            results.len() > results_before,
+            "No supported encodings for certification version {:?}",
+            version
+        );
+    }
+
+    if results.len() > 1 {
+        let (current_version, current_name, current_bytes) = results.pop().unwrap();
+        for (version, name, bytes) in &results {
+            assert_eq!(
+                &current_bytes, bytes,
+                "Different encodings: {}@{:?} and {}@{:?}",
+                current_name, current_version, name, version
+            );
+        }
+    }
+}
+
+/// Tests that, given a `StreamHeader` that is valid for a given certification
+/// version range (e.g. no `reject_signals` before certification version 8),
+/// all supported encodings will decode back into the same `StreamHeader`.
+#[test_strategy::proptest]
+fn stream_header_roundtrip_encoding(
+    #[strategy(arb_valid_versioned_stream_header(
+        100, // max_signal_count
+    ))]
+    test_header: (StreamHeader, RangeInclusive<CertificationVersion>),
+) {
+    let (header, version_range) = test_header;
+
+    for version in iter(version_range) {
+        for encoding in &*STREAM_HEADER_ENCODINGS {
+            if encoding.version_range.contains(&version) {
+                let bytes = (encoding.encode)((&header, version))
+                    .unwrap_or_else(|_| panic!("Failed to encode {}@{:?}", encoding.name, version));
+                let result = (encoding.decode)(&bytes)
+                    .unwrap_or_else(|_| panic!("Failed to decode {}@{:?}", encoding.name, version));
+
+                assert_eq!(
+                    header, result,
+                    "Roundtrip encoding {}@{:?} failed",
+                    encoding.name, version
+                );
             }
         }
     }
+}
 
-    /// Tests that, given a `StreamHeader` that is valid for a given certification
-    /// version range (e.g. no `reject_signals` before certification version 8),
-    /// all supported encodings will decode back into the same `StreamHeader`.
-    #[test]
-    fn stream_header_roundtrip_encoding((header, version_range) in arb_valid_versioned_stream_header(100)) {
-        for version in iter(version_range) {
-            for encoding in &*STREAM_HEADER_ENCODINGS {
-                if encoding.version_range.contains(&version) {
-                    let bytes = (encoding.encode)((&header, version))
-                        .unwrap_or_else(|_| panic!("Failed to encode {}@{:?}", encoding.name, version));
-                    let result = (encoding.decode)(&bytes)
-                        .unwrap_or_else(|_| panic!("Failed to decode {}@{:?}", encoding.name, version));
+/// Tests that, given a `StreamHeader` that is invalid for a given certification
+/// version range (e.g. `reject_signals` before certification version 8),
+/// encoding will panic.
+///
+/// Be aware that the output generated by this test failing includes all panics
+/// (e.g. stack traces), including those produced by previous iterations where
+/// panics were caught by `std::panic::catch_unwind`.
+#[test_strategy::proptest]
+fn stream_header_encoding_panic_on_invalid(
+    #[strategy(arb_invalid_versioned_stream_header(
+        100, // max_signal_count
+    ))]
+    test_header: (StreamHeader, RangeInclusive<CertificationVersion>),
+) {
+    let (header, version_range) = test_header;
+    for version in iter(version_range) {
+        for encoding in &*STREAM_HEADER_ENCODINGS {
+            if encoding.version_range.contains(&version) {
+                let result = std::panic::catch_unwind(|| (encoding.encode)((&header, version)));
 
-                    assert_eq!(header, result, "Roundtrip encoding {}@{:?} failed", encoding.name, version);
-                }
-            }
-        }
-    }
-
-    /// Tests that, given a `StreamHeader` that is invalid for a given certification
-    /// version range (e.g. `reject_signals` before certification version 8),
-    /// encoding will panic.
-    ///
-    /// Be aware that the output generated by this test failing includes all panics
-    /// (e.g. stack traces), including those produced by previous iterations where
-    /// panics were caught by `std::panic::catch_unwind`.
-    #[test]
-    fn stream_header_encoding_panic_on_invalid((header, version_range) in arb_invalid_versioned_stream_header(100)) {
-        for version in iter(version_range) {
-            for encoding in &*STREAM_HEADER_ENCODINGS {
-                if encoding.version_range.contains(&version) {
-                    let result = std::panic::catch_unwind(|| {
-                        (encoding.encode)((&header, version))
-                    });
-
-                    assert!(result.is_err(), "Encoding of invalid {}@{:?} succeeded", encoding.name, version);
-                }
+                assert!(
+                    result.is_err(),
+                    "Encoding of invalid {}@{:?} succeeded",
+                    encoding.name,
+                    version
+                );
             }
         }
     }
@@ -256,49 +289,73 @@ lazy_static! {
     ];
 }
 
-proptest! {
-    /// Tests that given a `RequestOrResponse` that is valid for a given certification
-    /// version range (e.g. no `reject_signals` before certification version 8) all
-    /// supported canonical type (e.g. `RequestOrResponseV3` or `RequestOrResponse`)
-    /// and certification version combinations produce the exact same encoding.
-    #[test]
-    fn message_unique_encoding((message, version_range) in arb_valid_versioned_message()) {
-        let mut results = vec![];
-        for version in iter(version_range) {
-            let results_before = results.len();
-            for encoding in &*MESSAGE_ENCODINGS {
-                if encoding.version_range.contains(&version) {
-                    let bytes = (encoding.encode)((&message, version))
-                        .unwrap_or_else(|_| panic!("Failed to encode {}@{:?}", encoding.name, version));
-                    results.push((version, encoding.name, bytes));
-                }
-            }
-            assert!(results.len() > results_before, "No supported encodings for certification version {:?}", version);
-        }
+/// Tests that given a `RequestOrResponse` that is valid for a given certification
+/// version range (e.g. no `reject_signals` before certification version 8) all
+/// supported canonical type (e.g. `RequestOrResponseV3` or `RequestOrResponse`)
+/// and certification version combinations produce the exact same encoding.
+#[test_strategy::proptest]
+fn message_unique_encoding(
+    #[strategy(arb_valid_versioned_message())] test_message: (
+        RequestOrResponse,
+        RangeInclusive<CertificationVersion>,
+    ),
+) {
+    let (message, version_range) = test_message;
 
-        if results.len() > 1 {
-            let (current_version, current_name, current_bytes) = results.pop().unwrap();
-            for (version, name, bytes) in &results {
-                assert_eq!(&current_bytes, bytes, "Different encodings: {}@{:?} and {}@{:?}", current_name, current_version, name, version);
+    let mut results = vec![];
+    for version in iter(version_range) {
+        let results_before = results.len();
+        for encoding in &*MESSAGE_ENCODINGS {
+            if encoding.version_range.contains(&version) {
+                let bytes = (encoding.encode)((&message, version))
+                    .unwrap_or_else(|_| panic!("Failed to encode {}@{:?}", encoding.name, version));
+                results.push((version, encoding.name, bytes));
             }
         }
+        assert!(
+            results.len() > results_before,
+            "No supported encodings for certification version {:?}",
+            version
+        );
     }
 
-    /// Tests that, given a `RequestOrResponse` that is valid for a given
-    /// certification version range, all supported encodings will decode back into
-    /// the same `RequestOrResponse`.
-    #[test]
-    fn message_roundtrip_encoding((message, version_range) in arb_valid_versioned_message()) {
-        for version in iter(version_range) {
-            for encoding in &*MESSAGE_ENCODINGS {
-                if encoding.version_range.contains(&version) {
-                    let bytes = (encoding.encode)((&message, version))
-                        .unwrap_or_else(|_| panic!("Failed to encode {}@{:?}", encoding.name, version));
-                    let result = (encoding.decode)(&bytes)
-                        .unwrap_or_else(|_| panic!("Failed to decode {}@{:?}", encoding.name, version));
+    if results.len() > 1 {
+        let (current_version, current_name, current_bytes) = results.pop().unwrap();
+        for (version, name, bytes) in &results {
+            assert_eq!(
+                &current_bytes, bytes,
+                "Different encodings: {}@{:?} and {}@{:?}",
+                current_name, current_version, name, version
+            );
+        }
+    }
+}
 
-                    assert_eq!(message, result, "Roundtrip encoding {}@{:?} failed", encoding.name, version);
-                }
+/// Tests that, given a `RequestOrResponse` that is valid for a given
+/// certification version range, all supported encodings will decode back into
+/// the same `RequestOrResponse`.
+#[test_strategy::proptest]
+fn message_roundtrip_encoding(
+    #[strategy(arb_valid_versioned_message())] test_message: (
+        RequestOrResponse,
+        RangeInclusive<CertificationVersion>,
+    ),
+) {
+    let (message, version_range) = test_message;
+
+    for version in iter(version_range) {
+        for encoding in &*MESSAGE_ENCODINGS {
+            if encoding.version_range.contains(&version) {
+                let bytes = (encoding.encode)((&message, version))
+                    .unwrap_or_else(|_| panic!("Failed to encode {}@{:?}", encoding.name, version));
+                let result = (encoding.decode)(&bytes)
+                    .unwrap_or_else(|_| panic!("Failed to decode {}@{:?}", encoding.name, version));
+
+                assert_eq!(
+                    message, result,
+                    "Roundtrip encoding {}@{:?} failed",
+                    encoding.name, version
+                );
             }
         }
     }
@@ -350,31 +407,44 @@ pub(crate) fn arb_valid_system_metadata(
     ]
 }
 
-proptest! {
-    /// Tests that given a `SystemMetadata` that is valid for a given certification
-    /// version range, all supported canonical type (e.g. `SystemMetadataV9` or
-    /// `SystemMetadataV10`) and certification version combinations produce the
-    /// exact same encoding.
-    #[test]
-    fn system_metadata_unique_encoding((metadata, version_range) in arb_valid_system_metadata()) {
-        let mut results = vec![];
-        for version in iter(version_range) {
-            let results_before = results.len();
-            for encoding in &*SYSTEM_METADATA_ENCODINGS {
-                if encoding.version_range.contains(&version) {
-                    let bytes = (encoding.encode)((&metadata, version))
-                        .unwrap_or_else(|_| panic!("Failed to encode {}@{:?}", encoding.name, version));
-                    results.push((version, encoding.name, bytes));
-                }
-            }
-            assert!(results.len() > results_before, "No supported encodings for certification version {:?}", version);
-        }
+/// Tests that given a `SystemMetadata` that is valid for a given certification
+/// version range, all supported canonical type (e.g. `SystemMetadataV9` or
+/// `SystemMetadataV10`) and certification version combinations produce the
+/// exact same encoding.
+#[test_strategy::proptest]
+fn system_metadata_unique_encoding(
+    #[strategy(arb_valid_system_metadata())] test_metadata: (
+        SystemMetadata,
+        RangeInclusive<CertificationVersion>,
+    ),
+) {
+    let (metadata, version_range) = test_metadata;
 
-        if results.len() > 1 {
-            let (current_version, current_name, current_bytes) = results.pop().unwrap();
-            for (version, name, bytes) in &results {
-                assert_eq!(&current_bytes, bytes, "Different encodings: {}@{:?} and {}@{:?}", current_name, current_version, name, version);
+    let mut results = vec![];
+    for version in iter(version_range) {
+        let results_before = results.len();
+        for encoding in &*SYSTEM_METADATA_ENCODINGS {
+            if encoding.version_range.contains(&version) {
+                let bytes = (encoding.encode)((&metadata, version))
+                    .unwrap_or_else(|_| panic!("Failed to encode {}@{:?}", encoding.name, version));
+                results.push((version, encoding.name, bytes));
             }
+        }
+        assert!(
+            results.len() > results_before,
+            "No supported encodings for certification version {:?}",
+            version
+        );
+    }
+
+    if results.len() > 1 {
+        let (current_version, current_name, current_bytes) = results.pop().unwrap();
+        for (version, name, bytes) in &results {
+            assert_eq!(
+                &current_bytes, bytes,
+                "Different encodings: {}@{:?} and {}@{:?}",
+                current_name, current_version, name, version
+            );
         }
     }
 }
@@ -402,30 +472,43 @@ pub(crate) fn arb_valid_subnet_metrics(
     )]
 }
 
-proptest! {
-    /// Tests that given a `SubnetMetrics` that is valid for a given certification
-    /// version range, all supported canonical type and certification version
-    /// combinations produce the exact same encoding.
-    #[test]
-    fn subnet_metrics_unique_encoding((subnet_metrics, version_range) in arb_valid_subnet_metrics()) {
-        let mut results = vec![];
-        for version in iter(version_range) {
-            let results_before = results.len();
-            for encoding in &*SUBNET_METRICS_ENCODINGS {
-                if encoding.version_range.contains(&version) {
-                    let bytes = (encoding.encode)((&subnet_metrics, version))
-                        .unwrap_or_else(|_| panic!("Failed to encode {}@{:?}", encoding.name, version));
-                    results.push((version, encoding.name, bytes));
-                }
-            }
-            assert!(results.len() > results_before, "No supported encodings for certification version {:?}", version);
-        }
+/// Tests that given a `SubnetMetrics` that is valid for a given certification
+/// version range, all supported canonical type and certification version
+/// combinations produce the exact same encoding.
+#[test_strategy::proptest]
+fn subnet_metrics_unique_encoding(
+    #[strategy(arb_valid_subnet_metrics())] test_subnet_metrics: (
+        SubnetMetrics,
+        RangeInclusive<CertificationVersion>,
+    ),
+) {
+    let (subnet_metrics, version_range) = test_subnet_metrics;
 
-        if results.len() > 1 {
-            let (current_version, current_name, current_bytes) = results.pop().unwrap();
-            for (version, name, bytes) in &results {
-                assert_eq!(&current_bytes, bytes, "Different encodings: {}@{:?} and {}@{:?}", current_name, current_version, name, version);
+    let mut results = vec![];
+    for version in iter(version_range) {
+        let results_before = results.len();
+        for encoding in &*SUBNET_METRICS_ENCODINGS {
+            if encoding.version_range.contains(&version) {
+                let bytes = (encoding.encode)((&subnet_metrics, version))
+                    .unwrap_or_else(|_| panic!("Failed to encode {}@{:?}", encoding.name, version));
+                results.push((version, encoding.name, bytes));
             }
+        }
+        assert!(
+            results.len() > results_before,
+            "No supported encodings for certification version {:?}",
+            version
+        );
+    }
+
+    if results.len() > 1 {
+        let (current_version, current_name, current_bytes) = results.pop().unwrap();
+        for (version, name, bytes) in &results {
+            assert_eq!(
+                &current_bytes, bytes,
+                "Different encodings: {}@{:?} and {}@{:?}",
+                current_name, current_version, name, version
+            );
         }
     }
 }

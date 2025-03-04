@@ -476,7 +476,7 @@ pub struct AdvanceSnsTargetVersion {
 #[derive(
     candid::CandidType, candid::Deserialize, comparable::Comparable, Clone, Debug, PartialEq,
 )]
-pub struct SetCustomProposalTopics {
+pub struct SetTopicsForCustomProposals {
     pub custom_function_id_to_topic: BTreeMap<u64, topics::Topic>,
 }
 /// A proposal is the immutable input of a proposal submission.
@@ -590,10 +590,10 @@ pub mod proposal {
         ///
         /// Id = 15.
         AdvanceSnsTargetVersion(super::AdvanceSnsTargetVersion),
-        /// SetCustomProposalTopics
+        /// Set mapping from custom proposal types to topics.
         ///
         /// Id = 16;
-        SetCustomProposalTopics(super::SetCustomProposalTopics),
+        SetTopicsForCustomProposals(super::SetTopicsForCustomProposals),
     }
 }
 #[derive(Default, candid::CandidType, candid::Deserialize, Debug, Clone, PartialEq)]
@@ -795,7 +795,7 @@ pub struct ProposalData {
     /// Id 13 - ManageLedgerParameters proposals.
     /// Id 14 - ManageDappCanisterSettings proposals.
     /// Id 15 - AdvanceSnsTargetVersion proposals.
-    /// Id 16 - SetCustomProposalTopics proposals.
+    /// Id 16 - SetTopicsForCustomProposals proposals.
     pub action: u64,
     /// This is stored here temporarily. It is also stored on the map
     /// that contains proposals.

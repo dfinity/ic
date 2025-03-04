@@ -9,6 +9,8 @@ members = [
     "packages/ic-dummy-getrandom-for-wasm",
     "packages/ic-ed25519",
     "packages/ic-ethereum-types",
+    "packages/ic-error-types",
+    "packages/ic-hpke",
     "packages/ic-metrics-assert",
     "packages/ic-secp256k1",
     "packages/ic-sha3",
@@ -38,8 +40,10 @@ members = [
     "rs/boundary_node/rate_limits",
     "rs/boundary_node/rate_limits/api",
     "rs/boundary_node/rate_limits/canister_client",
+    "rs/boundary_node/rate_limits/integration_tests",
     "rs/boundary_node/salt_sharing",
     "rs/boundary_node/salt_sharing/api",
+    "rs/boundary_node/salt_sharing/integration_tests",
     "rs/boundary_node/systemd_journal_gatewayd_shim",
     "rs/canister_client",
     "rs/canister_client/read_state_response_parser",
@@ -200,6 +204,7 @@ members = [
     "rs/nervous_system/string",
     "rs/nervous_system/temporary",
     "rs/nervous_system/time_helpers",
+    "rs/nervous_system/timers",
     "rs/nervous_system/tools/release-runscript",
     "rs/nervous_system/tools/sync-with-released-nervous-system-wasms",
     "rs/nns/constants",
@@ -421,7 +426,6 @@ members = [
     "rs/types/types_test_utils",
     "rs/types/base_types",
     "rs/types/base_types/protobuf_generator",
-    "rs/types/error_types",
     "rs/types/management_canister_types",
     "rs/types/wasm_types",
     "rs/universal_canister/lib",
@@ -571,7 +575,7 @@ ic-certificate-verification = "3"
 ic-certification = "3"
 ic-http-certification = "3"
 ic-http-gateway = "0.1"
-ic-management-canister-types = "0.2.0"
+ic-management-canister-types = "0.2.1"
 ic-response-verification = "3"
 ic-sha3 = "1.0.0"
 ic-stable-structures = "0.6.5"
@@ -698,6 +702,7 @@ slog = { version = "2.7.0", features = [
 slog-async = { version = "2.8.0", features = ["nested-values"] }
 slog-scope = "4.4.0"
 slog-term = "2.9.1"
+slotmap = "1.0.7"
 socket2 = { version = "0.5.7", features = ["all"] }
 ssh2 = "0.9.4"
 static_assertions = "1.1.0"

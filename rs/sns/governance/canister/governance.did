@@ -6,7 +6,7 @@ type Account = record {
 type Action = variant {
   ManageNervousSystemParameters : NervousSystemParameters;
   AddGenericNervousSystemFunction : NervousSystemFunction;
-  SetCustomProposalTopics : SetCustomProposalTopics;
+  SetTopicsForCustomProposals : SetTopicsForCustomProposals;
   ManageDappCanisterSettings : ManageDappCanisterSettings;
   RemoveGenericNervousSystemFunction : nat64;
   UpgradeSnsToNextVersion : record {};
@@ -395,7 +395,7 @@ type AdvanceSnsTargetVersion = record {
   new_target : opt SnsVersion;
 };
 
-type SetCustomProposalTopics = record {
+type SetTopicsForCustomProposals = record {
   custom_function_id_to_topic : vec record { nat64; Topic };
 };
 

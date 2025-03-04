@@ -53,14 +53,14 @@ use crate::{
             MintTokensRequest, MintTokensResponse, NervousSystemFunction, NervousSystemParameters,
             Neuron, NeuronId, NeuronPermission, NeuronPermissionList, NeuronPermissionType,
             Proposal, ProposalData, ProposalDecisionStatus, ProposalId, ProposalRewardStatus,
-            RegisterDappCanisters, RewardEvent, SetCustomProposalTopics, Tally,
+            RegisterDappCanisters, RewardEvent, SetTopicsForCustomProposals, Tally,
             TransferSnsTreasuryFunds, UpgradeSnsControlledCanister, Vote, WaitForQuietState,
         },
     },
     proposal::{
         get_action_auxiliary,
         transfer_sns_treasury_funds_amount_is_small_enough_at_execution_time_or_err,
-        validate_and_render_proposal, validate_and_render_set_custom_proposal_topics,
+        validate_and_render_proposal, validate_and_render_set_topics_for_custom_proposals,
         ValidGenericNervousSystemFunction, MAX_LIST_PROPOSAL_RESULTS,
         MAX_NUMBER_OF_PROPOSALS_WITH_BALLOTS,
     },
@@ -2142,8 +2142,8 @@ impl Governance {
                     })
                     .and_then(|new_target| self.perform_advance_target_version(new_target))
             }
-            Action::SetCustomProposalTopics(set_custom_proposal_topics) => {
-                self.perform_set_custom_proposal_topics(set_custom_proposal_topics)
+            Action::SetTopicsForCustomProposals(set_topics_for_custom_proposals) => {
+                self.perform_set_topics_for_custom_proposals(set_topics_for_custom_proposals)
             }
             // This should not be possible, because Proposal validation is performed when
             // a proposal is first made.
@@ -3127,14 +3127,14 @@ impl Governance {
     }
 
     // Make a change to the mapping from custom proposal types to topics.
-    fn perform_set_custom_proposal_topics(
+    fn perform_set_topics_for_custom_proposals(
         &mut self,
-        set_custom_proposal_topics: SetCustomProposalTopics,
+        set_topics_for_custom_proposals: SetTopicsForCustomProposals,
     ) -> Result<(), GovernanceError> {
         // This proposal had already been validated at submission time, but the state may have
         // change since then, which is why it is being validated again.
-        if let Err(message) = validate_and_render_set_custom_proposal_topics(
-            &set_custom_proposal_topics,
+        if let Err(message) = validate_and_render_set_topics_for_custom_proposals(
+            &set_topics_for_custom_proposals,
             &self.proto.custom_functions_to_topics(),
         ) {
             return Err(GovernanceError::new_with_message(
@@ -3143,11 +3143,11 @@ impl Governance {
             ));
         }
 
-        let SetCustomProposalTopics {
+        let SetTopicsForCustomProposals {
             custom_function_id_to_topic,
-        } = set_custom_proposal_topics;
+        } = set_topics_for_custom_proposals;
 
-        for (custom_function_id, new_topic) in custom_function_id_to_topic.into_iter() {
+        for (custom_function_id, new_topic) in custom_function_id_to_topic {
             let nervous_system_function = self
                 .proto
                 .id_to_nervous_system_functions
@@ -3155,10 +3155,17 @@ impl Governance {
 
             if let Some(nervous_system_function) = nervous_system_function {
                 let proposal_type = nervous_system_function.function_type.as_mut();
+
                 if let Some(FunctionType::GenericNervousSystemFunction(custom_proposal_type)) =
                     proposal_type
                 {
                     custom_proposal_type.topic = Some(new_topic);
+                } else {
+                    log!(
+                        ERROR,
+                        "Unexpected situation: Cannot change the topic of a native proposal type: \
+                        {proposal_type:?}",
+                    )
                 }
             }
         }

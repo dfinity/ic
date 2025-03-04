@@ -4,9 +4,10 @@ use crate::management_canister::requests::{
 use crate::Request;
 use crate::{CallCanisters, CanisterInfo};
 use candid::Principal;
+use ic_management_canister_types::{CanisterStatusResult, DefiniteCanisterSettings};
 use pocket_ic::common::rest::RawEffectivePrincipal;
-use pocket_ic::management_canister::DefiniteCanisterSettings;
-use pocket_ic::{management_canister::CanisterStatusResult, nonblocking::PocketIc};
+use pocket_ic::nonblocking::PocketIc;
+
 use thiserror::Error;
 
 /// A wrapper around PocketIc that specifies a sender for the requests.
