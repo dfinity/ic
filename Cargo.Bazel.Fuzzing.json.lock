@@ -1,5 +1,5 @@
 {
-  "checksum": "6e56d15113d0514effecb38c75341abadec87f1a36b329d4c79de9c77e1d8fab",
+  "checksum": "f1176bb09b59f797e3987a34dd81b4a05cbfbe9f106063b2a90444b6fc90546c",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -30536,6 +30536,72 @@
         },
         "edition": "2015",
         "version": "0.3.1"
+      },
+      "license": "MIT",
+      "license_ids": [
+        "MIT"
+      ],
+      "license_file": "LICENSE"
+    },
+    "hostname 0.4.0": {
+      "name": "hostname",
+      "version": "0.4.0",
+      "package_url": "https://github.com/svartalf/hostname",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/hostname/0.4.0/download",
+          "sha256": "f9c7c7c8ac16c798734b8a24560c1362120597c40d5e1459f09498f8f6c8f2ba"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "hostname",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "hostname",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "default"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "cfg-if 1.0.0",
+              "target": "cfg_if"
+            }
+          ],
+          "selects": {
+            "cfg(any(unix, target_os = \"redox\"))": [
+              {
+                "id": "libc 0.2.158",
+                "target": "libc"
+              }
+            ],
+            "cfg(target_os = \"windows\")": [
+              {
+                "id": "windows 0.52.0",
+                "target": "windows"
+              }
+            ]
+          }
+        },
+        "edition": "2021",
+        "version": "0.4.0"
       },
       "license": "MIT",
       "license_ids": [
