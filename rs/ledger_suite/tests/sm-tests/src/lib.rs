@@ -5139,7 +5139,7 @@ pub mod archiving {
             const MAX_TICKS: usize = 500;
             let mut ticks = 0;
             let mut transfer_status = message_status(&env, &transfer_message_id);
-            while transfer_status == None {
+            while transfer_status.is_none() {
                 env.tick();
                 ticks += 1;
                 assert!(ticks < MAX_TICKS);
@@ -5267,7 +5267,7 @@ pub mod archiving {
         // Tick until the transfer completes, meaning the archiving also completes.
         const MAX_TICKS: usize = 500;
         let mut ticks = 0;
-        while transfer_status == None {
+        while transfer_status.is_none() {
             env.tick();
             ticks += 1;
             assert!(ticks < MAX_TICKS);
@@ -5314,7 +5314,7 @@ pub mod archiving {
         let Some(first_block_from_ledger) = icrc3_get_blocks_result.blocks.first() else {
             return false;
         };
-        if first_block_from_ledger.id != Nat::from(block_id) {
+        if first_block_from_ledger.id != block_id {
             return false;
         }
         let Some(archived_blocks) = icrc3_get_blocks_result.archived_blocks.first() else {
@@ -5323,7 +5323,7 @@ pub mod archiving {
         let Some(archived_args) = archived_blocks.args.first() else {
             return false;
         };
-        archived_args.start == block_id && archived_args.length == Nat::from(1u64)
+        archived_args.start == block_id && archived_args.length == 1u64
     }
 
     fn verify_block_in_ledger_and_archive(
@@ -5348,7 +5348,7 @@ pub mod archiving {
         assert_eq!(archived_args.start, Nat::from(block_id));
         assert_eq!(archived_args.length, Nat::from(1u64));
         let archive_blocks_res = icrc3_get_blocks(
-            &env,
+            env,
             CanisterId::try_from(PrincipalId::from(archived_blocks.callback.canister_id)).unwrap(),
             0,
             1,
