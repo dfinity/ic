@@ -24,9 +24,9 @@ system_test_nns(
         "//rs/tests/driver:ic-system-test-driver",
         "//rs/types/management_canister_types",
         "//rs/types/types",
+        "//packages/ic-vetkd-utils",
         "@crate_index//:anyhow",
         "@crate_index//:ic-agent",
-        "@crate_index//:ic_bls12_381",
         "@crate_index//:slog",
     ],
 )

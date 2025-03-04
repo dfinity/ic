@@ -37,7 +37,10 @@ pub fn get_vetkey_public_keys(
         .collect::<BTreeMap<_, _>>();
     for (tag, transcript) in summary.current_transcripts().iter() {
         if !transcripts.contains_key(tag) {
-            warn!(logger, "Reusing current transcript for tag {:?}", tag);
+            warn!(
+                logger,
+                "VetKD: Reusing current transcript for tag {:?}", tag
+            );
             transcripts.insert(tag, transcript);
         }
     }
