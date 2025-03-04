@@ -15,7 +15,7 @@ use ic_icrc1::blocks::encoded_block_to_generic_block;
 use ic_icrc1::{Block, LedgerAllowances, LedgerBalances, Transaction};
 pub use ic_ledger_canister_core::archive::ArchiveOptions;
 use ic_ledger_canister_core::runtime::{CdkRuntime, Runtime};
-use ic_ledger_canister_core::{archive::Archive, blockchain::BlockData};
+use ic_ledger_canister_core::{archive::Archive, blockchain::BlockDataContainer};
 use ic_ledger_canister_core::{
     archive::ArchiveCanisterWasm,
     blockchain::Blockchain,
@@ -53,7 +53,7 @@ use serde_bytes::ByteBuf;
 use std::borrow::Cow;
 use std::cell::RefCell;
 use std::collections::{BTreeMap, VecDeque};
-use std::ops::{DerefMut, Range};
+use std::ops::DerefMut;
 use std::time::Duration;
 
 const TRANSACTION_WINDOW: Duration = Duration::from_secs(24 * 60 * 60);
@@ -561,7 +561,7 @@ pub struct Ledger {
     approvals: LedgerAllowances<Tokens>,
     #[serde(default)]
     stable_approvals: AllowanceTable<StableAllowancesData>,
-    blockchain: Blockchain<CdkRuntime, Icrc1ArchiveWasm, StableBlockData>,
+    blockchain: Blockchain<CdkRuntime, Icrc1ArchiveWasm, StableBlockDataContainer>,
 
     minting_account: Account,
     fee_collector: Option<FeeCollector<Account>>,
@@ -793,7 +793,7 @@ impl LedgerData for Ledger {
     type ArchiveWasm = Icrc1ArchiveWasm;
     type Transaction = Transaction<Tokens>;
     type Block = Block<Tokens>;
-    type BlockData = StableBlockData;
+    type BlockDataContainer = StableBlockDataContainer;
 
     fn transaction_window(&self) -> Duration {
         TRANSACTION_WINDOW
@@ -815,13 +815,15 @@ impl LedgerData for Ledger {
         &self.token_symbol
     }
 
-    fn blockchain(&self) -> &Blockchain<Self::Runtime, Self::ArchiveWasm, Self::BlockData> {
+    fn blockchain(
+        &self,
+    ) -> &Blockchain<Self::Runtime, Self::ArchiveWasm, Self::BlockDataContainer> {
         &self.blockchain
     }
 
     fn blockchain_mut(
         &mut self,
-    ) -> &mut Blockchain<Self::Runtime, Self::ArchiveWasm, Self::BlockData> {
+    ) -> &mut Blockchain<Self::Runtime, Self::ArchiveWasm, Self::BlockDataContainer> {
         &mut self.blockchain
     }
 
@@ -1323,60 +1325,18 @@ impl BalancesStore for StableBalances {
 }
 
 #[derive(Debug, Deserialize, Serialize, Default)]
-#[serde(transparent)]
-pub struct StableBlockData {
-    blocks: Vec<EncodedBlock>,
-}
+pub struct StableBlockDataContainer {}
 
-impl BlockData for StableBlockData {
-    fn add_block(&mut self, index: u64, block: EncodedBlock) {
-        BLOCKS_MEMORY.with_borrow_mut(|blocks| {
-            assert!(blocks.insert(index, block.into_vec()).is_none());
-        });
+impl BlockDataContainer for StableBlockDataContainer {
+    fn with_blocks<R>(
+        f: impl FnOnce(&StableBTreeMap<u64, Vec<u8>, VirtualMemory<DefaultMemoryImpl>>) -> R,
+    ) -> R {
+        BLOCKS_MEMORY.with(|cell| f(&cell.borrow()))
     }
 
-    fn get_blocks(&self, range: Range<u64>) -> Vec<EncodedBlock> {
-        BLOCKS_MEMORY.with_borrow(|blocks| {
-            blocks
-                .range(range)
-                .map(|kv| EncodedBlock::from_vec(kv.1))
-                .collect()
-        })
-    }
-
-    fn get_block(&self, index: u64) -> Option<EncodedBlock> {
-        BLOCKS_MEMORY.with_borrow(|blocks| blocks.get(&index).map(EncodedBlock::from_vec))
-    }
-
-    fn remove_oldest_blocks(&mut self, num_blocks: u64) {
-        BLOCKS_MEMORY.with_borrow_mut(|blocks| {
-            let mut removed = 0;
-            while !blocks.is_empty() && removed < num_blocks {
-                blocks.pop_first();
-                removed += 1;
-            }
-        });
-    }
-
-    fn len(&self) -> u64 {
-        BLOCKS_MEMORY.with_borrow(|blocks| blocks.len())
-    }
-
-    fn is_empty(&self) -> bool {
-        BLOCKS_MEMORY.with_borrow(|blocks| blocks.is_empty())
-    }
-
-    fn migrate_one_block(&mut self, num_archived_blocks: u64) -> bool {
-        let num_migrated = self.len();
-        if num_migrated < self.blocks.len() as u64 {
-            self.add_block(
-                num_archived_blocks + num_migrated,
-                self.blocks[num_migrated as usize].clone(),
-            );
-            true
-        } else {
-            self.blocks.clear();
-            false
-        }
+    fn with_blocks_mut<R>(
+        f: impl FnOnce(&mut StableBTreeMap<u64, Vec<u8>, VirtualMemory<DefaultMemoryImpl>>) -> R,
+    ) -> R {
+        BLOCKS_MEMORY.with(|cell| f(&mut cell.borrow_mut()))
     }
 }
