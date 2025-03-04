@@ -50,6 +50,11 @@ pub fn derive_vetkd_public_key(
     Ok(derived_key.serialize().to_vec())
 }
 
+/// Checks if the given bytes deserialize into a correct public key
+pub fn is_valid_transport_public_key(transport_public_key: &[u8; 48]) -> bool {
+    G2Affine::deserialize(transport_public_key).is_ok()
+}
+
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub enum VetKdPublicKeyDeriveError {
     InvalidAlgorithmId,
