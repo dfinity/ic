@@ -55,8 +55,10 @@ type DeveloperDistribution = record {
 type FractionalDeveloperVotingPower = record {
   treasury_distribution : opt TreasuryDistribution;
   developer_distribution : opt DeveloperDistribution;
-  airdrop_distribution : opt AirdropDistribution;
   swap_distribution : opt SwapDistribution;
+
+  // Obsolete fields.
+  airdrop_distribution : opt AirdropDistribution;
 };
 
 type GetAllowedPrincipalsResponse = record {

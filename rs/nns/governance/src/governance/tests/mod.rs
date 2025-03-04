@@ -452,9 +452,7 @@ mod convert_from_create_service_nervous_system_to_sns_init_payload_tests {
                         total_e8s: swap_total_e8s,
                         initial_swap_amount_e8s: swap_total_e8s,
                     },),
-                    airdrop_distribution: Some(sns_init_pb::AirdropDistribution {
-                        airdrop_neurons: vec![],
-                    },),
+                    airdrop_distribution: None,
                 },
             ),
         );
@@ -796,9 +794,7 @@ mod convert_create_service_nervous_system_proposal_to_sns_init_payload_tests_wit
                         total_e8s: swap_total_e8s,
                         initial_swap_amount_e8s: swap_total_e8s,
                     },),
-                    airdrop_distribution: Some(sns_init_pb::AirdropDistribution {
-                        airdrop_neurons: vec![],
-                    },),
+                    airdrop_distribution: None,
                 },
             ),
         );
