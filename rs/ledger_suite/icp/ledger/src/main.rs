@@ -1341,15 +1341,10 @@ fn iter_blocks_() {
     over(protobuf, |IterBlocksArgs { start, length }| {
         let length =
             std::cmp::min(length, max_blocks_per_request(&PrincipalId::from(caller()))) as u64;
-        let blocks_len = LEDGER.read().unwrap().blockchain.num_unarchived_blocks();
-        let start = std::cmp::min(start as u64, blocks_len);
-        let end = std::cmp::min(start + length, blocks_len);
         let archived_len = LEDGER.read().unwrap().blockchain.num_archived_blocks;
-        let blocks = LEDGER
-            .read()
-            .unwrap()
-            .blockchain
-            .get_blocks(archived_len + start..archived_len + end);
+        let start = archived_len + start as u64;
+        let end = start + length;
+        let blocks = LEDGER.read().unwrap().blockchain.get_blocks(start..end);
         IterBlocksRes(blocks)
     });
 }

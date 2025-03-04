@@ -118,20 +118,7 @@ where
     }
 
     /// Returns the blocks stored locally.
-    ///
-    /// # Panic
-    ///
-    /// This function panics if the specified range is not a subset of locally available blocks.
     pub fn get_blocks(&self, local_blocks: std::ops::Range<u64>) -> Vec<EncodedBlock> {
-        use crate::range_utils::is_subrange;
-
-        assert!(
-            is_subrange(&local_blocks, &self.local_block_range()),
-            "requested block range {:?} is not a subrange of local blocks {:?}",
-            local_blocks,
-            self.local_block_range()
-        );
-
         self.blocks.get_blocks(local_blocks)
     }
 
