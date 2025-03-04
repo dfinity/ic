@@ -1,5 +1,5 @@
 {
-  "checksum": "bdcbdf21b5cda7470290bfa053f648ac6bd22c5ca394d196b9d1c7029e9284f3",
+  "checksum": "c503d0e2b21e87e0ccf4248de59b7866351190a9976a27481568e3d30ae4869e",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -1308,6 +1308,7 @@
         "crate_features": {
           "common": [
             "alloc",
+            "default",
             "getrandom",
             "rand_core"
           ],
@@ -19703,6 +19704,10 @@
               "target": "hmac"
             },
             {
+              "id": "hpke 0.12.0",
+              "target": "hpke"
+            },
+            {
               "id": "http 1.2.0",
               "target": "http"
             },
@@ -19796,7 +19801,7 @@
               "target": "ic_http_gateway"
             },
             {
-              "id": "ic-management-canister-types 0.2.0",
+              "id": "ic-management-canister-types 0.2.1",
               "target": "ic_management_canister_types"
             },
             {
@@ -20380,6 +20385,10 @@
             {
               "id": "slog-term 2.9.1",
               "target": "slog_term"
+            },
+            {
+              "id": "slotmap 1.0.7",
+              "target": "slotmap"
             },
             {
               "id": "socket2 0.5.7",
@@ -22154,6 +22163,7 @@
             "arithmetic",
             "default",
             "digest",
+            "ecdh",
             "ff",
             "group",
             "hazmat",
@@ -22189,6 +22199,10 @@
             {
               "id": "group 0.13.0",
               "target": "group"
+            },
+            {
+              "id": "hkdf 0.12.4",
+              "target": "hkdf"
             },
             {
               "id": "pem-rfc7468 0.7.0",
@@ -29635,6 +29649,105 @@
       ],
       "license_file": "LICENSE"
     },
+    "hpke 0.12.0": {
+      "name": "hpke",
+      "version": "0.12.0",
+      "package_url": "https://github.com/rozbb/rust-hpke",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/hpke/0.12.0/download",
+          "sha256": "4917627a14198c3603282c5158b815ad5534795451d3c074b53cf3cee0960b11"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "hpke",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "hpke",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "alloc",
+            "p384"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "aead 0.5.2",
+              "target": "aead"
+            },
+            {
+              "id": "aes-gcm 0.10.3",
+              "target": "aes_gcm"
+            },
+            {
+              "id": "chacha20poly1305 0.10.1",
+              "target": "chacha20poly1305"
+            },
+            {
+              "id": "digest 0.10.7",
+              "target": "digest"
+            },
+            {
+              "id": "generic-array 0.14.7",
+              "target": "generic_array"
+            },
+            {
+              "id": "hkdf 0.12.4",
+              "target": "hkdf"
+            },
+            {
+              "id": "hmac 0.12.1",
+              "target": "hmac"
+            },
+            {
+              "id": "p384 0.13.1",
+              "target": "p384"
+            },
+            {
+              "id": "rand_core 0.6.4",
+              "target": "rand_core"
+            },
+            {
+              "id": "sha2 0.10.8",
+              "target": "sha2"
+            },
+            {
+              "id": "subtle 2.6.1",
+              "target": "subtle"
+            },
+            {
+              "id": "zeroize 1.8.1",
+              "target": "zeroize"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.12.0"
+      },
+      "license": "MIT/Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE"
+    },
     "html5ever 0.26.0": {
       "name": "html5ever",
       "version": "0.26.0",
@@ -32721,7 +32834,7 @@
               "target": "serde_bytes"
             },
             {
-              "id": "slotmap 1.0.6",
+              "id": "slotmap 1.0.7",
               "target": "slotmap"
             }
           ],
@@ -33244,14 +33357,14 @@
       ],
       "license_file": null
     },
-    "ic-management-canister-types 0.2.0": {
+    "ic-management-canister-types 0.2.1": {
       "name": "ic-management-canister-types",
-      "version": "0.2.0",
+      "version": "0.2.1",
       "package_url": "https://github.com/dfinity/cdk-rs",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/ic-management-canister-types/0.2.0/download",
-          "sha256": "4ce1cdd2b6df9eac37cd2dcf5d40cf9427a24aed9b0751cbe5b09ae116eb4de3"
+          "url": "https://static.crates.io/crates/ic-management-canister-types/0.2.1/download",
+          "sha256": "1a23527ab5e2ede1aae270cdb79ef0491479c8b5c2de9fd393048ca907cac5e1"
         }
       },
       "targets": [
@@ -33295,7 +33408,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.2.0"
+        "version": "0.2.1"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -49703,6 +49816,65 @@
           "selects": {}
         },
         "version": "0.13.2"
+      },
+      "license": "Apache-2.0 OR MIT",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE"
+    },
+    "p384 0.13.1": {
+      "name": "p384",
+      "version": "0.13.1",
+      "package_url": "https://github.com/RustCrypto/elliptic-curves/tree/master/p384",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/p384/0.13.1/download",
+          "sha256": "fe42f1670a52a47d448f14b6a5c61dd78fce51856e68edaa38f7ae3a46b8d6b6"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "p384",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "p384",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "arithmetic",
+            "ecdh"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "elliptic-curve 0.13.8",
+              "target": "elliptic_curve"
+            },
+            {
+              "id": "primeorder 0.13.2",
+              "target": "primeorder"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.13.1"
       },
       "license": "Apache-2.0 OR MIT",
       "license_ids": [
@@ -70999,14 +71171,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "slotmap 1.0.6": {
+    "slotmap 1.0.7": {
       "name": "slotmap",
-      "version": "1.0.6",
+      "version": "1.0.7",
       "package_url": "https://github.com/orlp/slotmap",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/slotmap/1.0.6/download",
-          "sha256": "e1e08e261d0e8f5c43123b7adf3e4ca1690d655377ac93a03b2c9d3e98de1342"
+          "url": "https://static.crates.io/crates/slotmap/1.0.7/download",
+          "sha256": "dbff4acf519f630b3a3ddcfaea6c06b42174d9a44bc70c620e9ed1649d58b82a"
         }
       },
       "targets": [
@@ -71050,14 +71222,14 @@
         "deps": {
           "common": [
             {
-              "id": "slotmap 1.0.6",
+              "id": "slotmap 1.0.7",
               "target": "build_script_build"
             }
           ],
           "selects": {}
         },
         "edition": "2018",
-        "version": "1.0.6"
+        "version": "1.0.7"
       },
       "build_script_attrs": {
         "compile_data_glob": [
@@ -91204,6 +91376,7 @@
     "hex-literal 0.4.1",
     "hkdf 0.12.4",
     "hmac 0.12.1",
+    "hpke 0.12.0",
     "http 1.2.0",
     "http-body 1.0.1",
     "http-body-util 0.1.2",
@@ -91229,7 +91402,7 @@
     "ic-certified-map 0.3.4",
     "ic-http-certification 3.0.3",
     "ic-http-gateway 0.2.0",
-    "ic-management-canister-types 0.2.0",
+    "ic-management-canister-types 0.2.1",
     "ic-metrics-encoder 1.1.1",
     "ic-response-verification 3.0.3",
     "ic-sha3 1.0.0",
@@ -91381,6 +91554,7 @@
     "slog-json 2.6.1",
     "slog-scope 4.4.0",
     "slog-term 2.9.1",
+    "slotmap 1.0.7",
     "socket2 0.5.7",
     "ssh2 0.9.4",
     "static_assertions 1.1.0",

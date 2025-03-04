@@ -35,6 +35,7 @@ CANISTERS = {
     "rate-limit-canister.wasm.gz": "//rs/boundary_node/rate_limits:rate_limit_canister",
     "registry-canister.wasm.gz": "//rs/registry/canister:registry-canister",
     "root-canister.wasm.gz": "//rs/nns/handlers/root/impl:root-canister",
+    "salt-sharing-canister.wasm.gz": "//rs/boundary_node/salt_sharing:salt_sharing_canister",
     "sns-governance-canister.wasm.gz": "//rs/sns/governance:sns-governance-canister",
     "sns-governance-canister_test.wasm.gz": "//rs/sns/governance:sns-governance-canister-test",
     "sns-root-canister.wasm.gz": "//rs/sns/root:sns-root-canister",
@@ -88,6 +89,8 @@ CANISTERS_MAX_SIZE_COMPRESSED_E5_BYTES = {
     # -- BN team --
     # Size when constraint addded: 540_349 bytes
     "rate-limit-canister.wasm.gz": "7",
+    # Size when constraint addded: 452_227 bytes
+    "salt-sharing-canister.wasm.gz": "6",
 }
 
 CANISTERS_MAX_SIZE_COMPRESSED_E5_BYTES.update(NNS_CANISTER_NAME_TO_MAX_COMPRESSED_WASM_SIZE_E5_BYTES)
