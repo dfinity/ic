@@ -1,18 +1,15 @@
 use candid::{candid_method, Nat, Principal};
-use dfn_candid::{candid, candid_one, CandidOne};
+use dfn_candid::{candid, candid_one};
+use dfn_core::endpoint::reject_on_decode_error::{over, over_async, over_async_may_reject};
 #[allow(unused_imports)]
 use dfn_core::BytesS;
-use dfn_core::{
-    endpoint::reject_on_decode_error::{over, over_async, over_async_may_reject},
-    over_init,
-};
 use dfn_protobuf::protobuf;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_canister_log::{LogEntry, Sink};
 use ic_cdk::api::{
     caller, data_certificate, instruction_counter, print, set_certified_data, time, trap,
 };
-use ic_cdk_macros::init;
+use ic_cdk_macros::{init, post_upgrade, pre_upgrade};
 use ic_icrc1::endpoints::{convert_transfer_error, StandardRecord};
 use ic_ledger_canister_core::ledger::LedgerContext;
 use ic_ledger_canister_core::runtime::heap_memory_size_bytes;
@@ -734,6 +731,7 @@ const MAX_INSTRUCTIONS_PER_UPGRADE: u64 = 5_000_000;
 #[cfg(feature = "low-upgrade-instruction-limits")]
 const MAX_INSTRUCTIONS_PER_TIMER_CALL: u64 = 500_000;
 
+#[post_upgrade]
 fn post_upgrade(args: Option<LedgerCanisterPayload>) {
     let start = instruction_counter();
 
@@ -881,12 +879,7 @@ fn migrate_next_part(instruction_limit: u64) {
     }
 }
 
-#[export_name = "canister_post_upgrade"]
-fn post_upgrade_() {
-    over_init(|CandidOne(args)| post_upgrade(args));
-}
-
-#[export_name = "canister_pre_upgrade"]
+#[pre_upgrade]
 fn pre_upgrade() {
     let start = instruction_counter();
 
