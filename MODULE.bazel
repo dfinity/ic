@@ -7,13 +7,18 @@ module(
 )
 
 # General Bazel helpers
-
 bazel_dep(name = "bazel_skylib", version = "1.7.1")
 bazel_dep(name = "aspect_bazel_lib", version = "2.9.0")
 
 # CC dependencies (for C libs like miracl-core, etc)
 bazel_dep(name = "rules_cc", version = "0.0.13")
 bazel_dep(name = "platforms", version = "0.0.10")
+bazel_dep(name = "hermetic_cc_toolchain", version = "3.1.1")
+single_version_override(
+    module_name = "hermetic_cc_toolchain",
+    patch_strip = 1,
+    patches = ["//bazel:hermetic_cc_toolchain.patch"],
+)
 
 # configure/make dependencies
 bazel_dep(name = "rules_foreign_cc", version = "0.12.0")
@@ -878,4 +883,78 @@ http_file(
     downloaded_file_path = "cacert.pem",
     sha256 = "bb1782d281fe60d4a2dcf41bc229abe3e46c280212597d4abcc25bddf667739b",
     url = "https://curl.se/ca/cacert-2024-11-26.pem",
+)
+
+# Set up hermetic cc toolchains for binaries and canisters
+toolchains = use_extension("@hermetic_cc_toolchain//toolchain:ext.bzl", "toolchains")
+toolchains.extra_settings(settings = ["//bazel:use_hermetic_cc"])
+use_repo(toolchains, "zig_sdk")
+
+register_toolchains(
+    # if no `--platform` is specified, these toolchains will be used for
+    # (linux,darwin,windows)x(amd64,arm64)
+    "@zig_sdk//toolchain:linux_amd64_gnu.2.28",
+
+    # wasm toolchains
+    "@zig_sdk//toolchain:none_wasm",
+
+    # These toolchains are only registered locally.
+    dev_dependency = True,
+)
+
+# openssl-sys does not build with the vendored feature when using
+# rules_rust, so we build it ourselves, here.
+# https://github.com/bazelbuild/rules_rust/issues/1519
+http_archive(
+    name = "openssl",
+    build_file_content = """
+load("@rules_foreign_cc//foreign_cc:defs.bzl", "configure_make")
+
+filegroup(
+    name = "all_srcs",
+    srcs = glob(
+        include = ["**"],
+        exclude = ["*.bazel"],
+    ),
+)
+
+# https://wiki.openssl.org/index.php/Compilation_and_Installation
+CONFIGURE_OPTIONS = [
+    "no-comp",
+    "no-idea",
+    "no-weak-ssl-ciphers",
+    "no-shared",
+]
+
+MAKE_TARGETS = [
+    "build_libs",
+    "install_dev",
+]
+
+configure_make(
+    name = "openssl",
+    args = ["-j12"],
+    configure_command = "config",
+    configure_in_place = True,
+    configure_options = CONFIGURE_OPTIONS,
+    lib_name = "openssl",
+    lib_source = ":all_srcs",
+    out_lib_dir = "lib64",
+    #out_binaries = ["openssl"],
+    out_shared_libs = [],
+    out_static_libs = ["libssl.a"],
+    targets = MAKE_TARGETS,
+    visibility = ["//visibility:public"],
+)
+
+filegroup(
+    name = "gen_dir",
+    srcs = [":openssl"],
+    output_group = "gen_dir",
+    visibility = ["//visibility:public"],
+)
+""",
+    integrity = "sha256-4V3agv4v6BOdwqwho21MoB1TE8dfmfRsTooncJtylL8=",
+    strip_prefix = "openssl-3.4.0",
+    urls = ["https://github.com/openssl/openssl/releases/download/openssl-3.4.0/openssl-3.4.0.tar.gz"],
 )
