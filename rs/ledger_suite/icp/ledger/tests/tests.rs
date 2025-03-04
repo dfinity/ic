@@ -357,20 +357,17 @@ fn test_anonymous_approval() {
         expected_allowance: None,
         created_at_time: None,
     };
-    let encoded_transfer_result = env
+    let transfer_error = env
         .execute_ingress_as(
             anon,
             canister_id,
             "icrc2_approve",
             Encode!(&approve_args).unwrap(),
         )
-        .expect("failed to approve transfer")
-        .bytes();
-    let string_from_bytes_result = String::from_utf8(encoded_transfer_result.clone());
-    assert_eq!(
-        string_from_bytes_result,
-        Ok("Anonymous principal cannot approve token transfers on the ledger.".to_string())
-    );
+        .unwrap_err();
+    assert!(transfer_error
+        .description()
+        .contains("Anonymous principal cannot approve token transfers on the ledger."));
 }
 
 #[test]

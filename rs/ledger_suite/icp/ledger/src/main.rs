@@ -1,4 +1,6 @@
 use candid::{candid_method, Nat, Principal};
+#[cfg(feature = "notify-method")]
+use dfn_candid::CandidOne;
 use dfn_candid::{candid, candid_one};
 use dfn_core::endpoint::reject_on_decode_error::{over, over_async, over_async_may_reject};
 #[allow(unused_imports)]
@@ -9,7 +11,7 @@ use ic_canister_log::{LogEntry, Sink};
 use ic_cdk::api::{
     caller, data_certificate, instruction_counter, print, set_certified_data, time, trap,
 };
-use ic_cdk_macros::{init, post_upgrade, pre_upgrade};
+use ic_cdk_macros::{init, post_upgrade, pre_upgrade, update};
 use ic_icrc1::endpoints::{convert_transfer_error, StandardRecord};
 use ic_ledger_canister_core::ledger::LedgerContext;
 use ic_ledger_canister_core::runtime::heap_memory_size_bytes;
@@ -1585,9 +1587,17 @@ fn query_encoded_blocks_() {
     over(candid_one, query_encoded_blocks)
 }
 
-#[candid_method(update, rename = "icrc2_approve")]
+#[update]
+#[candid_method(update)]
 async fn icrc2_approve(arg: ApproveArgs) -> Result<Nat, ApproveError> {
     panic_if_not_ready();
+    if !LEDGER
+        .read()
+        .unwrap()
+        .can_send(&PrincipalId::from(caller()))
+    {
+        panic!("Anonymous principal cannot approve token transfers on the ledger.");
+    }
     if !LEDGER.read().unwrap().feature_flags.icrc2 {
         trap("ICRC-2 features are not enabled on the ledger.");
     }
@@ -1677,24 +1687,6 @@ async fn icrc2_approve(arg: ApproveArgs) -> Result<Nat, ApproveError> {
     let max_msg_size = *MAX_MESSAGE_SIZE_BYTES.read().unwrap();
     archive_blocks::<Access>(DebugOutSink, max_msg_size as u64).await;
     Ok(Nat::from(block_index))
-}
-
-#[export_name = "canister_update icrc2_approve"]
-fn icrc2_approve_candid() {
-    panic_if_not_ready();
-    over_async_may_reject(candid_one, |arg: ApproveArgs| async {
-        if !LEDGER
-            .read()
-            .unwrap()
-            .can_send(&PrincipalId::from(caller()))
-        {
-            return Err(
-                "Anonymous principal cannot approve token transfers on the ledger.".to_string(),
-            );
-        }
-
-        Ok(icrc2_approve(arg).await)
-    })
 }
 
 fn get_allowance(from: AccountIdentifier, spender: AccountIdentifier) -> Allowance {
