@@ -11,7 +11,7 @@ use ic_canister_log::{LogEntry, Sink};
 use ic_cdk::api::{
     caller, data_certificate, instruction_counter, print, set_certified_data, time, trap,
 };
-use ic_cdk_macros::{init, post_upgrade, pre_upgrade, update};
+use ic_cdk_macros::{init, post_upgrade, pre_upgrade, query, update};
 use ic_icrc1::endpoints::{convert_transfer_error, StandardRecord};
 use ic_ledger_canister_core::ledger::LedgerContext;
 use ic_ledger_canister_core::runtime::heap_memory_size_bytes;
@@ -598,7 +598,8 @@ fn icrc1_balance_of(acc: Account) -> Nat {
     Nat::from(account_balance(AccountIdentifier::from(acc)).get_e8s())
 }
 
-#[candid_method(query, rename = "icrc1_supported_standards")]
+#[query]
+#[candid_method(query)]
 fn icrc1_supported_standards() -> Vec<StandardRecord> {
     let mut standards = vec![StandardRecord {
         name: "ICRC-1".to_string(),
@@ -620,7 +621,8 @@ fn icrc1_supported_standards() -> Vec<StandardRecord> {
     standards
 }
 
-#[candid_method(query, rename = "icrc1_minting_account")]
+#[query]
+#[candid_method(query)]
 fn icrc1_minting_account() -> Option<Account> {
     LEDGER.read().unwrap().icrc1_minting_account
 }
@@ -630,7 +632,8 @@ fn transfer_fee(_: TransferFeeArgs) -> TransferFee {
     LEDGER.read().unwrap().transfer_fee()
 }
 
-#[candid_method(query, rename = "icrc1_metadata")]
+#[query]
+#[candid_method(query)]
 fn icrc1_metadata() -> Vec<(String, Value)> {
     vec![
         Value::entry("icrc1:decimals", DECIMAL_PLACES as u64),
@@ -653,7 +656,8 @@ fn total_supply() -> Tokens {
     LEDGER.read().unwrap().balances().total_supply()
 }
 
-#[candid_method(query, rename = "icrc1_total_supply")]
+#[query]
+#[candid_method(query)]
 fn icrc1_total_supply() -> Nat {
     Nat::from(LEDGER.read().unwrap().balances().total_supply().get_e8s())
 }
@@ -672,24 +676,28 @@ fn token_name() -> Name {
     }
 }
 
+#[query]
 #[candid_method(query)]
 fn icrc1_name() -> String {
     LEDGER.read().unwrap().token_name.clone()
 }
 
-#[candid_method(query, rename = "icrc1_symbol")]
+#[query]
+#[candid_method(query)]
 fn icrc1_symbol() -> String {
     LEDGER.read().unwrap().token_symbol.to_string()
 }
 
-#[candid_method(query, rename = "decimals")]
+#[query]
+#[candid_method(query)]
 fn token_decimals() -> Decimals {
     Decimals {
         decimals: DECIMAL_PLACES,
     }
 }
 
-#[candid_method(query, rename = "icrc1_decimals")]
+#[query]
+#[candid_method(query)]
 fn icrc1_decimals() -> u8 {
     debug_assert!(ic_ledger_core::tokens::DECIMAL_PLACES <= u8::MAX as u32);
     ic_ledger_core::tokens::DECIMAL_PLACES as u8
@@ -1256,31 +1264,11 @@ fn token_name_candid() {
     over(candid_one, |()| token_name())
 }
 
-#[export_name = "canister_query icrc1_name"]
-fn icrc1_name_candid() {
-    over(candid_one, |()| icrc1_name())
-}
-
-#[export_name = "canister_query decimals"]
-fn token_decimals_candid() {
-    over(candid_one, |()| token_decimals())
-}
-
-#[export_name = "canister_query icrc1_decimals"]
-fn icrc1_decimals_candid() {
-    over(candid_one, |()| icrc1_decimals())
-}
-
 #[export_name = "canister_query total_supply_pb"]
 fn total_supply_() {
     over(protobuf, |_: TotalSupplyArgs| {
         tokens_into_proto(total_supply())
     })
-}
-
-#[export_name = "canister_query icrc1_total_supply"]
-fn icrc1_total_supply_candid() {
-    over(candid_one, |()| icrc1_total_supply())
 }
 
 /// Get multiple blocks by *offset into the container* (not BlockIndex) and
@@ -1319,12 +1307,8 @@ fn get_blocks_() {
     });
 }
 
-#[export_name = "canister_query icrc1_supported_standards"]
-fn icrc1_supported_standards_candid() {
-    over(candid_one, |()| icrc1_supported_standards())
-}
-
-#[candid_method(query, rename = "query_blocks")]
+#[query]
+#[candid_method(query)]
 fn query_blocks(GetBlocksArgs { start, length }: GetBlocksArgs) -> QueryBlocksResponse {
     let ledger = LEDGER.read().unwrap();
     let locations = block_locations(&*ledger, start, length.min(usize::MAX as u64) as usize);
@@ -1366,22 +1350,8 @@ fn query_blocks(GetBlocksArgs { start, length }: GetBlocksArgs) -> QueryBlocksRe
     }
 }
 
-#[export_name = "canister_query query_blocks"]
-fn query_blocks_() {
-    over(candid_one, query_blocks)
-}
-
-#[export_name = "canister_query icrc1_minting_account"]
-fn icrc1_minting_account_candid() {
-    over(candid_one, |()| icrc1_minting_account())
-}
-
-#[export_name = "canister_query icrc1_symbol"]
-fn icrc1_symbol_candid() {
-    over(candid_one, |()| icrc1_symbol())
-}
-
-#[candid_method(query, rename = "archives")]
+#[query]
+#[candid_method(query)]
 fn archives() -> Archives {
     let ledger_guard = LEDGER.try_read().expect("Failed to get ledger read lock");
     let archive_guard = ledger_guard.blockchain.archive.read().unwrap();
@@ -1407,16 +1377,6 @@ fn get_nodes_() {
             .map(|archive| archive.canister_id)
             .collect::<Vec<CanisterId>>()
     });
-}
-
-#[export_name = "canister_query archives"]
-fn archives_candid() {
-    over(candid_one, |()| archives());
-}
-
-#[export_name = "canister_query icrc1_metadata"]
-fn icrc1_metadata_candid() {
-    over(candid_one, |()| icrc1_metadata())
 }
 
 fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::io::Result<()> {
@@ -1544,7 +1504,8 @@ fn http_request() {
     dfn_http_metrics::serve_metrics(encode_metrics);
 }
 
-#[candid_method(query, rename = "query_encoded_blocks")]
+#[query]
+#[candid_method(query)]
 fn query_encoded_blocks(
     GetBlocksArgs { start, length }: GetBlocksArgs,
 ) -> QueryEncodedBlocksResponse {
@@ -1580,11 +1541,6 @@ fn query_encoded_blocks(
         first_block_index: local_blocks.start as BlockIndex,
         archived_blocks,
     }
-}
-
-#[export_name = "canister_query query_encoded_blocks"]
-fn query_encoded_blocks_() {
-    over(candid_one, query_encoded_blocks)
 }
 
 #[update]
@@ -1699,7 +1655,8 @@ fn get_allowance(from: AccountIdentifier, spender: AccountIdentifier) -> Allowan
     }
 }
 
-#[candid_method(query, rename = "icrc2_allowance")]
+#[query]
+#[candid_method(query)]
 fn icrc2_allowance(arg: AllowanceArgs) -> Allowance {
     if !LEDGER.read().unwrap().feature_flags.icrc2 {
         trap("ICRC-2 features are not enabled on the ledger.");
@@ -1709,24 +1666,15 @@ fn icrc2_allowance(arg: AllowanceArgs) -> Allowance {
     get_allowance(from, spender)
 }
 
-#[export_name = "canister_query icrc2_allowance"]
-fn icrc2_allowance_candid() {
-    over(candid_one, icrc2_allowance)
-}
-
 #[cfg(feature = "icp-allowance-getter")]
+#[query(name = "allowance")]
 #[candid_method(query, rename = "allowance")]
 fn icp_allowance(arg: IcpAllowanceArgs) -> Allowance {
     get_allowance(arg.account, arg.spender)
 }
 
-#[cfg(feature = "icp-allowance-getter")]
-#[export_name = "canister_query allowance"]
-fn allowance_candid() {
-    over(candid_one, icp_allowance)
-}
-
-#[candid_method(update, rename = "icrc21_canister_call_consent_message")]
+#[update]
+#[candid_method(update)]
 fn icrc21_canister_call_consent_message(
     consent_msg_request: ConsentMessageRequest,
 ) -> Result<ConsentInfo, Icrc21Error> {
@@ -1744,29 +1692,16 @@ fn icrc21_canister_call_consent_message(
     )
 }
 
-#[export_name = "canister_query icrc21_canister_call_consent_message"]
-fn icrc21_canister_call_consent_message_candid() {
-    over(candid_one, icrc21_canister_call_consent_message)
-}
-
-#[candid_method(query, rename = "icrc10_supported_standards")]
+#[query]
+#[candid_method(query)]
 fn icrc10_supported_standards() -> Vec<StandardRecord> {
     icrc1_supported_standards()
 }
 
-#[export_name = "canister_query icrc10_supported_standards"]
-fn icrc10_supported_standards_candid() {
-    over(candid_one, |()| icrc10_supported_standards())
-}
-
-#[candid_method(query, rename = "is_ledger_ready")]
+#[query]
+#[candid_method(query)]
 fn is_ledger_ready() -> bool {
     is_ready()
-}
-
-#[export_name = "canister_query is_ledger_ready"]
-fn is_ledger_ready_candid() {
-    over(candid_one, |()| is_ledger_ready())
 }
 
 candid::export_service!();
