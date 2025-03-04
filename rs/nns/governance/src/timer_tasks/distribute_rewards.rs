@@ -6,7 +6,7 @@ use std::thread::LocalKey;
 use std::time::Duration;
 
 thread_local! {
-    static REWARDS_TIMER_ID: RefCell<Option<TimerId>> = RefCell::new(None);
+    static REWARDS_TIMER_ID: RefCell<Option<TimerId>> = const { RefCell::new(None) };
 }
 
 fn cancel_distribute_pending_rewards_timer() {

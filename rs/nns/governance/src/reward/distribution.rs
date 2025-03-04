@@ -432,11 +432,4 @@ mod test {
             assert!(rewards_distribution_state_machine.distributions.is_empty())
         });
     }
-
-    #[test]
-    fn todo() {
-        // DO NOT MERGE
-        // Tests that are still needed:
-        // A test that rewards aren't lost across upgrades.
-    }
 }
