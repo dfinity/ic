@@ -5,7 +5,6 @@ package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
     # Keep sorted.
-    "//packages/ic-error-types",
     "//rs/canonical_state",
     "//rs/canonical_state/tree_hash",
     "//rs/config",
@@ -41,7 +40,6 @@ DEPENDENCIES = [
     "@crate_index//:serde",
     "@crate_index//:serde_bytes",
     "@crate_index//:slog",
-    "@crate_index//:strum",
     "@crate_index//:tempfile",
     "@crate_index//:uuid",
 ]
@@ -53,14 +51,9 @@ MACRO_DEPENDENCIES = [
 
 DEV_DEPENDENCIES = [
     # Keep sorted.
-    "//rs/registry/subnet_features",
-    "//rs/state_machine_tests",
     "//rs/test_utilities/consensus",
-    "//rs/test_utilities/io",
     "//rs/test_utilities/logger",
-    "//rs/test_utilities/metrics",
     "//rs/test_utilities/state",
-    "//rs/test_utilities/time",
     "//rs/test_utilities/tmpdir",
     "//rs/test_utilities/types",
     "//rs/types/management_canister_types",
@@ -87,7 +80,6 @@ BIN_DEPENDENCIES = [
     "//rs/registry/subnet_type",
     "//rs/replicated_state",
     "//rs/test_utilities/state",
-    "//rs/test_utilities/time",
     "//rs/test_utilities/types",
     "//rs/types/base_types",
     "//rs/types/types",
@@ -113,7 +105,7 @@ rust_test(
     timeout = "long",
     crate = ":state_manager",
     proc_macro_deps = MACRO_DEV_DEPENDENCIES,
-    deps = DEPENDENCIES + DEV_DEPENDENCIES,
+    deps = DEV_DEPENDENCIES,
 )
 
 rust_ic_test(
@@ -125,7 +117,13 @@ rust_ic_test(
     ],
     crate_root = "tests/state_manager.rs",
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
-    deps = [":state_manager"] + DEPENDENCIES + DEV_DEPENDENCIES,
+    deps = [":state_manager"] + DEPENDENCIES + DEV_DEPENDENCIES + [
+        # Keep sorted.
+        "//rs/registry/subnet_features",
+        "//rs/state_machine_tests",
+        "//rs/test_utilities/io",
+        "//rs/test_utilities/metrics",
+    ],
 )
 
 rust_bench(

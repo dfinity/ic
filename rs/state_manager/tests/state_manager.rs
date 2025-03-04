@@ -6826,6 +6826,7 @@ fn stream_store_encode_partial_bad_indices(
     let (stream, begin, count) = test_slice;
     // `witness_begin` (`== begin + 1`) after `msg_begin` (`== begin`).
     encode_partial_slice_test(stream, begin.increment(), begin, count, byte_limit);
+
 }
 
 /// Test if query stats are correctly aggregated into the canister state.
