@@ -51,6 +51,7 @@ MACRO_DEPENDENCIES = [
 
 DEV_DEPENDENCIES = [
     # Keep sorted.
+    "//packages/ic-error-types",
     "//rs/test_utilities/consensus",
     "//rs/test_utilities/logger",
     "//rs/test_utilities/state",
@@ -61,6 +62,7 @@ DEV_DEPENDENCIES = [
     "@crate_index//:assert_matches",
     "@crate_index//:maplit",
     "@crate_index//:proptest",
+    "@crate_index//:strum",
 ]
 
 MACRO_DEV_DEPENDENCIES = [
