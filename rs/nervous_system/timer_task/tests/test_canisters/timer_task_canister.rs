@@ -22,37 +22,37 @@ thread_local! {
 fn schedule(name: &str) {
     match name {
         SuccessRecurringSyncTask::NAME => {
-            SuccessRecurringSyncTask::default().schedule(&METRICS_REGISTRY)
+            SuccessRecurringSyncTask::default().schedule(&METRICS_REGISTRY);
         }
         IncrementalDelayRecurringSyncTask::NAME => {
-            IncrementalDelayRecurringSyncTask::default().schedule(&METRICS_REGISTRY)
+            IncrementalDelayRecurringSyncTask::default().schedule(&METRICS_REGISTRY);
         }
         PanicRecurringSyncTask::NAME => {
-            PanicRecurringSyncTask::default().schedule(&METRICS_REGISTRY)
+            PanicRecurringSyncTask::default().schedule(&METRICS_REGISTRY);
         }
         OutOfInstructionsRecurringSyncTask::NAME => {
-            OutOfInstructionsRecurringSyncTask::default().schedule(&METRICS_REGISTRY)
+            OutOfInstructionsRecurringSyncTask::default().schedule(&METRICS_REGISTRY);
         }
         SuccessRecurringAsyncTask::NAME => {
-            SuccessRecurringAsyncTask::default().schedule(&METRICS_REGISTRY)
+            SuccessRecurringAsyncTask::default().schedule(&METRICS_REGISTRY);
         }
         PanicRecurringAsyncTask::NAME => {
-            PanicRecurringAsyncTask::default().schedule(&METRICS_REGISTRY)
+            PanicRecurringAsyncTask::default().schedule(&METRICS_REGISTRY);
         }
         OutOfInstructionsBeforeCallRecurringAsyncTask::NAME => {
-            OutOfInstructionsBeforeCallRecurringAsyncTask::default().schedule(&METRICS_REGISTRY)
+            OutOfInstructionsBeforeCallRecurringAsyncTask::default().schedule(&METRICS_REGISTRY);
         }
         OutOfInstructionsAfterCallRecurringAsyncTask::NAME => {
-            OutOfInstructionsAfterCallRecurringAsyncTask::default().schedule(&METRICS_REGISTRY)
+            OutOfInstructionsAfterCallRecurringAsyncTask::default().schedule(&METRICS_REGISTRY);
         }
         SuccessPeriodicSyncTask::NAME => {
-            SuccessPeriodicSyncTask::default().schedule(&METRICS_REGISTRY)
+            SuccessPeriodicSyncTask::default().schedule(&METRICS_REGISTRY);
         }
         SuccessPeriodicAsyncTask::NAME => {
-            SuccessPeriodicAsyncTask::default().schedule(&METRICS_REGISTRY)
+            SuccessPeriodicAsyncTask::default().schedule(&METRICS_REGISTRY);
         }
         PanicPeriodicAsyncTask::NAME => {
-            PanicPeriodicAsyncTask::default().schedule(&METRICS_REGISTRY)
+            PanicPeriodicAsyncTask::default().schedule(&METRICS_REGISTRY);
         }
         _ => panic!("Unknown task: {}", name),
     }

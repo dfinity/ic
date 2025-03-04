@@ -2748,3 +2748,10 @@ message Account {
   // subaccount (all bytes set to 0) is used.
   optional Subaccount subaccount = 2;
 }
+
+// A reward disbribution that has been calculated but not fully disbursed.
+// This supports large reward distributions that may need to be split into multiple
+// messages.
+message RewardsDistributionInProgress {
+  map<uint64, uint64> neuron_ids_to_e8_amounts = 1;
+}

@@ -586,6 +586,7 @@ fn retain_neurons_with_castable_ballots(
 
 #[cfg(test)]
 mod test {
+    use crate::canister_state::{governance_mut, set_governance_for_tests};
     use crate::test_utils::MockRandomness;
     use crate::{
         governance::{
@@ -613,6 +614,7 @@ mod test {
     use ic_base_types::PrincipalId;
     use ic_ledger_core::Tokens;
     use ic_nervous_system_long_message::in_test_temporarily_set_call_context_over_threshold;
+    use ic_nervous_system_timers::test::run_pending_timers_every_interval_for_count;
     use ic_nns_common::pb::v1::{NeuronId, ProposalId};
     use ic_nns_constants::GOVERNANCE_CANISTER_ID;
     use ic_stable_structures::DefaultMemoryImpl;
@@ -1532,7 +1534,12 @@ mod test {
             0
         );
 
+        // Because of how the timers work, we need to shift governance into global state
+        // to make this work, so that the timer accesses the same value of governance.
+        set_governance_for_tests(governance);
+        let governance = governance_mut();
         governance.distribute_rewards(Tokens::from_e8s(100_000_000));
+        run_pending_timers_every_interval_for_count(core::time::Duration::from_secs(2), 2);
 
         assert_eq!(
             governance
@@ -1544,13 +1551,14 @@ mod test {
 
         now_setter(now + REWARD_DISTRIBUTION_PERIOD_SECONDS + 1);
         // Finish processing the vote
+
         governance
             .process_voting_state_machines()
             .now_or_never()
             .unwrap();
-
-        // Now rewards should be able to be distributed
         governance.distribute_rewards(Tokens::from_e8s(100_000_000));
+        // Now rewards should be able to be distributed
+        run_pending_timers_every_interval_for_count(core::time::Duration::from_secs(2), 2);
 
         assert_eq!(
             governance
