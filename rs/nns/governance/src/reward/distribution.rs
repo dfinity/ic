@@ -287,9 +287,6 @@ mod test {
 
     #[test]
     fn test_distribute_rewards_for_multiple_events_to_neurons() {
-        // We are testing recoverability of the system (i.e. it got stalled, but we didnt' lose data, and now
-        // it is able to finish processing)
-
         let mut neurons = BTreeMap::new();
         for i in 0..5 {
             neurons.insert(i, make_neuron(i, 1000, 1000));
@@ -317,6 +314,9 @@ mod test {
             );
         }
 
+        // We are testing that rewards are always distributed even if there are more than
+        // one distribution event that needs to get processed.  Each timer task would continue the
+        // work, and we ensure the next distribution is picked up.
         rewards_distribution_state_machine.with_next_distribution(
             |(_day_after_genesis, distribution)| {
                 distribution.continue_processing(&mut neuron_store, || false);
@@ -349,8 +349,9 @@ mod test {
 
     #[test]
     fn test_distributions_always_at_least_distributes_one() {
-        // We are testing recoverability of the system (i.e. it got stalled, but we didnt' lose data, and now
-        // it is able to finish processing)
+        // This test ensures that in the worst case, the task will always distribute at least one
+        // reward (i.e. it does not check instructions before trying to do at least a single piece
+        // of work)
 
         let mut neurons = BTreeMap::new();
         for i in 0..5 {
