@@ -6332,6 +6332,10 @@ impl Governance {
             Some(Command::RefreshVotingPower(_)) => self
                 .refresh_voting_power(&id, caller)
                 .map(ManageNeuronResponse::refresh_voting_power_response),
+            Some(Command::DisburseMaturity(_)) => Err(GovernanceError::new_with_message(
+                ErrorType::Unavailable,
+                "Disbursing maturity is not implemented yet.",
+            )),
             None => panic!(),
         }
     }
@@ -6392,6 +6396,9 @@ impl Governance {
         }
     }
 
+    pub fn get_ledger(&self) -> Arc<dyn IcpLedger + Send + Sync> {
+        self.ledger.clone()
+    }
     /// Triggers a reward distribution event if enough time has passed since
     /// the last one. This is intended to be called by a cron
     /// process.
@@ -6416,24 +6423,7 @@ impl Governance {
                     LOG_PREFIX, e,
                 ),
             }
-        // Second try to distribute voting rewards (once per day).
-        } else if self.should_distribute_rewards() {
-            // Getting the total ICP supply from the ledger is expensive enough that we
-            // don't want to do it on every call to `run_periodic_tasks`. So we only
-            // fetch it when it's needed.
-            match self.ledger.total_supply().await {
-                Ok(supply) => {
-                    if self.should_distribute_rewards() {
-                        self.distribute_rewards(supply);
-                    }
-                }
-                Err(e) => println!(
-                    "{}Error when getting total ICP supply: {}",
-                    LOG_PREFIX,
-                    GovernanceError::from(e),
-                ),
-            }
-        // Third try to compute cached metrics (once per day).
+            // Second try to compute cached metrics (once per day).
         } else if self.should_compute_cached_metrics() {
             match self.ledger.total_supply().await {
                 Ok(supply) => {
@@ -6558,30 +6548,11 @@ impl Governance {
         xdr_permyriad_per_icp / dec!(10_000)
     }
 
-    /// When a neuron is finally dissolved, if there is any staked maturity it is moved to regular maturity
-    /// which can be spawned (and is modulated).
+    /// Unstakes the maturity of neurons that have dissolved.
     pub fn unstake_maturity_of_dissolved_neurons(&mut self) {
         let now_seconds = self.env.now();
-        // Filter all the neurons that are currently in "dissolved" state and have some staked maturity.
-        // No neuron in stable storage should have staked maturity.
-        for neuron_id in self
-            .neuron_store
-            .list_neurons_ready_to_unstake_maturity(now_seconds)
-        {
-            let unstake_result = self
-                .neuron_store
-                .with_neuron_mut(&neuron_id, |neuron| neuron.unstake_maturity(now_seconds));
-
-            match unstake_result {
-                Ok(_) => {}
-                Err(e) => {
-                    println!(
-                        "{}Error in heartbeat when moving staked maturity for neuron {:?}: {:?}",
-                        LOG_PREFIX, neuron_id, e
-                    );
-                }
-            };
-        }
+        self.neuron_store
+            .unstake_maturity_of_dissolved_neurons(now_seconds);
     }
 
     fn can_spawn_neurons(&self) -> bool {
@@ -6770,16 +6741,6 @@ impl Governance {
 
         // Release the global spawning lock
         self.heap_data.spawning_neurons = Some(false);
-    }
-
-    /// Return `true` if rewards should be distributed, `false` otherwise
-    fn should_distribute_rewards(&self) -> bool {
-        let latest_distribution_nominal_end_timestamp_seconds =
-            self.latest_reward_event().day_after_genesis * REWARD_DISTRIBUTION_PERIOD_SECONDS
-                + self.heap_data.genesis_timestamp_seconds;
-
-        self.most_recent_fully_elapsed_reward_round_end_timestamp_seconds()
-            > latest_distribution_nominal_end_timestamp_seconds
     }
 
     /// Create a reward event.

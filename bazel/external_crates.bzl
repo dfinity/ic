@@ -537,6 +537,11 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "hmac": crate.spec(
                 version = "^0.12",
             ),
+            "hpke": crate.spec(
+                version = "^0.12",
+                default_features = False,
+                features = ["p384", "alloc"],
+            ),
             "humantime": crate.spec(
                 version = "^2.1.0",
             ),
@@ -628,7 +633,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^1.1.1",
             ),
             "ic-management-canister-types": crate.spec(
-                version = "0.2.0",
+                version = "0.2.1",
             ),
             "ic_principal": crate.spec(
                 version = "^0.1.1",
@@ -1236,10 +1241,19 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "slog-term": crate.spec(
                 version = "^2.9.1",
             ),
+            "slotmap": crate.spec(
+                version = "^1.0.7",
+            ),
             "socket2": crate.spec(
                 version = "^0.5.7",
                 features = [
                     "all",
+                ],
+            ),
+            "socks5-impl": crate.spec(
+                version = "0.6",
+                features = [
+                    "tokio",
                 ],
             ),
             "ssh2": crate.spec(
