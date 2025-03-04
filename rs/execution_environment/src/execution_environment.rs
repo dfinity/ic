@@ -3052,6 +3052,14 @@ impl ExecutionEnvironment {
         let nodes = args.get_set_of_nodes()?;
         let registry_version = args.get_registry_version();
 
+        // TODO(CON-1416): Remove this safety check, once resharing VetKeys also works
+        if !args.key_id.is_idkg_key() {
+            return Err(UserError::new(
+                ErrorCode::CanisterRejectedMessage,
+                "This key is not an idkg key",
+            ));
+        }
+
         state.metadata.subnet_call_context_manager.push_context(
             SubnetCallContext::ReshareChainKey(ReshareChainKeyContext {
                 request: request.clone(),
