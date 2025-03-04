@@ -98,16 +98,16 @@ fn print_table(data: Vec<Vec<String>>) {
         widths.push(width);
     }
 
-    print!("\n");
+    println!();
     for row in full {
         print!("| ");
         for i in 0..3 {
             let width = widths[i];
             print!("{:>width$} | ", row[i]);
         }
-        print!("\n");
+        println!();
     }
-    print!("\n");
+    println!();
 }
 
 /// Not really a benchmark, but this will display the compilation cost of each
