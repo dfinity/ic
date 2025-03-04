@@ -5,7 +5,7 @@ use anyhow::Result;
 use canister_test::Canister;
 use ic_consensus_threshold_sig_system_test_utils::{
     enable_chain_key_signing_with_timeout_and_rotation_period, get_public_key_with_logger,
-    setup_without_ecdsa_on_nns,
+    make_key_ids_for_all_idkg_schemes, setup_without_ecdsa_on_nns,
 };
 use ic_management_canister_types_private::MasterPublicKeyId;
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
@@ -22,13 +22,6 @@ use ic_system_test_driver::{
 use slog::info;
 
 const MASTER_KEY_TRANSCRIPTS_CREATED: &str = "consensus_master_key_transcripts_created";
-
-fn make_key_ids_for_all_schemes() -> Vec<MasterPublicKeyId> {
-    ic_consensus_threshold_sig_system_test_utils::make_key_ids_for_all_schemes()
-        .into_iter()
-        .filter(|key_id| key_id.is_idkg_key())
-        .collect()
-}
 
 /// Tests whether chain key transcripts are correctly reshared when crypto keys are rotated
 /// using the test settings below:
@@ -49,7 +42,7 @@ fn test(test_env: TestEnv) {
     block_on(async move {
         let nns = runtime_from_url(nns_node.get_public_url(), nns_node.effective_canister_id());
         let governance = Canister::new(&nns, GOVERNANCE_CANISTER_ID);
-        let key_ids = make_key_ids_for_all_schemes();
+        let key_ids = make_key_ids_for_all_idkg_schemes();
         enable_chain_key_signing_with_timeout_and_rotation_period(
             &governance,
             app_subnet.subnet_id,

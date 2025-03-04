@@ -96,6 +96,14 @@ pub fn make_key_ids_for_all_schemes() -> Vec<MasterPublicKeyId> {
     ]
 }
 
+pub fn make_key_ids_for_all_idkg_schemes() -> Vec<MasterPublicKeyId> {
+    vec![
+        make_ecdsa_key_id(),
+        make_bip340_key_id(),
+        make_eddsa_key_id(),
+    ]
+}
+
 /// Creates one system subnet without signing enabled and one application subnet
 /// with signing enabled.
 pub fn setup_without_ecdsa_on_nns(test_env: TestEnv) {
