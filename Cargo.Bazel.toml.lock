@@ -871,7 +871,7 @@ dependencies = [
  "serde_urlencoded",
  "sync_wrapper 1.0.1",
  "tokio",
- "tower 0.5.1",
+ "tower 0.5.2",
  "tower-layer",
  "tower-service",
  "tracing",
@@ -917,7 +917,7 @@ dependencies = [
  "multer 3.1.0",
  "pin-project-lite",
  "serde",
- "tower 0.5.1",
+ "tower 0.5.2",
  "tower-layer",
  "tower-service",
 ]
@@ -3165,7 +3165,7 @@ dependencies = [
  "k256 0.11.6",
  "keyring",
  "lazy_static",
- "reqwest 0.12.9",
+ "reqwest 0.12.12",
  "ring 0.16.20",
  "schemars",
  "sec1 0.3.0",
@@ -3338,7 +3338,7 @@ dependencies = [
  "hyper-socks2",
  "hyper-util",
  "ic-agent",
- "ic-bn-lib 0.1.0 (git+https://github.com/dfinity/ic-bn-lib?rev=d74a6527fbaf8a2c1a7076983cc84f5c5a727923)",
+ "ic-bn-lib",
  "ic-btc-interface",
  "ic-canister-log",
  "ic-canister-sig-creation",
@@ -3461,7 +3461,7 @@ dependencies = [
  "rayon",
  "rcgen",
  "regex",
- "reqwest 0.12.9",
+ "reqwest 0.12.12",
  "rgb",
  "ring 0.17.7",
  "ripemd",
@@ -3540,7 +3540,7 @@ dependencies = [
  "toml",
  "tonic",
  "tonic-build",
- "tower 0.5.1",
+ "tower 0.5.2",
  "tower-http 0.6.2",
  "tower-request-id",
  "tower-test",
@@ -5356,7 +5356,7 @@ dependencies = [
  "pkcs8 0.10.2",
  "rand 0.8.5",
  "rangemap",
- "reqwest 0.12.9",
+ "reqwest 0.12.12",
  "ring 0.17.7",
  "sec1 0.7.3",
  "serde",
@@ -5376,7 +5376,7 @@ dependencies = [
 [[package]]
 name = "ic-bn-lib"
 version = "0.1.0"
-source = "git+https://github.com/dfinity/ic-bn-lib?rev=1e733b13ad9458a792012e7824d458570569cb6e#1e733b13ad9458a792012e7824d458570569cb6e"
+source = "git+https://github.com/dfinity/ic-bn-lib?rev=530f8e8ea577740213aff4b6dfa7a49cc32bae4a#530f8e8ea577740213aff4b6dfa7a49cc32bae4a"
 dependencies = [
  "ahash 0.8.11",
  "anyhow",
@@ -5410,73 +5410,7 @@ dependencies = [
  "prost-types 0.13.3",
  "rand 0.8.5",
  "rcgen",
- "reqwest 0.12.9",
- "rustls 0.23.18",
- "rustls-acme",
- "rustls-pemfile 2.2.0",
- "rustls-platform-verifier",
- "scopeguard",
- "serde",
- "serde_json",
- "sha1",
- "strum 0.26.3",
- "strum_macros 0.26.4",
- "sync_wrapper 1.0.1",
- "systemstat",
- "thiserror 2.0.11",
- "tokio",
- "tokio-io-timeout",
- "tokio-rustls 0.26.0",
- "tokio-util",
- "tower 0.5.1",
- "tower-service",
- "tracing",
- "url",
- "uuid",
- "vrl",
- "webpki-root-certs",
- "x509-parser",
- "zeroize",
-]
-
-[[package]]
-name = "ic-bn-lib"
-version = "0.1.0"
-source = "git+https://github.com/dfinity/ic-bn-lib?rev=d74a6527fbaf8a2c1a7076983cc84f5c5a727923#d74a6527fbaf8a2c1a7076983cc84f5c5a727923"
-dependencies = [
- "ahash 0.8.11",
- "anyhow",
- "arc-swap",
- "async-trait",
- "axum",
- "backoff",
- "base64 0.22.1",
- "bytes",
- "chacha20poly1305",
- "clap 4.5.20",
- "clap_derive 4.5.18",
- "cloudflare 0.12.0 (git+https://github.com/cloudflare/cloudflare-rs.git?rev=f14720e42184ee176a97676e85ef2d2d85bc3aae)",
- "derive-new",
- "fqdn 0.4.5",
- "futures",
- "futures-util",
- "hickory-proto",
- "hickory-resolver",
- "http 1.2.0",
- "http-body 1.0.1",
- "http-body-util",
- "humantime",
- "hyper 1.5.1",
- "hyper-util",
- "instant-acme",
- "moka",
- "parse-size",
- "prometheus",
- "prost 0.13.3",
- "prost-types 0.13.3",
- "rand 0.8.5",
- "rcgen",
- "reqwest 0.12.9",
+ "reqwest 0.12.12",
  "rustls 0.23.18",
  "rustls-acme",
  "rustls-pemfile 2.2.0",
@@ -5493,7 +5427,7 @@ dependencies = [
  "tokio-io-timeout",
  "tokio-rustls 0.26.0",
  "tokio-util",
- "tower 0.5.1",
+ "tower 0.5.2",
  "tower-service",
  "tracing",
  "url",
@@ -5706,7 +5640,7 @@ dependencies = [
 [[package]]
 name = "ic-gateway"
 version = "0.1.0"
-source = "git+https://github.com/dfinity/ic-gateway?rev=b0b40ea88c4e4f1f39cc1fea2f0fa8ef5f121d6f#b0b40ea88c4e4f1f39cc1fea2f0fa8ef5f121d6f"
+source = "git+https://github.com/dfinity/ic-gateway?rev=54baeada76de8537046bb04d7cfeba7df94afa5a#54baeada76de8537046bb04d7cfeba7df94afa5a"
 dependencies = [
  "ahash 0.8.11",
  "anyhow",
@@ -5737,7 +5671,7 @@ dependencies = [
  "humantime",
  "hyper-util",
  "ic-agent",
- "ic-bn-lib 0.1.0 (git+https://github.com/dfinity/ic-bn-lib?rev=1e733b13ad9458a792012e7824d458570569cb6e)",
+ "ic-bn-lib",
  "ic-http-gateway",
  "ic-transport-types 0.39.3",
  "itertools 0.13.0",
@@ -5748,7 +5682,7 @@ dependencies = [
  "prometheus",
  "rand 0.8.5",
  "regex",
- "reqwest 0.12.9",
+ "reqwest 0.12.12",
  "rustls 0.23.18",
  "rustls-platform-verifier",
  "serde",
@@ -5762,7 +5696,7 @@ dependencies = [
  "time",
  "tokio",
  "tokio-util",
- "tower 0.5.1",
+ "tower 0.5.2",
  "tower-http 0.6.2",
  "tower-service",
  "tower_governor",
@@ -8095,7 +8029,7 @@ dependencies = [
  "rasn-ocsp",
  "rasn-pkix",
  "readme-rustdocifier",
- "reqwest 0.12.9",
+ "reqwest 0.12.12",
  "rustls 0.23.18",
  "sha1",
  "tokio",
@@ -9005,7 +8939,7 @@ dependencies = [
  "hex",
  "ic-certification 2.6.0",
  "ic-transport-types 0.37.1",
- "reqwest 0.12.9",
+ "reqwest 0.12.12",
  "schemars",
  "serde",
  "serde_bytes",
@@ -9445,7 +9379,7 @@ checksum = "0c1318b19085f08681016926435853bbf7858f9c082d0999b80550ff5d9abe15"
 dependencies = [
  "bytes",
  "heck 0.5.0",
- "itertools 0.12.0",
+ "itertools 0.13.0",
  "log",
  "multimap",
  "once_cell",
@@ -9478,7 +9412,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e9552f850d5f0964a4e4d0bf306459ac29323ddfbae05e35a7c0d35cb0803cc5"
 dependencies = [
  "anyhow",
- "itertools 0.12.0",
+ "itertools 0.13.0",
  "proc-macro2",
  "quote",
  "syn 2.0.87",
@@ -10170,9 +10104,9 @@ dependencies = [
 
 [[package]]
 name = "reqwest"
-version = "0.12.9"
+version = "0.12.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a77c62af46e79de0a562e1a9849205ffcb7fc1238876e9bd743357570e04046f"
+checksum = "43e734407157c3c2034e0258f5e4473ddb361b1e85f95a66690d67264d7cd1da"
 dependencies = [
  "async-compression",
  "base64 0.22.1",
@@ -10211,6 +10145,7 @@ dependencies = [
  "tokio-rustls 0.26.0",
  "tokio-socks",
  "tokio-util",
+ "tower 0.5.2",
  "tower-service",
  "url",
  "wasm-bindgen",
@@ -12675,9 +12610,9 @@ dependencies = [
 
 [[package]]
 name = "tower"
-version = "0.5.1"
+version = "0.5.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2873938d487c3cfb9aed7546dc9f2711d867c9f90c46b889989a2cb84eba6b4f"
+checksum = "d039ad9159c98b70ecfd540b2573b97f7f52c3e8d9f8ad57a24b916a536975f9"
 dependencies = [
  "futures-core",
  "futures-util",
@@ -12685,7 +12620,7 @@ dependencies = [
  "indexmap 2.2.6",
  "pin-project-lite",
  "slab",
- "sync_wrapper 0.1.2",
+ "sync_wrapper 1.0.1",
  "tokio",
  "tokio-util",
  "tower-layer",
@@ -12729,7 +12664,7 @@ dependencies = [
  "pin-project-lite",
  "tokio",
  "tokio-util",
- "tower 0.5.1",
+ "tower 0.5.2",
  "tower-layer",
  "tower-service",
  "tracing",
@@ -12786,7 +12721,7 @@ dependencies = [
  "http 1.2.0",
  "pin-project",
  "thiserror 1.0.68",
- "tower 0.5.1",
+ "tower 0.5.2",
  "tracing",
 ]
 

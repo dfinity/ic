@@ -1,5 +1,5 @@
 {
-  "checksum": "037dd2d1f57d709d043f8f53e56b4a491cb4191b044e28f17b373dcf7fb3ccf9",
+  "checksum": "01862b6c19faa5f1f6974fbff1e4f225016818d7777366b62c71566cf5098be3",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -4880,7 +4880,7 @@
               "target": "tokio"
             },
             {
-              "id": "tower 0.5.1",
+              "id": "tower 0.5.2",
               "target": "tower"
             },
             {
@@ -5123,7 +5123,7 @@
               "target": "serde"
             },
             {
-              "id": "tower 0.5.1",
+              "id": "tower 0.5.2",
               "target": "tower"
             },
             {
@@ -19314,7 +19314,7 @@
               "target": "lazy_static"
             },
             {
-              "id": "reqwest 0.12.9",
+              "id": "reqwest 0.12.12",
               "target": "reqwest"
             },
             {
@@ -20575,7 +20575,7 @@
               "target": "regex"
             },
             {
-              "id": "reqwest 0.12.9",
+              "id": "reqwest 0.12.12",
               "target": "reqwest"
             },
             {
@@ -20875,7 +20875,7 @@
               "target": "tonic_build"
             },
             {
-              "id": "tower 0.5.1",
+              "id": "tower 0.5.2",
               "target": "tower"
             },
             {
@@ -31871,7 +31871,7 @@
               "target": "rangemap"
             },
             {
-              "id": "reqwest 0.12.9",
+              "id": "reqwest 0.12.12",
               "target": "reqwest"
             },
             {
@@ -31962,7 +31962,7 @@
         "Git": {
           "remote": "https://github.com/dfinity/ic-bn-lib",
           "commitish": {
-            "Rev": "1e733b13ad9458a792012e7824d458570569cb6e"
+            "Rev": "530f8e8ea577740213aff4b6dfa7a49cc32bae4a"
           }
         }
       },
@@ -32104,7 +32104,7 @@
               "target": "rcgen"
             },
             {
-              "id": "reqwest 0.12.9",
+              "id": "reqwest 0.12.12",
               "target": "reqwest"
             },
             {
@@ -32168,7 +32168,7 @@
               "target": "tokio_util"
             },
             {
-              "id": "tower 0.5.1",
+              "id": "tower 0.5.2",
               "target": "tower"
             },
             {
@@ -33253,7 +33253,7 @@
         "Git": {
           "remote": "https://github.com/dfinity/ic-gateway",
           "commitish": {
-            "Rev": "b0b40ea88c4e4f1f39cc1fea2f0fa8ef5f121d6f"
+            "Rev": "54baeada76de8537046bb04d7cfeba7df94afa5a"
           }
         }
       },
@@ -33427,7 +33427,7 @@
               "target": "regex"
             },
             {
-              "id": "reqwest 0.12.9",
+              "id": "reqwest 0.12.12",
               "target": "reqwest"
             },
             {
@@ -33479,7 +33479,7 @@
               "target": "tokio_util"
             },
             {
-              "id": "tower 0.5.1",
+              "id": "tower 0.5.2",
               "target": "tower"
             },
             {
@@ -48257,7 +48257,7 @@
               "target": "rasn_pkix"
             },
             {
-              "id": "reqwest 0.12.9",
+              "id": "reqwest 0.12.12",
               "target": "reqwest"
             },
             {
@@ -53600,7 +53600,7 @@
               "target": "ic_transport_types"
             },
             {
-              "id": "reqwest 0.12.9",
+              "id": "reqwest 0.12.12",
               "target": "reqwest"
             },
             {
@@ -56335,7 +56335,7 @@
               "target": "heck"
             },
             {
-              "id": "itertools 0.12.0",
+              "id": "itertools 0.13.0",
               "target": "itertools"
             },
             {
@@ -56489,7 +56489,7 @@
               "target": "anyhow"
             },
             {
-              "id": "itertools 0.12.0",
+              "id": "itertools 0.13.0",
               "target": "itertools"
             },
             {
@@ -61758,14 +61758,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "reqwest 0.12.9": {
+    "reqwest 0.12.12": {
       "name": "reqwest",
-      "version": "0.12.9",
+      "version": "0.12.12",
       "package_url": "https://github.com/seanmonstar/reqwest",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/reqwest/0.12.9/download",
-          "sha256": "a77c62af46e79de0a562e1a9849205ffcb7fc1238876e9bd743357570e04046f"
+          "url": "https://static.crates.io/crates/reqwest/0.12.12/download",
+          "sha256": "43e734407157c3c2034e0258f5e4473ddb361b1e85f95a66690d67264d7cd1da"
         }
       },
       "targets": [
@@ -62609,6 +62609,10 @@
               {
                 "id": "tokio 1.42.0",
                 "target": "tokio"
+              },
+              {
+                "id": "tower 0.5.2",
+                "target": "tower"
               }
             ],
             "cfg(target_arch = \"wasm32\")": [
@@ -63818,7 +63822,7 @@
           }
         },
         "edition": "2021",
-        "version": "0.12.9"
+        "version": "0.12.12"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -80311,14 +80315,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "tower 0.5.1": {
+    "tower 0.5.2": {
       "name": "tower",
-      "version": "0.5.1",
+      "version": "0.5.2",
       "package_url": "https://github.com/tower-rs/tower",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/tower/0.5.1/download",
-          "sha256": "2873938d487c3cfb9aed7546dc9f2711d867c9f90c46b889989a2cb84eba6b4f"
+          "url": "https://static.crates.io/crates/tower/0.5.2/download",
+          "sha256": "d039ad9159c98b70ecfd540b2573b97f7f52c3e8d9f8ad57a24b916a536975f9"
         }
       },
       "targets": [
@@ -80401,7 +80405,7 @@
               "target": "slab"
             },
             {
-              "id": "sync_wrapper 0.1.2",
+              "id": "sync_wrapper 1.0.1",
               "target": "sync_wrapper"
             },
             {
@@ -80428,7 +80432,7 @@
           "selects": {}
         },
         "edition": "2018",
-        "version": "0.5.1"
+        "version": "0.5.2"
       },
       "license": "MIT",
       "license_ids": [
@@ -80637,7 +80641,7 @@
               "target": "tokio_util"
             },
             {
-              "id": "tower 0.5.1",
+              "id": "tower 0.5.2",
               "target": "tower"
             },
             {
@@ -80933,7 +80937,7 @@
               "target": "thiserror"
             },
             {
-              "id": "tower 0.5.1",
+              "id": "tower 0.5.2",
               "target": "tower"
             },
             {
@@ -93421,7 +93425,7 @@
     "rayon 1.10.0",
     "rcgen 0.13.1",
     "regex 1.11.1",
-    "reqwest 0.12.9",
+    "reqwest 0.12.12",
     "rgb 0.8.37",
     "ring 0.17.7",
     "ripemd 0.1.3",
@@ -93500,7 +93504,7 @@
     "toml 0.5.11",
     "tonic 0.12.3",
     "tonic-build 0.12.3",
-    "tower 0.5.1",
+    "tower 0.5.2",
     "tower-http 0.6.2",
     "tower-request-id 0.3.0",
     "tower-test 0.4.0",
