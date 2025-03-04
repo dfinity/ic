@@ -5252,10 +5252,7 @@ pub mod archiving {
         // archive has been created.
         let mut archive_info = list_archives(&env, ledger_id);
         while archive_info.is_empty() {
-            // let get_blocks_res = icrc3_get_blocks(&env, ledger_id, 0, 1);
-            // println!("get_blocks_res: {:?}", get_blocks_res);
             env.tick();
-            // println!("ticking while waiting for archive info to update");
             archive_info = list_archives(&env, ledger_id);
         }
         // Verify that the ledger reports block `0` to be present both in the ledger and in the archive
@@ -5285,7 +5282,6 @@ pub mod archiving {
 
         // Verify that the ledger now does not return the first block, but reports that it is in the archive.
         let get_blocks_res = icrc3_get_blocks(&env, ledger_id, 0, 1);
-        println!("get_blocks_res: {:?}", get_blocks_res);
         assert!(get_blocks_res.blocks.is_empty());
     }
 
