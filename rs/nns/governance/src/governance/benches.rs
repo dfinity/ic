@@ -477,6 +477,30 @@ fn single_vote_all_stable() -> BenchResult {
 }
 
 #[bench(raw)]
+fn centralized_following_heap() -> BenchResult {
+    let _a = temporarily_disable_allow_active_neurons_in_stable_memory();
+    let _b = temporarily_disable_stable_memory_following_index();
+    let _c = temporarily_disable_migrate_active_neurons_to_stable_memory();
+
+    cast_vote_cascade_helper(
+        SetUpStrategy::Centralized { num_neurons: 151 },
+        Topic::NetworkEconomics,
+    )
+}
+
+#[bench(raw)]
+fn centralized_following_stable_index() -> BenchResult {
+    let _a = temporarily_enable_allow_active_neurons_in_stable_memory();
+    let _b = temporarily_enable_stable_memory_following_index();
+    let _c = temporarily_disable_migrate_active_neurons_to_stable_memory();
+
+    cast_vote_cascade_helper(
+        SetUpStrategy::Centralized { num_neurons: 151 },
+        Topic::NetworkEconomics,
+    )
+}
+
+#[bench(raw)]
 fn centralized_following_all_stable() -> BenchResult {
     let _a = temporarily_enable_allow_active_neurons_in_stable_memory();
     let _b = temporarily_enable_stable_memory_following_index();

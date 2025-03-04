@@ -53,6 +53,18 @@ benches:
       heap_increase: 0
       stable_memory_increase: 128
     scopes: {}
+  centralized_following_heap:
+    total:
+      instructions: 26580186
+      heap_increase: 1
+      stable_memory_increase: 128
+    scopes: {}
+  centralized_following_stable_index:
+    total:
+      instructions: 42393491
+      heap_increase: 1
+      stable_memory_increase: 128
+    scopes: {}
   compute_ballots_for_new_proposal_with_stable_neurons:
     total:
       instructions: 2265911
