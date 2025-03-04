@@ -74,7 +74,8 @@ fn test_add_deltas_correctly() {
 #[test]
 fn test_add_deltas_with_keys_to_retain() {
     let keys_to_retain = HashSet::from(["test_key1".to_string(), "test_key3".to_string()]);
-    let provider = CanisterDataProvider::<DummyStore>::default().with_keys_filter(keys_to_retain);
+    let provider =
+        CanisterDataProvider::<DummyStore>::default().with_keys_prefixes_filter(keys_to_retain);
     let deltas = self::generate_deltas(5);
 
     provider.add_deltas(deltas).unwrap();

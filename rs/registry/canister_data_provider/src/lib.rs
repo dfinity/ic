@@ -80,19 +80,18 @@ pub trait StableMemoryBorrower: Send + Sync {
 
 /// This registry data provider is designed to work with the `ic-registry-canister-client`
 /// in canisters, enabling the retrieval and storage of a registry copy in stable memory.
+///
+/// Only keys prefixed with the given `prefixes_to_retain` will be retained in the local registry.
 #[derive(Default)]
 pub struct CanisterDataProvider<S: StableMemoryBorrower> {
-    keys_to_retain: Option<HashSet<String>>,
+    prefixes_to_retain: Option<HashSet<String>>,
     _store: PhantomData<S>,
 }
 
 impl<S: StableMemoryBorrower> CanisterDataProvider<S> {
-    /// Create a new instance of `CanisterDataProvider`.
-    ///
-    /// Only `keys_to_retain` will be stored in the local registry
-    pub fn with_keys_filter(self, keys_to_retain: HashSet<String>) -> Self {
+    pub fn with_keys_prefixes_filter(self, prefixes_to_retain: HashSet<String>) -> Self {
         Self {
-            keys_to_retain: Some(keys_to_retain),
+            prefixes_to_retain: Some(prefixes_to_retain),
             ..self
         }
     }
@@ -121,8 +120,11 @@ impl<S: StableMemoryBorrower> CanisterDataProvider<S> {
             let string_key = std::str::from_utf8(&delta.key[..])
                 .map_err(|_| anyhow::anyhow!("Failed to convert key {:?} to string", delta.key))?;
 
-            if let Some(keys) = &self.keys_to_retain {
-                if keys.iter().all(|prefix| !string_key.starts_with(prefix)) {
+            if let Some(prefixes_to_retain) = &self.prefixes_to_retain {
+                if prefixes_to_retain
+                    .iter()
+                    .all(|prefix| !string_key.starts_with(prefix))
+                {
                     continue;
                 }
             }
