@@ -1,5 +1,5 @@
 {
-  "checksum": "4442b1336cb05fbe627389ecbe578e2d9894ddbbd4a01d20c02faf4d537241c4",
+  "checksum": "5948e31e10851023cdca3ba65e08ff5fe90d460c9651e4f9c2622b3fbe50a802",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -33296,7 +33296,7 @@
         "Git": {
           "remote": "https://github.com/dfinity/ic-gateway",
           "commitish": {
-            "Rev": "54baeada76de8537046bb04d7cfeba7df94afa5a"
+            "Rev": "8590b8e9f0af4cdc3b95cd09a0c7a89037b3c038"
           }
         }
       },
@@ -61836,10 +61836,7 @@
             "__rustls-ring",
             "__tls",
             "blocking",
-            "brotli",
             "charset",
-            "deflate",
-            "gzip",
             "h2",
             "hickory-dns",
             "http2",
@@ -61910,10 +61907,6 @@
           "selects": {
             "aarch64-apple-darwin": [
               {
-                "id": "async-compression 0.4.3",
-                "target": "async_compression"
-              },
-              {
                 "id": "encoding_rs 0.8.32",
                 "target": "encoding_rs"
               },
@@ -61972,10 +61965,6 @@
             ],
             "aarch64-apple-ios": [
               {
-                "id": "async-compression 0.4.3",
-                "target": "async_compression"
-              },
-              {
                 "id": "encoding_rs 0.8.32",
                 "target": "encoding_rs"
               },
@@ -62029,10 +62018,6 @@
               }
             ],
             "aarch64-apple-ios-sim": [
-              {
-                "id": "async-compression 0.4.3",
-                "target": "async_compression"
-              },
               {
                 "id": "encoding_rs 0.8.32",
                 "target": "encoding_rs"
@@ -62088,10 +62073,6 @@
             ],
             "aarch64-linux-android": [
               {
-                "id": "async-compression 0.4.3",
-                "target": "async_compression"
-              },
-              {
                 "id": "encoding_rs 0.8.32",
                 "target": "encoding_rs"
               },
@@ -62145,10 +62126,6 @@
               }
             ],
             "aarch64-pc-windows-msvc": [
-              {
-                "id": "async-compression 0.4.3",
-                "target": "async_compression"
-              },
               {
                 "id": "encoding_rs 0.8.32",
                 "target": "encoding_rs"
@@ -62204,10 +62181,6 @@
             ],
             "aarch64-unknown-fuchsia": [
               {
-                "id": "async-compression 0.4.3",
-                "target": "async_compression"
-              },
-              {
                 "id": "encoding_rs 0.8.32",
                 "target": "encoding_rs"
               },
@@ -62261,10 +62234,6 @@
               }
             ],
             "aarch64-unknown-linux-gnu": [
-              {
-                "id": "async-compression 0.4.3",
-                "target": "async_compression"
-              },
               {
                 "id": "encoding_rs 0.8.32",
                 "target": "encoding_rs"
@@ -62320,10 +62289,6 @@
             ],
             "aarch64-unknown-nixos-gnu": [
               {
-                "id": "async-compression 0.4.3",
-                "target": "async_compression"
-              },
-              {
                 "id": "encoding_rs 0.8.32",
                 "target": "encoding_rs"
               },
@@ -62377,10 +62342,6 @@
               }
             ],
             "aarch64-unknown-nto-qnx710": [
-              {
-                "id": "async-compression 0.4.3",
-                "target": "async_compression"
-              },
               {
                 "id": "encoding_rs 0.8.32",
                 "target": "encoding_rs"
@@ -62436,10 +62397,6 @@
             ],
             "arm-unknown-linux-gnueabi": [
               {
-                "id": "async-compression 0.4.3",
-                "target": "async_compression"
-              },
-              {
                 "id": "encoding_rs 0.8.32",
                 "target": "encoding_rs"
               },
@@ -62494,10 +62451,6 @@
             ],
             "armv7-linux-androideabi": [
               {
-                "id": "async-compression 0.4.3",
-                "target": "async_compression"
-              },
-              {
                 "id": "encoding_rs 0.8.32",
                 "target": "encoding_rs"
               },
@@ -62551,10 +62504,6 @@
               }
             ],
             "armv7-unknown-linux-gnueabi": [
-              {
-                "id": "async-compression 0.4.3",
-                "target": "async_compression"
-              },
               {
                 "id": "encoding_rs 0.8.32",
                 "target": "encoding_rs"
@@ -62684,10 +62633,6 @@
             ],
             "i686-apple-darwin": [
               {
-                "id": "async-compression 0.4.3",
-                "target": "async_compression"
-              },
-              {
                 "id": "encoding_rs 0.8.32",
                 "target": "encoding_rs"
               },
@@ -62746,10 +62691,6 @@
             ],
             "i686-linux-android": [
               {
-                "id": "async-compression 0.4.3",
-                "target": "async_compression"
-              },
-              {
                 "id": "encoding_rs 0.8.32",
                 "target": "encoding_rs"
               },
@@ -62803,10 +62744,6 @@
               }
             ],
             "i686-pc-windows-msvc": [
-              {
-                "id": "async-compression 0.4.3",
-                "target": "async_compression"
-              },
               {
                 "id": "encoding_rs 0.8.32",
                 "target": "encoding_rs"
@@ -62862,10 +62799,6 @@
             ],
             "i686-unknown-freebsd": [
               {
-                "id": "async-compression 0.4.3",
-                "target": "async_compression"
-              },
-              {
                 "id": "encoding_rs 0.8.32",
                 "target": "encoding_rs"
               },
@@ -62919,10 +62852,6 @@
               }
             ],
             "i686-unknown-linux-gnu": [
-              {
-                "id": "async-compression 0.4.3",
-                "target": "async_compression"
-              },
               {
                 "id": "encoding_rs 0.8.32",
                 "target": "encoding_rs"
@@ -62978,10 +62907,6 @@
             ],
             "powerpc-unknown-linux-gnu": [
               {
-                "id": "async-compression 0.4.3",
-                "target": "async_compression"
-              },
-              {
                 "id": "encoding_rs 0.8.32",
                 "target": "encoding_rs"
               },
@@ -63035,10 +62960,6 @@
               }
             ],
             "riscv32imc-unknown-none-elf": [
-              {
-                "id": "async-compression 0.4.3",
-                "target": "async_compression"
-              },
               {
                 "id": "encoding_rs 0.8.32",
                 "target": "encoding_rs"
@@ -63094,10 +63015,6 @@
             ],
             "riscv64gc-unknown-none-elf": [
               {
-                "id": "async-compression 0.4.3",
-                "target": "async_compression"
-              },
-              {
                 "id": "encoding_rs 0.8.32",
                 "target": "encoding_rs"
               },
@@ -63151,10 +63068,6 @@
               }
             ],
             "s390x-unknown-linux-gnu": [
-              {
-                "id": "async-compression 0.4.3",
-                "target": "async_compression"
-              },
               {
                 "id": "encoding_rs 0.8.32",
                 "target": "encoding_rs"
@@ -63210,10 +63123,6 @@
             ],
             "thumbv7em-none-eabi": [
               {
-                "id": "async-compression 0.4.3",
-                "target": "async_compression"
-              },
-              {
                 "id": "encoding_rs 0.8.32",
                 "target": "encoding_rs"
               },
@@ -63267,10 +63176,6 @@
               }
             ],
             "thumbv8m.main-none-eabi": [
-              {
-                "id": "async-compression 0.4.3",
-                "target": "async_compression"
-              },
               {
                 "id": "encoding_rs 0.8.32",
                 "target": "encoding_rs"
@@ -63338,10 +63243,6 @@
             ],
             "x86_64-apple-darwin": [
               {
-                "id": "async-compression 0.4.3",
-                "target": "async_compression"
-              },
-              {
                 "id": "encoding_rs 0.8.32",
                 "target": "encoding_rs"
               },
@@ -63400,10 +63301,6 @@
             ],
             "x86_64-apple-ios": [
               {
-                "id": "async-compression 0.4.3",
-                "target": "async_compression"
-              },
-              {
                 "id": "encoding_rs 0.8.32",
                 "target": "encoding_rs"
               },
@@ -63457,10 +63354,6 @@
               }
             ],
             "x86_64-linux-android": [
-              {
-                "id": "async-compression 0.4.3",
-                "target": "async_compression"
-              },
               {
                 "id": "encoding_rs 0.8.32",
                 "target": "encoding_rs"
@@ -63516,10 +63409,6 @@
             ],
             "x86_64-pc-windows-msvc": [
               {
-                "id": "async-compression 0.4.3",
-                "target": "async_compression"
-              },
-              {
                 "id": "encoding_rs 0.8.32",
                 "target": "encoding_rs"
               },
@@ -63573,10 +63462,6 @@
               }
             ],
             "x86_64-unknown-freebsd": [
-              {
-                "id": "async-compression 0.4.3",
-                "target": "async_compression"
-              },
               {
                 "id": "encoding_rs 0.8.32",
                 "target": "encoding_rs"
@@ -63632,10 +63517,6 @@
             ],
             "x86_64-unknown-fuchsia": [
               {
-                "id": "async-compression 0.4.3",
-                "target": "async_compression"
-              },
-              {
                 "id": "encoding_rs 0.8.32",
                 "target": "encoding_rs"
               },
@@ -63689,10 +63570,6 @@
               }
             ],
             "x86_64-unknown-linux-gnu": [
-              {
-                "id": "async-compression 0.4.3",
-                "target": "async_compression"
-              },
               {
                 "id": "encoding_rs 0.8.32",
                 "target": "encoding_rs"
@@ -63748,10 +63625,6 @@
             ],
             "x86_64-unknown-nixos-gnu": [
               {
-                "id": "async-compression 0.4.3",
-                "target": "async_compression"
-              },
-              {
                 "id": "encoding_rs 0.8.32",
                 "target": "encoding_rs"
               },
@@ -63805,10 +63678,6 @@
               }
             ],
             "x86_64-unknown-none": [
-              {
-                "id": "async-compression 0.4.3",
-                "target": "async_compression"
-              },
               {
                 "id": "encoding_rs 0.8.32",
                 "target": "encoding_rs"

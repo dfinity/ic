@@ -5647,7 +5647,7 @@ dependencies = [
 [[package]]
 name = "ic-gateway"
 version = "0.1.0"
-source = "git+https://github.com/dfinity/ic-gateway?rev=54baeada76de8537046bb04d7cfeba7df94afa5a#54baeada76de8537046bb04d7cfeba7df94afa5a"
+source = "git+https://github.com/dfinity/ic-gateway?rev=8590b8e9f0af4cdc3b95cd09a0c7a89037b3c038#8590b8e9f0af4cdc3b95cd09a0c7a89037b3c038"
 dependencies = [
  "ahash 0.8.11",
  "anyhow",
@@ -10115,7 +10115,6 @@ version = "0.12.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "43e734407157c3c2034e0258f5e4473ddb361b1e85f95a66690d67264d7cd1da"
 dependencies = [
- "async-compression",
  "base64 0.22.1",
  "bytes",
  "encoding_rs",
