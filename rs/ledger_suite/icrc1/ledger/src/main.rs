@@ -787,7 +787,7 @@ fn supported_standards() -> Vec<StandardRecord> {
         },
         StandardRecord {
             name: "ICRC-10".to_string(),
-            url: "https://github.com/dfinity/ICRCs/ICRC-10".to_string(),
+            url: "https://github.com/dfinity/ICRC/blob/main/ICRCs/ICRC-10/ICRC-10.md".to_string(),
         },
         StandardRecord {
             name: "ICRC-21".to_string(),
