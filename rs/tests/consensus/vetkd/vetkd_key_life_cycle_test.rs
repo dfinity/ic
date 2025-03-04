@@ -17,7 +17,7 @@ end::catalog[] */
 use anyhow::Result;
 use canister_test::Canister;
 use ic_consensus_threshold_sig_system_test_utils::{
-    enable_chain_key_signing, get_public_key_with_logger, DKG_INTERVAL,
+    enable_chain_key_signing, get_public_key_with_logger, vetkd_encrypted_derive_key,
 };
 use ic_management_canister_types_private::{MasterPublicKeyId, VetKdCurve, VetKdKeyId};
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
@@ -38,6 +38,7 @@ use ic_types::Height;
 use ic_vetkd_utils::{DerivedPublicKey, IBECiphertext, TransportSecretKey};
 
 const NODES_COUNT: usize = 4;
+const DKG_INTERVAL: u64 = 50;
 
 const MSG: &str = "Secret message that is totally important";
 const DERIVATION_ID: &str = "secret_message";
@@ -79,11 +80,12 @@ fn test(env: TestEnv) {
     let nns_agent = nns_node.build_default_agent();
 
     let nns_runtime = runtime_from_url(nns_node.get_public_url(), nns_node.effective_canister_id());
-    let governance = Canister::new(&nns_runtime, GOVERNANCE_CANISTER_ID);
-    let key_ids = vec![MasterPublicKeyId::VetKd(VetKdKeyId {
+    let vet_key = VetKdKeyId {
         curve: VetKdCurve::Bls12_381_G2,
         name: String::from("some_vetkd_key"),
-    })];
+    };
+    let governance = Canister::new(&nns_runtime, GOVERNANCE_CANISTER_ID);
+    let key_ids = vec![MasterPublicKeyId::VetKd(vet_key.clone())];
 
     block_on(async {
         enable_chain_key_signing(&governance, nns_subnet.subnet_id, key_ids.clone(), &log).await;
@@ -95,10 +97,6 @@ fn test(env: TestEnv) {
                 .await
                 .expect("Should successfully retrieve the public key");
 
-            let key: [u8; 96] = key
-                .try_into()
-                .expect("Unexpected vetkd key length returned from IC");
-
             let _key =
                 DerivedPublicKey::deserialize(&key).expect("Failed to parse vetkd public key");
 
@@ -106,8 +104,18 @@ fn test(env: TestEnv) {
                 IBECiphertext::encrypt(&key, DERIVATION_ID.as_bytes(), MSG.as_bytes(), &SEED)
                     .expect("Failed to encrypt message");
 
-            let transport_key = TransportSecretKey::from_seed(&SEED)
+            let transport_key = TransportSecretKey::from_seed(SEED.to_vec())
                 .expect("Failed to generate transport secret key");
+
+            let encrypted_priv_key = vetkd_encrypted_derive_key(
+                transport_key.public_key().try_into().unwrap(),
+                vet_key.clone(),
+                DERIVATION_ID.as_bytes().to_vec(),
+                &msg_can,
+                &log,
+            )
+            .await
+            .expect("Failed to retrieve encrypted derive key");
         }
     });
 }
