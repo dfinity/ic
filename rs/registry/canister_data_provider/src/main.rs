@@ -53,7 +53,7 @@ impl StableMemoryBorrower for StableMemoryStore {
 
 fn main() {
     let local_registry: Arc<CanisterDataProvider<StableMemoryStore>> =
-        Arc::new(CanisterDataProvider::new(Default::default()));
+        Arc::new(CanisterDataProvider::default());
     let registry_client: CanisterRegistryClient =
         CanisterRegistryClient::new(local_registry.clone());
 

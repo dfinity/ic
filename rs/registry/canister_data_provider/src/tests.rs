@@ -44,7 +44,7 @@ fn generate_deltas(num: usize) -> Vec<RegistryDelta> {
 
 #[test]
 fn test_add_deltas_correctly() {
-    let provider = CanisterDataProvider::<DummyStore>::new(None);
+    let provider = CanisterDataProvider::<DummyStore>::default();
     let deltas = generate_deltas(10);
 
     provider.add_deltas(deltas).unwrap();
@@ -56,11 +56,11 @@ fn test_add_deltas_correctly() {
         .get_updates_since(RegistryVersion::from(5))
         .unwrap();
 
-    // Verify that only updates with version >= 5 are returned
-    assert_eq!(updates_since.len(), 6); // 5 through 10
+    // Verify that only updates with version > 5 are returned
+    assert_eq!(updates_since.len(), 5); // 6 through 10
 
     for (i, update) in updates_since.iter().enumerate() {
-        let expected_version = (5 + i) as u64;
+        let expected_version = (6 + i) as u64;
 
         assert_eq!(update.version.get(), expected_version);
         assert_eq!(update.key, format!("test_key{}", expected_version));
@@ -74,7 +74,7 @@ fn test_add_deltas_correctly() {
 #[test]
 fn test_add_deltas_with_keys_to_retain() {
     let keys_to_retain = HashSet::from(["test_key1".to_string(), "test_key3".to_string()]);
-    let provider = CanisterDataProvider::<DummyStore>::new(Some(keys_to_retain));
+    let provider = CanisterDataProvider::<DummyStore>::default().with_keys_filter(keys_to_retain);
     let deltas = self::generate_deltas(5);
 
     provider.add_deltas(deltas).unwrap();

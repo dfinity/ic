@@ -80,20 +80,20 @@ pub trait StableMemoryBorrower: Send + Sync {
 
 /// This registry data provider is designed to work with the `ic-registry-canister-client`
 /// in canisters, enabling the retrieval and storage of a registry copy in stable memory.
-///
-/// - If `keys_to_keep` is `Some(keys)`, only the specified `keys` will be stored in stable memory,
-///   while all other keys from the registry will be discarded.
-/// - If `keys_to_keep` is `None`, all keys from the registry will be retained in stable memory.
+#[derive(Default)]
 pub struct CanisterDataProvider<S: StableMemoryBorrower> {
-    keys_to_keep: Option<HashSet<String>>,
+    keys_to_retain: Option<HashSet<String>>,
     _store: PhantomData<S>,
 }
 
 impl<S: StableMemoryBorrower> CanisterDataProvider<S> {
-    pub fn new(keys_to_retain: Option<HashSet<String>>) -> Self {
+    /// - If `keys_to_retain` is `Some(keys)`, only the specified `keys` will be stored in stable memory,
+    ///   while all other keys from the registry will be discarded.
+    /// - If `keys_to_retain` is `None`, all keys from the registry will be retained in stable memory.
+    pub fn with_keys_filter(self, keys_to_retain: HashSet<String>) -> Self {
         Self {
-            keys_to_keep: keys_to_retain,
-            _store: PhantomData,
+            keys_to_retain: Some(keys_to_retain),
+            ..self
         }
     }
 
@@ -121,7 +121,7 @@ impl<S: StableMemoryBorrower> CanisterDataProvider<S> {
             let string_key = std::str::from_utf8(&delta.key[..])
                 .map_err(|_| anyhow::anyhow!("Failed to convert key {:?} to string", delta.key))?;
 
-            if let Some(keys) = &self.keys_to_keep {
+            if let Some(keys) = &self.keys_to_retain {
                 if keys.iter().all(|prefix| !string_key.starts_with(prefix)) {
                     continue;
                 }
@@ -207,23 +207,24 @@ impl<S: StableMemoryBorrower> RegistryDataProvider for CanisterDataProvider<S> {
         &self,
         version: RegistryVersion,
     ) -> Result<Vec<RegistryTransportRecord>, RegistryDataProviderError> {
-        S::with_borrow(|local_registry| {
-            let start_key = StorableRegistryKey {
-                version: version.get(),
-                ..Default::default()
-            };
+        let next_version = version.increment();
+        let start_key = StorableRegistryKey {
+            version: next_version.get(),
+            ..Default::default()
+        };
 
-            let from_start_key = local_registry
+        let from_start_key = S::with_borrow(|local_registry| {
+            local_registry
                 .range(start_key..)
                 .map(|(storable_key, value)| RegistryTransportRecord {
                     version: RegistryVersion::from(storable_key.version),
                     key: storable_key.key,
                     value: value.0,
                 })
-                .collect_vec();
+                .collect_vec()
+        });
 
-            Ok(from_start_key)
-        })
+        Ok(from_start_key)
     }
 }
 

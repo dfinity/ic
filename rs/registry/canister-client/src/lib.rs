@@ -143,9 +143,9 @@ impl RegistryClient for CanisterRegistryClient {
 
         let records = records
             .iter()
-            .skip(first_match_index) // (1)
-            .filter(|r| r.version <= version) // (2)
-            .take_while(|r| r.key.starts_with(key_prefix)); // (3)
+            .skip(first_match_index)
+            .filter(|r| r.version <= version)
+            .take_while(|r| r.key.starts_with(key_prefix));
 
         let mut effective_records = BTreeMap::new();
         for record in records {
