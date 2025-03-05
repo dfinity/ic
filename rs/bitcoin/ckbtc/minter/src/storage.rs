@@ -174,6 +174,19 @@ pub fn record_event<R: CanisterRuntime>(payload: EventType, runtime: &R) {
     })
 }
 
+pub fn record_event_v0<R: CanisterRuntime>(payload: EventType, runtime: &R) {
+    let bytes = encode_event(&Event {
+        timestamp: Some(runtime.time()),
+        payload,
+    });
+    V0_EVENTS.with(|events| {
+        events
+            .borrow()
+            .append(&bytes)
+            .expect("failed to append an entry to the event log");
+    })
+}
+
 #[cfg(feature = "canbench-rs")]
 mod benches {
     use super::*;

@@ -801,8 +801,17 @@ async fn test_disallow_enabling_voting_rewards_while_in_pre_initialization_swap(
     };
 
     let err = err.error_message.to_lowercase();
-    assert!(err.contains("mode"), "{:#?}", err);
-    assert!(err.contains("vot"), "{:#?}", err);
+    assert!(
+        err.contains("manage nervous system parameters"),
+        "{:#?}",
+        err
+    );
+    assert!(err.contains("not allowed"), "{:#?}", err);
+    assert!(
+        err.contains("in preinitializationswap (2) mode"),
+        "{:#?}",
+        err
+    );
 }
 
 #[tokio::test]
@@ -2477,7 +2486,24 @@ fn test_no_target_version_fails_check_upgrade_status() {
 }
 
 #[test]
-fn test_check_upgrade_fails_and_sets_deployed_version_if_deployed_version_missing() {
+fn test_check_upgrade_fails_and_sets_deployed_version_if_deployed_version_missing_auto() {
+    let automatically_advance_target_version = true;
+    test_check_upgrade_fails_and_sets_deployed_version_if_deployed_version_missing(
+        automatically_advance_target_version,
+    );
+}
+
+#[test]
+fn test_check_upgrade_fails_and_sets_deployed_version_if_deployed_version_missing_no_auto() {
+    let automatically_advance_target_version = false;
+    test_check_upgrade_fails_and_sets_deployed_version_if_deployed_version_missing(
+        automatically_advance_target_version,
+    );
+}
+
+fn test_check_upgrade_fails_and_sets_deployed_version_if_deployed_version_missing(
+    automatically_advance_target_version: bool,
+) {
     let root_canister_id = *TEST_ROOT_CANISTER_ID;
     let governance_canister_id = *TEST_GOVERNANCE_CANISTER_ID;
     let next_version = SnsVersion {
@@ -2598,6 +2624,9 @@ fn test_check_upgrade_fails_and_sets_deployed_version_if_deployed_version_missin
         Box::new(DoNothingLedger {}),
         Box::new(FakeCmc::new()),
     );
+    if let Some(parameters) = governance.proto.parameters.as_mut() {
+        parameters.automatically_advance_target_version = Some(automatically_advance_target_version)
+    };
 
     let expected_running_version_before_upgrade = Some(running_version.clone().into());
     let expected_running_version_after_upgrade = Some(next_version.clone().into());
@@ -2668,43 +2697,93 @@ fn test_check_upgrade_fails_and_sets_deployed_version_if_deployed_version_missin
     // Check that the upgrade journal reflects the succeeded upgrade.
     let upgrade_journal = governance.proto.upgrade_journal.clone().unwrap();
 
-    let (reset_upgrade_steps, refreshed_versions) = assert_matches!(
-        &upgrade_journal.entries[..],
-        [
-            UpgradeJournalEntry {
-                timestamp_seconds: _,
-                event: Some(upgrade_journal_entry::Event::UpgradeStepsReset(
-                    upgrade_journal_entry::UpgradeStepsReset {
-                        human_readable: Some(_),
-                        upgrade_steps: Some(reset_upgrade_steps),
-                    },
-                )),
-            },
-            UpgradeJournalEntry {
-                timestamp_seconds: Some(_),
-                event: Some(upgrade_journal_entry::Event::UpgradeStepsRefreshed(
-                    upgrade_journal_entry::UpgradeStepsRefreshed {
-                        upgrade_steps: Some(
-                            Versions {
-                                versions: refreshed_versions,
-                            },
-                        ),
-                    },
-                )),
-            },
-            UpgradeJournalEntry {
-                timestamp_seconds: _,
-                event: Some(upgrade_journal_entry::Event::UpgradeOutcome(
-                    upgrade_journal_entry::UpgradeOutcome {
-                        human_readable: Some(_),
-                        status: Some(
-                            upgrade_journal_entry::upgrade_outcome::Status::Success(Empty {})
-                        ),
-                    }
-                )),
-            }
-        ] => (reset_upgrade_steps, refreshed_versions)
-    );
+    let (reset_upgrade_steps, refreshed_versions) = if automatically_advance_target_version {
+        assert_matches!(
+            &upgrade_journal.entries[..],
+            [
+                UpgradeJournalEntry {
+                    timestamp_seconds: _,
+                    event: Some(upgrade_journal_entry::Event::UpgradeStepsReset(
+                        upgrade_journal_entry::UpgradeStepsReset {
+                            human_readable: Some(_),
+                            upgrade_steps: Some(reset_upgrade_steps),
+                        },
+                    )),
+                },
+                UpgradeJournalEntry {
+                    timestamp_seconds: Some(_),
+                    event: Some(upgrade_journal_entry::Event::TargetVersionSet(
+                        upgrade_journal_entry::TargetVersionSet {
+                            old_target_version: None,
+                            new_target_version: Some(_),
+                            is_advanced_automatically: Some(true),
+                        },
+                    )),
+                },
+                UpgradeJournalEntry {
+                    timestamp_seconds: Some(_),
+                    event: Some(upgrade_journal_entry::Event::UpgradeStepsRefreshed(
+                        upgrade_journal_entry::UpgradeStepsRefreshed {
+                            upgrade_steps: Some(
+                                Versions {
+                                    versions: refreshed_versions,
+                                },
+                            ),
+                        },
+                    )),
+                },
+                UpgradeJournalEntry {
+                    timestamp_seconds: _,
+                    event: Some(upgrade_journal_entry::Event::UpgradeOutcome(
+                        upgrade_journal_entry::UpgradeOutcome {
+                            human_readable: Some(_),
+                            status: Some(
+                                upgrade_journal_entry::upgrade_outcome::Status::Success(Empty {})
+                            ),
+                        }
+                    )),
+                }
+            ] => (reset_upgrade_steps, refreshed_versions)
+        )
+    } else {
+        assert_matches!(
+            &upgrade_journal.entries[..],
+            [
+                UpgradeJournalEntry {
+                    timestamp_seconds: _,
+                    event: Some(upgrade_journal_entry::Event::UpgradeStepsReset(
+                        upgrade_journal_entry::UpgradeStepsReset {
+                            human_readable: Some(_),
+                            upgrade_steps: Some(reset_upgrade_steps),
+                        },
+                    )),
+                },
+                UpgradeJournalEntry {
+                    timestamp_seconds: Some(_),
+                    event: Some(upgrade_journal_entry::Event::UpgradeStepsRefreshed(
+                        upgrade_journal_entry::UpgradeStepsRefreshed {
+                            upgrade_steps: Some(
+                                Versions {
+                                    versions: refreshed_versions,
+                                },
+                            ),
+                        },
+                    )),
+                },
+                UpgradeJournalEntry {
+                    timestamp_seconds: _,
+                    event: Some(upgrade_journal_entry::Event::UpgradeOutcome(
+                        upgrade_journal_entry::UpgradeOutcome {
+                            human_readable: Some(_),
+                            status: Some(
+                                upgrade_journal_entry::upgrade_outcome::Status::Success(Empty {})
+                            ),
+                        }
+                    )),
+                }
+            ] => (reset_upgrade_steps, refreshed_versions)
+        )
+    };
 
     assert_eq!(
         reset_upgrade_steps.versions,

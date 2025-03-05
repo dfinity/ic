@@ -1,6 +1,7 @@
 use candid::{CandidType, Encode};
 use canister_test::Wasm;
 use ic_base_types::CanisterId;
+use ic_management_canister_types::CanisterStatusType as CanisterStatusResultStatus;
 use ic_management_canister_types_private::CanisterInstallMode;
 use ic_nervous_system_agent::sns::Sns;
 use ic_nervous_system_integration_tests::{
@@ -19,7 +20,7 @@ use ic_nns_common::pb::v1::ProposalId;
 use ic_nns_constants::ROOT_CANISTER_ID;
 use ic_sns_governance_api::pb::v1::UpgradeSnsControlledCanister;
 use ic_sns_swap::pb::v1::Lifecycle;
-use pocket_ic::{management_canister::CanisterStatusResultStatus, nonblocking::PocketIc};
+use pocket_ic::nonblocking::PocketIc;
 
 // TODO @rvem: I don't like the fact that this struct definition is copy-pasted from 'canister/canister.rs'.
 // We should extract it into a separate crate and reuse in both canister and this crates.

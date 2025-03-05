@@ -14,7 +14,7 @@ use ic_interfaces::execution_environment::{ExecutionMode, SubnetAvailableMemory}
 use ic_logger::replica_logger::no_op_logger;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::page_map::TestPageAllocatorFileDescriptorImpl;
-use ic_replicated_state::{Memory, NetworkTopology, SystemState};
+use ic_replicated_state::{Memory, MessageMemoryUsage, NetworkTopology, SystemState};
 use ic_system_api::{
     sandbox_safe_system_state::SandboxSafeSystemState, ApiType, DefaultOutOfInstructionsHandler,
     ExecutionParameters, InstructionLimits, SystemApiImpl,
@@ -68,7 +68,7 @@ fn test_wasmtime_system_api() {
     );
     let canister_memory_limit = NumBytes::from(4 << 30);
     let canister_current_memory_usage = NumBytes::from(0);
-    let canister_current_message_memory_usage = NumBytes::from(0);
+    let canister_current_message_memory_usage = MessageMemoryUsage::ZERO;
     let system_api = SystemApiImpl::new(
         api_type,
         sandbox_safe_system_state,

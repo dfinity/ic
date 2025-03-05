@@ -688,6 +688,18 @@ pub struct AdvanceSnsTargetVersion {
     #[prost(message, optional, tag = "1")]
     pub new_target: ::core::option::Option<SnsVersion>,
 }
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct SetTopicsForCustomProposals {
+    #[prost(btree_map = "uint64, enumeration(Topic)", tag = "1")]
+    pub custom_function_id_to_topic: ::prost::alloc::collections::BTreeMap<u64, i32>,
+}
 /// A proposal is the immutable input of a proposal submission.
 #[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]
 #[compare_default]
@@ -716,7 +728,7 @@ pub struct Proposal {
     /// of this mapping.
     #[prost(
         oneof = "proposal::Action",
-        tags = "4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19"
+        tags = "4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20"
     )]
     pub action: ::core::option::Option<proposal::Action>,
 }
@@ -826,6 +838,11 @@ pub mod proposal {
         /// Id = 15.
         #[prost(message, tag = "19")]
         AdvanceSnsTargetVersion(super::AdvanceSnsTargetVersion),
+        /// Change the mapping from custom proposal types to topics.
+        ///
+        /// Id = 16;
+        #[prost(message, tag = "20")]
+        SetTopicsForCustomProposals(super::SetTopicsForCustomProposals),
     }
 }
 #[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]
@@ -1059,6 +1076,7 @@ pub struct ProposalData {
     /// Id 13 - ManageLedgerParameters proposals.
     /// Id 14 - ManageDappCanisterSettings proposals.
     /// Id 15 - AdvanceSnsTargetVersion proposals.
+    /// Id 16 - SetTopicsForCustomProposals proposals.
     #[prost(uint64, tag = "1")]
     pub action: u64,
     /// This is stored here temporarily. It is also stored on the map

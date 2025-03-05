@@ -38,6 +38,7 @@ fn should_parse_constructor_parameters() {
         if canister == TargetCanister::IcpArchive1
             || canister == TargetCanister::IcpArchive2
             || canister == TargetCanister::IcpArchive3
+            || canister == TargetCanister::IcpArchive4
             //canister lives outside the monorepo
             || canister == TargetCanister::EvmRpc
             || canister == TargetCanister::CyclesLedger

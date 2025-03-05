@@ -63,6 +63,7 @@ ic-test-utilities-load-wasm = { path = "../../../test_utilities/load_wasm" }
 ic-types = { path = "../../../types/types" }
 maplit = "1.0.2"
 mockall = { workspace = true }
+pocket-ic = { path = "../../../../packages/pocket-ic" }
 proptest = { workspace = true }
 simple_asn1 = { workspace = true }
 tokio = { workspace = true }
