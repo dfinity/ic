@@ -94,6 +94,21 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             patch_args = ["-p4"],
             patches = ["@@//bazel:cranelift-codegen-meta.patch"],
         )],
+        "cranelift-assembler-lib": [crate.annotation(
+            # Patch for issue: https://github.com/bytecodealliance/wasmtime/pull/10334
+            patch_args = ["-p4"],
+            patches = ["@@//bazel:cranelift-assembler-lib.patch"],
+        )],
+        "cranelift-assembler-main": [crate.annotation(
+            # Patch for issue: https://github.com/bytecodealliance/wasmtime/pull/10334
+            patch_args = ["-p4"],
+            patches = ["@@//bazel:cranelift-assembler-main.patch"],
+        )],
+        "cranelift-codegen-meta-isle": [crate.annotation(
+            # Patch for issue: https://github.com/bytecodealliance/wasmtime/pull/10334
+            patch_args = ["-p4"],
+            patches = ["@@//bazel:cranelift-codegen-meta-isle.patch"],
+        )],
         "secp256k1-sys": [crate.annotation(
             # This specific version is used by ic-btc-kyt canister, which
             # requires an extra cfg flag to avoid linking issues.
