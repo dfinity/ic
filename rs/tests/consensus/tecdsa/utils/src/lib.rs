@@ -603,7 +603,7 @@ pub async fn get_ecdsa_signature_with_logger(
     };
 
     let signature: Vec<u8> = retry_with_msg_async!(
-        format!("Sending an ECDSA signing request: {:?}", signature_request),
+        format!("Sending a {} signing request", key_id),
         logger,
         Duration::from_secs(40),
         Duration::from_secs(2),
