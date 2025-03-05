@@ -1,0 +1,5 @@
+
+
+service : () -> {
+  get_hello : () -> (text) query
+}
