@@ -1,5 +1,5 @@
 {
-  "checksum": "f52afc9d24fa29464515acc5ebcd6838624b23468fda6d011ab4cc610889c313",
+  "checksum": "000f10adc62c6745ae6412990f36b5867316f0349c6e93a14e7156026ab27c7f",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -15211,7 +15211,7 @@
           "url": "https://static.crates.io/crates/cranelift-assembler-x64/0.117.2/download",
           "sha256": "d2b83fcf2fc1c8954561490d02079b496fd0c757da88129981e15bfe3a548229",
           "patch_args": [
-            "-p4"
+            "-p3"
           ],
           "patches": [
             "@@//bazel:cranelift-assembler-lib.patch",
