@@ -1,0 +1,17 @@
+[package]
+name = "node-rewards-canister"
+version.workspace = true
+authors.workspace = true
+description.workspace = true
+documentation.workspace = true
+edition.workspace = true
+
+[dependencies]
+ic-cdk = { workspace = true }
+candid = { workspace = true }
+
+[dev-dependencies]
+candid_parser = { workspace = true }
+ic-state-machine-tests = { path = "../../state_machine_tests" }
+
+

@@ -1,0 +1,98 @@
+load("@rules_rust//cargo:defs.bzl", "cargo_build_script")
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+load("//bazel:canisters.bzl", "rust_canister")
+load("//bazel:defs.bzl", "rust_ic_test", "rust_ic_test_suite_with_extra_srcs")
+load("//bazel:prost.bzl", "generated_files_check")
+
+package(default_visibility = ["//visibility:public"])
+
+filegroup(
+    name = "protos",
+    srcs = glob(["proto/**/*.proto"]),
+)
+
+DEPENDENCIES = [
+    # Keep sorted.
+    "@crate_index//:candid",
+    "@crate_index//:ic-cdk",
+]
+
+DEV_DEPENDENCIES = [
+    # Keep sorted.
+    "//rs/state_machine_tests",
+    "@crate_index//:candid_parser",
+]
+
+MACRO_DEPENDENCIES = [
+    # Keep sorted.
+]
+
+DEV_MACRO_DEPENDENCIES = [
+    # Keep sorted.
+]
+
+LIB_SRCS = glob(
+    [
+        "gen/**/*.rs",
+        "src/**/*.rs",
+    ],
+    exclude = ["**/*tests*/**"],
+)
+
+rust_library(
+    name = "nrc",
+    srcs = LIB_SRCS,
+    crate_name = "node_rewards_canister",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    version = "0.9.0",
+    deps = DEPENDENCIES,
+)
+
+rust_canister(
+    name = "node-rewards-canister",
+    srcs = ["src/main.rs"],
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    service_file = ":node-rewards-canister.did",
+    deps = DEPENDENCIES + [
+        ":nrc",
+    ],
+)
+
+rust_test(
+    name = "main_test",
+    srcs = glob(["src/main.rs"]),
+    compile_data = ["node-rewards-canister.did"],
+    crate_root = "src/main.rs",
+    proc_macro_deps = MACRO_DEPENDENCIES + DEV_MACRO_DEPENDENCIES,
+    deps = DEV_DEPENDENCIES + DEPENDENCIES + [
+        ":nrc",
+    ],
+)
+
+rust_test(
+    name = "nrc_test",
+    crate = ":nrc",
+    proc_macro_deps = MACRO_DEPENDENCIES + DEV_MACRO_DEPENDENCIES,
+    deps = DEPENDENCIES + DEV_DEPENDENCIES,
+)
+
+rust_ic_test_suite_with_extra_srcs(
+    name = "node_rewards_canister_integration_test",
+    srcs = glob(
+        ["tests/*.rs"],
+        exclude = [
+            # Keep sorted.
+            "tests/mod.rs",
+        ],
+    ),
+    data = [
+        # Keep sorted.
+    ],
+    env = {
+        # Keep sorted.
+        "CARGO_MANIFEST_DIR": "rs/node_rewards/canister",
+    },
+    extra_srcs = glob(["tests/common/*.rs"]),
+    proc_macro_deps = MACRO_DEPENDENCIES + DEV_MACRO_DEPENDENCIES,
+    deps = DEPENDENCIES + DEV_DEPENDENCIES + [":nrc"],
+)
