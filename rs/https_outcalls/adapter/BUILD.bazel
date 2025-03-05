@@ -37,6 +37,7 @@ DEV_DEPENDENCIES = [
     "@crate_index//:rstest",
     "@crate_index//:rustls",
     "@crate_index//:rustls-pemfile",
+    "@crate_index//:socks5-impl",
     "@crate_index//:tempfile",
     "@crate_index//:tokio-rustls",
     "@crate_index//:uuid",

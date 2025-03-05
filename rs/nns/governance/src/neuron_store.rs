@@ -907,10 +907,15 @@ impl NeuronStore {
     }
 
     /// List all neuron ids whose neurons have staked maturity greater than 0.
-    fn list_neurons_ready_to_unstake_maturity(&self, now_seconds: u64) -> Vec<NeuronId> {
+    fn list_neurons_ready_to_unstake_maturity(
+        &self,
+        now_seconds: u64,
+        max_num_neurons: usize,
+    ) -> Vec<NeuronId> {
         self.with_active_neurons_iter_sections(
             |iter| {
                 iter.filter(|neuron| neuron.ready_to_unstake_maturity(now_seconds))
+                    .take(max_num_neurons)
                     .map(|neuron| neuron.id())
                     .collect()
             },
@@ -983,11 +988,15 @@ impl NeuronStore {
 
     /// When a neuron is finally dissolved, if there is any staked maturity it is moved to regular maturity
     /// which can be spawned (and is modulated).
-    pub fn unstake_maturity_of_dissolved_neurons(&mut self, now_seconds: u64) {
+    pub fn unstake_maturity_of_dissolved_neurons(
+        &mut self,
+        now_seconds: u64,
+        max_num_neurons: usize,
+    ) {
         let neuron_ids = {
             #[cfg(feature = "canbench-rs")]
             let _scope_list = canbench_rs::bench_scope("list_neuron_ids");
-            self.list_neurons_ready_to_unstake_maturity(now_seconds)
+            self.list_neurons_ready_to_unstake_maturity(now_seconds, max_num_neurons)
         };
 
         #[cfg(feature = "canbench-rs")]
