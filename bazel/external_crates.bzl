@@ -90,24 +90,19 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             patches = ["@@//bazel:cranelift-isle.patch"],
         )],
         "cranelift-codegen-meta": [crate.annotation(
-            # Patch for determinism issues
             patch_args = ["-p4"],
-            patches = ["@@//bazel:cranelift-codegen-meta.patch"],
+            patches = [
+                "@@//bazel:cranelift-codegen-meta.patch",  # Patch for determinism issues
+                "@@//bazel:cranelift-codegen-meta-isle.patch",  # Patch for issue: https://github.com/bytecodealliance/wasmtime/pull/10334
+            ],
         )],
         "cranelift-assembler-x64": [crate.annotation(
             # Patch for issue: https://github.com/bytecodealliance/wasmtime/pull/10334
             patch_args = ["-p4"],
-            patches = ["@@//bazel:cranelift-assembler-lib.patch"],
-        )],
-        "cranelift-assembler-x64": [crate.annotation(
-            # Patch for issue: https://github.com/bytecodealliance/wasmtime/pull/10334
-            patch_args = ["-p4"],
-            patches = ["@@//bazel:cranelift-assembler-main.patch"],
-        )],
-        "cranelift-codegen-meta": [crate.annotation(
-            # Patch for issue: https://github.com/bytecodealliance/wasmtime/pull/10334
-            patch_args = ["-p4"],
-            patches = ["@@//bazel:cranelift-codegen-meta-isle.patch"],
+            patches = [
+                "@@//bazel:cranelift-assembler-lib.patch",
+                "@@//bazel:cranelift-assembler-main.patch",
+            ],
         )],
         "secp256k1-sys": [crate.annotation(
             # This specific version is used by ic-btc-kyt canister, which
