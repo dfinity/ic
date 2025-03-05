@@ -3762,22 +3762,17 @@ fn reshare_chain_key_api_is_disabled() {
         .with_caller(nns_subnet, nns_canister)
         .build();
     let method = Method::ReshareChainKey;
+    let key = make_vetkd_key("some_key");
     test.inject_call_to_ic00(
         method,
-        ic00::ReshareChainKeyArgs::new(
-            make_vetkd_key("some_key"),
-            nns_subnet,
-            nodes,
-            registry_version,
-        )
-        .encode(),
+        ic00::ReshareChainKeyArgs::new(key.clone(), nns_subnet, nodes, registry_version).encode(),
         Cycles::new(0),
     );
     test.execute_all();
     let response = test.xnet_messages()[0].clone();
     assert_eq!(
         get_reject_message(response),
-        "reshare_chain_key API is not yet implemented.",
+        format!("Subnet {} does not hold threshold key {}.", own_subnet, key),
     )
 }
 
