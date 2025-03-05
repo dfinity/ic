@@ -130,6 +130,17 @@ rust_binary(
     deps = DEPENDENCIES + [":rosetta-api"],
 )
 
+rust_binary(
+    name = "standalone-pocket-ic",
+    srcs = ["tests/standalone_pocket_ic.rs"],
+    aliases = ALIASES,
+    deps = [
+        "//packages/pocket-ic",
+        "@crate_index//:candid",
+        "@crate_index//:tempfile",
+    ],
+)
+
 rust_test(
     name = "rosetta-api_test",
     aliases = ALIASES,
@@ -140,7 +151,10 @@ rust_test(
 
 rust_test_suite_with_extra_srcs(
     name = "rosetta-api-tests",
-    srcs = glob(["tests/*.rs"]),
+    srcs = glob(
+        ["tests/*.rs"],
+        exclude = ["tests/standalone_pocket_ic.rs"],
+    ),
     aliases = ALIASES,
     data = glob([
         "tests/*.json",
