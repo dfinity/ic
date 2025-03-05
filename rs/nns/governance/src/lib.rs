@@ -171,7 +171,7 @@ pub mod neurons_fund;
 mod node_provider_rewards;
 pub mod pb;
 pub mod proposals;
-mod reward;
+pub mod reward;
 pub mod storage;
 mod subaccount_index;
 pub mod timer_tasks;
@@ -1165,3 +1165,6 @@ impl NeuronSubsetMetricsPb {
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(feature = "canbench-rs")]
+mod benches_util;

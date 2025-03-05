@@ -482,6 +482,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7c02d123df017efcdfbd739ef81735b36c5ba83ec3c59c80a9d7ecc718f92e50"
 
 [[package]]
+name = "as-any"
+version = "0.3.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b0f477b951e452a0b6b4a10b53ccd569042d1d01729b519e02074a9c0958a063"
+
+[[package]]
 name = "ascii-canvas"
 version = "3.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -8989,6 +8995,7 @@ dependencies = [
  "serde",
  "serde_json",
  "slog",
+ "socks5-impl",
  "tempfile",
  "thiserror 2.0.11",
  "tokio",
@@ -10563,8 +10570,8 @@ version = "0.9.0"
 dependencies = [
  "candid",
  "comparable",
- "dfn_core",
  "ic-base-types",
+ "ic-cdk 0.17.1",
  "ic-crypto-sha2",
  "ic-nervous-system-common",
  "ic-nns-common-protobuf-generator",
@@ -10577,7 +10584,6 @@ dependencies = [
  "ic-types",
  "lazy_static",
  "num-traits",
- "on_wire",
  "prost 0.13.4",
  "serde",
  "serde_bytes",
@@ -10999,7 +11005,6 @@ dependencies = [
  "cycles-minting-canister",
  "dfn_candid",
  "dfn_http",
- "dfn_json",
  "dfn_protobuf",
  "flate2",
  "futures",
@@ -12426,6 +12431,7 @@ dependencies = [
  "lazy_static",
  "maplit",
  "num-traits",
+ "pretty_assertions",
  "prost 0.13.4",
  "serde",
  "serde_yaml",
@@ -12929,7 +12935,6 @@ dependencies = [
  "ic-test-utilities-logger",
  "ic-test-utilities-metrics",
  "ic-test-utilities-state",
- "ic-test-utilities-time",
  "ic-test-utilities-tmpdir",
  "ic-test-utilities-types",
  "ic-types",
@@ -20944,6 +20949,21 @@ checksum = "c970269d99b64e60ec3bd6ad27270092a5394c4e309314b18ae3fe575695fbe8"
 dependencies = [
  "libc",
  "windows-sys 0.52.0",
+]
+
+[[package]]
+name = "socks5-impl"
+version = "0.6.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "16c081d915d229c8e86edd9bfc784fbbee0e9ae6f2a338d791b22c5ec45dc00f"
+dependencies = [
+ "as-any",
+ "async-trait",
+ "byteorder",
+ "bytes",
+ "percent-encoding",
+ "thiserror 2.0.11",
+ "tokio",
 ]
 
 [[package]]

@@ -1,5 +1,5 @@
 {
-  "checksum": "c503d0e2b21e87e0ccf4248de59b7866351190a9976a27481568e3d30ae4869e",
+  "checksum": "4442b1336cb05fbe627389ecbe578e2d9894ddbbd4a01d20c02faf4d537241c4",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -2759,6 +2759,45 @@
         },
         "edition": "2018",
         "version": "0.7.4"
+      },
+      "license": "MIT OR Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE"
+    },
+    "as-any 0.3.2": {
+      "name": "as-any",
+      "version": "0.3.2",
+      "package_url": "https://codeberg.org/fogti/as-any",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/as-any/0.3.2/download",
+          "sha256": "b0f477b951e452a0b6b4a10b53ccd569042d1d01729b519e02074a9c0958a063"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "as_any",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "as_any",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "edition": "2018",
+        "version": "0.3.2"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -20393,6 +20432,10 @@
             {
               "id": "socket2 0.5.7",
               "target": "socket2"
+            },
+            {
+              "id": "socks5-impl 0.6.1",
+              "target": "socks5_impl"
             },
             {
               "id": "ssh2 0.9.4",
@@ -71559,6 +71602,88 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
+    "socks5-impl 0.6.1": {
+      "name": "socks5-impl",
+      "version": "0.6.1",
+      "package_url": "https://github.com/ssrlive/socks5-impl",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/socks5-impl/0.6.1/download",
+          "sha256": "16c081d915d229c8e86edd9bfc784fbbee0e9ae6f2a338d791b22c5ec45dc00f"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "socks5_impl",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "socks5_impl",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "tokio"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "as-any 0.3.2",
+              "target": "as_any"
+            },
+            {
+              "id": "byteorder 1.5.0",
+              "target": "byteorder"
+            },
+            {
+              "id": "bytes 1.9.0",
+              "target": "bytes"
+            },
+            {
+              "id": "percent-encoding 2.3.1",
+              "target": "percent_encoding"
+            },
+            {
+              "id": "thiserror 2.0.11",
+              "target": "thiserror"
+            },
+            {
+              "id": "tokio 1.42.0",
+              "target": "tokio"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "proc_macro_deps": {
+          "common": [
+            {
+              "id": "async-trait 0.1.83",
+              "target": "async_trait"
+            }
+          ],
+          "selects": {}
+        },
+        "version": "0.6.1"
+      },
+      "license": "GPL-3.0-or-later",
+      "license_ids": [
+        "GPL-3.0"
+      ],
+      "license_file": "LICENSE"
+    },
     "spin 0.5.2": {
       "name": "spin",
       "version": "0.5.2",
@@ -91556,6 +91681,7 @@
     "slog-term 2.9.1",
     "slotmap 1.0.7",
     "socket2 0.5.7",
+    "socks5-impl 0.6.1",
     "ssh2 0.9.4",
     "static_assertions 1.1.0",
     "strum 0.26.3",
