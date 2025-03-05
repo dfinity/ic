@@ -1,9 +1,24 @@
 # NOTE: This configuration is for referenceh only, and not used by Bazel.
 #
-# To run canbench manually:
+# To run canbench manually (assuming the current directory is this directory):
 #
-#    gunzip -c ../test_resources/mainnet_events.mem.gz > ../test_resources/mainnet_events.mem
-#     ~/.cargo/bin/canbench
+# 1. Compile minter canister with self_check feature.
+#
+#    cargo build --target wasm32-unknown-unknown --bin ic-ckbtc-minter --features self_check
+#
+# 2. Set IC_CKBTC_MINTER_WASM_PATH manually to the compilation result produced above.
+#
+#    export IC_CKBTC_MINTER_WASM_PATH=../../../../../wasm32-unknown-unknown/debug/ic-ckbtc-minter.wasm
+#
+# 3. Produce a stable memory dump, and store it in test_resources/mainnet_events.mem
+#
+#    cargo test --test dump_stable_memory
+#    gunzip ../test_resources/mainnet_events.mem.gz
+#
+# 4. Install and run canbench:
+#
+#    cargo install canbench
+#    ~/.cargo/bin/canbench
 
 build_cmd:
   cargo build --target wasm32-unknown-unknown --profile canister-release --features canbench-rs
