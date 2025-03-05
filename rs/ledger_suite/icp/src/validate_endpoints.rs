@@ -13,9 +13,9 @@ use protobuf::cycles_notification_response::Response;
 use serde_bytes::ByteBuf;
 use std::convert::{TryFrom, TryInto};
 
-/// The point of this file is to validate protobufs as they're received and turn
-/// them into a validated data type
-/// ENDPOINTS.
+// The point of this file is to validate protobufs as they're received and turn
+// them into a validated data type
+// ENDPOINTS.
 
 pub fn tokens_from_proto(pb: protobuf::Tokens) -> Tokens {
     Tokens::from_e8s(pb.e8s)
