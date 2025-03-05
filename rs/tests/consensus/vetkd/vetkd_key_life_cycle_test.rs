@@ -22,7 +22,7 @@ use anyhow::{anyhow, Result};
 use canister_test::Canister;
 use futures::FutureExt;
 use ic_consensus_threshold_sig_system_test_utils::{
-    enable_chain_key_signing, get_public_key_with_logger, vetkd_encrypted_derive_key,
+    enable_chain_key_signing, get_public_key_with_logger, vetkd_derive_encrypted_key,
 };
 use ic_management_canister_types_private::{MasterPublicKeyId, VetKdCurve, VetKdKeyId};
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
@@ -93,7 +93,7 @@ fn test(env: TestEnv) {
         name: String::from("some_vetkd_key"),
     };
     let governance = Canister::new(&nns_runtime, GOVERNANCE_CANISTER_ID);
-    let key_ids = vec![MasterPublicKeyId::VetKd(vet_key.clone())];
+    let key_ids = vec![MasterPublicKeyId::VetKd(vetkd_key_id.clone())];
 
     block_on(async {
         enable_chain_key_signing(&governance, nns_subnet.subnet_id, key_ids.clone(), &log).await;
@@ -126,7 +126,7 @@ fn test(env: TestEnv) {
                 || {
                     vetkd_derive_encrypted_key(
                         transport_key.public_key().try_into().unwrap(),
-                        vet_key.clone(),
+                        vetkd_key_id.clone(),
                         DERIVATION_ID.as_bytes().to_vec(),
                         &msg_can,
                     )
