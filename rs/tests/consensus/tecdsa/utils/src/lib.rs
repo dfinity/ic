@@ -965,7 +965,6 @@ pub async fn vetkd_encrypted_derive_key(
     key_id: VetKdKeyId,
     derivation_id: Vec<u8>,
     msg_can: &MessageCanister<'_>,
-    logger: &Logger,
 ) -> Result<Vec<u8>, AgentError> {
     let args = VetKdDeriveEncryptedKeyArgs {
         derivation_domain: vec![],

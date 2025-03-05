@@ -26,6 +26,7 @@ system_test_nns(
         "//rs/types/types",
         "//packages/ic-vetkd-utils",
         "@crate_index//:anyhow",
+        "@crate_index//:futures",
         "@crate_index//:ic-agent",
         "@crate_index//:slog",
     ],

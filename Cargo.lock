@@ -2588,6 +2588,7 @@ version = "0.9.0"
 dependencies = [
  "anyhow",
  "canister-test",
+ "futures",
  "ic-management-canister-types-private",
  "ic-nns-constants",
  "ic-registry-subnet-type",
