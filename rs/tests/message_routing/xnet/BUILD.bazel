@@ -1,4 +1,4 @@
-load("//rs/tests:common.bzl", "GRAFANA_RUNTIME_DEPS", "GUESTOS_RUNTIME_DEPS", "MAINNET_ENV", "XNET_TEST_CANISTER_RUNTIME_DEPS")
+load("//rs/tests:common.bzl", "GRAFANA_RUNTIME_DEPS", "GUESTOS_RUNTIME_DEPS", "MAINNET_REVISION_RUNTIME_DEPS", "XNET_TEST_CANISTER_RUNTIME_DEPS")
 load("//rs/tests:system_tests.bzl", "system_test", "system_test_nns")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
@@ -118,7 +118,7 @@ system_test_nns(
     name = "xnet_compatibility",
     env = {
         "XNET_TEST_CANISTER_WASM_PATH": "$(rootpath //rs/rust_canisters/xnet_test:xnet-test-canister)",
-    } | MAINNET_ENV,
+    },
     extra_head_nns_tags = ["manual"],  # only run this test with the mainnet NNS canisters.
     tags = [
         "long_test",
@@ -129,7 +129,8 @@ system_test_nns(
     runtime_deps =
         GUESTOS_RUNTIME_DEPS +
         XNET_TEST_CANISTER_RUNTIME_DEPS +
-        GRAFANA_RUNTIME_DEPS,
+        GRAFANA_RUNTIME_DEPS +
+        MAINNET_REVISION_RUNTIME_DEPS,
     deps = [
         "//rs/registry/subnet_type",
         "//rs/tests/consensus/utils",
