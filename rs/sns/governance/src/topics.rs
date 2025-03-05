@@ -320,7 +320,11 @@ impl pb::Topic {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::types::native_action_ids::nervous_system_functions;
+    use crate::{
+        pb::v1::{nervous_system_function, ExecuteGenericNervousSystemFunction},
+        types::native_action_ids::nervous_system_functions,
+    };
+    use maplit::btreemap;
     use std::collections::BTreeSet;
 
     #[test]
@@ -358,5 +362,170 @@ mod test {
             "Some native proposal topics were defined for non-native proposals: {:?}",
             native_functions_with_topic,
         )
+    }
+
+    #[test]
+    fn test_all_topics() {
+        let custom_proposal_without_function_type = NervousSystemFunction {
+            id: 1003,
+            name: "Custom proposal for tests".to_string(),
+            description: None,
+            function_type: None,
+        };
+
+        let custom_proposal_without_topic = NervousSystemFunction {
+            id: 1002,
+            name: "Custom proposal for tests".to_string(),
+            description: None,
+            function_type: Some(
+                nervous_system_function::FunctionType::GenericNervousSystemFunction(
+                    nervous_system_function::GenericNervousSystemFunction {
+                        topic: None,
+                        ..Default::default()
+                    },
+                ),
+            ),
+        };
+
+        let custom_proposal_with_topic = NervousSystemFunction {
+            id: 1001,
+            name: "Custom proposal for tests".to_string(),
+            description: None,
+            function_type: Some(
+                nervous_system_function::FunctionType::GenericNervousSystemFunction(
+                    nervous_system_function::GenericNervousSystemFunction {
+                        topic: Some(pb::Topic::CriticalDappOperations as i32),
+                        ..Default::default()
+                    },
+                ),
+            ),
+        };
+
+        let governance_proto = pb::Governance {
+            id_to_nervous_system_functions: btreemap! {
+                1001 => custom_proposal_with_topic,
+                1002 => custom_proposal_without_topic,
+                1003 => custom_proposal_without_function_type,
+            },
+            ..Default::default()
+        };
+
+        let mut test_cases = vec![
+            // DaoCommunitySettings
+            (
+                pb::proposal::Action::ManageNervousSystemParameters(Default::default()),
+                Ok(Some(pb::Topic::DaoCommunitySettings)),
+            ),
+            (
+                pb::proposal::Action::ManageLedgerParameters(Default::default()),
+                Ok(Some(pb::Topic::DaoCommunitySettings)),
+            ),
+            (
+                pb::proposal::Action::ManageSnsMetadata(Default::default()),
+                Ok(Some(pb::Topic::DaoCommunitySettings)),
+            ),
+            // SnsFrameworkManagement
+            (
+                pb::proposal::Action::UpgradeSnsToNextVersion(Default::default()),
+                Ok(Some(pb::Topic::SnsFrameworkManagement)),
+            ),
+            (
+                pb::proposal::Action::AdvanceSnsTargetVersion(Default::default()),
+                Ok(Some(pb::Topic::SnsFrameworkManagement)),
+            ),
+            (
+                pb::proposal::Action::SetTopicsForCustomProposals(Default::default()),
+                Ok(Some(pb::Topic::SnsFrameworkManagement)),
+            ),
+            // DappCanisterManagement
+            (
+                pb::proposal::Action::UpgradeSnsControlledCanister(Default::default()),
+                Ok(Some(pb::Topic::DappCanisterManagement)),
+            ),
+            (
+                pb::proposal::Action::RegisterDappCanisters(Default::default()),
+                Ok(Some(pb::Topic::DappCanisterManagement)),
+            ),
+            (
+                pb::proposal::Action::ManageDappCanisterSettings(Default::default()),
+                Ok(Some(pb::Topic::DappCanisterManagement)),
+            ),
+            // ApplicationBusinessLogic - skipped, since this topic is for custom proposals.
+
+            // Governance
+            (
+                pb::proposal::Action::Motion(Default::default()),
+                Ok(Some(pb::Topic::Governance)),
+            ),
+            // TreasuryAssetManagement
+            (
+                pb::proposal::Action::TransferSnsTreasuryFunds(Default::default()),
+                Ok(Some(pb::Topic::TreasuryAssetManagement)),
+            ),
+            (
+                pb::proposal::Action::MintSnsTokens(Default::default()),
+                Ok(Some(pb::Topic::TreasuryAssetManagement)),
+            ),
+            // CriticalDappOperations
+            (
+                pb::proposal::Action::DeregisterDappCanisters(Default::default()),
+                Ok(Some(pb::Topic::CriticalDappOperations)),
+            ),
+            (
+                pb::proposal::Action::AddGenericNervousSystemFunction(Default::default()),
+                Ok(Some(pb::Topic::CriticalDappOperations)),
+            ),
+            (
+                pb::proposal::Action::RemoveGenericNervousSystemFunction(Default::default()),
+                Ok(Some(pb::Topic::CriticalDappOperations)),
+            ),
+        ];
+
+        // Smoke test
+        assert_eq!(
+            test_cases.len(),
+            nervous_system_functions().len() - 1,
+            "Missing some test cases for native proposals."
+        );
+
+        // Special case: Undefined function.
+        test_cases.push((
+            pb::proposal::Action::Unspecified(Default::default()),
+            Err("foo".to_string()),
+        ));
+
+        // Add test cases for custom proposals.
+        test_cases.push((
+            pb::proposal::Action::ExecuteGenericNervousSystemFunction(
+                ExecuteGenericNervousSystemFunction {
+                    function_id: 1001,
+                    ..Default::default()
+                },
+            ),
+            Ok(Some(pb::Topic::CriticalDappOperations)),
+        ));
+        test_cases.push((
+            pb::proposal::Action::ExecuteGenericNervousSystemFunction(
+                ExecuteGenericNervousSystemFunction {
+                    function_id: 1002,
+                    ..Default::default()
+                },
+            ),
+            Err("foo".to_string()),
+        ));
+        test_cases.push((
+            pb::proposal::Action::ExecuteGenericNervousSystemFunction(
+                ExecuteGenericNervousSystemFunction {
+                    function_id: 1003,
+                    ..Default::default()
+                },
+            ),
+            Err("bar".to_string()),
+        ));
+
+        for (action, expected) in test_cases.into_iter() {
+            let observed = governance_proto.get_topic_for_action(&action);
+            assert_eq!(observed, expected);
+        }
     }
 }
