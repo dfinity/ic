@@ -1815,11 +1815,7 @@ impl SystemApiImpl {
             ApiType::ReplyCallback { execution_mode, .. }
             | ApiType::RejectCallback { execution_mode, .. }
             | ApiType::Cleanup { execution_mode, .. } => {
-                if *execution_mode == ExecutionMode::NonReplicated {
-                    false
-                } else {
-                    true
-                }
+                *execution_mode != ExecutionMode::NonReplicated
             }
         }
     }
