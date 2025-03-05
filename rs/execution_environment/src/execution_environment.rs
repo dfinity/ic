@@ -55,9 +55,9 @@ use ic_replicated_state::{
         NextExecution,
     },
     metadata_state::subnet_call_context_manager::{
-        EcdsaArguments, IDkgDealingsContext, InstallCodeCall, InstallCodeCallId, SchnorrArguments,
-        SetupInitialDkgContext, SignWithThresholdContext, StopCanisterCall, SubnetCallContext,
-        ThresholdArguments, VetKdArguments,
+        EcdsaArguments, InstallCodeCall, InstallCodeCallId, ReshareChainKeyContext,
+        SchnorrArguments, SetupInitialDkgContext, SignWithThresholdContext, StopCanisterCall,
+        SubnetCallContext, ThresholdArguments, VetKdArguments,
     },
     page_map::PageAllocatorFileDescriptor,
     CanisterState, ExecutionTask, NetworkTopology, ReplicatedState,
@@ -2996,21 +2996,22 @@ impl ExecutionEnvironment {
         let nodes = args.get_set_of_nodes()?;
         let registry_version = args.get_registry_version();
 
-        let key_id = args
-            .key_id
-            .try_into()
-            .map_err(|err| UserError::new(ErrorCode::CanisterRejectedMessage, err))?;
+        if !args.key_id.is_idkg_key() {
+            return Err(UserError::new(
+                ErrorCode::CanisterRejectedMessage,
+                "This key is not an idkg key",
+            ));
+        }
 
-        state
-            .metadata
-            .subnet_call_context_manager
-            .push_context(SubnetCallContext::IDkgDealings(IDkgDealingsContext {
+        state.metadata.subnet_call_context_manager.push_context(
+            SubnetCallContext::ReshareChainKey(ReshareChainKeyContext {
                 request: request.clone(),
-                key_id,
+                key_id: args.key_id,
                 nodes,
                 registry_version,
                 time: state.time(),
-            }));
+            }),
+        );
         Ok(())
     }
 

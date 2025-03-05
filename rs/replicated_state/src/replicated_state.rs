@@ -1,7 +1,7 @@
 use super::{
     canister_state::CanisterState,
     metadata_state::{
-        subnet_call_context_manager::{IDkgDealingsContext, SignWithThresholdContext},
+        subnet_call_context_manager::{ReshareChainKeyContext, SignWithThresholdContext},
         IngressHistoryState, Stream, StreamMap, SystemMetadata,
     },
 };
@@ -709,12 +709,12 @@ impl ReplicatedState {
             .sign_with_threshold_contexts
     }
 
-    /// Returns all IDKG dealings contexts.
-    pub fn idkg_dealings_contexts(&self) -> &BTreeMap<CallbackId, IDkgDealingsContext> {
+    /// Returns all reshare chain key contexts.
+    pub fn reshare_chain_key_contexts(&self) -> &BTreeMap<CallbackId, ReshareChainKeyContext> {
         &self
             .metadata
             .subnet_call_context_manager
-            .idkg_dealings_contexts
+            .reshare_chain_key_contexts
     }
 
     /// Retrieves a reference to the stream from this subnet to the destination
