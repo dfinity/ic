@@ -16834,6 +16834,7 @@ version = "0.1.0"
 dependencies = [
  "candid",
  "ic-cdk 0.17.1",
+ "serde",
 ]
 
 [[package]]
