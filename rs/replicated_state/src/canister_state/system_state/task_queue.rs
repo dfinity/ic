@@ -124,7 +124,7 @@ impl TaskQueue {
         queue
     }
 
-    fn from_checkpoint_v2(item: pb::TaskQueue, canister_id: &CanisterId) -> Self {
+    pub fn from_checkpoint_v2(item: pb::TaskQueue, canister_id: &CanisterId) -> Self {
         let queue = Self {
             paused_or_aborted_task: item
                 .paused_or_aborted_task

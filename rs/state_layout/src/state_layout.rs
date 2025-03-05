@@ -1884,6 +1884,12 @@ impl<Permissions: AccessPolicy> CanisterLayout<Permissions> {
         self.canister_root.join(CANISTER_FILE).into()
     }
 
+    pub fn canister_v2(
+        &self,
+    ) -> ProtoFileWith<pb_canister_state_bits::CanisterStateBitsV2, Permissions> {
+        self.canister_root.join(CANISTER_FILE).into()
+    }
+
     /// List all PageMaps with at least one file.
     pub fn all_existing_pagemaps(&self) -> Result<Vec<PageMapLayout<Permissions>>, LayoutError> {
         let mut result = Vec::new();
@@ -2392,13 +2398,13 @@ impl From<CanisterStateBits> for pb_canister_state_bits::CanisterStateBitsV2 {
     }
 }
 
-impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
+impl TryFrom<(pb_canister_state_bits::CanisterStateBits, &CanisterId)> for CanisterStateBits {
     type Error = ProxyDecodeError;
 
     fn try_from(
-        value: pb_canister_state_bits::CanisterStateBits,
-        canister_id: &CanisterId,
+        v: (pb_canister_state_bits::CanisterStateBits, &CanisterId),
     ) -> Result<Self, Self::Error> {
+        let (value, canister_id) = v;
         let execution_state_bits = value
             .execution_state_bits
             .map(|b| b.try_into())
@@ -2551,6 +2557,151 @@ impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
                     "CanisterStateBits::on_low_wasm_memory_hook_status",
                 )
                 .unwrap_or_default(),
+                canister_id,
+            ),
+        })
+    }
+}
+
+impl TryFrom<(pb_canister_state_bits::CanisterStateBitsV2, &CanisterId)> for CanisterStateBits {
+    type Error = ProxyDecodeError;
+
+    fn try_from(
+        v: (pb_canister_state_bits::CanisterStateBitsV2, &CanisterId),
+    ) -> Result<Self, Self::Error> {
+        let (value, canister_id) = v;
+        let execution_state_bits = value
+            .execution_state_bits
+            .map(|b| b.try_into())
+            .transpose()?;
+        let call_context_manager = value
+            .call_context_manager
+            .map(|c| c.try_into())
+            .transpose()?;
+
+        let consumed_cycles = try_from_option_field(
+            value.consumed_cycles,
+            "CanisterStateBitsV2::consumed_cycles",
+        )
+        .unwrap_or_default();
+
+        let mut controllers = BTreeSet::new();
+        for controller in value.controllers.into_iter() {
+            controllers.insert(PrincipalId::try_from(controller)?);
+        }
+
+        let cycles_balance =
+            try_from_option_field(value.cycles_balance, "CanisterStateBitsV2::cycles_balance")?;
+
+        let cycles_debit = value
+            .cycles_debit
+            .map(|c| c.into())
+            .unwrap_or_else(Cycles::zero);
+
+        let reserved_balance = value
+            .reserved_balance
+            .map(|c| c.into())
+            .unwrap_or_else(Cycles::zero);
+
+        let mut consumed_cycles_by_use_cases = BTreeMap::new();
+        for x in value.consumed_cycles_by_use_cases.into_iter() {
+            consumed_cycles_by_use_cases.insert(
+                CyclesUseCase::try_from(
+                    pb_canister_state_bits::CyclesUseCase::try_from(x.use_case).map_err(|_| {
+                        ProxyDecodeError::ValueOutOfRange {
+                            typ: "CyclesUseCase",
+                            err: format!("Unexpected value of cycles use case: {}", x.use_case),
+                        }
+                    })?,
+                )?,
+                NominalCycles::try_from(x.cycles.unwrap_or_default()).unwrap_or_default(),
+            );
+        }
+
+        Ok(Self {
+            controllers,
+            last_full_execution_round: value.last_full_execution_round.into(),
+            call_context_manager,
+            compute_allocation: ComputeAllocation::try_from(value.compute_allocation).map_err(
+                |e| ProxyDecodeError::ValueOutOfRange {
+                    typ: "ComputeAllocation",
+                    err: format!("{:?}", e),
+                },
+            )?,
+            accumulated_priority: value.accumulated_priority.into(),
+            priority_credit: value.priority_credit.into(),
+            long_execution_mode: pb_canister_state_bits::LongExecutionMode::try_from(
+                value.long_execution_mode,
+            )
+            .unwrap_or_default()
+            .into(),
+            execution_state_bits,
+            memory_allocation: MemoryAllocation::try_from(NumBytes::from(value.memory_allocation))
+                .map_err(|e| ProxyDecodeError::ValueOutOfRange {
+                    typ: "MemoryAllocation",
+                    err: format!("{:?}", e),
+                })?,
+            wasm_memory_threshold: NumBytes::new(value.wasm_memory_threshold.unwrap_or(0)),
+            freeze_threshold: NumSeconds::from(value.freeze_threshold),
+            cycles_balance,
+            cycles_debit,
+            reserved_balance,
+            reserved_balance_limit: value.reserved_balance_limit.map(|v| v.into()),
+            status: try_from_option_field(
+                value.canister_status,
+                "CanisterStateBitsV2::canister_status",
+            )?,
+            scheduled_as_first: value.scheduled_as_first,
+            skipped_round_due_to_no_messages: value.skipped_round_due_to_no_messages,
+            executed: value.executed,
+            interrupted_during_execution: value.interrupted_during_execution,
+            certified_data: value.certified_data,
+            consumed_cycles,
+            stable_memory_size: NumWasmPages::from(value.stable_memory_size64 as usize),
+            heap_delta_debit: NumBytes::from(value.heap_delta_debit),
+            install_code_debit: NumInstructions::from(value.install_code_debit),
+            time_of_last_allocation_charge_nanos: try_from_option_field(
+                value.time_of_last_allocation_charge_nanos,
+                "CanisterStateBitsV2::time_of_last_allocation_charge_nanos",
+            )?,
+            global_timer_nanos: value.global_timer_nanos,
+            canister_version: value.canister_version,
+            consumed_cycles_by_use_cases,
+            // TODO(MR-412): replace `unwrap_or_default` by returning an error on missing canister_history field
+            canister_history: try_from_option_field(
+                value.canister_history,
+                "CanisterStateBitsV2::canister_history",
+            )
+            .unwrap_or_default(),
+            wasm_chunk_store_metadata: try_from_option_field(
+                value.wasm_chunk_store_metadata,
+                "CanisterStateBitsV2::wasm_chunk_store_metadata",
+            )
+            .unwrap_or_default(),
+            total_query_stats: try_from_option_field(
+                value.total_query_stats,
+                "CanisterStateBitsV2::total_query_stats",
+            )
+            .unwrap_or_default(),
+            log_visibility: try_from_option_field(
+                value.log_visibility_v2,
+                "CanisterStateBitsV2::log_visibility_v2",
+            )
+            .unwrap_or_default(),
+            canister_log: CanisterLog::new(
+                value.next_canister_log_record_idx,
+                value
+                    .canister_log_records
+                    .into_iter()
+                    .map(|record| record.into())
+                    .collect(),
+            ),
+            wasm_memory_limit: value.wasm_memory_limit.map(NumBytes::from),
+            next_snapshot_id: value.next_snapshot_id,
+            snapshots_memory_usage: NumBytes::from(value.snapshots_memory_usage),
+            task_queue: TaskQueue::from_checkpoint_v2(
+                try_from_option_field(value.task_queue, "CanisterStateBitsV2::task_queue")
+                    .unwrap_or_default(),
                 canister_id,
             ),
         })
