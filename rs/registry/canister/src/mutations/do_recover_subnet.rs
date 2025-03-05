@@ -116,7 +116,7 @@ impl Registry {
                     });
 
             let chain_key_initializations = self
-                .get_all_initial_i_dkg_dealings_from_ic00(&initial_chain_key_config, dkg_nodes)
+                .get_all_chain_key_reshares_from_ic00(&initial_chain_key_config, dkg_nodes)
                 .await;
 
             if let Some(initial_chain_key_config) = initial_chain_key_config {
