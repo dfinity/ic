@@ -13,5 +13,6 @@ candid = { workspace = true }
 [dev-dependencies]
 candid_parser = { workspace = true }
 ic-state-machine-tests = { path = "../../state_machine_tests" }
-
+ic-nns-test-utils = { path = "../../nns/test_utils" }
+node-rewards-canister-api = { path = "./api" }
 

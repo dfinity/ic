@@ -9,6 +9,6 @@
 mod tests {
     #[test]
     fn dummy_test_to_confirm_tests_are_being_run() {
-        assert_eq!(2 + 2, 5);
+        assert_eq!(2 + 2, 4);
     }
 }

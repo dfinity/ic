@@ -1,16 +1,27 @@
-use ic_cdk::query;
+use ic_cdk::{init, post_upgrade, pre_upgrade, query};
+use node_rewards_canister_api::lifecycle_args::{InitArgs, UpgradeArgs};
 
 fn main() {
     println!("Hello, world!");
 }
 
+#[init]
+fn canister_init(_args: InitArgs) {}
+
+#[pre_upgrade]
+fn pre_upgrade() {}
+
+#[post_upgrade]
+fn post_upgrade(args: Option<UpgradeArgs>) {}
+
 #[query]
-fn get_hello() -> String {
+fn hello() -> String {
     "Hello, world!".to_string()
 }
 
 #[cfg(test)]
 mod tests {
+    use super::*;
     use candid_parser::utils::{service_equal, CandidSource};
     #[test]
     fn test_implemented_interface_matches_declared_interface_exactly() {

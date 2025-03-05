@@ -6,19 +6,16 @@ load("//bazel:prost.bzl", "generated_files_check")
 
 package(default_visibility = ["//visibility:public"])
 
-filegroup(
-    name = "protos",
-    srcs = glob(["proto/**/*.proto"]),
-)
-
 DEPENDENCIES = [
     # Keep sorted.
+    "//rs/node_rewards/canister/api",
     "@crate_index//:candid",
     "@crate_index//:ic-cdk",
 ]
 
 DEV_DEPENDENCIES = [
     # Keep sorted.
+    "//rs/nns/test_utils",
     "//rs/state_machine_tests",
     "@crate_index//:candid_parser",
 ]
@@ -30,6 +27,23 @@ MACRO_DEPENDENCIES = [
 DEV_MACRO_DEPENDENCIES = [
     # Keep sorted.
 ]
+
+DEV_DATA = [
+    # Keep sorted.
+    ":node-rewards-canister",
+    "//rs/nns/governance:governance-canister",
+    "//rs/nns/governance:governance-canister-test",
+    "//rs/registry/canister:registry-canister",
+]
+
+DEV_ENV = {
+    # Keep sorted.
+    "CARGO_MANIFEST_DIR": "rs/node_rewards/canister",
+    "NODE_REWARDS_CANISTER_WASM_PATH": "$(rootpath //rs/node_rewards/canister:node-rewards-canister)",
+    "GOVERNANCE_CANISTER_WASM_PATH": "$(rootpath //rs/nns/governance:governance-canister)",
+    "GOVERNANCE_CANISTER_TEST_WASM_PATH": "$(rootpath //rs/nns/governance:governance-canister-test)",
+    "REGISTRY_CANISTER_WASM_PATH": "$(rootpath //rs/registry/canister:registry-canister)",
+}
 
 LIB_SRCS = glob(
     [
@@ -85,13 +99,8 @@ rust_ic_test_suite_with_extra_srcs(
             "tests/mod.rs",
         ],
     ),
-    data = [
-        # Keep sorted.
-    ],
-    env = {
-        # Keep sorted.
-        "CARGO_MANIFEST_DIR": "rs/node_rewards/canister",
-    },
+    data = DEV_DATA,
+    env = DEV_ENV,
     extra_srcs = glob(["tests/common/*.rs"]),
     proc_macro_deps = MACRO_DEPENDENCIES + DEV_MACRO_DEPENDENCIES,
     deps = DEPENDENCIES + DEV_DEPENDENCIES + [":nrc"],
