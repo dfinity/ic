@@ -6,7 +6,6 @@ use ic_ckbtc_minter::state::eventlog::Event;
 use ic_ckbtc_minter::state::Mode;
 use ic_test_utilities_load_wasm::load_wasm;
 use pocket_ic::{PocketIc, PocketIcBuilder};
-use std::io::Write;
 use std::path::PathBuf;
 
 #[derive(Clone, Debug, CandidType, Deserialize)]
@@ -143,32 +142,43 @@ fn upload_events(setup: &Setup, file_name: &str) {
     }
 }
 
-fn upload_events_and_dump_stable_memory<Out: Write>(input_file: &str, mut output: Out) {
+fn upload_events_and_dump_stable_memory(input_file: &str, output_file: &str) {
+    use flate2::bufread::GzEncoder;
+    use flate2::Compression;
+    use std::fs::File;
+    use std::io::{BufReader, BufWriter, Read, Write};
+
     let setup = Setup::new(Network::Mainnet);
     upload_events(&setup, input_file);
-
     let mem = setup.env.get_stable_memory(setup.minter_id);
-    output.write_all(&mem).unwrap();
+    let mut gz = GzEncoder::new(BufReader::new(mem.as_slice()), Compression::best());
+    let mut compressed_buffer = Vec::new();
+    gz.read_to_end(&mut compressed_buffer)
+        .expect("BUG: failed to compress events");
+    let mut compressed_file = BufWriter::new(File::create(output_file).unwrap());
+    compressed_file
+        .write_all(&compressed_buffer)
+        .expect("BUG: failed to write events");
 }
 
 // This is used by Bazel to build an executable.
 fn main() {
     let args: Vec<String> = std::env::args().collect();
-    if args.len() != 2 {
-        panic!("Expecting path to events.gz file as argument");
+    if args.len() != 3 {
+        panic!("USAGE: {} mainnet_events.gz memory_dump.gz", args[0]);
     }
-    upload_events_and_dump_stable_memory(&args[1], std::io::stdout());
+    upload_events_and_dump_stable_memory(&args[1], &args[2]);
 }
 
 #[test]
 fn test_minter_dump_stable_mem_mainnet() {
-    fn path_to_events_file(file_name: &str) -> PathBuf {
+    fn path_to_events_file(file_name: &str) -> String {
         let mut path = PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap());
-        path.push(format!("test_resources/{}", file_name));
-        path
+        path.push("test_resources");
+        path.push(file_name);
+        path.display().to_string()
     }
     let input_file = path_to_events_file("mainnet_events.gz");
-    let mem_path = path_to_events_file("mainnet_events.mem");
-    let file = std::fs::File::create(mem_path).unwrap();
-    upload_events_and_dump_stable_memory(input_file.to_str().unwrap(), file);
+    let output_file = path_to_events_file("mainnet_events.mem.gz");
+    upload_events_and_dump_stable_memory(&input_file, &output_file);
 }
