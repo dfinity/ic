@@ -5,3 +5,4 @@ pub mod models;
 pub mod objects;
 pub mod request_types;
 pub mod response_types;
+pub mod watchdog;
