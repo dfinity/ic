@@ -605,7 +605,7 @@ pub async fn get_ecdsa_signature_with_logger(
     let signature: Vec<u8> = retry_with_msg_async!(
         format!("Sending an ECDSA signing request: {:?}", signature_request),
         logger,
-        Duration::from_secs(20),
+        Duration::from_secs(40),
         Duration::from_secs(2),
         || async {
             let res = msg_can
@@ -657,7 +657,7 @@ pub async fn get_schnorr_signature_with_logger(
             signature_request.message.len(),
         ),
         logger,
-        Duration::from_secs(20),
+        Duration::from_secs(40),
         Duration::from_secs(2),
         || async {
             let res = msg_can
@@ -709,7 +709,7 @@ pub async fn get_vetkd_with_logger(
     let encrypted_key: Vec<u8> = retry_with_msg_async!(
         format!("Sending a {} request of size: {}", key_id, input.len(),),
         logger,
-        Duration::from_secs(20),
+        Duration::from_secs(40),
         Duration::from_secs(2),
         || async {
             vetkd_derive_encrypted_key(
