@@ -1,5 +1,6 @@
 
+type InitArgs = record { };
 
-service : () -> {
-  get_hello : () -> (text) query
+service : (InitArgs) -> {
+  hello : () -> (text) query
 }

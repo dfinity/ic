@@ -1,0 +1,9 @@
+[package]
+name = "node-rewards-canister-api"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+candid = { workspace = true }
+ic-cdk = { workspace = true }
+serde = { workspace = true }

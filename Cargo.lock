@@ -16823,7 +16823,17 @@ dependencies = [
  "candid",
  "candid_parser",
  "ic-cdk 0.17.1",
+ "ic-nns-test-utils",
  "ic-state-machine-tests",
+ "node-rewards-canister-api",
+]
+
+[[package]]
+name = "node-rewards-canister-api"
+version = "0.1.0"
+dependencies = [
+ "candid",
+ "ic-cdk 0.17.1",
 ]
 
 [[package]]
