@@ -16268,6 +16268,7 @@ version = "0.9.0"
 dependencies = [
  "bit-vec 0.6.3",
  "criterion",
+ "ic-config",
  "ic-logger",
  "ic-replicated-state",
  "ic-sys",
