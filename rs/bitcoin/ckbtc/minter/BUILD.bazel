@@ -278,4 +278,4 @@ rust_canbench(
         "@crate_index//:ic-metrics-encoder",
         "@crate_index//:serde_json",
     ],
-}
+)
