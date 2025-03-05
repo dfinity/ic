@@ -2241,7 +2241,6 @@ initial_token_distribution: !FractionalDeveloperVotingPower
   swap_distribution:
     total_e8s: 10000000000
     initial_swap_amount_e8s: 10000000000
-  airdrop_distribution: null
 ".to_string();
 
         assert_eq!(observed, Ok(expected));
@@ -3434,7 +3433,6 @@ initial_token_distribution: !FractionalDeveloperVotingPower
             // Not used in this test.
             developer_distribution: None,
             treasury_distribution: None,
-            airdrop_distribution: None,
         };
         let sns_init_payload = SnsInitPayload {
             max_direct_participation_icp_e8s: Some(MAX_DIRECT_ICP_CONTRIBUTION_TO_SWAP),

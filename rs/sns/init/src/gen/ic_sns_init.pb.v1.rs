@@ -274,9 +274,6 @@ pub struct FractionalDeveloperVotingPower {
     /// The swap bucket.
     #[prost(message, optional, tag = "3")]
     pub swap_distribution: ::core::option::Option<SwapDistribution>,
-    /// OBSOLETE.
-    #[prost(message, optional, tag = "4")]
-    pub airdrop_distribution: ::core::option::Option<AirdropDistribution>,
 }
 /// The distributions awarded to developers at SNS genesis.
 #[derive(
@@ -337,20 +334,6 @@ pub struct SwapDistribution {
     /// deposited in the swap canister's account for the initial token swap.
     #[prost(uint64, tag = "2")]
     pub initial_swap_amount_e8s: u64,
-}
-/// OBSOLETE.
-#[derive(
-    candid::CandidType,
-    candid::Deserialize,
-    serde::Serialize,
-    Eq,
-    Clone,
-    PartialEq,
-    ::prost::Message,
-)]
-pub struct AirdropDistribution {
-    #[prost(message, repeated, tag = "1")]
-    pub airdrop_neurons: ::prost::alloc::vec::Vec<NeuronDistribution>,
 }
 /// A tuple of values used to create a Neuron available at SNS genesis.
 #[derive(
