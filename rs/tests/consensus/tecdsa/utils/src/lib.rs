@@ -925,14 +925,14 @@ pub fn verify_vetkd(public_key: &[u8], encrypted_key: &[u8], input: &[u8]) -> bo
         .expect("Failed to generate transport secret key");
 
     let priv_key = transport_key
-        .decrypt(encrypted_key, &public_key, input)
+        .decrypt(encrypted_key, public_key, input)
         .expect("Failed to decrypt derived key");
 
     let msg = enc_msg
         .decrypt(&priv_key)
         .expect("Failed to decrypt the message");
 
-    &msg == MSG.as_bytes()
+    msg == MSG.as_bytes()
 }
 
 pub fn verify_signature(key_id: &MasterPublicKeyId, msg: &[u8], pk: &[u8], sig: &[u8]) {
