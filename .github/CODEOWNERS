@@ -156,7 +156,7 @@ go_deps.bzl               @dfinity/idx
 /rs/interfaces/src/messaging.rs                         @dfinity/ic-message-routing-owners
 /rs/interfaces/src/p2p.rs                               @dfinity/consensus
 /rs/interfaces/src/p2p/                                 @dfinity/consensus
-/rs/interfaces/src/vetkd.rs                            @dfinity/consensus
+/rs/interfaces/src/vetkd.rs                             @dfinity/consensus
 /rs/interfaces/state_manager/                           @dfinity/ic-message-routing-owners
 /rs/ledger_suite/                                       @dfinity/finint
 /rs/limits/                                             @dfinity/ic-interface-owners
@@ -167,6 +167,7 @@ go_deps.bzl               @dfinity/idx
 /rs/monitoring/pprof/                                   @dfinity/consensus @dfinity/ic-message-routing-owners
 /rs/nervous_system/                                     @dfinity/nns-team
 /rs/nns/                                                @dfinity/nns-team
+/rs/node_rewards/                                       @dfinity/nns-team @dfinity/dre
 /rs/orchestrator/                                       @dfinity/consensus
 /rs/orchestrator/src/hostos_upgrade.rs                  @dfinity/consensus @dfinity/node
 /rs/p2p/                                                @dfinity/consensus
