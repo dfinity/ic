@@ -1,4 +1,6 @@
-use ic_crypto_internal_bls12_381_vetkd::{DerivationDomain, DerivedPublicKey, G2Affine};
+use ic_crypto_internal_bls12_381_vetkd::{
+    DerivationDomain, DerivedPublicKey, G2Affine, TransportPublicKey,
+};
 use ic_crypto_internal_threshold_sig_canister_threshold_sig::DeriveThresholdPublicKeyError;
 use ic_types::crypto::canister_threshold_sig::error::CanisterThresholdGetPublicKeyError;
 use ic_types::crypto::canister_threshold_sig::{MasterPublicKey, PublicKey};
@@ -52,7 +54,7 @@ pub fn derive_vetkd_public_key(
 
 /// Checks if the given bytes deserialize into a correct public key
 pub fn is_valid_transport_public_key(transport_public_key: &[u8; 48]) -> bool {
-    G2Affine::deserialize(transport_public_key).is_ok()
+    TransportPublicKey::deserialize(transport_public_key).is_ok()
 }
 
 #[derive(Clone, Eq, PartialEq, Debug)]
