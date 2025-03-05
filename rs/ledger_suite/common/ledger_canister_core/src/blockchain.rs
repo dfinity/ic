@@ -99,7 +99,9 @@ where
         self.num_archived_blocks..self.num_archived_blocks + self.blocks.len()
     }
 
-    /// Returns the blocks stored locally.
+    /// Returns the blocks stored locally. If the requested range is (partially) outside
+    /// of the local blocks range, the intersections with the local blocks range
+    /// is returned - the function does not panic in this case.
     pub fn get_blocks(&self, local_blocks: std::ops::Range<u64>) -> Vec<EncodedBlock> {
         self.blocks.get_blocks(local_blocks)
     }
