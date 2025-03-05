@@ -2,7 +2,6 @@
 Common dependencies for system-tests.
 """
 
-load("@mainnet_versions//:defs.bzl", "mainnet_versions")
 load(":qualifying_nns_canisters.bzl", "QUALIFYING_NNS_CANISTERS", "QUALIFYING_SNS_CANISTERS")
 
 GUESTOS_DEV_VERSION = "//ic-os/guestos/envs/dev:version.txt"
@@ -12,13 +11,7 @@ GUESTOS_RUNTIME_DEPS = [
     "//ic-os/components:hostos-scripts/build-bootstrap-config-image.sh",
 ]
 
-MAINNET_NNS_SUBNET_REVISION = mainnet_versions["subnets"]["tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe"]
-MAINNET_APPLICATION_SUBNET_REVISION = mainnet_versions["subnets"]["io67a-2jmkw-zup3h-snbwi-g6a5n-rm5dn-b6png-lvdpl-nqnto-yih6l-gqe"]
-
-MAINNET_ENV = {
-    "MAINNET_NNS_SUBNET_REVISION_ENV": MAINNET_NNS_SUBNET_REVISION,
-    "MAINNET_APPLICATION_SUBNET_REVISION_ENV": MAINNET_APPLICATION_SUBNET_REVISION,
-}
+MAINNET_REVISION_RUNTIME_DEPS = ["//:mainnet_nns_subnet_revision"]
 
 NNS_CANISTER_WASM_PROVIDERS = {
     "registry-canister": {
@@ -164,6 +157,7 @@ STATESYNC_TEST_CANISTER_RUNTIME_DEPS = ["//rs/rust_canisters/statesync_test:stat
 IC_MAINNET_NNS_RECOVERY_RUNTIME_DEPS = GUESTOS_RUNTIME_DEPS + \
                                        NNS_CANISTER_RUNTIME_DEPS + \
                                        BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS + \
+                                       MAINNET_REVISION_RUNTIME_DEPS + \
                                        GRAFANA_RUNTIME_DEPS + [
     "//rs/sns/cli:sns",
     "//rs/tests:recovery/binaries",

@@ -360,7 +360,7 @@ fn unstake_maturity_of_dissolved_neurons_heap() -> BenchResult {
         add_neuron_ready_to_unstake_maturity(now_seconds(), &mut rng, &mut neuron_store);
     }
 
-    bench_fn(|| neuron_store.unstake_maturity_of_dissolved_neurons(now_seconds()))
+    bench_fn(|| neuron_store.unstake_maturity_of_dissolved_neurons(now_seconds(), 100))
 }
 
 #[bench(raw)]
@@ -374,7 +374,7 @@ fn unstake_maturity_of_dissolved_neurons_stable() -> BenchResult {
     }
 
     bench_fn(|| {
-        neuron_store.unstake_maturity_of_dissolved_neurons(now_seconds());
+        neuron_store.unstake_maturity_of_dissolved_neurons(now_seconds(), 100);
     })
 }
 

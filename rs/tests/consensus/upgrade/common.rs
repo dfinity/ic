@@ -64,7 +64,8 @@ pub fn bless_branch_version(env: &TestEnv, nns_node: &IcNodeSnapshot) -> String 
 pub fn bless_mainnet_version(env: &TestEnv, nns_node: &IcNodeSnapshot) -> String {
     let logger = env.logger();
 
-    let mainnet_version = get_mainnet_nns_revision();
+    let mainnet_version =
+        read_dependency_to_string("mainnet_nns_subnet_revision.txt").expect("mainnet IC version");
 
     // Bless mainnet version
     let sha256 = env.get_mainnet_ic_os_update_img_sha256().unwrap();
