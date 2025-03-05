@@ -662,14 +662,55 @@ fn process_subnet_call_context(
     ),
     PayloadCreationError,
 > {
-    process_setup_initial_dkg_contexts(
-        this_subnet_id,
-        start_block_height,
-        registry_client,
-        state,
-        validation_context,
-        logger,
-    )
+    let (init_dkg_configs, init_dkg_errors, init_dkg_valid_target_ids) =
+        process_setup_initial_dkg_contexts(
+            this_subnet_id,
+            start_block_height,
+            registry_client,
+            state,
+            validation_context,
+            logger,
+        )?;
+
+    let (reshare_key_configs, reshare_key_errors, reshare_key_valid_target_ids) =
+        process_reshare_chain_key_contexts(
+            this_subnet_id,
+            start_block_height,
+            registry_client,
+            state,
+            validation_context,
+            logger,
+        )?;
+
+    Ok((init_dkg_configs, init_dkg_errors, init_dkg_valid_target_ids))
+}
+
+#[allow(clippy::type_complexity)]
+fn process_reshare_chain_key_contexts(
+    this_subnet_id: SubnetId,
+    start_block_height: Height,
+    registry_client: &dyn RegistryClient,
+    state: &ReplicatedState,
+    validation_context: &ValidationContext,
+    logger: &ReplicaLogger,
+) -> Result<
+    (
+        Vec<Vec<NiDkgConfig>>,
+        Vec<(NiDkgId, String)>,
+        Vec<NiDkgTargetId>,
+    ),
+    PayloadCreationError,
+> {
+    let mut new_configs = Vec::new();
+    let mut errors = Vec::new();
+    let mut valid_target_ids = Vec::new();
+    let contexts = &state
+        .metadata
+        .subnet_call_context_manager
+        .reshare_chain_key_contexts;
+
+    // TODO
+    Ok((new_configs, errors, valid_target_ids))
 }
 
 #[allow(clippy::type_complexity)]
@@ -679,10 +720,7 @@ fn process_setup_initial_dkg_contexts(
     registry_client: &dyn RegistryClient,
     state: &ReplicatedState,
     validation_context: &ValidationContext,
-    logger: &ic_logger::context_logger::ContextLogger<
-        ic_protobuf::log::log_entry::v1::LogEntry,
-        ic_logger::replica_logger::LogEntryLogger,
-    >,
+    logger: &ReplicaLogger,
 ) -> Result<
     (
         Vec<Vec<NiDkgConfig>>,
@@ -699,34 +737,26 @@ fn process_setup_initial_dkg_contexts(
         .subnet_call_context_manager
         .setup_initial_dkg_contexts;
     for (_callback_id, context) in contexts.iter() {
-        let SetupInitialDkgContext {
-            request: _,
-            nodes_in_target_subnet,
-            target_id,
-            registry_version,
-            time: _,
-        } = context;
-
         // if we haven't reached the required registry version yet, skip this context
-        if registry_version > &validation_context.registry_version {
+        if context.registry_version > validation_context.registry_version {
             continue;
         }
 
         // Dealers must be in the same registry_version.
-        let dealers = get_node_list(this_subnet_id, registry_client, *registry_version)?;
+        let dealers = get_node_list(this_subnet_id, registry_client, context.registry_version)?;
 
         match create_low_high_remote_dkg_configs(
             start_block_height,
             this_subnet_id,
-            NiDkgTargetSubnet::Remote(*target_id),
+            NiDkgTargetSubnet::Remote(context.target_id),
             &dealers,
-            nodes_in_target_subnet,
-            registry_version,
+            &context.nodes_in_target_subnet,
+            &context.registry_version,
             logger,
         ) {
             Ok((config0, config1)) => {
                 new_configs.push(vec![config0, config1]);
-                valid_target_ids.push(*target_id);
+                valid_target_ids.push(context.target_id);
             }
             Err(mut err_vec) => errors.append(&mut err_vec),
         };
