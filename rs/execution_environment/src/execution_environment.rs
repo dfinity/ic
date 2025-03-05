@@ -2906,7 +2906,7 @@ impl ExecutionEnvironment {
         rng: &mut dyn RngCore,
         subnet_size: usize,
     ) -> Result<(), UserError> {
-        if let ThresholdArguments::Schnorr(ref schnorr) = args {
+        if let ThresholdArguments::Schnorr(schnorr) = &args {
             let alg = schnorr.key_id.algorithm;
             match (alg, &schnorr.taproot_tree_root) {
                 (SchnorrAlgorithm::Bip340Secp256k1, Some(aux)) => {
