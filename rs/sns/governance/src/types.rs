@@ -139,7 +139,7 @@ pub mod native_action_ids {
     pub const SET_CUSTOM_TOPICS_FOR_CUSTOM_PROPOSALS_ACTION: u64 = 16;
 
     // When adding something to this list, make sure to update the below function.
-    pub fn native_functions() -> Vec<NervousSystemFunction> {
+    pub fn nervous_system_functions() -> Vec<NervousSystemFunction> {
         vec![
             NervousSystemFunction::motion(),
             NervousSystemFunction::manage_nervous_system_parameters(),
@@ -1072,6 +1072,14 @@ impl NervousSystemFunction {
             Some(FunctionType::NativeNervousSystemFunction(_))
         )
     }
+
+    /// The special case if for `EXECUTE_GENERIC_NERVOUS_SYSTEM_FUNCTION` which wraps custom
+    /// proposals of this SNS. While technically being a native function, this one does not have
+    /// its own topic.
+    pub fn needs_topic(&self) -> bool {
+        self.id != native_action_ids::EXECUTE_GENERIC_NERVOUS_SYSTEM_FUNCTION
+    }
+
     fn unspecified() -> NervousSystemFunction {
         NervousSystemFunction {
             id: native_action_ids::UNSPECIFIED,

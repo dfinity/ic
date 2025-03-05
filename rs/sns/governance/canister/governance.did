@@ -227,7 +227,7 @@ type GenericNervousSystemFunction = record {
   target_canister_id : opt principal;
   validator_method_name : opt text;
   target_method_name : opt text;
-  topic: opt Topic;
+  topic : opt Topic;
 };
 
 type GetMaturityModulationResponse = record {

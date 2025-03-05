@@ -142,7 +142,7 @@ impl Governance {
         let mut uncategorized_functions = vec![];
 
         let topic_id_to_functions: HashMap<u64, NervousSystemFunction> =
-            native_action_ids::native_functions()
+            native_action_ids::nervous_system_functions()
                 .into_iter()
                 .map(|function| (function.id, function))
                 .collect();
@@ -320,23 +320,43 @@ impl pb::Topic {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::types::native_action_ids::native_functions;
+    use crate::types::native_action_ids::nervous_system_functions;
     use std::collections::BTreeSet;
 
     #[test]
-    fn test_all_native_topics() {
-        let all_native_functions_with_topic = topic_descriptions()
+    fn test_all_native_proposals_have_topics_except_execute_nervous_system_function() {
+        let native_functions = nervous_system_functions()
+            .into_iter()
+            .filter_map(|nervous_system_function| {
+                if nervous_system_function.needs_topic() {
+                    Some((nervous_system_function.id, nervous_system_function.name))
+                } else {
+                    None
+                }
+            })
+            .collect::<BTreeSet<_>>();
+
+        let mut native_functions_with_topic = topic_descriptions()
             .into_iter()
             .flat_map(|topic_info: TopicInfo<NativeFunctions>| {
                 topic_info.functions.native_functions
             })
             .collect::<BTreeSet<_>>();
 
-        let all_native_functions = native_functions()
-            .into_iter()
-            .map(|nervous_system_function| nervous_system_function.id)
-            .collect::<BTreeSet<_>>();
+        for (native_function_id, native_function_name) in native_functions {
+            let function_id_found = native_functions_with_topic.remove(&native_function_id);
+            assert!(
+                function_id_found,
+                "Topic not defined for native proposal '{}' with ID {}.",
+                native_function_name, native_function_id,
+            )
+        }
 
-        assert_eq!(all_native_functions_with_topic, all_native_functions);
+        assert_eq!(
+            native_functions_with_topic,
+            BTreeSet::new(),
+            "Some native proposal topics were defined for non-native proposals: {:?}",
+            native_functions_with_topic,
+        )
     }
 }
