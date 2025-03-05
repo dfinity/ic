@@ -282,6 +282,7 @@ rust_canbench(
     rustc_env = {
         "CKBTC_MINTER_DID_PATH": "$(execpath :ckbtc_minter.did)",
     },
+    visibility = ["//visibility:private"],
     deps = [
         # Keep sorted.
         ":ckbtc_minter_lib-canbench",
@@ -295,5 +296,4 @@ rust_canbench(
         "@crate_index//:ic-metrics-encoder",
         "@crate_index//:serde_json",
     ],
-    visibility = ["//visibility:private"],
 )
