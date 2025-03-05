@@ -10,7 +10,6 @@ use ic_management_canister_types_private::{
     LogVisibilityV2,
 };
 
-use dfn_core::api::ic0;
 use ic_nns_common::types::UpdateIcpXdrConversionRatePayload;
 use ic_types::{CanisterId, Cycles, PrincipalId, SubnetId};
 use ic_xrc_types::ExchangeRate;
