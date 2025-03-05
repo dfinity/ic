@@ -1,8 +1,6 @@
 use crate::{
     allow_active_neurons_in_stable_memory,
-    governance::{
-        Environment, TimeWarp, LOG_PREFIX,
-    },
+    governance::{Environment, TimeWarp, LOG_PREFIX},
     migrate_active_neurons_to_stable_memory,
     neuron::types::Neuron,
     neurons_fund::neurons_fund_neuron::pick_most_important_hotkeys,
