@@ -45,6 +45,7 @@ LEDGER_CANISTER_DEPS = [
     "@crate_index//:ic-metrics-encoder",
     "@crate_index//:ic-stable-structures",
     "@crate_index//:num-traits",
+    "@crate_index//:prost",
     "@crate_index//:serde_bytes",
 ]
 

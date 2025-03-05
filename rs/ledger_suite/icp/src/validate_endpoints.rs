@@ -3,8 +3,8 @@ use crate::{protobuf, TransferFee, TransferFeeArgs};
 use crate::{
     AccountBalanceArgs, AccountIdentifier, Block, BlockArg, BlockRes, CyclesResponse, EncodedBlock,
     GetBlocksArgs, GetBlocksRes, HashOf, IterBlocksArgs, IterBlocksRes, Memo, NotifyCanisterArgs,
-    Operation, SendArgs, Subaccount, TimeStamp, TipOfChainRes, Tokens, TotalSupplyArgs,
-    Transaction, TransactionNotification, DEFAULT_TRANSFER_FEE,
+    Operation, SendArgs, Subaccount, TimeStamp, TipOfChainRes, Tokens, Transaction,
+    TransactionNotification, DEFAULT_TRANSFER_FEE,
 };
 use dfn_protobuf::ToProto;
 use ic_base_types::{CanisterId, CanisterIdError};
@@ -16,16 +16,6 @@ use std::convert::{TryFrom, TryInto};
 /// The point of this file is to validate protobufs as they're received and turn
 /// them into a validated data type
 /// ENDPOINTS.
-impl ToProto for TotalSupplyArgs {
-    type Proto = protobuf::TotalSupplyRequest;
-    fn from_proto(_: Self::Proto) -> Result<Self, String> {
-        Ok(TotalSupplyArgs {})
-    }
-
-    fn into_proto(self) -> protobuf::TotalSupplyRequest {
-        protobuf::TotalSupplyRequest {}
-    }
-}
 
 pub fn tokens_from_proto(pb: protobuf::Tokens) -> Tokens {
     Tokens::from_e8s(pb.e8s)

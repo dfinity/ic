@@ -1056,7 +1056,7 @@ pub struct TransferFeeArgs {}
 /// to query past values. Requiring 1 candid value instead of zero is a
 /// non-backward compatible change. But adding optional fields to a struct taken
 /// as input is backward-compatible.
-#[derive(Clone, Eq, PartialEq, Hash, Debug, CandidType, Deserialize, Serialize)]
+#[derive(Clone, Eq, PartialEq, Hash, CandidType, Deserialize, Serialize, ::prost::Message)]
 pub struct TotalSupplyArgs {}
 
 #[derive(Clone, Eq, PartialEq, Hash, Debug, CandidType, Deserialize, Serialize)]

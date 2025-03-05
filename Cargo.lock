@@ -15479,6 +15479,7 @@ dependencies = [
  "num-traits",
  "on_wire",
  "proptest 1.6.0",
+ "prost 0.13.4",
  "serde",
  "serde_bytes",
  "serde_cbor",

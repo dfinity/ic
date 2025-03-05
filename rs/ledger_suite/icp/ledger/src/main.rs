@@ -66,6 +66,7 @@ use ledger_canister::{
 use num_traits::cast::ToPrimitive;
 #[allow(unused_imports)]
 use on_wire::IntoWire;
+use prost::Message;
 use std::cell::RefCell;
 use std::io::{Read, Write};
 use std::{
@@ -654,9 +655,18 @@ fn icrc1_fee() -> Nat {
     Nat::from(LEDGER.read().unwrap().transfer_fee.get_e8s())
 }
 
-/// The total number of Tokens not inside the minting canister
-fn total_supply() -> Tokens {
-    LEDGER.read().unwrap().balances().total_supply()
+#[export_name = "canister_query total_supply_pb"]
+fn total_supply() {
+    let input = ic_cdk::api::call::arg_data_raw();
+
+    ic_cdk::setup();
+    let _ = TotalSupplyArgs::decode(&input[..]).expect("Could not decode TotalSupplyArgs");
+    let res = tokens_into_proto(LEDGER.read().unwrap().balances().total_supply());
+    let mut buf = Vec::with_capacity(res.encoded_len());
+    res.encode(&mut buf)
+        .map_err(|e| e.to_string())
+        .expect("Could not encode response");
+    ic_cdk::api::call::reply_raw(&buf)
 }
 
 #[query]
@@ -1220,13 +1230,6 @@ fn compute_account_identifier(arg: Account) -> AccountIdBlob {
 #[export_name = "canister_query transfer_fee_pb"]
 fn transfer_fee_() {
     over(protobuf, transfer_fee)
-}
-
-#[export_name = "canister_query total_supply_pb"]
-fn total_supply_() {
-    over(protobuf, |_: TotalSupplyArgs| {
-        tokens_into_proto(total_supply())
-    })
 }
 
 /// Get multiple blocks by *offset into the container* (not BlockIndex) and
