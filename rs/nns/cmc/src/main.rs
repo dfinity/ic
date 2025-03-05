@@ -8,8 +8,7 @@ use exchange_rate_canister::{
 };
 use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_cdk::api::call::{arg_data_raw, reply_raw, CallResult, ManualReply};
-use ic_cdk::api::stable;
-use ic_cdk::{call, heartbeat, init, post_upgrade, pre_upgrade, query, spawn, update};
+use ic_cdk::{heartbeat, init, post_upgrade, pre_upgrade, query, spawn, update};
 use ic_crypto_tree_hash::{
     flatmap, HashTreeBuilder, HashTreeBuilderImpl, Label, LabeledTree, WitnessGenerator,
     WitnessGeneratorImpl,
@@ -44,7 +43,7 @@ use std::{
     collections::{btree_map::Entry, BTreeMap, BTreeSet},
     convert::TryInto,
     thread::LocalKey,
-    time::{Duration, SystemTime, UNIX_EPOCH},
+    time::Duration,
 };
 
 mod environment;
@@ -1097,7 +1096,7 @@ fn transaction_notification_pb() {
 async fn transaction_notification(tn: TransactionNotification) {
     match do_transaction_notification(tn).await {
         Ok(response) => ManualReply::<CyclesResponse>::one(response),
-        Err(e) => ManualReply::reject(&format!("Error: {:?}", e)),
+        Err(e) => ManualReply::reject(format!("Error: {:?}", e)),
     };
 }
 

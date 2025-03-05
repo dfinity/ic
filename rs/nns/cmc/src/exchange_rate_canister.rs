@@ -506,7 +506,6 @@ mod test {
         cell::RefCell,
         collections::VecDeque,
         sync::{Arc, Mutex},
-        time::UNIX_EPOCH,
     };
 
     #[derive(Default)]
