@@ -69,7 +69,7 @@ jobs:
     name: Bazel System Tests Hourly
     <<: *dind-large-setup
     runs-on:
-      group: ln1
+      group: dm1
       labels: dind-large
     steps:
       - <<: *checkout
