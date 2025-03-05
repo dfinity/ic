@@ -1,6 +1,6 @@
 use crate::logs::ERROR;
 use crate::pb::v1::{self as pb, NervousSystemFunction};
-use crate::types::native_action_ids;
+use crate::types::native_action_ids::{self, SET_CUSTOM_TOPICS_FOR_CUSTOM_PROPOSALS_ACTION};
 use crate::{governance::Governance, pb::v1::nervous_system_function::FunctionType};
 use ic_canister_log::log;
 use ic_sns_governance_api::pb::v1::topics::Topic;
@@ -73,6 +73,7 @@ pub fn topic_descriptions() -> Vec<TopicInfo<NativeFunctions>> {
                 native_functions: vec![
                     UPGRADE_SNS_TO_NEXT_VERSION,
                     ADVANCE_SNS_TARGET_VERSION,
+                    SET_CUSTOM_TOPICS_FOR_CUSTOM_PROPOSALS_ACTION,
                 ],
             },
             is_critical: false,
@@ -252,12 +253,90 @@ impl pb::Governance {
             })
             .collect()
     }
+
+    pub fn get_topic_for_action(
+        &self,
+        action: &pb::proposal::Action,
+    ) -> Result<Option<pb::Topic>, String> {
+        if let Some(topic) = pb::Topic::get_topic_for_native_action(action) {
+            return Ok(Some(topic));
+        };
+
+        let action_code = u64::from(action);
+
+        let Some(function) = self.id_to_nervous_system_functions.get(&action_code) else {
+            return Err(format!("Invalid action with ID {action_code}."));
+        };
+
+        let custom_proposal_topic_id = match &function.function_type {
+            Some(FunctionType::GenericNervousSystemFunction(generic)) => generic.topic,
+            Some(FunctionType::NativeNervousSystemFunction(_)) => {
+                return Err(format!(
+                    "Internal: native function with ID {action_code} does not have a topic."
+                ));
+            }
+            None => {
+                return Err(format!(
+                    "Function type not set for action with ID {action_code}."
+                ));
+            }
+        };
+
+        let Some(custom_proposal_topic_id) = custom_proposal_topic_id else {
+            return Ok(None);
+        };
+
+        let Ok(topic) = pb::Topic::try_from(custom_proposal_topic_id) else {
+            return Err(format!("Invalid topic ID {custom_proposal_topic_id}."));
+        };
+
+        Ok(Some(topic))
+    }
 }
 
 impl pb::Topic {
     pub fn is_critical(&self) -> bool {
         topic_descriptions()
             .iter()
-            .any(|topic| pb::Topic::from(topic.topic) == *self && topic.is_critical)
+            .any(|topic| Self::from(topic.topic) == *self && topic.is_critical)
+    }
+
+    pub fn get_topic_for_native_action(action: &pb::proposal::Action) -> Option<Self> {
+        let action_code = u64::from(action);
+
+        topic_descriptions()
+            .into_iter()
+            .find_map(|topic_info: TopicInfo<NativeFunctions>| {
+                topic_info
+                    .functions
+                    .native_functions
+                    .into_iter()
+                    .find(|native_function| action_code == *native_function)
+                    .map(|_| Self::from(topic_info.topic))
+            })
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use crate::types::native_action_ids::native_functions;
+    use std::collections::BTreeSet;
+
+    #[test]
+    fn test_all_native_topics() {
+        let all_native_functions_with_topic = topic_descriptions()
+            .into_iter()
+            .flat_map(|topic_info: TopicInfo<NativeFunctions>| {
+                topic_info.functions.native_functions
+            })
+            .collect::<BTreeSet<_>>();
+
+        let all_native_functions = native_functions()
+            .into_iter()
+            .map(|nervous_system_function| nervous_system_function.id)
+            .collect::<BTreeSet<_>>();
+
+        assert_eq!(all_native_functions_with_topic, all_native_functions);
     }
 }

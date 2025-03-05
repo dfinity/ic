@@ -1900,9 +1900,6 @@ fn summarize_blob_field(blob: &[u8]) -> Vec<u8> {
 }
 
 // Mapping of action to the unique function id of that action.
-//
-// When adding/removing an action here, also add/remove from
-// `Action::native_actions_metadata()`.
 impl From<&Action> for u64 {
     fn from(action: &Action) -> Self {
         match action {
