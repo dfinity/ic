@@ -1,4 +1,4 @@
-use ic_cdk::api::stable::{BufferedStableReader, BufferedStableWriter, StableReader, StableWriter};
+use ic_cdk::api::stable::{BufferedStableReader, BufferedStableWriter};
 use std::io::{Read, Write};
 
 // Same as page size
