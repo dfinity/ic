@@ -367,14 +367,14 @@ mod test {
     #[test]
     fn test_all_topics() {
         let custom_proposal_without_function_type = NervousSystemFunction {
-            id: 1003,
+            id: 1004,
             name: "Custom proposal for tests".to_string(),
             description: None,
             function_type: None,
         };
 
         let custom_proposal_without_topic = NervousSystemFunction {
-            id: 1002,
+            id: 1003,
             name: "Custom proposal for tests".to_string(),
             description: None,
             function_type: Some(
@@ -387,7 +387,21 @@ mod test {
             ),
         };
 
-        let custom_proposal_with_topic = NervousSystemFunction {
+        let custom_proposal_with_invalid_topic = NervousSystemFunction {
+            id: 1002,
+            name: "Custom proposal for tests".to_string(),
+            description: None,
+            function_type: Some(
+                nervous_system_function::FunctionType::GenericNervousSystemFunction(
+                    nervous_system_function::GenericNervousSystemFunction {
+                        topic: Some(i32::MAX),
+                        ..Default::default()
+                    },
+                ),
+            ),
+        };
+
+        let custom_proposal_with_valid_topic = NervousSystemFunction {
             id: 1001,
             name: "Custom proposal for tests".to_string(),
             description: None,
@@ -403,9 +417,10 @@ mod test {
 
         let governance_proto = pb::Governance {
             id_to_nervous_system_functions: btreemap! {
-                1001 => custom_proposal_with_topic,
-                1002 => custom_proposal_without_topic,
-                1003 => custom_proposal_without_function_type,
+                1001 => custom_proposal_with_valid_topic,
+                1002 => custom_proposal_with_invalid_topic,
+                1003 => custom_proposal_without_topic,
+                1004 => custom_proposal_without_function_type,
             },
             ..Default::default()
         };
@@ -491,7 +506,7 @@ mod test {
         // Special case: Undefined function.
         test_cases.push((
             pb::proposal::Action::Unspecified(Default::default()),
-            Err("foo".to_string()),
+            Err("Invalid action with ID 0.".to_string()),
         ));
 
         // Add test cases for custom proposals.
@@ -511,7 +526,7 @@ mod test {
                     ..Default::default()
                 },
             ),
-            Err("foo".to_string()),
+            Err(format!("Invalid topic ID {}.", i32::MAX)),
         ));
         test_cases.push((
             pb::proposal::Action::ExecuteGenericNervousSystemFunction(
@@ -520,9 +535,19 @@ mod test {
                     ..Default::default()
                 },
             ),
-            Err("bar".to_string()),
+            Ok(None),
+        ));
+        test_cases.push((
+            pb::proposal::Action::ExecuteGenericNervousSystemFunction(
+                ExecuteGenericNervousSystemFunction {
+                    function_id: 1004,
+                    ..Default::default()
+                },
+            ),
+            Err("Function type not set for action with ID 1004.".to_string()),
         ));
 
+        // Run code under test.
         for (action, expected) in test_cases.into_iter() {
             let observed = governance_proto.get_topic_for_action(&action);
             assert_eq!(observed, expected);
