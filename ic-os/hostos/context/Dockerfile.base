@@ -91,6 +91,16 @@ ENV SOURCE_DATE_EPOCH=0
 ENV TZ=UTC
 ENV DEBIAN_FRONTEND=noninteractive
 
+# Add future release, as opt-in targets
+RUN echo "deb http://archive.ubuntu.com/ubuntu oracular main universe restricted multiverse" >> /etc/apt/sources.list.d/future.list && \
+    echo "deb http://archive.ubuntu.com/ubuntu plucky main universe restricted multiverse" >> /etc/apt/sources.list.d/future.list && \
+    echo "Package: *" >> /etc/apt/preferences && \
+    echo "Pin: release n=oracular" >> /etc/apt/preferences && \
+    echo "Pin-Priority: -10" >> /etc/apt/preferences && \
+    echo "" >> /etc/apt/preferences && \
+    echo "Package: *" >> /etc/apt/preferences && \
+    echo "Pin: release n=plucky" >> /etc/apt/preferences && \
+    echo "Pin-Priority: -10" >> /etc/apt/preferences
 
 # For the prod image, just use packages.common to define the packages installed
 # on target.
