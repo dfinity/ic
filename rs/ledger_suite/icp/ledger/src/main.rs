@@ -959,7 +959,13 @@ fn send_() {
     );
 }
 
-#[candid_method(update, rename = "send_dfx")]
+/// Do not use call this from code, this is only here so dfx has something to
+/// call when making a payment. This will be changed in ways that are not
+/// backwards compatible with previous interfaces.
+///
+/// I STRONGLY recommend that you use "send_pb" instead.
+#[update]
+#[candid_method(update)]
 async fn send_dfx(arg: SendArgs) -> BlockIndex {
     panic_if_not_ready();
     transfer_candid(TransferArgs::from(arg))
@@ -967,17 +973,6 @@ async fn send_dfx(arg: SendArgs) -> BlockIndex {
         .unwrap_or_else(|e| {
             trap(&e.to_string());
         })
-}
-
-/// Do not use call this from code, this is only here so dfx has something to
-/// call when making a payment. This will be changed in ways that are not
-/// backwards compatible with previous interfaces.
-///
-/// I STRONGLY recommend that you use "send_pb" instead.
-#[export_name = "canister_update send_dfx"]
-fn send_dfx_() {
-    panic_if_not_ready();
-    over_async(candid_one, send_dfx);
 }
 
 #[cfg(feature = "notify-method")]
@@ -1009,6 +1004,7 @@ fn notify_() {
     );
 }
 
+#[update(name = "transfer")]
 #[candid_method(update, rename = "transfer")]
 async fn transfer_candid(arg: TransferArgs) -> Result<BlockIndex, TransferError> {
     panic_if_not_ready();
@@ -1055,12 +1051,6 @@ async fn icrc1_transfer(
             err
         })?,
     ))
-}
-
-#[export_name = "canister_update transfer"]
-fn transfer() {
-    panic_if_not_ready();
-    over_async_may_reject(candid_one, |arg| async { Ok(transfer_candid(arg).await) })
 }
 
 #[export_name = "canister_update icrc1_transfer"]
