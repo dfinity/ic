@@ -88,7 +88,7 @@ fn test(env: TestEnv) {
     let nns_agent = nns_node.build_default_agent();
 
     let nns_runtime = runtime_from_url(nns_node.get_public_url(), nns_node.effective_canister_id());
-    let vet_key = VetKdKeyId {
+    let vetkd_key_id = VetKdKeyId {
         curve: VetKdCurve::Bls12_381_G2,
         name: String::from("some_vetkd_key"),
     };
@@ -119,26 +119,26 @@ fn test(env: TestEnv) {
             info!(log, "Trying to fetch the key");
 
             let encrypted_priv_key: Vec<u8> = retry_async(
-                "Trying to retreive encrypted derive key",
+                "Trying to derive encrypted key",
                 &log,
                 Duration::from_secs(120),
                 Duration::from_secs(2),
                 || {
-                    vetkd_encrypted_derive_key(
+                    vetkd_derive_encrypted_key(
                         transport_key.public_key().try_into().unwrap(),
                         vet_key.clone(),
                         DERIVATION_ID.as_bytes().to_vec(),
                         &msg_can,
                     )
-                    .map(|maybe_key| maybe_key.map_err(|_| anyhow!("Failed to retreive key")))
+                    .map(|maybe_key| maybe_key.map_err(|_| anyhow!("Failed to retrieve key")))
                 },
             )
             .await
-            .expect("Failed to retrieve encrypted derive key");
+            .expect("Failed to derive encrypted key");
 
             let priv_key = transport_key
                 .decrypt(&encrypted_priv_key, &pub_key, DERIVATION_ID.as_bytes())
-                .expect("Failed to decript derived key");
+                .expect("Failed to decrypt derived key");
 
             let msg = enc_msg
                 .decrypt(&priv_key)

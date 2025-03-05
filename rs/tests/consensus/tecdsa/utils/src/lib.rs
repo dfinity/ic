@@ -960,7 +960,7 @@ impl Request<SignWithChainKeyReply> for ChainSignatureRequest {
     }
 }
 
-pub async fn vetkd_encrypted_derive_key(
+pub async fn vetkd_derive_encrypted_key(
     encryption_public_key: [u8; 48],
     key_id: VetKdKeyId,
     derivation_id: Vec<u8>,
