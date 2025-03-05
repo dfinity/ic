@@ -13,7 +13,9 @@ use ic_protobuf::registry::subnet::v1::{
 use ic_registry_client_helpers::{
     crypto::initial_ni_dkg_transcript_from_registry_record, subnet::SubnetRegistry,
 };
-use ic_replicated_state::ReplicatedState;
+use ic_replicated_state::{
+    metadata_state::subnet_call_context_manager::SetupInitialDkgContext, ReplicatedState,
+};
 use ic_types::{
     batch::ValidationContext,
     consensus::{
@@ -640,10 +642,10 @@ fn get_dkg_interval_length(
         })
 }
 
-// Reads the SubnetCallContext and attempts to create DKG configs for new
-// subnets for the next round. An Ok return value contains:
-// * configs grouped by subnet (low and high threshold configs per subnet)
-// * errors produced while generating the configs.
+/// Reads the SubnetCallContext and attempts to create DKG configs for new
+/// subnets for the next round. An Ok return value contains:
+/// * configs grouped by subnet (low and high threshold configs per subnet)
+/// * errors produced while generating the configs.
 #[allow(clippy::type_complexity)]
 fn process_subnet_call_context(
     this_subnet_id: SubnetId,
@@ -660,6 +662,35 @@ fn process_subnet_call_context(
     ),
     PayloadCreationError,
 > {
+    process_setup_initial_dkg_contexts(
+        this_subnet_id,
+        start_block_height,
+        registry_client,
+        state,
+        validation_context,
+        logger,
+    )
+}
+
+#[allow(clippy::type_complexity)]
+fn process_setup_initial_dkg_contexts(
+    this_subnet_id: SubnetId,
+    start_block_height: Height,
+    registry_client: &dyn RegistryClient,
+    state: &ReplicatedState,
+    validation_context: &ValidationContext,
+    logger: &ic_logger::context_logger::ContextLogger<
+        ic_protobuf::log::log_entry::v1::LogEntry,
+        ic_logger::replica_logger::LogEntryLogger,
+    >,
+) -> Result<
+    (
+        Vec<Vec<NiDkgConfig>>,
+        Vec<(NiDkgId, String)>,
+        Vec<NiDkgTargetId>,
+    ),
+    PayloadCreationError,
+> {
     let mut new_configs = Vec::new();
     let mut errors = Vec::new();
     let mut valid_target_ids = Vec::new();
@@ -668,8 +699,6 @@ fn process_subnet_call_context(
         .subnet_call_context_manager
         .setup_initial_dkg_contexts;
     for (_callback_id, context) in contexts.iter() {
-        use ic_replicated_state::metadata_state::subnet_call_context_manager::SetupInitialDkgContext;
-
         let SetupInitialDkgContext {
             request: _,
             nodes_in_target_subnet,
@@ -686,7 +715,7 @@ fn process_subnet_call_context(
         // Dealers must be in the same registry_version.
         let dealers = get_node_list(this_subnet_id, registry_client, *registry_version)?;
 
-        match create_remote_dkg_configs(
+        match create_low_high_remote_dkg_configs(
             start_block_height,
             this_subnet_id,
             NiDkgTargetSubnet::Remote(*target_id),
@@ -769,10 +798,10 @@ fn add_callback_ids_to_transcript_results(
         .collect()
 }
 
-// This function is called for each entry on the SubnetCallContext. It returns
-// either the created high and low configs for the entry or returns two errors
-// identified by the NiDkgId.
-fn create_remote_dkg_configs(
+/// This function is on for each entry on the SetupInitialDkgContext. It returns
+/// either the created high and low configs for the entry or returns two errors
+/// identified by the NiDkgId.
+fn create_low_high_remote_dkg_configs(
     start_block_height: Height,
     dealer_subnet: SubnetId,
     target_subnet: NiDkgTargetSubnet,
@@ -796,8 +825,8 @@ fn create_remote_dkg_configs(
     };
 
     let low_thr_config =
-        do_create_remote_dkg_config(low_thr_dkg_id.clone(), dealers, receivers, registry_version);
-    let high_thr_config = do_create_remote_dkg_config(
+        create_remote_dkg_config(low_thr_dkg_id.clone(), dealers, receivers, registry_version);
+    let high_thr_config = create_remote_dkg_config(
         high_thr_dkg_id.clone(),
         dealers,
         receivers,
@@ -831,7 +860,7 @@ fn create_remote_dkg_configs(
     }
 }
 
-fn do_create_remote_dkg_config(
+fn create_remote_dkg_config(
     dkg_id: NiDkgId,
     dealers: &BTreeSet<NodeId>,
     receivers: &BTreeSet<NodeId>,
