@@ -123,7 +123,7 @@ use futures::FutureExt;
 #[cfg(target_arch = "wasm32")]
 use ic_cdk::spawn;
 use ic_nervous_system_time_helpers::now_seconds;
-pub use ic_nervous_system_timers::{set_timer, set_timer_interval};
+pub use ic_nervous_system_timers::{set_timer, set_timer_interval, TimerId};
 use metrics::{with_async_metrics, with_sync_metrics, MetricsRegistryRef};
 use std::future::Future;
 use std::time::Duration;
@@ -235,7 +235,7 @@ pub trait PeriodicSyncTask: Copy + Sized + 'static {
     // TODO: can periodic tasks have a state that is mutable across invocations?
     fn execute(self);
 
-    fn schedule(self, metrics_registry: MetricsRegistryRef) {
+    fn schedule(self, metrics_registry: MetricsRegistryRef) -> TimerId {
         set_timer_interval(Self::INTERVAL, move || {
             let instructions_before = instruction_counter();
 
@@ -245,7 +245,7 @@ pub trait PeriodicSyncTask: Copy + Sized + 'static {
             with_sync_metrics(metrics_registry, Self::NAME, |metrics| {
                 metrics.record(instructions_used, now_seconds());
             });
-        });
+        })
     }
 
     const NAME: &'static str;
@@ -256,7 +256,7 @@ pub trait PeriodicSyncTask: Copy + Sized + 'static {
 pub trait PeriodicAsyncTask: Copy + Sized + 'static {
     async fn execute(self);
 
-    fn schedule(self, metrics_registry: MetricsRegistryRef) {
+    fn schedule(self, metrics_registry: MetricsRegistryRef) -> TimerId {
         set_timer_interval(Self::INTERVAL, move || {
             spawn_in_canister_env(async move {
                 let instructions_before = call_context_instruction_counter();
@@ -271,7 +271,7 @@ pub trait PeriodicAsyncTask: Copy + Sized + 'static {
                     metrics.record_finish(instructions_used, now_seconds());
                 });
             });
-        });
+        })
     }
 
     const NAME: &'static str;

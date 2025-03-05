@@ -717,7 +717,7 @@ pub fn expiration_test(env: TestEnv) {
         };
 
         // Check the state of the registration
-        ic_system_test_driver::retry_with_msg_async!(
+        ic_system_test_driver::sg_async!(
             "check_registration".to_string(),
             &logger,
             CHECK_TIMEOUT,
