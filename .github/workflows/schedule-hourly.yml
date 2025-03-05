@@ -59,7 +59,7 @@ jobs:
         -e NODE_NAME --privileged --cgroupns host -v /cache:/cache -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp
     timeout-minutes: 120
     runs-on:
-      group: dm1
+      group: ln1
       labels: dind-large
     steps:
       - name: Checkout
