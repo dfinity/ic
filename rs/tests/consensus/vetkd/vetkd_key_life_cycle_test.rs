@@ -130,7 +130,9 @@ fn test(env: TestEnv) {
                         DERIVATION_ID.as_bytes().to_vec(),
                         &msg_can,
                     )
-                    .map(|maybe_key| maybe_key.map_err(|_| anyhow!("Failed to retrieve key")))
+                    .map(|maybe_key| {
+                        maybe_key.map_err(|e| anyhow!("Failed to retrieve key: {e:?}"))
+                    })
                 },
             )
             .await
