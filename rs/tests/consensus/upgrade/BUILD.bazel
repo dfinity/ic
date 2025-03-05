@@ -82,6 +82,7 @@ system_test_nns(
 
 system_test_nns(
     name = "upgrade_app_subnet_test",
+    env = MAINNET_ENV,
     extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on long_test.
     flaky = True,
     tags = [
