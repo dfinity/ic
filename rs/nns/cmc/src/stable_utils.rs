@@ -1,15 +1,12 @@
-use ic_cdk::api::stable::{BufferedStableReader, BufferedStableWriter};
+use ic_cdk::api::stable::{StableReader, StableWriter};
 use std::io::{Read, Write};
-
-// Same as page size
-const BUFFER_SIZE: usize = 65_536;
 
 /// Writes `content` to stable memory.
 /// Format:
 ///  [0..4] = length (4 bytes, little-endian)
 ///  [4.. ] = actual data
 pub fn stable_set(content: &[u8]) -> std::io::Result<()> {
-    let mut writer = BufferedStableWriter::new(BUFFER_SIZE);
+    let mut writer = StableWriter::default();
 
     // Write the length (4 bytes)
     let len_bytes = (content.len() as u32).to_le_bytes();
@@ -24,7 +21,7 @@ pub fn stable_set(content: &[u8]) -> std::io::Result<()> {
 
 /// Reads back the data written by `stable_set`.
 pub fn stable_get() -> std::io::Result<Vec<u8>> {
-    let mut reader = BufferedStableReader::new(BUFFER_SIZE);
+    let mut reader = StableReader::default();
 
     // Read the 4‑byte length
     let mut len_bytes = [0; 4];
