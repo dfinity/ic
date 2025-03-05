@@ -1165,7 +1165,8 @@ fn tip_of_chain_() {
     let input = ic_cdk::api::call::arg_data_raw();
 
     ic_cdk::setup();
-    let _ = protobuf::TipOfChainRequest::decode(&input[..]).expect("Could not decode TotalSupplyArgs");
+    let _ =
+        protobuf::TipOfChainRequest::decode(&input[..]).expect("Could not decode TotalSupplyArgs");
     let res = tip_of_chain();
     let mut buf = Vec::with_capacity(res.encoded_len());
     res.encode(&mut buf)
