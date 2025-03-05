@@ -2199,6 +2199,11 @@ impl ExecutionTestBuilder {
         self
     }
 
+    pub fn with_max_snapshots_per_canister(mut self, max_snapshots_per_canister: usize) -> Self {
+        self.execution_config.max_number_of_snapshots_per_canister = max_snapshots_per_canister;
+        self
+    }
+
     pub fn build(self) -> ExecutionTest {
         let own_range = CanisterIdRange {
             start: CanisterId::from(CANISTER_IDS_PER_SUBNET),

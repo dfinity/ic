@@ -9,6 +9,7 @@ DEPENDENCIES = [
     "//rs/config",
     "//rs/consensus/dkg",
     "//rs/consensus/utils",
+    "//rs/consensus/vetkd",
     "//rs/crypto",
     "//rs/crypto/prng",
     "//rs/crypto/utils/threshold_sig_der",

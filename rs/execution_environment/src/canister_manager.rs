@@ -13,9 +13,7 @@ use crate::{
 };
 use ic_base_types::NumSeconds;
 use ic_config::embedders::Config as EmbeddersConfig;
-use ic_config::{
-    execution_environment::MAX_NUMBER_OF_SNAPSHOTS_PER_CANISTER, flag_status::FlagStatus,
-};
+use ic_config::flag_status::FlagStatus;
 use ic_cycles_account_manager::{CyclesAccountManager, ResourceSaturation};
 use ic_embedders::wasm_utils::decoding::decode_wasm;
 use ic_error_types::{ErrorCode, RejectCode, UserError};
@@ -131,6 +129,7 @@ pub(crate) struct CanisterMgrConfig {
     wasm_chunk_store_max_size: NumBytes,
     canister_snapshot_baseline_instructions: NumInstructions,
     default_wasm_memory_limit: NumBytes,
+    max_number_of_snapshots_per_canister: usize,
 }
 
 impl CanisterMgrConfig {
@@ -153,6 +152,7 @@ impl CanisterMgrConfig {
         wasm_chunk_store_max_size: NumBytes,
         canister_snapshot_baseline_instructions: NumInstructions,
         default_wasm_memory_limit: NumBytes,
+        max_number_of_snapshots_per_canister: usize,
     ) -> Self {
         Self {
             subnet_memory_capacity,
@@ -172,6 +172,7 @@ impl CanisterMgrConfig {
             wasm_chunk_store_max_size,
             canister_snapshot_baseline_instructions,
             default_wasm_memory_limit,
+            max_number_of_snapshots_per_canister,
         }
     }
 }
@@ -1874,12 +1875,12 @@ impl CanisterManager {
                 if state
                     .canister_snapshots
                     .count_by_canister(&canister.canister_id())
-                    >= MAX_NUMBER_OF_SNAPSHOTS_PER_CANISTER
+                    >= self.config.max_number_of_snapshots_per_canister
                 {
                     return (
                         Err(CanisterManagerError::CanisterSnapshotLimitExceeded {
                             canister_id: canister.canister_id(),
-                            limit: MAX_NUMBER_OF_SNAPSHOTS_PER_CANISTER,
+                            limit: self.config.max_number_of_snapshots_per_canister,
                         }),
                         NumInstructions::new(0),
                     );

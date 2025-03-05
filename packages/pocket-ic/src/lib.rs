@@ -67,10 +67,10 @@ use candid::{
 };
 use flate2::read::GzDecoder;
 use ic_management_canister_types::{
-    CanisterId, CanisterInstallMode, CanisterSettings, CanisterStatusResult, Snapshot,
+    CanisterId, CanisterInstallMode, CanisterLogRecord, CanisterSettings, CanisterStatusResult,
+    Snapshot,
 };
 use ic_transport_types::SubnetMetrics;
-use management_canister::CanisterLogRecord;
 use reqwest::Url;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -95,7 +95,6 @@ use tracing::{instrument, warn};
 use wslpath::windows_to_wsl;
 
 pub mod common;
-pub mod management_canister;
 pub mod nonblocking;
 
 const EXPECTED_SERVER_VERSION: &str = "8.0.0";

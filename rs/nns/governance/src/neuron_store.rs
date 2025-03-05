@@ -907,10 +907,15 @@ impl NeuronStore {
     }
 
     /// List all neuron ids whose neurons have staked maturity greater than 0.
-    pub fn list_neurons_ready_to_unstake_maturity(&self, now_seconds: u64) -> Vec<NeuronId> {
+    fn list_neurons_ready_to_unstake_maturity(
+        &self,
+        now_seconds: u64,
+        max_num_neurons: usize,
+    ) -> Vec<NeuronId> {
         self.with_active_neurons_iter_sections(
             |iter| {
                 iter.filter(|neuron| neuron.ready_to_unstake_maturity(now_seconds))
+                    .take(max_num_neurons)
                     .map(|neuron| neuron.id())
                     .collect()
             },
@@ -979,6 +984,39 @@ impl NeuronStore {
         );
 
         (ballots, deciding_voting_power, potential_voting_power)
+    }
+
+    /// When a neuron is finally dissolved, if there is any staked maturity it is moved to regular maturity
+    /// which can be spawned (and is modulated).
+    pub fn unstake_maturity_of_dissolved_neurons(
+        &mut self,
+        now_seconds: u64,
+        max_num_neurons: usize,
+    ) {
+        let neuron_ids = {
+            #[cfg(feature = "canbench-rs")]
+            let _scope_list = canbench_rs::bench_scope("list_neuron_ids");
+            self.list_neurons_ready_to_unstake_maturity(now_seconds, max_num_neurons)
+        };
+
+        #[cfg(feature = "canbench-rs")]
+        let _scope_unstake = canbench_rs::bench_scope("unstake_maturity");
+        // Filter all the neurons that are currently in "dissolved" state and have some staked maturity.
+        // No neuron in stable storage should have staked maturity.
+        for neuron_id in neuron_ids {
+            let unstake_result =
+                self.with_neuron_mut(&neuron_id, |neuron| neuron.unstake_maturity(now_seconds));
+
+            match unstake_result {
+                Ok(_) => {}
+                Err(e) => {
+                    println!(
+                        "{}Error when moving staked maturity for neuron {:?}: {:?}",
+                        LOG_PREFIX, neuron_id, e
+                    );
+                }
+            };
+        }
     }
 
     /// Returns the full neuron if the given principal is authorized - either it can vote for the
