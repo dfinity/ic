@@ -1,4 +1,4 @@
-# NOTE: This configuration is for referenceh only, and not used by Bazel.
+# NOTE: This configuration is for reference only, and not used by Bazel.
 #
 # To run canbench manually (assuming the current directory is this directory):
 #
