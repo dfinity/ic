@@ -98,7 +98,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
         )],
         "cranelift-assembler-x64": [crate.annotation(
             # Patch for issue: https://github.com/bytecodealliance/wasmtime/pull/10334
-            patch_args = ["-p4"],
+            patch_args = ["-p3"],
             patches = [
                 "@@//bazel:cranelift-assembler-lib.patch",
                 "@@//bazel:cranelift-assembler-main.patch",
