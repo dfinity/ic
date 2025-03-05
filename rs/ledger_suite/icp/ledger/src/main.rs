@@ -1162,7 +1162,16 @@ fn block_() {
 
 #[export_name = "canister_query tip_of_chain_pb"]
 fn tip_of_chain_() {
-    over(protobuf, |protobuf::TipOfChainRequest {}| tip_of_chain());
+    let input = ic_cdk::api::call::arg_data_raw();
+
+    ic_cdk::setup();
+    let _ = protobuf::TipOfChainRequest::decode(&input[..]).expect("Could not decode TotalSupplyArgs");
+    let res = tip_of_chain();
+    let mut buf = Vec::with_capacity(res.encoded_len());
+    res.encode(&mut buf)
+        .map_err(|e| e.to_string())
+        .expect("Could not encode response");
+    ic_cdk::api::call::reply_raw(&buf)
 }
 
 #[export_name = "canister_query get_archive_index_pb"]

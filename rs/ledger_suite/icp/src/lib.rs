@@ -1085,8 +1085,11 @@ pub struct Archives {
 }
 
 /// Argument returned by the tip_of_chain endpoint
+#[derive(::prost::Message)]
 pub struct TipOfChainRes {
+    #[prost(message, optional, tag = "1")]
     pub certification: Option<Vec<u8>>,
+    #[prost(uint64, tag = "2")]
     pub tip_index: BlockIndex,
 }
 

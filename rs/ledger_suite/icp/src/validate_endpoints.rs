@@ -3,8 +3,8 @@ use crate::{protobuf, TransferFee, TransferFeeArgs};
 use crate::{
     AccountBalanceArgs, AccountIdentifier, Block, BlockArg, BlockRes, CyclesResponse, EncodedBlock,
     GetBlocksArgs, GetBlocksRes, HashOf, IterBlocksArgs, IterBlocksRes, Memo, NotifyCanisterArgs,
-    Operation, SendArgs, Subaccount, TimeStamp, TipOfChainRes, Tokens, Transaction,
-    TransactionNotification, DEFAULT_TRANSFER_FEE,
+    Operation, SendArgs, Subaccount, TimeStamp, Tokens, Transaction, TransactionNotification,
+    DEFAULT_TRANSFER_FEE,
 };
 use dfn_protobuf::ToProto;
 use ic_base_types::{CanisterId, CanisterIdError};
@@ -69,32 +69,6 @@ impl ToProto for TransferFee {
     fn into_proto(self) -> Self::Proto {
         protobuf::TransferFeeResponse {
             transfer_fee: Some(tokens_into_proto(self.transfer_fee)),
-        }
-    }
-}
-
-impl ToProto for TipOfChainRes {
-    type Proto = protobuf::TipOfChainResponse;
-
-    fn from_proto(pb: Self::Proto) -> Result<Self, String> {
-        let chain_length = pb
-            .chain_length
-            .ok_or("Didn't receive a chain length")?
-            .height;
-        Ok(TipOfChainRes {
-            certification: pb.certification.map(|pb| pb.certification),
-            tip_index: chain_length,
-        })
-    }
-
-    fn into_proto(self) -> Self::Proto {
-        protobuf::TipOfChainResponse {
-            certification: self
-                .certification
-                .map(|certification| protobuf::Certification { certification }),
-            chain_length: Some(protobuf::BlockIndex {
-                height: self.tip_index,
-            }),
         }
     }
 }
