@@ -1,7 +1,7 @@
 use crate::{
     allow_active_neurons_in_stable_memory,
     governance::{
-        Environment, TimeWarp, LOG_PREFIX, MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS,
+        Environment, TimeWarp, LOG_PREFIX,
     },
     migrate_active_neurons_to_stable_memory,
     neuron::types::Neuron,
@@ -949,7 +949,9 @@ impl NeuronStore {
         let mut process_neuron = |neuron: &Neuron| {
             if neuron.is_inactive(now_seconds)
                 || neuron.dissolve_delay_seconds(now_seconds)
-                    < MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS
+                    < voting_power_economics
+                        .neuron_minimum_dissolve_delay_to_vote_seconds
+                        .unwrap()
             {
                 return;
             }

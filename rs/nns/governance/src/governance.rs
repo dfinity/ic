@@ -5342,7 +5342,14 @@ impl Governance {
         let min_dissolve_delay_seconds_to_vote = if let Action::ManageNeuron(_) = action {
             0
         } else {
-            MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS
+            self.heap_data
+                .economics
+                .clone()
+                .unwrap()
+                .voting_power_economics
+                .unwrap()
+                .neuron_minimum_dissolve_delay_to_vote_seconds
+                .unwrap()
         };
 
         // The proposer must be eligible to vote. This also ensures that the
