@@ -1,24 +1,26 @@
 use candid::{decode_one, encode_one, CandidType, Decode, Deserialize, Encode, Principal};
 use ic_certification::Label;
-use ic_transport_types::Envelope;
-use ic_transport_types::EnvelopeContent::ReadState;
-use pocket_ic::common::rest::{BlockmakerConfigs, RawSubnetBlockmaker, TickConfigs};
-use pocket_ic::management_canister::{
-    CanisterIdRecord, CanisterInstallMode, CanisterSettings, EcdsaPublicKeyResult,
-    HttpRequestResult, NodeMetricsHistoryArgs, NodeMetricsHistoryResultItem,
-    ProvisionalCreateCanisterWithCyclesArgs, SchnorrAlgorithm, SchnorrPublicKeyArgsKeyId,
-    SchnorrPublicKeyResult, SignWithBip341Aux, SignWithSchnorrAux,
+use ic_management_canister_types::CanisterIdRecord;
+use ic_management_canister_types::{
+    Bip341, CanisterInstallMode, CanisterSettings, EcdsaPublicKeyResult, HttpRequestResult,
+    NodeMetricsHistoryArgs, NodeMetricsHistoryRecord as NodeMetricsHistoryResultItem,
+    ProvisionalCreateCanisterWithCyclesArgs, SchnorrAlgorithm, SchnorrAux,
+    SchnorrKeyId as SchnorrPublicKeyArgsKeyId, SchnorrPublicKeyResult,
 };
+use ic_transport_types::Envelope;
+use ic_transport_types::EnvelopeContent::{Call, ReadState};
+use pocket_ic::common::rest::{BlockmakerConfigs, RawSubnetBlockmaker, TickConfigs};
 use pocket_ic::{
     common::rest::{
         BlobCompression, CanisterHttpReply, CanisterHttpResponse, MockCanisterHttpResponse,
-        RawEffectivePrincipal, SubnetKind,
+        RawEffectivePrincipal, RawMessageId, SubnetKind,
     },
     query_candid, update_candid, DefaultEffectiveCanisterIdError, ErrorCode, IngressStatusResult,
     PocketIc, PocketIcBuilder, RejectCode,
 };
-#[cfg(unix)]
 use reqwest::blocking::Client;
+use reqwest::header::CONTENT_LENGTH;
+use reqwest::{Method, StatusCode};
 use serde::Serialize;
 use sha2::{Digest, Sha256};
 use std::{io::Read, time::SystemTime};
@@ -924,15 +926,14 @@ fn test_schnorr() {
     // We define the message, derivation path, and ECDSA key ID to use in this test.
     let message = b"Hello, world!==================="; // must be of length 32 bytes for BIP340
     let derivation_path = vec!["my message".as_bytes().to_vec()];
-    let some_aux: Option<SignWithSchnorrAux> =
-        Some(SignWithSchnorrAux::Bip341(SignWithBip341Aux {
-            merkle_root_hash: b"Hello, aux!=====================".to_vec(),
-        }));
-    for algorithm in [SchnorrAlgorithm::Bip340Secp256K1, SchnorrAlgorithm::Ed25519] {
+    let some_aux: Option<SchnorrAux> = Some(SchnorrAux::Bip341(Bip341 {
+        merkle_root_hash: b"Hello, aux!=====================".to_vec(),
+    }));
+    for algorithm in [SchnorrAlgorithm::Bip340secp256k1, SchnorrAlgorithm::Ed25519] {
         for name in ["key_1", "test_key_1", "dfx_test_key"] {
             for aux in [None, some_aux.clone()] {
                 let key_id = SchnorrPublicKeyArgsKeyId {
-                    algorithm: algorithm.clone(),
+                    algorithm,
                     name: name.to_string(),
                 };
 
@@ -965,13 +966,13 @@ fn test_schnorr() {
 
                 // We verify the Schnorr signature.
                 match key_id.algorithm {
-                    SchnorrAlgorithm::Bip340Secp256K1 => {
+                    SchnorrAlgorithm::Bip340secp256k1 => {
                         use k256::ecdsa::signature::hazmat::PrehashVerifier;
                         use k256::schnorr::{Signature, VerifyingKey};
                         let bip340_public_key = schnorr_public_key.public_key[1..].to_vec();
                         let public_key = match aux {
                             None => bip340_public_key,
-                            Some(SignWithSchnorrAux::Bip341(bip341_aux)) => {
+                            Some(SchnorrAux::Bip341(bip341_aux)) => {
                                 use bitcoin::hashes::Hash;
                                 use bitcoin::schnorr::TapTweak;
                                 let xonly = bitcoin::util::key::XOnlyPublicKey::from_slice(
@@ -1195,6 +1196,44 @@ fn test_canister_http() {
     let http_response: Result<HttpRequestResult, (RejectionCode, String)> =
         decode_one(&reply).unwrap();
     assert_eq!(http_response.unwrap().body, body);
+}
+
+#[test]
+fn test_canister_http_in_live_mode() {
+    // We create a PocketIC instance with an NNS subnet
+    // (the "live" mode requires the NNS subnet).
+    let mut pic = PocketIcBuilder::new()
+        .with_nns_subnet()
+        .with_application_subnet()
+        .build();
+
+    // Enable the "live" mode.
+    let _ = pic.make_live(None);
+
+    // Create a canister and charge it with 2T cycles.
+    let canister_id = pic.create_canister();
+    pic.add_cycles(canister_id, INIT_CYCLES);
+
+    // Install the test canister wasm file on the canister.
+    let test_wasm = test_canister_wasm();
+    pic.install_canister(canister_id, test_wasm, vec![], None);
+
+    // Submit an update call to the test canister making a canister http outcall.
+    let call_id = pic
+        .submit_call(
+            canister_id,
+            Principal::anonymous(),
+            "canister_http",
+            encode_one(()).unwrap(),
+        )
+        .unwrap();
+
+    // Await the update call without making additional progress (the PocketIC instance
+    // is already in the "live" mode making progress automatically).
+    let reply = pic.await_call_no_ticks(call_id).unwrap();
+    let http_response: Result<HttpRequestResult, (RejectionCode, String)> =
+        decode_one(&reply).unwrap();
+    http_response.unwrap();
 }
 
 #[test]
@@ -1791,20 +1830,38 @@ fn test_canister_snapshots() {
     let reply = call_counter_canister(&pic, canister_id, "read");
     assert_eq!(reply, 2_u32.to_le_bytes().to_vec());
 
-    // We take one more snapshot: since we already have an active snapshot,
-    // taking another snapshot fails unless we specify the active snapshot to be replaced.
     pic.stop_canister(canister_id, None).unwrap();
-    pic.take_canister_snapshot(canister_id, None, None)
-        .unwrap_err();
+    // We take another snapshot replacing the first one.
     let second_snapshot = pic
         .take_canister_snapshot(canister_id, None, Some(first_snapshot.id))
         .unwrap();
     pic.start_canister(canister_id, None).unwrap();
 
-    // Finally, we delete the current snapshot which allows us to take a snapshot without specifying any snapshot to be replaced.
+    // There should only be the second snapshot in the list of canister snapshots.
+    let snapshots = pic.list_canister_snapshots(canister_id, None).unwrap();
+    assert_eq!(snapshots.len(), 1);
+    assert_eq!(snapshots[0].id, second_snapshot.id);
+    assert_eq!(snapshots[0].total_size, second_snapshot.total_size);
+    assert_eq!(
+        snapshots[0].taken_at_timestamp,
+        second_snapshot.taken_at_timestamp
+    );
+
+    // Attempt to take another snapshot without providing a replace_id. The second snapshot
+    // should be still there.
+    pic.stop_canister(canister_id, None).unwrap();
+    let third_snapshot = pic.take_canister_snapshot(canister_id, None, None).unwrap();
+    pic.start_canister(canister_id, None).unwrap();
+    let snapshots = pic.list_canister_snapshots(canister_id, None).unwrap();
+    assert_eq!(snapshots[0].id, second_snapshot.id);
+
+    // Finally, we delete the second snapshot which leaves the canister with the third snapshot
+    // only.
     pic.delete_canister_snapshot(canister_id, None, second_snapshot.id)
         .unwrap();
-    pic.take_canister_snapshot(canister_id, None, None).unwrap();
+    let snapshots = pic.list_canister_snapshots(canister_id, None).unwrap();
+    assert_eq!(snapshots.len(), 1);
+    assert_eq!(snapshots[0].id, third_snapshot.id);
 }
 
 #[test]
@@ -2077,6 +2134,95 @@ fn read_state_request_status(
 }
 
 #[test]
+fn call_ingress_expiry() {
+    let pic = PocketIcBuilder::new()
+        .with_nns_subnet()
+        .with_application_subnet()
+        .build();
+    let canister_id = pic.create_canister();
+    pic.add_cycles(canister_id, INIT_CYCLES);
+    pic.install_canister(canister_id, test_canister_wasm(), vec![], None);
+
+    // submit an update call via /api/v2/canister/.../call using an ingress expiry in the future
+    let unix_time_secs = 2272143600; // Wed Jan 01 2042 00:00:00 GMT+0100
+    let time = SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(unix_time_secs);
+    pic.set_certified_time(time);
+    let ingress_expiry = pic
+        .get_time()
+        .duration_since(std::time::SystemTime::UNIX_EPOCH)
+        .unwrap()
+        .as_nanos() as u64
+        + 240_000_000_000;
+    let (resp, msg_id) = call_request(&pic, ingress_expiry, canister_id);
+    assert_eq!(resp.status(), reqwest::StatusCode::ACCEPTED);
+
+    // execute a round on the PocketIC instance to process that update call
+    pic.tick();
+
+    // check the update call status
+    let raw_message_id = RawMessageId {
+        effective_principal: RawEffectivePrincipal::CanisterId(canister_id.as_slice().to_vec()),
+        message_id: msg_id.to_vec(),
+    };
+    let reply = pic.ingress_status(raw_message_id).unwrap().unwrap();
+    let principal = Decode!(&reply, String).unwrap();
+    assert_eq!(principal, canister_id.to_string());
+
+    // use an invalid ingress expiry
+    let ingress_expiry = SystemTime::now()
+        .duration_since(std::time::SystemTime::UNIX_EPOCH)
+        .unwrap()
+        .as_nanos() as u64
+        + 240_000_000_000;
+    let (resp, _msg_id) = call_request(&pic, ingress_expiry, canister_id);
+    assert_eq!(resp.status(), reqwest::StatusCode::BAD_REQUEST);
+    let err = String::from_utf8(resp.bytes().unwrap().to_vec()).unwrap();
+    assert!(
+        err.contains("Invalid request expiry: Specified ingress_expiry not within expected range")
+    );
+}
+
+fn call_request(
+    pic: &PocketIc,
+    ingress_expiry: u64,
+    canister_id: Principal,
+) -> (reqwest::blocking::Response, [u8; 32]) {
+    let content = Call {
+        nonce: None,
+        ingress_expiry,
+        sender: Principal::anonymous(),
+        canister_id,
+        method_name: "whoami".to_string(),
+        arg: Encode!(&()).unwrap(),
+    };
+    let envelope = Envelope {
+        content: std::borrow::Cow::Borrowed(&content),
+        sender_pubkey: None,
+        sender_sig: None,
+        sender_delegation: None,
+    };
+
+    let mut serialized_bytes = Vec::new();
+    let mut serializer = serde_cbor::Serializer::new(&mut serialized_bytes);
+    serializer.self_describe().unwrap();
+    envelope.serialize(&mut serializer).unwrap();
+
+    let endpoint = format!(
+        "instances/{}/api/v2/canister/{}/call",
+        pic.instance_id(),
+        canister_id.to_text()
+    );
+    let client = reqwest::blocking::Client::new();
+    let resp = client
+        .post(pic.get_server_url().join(&endpoint).unwrap())
+        .header(reqwest::header::CONTENT_TYPE, "application/cbor")
+        .body(serialized_bytes)
+        .send()
+        .unwrap();
+    (resp, *content.to_request_id())
+}
+
+#[test]
 fn await_call_no_ticks() {
     let mut pic = PocketIcBuilder::new()
         .with_nns_subnet()
@@ -2294,4 +2440,66 @@ fn test_custom_blockmaker_metrics() {
 
     assert_eq!(blockmaker_2_metrics.num_blocks_proposed_total, 0);
     assert_eq!(blockmaker_2_metrics.num_block_failures_total, daily_blocks);
+}
+
+#[test]
+fn test_http_methods() {
+    // We create a PocketIC instance consisting of the NNS and one application subnet.
+    let mut pic = PocketIcBuilder::new()
+        .with_nns_subnet()
+        .with_application_subnet()
+        .build();
+
+    // We retrieve the app subnet ID from the topology.
+    let topology = pic.topology();
+    let app_subnet = topology.get_app_subnets()[0];
+
+    // We create a canister on the app subnet.
+    let canister = pic.create_canister_on_subnet(None, None, app_subnet);
+    assert_eq!(pic.get_subnet(canister), Some(app_subnet));
+
+    // We top up the canister with cycles and install the test canister WASM to them.
+    pic.add_cycles(canister, INIT_CYCLES);
+    pic.install_canister(canister, test_canister_wasm(), vec![], None);
+
+    // We start the HTTP gateway
+    let endpoint = pic.make_live(None);
+
+    // We request the path `/` with various HTTP methods.
+    // We use raw endpoints as the test canister does not support certification.
+    let gateway_host = endpoint.host().unwrap();
+    let host = format!("{}.raw.{}", canister, gateway_host);
+    let mut url = endpoint;
+    url.set_host(Some(&host)).unwrap();
+    url.set_path("/");
+    for method in [
+        Method::GET,
+        Method::POST,
+        Method::PUT,
+        Method::DELETE,
+        Method::HEAD,
+        Method::PATCH,
+    ] {
+        let client = Client::new();
+        let res = client.request(method.clone(), url.clone()).send().unwrap();
+        // The test canister rejects all request to the path `/` with `StatusCode::BAD_REQUEST`
+        // and the error message "The request is not supported by the test canister.".
+        assert_eq!(res.status(), StatusCode::BAD_REQUEST);
+        let content_length: usize = res
+            .headers()
+            .get(CONTENT_LENGTH)
+            .unwrap()
+            .to_str()
+            .unwrap()
+            .parse()
+            .unwrap();
+        let expected_page = "The request is not supported by the test canister.";
+        assert_eq!(content_length, expected_page.len());
+        let page = String::from_utf8(res.bytes().unwrap().to_vec()).unwrap();
+        if let Method::HEAD = method {
+            assert!(page.is_empty());
+        } else {
+            assert_eq!(page, expected_page);
+        }
+    }
 }

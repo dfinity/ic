@@ -493,7 +493,10 @@ mod tests {
         crypto::CryptoHash,
         CryptoHashOfState, SubnetId,
     };
-    use std::sync::{Arc, RwLock};
+    use std::{
+        collections::HashSet,
+        sync::{Arc, RwLock},
+    };
 
     #[test]
     fn test_purger() {
@@ -890,7 +893,10 @@ mod tests {
                 .replace(finalized_block_proposal_1.content.as_ref().height);
 
             let pool_reader = PoolReader::new(&pool);
-            let remove_from_validated_changeset: Vec<_> = purger
+            // Ignored because the `Hash` implementation of `Block` does not
+            // access the mutable payload `Thunk`.
+            #[allow(clippy::mutable_key_type)]
+            let remove_from_validated_changeset: HashSet<_> = purger
                 .on_state_change(&pool_reader)
                 .into_iter()
                 .filter(|change_action| {
@@ -900,7 +906,7 @@ mod tests {
 
             assert_eq!(
                 remove_from_validated_changeset,
-                vec![
+                HashSet::from([
                     ChangeAction::RemoveFromValidated(ConsensusMessage::Notarization(
                         non_finalized_notarization_2
                     )),
@@ -910,7 +916,7 @@ mod tests {
                     ChangeAction::RemoveFromValidated(ConsensusMessage::BlockProposal(
                         non_finalized_block_proposal_2_1
                     )),
-                ]
+                ])
             );
         })
     }

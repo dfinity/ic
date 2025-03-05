@@ -68,8 +68,8 @@
     "sha256": "fd25a4e2e283b498c3be1aaf63cc9b2726264d78a12b12f43ad453ceeb575e7c"
   },
   "governance": {
-    "rev": "345790def6dfa93bcc317171c9733851d205802e",
-    "sha256": "15c9b8db9e54963d4f7075e1fd3bd6a0055dbe6981a2f6a54dd64114fdb0629f"
+    "rev": "ebb190bf1da0dba3e486b78c95cf5a3c5542e2f3",
+    "sha256": "d1668a798dc235587dfd3d50c0f7655b74d9360d4a5dbafd11ddc47042a7fbe4"
   },
   "index": {
     "rev": "7c6309cb5bec7ab28ed657ac7672af08a59fc1ba",
@@ -100,20 +100,20 @@
     "sha256": "c0e70561a26bcb4a2acee50c487335640bab9e7301f9970b08ac345a59075748"
   },
   "root": {
-    "rev": "c5e098e8cc8e62249e6d7f4ed09e6c2ed87fc800",
-    "sha256": "304af3d8d330397d53eed7e8580810fb3ab303930bdf6fd3969c9109dd11b80e"
+    "rev": "00b04a892dfb2fee1459f1de9d4a731aa04f1ca3",
+    "sha256": "36188e425f4d6d9c0e89252ed6028f6735f1911a4bbdc02312fd009a86d039b8"
   },
   "sns-wasm": {
-    "rev": "c5e098e8cc8e62249e6d7f4ed09e6c2ed87fc800",
-    "sha256": "6308fdd2d8bafb6a54ae995f0ff07118976dd75f6e2775fdf50349084a59b4b7"
+    "rev": "ebb190bf1da0dba3e486b78c95cf5a3c5542e2f3",
+    "sha256": "277631fb22c6f2e205f6f99ce602deab30d746193db46f75b3b69316fb031273"
   },
   "sns_archive": {
     "rev": "c741e349451edf0c9792149ad439bb32a0161371",
     "sha256": "2b0970a84976bc2eb9591b68d44501566937994fa5594972f8aac9c8b058672f"
   },
   "sns_governance": {
-    "rev": "2d4bcba47ea10520ff21ce54a8acb9cdb0629317",
-    "sha256": "82edbcf511304b53e519965b4899266ea75593c3e731524f0b010a1fc4e974ad"
+    "rev": "ebb190bf1da0dba3e486b78c95cf5a3c5542e2f3",
+    "sha256": "fc28495a50286e87777b1d0a14107ad02be4722a4b7afe5bd3dc6ec44a5c345f"
   },
   "sns_index": {
     "rev": "c741e349451edf0c9792149ad439bb32a0161371",
@@ -132,7 +132,7 @@
     "sha256": "cbbc1ffdd911c58692409e942fafbddcf3e3445e1df99b26d83ae8ed5383af9a"
   },
   "swap": {
-    "rev": "a5878586e47536d4cd47f0aadb66b73df8131d2b",
-    "sha256": "45408ed654561dfb17c84b86948dda9498aa0ba8ee669ae774e5faca830c4c24"
+    "rev": "00b04a892dfb2fee1459f1de9d4a731aa04f1ca3",
+    "sha256": "9289cf5b79e8e4341175fd4bcad3412f57faf2f49a67b8ace6fa113028a515f7"
   }
 }

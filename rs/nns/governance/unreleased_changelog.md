@@ -9,29 +9,19 @@ on the process that this file is part of, see
 
 ## Added
 
+* Collect metrics about timer tasks defined using ic_nervous_system_timer_task library.
+
 ## Changed
 
-* ManageNetworkEconomics proposals can now modify deep fields one at a time.
-  Previously, this was only possible for top level fields.
-
-* Added validation for ManageNetworkEconomics proposals. Previously, there was
-  none. The result must have all the following properties:
-
-  * All "optional" fields are actually set.
-
-  * `maximum_icp_xdr_rate >= minimum_icp_xdr_rate`
-
-  * Decimal fields have parsable `human_readable` values.
-
-  * `one_third_participation_milestone_xdr < full_participation_milestone_xdr`
+* Voting Rewards will be scheduled by a timer instead of by heartbeats.
+* Unstaking maturity task will be processing up to 100 neurons in a single message, to avoid
+  exceeding the instruction limit in a single execution.
+* Voting Rewards will be distributed asynchronously in the background after being calculated.  
+  * This will allow rewards to be compatible with neurons being stored in Stable Memory. 
 
 ## Deprecated
 
 ## Removed
-
-* Neuron migration (`migrate_active_neurons_to_stable_memory`) is rolled back due to issues with
-  reward distribution. It has already been rolled back with a hotfix ([proposal
-  135265](https://dashboard.internetcomputer.org/proposal/135265))
 
 ## Fixed
 

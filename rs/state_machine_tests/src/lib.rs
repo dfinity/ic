@@ -6,7 +6,9 @@ use ic_btc_consensus::BitcoinPayloadBuilder;
 use ic_config::{
     adapters::AdaptersConfig,
     bitcoin_payload_builder_config::Config as BitcoinPayloadBuilderConfig,
-    execution_environment::Config as HypervisorConfig, state_manager::LsmtConfig,
+    execution_environment::Config as HypervisorConfig,
+    message_routing::{MAX_STREAM_MESSAGES, TARGET_STREAM_SIZE_BYTES},
+    state_manager::LsmtConfig,
     subnet_config::SubnetConfig,
 };
 use ic_consensus::{
@@ -103,7 +105,7 @@ use ic_replicated_state::{
 use ic_state_layout::{CheckpointLayout, ReadOnly};
 use ic_state_manager::StateManagerImpl;
 use ic_test_utilities::crypto::CryptoReturningOk;
-use ic_test_utilities_consensus::FakeConsensusPoolCache;
+use ic_test_utilities_consensus::{batch::MockBatchPayloadBuilder, FakeConsensusPoolCache};
 use ic_test_utilities_metrics::{
     fetch_counter_vec, fetch_histogram_stats, fetch_int_counter, fetch_int_gauge,
     fetch_int_gauge_vec, Labels,
@@ -841,7 +843,7 @@ pub struct StateMachine {
     pub log_level: Option<Level>,
     pub nodes: Vec<StateMachineNode>,
     pub batch_summary: Option<BatchSummary>,
-    time_source: Arc<FastForwardTimeSource>,
+    pub time_source: Arc<FastForwardTimeSource>,
     consensus_pool_cache: Arc<FakeConsensusPoolCache>,
     canister_http_pool: Arc<RwLock<CanisterHttpPoolImpl>>,
     canister_http_payload_builder: Arc<CanisterHttpPayloadBuilderImpl>,
@@ -850,6 +852,7 @@ pub struct StateMachine {
     /// A drop guard to gracefully cancel the ingress watcher task.
     _ingress_watcher_drop_guard: tokio_util::sync::DropGuard,
     query_stats_payload_builder: Arc<PocketQueryStatsPayloadBuilderImpl>,
+    vetkd_payload_builder: Arc<dyn BatchPayloadBuilder>,
     remove_old_states: bool,
     // This field must be the last one so that the temporary directory is deleted at the very end.
     state_dir: Box<dyn StateMachineStateDir>,
@@ -908,6 +911,8 @@ pub struct StateMachineBuilder {
     subnet_size: usize,
     nns_subnet_id: Option<SubnetId>,
     subnet_id: Option<SubnetId>,
+    max_stream_messages: usize,
+    target_stream_size_bytes: usize,
     routing_table: RoutingTable,
     chain_keys_enabled_status: BTreeMap<MasterPublicKeyId, bool>,
     ecdsa_signature_fee: Option<Cycles>,
@@ -938,6 +943,8 @@ impl StateMachineBuilder {
             subnet_size: SMALL_APP_SUBNET_MAX_SIZE,
             nns_subnet_id: None,
             subnet_id: None,
+            max_stream_messages: MAX_STREAM_MESSAGES,
+            target_stream_size_bytes: TARGET_STREAM_SIZE_BYTES,
             routing_table: RoutingTable::new(),
             chain_keys_enabled_status: Default::default(),
             ecdsa_signature_fee: None,
@@ -1049,6 +1056,20 @@ impl StateMachineBuilder {
         }
     }
 
+    pub fn with_max_stream_messages(self, max_stream_messages: usize) -> Self {
+        Self {
+            max_stream_messages,
+            ..self
+        }
+    }
+
+    pub fn with_target_stream_size_bytes(self, target_stream_size_bytes: usize) -> Self {
+        Self {
+            target_stream_size_bytes,
+            ..self
+        }
+    }
+
     pub fn with_master_ecdsa_public_key(self) -> Self {
         self.with_chain_key(MasterPublicKeyId::Ecdsa(EcdsaKeyId {
             curve: EcdsaCurve::Secp256k1,
@@ -1154,6 +1175,8 @@ impl StateMachineBuilder {
             self.subnet_type,
             self.subnet_size,
             self.subnet_id,
+            self.max_stream_messages,
+            self.target_stream_size_bytes,
             self.chain_keys_enabled_status,
             self.ecdsa_signature_fee,
             self.schnorr_signature_fee,
@@ -1287,6 +1310,7 @@ impl StateMachineBuilder {
             self_validating_payload_builder,
             sm.canister_http_payload_builder.clone(),
             sm.query_stats_payload_builder.clone(),
+            sm.vetkd_payload_builder.clone(),
             sm.metrics_registry.clone(),
             sm.replica_logger.clone(),
         ));
@@ -1480,6 +1504,8 @@ impl StateMachine {
         subnet_type: SubnetType,
         subnet_size: usize,
         subnet_id: Option<SubnetId>,
+        max_stream_messages: usize,
+        target_stream_size_bytes: usize,
         chain_keys_enabled_status: BTreeMap<MasterPublicKeyId, bool>,
         ecdsa_signature_fee: Option<Cycles>,
         schnorr_signature_fee: Option<Cycles>,
@@ -1591,6 +1617,8 @@ impl StateMachine {
             replica_logger.clone(),
         ));
 
+        let vetkd_payload_builder = Arc::new(MockBatchPayloadBuilder::new().expect_noop());
+
         // Setup ingress watcher for synchronous call endpoint.
         let (completed_execution_messages_tx, completed_execution_messages_rx) =
             mpsc::channel(COMPLETED_EXECUTION_MESSAGES_BUFFER_SIZE);
@@ -1639,6 +1667,8 @@ impl StateMachine {
             hypervisor_config,
             cycles_account_manager.clone(),
             subnet_id,
+            max_stream_messages,
+            target_stream_size_bytes,
             &metrics_registry,
             replica_logger.clone(),
             Arc::clone(&registry_client) as _,
@@ -1833,6 +1863,7 @@ impl StateMachine {
             canister_http_pool,
             canister_http_payload_builder,
             query_stats_payload_builder: pocket_query_stats_payload_builder,
+            vetkd_payload_builder,
             remove_old_states,
         }
     }
@@ -2415,6 +2446,7 @@ impl StateMachine {
             randomness: Randomness::from(seed),
             chain_key_subnet_public_keys: self.chain_key_subnet_public_keys.clone(),
             idkg_pre_signature_ids: BTreeMap::new(),
+            ni_dkg_ids: BTreeMap::new(),
             registry_version: self.registry_client.get_latest_version(),
             time: time_of_next_round,
             consensus_responses: payload.consensus_responses,
@@ -2588,12 +2620,14 @@ impl StateMachine {
     pub fn await_state_hash(&self) -> CryptoHashOfState {
         let h = self.state_manager.latest_state_height();
         let started_at = Instant::now();
-        let mut tries = 0;
-        while tries < 100 {
+        loop {
+            let elapsed = started_at.elapsed();
+            if elapsed > Duration::from_secs(5 * 60) {
+                panic!("State hash computation took too long ({:?})", elapsed);
+            }
             match self.state_manager.get_state_hash_at(h) {
                 Ok(hash) => return hash,
                 Err(StateHashError::Transient(_)) => {
-                    tries += 1;
                     std::thread::sleep(Duration::from_millis(100));
                     continue;
                 }
@@ -2602,10 +2636,6 @@ impl StateMachine {
                 }
             }
         }
-        panic!(
-            "State hash computation took too long ({:?})",
-            started_at.elapsed()
-        )
     }
 
     /// Blocks until the result of the ingress message with the specified ID is

@@ -15,6 +15,7 @@ system_test_nns(
     runtime_deps = GUESTOS_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
+        "//packages/ic-vetkd-utils",
         "//rs/config",
         "//rs/nns/constants",
         "//rs/registry/subnet_type",
@@ -25,6 +26,7 @@ system_test_nns(
         "//rs/types/management_canister_types",
         "//rs/types/types",
         "@crate_index//:anyhow",
+        "@crate_index//:futures",
         "@crate_index//:ic-agent",
         "@crate_index//:slog",
     ],

@@ -954,6 +954,53 @@ fn test_batch_adjust_neurons_storage() {
 }
 
 #[test]
+fn test_unstake_maturity() {
+    let mut neuron_store = NeuronStore::new(BTreeMap::new());
+    let now_seconds = neuron_store.now();
+    for id in 1..=5 {
+        let neuron = simple_neuron_builder(id)
+            .with_dissolve_state_and_age(DissolveStateAndAge::DissolvingOrDissolved {
+                when_dissolved_timestamp_seconds: now_seconds,
+            })
+            .with_staked_maturity_e8s_equivalent(1_000_000)
+            .build();
+        neuron_store.add_neuron(neuron).unwrap();
+    }
+
+    let neuron_has_staked_maturity = |neuron_store: &NeuronStore, id: u64| {
+        neuron_store
+            .with_neuron(&NeuronId { id }, |neuron| {
+                neuron.staked_maturity_e8s_equivalent.is_some()
+            })
+            .unwrap()
+    };
+
+    // Initially all neurons have staked maturity.
+    for id in 1..=5 {
+        assert!(neuron_has_staked_maturity(&neuron_store, id));
+    }
+
+    // Unstake the maturity of the first 3 neurons.
+    neuron_store.unstake_maturity_of_dissolved_neurons(now_seconds, 3);
+
+    // Verify that the first 3 neurons have no staked maturity, while the rest do.
+    for id in 1..=3 {
+        assert!(!neuron_has_staked_maturity(&neuron_store, id));
+    }
+    for id in 4..=5 {
+        assert!(neuron_has_staked_maturity(&neuron_store, id));
+    }
+
+    // Unstake the maturity of the remaining neurons.
+    neuron_store.unstake_maturity_of_dissolved_neurons(now_seconds, 3);
+
+    // Verify that all neurons have no staked maturity.
+    for id in 1..=5 {
+        assert!(!neuron_has_staked_maturity(&neuron_store, id));
+    }
+}
+
+#[test]
 fn test_batch_adjust_neurons_storage_exceeds_instructions_limit() {
     // This test doesn't make sense after neurons are migrated completely to stable memory.
     let _a = temporarily_disable_allow_active_neurons_in_stable_memory();

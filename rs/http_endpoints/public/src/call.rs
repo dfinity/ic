@@ -13,6 +13,7 @@ use hyper::StatusCode;
 use ic_crypto_interfaces_sig_verification::IngressSigVerifier;
 use ic_error_types::UserError;
 use ic_interfaces::ingress_pool::IngressPoolThrottler;
+use ic_interfaces::time_source::{SysTimeSource, TimeSource};
 use ic_interfaces_registry::RegistryClient;
 use ic_logger::{error, warn, ReplicaLogger};
 use ic_registry_client_helpers::{
@@ -27,7 +28,6 @@ use ic_types::{
     messages::{
         HttpCallContent, HttpRequestEnvelope, MessageId, SignedIngress, SignedIngressContent,
     },
-    time::current_time,
     CanisterId, CountBytes, NodeId, RegistryVersion, SubnetId,
 };
 use ic_validator::HttpRequestVerifier;
@@ -42,6 +42,7 @@ pub struct IngressValidatorBuilder {
     node_id: NodeId,
     subnet_id: SubnetId,
     malicious_flags: Option<MaliciousFlags>,
+    time_source: Option<Arc<dyn TimeSource>>,
     ingress_verifier: Arc<dyn IngressSigVerifier + Send + Sync>,
     registry_client: Arc<dyn RegistryClient>,
     ingress_filter: Arc<Mutex<IngressFilterService>>,
@@ -65,6 +66,7 @@ impl IngressValidatorBuilder {
             node_id,
             subnet_id,
             malicious_flags: None,
+            time_source: None,
             ingress_verifier,
             registry_client,
             ingress_filter,
@@ -78,6 +80,11 @@ impl IngressValidatorBuilder {
         self
     }
 
+    pub fn with_time_source(mut self, time_source: Arc<dyn TimeSource>) -> Self {
+        self.time_source = Some(time_source);
+        self
+    }
+
     pub fn build(self) -> IngressValidator {
         let log = self.log;
         IngressValidator {
@@ -85,6 +92,7 @@ impl IngressValidatorBuilder {
             node_id: self.node_id,
             subnet_id: self.subnet_id,
             registry_client: self.registry_client.clone(),
+            time_source: self.time_source.unwrap_or(Arc::new(SysTimeSource::new())),
             validator: build_validator(self.ingress_verifier, self.malicious_flags),
             ingress_filter: self.ingress_filter,
             ingress_throttler: self.ingress_throttler,
@@ -164,6 +172,7 @@ pub struct IngressValidator {
     node_id: NodeId,
     subnet_id: SubnetId,
     registry_client: Arc<dyn RegistryClient>,
+    time_source: Arc<dyn TimeSource>,
     validator: Arc<dyn HttpRequestVerifier<SignedIngressContent, RegistryRootOfTrustProvider>>,
     ingress_filter: Arc<Mutex<IngressFilterService>>,
     ingress_throttler: Arc<RwLock<dyn IngressPoolThrottler + Send + Sync>>,
@@ -185,6 +194,7 @@ impl IngressValidator {
             node_id,
             subnet_id,
             registry_client,
+            time_source,
             validator,
             ingress_filter,
             ingress_throttler,
@@ -243,7 +253,11 @@ impl IngressValidator {
         let request_c = msg.as_ref().clone();
 
         tokio::task::spawn_blocking(move || {
-            validator.validate_request(&request_c, current_time(), &root_of_trust_provider)
+            validator.validate_request(
+                &request_c,
+                time_source.get_relative_time(),
+                &root_of_trust_provider,
+            )
         })
         .await
         .map_err(|_| HttpError {

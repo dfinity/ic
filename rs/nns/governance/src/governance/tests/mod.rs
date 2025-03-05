@@ -1,4 +1,5 @@
 use super::*;
+use crate::test_utils::MockRandomness;
 use crate::{
     neuron::{DissolveStateAndAge, NeuronBuilder},
     pb::v1::{
@@ -451,9 +452,6 @@ mod convert_from_create_service_nervous_system_to_sns_init_payload_tests {
                         total_e8s: swap_total_e8s,
                         initial_swap_amount_e8s: swap_total_e8s,
                     },),
-                    airdrop_distribution: Some(sns_init_pb::AirdropDistribution {
-                        airdrop_neurons: vec![],
-                    },),
                 },
             ),
         );
@@ -795,9 +793,6 @@ mod convert_create_service_nervous_system_proposal_to_sns_init_payload_tests_wit
                         total_e8s: swap_total_e8s,
                         initial_swap_amount_e8s: swap_total_e8s,
                     },),
-                    airdrop_distribution: Some(sns_init_pb::AirdropDistribution {
-                        airdrop_neurons: vec![],
-                    },),
                 },
             ),
         );
@@ -844,10 +839,11 @@ mod convert_create_service_nervous_system_proposal_to_sns_init_payload_tests_wit
 }
 
 mod metrics_tests {
-
     use ic_nns_common::pb::v1::ProposalId;
     use maplit::btreemap;
+    use std::sync::Arc;
 
+    use crate::test_utils::MockRandomness;
     use crate::{
         encode_metrics,
         governance::Governance,
@@ -893,7 +889,6 @@ mod metrics_tests {
             }),
             ..ProposalData::default()
         };
-
         let governance = Governance::new(
             GovernanceProto {
                 proposals: btreemap! {
@@ -902,9 +897,10 @@ mod metrics_tests {
                 },
                 ..GovernanceProto::default()
             },
-            Box::new(MockEnvironment::new(Default::default(), 0)),
-            Box::new(StubIcpLedger {}),
-            Box::new(StubCMC {}),
+            Arc::new(MockEnvironment::new(Default::default(), 0)),
+            Arc::new(StubIcpLedger {}),
+            Arc::new(StubCMC {}),
+            Box::new(MockRandomness::new()),
         );
 
         let mut writer = ic_metrics_encoder::MetricsEncoder::new(vec![], 1000);
@@ -966,9 +962,10 @@ mod metrics_tests {
                 },
                 ..GovernanceProto::default()
             },
-            Box::<MockEnvironment>::default(),
-            Box::new(StubIcpLedger {}),
-            Box::new(StubCMC {}),
+            Arc::<MockEnvironment>::default(),
+            Arc::new(StubIcpLedger {}),
+            Arc::new(StubCMC {}),
+            Box::new(MockRandomness::new()),
         );
 
         let mut writer = ic_metrics_encoder::MetricsEncoder::new(vec![], 10);
@@ -1171,10 +1168,14 @@ fn test_pre_and_post_upgrade_first_time() {
     // Then Governance is instantiated during upgrade with proto
     let mut governance = Governance::new(
         governance_proto,
-        Box::<MockEnvironment>::default(),
-        Box::new(StubIcpLedger {}),
-        Box::new(StubCMC {}),
+        Arc::<MockEnvironment>::default(),
+        Arc::new(StubIcpLedger {}),
+        Arc::new(StubCMC {}),
+        Box::new(MockRandomness::new()),
     );
+
+    // Simulate seeding the randomness in a running governance canister.
+    governance.randomness.seed_rng([12; 32]);
 
     assert_eq!(governance.neuron_store.len(), 1);
     // On next pre-upgrade, we get the heap proto and store it in stable memory
@@ -1196,15 +1197,17 @@ fn test_pre_and_post_upgrade_first_time() {
     // We now simulate the post_upgrade
     let mut governance = Governance::new_restored(
         extracted_proto,
-        Box::<MockEnvironment>::default(),
-        Box::new(StubIcpLedger {}),
-        Box::new(StubCMC {}),
+        Arc::<MockEnvironment>::default(),
+        Arc::new(StubIcpLedger {}),
+        Arc::new(StubCMC {}),
+        Box::new(MockRandomness::new()),
     );
 
     assert_eq!(governance.neuron_store.len(), 1);
     // It should not rebuild during post_upgrade so it should still be mis-matched with neurons.
     let extracted_proto = governance.take_heap_proto();
     assert_eq!(extracted_proto.topic_followee_index.len(), 2);
+    assert_eq!(extracted_proto.rng_seed, Some(vec![12; 32]));
 }
 
 #[test]
@@ -1217,9 +1220,10 @@ fn can_spawn_neurons_only_true_when_not_spawning_and_neurons_ready_to_spawn() {
 
     let mut governance = Governance::new(
         proto,
-        Box::new(mock_env),
-        Box::new(StubIcpLedger {}),
-        Box::new(StubCMC {}),
+        Arc::new(mock_env),
+        Arc::new(StubIcpLedger {}),
+        Arc::new(StubCMC {}),
+        Box::new(MockRandomness::new()),
     );
     // No neurons to spawn...
     assert!(!governance.can_spawn_neurons());
@@ -1264,9 +1268,10 @@ fn test_validate_execute_nns_function() {
             }],
             ..Default::default()
         },
-        Box::new(MockEnvironment::new(vec![], 100)),
-        Box::new(StubIcpLedger {}),
-        Box::new(StubCMC {}),
+        Arc::new(MockEnvironment::new(vec![], 100)),
+        Arc::new(StubIcpLedger {}),
+        Arc::new(StubCMC {}),
+        Box::new(MockRandomness::new()),
     );
 
     let test_execute_nns_function_error =
@@ -1371,8 +1376,8 @@ fn test_validate_execute_nns_function() {
                 nns_function: NnsFunction::UpdateAllowedPrincipals as i32,
                 payload: vec![],
             },
-            "Proposal is obsolete because NNS_FUNCTION_UPDATE_ALLOWED_PRINCIPALS is only used for \
-            the old SNS initialization mechanism, which is now obsolete. Use \
+            "Proposal is obsolete because NNS_FUNCTION_UPDATE_ALLOWED_PRINCIPALS is only used \
+            for the old SNS initialization mechanism, which is now obsolete. Use \
             CREATE_SERVICE_NERVOUS_SYSTEM instead."
                 .to_string(),
         ),
@@ -1381,8 +1386,8 @@ fn test_validate_execute_nns_function() {
                 nns_function: NnsFunction::UpdateApiBoundaryNodesVersion as i32,
                 payload: vec![],
             },
-            "Proposal is obsolete because NNS_FUNCTION_UPDATE_API_BOUNDARY_NODES_VERSION is obsolete. \
-            Use NNS_FUNCTION_DEPLOY_GUESTOS_TO_SOME_API_BOUNDARY_NODES instead."
+            "Proposal is obsolete because NNS_FUNCTION_UPDATE_API_BOUNDARY_NODES_VERSION is \
+            obsolete. Use NNS_FUNCTION_DEPLOY_GUESTOS_TO_SOME_API_BOUNDARY_NODES instead."
                 .to_string(),
         ),
         (
@@ -1390,8 +1395,8 @@ fn test_validate_execute_nns_function() {
                 nns_function: NnsFunction::UpdateUnassignedNodesConfig as i32,
                 payload: vec![],
             },
-            "Proposal is obsolete because NNS_FUNCTION_UPDATE_UNASSIGNED_NODES_CONFIG is obsolete. \
-            Use NNS_FUNCTION_DEPLOY_GUESTOS_TO_ALL_UNASSIGNED_NODES/\
+            "Proposal is obsolete because NNS_FUNCTION_UPDATE_UNASSIGNED_NODES_CONFIG is \
+            obsolete. Use NNS_FUNCTION_DEPLOY_GUESTOS_TO_ALL_UNASSIGNED_NODES/\
             NNS_FUNCTION_UPDATE_SSH_READONLY_ACCESS_FOR_ALL_UNASSIGNED_NODES instead."
                 .to_string(),
         ),
@@ -1400,8 +1405,8 @@ fn test_validate_execute_nns_function() {
                 nns_function: NnsFunction::UpdateElectedHostosVersions as i32,
                 payload: vec![],
             },
-            "Proposal is obsolete because NNS_FUNCTION_UPDATE_ELECTED_HOSTOS_VERSIONS is obsolete. \
-            Use NNS_FUNCTION_REVISE_ELECTED_HOSTOS_VERSIONS instead."
+            "Proposal is obsolete because NNS_FUNCTION_UPDATE_ELECTED_HOSTOS_VERSIONS is \
+            obsolete. Use NNS_FUNCTION_REVISE_ELECTED_HOSTOS_VERSIONS instead."
                 .to_string(),
         ),
         (
@@ -1411,6 +1416,24 @@ fn test_validate_execute_nns_function() {
             },
             "Proposal is obsolete because NNS_FUNCTION_UPDATE_NODES_HOSTOS_VERSION is obsolete. \
             Use NNS_FUNCTION_DEPLOY_HOSTOS_TO_SOME_NODES instead."
+                .to_string(),
+        ),
+        (
+            ExecuteNnsFunction {
+                nns_function: NnsFunction::NnsCanisterUpgrade as i32,
+                payload: vec![],
+            },
+            "Proposal is obsolete because NNS_FUNCTION_NNS_CANISTER_UPGRADE is obsolete. \
+            Use InstallCode instead."
+                .to_string(),
+        ),
+        (
+            ExecuteNnsFunction {
+                nns_function: NnsFunction::NnsRootUpgrade as i32,
+                payload: vec![],
+            },
+            "Proposal is obsolete because NNS_FUNCTION_NNS_ROOT_UPGRADE is obsolete. \
+            Use InstallCode instead."
                 .to_string(),
         ),
     ];
@@ -1567,9 +1590,10 @@ fn test_update_neuron_errors_out_expectedly() {
     };
     let mut governance = Governance::new(
         governance_proto,
-        Box::<MockEnvironment>::default(),
-        Box::new(StubIcpLedger {}),
-        Box::new(StubCMC {}),
+        Arc::<MockEnvironment>::default(),
+        Arc::new(StubIcpLedger {}),
+        Arc::new(StubCMC {}),
+        Box::new(MockRandomness::new()),
     );
 
     assert_eq!(
@@ -1631,9 +1655,10 @@ fn test_compute_ballots_for_new_proposal() {
 
     let mut governance = Governance::new(
         governance_proto,
-        Box::<MockEnvironment>::default(),
-        Box::new(StubIcpLedger {}),
-        Box::new(StubCMC {}),
+        Arc::<MockEnvironment>::default(),
+        Arc::new(StubIcpLedger {}),
+        Arc::new(StubCMC {}),
+        Box::new(MockRandomness::new()),
     );
     let manage_neuron_action = Action::ManageNeuron(Box::new(ManageNeuron {
         id: Some(NeuronId { id: 10 }),

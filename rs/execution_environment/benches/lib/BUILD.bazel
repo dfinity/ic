@@ -4,6 +4,7 @@ package(default_visibility = ["//visibility:public"])
 
 BENCH_DEPENDENCIES = [
     # Keep sorted.
+    "//packages/ic-error-types",
     "//rs/config",
     "//rs/cycles_account_manager",
     "//rs/execution_environment",
@@ -20,7 +21,6 @@ BENCH_DEPENDENCIES = [
     "//rs/test_utilities/state",
     "//rs/test_utilities/time",
     "//rs/test_utilities/types",
-    "//rs/types/error_types",
     "//rs/types/types",
     "//rs/types/wasm_types",
     "@crate_index//:criterion",

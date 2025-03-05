@@ -12,9 +12,6 @@ use icp_ledger::{
 use icrc_ledger_types::icrc1::account::Account;
 use serde::{Deserialize, Serialize};
 
-// TODO(NNS1-3566): Delete this.
-pub const IS_AUTOMATIC_REFUND_ENABLED: bool = true;
-
 pub const DEFAULT_CYCLES_PER_XDR: u128 = 1_000_000_000_000u128; // 1T cycles = 1 XDR
 
 pub const PERMYRIAD_DECIMAL_PLACES: u32 = 4;

@@ -165,7 +165,7 @@ def _custom_partitions(mode):
     ext4_image(
         name = "partition-data.tzst",
         src = "data_tar",
-        partition_size = "1750M",
+        partition_size = "2250M",
         subdir = "data",
         target_compatible_with = [
             "@platforms//os:linux",
