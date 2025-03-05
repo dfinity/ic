@@ -105,7 +105,7 @@ use ic_replicated_state::{
 use ic_state_layout::{CheckpointLayout, ReadOnly};
 use ic_state_manager::StateManagerImpl;
 use ic_test_utilities::crypto::CryptoReturningOk;
-use ic_test_utilities_consensus::FakeConsensusPoolCache;
+use ic_test_utilities_consensus::{batch::MockBatchPayloadBuilder, FakeConsensusPoolCache};
 use ic_test_utilities_metrics::{
     fetch_counter_vec, fetch_histogram_stats, fetch_int_counter, fetch_int_gauge,
     fetch_int_gauge_vec, Labels,
@@ -843,7 +843,7 @@ pub struct StateMachine {
     pub log_level: Option<Level>,
     pub nodes: Vec<StateMachineNode>,
     pub batch_summary: Option<BatchSummary>,
-    time_source: Arc<FastForwardTimeSource>,
+    pub time_source: Arc<FastForwardTimeSource>,
     consensus_pool_cache: Arc<FakeConsensusPoolCache>,
     canister_http_pool: Arc<RwLock<CanisterHttpPoolImpl>>,
     canister_http_payload_builder: Arc<CanisterHttpPayloadBuilderImpl>,
@@ -852,6 +852,7 @@ pub struct StateMachine {
     /// A drop guard to gracefully cancel the ingress watcher task.
     _ingress_watcher_drop_guard: tokio_util::sync::DropGuard,
     query_stats_payload_builder: Arc<PocketQueryStatsPayloadBuilderImpl>,
+    vetkd_payload_builder: Arc<dyn BatchPayloadBuilder>,
     remove_old_states: bool,
     // This field must be the last one so that the temporary directory is deleted at the very end.
     state_dir: Box<dyn StateMachineStateDir>,
@@ -1309,6 +1310,7 @@ impl StateMachineBuilder {
             self_validating_payload_builder,
             sm.canister_http_payload_builder.clone(),
             sm.query_stats_payload_builder.clone(),
+            sm.vetkd_payload_builder.clone(),
             sm.metrics_registry.clone(),
             sm.replica_logger.clone(),
         ));
@@ -1615,6 +1617,8 @@ impl StateMachine {
             replica_logger.clone(),
         ));
 
+        let vetkd_payload_builder = Arc::new(MockBatchPayloadBuilder::new().expect_noop());
+
         // Setup ingress watcher for synchronous call endpoint.
         let (completed_execution_messages_tx, completed_execution_messages_rx) =
             mpsc::channel(COMPLETED_EXECUTION_MESSAGES_BUFFER_SIZE);
@@ -1859,6 +1863,7 @@ impl StateMachine {
             canister_http_pool,
             canister_http_payload_builder,
             query_stats_payload_builder: pocket_query_stats_payload_builder,
+            vetkd_payload_builder,
             remove_old_states,
         }
     }
@@ -2615,12 +2620,14 @@ impl StateMachine {
     pub fn await_state_hash(&self) -> CryptoHashOfState {
         let h = self.state_manager.latest_state_height();
         let started_at = Instant::now();
-        let mut tries = 0;
-        while tries < 100 {
+        loop {
+            let elapsed = started_at.elapsed();
+            if elapsed > Duration::from_secs(5 * 60) {
+                panic!("State hash computation took too long ({:?})", elapsed);
+            }
             match self.state_manager.get_state_hash_at(h) {
                 Ok(hash) => return hash,
                 Err(StateHashError::Transient(_)) => {
-                    tries += 1;
                     std::thread::sleep(Duration::from_millis(100));
                     continue;
                 }
@@ -2629,10 +2636,6 @@ impl StateMachine {
                 }
             }
         }
-        panic!(
-            "State hash computation took too long ({:?})",
-            started_at.elapsed()
-        )
     }
 
     /// Blocks until the result of the ingress message with the specified ID is

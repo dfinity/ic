@@ -44,6 +44,7 @@ DEV_DEPENDENCIES = [
     "//rs/sns/init/protobuf_generator:lib",
     "//rs/test_utilities/compare_dirs",
     "@crate_index//:num-traits",
+    "@crate_index//:pretty_assertions",
     "@crate_index//:tempfile",
 ]
 
