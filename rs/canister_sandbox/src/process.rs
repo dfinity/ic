@@ -70,9 +70,9 @@ pub fn spawn_socketed_process(
     let mut child_handle = cmd.spawn()?;
 
     let child_stdout = child_handle.stdout.take();
-    rayon::spawn(move || copying_task(prefix, child_stdout, std::io::stdout()));
+    std::thread::spawn(move || copying_task(prefix, child_stdout, std::io::stdout()));
     let child_stderr = child_handle.stderr.take();
-    rayon::spawn(move || copying_task(prefix, child_stderr, std::io::stderr()));
+    std::thread::spawn(move || copying_task(prefix, child_stderr, std::io::stderr()));
 
     Ok(child_handle)
 }
