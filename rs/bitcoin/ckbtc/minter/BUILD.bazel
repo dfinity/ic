@@ -253,7 +253,6 @@ genrule(
 
 rust_canbench(
     name = "ckbtc_minter_canbench",
-    testonly = True,
     srcs = ["src/main.rs"],
     compile_data = [":ckbtc_minter.did"],
     data = ["mainnet_events.mem.gz"],
@@ -296,4 +295,5 @@ rust_canbench(
         "@crate_index//:ic-metrics-encoder",
         "@crate_index//:serde_json",
     ],
+    visibility = ["//visibility:private"],
 )
