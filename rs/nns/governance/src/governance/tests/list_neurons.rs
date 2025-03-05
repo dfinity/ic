@@ -1,3 +1,4 @@
+use crate::test_utils::MockRandomness;
 use crate::{
     governance::Governance,
     pb::v1::{neuron::DissolveState, NetworkEconomics, Neuron},
@@ -7,6 +8,7 @@ use ic_base_types::PrincipalId;
 use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_governance_api::pb::v1::list_neurons::NeuronSubaccount;
 use ic_nns_governance_api::pb::v1::ListNeurons;
+use std::sync::Arc;
 
 #[test]
 fn test_list_neurons_with_paging() {
@@ -39,9 +41,10 @@ fn test_list_neurons_with_paging() {
             }),
             ..crate::pb::v1::Governance::default()
         },
-        Box::new(MockEnvironment::new(Default::default(), 0)),
-        Box::new(StubIcpLedger {}),
-        Box::new(StubCMC {}),
+        Arc::new(MockEnvironment::new(Default::default(), 0)),
+        Arc::new(StubIcpLedger {}),
+        Arc::new(StubCMC {}),
+        Box::new(MockRandomness::new()),
     );
 
     let mut request = ListNeurons {
@@ -127,9 +130,10 @@ fn test_list_neurons_by_subaccounts_and_ids() {
             }),
             ..crate::pb::v1::Governance::default()
         },
-        Box::new(MockEnvironment::new(Default::default(), 0)),
-        Box::new(StubIcpLedger {}),
-        Box::new(StubCMC {}),
+        Arc::new(MockEnvironment::new(Default::default(), 0)),
+        Arc::new(StubIcpLedger {}),
+        Arc::new(StubCMC {}),
+        Box::new(MockRandomness::new()),
     );
 
     let request = ListNeurons {

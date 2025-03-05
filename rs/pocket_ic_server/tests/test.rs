@@ -429,7 +429,7 @@ fn test_specified_id() {
         .unwrap();
     let canister_id = rt.block_on(async {
         let agent = ic_agent::Agent::builder()
-            .with_url(endpoint.clone())
+            .with_url(endpoint)
             .build()
             .unwrap();
         agent.fetch_root_key().await.unwrap();
@@ -1190,9 +1190,8 @@ fn test_unresponsive_gateway_backend() {
         .send()
         .unwrap();
     assert_eq!(resp.status(), StatusCode::BAD_GATEWAY);
-    assert!(String::from_utf8(resp.bytes().unwrap().as_ref().to_vec())
-        .unwrap()
-        .contains("connection_failure: HTTP request failed: error sending request for url"));
+    let page = String::from_utf8(resp.bytes().unwrap().as_ref().to_vec()).unwrap();
+    assert!(page.contains("ConnectionFailure: HTTP request failed: error sending request for url"));
 }
 
 #[test]
@@ -1369,7 +1368,7 @@ fn http_gateway_route_underscore() {
     let error_page = client.get(invalid_url).send().unwrap();
     assert_eq!(error_page.status(), StatusCode::BAD_REQUEST);
     let page = String::from_utf8(error_page.bytes().unwrap().to_vec()).unwrap();
-    assert!(page.contains("canister_id_not_found"));
+    assert!(page.contains("CanisterIdNotFound"));
 }
 
 #[test]

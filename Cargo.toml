@@ -9,6 +9,8 @@ members = [
     "packages/ic-dummy-getrandom-for-wasm",
     "packages/ic-ed25519",
     "packages/ic-ethereum-types",
+    "packages/ic-error-types",
+    "packages/ic-hpke",
     "packages/ic-metrics-assert",
     "packages/ic-secp256k1",
     "packages/ic-sha3",
@@ -38,8 +40,10 @@ members = [
     "rs/boundary_node/rate_limits",
     "rs/boundary_node/rate_limits/api",
     "rs/boundary_node/rate_limits/canister_client",
+    "rs/boundary_node/rate_limits/integration_tests",
     "rs/boundary_node/salt_sharing",
     "rs/boundary_node/salt_sharing/api",
+    "rs/boundary_node/salt_sharing/integration_tests",
     "rs/boundary_node/systemd_journal_gatewayd_shim",
     "rs/canister_client",
     "rs/canister_client/read_state_response_parser",
@@ -200,6 +204,7 @@ members = [
     "rs/nervous_system/string",
     "rs/nervous_system/temporary",
     "rs/nervous_system/time_helpers",
+    "rs/nervous_system/timers",
     "rs/nervous_system/tools/release-runscript",
     "rs/nervous_system/tools/sync-with-released-nervous-system-wasms",
     "rs/nns/constants",
@@ -421,7 +426,6 @@ members = [
     "rs/types/types_test_utils",
     "rs/types/base_types",
     "rs/types/base_types/protobuf_generator",
-    "rs/types/error_types",
     "rs/types/management_canister_types",
     "rs/types/wasm_types",
     "rs/universal_canister/lib",
@@ -560,7 +564,7 @@ hyper-rustls = { version = "0.27.3", default-features = false, features = [
 hyper-socks2 = { version = "0.9.1", default-features = false }
 hyper-util = { version = "0.1.10", features = ["full"] }
 ic-agent = { version = "0.39.2", features = ["pem", "ring"] }
-ic-bn-lib = { git = "https://github.com/dfinity/ic-bn-lib", rev = "d74a6527fbaf8a2c1a7076983cc84f5c5a727923" }
+ic-bn-lib = { git = "https://github.com/dfinity/ic-bn-lib", rev = "530f8e8ea577740213aff4b6dfa7a49cc32bae4a" }
 ic-btc-interface = "0.2.2"
 ic-canister-sig-creation = { git = "https://github.com/dfinity/ic-canister-sig-creation", rev = "7f9e931954637526295269155881207f6c832d6d" }
 ic-cbor = "3"
@@ -569,9 +573,10 @@ ic-cdk-macros = "0.17.0"
 ic-cdk-timers = "0.11.0"
 ic-certificate-verification = "3"
 ic-certification = "3"
-ic-http-certification = "3"
-ic-http-gateway = "0.1"
-ic-management-canister-types = "0.2.0"
+ic-gateway = { git = "https://github.com/dfinity/ic-gateway", rev = "8590b8e9f0af4cdc3b95cd09a0c7a89037b3c038" }
+ic-http-certification = "3.0.3"
+ic-http-gateway = "0.2.0"
+ic-management-canister-types = "0.2.1"
 ic-response-verification = "3"
 ic-sha3 = "1.0.0"
 ic-stable-structures = "0.6.5"
@@ -660,7 +665,7 @@ rand_chacha = "0.3.1"
 rayon = "1.10.0"
 rcgen = { version = "0.13.1", features = ["zeroize"] }
 regex = "1.11.0"
-reqwest = { version = "0.12.8", default-features = false, features = [
+reqwest = { version = "0.12.12", default-features = false, features = [
     "blocking",
     "http2",
     "json",
@@ -698,6 +703,7 @@ slog = { version = "2.7.0", features = [
 slog-async = { version = "2.8.0", features = ["nested-values"] }
 slog-scope = "4.4.0"
 slog-term = "2.9.1"
+slotmap = "1.0.7"
 socket2 = { version = "0.5.7", features = ["all"] }
 ssh2 = "0.9.4"
 static_assertions = "1.1.0"
@@ -709,6 +715,8 @@ tar = "0.4.39"
 tempfile = "3.12.0"
 thiserror = "2.0.3"
 threadpool = "1.8.1"
+tikv-jemalloc-ctl = { version = "0.6", features = ["stats"] }
+tikv-jemallocator = "0.6"
 time = { version = "0.3.36", features = ["formatting"] }
 tracing-flame = "0.2.0"
 tokio = { version = "1.42.0", features = ["full"] }

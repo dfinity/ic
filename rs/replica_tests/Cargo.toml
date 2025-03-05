@@ -15,7 +15,7 @@ ic-btc-replica-types = { path = "../bitcoin/replica_types" }
 ic-btc-service = { path = "../bitcoin/service" }
 ic-canister-client-sender = { path = "../canister_client/sender" }
 ic-config = { path = "../config" }
-ic-error-types = { path = "../types/error_types" }
+ic-error-types = { path = "../../packages/ic-error-types" }
 ic-execution-environment = { path = "../execution_environment" }
 ic-interfaces = { path = "../interfaces" }
 ic-interfaces-registry = { path = "../interfaces/registry" }

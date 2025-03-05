@@ -35,10 +35,7 @@ use ic_types::{
         bytes_to_vetkd_payload, vetkd_payload_to_bytes, ConsensusResponse, ValidationContext,
         VetKdAgreement, VetKdErrorCode, VetKdPayload,
     },
-    crypto::{
-        vetkd::{VetKdArgs, VetKdEncryptedKey},
-        ExtendedDerivationPath,
-    },
+    crypto::vetkd::{VetKdArgs, VetKdDerivationDomain, VetKdEncryptedKey},
     messages::{CallbackId, Payload as ResponsePayload, RejectContext},
     CountBytes, Height, NumBytes, SubnetId, Time,
 };
@@ -206,9 +203,9 @@ impl VetKdPayloadBuilderImpl {
                     continue;
                 };
                 let args = VetKdArgs {
-                    derivation_path: ExtendedDerivationPath {
+                    derivation_domain: VetKdDerivationDomain {
                         caller: context.request.sender.into(),
-                        derivation_path: context.derivation_path.clone(),
+                        domain: context.derivation_path.iter().flatten().cloned().collect(),
                     },
                     ni_dkg_id: ctxt_args.ni_dkg_id.clone(),
                     derivation_id: ctxt_args.derivation_id.clone(),
@@ -324,9 +321,9 @@ impl VetKdPayloadBuilderImpl {
             return invalid_artifact_err(InvalidVetKdPayloadReason::UnexpectedIDkgContext(id));
         };
         let args = VetKdArgs {
-            derivation_path: ExtendedDerivationPath {
+            derivation_domain: VetKdDerivationDomain {
                 caller: context.request.sender.into(),
-                derivation_path: context.derivation_path.clone(),
+                domain: context.derivation_path.iter().flatten().cloned().collect(),
             },
             ni_dkg_id: ctxt_args.ni_dkg_id.clone(),
             derivation_id: ctxt_args.derivation_id.clone(),
@@ -351,6 +348,8 @@ impl VetKdPayloadBuilderImpl {
                     invalid_artifact(InvalidVetKdPayloadReason::VetKdKeyVerificationError(err))
                 } else {
                     warn!(self.log, "VetKD payload validation failure: {err:?}");
+                    self.metrics
+                        .payload_errors_inc("validation_failed", &context.key_id());
                     validation_failed(VetKdPayloadValidationFailure::VetKdKeyVerificationError(
                         err,
                     ))

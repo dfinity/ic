@@ -45,7 +45,7 @@ use ic_types::crypto::canister_threshold_sig::error::{
 use ic_types::crypto::canister_threshold_sig::idkg::{
     BatchSignedIDkgDealing, IDkgTranscriptOperation,
 };
-use ic_types::crypto::vetkd::VetKdEncryptedKeyShareContent;
+use ic_types::crypto::vetkd::{VetKdDerivationDomain, VetKdEncryptedKeyShareContent};
 use ic_types::crypto::ExtendedDerivationPath;
 use ic_types::crypto::{AlgorithmId, CurrentNodePublicKeys};
 use ic_types::{NodeId, NumberOfNodes, Randomness};
@@ -823,7 +823,7 @@ impl VetKdCspVault for RemoteCspVault {
         key_id: KeyId,
         master_public_key: Vec<u8>,
         encryption_public_key: Vec<u8>,
-        derivation_path: ExtendedDerivationPath,
+        derivation_domain: VetKdDerivationDomain,
         derivation_id: Vec<u8>,
     ) -> Result<VetKdEncryptedKeyShareContent, VetKdEncryptedKeyShareCreationVaultError> {
         self.tokio_block_on(self.tarpc_csp_client.create_encrypted_vetkd_key_share(
@@ -831,7 +831,7 @@ impl VetKdCspVault for RemoteCspVault {
             key_id,
             ByteBuf::from(master_public_key),
             ByteBuf::from(encryption_public_key),
-            derivation_path,
+            derivation_domain,
             ByteBuf::from(derivation_id),
         ))
         .unwrap_or_else(|rpc_error: tarpc::client::RpcError| {

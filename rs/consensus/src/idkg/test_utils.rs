@@ -60,7 +60,9 @@ use ic_types::crypto::canister_threshold_sig::{
 use ic_types::crypto::threshold_sig::ni_dkg::{
     NiDkgId, NiDkgMasterPublicKeyId, NiDkgTag, NiDkgTargetSubnet,
 };
-use ic_types::crypto::vetkd::{VetKdArgs, VetKdEncryptedKeyShare, VetKdEncryptedKeyShareContent};
+use ic_types::crypto::vetkd::{
+    VetKdArgs, VetKdDerivationDomain, VetKdEncryptedKeyShare, VetKdEncryptedKeyShareContent,
+};
 use ic_types::crypto::{AlgorithmId, ExtendedDerivationPath};
 use ic_types::messages::CallbackId;
 use ic_types::time::UNIX_EPOCH;
@@ -1371,9 +1373,9 @@ pub(crate) fn create_schnorr_sig_inputs_with_args(
 pub(crate) fn create_vetkd_inputs_with_args(caller: u8, key_id: &VetKdKeyId) -> TestSigInputs {
     let inputs = VetKdArgs {
         ni_dkg_id: fake_dkg_id(key_id.clone()),
-        derivation_path: ExtendedDerivationPath {
+        derivation_domain: VetKdDerivationDomain {
             caller: PrincipalId::try_from(&vec![caller]).unwrap(),
-            derivation_path: vec![],
+            domain: vec![],
         },
         derivation_id: vec![],
         encryption_public_key: vec![1; 32],

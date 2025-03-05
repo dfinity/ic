@@ -10,7 +10,7 @@ use ic_registry_subnet_type::SubnetType;
 use ic_sys::{PageBytes, PageIndex};
 use ic_types::{
     consensus::idkg::PreSigId,
-    crypto::canister_threshold_sig::MasterPublicKey,
+    crypto::{canister_threshold_sig::MasterPublicKey, threshold_sig::ni_dkg::NiDkgId},
     ingress::{IngressStatus, WasmResult},
     messages::{CertificateDelegation, MessageId, Query, SignedIngressContent},
     Cycles, ExecutionRound, Height, NumInstructions, NumOsPages, Randomness, ReplicaVersion, Time,
@@ -62,7 +62,7 @@ pub struct InstanceStats {
 
     /// Number of active (paged in) OS pages (4KiB) for the canister Wasm memory,
     /// as reported by libc `mincore()` API.
-    pub wasm_active_pages: usize,
+    pub wasm_resident_pages: usize,
 
     /// Number of accessed OS pages (4KiB) in stable memory.
     pub stable_accessed_pages: usize,
@@ -1369,6 +1369,13 @@ pub struct ChainKeySettings {
     pub pre_signatures_to_create_in_advance: u32,
 }
 
+#[derive(Clone, Eq, PartialEq, Debug, Default)]
+pub struct ChainKeyData {
+    pub master_public_keys: BTreeMap<MasterPublicKeyId, MasterPublicKey>,
+    pub idkg_pre_signature_ids: BTreeMap<MasterPublicKeyId, BTreeSet<PreSigId>>,
+    pub nidkg_ids: BTreeMap<MasterPublicKeyId, NiDkgId>,
+}
+
 pub trait Scheduler: Send {
     /// Type modelling the replicated state.
     ///
@@ -1423,8 +1430,7 @@ pub trait Scheduler: Send {
         &self,
         state: Self::State,
         randomness: Randomness,
-        chain_key_subnet_public_keys: BTreeMap<MasterPublicKeyId, MasterPublicKey>,
-        idkg_pre_signature_ids: BTreeMap<MasterPublicKeyId, BTreeSet<PreSigId>>,
+        chain_key_data: ChainKeyData,
         replica_version: &ReplicaVersion,
         current_round: ExecutionRound,
         round_summary: Option<ExecutionRoundSummary>,

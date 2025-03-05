@@ -8,7 +8,6 @@ set -eufo pipefail
 
 # default behavior is to build targets specified in BAZEL_TARGETS and not upload to s3
 release_build="false"
-s3_upload="False"
 
 # List of "protected" branches, i.e. branches (not necessarily "protected" in the GitHub sense) where we need
 # the full build to occur (including versioning
@@ -23,26 +22,25 @@ done
 # if we are on a "protected" branch or targeting a rc branch we upload all artifacts and run a release build
 # (with versioning)
 if [[ "${IS_PROTECTED_BRANCH:-}" == "true" ]]; then
-    s3_upload="True"
     release_build="true"
     RUN_ON_DIFF_ONLY="false"
 fi
 
 if [[ "${CI_EVENT_NAME:-}" == "merge_group" ]]; then
-    s3_upload="False"
     RUN_ON_DIFF_ONLY="false"
 fi
 
 if [[ "${RUN_ON_DIFF_ONLY:-}" == "true" ]]; then
     # get bazel targets that changed within the MR
     BAZEL_TARGETS=$("${CI_PROJECT_DIR:-}"/ci/bazel-scripts/diff.sh)
-else
-    s3_upload="True"
 fi
 
 # if bazel targets is empty we don't need to run any tests
 if [ -z "${BAZEL_TARGETS:-}" ]; then
     echo "No bazel targets to build"
+    # create empty SHA256SUMS for build determinism
+    # (not ideal but temporary until we can improve or get rid of diff.sh)
+    touch SHA256SUMS
     exit 0
 fi
 
@@ -89,11 +87,10 @@ bazel_args=(
     ${BAZEL_TARGETS}
     --color=yes
     --build_metadata=BUILDBUDDY_LINKS="[CI Job](${CI_JOB_URL})"
-    --s3_upload="${s3_upload:-"False"}"
 )
 
 if [[ $release_build == true ]]; then
-    bazel_args+=(--config=stamped)
+    bazel_args+=(--config=release)
 fi
 
 # Unless explicitly provided, we set a default --repository_cache to a volume mounted inside our runners
@@ -103,7 +100,10 @@ if [[ ! " ${bazel_args[*]} " =~ [[:space:]]--repository_cache[[:space:]] ]] && [
     bazel_args+=(--repository_cache=/cache/bazel)
 fi
 
-bazel "${bazel_args[@]}" 2>&1 | awk -v url_out="$url_out" "$stream_awk_program"
+echo "running build command 'bazel ${bazel_args[@]}'"
+
+bazel_exitcode="0"
+bazel "${bazel_args[@]}" 2>&1 | awk -v url_out="$url_out" "$stream_awk_program" || bazel_exitcode="$?"
 
 # Write the bes link & summary
 echo "Build results uploaded to $(<"$url_out")"
@@ -112,3 +112,17 @@ if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
     echo "BuildBuddy [$invocation]($(<"$url_out"))" >>"$GITHUB_STEP_SUMMARY"
 fi
 rm "$url_out"
+
+# List and aggregate all SHA256SUMS files.
+if [ -e ./bazel-out/ ]; then
+    for shafile in $(find bazel-out/ -name SHA256SUMS); do
+        if [ -f "$shafile" ]; then
+            echo "$shafile"
+        fi
+    done | xargs cat | sort | uniq >SHA256SUMS
+else
+    # if no bazel-out, assume no targets were built
+    touch SHA256SUMS
+fi
+
+exit "$bazel_exitcode"

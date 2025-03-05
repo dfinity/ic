@@ -5,9 +5,11 @@ package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
     # Keep sorted.
+    "//rs/config",
     "//rs/monitoring/logger",
     "//rs/replicated_state",
     "//rs/sys",
+    "//rs/types/types",
     "@crate_index//:bit-vec",
     "@crate_index//:lazy_static",
     "@crate_index//:libc",
