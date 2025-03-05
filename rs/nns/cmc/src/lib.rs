@@ -40,12 +40,18 @@ extern "C" {
     pub fn mint_cycles(amount: u64) -> u64;
 }
 
+/// # Safety
+/// This function always panics outside of wasm32
 #[cfg(not(target_arch = "wasm32"))]
 pub unsafe fn mint_cycles(_amount: u64) -> u64 {
     panic!("mint_cycles should only be called inside canisters.");
 }
 
 // Not available in ic_cdk
+/// # Safety
+///
+/// This function can only be called from the CMC canister, and this is the CMC canister.
+/// It is not exposed in ic-cdk because it can't be called from anywhere else.
 pub fn ic0_mint_cycles(amount: u64) -> u64 {
     unsafe { mint_cycles(amount) }
 }
