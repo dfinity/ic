@@ -82,7 +82,7 @@ jobs:
     name: Bazel Test All
     <<: *dind-large-setup
     runs-on:
-      group: dm1
+      group: ln1
       labels: dind-large
     env:
       CLOUD_CREDENTIALS_CONTENT: ${{ secrets.CLOUD_CREDENTIALS_CONTENT }}
