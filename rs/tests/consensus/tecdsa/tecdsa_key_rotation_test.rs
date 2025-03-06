@@ -5,7 +5,7 @@ use anyhow::Result;
 use canister_test::Canister;
 use ic_consensus_threshold_sig_system_test_utils::{
     enable_chain_key_signing_with_timeout_and_rotation_period, get_public_key_with_logger,
-    make_key_ids_for_all_schemes, setup_without_ecdsa_on_nns,
+    make_key_ids_for_all_idkg_schemes, setup_without_ecdsa_on_nns,
 };
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_registry_subnet_type::SubnetType;
@@ -41,7 +41,7 @@ fn test(test_env: TestEnv) {
     block_on(async move {
         let nns = runtime_from_url(nns_node.get_public_url(), nns_node.effective_canister_id());
         let governance = Canister::new(&nns, GOVERNANCE_CANISTER_ID);
-        let key_ids = make_key_ids_for_all_schemes();
+        let key_ids = make_key_ids_for_all_idkg_schemes();
         enable_chain_key_signing_with_timeout_and_rotation_period(
             &governance,
             app_subnet.subnet_id,

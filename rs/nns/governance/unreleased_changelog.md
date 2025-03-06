@@ -12,8 +12,13 @@ on the process that this file is part of, see
 * Collect metrics about timer tasks defined using ic_nervous_system_timer_task library.
 
 ## Changed
+
 * Voting Rewards will be scheduled by a timer instead of by heartbeats.
-* 
+* Unstaking maturity task will be processing up to 100 neurons in a single message, to avoid
+  exceeding the instruction limit in a single execution.
+* Voting Rewards will be distributed asynchronously in the background after being calculated.  
+  * This will allow rewards to be compatible with neurons being stored in Stable Memory. 
+
 ## Deprecated
 
 ## Removed
