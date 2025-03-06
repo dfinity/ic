@@ -744,7 +744,7 @@ impl PayloadBuilder {
     }
 
     /// Push `blob` with canister liquid cycles balance.
-    pub fn cycles_liquid_balance128(mut self) -> Self {
+    pub fn liquid_cycles_balance128(mut self) -> Self {
         self.0.push(Ops::LiquidCyclesBalance128 as u8);
         self
     }

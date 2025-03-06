@@ -3070,7 +3070,7 @@ fn test_canister_liquid_cycle_balance() {
         .execute_ingress(
             canister_id,
             "update",
-            wasm().cycles_liquid_balance128().append_and_reply().build(),
+            wasm().liquid_cycles_balance128().append_and_reply().build(),
         )
         .unwrap();
     let liquid_balance = match res {
