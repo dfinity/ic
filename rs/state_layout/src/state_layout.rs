@@ -1878,12 +1878,6 @@ impl<Permissions: AccessPolicy> CanisterLayout<Permissions> {
         self.canister_root.join(WASM_FILE).into()
     }
 
-    pub fn canister(
-        &self,
-    ) -> ProtoFileWith<pb_canister_state_bits::CanisterStateBitsV2, Permissions> {
-        self.canister_root.join(CANISTER_FILE).into()
-    }
-
     pub fn canister_v2(
         &self,
     ) -> ProtoFileWith<pb_canister_state_bits::CanisterStateBitsV2, Permissions> {
