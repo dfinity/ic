@@ -906,7 +906,7 @@ impl StateLayout {
 
         // Atomically removes the checkpoint by first renaming it into tmp_path, and then deleting tmp_path.
         // This way maintains the invariant that <root>/checkpoints/<height> are always internally consistent.
-        self.atomically_rename_checkpoint_to_tmp_path(&cp_path, &tmp_path)
+        self.atomically_rename_to_tmp_path(&cp_path, &tmp_path)
             .map_err(|err| LayoutError::IoError {
                 path: cp_path.clone(),
                 message: format!(
@@ -970,7 +970,7 @@ impl StateLayout {
 
         // Atomically removes the checkpoint by first renaming it into tmp_path, and then deleting tmp_path.
         // This way maintains the invariant that <root>/checkpoints/<height> are always internally consistent.
-        self.atomically_rename_checkpoint_to_tmp_path(&cp_path, &tmp_path)
+        self.atomically_rename_to_tmp_path(&cp_path, &tmp_path)
             .map_err(|err| LayoutError::IoError {
                 path: cp_path.clone(),
                 message: format!(
@@ -1130,12 +1130,23 @@ impl StateLayout {
         let tmp_path = self
             .fs_tmp()
             .join(format!("diverged_checkpoint_{}", &checkpoint_name));
-        self.atomically_remove_via_path(&cp_path, &tmp_path, ())
+        self.atomically_rename_to_tmp_path(&cp_path, &tmp_path)
             .map_err(|err| LayoutError::IoError {
-                path: cp_path,
-                message: format!("failed to remove diverged checkpoint {}", height),
+                path: cp_path.clone(),
+                message: format!(
+                    "failed to rename diverged checkpoint {} to tmp path",
+                    height
+                ),
                 io_err: err,
-            })
+            })?;
+        std::fs::remove_dir_all(tmp_path).map_err(|err| LayoutError::IoError {
+            path: cp_path,
+            message: format!(
+                "failed to remove diverged checkpoint {} from tmp path",
+                height
+            ),
+            io_err: err,
+        })
     }
 
     /// Creates a copy of the checkpoint with the specified height and places it
@@ -1175,12 +1186,17 @@ impl StateLayout {
         let backup_name = Self::checkpoint_name(height);
         let backup_path = self.backups().join(&backup_name);
         let tmp_path = self.fs_tmp().join(format!("backup_{}", &backup_name));
-        self.atomically_remove_via_path(backup_path.as_path(), tmp_path.as_path(), ())
+        self.atomically_rename_to_tmp_path(&backup_path, &tmp_path)
             .map_err(|err| LayoutError::IoError {
-                path: backup_path,
-                message: format!("failed to remove backup {}", height),
+                path: backup_path.clone(),
+                message: format!("failed to rename backup {} to tmp path", height),
                 io_err: err,
-            })
+            })?;
+        std::fs::remove_dir_all(tmp_path).map_err(|err| LayoutError::IoError {
+            path: backup_path,
+            message: format!("failed to remove backup {} from tmp path", height),
+            io_err: err,
+        })
     }
 
     /// Moves the checkpoint with the specified height to backup location so
@@ -1299,11 +1315,7 @@ impl StateLayout {
         }
     }
 
-    fn atomically_rename_checkpoint_to_tmp_path<T>(
-        &self,
-        path: &Path,
-        tmp_path: &Path,
-    ) -> std::io::Result<()> {
+    fn atomically_rename_to_tmp_path(&self, path: &Path, tmp_path: &Path) -> std::io::Result<()> {
         // We first move the checkpoint directory into a temporary directory to
         // maintain the invariant that <root>/checkpoints/<height> are always
         // internally consistent.
