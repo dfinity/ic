@@ -3116,7 +3116,7 @@ fn test_canister_liquid_cycle_balance() {
     // and that the accepted cycles are way more than that.
     let lost_cycles = liquid_balance - accepted_cycles;
     assert!(lost_cycles < 100 * B);
-    assert!(accepted_cycles > 100 * T - 100 * B);
+    assert!(accepted_cycles > INITIAL_CYCLES_BALANCE.get() - 100 * B);
 
     // Finally, we assert that the cycles have indeed moved from one universal canister to the other one.
     // The remaining balance of the sender is larger than the lost cycles by the unspent cycles in the execution of the ingress message,
@@ -3125,5 +3125,5 @@ fn test_canister_liquid_cycle_balance() {
     assert!(balance < 100 * B);
     // The receiver now holds the joint cycles balance of both canisters at the beginning minus some overhead.
     let receiver_balance = env.cycle_balance(callee);
-    assert!(receiver_balance > 200 * T - 100 * B);
+    assert!(receiver_balance > 2 * INITIAL_CYCLES_BALANCE.get() - 100 * B);
 }
