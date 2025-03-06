@@ -1559,6 +1559,10 @@ mod tests {
 
             let router = axum::routing::any(move || async { Cbor(http_response).into_response() });
 
+            rustls::crypto::ring::default_provider()
+                .install_default()
+                .unwrap();
+
             axum_server::bind_rustls(addr, generate_self_signed_cert().await)
                 .serve(router.into_make_service())
                 .await

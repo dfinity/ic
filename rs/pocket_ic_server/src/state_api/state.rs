@@ -943,6 +943,10 @@ impl ApiState {
 
             match https_config {
                 Some(config) => {
+                    rustls::crypto::ring::default_provider()
+                        .install_default()
+                        .unwrap();
+
                     axum_server::from_tcp_rustls(listener, config)
                         .handle(axum_handle)
                         .serve(router)

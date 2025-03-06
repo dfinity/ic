@@ -1,5 +1,5 @@
 {
-  "checksum": "e0b85a63c86b30b15e1b5f458272540f17d6aedfdd082d4c8d18e2c2bfe5a1fd",
+  "checksum": "46df1fbb42634b938fb812fab26dd5dc7231de4c4bab7dc23854ba38511df62a",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -4791,229 +4791,6 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "aws-lc-rs 1.10.0": {
-      "name": "aws-lc-rs",
-      "version": "1.10.0",
-      "package_url": "https://github.com/aws/aws-lc-rs",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/aws-lc-rs/1.10.0/download",
-          "sha256": "cdd82dba44d209fddb11c190e0a94b78651f95299598e472215667417a03ff1d"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "aws_lc_rs",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        },
-        {
-          "BuildScript": {
-            "crate_name": "build_script_build",
-            "crate_root": "build.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "aws_lc_rs",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
-            "aws-lc-sys",
-            "prebuilt-nasm"
-          ],
-          "selects": {}
-        },
-        "deps": {
-          "common": [
-            {
-              "id": "aws-lc-rs 1.10.0",
-              "target": "build_script_build"
-            },
-            {
-              "id": "aws-lc-sys 0.22.0",
-              "target": "aws_lc_sys"
-            },
-            {
-              "id": "mirai-annotations 1.12.0",
-              "target": "mirai_annotations"
-            },
-            {
-              "id": "zeroize 1.8.1",
-              "target": "zeroize"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2021",
-        "proc_macro_deps": {
-          "common": [
-            {
-              "id": "paste 1.0.15",
-              "target": "paste"
-            }
-          ],
-          "selects": {}
-        },
-        "version": "1.10.0"
-      },
-      "build_script_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "data_glob": [
-          "**"
-        ],
-        "link_deps": {
-          "common": [
-            {
-              "id": "aws-lc-sys 0.22.0",
-              "target": "aws_lc_sys"
-            }
-          ],
-          "selects": {}
-        },
-        "links": "aws_lc_rs_1_10_0_sys"
-      },
-      "license": "ISC AND (Apache-2.0 OR ISC)",
-      "license_ids": [
-        "Apache-2.0",
-        "ISC"
-      ],
-      "license_file": "LICENSE"
-    },
-    "aws-lc-sys 0.22.0": {
-      "name": "aws-lc-sys",
-      "version": "0.22.0",
-      "package_url": "https://github.com/aws/aws-lc-rs",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/aws-lc-sys/0.22.0/download",
-          "sha256": "df7a4168111d7eb622a31b214057b8509c0a7e1794f44c546d742330dc793972"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "aws_lc_sys",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        },
-        {
-          "BuildScript": {
-            "crate_name": "build_script_main",
-            "crate_root": "builder/main.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "aws_lc_sys",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
-            "prebuilt-nasm"
-          ],
-          "selects": {}
-        },
-        "deps": {
-          "common": [
-            {
-              "id": "aws-lc-sys 0.22.0",
-              "target": "build_script_main"
-            },
-            {
-              "id": "libc 0.2.158",
-              "target": "libc"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2021",
-        "proc_macro_deps": {
-          "common": [
-            {
-              "id": "paste 1.0.15",
-              "target": "paste"
-            }
-          ],
-          "selects": {}
-        },
-        "version": "0.22.0"
-      },
-      "build_script_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "cc 1.1.37",
-              "target": "cc"
-            },
-            {
-              "id": "cmake 0.1.54",
-              "target": "cmake"
-            },
-            {
-              "id": "dunce 1.0.5",
-              "target": "dunce"
-            },
-            {
-              "id": "fs_extra 1.3.0",
-              "target": "fs_extra"
-            }
-          ],
-          "selects": {
-            "cfg(not(any(all(any(target_arch = \"x86_64\", target_arch = \"aarch64\"), any(target_os = \"linux\", target_os = \"macos\", target_os = \"windows\"), any(target_env = \"gnu\", target_env = \"musl\", target_env = \"msvc\", target_env = \"\")), all(target_arch = \"x86\", target_os = \"windows\", target_env = \"msvc\"), all(target_arch = \"x86\", target_os = \"linux\", target_env = \"gnu\"))))": [
-              {
-                "id": "bindgen 0.69.4",
-                "target": "bindgen"
-              }
-            ]
-          }
-        },
-        "links": "aws_lc_0_22_0"
-      },
-      "license": "ISC AND (Apache-2.0 OR ISC) AND OpenSSL",
-      "license_ids": [
-        "Apache-2.0",
-        "ISC",
-        "OpenSSL"
-      ],
-      "license_file": "LICENSE"
-    },
     "axum 0.7.9": {
       "name": "axum",
       "version": "0.7.9",
@@ -5920,7 +5697,6 @@
             "rustls",
             "rustls-pemfile",
             "rustls-pki-types",
-            "tls-rustls",
             "tls-rustls-no-provider",
             "tokio-rustls"
           ],
@@ -7180,32 +6956,7 @@
           "common": [
             "runtime"
           ],
-          "selects": {
-            "arm-unknown-linux-gnueabi": [
-              "default",
-              "logging",
-              "prettyplease",
-              "which-rustfmt"
-            ],
-            "powerpc-unknown-linux-gnu": [
-              "default",
-              "logging",
-              "prettyplease",
-              "which-rustfmt"
-            ],
-            "s390x-unknown-linux-gnu": [
-              "default",
-              "logging",
-              "prettyplease",
-              "which-rustfmt"
-            ],
-            "x86_64-unknown-freebsd": [
-              "default",
-              "logging",
-              "prettyplease",
-              "which-rustfmt"
-            ]
-          }
+          "selects": {}
         },
         "deps": {
           "common": [
@@ -7262,64 +7013,7 @@
               "target": "syn"
             }
           ],
-          "selects": {
-            "arm-unknown-linux-gnueabi": [
-              {
-                "id": "log 0.4.20",
-                "target": "log"
-              },
-              {
-                "id": "prettyplease 0.2.15",
-                "target": "prettyplease"
-              },
-              {
-                "id": "which 4.4.0",
-                "target": "which"
-              }
-            ],
-            "powerpc-unknown-linux-gnu": [
-              {
-                "id": "log 0.4.20",
-                "target": "log"
-              },
-              {
-                "id": "prettyplease 0.2.15",
-                "target": "prettyplease"
-              },
-              {
-                "id": "which 4.4.0",
-                "target": "which"
-              }
-            ],
-            "s390x-unknown-linux-gnu": [
-              {
-                "id": "log 0.4.20",
-                "target": "log"
-              },
-              {
-                "id": "prettyplease 0.2.15",
-                "target": "prettyplease"
-              },
-              {
-                "id": "which 4.4.0",
-                "target": "which"
-              }
-            ],
-            "x86_64-unknown-freebsd": [
-              {
-                "id": "log 0.4.20",
-                "target": "log"
-              },
-              {
-                "id": "prettyplease 0.2.15",
-                "target": "prettyplease"
-              },
-              {
-                "id": "which 4.4.0",
-                "target": "which"
-              }
-            ]
-          }
+          "selects": {}
         },
         "edition": "2018",
         "version": "0.69.4"
@@ -7338,32 +7032,7 @@
               "target": "clang_sys"
             }
           ],
-          "selects": {
-            "arm-unknown-linux-gnueabi": [
-              {
-                "id": "prettyplease 0.2.15",
-                "target": "prettyplease"
-              }
-            ],
-            "powerpc-unknown-linux-gnu": [
-              {
-                "id": "prettyplease 0.2.15",
-                "target": "prettyplease"
-              }
-            ],
-            "s390x-unknown-linux-gnu": [
-              {
-                "id": "prettyplease 0.2.15",
-                "target": "prettyplease"
-              }
-            ],
-            "x86_64-unknown-freebsd": [
-              {
-                "id": "prettyplease 0.2.15",
-                "target": "prettyplease"
-              }
-            ]
-          }
+          "selects": {}
         }
       },
       "license": "BSD-3-Clause",
@@ -14412,54 +14081,6 @@
         "BSD-3-Clause"
       ],
       "license_file": null
-    },
-    "cmake 0.1.54": {
-      "name": "cmake",
-      "version": "0.1.54",
-      "package_url": "https://github.com/rust-lang/cmake-rs",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/cmake/0.1.54/download",
-          "sha256": "e7caa3f9de89ddbe2c607f4101924c5abec803763ae9534e4f4d7d8f84aa81f0"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "cmake",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "cmake",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "cc 1.1.37",
-              "target": "cc"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2021",
-        "version": "0.1.54"
-      },
-      "license": "MIT OR Apache-2.0",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "license_file": "LICENSE-APACHE"
     },
     "cobs 0.2.3": {
       "name": "cobs",
@@ -46228,44 +45849,6 @@
       ],
       "license_file": null
     },
-    "mirai-annotations 1.12.0": {
-      "name": "mirai-annotations",
-      "version": "1.12.0",
-      "package_url": "https://github.com/facebookexperimental/MIRAI",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/mirai-annotations/1.12.0/download",
-          "sha256": "c9be0862c1b3f26a88803c4a49de6889c10e608b3ee9344e6ef5b45fb37ad3d1"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "mirai_annotations",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "mirai_annotations",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "edition": "2018",
-        "version": "1.12.0"
-      },
-      "license": "MIT",
-      "license_ids": [
-        "MIT"
-      ],
-      "license_file": null
-    },
     "mockall 0.13.0": {
       "name": "mockall",
       "version": "0.13.0",
@@ -55658,23 +55241,6 @@
         "compile_data_glob": [
           "**"
         ],
-        "crate_features": {
-          "common": [],
-          "selects": {
-            "arm-unknown-linux-gnueabi": [
-              "verbatim"
-            ],
-            "powerpc-unknown-linux-gnu": [
-              "verbatim"
-            ],
-            "s390x-unknown-linux-gnu": [
-              "verbatim"
-            ],
-            "x86_64-unknown-freebsd": [
-              "verbatim"
-            ]
-          }
-        },
         "deps": {
           "common": [
             {
@@ -67579,8 +67145,6 @@
         ],
         "crate_features": {
           "common": [
-            "aws-lc-rs",
-            "aws_lc_rs",
             "brotli",
             "log",
             "logging",
@@ -67592,10 +67156,6 @@
         },
         "deps": {
           "common": [
-            {
-              "id": "aws-lc-rs 1.10.0",
-              "target": "aws_lc_rs"
-            },
             {
               "id": "brotli 7.0.0",
               "target": "brotli"
@@ -67652,10 +67212,6 @@
         ],
         "link_deps": {
           "common": [
-            {
-              "id": "aws-lc-rs 1.10.0",
-              "target": "aws_lc_rs"
-            },
             {
               "id": "ring 0.17.7",
               "target": "ring"
@@ -68412,7 +67968,6 @@
         "crate_features": {
           "common": [
             "alloc",
-            "aws_lc_rs",
             "ring",
             "std"
           ],
@@ -68420,10 +67975,6 @@
         },
         "deps": {
           "common": [
-            {
-              "id": "aws-lc-rs 1.10.0",
-              "target": "aws_lc_rs"
-            },
             {
               "id": "ring 0.17.7",
               "target": "ring"
@@ -94057,32 +93608,6 @@
       "x86_64-unknown-fuchsia",
       "x86_64-unknown-linux-gnu",
       "x86_64-unknown-nixos-gnu",
-      "x86_64-unknown-none"
-    ],
-    "cfg(not(any(all(any(target_arch = \"x86_64\", target_arch = \"aarch64\"), any(target_os = \"linux\", target_os = \"macos\", target_os = \"windows\"), any(target_env = \"gnu\", target_env = \"musl\", target_env = \"msvc\", target_env = \"\")), all(target_arch = \"x86\", target_os = \"windows\", target_env = \"msvc\"), all(target_arch = \"x86\", target_os = \"linux\", target_env = \"gnu\"))))": [
-      "aarch64-apple-ios",
-      "aarch64-apple-ios-sim",
-      "aarch64-linux-android",
-      "aarch64-unknown-fuchsia",
-      "aarch64-unknown-nto-qnx710",
-      "arm-unknown-linux-gnueabi",
-      "armv7-linux-androideabi",
-      "armv7-unknown-linux-gnueabi",
-      "i686-apple-darwin",
-      "i686-linux-android",
-      "i686-unknown-freebsd",
-      "powerpc-unknown-linux-gnu",
-      "riscv32imc-unknown-none-elf",
-      "riscv64gc-unknown-none-elf",
-      "s390x-unknown-linux-gnu",
-      "thumbv7em-none-eabi",
-      "thumbv8m.main-none-eabi",
-      "wasm32-unknown-unknown",
-      "wasm32-wasip1",
-      "x86_64-apple-ios",
-      "x86_64-linux-android",
-      "x86_64-unknown-freebsd",
-      "x86_64-unknown-fuchsia",
       "x86_64-unknown-none"
     ],
     "cfg(not(any(target_os = \"windows\", target_arch = \"wasm32\")))": [
