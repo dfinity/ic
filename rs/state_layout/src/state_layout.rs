@@ -1108,6 +1108,16 @@ impl StateLayout {
         }
     }
 
+    pub fn flush_checkpoint_removal_channel(&self) {
+        let (sender, receiver) = bounded::<()>(1);
+        self.checkpoint_removal_sender
+            .send(CheckpointRemovalRequest::Wait { sender })
+            .expect("failed to send completion signal");
+        receiver
+            .recv()
+            .expect("failed to receive completion signal");
+    }
+
     /// Marks the checkpoint with the specified height as diverged.
     ///
     /// Precondition:
