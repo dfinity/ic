@@ -922,10 +922,20 @@ impl StateLayout {
         std::mem::drop(drop_after_rename);
         // spawn a thread to delete the tmp_path
         std::thread::spawn(move || {
+            let start_bg = Instant::now();
             let _ = std::fs::remove_dir_all(tmp_path);
+            info!(
+                self.log.clone(),
+                "Async Removed checkpoint files @{} in {:?}",
+                height,
+                start_bg.elapsed()
+            );
         });
         let elapsed = start.elapsed();
-        info!(self.log, "Removed checkpoint @{} in {:?}", height, elapsed);
+        info!(
+            self.log,
+            "Async Renamed checkpoint @{} in {:?}", height, elapsed
+        );
         self.metrics
             .state_layout_remove_checkpoint_duration
             .observe(elapsed.as_secs_f64());
