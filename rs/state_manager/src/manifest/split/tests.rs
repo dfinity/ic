@@ -346,7 +346,7 @@ fn canister_pbuf_path(canister_id: CanisterId) -> String {
     checkpoint_layout
         .canister(&canister_id)
         .unwrap()
-        .canister()
+        .canister_v2()
         .raw_path()
         .to_str()
         .unwrap()
