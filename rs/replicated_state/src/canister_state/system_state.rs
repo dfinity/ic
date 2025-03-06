@@ -422,26 +422,6 @@ impl CanisterStatus {
     }
 }
 
-impl From<&CanisterStatus> for pb::canister_state_bits::CanisterStatus {
-    fn from(item: &CanisterStatus) -> Self {
-        match item {
-            CanisterStatus::Running {
-                call_context_manager,
-            } => Self::Running(pb::CanisterStatusRunning {
-                call_context_manager: Some(call_context_manager.into()),
-            }),
-            CanisterStatus::Stopped => Self::Stopped(pb::CanisterStatusStopped {}),
-            CanisterStatus::Stopping {
-                call_context_manager,
-                stop_contexts,
-            } => Self::Stopping(pb::CanisterStatusStopping {
-                call_context_manager: Some(call_context_manager.into()),
-                stop_contexts: stop_contexts.iter().map(|context| context.into()).collect(),
-            }),
-        }
-    }
-}
-
 impl From<&CanisterStatus> for pb::canister_state_bits_v2::CanisterStatus {
     fn from(item: &CanisterStatus) -> Self {
         match item {
@@ -459,42 +439,6 @@ impl From<&CanisterStatus> for pb::canister_state_bits_v2::CanisterStatus {
                 stop_contexts: stop_contexts.iter().map(|context| context.into()).collect(),
             }),
         }
-    }
-}
-
-impl TryFrom<pb::canister_state_bits::CanisterStatus> for CanisterStatus {
-    type Error = ProxyDecodeError;
-    fn try_from(value: pb::canister_state_bits::CanisterStatus) -> Result<Self, Self::Error> {
-        let canister_status = match value {
-            pb::canister_state_bits::CanisterStatus::Running(pb::CanisterStatusRunning {
-                call_context_manager,
-            }) => Self::Running {
-                call_context_manager: try_from_option_field(
-                    call_context_manager,
-                    "CanisterStatus::Running::call_context_manager",
-                )?,
-            },
-            pb::canister_state_bits::CanisterStatus::Stopped(pb::CanisterStatusStopped {}) => {
-                Self::Stopped
-            }
-            pb::canister_state_bits::CanisterStatus::Stopping(pb::CanisterStatusStopping {
-                call_context_manager,
-                stop_contexts,
-            }) => {
-                let mut contexts = Vec::<StopCanisterContext>::with_capacity(stop_contexts.len());
-                for context in stop_contexts.into_iter() {
-                    contexts.push(context.try_into()?);
-                }
-                Self::Stopping {
-                    call_context_manager: try_from_option_field(
-                        call_context_manager,
-                        "CanisterStatus::Stopping::call_context_manager",
-                    )?,
-                    stop_contexts: contexts,
-                }
-            }
-        };
-        Ok(canister_status)
     }
 }
 

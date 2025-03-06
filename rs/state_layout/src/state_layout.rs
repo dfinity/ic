@@ -18,7 +18,7 @@ use ic_replicated_state::{
         },
     },
     page_map::{Shard, StorageLayout, StorageResult},
-    CallContextManager, CanisterStatus, ExecutionTask, ExportedFunctions, Global, NumWasmPages,
+    CallContextManager, CanisterStatus, ExportedFunctions, Global, NumWasmPages,
 };
 use ic_sys::{fs::sync_path, mmap::ScopedMmap};
 use ic_types::{
@@ -29,7 +29,7 @@ use ic_types::{
 use ic_utils::thread::maybe_parallel_map;
 use ic_wasm_types::{CanisterModule, WasmHash};
 use prometheus::{Histogram, IntCounterVec};
-use std::collections::{BTreeMap, BTreeSet, VecDeque};
+use std::collections::{BTreeMap, BTreeSet};
 use std::convert::{identity, From, TryFrom, TryInto};
 use std::ffi::OsStr;
 use std::fs::OpenOptions;
@@ -2330,86 +2330,6 @@ impl<Permissions> From<PathBuf> for WasmFile<Permissions> {
     }
 }
 
-// EXC-1752 This is used only in one test and it will be removed in follow-up.
-impl From<CanisterStateBits> for pb_canister_state_bits::CanisterStateBits {
-    fn from(item: CanisterStateBits) -> Self {
-        Self {
-            controllers: item
-                .controllers
-                .into_iter()
-                .map(|controller| controller.into())
-                .collect(),
-            last_full_execution_round: item.last_full_execution_round.get(),
-            call_context_manager: item.call_context_manager.as_ref().map(|v| v.into()),
-            compute_allocation: item.compute_allocation.as_percent(),
-            accumulated_priority: item.accumulated_priority.get(),
-            priority_credit: item.priority_credit.get(),
-            long_execution_mode: pb_canister_state_bits::LongExecutionMode::from(
-                item.long_execution_mode,
-            )
-            .into(),
-            execution_state_bits: item.execution_state_bits.as_ref().map(|v| v.into()),
-            memory_allocation: item.memory_allocation.bytes().get(),
-            wasm_memory_threshold: Some(item.wasm_memory_threshold.get()),
-            freeze_threshold: item.freeze_threshold.get(),
-            cycles_balance: Some(item.cycles_balance.into()),
-            cycles_debit: Some(item.cycles_debit.into()),
-            reserved_balance: Some(item.reserved_balance.into()),
-            reserved_balance_limit: item.reserved_balance_limit.map(|v| v.into()),
-            canister_status: Some((&item.status).into()),
-            scheduled_as_first: item.scheduled_as_first,
-            skipped_round_due_to_no_messages: item.skipped_round_due_to_no_messages,
-            executed: item.executed,
-            interrupted_during_execution: item.interrupted_during_execution,
-            certified_data: item.certified_data.clone(),
-            consumed_cycles: Some((&item.consumed_cycles).into()),
-            stable_memory_size64: item.stable_memory_size.get() as u64,
-            heap_delta_debit: item.heap_delta_debit.get(),
-            install_code_debit: item.install_code_debit.get(),
-            time_of_last_allocation_charge_nanos: Some(item.time_of_last_allocation_charge_nanos),
-            task_queue: item
-                .task_queue
-                .get_queue()
-                .iter()
-                .map(|v| v.into())
-                .collect(),
-            global_timer_nanos: item.global_timer_nanos,
-            canister_version: item.canister_version,
-            consumed_cycles_by_use_cases: item
-                .consumed_cycles_by_use_cases
-                .into_iter()
-                .map(
-                    |(use_case, cycles)| pb_canister_state_bits::ConsumedCyclesByUseCase {
-                        use_case: pb_canister_state_bits::CyclesUseCase::from(use_case).into(),
-                        cycles: Some((&cycles).into()),
-                    },
-                )
-                .collect(),
-            canister_history: Some((&item.canister_history).into()),
-            wasm_chunk_store_metadata: Some((&item.wasm_chunk_store_metadata).into()),
-            total_query_stats: Some((&item.total_query_stats).into()),
-            log_visibility_v2: pb_canister_state_bits::LogVisibilityV2::from(&item.log_visibility)
-                .into(),
-            canister_log_records: item
-                .canister_log
-                .records()
-                .iter()
-                .map(|record| record.into())
-                .collect(),
-            next_canister_log_record_idx: item.canister_log.next_idx(),
-            wasm_memory_limit: item.wasm_memory_limit.map(|v| v.get()),
-            next_snapshot_id: item.next_snapshot_id,
-            snapshots_memory_usage: item.snapshots_memory_usage.get(),
-            on_low_wasm_memory_hook_status: Some(
-                pb_canister_state_bits::OnLowWasmMemoryHookStatus::from(
-                    item.task_queue.peek_hook_status(),
-                )
-                .into(),
-            ),
-        }
-    }
-}
-
 impl From<CanisterStateBits> for pb_canister_state_bits::CanisterStateBitsV2 {
     fn from(item: CanisterStateBits) -> Self {
         Self {
@@ -2475,171 +2395,6 @@ impl From<CanisterStateBits> for pb_canister_state_bits::CanisterStateBitsV2 {
             snapshots_memory_usage: item.snapshots_memory_usage.get(),
             task_queue: Some((&item.task_queue).into()),
         }
-    }
-}
-
-impl TryFrom<(pb_canister_state_bits::CanisterStateBits, &CanisterId)> for CanisterStateBits {
-    type Error = ProxyDecodeError;
-
-    fn try_from(
-        v: (pb_canister_state_bits::CanisterStateBits, &CanisterId),
-    ) -> Result<Self, Self::Error> {
-        let (value, canister_id) = v;
-        let execution_state_bits = value
-            .execution_state_bits
-            .map(|b| b.try_into())
-            .transpose()?;
-        let call_context_manager = value
-            .call_context_manager
-            .map(|c| c.try_into())
-            .transpose()?;
-
-        let consumed_cycles =
-            try_from_option_field(value.consumed_cycles, "CanisterStateBits::consumed_cycles")
-                .unwrap_or_default();
-
-        let mut controllers = BTreeSet::new();
-        for controller in value.controllers.into_iter() {
-            controllers.insert(PrincipalId::try_from(controller)?);
-        }
-
-        let cycles_balance =
-            try_from_option_field(value.cycles_balance, "CanisterStateBits::cycles_balance")?;
-
-        let cycles_debit = value
-            .cycles_debit
-            .map(|c| c.into())
-            .unwrap_or_else(Cycles::zero);
-
-        let reserved_balance = value
-            .reserved_balance
-            .map(|c| c.into())
-            .unwrap_or_else(Cycles::zero);
-
-        let task_queue: VecDeque<ExecutionTask> = value
-            .task_queue
-            .into_iter()
-            .map(|v| v.try_into().unwrap())
-            .collect();
-        if task_queue.len() > 1 {
-            return Err(ProxyDecodeError::Other(format!(
-                "Expecting at most one task queue entry. Found {:?}",
-                task_queue
-            )));
-        }
-
-        let mut consumed_cycles_by_use_cases = BTreeMap::new();
-        for x in value.consumed_cycles_by_use_cases.into_iter() {
-            consumed_cycles_by_use_cases.insert(
-                CyclesUseCase::try_from(
-                    pb_canister_state_bits::CyclesUseCase::try_from(x.use_case).map_err(|_| {
-                        ProxyDecodeError::ValueOutOfRange {
-                            typ: "CyclesUseCase",
-                            err: format!("Unexpected value of cycles use case: {}", x.use_case),
-                        }
-                    })?,
-                )?,
-                NominalCycles::try_from(x.cycles.unwrap_or_default()).unwrap_or_default(),
-            );
-        }
-
-        let on_low_wasm_memory_hook_status: Option<
-            pb_canister_state_bits::OnLowWasmMemoryHookStatus,
-        > = value.on_low_wasm_memory_hook_status.map(|v| {
-            pb_canister_state_bits::OnLowWasmMemoryHookStatus::try_from(v).unwrap_or_default()
-        });
-
-        Ok(Self {
-            controllers,
-            last_full_execution_round: value.last_full_execution_round.into(),
-            call_context_manager,
-            compute_allocation: ComputeAllocation::try_from(value.compute_allocation).map_err(
-                |e| ProxyDecodeError::ValueOutOfRange {
-                    typ: "ComputeAllocation",
-                    err: format!("{:?}", e),
-                },
-            )?,
-            accumulated_priority: value.accumulated_priority.into(),
-            priority_credit: value.priority_credit.into(),
-            long_execution_mode: pb_canister_state_bits::LongExecutionMode::try_from(
-                value.long_execution_mode,
-            )
-            .unwrap_or_default()
-            .into(),
-            execution_state_bits,
-            memory_allocation: MemoryAllocation::try_from(NumBytes::from(value.memory_allocation))
-                .map_err(|e| ProxyDecodeError::ValueOutOfRange {
-                    typ: "MemoryAllocation",
-                    err: format!("{:?}", e),
-                })?,
-            wasm_memory_threshold: NumBytes::new(value.wasm_memory_threshold.unwrap_or(0)),
-            freeze_threshold: NumSeconds::from(value.freeze_threshold),
-            cycles_balance,
-            cycles_debit,
-            reserved_balance,
-            reserved_balance_limit: value.reserved_balance_limit.map(|v| v.into()),
-            status: try_from_option_field(
-                value.canister_status,
-                "CanisterStateBits::canister_status",
-            )?,
-            scheduled_as_first: value.scheduled_as_first,
-            skipped_round_due_to_no_messages: value.skipped_round_due_to_no_messages,
-            executed: value.executed,
-            interrupted_during_execution: value.interrupted_during_execution,
-            certified_data: value.certified_data,
-            consumed_cycles,
-            stable_memory_size: NumWasmPages::from(value.stable_memory_size64 as usize),
-            heap_delta_debit: NumBytes::from(value.heap_delta_debit),
-            install_code_debit: NumInstructions::from(value.install_code_debit),
-            time_of_last_allocation_charge_nanos: try_from_option_field(
-                value.time_of_last_allocation_charge_nanos,
-                "CanisterStateBits::time_of_last_allocation_charge_nanos",
-            )?,
-            global_timer_nanos: value.global_timer_nanos,
-            canister_version: value.canister_version,
-            consumed_cycles_by_use_cases,
-            // TODO(MR-412): replace `unwrap_or_default` by returning an error on missing canister_history field
-            canister_history: try_from_option_field(
-                value.canister_history,
-                "CanisterStateBits::canister_history",
-            )
-            .unwrap_or_default(),
-            wasm_chunk_store_metadata: try_from_option_field(
-                value.wasm_chunk_store_metadata,
-                "CanisterStateBits::wasm_chunk_store_metadata",
-            )
-            .unwrap_or_default(),
-            total_query_stats: try_from_option_field(
-                value.total_query_stats,
-                "CanisterStateBits::total_query_stats",
-            )
-            .unwrap_or_default(),
-            log_visibility: try_from_option_field(
-                value.log_visibility_v2,
-                "CanisterStateBits::log_visibility_v2",
-            )
-            .unwrap_or_default(),
-            canister_log: CanisterLog::new(
-                value.next_canister_log_record_idx,
-                value
-                    .canister_log_records
-                    .into_iter()
-                    .map(|record| record.into())
-                    .collect(),
-            ),
-            wasm_memory_limit: value.wasm_memory_limit.map(NumBytes::from),
-            next_snapshot_id: value.next_snapshot_id,
-            snapshots_memory_usage: NumBytes::from(value.snapshots_memory_usage),
-            task_queue: TaskQueue::from_checkpoint(
-                task_queue,
-                try_from_option_field(
-                    on_low_wasm_memory_hook_status,
-                    "CanisterStateBits::on_low_wasm_memory_hook_status",
-                )
-                .unwrap_or_default(),
-                canister_id,
-            ),
-        })
     }
 }
 

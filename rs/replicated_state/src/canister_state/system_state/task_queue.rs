@@ -87,43 +87,6 @@ pub struct TaskQueue {
 }
 
 impl TaskQueue {
-    pub fn from_checkpoint(
-        queue: VecDeque<ExecutionTask>,
-        on_low_wasm_memory_hook_status: OnLowWasmMemoryHookStatus,
-        canister_id: &CanisterId,
-    ) -> Self {
-        let mut mut_queue = queue;
-
-        // Extraction of paused_or_aborted_task from queue will be removed in the follow-up EXC-1752 when
-        // we introduce CanisterStateBits version of TaskQueue, so the conversion will be implicit.
-        let paused_or_aborted_task = match mut_queue.front() {
-            Some(ExecutionTask::AbortedInstallCode { .. })
-            | Some(ExecutionTask::PausedExecution { .. })
-            | Some(ExecutionTask::PausedInstallCode(_))
-            | Some(ExecutionTask::AbortedExecution { .. }) => mut_queue.pop_front(),
-            Some(ExecutionTask::OnLowWasmMemory)
-            | Some(ExecutionTask::Heartbeat)
-            | Some(ExecutionTask::GlobalTimer)
-            | None => None,
-        };
-
-        let queue = TaskQueue {
-            paused_or_aborted_task,
-            on_low_wasm_memory_hook_status,
-            queue: mut_queue,
-        };
-
-        // Because paused tasks are not allowed in checkpoint rounds when
-        // checking dts invariants that is equivalent to disabling dts.
-        queue.check_dts_invariants(
-            FlagStatus::Disabled,
-            ExecutionRoundType::CheckpointRound,
-            canister_id,
-        );
-
-        queue
-    }
-
     pub fn from_checkpoint_v2(item: pb::TaskQueue, canister_id: &CanisterId) -> Self {
         let queue = Self {
             paused_or_aborted_task: item
@@ -222,18 +185,9 @@ impl TaskQueue {
             }
     }
 
-    /// peek_hook_status will be removed in the follow-up EXC-1752.
+    /// This is used only in tests.
     pub fn peek_hook_status(&self) -> OnLowWasmMemoryHookStatus {
         self.on_low_wasm_memory_hook_status
-    }
-
-    /// get_queue will be removed in the follow-up EXC-1752.
-    pub fn get_queue(&self) -> VecDeque<ExecutionTask> {
-        let mut queue = self.queue.clone();
-        if let Some(task) = self.paused_or_aborted_task.as_ref() {
-            queue.push_front(task.clone());
-        }
-        queue
     }
 
     /// `check_dts_invariants` should only be called after round execution.

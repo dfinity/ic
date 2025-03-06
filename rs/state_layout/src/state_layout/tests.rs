@@ -4,6 +4,7 @@ use ic_management_canister_types_private::{
     CanisterChange, CanisterChangeDetails, CanisterChangeOrigin, CanisterInstallMode, IC_00,
 };
 use ic_replicated_state::canister_state::system_state::PausedExecutionId;
+use ic_replicated_state::ExecutionTask;
 use ic_replicated_state::{
     canister_state::system_state::CanisterHistory,
     metadata_state::subnet_call_context_manager::InstallCodeCallId, page_map::Shard, NumWasmPages,
@@ -817,44 +818,6 @@ fn can_add_and_delete_canister_snapshots(
             .unwrap();
         check_snapshot_layout(&checkpoint_layout, &snapshot_ids[(i + 1)..]);
     }
-}
-
-// This will be removed after EXC-1752.
-#[test]
-fn test_decode_v1_encode_v2_decode() {
-    let mut controllers = BTreeSet::new();
-    controllers.insert(IC_00.into());
-    controllers.insert(canister_test_id(0).get());
-
-    let mut task_queue = TaskQueue::default();
-    task_queue.enqueue(ExecutionTask::OnLowWasmMemory);
-
-    let canister_state_bits_initial = CanisterStateBits {
-        controllers: controllers.clone(),
-        task_queue: task_queue.clone(),
-        ..default_canister_state_bits()
-    };
-
-    let canister_state_bits_initial_copy = CanisterStateBits {
-        controllers,
-        task_queue,
-        ..default_canister_state_bits()
-    };
-
-    let pb_bits_v1 =
-        pb_canister_state_bits::CanisterStateBits::from(canister_state_bits_initial_copy);
-
-    let canister_state_bits_load_v1 =
-        CanisterStateBits::try_from((pb_bits_v1, &CanisterId::from_u64(1))).unwrap();
-
-    assert_eq!(canister_state_bits_initial, canister_state_bits_load_v1);
-
-    let pb_bits_v2 = pb_canister_state_bits::CanisterStateBitsV2::from(canister_state_bits_load_v1);
-
-    let canister_state_bits_load_v2 =
-        CanisterStateBits::try_from((pb_bits_v2, &CanisterId::from_u64(1))).unwrap();
-
-    assert_eq!(canister_state_bits_load_v2, canister_state_bits_initial);
 }
 
 #[test]
