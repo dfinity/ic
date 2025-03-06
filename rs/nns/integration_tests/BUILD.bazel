@@ -60,7 +60,7 @@ BASE_DEPENDENCIES = [
         "//rs/rust_canisters/on_wire",
         "//rs/state_machine_tests",
         "//rs/test_utilities",
-        "//rs/types/error_types",
+        "//packages/ic-error-types",
         "//rs/types/management_canister_types",
         "//rs/types/types",
         "@crate_index//:crossbeam-channel",
