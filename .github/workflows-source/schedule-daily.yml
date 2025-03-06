@@ -249,8 +249,7 @@ jobs:
           - "//rs/consensus/..."
           - "//rs/ingress_manager/..."
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - <<: *checkout
 
       - name: Run Rust Benchmarks
         id: rust-benchmarks
