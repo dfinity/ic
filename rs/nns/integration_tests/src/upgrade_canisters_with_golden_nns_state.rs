@@ -271,6 +271,7 @@ fn test_upgrade_canisters_with_golden_nns_state() {
         Ok(WasmResult::Reply(ok)) => ok,
         _ => panic!("{:?}", result),
     };
+    use candid::Decode;
     println!();
     println!();
     println!("{}", Decode!(&result, String).unwrap());
