@@ -123,7 +123,7 @@ pub type CompleteCheckpointLayout = CheckpointLayout<ReadOnly>;
 
 /// This struct contains bits of the `ExecutionState` that are not already
 /// covered somewhere else and are too small to be serialized separately.
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct ExecutionStateBits {
     pub exported_globals: Vec<Global>,
     pub heap_size: NumWasmPages,
@@ -137,7 +137,7 @@ pub struct ExecutionStateBits {
 
 /// This struct contains bits of the `CanisterState` that are not already
 /// covered somewhere else and are too small to be serialized separately.
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct CanisterStateBits {
     pub controllers: BTreeSet<PrincipalId>,
     pub last_full_execution_round: ExecutionRound,
@@ -2326,6 +2326,86 @@ impl<Permissions> From<PathBuf> for WasmFile<Permissions> {
         Self {
             path,
             permissions_tag: PhantomData,
+        }
+    }
+}
+
+// EXC-1752 This is used only in one test and it will be removed in follow-up.
+impl From<CanisterStateBits> for pb_canister_state_bits::CanisterStateBits {
+    fn from(item: CanisterStateBits) -> Self {
+        Self {
+            controllers: item
+                .controllers
+                .into_iter()
+                .map(|controller| controller.into())
+                .collect(),
+            last_full_execution_round: item.last_full_execution_round.get(),
+            call_context_manager: item.call_context_manager.as_ref().map(|v| v.into()),
+            compute_allocation: item.compute_allocation.as_percent(),
+            accumulated_priority: item.accumulated_priority.get(),
+            priority_credit: item.priority_credit.get(),
+            long_execution_mode: pb_canister_state_bits::LongExecutionMode::from(
+                item.long_execution_mode,
+            )
+            .into(),
+            execution_state_bits: item.execution_state_bits.as_ref().map(|v| v.into()),
+            memory_allocation: item.memory_allocation.bytes().get(),
+            wasm_memory_threshold: Some(item.wasm_memory_threshold.get()),
+            freeze_threshold: item.freeze_threshold.get(),
+            cycles_balance: Some(item.cycles_balance.into()),
+            cycles_debit: Some(item.cycles_debit.into()),
+            reserved_balance: Some(item.reserved_balance.into()),
+            reserved_balance_limit: item.reserved_balance_limit.map(|v| v.into()),
+            canister_status: Some((&item.status).into()),
+            scheduled_as_first: item.scheduled_as_first,
+            skipped_round_due_to_no_messages: item.skipped_round_due_to_no_messages,
+            executed: item.executed,
+            interrupted_during_execution: item.interrupted_during_execution,
+            certified_data: item.certified_data.clone(),
+            consumed_cycles: Some((&item.consumed_cycles).into()),
+            stable_memory_size64: item.stable_memory_size.get() as u64,
+            heap_delta_debit: item.heap_delta_debit.get(),
+            install_code_debit: item.install_code_debit.get(),
+            time_of_last_allocation_charge_nanos: Some(item.time_of_last_allocation_charge_nanos),
+            task_queue: item
+                .task_queue
+                .get_queue()
+                .iter()
+                .map(|v| v.into())
+                .collect(),
+            global_timer_nanos: item.global_timer_nanos,
+            canister_version: item.canister_version,
+            consumed_cycles_by_use_cases: item
+                .consumed_cycles_by_use_cases
+                .into_iter()
+                .map(
+                    |(use_case, cycles)| pb_canister_state_bits::ConsumedCyclesByUseCase {
+                        use_case: pb_canister_state_bits::CyclesUseCase::from(use_case).into(),
+                        cycles: Some((&cycles).into()),
+                    },
+                )
+                .collect(),
+            canister_history: Some((&item.canister_history).into()),
+            wasm_chunk_store_metadata: Some((&item.wasm_chunk_store_metadata).into()),
+            total_query_stats: Some((&item.total_query_stats).into()),
+            log_visibility_v2: pb_canister_state_bits::LogVisibilityV2::from(&item.log_visibility)
+                .into(),
+            canister_log_records: item
+                .canister_log
+                .records()
+                .iter()
+                .map(|record| record.into())
+                .collect(),
+            next_canister_log_record_idx: item.canister_log.next_idx(),
+            wasm_memory_limit: item.wasm_memory_limit.map(|v| v.get()),
+            next_snapshot_id: item.next_snapshot_id,
+            snapshots_memory_usage: item.snapshots_memory_usage.get(),
+            on_low_wasm_memory_hook_status: Some(
+                pb_canister_state_bits::OnLowWasmMemoryHookStatus::from(
+                    item.task_queue.peek_hook_status(),
+                )
+                .into(),
+            ),
         }
     }
 }
