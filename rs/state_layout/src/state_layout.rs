@@ -921,11 +921,12 @@ impl StateLayout {
         // Drops drop_after_rename once the checkpoint path is renamed to tmp_path.
         std::mem::drop(drop_after_rename);
         // spawn a thread to delete the tmp_path
+        let log = self.log.clone();
         std::thread::spawn(move || {
             let start_bg = Instant::now();
-            let _ = std::fs::remove_dir_all(tmp_path);
+            let _ = std::fs::remove_dir_all(&tmp_path);
             info!(
-                self.log.clone(),
+                log,
                 "Async Removed checkpoint files @{} in {:?}",
                 height,
                 start_bg.elapsed()
