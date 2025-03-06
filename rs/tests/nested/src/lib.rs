@@ -83,14 +83,14 @@ pub fn registration(env: TestEnv) {
 
 /// Upgrade each HostOS VM to the test version, and verify that each is
 /// healthy before and after the upgrade.
-pub fn upgrade(env: TestEnv) {
+pub fn upgrade_hostos(env: TestEnv) {
     let logger = env.logger();
 
-    let hostos_version = read_dependency_from_env_to_string("ENV_DEPS__IC_VERSION_FILE").unwrap();
-    let target_version = HostosVersion::try_from(format!("{hostos_version}-test")).unwrap();
+    let starting_version = read_dependency_from_env_to_string("ENV_DEPS__IC_VERSION_FILE").unwrap();
 
-    let url = get_hostos_update_img_test_url().unwrap();
-    let sha256 = get_hostos_update_img_test_sha256().unwrap();
+    let update_image_version = HostosVersion::try_from(format!("{starting_version}-test")).unwrap();
+    let update_image_url = get_hostos_update_img_test_url().unwrap();
+    let update_image_sha256 = get_hostos_update_img_test_sha256().unwrap();
 
     let initial_topology = env.topology_snapshot();
     start_nested_vm(env.clone());
@@ -135,22 +135,22 @@ pub fn upgrade(env: TestEnv) {
     host.await_status_is_healthy().unwrap();
 
     // Elect target HostOS version
-    info!(logger, "Electing target HostOS version '{target_version}' with sha256 '{sha256}' and upgrade urls: '{url}'");
+    info!(logger, "Electing target HostOS version '{update_image_version}' with sha256 '{update_image_sha256}' and upgrade urls: '{update_image_url}'");
     block_on(elect_hostos_version(
         &nns_node,
-        &target_version,
-        &sha256,
-        vec![url.to_string()],
+        &update_image_version,
+        &update_image_sha256,
+        vec![update_image_url.to_string()],
     ));
     info!(logger, "Elected target HostOS version");
 
     info!(
         logger,
-        "Upgrading node '{}' to '{}'", node_id, target_version
+        "Upgrading node '{}' to '{}'", node_id, update_image_version
     );
     block_on(update_nodes_hostos_version(
         &nns_node,
-        &target_version,
+        &update_image_version,
         vec![node_id],
     ));
 
