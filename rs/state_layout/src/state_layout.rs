@@ -457,7 +457,7 @@ impl TipHandler {
 }
 
 fn spawn_checkpoint_removal_thread(log: ReplicaLogger) -> (JoinOnDrop<()>, Sender<PathBuf>) {
-    let (checkpoint_removal_sender, checkpoint_removal_receiver) = unbounded();
+    let (checkpoint_removal_sender, checkpoint_removal_receiver) =  unbounded::<PathBuf>();
     let checkpoint_removal_handle = JoinOnDrop::new(
         std::thread::Builder::new()
             .name("CheckpointRemovalThread".to_string())
