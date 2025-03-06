@@ -311,7 +311,7 @@ pub fn modify_wasm_bytes(wasm_bytes: &[u8], modify_with: u32) -> Vec<u8> {
 }
 
 // NOTE, keep the functions for building wasms in the same order as the constants in
-// rs/nns/constants/src/lib.rs
+// rs/nns/constants/src/lib.rs.  Only the first ledger archive is represented in the ordering.
 
 // REGISTRY
 
@@ -448,3 +448,22 @@ pub fn build_mainnet_index_wasm() -> Wasm {
 }
 
 // SUBNET RENTAL (not used in tests yet)
+
+// NODE REWARDS CANISTER
+
+/// Build Wasm for NNS Node Rewards canister
+pub fn build_node_rewards_wasm() -> Wasm {
+    let features = [];
+    Project::cargo_bin_maybe_from_env("node-rewards-canister", &features)
+}
+
+/// Build mainnet Wasm for NNS Node Rewards canister
+pub fn build_mainnet_node_rewards_wasm() -> Wasm {
+    panic!(
+        "NRC has not yet been released to mainnet.  Please update this function when it is.\
+        Additionally, tests using NNS canisters will need to build this canister when testing \
+        node provider rewards.  See sync-with-released-nervous-system-wasms/src/main.rs"
+    );
+    // let features = [];
+    // Project::cargo_bin_maybe_from_env("mainnet-node-rewards-canister", &features)
+}

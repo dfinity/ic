@@ -49,6 +49,9 @@ CANISTERS = {
 
     # Boundary Nodes
     "certificate-orchestrator.wasm.gz": "//rs/boundary_node/certificate_issuance/certificate_orchestrator:certificate_orchestrator",
+
+    # Node Rewards
+    "node-rewards-canister.wasm.gz": "//rs/node_rewards/canister:node-rewards-canister",
 }
 
 COMPRESSED_CANISTERS = {
