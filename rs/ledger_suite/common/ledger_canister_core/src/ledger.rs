@@ -489,11 +489,12 @@ pub struct BlockLocations {
 
 /// Returns the locations of the specified block range.
 pub fn block_locations<L: LedgerData>(ledger: &L, start: u64, length: usize) -> BlockLocations {
-    let requested_range = range_utils::make_range(start, length);
+    let mut requested_range = range_utils::make_range(start, length);
     let local_range = ledger.blockchain().local_block_range();
     let local_blocks = range_utils::intersect(&requested_range, &local_range)
         .unwrap_or_else(|_| range_utils::make_range(local_range.start, 0));
     let mut ranges = vec![local_blocks.clone()];
+    requested_range = range_utils::remove_intersection(&requested_range, &local_blocks);
 
     let archive = ledger.blockchain().archive.read().unwrap();
 
@@ -502,7 +503,10 @@ pub fn block_locations<L: LedgerData>(ledger: &L, start: u64, length: usize) -> 
         .flat_map(|archive| archive.index().into_iter())
         .filter_map(|((from, to), canister_id)| {
             let slice = range_utils::intersect(&(from..to + 1), &requested_range).ok()?;
-            ranges.push(slice.clone());
+            requested_range = range_utils::remove_intersection(&requested_range, &slice);
+            if !slice.is_empty() {
+                ranges.push(slice.clone());
+            }
             (!slice.is_empty()).then_some((canister_id, slice))
         })
         .collect();
