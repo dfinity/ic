@@ -222,7 +222,7 @@ impl TaskQueue {
             }
     }
 
-    #[cfg(test)]
+    /// peek_hook_status will be removed in the follow-up EXC-1752.    
     pub fn peek_hook_status(&self) -> OnLowWasmMemoryHookStatus {
         self.on_low_wasm_memory_hook_status
     }
