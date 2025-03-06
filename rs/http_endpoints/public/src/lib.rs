@@ -1471,8 +1471,11 @@ mod tests {
     fn set_up_nns_delegation_dependencies(
         rt_handle: tokio::runtime::Handle,
     ) -> (Arc<FakeRegistryClient>, MockTlsConfig) {
-        let registry_version = 1;
+        rustls::crypto::ring::default_provider()
+            .install_default()
+            .unwrap();
 
+        let registry_version = 1;
         let data_provider = Arc::new(ProtoRegistryDataProvider::new());
 
         add_single_subnet_record(
@@ -1558,10 +1561,6 @@ mod tests {
             };
 
             let router = axum::routing::any(move || async { Cbor(http_response).into_response() });
-
-            rustls::crypto::ring::default_provider()
-                .install_default()
-                .unwrap();
 
             axum_server::bind_rustls(addr, generate_self_signed_cert().await)
                 .serve(router.into_make_service())
