@@ -23,7 +23,6 @@ use ic_types::{hostos_version::HostosVersion, NodeId};
 
 use slog::info;
 use url::Url;
-use util::{check_hostos_version, elect_hostos_version, update_nodes_hostos_version};
 
 /// Use an SSH channel to check the version on the running HostOS.
 pub(crate) fn check_hostos_version(node: &NestedVm) -> String {
