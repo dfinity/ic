@@ -985,7 +985,7 @@ impl StateLayout {
 
         // Drops drop_after_rename once the checkpoint path is renamed to tmp_path.
         std::mem::drop(drop_after_rename);
-        std::fs::remove_dir_all(tmp_path).map_err(|err| LayoutError::IoError {
+        std::fs::remove_dir_all(&tmp_path).map_err(|err| LayoutError::IoError {
             path: cp_path,
             message: format!(
                 "failed to remove checkpoint {} from tmp path {} (err kind: {:?})",
@@ -1140,7 +1140,7 @@ impl StateLayout {
                 ),
                 io_err: err,
             })?;
-        std::fs::remove_dir_all(tmp_path).map_err(|err| LayoutError::IoError {
+        std::fs::remove_dir_all(&tmp_path).map_err(|err| LayoutError::IoError {
             path: cp_path,
             message: format!(
                 "failed to remove diverged checkpoint {} from tmp path",
@@ -1193,7 +1193,7 @@ impl StateLayout {
                 message: format!("failed to rename backup {} to tmp path", height),
                 io_err: err,
             })?;
-        std::fs::remove_dir_all(tmp_path).map_err(|err| LayoutError::IoError {
+        std::fs::remove_dir_all(&tmp_path).map_err(|err| LayoutError::IoError {
             path: backup_path,
             message: format!("failed to remove backup {} from tmp path", height),
             io_err: err,
