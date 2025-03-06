@@ -375,25 +375,28 @@ impl PayloadBuilder {
         self = self.push_bytes(call_args.on_reply.as_slice());
         self = self.push_bytes(call_args.on_reject.as_slice());
         self.0.push(Ops::CallNew as u8);
-        self.0.extend_from_slice(payload);
-        self.0.push(Ops::CallDataAppend as u8);
-        if let Some(on_cleanup) = call_args.on_cleanup {
-            self = self.push_bytes(on_cleanup.as_slice());
-            self.0.push(Ops::CallOnCleanup as u8);
-        }
         match cycles {
-            CallCycles::Zero => {}
+            CallCycles::Zero => {
+                self.0.extend_from_slice(payload);
+                self.0.push(Ops::CallDataAppend as u8);
+            }
             CallCycles::Cycles(cycles) => {
+                self.0.extend_from_slice(payload);
+                self.0.push(Ops::CallDataAppend as u8);
                 let (high_amount, low_amount) = cycles.into_parts();
                 self = self.push_int64(high_amount);
                 self = self.push_int64(low_amount);
                 self.0.push(Ops::CallCyclesAdd128 as u8);
             }
             CallCycles::Max => {
+                self.0.extend_from_slice(payload);
                 self = self.push_int64(method_name_bytes.len() as u64);
-                self = self.push_int64(payload.len() as u64);
-                self.0.push(Ops::CallCyclesAddMax as u8);
+                self.0.push(Ops::CallDataAppendCyclesAddMax as u8);
             }
+        }
+        if let Some(on_cleanup) = call_args.on_cleanup {
+            self = self.push_bytes(on_cleanup.as_slice());
+            self.0.push(Ops::CallOnCleanup as u8);
         }
         if let Some(timeout) = timeout_secounds {
             self = self.push_int(timeout);

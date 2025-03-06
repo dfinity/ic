@@ -120,6 +120,6 @@ try_from_u8!(
         CostSignWithSchnorr = 90,
         CostVetkdDeriveEncryptedKey = 91,
         LiquidCyclesBalance128 = 92,
-        CallCyclesAddMax = 93,
+        CallDataAppendCyclesAddMax = 93,
     }
 );

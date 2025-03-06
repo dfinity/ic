@@ -486,9 +486,11 @@ fn eval(ops_bytes: OpsBytes) {
                 }
             }
             Ops::LiquidCyclesBalance128 => stack.push_blob(api::liquid_balance128()),
-            Ops::CallCyclesAddMax => {
-                let payload_size = stack.pop_int64();
+            Ops::CallDataAppendCyclesAddMax => {
                 let method_name_size = stack.pop_int64();
+                let payload = stack.pop_blob();
+                api::call_data_append(&payload);
+                let payload_size = payload.len() as u64;
                 let cost_call = u128::from_le_bytes(
                     api::cost_call(method_name_size, payload_size)
                         .try_into()
