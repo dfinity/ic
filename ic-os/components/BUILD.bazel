@@ -86,5 +86,4 @@ sh_test(
     srcs = ["validate-ic-json5-script"],
     args = ["$(execpath ic/generate-ic-config/ic.json5.template)"],
     data = ["ic/generate-ic-config/ic.json5.template"],
-    tags = ["manual"],
 )

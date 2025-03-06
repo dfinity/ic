@@ -4,6 +4,7 @@ Rules for system-tests.
 
 load("@bazel_skylib//rules:common_settings.bzl", "BuildSettingInfo")
 load("@bazel_skylib//rules:copy_file.bzl", "copy_file")
+load("@kubeconfig//:defs.bzl", "k8s_tags")
 load("@rules_oci//oci:defs.bzl", "oci_load")
 load("@rules_rust//rust:defs.bzl", "rust_binary")
 load("//bazel:defs.bzl", "mcopy", "zstd_compress")
@@ -274,12 +275,6 @@ def system_test(
     if uses_boundary_guestos:
         icos_images["ENV_DEPS__BOUNDARY_GUESTOS_DISK_IMG"] = "//ic-os/boundary-guestos/envs/dev:disk-img.tar.zst"
 
-    # set "local" tag for k8s system tests due to rootful container image builds
-    is_k8s = select({
-        "//rs/tests:k8s": True,
-        "//conditions:default": False,
-    })
-
     run_system_test(
         name = name,
         src = test_driver_target,
@@ -288,7 +283,8 @@ def system_test(
         env = env,
         icos_images = icos_images,
         env_inherit = env_inherit,
-        tags = tags + ["requires-network", "system_test"] + (["local"] if is_k8s else []) +
+        tags = tags + ["requires-network", "system_test"] +
+               k8s_tags +
                (["manual"] if "experimental_system_test_colocation" in tags else []),
         target_compatible_with = ["@platforms//os:linux"],
         timeout = test_timeout,
@@ -312,6 +308,8 @@ def system_test(
     if colocated_test_driver_vm_forward_ssh_agent:
         env.update({"COLOCATED_TEST_DRIVER_VM_FORWARD_SSH_AGENT": "1"})
 
+    visibility = kwargs.get("visibility", ["//visibility:public"])
+
     run_system_test(
         name = name + "_colocate",
         src = "//rs/tests/idx:colocate_test_bin",
@@ -330,6 +328,7 @@ def system_test(
         target_compatible_with = ["@platforms//os:linux"],
         timeout = test_timeout,
         flaky = flaky,
+        visibility = visibility,
     )
     return struct(test_driver_target = test_driver_target)
 

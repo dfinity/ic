@@ -1,3 +1,4 @@
+use crate::test_utils::MockRandomness;
 use crate::{
     governance::{
         tests::{MockEnvironment, StubCMC, StubIcpLedger},
@@ -11,6 +12,7 @@ use ic_nns_governance_api::pb::v1::manage_neuron_response::{
     MergeMaturityResponse, StakeMaturityResponse,
 };
 use maplit::btreemap;
+use std::sync::Arc;
 
 #[test]
 fn test_stake_maturity() {
@@ -26,7 +28,6 @@ fn test_stake_maturity() {
         staked_maturity_e8s_equivalent: Some(100),
         ..Default::default()
     };
-
     let mut governance = Governance::new(
         GovernanceProto {
             neurons: btreemap! {
@@ -34,9 +35,10 @@ fn test_stake_maturity() {
             },
             ..GovernanceProto::default()
         },
-        Box::new(MockEnvironment::new(vec![], 0)),
-        Box::new(StubIcpLedger {}),
-        Box::new(StubCMC {}),
+        Arc::new(MockEnvironment::new(vec![], 0)),
+        Arc::new(StubIcpLedger {}),
+        Arc::new(StubCMC {}),
+        Box::new(MockRandomness::new()),
     );
 
     let request = StakeMaturity {

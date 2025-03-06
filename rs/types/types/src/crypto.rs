@@ -155,7 +155,6 @@ impl FromStr for KeyPurpose {
     Serialize,
 )]
 #[cfg_attr(all(test, not(target_arch = "wasm32")), derive(Arbitrary))]
-#[cfg_attr(test, derive(ExhaustiveSet))]
 #[allow(non_camel_case_types)]
 #[strum(serialize_all = "snake_case")]
 pub enum AlgorithmId {
@@ -179,6 +178,7 @@ pub enum AlgorithmId {
     ThresholdEcdsaSecp256r1 = 17,
     ThresholdSchnorrBip340 = 18,
     ThresholdEd25519 = 19,
+    VetKD = 20, // Verifiably Encrypted Threshold Key Derivation
 }
 
 impl AlgorithmId {
@@ -256,6 +256,7 @@ impl From<i32> for AlgorithmId {
             17 => AlgorithmId::ThresholdEcdsaSecp256r1,
             18 => AlgorithmId::ThresholdSchnorrBip340,
             19 => AlgorithmId::ThresholdEd25519,
+            20 => AlgorithmId::VetKD,
             _ => AlgorithmId::Placeholder,
         }
     }
@@ -802,7 +803,7 @@ impl CurrentNodePublicKeys {
     }
 }
 
-/// Metadata used to derive keys for tECDSA, tSchnorr, and vetKD.
+/// Metadata used to derive keys for tECDSA, and tSchnorr.
 #[serde_with::serde_as]
 #[derive(Clone, Eq, PartialEq, Hash, Deserialize, Serialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]

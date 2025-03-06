@@ -9,7 +9,8 @@ use ic_management_canister_types_private::{
     DerivationPath, ECDSAPublicKeyArgs, ECDSAPublicKeyResponse, EcdsaCurve, EcdsaKeyId,
     MasterPublicKeyId, Payload, SchnorrAlgorithm, SchnorrKeyId, SchnorrPublicKeyArgs,
     SchnorrPublicKeyResponse, SignWithECDSAArgs, SignWithECDSAReply, SignWithSchnorrArgs,
-    SignWithSchnorrReply, VetKdKeyId, VetKdPublicKeyArgs, VetKdPublicKeyResult,
+    SignWithSchnorrReply, VetKdDeriveEncryptedKeyArgs, VetKdDeriveEncryptedKeyResult, VetKdKeyId,
+    VetKdPublicKeyArgs, VetKdPublicKeyResult,
 };
 use ic_message::ForwardParams;
 use ic_nervous_system_common_test_keys::{TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_KEYPAIR};
@@ -429,7 +430,7 @@ pub async fn get_vetkd_public_key_with_retries(
 ) -> Result<Vec<u8>, AgentError> {
     let public_key_request = VetKdPublicKeyArgs {
         canister_id: None,
-        derivation_path: DerivationPath::new(vec![]),
+        derivation_domain: vec![],
         key_id: key_id.clone(),
     };
     info!(
@@ -957,4 +958,31 @@ impl Request<SignWithChainKeyReply> for ChainSignatureRequest {
             MasterPublicKeyId::VetKd(_) => panic!("not applicable to vetKD"),
         })
     }
+}
+
+pub async fn vetkd_derive_encrypted_key(
+    encryption_public_key: [u8; 48],
+    key_id: VetKdKeyId,
+    derivation_id: Vec<u8>,
+    msg_can: &MessageCanister<'_>,
+) -> Result<Vec<u8>, AgentError> {
+    let args = VetKdDeriveEncryptedKeyArgs {
+        derivation_domain: vec![],
+        derivation_id,
+        key_id,
+        encryption_public_key,
+    };
+
+    let res = msg_can
+        .forward_to(
+            &Principal::management_canister(),
+            "vetkd_derive_encrypted_key",
+            Encode!(&args).unwrap(),
+        )
+        .await?;
+
+    let res = VetKdDeriveEncryptedKeyResult::decode(&res)
+        .expect("Failed to decode VetKdDeriveEncryptedKeyResult");
+
+    Ok(res.encrypted_key)
 }
