@@ -1,8 +1,6 @@
-load("@rules_rust//cargo:defs.bzl", "cargo_build_script")
 load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 load("//bazel:canisters.bzl", "rust_canister")
-load("//bazel:defs.bzl", "rust_ic_test", "rust_ic_test_suite_with_extra_srcs")
-load("//bazel:prost.bzl", "generated_files_check")
+load("//bazel:defs.bzl", "rust_ic_test_suite_with_extra_srcs")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -73,7 +71,7 @@ rust_canister(
 
 rust_test(
     name = "main_test",
-    srcs = glob(["src/main.rs"]),
+    srcs = ["src/main.rs"],
     compile_data = ["node-rewards-canister.did"],
     crate_root = "src/main.rs",
     proc_macro_deps = MACRO_DEPENDENCIES + DEV_MACRO_DEPENDENCIES,
