@@ -1,5 +1,5 @@
 {
-  "checksum": "a7131ea57b12979af0a6f7a2d04e6e562d3963b89eb8425c921b05cc939f8590",
+  "checksum": "e0b85a63c86b30b15e1b5f458272540f17d6aedfdd082d4c8d18e2c2bfe5a1fd",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -21644,7 +21644,7 @@
               "target": "tower_test"
             },
             {
-              "id": "tower_governor 0.4.3",
+              "id": "tower_governor 0.5.0",
               "target": "tower_governor"
             },
             {
@@ -28853,102 +28853,6 @@
         "MIT"
       ],
       "license_file": "LICENSE-APACHE"
-    },
-    "governor 0.6.0": {
-      "name": "governor",
-      "version": "0.6.0",
-      "package_url": "https://github.com/antifuchs/governor.git",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/governor/0.6.0/download",
-          "sha256": "821239e5672ff23e2a7060901fa622950bbd80b649cdaadd78d1c1767ed14eb4"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "governor",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "governor",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
-            "dashmap",
-            "default",
-            "futures",
-            "futures-timer",
-            "jitter",
-            "quanta",
-            "rand",
-            "std"
-          ],
-          "selects": {}
-        },
-        "deps": {
-          "common": [
-            {
-              "id": "cfg-if 1.0.0",
-              "target": "cfg_if"
-            },
-            {
-              "id": "dashmap 5.5.0",
-              "target": "dashmap"
-            },
-            {
-              "id": "futures 0.3.31",
-              "target": "futures"
-            },
-            {
-              "id": "futures-timer 3.0.3",
-              "target": "futures_timer"
-            },
-            {
-              "id": "no-std-compat 0.4.1",
-              "target": "no_std_compat"
-            },
-            {
-              "id": "nonzero_ext 0.3.0",
-              "target": "nonzero_ext"
-            },
-            {
-              "id": "parking_lot 0.12.1",
-              "target": "parking_lot"
-            },
-            {
-              "id": "quanta 0.11.1",
-              "target": "quanta"
-            },
-            {
-              "id": "rand 0.8.5",
-              "target": "rand"
-            },
-            {
-              "id": "smallvec 1.13.2",
-              "target": "smallvec"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2018",
-        "version": "0.6.0"
-      },
-      "license": "MIT",
-      "license_ids": [
-        "MIT"
-      ],
-      "license_file": null
     },
     "governor 0.8.1": {
       "name": "governor",
@@ -58028,113 +57932,6 @@
       ],
       "license_file": null
     },
-    "quanta 0.11.1": {
-      "name": "quanta",
-      "version": "0.11.1",
-      "package_url": "https://github.com/metrics-rs/quanta",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/quanta/0.11.1/download",
-          "sha256": "a17e662a7a8291a865152364c20c7abc5e60486ab2001e8ec10b24862de0b9ab"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "quanta",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "quanta",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
-            "default",
-            "flaky_tests"
-          ],
-          "selects": {}
-        },
-        "deps": {
-          "common": [
-            {
-              "id": "crossbeam-utils 0.8.19",
-              "target": "crossbeam_utils"
-            },
-            {
-              "id": "once_cell 1.19.0",
-              "target": "once_cell"
-            }
-          ],
-          "selects": {
-            "cfg(all(target_arch = \"wasm32\", target_os = \"unknown\"))": [
-              {
-                "id": "web-sys 0.3.64",
-                "target": "web_sys"
-              }
-            ],
-            "cfg(all(target_arch = \"wasm32\", target_os = \"wasi\"))": [
-              {
-                "id": "wasi 0.11.0+wasi-snapshot-preview1",
-                "target": "wasi"
-              }
-            ],
-            "cfg(not(any(target_os = \"macos\", target_os = \"ios\", target_os = \"windows\", target_arch = \"wasm32\")))": [
-              {
-                "id": "libc 0.2.158",
-                "target": "libc"
-              }
-            ],
-            "cfg(target_arch = \"x86\")": [
-              {
-                "id": "raw-cpuid 10.7.0",
-                "target": "raw_cpuid"
-              }
-            ],
-            "cfg(target_arch = \"x86_64\")": [
-              {
-                "id": "raw-cpuid 10.7.0",
-                "target": "raw_cpuid"
-              }
-            ],
-            "cfg(target_os = \"ios\")": [
-              {
-                "id": "mach2 0.4.2",
-                "target": "mach2"
-              }
-            ],
-            "cfg(target_os = \"macos\")": [
-              {
-                "id": "mach2 0.4.2",
-                "target": "mach2"
-              }
-            ],
-            "cfg(target_os = \"windows\")": [
-              {
-                "id": "winapi 0.3.9",
-                "target": "winapi"
-              }
-            ]
-          }
-        },
-        "edition": "2021",
-        "version": "0.11.1"
-      },
-      "license": "MIT",
-      "license_ids": [
-        "MIT"
-      ],
-      "license_file": "LICENSE"
-    },
     "quanta 0.12.3": {
       "name": "quanta",
       "version": "0.12.3",
@@ -60531,53 +60328,6 @@
         "MIT"
       ],
       "license_file": "LICENSE-APACHE"
-    },
-    "raw-cpuid 10.7.0": {
-      "name": "raw-cpuid",
-      "version": "10.7.0",
-      "package_url": "https://github.com/gz/rust-cpuid",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/raw-cpuid/10.7.0/download",
-          "sha256": "6c297679cb867470fa8c9f67dbba74a78d78e3e98d7cf2b08d6d71540f797332"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "raw_cpuid",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "raw_cpuid",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "bitflags 1.3.2",
-              "target": "bitflags"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2018",
-        "version": "10.7.0"
-      },
-      "license": "MIT",
-      "license_ids": [
-        "MIT"
-      ],
-      "license_file": "LICENSE.md"
     },
     "raw-cpuid 11.1.0": {
       "name": "raw-cpuid",
@@ -82120,89 +81870,6 @@
       ],
       "license_file": "LICENSE"
     },
-    "tower_governor 0.4.3": {
-      "name": "tower_governor",
-      "version": "0.4.3",
-      "package_url": "https://github.com/benwis/tower-governor",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/tower_governor/0.4.3/download",
-          "sha256": "aea939ea6cfa7c4880f3e7422616624f97a567c16df67b53b11f0d03917a8e46"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "tower_governor",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "tower_governor",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
-            "axum",
-            "default"
-          ],
-          "selects": {}
-        },
-        "deps": {
-          "common": [
-            {
-              "id": "axum 0.7.9",
-              "target": "axum"
-            },
-            {
-              "id": "forwarded-header-value 0.1.1",
-              "target": "forwarded_header_value"
-            },
-            {
-              "id": "governor 0.6.0",
-              "target": "governor"
-            },
-            {
-              "id": "http 1.2.0",
-              "target": "http"
-            },
-            {
-              "id": "pin-project 1.1.2",
-              "target": "pin_project"
-            },
-            {
-              "id": "thiserror 1.0.68",
-              "target": "thiserror"
-            },
-            {
-              "id": "tower 0.5.2",
-              "target": "tower"
-            },
-            {
-              "id": "tracing 0.1.41",
-              "target": "tracing"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2021",
-        "version": "0.4.3"
-      },
-      "license": "MIT OR Apache-2.0",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "license_file": "LICENSE"
-    },
     "tower_governor 0.5.0": {
       "name": "tower_governor",
       "version": "0.5.0",
@@ -94418,31 +94085,6 @@
       "x86_64-unknown-fuchsia",
       "x86_64-unknown-none"
     ],
-    "cfg(not(any(target_os = \"macos\", target_os = \"ios\", target_os = \"windows\", target_arch = \"wasm32\")))": [
-      "aarch64-linux-android",
-      "aarch64-unknown-fuchsia",
-      "aarch64-unknown-linux-gnu",
-      "aarch64-unknown-nixos-gnu",
-      "aarch64-unknown-nto-qnx710",
-      "arm-unknown-linux-gnueabi",
-      "armv7-linux-androideabi",
-      "armv7-unknown-linux-gnueabi",
-      "i686-linux-android",
-      "i686-unknown-freebsd",
-      "i686-unknown-linux-gnu",
-      "powerpc-unknown-linux-gnu",
-      "riscv32imc-unknown-none-elf",
-      "riscv64gc-unknown-none-elf",
-      "s390x-unknown-linux-gnu",
-      "thumbv7em-none-eabi",
-      "thumbv8m.main-none-eabi",
-      "x86_64-linux-android",
-      "x86_64-unknown-freebsd",
-      "x86_64-unknown-fuchsia",
-      "x86_64-unknown-linux-gnu",
-      "x86_64-unknown-nixos-gnu",
-      "x86_64-unknown-none"
-    ],
     "cfg(not(any(target_os = \"windows\", target_arch = \"wasm32\")))": [
       "aarch64-apple-darwin",
       "aarch64-apple-ios",
@@ -94698,11 +94340,6 @@
     ],
     "cfg(target_os = \"haiku\")": [],
     "cfg(target_os = \"hermit\")": [],
-    "cfg(target_os = \"ios\")": [
-      "aarch64-apple-ios",
-      "aarch64-apple-ios-sim",
-      "x86_64-apple-ios"
-    ],
     "cfg(target_os = \"linux\")": [
       "aarch64-unknown-linux-gnu",
       "aarch64-unknown-nixos-gnu",
@@ -95153,7 +94790,7 @@
     "tower-http 0.6.2",
     "tower-request-id 0.3.0",
     "tower-test 0.4.0",
-    "tower_governor 0.4.3",
+    "tower_governor 0.5.0",
     "tracing 0.1.41",
     "tracing-appender 0.2.3",
     "tracing-flame 0.2.0",

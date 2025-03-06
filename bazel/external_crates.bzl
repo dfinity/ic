@@ -1395,8 +1395,10 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                     "tracing",
                 ],
             ),
+            # axum 0.8 support not yet released, use git
             "tower_governor": crate.spec(
-                version = "^0.4.2",
+                git = "https://github.com/benwis/tower-governor",
+                rev = "bc9a6eacafcaec1e732886ceae8ae324bbd327df",
             ),
             "tower-request-id": crate.spec(
                 version = "^0.3.0",
