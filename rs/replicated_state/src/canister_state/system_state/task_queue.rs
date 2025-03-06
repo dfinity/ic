@@ -227,15 +227,6 @@ impl TaskQueue {
         self.on_low_wasm_memory_hook_status
     }
 
-    /// get_queue will be removed in the follow-up EXC-1752.
-    pub fn get_queue(&self) -> VecDeque<ExecutionTask> {
-        let mut queue = self.queue.clone();
-        if let Some(task) = self.paused_or_aborted_task.as_ref() {
-            queue.push_front(task.clone());
-        }
-        queue
-    }
-
     /// `check_dts_invariants` should only be called after round execution.
     ///
     /// It checks that the following properties are satisfied:
