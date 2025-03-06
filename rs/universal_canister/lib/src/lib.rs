@@ -60,6 +60,12 @@ pub fn call_args() -> CallArgs {
     CallArgs::default()
 }
 
+enum CallCycles {
+    Zero,
+    Cycles(Cycles),
+    Max,
+}
+
 /// A builder class for building payloads for the universal canister.
 ///
 /// Payloads for the UC encode `Ops` representing what instructions to
@@ -285,7 +291,7 @@ impl PayloadBuilder {
         method: S,
         call_args: CallArgs,
     ) -> Self {
-        self = self.call_helper(callee, method, call_args, None, None);
+        self = self.call_helper(callee, method, call_args, CallCycles::Zero, None);
         self
     }
 
@@ -296,7 +302,17 @@ impl PayloadBuilder {
         call_args: CallArgs,
         cycles: Cycles,
     ) -> Self {
-        self = self.call_helper(callee, method, call_args, Some(cycles), None);
+        self = self.call_helper(callee, method, call_args, CallCycles::Cycles(cycles), None);
+        self
+    }
+
+    pub fn call_with_max_cycles<P: AsRef<[u8]>, S: ToString>(
+        mut self,
+        callee: P,
+        method: S,
+        call_args: CallArgs,
+    ) -> Self {
+        self = self.call_helper(callee, method, call_args, CallCycles::Max, None);
         self
     }
 
@@ -312,7 +328,7 @@ impl PayloadBuilder {
             callee,
             method,
             call_args,
-            Some(cycles),
+            CallCycles::Cycles(cycles),
             Some(timeout_seconds),
         );
         self
@@ -348,25 +364,36 @@ impl PayloadBuilder {
         callee: P,
         method: S,
         call_args: CallArgs,
-        cycles: Option<Cycles>,
+        cycles: CallCycles,
         timeout_secounds: Option<u32>,
     ) -> Self {
+        let method_name = method.to_string();
+        let method_name_bytes = method_name.as_bytes();
+        let payload = call_args.other_side.as_slice();
         self = self.push_bytes(callee.as_ref());
-        self = self.push_bytes(method.to_string().as_bytes());
+        self = self.push_bytes(method_name_bytes);
         self = self.push_bytes(call_args.on_reply.as_slice());
         self = self.push_bytes(call_args.on_reject.as_slice());
         self.0.push(Ops::CallNew as u8);
-        self.0.extend_from_slice(call_args.other_side.as_slice());
+        self.0.extend_from_slice(payload);
         self.0.push(Ops::CallDataAppend as u8);
         if let Some(on_cleanup) = call_args.on_cleanup {
             self = self.push_bytes(on_cleanup.as_slice());
             self.0.push(Ops::CallOnCleanup as u8);
         }
-        if let Some(cycles) = cycles {
-            let (high_amount, low_amount) = cycles.into_parts();
-            self = self.push_int64(high_amount);
-            self = self.push_int64(low_amount);
-            self.0.push(Ops::CallCyclesAdd128 as u8);
+        match cycles {
+            CallCycles::Zero => {}
+            CallCycles::Cycles(cycles) => {
+                let (high_amount, low_amount) = cycles.into_parts();
+                self = self.push_int64(high_amount);
+                self = self.push_int64(low_amount);
+                self.0.push(Ops::CallCyclesAdd128 as u8);
+            }
+            CallCycles::Max => {
+                self = self.push_int64(method_name_bytes.len() as u64);
+                self = self.push_int64(payload.len() as u64);
+                self.0.push(Ops::CallCyclesAddMax as u8);
+            }
         }
         if let Some(timeout) = timeout_secounds {
             self = self.push_int(timeout);
@@ -713,6 +740,12 @@ impl PayloadBuilder {
     /// Push `blob` with canister cycles balance.
     pub fn cycles_balance128(mut self) -> Self {
         self.0.push(Ops::CyclesBalance128 as u8);
+        self
+    }
+
+    /// Push `blob` with canister liquid cycles balance.
+    pub fn cycles_liquid_balance128(mut self) -> Self {
+        self.0.push(Ops::LiquidCyclesBalance128 as u8);
         self
     }
 
