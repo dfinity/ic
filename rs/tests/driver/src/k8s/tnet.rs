@@ -29,11 +29,12 @@ use tokio;
 use tracing::*;
 
 use crate::driver::farm::{
-    Certificate, CreateVmRequest, DnsRecord, DnsRecordType, ImageLocation, PlaynetCertificate,
-    VMCreateResponse, VmSpec,
+    Certificate, CreateVmRequest, DnsRecord, DnsRecordType, PlaynetCertificate, VMCreateResponse,
+    VmSpec,
 };
 use crate::driver::resource::ImageType;
 use crate::driver::test_env::{TestEnv, TestEnvAttribute};
+use crate::driver::test_env_api::get_ic_os_img_url;
 use crate::k8s::config::*;
 use crate::k8s::datavolume::*;
 use crate::k8s::job::*;
@@ -411,13 +412,9 @@ impl TNet {
 
         if vm_type == ImageType::IcOsImage {
             // create a job to download the image and extract it
-            let image_url = format!(
-                "http://server.bazel-remote.svc.cluster.local:8080/cas/{}",
-                match vm_req.primary_image {
-                    ImageLocation::IcOsImageViaUrl { url: _, sha256 } => sha256,
-                    _ => self.image_sha.clone(),
-                }
-            );
+            let image_url = get_ic_os_img_url()
+                .expect("missing ic-os image url")
+                .to_string();
             // TODO: only download it once and copy it if it's already downloaded
             let args = format!(
                 "set -e; \
