@@ -202,8 +202,7 @@ impl OptionalFromRequestParts<DomainResolver> for HostHeader {
 
         let Some(id) = resolver
             .resolve_domain(&fqdn!(host))
-            .map(|d| d.canister_id)
-            .flatten()
+            .and_then(|d| d.canister_id)
         else {
             return Ok(None);
         };
@@ -251,8 +250,7 @@ impl OptionalFromRequestParts<DomainResolver> for RefererHeaderHost {
 
         let Some(id) = resolver
             .resolve_domain(&fqdn!(referer.host()))
-            .map(|d| d.canister_id)
-            .flatten()
+            .and_then(|d| d.canister_id)
         else {
             return Ok(None);
         };
