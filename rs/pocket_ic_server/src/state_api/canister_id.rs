@@ -332,10 +332,12 @@ mod tests {
         );
         assert!(rt
             .block_on(HostHeader::from_request_parts(&mut req, &resolver))
-            .is_err());
+            .unwrap()
+            .is_none());
         assert!(rt
             .block_on(QueryParam::from_request_parts(&mut req, &resolver))
-            .is_err());
+            .unwrap()
+            .is_none());
 
         let mut req = build_req(
             Some("rrkah-fqaaa-aaaaa-aaaaq-cai.little.domain.name"),
@@ -347,7 +349,8 @@ mod tests {
         );
         assert!(rt
             .block_on(QueryParam::from_request_parts(&mut req, &resolver))
-            .is_err());
+            .unwrap()
+            .is_none());
     }
 
     #[test]
@@ -362,7 +365,8 @@ mod tests {
         );
         assert!(rt
             .block_on(QueryParam::from_request_parts(&mut req, &resolver))
-            .is_err());
+            .unwrap()
+            .is_none());
 
         let mut req = build_req(
             Some("localhost"),
@@ -370,7 +374,8 @@ mod tests {
         );
         assert!(rt
             .block_on(HostHeader::from_request_parts(&mut req, &resolver))
-            .is_err());
+            .unwrap()
+            .is_none());
         assert_eq!(
             rt.block_on(QueryParam::from_request_parts(&mut req, &resolver)),
             Ok(Some(QueryParam(principal("rrkah-fqaaa-aaaaa-aaaaq-cai"))))

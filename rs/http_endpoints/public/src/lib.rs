@@ -1471,10 +1471,6 @@ mod tests {
     fn set_up_nns_delegation_dependencies(
         rt_handle: tokio::runtime::Handle,
     ) -> (Arc<FakeRegistryClient>, MockTlsConfig) {
-        rustls::crypto::ring::default_provider()
-            .install_default()
-            .unwrap();
-
         let registry_version = 1;
         let data_provider = Arc::new(ProtoRegistryDataProvider::new());
 
