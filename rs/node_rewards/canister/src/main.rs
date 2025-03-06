@@ -14,7 +14,7 @@ fn pre_upgrade() {}
 #[post_upgrade]
 fn post_upgrade(args: Option<UpgradeArgs>) {}
 
-#[query]
+#[query(hidden = true)]
 fn hello() -> String {
     "Hello, world!".to_string()
 }
