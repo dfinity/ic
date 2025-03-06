@@ -3,6 +3,9 @@ name = "node-rewards-canister-api"
 version = "0.1.0"
 edition = "2021"
 
+[lib]
+path = "src/lib.rs"
+
 [dependencies]
 candid = { workspace = true }
 ic-cdk = { workspace = true }
