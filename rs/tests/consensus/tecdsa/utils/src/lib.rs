@@ -1,4 +1,3 @@
-use anyhow::{anyhow, bail};
 use candid::{CandidType, Deserialize, Encode, Principal};
 use canister_test::{Canister, Cycles};
 use ic_agent::AgentError;
@@ -31,7 +30,6 @@ use ic_system_test_driver::{
         },
     },
     nns::vote_and_execute_proposal,
-    retry_with_msg_async,
     util::{block_on, MessageCanister},
 };
 use ic_types::{Height, PrincipalId, ReplicaVersion};
@@ -601,38 +599,45 @@ pub async fn get_ecdsa_signature_with_logger(
         derivation_path: DerivationPath::new(Vec::new()),
         key_id: key_id.clone(),
     };
-
-    let signature: Vec<u8> = retry_with_msg_async!(
-        format!("Sending a {} signing request", key_id),
+    info!(
         logger,
-        Duration::from_secs(40),
-        Duration::from_secs(2),
-        || async {
-            let res = msg_can
-                .forward_with_cycles_to(
-                    &Principal::management_canister(),
-                    "sign_with_ecdsa",
-                    Encode!(&signature_request).unwrap(),
-                    cycles,
-                )
-                .await;
-            match res {
-                Ok(reply) => {
-                    let signature = SignWithECDSAReply::decode(&reply)
-                        .expect("failed to decode SignWithECDSAReply")
-                        .signature;
-                    Ok(signature)
-                }
-                Err(err) => {
-                    bail!("sign_with_ecdsa returns `{}`. Trying again...", err)
+        "Sending an ECDSA signing request: {:?}", signature_request
+    );
+
+    let mut count = 0;
+    let signature = loop {
+        // Ask for a signature.
+        let res = msg_can
+            .forward_with_cycles_to(
+                &Principal::management_canister(),
+                "sign_with_ecdsa",
+                Encode!(&signature_request).unwrap(),
+                cycles,
+            )
+            .await;
+        match res {
+            Ok(reply) => {
+                let signature = SignWithECDSAReply::decode(&reply)
+                    .expect("failed to decode SignWithECDSAReply")
+                    .signature;
+                break signature;
+            }
+            Err(err) => {
+                count += 1;
+                if count < 5 {
+                    debug!(
+                        logger,
+                        "sign_with_ecdsa returns `{}`. Trying again in 2 seconds...", err
+                    );
+                    tokio::time::sleep(Duration::from_secs(2)).await;
+                } else {
+                    return Err(err);
                 }
             }
         }
-    )
-    .await
-    .expect("Failed to retrieve ECDSA signature");
-
+    };
     info!(logger, "sign_with_ecdsa returns {:?}", signature);
+
     Ok(signature)
 }
 
@@ -649,42 +654,47 @@ pub async fn get_schnorr_signature_with_logger(
         key_id: key_id.clone(),
         aux: None,
     };
-
-    let signature: Vec<u8> = retry_with_msg_async!(
-        format!(
-            "Sending a {} signing request of size: {}",
-            key_id,
-            signature_request.message.len(),
-        ),
+    info!(
         logger,
-        Duration::from_secs(40),
-        Duration::from_secs(2),
-        || async {
-            let res = msg_can
-                .forward_with_cycles_to(
-                    &Principal::management_canister(),
-                    "sign_with_schnorr",
-                    Encode!(&signature_request).unwrap(),
-                    cycles,
-                )
-                .await;
-            match res {
-                Ok(reply) => {
-                    let signature = SignWithSchnorrReply::decode(&reply)
-                        .expect("failed to decode SignWithSchnorrReply")
-                        .signature;
-                    Ok(signature)
-                }
-                Err(err) => {
-                    bail!("sign_with_schnorr returns `{}`. Trying again...", err)
+        "Sending a {} signing request of size: {}",
+        key_id,
+        signature_request.message.len(),
+    );
+
+    let mut count = 0;
+    let signature = loop {
+        // Ask for a signature.
+        let res = msg_can
+            .forward_with_cycles_to(
+                &Principal::management_canister(),
+                "sign_with_schnorr",
+                Encode!(&signature_request).unwrap(),
+                cycles,
+            )
+            .await;
+        match res {
+            Ok(reply) => {
+                let signature = SignWithSchnorrReply::decode(&reply)
+                    .expect("failed to decode SignWithSchnorrReply")
+                    .signature;
+                break signature;
+            }
+            Err(err) => {
+                count += 1;
+                if count < 5 {
+                    debug!(
+                        logger,
+                        "sign_with_schnorr returns `{}`. Trying again in 2 seconds...", err
+                    );
+                    tokio::time::sleep(Duration::from_secs(2)).await;
+                } else {
+                    return Err(err);
                 }
             }
         }
-    )
-    .await
-    .expect("Failed to retrieve Schnorr signature");
-
+    };
     info!(logger, "sign_with_schnorr returns {:?}", signature);
+
     Ok(signature)
 }
 
@@ -706,36 +716,38 @@ pub async fn get_vetkd_with_logger(
         input.len(),
     );
 
-    let encrypted_key: Vec<u8> = retry_with_msg_async!(
-        format!("Sending a {} request of size: {}", key_id, input.len(),),
-        logger,
-        Duration::from_secs(40),
-        Duration::from_secs(2),
-        || async {
-            vetkd_derive_encrypted_key(
-                transport_public_key,
-                key_id.clone(),
-                input.clone(),
-                msg_can,
-                cycles,
-            )
-            .await
-            .map_err(|err| {
-                anyhow!(
-                    "vetkd_derive_encrypted_key returns `{}`. Trying again...",
-                    err
-                )
-            })
+    let mut count = 0;
+    let result = loop {
+        let res = vetkd_derive_encrypted_key(
+            transport_public_key,
+            key_id.clone(),
+            input.clone(),
+            msg_can,
+            cycles,
+        )
+        .await;
+        match res {
+            Ok(result) => {
+                break result;
+            }
+            Err(err) => {
+                count += 1;
+                if count < 5 {
+                    debug!(
+                        logger,
+                        "vetkd_derive_encrypted_key returns `{}`. Trying again in 2 seconds...",
+                        err
+                    );
+                    tokio::time::sleep(Duration::from_secs(2)).await;
+                } else {
+                    return Err(err);
+                }
+            }
         }
-    )
-    .await
-    .expect("Failed to derive encrypted key");
+    };
 
-    info!(
-        logger,
-        "vetkd_derive_encrypted_key returns {:?}", encrypted_key
-    );
-    Ok(encrypted_key)
+    info!(logger, "vetkd_derive_encrypted_key returns {:?}", result);
+    Ok(result)
 }
 
 pub async fn enable_chain_key_signing(
