@@ -16830,7 +16830,7 @@ dependencies = [
 
 [[package]]
 name = "node-rewards-canister-api"
-version = "0.1.0"
+version = "0.9.0"
 dependencies = [
  "candid",
  "ic-cdk 0.17.1",
