@@ -51,11 +51,11 @@ const HEADERS_HIDE_HTTP_REQUEST: [&str; 4] =
 
 // Rust const/static concat is non-existent, so we have to repeat
 pub const PATH_STATUS: &str = "/api/v2/status";
-pub const PATH_QUERY: &str = "/api/v2/canister/:canister_id/query";
-pub const PATH_CALL: &str = "/api/v2/canister/:canister_id/call";
-pub const PATH_CALL_V3: &str = "/api/v3/canister/:canister_id/call";
-pub const PATH_READ_STATE: &str = "/api/v2/canister/:canister_id/read_state";
-pub const PATH_SUBNET_READ_STATE: &str = "/api/v2/subnet/:subnet_id/read_state";
+pub const PATH_QUERY: &str = "/api/v2/canister/{canister_id}/query";
+pub const PATH_CALL: &str = "/api/v2/canister/{canister_id}/call";
+pub const PATH_CALL_V3: &str = "/api/v3/canister/{canister_id}/call";
+pub const PATH_READ_STATE: &str = "/api/v2/canister/{canister_id}/read_state";
+pub const PATH_SUBNET_READ_STATE: &str = "/api/v2/subnet/{subnet_id}/read_state";
 pub const PATH_HEALTH: &str = "/health";
 
 lazy_static! {

@@ -1,6 +1,5 @@
 use crate::state_api::state::HandlerState;
-use async_trait::async_trait;
-use axum::extract::FromRequestParts;
+use axum::extract::OptionalFromRequestParts;
 use candid::Principal;
 use fqdn::{fqdn, Fqdn, FQDN};
 use hyper::{
@@ -122,26 +121,28 @@ impl ResolvesDomain for DomainResolver {
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub(crate) struct QueryParam(pub Principal);
 
-#[async_trait]
-impl FromRequestParts<Arc<HandlerState>> for QueryParam {
+impl OptionalFromRequestParts<Arc<HandlerState>> for QueryParam {
     type Rejection = &'static str;
 
     async fn from_request_parts(
         parts: &mut Parts,
         state: &Arc<HandlerState>,
-    ) -> Result<Self, Self::Rejection> {
-        FromRequestParts::from_request_parts(parts, state.resolver()).await
+    ) -> Result<Option<Self>, Self::Rejection> {
+        <QueryParam as OptionalFromRequestParts<DomainResolver>>::from_request_parts(
+            parts,
+            state.resolver(),
+        )
+        .await
     }
 }
 
-#[async_trait]
-impl FromRequestParts<DomainResolver> for QueryParam {
+impl OptionalFromRequestParts<DomainResolver> for QueryParam {
     type Rejection = &'static str;
 
     async fn from_request_parts(
         parts: &mut Parts,
         _resolver: &DomainResolver,
-    ) -> Result<Self, Self::Rejection> {
+    ) -> Result<Option<Self>, Self::Rejection> {
         const NO_PARAM: &str = "'canisterId' query parameter not found";
         const BAD_PARAM: &str = "'canisterId' failed to parse: Invalid Principal";
 
@@ -151,7 +152,7 @@ impl FromRequestParts<DomainResolver> for QueryParam {
                 .ok_or(NO_PARAM)?;
 
         Principal::from_text(canister_id.as_ref())
-            .map(QueryParam)
+            .map(|x| Some(QueryParam(x)))
             .map_err(|_| BAD_PARAM)
     }
 }
@@ -159,26 +160,28 @@ impl FromRequestParts<DomainResolver> for QueryParam {
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub(crate) struct HostHeader(pub Principal);
 
-#[async_trait]
-impl FromRequestParts<Arc<HandlerState>> for HostHeader {
+impl OptionalFromRequestParts<Arc<HandlerState>> for HostHeader {
     type Rejection = &'static str;
 
     async fn from_request_parts(
         parts: &mut Parts,
         state: &Arc<HandlerState>,
-    ) -> Result<Self, Self::Rejection> {
-        FromRequestParts::from_request_parts(parts, state.resolver()).await
+    ) -> Result<Option<Self>, Self::Rejection> {
+        <HostHeader as OptionalFromRequestParts<DomainResolver>>::from_request_parts(
+            parts,
+            state.resolver(),
+        )
+        .await
     }
 }
 
-#[async_trait]
-impl FromRequestParts<DomainResolver> for HostHeader {
+impl OptionalFromRequestParts<DomainResolver> for HostHeader {
     type Rejection = &'static str;
 
     async fn from_request_parts(
         parts: &mut Parts,
         resolver: &DomainResolver,
-    ) -> Result<Self, Self::Rejection> {
+    ) -> Result<Option<Self>, Self::Rejection> {
         const NO_HOST: &str = "No host in headers";
         const BAD_HOST: &str = "Host header did not contain a canister id or alias";
 
@@ -194,33 +197,35 @@ impl FromRequestParts<DomainResolver> for HostHeader {
             .map(|d| d.canister_id)
             .ok_or(BAD_HOST)?
             .ok_or(BAD_HOST)
-            .map(HostHeader)
+            .map(|x| Some(HostHeader(x)))
     }
 }
 
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub(crate) struct RefererHeaderHost(pub Principal);
 
-#[async_trait]
-impl FromRequestParts<Arc<HandlerState>> for RefererHeaderHost {
+impl OptionalFromRequestParts<Arc<HandlerState>> for RefererHeaderHost {
     type Rejection = &'static str;
 
     async fn from_request_parts(
         parts: &mut Parts,
         state: &Arc<HandlerState>,
-    ) -> Result<Self, Self::Rejection> {
-        FromRequestParts::from_request_parts(parts, state.resolver()).await
+    ) -> Result<Option<Self>, Self::Rejection> {
+        <RefererHeaderHost as OptionalFromRequestParts<DomainResolver>>::from_request_parts(
+            parts,
+            state.resolver(),
+        )
+        .await
     }
 }
 
-#[async_trait]
-impl FromRequestParts<DomainResolver> for RefererHeaderHost {
+impl OptionalFromRequestParts<DomainResolver> for RefererHeaderHost {
     type Rejection = &'static str;
 
     async fn from_request_parts(
         parts: &mut Parts,
         resolver: &DomainResolver,
-    ) -> Result<Self, Self::Rejection> {
+    ) -> Result<Option<Self>, Self::Rejection> {
         const NO_REFERER: &str = "No referer in headers";
         const BAD_REFERER: &str = "Referer header did not contain a canister id or alias";
 
@@ -233,33 +238,35 @@ impl FromRequestParts<DomainResolver> for RefererHeaderHost {
             .map(|d| d.canister_id)
             .ok_or(BAD_REFERER)?
             .ok_or(BAD_REFERER)
-            .map(RefererHeaderHost)
+            .map(|x| Some(RefererHeaderHost(x)))
     }
 }
 
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub(crate) struct RefererHeaderQueryParam(pub Principal);
 
-#[async_trait]
-impl FromRequestParts<Arc<HandlerState>> for RefererHeaderQueryParam {
+impl OptionalFromRequestParts<Arc<HandlerState>> for RefererHeaderQueryParam {
     type Rejection = &'static str;
 
     async fn from_request_parts(
         parts: &mut Parts,
         state: &Arc<HandlerState>,
-    ) -> Result<Self, Self::Rejection> {
-        FromRequestParts::from_request_parts(parts, state.resolver()).await
+    ) -> Result<Option<Self>, Self::Rejection> {
+        <RefererHeaderQueryParam as OptionalFromRequestParts<DomainResolver>>::from_request_parts(
+            parts,
+            state.resolver(),
+        )
+        .await
     }
 }
 
-#[async_trait]
-impl FromRequestParts<DomainResolver> for RefererHeaderQueryParam {
+impl OptionalFromRequestParts<DomainResolver> for RefererHeaderQueryParam {
     type Rejection = &'static str;
 
     async fn from_request_parts(
         parts: &mut Parts,
         _resolver: &DomainResolver,
-    ) -> Result<Self, Self::Rejection> {
+    ) -> Result<Option<Self>, Self::Rejection> {
         const NO_REFERER: &str = "No referer in headers";
         const BAD_REFERER: &str = "Referer header did not contain a canister id or alias";
         const NO_PARAM: &str = "'canisterId' query parameter not found";
@@ -273,7 +280,7 @@ impl FromRequestParts<DomainResolver> for RefererHeaderQueryParam {
             .ok_or(NO_PARAM)?;
 
         Principal::from_text(canister_id.as_ref())
-            .map(RefererHeaderQueryParam)
+            .map(|x| Some(RefererHeaderQueryParam(x)))
             .map_err(|_| BAD_PARAM)
     }
 }
@@ -281,7 +288,7 @@ impl FromRequestParts<DomainResolver> for RefererHeaderQueryParam {
 #[cfg(test)]
 mod tests {
     use crate::state_api::canister_id::DomainResolver;
-    use axum::extract::FromRequestParts;
+    use axum::extract::OptionalFromRequestParts;
     use fqdn::fqdn;
     use hyper::{header::HOST, http::request::Parts, Request};
     use ic_agent::export::Principal;
@@ -311,7 +318,7 @@ mod tests {
         );
         assert_eq!(
             rt.block_on(HostHeader::from_request_parts(&mut req, &resolver)),
-            Ok(HostHeader(principal("rrkah-fqaaa-aaaaa-aaaaq-cai")))
+            Ok(Some(HostHeader(principal("rrkah-fqaaa-aaaaa-aaaaq-cai"))))
         );
         assert!(rt
             .block_on(QueryParam::from_request_parts(&mut req, &resolver))
@@ -326,7 +333,7 @@ mod tests {
         let mut req = build_req(Some("rrkah-fqaaa-aaaaa-aaaaq-cai.localhost"), "/about");
         assert_eq!(
             rt.block_on(HostHeader::from_request_parts(&mut req, &resolver)),
-            Ok(HostHeader(principal("rrkah-fqaaa-aaaaa-aaaaq-cai")))
+            Ok(Some(HostHeader(principal("rrkah-fqaaa-aaaaa-aaaaq-cai"))))
         );
         assert!(rt
             .block_on(QueryParam::from_request_parts(&mut req, &resolver))
@@ -341,7 +348,7 @@ mod tests {
             .is_err());
         assert_eq!(
             rt.block_on(QueryParam::from_request_parts(&mut req, &resolver)),
-            Ok(QueryParam(principal("rrkah-fqaaa-aaaaa-aaaaq-cai")))
+            Ok(Some(QueryParam(principal("rrkah-fqaaa-aaaaa-aaaaq-cai"))))
         );
     }
 

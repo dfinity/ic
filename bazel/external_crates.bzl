@@ -174,7 +174,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 ],
             ),
             "aide": crate.spec(
-                version = "^0.13.4",
+                version = "^0.14.1",
                 features = [
                     "axum",
                 ],
@@ -222,14 +222,14 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.1.83",
             ),
             "axum": crate.spec(
-                version = "^0.7.9",
+                version = "^0.8.1",
             ),
             "axum-extra": crate.spec(
-                version = "^0.9.6",
+                version = "^0.10.0",
                 features = ["typed-header"],
             ),
             "axum-server": crate.spec(
-                version = "^0.6.0",
+                version = "^0.7.1",
                 features = [
                     "tls-rustls",
                 ],
@@ -580,7 +580,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             ),
             "ic-bn-lib": crate.spec(
                 git = "https://github.com/dfinity/ic-bn-lib",
-                rev = "530f8e8ea577740213aff4b6dfa7a49cc32bae4a",
+                rev = "686cff6ccd422716d48767a299ab33044a27d4ad",
             ),
             "ic-btc-interface": crate.spec(
                 version = "^0.2.2",
@@ -625,7 +625,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             ),
             "ic-gateway": crate.spec(
                 git = "https://github.com/dfinity/ic-gateway",
-                rev = "8590b8e9f0af4cdc3b95cd09a0c7a89037b3c038",
+                rev = "a6cdd78692aa0715c38979aaa8447e70c4456b0b",
             ),
             "ic-http-certification": crate.spec(
                 version = "3.0.3",
