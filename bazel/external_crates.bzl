@@ -177,6 +177,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.14.1",
                 features = [
                     "axum",
+                    "axum-json",
                 ],
             ),
             "arbitrary": crate.spec(

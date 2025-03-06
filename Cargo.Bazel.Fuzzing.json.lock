@@ -1,5 +1,5 @@
 {
-  "checksum": "fce152b056596d245035592d978c4740b7cc75b553f3591050b1d3c5c4be8f2a",
+  "checksum": "de37c6d2c2179633b78dc8c680d638821a439d90c378cbeb90a848cac01fdc0f",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -1752,6 +1752,7 @@
         "crate_features": {
           "common": [
             "axum",
+            "axum-json",
             "bytes",
             "http"
           ],
