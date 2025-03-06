@@ -17,4 +17,6 @@ on the process that this file is part of, see
 
 ## Fixed
 
+* `AddGenericNervousSystemFunction` can be used to add custom proposals under _critical_ topics.
+
 ## Security
