@@ -14514,6 +14514,8 @@ dependencies = [
  "ic-system-test-driver",
  "ic-types",
  "ic-types-test-utils",
+ "ic-vetkd-utils",
+ "ic_bls12_381",
  "k256 0.13.4",
  "registry-canister",
  "serde",
