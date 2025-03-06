@@ -932,6 +932,17 @@ impl StateLayout {
         Ok(())
     }
 
+    fn remove_checkpoint<T>(
+        &self,
+        height: Height,
+        drop_after_rename: T,
+    ) -> Result<(), LayoutError> {
+        if height.get() % 1000 == 0 {
+            self.remove_checkpoint_sync(height, drop_after_rename)
+        } else {
+            self.remove_checkpoint_async(height, drop_after_rename)
+        }
+    }
     fn remove_checkpoint_sync<T>(
         &self,
         height: Height,
