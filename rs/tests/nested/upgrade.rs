@@ -7,7 +7,7 @@ fn main() -> Result<()> {
     // `HOSTOS_UPDATE_VERSION` env variable.
     SystemTestGroup::new()
         .with_setup(|e| nested::config(e, false))
-        .add_test(systest!(nested::upgrade_hostos))
+        .add_test(systest!(nested::upgrade_hostos_to_test_version))
         .with_timeout_per_test(Duration::from_secs(30 * 60))
         .with_overall_timeout(Duration::from_secs(40 * 60))
         .execute_from_args()?;

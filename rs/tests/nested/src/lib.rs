@@ -1,6 +1,8 @@
 use std::str::FromStr;
 use std::time::Duration;
 
+use url::Url;
+
 use canister_test::PrincipalId;
 use ic_consensus_system_test_utils::rw_message::install_nns_and_check_progress;
 use ic_registry_subnet_type::SubnetType;
@@ -81,16 +83,15 @@ pub fn registration(env: TestEnv) {
     assert_eq!(num_unassigned_nodes, 1);
 }
 
-/// Upgrade each HostOS VM to the test version, and verify that each is
+/// Upgrade each HostOS VM to the target version, and verify that each is
 /// healthy before and after the upgrade.
-pub fn upgrade_hostos(env: TestEnv) {
+pub fn upgrade_hostos(
+    env: TestEnv,
+    target_version: HostosVersion,
+    update_image_url: Url,
+    update_image_sha256: String,
+) {
     let logger = env.logger();
-
-    let starting_version = read_dependency_from_env_to_string("ENV_DEPS__IC_VERSION_FILE").unwrap();
-
-    let update_image_version = HostosVersion::try_from(format!("{starting_version}-test")).unwrap();
-    let update_image_url = get_hostos_update_img_test_url().unwrap();
-    let update_image_sha256 = get_hostos_update_img_test_sha256().unwrap();
 
     let initial_topology = env.topology_snapshot();
     start_nested_vm(env.clone());
@@ -135,10 +136,13 @@ pub fn upgrade_hostos(env: TestEnv) {
     host.await_status_is_healthy().unwrap();
 
     // Elect target HostOS version
-    info!(logger, "Electing target HostOS version '{update_image_version}' with sha256 '{update_image_sha256}' and upgrade urls: '{update_image_url}'");
+    info!(
+        logger,
+        "Electing target HostOS version '{target_version}' with sha256 '{update_image_sha256}' and upgrade urls: '{update_image_url}'"
+    );
     block_on(elect_hostos_version(
         &nns_node,
-        &update_image_version,
+        &target_version,
         &update_image_sha256,
         vec![update_image_url.to_string()],
     ));
@@ -146,11 +150,11 @@ pub fn upgrade_hostos(env: TestEnv) {
 
     info!(
         logger,
-        "Upgrading node '{}' to '{}'", node_id, update_image_version
+        "Upgrading node '{}' to '{}'", node_id, target_version
     );
     block_on(update_nodes_hostos_version(
         &nns_node,
-        &update_image_version,
+        &target_version,
         vec![node_id],
     ));
 
@@ -172,4 +176,28 @@ pub fn upgrade_hostos(env: TestEnv) {
     info!(logger, "Version found is: '{}'", new_version);
 
     assert!(new_version != original_version);
+}
+
+/// Orchestrate the HostOS upgrade by computing the `test` target version and retrieving corresponding update image info,
+/// then calling `upgrade_hostos` with these parameters.
+///
+pub fn upgrade_hostos_to_test_version(env: TestEnv) {
+    let starting_version = read_dependency_from_env_to_string("ENV_DEPS__IC_VERSION_FILE").unwrap();
+    let target_version = HostosVersion::try_from(format!("{starting_version}-test")).unwrap();
+
+    let update_image_url = get_hostos_update_img_test_url().unwrap();
+    let update_image_sha256 = get_hostos_update_img_test_sha256().unwrap();
+
+    upgrade_hostos(env, target_version, update_image_url, update_image_sha256);
+}
+
+pub fn upgrade_hostos_to_mainnet_version(env: TestEnv) {
+    // TODO: update target_version, update_image_url, and update_image_sha256 with mainnet versions
+    let starting_version = read_dependency_from_env_to_string("ENV_DEPS__IC_VERSION_FILE").unwrap();
+    let target_version = HostosVersion::try_from(format!("{starting_version}-test")).unwrap();
+
+    let update_image_url = get_hostos_update_img_test_url().unwrap();
+    let update_image_sha256 = get_hostos_update_img_test_sha256().unwrap();
+
+    upgrade_hostos(env, target_version, update_image_url, update_image_sha256);
 }
