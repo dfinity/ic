@@ -1472,6 +1472,7 @@ mod tests {
         rt_handle: tokio::runtime::Handle,
     ) -> (Arc<FakeRegistryClient>, MockTlsConfig) {
         let registry_version = 1;
+
         let data_provider = Arc::new(ProtoRegistryDataProvider::new());
 
         add_single_subnet_record(
