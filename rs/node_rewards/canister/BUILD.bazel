@@ -47,7 +47,6 @@ DEV_ENV = {
 
 LIB_SRCS = glob(
     [
-        "gen/**/*.rs",
         "src/**/*.rs",
     ],
     exclude = ["**/*tests*/**"],

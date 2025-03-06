@@ -12,7 +12,7 @@ fn canister_init(_args: InitArgs) {}
 fn pre_upgrade() {}
 
 #[post_upgrade]
-fn post_upgrade(args: Option<UpgradeArgs>) {}
+fn post_upgrade(_args: Option<UpgradeArgs>) {}
 
 #[query(hidden = true)]
 fn hello() -> String {
