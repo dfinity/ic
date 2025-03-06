@@ -350,7 +350,7 @@ enum OnLowWasmMemoryHookStatus {
   ON_LOW_WASM_MEMORY_HOOK_STATUS_EXECUTED = 3;
 }
 
-message TaskQueue{
+message TaskQueue {
   optional ExecutionTask paused_or_aborted_task = 1;
   OnLowWasmMemoryHookStatus on_low_wasm_memory_hook_status = 2;
   repeated ExecutionTask queue = 3;
@@ -447,7 +447,6 @@ message CanisterStateBits {
   optional uint64 wasm_memory_threshold = 50;
   optional OnLowWasmMemoryHookStatus on_low_wasm_memory_hook_status = 53;
 }
-
 
 message CanisterStateBitsV2 {
   reserved 1;
