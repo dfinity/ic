@@ -3461,7 +3461,7 @@ fn can_recover_from_corruption_on_state_sync() {
             std::fs::write(&canister_90_memory, b"Garbage").unwrap();
             make_readonly(&canister_90_memory).unwrap();
 
-            let canister_90_raw_pb = canister_90_layout.canister().raw_path().to_path_buf();
+            let canister_90_raw_pb = canister_90_layout.canister_v2().raw_path().to_path_buf();
             make_mutable(&canister_90_raw_pb).unwrap();
             write_all_at(&canister_90_raw_pb, b"Garbage", 0).unwrap();
             make_readonly(&canister_90_raw_pb).unwrap();
@@ -3491,7 +3491,7 @@ fn can_recover_from_corruption_on_state_sync() {
             .unwrap();
             make_readonly(&canister_100_stable_memory).unwrap();
 
-            let canister_100_raw_pb = canister_100_layout.canister().raw_path().to_path_buf();
+            let canister_100_raw_pb = canister_100_layout.canister_v2().raw_path().to_path_buf();
             make_mutable(&canister_100_raw_pb).unwrap();
             std::fs::write(&canister_100_raw_pb, b"Garbage").unwrap();
             make_readonly(&canister_100_raw_pb).unwrap();
@@ -5650,7 +5650,7 @@ fn tip_is_initialized_correctly() {
             .canister(&checkpoint_layout.canister_ids().unwrap()[0])
             .unwrap();
         assert!(!canister_layout.queues().raw_path().exists()); // empty
-        assert!(canister_layout.canister().raw_path().exists());
+        assert!(canister_layout.canister_v2().raw_path().exists());
         assert!(canister_layout.wasm().raw_path().exists());
         assert!(
             canister_layout.vmemory_0().base().exists()
