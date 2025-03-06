@@ -7,13 +7,6 @@ did_git_test(
     tags = ["manual"],  # only executed as part of candid_integration_tests
 )
 
-did_git_test(
-    name = "example_did_git_test_also_reverse",
-    did = ":example.did",
-    enable_also_reverse = True,
-    tags = ["manual"],  # only executed as part of candid_integration_tests
-)
-
 genrule(
     name = "create_new_did_file",
     srcs = [":example.did"],
