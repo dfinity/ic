@@ -1339,7 +1339,6 @@ fn http_gateway_route_underscore() {
         let invalid_url = gateway.join(invalid_suffix).unwrap().to_string();
         let error_page = client.get(invalid_url).send().unwrap();
         let page = String::from_utf8(error_page.bytes().unwrap().to_vec()).unwrap();
-        println!("{page}");
         assert!(page.contains("Canister rwlgt-iiaaa-aaaaa-aaaaa-cai not found"));
     }
 
