@@ -347,7 +347,7 @@ pub struct StateLayout {
     metrics: StateLayoutMetrics,
     tip_handler_captured: Arc<AtomicBool>,
     checkpoint_ref_registry: Arc<Mutex<BTreeMap<Height, CheckpointRefData>>>,
-    checkpoint_removal_sender: Sender<PathBuf>,
+    checkpoint_removal_sender: Sender<CheckpointRemovalRequest>,
     _checkpoint_removal_handle: Arc<JoinOnDrop<()>>,
 }
 
@@ -456,31 +456,46 @@ impl TipHandler {
     }
 }
 
-fn spawn_checkpoint_removal_thread(log: ReplicaLogger) -> (JoinOnDrop<()>, Sender<PathBuf>) {
-    let (checkpoint_removal_sender, checkpoint_removal_receiver) =  unbounded::<PathBuf>();
+enum CheckpointRemovalRequest {
+    Remove(PathBuf),
+    Wait { sender: Sender<()> },
+}
+
+fn spawn_checkpoint_removal_thread(
+    log: ReplicaLogger,
+) -> (JoinOnDrop<()>, Sender<CheckpointRemovalRequest>) {
+    let (checkpoint_removal_sender, checkpoint_removal_receiver) =
+        unbounded::<CheckpointRemovalRequest>();
     let checkpoint_removal_handle = JoinOnDrop::new(
         std::thread::Builder::new()
             .name("CheckpointRemovalThread".to_string())
             .spawn(move || {
-                while let Ok(path) = checkpoint_removal_receiver.recv() {
-                    info!(
-                        log,
-                        "CheckpointRemovalThread start removing checkpoint: {}",
-                        path.display(),
-                    );
-                    let start_bg = Instant::now();
-                    if let Err(err) = std::fs::remove_dir_all(&path) {
-                        error!(
-                            log,
-                            "Failed to remove checkpoint directory. Error: {}.", err
-                        )
+                while let Ok(req) = checkpoint_removal_receiver.recv() {
+                    match req {
+                        CheckpointRemovalRequest::Remove(path) => {
+                            info!(
+                                log,
+                                "CheckpointRemovalThread start removing checkpoint: {}",
+                                path.display(),
+                            );
+                            let start_bg = Instant::now();
+                            if let Err(err) = std::fs::remove_dir_all(&path) {
+                                error!(
+                                    log,
+                                    "Failed to remove checkpoint directory. Error: {}.", err
+                                )
+                            }
+                            info!(
+                                log,
+                                "CheckpointRemovalThread Async Removed checkpoint files {} in {:?}",
+                                path.display(),
+                                start_bg.elapsed()
+                            );
+                        }
+                        CheckpointRemovalRequest::Wait { sender } => {
+                            sender.send(()).expect("Failed to send completion signal");
+                        }
                     }
-                    info!(
-                        log,
-                        "CheckpointRemovalThread Async Removed checkpoint files {} in {:?}",
-                        path.display(),
-                        start_bg.elapsed()
-                    );
                 }
             })
             .expect("failed to checkpoint removal thread"),
@@ -968,7 +983,7 @@ impl StateLayout {
             "Async Renamed checkpoint @{} in {:?}", height, elapsed
         );
         self.checkpoint_removal_sender
-            .send(tmp_path)
+            .send(CheckpointRemovalRequest::Remove(tmp_path))
             .expect("failed to send checkpoint removal");
         self.metrics
             .state_layout_remove_checkpoint_duration
@@ -987,6 +1002,7 @@ impl StateLayout {
             self.remove_checkpoint_async(height, drop_after_rename)
         }
     }
+
     fn remove_checkpoint_sync<T>(
         &self,
         height: Height,
