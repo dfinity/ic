@@ -311,7 +311,7 @@ pub fn modify_wasm_bytes(wasm_bytes: &[u8], modify_with: u32) -> Vec<u8> {
 }
 
 // NOTE, keep the functions for building wasms in the same order as the constants in
-// rs/nns/constants/src/lib.rs
+// rs/nns/constants/src/lib.rs.  Only the first ledger archive is represented in the ordering.
 
 // REGISTRY
 
