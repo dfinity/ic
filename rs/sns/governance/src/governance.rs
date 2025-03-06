@@ -3490,7 +3490,6 @@ impl Governance {
         let proposal_id = ProposalId { id: proposal_num };
 
         let proposal_topic = self
-            .proto
             .get_topic_for_action(action)
             .map_err(|err| GovernanceError::new_with_message(ErrorType::InvalidProposal, err))?;
 
@@ -6071,6 +6070,9 @@ mod fail_stuck_upgrade_in_progress_tests;
 
 #[cfg(test)]
 mod advance_target_sns_version_tests;
+
+#[cfg(test)]
+mod proposal_topics_tests;
 
 #[cfg(test)]
 mod test_helpers;
