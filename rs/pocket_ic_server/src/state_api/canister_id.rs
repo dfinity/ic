@@ -143,13 +143,18 @@ impl OptionalFromRequestParts<DomainResolver> for QueryParam {
         parts: &mut Parts,
         _resolver: &DomainResolver,
     ) -> Result<Option<Self>, Self::Rejection> {
-        const NO_PARAM: &str = "'canisterId' query parameter not found";
         const BAD_PARAM: &str = "'canisterId' failed to parse: Invalid Principal";
 
-        let (_, canister_id) =
-            form_urlencoded::parse(parts.uri.query().ok_or(NO_PARAM)?.as_bytes())
-                .find(|(name, _)| name == "canisterId")
-                .ok_or(NO_PARAM)?;
+        let Some(query) = parts.uri.query() else {
+            return Ok(None);
+        };
+
+        let Some(canister_id) = form_urlencoded::parse(query.as_bytes())
+            .find(|(name, _)| name == "canisterId")
+            .map(|(_, v)| v)
+        else {
+            return Ok(None);
+        };
 
         Principal::from_text(canister_id.as_ref())
             .map(|x| Some(QueryParam(x)))
@@ -182,22 +187,28 @@ impl OptionalFromRequestParts<DomainResolver> for HostHeader {
         parts: &mut Parts,
         resolver: &DomainResolver,
     ) -> Result<Option<Self>, Self::Rejection> {
-        const NO_HOST: &str = "No host in headers";
         const BAD_HOST: &str = "Host header did not contain a canister id or alias";
 
-        let host = parts.headers.get(HOST).ok_or(NO_HOST)?;
+        let Some(host) = parts.headers.get(HOST) else {
+            return Ok(None);
+        };
         let host = host.to_str().map_err(|_| BAD_HOST)?;
+
         // Remove the port
         let host = host
             .rsplit_once(':')
             .map(|(host, _port)| host)
             .unwrap_or(host);
-        resolver
+
+        let Some(id) = resolver
             .resolve_domain(&fqdn!(host))
             .map(|d| d.canister_id)
-            .ok_or(BAD_HOST)?
-            .ok_or(BAD_HOST)
-            .map(|x| Some(HostHeader(x)))
+            .flatten()
+        else {
+            return Ok(None);
+        };
+
+        Ok(Some(HostHeader(id)))
     }
 }
 
@@ -226,19 +237,27 @@ impl OptionalFromRequestParts<DomainResolver> for RefererHeaderHost {
         parts: &mut Parts,
         resolver: &DomainResolver,
     ) -> Result<Option<Self>, Self::Rejection> {
-        const NO_REFERER: &str = "No referer in headers";
         const BAD_REFERER: &str = "Referer header did not contain a canister id or alias";
 
-        let referer = parts.headers.get(REFERER).ok_or(NO_REFERER)?;
+        let Some(referer) = parts.headers.get(REFERER) else {
+            return Ok(None);
+        };
         let referer = referer.to_str().map_err(|_| BAD_REFERER)?;
         let referer: Uri = referer.parse().map_err(|_| BAD_REFERER)?;
-        let referer = referer.authority().ok_or(BAD_REFERER)?;
-        resolver
+
+        let Some(referer) = referer.authority() else {
+            return Ok(None);
+        };
+
+        let Some(id) = resolver
             .resolve_domain(&fqdn!(referer.host()))
             .map(|d| d.canister_id)
-            .ok_or(BAD_REFERER)?
-            .ok_or(BAD_REFERER)
-            .map(|x| Some(RefererHeaderHost(x)))
+            .flatten()
+        else {
+            return Ok(None);
+        };
+
+        Ok(Some(RefererHeaderHost(id)))
     }
 }
 
@@ -267,17 +286,25 @@ impl OptionalFromRequestParts<DomainResolver> for RefererHeaderQueryParam {
         parts: &mut Parts,
         _resolver: &DomainResolver,
     ) -> Result<Option<Self>, Self::Rejection> {
-        const NO_REFERER: &str = "No referer in headers";
         const BAD_REFERER: &str = "Referer header did not contain a canister id or alias";
-        const NO_PARAM: &str = "'canisterId' query parameter not found";
         const BAD_PARAM: &str = "'canisterId' failed to parse: Invalid Principal";
 
-        let referer = parts.headers.get(REFERER).ok_or(NO_REFERER)?;
+        let Some(referer) = parts.headers.get(REFERER) else {
+            return Ok(None);
+        };
         let referer = referer.to_str().map_err(|_| BAD_REFERER)?;
         let referer: Uri = referer.parse().map_err(|_| BAD_REFERER)?;
-        let (_, canister_id) = form_urlencoded::parse(referer.query().ok_or(NO_PARAM)?.as_bytes())
+
+        let Some(query) = referer.query() else {
+            return Ok(None);
+        };
+
+        let Some(canister_id) = form_urlencoded::parse(query.as_bytes())
             .find(|(name, _)| name == "canisterId")
-            .ok_or(NO_PARAM)?;
+            .map(|(_, v)| v)
+        else {
+            return Ok(None);
+        };
 
         Principal::from_text(canister_id.as_ref())
             .map(|x| Some(RefererHeaderQueryParam(x)))
