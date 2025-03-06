@@ -505,7 +505,12 @@ mod test {
 
     #[test]
     fn test_setup_router() {
-        let args = vec!["", "--domain", "ic0.app"];
+        let args = vec![
+            "",
+            "--domain",
+            "ic0.app",
+            "--domain-canister-id-from-query-params",
+        ];
         let cli = Cli::parse_from(args);
 
         rustls::crypto::ring::default_provider()
