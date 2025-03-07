@@ -2,7 +2,7 @@ use candid::{candid_method, Nat, Principal};
 use dfn_candid::candid_one;
 #[cfg(feature = "notify-method")]
 use dfn_candid::CandidOne;
-use dfn_core::endpoint::reject_on_decode_error::{over, over_async, over_async_may_reject};
+use dfn_core::endpoint::reject_on_decode_error::{over, over_async_may_reject};
 #[allow(unused_imports)]
 use dfn_core::BytesS;
 use dfn_protobuf::protobuf;
@@ -31,16 +31,17 @@ use ic_ledger_core::{
 };
 use ic_stable_structures::reader::{BufferedReader, Reader};
 use ic_stable_structures::writer::{BufferedWriter, Writer};
+use icp_ledger::validate_endpoints::{from_proto_bytes, to_proto_bytes};
 #[cfg(feature = "icp-allowance-getter")]
 use icp_ledger::IcpAllowanceArgs;
 use icp_ledger::{
     max_blocks_per_request, protobuf, tokens_into_proto, AccountBalanceArgs, AccountIdBlob,
     AccountIdentifier, AccountIdentifierByteBuf, ArchiveInfo, ArchivedBlocksRange,
-    ArchivedEncodedBlocksRange, Archives, BinaryAccountBalanceArgs, Block, BlockArg, BlockRes,
-    CandidBlock, Decimals, FeatureFlags, GetBlocksArgs, IterBlocksArgs, IterBlocksRes,
-    LedgerCanisterPayload, Memo, Name, Operation, PaymentError, QueryBlocksResponse,
-    QueryEncodedBlocksResponse, SendArgs, Subaccount, Symbol, TipOfChainRes, TotalSupplyArgs,
-    Transaction, TransferArgs, TransferError, TransferFee, TransferFeeArgs, MEMO_SIZE_BYTES,
+    ArchivedEncodedBlocksRange, Archives, BinaryAccountBalanceArgs, Block, BlockArg, CandidBlock,
+    Decimals, FeatureFlags, GetBlocksArgs, IterBlocksArgs, IterBlocksRes, LedgerCanisterPayload,
+    Memo, Name, Operation, PaymentError, QueryBlocksResponse, QueryEncodedBlocksResponse, SendArgs,
+    Subaccount, Symbol, TipOfChainRes, TotalSupplyArgs, Transaction, TransferArgs, TransferError,
+    TransferFee, TransferFeeArgs, MEMO_SIZE_BYTES,
 };
 use icrc_ledger_types::icrc1::transfer::TransferError as Icrc1TransferError;
 use icrc_ledger_types::icrc2::allowance::{Allowance, AllowanceArgs};
@@ -400,8 +401,7 @@ pub async fn notify(
     to_subaccount: Option<Subaccount>,
     notify_using_protobuf: bool,
 ) -> Result<BytesS, String> {
-    use dfn_core::api::{call_bytes_with_cleanup, call_with_cleanup, Funds};
-    use dfn_protobuf::ProtoBuf;
+    use dfn_core::api::{call_bytes_with_cleanup, Funds};
 
     NOTIFY_METHOD_CALLS.with(|n| *n.borrow_mut() += 1);
 
@@ -436,12 +436,13 @@ pub async fn notify(
                     "Searching canister {} for block {}",
                     cid, block_height
                 ));
-                // Lookup the block on the archive
-                let BlockRes(res) = call_with_cleanup(cid, "get_block_pb", protobuf, block_height)
-                    .await
-                    .map_err(|e| format!("Failed to fetch block {}", e.1))?;
-                res.ok_or("Block not found")?
-                    .map_err(|c| format!("Tried to redirect lookup a second time to {}", c))?
+                // // Lookup the block on the archive
+                // let BlockRes(res) = call_with_cleanup(cid, "get_block_pb", protobuf, block_height)
+                //     .await
+                //     .map_err(|e| format!("Failed to fetch block {}", e.1))?;
+                // res.ok_or("Block not found")?
+                //     .map_err(|c| format!("Tried to redirect lookup a second time to {}", c))?
+                return Err("not implemented".to_string());
             }
         };
 
@@ -491,16 +492,17 @@ pub async fn notify(
     add_payment(Memo(block_height), transfer, None);
 
     let response = if notify_using_protobuf {
-        let bytes = ProtoBuf(transaction_notification_args)
-            .into_bytes()
-            .expect("transaction notification serialization failed");
-        call_bytes_with_cleanup(
-            to_canister,
-            "transaction_notification_pb",
-            &bytes[..],
-            Funds::zero(),
-        )
-        .await
+        // let bytes = ProtoBuf(transaction_notification_args)
+        //     .into_bytes()
+        //     .expect("transaction notification serialization failed");
+        // call_bytes_with_cleanup(
+        //     to_canister,
+        //     "transaction_notification_pb",
+        //     &bytes[..],
+        //     Funds::zero(),
+        // )
+        // .await
+        return Err("not implemented".to_string());
     } else {
         let bytes = candid::encode_one(transaction_notification_args)
             .expect("transaction notification serialization failed");
@@ -658,15 +660,11 @@ fn icrc1_fee() -> Nat {
 #[export_name = "canister_query total_supply_pb"]
 fn total_supply() {
     let input = ic_cdk::api::call::arg_data_raw();
-
     ic_cdk::setup();
-    let _ = TotalSupplyArgs::decode(&input[..]).expect("Could not decode TotalSupplyArgs");
+    let _: TotalSupplyArgs = from_proto_bytes(input);
     let res = tokens_into_proto(LEDGER.read().unwrap().balances().total_supply());
-    let mut buf = Vec::with_capacity(res.encoded_len());
-    res.encode(&mut buf)
-        .map_err(|e| e.to_string())
-        .expect("Could not encode response");
-    ic_cdk::api::call::reply_raw(&buf)
+    let res_proto = to_proto_bytes(res);
+    ic_cdk::api::call::reply_raw(&res_proto)
 }
 
 #[query]
@@ -952,21 +950,24 @@ impl LedgerAccess for Access {
 #[export_name = "canister_update send_pb"]
 fn send_() {
     panic_if_not_ready();
-    over_async(
-        protobuf,
-        |SendArgs {
-             memo,
-             amount,
-             fee,
-             from_subaccount,
-             to,
-             created_at_time,
-         }| async move {
-            send(memo, amount, fee, from_subaccount, to, created_at_time)
-                .await
-                .unwrap_or_else(|e| trap(&e.to_string()))
-        },
-    );
+
+    let input = ic_cdk::api::call::arg_data_raw();
+    ic_cdk::spawn(async move {
+        ic_cdk::setup();
+        let args: SendArgs = from_proto_bytes(input);
+        let res = send(
+            args.memo,
+            args.amount,
+            args.fee,
+            args.from_subaccount,
+            args.to,
+            args.created_at_time,
+        )
+        .await
+        .unwrap_or_else(|e| trap(&e.to_string()));
+        let res_proto = to_proto_bytes(res);
+        ic_cdk::api::call::reply_raw(&res_proto)
+    })
 }
 
 /// Do not use call this from code, this is only here so dfx has something to
@@ -988,30 +989,25 @@ async fn send_dfx(arg: SendArgs) -> BlockIndex {
 #[cfg(feature = "notify-method")]
 #[export_name = "canister_update notify_pb"]
 fn notify_() {
-    use dfn_core::endpoint::over_async_may_reject_explicit;
-    use dfn_protobuf::ProtoBuf;
-
-    // we use over_init because it doesn't reply automatically so we can do explicit
-    // replies in the callback
-    over_async_may_reject_explicit(
-        |ProtoBuf(icp_ledger::NotifyCanisterArgs {
-             block_height,
-             max_fee,
-             from_subaccount,
-             to_canister,
-             to_subaccount,
-         })| async move {
+    let input = ic_cdk::api::call::arg_data_raw();
+    ic_cdk::spawn(async move {
+        ic_cdk::setup();
+        let args: icp_ledger::NotifyCanisterArgs = from_proto_bytes(input);
+        ic_cdk::api::call::reply_raw(
             notify(
-                block_height,
-                max_fee,
-                from_subaccount,
-                to_canister,
-                to_subaccount,
+                args.block_height,
+                args.max_fee,
+                args.from_subaccount,
+                args.to_canister,
+                args.to_subaccount,
                 true,
             )
             .await
-        },
-    );
+            .expect("notify failed")
+            .0
+            .as_slice(),
+        )
+    })
 }
 
 #[update(name = "transfer")]
@@ -1157,22 +1153,21 @@ fn notify_dfx_() {
 
 #[export_name = "canister_query block_pb"]
 fn block_() {
-    over(protobuf, |BlockArg(height)| BlockRes(block(height)));
+    let input = ic_cdk::api::call::arg_data_raw();
+    ic_cdk::setup();
+    let arg: BlockArg = from_proto_bytes(input);
+    let res = to_proto_bytes(icp_ledger::BlockRes(block(arg.0)));
+    ic_cdk::api::call::reply_raw(&res)
 }
 
 #[export_name = "canister_query tip_of_chain_pb"]
 fn tip_of_chain_() {
     let input = ic_cdk::api::call::arg_data_raw();
-
     ic_cdk::setup();
-    let _ =
-        protobuf::TipOfChainRequest::decode(&input[..]).expect("Could not decode TotalSupplyArgs");
-    let res = tip_of_chain();
-    let mut buf = Vec::with_capacity(res.encoded_len());
-    res.encode(&mut buf)
-        .map_err(|e| e.to_string())
-        .expect("Could not encode response");
-    ic_cdk::api::call::reply_raw(&buf)
+    let _ = protobuf::TipOfChainRequest::decode(&input[..])
+        .expect("Could not decode TipOfChainRequest");
+    let res = to_proto_bytes(tip_of_chain());
+    ic_cdk::api::call::reply_raw(&res)
 }
 
 #[export_name = "canister_query get_archive_index_pb"]
@@ -1205,9 +1200,12 @@ fn get_archive_index_() {
 
 #[export_name = "canister_query account_balance_pb"]
 fn account_balance_() {
-    over(protobuf, |AccountBalanceArgs { account }| {
-        tokens_into_proto(account_balance(account))
-    })
+    let input = ic_cdk::api::call::arg_data_raw();
+    ic_cdk::setup();
+    let args: AccountBalanceArgs = from_proto_bytes(input);
+    let res = tokens_into_proto(account_balance(args.account));
+    let res_proto = to_proto_bytes(res);
+    ic_cdk::api::call::reply_raw(&res_proto)
 }
 
 #[query(name = "account_balance")]
@@ -1239,7 +1237,12 @@ fn compute_account_identifier(arg: Account) -> AccountIdBlob {
 
 #[export_name = "canister_query transfer_fee_pb"]
 fn transfer_fee_() {
-    over(protobuf, transfer_fee)
+    let input = ic_cdk::api::call::arg_data_raw();
+    ic_cdk::setup();
+    let args: TransferFeeArgs = from_proto_bytes(input);
+    let fee = transfer_fee(args);
+    let res = to_proto_bytes(fee);
+    ic_cdk::api::call::reply_raw(&res)
 }
 
 /// Get multiple blocks by *offset into the container* (not BlockIndex) and
@@ -1249,33 +1252,41 @@ fn transfer_fee_() {
 /// with height 100.
 #[export_name = "canister_query iter_blocks_pb"]
 fn iter_blocks_() {
-    over(protobuf, |IterBlocksArgs { start, length }| {
-        let length =
-            std::cmp::min(length, max_blocks_per_request(&PrincipalId::from(caller()))) as u64;
-        let start = start as u64;
-        let blocks = LEDGER
-            .read()
-            .unwrap()
-            .blockchain
-            .blocks
-            .get_blocks(start..start + length);
-        IterBlocksRes(blocks)
-    });
+    let input = ic_cdk::api::call::arg_data_raw();
+    ic_cdk::setup();
+    let args: IterBlocksArgs = from_proto_bytes(input);
+    let length = std::cmp::min(
+        args.length as usize,
+        max_blocks_per_request(&PrincipalId::from(caller())),
+    ) as u64;
+    let start = args.start as u64;
+    let blocks = LEDGER
+        .read()
+        .unwrap()
+        .blockchain
+        .blocks
+        .get_blocks(start..start + length);
+    let res = to_proto_bytes(IterBlocksRes(blocks));
+    ic_cdk::api::call::reply_raw(&res)
 }
 
 /// Get multiple blocks by BlockIndex and length. If the query is outside the
 /// range stored in the Node the result is an error.
 #[export_name = "canister_query get_blocks_pb"]
 fn get_blocks_() {
-    over(protobuf, |GetBlocksArgs { start, length }| {
-        let length = std::cmp::min(
-            length,
-            max_blocks_per_request(&PrincipalId::from(caller())) as u64,
-        );
-        let blockchain = &LEDGER.read().unwrap().blockchain;
-        let start_offset = blockchain.num_archived_blocks();
-        icp_ledger::get_blocks_ledger(&blockchain.blocks, start_offset, start, length as usize)
-    });
+    let input = ic_cdk::api::call::arg_data_raw();
+    ic_cdk::setup();
+    let args: GetBlocksArgs = from_proto_bytes(input);
+    let start = args.start;
+    let length = std::cmp::min(
+        args.length,
+        max_blocks_per_request(&PrincipalId::from(caller())) as u64,
+    );
+    let blockchain = &LEDGER.read().unwrap().blockchain;
+    let start_offset = blockchain.num_archived_blocks();
+    let res =
+        icp_ledger::get_blocks_ledger(&blockchain.blocks, start_offset, start, length as usize);
+    ic_cdk::api::call::reply_raw(&to_proto_bytes(res))
 }
 
 #[query]

@@ -2,15 +2,16 @@ use candid::candid_method;
 use dfn_candid::candid_one;
 use dfn_core::api::{caller, print, stable_memory_size_in_pages};
 use dfn_core::{over_init, stable, BytesS};
-use dfn_protobuf::protobuf;
 use ic_ledger_canister_core::range_utils;
 use ic_ledger_canister_core::runtime::heap_memory_size_bytes;
 use ic_ledger_core::block::{BlockIndex, BlockType, EncodedBlock};
 use ic_metrics_encoder::MetricsEncoder;
+use icp_ledger::validate_endpoints::from_proto_bytes;
 use icp_ledger::{
-    Block, BlockRange, BlockRes, CandidBlock, GetBlocksArgs, GetBlocksError, GetBlocksResult,
-    GetEncodedBlocksResult, IterBlocksArgs,
+    validate_endpoints::to_proto_bytes, Block, BlockRange, BlockRes, CandidBlock, GetBlocksArgs,
+    GetBlocksError, GetBlocksResult, GetEncodedBlocksResult,
 };
+use icp_ledger::{BlockArg, IterBlocksArgs};
 use serde::{Deserialize, Serialize};
 use std::sync::RwLock;
 
@@ -131,7 +132,11 @@ fn get_block(block_height: BlockIndex) -> BlockRes {
 
 #[export_name = "canister_query get_block_pb"]
 fn get_block_() {
-    dfn_core::over(protobuf, get_block);
+    let input = ic_cdk::api::call::arg_data_raw();
+    ic_cdk::setup();
+    let arg: BlockArg = from_proto_bytes(input);
+    let res = to_proto_bytes(get_block(arg.0));
+    ic_cdk::api::call::reply_raw(&res)
 }
 
 #[export_name = "canister_init"]
@@ -161,28 +166,35 @@ fn append_blocks_() {
 /// 100.
 #[export_name = "canister_query iter_blocks_pb"]
 fn iter_blocks_() {
-    dfn_core::over(protobuf, |IterBlocksArgs { start, length }| {
-        let archive_state = ARCHIVE_STATE.read().unwrap();
-        let blocks = &archive_state.blocks;
-        let length = length.min(icp_ledger::max_blocks_per_request(&caller()));
-        icp_ledger::iter_blocks(blocks, start, length)
-    });
+    let input = ic_cdk::api::call::arg_data_raw();
+    ic_cdk::setup();
+    let args: IterBlocksArgs = from_proto_bytes(input);
+    let archive_state = ARCHIVE_STATE.read().unwrap();
+    let blocks = &archive_state.blocks;
+    let start = args.start as usize;
+    let length = args.length as usize;
+    let length = length.min(icp_ledger::max_blocks_per_request(&caller()));
+    let res = to_proto_bytes(icp_ledger::iter_blocks(blocks, start, length));
+    ic_cdk::api::call::reply_raw(&res)
 }
 
 /// Get multiple Blocks by BlockIndex and length. If the query is outside the
 /// range stored in the Node the result is an error.
 #[export_name = "canister_query get_blocks_pb"]
 fn get_blocks_() {
-    dfn_core::over(protobuf, |GetBlocksArgs { start, length }| {
-        let archive_state = ARCHIVE_STATE.read().unwrap();
-        let blocks = &archive_state.blocks;
-        let from_offset = archive_state.block_height_offset;
-        let length = length
-            .min(usize::MAX as u64)
-            .min(icp_ledger::max_blocks_per_request(&caller()) as u64)
-            as usize;
-        icp_ledger::get_blocks(blocks, from_offset, start, length)
-    });
+    let input = ic_cdk::api::call::arg_data_raw();
+    ic_cdk::setup();
+    let args: GetBlocksArgs = from_proto_bytes(input);
+    let start = args.start;
+    let length = args.length;
+    let archive_state = ARCHIVE_STATE.read().unwrap();
+    let blocks = &archive_state.blocks;
+    let from_offset = archive_state.block_height_offset;
+    let length = length
+        .min(usize::MAX as u64)
+        .min(icp_ledger::max_blocks_per_request(&caller()) as u64) as usize;
+    let res = to_proto_bytes(icp_ledger::get_blocks(blocks, from_offset, start, length));
+    ic_cdk::api::call::reply_raw(&res)
 }
 
 #[candid_method(query, rename = "get_blocks")]

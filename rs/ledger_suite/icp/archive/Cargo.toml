@@ -21,6 +21,7 @@ ic-metrics-encoder = "1"
 ic-nns-constants = { path = "../../../nns/constants" }
 icp-ledger = { path = "../" }
 lazy_static = { workspace = true }
+prost = { workspace = true }
 serde = { workspace = true }
 
 [dev-dependencies]

@@ -22,7 +22,7 @@ lazy_static! {
 
 #[export_name = "canister_update transaction_notification_pb"]
 fn transaction_notification_pb_() {
-    over_may_reject(protobuf, transaction_notification)
+    // over_may_reject(protobuf, transaction_notification)
 }
 
 #[export_name = "canister_update transaction_notification"]

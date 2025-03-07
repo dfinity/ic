@@ -153,6 +153,7 @@ rust_ic_test(
         "@crate_index//:hex",
         "@crate_index//:ic-agent",
         "@crate_index//:num-traits",
+        "@crate_index//:prost",
         "@crate_index//:serde_bytes",
     ],
 )

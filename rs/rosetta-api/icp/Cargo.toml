@@ -37,6 +37,7 @@ lazy_static = { workspace = true }
 num-bigint = { workspace = true }
 on_wire = { path = "../../rust_canisters/on_wire" }
 prometheus = { workspace = true }
+prost = { workspace = true }
 rand = { workspace = true }
 registry-canister = { path = "../../registry/canister" }
 reqwest = { workspace = true }
@@ -78,7 +79,6 @@ ic-icrc1-tokens-u256 = { path = "../../ledger_suite/icrc1/tokens_u256" }
 ic-nns-test-utils = { path = "../../nns/test_utils" }
 ic-nns-governance-init = { path = "../../nns/governance/init" }
 ic-nns-handler-root = { path = "../../nns/handlers/root/impl" }
-prost = { workspace = true }
 
 [features]
 rosetta-blocks = []

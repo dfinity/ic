@@ -20,6 +20,7 @@ ic-ledger-hash-of = { path = "../../../../packages/ic-ledger-hash-of" }
 ic-types = { path = "../../../types/types" }
 icp-ledger = { path = "../../../ledger_suite/icp" }
 on_wire = { path = "../../../rust_canisters/on_wire" }
+prost = { workspace = true }
 reqwest = { workspace = true }
 rusqlite = { version = "~0.28.0", features = ["bundled"] }
 serde = { workspace = true }

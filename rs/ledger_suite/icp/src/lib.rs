@@ -1,5 +1,4 @@
 use candid::CandidType;
-use dfn_protobuf::ProtoBuf;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_crypto_sha2::Sha256;
 pub use ic_ledger_canister_core::archive::ArchiveOptions;
@@ -14,7 +13,6 @@ use ic_ledger_core::{
 use ic_ledger_hash_of::HashOf;
 use ic_ledger_hash_of::HASH_LENGTH;
 use icrc_ledger_types::icrc1::account::Account;
-use on_wire::{FromWire, IntoWire};
 use serde::{Deserialize, Serialize};
 use serde_bytes::ByteBuf;
 use std::collections::{HashMap, HashSet};
@@ -24,6 +22,7 @@ use std::ops::Range;
 use std::time::Duration;
 use std::{borrow::Cow, collections::BTreeMap};
 use strum_macros::IntoStaticStr;
+use validate_endpoints::{from_proto_bytes_res, to_proto_bytes};
 
 pub use ic_ledger_core::{
     block::BlockIndex,
@@ -35,7 +34,7 @@ pub mod account_identifier;
 #[allow(clippy::all)]
 #[path = "gen/ic_ledger.pb.v1.rs"]
 pub mod protobuf;
-mod validate_endpoints;
+pub mod validate_endpoints;
 pub use account_identifier::{AccountIdentifier, Subaccount};
 pub use validate_endpoints::{tokens_from_proto, tokens_into_proto};
 
@@ -386,15 +385,12 @@ impl BlockType for Block {
     type Tokens = Tokens;
 
     fn encode(self) -> EncodedBlock {
-        EncodedBlock::from_vec(
-            ProtoBuf::new(self)
-                .into_bytes()
-                .expect("unreachable: failed to encode a block"),
-        )
+        EncodedBlock::from_vec(to_proto_bytes(self))
     }
 
     fn decode(encoded_block: EncodedBlock) -> Result<Self, String> {
-        Ok(ProtoBuf::from_bytes(encoded_block.into_vec())?.get())
+        let block: Block = from_proto_bytes_res(encoded_block.into_vec())?;
+        Ok(block)
     }
 
     fn block_hash(encoded_block: &EncodedBlock) -> HashOf<EncodedBlock> {
@@ -1056,7 +1052,7 @@ pub struct TransferFeeArgs {}
 /// to query past values. Requiring 1 candid value instead of zero is a
 /// non-backward compatible change. But adding optional fields to a struct taken
 /// as input is backward-compatible.
-#[derive(Clone, Eq, PartialEq, Hash, CandidType, Deserialize, Serialize, ::prost::Message)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, CandidType, Deserialize, Serialize)]
 pub struct TotalSupplyArgs {}
 
 #[derive(Clone, Eq, PartialEq, Hash, Debug, CandidType, Deserialize, Serialize)]
@@ -1085,11 +1081,8 @@ pub struct Archives {
 }
 
 /// Argument returned by the tip_of_chain endpoint
-#[derive(::prost::Message)]
 pub struct TipOfChainRes {
-    #[prost(message, optional, tag = "1")]
     pub certification: Option<Vec<u8>>,
-    #[prost(uint64, tag = "2")]
     pub tip_index: BlockIndex,
 }
 

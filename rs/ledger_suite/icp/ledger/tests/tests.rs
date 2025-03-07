@@ -1,7 +1,6 @@
 use candid::Principal;
 use candid::{Decode, Encode, Nat};
 use dfn_candid::CandidOne;
-use dfn_protobuf::ProtoBuf;
 use ic_agent::identity::Identity;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_icrc1_test_utils::minter_identity;
@@ -13,6 +12,7 @@ use ic_ledger_suite_state_machine_tests::{
     AllowanceProvider, FEE, MINTER,
 };
 use ic_state_machine_tests::{ErrorCode, StateMachine, UserError};
+use icp_ledger::validate_endpoints::{from_proto_bytes, to_proto_bytes};
 use icp_ledger::{
     AccountIdBlob, AccountIdentifier, AccountIdentifierByteBuf, ArchiveOptions,
     ArchivedBlocksRange, Block, CandidBlock, CandidOperation, CandidTransaction, FeatureFlags,
@@ -29,7 +29,7 @@ use icrc_ledger_types::icrc1::{
 use icrc_ledger_types::icrc2::allowance::{Allowance, AllowanceArgs};
 use icrc_ledger_types::icrc2::approve::ApproveArgs;
 use num_traits::cast::ToPrimitive;
-use on_wire::{FromWire, IntoWire};
+use on_wire::IntoWire;
 use serde_bytes::ByteBuf;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -165,16 +165,14 @@ fn get_blocks_pb(
             PrincipalId(caller),
             ledger,
             "get_blocks_pb",
-            ProtoBuf(GetBlocksArgs {
+            to_proto_bytes(GetBlocksArgs {
                 start,
                 length: length as u64,
-            })
-            .into_bytes()
-            .unwrap(),
+            }),
         )
         .expect("failed to query blocks")
         .bytes();
-    let result: GetBlocksRes = ProtoBuf::from_bytes(bytes).map(|c| c.0).unwrap();
+    let result: GetBlocksRes = from_proto_bytes(bytes);
     result
 }
 
@@ -190,13 +188,11 @@ fn iter_blocks_pb(
             PrincipalId(caller),
             ledger,
             "iter_blocks_pb",
-            ProtoBuf(IterBlocksArgs { start, length })
-                .into_bytes()
-                .unwrap(),
+            to_proto_bytes(IterBlocksArgs { start, length }),
         )
         .expect("failed to query blocks")
         .bytes();
-    let result: IterBlocksRes = ProtoBuf::from_bytes(bytes).map(|c| c.0).unwrap();
+    let result: IterBlocksRes = from_proto_bytes(bytes);
     result
 }
 
@@ -785,12 +781,10 @@ fn check_block_endpoint_limits() {
     assert_eq!(query.blocks.len(), MAX_BLOCKS_PER_REQUEST);
 
     // get_blocks_pb
-    let get_blocks_pb_args = ProtoBuf(GetBlocksArgs {
+    let get_blocks_pb_args = to_proto_bytes(GetBlocksArgs {
         start: 0,
         length: (MAX_BLOCKS_PER_REQUEST + 1) as u64,
-    })
-    .into_bytes()
-    .unwrap();
+    });
 
     let ingress_update = get_blocks_pb(
         &env,
@@ -806,7 +800,7 @@ fn check_block_endpoint_limits() {
         0,
         MAX_BLOCKS_PER_REQUEST + 1,
     );
-    let query: GetBlocksRes = ProtoBuf::from_bytes(
+    let query: GetBlocksRes = from_proto_bytes(
         env.query_as(
             user_principal.into(),
             canister_id,
@@ -815,9 +809,7 @@ fn check_block_endpoint_limits() {
         )
         .expect("query failed")
         .bytes(),
-    )
-    .map(|c| c.0)
-    .unwrap();
+    );
 
     assert_eq!(
         ingress_update.0.expect("failed to get blocks").len(),
@@ -833,13 +825,10 @@ fn check_block_endpoint_limits() {
     );
 
     // iter_blocks_pb
-    let iter_blocks_pb_args = ProtoBuf(IterBlocksArgs {
+    let iter_blocks_pb_args = to_proto_bytes(IterBlocksArgs {
         start: 0,
         length: MAX_BLOCKS_PER_REQUEST + 1,
-    })
-    .into_bytes()
-    .unwrap();
-
+    });
     let ingress_update = iter_blocks_pb(
         &env,
         user_principal,
@@ -854,7 +843,7 @@ fn check_block_endpoint_limits() {
         0,
         MAX_BLOCKS_PER_REQUEST + 1,
     );
-    let query: IterBlocksRes = ProtoBuf::from_bytes(
+    let query: IterBlocksRes = from_proto_bytes(
         env.query_as(
             user_principal.into(),
             canister_id,
@@ -863,9 +852,7 @@ fn check_block_endpoint_limits() {
         )
         .expect("query failed")
         .bytes(),
-    )
-    .map(|c| c.0)
-    .unwrap();
+    );
 
     assert_eq!(
         ingress_update.0.len(),
@@ -1032,12 +1019,10 @@ fn check_archive_block_endpoint_limits() {
     assert_eq!(query_blocks_len, MAX_BLOCKS_PER_REQUEST);
 
     // get_blocks_pb
-    let get_blocks_pb_args = ProtoBuf(GetBlocksArgs {
+    let get_blocks_pb_args = to_proto_bytes(GetBlocksArgs {
         start: 0,
         length: (MAX_BLOCKS_PER_REQUEST + 1) as u64,
-    })
-    .into_bytes()
-    .unwrap();
+    });
 
     let ingress_update = get_blocks_pb(
         &env,
@@ -1053,7 +1038,7 @@ fn check_archive_block_endpoint_limits() {
         0,
         MAX_BLOCKS_PER_REQUEST + 1,
     );
-    let query: GetBlocksRes = ProtoBuf::from_bytes(
+    let query: GetBlocksRes = from_proto_bytes(
         env.query_as(
             user_principal.into(),
             CanisterId::unchecked_from_principal(callback.canister_id.into()),
@@ -1062,9 +1047,7 @@ fn check_archive_block_endpoint_limits() {
         )
         .expect("query failed")
         .bytes(),
-    )
-    .map(|c| c.0)
-    .unwrap();
+    );
 
     assert_eq!(
         ingress_update.0.expect("failed to get blocks").len(),
@@ -1080,12 +1063,10 @@ fn check_archive_block_endpoint_limits() {
     );
 
     // iter_blocks_pb
-    let iter_blocks_pb_args = ProtoBuf(IterBlocksArgs {
+    let iter_blocks_pb_args = to_proto_bytes(IterBlocksArgs {
         start: 0,
         length: MAX_BLOCKS_PER_REQUEST + 1,
-    })
-    .into_bytes()
-    .unwrap();
+    });
 
     let ingress_update = iter_blocks_pb(
         &env,
@@ -1101,7 +1082,7 @@ fn check_archive_block_endpoint_limits() {
         0,
         MAX_BLOCKS_PER_REQUEST + 1,
     );
-    let query: IterBlocksRes = ProtoBuf::from_bytes(
+    let query: IterBlocksRes = from_proto_bytes(
         env.query_as(
             user_principal.into(),
             CanisterId::unchecked_from_principal(callback.canister_id.into()),
@@ -1110,9 +1091,7 @@ fn check_archive_block_endpoint_limits() {
         )
         .expect("query failed")
         .bytes(),
-    )
-    .map(|c| c.0)
-    .unwrap();
+    );
 
     assert_eq!(
         ingress_update.0.len(),
@@ -1340,7 +1319,7 @@ fn test_stable_migration_endpoints_disabled(ledger_wasm_mainnet: Vec<u8>) {
     };
 
     let send_dfx_args = Encode!(&send_args).unwrap();
-    let send_pb_args = ProtoBuf(send_args).into_bytes().unwrap();
+    let send_pb_args = to_proto_bytes(send_args);
 
     let ai = AccountIdentifier { hash: [1u8; 28] };
     let transfer_args = Encode!(&icp_ledger::TransferArgs {
