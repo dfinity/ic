@@ -178,9 +178,8 @@ pub fn upgrade_hostos(
     assert!(new_version != original_version);
 }
 
-/// Orchestrate the HostOS upgrade by computing the `test` target version and retrieving corresponding update image info,
-/// then calling `upgrade_hostos` with these parameters.
-///
+/// Orchestrate the HostOS upgrade by determining the `test` target version,
+/// retrieving the update image info, and calling upgrade_hostos.
 pub fn upgrade_hostos_to_test_version(env: TestEnv) {
     let starting_version = read_dependency_from_env_to_string("ENV_DEPS__IC_VERSION_FILE").unwrap();
     let target_version = HostosVersion::try_from(format!("{starting_version}-test")).unwrap();
