@@ -79,6 +79,7 @@ pub enum CyclesUseCase {
     BurnedCycles = 12,
     SchnorrOutcalls = 13,
     VetKd = 14,
+    DroppedMessages = 15,
 }
 
 impl CyclesUseCase {
@@ -100,6 +101,7 @@ impl CyclesUseCase {
             Self::BurnedCycles => "BurnedCycles",
             Self::SchnorrOutcalls => "SchnorrOutcalls",
             Self::VetKd => "VetKd",
+            Self::DroppedMessages => "DroppedMessages",
         }
     }
 }
@@ -123,6 +125,7 @@ impl From<CyclesUseCase> for pb::CyclesUseCase {
             CyclesUseCase::BurnedCycles => pb::CyclesUseCase::BurnedCycles,
             CyclesUseCase::SchnorrOutcalls => pb::CyclesUseCase::SchnorrOutcalls,
             CyclesUseCase::VetKd => pb::CyclesUseCase::VetKd,
+            CyclesUseCase::DroppedMessages => pb::CyclesUseCase::DroppedMessages,
         }
     }
 }
@@ -151,6 +154,7 @@ impl TryFrom<pb::CyclesUseCase> for CyclesUseCase {
             pb::CyclesUseCase::BurnedCycles => Ok(Self::BurnedCycles),
             pb::CyclesUseCase::SchnorrOutcalls => Ok(Self::SchnorrOutcalls),
             pb::CyclesUseCase::VetKd => Ok(Self::VetKd),
+            pb::CyclesUseCase::DroppedMessages => Ok(Self::DroppedMessages),
         }
     }
 }
@@ -1832,7 +1836,8 @@ impl SystemState {
             | CyclesUseCase::HTTPOutcalls
             | CyclesUseCase::DeletedCanisters
             | CyclesUseCase::NonConsumed
-            | CyclesUseCase::BurnedCycles => requested_amount,
+            | CyclesUseCase::BurnedCycles
+            | CyclesUseCase::DroppedMessages => requested_amount,
         };
         self.cycles_balance -= remaining_amount;
         self.observe_consumed_cycles_with_use_case(
@@ -1881,11 +1886,12 @@ impl SystemState {
         use_case: CyclesUseCase,
         consuming_cycles: ConsumingCycles,
     ) {
-        // The three CyclesUseCase below are not valid on the canister
+        // The use cases below are not valid on the canister
         // level, they should only appear on the subnet level.
         debug_assert_ne!(use_case, CyclesUseCase::ECDSAOutcalls);
         debug_assert_ne!(use_case, CyclesUseCase::HTTPOutcalls);
         debug_assert_ne!(use_case, CyclesUseCase::DeletedCanisters);
+        debug_assert_ne!(use_case, CyclesUseCase::DroppedMessages);
 
         if use_case == CyclesUseCase::NonConsumed || amount == Cycles::from(0u128) {
             return;

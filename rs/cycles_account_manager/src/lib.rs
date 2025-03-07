@@ -950,7 +950,8 @@ impl CyclesAccountManager {
             | CyclesUseCase::HTTPOutcalls
             | CyclesUseCase::DeletedCanisters
             | CyclesUseCase::NonConsumed
-            | CyclesUseCase::BurnedCycles => system_state.balance(),
+            | CyclesUseCase::BurnedCycles
+            | CyclesUseCase::DroppedMessages => system_state.balance(),
         };
 
         self.verify_cycles_balance_with_threshold(
