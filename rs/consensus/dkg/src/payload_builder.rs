@@ -13,9 +13,7 @@ use ic_protobuf::registry::subnet::v1::{
 use ic_registry_client_helpers::{
     crypto::initial_ni_dkg_transcript_from_registry_record, subnet::SubnetRegistry,
 };
-use ic_replicated_state::{
-    metadata_state::subnet_call_context_manager::SetupInitialDkgContext, ReplicatedState,
-};
+use ic_replicated_state::ReplicatedState;
 use ic_types::{
     batch::ValidationContext,
     consensus::{
@@ -680,7 +678,6 @@ fn process_subnet_call_context(
             registry_client,
             state,
             validation_context,
-            logger,
         )?;
 
     let dkg_configs = init_dkg_configs
@@ -706,7 +703,6 @@ fn process_reshare_chain_key_contexts(
     registry_client: &dyn RegistryClient,
     state: &ReplicatedState,
     validation_context: &ValidationContext,
-    logger: &ReplicaLogger,
 ) -> Result<
     (
         Vec<Vec<NiDkgConfig>>,
@@ -728,7 +724,30 @@ fn process_reshare_chain_key_contexts(
         if context.registry_version > validation_context.registry_version {
             continue;
         }
-        // TODO:
+
+        // Only process NiDkgIds
+        let Ok(key_id) = NiDkgMasterPublicKeyId::try_from(context.key_id.clone()) else {
+            continue;
+        };
+
+        // Dealers must be in the same registry_version.
+        let dealers = get_node_list(this_subnet_id, registry_client, context.registry_version)?;
+
+        match create_remote_dkg_config_for_key_id(
+            key_id,
+            start_block_height,
+            this_subnet_id,
+            context.target_id,
+            &dealers,
+            &context.nodes,
+            &context.registry_version,
+        ) {
+            Ok(config) => {
+                new_configs.push(vec![config]);
+                valid_target_ids.push(context.target_id);
+            }
+            Err(err) => errors.push(err),
+        }
     }
     Ok((new_configs, errors, valid_target_ids))
 }
@@ -916,17 +935,16 @@ fn create_remote_dkg_config_for_key_id(
     key_id: NiDkgMasterPublicKeyId,
     start_block_height: Height,
     dealer_subnet: SubnetId,
-    target_subnet: NiDkgTargetId,
+    target_id: NiDkgTargetId,
     dealers: &BTreeSet<NodeId>,
     receivers: &BTreeSet<NodeId>,
     registry_version: &RegistryVersion,
-    logger: &ReplicaLogger,
 ) -> Result<NiDkgConfig, (NiDkgId, String)> {
     let dkg_id = NiDkgId {
         start_block_height,
         dealer_subnet,
         dkg_tag: NiDkgTag::HighThresholdForKey(key_id),
-        target_subnet: NiDkgTargetSubnet::Remote(target_subnet),
+        target_subnet: NiDkgTargetSubnet::Remote(target_id),
     };
 
     create_remote_dkg_config(dkg_id.clone(), dealers, receivers, registry_version)
