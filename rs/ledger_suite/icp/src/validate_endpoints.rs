@@ -8,6 +8,7 @@ use crate::{
 };
 use ic_base_types::{CanisterId, CanisterIdError};
 use ic_ledger_hash_of::HASH_LENGTH;
+use on_wire::{witness, FromWire, IntoWire, NewType};
 use prost::Message;
 use protobuf::cycles_notification_response::Response;
 use serde_bytes::ByteBuf;
@@ -100,6 +101,55 @@ pub fn from_proto_bytes_res<T: ToProto>(msg: Vec<u8>) -> Result<T, String> {
 
 pub fn from_proto_bytes<T: ToProto>(msg: Vec<u8>) -> T {
     from_proto_bytes_res(msg).expect("failed to decode proto message")
+}
+
+pub struct ProtoBuf<A>(pub A);
+
+impl<A> ProtoBuf<A> {
+    pub fn new(a: A) -> Self {
+        ProtoBuf(a)
+    }
+
+    pub fn get(self) -> A {
+        self.0
+    }
+}
+
+/// This is the witness for protobuf types (types with a prost::Message
+/// implementation) and types that convert to a protobuf type (types with a
+/// ToProto implementation).
+pub fn protobuf<A, B>(a: ProtoBuf<A>, b: B) -> (A, ProtoBuf<B>)
+where
+    A: ToProto,
+    B: ToProto,
+{
+    witness(a, b)
+}
+
+impl<Type: ToProto> FromWire for ProtoBuf<Type> {
+    fn from_bytes(bytes: Vec<u8>) -> Result<Self, String> {
+        let ty = Type::Proto::decode(&bytes[..]).map_err(|e| e.to_string())?;
+        Ok(ProtoBuf(Type::from_proto(ty)?))
+    }
+}
+
+impl<Type: ToProto> IntoWire for ProtoBuf<Type> {
+    fn into_bytes(self) -> Result<Vec<u8>, String> {
+        let proto_type = self.0.into_proto();
+        let mut buf = Vec::with_capacity(proto_type.encoded_len());
+        proto_type.encode(&mut buf).map_err(|e| e.to_string())?;
+        Ok(buf)
+    }
+}
+
+impl<T> NewType for ProtoBuf<T> {
+    type Inner = T;
+    fn into_inner(self) -> T {
+        self.0
+    }
+    fn from_inner(t: T) -> Self {
+        ProtoBuf::new(t)
+    }
 }
 
 pub trait ToProto: Sized {
