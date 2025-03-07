@@ -25,8 +25,8 @@ benches:
     scopes: {}
   add_neuron_inactive_maximum:
     total:
-      instructions: 112621770
-      heap_increase: 1
+      instructions: 114741030
+      heap_increase: 0
       stable_memory_increase: 0
     scopes: {}
   add_neuron_inactive_typical:
@@ -169,7 +169,7 @@ benches:
     scopes: {}
   range_neurons_performance:
     total:
-      instructions: 55874297
+      instructions: 83788874
       heap_increase: 0
       stable_memory_increase: 0
     scopes: {}
