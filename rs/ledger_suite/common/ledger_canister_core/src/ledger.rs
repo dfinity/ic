@@ -511,7 +511,7 @@ pub fn block_locations<L: LedgerData>(ledger: &L, start: u64, length: usize) -> 
         })
         .collect();
 
-    assert!(
+    debug_assert!(
         !range_utils::contains_intersections(&ranges),
         "overlapping block ranges: {:?}",
         ranges

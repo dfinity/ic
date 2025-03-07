@@ -16,14 +16,22 @@ pub fn make_range(start: u64, len: usize) -> Range<u64> {
 pub struct NoIntersection;
 
 /// Constructs an intersection of two ranges.
+/// If the intersection is empty, `NoIntersection` is returned.
 pub fn intersect(l: &Range<u64>, r: &Range<u64>) -> Result<Range<u64>, NoIntersection> {
+    if l.is_empty() || r.is_empty() {
+        return Err(NoIntersection);
+    }
     if l.end < r.start || r.end < l.start {
         return Err(NoIntersection);
     }
-    Ok(Range {
+    let candidate = Range {
         start: l.start.max(r.start),
         end: l.end.min(r.end),
-    })
+    };
+    match candidate.is_empty() {
+        true => Err(NoIntersection),
+        false => Ok(candidate),
+    }
 }
 
 /// Returns true iff `r` contains each point of `l`.
@@ -77,6 +85,9 @@ pub fn offset(r: &Range<u64>, offset: u64) -> Range<u64> {
 }
 
 /// Removes the intersection of two ranges from the first range.
+/// If the resulting range would be two disjoint ranges (i.e., if the
+/// `possibly_partially_intersecting_range` is in the middle of the `input_range`), return the
+/// first of the resulting disjoint ranges.
 pub fn remove_intersection(
     input_range: &Range<u64>,
     possibly_partially_intersecting_range: &Range<u64>,
@@ -131,6 +142,11 @@ fn test_intersect() {
         Ok(Range { start: 5, end: 10 })
     );
 
+    // Two adjacent ranges.
+    let input_range = Range { start: 0, end: 10 };
+    let other_range = Range { start: 10, end: 20 };
+    assert_eq!(intersect(&input_range, &other_range), Err(NoIntersection));
+
     // Two ranges that are equal.
     let input_range = Range { start: 0, end: 10 };
     let other_range = Range { start: 0, end: 10 };
@@ -142,10 +158,7 @@ fn test_intersect() {
     // Two empty ranges.
     let input_range = Range { start: 0, end: 0 };
     let other_range = Range { start: 0, end: 0 };
-    assert_eq!(
-        intersect(&input_range, &other_range),
-        Ok(Range { start: 0, end: 0 })
-    );
+    assert_eq!(intersect(&input_range, &other_range), Err(NoIntersection));
 }
 
 #[test]
@@ -171,6 +184,14 @@ fn test_remove_intersection() {
         Range { start: 10, end: 15 }
     );
 
+    // Two ranges that intersect, with the other range being a subrange inside the input range.
+    let input_range = Range { start: 0, end: 10 };
+    let other_range = Range { start: 2, end: 5 };
+    assert_eq!(
+        remove_intersection(&input_range, &other_range),
+        Range { start: 0, end: 2 }
+    );
+
     // Two ranges that are equal.
     let input_range = Range { start: 0, end: 10 };
     let other_range = Range { start: 0, end: 10 };
@@ -182,24 +203,15 @@ fn test_remove_intersection() {
     // Two empty ranges.
     let input_range = Range { start: 0, end: 0 };
     let other_range = Range { start: 0, end: 0 };
-    assert_eq!(
-        remove_intersection(&input_range, &other_range),
-        Range { start: 0, end: 0 }
-    );
+    assert_eq!(remove_intersection(&input_range, &other_range), input_range);
 
     // Two empty ranges with start not at 0.
     let input_range = Range { start: 5, end: 5 };
     let other_range = Range { start: 5, end: 5 };
-    assert_eq!(
-        remove_intersection(&input_range, &other_range),
-        Range { start: 0, end: 0 }
-    );
+    assert_eq!(remove_intersection(&input_range, &other_range), input_range);
 
     // Empty input range.
     let input_range = Range { start: 0, end: 0 };
     let other_range = Range { start: 0, end: 10 };
-    assert_eq!(
-        remove_intersection(&input_range, &other_range),
-        Range { start: 0, end: 0 }
-    );
+    assert_eq!(remove_intersection(&input_range, &other_range), input_range);
 }
