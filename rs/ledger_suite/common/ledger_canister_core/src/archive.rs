@@ -251,7 +251,7 @@ pub async fn send_blocks_to_archive<Rt: Runtime, Wasm: ArchiveCanisterWasm>(
                 .await
                 .map_err(|e| (num_sent_blocks, e))?;
 
-        // Take as many blocks as can be sent and send those in
+        // Take as many blocks as can be sent and send as many as can fit in a single message.
         let mut first_blocks: VecDeque<_> = take_prefix(&mut blocks, remaining_capacity).into();
         if first_blocks.is_empty() {
             return Err((num_sent_blocks, FailedToArchiveBlocks("empty chunk".into())));
@@ -264,58 +264,55 @@ pub async fn send_blocks_to_archive<Rt: Runtime, Wasm: ArchiveCanisterWasm>(
              blocks.len()
         );
 
-        // Additionally, need to respect the inter-canister message size.
-        while !first_blocks.is_empty() {
-            let chunk = take_prefix(&mut first_blocks, max_chunk_size);
-            let chunk_len = chunk.len() as u64;
-            if chunk.is_empty() {
-                return Err((num_sent_blocks, FailedToArchiveBlocks("empty chunk".into())));
-            }
-            log!(
-                log_sink,
-                "[archive] calling append_blocks() with a chunk of size {}",
-                chunk_len
-            );
-            match Rt::call(node_canister_id, "append_blocks", 0, (chunk,)).await {
-                Ok(()) => num_sent_blocks += chunk_len as usize,
-                Err((_, msg)) => return Err((num_sent_blocks, FailedToArchiveBlocks(msg))),
-            };
+        let chunk = take_prefix(&mut first_blocks, max_chunk_size);
+        let chunk_len = chunk.len() as u64;
+        if chunk.is_empty() {
+            return Err((num_sent_blocks, FailedToArchiveBlocks("empty chunk".into())));
+        }
+        log!(
+            log_sink,
+            "[archive] calling append_blocks() with a chunk of size {}",
+            chunk_len
+        );
+        match Rt::call(node_canister_id, "append_blocks", 0, (chunk,)).await {
+            Ok(()) => num_sent_blocks += chunk_len as usize,
+            Err((_, msg)) => return Err((num_sent_blocks, FailedToArchiveBlocks(msg))),
+        };
 
-            // Keep track of BlockIndices.
-            let heights = inspect_archive(&archive, |archive| {
-                let heights = archive.nodes_block_ranges.get_mut(node_index);
-                match heights {
-                    // We haven't inserted any Blocks into this archive node yet.
-                    None => {
-                        match archive.nodes_block_ranges.last().copied() {
-                            // If we haven't recorded any heights yet in any of the
-                            // nodes then this is the **first archive node** and it
-                            // starts with Block at height 0.
-                            None => archive.nodes_block_ranges.push((0, chunk_len - 1)),
-                            // If we haven't recorded any heights for this node but
-                            // a previous node exists then the current heights
-                            // start one above those in the previous node.
-                            Some((_, last_height)) => archive
-                                .nodes_block_ranges
-                                .push((last_height + 1, last_height + chunk_len)),
-                        }
-                    }
-                    // We have already inserted some Blocks into this archive node.
-                    // Hence, we already have a value to work with.
-                    Some(heights) => {
-                        heights.1 += chunk_len;
+        // Keep track of BlockIndices.
+        let heights = inspect_archive(&archive, |archive| {
+            let heights = archive.nodes_block_ranges.get_mut(node_index);
+            match heights {
+                // We haven't inserted any Blocks into this archive node yet.
+                None => {
+                    match archive.nodes_block_ranges.last().copied() {
+                        // If we haven't recorded any heights yet in any of the
+                        // nodes then this is the **first archive node** and it
+                        // starts with Block at height 0.
+                        None => archive.nodes_block_ranges.push((0, chunk_len - 1)),
+                        // If we haven't recorded any heights for this node but
+                        // a previous node exists then the current heights
+                        // start one above those in the previous node.
+                        Some((_, last_height)) => archive
+                            .nodes_block_ranges
+                            .push((last_height + 1, last_height + chunk_len)),
                     }
                 }
-                archive.nodes_block_ranges.get(node_index).cloned().unwrap()
-            });
+                // We have already inserted some Blocks into this archive node.
+                // Hence, we already have a value to work with.
+                Some(heights) => {
+                    heights.1 += chunk_len;
+                }
+            }
+            archive.nodes_block_ranges.get(node_index).cloned().unwrap()
+        });
 
-            log!(
-                log_sink,
-                "[archive] archive node [{}] block heights {:?}",
-                node_index,
-                heights
-            );
-        }
+        log!(
+            log_sink,
+            "[archive] archive node [{}] block heights {:?}",
+            node_index,
+            heights
+        );
     }
 
     log!(log_sink, "[archive] send_blocks_to_archive() done");
