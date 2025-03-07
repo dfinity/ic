@@ -953,10 +953,13 @@ impl NeuronStore {
         let mut deciding_voting_power: u128 = 0;
         let mut potential_voting_power: u128 = 0;
 
+        let min_dissolve_delay_seconds = voting_power_economics
+            .neuron_minimum_dissolve_delay_to_vote_seconds
+            .unwrap_or(VotingPowerEconomics::DEFAULT_NEURON_MINIMUM_DISSOLVE_DELAY_TO_VOTE_SECONDS);
+
         let mut process_neuron = |neuron: &Neuron| {
             if neuron.is_inactive(now_seconds)
-                || neuron.dissolve_delay_seconds(now_seconds)
-                    < voting_power_economics.neuron_minimum_dissolve_delay_to_vote_seconds()
+                || neuron.dissolve_delay_seconds(now_seconds) < min_dissolve_delay_seconds
             {
                 return;
             }

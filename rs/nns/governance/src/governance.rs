@@ -4984,9 +4984,7 @@ impl Governance {
     pub fn neuron_minimum_dissolve_delay_to_vote_seconds(&self) -> u64 {
         self.voting_power_economics()
             .neuron_minimum_dissolve_delay_to_vote_seconds
-            .unwrap_or_else(|| {
-                VotingPowerEconomics::DEFAULT_NEURON_MINIMUM_DISSOLVE_DELAY_TO_VOTE_SECONDS
-            })
+            .unwrap_or(VotingPowerEconomics::DEFAULT_NEURON_MINIMUM_DISSOLVE_DELAY_TO_VOTE_SECONDS)
     }
 
     /// The proposal id of the next proposal.
