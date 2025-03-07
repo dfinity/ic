@@ -390,9 +390,9 @@ async fn main() -> Result<(), Error> {
 
     let api_router = Router::new()
         .route("/registrations", post(create_registration_handler))
-        .route("/registrations/:id", get(get_registration_handler))
-        .route("/registrations/:id", put(update_registration_handler))
-        .route("/registrations/:id", delete(remove_registration_handler))
+        .route("/registrations/{id}", get(get_registration_handler))
+        .route("/registrations/{id}", put(update_registration_handler))
+        .route("/registrations/{id}", delete(remove_registration_handler))
         .route("/certificates", get(export_handler));
 
     // API (Instrument)
