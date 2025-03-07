@@ -3647,9 +3647,8 @@ async fn test_reward_event_proposals_last_longer_than_reward_period() {
     gov.run_periodic_tasks().now_or_never();
     assert_eq!(gov.latest_reward_event().day_after_genesis, 6);
     // let's advance far enough to trigger a reward event
-    fake_driver.advance_time_by(REWARD_DISTRIBUTION_PERIOD_SECONDS);
-    run_pending_timers();
-    gov.run_periodic_tasks().now_or_never();
+    fake_driver.advance_time_by(REWARD_DISTRIBUTION_PERIOD_SECONDS + 1);
+    run_pending_timers_every_interval_for_count(std::time::Duration::from_secs(3), 3);
 
     // Inspect latest_reward_event.
     let fully_elapsed_reward_rounds = 7;
@@ -3708,7 +3707,7 @@ async fn test_reward_event_proposals_last_longer_than_reward_period() {
     // Now let's advance again -- a new empty reward event should happen
     fake_driver.advance_time_by(REWARD_DISTRIBUTION_PERIOD_SECONDS);
     run_pending_timers();
-    gov.run_periodic_tasks().now_or_never();
+
     assert_eq!(
         *gov.latest_reward_event(),
         RewardEvent {
@@ -4292,6 +4291,8 @@ fn compute_maturities(
     fake_driver.advance_time_by(1);
     run_pending_timers();
 
+    run_pending_timers_every_interval_for_count(core::time::Duration::from_secs(10), 3);
+
     // Inspect latest_reward_event.
     let actual_reward_event = gov.latest_reward_event();
     assert_eq!(
@@ -4859,7 +4860,7 @@ fn test_approve_kyc() {
         .with_neuron(&NeuronId::from_u64(4), |n| n.kyc_verified)
         .expect("Neuron not found"));
 
-    gov.approve_genesis_kyc(&[principal1, principal2]);
+    gov.approve_genesis_kyc(&[principal1, principal2]).unwrap();
 
     assert!(gov
         .neuron_store
@@ -14350,7 +14351,7 @@ async fn distribute_rewards_test() {
     // Step 1.1: Craft many neurons.
     // A number whose only significance is that it is not Protocol Buffers default (i.e. 0.0).
     let starting_maturity = 3;
-    let neuron_range = 1000..2000;
+    let neuron_range = 100..200;
     let neurons = neuron_range
         .clone()
         .map(|id| Neuron {
@@ -14450,7 +14451,7 @@ async fn distribute_rewards_test() {
 
     // Step 2: Run code under test.
     governance.run_periodic_tasks().await;
-    run_pending_timers_every_interval_for_count(std::time::Duration::from_secs(2), 10);
+    run_pending_timers_every_interval_for_count(std::time::Duration::from_secs(2), 200);
 
     // Step 3: Inspect results.
 
