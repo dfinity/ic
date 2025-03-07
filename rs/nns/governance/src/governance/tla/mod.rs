@@ -64,6 +64,18 @@ fn neuron_global(gov: &Governance) -> TlaValue {
                                 "maturity".to_string(),
                                 neuron.maturity_e8s_equivalent.to_tla_value(),
                             ),
+                            (
+                                ("state".to_string()),
+                                TlaValue::Variant {
+                                    tag: (if neuron.spawn_at_timestamp_seconds.is_some() {
+                                        "Spawning"
+                                    } else {
+                                        "NotSpawning"
+                                    })
+                                    .to_string(),
+                                    value: Box::new(TlaValue::Constant("UNIT".to_string())),
+                                },
+                            ),
                         ])),
                     )
                 })
