@@ -175,7 +175,7 @@ pub fn record_event<R: CanisterRuntime>(payload: EventType, runtime: &R) {
 }
 
 #[cfg(feature = "self_check")]
-pub fn record_event_v0<R: CanisterRuntime>(payload: EventType, runtime: &R)) {
+pub fn record_event_v0<R: CanisterRuntime>(payload: EventType, runtime: &R) {
     // The timestamp below could be a source of non-reprodicibilty.
     // However, this function is only used for the purpose of dumping
     // stable memory after uploading v0 events from local file to the
