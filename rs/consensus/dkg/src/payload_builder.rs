@@ -640,12 +640,120 @@ fn get_dkg_interval_length(
         })
 }
 
-// Reads the SubnetCallContext and attempts to create DKG configs for new
-// subnets for the next round. An Ok return value contains:
-// * configs grouped by subnet (low and high threshold configs per subnet)
-// * errors produced while generating the configs.
+// TODO: Recheck this documentation
+/// Reads the SubnetCallContext and attempts to create DKG configs for new
+/// subnets for the next round. An Ok return value contains:
+/// * configs grouped by subnet (low and high threshold configs per subnet)
+/// * errors produced while generating the configs.
 #[allow(clippy::type_complexity)]
 fn process_subnet_call_context(
+    this_subnet_id: SubnetId,
+    start_block_height: Height,
+    registry_client: &dyn RegistryClient,
+    state: &ReplicatedState,
+    validation_context: &ValidationContext,
+    logger: &ReplicaLogger,
+) -> Result<
+    (
+        Vec<Vec<NiDkgConfig>>,
+        Vec<(NiDkgId, String)>,
+        Vec<NiDkgTargetId>,
+    ),
+    PayloadCreationError,
+> {
+    let (init_dkg_configs, init_dkg_errors, init_dkg_valid_target_ids) =
+        process_setup_initial_dkg_contexts(
+            this_subnet_id,
+            start_block_height,
+            registry_client,
+            state,
+            validation_context,
+            logger,
+        )?;
+
+    let (reshare_key_configs, reshare_key_errors, reshare_key_valid_target_ids) =
+        process_reshare_chain_key_contexts(
+            this_subnet_id,
+            start_block_height,
+            registry_client,
+            state,
+            validation_context,
+        )?;
+
+    let dkg_configs = init_dkg_configs
+        .into_iter()
+        .chain(reshare_key_configs)
+        .collect();
+    let dkg_errors = init_dkg_errors
+        .into_iter()
+        .chain(reshare_key_errors)
+        .collect();
+    let dkg_valid_target_ids = init_dkg_valid_target_ids
+        .into_iter()
+        .chain(reshare_key_valid_target_ids)
+        .collect();
+
+    Ok((dkg_configs, dkg_errors, dkg_valid_target_ids))
+}
+
+#[allow(clippy::type_complexity)]
+fn process_reshare_chain_key_contexts(
+    this_subnet_id: SubnetId,
+    start_block_height: Height,
+    registry_client: &dyn RegistryClient,
+    state: &ReplicatedState,
+    validation_context: &ValidationContext,
+) -> Result<
+    (
+        Vec<Vec<NiDkgConfig>>,
+        Vec<(NiDkgId, String)>,
+        Vec<NiDkgTargetId>,
+    ),
+    PayloadCreationError,
+> {
+    let mut new_configs = Vec::new();
+    let mut errors = Vec::new();
+    let mut valid_target_ids = Vec::new();
+    let contexts = &state
+        .metadata
+        .subnet_call_context_manager
+        .reshare_chain_key_contexts;
+
+    for (_callback_id, context) in contexts.iter() {
+        // if we haven't reached the required registry version yet, skip this context
+        if context.registry_version > validation_context.registry_version {
+            continue;
+        }
+
+        // Only process NiDkgIds
+        let Ok(key_id) = NiDkgMasterPublicKeyId::try_from(context.key_id.clone()) else {
+            continue;
+        };
+
+        // Dealers must be in the same registry_version.
+        let dealers = get_node_list(this_subnet_id, registry_client, context.registry_version)?;
+
+        match create_remote_dkg_config_for_key_id(
+            key_id,
+            start_block_height,
+            this_subnet_id,
+            context.target_id,
+            &dealers,
+            &context.nodes,
+            &context.registry_version,
+        ) {
+            Ok(config) => {
+                new_configs.push(vec![config]);
+                valid_target_ids.push(context.target_id);
+            }
+            Err(err) => errors.push(err),
+        }
+    }
+    Ok((new_configs, errors, valid_target_ids))
+}
+
+#[allow(clippy::type_complexity)]
+fn process_setup_initial_dkg_contexts(
     this_subnet_id: SubnetId,
     start_block_height: Height,
     registry_client: &dyn RegistryClient,
@@ -668,36 +776,26 @@ fn process_subnet_call_context(
         .subnet_call_context_manager
         .setup_initial_dkg_contexts;
     for (_callback_id, context) in contexts.iter() {
-        use ic_replicated_state::metadata_state::subnet_call_context_manager::SetupInitialDkgContext;
-
-        let SetupInitialDkgContext {
-            request: _,
-            nodes_in_target_subnet,
-            target_id,
-            registry_version,
-            time: _,
-        } = context;
-
         // if we haven't reached the required registry version yet, skip this context
-        if registry_version > &validation_context.registry_version {
+        if context.registry_version > validation_context.registry_version {
             continue;
         }
 
         // Dealers must be in the same registry_version.
-        let dealers = get_node_list(this_subnet_id, registry_client, *registry_version)?;
+        let dealers = get_node_list(this_subnet_id, registry_client, context.registry_version)?;
 
-        match create_remote_dkg_configs(
+        match create_low_high_remote_dkg_configs(
             start_block_height,
             this_subnet_id,
-            NiDkgTargetSubnet::Remote(*target_id),
+            context.target_id,
             &dealers,
-            nodes_in_target_subnet,
-            registry_version,
+            &context.nodes_in_target_subnet,
+            &context.registry_version,
             logger,
         ) {
             Ok((config0, config1)) => {
                 new_configs.push(vec![config0, config1]);
-                valid_target_ids.push(*target_id);
+                valid_target_ids.push(context.target_id);
             }
             Err(mut err_vec) => errors.append(&mut err_vec),
         };
@@ -769,13 +867,13 @@ fn add_callback_ids_to_transcript_results(
         .collect()
 }
 
-// This function is called for each entry on the SubnetCallContext. It returns
-// either the created high and low configs for the entry or returns two errors
-// identified by the NiDkgId.
-fn create_remote_dkg_configs(
+/// This function is on for each entry on the SetupInitialDkgContext. It returns
+/// either the created high and low configs for the entry or returns two errors
+/// identified by the NiDkgId.
+fn create_low_high_remote_dkg_configs(
     start_block_height: Height,
     dealer_subnet: SubnetId,
-    target_subnet: NiDkgTargetSubnet,
+    target_subnet: NiDkgTargetId,
     dealers: &BTreeSet<NodeId>,
     receivers: &BTreeSet<NodeId>,
     registry_version: &RegistryVersion,
@@ -785,24 +883,26 @@ fn create_remote_dkg_configs(
         start_block_height,
         dealer_subnet,
         dkg_tag: NiDkgTag::LowThreshold,
-        target_subnet,
+        target_subnet: NiDkgTargetSubnet::Remote(target_subnet),
     };
 
     let high_thr_dkg_id = NiDkgId {
         start_block_height,
         dealer_subnet,
         dkg_tag: NiDkgTag::HighThreshold,
-        target_subnet,
+        target_subnet: NiDkgTargetSubnet::Remote(target_subnet),
     };
 
     let low_thr_config =
-        do_create_remote_dkg_config(low_thr_dkg_id.clone(), dealers, receivers, registry_version);
-    let high_thr_config = do_create_remote_dkg_config(
+        create_remote_dkg_config(low_thr_dkg_id.clone(), dealers, receivers, registry_version);
+    let high_thr_config = create_remote_dkg_config(
         high_thr_dkg_id.clone(),
         dealers,
         receivers,
         registry_version,
     );
+
+    // TODO: Is it really an error, if only one of the two configs was created?
     let sibl_err = String::from("Failed to create the sibling config");
     match (low_thr_config, high_thr_config) {
         (Ok(config0), Ok(config1)) => Ok((config0, config1)),
@@ -831,7 +931,27 @@ fn create_remote_dkg_configs(
     }
 }
 
-fn do_create_remote_dkg_config(
+fn create_remote_dkg_config_for_key_id(
+    key_id: NiDkgMasterPublicKeyId,
+    start_block_height: Height,
+    dealer_subnet: SubnetId,
+    target_id: NiDkgTargetId,
+    dealers: &BTreeSet<NodeId>,
+    receivers: &BTreeSet<NodeId>,
+    registry_version: &RegistryVersion,
+) -> Result<NiDkgConfig, (NiDkgId, String)> {
+    let dkg_id = NiDkgId {
+        start_block_height,
+        dealer_subnet,
+        dkg_tag: NiDkgTag::HighThresholdForKey(key_id),
+        target_subnet: NiDkgTargetSubnet::Remote(target_id),
+    };
+
+    create_remote_dkg_config(dkg_id.clone(), dealers, receivers, registry_version)
+        .map_err(|err| (dkg_id, format!("{:?}", err)))
+}
+
+fn create_remote_dkg_config(
     dkg_id: NiDkgId,
     dealers: &BTreeSet<NodeId>,
     receivers: &BTreeSet<NodeId>,
