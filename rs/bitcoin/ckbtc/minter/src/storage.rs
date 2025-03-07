@@ -174,7 +174,8 @@ pub fn record_event<R: CanisterRuntime>(payload: EventType, runtime: &R) {
     })
 }
 
-#[cfg(feature = "self_check")]
+/// This function is only called by update_events when the canister
+/// is compiled with the `self_check` feature (only used by debug build).
 pub fn record_event_v0<R: CanisterRuntime>(payload: EventType, runtime: &R) {
     // The timestamp below could be a source of non-reprodicibilty.
     // However, this function is only used for the purpose of dumping
