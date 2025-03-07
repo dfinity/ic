@@ -1698,6 +1698,13 @@ pub struct PageMapLayout<Permissions: AccessPolicy> {
     _checkpoint: Option<CheckpointLayout<Permissions>>,
 }
 
+pub struct PageMapLayoutW<'a, Permissions: WritePolicy> {
+    root: PathBuf,
+    name_stem: String,
+    permissions_tag: PhantomData<Permissions>,
+    _checkpoint: &'a CheckpointLayout<Permissions>,
+}
+
 impl<P> PageMapLayout<P>
 where
     P: ReadPolicy + WritePolicy,
@@ -1813,7 +1820,10 @@ where
     }
 }
 
-impl<Permissions: AccessPolicy> StorageLayoutW for PageMapLayout<Permissions> {
+impl<Permissions> StorageLayoutW for PageMapLayoutW<'_, Permissions>
+where
+    Permissions: WritePolicy,
+{
     /// Overlay path encoding, consistent with `overlay_height()` and `overlay_shard()`
     fn overlay(&self, height: Height, shard: Shard) -> PathBuf {
         self.root.join(format!(
@@ -1824,6 +1834,21 @@ impl<Permissions: AccessPolicy> StorageLayoutW for PageMapLayout<Permissions> {
         ))
     }
 }
+
+// impl<Permissions> StorageLayoutW for PageMapLayout<Permissions>
+// where
+//     Permissions: WritePolicy,
+// {
+//     /// Overlay path encoding, consistent with `overlay_height()` and `overlay_shard()`
+//     fn overlay(&self, height: Height, shard: Shard) -> PathBuf {
+//         self.root.join(format!(
+//             "{:016x}_{:04x}_{}.overlay",
+//             height.get(),
+//             shard.get(),
+//             self.name_stem,
+//         ))
+//     }
+// }
 
 impl<P> StorageLayoutR for PageMapLayout<P>
 where
