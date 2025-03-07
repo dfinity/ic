@@ -70,7 +70,7 @@ fn setup_env(memory64_enabled: bool) -> (StateMachine, CanisterId) {
         max_compilation_cache_size: NumBytes::new(10 * 1024 * 1024), // 10MiB
         ..Default::default()
     };
-    let subnet_type = SubnetType::System;
+    let subnet_type = SubnetType::Application;
     let config = StateMachineConfig::new(SubnetConfig::new(subnet_type), exec_config);
     let env = StateMachineBuilder::new()
         .with_config(Some(config))
