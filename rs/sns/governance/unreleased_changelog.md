@@ -9,6 +9,8 @@ on the process that this file is part of, see
 
 ## Added
 
+* Added `ProposalData.topic : opt Topic`.
+
 ## Changed
 
 ## Deprecated

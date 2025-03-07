@@ -174,7 +174,15 @@ pub fn record_event<R: CanisterRuntime>(payload: EventType, runtime: &R) {
     })
 }
 
+/// This function is only called by update_events when the canister
+/// is compiled with the `self_check` feature (only used by debug build).
 pub fn record_event_v0<R: CanisterRuntime>(payload: EventType, runtime: &R) {
+    // The timestamp below could be a source of non-reprodicibilty.
+    // However, this function is only used for the purpose of dumping
+    // stable memory after uploading v0 events from local file to the
+    // canister, and the memory dump is used in a canbench to measure
+    // instruction counts. So the actual value of timestamps shouldn't
+    // matter.
     let bytes = encode_event(&Event {
         timestamp: Some(runtime.time()),
         payload,
@@ -207,9 +215,11 @@ mod benches {
                 .expect("failed to initialize stable log")
             })
         });
+        // V1_EVENTS is created as empty (by using `new` than `init`) because
+        // it might already have an existing init event before running this benchmark.
         V1_EVENTS.with(|x| {
             *x.borrow_mut() = MEMORY_MANAGER.with(|m| {
-                StableLog::init(
+                StableLog::new(
                     m.borrow().get(V1_LOG_INDEX_MEMORY_ID),
                     m.borrow().get(V1_LOG_DATA_MEMORY_ID),
                 )

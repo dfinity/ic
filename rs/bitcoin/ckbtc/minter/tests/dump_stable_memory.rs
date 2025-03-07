@@ -6,7 +6,6 @@ use ic_ckbtc_minter::state::eventlog::Event;
 use ic_ckbtc_minter::state::Mode;
 use ic_test_utilities_load_wasm::load_wasm;
 use pocket_ic::{PocketIc, PocketIcBuilder};
-use std::path::PathBuf;
 
 #[derive(Clone, Debug, CandidType, Deserialize)]
 pub struct GetEventsResult {
@@ -40,13 +39,6 @@ impl Setup {
         // install bitcoin canister
         let bitcoin_id = bitcoin_canister_id(btc_network);
         env.create_canister_with_id(None, None, bitcoin_id).unwrap();
-        env.install_canister(
-            bitcoin_id,
-            bitcoin_mock_wasm(),
-            Encode!(&btc_network).unwrap(),
-            None,
-        );
-
         let ledger_id = env.create_canister();
         let minter_id = env.create_canister();
         let btc_checker_id = env.create_canister();
@@ -64,9 +56,6 @@ impl Setup {
             ..default_init_args()
         }))
         .unwrap();
-
-        // println!("{:02x?}", init_args);
-
         env.install_canister(minter_id, minter_wasm(), init_args, None);
         Self { env, minter_id }
     }
@@ -80,19 +69,6 @@ fn bitcoin_canister_id(btc_network: Network) -> Principal {
         Network::Mainnet => ic_config::execution_environment::BITCOIN_MAINNET_CANISTER_ID,
     })
     .unwrap()
-}
-
-fn bitcoin_mock_wasm() -> Vec<u8> {
-    load_wasm(
-        PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap())
-            .parent()
-            .unwrap()
-            .parent()
-            .unwrap()
-            .join("mock"),
-        "ic-bitcoin-canister-mock",
-        &[],
-    )
 }
 
 fn minter_wasm() -> Vec<u8> {
@@ -173,7 +149,7 @@ fn main() {
 #[test]
 fn test_minter_dump_stable_mem_mainnet() {
     fn path_to_events_file(file_name: &str) -> String {
-        let mut path = PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap());
+        let mut path = std::path::PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap());
         path.push("test_resources");
         path.push(file_name);
         path.display().to_string()
