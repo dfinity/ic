@@ -270,7 +270,7 @@ pub fn generate_responses_to_subnet_calls(
             "New DKG summary with config ids created: {:?}",
             summary.dkg.configs.keys().collect::<Vec<_>>()
         );
-        consensus_responses.append(&mut generate_responses_to_setup_initial_dkg_calls(
+        consensus_responses.append(&mut generate_responses_to_remote_dkgs(
             &summary.dkg.transcripts_for_remote_subnets,
             log,
         ))
@@ -359,7 +359,7 @@ impl RemoteDkgResults {
 
 /// This function creates responses to the SetupInitialDKG system calls with the
 /// computed DKG key material for remote subnets, without needing values from the state.
-pub fn generate_responses_to_setup_initial_dkg_calls(
+pub fn generate_responses_to_remote_dkgs(
     transcripts_for_remote_subnets: &[(NiDkgId, CallbackId, Result<NiDkgTranscript, String>)],
     log: &ReplicaLogger,
 ) -> Vec<ConsensusResponse> {
