@@ -57,7 +57,7 @@ def mainnet_images_support():
 
     native.genrule(
         name = "mainnet_hostos_sha_file",
-        srcs = ["@mainnet_hostos_shas//SHA256SUMS"],
+        srcs = ["@mainnet_hostos_shas//file"],
         outs = ["mainnet_hostos.sha256"],
         cmd = """
             echo "$<" | cut -d ' ' -f 1 > $@

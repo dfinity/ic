@@ -190,13 +190,25 @@ pub fn upgrade_hostos_to_test_version(env: TestEnv) {
     upgrade_hostos(env, target_version, update_image_url, update_image_sha256);
 }
 
+/// Orchestrate the HostOS upgrade using mainnet images.
+/// Reads version, update URL, and SHA256 from the files produced by mainnet-images.bzl.
 pub fn upgrade_hostos_to_mainnet_version(env: TestEnv) {
-    // TODO: update target_version, update_image_url, and update_image_sha256 with mainnet versions
-    let starting_version = read_dependency_from_env_to_string("ENV_DEPS__IC_VERSION_FILE").unwrap();
-    let target_version = HostosVersion::try_from(format!("{starting_version}-test")).unwrap();
+    let target_version_str =
+        read_dependency_from_env_to_string("ENV_DEPS__MAINNET_HOSTOS_VERSION_FILE").unwrap();
+    println!("Target version string: {}", target_version_str);
+    let target_version =
+        HostosVersion::try_from(target_version_str.trim()).expect("Invalid mainnet hostos version");
 
-    let update_image_url = get_hostos_update_img_test_url().unwrap();
-    let update_image_sha256 = get_hostos_update_img_test_sha256().unwrap();
+    let update_image_url_str =
+        read_dependency_from_env_to_string("ENV_DEPS__MAINNET_HOSTOS_URL_FILE").unwrap();
+    let update_image_url =
+        Url::parse(update_image_url_str.trim()).expect("Invalid mainnet hostos update image URL");
+
+    println!("target version: {}", target_version);
+    println!("update image url: {}", update_image_url);
+
+    let update_image_sha256 =
+        read_dependency_from_env_to_string("ENV_DEPS__MAINNET_HOSTOS_SHA_FILE").unwrap();
 
     upgrade_hostos(env, target_version, update_image_url, update_image_sha256);
 }
