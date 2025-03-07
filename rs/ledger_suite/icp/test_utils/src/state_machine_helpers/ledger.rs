@@ -6,7 +6,6 @@ use icp_ledger::{
     validate_endpoints::from_proto_bytes, GetBlocksArgs, QueryBlocksResponse,
     QueryEncodedBlocksResponse, MAX_BLOCKS_PER_REQUEST,
 };
-use on_wire::FromWire;
 
 pub fn icp_get_blocks(
     env: &StateMachine,
