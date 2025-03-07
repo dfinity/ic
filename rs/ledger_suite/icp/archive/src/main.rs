@@ -171,8 +171,8 @@ fn iter_blocks_() {
     let args: IterBlocksArgs = from_proto_bytes(input);
     let archive_state = ARCHIVE_STATE.read().unwrap();
     let blocks = &archive_state.blocks;
-    let start = args.start as usize;
-    let length = args.length as usize;
+    let start = args.start;
+    let length = args.length;
     let length = length.min(icp_ledger::max_blocks_per_request(&caller()));
     let res = to_proto_bytes(icp_ledger::iter_blocks(blocks, start, length));
     ic_cdk::api::call::reply_raw(&res)
