@@ -26,12 +26,12 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
     CRATE_ANNOTATIONS = {
         "openssl-sys": [crate.annotation(
             build_script_data = [
-                "@@_main~_repo_rules~openssl//:gen_dir",
+                "@openssl//:gen_dir",
             ],
             build_script_env = {
                 "OPENSSL_NO_VENDOR": "1",
-                "OPENSSL_LIB_DIR": "$(location @@_main~_repo_rules~openssl//:gen_dir)/lib64",
-                "OPENSSL_INCLUDE_DIR": "$(location @@_main~_repo_rules~openssl//:gen_dir)/include",
+                "OPENSSL_LIB_DIR": "$(location @openssl//:gen_dir)/lib64",
+                "OPENSSL_INCLUDE_DIR": "$(location @openssl//:gen_dir)/include",
                 "OPENSSL_STATIC": "1",
             },
         )],
@@ -47,7 +47,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             patch_args = ["-p1"],
             patches = ["@@//bazel:libssh2-sys.patch"],
             build_script_data = [
-                "@@_main~_repo_rules~openssl//:gen_dir",
+                "@openssl//:gen_dir",
             ],
         )],
         "libz-sys": [crate.annotation(
