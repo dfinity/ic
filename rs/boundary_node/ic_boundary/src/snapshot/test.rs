@@ -2,6 +2,7 @@ use super::*;
 use crate::test_utils::{create_fake_registry_client, valid_tls_certificate_and_validation_time};
 use ic_registry_routing_table::CanisterIdRange;
 
+#[allow(clippy::type_complexity)]
 pub fn test_registry_snapshot(
     subnets: usize,
     nodes_per_subnet: usize,
