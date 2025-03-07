@@ -60,6 +60,10 @@ pub struct InstanceStats {
     /// Number of pages loaded by copying the data.
     pub wasm_copy_page_count: usize,
 
+    /// Number of active (paged in) OS pages (4KiB) for the canister Wasm memory,
+    /// as reported by libc `mincore()` API.
+    pub wasm_resident_pages: usize,
+
     /// Number of accessed OS pages (4KiB) in stable memory.
     pub stable_accessed_pages: usize,
 
