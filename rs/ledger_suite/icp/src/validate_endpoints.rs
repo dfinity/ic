@@ -13,9 +13,9 @@ use protobuf::cycles_notification_response::Response;
 use serde_bytes::ByteBuf;
 use std::convert::{TryFrom, TryInto};
 
-// The point of this file is to validate protobufs as they're received and turn
-// them into a validated data type
-// ENDPOINTS.
+/// The point of this file is to validate protobufs as they're received and turn
+/// them into a validated data type
+/// ENDPOINTS.
 impl ToProto for TotalSupplyArgs {
     type Proto = protobuf::TotalSupplyRequest;
     fn from_proto(_: Self::Proto) -> Result<Self, String> {
