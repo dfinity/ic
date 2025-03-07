@@ -7,6 +7,7 @@ package(default_visibility = ["//visibility:public"])
 DEPENDENCIES = [
     # Keep sorted.
     "//rs/node_rewards/canister/api",
+    "//rs/registry/canister_data_provider",
     "@crate_index//:candid",
     "@crate_index//:ic-cdk",
     "@crate_index//:ic-stable-structures",

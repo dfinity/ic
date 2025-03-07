@@ -15,6 +15,7 @@ path = "src/lib.rs"
 
 [dependencies]
 ic-cdk = { workspace = true }
+ic_registry_canister_data_provider = { path = "../../registry/canister_data_provider" }
 ic-stable-structures = { workspace = true }
 candid = { workspace = true }
 node-rewards-canister-api = { path = "./api" }
