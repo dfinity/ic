@@ -29,7 +29,7 @@ use ic_replicated_state::{
     num_bytes_try_from,
     page_map::PageAllocatorFileDescriptor,
     CanisterState, CanisterStatus, ExecutionTask, InputQueueType, NetworkTopology, NumWasmPages,
-    ReplicatedState,
+    ReplicatedState, StateError,
 };
 use ic_system_api::InstructionLimits;
 use ic_types::{
@@ -1038,12 +1038,14 @@ impl SchedulerImpl {
                             )
                             .map(|_| ())
                             .map_err(|(err, msg)| {
-                                error!(
-                                    self.log,
-                                    "Inducting {:?} on same subnet failed with error '{}'.",
-                                    &msg,
-                                    &err
-                                );
+                                if !matches!(err, StateError::CanisterStopped(_)) {
+                                    error!(
+                                        self.log,
+                                        "Inducting {:?} on same subnet failed with error '{}'.",
+                                        &msg,
+                                        &err
+                                    );
+                                }
                             }),
                         None => Err(()),
                     }
@@ -2026,7 +2028,7 @@ fn observe_replicated_state_metrics(
             // Log all old call contexts, but not (nearly) every round.
             if current_round.get() % SPAMMY_LOG_INTERVAL_ROUNDS == 0 {
                 for (origin, origin_time) in &old_call_contexts {
-                    warn!(
+                    info!(
                         logger,
                         "Call context on canister {} with origin {:?} has been open for {:?}",
                         canister.canister_id(),
