@@ -4974,6 +4974,12 @@ impl Governance {
         }
     }
 
+    pub fn neuron_minimum_dissolve_delay_to_vote_seconds(&self) -> u64 {
+        self.voting_power_economics()
+            .neuron_minimum_dissolve_delay_to_vote_seconds
+            .unwrap_or(VotingPowerEconomics::DEFAULT_NEURON_MINIMUM_DISSOLVE_DELAY_TO_VOTE_SECONDS)
+    }
+
     /// The proposal id of the next proposal.
     fn next_proposal_id(&self) -> u64 {
         // Correctness is based on the following observations:
@@ -5353,7 +5359,7 @@ impl Governance {
         let min_dissolve_delay_seconds_to_vote = if let Action::ManageNeuron(_) = action {
             0
         } else {
-            MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS
+            self.neuron_minimum_dissolve_delay_to_vote_seconds()
         };
 
         // The proposer must be eligible to vote. This also ensures that the
