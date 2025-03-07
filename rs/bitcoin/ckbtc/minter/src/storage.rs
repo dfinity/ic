@@ -223,7 +223,6 @@ mod benches {
                     m.borrow().get(V1_LOG_INDEX_MEMORY_ID),
                     m.borrow().get(V1_LOG_DATA_MEMORY_ID),
                 )
-                .expect("failed to initialize stable log")
             })
         });
 
