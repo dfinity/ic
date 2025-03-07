@@ -401,7 +401,9 @@ pub async fn notify(
     to_subaccount: Option<Subaccount>,
     notify_using_protobuf: bool,
 ) -> Result<BytesS, String> {
-    use dfn_core::api::{call_bytes_with_cleanup, Funds};
+    use dfn_core::api::{call_bytes_with_cleanup, call_with_cleanup, Funds};
+    use icp_ledger::validate_endpoints::{protobuf, ProtoBuf};
+    use icp_ledger::BlockRes;
 
     NOTIFY_METHOD_CALLS.with(|n| *n.borrow_mut() += 1);
 
@@ -436,13 +438,12 @@ pub async fn notify(
                     "Searching canister {} for block {}",
                     cid, block_height
                 ));
-                // // Lookup the block on the archive
-                // let BlockRes(res) = call_with_cleanup(cid, "get_block_pb", protobuf, block_height)
-                //     .await
-                //     .map_err(|e| format!("Failed to fetch block {}", e.1))?;
-                // res.ok_or("Block not found")?
-                //     .map_err(|c| format!("Tried to redirect lookup a second time to {}", c))?
-                return Err("not implemented".to_string());
+                // Lookup the block on the archive
+                let BlockRes(res) = call_with_cleanup(cid, "get_block_pb", protobuf, block_height)
+                    .await
+                    .map_err(|e| format!("Failed to fetch block {}", e.1))?;
+                res.ok_or("Block not found")?
+                    .map_err(|c| format!("Tried to redirect lookup a second time to {}", c))?
             }
         };
 
@@ -492,17 +493,16 @@ pub async fn notify(
     add_payment(Memo(block_height), transfer, None);
 
     let response = if notify_using_protobuf {
-        // let bytes = ProtoBuf(transaction_notification_args)
-        //     .into_bytes()
-        //     .expect("transaction notification serialization failed");
-        // call_bytes_with_cleanup(
-        //     to_canister,
-        //     "transaction_notification_pb",
-        //     &bytes[..],
-        //     Funds::zero(),
-        // )
-        // .await
-        return Err("not implemented".to_string());
+        let bytes = ProtoBuf(transaction_notification_args)
+            .into_bytes()
+            .expect("transaction notification serialization failed");
+        call_bytes_with_cleanup(
+            to_canister,
+            "transaction_notification_pb",
+            &bytes[..],
+            Funds::zero(),
+        )
+        .await
     } else {
         let bytes = candid::encode_one(transaction_notification_args)
             .expect("transaction notification serialization failed");
