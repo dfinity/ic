@@ -308,7 +308,7 @@ enum TranscriptResults1 {
 }
 
 impl TranscriptResults1 {
-    fn new(id: &NiDkgId, transcript: Result<NiDkgTranscript, String>) {
+    fn new(id: &NiDkgId, transcript: Result<NiDkgTranscript, String>) -> Self {
         match id.dkg_tag {
             NiDkgTag::LowThreshold => Self::SetupInitialDKG {
                 low_threshold: Some(transcript),
@@ -322,7 +322,7 @@ impl TranscriptResults1 {
         }
     }
 
-    fn add_transcripts(
+    fn add_transcript(
         &mut self,
         id: &NiDkgId,
         transcript: Result<NiDkgTranscript, String>,
@@ -353,7 +353,10 @@ impl TranscriptResults1 {
         };
 
         if old_val.is_some() {
-            error!("Received a dublicate transcript for SetupInitialDKG request");
+            error!(
+                logger,
+                "Received a dublicate transcript for SetupInitialDKG request"
+            );
         }
     }
 }
@@ -364,67 +367,95 @@ pub fn generate_responses_to_setup_initial_dkg_calls(
     transcripts_for_remote_subnets: &[(NiDkgId, CallbackId, Result<NiDkgTranscript, String>)],
     log: &ReplicaLogger,
 ) -> Vec<ConsensusResponse> {
-    let mut consensus_responses = Vec::new();
+    // let mut transcripts: BTreeMap<CallbackId, TranscriptResults> = BTreeMap::new();
 
-    let mut transcripts: BTreeMap<CallbackId, TranscriptResults> = BTreeMap::new();
+    // for (id, callback_id, transcript) in transcripts_for_remote_subnets.iter() {
+    //     let add_transcript = |transcript_results: &mut TranscriptResults| {
+    //         let value = Some(transcript.clone());
+    //         match &id.dkg_tag {
+    //             NiDkgTag::LowThreshold => {
+    //                 if transcript_results.low_threshold.is_some() {
+    //                     error!(
+    //                         log,
+    //                         "Multiple low threshold transcripts for {}", callback_id
+    //                     );
+    //                 }
+    //                 transcript_results.low_threshold = value;
+    //             }
+    //             NiDkgTag::HighThreshold => {
+    //                 if transcript_results.high_threshold.is_some() {
+    //                     error!(
+    //                         log,
+    //                         "Multiple high threshold transcripts for {}", callback_id
+    //                     );
+    //                 }
+    //                 transcript_results.high_threshold = value;
+    //             }
+    //             NiDkgTag::HighThresholdForKey(master_public_key_id) => {
+    //                 /////////////////////////////////////
+    //                 // TODO(CON-1416): Generalize this function to support both SetupInitialDKG and vetKD key resharing
+    //                 /////////////////////////////////////
+    //                 error!(
+    //                     log,
+    //                     "Implementation error: NiDkgTag::HighThresholdForKey({master_public_key_id}) used in SetupInitialDKG for callback ID {callback_id}",
+    //                 );
+    //             }
+    //         }
+    //     };
+    //     match transcripts.get_mut(callback_id) {
+    //         Some(existing) => add_transcript(existing),
+    //         None => {
+    //             let mut transcript_results = TranscriptResults {
+    //                 low_threshold: None,
+    //                 high_threshold: None,
+    //             };
+    //             add_transcript(&mut transcript_results);
+    //             transcripts.insert(*callback_id, transcript_results);
+    //         }
+    //     };
+    // }
 
+    // for (callback, transcript_results) in transcripts.into_iter() {
+    //     let payload = generate_dkg_response_payload(
+    //         transcript_results.low_threshold.as_ref(),
+    //         transcript_results.high_threshold.as_ref(),
+    //         log,
+    //     );
+    //     if let Some(payload) = payload {
+    //         consensus_responses.push(ConsensusResponse::new(callback, payload));
+    //     }
+    // }
+
+    let mut transcripts: BTreeMap<CallbackId, TranscriptResults1> = BTreeMap::new();
     for (id, callback_id, transcript) in transcripts_for_remote_subnets.iter() {
-        let add_transcript = |transcript_results: &mut TranscriptResults| {
-            let value = Some(transcript.clone());
-            match &id.dkg_tag {
-                NiDkgTag::LowThreshold => {
-                    if transcript_results.low_threshold.is_some() {
-                        error!(
-                            log,
-                            "Multiple low threshold transcripts for {}", callback_id
-                        );
-                    }
-                    transcript_results.low_threshold = value;
-                }
-                NiDkgTag::HighThreshold => {
-                    if transcript_results.high_threshold.is_some() {
-                        error!(
-                            log,
-                            "Multiple high threshold transcripts for {}", callback_id
-                        );
-                    }
-                    transcript_results.high_threshold = value;
-                }
-                NiDkgTag::HighThresholdForKey(master_public_key_id) => {
-                    /////////////////////////////////////
-                    // TODO(CON-1416): Generalize this function to support both SetupInitialDKG and vetKD key resharing
-                    /////////////////////////////////////
-                    error!(
-                        log,
-                        "Implementation error: NiDkgTag::HighThresholdForKey({master_public_key_id}) used in SetupInitialDKG for callback ID {callback_id}",
-                    );
-                }
-            }
-        };
-        match transcripts.get_mut(callback_id) {
-            Some(existing) => add_transcript(existing),
-            None => {
-                let mut transcript_results = TranscriptResults {
-                    low_threshold: None,
-                    high_threshold: None,
-                };
-                add_transcript(&mut transcript_results);
-                transcripts.insert(*callback_id, transcript_results);
-            }
-        };
+        transcripts
+            .entry(*callback_id)
+            .and_modify(|transcript_result| {
+                transcript_result.add_transcript(id, transcript.clone(), log)
+            })
+            .or_insert(TranscriptResults1::new(id, transcript.clone()));
     }
 
-    for (callback, transcript_results) in transcripts.into_iter() {
-        let payload = generate_dkg_response_payload(
-            transcript_results.low_threshold.as_ref(),
-            transcript_results.high_threshold.as_ref(),
-            log,
-        );
-        if let Some(payload) = payload {
-            consensus_responses.push(ConsensusResponse::new(callback, payload));
-        }
-    }
-    consensus_responses
+    transcripts
+        .into_iter()
+        .filter_map(|(callback_id, transcript_result)| match transcript_result {
+            TranscriptResults1::ReshareChainKey(ni_dkg_transcript) => {
+                // TODO(CON-1416): Generalize this function to support both SetupInitialDKG and vetKD key resharing
+                error!(
+                    log,
+                    "ReshareChainKey for callback ID {callback_id} is unimplemented",
+                );
+                None
+            }
+            TranscriptResults1::SetupInitialDKG {
+                low_threshold,
+                high_threshold,
+            } => {
+                generate_dkg_response_payload(low_threshold.as_ref(), high_threshold.as_ref(), log)
+                    .map(|payload| ConsensusResponse::new(callback_id, payload))
+            }
+        })
+        .collect()
 }
 
 /// Generate a response payload given the low and high threshold transcripts
