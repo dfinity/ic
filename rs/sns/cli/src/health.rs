@@ -32,11 +32,18 @@ struct SnsHealthInfo {
     memory_consumption: Vec<(u64, SnsCanisterType)>,
     cycles: Vec<(Cycles, SnsCanisterType)>,
     num_remaining_upgrade_steps: usize,
+    automatic_target_version_advancement: Option<bool>,
 }
 
 impl TableRow for SnsHealthInfo {
     fn column_names() -> Vec<&'static str> {
-        vec!["Name", "Memory", "Cycles", "Upgrades Remaining"]
+        vec![
+            "Name",
+            "Memory",
+            "Cycles",
+            "Upgrades Remaining",
+            "Auto Upgrades",
+        ]
     }
 
     fn column_values(&self) -> Vec<String> {
@@ -87,11 +94,19 @@ impl TableRow for SnsHealthInfo {
             "👍".to_string()
         };
 
+        let automatic_target_version_advancement_sign =
+            match self.automatic_target_version_advancement {
+                Some(true) => "🐇",
+                Some(false) => "✍️",
+                None => "🦕",
+            };
+
         vec![
             self.name.clone(),
             high_memory_consumption,
             low_cycles,
             format!("{}", self.num_remaining_upgrade_steps),
+            automatic_target_version_advancement_sign.to_string(),
         ]
     }
 }
@@ -165,11 +180,18 @@ pub async fn exec(args: HealthArgs, agent: &Agent) -> Result<()> {
                 .len()
                 .saturating_sub(1);
 
+            let automatic_target_version_advancement = sns
+                .governance
+                .get_nervous_system_parameters(agent)
+                .await?
+                .automatically_advance_target_version;
+
             Result::<SnsHealthInfo, anyhow::Error>::Ok(SnsHealthInfo {
                 name,
                 memory_consumption,
                 cycles,
                 num_remaining_upgrade_steps,
+                automatic_target_version_advancement,
             })
         })
         .buffer_unordered(10)
