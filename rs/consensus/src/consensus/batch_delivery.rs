@@ -376,7 +376,7 @@ pub fn generate_responses_to_remote_dkgs(
     dkg_results
         .into_iter()
         .filter_map(|(callback_id, transcript_result)| match transcript_result {
-            RemoteDkgResults::ReshareChainKey(ni_dkg_transcript) => {
+            RemoteDkgResults::ReshareChainKey(_ni_dkg_transcript) => {
                 // TODO(CON-1416): Implement this case
                 error!(
                     log,
