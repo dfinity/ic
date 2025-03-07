@@ -65,7 +65,7 @@ fn test(env: TestEnv) {
     let original_version = get_assigned_replica_version(&nns_node).unwrap();
     info!(logger, "Original replica version: {}", original_version);
 
-    let upgrade_url = get_ic_os_update_img_test_url().expect("no image URL");
+    let upgrade_url = get_guestos_update_img_test_url().expect("no image URL");
     info!(logger, "Upgrade URL: {}", upgrade_url);
 
     // A list of URLs, among which only one is valid:
@@ -86,7 +86,7 @@ fn test(env: TestEnv) {
         &original_version,
         UpdateImageType::ImageTest,
         release_package_urls,
-        get_ic_os_update_img_test_sha256().expect("no SHA256 hash"),
+        get_guestos_update_img_test_sha256().expect("no SHA256 hash"),
         &logger,
     ));
 

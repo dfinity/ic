@@ -47,8 +47,8 @@ pub fn bless_branch_version(env: &TestEnv, nns_node: &IcNodeSnapshot) -> String 
     let branch_version = format!("{}-test", original_branch_version);
 
     // Bless branch version
-    let sha256 = get_ic_os_update_img_test_sha256().unwrap();
-    let upgrade_url = get_ic_os_update_img_test_url().unwrap();
+    let sha256 = get_guestos_update_img_test_sha256().unwrap();
+    let upgrade_url = get_guestos_update_img_test_url().unwrap();
     block_on(bless_replica_version(
         nns_node,
         &original_branch_version,
@@ -67,8 +67,8 @@ pub fn bless_mainnet_version(env: &TestEnv, nns_node: &IcNodeSnapshot) -> String
     let mainnet_version = get_mainnet_nns_revision();
 
     // Bless mainnet version
-    let sha256 = env.get_mainnet_ic_os_update_img_sha256().unwrap();
-    let upgrade_url = get_mainnet_ic_os_update_img_url().unwrap();
+    let sha256 = env.get_mainnet_guestos_update_img_sha256().unwrap();
+    let upgrade_url = get_mainnet_guestos_update_img_url().unwrap();
     block_on(bless_replica_version(
         nns_node,
         &mainnet_version,

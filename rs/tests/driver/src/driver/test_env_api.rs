@@ -1110,8 +1110,8 @@ impl HasRegistryLocalStore for TestEnv {
 pub trait HasIcDependencies {
     fn get_farm_url(&self) -> Result<Url>;
     fn get_initial_replica_version(&self) -> Result<ReplicaVersion>;
-    fn get_mainnet_ic_os_img_sha256(&self) -> Result<String>;
-    fn get_mainnet_ic_os_update_img_sha256(&self) -> Result<String>;
+    fn get_mainnet_guestos_img_sha256(&self) -> Result<String>;
+    fn get_mainnet_guestos_update_img_sha256(&self) -> Result<String>;
 }
 
 impl<T: HasTestEnv> HasIcDependencies for T {
@@ -1127,12 +1127,12 @@ impl<T: HasTestEnv> HasIcDependencies for T {
         Ok(initial_replica_version.version)
     }
 
-    fn get_mainnet_ic_os_img_sha256(&self) -> Result<String> {
+    fn get_mainnet_guestos_img_sha256(&self) -> Result<String> {
         let mainnet_version = get_mainnet_nns_revision();
         fetch_sha256(format!("http://download.proxy-global.dfinity.network:8080/ic/{mainnet_version}/guest-os/disk-img"), "disk-img.tar.zst", self.test_env().logger())
     }
 
-    fn get_mainnet_ic_os_update_img_sha256(&self) -> Result<String> {
+    fn get_mainnet_guestos_update_img_sha256(&self) -> Result<String> {
         let mainnet_version = get_mainnet_nns_revision();
         fetch_sha256(format!("http://download.proxy-global.dfinity.network:8080/ic/{mainnet_version}/guest-os/update-img"), "update-img.tar.zst", self.test_env().logger())
     }
@@ -1145,48 +1145,48 @@ pub fn get_elasticsearch_hosts() -> Result<Vec<String>> {
     parse_elasticsearch_hosts(Some(hosts))
 }
 
-pub fn get_ic_os_img_url() -> Result<Url> {
+pub fn get_guestos_img_url() -> Result<Url> {
     let url = std::env::var("ENV_DEPS__GUESTOS_DISK_IMG_URL")?;
     Ok(Url::parse(&url)?)
 }
 
-pub fn get_ic_os_img_sha256() -> Result<String> {
+pub fn get_guestos_img_sha256() -> Result<String> {
     Ok(std::env::var("ENV_DEPS__GUESTOS_DISK_IMG_HASH")?)
 }
 
-pub fn get_malicious_ic_os_img_url() -> Result<Url> {
+pub fn get_malicious_guestos_img_url() -> Result<Url> {
     let url = std::env::var("ENV_DEPS__GUESTOS_MALICIOUS_DISK_IMG_URL")?;
     Ok(Url::parse(&url)?)
 }
 
-pub fn get_malicious_ic_os_img_sha256() -> Result<String> {
+pub fn get_malicious_guestos_img_sha256() -> Result<String> {
     Ok(std::env::var("ENV_DEPS__GUESTOS_MALICIOUS_DISK_IMG_HASH")?)
 }
 
-pub fn get_ic_os_update_img_url() -> Result<Url> {
+pub fn get_guestos_update_img_url() -> Result<Url> {
     let url = std::env::var("ENV_DEPS__GUESTOS_UPDATE_IMG_URL")?;
     Ok(Url::parse(&url)?)
 }
 
-pub fn get_ic_os_update_img_sha256() -> Result<String> {
+pub fn get_guestos_update_img_sha256() -> Result<String> {
     Ok(std::env::var("ENV_DEPS__GUESTOS_UPDATE_IMG_HASH")?)
 }
 
-pub fn get_ic_os_update_img_test_url() -> Result<Url> {
+pub fn get_guestos_update_img_test_url() -> Result<Url> {
     let url = std::env::var("ENV_DEPS__GUESTOS_UPDATE_IMG_TEST_URL")?;
     Ok(Url::parse(&url)?)
 }
 
-pub fn get_ic_os_update_img_test_sha256() -> Result<String> {
+pub fn get_guestos_update_img_test_sha256() -> Result<String> {
     Ok(std::env::var("ENV_DEPS__GUESTOS_UPDATE_IMG_TEST_HASH")?)
 }
 
-pub fn get_malicious_ic_os_update_img_url() -> Result<Url> {
+pub fn get_malicious_guestos_update_img_url() -> Result<Url> {
     let url = std::env::var("ENV_DEPS__GUESTOS_MALICIOUS_UPDATE_IMG_URL")?;
     Ok(Url::parse(&url)?)
 }
 
-pub fn get_malicious_ic_os_update_img_sha256() -> Result<String> {
+pub fn get_malicious_guestos_update_img_sha256() -> Result<String> {
     Ok(std::env::var(
         "ENV_DEPS__GUESTOS_MALICIOUS_UPDATE_IMG_HASH",
     )?)
@@ -1211,13 +1211,13 @@ pub fn get_mainnet_application_subnet_revision() -> String {
         .expect("could not read mainnet application subnet version from environment")
 }
 
-pub fn get_mainnet_ic_os_img_url() -> Result<Url> {
+pub fn get_mainnet_guestos_img_url() -> Result<Url> {
     let mainnet_version = get_mainnet_nns_revision();
     let url = format!("http://download.proxy-global.dfinity.network:8080/ic/{mainnet_version}/guest-os/disk-img/disk-img.tar.zst");
     Ok(Url::parse(&url)?)
 }
 
-pub fn get_mainnet_ic_os_update_img_url() -> Result<Url> {
+pub fn get_mainnet_guestos_update_img_url() -> Result<Url> {
     let mainnet_version = get_mainnet_nns_revision();
     let url = format!("http://download.proxy-global.dfinity.network:8080/ic/{mainnet_version}/guest-os/update-img/update-img.tar.zst");
     Ok(Url::parse(&url)?)
