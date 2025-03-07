@@ -1,5 +1,5 @@
 load("@rules_rust//rust:defs.bzl", "rust_library")
-load("//rs/tests:common.bzl", "GUESTOS_RUNTIME_DEPS")
+load("//rs/tests:common.bzl", "GUESTOS_RUNTIME_DEPS", "MAINNET_ENV")
 load("//rs/tests:system_tests.bzl", "system_test_nns")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
@@ -38,6 +38,7 @@ rust_library(
 
 system_test_nns(
     name = "registration",
+    env = MAINNET_ENV,
     flaky = True,
     tags = [
         "system_test_hourly",
@@ -52,6 +53,7 @@ system_test_nns(
 
 system_test_nns(
     name = "upgrade",
+    env = MAINNET_ENV,
     flaky = True,
     tags = [
         "system_test_hourly",
