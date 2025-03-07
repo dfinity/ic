@@ -838,6 +838,8 @@ pub fn setup_router(
         http_client.clone(),
         Arc::clone(&routing_table),
         Arc::clone(&registry_snapshot),
+        cli.health.health_subnets_alive_threshold,
+        cli.health.health_nodes_per_subnet_alive_threshold,
     );
 
     let proxy_router = Arc::new(proxy_router);
