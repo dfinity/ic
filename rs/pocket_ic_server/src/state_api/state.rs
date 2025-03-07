@@ -11,12 +11,13 @@ use async_trait::async_trait;
 use axum::{
     extract::{Request as AxumRequest, State},
     response::{IntoResponse, Response},
-    routing::{get, post},
+    routing::get,
     Router,
 };
 use axum_server::tls_rustls::RustlsConfig;
 use axum_server::Handle;
 use base64;
+use ic_agent::agent::route_provider::RouteProvider;
 use fqdn::{fqdn, FQDN};
 use futures::future::Shared;
 use http::{
@@ -24,12 +25,14 @@ use http::{
         ACCEPT_RANGES, CACHE_CONTROL, CONTENT_LENGTH, CONTENT_RANGE, CONTENT_TYPE, COOKIE, DNT,
         IF_MODIFIED_SINCE, IF_NONE_MATCH, RANGE, USER_AGENT,
     },
-    HeaderName, Method, StatusCode,
+    Method, StatusCode, Uri
 };
 use ic_bn_lib::http::body::buffer_body;
 use ic_bn_lib::http::headers::{X_IC_CANISTER_ID, X_REQUESTED_WITH, X_REQUEST_ID};
 use ic_bn_lib::http::proxy::proxy;
-use ic_bn_lib::http::{Client, Error as IcBnError};
+use ic_bn_lib::http::{Client, Error as IcBnError, Stats, ConnInfo};
+use uuid::Uuid;
+use tokio_util::sync::CancellationToken;
 use ic_http_gateway::{CanisterRequest, HttpGatewayClient, HttpGatewayRequestArgs};
 use ic_types::{canister_http::CanisterHttpRequestId, CanisterId, NodeId, PrincipalId, SubnetId};
 use itertools::Itertools;
@@ -59,6 +62,10 @@ use tokio::{
 use tower::ServiceExt;
 use tower_http::cors::{Any, CorsLayer};
 use tracing::{debug, error, trace};
+    use clap::Parser;
+    use ic_agent::agent::route_provider::RoundRobinRouteProvider;
+    use ic_bn_lib::tls::prepare_client_config;
+    use ic_gateway::{setup_router, Cli};
 
 // The maximum wait time for a computation to finish synchronously.
 const DEFAULT_SYNC_WAIT_DURATION: Duration = Duration::from_secs(10);
@@ -427,9 +434,6 @@ fn received_stop_signal(rx: &mut Receiver<()>) -> bool {
 const MAX_REQUEST_BODY_SIZE: usize = 10 * 1_048_576;
 const MINUTE: Duration = Duration::from_secs(60);
 
-const X_OC_JWT: HeaderName = HeaderName::from_static("x-oc-jwt");
-const X_OC_API_KEY: HeaderName = HeaderName::from_static("x-oc-api-key");
-
 fn layer(methods: &[Method]) -> CorsLayer {
     CorsLayer::new()
         .allow_origin(Any)
@@ -452,34 +456,6 @@ fn layer(methods: &[Method]) -> CorsLayer {
             COOKIE,
             X_REQUESTED_WITH,
             X_IC_CANISTER_ID,
-        ])
-        .max_age(10 * MINUTE)
-}
-
-fn http_gw_layer(methods: &[Method]) -> CorsLayer {
-    CorsLayer::new()
-        .allow_origin(Any)
-        .allow_methods(methods.to_vec())
-        .expose_headers([
-            ACCEPT_RANGES,
-            CONTENT_LENGTH,
-            CONTENT_RANGE,
-            X_REQUEST_ID,
-            X_IC_CANISTER_ID,
-        ])
-        .allow_headers([
-            USER_AGENT,
-            DNT,
-            IF_NONE_MATCH,
-            IF_MODIFIED_SINCE,
-            CACHE_CONTROL,
-            CONTENT_TYPE,
-            RANGE,
-            COOKIE,
-            X_REQUESTED_WITH,
-            X_IC_CANISTER_ID,
-            X_OC_JWT,
-            X_OC_API_KEY,
         ])
         .max_age(10 * MINUTE)
 }
@@ -814,6 +790,7 @@ impl ApiState {
                     .map(|p| p.as_str())
                     .unwrap_or_default()
             );
+            println!("URL: {}", url);
             proxy(Url::parse(&url).unwrap(), request, &client)
                 .await
                 .map_err(|e| ErrorCause::ConnectionFailure(e.to_string()))
@@ -860,86 +837,112 @@ impl ApiState {
             .map_err(|_| format!("Timed out fetching root key from {}", replica_url))?
             .map_err(|e| e.to_string())?;
 
-        let replica_url = replica_url.trim_end_matches('/').to_string();
+        //let replica_url = replica_url.trim_end_matches('/').to_string();
 
         let handle = Handle::new();
         let axum_handle = handle.clone();
         let domains = http_gateway_config
             .domains
             .clone()
-            .unwrap_or(vec!["localhost".to_string()])
-            .iter()
-            .map(|d| fqdn!(d))
-            .collect();
+            .unwrap_or(vec!["localhost".to_string()]);
+            //.iter()
+            //.map(|d| fqdn!(d))
+            //.collect();
         spawn(async move {
-            let http_gateway_client = ic_http_gateway::HttpGatewayClientBuilder::new()
+            let _http_gateway_client = ic_http_gateway::HttpGatewayClientBuilder::new()
                 .with_agent(agent)
                 .build()
                 .unwrap();
-            let domain_resolver = DomainResolver::new(domains);
+            //let _domain_resolver = DomainResolver::new(domains);
             let backend_client = Arc::new(ReqwestClient::new(reqwest::Client::new()));
-            let state_handler = Arc::new(HandlerState::new(
-                http_gateway_client,
-                backend_client.clone(),
-                domain_resolver,
-                replica_url.clone(),
-            ));
 
-            // ADAPTED from ic-gateway
-            let cors_post = layer(&[Method::POST]);
+    let router = {
+        let mut args = vec!["".to_string()];
+        for d in &domains {
+          args.push("--domain".to_string());
+          args.push(d.clone());
+        }
+        args.push("--domain-canister-id-from-query-params".to_string());
+        let cli = Cli::parse_from(args);
+        //cli.domain.domain = domains.iter().map(|d| fqdn!(d)).collect();
+        println!("cli: domains ({:?}); {:?}", domains, cli.domain.domain);
+    
+        let _ = rustls::crypto::ring::default_provider()
+            .install_default();
+
+        let mut http_client_opts: ic_bn_lib::http::client::Options<ic_bn_lib::http::dns::Resolver> =
+            (&cli.http_client).into();
+        http_client_opts.tls_config = Some(prepare_client_config(&[
+            &rustls::version::TLS13, 
+            &rustls::version::TLS12,
+        ]));
+        let http_client =
+            Arc::new(ic_bn_lib::http::ReqwestClient::new(http_client_opts.clone()).unwrap());
+
+        let route_provider = RoundRobinRouteProvider::new(vec![replica_url.clone()]).unwrap();
+
+        let mut tasks = ic_bn_lib::tasks::TaskManager::new();
+    
+        let ic_gateway_router = setup_router(
+            &cli,
+            vec![],
+            &mut tasks,
+            http_client,
+            Arc::new(route_provider),
+            &prometheus::Registry::new(),
+            None,
+            None,
+        )
+        .unwrap();
             let cors_get = layer(&[Method::HEAD, Method::GET]);
-            // IC API proxy routers
-            let router_api_v2 = Router::new()
-                .route(
-                    "/canister/{principal}/query",
-                    post(proxy_handler).layer(cors_post.clone()),
+        Router::new()
+                .nest("/_", Router::new()
+                  .route(
+                      "/dashboard",
+                      get(proxy_handler).layer(cors_get.clone()),
+                  )
+                  .route(
+                      "/topology",
+                      get(proxy_handler).layer(cors_get.clone()),
+                  )
+                  .with_state((format!("{}/_", replica_url.trim_end_matches('/')), backend_client))
                 )
-                .route(
-                    "/canister/{principal}/call",
-                    post(proxy_handler).layer(cors_post.clone()),
-                )
-                .route(
-                    "/canister/{principal}/read_state",
-                    post(proxy_handler).layer(cors_post.clone()),
-                )
-                .route(
-                    "/subnet/{principal}/read_state",
-                    post(proxy_handler).layer(cors_post.clone()),
-                )
-                .route("/status", get(proxy_handler).layer(cors_get.clone()))
-                .fallback(|| async { (StatusCode::NOT_FOUND, "") })
-                .with_state((format!("{}/api/v2", replica_url), backend_client.clone()));
-            let router_api_v3 = Router::new()
-                .route(
-                    "/canister/{principal}/call",
-                    post(proxy_handler).layer(cors_post.clone()),
-                )
-                .fallback(|| async { (StatusCode::NOT_FOUND, "") })
-                .with_state((format!("{}/api/v3", replica_url), backend_client.clone()));
-
-            let router_http = Router::new().fallback(
-                post(handler)
-                    .get(handler)
-                    .put(handler)
-                    .delete(handler)
-                    .patch(handler)
-                    .layer(http_gw_layer(&[
-                        Method::HEAD,
-                        Method::GET,
-                        Method::POST,
-                        Method::PUT,
-                        Method::DELETE,
-                        Method::PATCH,
-                    ]))
-                    .with_state(state_handler),
-            );
-            // Top-level router
-            let router = Router::new()
-                .nest("/api/v2", router_api_v2)
-                .nest("/api/v3", router_api_v3)
-                .fallback(|request: AxumRequest| async move { router_http.oneshot(request).await })
-                .into_make_service();
-            // END ADAPTED from ic-gateway
+                .fallback(|mut request: AxumRequest| async move {
+                    let conn_info = ConnInfo {
+                      id: Uuid::now_v7(),
+                      accepted_at: std::time::Instant::now(),
+                      remote_addr: ic_bn_lib::http::server::Addr::Tcp("127.0.0.1:8080".parse().unwrap()),
+                      traffic: Arc::new(Stats::new()),
+                      req_count: AtomicU64::new(0),
+                      close: CancellationToken::new(),
+                    };
+                    request.extensions_mut().insert(Arc::new(conn_info));
+                    let mut parts = request.uri().clone().into_parts();
+                    parts.path_and_query = parts.path_and_query.map(|p| p.as_str().try_into().unwrap());
+                    *request.uri_mut() = Uri::from_parts(parts).unwrap();
+                    let route_provider = RoundRobinRouteProvider::new(vec![replica_url.clone()]).unwrap();
+                    let url = route_provider.route().unwrap();
+                    println!("from route provider: {}", url);
+                    println!("joining: {}", request.uri().path());
+                    let url = url.join(request.uri().path()).unwrap();
+                    println!("fallback: {}", url);
+                    let authority =     request
+        .uri()
+        .authority()
+        .map(|x| x.host())
+        .or_else(|| {
+            request
+                .headers()
+                .get(http::header::HOST)
+                .and_then(|x| x.to_str().ok())
+                // Split if it has a port
+                .and_then(|x| x.split(':').next())
+        });
+                    println!("authority: {:?}", authority);
+                    ic_gateway_router.oneshot(request).await
+                  })
+                .into_make_service()
+    };
 
             match https_config {
                 Some(config) => {

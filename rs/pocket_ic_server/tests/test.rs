@@ -475,7 +475,9 @@ fn test_dashboard() {
     let gateway_dashboard_url = gateway.join("_/dashboard").unwrap().to_string();
     for dashboard_url in [instance_dashboard_url, gateway_dashboard_url] {
         let dashboard = client.get(dashboard_url).send().unwrap();
+        println!("status: {:?}", dashboard.status());
         let page = String::from_utf8(dashboard.bytes().unwrap().to_vec()).unwrap();
+        println!("page: {}", page);
         assert!(page.contains(&canister_1.to_string()));
         assert!(page.contains(&canister_2.to_string()));
         assert!(page.contains(&nns_subnet.to_string()));

@@ -38,6 +38,7 @@ ic-crypto-sha2 = { path = "../crypto/sha2" }
 ic-crypto-utils-threshold-sig-der = { path = "../crypto/utils/threshold_sig_der" }
 ic-ed25519 = { path = "../../packages/ic-ed25519" }
 ic-error-types = { path = "../../packages/ic-error-types" }
+ic-gateway = { workspace = true }
 ic-http-gateway = { workspace = true }
 ic-http-endpoints-public = { path = "../http_endpoints/public" }
 ic-https-outcalls-adapter = { path = "../https_outcalls/adapter" }
@@ -65,8 +66,10 @@ ic-utils-thread = { path = "../utils/thread" }
 ic-validator-ingress-message = { path = "../validator/ingress_message" }
 itertools = { workspace = true }
 pocket-ic = { path = "../../packages/pocket-ic" }
+prometheus = { workspace = true }
 rand = { workspace = true }
 reqwest = { workspace = true }
+rustls = { workspace = true }
 serde = { workspace = true }
 serde_cbor = { workspace = true }
 serde_json = { workspace = true }
@@ -88,15 +91,12 @@ wat = { workspace = true }
 bitcoincore-rpc = { workspace = true }
 ic-btc-interface = { workspace = true }
 ic-config = { path = "../config" }
-ic-gateway = { workspace = true }
 ic-registry-transport = { path = "../registry/transport" }
 ic-interfaces-registry = { path = "../interfaces/registry" }
 ic-nns-constants = { path = "../nns/constants" }
 nix = { version = "0.29.0" }
-prometheus = { workspace = true }
 rcgen = { workspace = true }
 registry-canister = { path = "../registry/canister" }
 reqwest = { workspace = true }
-rustls = { workspace = true }
 serde_json = { workspace = true }
 spec-compliance = { path = "../tests/research/spec_compliance" }
