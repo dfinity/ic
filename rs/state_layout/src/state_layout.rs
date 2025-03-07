@@ -213,7 +213,8 @@ pub struct CanisterSnapshotBits {
 #[derive(Clone)]
 struct StateLayoutMetrics {
     state_layout_error_count: IntCounterVec,
-    state_layout_remove_checkpoint_duration: Histogram,
+    state_layout_sync_remove_checkpoint_duration: Histogram,
+    state_layout_async_remove_checkpoint_duration: Histogram,
 }
 
 impl StateLayoutMetrics {
@@ -224,9 +225,14 @@ impl StateLayoutMetrics {
                 "Total number of errors encountered in the state layout.",
                 &["source"],
             ),
-            state_layout_remove_checkpoint_duration: metric_registry.histogram(
-                "state_layout_remove_checkpoint_duration",
-                "Time elapsed in removing checkpoint.",
+            state_layout_sync_remove_checkpoint_duration: metric_registry.histogram(
+                "state_layout_sync_remove_checkpoint_seconds_duration",
+                "Time elapsed in removing checkpoint synchronously.",
+                decimal_buckets(-3, 1),
+            ),
+            state_layout_async_remove_checkpoint_duration: metric_registry.histogram(
+                "state_layout_async_remove_checkpoint_seconds_duration",
+                "Time elapsed in removing checkpoint asynchronously in the background thread.",
                 decimal_buckets(-3, 1),
             ),
         }
@@ -462,6 +468,9 @@ fn spawn_checkpoint_removal_thread(
     log: ReplicaLogger,
     metrics: StateLayoutMetrics,
 ) -> (JoinOnDrop<()>, Sender<CheckpointRemovalRequest>) {
+    // The number of the requests in the channel is limited by the number of checkpoints created.
+    // As we always flush the channel before creating a new checkpoint, there won't be excessive number of requests.
+    #[allow(clippy::disallowed_methods)]
     let (checkpoint_removal_sender, checkpoint_removal_receiver) =
         unbounded::<CheckpointRemovalRequest>();
     let checkpoint_removal_handle = JoinOnDrop::new(
@@ -479,8 +488,16 @@ fn spawn_checkpoint_removal_thread(
                                 )
                             }
                             metrics
-                                .state_layout_remove_checkpoint_duration
+                                .state_layout_async_remove_checkpoint_duration
                                 .observe(start.elapsed().as_secs_f64());
+                            let remaining_requests = checkpoint_removal_receiver.len();
+                            info!(
+                                log,
+                                "Asynchronously removed checkpoint from tmp path {} in {:?}. Number of remaining requests: {}",
+                                path.display(),
+                                start.elapsed(),
+                                remaining_requests
+                            );
                         }
                         CheckpointRemovalRequest::Wait { sender } => {
                             sender.send(()).expect("Failed to send completion signal");
@@ -964,17 +981,15 @@ impl StateLayout {
 
         // Drops drop_after_rename once the checkpoint path is renamed to tmp_path.
         std::mem::drop(drop_after_rename);
-        let elapsed = start.elapsed();
-        info!(
-            self.log,
-            "Moved checkpoint @{} to tmp path in {:?}", height, elapsed
-        );
         self.checkpoint_removal_sender
             .send(CheckpointRemovalRequest::Remove(tmp_path))
-            .expect("failed to send checkpoint removal");
-        self.metrics
-            .state_layout_remove_checkpoint_duration
-            .observe(elapsed.as_secs_f64());
+            .expect("failed to send checkpoint removal request");
+        info!(
+            self.log,
+            "Async checkpoint removal operation moves checkpoint @{} to tmp path and returns in {:?}",
+            height,
+            start.elapsed()
+        );
         Ok(())
     }
 
@@ -1035,10 +1050,10 @@ impl StateLayout {
         let elapsed = start.elapsed();
         info!(
             self.log,
-            "Removed checkpoint synchronously @{} in {:?}", height, elapsed
+            "Synchronously removed checkpoint @{} in {:?}", height, elapsed
         );
         self.metrics
-            .state_layout_remove_checkpoint_duration
+            .state_layout_sync_remove_checkpoint_duration
             .observe(elapsed.as_secs_f64());
         Ok(())
     }
