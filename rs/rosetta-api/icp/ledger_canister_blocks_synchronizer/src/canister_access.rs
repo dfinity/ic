@@ -1,12 +1,11 @@
 #![allow(clippy::disallowed_types)]
-use dfn_protobuf::{ProtoBuf, ToProto};
 use ic_agent::identity::AnonymousIdentity;
 use ic_agent::{Agent, AgentError, NonceGenerator};
 use ic_ledger_core::block::EncodedBlock;
 use ic_types::CanisterId;
 use icp_ledger::protobuf::{ArchiveIndexEntry, ArchiveIndexResponse, TipOfChainRequest};
+use icp_ledger::validate_endpoints::{from_proto_bytes, to_proto_bytes_res, ToProto};
 use icp_ledger::{BlockArg, BlockIndex, BlockRes, GetBlocksArgs, GetBlocksRes, TipOfChainRes};
-use on_wire::{FromWire, IntoWire};
 use std::collections::VecDeque;
 use std::convert::TryFrom;
 use std::sync::Arc;
@@ -96,7 +95,7 @@ impl CanisterAccess {
         method: &str,
         payload: Payload,
     ) -> Result<Res, String> {
-        let arg = ProtoBuf(payload).into_bytes()?;
+        let arg = to_proto_bytes_res(payload)?;
         let bytes = self
             .agent
             .query(&canister_id.get().0, method)
@@ -104,7 +103,7 @@ impl CanisterAccess {
             .call()
             .await
             .map_err(|e| format!("{}", e))?;
-        ProtoBuf::from_bytes(bytes).map(|c| c.0)
+        Ok(from_proto_bytes(bytes))
     }
 
     pub async fn query_tip(&self) -> Result<TipOfChainRes, String> {

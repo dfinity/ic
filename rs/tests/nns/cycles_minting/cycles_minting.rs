@@ -4,11 +4,11 @@ use cycles_minting_canister::{
     NotifyError, NotifyTopUp, SubnetSelection, TopUpCanisterResult,
 };
 use dfn_candid::CandidOne;
-use dfn_protobuf::{ProtoBuf, ToProto};
 use ic_canister_client::{Agent, Ed25519KeyPair, HttpClient, Sender};
 use ic_ledger_core::{block::BlockType, tokens::CheckedAdd};
 use ic_nns_constants::LEDGER_CANISTER_ID;
 use ic_types::{CanisterId, Cycles, PrincipalId};
+use icp_ledger::validate_endpoints::{ProtoBuf, ToProto};
 use icp_ledger::{
     protobuf::TipOfChainRequest, tokens_from_proto, AccountBalanceArgs, AccountIdentifier, Block,
     BlockArg, BlockIndex, BlockRes, CyclesResponse, Memo, NotifyCanisterArgs, Operation,

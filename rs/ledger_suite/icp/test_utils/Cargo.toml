@@ -20,4 +20,5 @@ icp-ledger = { path = ".." }
 icrc-ledger-types = { path = "../../../../packages/icrc-ledger-types" }
 on_wire = { path = "../../../rust_canisters/on_wire" }
 pocket-ic = { path = "../../../../packages/pocket-ic" }
+prost = { workspace = true }
 serde = { workspace = true }

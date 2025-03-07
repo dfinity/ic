@@ -6,7 +6,6 @@ use dfn_core::{
     api::{call_with_cleanup, caller},
     over, over_async, over_init, over_may_reject, stable,
 };
-use dfn_protobuf::protobuf;
 use environment::Environment;
 use exchange_rate_canister::{
     RealExchangeRateCanisterClient, UpdateExchangeRateError, UpdateExchangeRateState,
@@ -16,6 +15,7 @@ use ic_crypto_tree_hash::{
     WitnessGeneratorImpl,
 };
 use ic_ledger_core::{block::BlockType, tokens::CheckedSub};
+use icp_ledger::validate_endpoints::protobuf;
 // TODO(EXC-1687): remove temporary aliases `Ic00CanisterSettingsArgs` and `Ic00CanisterSettingsArgsBuilder`.
 use ic_management_canister_types_private::{
     BoundedVec, CanisterIdRecord, CanisterSettingsArgs as Ic00CanisterSettingsArgs,

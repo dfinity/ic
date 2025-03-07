@@ -32,6 +32,7 @@ rust_canister(
         "@crate_index//:ic-cdk",
         "@crate_index//:ic-metrics-encoder",
         "@crate_index//:lazy_static",
+        "@crate_index//:prost",
         "@crate_index//:serde",
     ],
 )
