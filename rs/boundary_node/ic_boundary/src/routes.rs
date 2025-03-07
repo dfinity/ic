@@ -413,8 +413,6 @@ impl RootKey for ProxyRouter {
 
 impl Health for ProxyRouter {
     fn health(&self) -> ReplicaHealthStatus {
-        // Return healthy state if we have at least one healthy replica node
-        // TODO increase threshold? change logic?
         match (
             self.published_routes.load_full(),
             self.published_registry_snapshot.load_full(),
