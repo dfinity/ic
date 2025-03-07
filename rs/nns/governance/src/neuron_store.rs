@@ -956,9 +956,7 @@ impl NeuronStore {
         let mut process_neuron = |neuron: &Neuron| {
             if neuron.is_inactive(now_seconds)
                 || neuron.dissolve_delay_seconds(now_seconds)
-                    < voting_power_economics
-                        .neuron_minimum_dissolve_delay_to_vote_seconds
-                        .unwrap()
+                    < voting_power_economics.neuron_minimum_dissolve_delay_to_vote_seconds()
             {
                 return;
             }

@@ -275,14 +275,14 @@ impl VotingPowerEconomics {
         ),
         clear_following_after_seconds: Some(Self::DEFAULT_CLEAR_FOLLOWING_AFTER_SECONDS),
         neuron_minimum_dissolve_delay_to_vote_seconds: Some(
-            Self::MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS,
+            Self::DEFAULT_NEURON_MINIMUM_DISSOLVE_DELAY_TO_VOTE_SECONDS,
         ),
     };
 
-    // [MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS] represents the default time threshold (in seconds)
+    // [DEFAULT_NEURON_MINIMUM_DISSOLVE_DELAY_TO_VOTE_SECONDS] represents the default time threshold (in seconds)
     // after which voting power begins to decrease in the network economics configuration. This is a preset
     // value for the system, but it should be updated to align with [MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS].
-    pub const MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS: u64 =
+    pub const DEFAULT_NEURON_MINIMUM_DISSOLVE_DELAY_TO_VOTE_SECONDS: u64 =
         crate::governance::MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS;
     pub const DEFAULT_START_REDUCING_VOTING_POWER_AFTER_SECONDS: u64 = 6 * ONE_MONTH_SECONDS;
     pub const DEFAULT_CLEAR_FOLLOWING_AFTER_SECONDS: u64 = ONE_MONTH_SECONDS;
