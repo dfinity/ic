@@ -389,8 +389,7 @@ impl BlockType for Block {
     }
 
     fn decode(encoded_block: EncodedBlock) -> Result<Self, String> {
-        let block: Block = from_proto_bytes_res(encoded_block.into_vec())?;
-        Ok(block)
+        from_proto_bytes_res(encoded_block.into_vec())
     }
 
     fn block_hash(encoded_block: &EncodedBlock) -> HashOf<EncodedBlock> {

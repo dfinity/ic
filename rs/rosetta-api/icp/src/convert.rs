@@ -32,12 +32,11 @@ use ic_types::{
     messages::{HttpCanisterUpdate, HttpReadState},
     CanisterId, PrincipalId,
 };
-use icp_ledger::validate_endpoints::ToProto;
+use icp_ledger::validate_endpoints::{from_proto_bytes_res, to_proto_bytes};
 use icp_ledger::{
     Block, BlockIndex, Operation as LedgerOperation, SendArgs, Subaccount, TimeStamp, Tokens,
     Transaction,
 };
-use prost::Message;
 use rosetta_core::convert::principal_id_from_public_key;
 use serde_json::{from_value, map::Map, Number, Value};
 use std::convert::{TryFrom, TryInto};
@@ -433,20 +432,11 @@ pub fn principal_id_from_public_key_or_principal(
 
 // This is so I can keep track of where this conversion is done
 pub fn from_arg(encoded: Vec<u8>) -> Result<SendArgs, ApiError> {
-    let proto_args: icp_ledger::protobuf::SendRequest = prost::Message::decode(&encoded[..])
-        .map_err(|e| e.to_string())
-        .map_err(ApiError::internal_error)?;
-    let res = SendArgs::from_proto(proto_args).map_err(ApiError::internal_error)?;
-    Ok(res)
+    from_proto_bytes_res(encoded).map_err(ApiError::internal_error)
 }
 
 pub fn to_arg(args: SendArgs) -> Vec<u8> {
-    let res = args.into_proto();
-    let mut proto = Vec::with_capacity(res.encoded_len());
-    res.encode(&mut proto)
-        .map_err(|e| e.to_string())
-        .expect("Could not encode response");
-    proto
+    to_proto_bytes(args)
 }
 
 pub fn from_hash<T>(hash: &HashOf<T>) -> String {
