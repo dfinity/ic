@@ -226,8 +226,6 @@ fn canister_init_(init_payload: ApiGovernanceProto) {
         init_payload.neurons.len()
     );
 
-    schedule_timers();
-
     let governance_proto = InternalGovernanceProto::from(init_payload);
     set_governance(Governance::new(
         governance_proto,
@@ -236,6 +234,10 @@ fn canister_init_(init_payload: ApiGovernanceProto) {
         Arc::new(CMCCanister::<CdkRuntime>::new()),
         Box::new(CanisterRandomnessGenerator::new()),
     ));
+
+    // Timers etc should not be scheduled until after Governance has been initialized, since
+    // some of them may rely on Governance state to determine when they should run.
+    schedule_timers();
 }
 
 #[pre_upgrade]
@@ -273,7 +275,6 @@ fn canister_post_upgrade() {
         restored_state.xdr_conversion_rate,
     );
 
-    schedule_timers();
     set_governance(Governance::new_restored(
         restored_state,
         Arc::new(CanisterEnv::new()),
@@ -283,6 +284,10 @@ fn canister_post_upgrade() {
     ));
 
     validate_stable_storage();
+
+    // Timers etc should not be scheduled until after Governance has been initialized, since
+    // some of them may rely on Governance state to determine when they should run.
+    schedule_timers();
 }
 
 #[cfg(feature = "test")]
@@ -595,7 +600,7 @@ async fn heartbeat() {
 fn manage_neuron_pb() {
     debug_log("manage_neuron_pb");
     panic_with_probability(
-        0.1,
+        0.7,
         "manage_neuron_pb is deprecated. Please use manage_neuron instead.",
     );
 
@@ -630,7 +635,7 @@ fn list_proposals_pb() {
 fn list_neurons_pb() {
     debug_log("list_neurons_pb");
     panic_with_probability(
-        0.1,
+        0.7,
         "list_neurons_pb is deprecated. Please use list_neurons instead.",
     );
 

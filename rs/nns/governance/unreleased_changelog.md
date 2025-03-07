@@ -9,14 +9,23 @@ on the process that this file is part of, see
 
 ## Added
 
+* Collect metrics about timer tasks defined using ic_nervous_system_timer_task library.
+
 ## Changed
 
-## Deprecated
+* Voting Rewards will be scheduled by a timer instead of by heartbeats.
+* Unstaking maturity task will be processing up to 100 neurons in a single message, to avoid
+  exceeding the instruction limit in a single execution.
+* Voting Rewards will be distributed asynchronously in the background after being calculated.  
+  * This will allow rewards to be compatible with neurons being stored in Stable Memory. 
+* Ramp up the failure rate of _pb method to 0.7 again.
 
-* NnsCanisterUpgrade/NnsRootUpgrade NNS funtions are made obsolete.
+## Deprecated
 
 ## Removed
 
 ## Fixed
+
+* Avoid applying `approve_genesis_kyc` to an unbounded number of neurons, but at most 1000 neurons.
 
 ## Security

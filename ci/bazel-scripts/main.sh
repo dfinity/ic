@@ -38,6 +38,9 @@ fi
 # if bazel targets is empty we don't need to run any tests
 if [ -z "${BAZEL_TARGETS:-}" ]; then
     echo "No bazel targets to build"
+    # create empty SHA256SUMS for build determinism
+    # (not ideal but temporary until we can improve or get rid of diff.sh)
+    touch SHA256SUMS
     exit 0
 fi
 
@@ -51,13 +54,6 @@ mkdir -p "$(dirname "${AWS_CREDS}")"
 if [ -n "${CLOUD_CREDENTIALS_CONTENT+x}" ]; then
     echo "$CLOUD_CREDENTIALS_CONTENT" >"$AWS_CREDS"
     unset CLOUD_CREDENTIALS_CONTENT
-fi
-
-if [ -z "${KUBECONFIG:-}" ] && [ -n "${KUBECONFIG_TNET_CREATOR_LN1:-}" ]; then
-    KUBECONFIG=$(mktemp -t kubeconfig-XXXXXX)
-    export KUBECONFIG
-    echo "$KUBECONFIG_TNET_CREATOR_LN1" >"$KUBECONFIG"
-    trap 'rm -f -- "$KUBECONFIG"' EXIT
 fi
 
 # An awk (mawk) program used to process STDERR to make it easier
@@ -97,7 +93,10 @@ if [[ ! " ${bazel_args[*]} " =~ [[:space:]]--repository_cache[[:space:]] ]] && [
     bazel_args+=(--repository_cache=/cache/bazel)
 fi
 
-bazel "${bazel_args[@]}" 2>&1 | awk -v url_out="$url_out" "$stream_awk_program"
+echo "running build command 'bazel ${bazel_args[@]}'"
+
+bazel_exitcode="0"
+bazel "${bazel_args[@]}" 2>&1 | awk -v url_out="$url_out" "$stream_awk_program" || bazel_exitcode="$?"
 
 # Write the bes link & summary
 echo "Build results uploaded to $(<"$url_out")"
@@ -118,3 +117,5 @@ else
     # if no bazel-out, assume no targets were built
     touch SHA256SUMS
 fi
+
+exit "$bazel_exitcode"
