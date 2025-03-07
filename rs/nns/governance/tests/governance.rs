@@ -4860,7 +4860,7 @@ fn test_approve_kyc() {
         .with_neuron(&NeuronId::from_u64(4), |n| n.kyc_verified)
         .expect("Neuron not found"));
 
-    gov.approve_genesis_kyc(&[principal1, principal2]);
+    gov.approve_genesis_kyc(&[principal1, principal2]).unwrap();
 
     assert!(gov
         .neuron_store

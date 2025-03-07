@@ -19,11 +19,14 @@ on the process that this file is part of, see
   exceeding the instruction limit in a single execution.
 * Voting Rewards will be distributed asynchronously in the background after being calculated.  
   * This will allow rewards to be compatible with neurons being stored in Stable Memory. 
+* Ramp up the failure rate of _pb method to 0.7 again.
 
 ## Deprecated
 
 ## Removed
 
 ## Fixed
+
+* Avoid applying `approve_genesis_kyc` to an unbounded number of neurons, but at most 1000 neurons.
 
 ## Security

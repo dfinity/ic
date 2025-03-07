@@ -99,7 +99,7 @@ fn check_result(height: u64) -> CheckResult {
 }
 
 // Ensure that nodes that have failed healthcheck or lag behind are excluded
-#[tokio::test(flavor = "multi_thread")]
+#[tokio::test]
 async fn test_check_some_unhealthy() -> Result<(), Error> {
     let routes = Arc::new(ArcSwapOption::empty());
     let persister = Arc::new(Persister::new(Arc::clone(&routes)));
@@ -162,7 +162,7 @@ async fn test_check_some_unhealthy() -> Result<(), Error> {
 }
 
 // Ensure that when nodes are removed from routing table -> they're removed from the resulting lookup table
-#[tokio::test(flavor = "multi_thread")]
+#[tokio::test]
 async fn test_check_nodes_gone() -> Result<(), Error> {
     let routes = Arc::new(ArcSwapOption::empty());
     let persister = Arc::new(Persister::new(Arc::clone(&routes)));
@@ -250,7 +250,7 @@ async fn test_check_nodes_gone() -> Result<(), Error> {
     Ok(())
 }
 
-#[tokio::test(flavor = "multi_thread")]
+#[tokio::test]
 async fn test_runner() -> Result<(), Error> {
     let mut checker = MockCheck::new();
     checker.expect_check().returning(|_| Ok(check_result(1000)));

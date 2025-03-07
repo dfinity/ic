@@ -29,7 +29,7 @@ use ic_nns_common::pb::v1::{NeuronId, ProposalId};
 use icp_ledger::{AccountIdentifier, Subaccount};
 use std::{
     borrow::Cow,
-    collections::{BTreeMap, BTreeSet, HashMap},
+    collections::{BTreeMap, BTreeSet, HashMap, HashSet},
     fmt::{Debug, Display, Formatter},
     ops::{Bound, Deref, RangeBounds},
 };
@@ -1439,6 +1439,52 @@ pub fn groom_some_neurons(
             return next;
         }
     }
+}
+
+/// Approves KYC for the neurons with the given principals. Returns an error if the number of
+/// neurons to approve KYC for exceeds the maximum allowed, in which case no neurons are approved.
+pub fn approve_genesis_kyc(
+    neuron_store: &mut NeuronStore,
+    principals: &[PrincipalId],
+) -> Result<(), GovernanceError> {
+    const APPROVE_GENESIS_KYC_MAX_NEURONS: usize = 1000;
+
+    let principal_set: HashSet<PrincipalId> = principals.iter().cloned().collect();
+    let neuron_id_to_principal = principal_set
+        .into_iter()
+        .flat_map(|principal| {
+            neuron_store
+                .get_neuron_ids_readable_by_caller(principal)
+                .into_iter()
+                .map(move |neuron_id| (neuron_id, principal))
+        })
+        .collect::<HashMap<_, _>>();
+
+    if neuron_id_to_principal.len() > APPROVE_GENESIS_KYC_MAX_NEURONS {
+        return Err(GovernanceError::new_with_message(
+            ErrorType::PreconditionFailed,
+            format!(
+                "ApproveGenesisKyc can only change the KYC status of up to {} neurons at a time",
+                APPROVE_GENESIS_KYC_MAX_NEURONS
+            ),
+        ));
+    }
+
+    for (neuron_id, principal) in neuron_id_to_principal {
+        let result = neuron_store.with_neuron_mut(&neuron_id, |neuron| {
+            if neuron.controller() == principal {
+                neuron.kyc_verified = true;
+            }
+        });
+        // Log errors but continue with the rest of the neurons.
+        if let Err(e) = result {
+            eprintln!(
+                "{}ERROR: Failed to approve KYC for neuron {:?}: {:?}",
+                LOG_PREFIX, neuron_id, e
+            );
+        }
+    }
+    Ok(())
 }
 
 /// Number of entries for each neuron indexes (in stable storage)

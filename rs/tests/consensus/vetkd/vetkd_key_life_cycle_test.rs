@@ -40,7 +40,7 @@ use ic_system_test_driver::{
     systest,
     util::{block_on, runtime_from_url, MessageCanister},
 };
-use ic_types::Height;
+use ic_types::{Cycles, Height};
 use ic_vetkd_utils::{DerivedPublicKey, IBECiphertext, TransportSecretKey};
 use slog::info;
 use std::time::Duration;
@@ -129,6 +129,7 @@ fn test(env: TestEnv) {
                         vetkd_key_id.clone(),
                         DERIVATION_ID.as_bytes().to_vec(),
                         &msg_can,
+                        Cycles::zero(),
                     )
                     .map(|maybe_key| {
                         maybe_key.map_err(|e| anyhow!("Failed to retrieve key: {e:?}"))

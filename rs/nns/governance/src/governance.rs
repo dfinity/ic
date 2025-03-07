@@ -14,7 +14,8 @@ use crate::{
     neuron::{DissolveStateAndAge, Neuron, NeuronBuilder, Visibility},
     neuron_data_validation::{NeuronDataValidationSummary, NeuronDataValidator},
     neuron_store::{
-        metrics::NeuronSubsetMetrics, prune_some_following, NeuronMetrics, NeuronStore,
+        approve_genesis_kyc, metrics::NeuronSubsetMetrics, prune_some_following, NeuronMetrics,
+        NeuronStore,
     },
     neurons_fund::{
         NeuronsFund, NeuronsFundNeuronPortion, NeuronsFundSnapshot,
@@ -4396,8 +4397,8 @@ impl Governance {
                 }
             }
             Action::ApproveGenesisKyc(proposal) => {
-                self.approve_genesis_kyc(&proposal.principals);
-                self.set_proposal_execution_status(pid, Ok(()));
+                let result = self.approve_genesis_kyc(&proposal.principals);
+                self.set_proposal_execution_status(pid, result);
             }
             Action::AddOrRemoveNodeProvider(ref proposal) => {
                 if let Some(change) = &proposal.change {
@@ -4848,19 +4849,11 @@ impl Governance {
 
     /// Mark all Neurons controlled by the given principals as having passed
     /// KYC verification
-    pub fn approve_genesis_kyc(&mut self, principals: &[PrincipalId]) {
-        let principal_set: HashSet<&PrincipalId> = principals.iter().collect();
-
-        for principal in principal_set {
-            for neuron_id in self.get_neuron_ids_by_principal(principal) {
-                self.with_neuron_mut(&neuron_id, |neuron| {
-                    if neuron.controller() == *principal {
-                        neuron.kyc_verified = true;
-                    }
-                })
-                .ok();
-            }
-        }
+    pub fn approve_genesis_kyc(
+        &mut self,
+        principals: &[PrincipalId],
+    ) -> Result<(), GovernanceError> {
+        approve_genesis_kyc(&mut self.neuron_store, principals)
     }
 
     fn validate_manage_neuron_proposal(
