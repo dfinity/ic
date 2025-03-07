@@ -13,6 +13,7 @@ use ic_state_layout::{
     SUBNET_QUEUES_FILE, SYSTEM_METADATA_FILE,
 };
 use ic_state_manager::CheckpointMetrics;
+use ic_types::CanisterId;
 use std::convert::TryFrom;
 use std::path::PathBuf;
 
@@ -20,6 +21,7 @@ use std::path::PathBuf;
 pub fn do_decode(path: PathBuf) -> Result<(), String> {
     let dummy_metrics_registry = ic_metrics::MetricsRegistry::new();
     let dummy_metrics = CheckpointMetrics::new(&dummy_metrics_registry, crate::commands::logger());
+    let dummy_canister_id = CanisterId::from_u64(1);
     let fname = path
         .file_name()
         .ok_or_else(|| format!("failed to get file name of path {}", path.display()))?
@@ -41,9 +43,10 @@ pub fn do_decode(path: PathBuf) -> Result<(), String> {
                 &dummy_metrics as &dyn CheckpointLoadingMetrics,
             )
         }
-        CANISTER_FILE => {
-            display_proto::<pb_canister::CanisterStateBits, CanisterStateBits>(path.clone())
-        }
+        CANISTER_FILE => display_proto_with_canister_id::<
+            pb_canister::CanisterStateBitsV2,
+            CanisterStateBits,
+        >(path.clone(), &dummy_canister_id),
         _ => Err(format!("don't know how to decode {}", fname)),
     }
 }
@@ -63,6 +66,32 @@ where
     let f: ProtoFileWith<ProtoType, ReadOnly> = path.into();
     let pb = f.deserialize().map_err(|e| format!("{:?}", e))?;
     let t = RustType::try_from((pb, metrics)).map_err(|e| {
+        format!(
+            "failed to decode rust type {} from protobuf {}: {}",
+            std::any::type_name::<RustType>(),
+            std::any::type_name::<ProtoType>(),
+            e
+        )
+    })?;
+    println!("{:#?}", t);
+    Ok(())
+}
+
+/// Pretty prints the `RustType` persisted at `path`, encoded as `ProtoType`.
+/// This is for Rust types that require `CanisterId` for
+/// deserialization.
+fn display_proto_with_canister_id<'a, ProtoType, RustType>(
+    path: PathBuf,
+    canister_id: &'a CanisterId,
+) -> Result<(), String>
+where
+    ProtoType: prost::Message + Default,
+    RustType: TryFrom<(ProtoType, &'a CanisterId)> + std::fmt::Debug,
+    <RustType as TryFrom<(ProtoType, &'a CanisterId)>>::Error: std::fmt::Display,
+{
+    let f: ProtoFileWith<ProtoType, ReadOnly> = path.into();
+    let pb = f.deserialize().map_err(|e| format!("{:?}", e))?;
+    let t = RustType::try_from((pb, canister_id)).map_err(|e| {
         format!(
             "failed to decode rust type {} from protobuf {}: {}",
             std::any::type_name::<RustType>(),

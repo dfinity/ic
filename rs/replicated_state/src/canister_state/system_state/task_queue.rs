@@ -35,11 +35,11 @@ impl OnLowWasmMemoryHookStatus {
     }
 }
 
-impl From<&OnLowWasmMemoryHookStatus> for pb::OnLowWasmMemoryHookStatus {
-    fn from(item: &OnLowWasmMemoryHookStatus) -> Self {
+impl From<OnLowWasmMemoryHookStatus> for pb::OnLowWasmMemoryHookStatus {
+    fn from(item: OnLowWasmMemoryHookStatus) -> Self {
         use OnLowWasmMemoryHookStatus::*;
 
-        match *item {
+        match item {
             ConditionNotSatisfied => Self::ConditionNotSatisfied,
             Ready => Self::Ready,
             Executed => Self::Executed,
@@ -111,6 +111,35 @@ impl TaskQueue {
             paused_or_aborted_task,
             on_low_wasm_memory_hook_status,
             queue: mut_queue,
+        };
+
+        // Because paused tasks are not allowed in checkpoint rounds when
+        // checking dts invariants that is equivalent to disabling dts.
+        queue.check_dts_invariants(
+            FlagStatus::Disabled,
+            ExecutionRoundType::CheckpointRound,
+            canister_id,
+        );
+
+        queue
+    }
+
+    pub fn from_checkpoint_v2(item: pb::TaskQueue, canister_id: &CanisterId) -> Self {
+        let queue = Self {
+            paused_or_aborted_task: item
+                .paused_or_aborted_task
+                .map(|task| task.try_into().unwrap()),
+            on_low_wasm_memory_hook_status: pb::OnLowWasmMemoryHookStatus::try_from(
+                item.on_low_wasm_memory_hook_status,
+            )
+            .unwrap()
+            .try_into()
+            .unwrap(),
+            queue: item
+                .queue
+                .into_iter()
+                .map(|task| task.try_into().unwrap())
+                .collect(),
         };
 
         // Because paused tasks are not allowed in checkpoint rounds when
@@ -353,6 +382,19 @@ impl TaskQueue {
         };
 
         self.paused_or_aborted_task = Some(aborted_task);
+    }
+}
+
+impl From<&TaskQueue> for pb::TaskQueue {
+    fn from(item: &TaskQueue) -> Self {
+        Self {
+            paused_or_aborted_task: item.paused_or_aborted_task.as_ref().map(|task| task.into()),
+            on_low_wasm_memory_hook_status: pb::OnLowWasmMemoryHookStatus::from(
+                item.on_low_wasm_memory_hook_status,
+            )
+            .into(),
+            queue: item.queue.iter().map(|task| task.into()).collect(),
+        }
     }
 }
 

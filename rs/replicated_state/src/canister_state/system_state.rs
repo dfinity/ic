@@ -442,6 +442,26 @@ impl From<&CanisterStatus> for pb::canister_state_bits::CanisterStatus {
     }
 }
 
+impl From<&CanisterStatus> for pb::canister_state_bits_v2::CanisterStatus {
+    fn from(item: &CanisterStatus) -> Self {
+        match item {
+            CanisterStatus::Running {
+                call_context_manager,
+            } => Self::Running(pb::CanisterStatusRunning {
+                call_context_manager: Some(call_context_manager.into()),
+            }),
+            CanisterStatus::Stopped => Self::Stopped(pb::CanisterStatusStopped {}),
+            CanisterStatus::Stopping {
+                call_context_manager,
+                stop_contexts,
+            } => Self::Stopping(pb::CanisterStatusStopping {
+                call_context_manager: Some(call_context_manager.into()),
+                stop_contexts: stop_contexts.iter().map(|context| context.into()).collect(),
+            }),
+        }
+    }
+}
+
 impl TryFrom<pb::canister_state_bits::CanisterStatus> for CanisterStatus {
     type Error = ProxyDecodeError;
     fn try_from(value: pb::canister_state_bits::CanisterStatus) -> Result<Self, Self::Error> {
@@ -458,6 +478,42 @@ impl TryFrom<pb::canister_state_bits::CanisterStatus> for CanisterStatus {
                 Self::Stopped
             }
             pb::canister_state_bits::CanisterStatus::Stopping(pb::CanisterStatusStopping {
+                call_context_manager,
+                stop_contexts,
+            }) => {
+                let mut contexts = Vec::<StopCanisterContext>::with_capacity(stop_contexts.len());
+                for context in stop_contexts.into_iter() {
+                    contexts.push(context.try_into()?);
+                }
+                Self::Stopping {
+                    call_context_manager: try_from_option_field(
+                        call_context_manager,
+                        "CanisterStatus::Stopping::call_context_manager",
+                    )?,
+                    stop_contexts: contexts,
+                }
+            }
+        };
+        Ok(canister_status)
+    }
+}
+
+impl TryFrom<pb::canister_state_bits_v2::CanisterStatus> for CanisterStatus {
+    type Error = ProxyDecodeError;
+    fn try_from(value: pb::canister_state_bits_v2::CanisterStatus) -> Result<Self, Self::Error> {
+        let canister_status = match value {
+            pb::canister_state_bits_v2::CanisterStatus::Running(pb::CanisterStatusRunning {
+                call_context_manager,
+            }) => Self::Running {
+                call_context_manager: try_from_option_field(
+                    call_context_manager,
+                    "CanisterStatus::Running::call_context_manager",
+                )?,
+            },
+            pb::canister_state_bits_v2::CanisterStatus::Stopped(pb::CanisterStatusStopped {}) => {
+                Self::Stopped
+            }
+            pb::canister_state_bits_v2::CanisterStatus::Stopping(pb::CanisterStatusStopping {
                 call_context_manager,
                 stop_contexts,
             }) => {
@@ -796,7 +852,7 @@ impl SystemState {
         ingress_induction_cycles_debit: Cycles,
         reserved_balance: Cycles,
         reserved_balance_limit: Option<Cycles>,
-        task_queue: VecDeque<ExecutionTask>,
+        task_queue: TaskQueue,
         global_timer: CanisterTimer,
         canister_version: u64,
         canister_history: CanisterHistory,
@@ -808,7 +864,6 @@ impl SystemState {
         next_snapshot_id: u64,
         snapshots_memory_usage: NumBytes,
         metrics: &dyn CheckpointLoadingMetrics,
-        on_low_wasm_memory_hook_status: OnLowWasmMemoryHookStatus,
     ) -> Self {
         let system_state = Self {
             controllers,
@@ -824,11 +879,7 @@ impl SystemState {
             ingress_induction_cycles_debit,
             reserved_balance,
             reserved_balance_limit,
-            task_queue: TaskQueue::from_checkpoint(
-                task_queue,
-                on_low_wasm_memory_hook_status,
-                &canister_id,
-            ),
+            task_queue,
             global_timer,
             canister_version,
             canister_history,

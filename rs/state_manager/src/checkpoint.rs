@@ -760,13 +760,24 @@ pub fn load_canister_state(
         };
 
     let starting_time = Instant::now();
-    let canister_state_bits: CanisterStateBits =
-        CanisterStateBits::try_from(canister_layout.canister().deserialize()?).map_err(|err| {
+    let canister_state_bits: CanisterStateBits = match canister_layout.canister_v2().deserialize() {
+        Ok(bits) => CanisterStateBits::try_from((bits, canister_id)).map_err(|err| {
             into_checkpoint_error(
                 format!("canister_states[{}]::canister_state_bits", canister_id),
                 err,
             )
-        })?;
+        })?,
+        Err(_) => {
+            CanisterStateBits::try_from((canister_layout.canister().deserialize()?, canister_id))
+                .map_err(|err| {
+                    into_checkpoint_error(
+                        format!("canister_states[{}]::canister_state_bits", canister_id),
+                        err,
+                    )
+                })?
+        }
+    };
+
     durations.insert("canister_state_bits", starting_time.elapsed());
 
     let execution_state = match canister_state_bits.execution_state_bits {
@@ -870,7 +881,7 @@ pub fn load_canister_state(
         canister_state_bits.cycles_debit,
         canister_state_bits.reserved_balance,
         canister_state_bits.reserved_balance_limit,
-        canister_state_bits.task_queue.into_iter().collect(),
+        canister_state_bits.task_queue,
         CanisterTimer::from_nanos_since_unix_epoch(canister_state_bits.global_timer_nanos),
         canister_state_bits.canister_version,
         canister_state_bits.canister_history,
@@ -882,7 +893,6 @@ pub fn load_canister_state(
         canister_state_bits.next_snapshot_id,
         canister_state_bits.snapshots_memory_usage,
         metrics,
-        canister_state_bits.on_low_wasm_memory_hook_status,
     );
 
     let canister_state = CanisterState {
