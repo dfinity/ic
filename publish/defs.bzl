@@ -8,6 +8,10 @@ def _release_nostrip_transition(_settings, _attr):
     return {
         "//command_line_option:compilation_mode": "opt",
         "//command_line_option:strip": "never",
+        # opt mode will have rules_rust strip debug symbols, regardless of the
+        # strip setting. Unfortunately zig cc (from hermetic_cc_toolchain)
+        # strips as "all or nothing", so we lose all symbols, unless we also
+        # override the strip setting here.
         "@rules_rust//:extra_rustc_flags": ["-Cdebug-assertions=off", "-Cstrip=none"],
     }
 
