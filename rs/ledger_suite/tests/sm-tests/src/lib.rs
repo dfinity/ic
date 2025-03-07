@@ -5255,11 +5255,14 @@ pub mod archiving {
             env.tick();
             archive_info = list_archives(&env, ledger_id);
         }
-        // Verify that the ledger reports block `0` to be present both in the ledger and in the archive
+        // Verify that the ledger reports block `0` to be present only in the ledger
         let get_blocks_res = icrc3_get_blocks(&env, ledger_id, 0, 1);
-        assert!(ledger_reports_block_in_two_places(0, &get_blocks_res));
-        // Verify that the block actually exists in both ledger and archive
-        verify_block_in_ledger_and_archive(&env, 0, &get_blocks_res);
+        assert!(!ledger_reports_block_in_two_places(0, &get_blocks_res));
+        // Verify that the response contained no archive info.
+        assert_eq!(
+            check_if_block_in_ledger_and_archive(&env, 0, &get_blocks_res),
+            BlockInLedgerAndArchive::NoArchiveInfo
+        );
 
         // Tick until the transfer completes, meaning the archiving also completes.
         const MAX_TICKS: usize = 500;
@@ -5322,21 +5325,26 @@ pub mod archiving {
         archived_args.start == block_id && archived_args.length == 1u64
     }
 
-    fn verify_block_in_ledger_and_archive(
+    #[derive(Debug, Eq, PartialEq)]
+    enum BlockInLedgerAndArchive {
+        True,
+        NoArchiveInfo,
+    }
+
+    fn check_if_block_in_ledger_and_archive(
         env: &StateMachine,
         block_id: u64,
         icrc3_get_blocks_result: &GetBlocksResult,
-    ) {
+    ) -> BlockInLedgerAndArchive {
         let first_block_from_ledger = icrc3_get_blocks_result
             .blocks
             .first()
             .expect("should return one block");
         assert_eq!(first_block_from_ledger.id, Nat::from(block_id));
         // Verify that the ledger also reported that the first block exists in the archive.
-        let archived_blocks = icrc3_get_blocks_result
-            .archived_blocks
-            .first()
-            .expect("should return one archived blocks info");
+        let Some(archived_blocks) = icrc3_get_blocks_result.archived_blocks.first() else {
+            return BlockInLedgerAndArchive::NoArchiveInfo;
+        };
         let archived_args = archived_blocks
             .args
             .first()
@@ -5354,6 +5362,7 @@ pub mod archiving {
             .first()
             .expect("should return one block");
         assert_eq!(first_block_from_ledger, first_block_from_archive);
+        BlockInLedgerAndArchive::True
     }
 
     fn message_status(env: &StateMachine, message_id: &MessageId) -> Option<WasmResult> {
