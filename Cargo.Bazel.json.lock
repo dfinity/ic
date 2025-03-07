@@ -1,5 +1,5 @@
 {
-  "checksum": "059a9792f5627f5ef135cb3499f5d0a91cb2cba25447542035d17997c382f9aa",
+  "checksum": "45dc49005994f7cdaac3fed857333fdf777a569fc4240ea30135f684eb4c7741",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -42324,7 +42324,7 @@
         ],
         "data": {
           "common": [
-            "@@_main~_repo_rules~openssl//:gen_dir"
+            "@openssl//:gen_dir"
           ],
           "selects": {}
         },
@@ -49543,7 +49543,7 @@
         ],
         "data": {
           "common": [
-            "@@_main~_repo_rules~openssl//:gen_dir"
+            "@openssl//:gen_dir"
           ],
           "selects": {}
         },
@@ -49569,8 +49569,8 @@
         },
         "build_script_env": {
           "common": {
-            "OPENSSL_INCLUDE_DIR": "$(location @@_main~_repo_rules~openssl//:gen_dir)/include",
-            "OPENSSL_LIB_DIR": "$(location @@_main~_repo_rules~openssl//:gen_dir)/lib64",
+            "OPENSSL_INCLUDE_DIR": "$(location @openssl//:gen_dir)/include",
+            "OPENSSL_LIB_DIR": "$(location @openssl//:gen_dir)/lib64",
             "OPENSSL_NO_VENDOR": "1",
             "OPENSSL_STATIC": "1"
           },
