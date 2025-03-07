@@ -97,7 +97,7 @@ impl TableRow for SnsHealthInfo {
         let automatic_target_version_advancement_sign =
             match self.automatic_target_version_advancement {
                 Some(true) => "🐇",
-                Some(false) => "✍️",
+                Some(false) => "💪",
                 None => "🦕",
             };
 
