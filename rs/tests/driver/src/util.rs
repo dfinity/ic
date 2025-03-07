@@ -12,7 +12,6 @@ use crate::{
 use anyhow::bail;
 use candid::{Decode, Encode};
 use canister_test::{Canister, RemoteTestRuntime, Runtime, Wasm};
-use dfn_protobuf::{protobuf, ProtoBuf};
 use futures::{
     future::{join_all, select_all, try_join_all},
     FutureExt,
@@ -50,6 +49,7 @@ use ic_types::{
 };
 use ic_universal_canister::{call_args, wasm as universal_canister_argument_builder};
 use ic_utils::{call::AsyncCall, interfaces::ManagementCanister};
+use icp_ledger::validate_endpoints::{protobuf, ProtoBuf};
 use icp_ledger::{
     tokens_from_proto, AccountBalanceArgs, AccountIdentifier, Memo, SendArgs, Subaccount, Tokens,
     DEFAULT_TRANSFER_FEE,
