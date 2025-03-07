@@ -1256,7 +1256,7 @@ fn iter_blocks_() {
     ic_cdk::setup();
     let args: IterBlocksArgs = from_proto_bytes(input);
     let length = std::cmp::min(
-        args.length as usize,
+        args.length,
         max_blocks_per_request(&PrincipalId::from(caller())),
     ) as u64;
     let start = args.start as u64;
