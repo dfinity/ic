@@ -299,6 +299,65 @@ struct TranscriptResults {
     high_threshold: Option<Result<NiDkgTranscript, String>>,
 }
 
+enum TranscriptResults1 {
+    ReshareChainKey(Result<NiDkgTranscript, String>),
+    SetupInitialDKG {
+        low_threshold: Option<Result<NiDkgTranscript, String>>,
+        high_threshold: Option<Result<NiDkgTranscript, String>>,
+    },
+}
+
+impl TranscriptResults1 {
+    fn new(id: &NiDkgId, transcript: Result<NiDkgTranscript, String>) {
+        match id.dkg_tag {
+            NiDkgTag::LowThreshold => Self::SetupInitialDKG {
+                low_threshold: Some(transcript),
+                high_threshold: None,
+            },
+            NiDkgTag::HighThreshold => Self::SetupInitialDKG {
+                low_threshold: None,
+                high_threshold: Some(transcript),
+            },
+            NiDkgTag::HighThresholdForKey(_) => Self::ReshareChainKey(transcript),
+        }
+    }
+
+    fn add_transcripts(
+        &mut self,
+        id: &NiDkgId,
+        transcript: Result<NiDkgTranscript, String>,
+        logger: &ReplicaLogger,
+    ) {
+        let Self::SetupInitialDKG {
+            low_threshold,
+            high_threshold,
+        } = self
+        else {
+            error!(
+                logger,
+                "Cannot add a second transcript to a ReshareChainKey transcript"
+            );
+            return;
+        };
+
+        let old_val = match id.dkg_tag {
+            NiDkgTag::LowThreshold => low_threshold.replace(transcript),
+            NiDkgTag::HighThreshold => high_threshold.replace(transcript),
+            NiDkgTag::HighThresholdForKey(_) => {
+                error!(
+                    logger,
+                    "Cannot add a ReshareChainKey key to a SetupInitialDKG request"
+                );
+                return;
+            }
+        };
+
+        if old_val.is_some() {
+            error!("Received a dublicate transcript for SetupInitialDKG request");
+        }
+    }
+}
+
 /// This function creates responses to the SetupInitialDKG system calls with the
 /// computed DKG key material for remote subnets, without needing values from the state.
 pub fn generate_responses_to_setup_initial_dkg_calls(
