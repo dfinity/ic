@@ -21,6 +21,7 @@ on the process that this file is part of, see
     * The execution of `ApproveGenesisKyc` proposals have a limit of 1000 neurons, above which
     the proposal will fail.
     * More benchmarks were added.
+* Enable timer task metrics for better observability.
 
 ## Changed
 
