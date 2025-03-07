@@ -6,7 +6,6 @@ use ic_ckbtc_minter::state::eventlog::Event;
 use ic_ckbtc_minter::state::Mode;
 use ic_test_utilities_load_wasm::load_wasm;
 use pocket_ic::{PocketIc, PocketIcBuilder};
-use std::path::PathBuf;
 
 #[derive(Clone, Debug, CandidType, Deserialize)]
 pub struct GetEventsResult {
@@ -150,7 +149,7 @@ fn main() {
 #[test]
 fn test_minter_dump_stable_mem_mainnet() {
     fn path_to_events_file(file_name: &str) -> String {
-        let mut path = PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap());
+        let mut path = std::path::PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap());
         path.push("test_resources");
         path.push(file_name);
         path.display().to_string()
