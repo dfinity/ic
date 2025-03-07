@@ -174,7 +174,14 @@ pub fn record_event<R: CanisterRuntime>(payload: EventType, runtime: &R) {
     })
 }
 
-pub fn record_event_v0<R: CanisterRuntime>(payload: EventType, runtime: &R) {
+#[cfg(feature = "self_check")]
+pub fn record_event_v0<R: CanisterRuntime>(payload: EventType) {
+    // The timestamp below could be a source of non-reprodicibilty.
+    // However, this function is only used for the purpose of dumping
+    // stable memory after uploading v0 events from local file to the
+    // canister, and the memory dump is used in a canbench to measure
+    // instruction counts. So the actual value of timestamps shouldn't
+    // matter.
     let bytes = encode_event(&Event {
         timestamp: Some(runtime.time()),
         payload,

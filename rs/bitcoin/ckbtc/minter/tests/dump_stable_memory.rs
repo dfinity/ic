@@ -40,13 +40,6 @@ impl Setup {
         // install bitcoin canister
         let bitcoin_id = bitcoin_canister_id(btc_network);
         env.create_canister_with_id(None, None, bitcoin_id).unwrap();
-        env.install_canister(
-            bitcoin_id,
-            bitcoin_mock_wasm(),
-            Encode!(&btc_network).unwrap(),
-            None,
-        );
-
         let ledger_id = env.create_canister();
         let minter_id = env.create_canister();
         let btc_checker_id = env.create_canister();
@@ -64,8 +57,6 @@ impl Setup {
             ..default_init_args()
         }))
         .unwrap();
-
-
         env.install_canister(minter_id, minter_wasm(), init_args, None);
         Self { env, minter_id }
     }
@@ -79,19 +70,6 @@ fn bitcoin_canister_id(btc_network: Network) -> Principal {
         Network::Mainnet => ic_config::execution_environment::BITCOIN_MAINNET_CANISTER_ID,
     })
     .unwrap()
-}
-
-fn bitcoin_mock_wasm() -> Vec<u8> {
-    load_wasm(
-        PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap())
-            .parent()
-            .unwrap()
-            .parent()
-            .unwrap()
-            .join("mock"),
-        "ic-bitcoin-canister-mock",
-        &[],
-    )
 }
 
 fn minter_wasm() -> Vec<u8> {
