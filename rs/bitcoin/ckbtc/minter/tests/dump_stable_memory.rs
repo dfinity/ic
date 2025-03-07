@@ -65,7 +65,6 @@ impl Setup {
         }))
         .unwrap();
 
-        // println!("{:02x?}", init_args);
 
         env.install_canister(minter_id, minter_wasm(), init_args, None);
         Self { env, minter_id }
