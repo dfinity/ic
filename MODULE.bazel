@@ -876,7 +876,6 @@ cc_library(
     linkstatic = True,
     visibility = ["//visibility:public"],
 )
-
 """,
     integrity = "sha256-CLw4JzN3fdo8liWeNzL/lsHfmNBHDE+FsWMnTq5of08=",
     strip_prefix = "llvm-project-llvmorg-20.1.0/compiler-rt/lib/fuzzer",

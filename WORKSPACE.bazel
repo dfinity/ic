@@ -284,12 +284,14 @@ cc_import(
     system_provided = True,
     visibility = ["//visibility:private"],
 )
+
 # Use an extra cc_library to hide the depth of the include folder
 cc_library(
     name = "libsystemd",
     includes = ["include"],
     deps = ["libsystemd-internal"],
     visibility = ["//visibility:public"],
-)""",
+)
+""",
     path = "/usr",
 )
