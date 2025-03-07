@@ -3,12 +3,10 @@ use regex::Regex;
 use slog::Logger;
 use std::collections::BTreeMap;
 use std::net::{Ipv4Addr, Ipv6Addr};
-use std::path::Path;
-use std::process::Command;
 use std::str::FromStr;
 use url::Url;
 
-use anyhow::{bail, Result};
+use anyhow::Result;
 use backon::Retryable;
 use backon::{ConstantBuilder, ExponentialBuilder};
 use k8s_openapi::api::core::v1::{ConfigMap, PersistentVolumeClaim, Pod, Secret, Service};
@@ -115,42 +113,6 @@ impl TNode {
             uid: self.owner.metadata.uid.clone().expect("should have uid"),
             ..Default::default()
         }
-    }
-
-    pub async fn build_oci_config_image(&self, file_path: &Path, tag: &str) -> Result<()> {
-        // https://kubevirt.io/user-guide/storage/disks_and_volumes/#containerdisk
-        // build ctr disk that holds config fat disk for guestos & push it to local ctr registry
-        // uncompress zst disk (the case with boundary node image)
-        let command = format!(
-            "set -xe; \
-            mkdir -p /var/sysimage/tnet; \
-            if echo {0} | grep -q '.zst'; then \
-                uncompressed_file=$(echo {0} | sed 's/.zst$//'); \
-                rm -f $uncompressed_file; \
-                unzstd -o $uncompressed_file {0}; \
-                file_to_copy=$uncompressed_file; \
-            else \
-                file_to_copy={0}; \
-            fi; \
-            ctr=$(sudo buildah --root /var/sysimage/tnet from scratch); \
-            sudo buildah --root /var/sysimage/tnet copy --chown=107:107 $ctr $file_to_copy /disk/; \
-            sudo buildah --root /var/sysimage/tnet commit $ctr harbor-core.harbor.svc.cluster.local/tnet/config:{1}; \
-            sudo buildah --root /var/sysimage/tnet push --tls-verify=false --creds 'robot$tnet+tnet:TestingPOC1' harbor-core.harbor.svc.cluster.local/tnet/config:{1}",
-            file_path.display(), tag
-        );
-        let output = Command::new("bash")
-            .arg("-c")
-            .arg(command)
-            .output()
-            .expect("Failed to execute command");
-        if !output.status.success() {
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            bail!(
-                "Error building and pushing config container config image: {}",
-                stderr
-            );
-        }
-        Ok(())
     }
 
     pub async fn deploy_config_image(
@@ -415,16 +377,24 @@ impl TNet {
             let image_url = get_ic_os_img_url()
                 .expect("missing ic-os image url")
                 .to_string();
+            let config_image_url = format!(
+                "{}/{}/config_disk.img",
+                self.config_url.clone().unwrap(),
+                vm_name.clone()
+            )
+            .to_string();
             // TODO: only download it once and copy it if it's already downloaded
             let args = format!(
-                "set -e; \
+                "set -xe; \
                 mkdir -p /tnet/{vm_name}; \
-                wget -O /tnet/{vm_name}/img.tar.zst {image_url}; \
+                curl --retry 10 --retry-delay 1 -o /tnet/{vm_name}/img.tar.zst {image_url}; \
                 tar -x --zstd -vf /tnet/{vm_name}/img.tar.zst -C /tnet/{vm_name}; \
+                curl --retry 20 --retry-delay 3 -o /tnet/{vm_name}/config_disk.img {config_image_url}; \
                 chmod -R 777 /tnet/{vm_name}; \
                 rm -f /tnet/{vm_name}/img.tar.zst /tnet/{vm_name}/img.tar",
                 vm_name = vm_name,
                 image_url = image_url,
+                config_image_url = config_image_url,
             );
             create_job(
                 &vm_name.clone(),
