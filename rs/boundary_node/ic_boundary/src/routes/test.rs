@@ -270,17 +270,19 @@ async fn test_health() -> Result<(), Error> {
     let published_registry_snapshot = Arc::new(ArcSwapOption::empty());
 
     let persister = Persister::new(published_routes.clone());
-    let (snapshot, _, _) = test_registry_snapshot(5, 3);
-    published_registry_snapshot.store(Some(Arc::new(snapshot.clone())));
 
     let http_client = Arc::new(TestHttpClient(1));
     let proxy_router = Arc::new(ProxyRouter::new(
         http_client,
         published_routes,
-        published_registry_snapshot,
+        published_registry_snapshot.clone(),
         0.51,
         0.6666,
     ));
+
+    // Install snapshot
+    let (snapshot, _, _) = test_registry_snapshot(5, 3);
+    published_registry_snapshot.store(Some(Arc::new(snapshot.clone())));
 
     // Initial state
     assert_eq!(proxy_router.health(), ReplicaHealthStatus::Starting);
@@ -413,6 +415,28 @@ async fn test_health() -> Result<(), Error> {
         })
         .collect::<Vec<_>>();
     persister.persist(subnets);
+    assert_eq!(
+        proxy_router.health(),
+        ReplicaHealthStatus::CertifiedStateBehind
+    );
+
+    // Install snapshot with zero subnets
+    let (snapshot, _, _) = test_registry_snapshot(0, 0);
+    published_registry_snapshot.store(Some(Arc::new(snapshot.clone())));
+    persister.persist(snapshot.subnets.clone());
+
+    // Make sure it doesn't crash
+    assert_eq!(
+        proxy_router.health(),
+        ReplicaHealthStatus::CertifiedStateBehind
+    );
+
+    // Install snapshot with subnets which have zero nodes
+    let (snapshot, _, _) = test_registry_snapshot(5, 0);
+    published_registry_snapshot.store(Some(Arc::new(snapshot.clone())));
+    persister.persist(snapshot.subnets.clone());
+
+    // Make sure it doesn't crash
     assert_eq!(
         proxy_router.health(),
         ReplicaHealthStatus::CertifiedStateBehind
