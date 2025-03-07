@@ -113,17 +113,13 @@ impl<'a> Arbitrary<'a> for SystemApiModule {
         let mut exports = ExportSection::new();
         let choice = u.choose_index(CANISTER_EXPORT_FUNCTION_PREFIX.len())?;
         let name = format!("{} test", CANISTER_EXPORT_FUNCTION_PREFIX[choice]);
-        exports.export(
-            name.as_str(),
-            ExportKind::Func,
-            store.import_section.len() as u32,
-        );
+        exports.export(name.as_str(), ExportKind::Func, store.import_section.len());
 
         let choice = u.choose_index(CANISTER_EXPORT_FUNCTION_ONCE.len())?;
         exports.export(
-            &CANISTER_EXPORT_FUNCTION_ONCE[choice],
+            CANISTER_EXPORT_FUNCTION_ONCE[choice],
             ExportKind::Func,
-            store.import_section.len() as u32 + 1,
+            store.import_section.len() + 1,
         );
 
         module.section(&exports);
