@@ -9,6 +9,7 @@ DEPENDENCIES = [
     "//rs/node_rewards/canister/api",
     "@crate_index//:candid",
     "@crate_index//:ic-cdk",
+    "@crate_index//:ic-stable-structures",
 ]
 
 DEV_DEPENDENCIES = [

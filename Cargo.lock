@@ -12224,6 +12224,7 @@ dependencies = [
  "candid_parser",
  "ic-cdk 0.17.1",
  "ic-nns-test-utils",
+ "ic-stable-structures",
  "ic-state-machine-tests",
  "node-rewards-canister-api",
 ]
