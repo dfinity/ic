@@ -180,7 +180,7 @@ pub async fn create_vm(
 ) -> Result<()> {
     info!("Creating virtual machine {}", name);
     let template = match vm_type {
-        ImageType::IcOsImage => NODE_TEMPLATE.to_string(),
+        ImageType::IcOsImage | ImageType::BoundaryImage => NODE_TEMPLATE.to_string(),
         _ => UVM_TEMPLATE.replace("{pub_key}", &access_key.unwrap()),
     };
     let yaml = template

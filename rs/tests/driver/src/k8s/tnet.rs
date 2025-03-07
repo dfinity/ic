@@ -32,7 +32,7 @@ use crate::driver::farm::{
 };
 use crate::driver::resource::ImageType;
 use crate::driver::test_env::{TestEnv, TestEnvAttribute};
-use crate::driver::test_env_api::get_ic_os_img_url;
+use crate::driver::test_env_api::{get_boundary_node_img_url, get_ic_os_img_url};
 use crate::k8s::config::*;
 use crate::k8s::datavolume::*;
 use crate::k8s::job::*;
@@ -354,9 +354,9 @@ impl TNet {
             "{}-{}",
             self.unique_name.clone().expect("no unique name"),
             match vm_type {
-                ImageType::IcOsImage => self.nodes.len().to_string(),
                 ImageType::UniversalImage | ImageType::PrometheusImage =>
                     format!("{}-{}", self.nodes.len(), vm_req.name),
+                _ => self.nodes.len().to_string(),
             }
         );
 
@@ -372,15 +372,22 @@ impl TNet {
         )
         .await?;
 
-        if vm_type == ImageType::IcOsImage {
+        if vm_type == ImageType::IcOsImage || vm_type == ImageType::BoundaryImage {
             // create a job to download the image and extract it
-            let image_url = get_ic_os_img_url()
-                .expect("missing ic-os image url")
-                .to_string();
+            let image_url = match vm_type {
+                ImageType::IcOsImage => get_ic_os_img_url().expect("missing image url").to_string(),
+                _ => get_boundary_node_img_url()
+                    .expect("missing image url")
+                    .to_string(),
+            };
             let config_image_url = format!(
-                "{}/{}/config_disk.img",
+                "{}/{}/config_disk.img{}",
                 self.config_url.clone().unwrap(),
-                vm_name.clone()
+                vm_name.clone(),
+                match vm_type {
+                    ImageType::IcOsImage => "",
+                    _ => ".zst",
+                }
             )
             .to_string();
             // TODO: only download it once and copy it if it's already downloaded
@@ -389,7 +396,12 @@ impl TNet {
                 mkdir -p /tnet/{vm_name}; \
                 curl --retry 10 --retry-delay 1 -o /tnet/{vm_name}/img.tar.zst {image_url}; \
                 tar -x --zstd -vf /tnet/{vm_name}/img.tar.zst -C /tnet/{vm_name}; \
-                curl --retry 20 --retry-delay 3 -o /tnet/{vm_name}/config_disk.img {config_image_url}; \
+                if echo {config_image_url} | grep -q '.zst'; then \
+                    curl --retry 20 --retry-delay 3 -o /tnet/{vm_name}/config_disk.img.zst {config_image_url}; \
+                    unzstd -o /tnet/{vm_name}/config_disk.img /tnet/{vm_name}/config_disk.img.zst; \
+                else \
+                    curl --retry 20 --retry-delay 3 -o /tnet/{vm_name}/config_disk.img {config_image_url}; \
+                fi; \
                 chmod -R 777 /tnet/{vm_name}; \
                 rm -f /tnet/{vm_name}/img.tar.zst /tnet/{vm_name}/img.tar",
                 vm_name = vm_name,

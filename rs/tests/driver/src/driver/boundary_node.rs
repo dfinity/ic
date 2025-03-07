@@ -28,6 +28,7 @@ use crate::{
         test_setup::{GroupSetup, InfraProvider},
     },
     k8s::images::upload_image,
+    k8s::job::wait_for_job_completion,
     k8s::tnet::TNet,
     retry_with_msg,
     util::{block_on, create_agent, create_agent_mapping},
@@ -351,6 +352,8 @@ impl BoundaryNodeWithVm {
                     &mk_compressed_img_path()
                 ),
             ))?;
+            block_on(wait_for_job_completion(&tnet_node.name.clone().unwrap()))
+                .expect("waiting for job failed");
             block_on(tnet_node.start()).expect("starting vm failed");
         }
 
@@ -466,7 +469,7 @@ impl BoundaryNode {
         let allocated_vm = match InfraProvider::read_attribute(env) {
             InfraProvider::K8s => {
                 let mut tnet = TNet::read_attribute(env);
-                let vm_res = block_on(tnet.vm_create(create_vm_req, ImageType::IcOsImage))
+                let vm_res = block_on(tnet.vm_create(create_vm_req, ImageType::BoundaryImage))
                     .expect("failed to create vm");
                 tnet.write_attribute(env);
                 vm_res

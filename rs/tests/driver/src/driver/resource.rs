@@ -56,6 +56,7 @@ pub enum ImageType {
     IcOsImage,
     PrometheusImage,
     UniversalImage,
+    BoundaryImage,
 }
 
 impl From<DiskImage> for ImageLocation {
@@ -65,7 +66,7 @@ impl From<DiskImage> for ImageLocation {
                 url: src.url.clone(),
                 sha256: src.sha256,
             },
-            ImageType::PrometheusImage | ImageType::UniversalImage => ImageViaUrl {
+            _ => ImageViaUrl {
                 url: src.url.clone(),
                 sha256: src.sha256,
             },
@@ -344,11 +345,11 @@ pub fn allocate_resources(
                         CreateVmRequest {
                             primary_image: ImageLocation::PersistentVolumeClaim {
                                 name: match req.primary_image.image_type {
-                                    ImageType::IcOsImage => {
-                                        format!("image-guestos-{}", tnet.image_sha)
-                                    }
                                     ImageType::PrometheusImage => "img-prometheus-vm".into(),
                                     ImageType::UniversalImage => "img-universal-vm".into(),
+                                    _ => {
+                                        format!("image-guestos-{}", tnet.image_sha)
+                                    }
                                 },
                             },
                             ..create_vm_request
