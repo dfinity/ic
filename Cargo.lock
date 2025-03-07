@@ -6970,6 +6970,7 @@ dependencies = [
  "minicbor-derive",
  "mockall",
  "num-traits",
+ "pocket-ic",
  "proptest 1.6.0",
  "ripemd",
  "scopeguard",
