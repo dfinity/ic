@@ -16,7 +16,6 @@ end::catalog[] */
 
 use anyhow::Result;
 use canister_test::{Canister, RemoteTestRuntime, Runtime};
-use dfn_protobuf::protobuf;
 use ic_canister_client::Sender;
 use ic_ledger_canister_blocks_synchronizer_test_utils::sample_data::acc_id;
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID, REGISTRY_CANISTER_ID};
@@ -40,6 +39,7 @@ use ic_system_test_driver::{
     util::block_on,
 };
 use ic_types::{messages::Blob, CanisterId};
+use icp_ledger::validate_endpoints::protobuf;
 use icp_ledger::{
     protobuf::TipOfChainRequest, tokens_from_proto, AccountBalanceArgs, AccountIdentifier,
     ArchiveOptions, BlockIndex, Certification, LedgerCanisterInitPayload, TipOfChainRes, Tokens,
