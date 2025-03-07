@@ -1,5 +1,5 @@
 {
-  "checksum": "4442b1336cb05fbe627389ecbe578e2d9894ddbbd4a01d20c02faf4d537241c4",
+  "checksum": "5948e31e10851023cdca3ba65e08ff5fe90d460c9651e4f9c2622b3fbe50a802",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -529,7 +529,7 @@
               "target": "http"
             },
             {
-              "id": "regex 1.11.0",
+              "id": "regex 1.11.1",
               "target": "regex"
             },
             {
@@ -965,7 +965,7 @@
               "target": "pin_project_lite"
             },
             {
-              "id": "regex 1.11.0",
+              "id": "regex 1.11.1",
               "target": "regex"
             },
             {
@@ -4512,7 +4512,7 @@
               "target": "http"
             },
             {
-              "id": "lazy_static 1.4.0",
+              "id": "lazy_static 1.5.0",
               "target": "lazy_static"
             },
             {
@@ -4528,7 +4528,7 @@
               "target": "thiserror"
             },
             {
-              "id": "webpki-roots 0.26.1",
+              "id": "webpki-roots 0.26.8",
               "target": "webpki_roots"
             }
           ],
@@ -4919,7 +4919,7 @@
               "target": "tokio"
             },
             {
-              "id": "tower 0.5.1",
+              "id": "tower 0.5.2",
               "target": "tower"
             },
             {
@@ -5162,7 +5162,7 @@
               "target": "serde"
             },
             {
-              "id": "tower 0.5.1",
+              "id": "tower 0.5.2",
               "target": "tower"
             },
             {
@@ -6508,7 +6508,7 @@
               "target": "clang_sys"
             },
             {
-              "id": "lazy_static 1.4.0",
+              "id": "lazy_static 1.5.0",
               "target": "lazy_static"
             },
             {
@@ -6532,7 +6532,7 @@
               "target": "quote"
             },
             {
-              "id": "regex 1.11.0",
+              "id": "regex 1.11.1",
               "target": "regex"
             },
             {
@@ -6650,7 +6650,7 @@
               "target": "itertools"
             },
             {
-              "id": "lazy_static 1.4.0",
+              "id": "lazy_static 1.5.0",
               "target": "lazy_static"
             },
             {
@@ -6666,7 +6666,7 @@
               "target": "quote"
             },
             {
-              "id": "regex 1.11.0",
+              "id": "regex 1.11.1",
               "target": "regex"
             },
             {
@@ -6751,7 +6751,7 @@
         "deps": {
           "common": [
             {
-              "id": "lazy_static 1.4.0",
+              "id": "lazy_static 1.5.0",
               "target": "lazy_static"
             }
           ],
@@ -6817,7 +6817,7 @@
         "deps": {
           "common": [
             {
-              "id": "either 1.8.1",
+              "id": "either 1.14.0",
               "target": "either"
             },
             {
@@ -8229,6 +8229,12 @@
         "compile_data_glob": [
           "**"
         ],
+        "crate_features": {
+          "common": [
+            "alloc"
+          ],
+          "selects": {}
+        },
         "deps": {
           "common": [
             {
@@ -8258,6 +8264,64 @@
         "MIT"
       ],
       "license_file": "LICENSE.txt"
+    },
+    "bitvec-nom2 0.2.1": {
+      "name": "bitvec-nom2",
+      "version": "0.2.1",
+      "package_url": "https://github.com/rust-bakery/nom-bitvec",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/bitvec-nom2/0.2.1/download",
+          "sha256": "d988fcc40055ceaa85edc55875a08f8abd29018582647fd82ad6128dba14a5f0"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "bitvec_nom2",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "bitvec_nom2",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "alloc",
+            "default"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "bitvec 1.0.1",
+              "target": "bitvec"
+            },
+            {
+              "id": "nom 7.1.3",
+              "target": "nom"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2018",
+        "version": "0.2.1"
+      },
+      "license": "MIT",
+      "license_ids": [
+        "MIT"
+      ],
+      "license_file": "LICENSE"
     },
     "blake2 0.10.6": {
       "name": "blake2",
@@ -9138,7 +9202,7 @@
               "target": "build_info_common"
             },
             {
-              "id": "lazy_static 1.4.0",
+              "id": "lazy_static 1.5.0",
               "target": "lazy_static"
             }
           ],
@@ -9226,7 +9290,7 @@
               "target": "glob"
             },
             {
-              "id": "lazy_static 1.4.0",
+              "id": "lazy_static 1.5.0",
               "target": "lazy_static"
             },
             {
@@ -10908,7 +10972,7 @@
         "deps": {
           "common": [
             {
-              "id": "lazy_static 1.4.0",
+              "id": "lazy_static 1.5.0",
               "target": "lazy_static"
             },
             {
@@ -11543,7 +11607,7 @@
               "target": "pest_vm"
             },
             {
-              "id": "regex 1.11.0",
+              "id": "regex 1.11.1",
               "target": "regex"
             },
             {
@@ -12672,6 +12736,45 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
+    "cityhash-rs 1.0.1": {
+      "name": "cityhash-rs",
+      "version": "1.0.1",
+      "package_url": "https://github.com/Protryon/cityhash-rs",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/cityhash-rs/1.0.1/download",
+          "sha256": "93a719913643003b84bd13022b4b7e703c09342cd03b679c4641c7d2e50dc34d"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "cityhash_rs",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "cityhash_rs",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "edition": "2018",
+        "version": "1.0.1"
+      },
+      "license": "MIT OR Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE"
+    },
     "clang-sys 1.6.1": {
       "name": "clang-sys",
       "version": "1.6.1",
@@ -13246,6 +13349,215 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
+    "clickhouse 0.13.1": {
+      "name": "clickhouse",
+      "version": "0.13.1",
+      "package_url": "https://github.com/ClickHouse/clickhouse-rs",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/clickhouse/0.13.1/download",
+          "sha256": "2135bb9638e8c8c1e3d794f242099e57987059ba52e7e3de597e1d99b2c4a5a3"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "clickhouse",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "clickhouse",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "default",
+            "inserter",
+            "lz4",
+            "rustls-tls-ring",
+            "rustls-tls-webpki-roots",
+            "time",
+            "uuid"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "bstr 1.6.0",
+              "target": "bstr"
+            },
+            {
+              "id": "bytes 1.9.0",
+              "target": "bytes"
+            },
+            {
+              "id": "cityhash-rs 1.0.1",
+              "target": "cityhash_rs"
+            },
+            {
+              "id": "futures 0.3.31",
+              "target": "futures"
+            },
+            {
+              "id": "futures-channel 0.3.31",
+              "target": "futures_channel"
+            },
+            {
+              "id": "http-body-util 0.1.2",
+              "target": "http_body_util"
+            },
+            {
+              "id": "hyper 1.5.1",
+              "target": "hyper"
+            },
+            {
+              "id": "hyper-rustls 0.27.3",
+              "target": "hyper_rustls"
+            },
+            {
+              "id": "hyper-util 0.1.10",
+              "target": "hyper_util"
+            },
+            {
+              "id": "lz4_flex 0.11.3",
+              "target": "lz4_flex"
+            },
+            {
+              "id": "quanta 0.12.3",
+              "target": "quanta"
+            },
+            {
+              "id": "replace_with 0.1.7",
+              "target": "replace_with"
+            },
+            {
+              "id": "rustls 0.23.18",
+              "target": "rustls"
+            },
+            {
+              "id": "serde 1.0.217",
+              "target": "serde"
+            },
+            {
+              "id": "static_assertions 1.1.0",
+              "target": "static_assertions"
+            },
+            {
+              "id": "thiserror 1.0.68",
+              "target": "thiserror"
+            },
+            {
+              "id": "time 0.3.36",
+              "target": "time"
+            },
+            {
+              "id": "tokio 1.42.0",
+              "target": "tokio"
+            },
+            {
+              "id": "url 2.5.3",
+              "target": "url"
+            },
+            {
+              "id": "uuid 1.11.0",
+              "target": "uuid"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "proc_macro_deps": {
+          "common": [
+            {
+              "id": "clickhouse-derive 0.2.0",
+              "target": "clickhouse_derive"
+            },
+            {
+              "id": "sealed 0.6.0",
+              "target": "sealed"
+            }
+          ],
+          "selects": {}
+        },
+        "version": "0.13.1"
+      },
+      "license": "MIT OR Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE"
+    },
+    "clickhouse-derive 0.2.0": {
+      "name": "clickhouse-derive",
+      "version": "0.2.0",
+      "package_url": null,
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/clickhouse-derive/0.2.0/download",
+          "sha256": "d70f3e2893f7d3e017eeacdc9a708fbc29a10488e3ebca21f9df6a5d2b616dbb"
+        }
+      },
+      "targets": [
+        {
+          "ProcMacro": {
+            "crate_name": "clickhouse_derive",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "clickhouse_derive",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "proc-macro2 1.0.89",
+              "target": "proc_macro2"
+            },
+            {
+              "id": "quote 1.0.37",
+              "target": "quote"
+            },
+            {
+              "id": "serde_derive_internals 0.29.1",
+              "target": "serde_derive_internals"
+            },
+            {
+              "id": "syn 2.0.87",
+              "target": "syn"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.2.0"
+      },
+      "license": "MIT OR Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": null
+    },
     "clocksource 0.8.1": {
       "name": "clocksource",
       "version": "0.8.1",
@@ -13604,7 +13916,7 @@
               "target": "is_terminal"
             },
             {
-              "id": "lazy_static 1.4.0",
+              "id": "lazy_static 1.5.0",
               "target": "lazy_static"
             }
           ],
@@ -13976,7 +14288,7 @@
         "deps": {
           "common": [
             {
-              "id": "lazy_static 1.4.0",
+              "id": "lazy_static 1.5.0",
               "target": "lazy_static"
             },
             {
@@ -13984,7 +14296,7 @@
               "target": "libc"
             },
             {
-              "id": "regex 1.11.0",
+              "id": "regex 1.11.1",
               "target": "regex"
             },
             {
@@ -14082,7 +14394,7 @@
         "deps": {
           "common": [
             {
-              "id": "lazy_static 1.4.0",
+              "id": "lazy_static 1.5.0",
               "target": "lazy_static"
             },
             {
@@ -14213,6 +14525,50 @@
         "MIT"
       ],
       "license_file": "LICENSE-APACHE"
+    },
+    "const_panic 0.2.12": {
+      "name": "const_panic",
+      "version": "0.2.12",
+      "package_url": "https://github.com/rodrimati1992/const_panic/",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/const_panic/0.2.12/download",
+          "sha256": "2459fc9262a1aa204eb4b5764ad4f189caec88aea9634389c0a25f8be7f6265e"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "const_panic",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "const_panic",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "rust_1_64"
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.2.12"
+      },
+      "license": "Zlib",
+      "license_ids": [
+        "Zlib"
+      ],
+      "license_file": "LICENSE-ZLIB.md"
     },
     "convert_case 0.4.0": {
       "name": "convert_case",
@@ -15649,7 +16005,7 @@
               "target": "rayon"
             },
             {
-              "id": "regex 1.11.0",
+              "id": "regex 1.11.1",
               "target": "regex"
             },
             {
@@ -18969,7 +19325,7 @@
               "target": "humantime_serde"
             },
             {
-              "id": "ic-agent 0.39.2",
+              "id": "ic-agent 0.39.3",
               "target": "ic_agent"
             },
             {
@@ -18993,11 +19349,11 @@
               "target": "keyring"
             },
             {
-              "id": "lazy_static 1.4.0",
+              "id": "lazy_static 1.5.0",
               "target": "lazy_static"
             },
             {
-              "id": "reqwest 0.12.9",
+              "id": "reqwest 0.12.12",
               "target": "reqwest"
             },
             {
@@ -19783,7 +20139,7 @@
               "target": "hyper_util"
             },
             {
-              "id": "ic-agent 0.39.2",
+              "id": "ic-agent 0.39.3",
               "target": "ic_agent"
             },
             {
@@ -19832,6 +20188,10 @@
               "target": "ic_certified_map"
             },
             {
+              "id": "ic-gateway 0.1.0",
+              "target": "ic_gateway"
+            },
+            {
               "id": "ic-http-certification 3.0.3",
               "target": "ic_http_certification"
             },
@@ -19864,7 +20224,7 @@
               "target": "ic_test_state_machine_client"
             },
             {
-              "id": "ic-transport-types 0.39.2",
+              "id": "ic-transport-types 0.39.3",
               "target": "ic_transport_types"
             },
             {
@@ -19964,7 +20324,7 @@
               "target": "kube"
             },
             {
-              "id": "lazy_static 1.4.0",
+              "id": "lazy_static 1.5.0",
               "target": "lazy_static"
             },
             {
@@ -20250,11 +20610,11 @@
               "target": "rcgen"
             },
             {
-              "id": "regex 1.11.0",
+              "id": "regex 1.11.1",
               "target": "regex"
             },
             {
-              "id": "reqwest 0.12.9",
+              "id": "reqwest 0.12.12",
               "target": "reqwest"
             },
             {
@@ -20498,11 +20858,11 @@
               "target": "threadpool"
             },
             {
-              "id": "tikv-jemalloc-ctl 0.5.4",
+              "id": "tikv-jemalloc-ctl 0.6.0",
               "target": "tikv_jemalloc_ctl"
             },
             {
-              "id": "tikv-jemallocator 0.5.4",
+              "id": "tikv-jemallocator 0.6.0",
               "target": "tikv_jemallocator"
             },
             {
@@ -20558,7 +20918,7 @@
               "target": "tonic_build"
             },
             {
-              "id": "tower 0.5.1",
+              "id": "tower 0.5.2",
               "target": "tower"
             },
             {
@@ -20574,7 +20934,7 @@
               "target": "tower_test"
             },
             {
-              "id": "tower_governor 0.4.2",
+              "id": "tower_governor 0.4.3",
               "target": "tower_governor"
             },
             {
@@ -22013,14 +22373,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "either 1.8.1": {
+    "either 1.14.0": {
       "name": "either",
-      "version": "1.8.1",
-      "package_url": "https://github.com/bluss/either",
+      "version": "1.14.0",
+      "package_url": "https://github.com/rayon-rs/either",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/either/1.8.1/download",
-          "sha256": "7fcaabb2fef8c910e7f4c7ce9f67a1283a1715879a7c230ca9d6d1ae31f16d91"
+          "url": "https://static.crates.io/crates/either/1.14.0/download",
+          "sha256": "b7914353092ddf589ad78f25c5c1c21b7f80b0ff8621e7c814c3485b5306da9d"
         }
       },
       "targets": [
@@ -22049,8 +22409,8 @@
           ],
           "selects": {}
         },
-        "edition": "2018",
-        "version": "1.8.1"
+        "edition": "2021",
+        "version": "1.14.0"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -22836,7 +23196,7 @@
               "target": "log"
             },
             {
-              "id": "regex 1.11.0",
+              "id": "regex 1.11.1",
               "target": "regex"
             }
           ],
@@ -23507,7 +23867,7 @@
               "target": "once_cell"
             },
             {
-              "id": "regex 1.11.0",
+              "id": "regex 1.11.1",
               "target": "regex"
             },
             {
@@ -25305,7 +25665,7 @@
           "selects": {
             "cfg(any(target_os = \"macos\", target_os = \"ios\"))": [
               {
-                "id": "lazy_static 1.4.0",
+                "id": "lazy_static 1.5.0",
                 "target": "lazy_static"
               }
             ],
@@ -25929,14 +26289,14 @@
       ],
       "license_file": null
     },
-    "fqdn 0.4.1": {
+    "fqdn 0.4.5": {
       "name": "fqdn",
-      "version": "0.4.1",
+      "version": "0.4.5",
       "package_url": "https://github.com/Orange-OpenSource/fqdn",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/fqdn/0.4.1/download",
-          "sha256": "5eeee501d87b436020fcd3065cc981b5e4d22f2066735268b36b9d513d23e553"
+          "url": "https://static.crates.io/crates/fqdn/0.4.5/download",
+          "sha256": "3e7cf4b6cb33615d9adab21d74fd820753c532ef7c15ff556e382abde22e4023"
         }
       },
       "targets": [
@@ -25961,12 +26321,22 @@
         "crate_features": {
           "common": [
             "default",
-            "domain-label-cannot-start-or-end-with-hyphen"
+            "domain-label-cannot-start-or-end-with-hyphen",
+            "serde"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "serde 1.0.217",
+              "target": "serde"
+            }
           ],
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.4.1"
+        "version": "0.4.5"
       },
       "license": "MIT",
       "license_ids": [
@@ -29331,14 +29701,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "hickory-resolver 0.24.1": {
+    "hickory-resolver 0.24.4": {
       "name": "hickory-resolver",
-      "version": "0.24.1",
+      "version": "0.24.4",
       "package_url": "https://github.com/hickory-dns/hickory-dns",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/hickory-resolver/0.24.1/download",
-          "sha256": "28757f23aa75c98f254cf0405e6d8c25b831b32921b050a66692427679b1f243"
+          "url": "https://static.crates.io/crates/hickory-resolver/0.24.4/download",
+          "sha256": "cbb117a1ca520e111743ab2f6688eddee69db4e0ea242545a604dce8a66fd22e"
         }
       },
       "targets": [
@@ -29465,7 +29835,7 @@
           }
         },
         "edition": "2021",
-        "version": "0.24.1"
+        "version": "0.24.4"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -29685,6 +30055,72 @@
         },
         "edition": "2015",
         "version": "0.3.1"
+      },
+      "license": "MIT",
+      "license_ids": [
+        "MIT"
+      ],
+      "license_file": "LICENSE"
+    },
+    "hostname 0.4.0": {
+      "name": "hostname",
+      "version": "0.4.0",
+      "package_url": "https://github.com/svartalf/hostname",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/hostname/0.4.0/download",
+          "sha256": "f9c7c7c8ac16c798734b8a24560c1362120597c40d5e1459f09498f8f6c8f2ba"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "hostname",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "hostname",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "default"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "cfg-if 1.0.0",
+              "target": "cfg_if"
+            }
+          ],
+          "selects": {
+            "cfg(any(unix, target_os = \"redox\"))": [
+              {
+                "id": "libc 0.2.158",
+                "target": "libc"
+              }
+            ],
+            "cfg(target_os = \"windows\")": [
+              {
+                "id": "windows 0.52.0",
+                "target": "windows"
+              }
+            ]
+          }
+        },
+        "edition": "2021",
+        "version": "0.4.0"
       },
       "license": "MIT",
       "license_ids": [
@@ -30866,138 +31302,11 @@
             "native-tokio",
             "ring",
             "rustls-native-certs",
-            "tls12"
+            "tls12",
+            "webpki-roots",
+            "webpki-tokio"
           ],
-          "selects": {
-            "aarch64-apple-darwin": [
-              "webpki-roots",
-              "webpki-tokio"
-            ],
-            "aarch64-apple-ios": [
-              "webpki-roots",
-              "webpki-tokio"
-            ],
-            "aarch64-apple-ios-sim": [
-              "webpki-roots",
-              "webpki-tokio"
-            ],
-            "aarch64-linux-android": [
-              "webpki-roots",
-              "webpki-tokio"
-            ],
-            "aarch64-pc-windows-msvc": [
-              "webpki-roots",
-              "webpki-tokio"
-            ],
-            "aarch64-unknown-fuchsia": [
-              "webpki-roots",
-              "webpki-tokio"
-            ],
-            "aarch64-unknown-linux-gnu": [
-              "webpki-roots",
-              "webpki-tokio"
-            ],
-            "aarch64-unknown-nixos-gnu": [
-              "webpki-roots",
-              "webpki-tokio"
-            ],
-            "aarch64-unknown-nto-qnx710": [
-              "webpki-roots",
-              "webpki-tokio"
-            ],
-            "arm-unknown-linux-gnueabi": [
-              "webpki-roots",
-              "webpki-tokio"
-            ],
-            "armv7-linux-androideabi": [
-              "webpki-roots",
-              "webpki-tokio"
-            ],
-            "armv7-unknown-linux-gnueabi": [
-              "webpki-roots",
-              "webpki-tokio"
-            ],
-            "i686-apple-darwin": [
-              "webpki-roots",
-              "webpki-tokio"
-            ],
-            "i686-linux-android": [
-              "webpki-roots",
-              "webpki-tokio"
-            ],
-            "i686-pc-windows-msvc": [
-              "webpki-roots",
-              "webpki-tokio"
-            ],
-            "i686-unknown-freebsd": [
-              "webpki-roots",
-              "webpki-tokio"
-            ],
-            "i686-unknown-linux-gnu": [
-              "webpki-roots",
-              "webpki-tokio"
-            ],
-            "powerpc-unknown-linux-gnu": [
-              "webpki-roots",
-              "webpki-tokio"
-            ],
-            "riscv32imc-unknown-none-elf": [
-              "webpki-roots",
-              "webpki-tokio"
-            ],
-            "riscv64gc-unknown-none-elf": [
-              "webpki-roots",
-              "webpki-tokio"
-            ],
-            "s390x-unknown-linux-gnu": [
-              "webpki-roots",
-              "webpki-tokio"
-            ],
-            "thumbv7em-none-eabi": [
-              "webpki-roots",
-              "webpki-tokio"
-            ],
-            "thumbv8m.main-none-eabi": [
-              "webpki-roots",
-              "webpki-tokio"
-            ],
-            "x86_64-apple-darwin": [
-              "webpki-roots",
-              "webpki-tokio"
-            ],
-            "x86_64-apple-ios": [
-              "webpki-roots",
-              "webpki-tokio"
-            ],
-            "x86_64-linux-android": [
-              "webpki-roots",
-              "webpki-tokio"
-            ],
-            "x86_64-pc-windows-msvc": [
-              "webpki-roots",
-              "webpki-tokio"
-            ],
-            "x86_64-unknown-freebsd": [
-              "webpki-roots",
-              "webpki-tokio"
-            ],
-            "x86_64-unknown-fuchsia": [
-              "webpki-roots",
-              "webpki-tokio"
-            ],
-            "x86_64-unknown-linux-gnu": [
-              "webpki-roots",
-              "webpki-tokio"
-            ],
-            "x86_64-unknown-nixos-gnu": [
-              "webpki-roots",
-              "webpki-tokio"
-            ],
-            "x86_64-unknown-none": [
-              "webpki-roots",
-              "webpki-tokio"
-            ]
-          }
+          "selects": {}
         },
         "deps": {
           "common": [
@@ -31045,202 +31354,13 @@
             {
               "id": "tower-service 0.3.3",
               "target": "tower_service"
+            },
+            {
+              "id": "webpki-roots 0.26.8",
+              "target": "webpki_roots"
             }
           ],
-          "selects": {
-            "aarch64-apple-darwin": [
-              {
-                "id": "webpki-roots 0.26.1",
-                "target": "webpki_roots"
-              }
-            ],
-            "aarch64-apple-ios": [
-              {
-                "id": "webpki-roots 0.26.1",
-                "target": "webpki_roots"
-              }
-            ],
-            "aarch64-apple-ios-sim": [
-              {
-                "id": "webpki-roots 0.26.1",
-                "target": "webpki_roots"
-              }
-            ],
-            "aarch64-linux-android": [
-              {
-                "id": "webpki-roots 0.26.1",
-                "target": "webpki_roots"
-              }
-            ],
-            "aarch64-pc-windows-msvc": [
-              {
-                "id": "webpki-roots 0.26.1",
-                "target": "webpki_roots"
-              }
-            ],
-            "aarch64-unknown-fuchsia": [
-              {
-                "id": "webpki-roots 0.26.1",
-                "target": "webpki_roots"
-              }
-            ],
-            "aarch64-unknown-linux-gnu": [
-              {
-                "id": "webpki-roots 0.26.1",
-                "target": "webpki_roots"
-              }
-            ],
-            "aarch64-unknown-nixos-gnu": [
-              {
-                "id": "webpki-roots 0.26.1",
-                "target": "webpki_roots"
-              }
-            ],
-            "aarch64-unknown-nto-qnx710": [
-              {
-                "id": "webpki-roots 0.26.1",
-                "target": "webpki_roots"
-              }
-            ],
-            "arm-unknown-linux-gnueabi": [
-              {
-                "id": "webpki-roots 0.26.1",
-                "target": "webpki_roots"
-              }
-            ],
-            "armv7-linux-androideabi": [
-              {
-                "id": "webpki-roots 0.26.1",
-                "target": "webpki_roots"
-              }
-            ],
-            "armv7-unknown-linux-gnueabi": [
-              {
-                "id": "webpki-roots 0.26.1",
-                "target": "webpki_roots"
-              }
-            ],
-            "i686-apple-darwin": [
-              {
-                "id": "webpki-roots 0.26.1",
-                "target": "webpki_roots"
-              }
-            ],
-            "i686-linux-android": [
-              {
-                "id": "webpki-roots 0.26.1",
-                "target": "webpki_roots"
-              }
-            ],
-            "i686-pc-windows-msvc": [
-              {
-                "id": "webpki-roots 0.26.1",
-                "target": "webpki_roots"
-              }
-            ],
-            "i686-unknown-freebsd": [
-              {
-                "id": "webpki-roots 0.26.1",
-                "target": "webpki_roots"
-              }
-            ],
-            "i686-unknown-linux-gnu": [
-              {
-                "id": "webpki-roots 0.26.1",
-                "target": "webpki_roots"
-              }
-            ],
-            "powerpc-unknown-linux-gnu": [
-              {
-                "id": "webpki-roots 0.26.1",
-                "target": "webpki_roots"
-              }
-            ],
-            "riscv32imc-unknown-none-elf": [
-              {
-                "id": "webpki-roots 0.26.1",
-                "target": "webpki_roots"
-              }
-            ],
-            "riscv64gc-unknown-none-elf": [
-              {
-                "id": "webpki-roots 0.26.1",
-                "target": "webpki_roots"
-              }
-            ],
-            "s390x-unknown-linux-gnu": [
-              {
-                "id": "webpki-roots 0.26.1",
-                "target": "webpki_roots"
-              }
-            ],
-            "thumbv7em-none-eabi": [
-              {
-                "id": "webpki-roots 0.26.1",
-                "target": "webpki_roots"
-              }
-            ],
-            "thumbv8m.main-none-eabi": [
-              {
-                "id": "webpki-roots 0.26.1",
-                "target": "webpki_roots"
-              }
-            ],
-            "x86_64-apple-darwin": [
-              {
-                "id": "webpki-roots 0.26.1",
-                "target": "webpki_roots"
-              }
-            ],
-            "x86_64-apple-ios": [
-              {
-                "id": "webpki-roots 0.26.1",
-                "target": "webpki_roots"
-              }
-            ],
-            "x86_64-linux-android": [
-              {
-                "id": "webpki-roots 0.26.1",
-                "target": "webpki_roots"
-              }
-            ],
-            "x86_64-pc-windows-msvc": [
-              {
-                "id": "webpki-roots 0.26.1",
-                "target": "webpki_roots"
-              }
-            ],
-            "x86_64-unknown-freebsd": [
-              {
-                "id": "webpki-roots 0.26.1",
-                "target": "webpki_roots"
-              }
-            ],
-            "x86_64-unknown-fuchsia": [
-              {
-                "id": "webpki-roots 0.26.1",
-                "target": "webpki_roots"
-              }
-            ],
-            "x86_64-unknown-linux-gnu": [
-              {
-                "id": "webpki-roots 0.26.1",
-                "target": "webpki_roots"
-              }
-            ],
-            "x86_64-unknown-nixos-gnu": [
-              {
-                "id": "webpki-roots 0.26.1",
-                "target": "webpki_roots"
-              }
-            ],
-            "x86_64-unknown-none": [
-              {
-                "id": "webpki-roots 0.26.1",
-                "target": "webpki_roots"
-              }
-            ]
-          }
+          "selects": {}
         },
         "edition": "2021",
         "version": "0.27.3"
@@ -31653,14 +31773,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "ic-agent 0.39.2": {
+    "ic-agent 0.39.3": {
       "name": "ic-agent",
-      "version": "0.39.2",
+      "version": "0.39.3",
       "package_url": "https://github.com/dfinity/agent-rs",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/ic-agent/0.39.2/download",
-          "sha256": "1ba408987ca48fc3eee6a613e760d076a9046cccbbb5ba29efbada339ab28ed9"
+          "url": "https://static.crates.io/crates/ic-agent/0.39.3/download",
+          "sha256": "820d65a05258f2fdff326c65561b1ddc7ec54e5d43a4b1203b25eb83075c83d4"
         }
       },
       "targets": [
@@ -31684,6 +31804,7 @@
         ],
         "crate_features": {
           "common": [
+            "_internal_dynamic-routing",
             "default",
             "pem",
             "ring"
@@ -31757,7 +31878,7 @@
               "target": "ic_certification"
             },
             {
-              "id": "ic-transport-types 0.39.2",
+              "id": "ic-transport-types 0.39.3",
               "target": "ic_transport_types"
             },
             {
@@ -31793,7 +31914,7 @@
               "target": "rangemap"
             },
             {
-              "id": "reqwest 0.12.9",
+              "id": "reqwest 0.12.12",
               "target": "reqwest"
             },
             {
@@ -31868,7 +31989,7 @@
           ],
           "selects": {}
         },
-        "version": "0.39.2"
+        "version": "0.39.3"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -31884,7 +32005,7 @@
         "Git": {
           "remote": "https://github.com/dfinity/ic-bn-lib",
           "commitish": {
-            "Rev": "d74a6527fbaf8a2c1a7076983cc84f5c5a727923"
+            "Rev": "530f8e8ea577740213aff4b6dfa7a49cc32bae4a"
           }
         }
       },
@@ -31950,7 +32071,7 @@
               "target": "cloudflare"
             },
             {
-              "id": "fqdn 0.4.1",
+              "id": "fqdn 0.4.5",
               "target": "fqdn"
             },
             {
@@ -31966,7 +32087,7 @@
               "target": "hickory_proto"
             },
             {
-              "id": "hickory-resolver 0.24.1",
+              "id": "hickory-resolver 0.24.4",
               "target": "hickory_resolver"
             },
             {
@@ -32026,7 +32147,7 @@
               "target": "rcgen"
             },
             {
-              "id": "reqwest 0.12.9",
+              "id": "reqwest 0.12.12",
               "target": "reqwest"
             },
             {
@@ -32090,7 +32211,7 @@
               "target": "tokio_util"
             },
             {
-              "id": "tower 0.5.1",
+              "id": "tower 0.5.2",
               "target": "tower"
             },
             {
@@ -32312,7 +32433,7 @@
               "target": "ic_representation_independent_hash"
             },
             {
-              "id": "lazy_static 1.4.0",
+              "id": "lazy_static 1.5.0",
               "target": "lazy_static"
             },
             {
@@ -32940,7 +33061,7 @@
               "target": "ic_certification"
             },
             {
-              "id": "lazy_static 1.4.0",
+              "id": "lazy_static 1.5.0",
               "target": "lazy_static"
             },
             {
@@ -33167,6 +33288,322 @@
       ],
       "license_file": "LICENSE"
     },
+    "ic-gateway 0.1.0": {
+      "name": "ic-gateway",
+      "version": "0.1.0",
+      "package_url": null,
+      "repository": {
+        "Git": {
+          "remote": "https://github.com/dfinity/ic-gateway",
+          "commitish": {
+            "Rev": "8590b8e9f0af4cdc3b95cd09a0c7a89037b3c038"
+          }
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "ic_gateway",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "ic_gateway",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "ahash 0.8.11",
+              "target": "ahash"
+            },
+            {
+              "id": "anyhow 1.0.93",
+              "target": "anyhow"
+            },
+            {
+              "id": "arc-swap 1.7.1",
+              "target": "arc_swap"
+            },
+            {
+              "id": "async-channel 2.3.1",
+              "target": "async_channel"
+            },
+            {
+              "id": "axum 0.7.9",
+              "target": "axum"
+            },
+            {
+              "id": "axum-extra 0.9.6",
+              "target": "axum_extra"
+            },
+            {
+              "id": "backoff 0.4.0",
+              "target": "backoff"
+            },
+            {
+              "id": "base64 0.22.1",
+              "target": "base64"
+            },
+            {
+              "id": "bytes 1.9.0",
+              "target": "bytes"
+            },
+            {
+              "id": "candid 0.10.13",
+              "target": "candid"
+            },
+            {
+              "id": "chrono 0.4.38",
+              "target": "chrono"
+            },
+            {
+              "id": "clap 4.5.20",
+              "target": "clap"
+            },
+            {
+              "id": "clickhouse 0.13.1",
+              "target": "clickhouse"
+            },
+            {
+              "id": "ctrlc 3.4.5",
+              "target": "ctrlc"
+            },
+            {
+              "id": "fqdn 0.4.5",
+              "target": "fqdn"
+            },
+            {
+              "id": "futures 0.3.31",
+              "target": "futures"
+            },
+            {
+              "id": "futures-util 0.3.31",
+              "target": "futures_util"
+            },
+            {
+              "id": "governor 0.6.0",
+              "target": "governor"
+            },
+            {
+              "id": "hickory-resolver 0.24.4",
+              "target": "hickory_resolver"
+            },
+            {
+              "id": "hostname 0.4.0",
+              "target": "hostname"
+            },
+            {
+              "id": "http 1.2.0",
+              "target": "http"
+            },
+            {
+              "id": "http-body 1.0.1",
+              "target": "http_body"
+            },
+            {
+              "id": "http-body-util 0.1.2",
+              "target": "http_body_util"
+            },
+            {
+              "id": "humantime 2.1.0",
+              "target": "humantime"
+            },
+            {
+              "id": "hyper-util 0.1.10",
+              "target": "hyper_util"
+            },
+            {
+              "id": "ic-agent 0.39.3",
+              "target": "ic_agent"
+            },
+            {
+              "id": "ic-bn-lib 0.1.0",
+              "target": "ic_bn_lib"
+            },
+            {
+              "id": "ic-http-gateway 0.2.0",
+              "target": "ic_http_gateway"
+            },
+            {
+              "id": "ic-transport-types 0.39.3",
+              "target": "ic_transport_types"
+            },
+            {
+              "id": "itertools 0.13.0",
+              "target": "itertools"
+            },
+            {
+              "id": "lazy_static 1.5.0",
+              "target": "lazy_static"
+            },
+            {
+              "id": "maxminddb 0.24.0",
+              "target": "maxminddb"
+            },
+            {
+              "id": "moka 0.12.8",
+              "target": "moka"
+            },
+            {
+              "id": "ocsp-stapler 0.4.2",
+              "target": "ocsp_stapler"
+            },
+            {
+              "id": "prometheus 0.13.4",
+              "target": "prometheus"
+            },
+            {
+              "id": "rand 0.8.5",
+              "target": "rand"
+            },
+            {
+              "id": "regex 1.11.1",
+              "target": "regex"
+            },
+            {
+              "id": "reqwest 0.12.12",
+              "target": "reqwest"
+            },
+            {
+              "id": "rustls 0.23.18",
+              "target": "rustls"
+            },
+            {
+              "id": "rustls-platform-verifier 0.4.0",
+              "target": "rustls_platform_verifier"
+            },
+            {
+              "id": "serde 1.0.217",
+              "target": "serde"
+            },
+            {
+              "id": "serde_cbor 0.11.2",
+              "target": "serde_cbor"
+            },
+            {
+              "id": "serde_json 1.0.132",
+              "target": "serde_json"
+            },
+            {
+              "id": "strum 0.26.3",
+              "target": "strum"
+            },
+            {
+              "id": "thiserror 2.0.11",
+              "target": "thiserror"
+            },
+            {
+              "id": "tikv-jemalloc-ctl 0.6.0",
+              "target": "tikv_jemalloc_ctl"
+            },
+            {
+              "id": "tikv-jemallocator 0.6.0",
+              "target": "tikv_jemallocator"
+            },
+            {
+              "id": "time 0.3.36",
+              "target": "time"
+            },
+            {
+              "id": "tokio 1.42.0",
+              "target": "tokio"
+            },
+            {
+              "id": "tokio-util 0.7.13",
+              "target": "tokio_util"
+            },
+            {
+              "id": "tower 0.5.2",
+              "target": "tower"
+            },
+            {
+              "id": "tower-http 0.6.2",
+              "target": "tower_http"
+            },
+            {
+              "id": "tower-service 0.3.3",
+              "target": "tower_service"
+            },
+            {
+              "id": "tower_governor 0.4.3",
+              "target": "tower_governor"
+            },
+            {
+              "id": "tracing 0.1.41",
+              "target": "tracing"
+            },
+            {
+              "id": "tracing-core 0.1.33",
+              "target": "tracing_core"
+            },
+            {
+              "id": "tracing-serde 0.2.0",
+              "target": "tracing_serde"
+            },
+            {
+              "id": "tracing-subscriber 0.3.19",
+              "target": "tracing_subscriber"
+            },
+            {
+              "id": "url 2.5.3",
+              "target": "url"
+            },
+            {
+              "id": "uuid 1.11.0",
+              "target": "uuid"
+            },
+            {
+              "id": "webpki-roots 0.26.8",
+              "target": "webpki_roots"
+            },
+            {
+              "id": "x509-parser 0.16.0",
+              "target": "x509_parser"
+            },
+            {
+              "id": "zstd 0.13.2",
+              "target": "zstd"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "proc_macro_deps": {
+          "common": [
+            {
+              "id": "async-trait 0.1.83",
+              "target": "async_trait"
+            },
+            {
+              "id": "clap_derive 4.5.18",
+              "target": "clap_derive"
+            },
+            {
+              "id": "derive-new 0.7.0",
+              "target": "derive_new"
+            },
+            {
+              "id": "strum_macros 0.26.4",
+              "target": "strum_macros"
+            }
+          ],
+          "selects": {}
+        },
+        "version": "0.1.0"
+      },
+      "license": null,
+      "license_ids": [],
+      "license_file": "LICENSE"
+    },
     "ic-http-certification 3.0.3": {
       "name": "ic-http-certification",
       "version": "3.0.3",
@@ -33302,7 +33739,7 @@
               "target": "http_body_util"
             },
             {
-              "id": "ic-agent 0.39.2",
+              "id": "ic-agent 0.39.3",
               "target": "ic_agent"
             },
             {
@@ -33369,7 +33806,7 @@
               "target": "hex"
             },
             {
-              "id": "ic-agent 0.39.2",
+              "id": "ic-agent 0.39.3",
               "target": "ic_agent"
             },
             {
@@ -33892,14 +34329,14 @@
       ],
       "license_file": null
     },
-    "ic-transport-types 0.39.2": {
+    "ic-transport-types 0.39.3": {
       "name": "ic-transport-types",
-      "version": "0.39.2",
+      "version": "0.39.3",
       "package_url": "https://github.com/dfinity/agent-rs",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/ic-transport-types/0.39.2/download",
-          "sha256": "21e2418868dd5857d2a5bac3f1cb6de1aecf2316d380997ef842aec3d8a79d4e"
+          "url": "https://static.crates.io/crates/ic-transport-types/0.39.3/download",
+          "sha256": "979ee7bee5a67150a4c090fb012c93c294a528b4a867bad9a15cc6d01cb4227f"
         }
       },
       "targets": [
@@ -33972,7 +34409,7 @@
           ],
           "selects": {}
         },
-        "version": "0.39.2"
+        "version": "0.39.3"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -34026,7 +34463,7 @@
               "target": "futures_util"
             },
             {
-              "id": "ic-agent 0.39.2",
+              "id": "ic-agent 0.39.3",
               "target": "ic_agent"
             },
             {
@@ -34140,7 +34577,7 @@
               "alias": "bls12_381"
             },
             {
-              "id": "lazy_static 1.4.0",
+              "id": "lazy_static 1.5.0",
               "target": "lazy_static"
             },
             {
@@ -34216,7 +34653,7 @@
               "alias": "bls12_381"
             },
             {
-              "id": "lazy_static 1.4.0",
+              "id": "lazy_static 1.5.0",
               "target": "lazy_static"
             },
             {
@@ -36725,7 +37162,7 @@
               "target": "console"
             },
             {
-              "id": "lazy_static 1.4.0",
+              "id": "lazy_static 1.5.0",
               "target": "lazy_static"
             },
             {
@@ -37367,7 +37804,7 @@
         "deps": {
           "common": [
             {
-              "id": "either 1.8.1",
+              "id": "either 1.14.0",
               "target": "either"
             }
           ],
@@ -37423,7 +37860,7 @@
         "deps": {
           "common": [
             {
-              "id": "either 1.8.1",
+              "id": "either 1.14.0",
               "target": "either"
             }
           ],
@@ -37479,7 +37916,7 @@
         "deps": {
           "common": [
             {
-              "id": "either 1.8.1",
+              "id": "either 1.14.0",
               "target": "either"
             }
           ],
@@ -37487,6 +37924,62 @@
         },
         "edition": "2018",
         "version": "0.12.0"
+      },
+      "license": "MIT OR Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE"
+    },
+    "itertools 0.13.0": {
+      "name": "itertools",
+      "version": "0.13.0",
+      "package_url": "https://github.com/rust-itertools/itertools",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/itertools/0.13.0/download",
+          "sha256": "413ee7dfc52ee1a4949ceeb7dbc8a33f2d6c088194d9f922fb8318faf1f01186"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "itertools",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "itertools",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "default",
+            "use_alloc",
+            "use_std"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "either 1.14.0",
+              "target": "either"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2018",
+        "version": "0.13.0"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -37924,7 +38417,7 @@
         "deps": {
           "common": [
             {
-              "id": "lazy_static 1.4.0",
+              "id": "lazy_static 1.5.0",
               "target": "lazy_static"
             },
             {
@@ -37936,7 +38429,7 @@
               "target": "pest"
             },
             {
-              "id": "regex 1.11.0",
+              "id": "regex 1.11.1",
               "target": "regex"
             },
             {
@@ -38099,6 +38592,45 @@
         "CC0-1.0"
       ],
       "license_file": "LICENSE"
+    },
+    "jzon 0.12.5": {
+      "name": "jzon",
+      "version": "0.12.5",
+      "package_url": "https://github.com/rustadopt/jzon-rs",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/jzon/0.12.5/download",
+          "sha256": "17ab85f84ca42c5ec520e6f3c9966ba1fd62909ce260f8837e248857d2560509"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "jzon",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "jzon",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "edition": "2018",
+        "version": "0.12.5"
+      },
+      "license": "MIT/Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE"
     },
     "k256 0.11.6": {
       "name": "k256",
@@ -38657,6 +39189,115 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
+    "konst 0.3.16": {
+      "name": "konst",
+      "version": "0.3.16",
+      "package_url": "https://github.com/rodrimati1992/konst/",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/konst/0.3.16/download",
+          "sha256": "4381b9b00c55f251f2ebe9473aef7c117e96828def1a7cb3bd3f0f903c6894e9"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "konst",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "konst",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "const_panic 0.2.12",
+              "target": "const_panic"
+            },
+            {
+              "id": "konst_kernel 0.3.15",
+              "target": "konst_kernel"
+            },
+            {
+              "id": "typewit 1.11.0",
+              "target": "typewit"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.3.16"
+      },
+      "license": "Zlib",
+      "license_ids": [
+        "Zlib"
+      ],
+      "license_file": "LICENSE-ZLIB.md"
+    },
+    "konst_kernel 0.3.15": {
+      "name": "konst_kernel",
+      "version": "0.3.15",
+      "package_url": "https://github.com/rodrimati1992/konst/",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/konst_kernel/0.3.15/download",
+          "sha256": "e4b1eb7788f3824c629b1116a7a9060d6e898c358ebff59070093d51103dcc3c"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "konst_kernel",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "konst_kernel",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "__for_konst",
+            "rust_1_64"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "typewit 1.11.0",
+              "target": "typewit"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.3.15"
+      },
+      "license": "Zlib",
+      "license_ids": [
+        "Zlib"
+      ],
+      "license_file": "LICENSE-ZLIB.md"
+    },
     "kube 0.94.2": {
       "name": "kube",
       "version": "0.94.2",
@@ -38808,7 +39449,7 @@
               "target": "chrono"
             },
             {
-              "id": "either 1.8.1",
+              "id": "either 1.14.0",
               "target": "either"
             },
             {
@@ -39143,7 +39784,7 @@
               "target": "petgraph"
             },
             {
-              "id": "regex 1.11.0",
+              "id": "regex 1.11.1",
               "target": "regex"
             },
             {
@@ -39256,7 +39897,7 @@
               "target": "pico_args"
             },
             {
-              "id": "regex 1.11.0",
+              "id": "regex 1.11.1",
               "target": "regex"
             },
             {
@@ -39390,85 +40031,85 @@
           "selects": {
             "aarch64-apple-darwin": [
               {
-                "id": "regex 1.11.0",
+                "id": "regex 1.11.1",
                 "target": "regex"
               }
             ],
             "aarch64-pc-windows-msvc": [
               {
-                "id": "regex 1.11.0",
+                "id": "regex 1.11.1",
                 "target": "regex"
               }
             ],
             "aarch64-unknown-linux-gnu": [
               {
-                "id": "regex 1.11.0",
+                "id": "regex 1.11.1",
                 "target": "regex"
               }
             ],
             "aarch64-unknown-nixos-gnu": [
               {
-                "id": "regex 1.11.0",
+                "id": "regex 1.11.1",
                 "target": "regex"
               }
             ],
             "arm-unknown-linux-gnueabi": [
               {
-                "id": "regex 1.11.0",
+                "id": "regex 1.11.1",
                 "target": "regex"
               }
             ],
             "i686-pc-windows-msvc": [
               {
-                "id": "regex 1.11.0",
+                "id": "regex 1.11.1",
                 "target": "regex"
               }
             ],
             "i686-unknown-linux-gnu": [
               {
-                "id": "regex 1.11.0",
+                "id": "regex 1.11.1",
                 "target": "regex"
               }
             ],
             "powerpc-unknown-linux-gnu": [
               {
-                "id": "regex 1.11.0",
+                "id": "regex 1.11.1",
                 "target": "regex"
               }
             ],
             "s390x-unknown-linux-gnu": [
               {
-                "id": "regex 1.11.0",
+                "id": "regex 1.11.1",
                 "target": "regex"
               }
             ],
             "x86_64-apple-darwin": [
               {
-                "id": "regex 1.11.0",
+                "id": "regex 1.11.1",
                 "target": "regex"
               }
             ],
             "x86_64-pc-windows-msvc": [
               {
-                "id": "regex 1.11.0",
+                "id": "regex 1.11.1",
                 "target": "regex"
               }
             ],
             "x86_64-unknown-freebsd": [
               {
-                "id": "regex 1.11.0",
+                "id": "regex 1.11.1",
                 "target": "regex"
               }
             ],
             "x86_64-unknown-linux-gnu": [
               {
-                "id": "regex 1.11.0",
+                "id": "regex 1.11.1",
                 "target": "regex"
               }
             ],
             "x86_64-unknown-nixos-gnu": [
               {
-                "id": "regex 1.11.0",
+                "id": "regex 1.11.1",
                 "target": "regex"
               }
             ]
@@ -39582,85 +40223,85 @@
           "selects": {
             "aarch64-apple-darwin": [
               {
-                "id": "regex 1.11.0",
+                "id": "regex 1.11.1",
                 "target": "regex"
               }
             ],
             "aarch64-pc-windows-msvc": [
               {
-                "id": "regex 1.11.0",
+                "id": "regex 1.11.1",
                 "target": "regex"
               }
             ],
             "aarch64-unknown-linux-gnu": [
               {
-                "id": "regex 1.11.0",
+                "id": "regex 1.11.1",
                 "target": "regex"
               }
             ],
             "aarch64-unknown-nixos-gnu": [
               {
-                "id": "regex 1.11.0",
+                "id": "regex 1.11.1",
                 "target": "regex"
               }
             ],
             "arm-unknown-linux-gnueabi": [
               {
-                "id": "regex 1.11.0",
+                "id": "regex 1.11.1",
                 "target": "regex"
               }
             ],
             "i686-pc-windows-msvc": [
               {
-                "id": "regex 1.11.0",
+                "id": "regex 1.11.1",
                 "target": "regex"
               }
             ],
             "i686-unknown-linux-gnu": [
               {
-                "id": "regex 1.11.0",
+                "id": "regex 1.11.1",
                 "target": "regex"
               }
             ],
             "powerpc-unknown-linux-gnu": [
               {
-                "id": "regex 1.11.0",
+                "id": "regex 1.11.1",
                 "target": "regex"
               }
             ],
             "s390x-unknown-linux-gnu": [
               {
-                "id": "regex 1.11.0",
+                "id": "regex 1.11.1",
                 "target": "regex"
               }
             ],
             "x86_64-apple-darwin": [
               {
-                "id": "regex 1.11.0",
+                "id": "regex 1.11.1",
                 "target": "regex"
               }
             ],
             "x86_64-pc-windows-msvc": [
               {
-                "id": "regex 1.11.0",
+                "id": "regex 1.11.1",
                 "target": "regex"
               }
             ],
             "x86_64-unknown-freebsd": [
               {
-                "id": "regex 1.11.0",
+                "id": "regex 1.11.1",
                 "target": "regex"
               }
             ],
             "x86_64-unknown-linux-gnu": [
               {
-                "id": "regex 1.11.0",
+                "id": "regex 1.11.1",
                 "target": "regex"
               }
             ],
             "x86_64-unknown-nixos-gnu": [
               {
-                "id": "regex 1.11.0",
+                "id": "regex 1.11.1",
                 "target": "regex"
               }
             ]
@@ -39715,14 +40356,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "lazy_static 1.4.0": {
+    "lazy_static 1.5.0": {
       "name": "lazy_static",
-      "version": "1.4.0",
+      "version": "1.5.0",
       "package_url": "https://github.com/rust-lang-nursery/lazy-static.rs",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/lazy_static/1.4.0/download",
-          "sha256": "e2abad23fbc42b3700f2f279844dc832adb2b2eb069b2df918f455c4e18cc646"
+          "url": "https://static.crates.io/crates/lazy_static/1.5.0/download",
+          "sha256": "bbd2bcb4c963f2ddae06a2efc7e9f3591312473c50c6685e1f298068316e66fe"
         }
       },
       "targets": [
@@ -39754,16 +40395,16 @@
         "deps": {
           "common": [
             {
-              "id": "spin 0.5.2",
+              "id": "spin 0.9.8",
               "target": "spin"
             }
           ],
           "selects": {}
         },
         "edition": "2015",
-        "version": "1.4.0"
+        "version": "1.5.0"
       },
-      "license": "MIT/Apache-2.0",
+      "license": "MIT OR Apache-2.0",
       "license_ids": [
         "Apache-2.0",
         "MIT"
@@ -40861,7 +41502,7 @@
         "deps": {
           "common": [
             {
-              "id": "lazy_static 1.4.0",
+              "id": "lazy_static 1.5.0",
               "target": "lazy_static"
             },
             {
@@ -42558,6 +43199,50 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
+    "lz4_flex 0.11.3": {
+      "name": "lz4_flex",
+      "version": "0.11.3",
+      "package_url": "https://github.com/pseitz/lz4_flex",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/lz4_flex/0.11.3/download",
+          "sha256": "75761162ae2b0e580d7e7c390558127e5f01b4194debd6221fd8c207fc80e3f5"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "lz4_flex",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "lz4_flex",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "std"
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.11.3"
+      },
+      "license": "MIT",
+      "license_ids": [
+        "MIT"
+      ],
+      "license_file": "LICENSE"
+    },
     "lzma-sys 0.1.20": {
       "name": "lzma-sys",
       "version": "0.1.20",
@@ -43785,7 +44470,7 @@
               "target": "itertools"
             },
             {
-              "id": "lazy_static 1.4.0",
+              "id": "lazy_static 1.5.0",
               "target": "lazy_static"
             },
             {
@@ -43817,7 +44502,7 @@
               "target": "rand"
             },
             {
-              "id": "regex 1.11.0",
+              "id": "regex 1.11.1",
               "target": "regex"
             },
             {
@@ -44834,7 +45519,7 @@
               "target": "rand"
             },
             {
-              "id": "regex 1.11.0",
+              "id": "regex 1.11.1",
               "target": "regex"
             },
             {
@@ -45437,7 +46122,7 @@
         "deps": {
           "common": [
             {
-              "id": "either 1.8.1",
+              "id": "either 1.14.0",
               "target": "either"
             },
             {
@@ -46475,7 +47160,7 @@
               "target": "byteorder"
             },
             {
-              "id": "lazy_static 1.4.0",
+              "id": "lazy_static 1.5.0",
               "target": "lazy_static"
             },
             {
@@ -47522,6 +48207,158 @@
         "MIT"
       ],
       "license_file": "LICENSE-APACHE"
+    },
+    "ocsp-stapler 0.4.2": {
+      "name": "ocsp-stapler",
+      "version": "0.4.2",
+      "package_url": "https://github.com/blind-oracle/ocsp-stapler",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/ocsp-stapler/0.4.2/download",
+          "sha256": "aa06cab7b77b6e17232440445d51df42cb9c948911d8abd20c15dd3dfedc2ed3"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "ocsp_stapler",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        },
+        {
+          "BuildScript": {
+            "crate_name": "build_script_build",
+            "crate_root": "build.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "ocsp_stapler",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "anyhow 1.0.93",
+              "target": "anyhow"
+            },
+            {
+              "id": "arc-swap 1.7.1",
+              "target": "arc_swap"
+            },
+            {
+              "id": "base64 0.22.1",
+              "target": "base64"
+            },
+            {
+              "id": "bytes 1.9.0",
+              "target": "bytes"
+            },
+            {
+              "id": "chrono 0.4.38",
+              "target": "chrono"
+            },
+            {
+              "id": "http 1.2.0",
+              "target": "http"
+            },
+            {
+              "id": "itertools 0.13.0",
+              "target": "itertools"
+            },
+            {
+              "id": "ocsp-stapler 0.4.2",
+              "target": "build_script_build"
+            },
+            {
+              "id": "prometheus 0.13.4",
+              "target": "prometheus"
+            },
+            {
+              "id": "rasn 0.15.3",
+              "target": "rasn"
+            },
+            {
+              "id": "rasn-ocsp 0.15.3",
+              "target": "rasn_ocsp"
+            },
+            {
+              "id": "rasn-pkix 0.15.3",
+              "target": "rasn_pkix"
+            },
+            {
+              "id": "reqwest 0.12.12",
+              "target": "reqwest"
+            },
+            {
+              "id": "rustls 0.23.18",
+              "target": "rustls"
+            },
+            {
+              "id": "sha1 0.10.6",
+              "target": "sha1"
+            },
+            {
+              "id": "tokio 1.42.0",
+              "target": "tokio"
+            },
+            {
+              "id": "tokio-util 0.7.13",
+              "target": "tokio_util"
+            },
+            {
+              "id": "tracing 0.1.41",
+              "target": "tracing"
+            },
+            {
+              "id": "url 2.5.3",
+              "target": "url"
+            },
+            {
+              "id": "x509-parser 0.16.0",
+              "target": "x509_parser"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.4.2"
+      },
+      "build_script_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "readme-rustdocifier 0.1.1",
+              "target": "readme_rustdocifier"
+            }
+          ],
+          "selects": {}
+        }
+      },
+      "license": "MPL-2.0",
+      "license_ids": [
+        "MPL-2.0"
+      ],
+      "license_file": "LICENSE"
     },
     "oid-registry 0.7.0": {
       "name": "oid-registry",
@@ -49271,7 +50108,7 @@
               "target": "rand"
             },
             {
-              "id": "regex 1.11.0",
+              "id": "regex 1.11.1",
               "target": "regex"
             },
             {
@@ -52806,7 +53643,7 @@
               "target": "ic_transport_types"
             },
             {
-              "id": "reqwest 0.12.9",
+              "id": "reqwest 0.12.12",
               "target": "reqwest"
             },
             {
@@ -53594,7 +54431,7 @@
               "target": "predicates_core"
             },
             {
-              "id": "regex 1.11.0",
+              "id": "regex 1.11.1",
               "target": "regex"
             }
           ],
@@ -54712,7 +55549,7 @@
               "target": "hex"
             },
             {
-              "id": "lazy_static 1.4.0",
+              "id": "lazy_static 1.5.0",
               "target": "lazy_static"
             },
             {
@@ -54784,7 +55621,7 @@
               "target": "hex"
             },
             {
-              "id": "lazy_static 1.4.0",
+              "id": "lazy_static 1.5.0",
               "target": "lazy_static"
             },
             {
@@ -54934,7 +55771,7 @@
               "target": "fnv"
             },
             {
-              "id": "lazy_static 1.4.0",
+              "id": "lazy_static 1.5.0",
               "target": "lazy_static"
             },
             {
@@ -55080,7 +55917,7 @@
               "target": "once_cell"
             },
             {
-              "id": "regex 1.11.0",
+              "id": "regex 1.11.1",
               "target": "regex"
             }
           ],
@@ -55153,7 +55990,7 @@
               "target": "bitflags"
             },
             {
-              "id": "lazy_static 1.4.0",
+              "id": "lazy_static 1.5.0",
               "target": "lazy_static"
             },
             {
@@ -55467,7 +56304,7 @@
               "target": "prost_types"
             },
             {
-              "id": "regex 1.11.0",
+              "id": "regex 1.11.1",
               "target": "regex"
             },
             {
@@ -55541,7 +56378,7 @@
               "target": "heck"
             },
             {
-              "id": "itertools 0.12.0",
+              "id": "itertools 0.13.0",
               "target": "itertools"
             },
             {
@@ -55573,7 +56410,7 @@
               "target": "prost_types"
             },
             {
-              "id": "regex 1.11.0",
+              "id": "regex 1.11.1",
               "target": "regex"
             },
             {
@@ -55695,7 +56532,7 @@
               "target": "anyhow"
             },
             {
-              "id": "itertools 0.12.0",
+              "id": "itertools 0.13.0",
               "target": "itertools"
             },
             {
@@ -58200,6 +59037,296 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
+    "rasn 0.15.3": {
+      "name": "rasn",
+      "version": "0.15.3",
+      "package_url": "https://github.com/librasn/rasn.git",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/rasn/0.15.3/download",
+          "sha256": "c5379b720091e4bf4a9f118eb46f4ffb67bb8b7551649528c89e265cf880e748"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "rasn",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "rasn",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "default",
+            "macros",
+            "rasn-derive"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "arrayvec 0.7.4",
+              "target": "arrayvec"
+            },
+            {
+              "id": "bitvec 1.0.1",
+              "target": "bitvec"
+            },
+            {
+              "id": "bitvec-nom2 0.2.1",
+              "target": "bitvec_nom2",
+              "alias": "nom_bitvec"
+            },
+            {
+              "id": "bytes 1.9.0",
+              "target": "bytes"
+            },
+            {
+              "id": "chrono 0.4.38",
+              "target": "chrono"
+            },
+            {
+              "id": "either 1.14.0",
+              "target": "either"
+            },
+            {
+              "id": "jzon 0.12.5",
+              "target": "jzon"
+            },
+            {
+              "id": "konst 0.3.16",
+              "target": "konst"
+            },
+            {
+              "id": "nom 7.1.3",
+              "target": "nom"
+            },
+            {
+              "id": "num-bigint 0.4.6",
+              "target": "num_bigint"
+            },
+            {
+              "id": "num-integer 0.1.46",
+              "target": "num_integer"
+            },
+            {
+              "id": "num-traits 0.2.19",
+              "target": "num_traits"
+            },
+            {
+              "id": "once_cell 1.19.0",
+              "target": "once_cell"
+            },
+            {
+              "id": "snafu 0.7.5",
+              "target": "snafu"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "proc_macro_deps": {
+          "common": [
+            {
+              "id": "rasn-derive 0.15.3",
+              "target": "rasn_derive"
+            }
+          ],
+          "selects": {}
+        },
+        "version": "0.15.3"
+      },
+      "license": "MIT/Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": null
+    },
+    "rasn-derive 0.15.3": {
+      "name": "rasn-derive",
+      "version": "0.15.3",
+      "package_url": "https://github.com/librasn/rasn.git",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/rasn-derive/0.15.3/download",
+          "sha256": "e521162112419405837a6590b327f24707ce9f9b3ac9c9c4a4d10673b63abcd8"
+        }
+      },
+      "targets": [
+        {
+          "ProcMacro": {
+            "crate_name": "rasn_derive",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "rasn_derive",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "either 1.14.0",
+              "target": "either"
+            },
+            {
+              "id": "itertools 0.10.5",
+              "target": "itertools"
+            },
+            {
+              "id": "proc-macro2 1.0.89",
+              "target": "proc_macro2"
+            },
+            {
+              "id": "quote 1.0.37",
+              "target": "quote"
+            },
+            {
+              "id": "rayon 1.10.0",
+              "target": "rayon"
+            },
+            {
+              "id": "syn 1.0.109",
+              "target": "syn"
+            },
+            {
+              "id": "uuid 1.11.0",
+              "target": "uuid"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.15.3"
+      },
+      "license": "MIT/Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": null
+    },
+    "rasn-ocsp 0.15.3": {
+      "name": "rasn-ocsp",
+      "version": "0.15.3",
+      "package_url": "https://github.com/librasn/rasn.git",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/rasn-ocsp/0.15.3/download",
+          "sha256": "aada75dbe8ab73b0304c47a9b23c8846b93d19113c771d332dba2065c51c5372"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "rasn_ocsp",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "rasn_ocsp",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "rasn 0.15.3",
+              "target": "rasn"
+            },
+            {
+              "id": "rasn-pkix 0.15.3",
+              "target": "rasn_pkix"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.15.3"
+      },
+      "license": "MIT/Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": null
+    },
+    "rasn-pkix 0.15.3": {
+      "name": "rasn-pkix",
+      "version": "0.15.3",
+      "package_url": "https://github.com/librasn/rasn.git",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/rasn-pkix/0.15.3/download",
+          "sha256": "d9f74a31343c2fd11da94025b8dcbeb96bfb207b4d480db99ad5554c117448fa"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "rasn_pkix",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "rasn_pkix",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "rasn 0.15.3",
+              "target": "rasn"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.15.3"
+      },
+      "license": "MIT/Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": null
+    },
     "ratelimit 0.9.1": {
       "name": "ratelimit",
       "version": "0.9.1",
@@ -58382,7 +59509,7 @@
         "deps": {
           "common": [
             {
-              "id": "either 1.8.1",
+              "id": "either 1.14.0",
               "target": "either"
             },
             {
@@ -58602,6 +59729,73 @@
       "license": "ISC",
       "license_ids": [
         "ISC"
+      ],
+      "license_file": "LICENSE"
+    },
+    "readme-rustdocifier 0.1.1": {
+      "name": "readme-rustdocifier",
+      "version": "0.1.1",
+      "package_url": "https://github.com/malaire/readme-rustdocifier",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/readme-rustdocifier/0.1.1/download",
+          "sha256": "08ad765b21a08b1a8e5cdce052719188a23772bcbefb3c439f0baaf62c56ceac"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "readme_rustdocifier",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        },
+        {
+          "BuildScript": {
+            "crate_name": "build_script_build",
+            "crate_root": "build.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "readme_rustdocifier",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "readme-rustdocifier 0.1.1",
+              "target": "build_script_build"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.1.1"
+      },
+      "build_script_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "data_glob": [
+          "**"
+        ]
+      },
+      "license": "MIT",
+      "license_ids": [
+        "MIT"
       ],
       "license_file": "LICENSE"
     },
@@ -58829,14 +60023,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "regex 1.11.0": {
+    "regex 1.11.1": {
       "name": "regex",
-      "version": "1.11.0",
+      "version": "1.11.1",
       "package_url": "https://github.com/rust-lang/regex",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/regex/1.11.0/download",
-          "sha256": "38200e5ee88914975b69f657f0801b6f6dccafd44fd9326302a4aaeecfacb1d8"
+          "url": "https://static.crates.io/crates/regex/1.11.1/download",
+          "sha256": "b544ef1b4eac5dc2db33ea63606ae9ffcfac26c1416a2806ae0bf5f56b201191"
         }
       },
       "targets": [
@@ -58902,7 +60096,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "1.11.0"
+        "version": "1.11.1"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -59414,6 +60608,52 @@
         "MIT"
       ],
       "license_file": "LICENSE"
+    },
+    "replace_with 0.1.7": {
+      "name": "replace_with",
+      "version": "0.1.7",
+      "package_url": "https://github.com/alecmocatta/replace_with",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/replace_with/0.1.7/download",
+          "sha256": "e3a8614ee435691de62bcffcf4a66d91b3594bf1428a5722e79103249a095690"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "replace_with",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "replace_with",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "default",
+            "std"
+          ],
+          "selects": {}
+        },
+        "edition": "2018",
+        "version": "0.1.7"
+      },
+      "license": "MIT OR Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE.txt"
     },
     "reqwest 0.11.27": {
       "name": "reqwest",
@@ -60561,14 +61801,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "reqwest 0.12.9": {
+    "reqwest 0.12.12": {
       "name": "reqwest",
-      "version": "0.12.9",
+      "version": "0.12.12",
       "package_url": "https://github.com/seanmonstar/reqwest",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/reqwest/0.12.9/download",
-          "sha256": "a77c62af46e79de0a562e1a9849205ffcb7fc1238876e9bd743357570e04046f"
+          "url": "https://static.crates.io/crates/reqwest/0.12.12/download",
+          "sha256": "43e734407157c3c2034e0258f5e4473ddb361b1e85f95a66690d67264d7cd1da"
         }
       },
       "targets": [
@@ -60596,10 +61836,12 @@
             "__rustls-ring",
             "__tls",
             "blocking",
+            "charset",
             "h2",
             "hickory-dns",
             "http2",
             "json",
+            "macos-system-configuration",
             "multipart",
             "rustls-tls",
             "rustls-tls-native-roots",
@@ -60665,6 +61907,10 @@
           "selects": {
             "aarch64-apple-darwin": [
               {
+                "id": "encoding_rs 0.8.32",
+                "target": "encoding_rs"
+              },
+              {
                 "id": "futures-channel 0.3.31",
                 "target": "futures_channel"
               },
@@ -60673,7 +61919,7 @@
                 "target": "h2"
               },
               {
-                "id": "hickory-resolver 0.24.1",
+                "id": "hickory-resolver 0.24.4",
                 "target": "hickory_resolver"
               },
               {
@@ -60697,6 +61943,10 @@
                 "target": "rustls_pki_types"
               },
               {
+                "id": "system-configuration 0.6.1",
+                "target": "system_configuration"
+              },
+              {
                 "id": "tokio-rustls 0.26.0",
                 "target": "tokio_rustls"
               },
@@ -60709,12 +61959,16 @@
                 "target": "tokio_util"
               },
               {
-                "id": "webpki-roots 0.26.1",
+                "id": "webpki-roots 0.26.8",
                 "target": "webpki_roots"
               }
             ],
             "aarch64-apple-ios": [
               {
+                "id": "encoding_rs 0.8.32",
+                "target": "encoding_rs"
+              },
+              {
                 "id": "futures-channel 0.3.31",
                 "target": "futures_channel"
               },
@@ -60723,7 +61977,7 @@
                 "target": "h2"
               },
               {
-                "id": "hickory-resolver 0.24.1",
+                "id": "hickory-resolver 0.24.4",
                 "target": "hickory_resolver"
               },
               {
@@ -60759,12 +62013,16 @@
                 "target": "tokio_util"
               },
               {
-                "id": "webpki-roots 0.26.1",
+                "id": "webpki-roots 0.26.8",
                 "target": "webpki_roots"
               }
             ],
             "aarch64-apple-ios-sim": [
               {
+                "id": "encoding_rs 0.8.32",
+                "target": "encoding_rs"
+              },
+              {
                 "id": "futures-channel 0.3.31",
                 "target": "futures_channel"
               },
@@ -60773,7 +62031,7 @@
                 "target": "h2"
               },
               {
-                "id": "hickory-resolver 0.24.1",
+                "id": "hickory-resolver 0.24.4",
                 "target": "hickory_resolver"
               },
               {
@@ -60809,12 +62067,16 @@
                 "target": "tokio_util"
               },
               {
-                "id": "webpki-roots 0.26.1",
+                "id": "webpki-roots 0.26.8",
                 "target": "webpki_roots"
               }
             ],
             "aarch64-linux-android": [
               {
+                "id": "encoding_rs 0.8.32",
+                "target": "encoding_rs"
+              },
+              {
                 "id": "futures-channel 0.3.31",
                 "target": "futures_channel"
               },
@@ -60823,7 +62085,7 @@
                 "target": "h2"
               },
               {
-                "id": "hickory-resolver 0.24.1",
+                "id": "hickory-resolver 0.24.4",
                 "target": "hickory_resolver"
               },
               {
@@ -60859,12 +62121,16 @@
                 "target": "tokio_util"
               },
               {
-                "id": "webpki-roots 0.26.1",
+                "id": "webpki-roots 0.26.8",
                 "target": "webpki_roots"
               }
             ],
             "aarch64-pc-windows-msvc": [
               {
+                "id": "encoding_rs 0.8.32",
+                "target": "encoding_rs"
+              },
+              {
                 "id": "futures-channel 0.3.31",
                 "target": "futures_channel"
               },
@@ -60873,7 +62139,7 @@
                 "target": "h2"
               },
               {
-                "id": "hickory-resolver 0.24.1",
+                "id": "hickory-resolver 0.24.4",
                 "target": "hickory_resolver"
               },
               {
@@ -60909,12 +62175,16 @@
                 "target": "tokio_util"
               },
               {
-                "id": "webpki-roots 0.26.1",
+                "id": "webpki-roots 0.26.8",
                 "target": "webpki_roots"
               }
             ],
             "aarch64-unknown-fuchsia": [
               {
+                "id": "encoding_rs 0.8.32",
+                "target": "encoding_rs"
+              },
+              {
                 "id": "futures-channel 0.3.31",
                 "target": "futures_channel"
               },
@@ -60923,7 +62193,7 @@
                 "target": "h2"
               },
               {
-                "id": "hickory-resolver 0.24.1",
+                "id": "hickory-resolver 0.24.4",
                 "target": "hickory_resolver"
               },
               {
@@ -60959,12 +62229,16 @@
                 "target": "tokio_util"
               },
               {
-                "id": "webpki-roots 0.26.1",
+                "id": "webpki-roots 0.26.8",
                 "target": "webpki_roots"
               }
             ],
             "aarch64-unknown-linux-gnu": [
               {
+                "id": "encoding_rs 0.8.32",
+                "target": "encoding_rs"
+              },
+              {
                 "id": "futures-channel 0.3.31",
                 "target": "futures_channel"
               },
@@ -60973,7 +62247,7 @@
                 "target": "h2"
               },
               {
-                "id": "hickory-resolver 0.24.1",
+                "id": "hickory-resolver 0.24.4",
                 "target": "hickory_resolver"
               },
               {
@@ -61009,12 +62283,16 @@
                 "target": "tokio_util"
               },
               {
-                "id": "webpki-roots 0.26.1",
+                "id": "webpki-roots 0.26.8",
                 "target": "webpki_roots"
               }
             ],
             "aarch64-unknown-nixos-gnu": [
               {
+                "id": "encoding_rs 0.8.32",
+                "target": "encoding_rs"
+              },
+              {
                 "id": "futures-channel 0.3.31",
                 "target": "futures_channel"
               },
@@ -61023,7 +62301,7 @@
                 "target": "h2"
               },
               {
-                "id": "hickory-resolver 0.24.1",
+                "id": "hickory-resolver 0.24.4",
                 "target": "hickory_resolver"
               },
               {
@@ -61059,12 +62337,16 @@
                 "target": "tokio_util"
               },
               {
-                "id": "webpki-roots 0.26.1",
+                "id": "webpki-roots 0.26.8",
                 "target": "webpki_roots"
               }
             ],
             "aarch64-unknown-nto-qnx710": [
               {
+                "id": "encoding_rs 0.8.32",
+                "target": "encoding_rs"
+              },
+              {
                 "id": "futures-channel 0.3.31",
                 "target": "futures_channel"
               },
@@ -61073,7 +62355,7 @@
                 "target": "h2"
               },
               {
-                "id": "hickory-resolver 0.24.1",
+                "id": "hickory-resolver 0.24.4",
                 "target": "hickory_resolver"
               },
               {
@@ -61109,12 +62391,16 @@
                 "target": "tokio_util"
               },
               {
-                "id": "webpki-roots 0.26.1",
+                "id": "webpki-roots 0.26.8",
                 "target": "webpki_roots"
               }
             ],
             "arm-unknown-linux-gnueabi": [
               {
+                "id": "encoding_rs 0.8.32",
+                "target": "encoding_rs"
+              },
+              {
                 "id": "futures-channel 0.3.31",
                 "target": "futures_channel"
               },
@@ -61123,7 +62409,7 @@
                 "target": "h2"
               },
               {
-                "id": "hickory-resolver 0.24.1",
+                "id": "hickory-resolver 0.24.4",
                 "target": "hickory_resolver"
               },
               {
@@ -61159,12 +62445,16 @@
                 "target": "tokio_util"
               },
               {
-                "id": "webpki-roots 0.26.1",
+                "id": "webpki-roots 0.26.8",
                 "target": "webpki_roots"
               }
             ],
             "armv7-linux-androideabi": [
               {
+                "id": "encoding_rs 0.8.32",
+                "target": "encoding_rs"
+              },
+              {
                 "id": "futures-channel 0.3.31",
                 "target": "futures_channel"
               },
@@ -61173,7 +62463,7 @@
                 "target": "h2"
               },
               {
-                "id": "hickory-resolver 0.24.1",
+                "id": "hickory-resolver 0.24.4",
                 "target": "hickory_resolver"
               },
               {
@@ -61209,12 +62499,16 @@
                 "target": "tokio_util"
               },
               {
-                "id": "webpki-roots 0.26.1",
+                "id": "webpki-roots 0.26.8",
                 "target": "webpki_roots"
               }
             ],
             "armv7-unknown-linux-gnueabi": [
               {
+                "id": "encoding_rs 0.8.32",
+                "target": "encoding_rs"
+              },
+              {
                 "id": "futures-channel 0.3.31",
                 "target": "futures_channel"
               },
@@ -61223,7 +62517,7 @@
                 "target": "h2"
               },
               {
-                "id": "hickory-resolver 0.24.1",
+                "id": "hickory-resolver 0.24.4",
                 "target": "hickory_resolver"
               },
               {
@@ -61259,7 +62553,7 @@
                 "target": "tokio_util"
               },
               {
-                "id": "webpki-roots 0.26.1",
+                "id": "webpki-roots 0.26.8",
                 "target": "webpki_roots"
               }
             ],
@@ -61307,6 +62601,10 @@
               {
                 "id": "tokio 1.42.0",
                 "target": "tokio"
+              },
+              {
+                "id": "tower 0.5.2",
+                "target": "tower"
               }
             ],
             "cfg(target_arch = \"wasm32\")": [
@@ -61335,6 +62633,10 @@
             ],
             "i686-apple-darwin": [
               {
+                "id": "encoding_rs 0.8.32",
+                "target": "encoding_rs"
+              },
+              {
                 "id": "futures-channel 0.3.31",
                 "target": "futures_channel"
               },
@@ -61343,7 +62645,7 @@
                 "target": "h2"
               },
               {
-                "id": "hickory-resolver 0.24.1",
+                "id": "hickory-resolver 0.24.4",
                 "target": "hickory_resolver"
               },
               {
@@ -61367,6 +62669,10 @@
                 "target": "rustls_pki_types"
               },
               {
+                "id": "system-configuration 0.6.1",
+                "target": "system_configuration"
+              },
+              {
                 "id": "tokio-rustls 0.26.0",
                 "target": "tokio_rustls"
               },
@@ -61379,12 +62685,16 @@
                 "target": "tokio_util"
               },
               {
-                "id": "webpki-roots 0.26.1",
+                "id": "webpki-roots 0.26.8",
                 "target": "webpki_roots"
               }
             ],
             "i686-linux-android": [
               {
+                "id": "encoding_rs 0.8.32",
+                "target": "encoding_rs"
+              },
+              {
                 "id": "futures-channel 0.3.31",
                 "target": "futures_channel"
               },
@@ -61393,7 +62703,7 @@
                 "target": "h2"
               },
               {
-                "id": "hickory-resolver 0.24.1",
+                "id": "hickory-resolver 0.24.4",
                 "target": "hickory_resolver"
               },
               {
@@ -61429,12 +62739,16 @@
                 "target": "tokio_util"
               },
               {
-                "id": "webpki-roots 0.26.1",
+                "id": "webpki-roots 0.26.8",
                 "target": "webpki_roots"
               }
             ],
             "i686-pc-windows-msvc": [
               {
+                "id": "encoding_rs 0.8.32",
+                "target": "encoding_rs"
+              },
+              {
                 "id": "futures-channel 0.3.31",
                 "target": "futures_channel"
               },
@@ -61443,7 +62757,7 @@
                 "target": "h2"
               },
               {
-                "id": "hickory-resolver 0.24.1",
+                "id": "hickory-resolver 0.24.4",
                 "target": "hickory_resolver"
               },
               {
@@ -61479,12 +62793,16 @@
                 "target": "tokio_util"
               },
               {
-                "id": "webpki-roots 0.26.1",
+                "id": "webpki-roots 0.26.8",
                 "target": "webpki_roots"
               }
             ],
             "i686-unknown-freebsd": [
               {
+                "id": "encoding_rs 0.8.32",
+                "target": "encoding_rs"
+              },
+              {
                 "id": "futures-channel 0.3.31",
                 "target": "futures_channel"
               },
@@ -61493,7 +62811,7 @@
                 "target": "h2"
               },
               {
-                "id": "hickory-resolver 0.24.1",
+                "id": "hickory-resolver 0.24.4",
                 "target": "hickory_resolver"
               },
               {
@@ -61529,12 +62847,16 @@
                 "target": "tokio_util"
               },
               {
-                "id": "webpki-roots 0.26.1",
+                "id": "webpki-roots 0.26.8",
                 "target": "webpki_roots"
               }
             ],
             "i686-unknown-linux-gnu": [
               {
+                "id": "encoding_rs 0.8.32",
+                "target": "encoding_rs"
+              },
+              {
                 "id": "futures-channel 0.3.31",
                 "target": "futures_channel"
               },
@@ -61543,7 +62865,7 @@
                 "target": "h2"
               },
               {
-                "id": "hickory-resolver 0.24.1",
+                "id": "hickory-resolver 0.24.4",
                 "target": "hickory_resolver"
               },
               {
@@ -61579,12 +62901,16 @@
                 "target": "tokio_util"
               },
               {
-                "id": "webpki-roots 0.26.1",
+                "id": "webpki-roots 0.26.8",
                 "target": "webpki_roots"
               }
             ],
             "powerpc-unknown-linux-gnu": [
               {
+                "id": "encoding_rs 0.8.32",
+                "target": "encoding_rs"
+              },
+              {
                 "id": "futures-channel 0.3.31",
                 "target": "futures_channel"
               },
@@ -61593,7 +62919,7 @@
                 "target": "h2"
               },
               {
-                "id": "hickory-resolver 0.24.1",
+                "id": "hickory-resolver 0.24.4",
                 "target": "hickory_resolver"
               },
               {
@@ -61629,12 +62955,16 @@
                 "target": "tokio_util"
               },
               {
-                "id": "webpki-roots 0.26.1",
+                "id": "webpki-roots 0.26.8",
                 "target": "webpki_roots"
               }
             ],
             "riscv32imc-unknown-none-elf": [
               {
+                "id": "encoding_rs 0.8.32",
+                "target": "encoding_rs"
+              },
+              {
                 "id": "futures-channel 0.3.31",
                 "target": "futures_channel"
               },
@@ -61643,7 +62973,7 @@
                 "target": "h2"
               },
               {
-                "id": "hickory-resolver 0.24.1",
+                "id": "hickory-resolver 0.24.4",
                 "target": "hickory_resolver"
               },
               {
@@ -61679,12 +63009,16 @@
                 "target": "tokio_util"
               },
               {
-                "id": "webpki-roots 0.26.1",
+                "id": "webpki-roots 0.26.8",
                 "target": "webpki_roots"
               }
             ],
             "riscv64gc-unknown-none-elf": [
               {
+                "id": "encoding_rs 0.8.32",
+                "target": "encoding_rs"
+              },
+              {
                 "id": "futures-channel 0.3.31",
                 "target": "futures_channel"
               },
@@ -61693,7 +63027,7 @@
                 "target": "h2"
               },
               {
-                "id": "hickory-resolver 0.24.1",
+                "id": "hickory-resolver 0.24.4",
                 "target": "hickory_resolver"
               },
               {
@@ -61729,12 +63063,16 @@
                 "target": "tokio_util"
               },
               {
-                "id": "webpki-roots 0.26.1",
+                "id": "webpki-roots 0.26.8",
                 "target": "webpki_roots"
               }
             ],
             "s390x-unknown-linux-gnu": [
               {
+                "id": "encoding_rs 0.8.32",
+                "target": "encoding_rs"
+              },
+              {
                 "id": "futures-channel 0.3.31",
                 "target": "futures_channel"
               },
@@ -61743,7 +63081,7 @@
                 "target": "h2"
               },
               {
-                "id": "hickory-resolver 0.24.1",
+                "id": "hickory-resolver 0.24.4",
                 "target": "hickory_resolver"
               },
               {
@@ -61779,12 +63117,16 @@
                 "target": "tokio_util"
               },
               {
-                "id": "webpki-roots 0.26.1",
+                "id": "webpki-roots 0.26.8",
                 "target": "webpki_roots"
               }
             ],
             "thumbv7em-none-eabi": [
               {
+                "id": "encoding_rs 0.8.32",
+                "target": "encoding_rs"
+              },
+              {
                 "id": "futures-channel 0.3.31",
                 "target": "futures_channel"
               },
@@ -61793,7 +63135,7 @@
                 "target": "h2"
               },
               {
-                "id": "hickory-resolver 0.24.1",
+                "id": "hickory-resolver 0.24.4",
                 "target": "hickory_resolver"
               },
               {
@@ -61829,12 +63171,16 @@
                 "target": "tokio_util"
               },
               {
-                "id": "webpki-roots 0.26.1",
+                "id": "webpki-roots 0.26.8",
                 "target": "webpki_roots"
               }
             ],
             "thumbv8m.main-none-eabi": [
               {
+                "id": "encoding_rs 0.8.32",
+                "target": "encoding_rs"
+              },
+              {
                 "id": "futures-channel 0.3.31",
                 "target": "futures_channel"
               },
@@ -61843,7 +63189,7 @@
                 "target": "h2"
               },
               {
-                "id": "hickory-resolver 0.24.1",
+                "id": "hickory-resolver 0.24.4",
                 "target": "hickory_resolver"
               },
               {
@@ -61879,7 +63225,7 @@
                 "target": "tokio_util"
               },
               {
-                "id": "webpki-roots 0.26.1",
+                "id": "webpki-roots 0.26.8",
                 "target": "webpki_roots"
               }
             ],
@@ -61897,6 +63243,10 @@
             ],
             "x86_64-apple-darwin": [
               {
+                "id": "encoding_rs 0.8.32",
+                "target": "encoding_rs"
+              },
+              {
                 "id": "futures-channel 0.3.31",
                 "target": "futures_channel"
               },
@@ -61905,7 +63255,7 @@
                 "target": "h2"
               },
               {
-                "id": "hickory-resolver 0.24.1",
+                "id": "hickory-resolver 0.24.4",
                 "target": "hickory_resolver"
               },
               {
@@ -61929,6 +63279,10 @@
                 "target": "rustls_pki_types"
               },
               {
+                "id": "system-configuration 0.6.1",
+                "target": "system_configuration"
+              },
+              {
                 "id": "tokio-rustls 0.26.0",
                 "target": "tokio_rustls"
               },
@@ -61941,12 +63295,16 @@
                 "target": "tokio_util"
               },
               {
-                "id": "webpki-roots 0.26.1",
+                "id": "webpki-roots 0.26.8",
                 "target": "webpki_roots"
               }
             ],
             "x86_64-apple-ios": [
               {
+                "id": "encoding_rs 0.8.32",
+                "target": "encoding_rs"
+              },
+              {
                 "id": "futures-channel 0.3.31",
                 "target": "futures_channel"
               },
@@ -61955,7 +63313,7 @@
                 "target": "h2"
               },
               {
-                "id": "hickory-resolver 0.24.1",
+                "id": "hickory-resolver 0.24.4",
                 "target": "hickory_resolver"
               },
               {
@@ -61991,12 +63349,16 @@
                 "target": "tokio_util"
               },
               {
-                "id": "webpki-roots 0.26.1",
+                "id": "webpki-roots 0.26.8",
                 "target": "webpki_roots"
               }
             ],
             "x86_64-linux-android": [
               {
+                "id": "encoding_rs 0.8.32",
+                "target": "encoding_rs"
+              },
+              {
                 "id": "futures-channel 0.3.31",
                 "target": "futures_channel"
               },
@@ -62005,7 +63367,7 @@
                 "target": "h2"
               },
               {
-                "id": "hickory-resolver 0.24.1",
+                "id": "hickory-resolver 0.24.4",
                 "target": "hickory_resolver"
               },
               {
@@ -62041,12 +63403,16 @@
                 "target": "tokio_util"
               },
               {
-                "id": "webpki-roots 0.26.1",
+                "id": "webpki-roots 0.26.8",
                 "target": "webpki_roots"
               }
             ],
             "x86_64-pc-windows-msvc": [
               {
+                "id": "encoding_rs 0.8.32",
+                "target": "encoding_rs"
+              },
+              {
                 "id": "futures-channel 0.3.31",
                 "target": "futures_channel"
               },
@@ -62055,7 +63421,7 @@
                 "target": "h2"
               },
               {
-                "id": "hickory-resolver 0.24.1",
+                "id": "hickory-resolver 0.24.4",
                 "target": "hickory_resolver"
               },
               {
@@ -62091,12 +63457,16 @@
                 "target": "tokio_util"
               },
               {
-                "id": "webpki-roots 0.26.1",
+                "id": "webpki-roots 0.26.8",
                 "target": "webpki_roots"
               }
             ],
             "x86_64-unknown-freebsd": [
               {
+                "id": "encoding_rs 0.8.32",
+                "target": "encoding_rs"
+              },
+              {
                 "id": "futures-channel 0.3.31",
                 "target": "futures_channel"
               },
@@ -62105,7 +63475,7 @@
                 "target": "h2"
               },
               {
-                "id": "hickory-resolver 0.24.1",
+                "id": "hickory-resolver 0.24.4",
                 "target": "hickory_resolver"
               },
               {
@@ -62141,12 +63511,16 @@
                 "target": "tokio_util"
               },
               {
-                "id": "webpki-roots 0.26.1",
+                "id": "webpki-roots 0.26.8",
                 "target": "webpki_roots"
               }
             ],
             "x86_64-unknown-fuchsia": [
               {
+                "id": "encoding_rs 0.8.32",
+                "target": "encoding_rs"
+              },
+              {
                 "id": "futures-channel 0.3.31",
                 "target": "futures_channel"
               },
@@ -62155,7 +63529,7 @@
                 "target": "h2"
               },
               {
-                "id": "hickory-resolver 0.24.1",
+                "id": "hickory-resolver 0.24.4",
                 "target": "hickory_resolver"
               },
               {
@@ -62191,12 +63565,16 @@
                 "target": "tokio_util"
               },
               {
-                "id": "webpki-roots 0.26.1",
+                "id": "webpki-roots 0.26.8",
                 "target": "webpki_roots"
               }
             ],
             "x86_64-unknown-linux-gnu": [
               {
+                "id": "encoding_rs 0.8.32",
+                "target": "encoding_rs"
+              },
+              {
                 "id": "futures-channel 0.3.31",
                 "target": "futures_channel"
               },
@@ -62205,7 +63583,7 @@
                 "target": "h2"
               },
               {
-                "id": "hickory-resolver 0.24.1",
+                "id": "hickory-resolver 0.24.4",
                 "target": "hickory_resolver"
               },
               {
@@ -62241,12 +63619,16 @@
                 "target": "tokio_util"
               },
               {
-                "id": "webpki-roots 0.26.1",
+                "id": "webpki-roots 0.26.8",
                 "target": "webpki_roots"
               }
             ],
             "x86_64-unknown-nixos-gnu": [
               {
+                "id": "encoding_rs 0.8.32",
+                "target": "encoding_rs"
+              },
+              {
                 "id": "futures-channel 0.3.31",
                 "target": "futures_channel"
               },
@@ -62255,7 +63637,7 @@
                 "target": "h2"
               },
               {
-                "id": "hickory-resolver 0.24.1",
+                "id": "hickory-resolver 0.24.4",
                 "target": "hickory_resolver"
               },
               {
@@ -62291,12 +63673,16 @@
                 "target": "tokio_util"
               },
               {
-                "id": "webpki-roots 0.26.1",
+                "id": "webpki-roots 0.26.8",
                 "target": "webpki_roots"
               }
             ],
             "x86_64-unknown-none": [
               {
+                "id": "encoding_rs 0.8.32",
+                "target": "encoding_rs"
+              },
+              {
                 "id": "futures-channel 0.3.31",
                 "target": "futures_channel"
               },
@@ -62305,7 +63691,7 @@
                 "target": "h2"
               },
               {
-                "id": "hickory-resolver 0.24.1",
+                "id": "hickory-resolver 0.24.4",
                 "target": "hickory_resolver"
               },
               {
@@ -62341,14 +63727,14 @@
                 "target": "tokio_util"
               },
               {
-                "id": "webpki-roots 0.26.1",
+                "id": "webpki-roots 0.26.8",
                 "target": "webpki_roots"
               }
             ]
           }
         },
         "edition": "2021",
-        "version": "0.12.9"
+        "version": "0.12.12"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -63611,7 +64997,7 @@
               "target": "quote"
             },
             {
-              "id": "regex 1.11.0",
+              "id": "regex 1.11.1",
               "target": "regex"
             },
             {
@@ -65380,7 +66766,7 @@
               "target": "thiserror"
             },
             {
-              "id": "webpki-roots 0.26.1",
+              "id": "webpki-roots 0.26.8",
               "target": "webpki_roots"
             },
             {
@@ -66919,6 +68305,62 @@
         "MIT"
       ],
       "license_file": null
+    },
+    "sealed 0.6.0": {
+      "name": "sealed",
+      "version": "0.6.0",
+      "package_url": "https://github.com/jmg-duarte/sealed-rs",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/sealed/0.6.0/download",
+          "sha256": "22f968c5ea23d555e670b449c1c5e7b2fc399fdaec1d304a17cd48e288abc107"
+        }
+      },
+      "targets": [
+        {
+          "ProcMacro": {
+            "crate_name": "sealed",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "sealed",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "proc-macro2 1.0.89",
+              "target": "proc_macro2"
+            },
+            {
+              "id": "quote 1.0.37",
+              "target": "quote"
+            },
+            {
+              "id": "syn 2.0.87",
+              "target": "syn"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.6.0"
+      },
+      "license": "MIT OR Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE"
     },
     "sec1 0.3.0": {
       "name": "sec1",
@@ -68751,7 +70193,7 @@
         "deps": {
           "common": [
             {
-              "id": "regex 1.11.0",
+              "id": "regex 1.11.1",
               "target": "regex"
             },
             {
@@ -69818,7 +71260,7 @@
         "deps": {
           "common": [
             {
-              "id": "lazy_static 1.4.0",
+              "id": "lazy_static 1.5.0",
               "target": "lazy_static"
             }
           ],
@@ -70920,7 +72362,7 @@
               "target": "log"
             },
             {
-              "id": "regex 1.11.0",
+              "id": "regex 1.11.1",
               "target": "regex"
             },
             {
@@ -71065,7 +72507,7 @@
               "target": "arc_swap"
             },
             {
-              "id": "lazy_static 1.4.0",
+              "id": "lazy_static 1.5.0",
               "target": "lazy_static"
             },
             {
@@ -71355,6 +72797,75 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
+    "snafu 0.7.5": {
+      "name": "snafu",
+      "version": "0.7.5",
+      "package_url": "https://github.com/shepmaster/snafu",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/snafu/0.7.5/download",
+          "sha256": "e4de37ad025c587a29e8f3f5605c00f70b98715ef90b9061a815b9e59e9042d6"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "snafu",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "snafu",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "backtrace",
+            "backtraces",
+            "std"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "backtrace 0.3.68",
+              "target": "backtrace"
+            },
+            {
+              "id": "doc-comment 0.3.3",
+              "target": "doc_comment"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2018",
+        "proc_macro_deps": {
+          "common": [
+            {
+              "id": "snafu-derive 0.7.5",
+              "target": "snafu_derive"
+            }
+          ],
+          "selects": {}
+        },
+        "version": "0.7.5"
+      },
+      "license": "MIT OR Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE"
+    },
     "snafu 0.8.5": {
       "name": "snafu",
       "version": "0.8.5",
@@ -71404,6 +72915,66 @@
           "selects": {}
         },
         "version": "0.8.5"
+      },
+      "license": "MIT OR Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE"
+    },
+    "snafu-derive 0.7.5": {
+      "name": "snafu-derive",
+      "version": "0.7.5",
+      "package_url": "https://github.com/shepmaster/snafu",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/snafu-derive/0.7.5/download",
+          "sha256": "990079665f075b699031e9c08fd3ab99be5029b96f3b78dc0709e8f77e4efebf"
+        }
+      },
+      "targets": [
+        {
+          "ProcMacro": {
+            "crate_name": "snafu_derive",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "snafu_derive",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "heck 0.4.1",
+              "target": "heck"
+            },
+            {
+              "id": "proc-macro2 1.0.89",
+              "target": "proc_macro2"
+            },
+            {
+              "id": "quote 1.0.37",
+              "target": "quote"
+            },
+            {
+              "id": "syn 1.0.109",
+              "target": "syn"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2018",
+        "version": "0.7.5"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -71754,94 +73325,10 @@
         "crate_features": {
           "common": [
             "mutex",
+            "once",
             "spin_mutex"
           ],
-          "selects": {
-            "aarch64-apple-darwin": [
-              "once"
-            ],
-            "aarch64-apple-ios": [
-              "once"
-            ],
-            "aarch64-apple-ios-sim": [
-              "once"
-            ],
-            "aarch64-linux-android": [
-              "once"
-            ],
-            "aarch64-pc-windows-msvc": [
-              "once"
-            ],
-            "aarch64-unknown-fuchsia": [
-              "once"
-            ],
-            "aarch64-unknown-linux-gnu": [
-              "once"
-            ],
-            "aarch64-unknown-nixos-gnu": [
-              "once"
-            ],
-            "aarch64-unknown-nto-qnx710": [
-              "once"
-            ],
-            "arm-unknown-linux-gnueabi": [
-              "once"
-            ],
-            "armv7-linux-androideabi": [
-              "once"
-            ],
-            "armv7-unknown-linux-gnueabi": [
-              "once"
-            ],
-            "i686-apple-darwin": [
-              "once"
-            ],
-            "i686-linux-android": [
-              "once"
-            ],
-            "i686-pc-windows-msvc": [
-              "once"
-            ],
-            "i686-unknown-freebsd": [
-              "once"
-            ],
-            "i686-unknown-linux-gnu": [
-              "once"
-            ],
-            "thumbv7em-none-eabi": [
-              "once"
-            ],
-            "thumbv8m.main-none-eabi": [
-              "once"
-            ],
-            "x86_64-apple-darwin": [
-              "once"
-            ],
-            "x86_64-apple-ios": [
-              "once"
-            ],
-            "x86_64-linux-android": [
-              "once"
-            ],
-            "x86_64-pc-windows-msvc": [
-              "once"
-            ],
-            "x86_64-unknown-freebsd": [
-              "once"
-            ],
-            "x86_64-unknown-fuchsia": [
-              "once"
-            ],
-            "x86_64-unknown-linux-gnu": [
-              "once"
-            ],
-            "x86_64-unknown-nixos-gnu": [
-              "once"
-            ],
-            "x86_64-unknown-none": [
-              "once"
-            ]
-          }
+          "selects": {}
         },
         "edition": "2015",
         "version": "0.9.8"
@@ -73806,6 +75293,62 @@
       ],
       "license_file": null
     },
+    "system-configuration 0.6.1": {
+      "name": "system-configuration",
+      "version": "0.6.1",
+      "package_url": "https://github.com/mullvad/system-configuration-rs",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/system-configuration/0.6.1/download",
+          "sha256": "3c879d448e9d986b661742763247d3693ed13609438cf3d006f51f5368a5ba6b"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "system_configuration",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "system_configuration",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "bitflags 2.6.0",
+              "target": "bitflags"
+            },
+            {
+              "id": "core-foundation 0.9.4",
+              "target": "core_foundation"
+            },
+            {
+              "id": "system-configuration-sys 0.6.0",
+              "target": "system_configuration_sys"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.6.1"
+      },
+      "license": "MIT OR Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE"
+    },
     "system-configuration-sys 0.5.0": {
       "name": "system-configuration-sys",
       "version": "0.5.0",
@@ -73882,6 +75425,82 @@
       ],
       "license_file": null
     },
+    "system-configuration-sys 0.6.0": {
+      "name": "system-configuration-sys",
+      "version": "0.6.0",
+      "package_url": "https://github.com/mullvad/system-configuration-rs",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/system-configuration-sys/0.6.0/download",
+          "sha256": "8e1d1b10ced5ca923a1fcb8d03e96b8d3268065d724548c0211415ff6ac6bac4"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "system_configuration_sys",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        },
+        {
+          "BuildScript": {
+            "crate_name": "build_script_build",
+            "crate_root": "build.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "system_configuration_sys",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "core-foundation-sys 0.8.7",
+              "target": "core_foundation_sys"
+            },
+            {
+              "id": "libc 0.2.158",
+              "target": "libc"
+            },
+            {
+              "id": "system-configuration-sys 0.6.0",
+              "target": "build_script_build"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.6.0"
+      },
+      "build_script_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "data_glob": [
+          "**"
+        ]
+      },
+      "license": "MIT OR Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE"
+    },
     "systemstat 0.2.3": {
       "name": "systemstat",
       "version": "0.2.3",
@@ -73918,7 +75537,7 @@
               "target": "bytesize"
             },
             {
-              "id": "lazy_static 1.4.0",
+              "id": "lazy_static 1.5.0",
               "target": "lazy_static"
             },
             {
@@ -75603,14 +77222,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "tikv-jemalloc-ctl 0.5.4": {
+    "tikv-jemalloc-ctl 0.6.0": {
       "name": "tikv-jemalloc-ctl",
-      "version": "0.5.4",
+      "version": "0.6.0",
       "package_url": "https://github.com/tikv/jemallocator",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/tikv-jemalloc-ctl/0.5.4/download",
-          "sha256": "619bfed27d807b54f7f776b9430d4f8060e66ee138a28632ca898584d462c31c"
+          "url": "https://static.crates.io/crates/tikv-jemalloc-ctl/0.6.0/download",
+          "sha256": "f21f216790c8df74ce3ab25b534e0718da5a1916719771d3fec23315c99e468b"
         }
       },
       "targets": [
@@ -75634,7 +77253,8 @@
         ],
         "crate_features": {
           "common": [
-            "default"
+            "default",
+            "stats"
           ],
           "selects": {}
         },
@@ -75645,7 +77265,7 @@
               "target": "libc"
             },
             {
-              "id": "tikv-jemalloc-sys 0.5.4+5.3.0-patched",
+              "id": "tikv-jemalloc-sys 0.6.0+5.3.0-1-ge13ca993e8ccb9ba9847cc330696e02839f328f7",
               "target": "tikv_jemalloc_sys"
             }
           ],
@@ -75661,7 +77281,7 @@
           ],
           "selects": {}
         },
-        "version": "0.5.4"
+        "version": "0.6.0"
       },
       "license": "MIT/Apache-2.0",
       "license_ids": [
@@ -75670,14 +77290,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "tikv-jemalloc-sys 0.5.4+5.3.0-patched": {
+    "tikv-jemalloc-sys 0.6.0+5.3.0-1-ge13ca993e8ccb9ba9847cc330696e02839f328f7": {
       "name": "tikv-jemalloc-sys",
-      "version": "0.5.4+5.3.0-patched",
+      "version": "0.6.0+5.3.0-1-ge13ca993e8ccb9ba9847cc330696e02839f328f7",
       "package_url": "https://github.com/tikv/jemallocator",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/tikv-jemalloc-sys/0.5.4+5.3.0-patched/download",
-          "sha256": "9402443cb8fd499b6f327e40565234ff34dbda27460c5b47db0db77443dd85d1"
+          "url": "https://static.crates.io/crates/tikv-jemalloc-sys/0.6.0+5.3.0-1-ge13ca993e8ccb9ba9847cc330696e02839f328f7/download",
+          "sha256": "cd3c60906412afa9c2b5b5a48ca6a5abe5736aec9eb48ad05037a677e52e4e2d"
         }
       },
       "targets": [
@@ -75714,7 +77334,8 @@
         "crate_features": {
           "common": [
             "background_threads_runtime_support",
-            "default"
+            "default",
+            "stats"
           ],
           "selects": {}
         },
@@ -75725,14 +77346,14 @@
               "target": "libc"
             },
             {
-              "id": "tikv-jemalloc-sys 0.5.4+5.3.0-patched",
+              "id": "tikv-jemalloc-sys 0.6.0+5.3.0-1-ge13ca993e8ccb9ba9847cc330696e02839f328f7",
               "target": "build_script_build"
             }
           ],
           "selects": {}
         },
         "edition": "2018",
-        "version": "0.5.4+5.3.0-patched"
+        "version": "0.6.0+5.3.0-1-ge13ca993e8ccb9ba9847cc330696e02839f328f7"
       },
       "build_script_attrs": {
         "compile_data_glob": [
@@ -75775,14 +77396,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "tikv-jemallocator 0.5.4": {
+    "tikv-jemallocator 0.6.0": {
       "name": "tikv-jemallocator",
-      "version": "0.5.4",
+      "version": "0.6.0",
       "package_url": "https://github.com/tikv/jemallocator",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/tikv-jemallocator/0.5.4/download",
-          "sha256": "965fe0c26be5c56c94e38ba547249074803efd52adfb66de62107d95aab3eaca"
+          "url": "https://static.crates.io/crates/tikv-jemallocator/0.6.0/download",
+          "sha256": "4cec5ff18518d81584f477e9bfdf957f5bb0979b0bac3af4ca30b5b3ae2d2865"
         }
       },
       "targets": [
@@ -75818,14 +77439,14 @@
               "target": "libc"
             },
             {
-              "id": "tikv-jemalloc-sys 0.5.4+5.3.0-patched",
+              "id": "tikv-jemalloc-sys 0.6.0+5.3.0-1-ge13ca993e8ccb9ba9847cc330696e02839f328f7",
               "target": "tikv_jemalloc_sys"
             }
           ],
           "selects": {}
         },
         "edition": "2018",
-        "version": "0.5.4"
+        "version": "0.6.0"
       },
       "license": "MIT/Apache-2.0",
       "license_ids": [
@@ -76857,7 +78478,8 @@
             "sync",
             "test-util",
             "time",
-            "tokio-macros"
+            "tokio-macros",
+            "tracing"
           ],
           "selects": {
             "aarch64-pc-windows-msvc": [
@@ -77811,7 +79433,7 @@
         "deps": {
           "common": [
             {
-              "id": "either 1.8.1",
+              "id": "either 1.14.0",
               "target": "either"
             },
             {
@@ -78687,14 +80309,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "tower 0.5.1": {
+    "tower 0.5.2": {
       "name": "tower",
-      "version": "0.5.1",
+      "version": "0.5.2",
       "package_url": "https://github.com/tower-rs/tower",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/tower/0.5.1/download",
-          "sha256": "2873938d487c3cfb9aed7546dc9f2711d867c9f90c46b889989a2cb84eba6b4f"
+          "url": "https://static.crates.io/crates/tower/0.5.2/download",
+          "sha256": "d039ad9159c98b70ecfd540b2573b97f7f52c3e8d9f8ad57a24b916a536975f9"
         }
       },
       "targets": [
@@ -78777,7 +80399,7 @@
               "target": "slab"
             },
             {
-              "id": "sync_wrapper 0.1.2",
+              "id": "sync_wrapper 1.0.1",
               "target": "sync_wrapper"
             },
             {
@@ -78804,7 +80426,7 @@
           "selects": {}
         },
         "edition": "2018",
-        "version": "0.5.1"
+        "version": "0.5.2"
       },
       "license": "MIT",
       "license_ids": [
@@ -79013,7 +80635,7 @@
               "target": "tokio_util"
             },
             {
-              "id": "tower 0.5.1",
+              "id": "tower 0.5.2",
               "target": "tower"
             },
             {
@@ -79246,14 +80868,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "tower_governor 0.4.2": {
+    "tower_governor 0.4.3": {
       "name": "tower_governor",
-      "version": "0.4.2",
+      "version": "0.4.3",
       "package_url": "https://github.com/benwis/tower-governor",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/tower_governor/0.4.2/download",
-          "sha256": "313fa625fea5790ed56360a30ea980e41229cf482b4835801a67ef1922bf63b9"
+          "url": "https://static.crates.io/crates/tower_governor/0.4.3/download",
+          "sha256": "aea939ea6cfa7c4880f3e7422616624f97a567c16df67b53b11f0d03917a8e46"
         }
       },
       "targets": [
@@ -79309,7 +80931,7 @@
               "target": "thiserror"
             },
             {
-              "id": "tower 0.4.13",
+              "id": "tower 0.5.2",
               "target": "tower"
             },
             {
@@ -79320,14 +80942,14 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.4.2"
+        "version": "0.4.3"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
         "Apache-2.0",
         "MIT"
       ],
-      "license_file": null
+      "license_file": "LICENSE"
     },
     "tracing 0.1.41": {
       "name": "tracing",
@@ -79611,7 +81233,7 @@
         "deps": {
           "common": [
             {
-              "id": "lazy_static 1.4.0",
+              "id": "lazy_static 1.5.0",
               "target": "lazy_static"
             },
             {
@@ -80088,7 +81710,7 @@
               "target": "once_cell"
             },
             {
-              "id": "regex 1.11.0",
+              "id": "regex 1.11.1",
               "target": "regex"
             },
             {
@@ -80304,7 +81926,7 @@
               "target": "ipnet"
             },
             {
-              "id": "lazy_static 1.4.0",
+              "id": "lazy_static 1.5.0",
               "target": "lazy_static"
             },
             {
@@ -80412,7 +82034,7 @@
               "target": "futures_util"
             },
             {
-              "id": "lazy_static 1.4.0",
+              "id": "lazy_static 1.5.0",
               "target": "lazy_static"
             },
             {
@@ -80825,6 +82447,100 @@
         "MIT"
       ],
       "license_file": "LICENSE"
+    },
+    "typewit 1.11.0": {
+      "name": "typewit",
+      "version": "1.11.0",
+      "package_url": "https://github.com/rodrimati1992/typewit/",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/typewit/1.11.0/download",
+          "sha256": "cb77c29baba9e4d3a6182d51fa75e3215c7fd1dab8f4ea9d107c716878e55fc0"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "typewit",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "typewit",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "default",
+            "proc_macros",
+            "rust_1_61",
+            "typewit_proc_macros"
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "proc_macro_deps": {
+          "common": [
+            {
+              "id": "typewit_proc_macros 1.8.1",
+              "target": "typewit_proc_macros"
+            }
+          ],
+          "selects": {}
+        },
+        "version": "1.11.0"
+      },
+      "license": "Zlib",
+      "license_ids": [
+        "Zlib"
+      ],
+      "license_file": "LICENSE-ZLIB.md"
+    },
+    "typewit_proc_macros 1.8.1": {
+      "name": "typewit_proc_macros",
+      "version": "1.8.1",
+      "package_url": "https://github.com/rodrimati1992/typewit/",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/typewit_proc_macros/1.8.1/download",
+          "sha256": "e36a83ea2b3c704935a01b4642946aadd445cea40b10935e3f8bd8052b8193d6"
+        }
+      },
+      "targets": [
+        {
+          "ProcMacro": {
+            "crate_name": "typewit_proc_macros",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "typewit_proc_macros",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "edition": "2021",
+        "version": "1.8.1"
+      },
+      "license": "Zlib",
+      "license_ids": [
+        "Zlib"
+      ],
+      "license_file": "LICENSE-ZLIB.md"
     },
     "ucd-trie 0.1.6": {
       "name": "ucd-trie",
@@ -81633,7 +83349,7 @@
               "target": "fnv"
             },
             {
-              "id": "lazy_static 1.4.0",
+              "id": "lazy_static 1.5.0",
               "target": "lazy_static"
             }
           ],
@@ -82233,7 +83949,7 @@
               "target": "ordered_float"
             },
             {
-              "id": "regex 1.11.0",
+              "id": "regex 1.11.1",
               "target": "regex"
             },
             {
@@ -85520,14 +87236,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "webpki-roots 0.26.1": {
+    "webpki-roots 0.26.8": {
       "name": "webpki-roots",
-      "version": "0.26.1",
+      "version": "0.26.8",
       "package_url": "https://github.com/rustls/webpki-roots",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/webpki-roots/0.26.1/download",
-          "sha256": "b3de34ae270483955a94f4b21bdaaeb83d508bb84a01435f393818edb0012009"
+          "url": "https://static.crates.io/crates/webpki-roots/0.26.8/download",
+          "sha256": "2210b291f7ea53617fbafcc4939f10914214ec15aace5ba62293a668f322c5c9"
         }
       },
       "targets": [
@@ -85560,7 +87276,7 @@
           "selects": {}
         },
         "edition": "2018",
-        "version": "0.26.1"
+        "version": "0.26.8"
       },
       "license": "MPL-2.0",
       "license_ids": [
@@ -85695,7 +87411,7 @@
         "deps": {
           "common": [
             {
-              "id": "either 1.8.1",
+              "id": "either 1.14.0",
               "target": "either"
             },
             {
@@ -86218,6 +87934,68 @@
       ],
       "license_file": "LICENSE"
     },
+    "windows 0.52.0": {
+      "name": "windows",
+      "version": "0.52.0",
+      "package_url": "https://github.com/microsoft/windows-rs",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/windows/0.52.0/download",
+          "sha256": "e48a53791691ab099e5e2ad123536d0fff50652600abaf43bbf952894110d0be"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "windows",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "windows",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "Win32",
+            "Win32_Foundation",
+            "Win32_System",
+            "Win32_System_SystemInformation",
+            "default"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "windows-core 0.52.0",
+              "target": "windows_core"
+            },
+            {
+              "id": "windows-targets 0.52.6",
+              "target": "windows_targets"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.52.0"
+      },
+      "license": "MIT OR Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "license-apache-2.0"
+    },
     "windows-core 0.52.0": {
       "name": "windows-core",
       "version": "0.52.0",
@@ -86247,6 +88025,12 @@
         "compile_data_glob": [
           "**"
         ],
+        "crate_features": {
+          "common": [
+            "default"
+          ],
+          "selects": {}
+        },
         "deps": {
           "common": [
             {
@@ -89169,7 +90953,7 @@
               "target": "der_parser"
             },
             {
-              "id": "lazy_static 1.4.0",
+              "id": "lazy_static 1.5.0",
               "target": "lazy_static"
             },
             {
@@ -91511,7 +93295,7 @@
     "hyper-rustls 0.27.3",
     "hyper-socks2 0.9.1",
     "hyper-util 0.1.10",
-    "ic-agent 0.39.2",
+    "ic-agent 0.39.3",
     "ic-bn-lib 0.1.0",
     "ic-btc-interface 0.2.2",
     "ic-canister-log 0.2.0",
@@ -91525,6 +93309,7 @@
     "ic-certificate-verification 3.0.3",
     "ic-certification 3.0.3",
     "ic-certified-map 0.3.4",
+    "ic-gateway 0.1.0",
     "ic-http-certification 3.0.3",
     "ic-http-gateway 0.2.0",
     "ic-management-canister-types 0.2.1",
@@ -91533,7 +93318,7 @@
     "ic-sha3 1.0.0",
     "ic-stable-structures 0.6.5",
     "ic-test-state-machine-client 3.0.1",
-    "ic-transport-types 0.39.2",
+    "ic-transport-types 0.39.3",
     "ic-utils 0.39.0",
     "ic-verify-bls-signature 0.6.0",
     "ic-wasm 0.8.4",
@@ -91559,7 +93344,7 @@
     "k256 0.13.4",
     "k8s-openapi 0.22.0",
     "kube 0.94.2",
-    "lazy_static 1.4.0",
+    "lazy_static 1.5.0",
     "leb128 0.2.5",
     "libc 0.2.158",
     "libflate 2.1.0",
@@ -91633,8 +93418,8 @@
     "ratelimit 0.9.1",
     "rayon 1.10.0",
     "rcgen 0.13.1",
-    "regex 1.11.0",
-    "reqwest 0.12.9",
+    "regex 1.11.1",
+    "reqwest 0.12.12",
     "rgb 0.8.37",
     "ring 0.17.7",
     "ripemd 0.1.3",
@@ -91699,8 +93484,8 @@
     "thiserror 2.0.11",
     "thousands 0.2.0",
     "threadpool 1.8.1",
-    "tikv-jemalloc-ctl 0.5.4",
-    "tikv-jemallocator 0.5.4",
+    "tikv-jemalloc-ctl 0.6.0",
+    "tikv-jemallocator 0.6.0",
     "time 0.3.36",
     "tokio 1.42.0",
     "tokio-io-timeout 1.2.0",
@@ -91714,11 +93499,11 @@
     "toml 0.5.11",
     "tonic 0.12.3",
     "tonic-build 0.12.3",
-    "tower 0.5.1",
+    "tower 0.5.2",
     "tower-http 0.6.2",
     "tower-request-id 0.3.0",
     "tower-test 0.4.0",
-    "tower_governor 0.4.2",
+    "tower_governor 0.4.3",
     "tracing 0.1.41",
     "tracing-appender 0.2.3",
     "tracing-flame 0.2.0",

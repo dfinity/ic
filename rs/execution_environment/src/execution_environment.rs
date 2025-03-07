@@ -20,7 +20,7 @@ use ic_base_types::PrincipalId;
 use ic_config::execution_environment::Config as ExecutionConfig;
 use ic_config::flag_status::FlagStatus;
 use ic_crypto_utils_canister_threshold_sig::{
-    derive_threshold_public_key, derive_vetkd_public_key,
+    derive_threshold_public_key, derive_vetkd_public_key, is_valid_transport_public_key,
 };
 use ic_cycles_account_manager::{
     is_delayed_ingress_induction_cost, CyclesAccountManager, IngressInductionCost,
@@ -40,10 +40,10 @@ use ic_management_canister_types_private::{
     EmptyBlob, InstallChunkedCodeArgs, InstallCodeArgsV2, ListCanisterSnapshotArgs,
     LoadCanisterSnapshotArgs, MasterPublicKeyId, Method as Ic00Method, NodeMetricsHistoryArgs,
     Payload as Ic00Payload, ProvisionalCreateCanisterWithCyclesArgs, ProvisionalTopUpCanisterArgs,
-    SchnorrPublicKeyArgs, SchnorrPublicKeyResponse, SetupInitialDKGArgs, SignWithECDSAArgs,
-    SignWithSchnorrArgs, SignWithSchnorrAux, StoredChunksArgs, SubnetInfoArgs, SubnetInfoResponse,
-    TakeCanisterSnapshotArgs, UninstallCodeArgs, UpdateSettingsArgs, UploadChunkArgs,
-    VetKdDeriveEncryptedKeyArgs, VetKdPublicKeyArgs, VetKdPublicKeyResult, IC_00,
+    SchnorrAlgorithm, SchnorrPublicKeyArgs, SchnorrPublicKeyResponse, SetupInitialDKGArgs,
+    SignWithECDSAArgs, SignWithSchnorrArgs, SignWithSchnorrAux, StoredChunksArgs, SubnetInfoArgs,
+    SubnetInfoResponse, TakeCanisterSnapshotArgs, UninstallCodeArgs, UpdateSettingsArgs,
+    UploadChunkArgs, VetKdDeriveEncryptedKeyArgs, VetKdPublicKeyArgs, VetKdPublicKeyResult, IC_00,
 };
 use ic_metrics::MetricsRegistry;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
@@ -55,9 +55,9 @@ use ic_replicated_state::{
         NextExecution,
     },
     metadata_state::subnet_call_context_manager::{
-        EcdsaArguments, IDkgDealingsContext, InstallCodeCall, InstallCodeCallId, SchnorrArguments,
-        SetupInitialDkgContext, SignWithThresholdContext, StopCanisterCall, SubnetCallContext,
-        ThresholdArguments, VetKdArguments,
+        EcdsaArguments, InstallCodeCall, InstallCodeCallId, ReshareChainKeyContext,
+        SchnorrArguments, SetupInitialDkgContext, SignWithThresholdContext, StopCanisterCall,
+        SubnetCallContext, ThresholdArguments, VetKdArguments,
     },
     page_map::PageAllocatorFileDescriptor,
     CanisterState, ExecutionTask, NetworkTopology, ReplicatedState,
@@ -2859,6 +2859,12 @@ impl ExecutionEnvironment {
                 ),
             ));
         };
+        if !is_valid_transport_public_key(&args.encryption_public_key) {
+            return Err(UserError::new(
+                ErrorCode::CanisterRejectedMessage,
+                "The provided transport public key is invalid.",
+            ));
+        }
         self.sign_with_threshold(
             (*request).clone(),
             ThresholdArguments::VetKd(VetKdArguments {
@@ -2900,6 +2906,27 @@ impl ExecutionEnvironment {
         rng: &mut dyn RngCore,
         subnet_size: usize,
     ) -> Result<(), UserError> {
+        if let ThresholdArguments::Schnorr(schnorr) = &args {
+            let alg = schnorr.key_id.algorithm;
+            match (alg, &schnorr.taproot_tree_root) {
+                (SchnorrAlgorithm::Bip340Secp256k1, Some(aux)) => {
+                    if aux.len() != 0 && aux.len() != 32 {
+                        return Err(UserError::new(
+                            ErrorCode::CanisterRejectedMessage,
+                            format!("Invalid aux field for {}", alg),
+                        ));
+                    }
+                }
+                (_, None) => {}
+                (_, Some(_)) => {
+                    return Err(UserError::new(
+                        ErrorCode::CanisterRejectedMessage,
+                        format!("Schnorr algorithm {} does not support aux input", alg),
+                    ));
+                }
+            }
+        }
+
         let topology = &state.metadata.network_topology;
         // If the request isn't from the NNS, then we need to charge for it.
         let source_subnet = topology.routing_table.route(request.sender.get());
@@ -2990,21 +3017,22 @@ impl ExecutionEnvironment {
         let nodes = args.get_set_of_nodes()?;
         let registry_version = args.get_registry_version();
 
-        let key_id = args
-            .key_id
-            .try_into()
-            .map_err(|err| UserError::new(ErrorCode::CanisterRejectedMessage, err))?;
+        if !args.key_id.is_idkg_key() {
+            return Err(UserError::new(
+                ErrorCode::CanisterRejectedMessage,
+                "This key is not an idkg key",
+            ));
+        }
 
-        state
-            .metadata
-            .subnet_call_context_manager
-            .push_context(SubnetCallContext::IDkgDealings(IDkgDealingsContext {
+        state.metadata.subnet_call_context_manager.push_context(
+            SubnetCallContext::ReshareChainKey(ReshareChainKeyContext {
                 request: request.clone(),
-                key_id,
+                key_id: args.key_id,
                 nodes,
                 registry_version,
                 time: state.time(),
-            }));
+            }),
+        );
         Ok(())
     }
 
