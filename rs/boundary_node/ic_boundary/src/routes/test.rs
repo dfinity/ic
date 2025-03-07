@@ -264,43 +264,6 @@ async fn test_middleware_validate_subnet_request() -> Result<(), Error> {
     Ok(())
 }
 
-// #[tokio::test]
-// async fn test_health() -> Result<(), Error> {
-//     let root_key = vec![8, 6, 7, 5, 3, 0, 9];
-
-//     let proxy_router = Arc::new(TestProxyRouter {
-//         root_key: root_key.clone(),
-//         health: Arc::new(Mutex::new(ReplicaHealthStatus::Healthy)),
-//     });
-
-//     let state_health = proxy_router.clone() as Arc<dyn Health>;
-//     let mut app = Router::new().route(PATH_HEALTH, get(health).with_state(state_health));
-
-//     // Test healthy
-//     let request = Request::builder()
-//         .method("GET")
-//         .uri("http://localhost/health")
-//         .body(Body::from(""))
-//         .unwrap();
-
-//     let resp = app.call(request).await.unwrap();
-//     assert_eq!(resp.status(), StatusCode::NO_CONTENT);
-
-//     // Test starting
-//     proxy_router.set_health(ReplicaHealthStatus::Starting);
-
-//     let request = Request::builder()
-//         .method("GET")
-//         .uri("http://localhost/health")
-//         .body(Body::from(""))
-//         .unwrap();
-
-//     let resp = app.call(request).await.unwrap();
-//     assert_eq!(resp.status(), StatusCode::SERVICE_UNAVAILABLE);
-
-//     Ok(())
-// }
-
 #[tokio::test]
 async fn test_health() -> Result<(), Error> {
     let published_routes = Arc::new(ArcSwapOption::empty());
