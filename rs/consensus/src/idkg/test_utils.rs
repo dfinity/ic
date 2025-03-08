@@ -58,7 +58,7 @@ use ic_types::crypto::canister_threshold_sig::{
     ThresholdSchnorrSigShare,
 };
 use ic_types::crypto::threshold_sig::ni_dkg::{
-    NiDkgId, NiDkgMasterPublicKeyId, NiDkgTag, NiDkgTargetSubnet,
+    NiDkgId, NiDkgMasterPublicKeyId, NiDkgTag, NiDkgTargetId, NiDkgTargetSubnet,
 };
 use ic_types::crypto::vetkd::{
     VetKdArgs, VetKdDerivationDomain, VetKdEncryptedKeyShare, VetKdEncryptedKeyShareContent,
@@ -87,6 +87,7 @@ pub(crate) fn dealings_context_from_reshare_request(
         nodes: request.receiving_node_ids.into_iter().collect(),
         registry_version: request.registry_version,
         time: time::UNIX_EPOCH,
+        target_id: NiDkgTargetId::new([0; 32]),
     }
 }
 
