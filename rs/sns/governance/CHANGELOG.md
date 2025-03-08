@@ -11,6 +11,19 @@ here were moved from the adjacent `unreleased_changelog.md` file.
 INSERT NEW RELEASES HERE
 
 
+# 2025-03-08: Proposal 135703
+
+http://dashboard.internetcomputer.org/proposal/135703
+
+## Added
+
+* Added `ProposalData.topic : opt Topic`.
+
+## Fixed
+
+* `AddGenericNervousSystemFunction` can be used to add custom proposals under _critical_ topics.
+
+
 # 2025-03-01: Proposal 135615
 
 http://dashboard.internetcomputer.org/proposal/135615
