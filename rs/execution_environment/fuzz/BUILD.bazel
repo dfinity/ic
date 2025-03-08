@@ -60,10 +60,21 @@ SYSTEM_API_FUZZ_DEPENDENCIES = [
 ]
 
 rust_fuzz_test_binary(
-    name = "execute_with_wasm_executor_system_api_call",
+    name = "execute_with_wasm_executor_ic_wasm",
     testonly = True,
     srcs = [
-        "fuzz_targets/execute_system_api_call.rs",
+        "fuzz_targets/execute_ic_wasm.rs",
+    ],
+    allow_main = True,  # To allow the fuzzer to export it's own main fn
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = SYSTEM_API_FUZZ_DEPENDENCIES + [":fuzzer_sandbox"],
+)
+
+rust_fuzz_test_binary(
+    name = "execute_with_wasm_executor_system_api",
+    testonly = True,
+    srcs = [
+        "fuzz_targets/execute_system_api.rs",
     ],
     allow_main = True,  # To allow the fuzzer to export it's own main fn
     proc_macro_deps = MACRO_DEPENDENCIES,
