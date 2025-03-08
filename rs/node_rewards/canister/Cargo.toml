@@ -1,5 +1,5 @@
 [package]
-name = "ic-rewards-canister"
+name = "ic-node-rewards-canister"
 version.workspace = true
 authors.workspace = true
 description.workspace = true
@@ -15,8 +15,11 @@ path = "src/lib.rs"
 
 [dependencies]
 ic-cdk = { workspace = true }
-ic_registry_canister_data_provider = { path = "../../registry/canister_data_provider" }
+ic-interfaces-registry = { path = "../../interfaces/registry" }
+ic-registry-canister-client = { path = "../../registry/canister-client" }
+ic-registry-canister-data-provider = { path = "../../registry/canister-data-provider" }
 ic-stable-structures = { workspace = true }
+ic-types = { path = "../../types/types" }
 candid = { workspace = true }
 node-rewards-canister-api = { path = "./api" }
 

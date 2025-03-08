@@ -6,8 +6,11 @@ package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
     # Keep sorted.
+    "//rs/interfaces/registry",
     "//rs/node_rewards/canister/api",
-    "//rs/registry/canister_data_provider",
+    "//rs/registry/canister-client",
+    "//rs/registry/canister-data-provider",
+    "//rs/types/types",
     "@crate_index//:candid",
     "@crate_index//:ic-cdk",
     "@crate_index//:ic-stable-structures",
@@ -55,7 +58,7 @@ LIB_SRCS = glob(
 rust_library(
     name = "nrc",
     srcs = LIB_SRCS,
-    crate_name = "node_rewards_canister",
+    crate_name = "ic_node_rewards_canister",
     proc_macro_deps = MACRO_DEPENDENCIES,
     version = "0.9.0",
     deps = DEPENDENCIES,

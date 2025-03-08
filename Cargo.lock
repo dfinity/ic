@@ -12223,9 +12223,13 @@ dependencies = [
  "candid",
  "candid_parser",
  "ic-cdk 0.17.1",
+ "ic-interfaces-registry",
  "ic-nns-test-utils",
+ "ic-registry-canister-client",
+ "ic-registry-canister-data-provider",
  "ic-stable-structures",
  "ic-state-machine-tests",
+ "ic-types",
  "node-rewards-canister-api",
 ]
 

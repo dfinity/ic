@@ -20,7 +20,7 @@ SRCS = glob(
 )
 
 rust_library(
-    name = "client",
+    name = "canister-client",
     srcs = SRCS,
     crate_name = "ic_registry_canister_client",
     version = "0.9.0",

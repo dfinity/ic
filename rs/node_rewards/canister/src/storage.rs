@@ -1,5 +1,8 @@
+use ic_registry_canister_data_provider::{
+    StableMemoryBorrower, StorableRegistryKey, StorableRegistryValue,
+};
 use ic_stable_structures::memory_manager::{MemoryId, MemoryManager, VirtualMemory};
-use ic_stable_structures::DefaultMemoryImpl;
+use ic_stable_structures::{DefaultMemoryImpl, StableBTreeMap};
 use std::cell::RefCell;
 
 /// MemoryId for upgrades, if any.  This is reserved, but probably not going to be used.
@@ -13,5 +16,24 @@ thread_local! {
     static MEMORY_MANAGER: RefCell<MemoryManager<DefaultMemoryImpl>> =
         RefCell::new(MemoryManager::init(DefaultMemoryImpl::default()));
 
-    static REGISTRY_STORE_MEMORY: RefCell<VM> = RefCell::new(MEMORY_MANAGER.with_borrow(|mm| mm.get(REGISTRY_STORE_MEMORY_ID)));
+    static REGISTRY_DATA_STORE_BTREE_MAP: RefCell<StableBTreeMap<StorableRegistryKey, StorableRegistryValue, VM>>
+        = RefCell::new(MEMORY_MANAGER.with_borrow(|mm|
+            StableBTreeMap::new(mm.get(REGISTRY_STORE_MEMORY_ID))
+        ));
+}
+
+pub struct RegistryStoreStableMemoryBorrower;
+
+impl StableMemoryBorrower for RegistryStoreStableMemoryBorrower {
+    fn with_borrow<R>(
+        f: impl FnOnce(&StableBTreeMap<StorableRegistryKey, StorableRegistryValue, VM>) -> R,
+    ) -> R {
+        REGISTRY_DATA_STORE_BTREE_MAP.with(|btree| f(&btree.borrow()))
+    }
+
+    fn with_borrow_mut<R>(
+        f: impl FnOnce(&mut StableBTreeMap<StorableRegistryKey, StorableRegistryValue, VM>) -> R,
+    ) -> R {
+        REGISTRY_DATA_STORE_BTREE_MAP.with(|btree| f(&mut btree.borrow_mut()))
+    }
 }

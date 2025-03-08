@@ -5,8 +5,8 @@
 // 4. Structure makes boundaries clear and easy to enforce
 // 5. Simple Organization
 
-mod registry;
-mod storage;
+pub mod canister;
+pub mod storage;
 
 #[cfg(test)]
 mod tests {
