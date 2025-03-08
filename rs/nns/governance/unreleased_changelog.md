@@ -35,6 +35,8 @@ on the process that this file is part of, see
 
 ## Removed
 
+* Removed a migration mechanism previously used for data migrations through heartbeat.
+
 ## Fixed
 
 * Avoid applying `approve_genesis_kyc` to an unbounded number of neurons, but at most 1000 neurons.
