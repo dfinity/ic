@@ -1,8 +1,8 @@
 use crate::pb::v1::{
-    governance::migration::MigrationStatus, governance_error::ErrorType, neuron::DissolveState,
-    CreateServiceNervousSystem, GovernanceError, ListNeurons, ListNeuronsProto, NetworkEconomics,
-    Neuron, NeuronState, NeuronsFundEconomics, NeuronsFundMatchedFundingCurveCoefficients,
-    VotingPowerEconomics, XdrConversionRate,
+    governance_error::ErrorType, neuron::DissolveState, CreateServiceNervousSystem,
+    GovernanceError, ListNeurons, ListNeuronsProto, NetworkEconomics, Neuron, NeuronState,
+    NeuronsFundEconomics, NeuronsFundMatchedFundingCurveCoefficients, VotingPowerEconomics,
+    XdrConversionRate,
 };
 use ic_nervous_system_common::{ONE_DAY_SECONDS, ONE_MONTH_SECONDS};
 use ic_nervous_system_proto::pb::v1::{Decimal, Duration, GlobalTimeOfDay, Percentage};
@@ -169,15 +169,6 @@ impl Neuron {
         cached_neuron_stake_e8s
             .saturating_sub(neuron_fees_e8s)
             .saturating_add(staked_maturity_e8s_equivalent.unwrap_or(0))
-    }
-}
-
-impl MigrationStatus {
-    pub fn is_terminal(self) -> bool {
-        match self {
-            Self::Unspecified | Self::InProgress => false,
-            Self::Succeeded | Self::Failed => true,
-        }
     }
 }
 

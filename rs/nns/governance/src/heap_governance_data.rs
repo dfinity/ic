@@ -1,7 +1,5 @@
 use crate::pb::v1::{
-    governance::{
-        FollowersMap, GovernanceCachedMetrics, MakingSnsProposal, Migrations, NeuronInFlightCommand,
-    },
+    governance::{FollowersMap, GovernanceCachedMetrics, MakingSnsProposal, NeuronInFlightCommand},
     neuron::Followees,
     Governance as GovernanceProto, MonthlyNodeProviderRewards, NetworkEconomics, Neuron,
     NeuronStakeTransfer, NodeProvider, ProposalData, RestoreAgingSummary, RewardEvent,
@@ -31,7 +29,6 @@ pub struct HeapGovernanceData {
     pub maturity_modulation_last_updated_at_timestamp_seconds: Option<u64>,
     pub spawning_neurons: Option<bool>,
     pub making_sns_proposal: Option<MakingSnsProposal>,
-    pub migrations: Option<Migrations>,
     pub xdr_conversion_rate: XdrConversionRate,
     pub restore_aging_summary: Option<RestoreAgingSummary>,
 }
@@ -127,7 +124,6 @@ pub fn split_governance_proto(
         maturity_modulation_last_updated_at_timestamp_seconds,
         spawning_neurons,
         making_sns_proposal,
-        migrations,
         topic_followee_index,
         xdr_conversion_rate,
         restore_aging_summary,
@@ -170,7 +166,6 @@ pub fn split_governance_proto(
             maturity_modulation_last_updated_at_timestamp_seconds,
             spawning_neurons,
             making_sns_proposal,
-            migrations,
             xdr_conversion_rate,
             restore_aging_summary,
         },
@@ -209,7 +204,6 @@ pub fn reassemble_governance_proto(
         maturity_modulation_last_updated_at_timestamp_seconds,
         spawning_neurons,
         making_sns_proposal,
-        migrations,
         xdr_conversion_rate,
         restore_aging_summary,
     } = heap_governance_proto;
@@ -237,7 +231,6 @@ pub fn reassemble_governance_proto(
         maturity_modulation_last_updated_at_timestamp_seconds,
         spawning_neurons,
         making_sns_proposal,
-        migrations,
         topic_followee_index,
         xdr_conversion_rate: Some(xdr_conversion_rate),
         restore_aging_summary,
@@ -279,7 +272,6 @@ mod tests {
             maturity_modulation_last_updated_at_timestamp_seconds: Some(7),
             spawning_neurons: Some(true),
             making_sns_proposal: Some(MakingSnsProposal::default()),
-            migrations: Some(Migrations::default()),
             topic_followee_index: hashmap! {
                 1 => FollowersMap {
                     followers_map: hashmap! {

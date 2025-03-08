@@ -34,7 +34,6 @@ use ic_nns_constants::{
 };
 use ic_nns_governance_api::pb::v1::{
     self as nns_governance_pb,
-    governance::Migrations,
     manage_neuron::{
         self,
         claim_or_refresh::{self, MemoAndController},
@@ -1314,18 +1313,6 @@ pub fn nns_stake_maturity(
     });
 
     manage_neuron(state_machine, sender, neuron_id, command)
-}
-
-pub fn nns_get_migrations(state_machine: &StateMachine) -> Migrations {
-    let reply = query(
-        state_machine,
-        GOVERNANCE_CANISTER_ID,
-        "get_migrations",
-        Encode!(&Empty {}).unwrap(),
-    )
-    .unwrap();
-
-    Decode!(&reply, Migrations).unwrap()
 }
 
 pub fn nns_list_proposals(

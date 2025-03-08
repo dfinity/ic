@@ -64,7 +64,7 @@ use ic_nns_governance::{
     governance_proto_builder::GovernanceProtoBuilder,
     pb::v1::{
         add_or_remove_node_provider::Change,
-        governance::{GovernanceCachedMetrics, GovernanceCachedMetricsChange, MigrationsDesc},
+        governance::{GovernanceCachedMetrics, GovernanceCachedMetricsChange},
         governance_error::ErrorType::{
             self, InsufficientFunds, NotAuthorized, NotFound, ResourceExhausted,
         },
@@ -567,17 +567,6 @@ fn test_single_neuron_proposal_new() {
                 GovernanceChange::MaturityModulationLastUpdatedAtTimestampSeconds(
                     OptionChange::Different(None, Some(999111017),)
                 ),
-                GovernanceChange::Migrations(
-                    OptionChange::Different(
-                            None,
-                            Some(
-                                MigrationsDesc {
-                                    neuron_indexes_migration: None,
-                                    copy_inactive_neurons_to_stable_memory_migration: None
-                                },
-                            ),
-                        ),
-                    ),
             ]),
             NNSStateChange::LatestGcNumProposals(
                 comparable::UsizeChange(

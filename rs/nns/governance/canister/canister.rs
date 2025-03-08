@@ -33,7 +33,7 @@ use ic_nns_governance::{
 };
 use ic_nns_governance_api::pb::v1::{
     claim_or_refresh_neuron_from_account_response::Result as ClaimOrRefreshNeuronFromAccountResponseResult,
-    governance::{GovernanceCachedMetrics, Migrations},
+    governance::GovernanceCachedMetrics,
     governance_error::ErrorType,
     manage_neuron::{
         claim_or_refresh::{By, MemoAndController},
@@ -716,16 +716,6 @@ fn get_most_recent_monthly_node_provider_rewards() -> Option<MonthlyNodeProvider
 #[query(hidden = true)]
 fn get_neuron_data_validation_summary() -> NeuronDataValidationSummary {
     governance().neuron_data_validation_summary()
-}
-
-#[query(hidden = true)]
-fn get_migrations() -> Migrations {
-    let response = governance()
-        .heap_data
-        .migrations
-        .clone()
-        .unwrap_or_default();
-    Migrations::from(response)
 }
 
 #[query]
