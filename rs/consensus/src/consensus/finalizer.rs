@@ -255,7 +255,7 @@ impl Finalizer {
 mod tests {
     //! Finalizer unit tests
     use super::*;
-    use crate::consensus::batch_delivery::generate_responses_to_setup_initial_dkg_calls;
+    use crate::consensus::batch_delivery::generate_responses_to_remote_dkgs;
     use ic_consensus_mocks::{dependencies, dependencies_with_subnet_params, Dependencies};
     use ic_crypto_test_utils_ni_dkg::dummy_transcript_for_tests;
     use ic_logger::replica_logger::no_op_logger;
@@ -539,10 +539,8 @@ mod tests {
         .collect::<Vec<_>>();
 
         // Run the
-        let result = generate_responses_to_setup_initial_dkg_calls(
-            &transcripts_for_remote_subnets[..],
-            &no_op_logger(),
-        );
+        let result =
+            generate_responses_to_remote_dkgs(&transcripts_for_remote_subnets[..], &no_op_logger());
         assert_eq!(result.len(), 1);
 
         // Deserialize the `SetupInitialDKGResponse` and check the subnet id

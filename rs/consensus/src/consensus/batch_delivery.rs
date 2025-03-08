@@ -14,6 +14,7 @@ use ic_consensus_utils::{
     crypto_hashable_to_seed, membership::Membership, pool_reader::PoolReader,
 };
 use ic_consensus_vetkd::VetKdPayloadBuilderImpl;
+use ic_error_types::RejectCode;
 use ic_https_outcalls_consensus::payload_builder::CanisterHttpPayloadBuilderImpl;
 use ic_interfaces::{
     batch_payload::IntoMessages,
@@ -269,7 +270,7 @@ pub fn generate_responses_to_subnet_calls(
             "New DKG summary with config ids created: {:?}",
             summary.dkg.configs.keys().collect::<Vec<_>>()
         );
-        consensus_responses.append(&mut generate_responses_to_setup_initial_dkg_calls(
+        consensus_responses.append(&mut generate_responses_to_remote_dkgs(
             &summary.dkg.transcripts_for_remote_subnets,
             log,
         ))
@@ -294,78 +295,104 @@ pub fn generate_responses_to_subnet_calls(
     consensus_responses
 }
 
-struct TranscriptResults {
-    low_threshold: Option<Result<NiDkgTranscript, String>>,
-    high_threshold: Option<Result<NiDkgTranscript, String>>,
+enum RemoteDkgResults {
+    ReshareChainKey(Result<NiDkgTranscript, String>),
+    SetupInitialDKG {
+        low_threshold: Option<Result<NiDkgTranscript, String>>,
+        high_threshold: Option<Result<NiDkgTranscript, String>>,
+    },
+}
+
+impl RemoteDkgResults {
+    fn new(id: &NiDkgId, transcript: Result<NiDkgTranscript, String>) -> Self {
+        match id.dkg_tag {
+            NiDkgTag::LowThreshold => Self::SetupInitialDKG {
+                low_threshold: Some(transcript),
+                high_threshold: None,
+            },
+            NiDkgTag::HighThreshold => Self::SetupInitialDKG {
+                low_threshold: None,
+                high_threshold: Some(transcript),
+            },
+            NiDkgTag::HighThresholdForKey(_) => Self::ReshareChainKey(transcript),
+        }
+    }
+
+    fn add_transcript(
+        &mut self,
+        id: &NiDkgId,
+        transcript: Result<NiDkgTranscript, String>,
+        logger: &ReplicaLogger,
+    ) {
+        let Self::SetupInitialDKG {
+            low_threshold,
+            high_threshold,
+        } = self
+        else {
+            error!(
+                logger,
+                "Cannot add a second transcript to a ReshareChainKey transcript"
+            );
+            return;
+        };
+
+        let old_val = match id.dkg_tag {
+            NiDkgTag::LowThreshold => low_threshold.replace(transcript),
+            NiDkgTag::HighThreshold => high_threshold.replace(transcript),
+            NiDkgTag::HighThresholdForKey(_) => {
+                error!(
+                    logger,
+                    "Cannot add a ReshareChainKey key to a SetupInitialDKG request"
+                );
+                return;
+            }
+        };
+
+        if old_val.is_some() {
+            error!(
+                logger,
+                "Received a dublicate transcript for SetupInitialDKG request"
+            );
+        }
+    }
 }
 
 /// This function creates responses to the SetupInitialDKG system calls with the
 /// computed DKG key material for remote subnets, without needing values from the state.
-pub fn generate_responses_to_setup_initial_dkg_calls(
+pub fn generate_responses_to_remote_dkgs(
     transcripts_for_remote_subnets: &[(NiDkgId, CallbackId, Result<NiDkgTranscript, String>)],
     log: &ReplicaLogger,
 ) -> Vec<ConsensusResponse> {
-    let mut consensus_responses = Vec::new();
-
-    let mut transcripts: BTreeMap<CallbackId, TranscriptResults> = BTreeMap::new();
-
+    let mut dkg_results: BTreeMap<CallbackId, RemoteDkgResults> = BTreeMap::new();
     for (id, callback_id, transcript) in transcripts_for_remote_subnets.iter() {
-        let add_transcript = |transcript_results: &mut TranscriptResults| {
-            let value = Some(transcript.clone());
-            match &id.dkg_tag {
-                NiDkgTag::LowThreshold => {
-                    if transcript_results.low_threshold.is_some() {
-                        error!(
-                            log,
-                            "Multiple low threshold transcripts for {}", callback_id
-                        );
-                    }
-                    transcript_results.low_threshold = value;
-                }
-                NiDkgTag::HighThreshold => {
-                    if transcript_results.high_threshold.is_some() {
-                        error!(
-                            log,
-                            "Multiple high threshold transcripts for {}", callback_id
-                        );
-                    }
-                    transcript_results.high_threshold = value;
-                }
-                NiDkgTag::HighThresholdForKey(master_public_key_id) => {
-                    /////////////////////////////////////
-                    // TODO(CON-1416): Generalize this function to support both SetupInitialDKG and vetKD key resharing
-                    /////////////////////////////////////
-                    error!(
-                        log,
-                        "Implementation error: NiDkgTag::HighThresholdForKey({master_public_key_id}) used in SetupInitialDKG for callback ID {callback_id}",
-                    );
-                }
-            }
-        };
-        match transcripts.get_mut(callback_id) {
-            Some(existing) => add_transcript(existing),
-            None => {
-                let mut transcript_results = TranscriptResults {
-                    low_threshold: None,
-                    high_threshold: None,
-                };
-                add_transcript(&mut transcript_results);
-                transcripts.insert(*callback_id, transcript_results);
-            }
-        };
+        dkg_results
+            .entry(*callback_id)
+            .and_modify(|transcript_result| {
+                transcript_result.add_transcript(id, transcript.clone(), log)
+            })
+            .or_insert(RemoteDkgResults::new(id, transcript.clone()));
     }
 
-    for (callback, transcript_results) in transcripts.into_iter() {
-        let payload = generate_dkg_response_payload(
-            transcript_results.low_threshold.as_ref(),
-            transcript_results.high_threshold.as_ref(),
-            log,
-        );
-        if let Some(payload) = payload {
-            consensus_responses.push(ConsensusResponse::new(callback, payload));
-        }
-    }
-    consensus_responses
+    dkg_results
+        .into_iter()
+        .filter_map(|(callback_id, transcript_result)| match transcript_result {
+            RemoteDkgResults::ReshareChainKey(_ni_dkg_transcript) => {
+                // TODO(CON-1416): Implement this case
+                error!(
+                    log,
+                    "ReshareChainKey for callback ID {callback_id} is unimplemented",
+                );
+                None
+            }
+            RemoteDkgResults::SetupInitialDKG {
+                low_threshold,
+                high_threshold,
+            } => {
+                generate_dkg_response_payload(low_threshold.as_ref(), high_threshold.as_ref(), log)
+                    .map(|payload| ConsensusResponse::new(callback_id, payload))
+            }
+        })
+        .collect()
 }
 
 /// Generate a response payload given the low and high threshold transcripts
@@ -392,7 +419,7 @@ fn generate_dkg_response_payload(
                 Ok(key) => key,
                 Err(err) => {
                     return Some(Payload::Reject(RejectContext::new(
-                        ic_error_types::RejectCode::CanisterReject,
+                        RejectCode::CanisterReject,
                         format!(
                             "Failed to extract public key from high threshold transcript with id {:?}: {}",
                             high_threshold_transcript.dkg_id,
@@ -408,7 +435,7 @@ fn generate_dkg_response_payload(
                 Ok(key) => key,
                 Err(err) => {
                     return Some(Payload::Reject(RejectContext::new(
-                        ic_error_types::RejectCode::CanisterReject,
+                        RejectCode::CanisterReject,
                         format!(
                             "Failed to encode threshold signature public key of transcript id {:?} into DER: {}",
                             high_threshold_transcript.dkg_id,
@@ -430,11 +457,11 @@ fn generate_dkg_response_payload(
             Some(Payload::Data(initial_transcript_records.encode()))
         }
         (Some(Err(err_str1)), Some(Err(err_str2))) => Some(Payload::Reject(RejectContext::new(
-            ic_error_types::RejectCode::CanisterReject,
+            RejectCode::CanisterReject,
             format!("{}{}", err_str1, err_str2),
         ))),
         (Some(Err(err_str)), _) | (_, Some(Err(err_str))) => Some(Payload::Reject(
-            RejectContext::new(ic_error_types::RejectCode::CanisterReject, err_str),
+            RejectContext::new(RejectCode::CanisterReject, err_str),
         )),
         _ => None,
     }
