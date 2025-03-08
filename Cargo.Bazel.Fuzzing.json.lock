@@ -1,5 +1,5 @@
 {
-  "checksum": "de37c6d2c2179633b78dc8c680d638821a439d90c378cbeb90a848cac01fdc0f",
+  "checksum": "410a68f5e3b0e3d41926111459e319906ffb6eb1ca21162650b2bd69316f2424",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -6013,7 +6013,7 @@
         "deps": {
           "common": [
             {
-              "id": "cc 1.1.37",
+              "id": "cc 1.2.8",
               "target": "cc"
             }
           ],
@@ -10555,7 +10555,7 @@
         "deps": {
           "common": [
             {
-              "id": "cc 1.1.37",
+              "id": "cc 1.2.8",
               "target": "cc"
             },
             {
@@ -11707,14 +11707,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "cc 1.1.37": {
+    "cc 1.2.8": {
       "name": "cc",
-      "version": "1.1.37",
+      "version": "1.2.8",
       "package_url": "https://github.com/rust-lang/cc-rs",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/cc/1.1.37/download",
-          "sha256": "40545c26d092346d8a8dab71ee48e7685a7a9cba76e634790c215b41a4a7b4cf"
+          "url": "https://static.crates.io/crates/cc/1.2.8/download",
+          "sha256": "ad0cf6e91fde44c773c6ee7ec6bba798504641a8bc2eb7e37a04ffbf4dfaa55a"
         }
       },
       "targets": [
@@ -11922,7 +11922,7 @@
           }
         },
         "edition": "2018",
-        "version": "1.1.37"
+        "version": "1.2.8"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -20411,7 +20411,7 @@
               "target": "cargo_metadata"
             },
             {
-              "id": "cc 1.1.37",
+              "id": "cc 1.2.8",
               "target": "cc"
             },
             {
@@ -21126,7 +21126,7 @@
               "target": "rgb"
             },
             {
-              "id": "ring 0.17.7",
+              "id": "ring 0.17.13",
               "target": "ring"
             },
             {
@@ -24186,7 +24186,7 @@
         "deps": {
           "common": [
             {
-              "id": "cc 1.1.37",
+              "id": "cc 1.2.8",
               "target": "cc"
             }
           ],
@@ -26171,7 +26171,7 @@
         "deps": {
           "common": [
             {
-              "id": "cc 1.1.37",
+              "id": "cc 1.2.8",
               "target": "cc"
             }
           ],
@@ -32400,7 +32400,7 @@
         "deps": {
           "common": [
             {
-              "id": "cc 1.1.37",
+              "id": "cc 1.2.8",
               "target": "cc"
             }
           ],
@@ -32559,7 +32559,7 @@
               "target": "reqwest"
             },
             {
-              "id": "ring 0.17.7",
+              "id": "ring 0.17.13",
               "target": "ring"
             },
             {
@@ -37970,7 +37970,7 @@
               "target": "hyper_util"
             },
             {
-              "id": "ring 0.17.7",
+              "id": "ring 0.17.13",
               "target": "ring"
             },
             {
@@ -41695,7 +41695,7 @@
         "deps": {
           "common": [
             {
-              "id": "cc 1.1.37",
+              "id": "cc 1.2.8",
               "target": "cc"
             },
             {
@@ -41916,7 +41916,7 @@
         "deps": {
           "common": [
             {
-              "id": "cc 1.1.37",
+              "id": "cc 1.2.8",
               "target": "cc"
             }
           ],
@@ -42001,7 +42001,7 @@
         "deps": {
           "common": [
             {
-              "id": "cc 1.1.37",
+              "id": "cc 1.2.8",
               "target": "cc"
             }
           ],
@@ -42281,7 +42281,7 @@
               "target": "bindgen"
             },
             {
-              "id": "cc 1.1.37",
+              "id": "cc 1.2.8",
               "target": "cc"
             },
             {
@@ -42382,7 +42382,7 @@
         "deps": {
           "common": [
             {
-              "id": "cc 1.1.37",
+              "id": "cc 1.2.8",
               "target": "cc"
             },
             {
@@ -42488,7 +42488,7 @@
         "deps": {
           "common": [
             {
-              "id": "cc 1.1.37",
+              "id": "cc 1.2.8",
               "target": "cc"
             },
             {
@@ -42597,7 +42597,7 @@
         "deps": {
           "common": [
             {
-              "id": "cc 1.1.37",
+              "id": "cc 1.2.8",
               "target": "cc"
             },
             {
@@ -42695,7 +42695,7 @@
         "deps": {
           "common": [
             {
-              "id": "cc 1.1.37",
+              "id": "cc 1.2.8",
               "target": "cc"
             },
             {
@@ -43162,7 +43162,7 @@
         "deps": {
           "common": [
             {
-              "id": "cc 1.1.37",
+              "id": "cc 1.2.8",
               "target": "cc"
             },
             {
@@ -43976,7 +43976,7 @@
         "deps": {
           "common": [
             {
-              "id": "cc 1.1.37",
+              "id": "cc 1.2.8",
               "target": "cc"
             },
             {
@@ -49611,7 +49611,7 @@
         "deps": {
           "common": [
             {
-              "id": "cc 1.1.37",
+              "id": "cc 1.2.8",
               "target": "cc"
             }
           ],
@@ -49694,7 +49694,7 @@
         "deps": {
           "common": [
             {
-              "id": "cc 1.1.37",
+              "id": "cc 1.2.8",
               "target": "cc"
             },
             {
@@ -52310,7 +52310,7 @@
         "deps": {
           "common": [
             {
-              "id": "cc 1.1.37",
+              "id": "cc 1.2.8",
               "target": "cc"
             },
             {
@@ -57433,7 +57433,7 @@
         "deps": {
           "common": [
             {
-              "id": "cc 1.1.37",
+              "id": "cc 1.2.8",
               "target": "cc"
             }
           ],
@@ -58101,7 +58101,7 @@
               "target": "rand"
             },
             {
-              "id": "ring 0.17.7",
+              "id": "ring 0.17.13",
               "target": "ring"
             },
             {
@@ -60283,7 +60283,7 @@
               "target": "pem"
             },
             {
-              "id": "ring 0.17.7",
+              "id": "ring 0.17.13",
               "target": "ring"
             },
             {
@@ -64750,7 +64750,7 @@
         "deps": {
           "common": [
             {
-              "id": "cc 1.1.37",
+              "id": "cc 1.2.8",
               "target": "cc"
             }
           ],
@@ -64768,14 +64768,14 @@
       "license_ids": [],
       "license_file": "LICENSE"
     },
-    "ring 0.17.7": {
+    "ring 0.17.13": {
       "name": "ring",
-      "version": "0.17.7",
+      "version": "0.17.13",
       "package_url": "https://github.com/briansmith/ring",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/ring/0.17.7/download",
-          "sha256": "688c63d65483050968b2a8937f7995f443e27041a0f7700aa59b0822aedebb74"
+          "url": "https://static.crates.io/crates/ring/0.17.13/download",
+          "sha256": "70ac5d832aa16abd7d1def883a8545280c20a60f523a370aa3a9617c2b8550ee"
         }
       },
       "targets": [
@@ -64821,11 +64821,15 @@
         "deps": {
           "common": [
             {
+              "id": "cfg-if 1.0.0",
+              "target": "cfg_if"
+            },
+            {
               "id": "getrandom 0.2.10",
               "target": "getrandom"
             },
             {
-              "id": "ring 0.17.7",
+              "id": "ring 0.17.13",
               "target": "build_script_build"
             },
             {
@@ -64834,28 +64838,28 @@
             }
           ],
           "selects": {
-            "cfg(all(any(target_os = \"android\", target_os = \"linux\"), any(target_arch = \"aarch64\", target_arch = \"arm\")))": [
+            "cfg(all(all(target_arch = \"aarch64\", target_endian = \"little\"), target_os = \"windows\"))": [
+              {
+                "id": "windows-sys 0.52.0",
+                "target": "windows_sys"
+              }
+            ],
+            "cfg(all(all(target_arch = \"aarch64\", target_endian = \"little\"), target_vendor = \"apple\", any(target_os = \"ios\", target_os = \"macos\", target_os = \"tvos\", target_os = \"visionos\", target_os = \"watchos\")))": [
               {
                 "id": "libc 0.2.158",
                 "target": "libc"
               }
             ],
-            "cfg(all(target_arch = \"aarch64\", target_os = \"windows\"))": [
+            "cfg(all(any(all(target_arch = \"aarch64\", target_endian = \"little\"), all(target_arch = \"arm\", target_endian = \"little\")), any(target_os = \"android\", target_os = \"linux\")))": [
               {
-                "id": "windows-sys 0.48.0",
-                "target": "windows_sys"
-              }
-            ],
-            "cfg(any(target_arch = \"aarch64\", target_arch = \"arm\", target_arch = \"x86\", target_arch = \"x86_64\"))": [
-              {
-                "id": "spin 0.9.8",
-                "target": "spin"
+                "id": "libc 0.2.158",
+                "target": "libc"
               }
             ]
           }
         },
         "edition": "2021",
-        "version": "0.17.7"
+        "version": "0.17.13"
       },
       "build_script_attrs": {
         "compile_data_glob": [
@@ -64867,7 +64871,7 @@
         "deps": {
           "common": [
             {
-              "id": "cc 1.1.37",
+              "id": "cc 1.2.8",
               "target": "cc"
             }
           ],
@@ -64879,10 +64883,13 @@
           },
           "selects": {}
         },
-        "links": "ring_core_0_17_7"
+        "links": "ring_core_0_17_13_"
       },
-      "license": null,
-      "license_ids": [],
+      "license": "Apache-2.0 AND ISC",
+      "license_ids": [
+        "Apache-2.0",
+        "ISC"
+      ],
       "license_file": "LICENSE"
     },
     "ripemd 0.1.3": {
@@ -67066,7 +67073,7 @@
               "target": "log"
             },
             {
-              "id": "ring 0.17.7",
+              "id": "ring 0.17.13",
               "target": "ring"
             },
             {
@@ -67097,7 +67104,7 @@
         "link_deps": {
           "common": [
             {
-              "id": "ring 0.17.7",
+              "id": "ring 0.17.13",
               "target": "ring"
             }
           ],
@@ -67169,7 +67176,7 @@
               "target": "log"
             },
             {
-              "id": "ring 0.17.7",
+              "id": "ring 0.17.13",
               "target": "ring"
             },
             {
@@ -67209,7 +67216,7 @@
         "link_deps": {
           "common": [
             {
-              "id": "ring 0.17.7",
+              "id": "ring 0.17.13",
               "target": "ring"
             }
           ],
@@ -67295,7 +67302,7 @@
               "target": "once_cell"
             },
             {
-              "id": "ring 0.17.7",
+              "id": "ring 0.17.13",
               "target": "ring"
             },
             {
@@ -67335,7 +67342,7 @@
         "link_deps": {
           "common": [
             {
-              "id": "ring 0.17.7",
+              "id": "ring 0.17.13",
               "target": "ring"
             }
           ],
@@ -67433,7 +67440,7 @@
               "target": "rcgen"
             },
             {
-              "id": "ring 0.17.7",
+              "id": "ring 0.17.13",
               "target": "ring"
             },
             {
@@ -68039,7 +68046,7 @@
         "deps": {
           "common": [
             {
-              "id": "ring 0.17.7",
+              "id": "ring 0.17.13",
               "target": "ring"
             },
             {
@@ -68098,7 +68105,7 @@
         "deps": {
           "common": [
             {
-              "id": "ring 0.17.7",
+              "id": "ring 0.17.13",
               "target": "ring"
             },
             {
@@ -69491,7 +69498,7 @@
         "deps": {
           "common": [
             {
-              "id": "cc 1.1.37",
+              "id": "cc 1.2.8",
               "target": "cc"
             }
           ],
@@ -69576,7 +69583,7 @@
         "deps": {
           "common": [
             {
-              "id": "cc 1.1.37",
+              "id": "cc 1.2.8",
               "target": "cc"
             }
           ],
@@ -69667,7 +69674,7 @@
         "deps": {
           "common": [
             {
-              "id": "cc 1.1.37",
+              "id": "cc 1.2.8",
               "target": "cc"
             }
           ],
@@ -74364,7 +74371,7 @@
         "deps": {
           "common": [
             {
-              "id": "cc 1.1.37",
+              "id": "cc 1.2.8",
               "target": "cc"
             }
           ],
@@ -78048,7 +78055,7 @@
         "deps": {
           "common": [
             {
-              "id": "cc 1.1.37",
+              "id": "cc 1.2.8",
               "target": "cc"
             }
           ],
@@ -86686,7 +86693,7 @@
         "deps": {
           "common": [
             {
-              "id": "cc 1.1.37",
+              "id": "cc 1.2.8",
               "target": "cc"
             }
           ],
@@ -87225,7 +87232,7 @@
         "deps": {
           "common": [
             {
-              "id": "cc 1.1.37",
+              "id": "cc 1.2.8",
               "target": "cc"
             }
           ],
@@ -89082,11 +89089,7 @@
             "Win32_UI_Shell",
             "default"
           ],
-          "selects": {
-            "aarch64-pc-windows-msvc": [
-              "Win32_System_Threading"
-            ]
-          }
+          "selects": {}
         },
         "deps": {
           "common": [
@@ -92991,7 +92994,7 @@
         "deps": {
           "common": [
             {
-              "id": "cc 1.1.37",
+              "id": "cc 1.2.8",
               "target": "cc"
             },
             {
@@ -93059,6 +93062,22 @@
     "armv7-unknown-linux-gnueabi": [
       "armv7-unknown-linux-gnueabi"
     ],
+    "cfg(all(all(target_arch = \"aarch64\", target_endian = \"little\"), target_os = \"windows\"))": [
+      "aarch64-pc-windows-msvc"
+    ],
+    "cfg(all(all(target_arch = \"aarch64\", target_endian = \"little\"), target_vendor = \"apple\", any(target_os = \"ios\", target_os = \"macos\", target_os = \"tvos\", target_os = \"visionos\", target_os = \"watchos\")))": [
+      "aarch64-apple-darwin",
+      "aarch64-apple-ios",
+      "aarch64-apple-ios-sim"
+    ],
+    "cfg(all(any(all(target_arch = \"aarch64\", target_endian = \"little\"), all(target_arch = \"arm\", target_endian = \"little\")), any(target_os = \"android\", target_os = \"linux\")))": [
+      "aarch64-linux-android",
+      "aarch64-unknown-linux-gnu",
+      "aarch64-unknown-nixos-gnu",
+      "arm-unknown-linux-gnueabi",
+      "armv7-linux-androideabi",
+      "armv7-unknown-linux-gnueabi"
+    ],
     "cfg(all(any(target_arch = \"x86_64\", target_arch = \"arm64ec\"), target_env = \"msvc\", not(windows_raw_dylib)))": [
       "x86_64-pc-windows-msvc"
     ],
@@ -93069,14 +93088,6 @@
       "powerpc-unknown-linux-gnu",
       "s390x-unknown-linux-gnu",
       "x86_64-linux-android"
-    ],
-    "cfg(all(any(target_os = \"android\", target_os = \"linux\"), any(target_arch = \"aarch64\", target_arch = \"arm\")))": [
-      "aarch64-linux-android",
-      "aarch64-unknown-linux-gnu",
-      "aarch64-unknown-nixos-gnu",
-      "arm-unknown-linux-gnueabi",
-      "armv7-linux-androideabi",
-      "armv7-unknown-linux-gnueabi"
     ],
     "cfg(all(any(target_os = \"linux\", target_os = \"android\"), not(any(getrandom_backend = \"custom\", getrandom_backend = \"rdrand\", getrandom_backend = \"rndr\"))))": [
       "aarch64-linux-android",
@@ -93145,9 +93156,6 @@
     "cfg(all(target_arch = \"aarch64\", target_os = \"linux\"))": [
       "aarch64-unknown-linux-gnu",
       "aarch64-unknown-nixos-gnu"
-    ],
-    "cfg(all(target_arch = \"aarch64\", target_os = \"windows\"))": [
-      "aarch64-pc-windows-msvc"
     ],
     "cfg(all(target_arch = \"aarch64\", target_vendor = \"apple\"))": [
       "aarch64-apple-darwin",
@@ -93257,36 +93265,6 @@
       "x86_64-pc-windows-msvc"
     ],
     "cfg(any())": [],
-    "cfg(any(target_arch = \"aarch64\", target_arch = \"arm\", target_arch = \"x86\", target_arch = \"x86_64\"))": [
-      "aarch64-apple-darwin",
-      "aarch64-apple-ios",
-      "aarch64-apple-ios-sim",
-      "aarch64-linux-android",
-      "aarch64-pc-windows-msvc",
-      "aarch64-unknown-fuchsia",
-      "aarch64-unknown-linux-gnu",
-      "aarch64-unknown-nixos-gnu",
-      "aarch64-unknown-nto-qnx710",
-      "arm-unknown-linux-gnueabi",
-      "armv7-linux-androideabi",
-      "armv7-unknown-linux-gnueabi",
-      "i686-apple-darwin",
-      "i686-linux-android",
-      "i686-pc-windows-msvc",
-      "i686-unknown-freebsd",
-      "i686-unknown-linux-gnu",
-      "thumbv7em-none-eabi",
-      "thumbv8m.main-none-eabi",
-      "x86_64-apple-darwin",
-      "x86_64-apple-ios",
-      "x86_64-linux-android",
-      "x86_64-pc-windows-msvc",
-      "x86_64-unknown-freebsd",
-      "x86_64-unknown-fuchsia",
-      "x86_64-unknown-linux-gnu",
-      "x86_64-unknown-nixos-gnu",
-      "x86_64-unknown-none"
-    ],
     "cfg(any(target_arch = \"aarch64\", target_arch = \"x86\", target_arch = \"x86_64\"))": [
       "aarch64-apple-darwin",
       "aarch64-apple-ios",
@@ -94136,7 +94114,7 @@
     "candid 0.10.13",
     "candid_parser 0.1.4",
     "cargo_metadata 0.14.2",
-    "cc 1.1.37",
+    "cc 1.2.8",
     "cddl 0.9.4",
     "cfg-if 1.0.0",
     "chacha20poly1305 0.10.1",
@@ -94321,7 +94299,7 @@
     "regex 1.11.1",
     "reqwest 0.12.12",
     "rgb 0.8.37",
-    "ring 0.17.7",
+    "ring 0.17.13",
     "ripemd 0.1.3",
     "rlp 0.5.2",
     "rocksdb 0.22.0",

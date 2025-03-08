@@ -123,7 +123,7 @@ rcgen = { workspace = true }
 regex = { workspace = true }
 registry-canister = { path = "../../registry/canister" }
 reqwest = { workspace = true }
-ring = { version = "0.17.7", features = ["std"] }
+ring = { version = "0.17.12", features = ["std"] }
 rosetta-core = { path = "../../rosetta-api/common/rosetta_core" }
 rsa = { workspace = true }
 rust_decimal = "1.36.0"

@@ -1992,9 +1992,9 @@ checksum = "37b2a672a2cb129a2e41c10b1224bb368f9f37a2b16b612598138befd7b37eb5"
 
 [[package]]
 name = "cc"
-version = "1.1.37"
+version = "1.2.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "40545c26d092346d8a8dab71ee48e7685a7a9cba76e634790c215b41a4a7b4cf"
+checksum = "ad0cf6e91fde44c773c6ee7ec6bba798504641a8bc2eb7e37a04ffbf4dfaa55a"
 dependencies = [
  "jobserver",
  "libc",
@@ -3533,7 +3533,7 @@ dependencies = [
  "regex",
  "reqwest 0.12.12",
  "rgb",
- "ring 0.17.7",
+ "ring 0.17.13",
  "ripemd",
  "rlp",
  "rocksdb",
@@ -5447,7 +5447,7 @@ dependencies = [
  "rand 0.8.5",
  "rangemap",
  "reqwest 0.12.12",
- "ring 0.17.7",
+ "ring 0.17.13",
  "sec1 0.7.3",
  "serde",
  "serde_bytes",
@@ -6478,7 +6478,7 @@ dependencies = [
  "hyper 1.5.1",
  "hyper-rustls 0.27.3",
  "hyper-util",
- "ring 0.17.7",
+ "ring 0.17.13",
  "rustls-pki-types",
  "serde",
  "serde_json",
@@ -9655,7 +9655,7 @@ checksum = "ea0a9b3a42929fad8a7c3de7f86ce0814cfa893328157672680e9fb1145549c5"
 dependencies = [
  "bytes",
  "rand 0.8.5",
- "ring 0.17.7",
+ "ring 0.17.13",
  "rustc-hash 2.0.0",
  "rustls 0.23.18",
  "slab",
@@ -9996,7 +9996,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "54077e1872c46788540de1ea3d7f4ccb1983d12f9aa909b234468676c1a36779"
 dependencies = [
  "pem 3.0.3",
- "ring 0.17.7",
+ "ring 0.17.13",
  "rustls-pki-types",
  "time",
  "yasna",
@@ -10297,16 +10297,16 @@ dependencies = [
 
 [[package]]
 name = "ring"
-version = "0.17.7"
+version = "0.17.13"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "688c63d65483050968b2a8937f7995f443e27041a0f7700aa59b0822aedebb74"
+checksum = "70ac5d832aa16abd7d1def883a8545280c20a60f523a370aa3a9617c2b8550ee"
 dependencies = [
  "cc",
+ "cfg-if 1.0.0",
  "getrandom 0.2.10",
  "libc",
- "spin 0.9.8",
  "untrusted 0.9.0",
- "windows-sys 0.48.0",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -10555,7 +10555,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3f56a14d1f48b391359b22f731fd4bd7e43c97f3c50eee276f3aa09c94784d3e"
 dependencies = [
  "log",
- "ring 0.17.7",
+ "ring 0.17.13",
  "rustls-webpki 0.101.7",
  "sct",
 ]
@@ -10567,7 +10567,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bf4ef73721ac7bcd79b2b315da7779d8fc09718c6b3d2d1b2d94850eb8c18432"
 dependencies = [
  "log",
- "ring 0.17.7",
+ "ring 0.17.13",
  "rustls-pki-types",
  "rustls-webpki 0.102.8",
  "subtle",
@@ -10584,7 +10584,7 @@ dependencies = [
  "brotli-decompressor 4.0.1",
  "log",
  "once_cell",
- "ring 0.17.7",
+ "ring 0.17.13",
  "rustls-pki-types",
  "rustls-webpki 0.102.8",
  "subtle",
@@ -10609,7 +10609,7 @@ dependencies = [
  "log",
  "pem 3.0.3",
  "rcgen",
- "ring 0.17.7",
+ "ring 0.17.13",
  "serde",
  "serde_json",
  "thiserror 2.0.11",
@@ -10712,7 +10712,7 @@ version = "0.101.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8b6275d1ee7a1cd780b64aca7726599a1dbc893b1e64144529e55c3c2f745765"
 dependencies = [
- "ring 0.17.7",
+ "ring 0.17.13",
  "untrusted 0.9.0",
 ]
 
@@ -10722,7 +10722,7 @@ version = "0.102.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "64ca1bc8749bd4cf37b5ce386cc146580777b4e8572c7b97baf22c83f444bee9"
 dependencies = [
- "ring 0.17.7",
+ "ring 0.17.13",
  "rustls-pki-types",
  "untrusted 0.9.0",
 ]
