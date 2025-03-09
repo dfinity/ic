@@ -1,5 +1,5 @@
 use crate::{
-    canister_manager::{uninstall_canister, AddCanisterChangeToHistory},
+    canister_manager::{types::AddCanisterChangeToHistory, uninstall_canister},
     execution_environment::{
         as_num_instructions, as_round_instructions, execute_canister, ExecuteCanisterResult,
         ExecutionEnvironment, RoundInstructions, RoundLimits,

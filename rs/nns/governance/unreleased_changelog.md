@@ -10,6 +10,18 @@ on the process that this file is part of, see
 ## Added
 
 * Collect metrics about timer tasks defined using ic_nervous_system_timer_task library.
+* Re-enable neuron migration to stable memory:
+  * Setting `MIGRATE_ACTIVE_NEURONS_TO_STABLE_MEMORY` to true, which will cause active neurons
+  to be continously moved from heap memory to stable memory.
+  * Compared to the last time it was enabled, several improvements were made:
+    * Distribute rewards is moved to timer, and has a mechanism to distribute in batches in
+    multiple messages.
+    * Unstaking maturity task has a limit of 100 neurons per message, which prevents it from 
+    exceeding instruction limit.
+    * The execution of `ApproveGenesisKyc` proposals have a limit of 1000 neurons, above which
+    the proposal will fail.
+    * More benchmarks were added.
+* Enable timer task metrics for better observability.
 * Added `NetworkEconomics.voting_power_economics.neuron_minimum_dissolve_delay_to_vote_seconds`.
 
 ## Changed
