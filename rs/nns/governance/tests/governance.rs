@@ -8459,9 +8459,16 @@ fn test_network_economics_proposal() {
         Some(VotingPowerEconomics::DEFAULT_NEURON_MIN_DISSOLVE_DELAY_TO_VOTE_SECONDS),
     );
 
-    // A value that differs from the default, useful for testing that the proposal has the intended effect.
-    let non_VotingPowerEconomics::DEFAULT_NEURON_MIN_DISSOLVE_DELAY_TO_VOTE_SECONDS =
+    // A value that differs from the default, useful for testing that the proposal has
+    // the intended effect.
+    let nondefault_neuron_minimum_dissolve_delay_to_vote_seconds =
         VotingPowerEconomics::DEFAULT_NEURON_MIN_DISSOLVE_DELAY_TO_VOTE_SECONDS / 2;
+
+    // Smoke test
+    assert_ne!(
+        nondefault_neuron_minimum_dissolve_delay_to_vote_seconds,
+        VotingPowerEconomics::DEFAULT_NEURON_MIN_DISSOLVE_DELAY_TO_VOTE_SECONDS,
+    );
 
     // Propose to change some, NetworkEconomics parameters.
     let pid = match gov
@@ -8480,7 +8487,7 @@ fn test_network_economics_proposal() {
                             start_reducing_voting_power_after_seconds: Some(42),
                             clear_following_after_seconds: Some(4242),
                             neuron_minimum_dissolve_delay_to_vote_seconds: Some(
-                                non_VotingPowerEconomics::DEFAULT_NEURON_MIN_DISSOLVE_DELAY_TO_VOTE_SECONDS,
+                                nondefault_neuron_minimum_dissolve_delay_to_vote_seconds,
                             ),
                         }),
                         ..Default::default()
@@ -8513,8 +8520,8 @@ fn test_network_economics_proposal() {
                 start_reducing_voting_power_after_seconds: Some(42),
                 clear_following_after_seconds: Some(4242),
                 neuron_minimum_dissolve_delay_to_vote_seconds: Some(
-                    non_VotingPowerEconomics::DEFAULT_NEURON_MIN_DISSOLVE_DELAY_TO_VOTE_SECONDS
-                )
+                    nondefault_neuron_minimum_dissolve_delay_to_vote_seconds
+                ),
             }),
 
             // No changes to the rest.
