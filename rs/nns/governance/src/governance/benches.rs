@@ -1,6 +1,6 @@
 use crate::benches_util::check_projected_instructions;
 use crate::governance::REWARD_DISTRIBUTION_PERIOD_SECONDS;
-use crate::pb::v1::{RewardEvent, WaitForQuietState};
+use crate::pb::v1::{RewardEvent, VotingPowerEconomics, WaitForQuietState};
 use crate::test_utils::MockRandomness;
 use crate::{
     governance::{

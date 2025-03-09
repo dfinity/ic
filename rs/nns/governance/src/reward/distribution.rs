@@ -231,7 +231,7 @@ mod test {
     use super::*;
     use crate::governance::Governance;
     use crate::neuron::{DissolveStateAndAge, Neuron, NeuronBuilder};
-    use crate::pb::v1::Governance as GovernanceProto;
+    use crate::pb::v1::{Governance as GovernanceProto, VotingPowerEconomics};
     use crate::test_utils::{
         test_subaccount_for_neuron_id, MockEnvironment, MockRandomness, StubCMC, StubIcpLedger,
     };
