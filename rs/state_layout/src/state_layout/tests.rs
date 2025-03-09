@@ -475,11 +475,13 @@ fn random_unique_snapshot_ids(
 
 #[test]
 fn overlay_height_test() {
+    let tmp = tmpdir("checkpoint");
     let page_map_layout = PageMapLayout::<RwPolicy<()>> {
         root: PathBuf::new(),
         name_stem: "42".into(),
         permissions_tag: PhantomData,
-        _checkpoint: None,
+        _checkpoint: CheckpointLayout::new_untracked(tmp.path().to_owned(), Height::new(0))
+            .unwrap(),
     };
 
     assert_eq!(
@@ -494,9 +496,12 @@ fn overlay_height_test() {
         .overlay_height(&PathBuf::from("/a/b/c/vmemory.overlay"))
         .is_err());
     // Test that parsing is consistent with encoding.
-    let tmp = tmpdir("canister");
+    let tmp = tmpdir("checkpoint");
     let canister_layout: CanisterLayout<RwPolicy<()>> =
-        CanisterLayout::new_untracked(tmp.path().to_owned()).unwrap();
+        CheckpointLayout::new_untracked(tmp.path().to_owned(), Height::new(0))
+            .unwrap()
+            .canister(&canister_test_id(123))
+            .unwrap();
     assert_eq!(
         page_map_layout
             .overlay_height(
@@ -511,11 +516,13 @@ fn overlay_height_test() {
 
 #[test]
 fn overlay_shard_test() {
+    let tmp = tmpdir("checkpoint");
     let page_map_layout = PageMapLayout::<RwPolicy<()>> {
         root: PathBuf::new(),
         name_stem: "42".into(),
         permissions_tag: PhantomData,
-        _checkpoint: None,
+        _checkpoint: CheckpointLayout::new_untracked(tmp.path().to_owned(), Height::new(0))
+            .unwrap(),
     };
 
     assert_eq!(
@@ -534,7 +541,10 @@ fn overlay_shard_test() {
     // Test that parsing is consistent with encoding.
     let tmp = tmpdir("canister");
     let canister_layout: CanisterLayout<RwPolicy<()>> =
-        CanisterLayout::new_untracked(tmp.path().to_owned()).unwrap();
+        CheckpointLayout::new_untracked(tmp.path().to_owned(), Height::new(0))
+            .unwrap()
+            .canister(&canister_test_id(123))
+            .unwrap();
     assert_eq!(
         page_map_layout
             .overlay_shard(
@@ -577,8 +587,12 @@ proptest! {
 #[test]
 fn read_back_wasm_memory_overlay_file_names(heights in random_sorted_unique_heights(10)) {
     let tmp = tmpdir("canister");
-    let canister_layout: CanisterLayout<RwPolicy<()>> =
-        CanisterLayout::new_untracked(tmp.path().to_owned()).unwrap();
+
+            let canister_layout: CanisterLayout<RwPolicy<()>> =
+        CheckpointLayout::new_untracked(tmp.path().to_owned(), Height::new(0))
+            .unwrap()
+            .canister(&canister_test_id(123))
+            .unwrap();
     let overlay_names: Vec<PathBuf> = heights
         .iter()
         .map(|h| canister_layout.vmemory_0().overlay(*h, Shard::new(0)))
@@ -604,8 +618,11 @@ fn read_back_wasm_memory_overlay_file_names(heights in random_sorted_unique_heig
 #[test]
 fn read_back_stable_memory_overlay_file_names(heights in random_sorted_unique_heights(10)) {
     let tmp = tmpdir("canister");
-    let canister_layout: CanisterLayout<RwPolicy<()>> =
-        CanisterLayout::new_untracked(tmp.path().to_owned()).unwrap();
+            let canister_layout: CanisterLayout<RwPolicy<()>> =
+        CheckpointLayout::new_untracked(tmp.path().to_owned(), Height::new(0))
+            .unwrap()
+            .canister(&canister_test_id(123))
+            .unwrap();
     let overlay_names: Vec<PathBuf> = heights
         .iter()
         .map(|h| canister_layout.stable_memory().overlay(*h, Shard::new(0)))
@@ -632,7 +649,10 @@ fn read_back_stable_memory_overlay_file_names(heights in random_sorted_unique_he
 fn read_back_wasm_chunk_store_overlay_file_names(heights in random_sorted_unique_heights(10)) {
     let tmp = tmpdir("canister");
     let canister_layout: CanisterLayout<RwPolicy<()>> =
-        CanisterLayout::new_untracked(tmp.path().to_owned()).unwrap();
+        CheckpointLayout::new_untracked(tmp.path().to_owned(), Height::new(0))
+            .unwrap()
+            .canister(&canister_test_id(123))
+            .unwrap();
     let overlay_names: Vec<PathBuf> = heights
         .iter()
         .map(|h| canister_layout.wasm_chunk_store().overlay(*h, Shard::new(0)))

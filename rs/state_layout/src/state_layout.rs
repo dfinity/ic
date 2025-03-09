@@ -1695,7 +1695,7 @@ pub struct PageMapLayout<Permissions: AccessPolicy> {
     name_stem: String,
     permissions_tag: PhantomData<Permissions>,
     // Keep checkpoint alive so that the PageMap can be loaded asynchronously.
-    _checkpoint: Option<CheckpointLayout<Permissions>>,
+    _checkpoint: CheckpointLayout<Permissions>,
 }
 
 pub struct PageMapLayoutW<'a, Permissions: WritePolicy> {
@@ -1820,7 +1820,7 @@ where
     }
 }
 
-impl<Permissions> StorageLayoutW for PageMapLayoutW<'_, Permissions>
+impl<Permissions> StorageLayoutW for PageMapLayout<Permissions>
 where
     Permissions: WritePolicy,
 {
@@ -1834,21 +1834,6 @@ where
         ))
     }
 }
-
-// impl<Permissions> StorageLayoutW for PageMapLayout<Permissions>
-// where
-//     Permissions: WritePolicy,
-// {
-//     /// Overlay path encoding, consistent with `overlay_height()` and `overlay_shard()`
-//     fn overlay(&self, height: Height, shard: Shard) -> PathBuf {
-//         self.root.join(format!(
-//             "{:016x}_{:04x}_{}.overlay",
-//             height.get(),
-//             shard.get(),
-//             self.name_stem,
-//         ))
-//     }
-// }
 
 impl<P> StorageLayoutR for PageMapLayout<P>
 where
@@ -1927,7 +1912,7 @@ where
 pub struct CanisterLayout<Permissions: AccessPolicy> {
     canister_root: PathBuf,
     permissions_tag: PhantomData<Permissions>,
-    checkpoint: Option<CheckpointLayout<Permissions>>,
+    checkpoint: CheckpointLayout<Permissions>,
 }
 
 impl<Permissions> CanisterLayout<Permissions>
@@ -1942,16 +1927,7 @@ where
         Ok(Self {
             canister_root,
             permissions_tag: PhantomData,
-            checkpoint: Some(checkpoint.clone()),
-        })
-    }
-
-    pub fn new_untracked(canister_root: PathBuf) -> Result<Self, LayoutError> {
-        Permissions::check_dir(&canister_root)?;
-        Ok(Self {
-            canister_root,
-            permissions_tag: PhantomData,
-            checkpoint: None,
+            checkpoint: checkpoint.clone(),
         })
     }
 
@@ -2019,7 +1995,7 @@ where
 pub struct SnapshotLayout<Permissions: AccessPolicy> {
     snapshot_root: PathBuf,
     permissions_tag: PhantomData<Permissions>,
-    checkpoint: Option<CheckpointLayout<Permissions>>,
+    checkpoint: CheckpointLayout<Permissions>,
 }
 
 impl<Permissions> SnapshotLayout<Permissions>
@@ -2034,18 +2010,10 @@ where
         Ok(Self {
             snapshot_root,
             permissions_tag: PhantomData,
-            checkpoint: Some(checkpoint.clone()),
+            checkpoint: checkpoint.clone(),
         })
     }
 
-    pub fn new_untracked(snapshot_root: PathBuf) -> Result<Self, LayoutError> {
-        Permissions::check_dir(&snapshot_root)?;
-        Ok(Self {
-            snapshot_root,
-            permissions_tag: PhantomData,
-            checkpoint: None,
-        })
-    }
     fn raw_path(&self) -> PathBuf {
         self.snapshot_root.clone()
     }

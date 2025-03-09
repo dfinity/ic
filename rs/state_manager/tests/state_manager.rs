@@ -26,7 +26,9 @@ use ic_replicated_state::{
     ExecutionState, ExportedFunctions, Memory, NetworkTopology, NumWasmPages, PageMap,
     ReplicatedState, Stream, SubnetTopology,
 };
-use ic_state_layout::{CheckpointLayout, ReadOnly, StateLayout, SYSTEM_METADATA_FILE, WASM_FILE};
+use ic_state_layout::{
+    CheckpointLayout, ReadOnly, RwPolicy, StateLayout, SYSTEM_METADATA_FILE, WASM_FILE,
+};
 use ic_state_machine_tests::{StateMachine, StateMachineBuilder};
 use ic_state_manager::manifest::{build_meta_manifest, manifest_from_path, validate_manifest};
 use ic_state_manager::{
@@ -751,7 +753,6 @@ fn stable_memory_is_persisted() {
 
 #[test]
 fn missing_stable_memory_file_is_handled() {
-    use ic_state_layout::{CheckpointLayout, RwPolicy};
     state_manager_restart_test(|state_manager, restart_fn| {
         let (_height, mut state) = state_manager.take_tip();
         insert_dummy_canister(&mut state, canister_test_id(100));
@@ -5822,10 +5823,18 @@ fn can_merge_unexpected_number_of_files() {
             }
 
             wait_for_checkpoint(&state_manager, height(HEIGHT - 1));
-            let pm_layout = state_manager
-                .state_layout()
-                .checkpoint_verified(height(HEIGHT - 1))
-                .unwrap()
+            let cp_layout: CheckpointLayout<RwPolicy<()>> = CheckpointLayout::new_untracked(
+                state_manager
+                    .state_layout()
+                    .checkpoint_verified(height(HEIGHT - 1))
+                    .unwrap()
+                    .raw_path()
+                    .to_path_buf(),
+                height(HEIGHT - 1),
+            )
+            .unwrap();
+
+            let pm_layout = cp_layout
                 .canister(&canister_test_id(1))
                 .unwrap()
                 .vmemory_0();
@@ -5885,7 +5894,7 @@ fn batch_summary_is_respected_for_writing_overlay_files() {
             state_manager.commit_and_certify(state, height(1), CertificationScope::Metadata, None);
             state_manager.flush_tip_channel();
 
-            let tip_layout: CheckpointLayout<ReadOnly> = CheckpointLayout::new_untracked(
+            let tip_layout: CheckpointLayout<RwPolicy<()>> = CheckpointLayout::new_untracked(
                 state_manager.state_layout().raw_path().join("tip"),
                 height(0),
             )
