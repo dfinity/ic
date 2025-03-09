@@ -247,7 +247,7 @@ mod test {
 
         let now = 123_456_789;
         let dissolve_delay_seconds =
-            VotingPowerEconomics::DEFAULT_NEURON_MIN_DISSOLVE_DELAY_TO_VOTE_SECONDS;
+            VotingPowerEconomics::DEFAULT_NEURON_MINIMUM_DISSOLVE_DELAY_TO_VOTE_SECONDS;
         let aging_since_timestamp_seconds = now - dissolve_delay_seconds;
 
         let dissolve_state_and_age = DissolveStateAndAge::NotDissolving {
