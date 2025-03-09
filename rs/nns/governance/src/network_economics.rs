@@ -275,12 +275,12 @@ impl VotingPowerEconomics {
         ),
         clear_following_after_seconds: Some(Self::DEFAULT_CLEAR_FOLLOWING_AFTER_SECONDS),
         neuron_minimum_dissolve_delay_to_vote_seconds: Some(
-            Self::DEFAULT_NEURON_MIN_DISSOLVE_DELAY_TO_VOTE_SECONDS,
+            Self::DEFAULT_NEURON_MINIMUM_DISSOLVE_DELAY_TO_VOTE_SECONDS,
         ),
     };
 
     /// The minimum dissolve delay so that a neuron may vote.
-    pub const DEFAULT_NEURON_MIN_DISSOLVE_DELAY_TO_VOTE_SECONDS: u64 = 6 * ONE_MONTH_SECONDS;
+    pub const DEFAULT_NEURON_MINIMUM_DISSOLVE_DELAY_TO_VOTE_SECONDS: u64 = 6 * ONE_MONTH_SECONDS;
 
     pub const NEURON_MIN_DISSOLVE_DELAY_TO_VOTE_SECONDS_BOUNDS: RangeInclusive<u64> =
         (3 * ONE_MONTH_SECONDS)..=(6 * ONE_MONTH_SECONDS);
