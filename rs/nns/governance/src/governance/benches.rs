@@ -5,7 +5,7 @@ use crate::test_utils::MockRandomness;
 use crate::{
     governance::{
         test_data::CREATE_SERVICE_NERVOUS_SYSTEM_WITH_MATCHED_FUNDING, Governance,
-        MAX_NUMBER_OF_NEURONS, MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS,
+        MAX_NUMBER_OF_NEURONS,
     },
     neuron::{DissolveStateAndAge, Neuron, NeuronBuilder},
     neuron_store::NeuronStore,
@@ -368,9 +368,13 @@ fn make_neuron(
     let subaccount = Subaccount::try_from(account.as_slice()).unwrap();
 
     let now = 123_456_789;
+    let dissolve_delay_seconds =
+        VotingPowerEconomics::DEFAULT_NEURON_MIN_DISSOLVE_DELAY_TO_VOTE_SECONDS;
+    let aging_since_timestamp_seconds = now - dissolve_delay_seconds;
+
     let dissolve_state_and_age = DissolveStateAndAge::NotDissolving {
-        dissolve_delay_seconds: MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS,
-        aging_since_timestamp_seconds: now - MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS,
+        dissolve_delay_seconds,
+        aging_since_timestamp_seconds,
     };
 
     let hot_keys = (0..15).map(PrincipalId::new_user_test_id).collect();
