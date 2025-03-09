@@ -22,6 +22,7 @@ on the process that this file is part of, see
     the proposal will fail.
     * More benchmarks were added.
 * Enable timer task metrics for better observability.
+* Added `NetworkEconomics.voting_power_economics.neuron_minimum_dissolve_delay_to_vote_seconds`.
 
 ## Changed
 
