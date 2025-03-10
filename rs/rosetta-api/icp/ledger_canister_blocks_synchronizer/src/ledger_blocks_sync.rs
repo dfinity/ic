@@ -241,7 +241,7 @@ impl<B: BlocksAccess> LedgerBlocksSynchronizer<B> {
                 ));
             }
             retry += 1;
-            tokio::time::sleep(RETRY_DELAY_QUERY_TIP_BLOCK.into()).await;
+            tokio::time::sleep(RETRY_DELAY_QUERY_TIP_BLOCK).await;
         }?;
 
         let block = Block::decode(encoded_block.clone())?;
@@ -384,7 +384,7 @@ impl<B: BlocksAccess> LedgerBlocksSynchronizer<B> {
                 if batch.is_ok() || retry == MAX_RETRY {
                     break batch;
                 }
-                retry = retry + 1;
+                retry += 1;
             }
             .map_err(|e| {
                 error!(
