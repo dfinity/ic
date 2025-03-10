@@ -79,7 +79,7 @@ pub trait XNetSlicePool: Send + Sync {
         &self,
         subnet_id: SubnetId,
         begin: Option<&ExpectedIndices>,
-        msg_limit: Option<usize>,
+        max_signals: usize,
         byte_limit: Option<usize>,
     ) -> CertifiedSliceResult<Option<(CertifiedStreamSlice, usize)>>;
 
@@ -700,24 +700,23 @@ impl XNetPayloadBuilderImpl {
             }
 
             // Ensure the message limit (dictated e.g. by the backlog size) is respected.
-            if let Some(msg_limit) = get_msg_limit(subnet_id, state) {
-                if messages.len() > msg_limit {
-                    warn!(
-                        self.log,
-                        "Stream from {}: slice length ({}) above limit ({})",
-                        subnet_id,
-                        messages.len(),
-                        msg_limit
-                    );
-                    return SliceValidationResult::Invalid(format!(
-                        "Stream from {}: slice length above limit",
-                        subnet_id
-                    ));
-                }
+            let max_signals = get_signal_limit(subnet_id, state);
+            if messages.len() > max_signals {
+                warn!(
+                    self.log,
+                    "Stream from {}: slice length ({}) above limit ({})",
+                    subnet_id,
+                    messages.len(),
+                    max_signals
+                );
+                return SliceValidationResult::Invalid(format!(
+                    "Stream from {}: slice length above limit",
+                    subnet_id
+                ));
             }
 
             // Ensure the signal limit is respected.
-            let max_message_index = max_message_index(slice.header().begin());
+            let max_message_index = max_message_index(slice.header().begin(), MAX_SIGNALS);
             if messages.end() > max_message_index {
                 warn!(
                     self.log,
@@ -841,11 +840,11 @@ impl XNetPayloadBuilderImpl {
                     break;
                 }
 
-                let msg_limit = get_msg_limit(subnet_id, &state);
+                let max_signals = get_signal_limit(subnet_id, &state);
                 let (slice, slice_bytes) = match self.slice_pool.take_slice(
                     subnet_id,
                     Some(&begin),
-                    msg_limit,
+                    max_signals,
                     Some(bytes_left),
                 ) {
                     Ok(Some(slice)) => slice,
@@ -896,11 +895,11 @@ impl XNetPayloadBuilderImpl {
 ///
 /// In order to prevent mutual stalling, only applies to incoming NNS
 /// streams; and to `Application`-subnet-to-`System`-subnet streams.
-pub fn get_msg_limit(subnet_id: SubnetId, state: &ReplicatedState) -> Option<usize> {
+pub fn get_signal_limit(subnet_id: SubnetId, state: &ReplicatedState) -> usize {
     use SubnetType::*;
     match state.metadata.own_subnet_type {
         // No limits for now on application subnets.
-        Application | VerifiedApplication => None,
+        Application | VerifiedApplication => MAX_SIGNALS,
 
         System => {
             // If this is not the NNS subnet and the remote subnet is a system subnet, don't enforce the limit.
@@ -912,29 +911,32 @@ pub fn get_msg_limit(subnet_id: SubnetId, state: &ReplicatedState) -> Option<usi
                     .get(&subnet_id)
                     .map_or(Application, |subnet| subnet.subnet_type); // Technically map().unwrap() would work here, but this is safer.
                 if remote_subnet_type == System {
-                    return None;
+                    return MAX_SIGNALS;
                 }
             }
 
             // Always stay below the limit on the NNS subnet; and on other system subnets for streams from application subnets.
+            SYSTEM_SUBNET_STREAM_MSG_LIMIT
+            /*
             state
                 .streams()
                 .get(&subnet_id)
                 .map(|stream| stream.messages().len())
                 .or(Some(0))
                 .map(|len| SYSTEM_SUBNET_STREAM_MSG_LIMIT.saturating_sub(len))
+            */
         }
     }
 }
 
 /// The stream index up to which messages can be inducted while limiting the
-/// number of signals in the reverse stream to `MAX_SIGNALS`.
+/// number of signals in the reverse stream to `max_signals`.
 ///
 /// `stream_begin` is the `begin` in the `StreamHeader` contained in the (same) stream slice.
 ///  It reflects the status on the remote subnet as far as we know at present. Up to this index
 ///  signals can be gc'ed in the reverse stream.
-pub fn max_message_index(stream_begin: StreamIndex) -> StreamIndex {
-    stream_begin + (MAX_SIGNALS as u64).into()
+pub fn max_message_index(stream_begin: StreamIndex, max_signals: usize) -> StreamIndex {
+    stream_begin + (max_signals as u64).into()
 }
 
 /// Resolves a stream index and byte limit to an `EndpointLocator`, consisting
@@ -1453,11 +1455,11 @@ impl XNetSlicePool for XNetSlicePoolImpl {
         &self,
         subnet_id: SubnetId,
         begin: Option<&ExpectedIndices>,
-        msg_limit: Option<usize>,
+        max_signals: usize,
         byte_limit: Option<usize>,
     ) -> Result<Option<(CertifiedStreamSlice, usize)>, CertifiedSliceError> {
         let mut slice_pool = self.slice_pool.lock().unwrap();
-        slice_pool.take_slice(subnet_id, begin, msg_limit, byte_limit)
+        slice_pool.take_slice(subnet_id, begin, max_signals, byte_limit)
     }
 
     fn observe_pool_size_bytes(&self) {
