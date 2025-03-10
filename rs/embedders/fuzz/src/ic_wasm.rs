@@ -3,7 +3,9 @@ use crate::special_int::SpecialInt;
 use arbitrary::{Arbitrary, Result, Unstructured};
 use ic_config::embedders::Config as EmbeddersConfig;
 use ic_config::flag_status::FlagStatus;
-use ic_embedders::wasm_utils::validation::{RESERVED_SYMBOLS, WASM_FUNCTION_SIZE_LIMIT};
+use ic_embedders::wasm_utils::validation::{
+    RESERVED_SYMBOLS, WASM_FUNCTION_SIZE_LIMIT, WASM_VALID_SYSTEM_FUNCTIONS,
+};
 use ic_replicated_state::Global;
 use ic_types::methods::WasmMethod;
 use lazy_static::lazy_static;
@@ -24,16 +26,6 @@ lazy_static! {
     static ref SYSTEM_API_IMPORTS_WASM64: SystemApiImportStore =
         system_api_imports(ic_embedders_config(true));
 }
-
-const CANISTER_EXPORT_FUNCTION_ONCE: &[&str] = &[
-    "canister_init",
-    "canister_inspect_message",
-    "canister_pre_upgrade",
-    "canister_post_upgrade",
-    "canister_heartbeat",
-    "canister_global_timer",
-    "canister_on_low_wasm_memory",
-];
 
 const CANISTER_EXPORT_FUNCTION_PREFIX: &[&str] = &[
     "canister_query",
@@ -115,9 +107,9 @@ impl<'a> Arbitrary<'a> for SystemApiModule {
         let name = format!("{} test", CANISTER_EXPORT_FUNCTION_PREFIX[choice]);
         exports.export(name.as_str(), ExportKind::Func, store.import_section.len());
 
-        let choice = u.choose_index(CANISTER_EXPORT_FUNCTION_ONCE.len())?;
+        let choice = u.choose_index(WASM_VALID_SYSTEM_FUNCTIONS.len())?;
         exports.export(
-            CANISTER_EXPORT_FUNCTION_ONCE[choice],
+            WASM_VALID_SYSTEM_FUNCTIONS[choice],
             ExportKind::Func,
             store.import_section.len() + 1,
         );
@@ -396,13 +388,13 @@ fn export_name(
     visited: &mut BTreeSet<usize>,
 ) -> Result<String> {
     let mut name = unique_string(1_000, exported_names, u)?;
-    if u.ratio(1, 2)? && CANISTER_EXPORT_FUNCTION_ONCE.len() != visited.len() {
-        let index_choice: Vec<usize> = (0..CANISTER_EXPORT_FUNCTION_ONCE.len())
+    if u.ratio(1, 2)? && WASM_VALID_SYSTEM_FUNCTIONS.len() != visited.len() {
+        let index_choice: Vec<usize> = (0..WASM_VALID_SYSTEM_FUNCTIONS.len())
             .filter(|index| !visited.contains(index))
             .collect();
         let choice = u.choose(&index_choice)?;
         visited.insert(*choice);
-        return Ok(CANISTER_EXPORT_FUNCTION_ONCE[*choice].to_string());
+        return Ok(WASM_VALID_SYSTEM_FUNCTIONS[*choice].to_string());
     }
 
     let choice = u.choose_index(CANISTER_EXPORT_FUNCTION_PREFIX.len())?;

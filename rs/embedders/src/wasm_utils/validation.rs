@@ -40,6 +40,18 @@ pub const RESERVED_SYMBOLS: [&str; 6] = [
     STABLE_BYTEMAP_MEMORY_NAME,
 ];
 
+/// System functions that can be exported by a canister
+#[doc(hidden)] // pub for usage in tests
+pub const WASM_VALID_SYSTEM_FUNCTIONS: [&str; 7] = [
+    "canister_init",
+    "canister_inspect_message",
+    "canister_pre_upgrade",
+    "canister_post_upgrade",
+    "canister_heartbeat",
+    "canister_global_timer",
+    "canister_on_low_wasm_memory",
+];
+
 const WASM_FUNCTION_COMPLEXITY_LIMIT: Complexity = Complexity(1_000_000);
 pub const WASM_FUNCTION_SIZE_LIMIT: usize = 1_000_000;
 pub const MAX_CODE_SECTION_SIZE_IN_BYTES: u32 = 11 * 1024 * 1024;
@@ -972,15 +984,6 @@ fn validate_export_section(
 
         let mut seen_funcs: HashSet<&str> = HashSet::new();
         let valid_exported_functions = get_valid_exported_functions();
-        let valid_system_functions = [
-            "canister_init",
-            "canister_pre_upgrade",
-            "canister_post_upgrade",
-            "canister_inspect_message",
-            "canister_heartbeat",
-            "canister_global_timer",
-            "canister_on_low_wasm_memory",
-        ];
         let mut number_exported_functions = 0;
         let mut sum_exported_function_name_lengths = 0;
         for export in &module.exports {
@@ -1015,7 +1018,7 @@ fn validate_export_section(
                 } else if func_name.starts_with("canister_") {
                     // The "canister_" prefix is reserved and only functions allowed by the spec
                     // can be exported.
-                    if !valid_system_functions.contains(&func_name) {
+                    if !WASM_VALID_SYSTEM_FUNCTIONS.contains(&func_name) {
                         return Err(WasmValidationError::InvalidExportSection(format!(
                             "Exporting reserved function '{}' with \"canister_\" prefix",
                             func_name
