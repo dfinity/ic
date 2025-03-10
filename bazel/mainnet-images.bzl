@@ -23,13 +23,13 @@ def mainnet_images():
     http_file(
         name = "mainnet_setupos_disk_image",
         downloaded_file_path = "disk-img.tar.zst",
-        url = base_download_url(MAINNET_REVISION, "setupos", False, False) + "disk-img.tar.zst",
+        url = base_download_url(MAINNET_REVISION, "setup-os", False, False) + "disk-img.tar.zst",
     )
 
     http_file(
         name = "mainnet_hostos_shas",
         downloaded_file_path = "SHA256SUMS",
-        url = base_download_url(MAINNET_REVISION, "hostos", True, False) + "SHA256SUMS",
+        url = base_download_url(MAINNET_REVISION, "host-os", True, False) + "SHA256SUMS",
     )
 
 def mainnet_images_support():
@@ -40,27 +40,21 @@ def mainnet_images_support():
     native.genrule(
         name = "mainnet_hostos_version_file",
         outs = ["version.txt"],
-        cmd = """
-            echo "{MAINNET_REVISION}" > $@
-        """,
+        cmd = "echo \"{revision}\" > $@".format(revision=MAINNET_REVISION),
         tags = ["manual"],
     )
 
-    hostos_url = base_download_url(MAINNET_REVISION, "hostos", True, False) + "disk-img.tar.zst"
+    hostos_url = base_download_url(MAINNET_REVISION, "host-os", True, False) + "update-img.tar.zst"
     native.genrule(
         name = "mainnet_hostos_url_file",
         outs = ["mainnet_hostos.url"],
-        cmd = """
-            echo "{hostos_url}" > $@
-        """,
+        cmd = "echo \"{hostos_url}\" > $@".format(hostos_url=hostos_url),
     )
 
     native.genrule(
         name = "mainnet_hostos_sha_file",
         srcs = ["@mainnet_hostos_shas//file"],
         outs = ["mainnet_hostos.sha256"],
-        cmd = """
-            echo "$<" | cut -d ' ' -f 1 > $@
-        """,
+        cmd = "sed -n '2p' $(location @mainnet_hostos_shas//file) | cut -d ' ' -f 1 > $@",
         tags = ["manual"],
     )
