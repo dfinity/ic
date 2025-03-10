@@ -58,4 +58,8 @@ def rust_ledger_canister(name, extra_deps = [":ledger"], crate_features = None):
         service_file = "//rs/ledger_suite/icp:ledger.did",
         deps = LEDGER_CANISTER_DEPS + extra_deps,
         crate_features = crate_features if crate_features else [],
+        proc_macro_deps = [
+            # Keep sorted.
+            "@crate_index//:ic-cdk-macros",
+        ],        
     )
