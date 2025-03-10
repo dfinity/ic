@@ -3,6 +3,12 @@ use canister_test::Wasm;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_management_canister_types_private::CanisterInstallMode;
 use ic_nervous_system_agent::{
+    helpers::await_with_timeout,
+    helpers::nns::propose_to_deploy_sns_and_wait,
+    helpers::sns::{
+        await_swap_lifecycle, get_caller_neuron, participate_in_swap, propose_and_wait,
+    },
+    nns::ledger::transfer,
     pocketic_impl::PocketIcAgent,
     sns::{swap::SwapCanister, Sns},
     CallCanisters, ProgressNetwork,
@@ -10,14 +16,6 @@ use ic_nervous_system_agent::{
 use ic_nervous_system_clients::canister_status::CanisterStatusType;
 use ic_nervous_system_integration_tests::{
     create_service_nervous_system_builder::CreateServiceNervousSystemBuilder,
-    nervous_system_agent_helpers::{
-        await_with_timeout,
-        nns::{governance::propose_to_deploy_sns_and_wait, ledger::transfer},
-        sns::{
-            governance::{get_caller_neuron, propose_and_wait},
-            swap::{await_swap_lifecycle, participate_in_swap},
-        },
-    },
     pocket_ic_helpers::{
         install_canister_on_subnet,
         nns::ledger::mint_icp,
@@ -119,7 +117,6 @@ pub async fn create_sns<C: CallCanisters + ProgressNetwork>(
     swap_participants_agents: Vec<C>,
     dapp_canister_ids: Vec<CanisterId>,
 ) -> Sns {
-    let sns_proposal_id = "1";
     let mut create_service_nervous_system = CreateServiceNervousSystemBuilder::default()
         .neurons_fund_participation(true)
         .with_dapp_canisters(dapp_canister_ids)
@@ -160,9 +157,12 @@ pub async fn create_sns<C: CallCanisters + ProgressNetwork>(
         neuron_agent,
         neuron_id,
         create_service_nervous_system,
-        sns_proposal_id,
+        "Create SNS".to_string(),
+        "".to_string(),
+        "".to_string(),
     )
-    .await;
+    .await
+    .unwrap();
     let sns_swap = sns.swap;
     await_swap_lifecycle(swap_treasury_agent, sns_swap, Lifecycle::Open, true)
         .await
@@ -238,13 +238,19 @@ async fn complete_sns_swap<C: CallCanisters + ProgressNetwork>(
             from_subaccount: None,
             created_at_time: None,
         };
-        transfer(swap_treasury_agent, transfer_args).await.unwrap();
+
+        transfer(swap_treasury_agent, transfer_args)
+            .await
+            .unwrap()
+            .unwrap();
+
         participate_in_swap(
             swap_participant_agent,
             swap_canister,
             *swap_participant_amount,
         )
-        .await;
+        .await
+        .unwrap();
     }
     await_swap_lifecycle(
         swap_treasury_agent,
