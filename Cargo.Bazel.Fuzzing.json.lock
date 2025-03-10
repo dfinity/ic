@@ -1,5 +1,5 @@
 {
-  "checksum": "410a68f5e3b0e3d41926111459e319906ffb6eb1ca21162650b2bd69316f2424",
+  "checksum": "cfdbe73b1df092a66ab76e862a00fab8dd5768c8696162887008c37751e3de87",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -6013,7 +6013,7 @@
         "deps": {
           "common": [
             {
-              "id": "cc 1.2.8",
+              "id": "cc 1.2.16",
               "target": "cc"
             }
           ],
@@ -10555,7 +10555,7 @@
         "deps": {
           "common": [
             {
-              "id": "cc 1.2.8",
+              "id": "cc 1.2.16",
               "target": "cc"
             },
             {
@@ -11707,14 +11707,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "cc 1.2.8": {
+    "cc 1.2.16": {
       "name": "cc",
-      "version": "1.2.8",
+      "version": "1.2.16",
       "package_url": "https://github.com/rust-lang/cc-rs",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/cc/1.2.8/download",
-          "sha256": "ad0cf6e91fde44c773c6ee7ec6bba798504641a8bc2eb7e37a04ffbf4dfaa55a"
+          "url": "https://static.crates.io/crates/cc/1.2.16/download",
+          "sha256": "be714c154be609ec7f5dad223a33bf1482fff90472de28f7362806e6d4832b8c"
         }
       },
       "targets": [
@@ -11922,7 +11922,7 @@
           }
         },
         "edition": "2018",
-        "version": "1.2.8"
+        "version": "1.2.16"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -20411,7 +20411,7 @@
               "target": "cargo_metadata"
             },
             {
-              "id": "cc 1.2.8",
+              "id": "cc 1.2.16",
               "target": "cc"
             },
             {
@@ -24186,7 +24186,7 @@
         "deps": {
           "common": [
             {
-              "id": "cc 1.2.8",
+              "id": "cc 1.2.16",
               "target": "cc"
             }
           ],
@@ -26171,7 +26171,7 @@
         "deps": {
           "common": [
             {
-              "id": "cc 1.2.8",
+              "id": "cc 1.2.16",
               "target": "cc"
             }
           ],
@@ -32400,7 +32400,7 @@
         "deps": {
           "common": [
             {
-              "id": "cc 1.2.8",
+              "id": "cc 1.2.16",
               "target": "cc"
             }
           ],
@@ -41695,7 +41695,7 @@
         "deps": {
           "common": [
             {
-              "id": "cc 1.2.8",
+              "id": "cc 1.2.16",
               "target": "cc"
             },
             {
@@ -41916,7 +41916,7 @@
         "deps": {
           "common": [
             {
-              "id": "cc 1.2.8",
+              "id": "cc 1.2.16",
               "target": "cc"
             }
           ],
@@ -42001,7 +42001,7 @@
         "deps": {
           "common": [
             {
-              "id": "cc 1.2.8",
+              "id": "cc 1.2.16",
               "target": "cc"
             }
           ],
@@ -42281,7 +42281,7 @@
               "target": "bindgen"
             },
             {
-              "id": "cc 1.2.8",
+              "id": "cc 1.2.16",
               "target": "cc"
             },
             {
@@ -42382,7 +42382,7 @@
         "deps": {
           "common": [
             {
-              "id": "cc 1.2.8",
+              "id": "cc 1.2.16",
               "target": "cc"
             },
             {
@@ -42488,7 +42488,7 @@
         "deps": {
           "common": [
             {
-              "id": "cc 1.2.8",
+              "id": "cc 1.2.16",
               "target": "cc"
             },
             {
@@ -42597,7 +42597,7 @@
         "deps": {
           "common": [
             {
-              "id": "cc 1.2.8",
+              "id": "cc 1.2.16",
               "target": "cc"
             },
             {
@@ -42695,7 +42695,7 @@
         "deps": {
           "common": [
             {
-              "id": "cc 1.2.8",
+              "id": "cc 1.2.16",
               "target": "cc"
             },
             {
@@ -43162,7 +43162,7 @@
         "deps": {
           "common": [
             {
-              "id": "cc 1.2.8",
+              "id": "cc 1.2.16",
               "target": "cc"
             },
             {
@@ -43976,7 +43976,7 @@
         "deps": {
           "common": [
             {
-              "id": "cc 1.2.8",
+              "id": "cc 1.2.16",
               "target": "cc"
             },
             {
@@ -49611,7 +49611,7 @@
         "deps": {
           "common": [
             {
-              "id": "cc 1.2.8",
+              "id": "cc 1.2.16",
               "target": "cc"
             }
           ],
@@ -49694,7 +49694,7 @@
         "deps": {
           "common": [
             {
-              "id": "cc 1.2.8",
+              "id": "cc 1.2.16",
               "target": "cc"
             },
             {
@@ -52310,7 +52310,7 @@
         "deps": {
           "common": [
             {
-              "id": "cc 1.2.8",
+              "id": "cc 1.2.16",
               "target": "cc"
             },
             {
@@ -57433,7 +57433,7 @@
         "deps": {
           "common": [
             {
-              "id": "cc 1.2.8",
+              "id": "cc 1.2.16",
               "target": "cc"
             }
           ],
@@ -64750,7 +64750,7 @@
         "deps": {
           "common": [
             {
-              "id": "cc 1.2.8",
+              "id": "cc 1.2.16",
               "target": "cc"
             }
           ],
@@ -64871,7 +64871,7 @@
         "deps": {
           "common": [
             {
-              "id": "cc 1.2.8",
+              "id": "cc 1.2.16",
               "target": "cc"
             }
           ],
@@ -69498,7 +69498,7 @@
         "deps": {
           "common": [
             {
-              "id": "cc 1.2.8",
+              "id": "cc 1.2.16",
               "target": "cc"
             }
           ],
@@ -69583,7 +69583,7 @@
         "deps": {
           "common": [
             {
-              "id": "cc 1.2.8",
+              "id": "cc 1.2.16",
               "target": "cc"
             }
           ],
@@ -69674,7 +69674,7 @@
         "deps": {
           "common": [
             {
-              "id": "cc 1.2.8",
+              "id": "cc 1.2.16",
               "target": "cc"
             }
           ],
@@ -74371,7 +74371,7 @@
         "deps": {
           "common": [
             {
-              "id": "cc 1.2.8",
+              "id": "cc 1.2.16",
               "target": "cc"
             }
           ],
@@ -78055,7 +78055,7 @@
         "deps": {
           "common": [
             {
-              "id": "cc 1.2.8",
+              "id": "cc 1.2.16",
               "target": "cc"
             }
           ],
@@ -86693,7 +86693,7 @@
         "deps": {
           "common": [
             {
-              "id": "cc 1.2.8",
+              "id": "cc 1.2.16",
               "target": "cc"
             }
           ],
@@ -87232,7 +87232,7 @@
         "deps": {
           "common": [
             {
-              "id": "cc 1.2.8",
+              "id": "cc 1.2.16",
               "target": "cc"
             }
           ],
@@ -92994,7 +92994,7 @@
         "deps": {
           "common": [
             {
-              "id": "cc 1.2.8",
+              "id": "cc 1.2.16",
               "target": "cc"
             },
             {
@@ -94114,7 +94114,7 @@
     "candid 0.10.13",
     "candid_parser 0.1.4",
     "cargo_metadata 0.14.2",
-    "cc 1.2.8",
+    "cc 1.2.16",
     "cddl 0.9.4",
     "cfg-if 1.0.0",
     "chacha20poly1305 0.10.1",
