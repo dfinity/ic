@@ -174,14 +174,14 @@ rust_ic_test(
     name = "ckbtc_minter_tests",
     srcs = ["tests/tests.rs"],
     data = [
-        ":ckbtc_minter_debug.wasm",
+        ":ckbtc_minter_debug.wasm.gz",
         "//rs/bitcoin/checker:btc_checker_canister",
         "//rs/bitcoin/mock:bitcoin_canister_mock",
         "//rs/ledger_suite/icrc1/ledger:ledger_canister",
     ],
     env = {
         "CARGO_MANIFEST_DIR": "rs/bitcoin/ckbtc/minter",
-        "IC_CKBTC_MINTER_WASM_PATH": "$(rootpath :ckbtc_minter_debug.wasm)",
+        "IC_CKBTC_MINTER_WASM_PATH": "$(rootpath :ckbtc_minter_debug.wasm.gz)",
         "IC_ICRC1_LEDGER_WASM_PATH": "$(rootpath //rs/ledger_suite/icrc1/ledger:ledger_canister)",
         "IC_BTC_CHECKER_WASM_PATH": "$(rootpath //rs/bitcoin/checker:btc_checker_canister)",
         "IC_BITCOIN_CANISTER_MOCK_WASM_PATH": "$(rootpath //rs/bitcoin/mock:bitcoin_canister_mock)",
@@ -219,7 +219,7 @@ genrule(
     srcs = [
         ":ckbtc_minter_dump_stable_memory",
         "test_resources/mainnet_events.gz",
-        ":ckbtc_minter_debug.wasm",
+        ":ckbtc_minter_debug.wasm.gz",
         "//:pocket-ic-server",
         "//rs/bitcoin/mock:bitcoin_canister_mock",
     ],
@@ -227,7 +227,7 @@ genrule(
     cmd_bash = """
     export CARGO_MANIFEST_DIR=rs/bitcoin/ckbtc/minter
     export IC_BITCOIN_CANISTER_MOCK_WASM_PATH="$(location //rs/bitcoin/mock:bitcoin_canister_mock)"
-    export IC_CKBTC_MINTER_WASM_PATH="$(location :ckbtc_minter_debug.wasm)"
+    export IC_CKBTC_MINTER_WASM_PATH="$(location :ckbtc_minter_debug.wasm.gz)"
     export POCKET_IC_BIN="$(location //:pocket-ic-server)"
 
     $(location :ckbtc_minter_dump_stable_memory) $(location test_resources/mainnet_events.gz) $@

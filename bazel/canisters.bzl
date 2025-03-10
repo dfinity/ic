@@ -119,9 +119,7 @@ def rust_canister(name, service_file, visibility = ["//visibility:public"], test
     )
 
     # The finalized wasm (optimized, versioned, etc)
-    # NOTE: the name should be .wasm.gz, but '.wasm' is used by some targets
-    # and kept for legacy reasons
-    final_name = name + ".wasm"
+    final_name = name + ".wasm.gz"
     finalize_wasm(
         name = final_name,
         src_wasm = wasm_name,
@@ -134,7 +132,7 @@ def rust_canister(name, service_file, visibility = ["//visibility:public"], test
 
     native.alias(
         name = name,
-        actual = name + ".wasm",
+        actual = final_name,
         visibility = visibility,
     )
 
