@@ -89,25 +89,50 @@ impl SwapCanister {
     pub async fn new_sale_ticket<C: CallCanisters>(
         &self,
         agent: &C,
-        request: NewSaleTicketRequest,
+        amount_icp_e8s: u64,
+        subaccount: Option<Vec<u8>>,
     ) -> Result<NewSaleTicketResponse, C::Error> {
-        agent.call(self.canister_id, request).await
+        agent
+            .call(
+                self.canister_id,
+                NewSaleTicketRequest {
+                    amount_icp_e8s,
+                    subaccount,
+                },
+            )
+            .await
     }
 
     pub async fn refresh_buyer_tokens<C: CallCanisters>(
         &self,
         agent: &C,
-        request: RefreshBuyerTokensRequest,
+        buyer: PrincipalId,
+        confirmation_text: Option<String>,
     ) -> Result<RefreshBuyerTokensResponse, C::Error> {
-        agent.call(self.canister_id, request).await
+        agent
+            .call(
+                self.canister_id,
+                RefreshBuyerTokensRequest {
+                    buyer: buyer.to_string(),
+                    confirmation_text,
+                },
+            )
+            .await
     }
 
     pub async fn get_buyer_state<C: CallCanisters>(
         &self,
         agent: &C,
-        request: GetBuyerStateRequest,
+        principal_id: PrincipalId,
     ) -> Result<GetBuyerStateResponse, C::Error> {
-        agent.call(self.canister_id, request).await
+        agent
+            .call(
+                self.canister_id,
+                GetBuyerStateRequest {
+                    principal_id: Some(principal_id),
+                },
+            )
+            .await
     }
 
     pub async fn get_open_ticket<C: CallCanisters>(
@@ -120,9 +145,16 @@ impl SwapCanister {
     pub async fn error_refund_icp<C: CallCanisters>(
         &self,
         agent: &C,
-        request: ErrorRefundIcpRequest,
+        source_principal_id: PrincipalId,
     ) -> Result<ErrorRefundIcpResponse, C::Error> {
-        agent.call(self.canister_id, request).await
+        agent
+            .call(
+                self.canister_id,
+                ErrorRefundIcpRequest {
+                    source_principal_id: Some(source_principal_id),
+                },
+            )
+            .await
     }
 
     pub async fn get_lifecycle<C: CallCanisters>(

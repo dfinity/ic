@@ -53,10 +53,6 @@ impl Request for ManageNeuronRequest {
     type Response = ManageNeuronResponse;
 }
 
-// @rvem: Canister query 'get_proposal_info' accepts bare 'ProposalId' as input.
-// However, implementing 'Request' for bare 'ProposalId' is a bad option
-// since other canisters may expose endpoints that accept 'ProposalId' as input too.
-// So we're wrapping 'ProposalId' into a newtype struct and implementing 'Request' for it.
 pub(crate) struct GetProposalInfo(pub ProposalId);
 
 impl Request for GetProposalInfo {

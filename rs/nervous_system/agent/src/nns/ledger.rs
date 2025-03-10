@@ -2,7 +2,8 @@ use crate::CallCanisters;
 
 use ic_nns_constants::LEDGER_CANISTER_ID;
 use icp_ledger::{
-    BinaryAccountBalanceArgs, Tokens, TransferArgs, TransferError as ICPTransferError,
+    AccountIdentifier, BinaryAccountBalanceArgs, Tokens, TransferArgs,
+    TransferError as ICPTransferError,
 };
 use icrc_ledger_types::icrc1::transfer::{BlockIndex, TransferArg, TransferError};
 
@@ -22,7 +23,14 @@ pub async fn transfer<C: CallCanisters>(
 
 pub async fn account_balance<C: CallCanisters>(
     agent: &C,
-    account: BinaryAccountBalanceArgs,
+    account: AccountIdentifier,
 ) -> Result<Tokens, C::Error> {
-    agent.call(LEDGER_CANISTER_ID, account).await
+    agent
+        .call(
+            LEDGER_CANISTER_ID,
+            BinaryAccountBalanceArgs {
+                account: account.to_address(),
+            },
+        )
+        .await
 }

@@ -1,6 +1,7 @@
 use crate::{null_request::NullRequest, CallCanisters};
 use ic_base_types::PrincipalId;
 use ic_sns_governance_api::pb::v1::{
+    governance::Version,
     manage_neuron, manage_neuron_response,
     topics::{ListTopicsRequest, ListTopicsResponse},
     AdvanceTargetVersionRequest, AdvanceTargetVersionResponse, GetMetadataRequest,
@@ -189,9 +190,16 @@ impl GovernanceCanister {
     pub async fn advance_target_version<C: CallCanisters>(
         &self,
         agent: &C,
-        request: AdvanceTargetVersionRequest,
+        target_version: Version,
     ) -> Result<AdvanceTargetVersionResponse, C::Error> {
-        agent.call(self.canister_id, request).await
+        agent
+            .call(
+                self.canister_id,
+                AdvanceTargetVersionRequest {
+                    target_version: Some(target_version),
+                },
+            )
+            .await
     }
 
     pub async fn list_topics<C: CallCanisters>(

@@ -46,14 +46,13 @@ use ic_registry_transport::pb::v1::{
     registry_mutation, RegistryAtomicMutateRequest, RegistryMutation,
 };
 use ic_sns_governance_api::pb::v1::{
-    self as sns_pb, governance::Version, AdvanceTargetVersionRequest, AdvanceTargetVersionResponse,
+    self as sns_pb, governance::Version, AdvanceTargetVersionResponse,
 };
 use ic_sns_init::SnsCanisterInitPayloads;
 use ic_sns_swap::pb::v1::{
-    ErrorRefundIcpRequest, ErrorRefundIcpResponse, FinalizeSwapResponse,
-    GetAutoFinalizationStatusResponse, GetBuyerStateResponse, GetDerivedStateResponse,
-    GetInitResponse, GetLifecycleResponse, Lifecycle, NewSaleTicketRequest, NewSaleTicketResponse,
-    RefreshBuyerTokensResponse,
+    ErrorRefundIcpResponse, FinalizeSwapResponse, GetAutoFinalizationStatusResponse,
+    GetBuyerStateResponse, GetDerivedStateResponse, GetInitResponse, GetLifecycleResponse,
+    Lifecycle, NewSaleTicketResponse, RefreshBuyerTokensResponse,
 };
 use ic_sns_test_utils::itest_helpers::populate_canister_ids;
 use ic_sns_wasm::pb::v1::{
@@ -69,7 +68,7 @@ use maplit::btreemap;
 use pocket_ic::{nonblocking::PocketIc, PocketIcBuilder, RejectResponse};
 use prost::Message;
 use rust_decimal::prelude::ToPrimitive;
-use std::{collections::BTreeMap, fmt::Write, ops::Range, path::Path, time::Duration};
+use std::{collections::BTreeMap, fmt::Write, path::Path, time::Duration};
 
 pub const STARTING_CYCLES_PER_CANISTER: u128 = 2_000_000_000_000_000;
 
@@ -1050,59 +1049,12 @@ pub async fn upgrade_nns_canister_to_tip_of_master_or_panic(
     );
 }
 
-/// First, advances time by `expected_event_interval_seconds.start` seconds.
-/// Then, gradually advances time by up to the length of the interval `expected_event_interval_seconds`,
-/// observing the state using the provided `observe` function after each (evenly-timed) tick.
-/// - If the observed state matches the `expected` state, it returns `Ok(())`.
-/// - If the timeout is reached, it returns an error with the last observation.
-///
-/// The frequency of ticks is 1 per second for small intervals of `expected_event_interval_seconds`, and gradually
-/// lower for larger intervals to guarantee at most 500 ticks.
-///
-/// Example:
-/// ```
-/// let upgrade_journal_interval_seconds = 60 * 60;
-/// await_with_timeout(
-///     &pocket_ic,
-///     upgrade_journal_interval_seconds,
-///     |pocket_ic| async {
-///         sns::governance::get_upgrade_journal(pocket_ic, sns.governance.canister_id)
-///             .await
-///             .upgrade_steps
-///             .unwrap()
-///             .versions
-///     },
-///     &vec![initial_sns_version.clone()],
-/// )
-/// .await
-/// .unwrap();
-/// ```
-pub async fn await_with_timeout<'a, T, F, Fut>(
-    pocket_ic: &'a PocketIc,
-    expected_event_interval_seconds: Range<u64>,
-    observe: F,
-    expected: &T,
-) -> Result<(), String>
-where
-    T: std::cmp::PartialEq + std::fmt::Debug,
-    F: Fn(&'a PocketIc) -> Fut,
-    Fut: std::future::Future<Output = T>,
-{
-    crate::nervous_system_agent_helpers::await_with_timeout(
-        pocket_ic,
-        expected_event_interval_seconds,
-        observe,
-        expected,
-    )
-    .await
-}
-
 pub mod nns {
     use super::*;
+    use ic_nervous_system_agent::helpers::nns as nns_agent_helpers;
     use ic_nervous_system_agent::nns as nns_agent;
     pub mod governance {
         use super::*;
-        use crate::nervous_system_agent_helpers::nns::governance as nervous_system_agent_governance;
 
         pub async fn list_neurons(
             pocket_ic: &PocketIc,
@@ -1131,12 +1083,13 @@ pub mod nns {
             neuron_id: NeuronId,
             command: ManageNeuronCommandRequest,
         ) -> ManageNeuronResponse {
-            nervous_system_agent_governance::manage_neuron(
+            nns_agent::governance::manage_neuron(
                 &PocketIcAgent::new(pocket_ic, sender),
                 neuron_id,
                 command,
             )
             .await
+            .unwrap()
         }
 
         pub async fn propose_and_wait(
@@ -1147,14 +1100,14 @@ pub mod nns {
                 id: TEST_NEURON_1_ID,
             };
             let agent = PocketIcAgent::new(pocket_ic, *TEST_NEURON_1_OWNER_PRINCIPAL);
-            nervous_system_agent_governance::propose_and_wait(&agent, neuron_id, proposal).await
+            nns_agent_helpers::propose_and_wait(&agent, neuron_id, proposal).await
         }
 
         pub async fn wait_for_proposal_execution(
             pocket_ic: &PocketIc,
             proposal_id: u64,
         ) -> Result<ProposalInfo, String> {
-            nervous_system_agent_governance::wait_for_proposal_execution(
+            nns_agent_helpers::wait_for_proposal_execution(
                 &PocketIcAgent::new(pocket_ic, Principal::anonymous()),
                 ProposalId { id: proposal_id },
             )
@@ -1166,11 +1119,12 @@ pub mod nns {
             proposal_id: ProposalId,
             sender: PrincipalId,
         ) -> Result<ProposalInfo, RejectResponse> {
-            nervous_system_agent_governance::nns_get_proposal_info(
+            nns_agent::governance::get_proposal_info(
                 &PocketIcAgent::new(pocket_ic, sender),
                 proposal_id,
             )
             .await
+            .map(|p| p.unwrap())
             .map_err(|err| match err {
                 PocketIcCallError::PocketIc(reject_response) => reject_response,
                 err => panic!("Unexpected error when getting proposal info: {:#?}", err),
@@ -1181,12 +1135,9 @@ pub mod nns {
             pocket_ic: &PocketIc,
             proposal_id: ProposalId,
         ) -> GetNeuronsFundAuditInfoResponse {
-            ic_nervous_system_agent::nns::governance::get_neurons_fund_audit_info(
-                pocket_ic,
-                proposal_id,
-            )
-            .await
-            .unwrap()
+            nns_agent::governance::get_neurons_fund_audit_info(pocket_ic, proposal_id)
+                .await
+                .unwrap()
         }
 
         pub async fn propose_to_deploy_sns_and_wait(
@@ -1198,13 +1149,16 @@ pub mod nns {
             let test_neuron_1_id = NeuronId {
                 id: TEST_NEURON_1_ID,
             };
-            nervous_system_agent_governance::propose_to_deploy_sns_and_wait(
+            nns_agent_helpers::propose_to_deploy_sns_and_wait(
                 &agent,
                 test_neuron_1_id,
                 create_service_nervous_system,
-                sns_instance_label,
+                format!("Create SNS #{}", sns_instance_label),
+                "".to_string(),
+                "".to_string(),
             )
             .await
+            .unwrap()
         }
 
         pub async fn get_network_economics_parameters(pocket_ic: &PocketIc) -> NetworkEconomics {
@@ -1216,7 +1170,7 @@ pub mod nns {
 
     pub mod ledger {
         use super::*;
-        use crate::nervous_system_agent_helpers::nns::ledger as nervous_agent_ledger;
+        use ic_nervous_system_agent::nns::ledger as nns_agent_ledger;
         use icp_ledger::{Memo, TransferArgs};
 
         pub async fn icrc1_transfer(
@@ -1224,19 +1178,18 @@ pub mod nns {
             sender: PrincipalId,
             transfer_arg: TransferArg,
         ) -> Result<Nat, TransferError> {
-            nervous_agent_ledger::icrc1_transfer(
-                &PocketIcAgent::new(pocket_ic, sender),
-                transfer_arg,
-            )
-            .await
+            nns_agent_ledger::icrc1_transfer(&PocketIcAgent::new(pocket_ic, sender), transfer_arg)
+                .await
+                .unwrap()
         }
 
         pub async fn account_balance(pocket_ic: &PocketIc, account: &AccountIdentifier) -> Tokens {
-            nervous_agent_ledger::account_balance(
+            nns_agent_ledger::account_balance(
                 &PocketIcAgent::new(pocket_ic, Principal::from(*TEST_NEURON_1_OWNER_PRINCIPAL)),
-                account,
+                *account,
             )
             .await
+            .unwrap()
         }
 
         pub async fn transfer(
@@ -1244,7 +1197,9 @@ pub mod nns {
             sender: PrincipalId,
             args: TransferArgs,
         ) -> Result<u64, icp_ledger::TransferError> {
-            nervous_agent_ledger::transfer(&PocketIcAgent::new(pocket_ic, sender), args).await
+            nns_agent_ledger::transfer(&PocketIcAgent::new(pocket_ic, sender), args)
+                .await
+                .unwrap()
         }
 
         // Test method to mint ICP to a principal
@@ -1268,8 +1223,9 @@ pub mod nns {
                 from_subaccount: None,
                 created_at_time: None,
             };
-            nervous_agent_ledger::transfer(&governance_canister_agent, args)
+            nns_agent_ledger::transfer(&governance_canister_agent, args)
                 .await
+                .unwrap()
                 .unwrap()
         }
     }
@@ -1277,7 +1233,7 @@ pub mod nns {
     pub mod sns_wasm {
         use super::*;
         use ic_nns_test_utils::sns_wasm::create_modified_sns_wasm;
-        use ic_sns_wasm::pb::v1::{ListUpgradeStepsRequest, SnsVersion};
+        use ic_sns_wasm::pb::v1::SnsVersion;
 
         pub async fn get_deployed_sns_by_proposal_id(
             pocket_ic: &PocketIc,
@@ -1301,15 +1257,11 @@ pub mod nns {
 
         /// Get the latest version of SNS from SNS-W
         pub async fn get_latest_sns_version(pocket_ic: &PocketIc) -> Version {
-            let request = ListUpgradeStepsRequest {
-                starting_at: None,
-                sns_governance_canister_id: None,
-                limit: 0,
-            };
-            let response =
-                ic_nervous_system_agent::nns::sns_wasm::list_upgrade_steps(pocket_ic, request)
-                    .await
-                    .unwrap();
+            let response = ic_nervous_system_agent::nns::sns_wasm::list_upgrade_steps(
+                pocket_ic, None, None, 0,
+            )
+            .await
+            .unwrap();
             let latest_version = response
                 .steps
                 .last()
@@ -1384,9 +1336,7 @@ pub mod nns {
 
     pub mod cmc {
         use super::*;
-        use cycles_minting_canister::{
-            NotifyMintCyclesArg, NotifyMintCyclesSuccess, SetAuthorizedSubnetworkListArgs,
-        };
+        use cycles_minting_canister::NotifyMintCyclesSuccess;
         use icrc_ledger_types::icrc1::account::Subaccount;
 
         pub async fn set_authorized_subnetwork_list(
@@ -1397,7 +1347,8 @@ pub mod nns {
         ) {
             ic_nervous_system_agent::nns::cmc::set_authorized_subnetwork_list(
                 &PocketIcAgent::new(pocket_ic, sender),
-                SetAuthorizedSubnetworkListArgs { who, subnets },
+                who,
+                subnets,
             )
             .await
             .unwrap()
@@ -1412,11 +1363,9 @@ pub mod nns {
         ) -> NotifyMintCyclesSuccess {
             ic_nervous_system_agent::nns::cmc::notify_mint_cycles(
                 &PocketIcAgent::new(pocket_ic, sender),
-                NotifyMintCyclesArg {
-                    block_index,
-                    to_subaccount,
-                    deposit_memo,
-                },
+                block_index,
+                to_subaccount,
+                deposit_memo,
             )
             .await
             .unwrap()
@@ -1427,6 +1376,7 @@ pub mod nns {
 
 pub mod sns {
     use super::*;
+    use ic_nervous_system_agent::helpers::sns as sns_agent_helpers;
     use ic_nervous_system_agent::sns::root::SnsCanisters;
 
     #[derive(Clone, Debug, PartialEq)]
@@ -1558,10 +1508,11 @@ pub mod sns {
 
     pub mod governance {
         use super::*;
-        use crate::nervous_system_agent_helpers::sns::governance as nervous_agent_governance;
         use assert_matches::assert_matches;
         use ic_crypto_sha2::Sha256;
-        use ic_nervous_system_agent::sns::governance::GovernanceCanister;
+        use ic_nervous_system_agent::{
+            helpers::sns::SnsProposalError, sns::governance::GovernanceCanister,
+        };
         use ic_sns_governance_api::pb::v1::{
             get_neuron_response,
             neuron::DissolveState,
@@ -1609,13 +1560,10 @@ pub mod sns {
         ) -> sns_pb::ManageNeuronResponse {
             let agent = PocketIcAgent::new(pocket_ic, sender);
             let sns_governance_canister = GovernanceCanister::new(canister_id);
-            nervous_agent_governance::manage_neuron(
-                &agent,
-                neuron_id,
-                sns_governance_canister,
-                command,
-            )
-            .await
+            sns_governance_canister
+                .manage_neuron(&agent, neuron_id, command)
+                .await
+                .unwrap()
         }
 
         pub async fn start_dissolving_neuron(
@@ -1641,10 +1589,10 @@ pub mod sns {
             sender: PrincipalId,
             neuron_id: sns_pb::NeuronId,
             proposal: sns_pb::Proposal,
-        ) -> Result<sns_pb::ProposalData, sns_pb::GovernanceError> {
+        ) -> Result<sns_pb::ProposalData, SnsProposalError> {
             let agent = PocketIcAgent::new(pocket_ic, sender);
             let sns_governance_canister = GovernanceCanister::new(canister_id);
-            nervous_agent_governance::propose_and_wait(
+            sns_agent_helpers::propose_and_wait(
                 &agent,
                 neuron_id,
                 sns_governance_canister,
@@ -1658,10 +1606,9 @@ pub mod sns {
             pocket_ic: &PocketIc,
             canister_id: PrincipalId,
             proposal_id: sns_pb::ProposalId,
-        ) -> Result<sns_pb::ProposalData, sns_pb::GovernanceError> {
+        ) -> Result<sns_pb::ProposalData, SnsProposalError> {
             let canister = GovernanceCanister::new(canister_id);
-            nervous_agent_governance::wait_for_proposal_execution(pocket_ic, canister, proposal_id)
-                .await
+            sns_agent_helpers::wait_for_proposal_execution(pocket_ic, canister, proposal_id).await
         }
 
         pub async fn get_proposal(
@@ -1946,12 +1893,9 @@ pub mod sns {
             sns_governance_canister_id: PrincipalId,
             target_version: Version,
         ) -> AdvanceTargetVersionResponse {
-            let payload = AdvanceTargetVersionRequest {
-                target_version: Some(target_version),
-            };
             let canister = GovernanceCanister::new(sns_governance_canister_id);
             canister
-                .advance_target_version(pocket_ic, payload)
+                .advance_target_version(pocket_ic, target_version)
                 .await
                 .unwrap()
         }
@@ -2551,7 +2495,6 @@ pub mod sns {
 
     pub mod swap {
         use super::*;
-        use crate::nervous_system_agent_helpers::sns::swap as nervous_agent_swap;
         use ic_nervous_system_agent::sns::swap::SwapCanister;
         use ic_nns_governance_api::pb::v1::create_service_nervous_system::SwapParameters;
         use ic_sns_swap::pb::v1::{GetOpenTicketResponse, SnsNeuronRecipe};
@@ -2582,13 +2525,7 @@ pub mod sns {
             let agent = PocketIcAgent::new(pocket_ic, buyer);
             let canister = SwapCanister::new(swap_canister_id);
             canister
-                .new_sale_ticket(
-                    &agent,
-                    NewSaleTicketRequest {
-                        amount_icp_e8s,
-                        subaccount: None,
-                    },
-                )
+                .new_sale_ticket(&agent, amount_icp_e8s, None)
                 .await
                 .map_err(|err| err.to_string())
         }
@@ -2601,8 +2538,10 @@ pub mod sns {
         ) -> Result<RefreshBuyerTokensResponse, String> {
             let agent = PocketIcAgent::new(pocket_ic, buyer);
             let canister = SwapCanister::new(swap_canister_id);
-            nervous_agent_swap::refresh_buyer_tokens(&agent, canister, buyer, confirmation_text)
+            canister
+                .refresh_buyer_tokens(&agent, buyer, confirmation_text)
                 .await
+                .map_err(|err| err.to_string())
         }
 
         pub async fn get_buyer_state(
@@ -2611,7 +2550,10 @@ pub mod sns {
             buyer: PrincipalId,
         ) -> Result<GetBuyerStateResponse, String> {
             let canister = SwapCanister::new(swap_canister_id);
-            nervous_agent_swap::get_buyer_state(pocket_ic, canister, buyer).await
+            canister
+                .get_buyer_state(pocket_ic, buyer)
+                .await
+                .map_err(|err| err.to_string())
         }
 
         pub async fn get_open_ticket(
@@ -2634,12 +2576,7 @@ pub mod sns {
         ) -> ErrorRefundIcpResponse {
             let canister = SwapCanister::new(swap_canister_id);
             canister
-                .error_refund_icp(
-                    pocket_ic,
-                    ErrorRefundIcpRequest {
-                        source_principal_id: Some(source_principal_id),
-                    },
-                )
+                .error_refund_icp(pocket_ic, source_principal_id)
                 .await
                 .unwrap()
         }
@@ -2666,7 +2603,7 @@ pub mod sns {
             expected_lifecycle: Lifecycle,
         ) -> Result<(), String> {
             let canister = SwapCanister::new(swap_canister_id);
-            nervous_agent_swap::await_swap_lifecycle(pocket_ic, canister, expected_lifecycle, false)
+            sns_agent_helpers::await_swap_lifecycle(pocket_ic, canister, expected_lifecycle, false)
                 .await
         }
 
@@ -2838,8 +2775,9 @@ pub mod sns {
         ) {
             let agent = PocketIcAgent::new(pocket_ic, direct_participant);
             let canister = SwapCanister::new(swap_canister_id);
-            nervous_agent_swap::participate_in_swap(&agent, canister, amount_icp_excluding_fees)
+            sns_agent_helpers::participate_in_swap(&agent, canister, amount_icp_excluding_fees)
                 .await
+                .unwrap()
         }
 
         pub fn swap_direct_participations(swap_parameters: SwapParameters) -> Vec<Tokens> {

@@ -1,10 +1,12 @@
 use crate::{CallCanisters, ProgressNetwork};
 use crate::{CanisterInfo, Request};
 use candid::Principal;
-use ic_agent::Agent;
+use ic_agent::agent::{RejectCode, RejectResponse};
+use ic_agent::{Agent, AgentError};
 use itertools::{Either, Itertools};
 use serde_cbor::Value;
 use std::collections::BTreeSet;
+use std::time::Duration;
 use thiserror::Error;
 
 #[derive(Error, Debug)]
@@ -140,13 +142,27 @@ impl CallCanisters for Agent {
         self.get_principal().map_err(Self::Error::Identity)
     }
 
-    fn is_canister_stopped_error(&self, _err: &Self::Error) -> bool {
-        todo!("Not implemented yet");
+    fn is_canister_stopped_error(&self, err: &Self::Error) -> bool {
+        match err {
+            AgentCallError::Agent(AgentError::CertifiedReject(RejectResponse {
+                reject_code: RejectCode::CanisterError,
+                reject_message: msg,
+                error_code: Some(error_code),
+            })) => {
+                error_code == "IC0508"
+                    && (msg.contains("is stopped") || msg.contains("is stopping"))
+            }
+            _ => false,
+        }
     }
 }
 
 impl ProgressNetwork for Agent {
-    async fn progress(&self, duration: std::time::Duration) {
+    async fn progress(&self, duration: Duration) {
+        if duration > Duration::from_secs(5) {
+            eprintln!("Waiting more than 5 seconds: {:?}", duration);
+            eprintln!("Consider checking 'progress' calls in the code.");
+        }
         tokio::time::sleep(duration).await;
     }
 }
