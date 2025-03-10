@@ -546,6 +546,15 @@ pub struct SnapshotId {
     pub content: ::prost::alloc::vec::Vec<u8>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
+pub struct TaskQueue {
+    #[prost(message, optional, tag = "1")]
+    pub paused_or_aborted_task: ::core::option::Option<ExecutionTask>,
+    #[prost(enumeration = "OnLowWasmMemoryHookStatus", tag = "2")]
+    pub on_low_wasm_memory_hook_status: i32,
+    #[prost(message, repeated, tag = "3")]
+    pub queue: ::prost::alloc::vec::Vec<ExecutionTask>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CanisterStateBits {
     #[prost(uint64, tag = "2")]
     pub last_full_execution_round: u64,
@@ -650,6 +659,10 @@ pub struct CanisterStateBits {
     pub wasm_memory_threshold: ::core::option::Option<u64>,
     #[prost(enumeration = "OnLowWasmMemoryHookStatus", optional, tag = "53")]
     pub on_low_wasm_memory_hook_status: ::core::option::Option<i32>,
+    /// Contains tasks that need to be executed before processing any input of the
+    /// canister.
+    #[prost(message, optional, tag = "54")]
+    pub tasks: ::core::option::Option<TaskQueue>,
     #[prost(oneof = "canister_state_bits::CanisterStatus", tags = "11, 12, 13")]
     pub canister_status: ::core::option::Option<canister_state_bits::CanisterStatus>,
 }
