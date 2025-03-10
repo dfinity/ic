@@ -331,7 +331,7 @@ impl RemoteDkgResults {
         else {
             error!(
                 logger,
-                "Cannot add a second transcript to a ReshareChainKey transcript"
+                "Cannot add a second transcript to a ReshareChainKey transcript: {id}"
             );
             return;
         };
@@ -351,7 +351,7 @@ impl RemoteDkgResults {
         if old_val.is_some() {
             error!(
                 logger,
-                "Received a dublicate transcript for SetupInitialDKG request"
+                "Received a duplicate transcript for SetupInitialDKG request: {id}"
             );
         }
     }
@@ -370,7 +370,7 @@ pub fn generate_responses_to_remote_dkgs(
             .and_modify(|transcript_result| {
                 transcript_result.add_transcript(id, transcript.clone(), log)
             })
-            .or_insert(RemoteDkgResults::new(id, transcript.clone()));
+            .or_insert_with(|| RemoteDkgResults::new(id, transcript.clone()));
     }
 
     dkg_results
