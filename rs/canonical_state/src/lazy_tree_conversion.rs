@@ -525,7 +525,6 @@ fn status_to_tree(status: &IngressStatus) -> LazyTree<'_> {
 }
 
 const CERTIFIED_DATA_LABEL: &[u8] = b"certified_data";
-const CONTROLLER_LABEL: &[u8] = b"controller";
 const CONTROLLERS_LABEL: &[u8] = b"controllers";
 const METADATA_LABEL: &[u8] = b"metadata";
 const MODULE_HASH_LABEL: &[u8] = b"module_hash";
@@ -552,7 +551,6 @@ impl<'a> CanisterFork<'a> {
         match canister.execution_state.as_ref() {
             Some(execution_state) => match label {
                 CERTIFIED_DATA_LABEL => Some(Blob(&canister.system_state.certified_data[..], None)),
-                CONTROLLER_LABEL => Some(Blob(canister.system_state.controller().as_slice(), None)),
                 CONTROLLERS_LABEL => Some(blob(move || {
                     encode_controllers(&canister.system_state.controllers)
                 })),
@@ -563,7 +561,6 @@ impl<'a> CanisterFork<'a> {
                 _ => None,
             },
             None => match label {
-                CONTROLLER_LABEL => Some(Blob(canister.system_state.controller().as_slice(), None)),
                 CONTROLLERS_LABEL => Some(blob(move || {
                     encode_controllers(&canister.system_state.controllers)
                 })),
