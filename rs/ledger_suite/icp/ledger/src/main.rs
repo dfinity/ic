@@ -1,5 +1,5 @@
 use candid::{candid_method, Decode, Nat, Principal};
-use dfn_candid::{candid, candid_one, CandidOne};
+use dfn_candid::{candid_one, CandidOne};
 #[allow(unused_imports)]
 use dfn_core::BytesS;
 use dfn_core::{
@@ -1371,15 +1371,14 @@ fn archives() -> Archives {
     Archives { archives }
 }
 
-#[export_name = "canister_query get_nodes"]
-fn get_nodes_() {
-    over(candid, |()| {
-        archives()
-            .archives
-            .iter()
-            .map(|archive| archive.canister_id)
-            .collect::<Vec<CanisterId>>()
-    });
+#[query(name = "get_nodes")]
+#[candid_method(query, rename = "get_nodes")]
+fn get_nodes_() -> Vec<CanisterId> {
+    archives()
+        .archives
+        .iter()
+        .map(|archive| archive.canister_id)
+        .collect::<Vec<CanisterId>>()
 }
 
 fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::io::Result<()> {
