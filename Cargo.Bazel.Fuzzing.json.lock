@@ -1,5 +1,5 @@
 {
-  "checksum": "cfdbe73b1df092a66ab76e862a00fab8dd5768c8696162887008c37751e3de87",
+  "checksum": "3f337e88218cbcdc0efaf36384c5d8d3b651449ff3e6424222b6c5b52cbc37ef",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -6973,12 +6973,6 @@
         "compile_data_glob": [
           "**"
         ],
-        "crate_features": {
-          "common": [
-            "runtime"
-          ],
-          "selects": {}
-        },
         "deps": {
           "common": [
             {
@@ -21138,7 +21132,7 @@
               "target": "rlp"
             },
             {
-              "id": "rocksdb 0.22.0",
+              "id": "rocksdb 0.23.0",
               "target": "rocksdb"
             },
             {
@@ -42203,14 +42197,14 @@
       ],
       "license_file": null
     },
-    "librocksdb-sys 0.16.0+8.10.0": {
+    "librocksdb-sys 0.17.1+9.9.3": {
       "name": "librocksdb-sys",
-      "version": "0.16.0+8.10.0",
+      "version": "0.17.1+9.9.3",
       "package_url": "https://github.com/rust-rocksdb/rust-rocksdb",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/librocksdb-sys/0.16.0+8.10.0/download",
-          "sha256": "ce3d60bc059831dc1c83903fb45c103f75db65c5a7bf22272764d9cc683e348c"
+          "url": "https://static.crates.io/crates/librocksdb-sys/0.17.1+9.9.3/download",
+          "sha256": "2b7869a512ae9982f4d46ba482c2a304f1efd80c6412a3d4bf57bb79a619679f"
         }
       },
       "targets": [
@@ -42246,7 +42240,6 @@
         ],
         "crate_features": {
           "common": [
-            "default",
             "static"
           ],
           "selects": {}
@@ -42258,14 +42251,14 @@
               "target": "libc"
             },
             {
-              "id": "librocksdb-sys 0.16.0+8.10.0",
+              "id": "librocksdb-sys 0.17.1+9.9.3",
               "target": "build_script_build"
             }
           ],
           "selects": {}
         },
-        "edition": "2018",
-        "version": "0.16.0+8.10.0"
+        "edition": "2021",
+        "version": "0.17.1+9.9.3"
       },
       "build_script_attrs": {
         "compile_data_glob": [
@@ -42283,10 +42276,6 @@
             {
               "id": "cc 1.2.16",
               "target": "cc"
-            },
-            {
-              "id": "glob 0.3.1",
-              "target": "glob"
             }
           ],
           "selects": {}
@@ -65251,14 +65240,14 @@
       ],
       "license_file": null
     },
-    "rocksdb 0.22.0": {
+    "rocksdb 0.23.0": {
       "name": "rocksdb",
-      "version": "0.22.0",
+      "version": "0.23.0",
       "package_url": "https://github.com/rust-rocksdb/rust-rocksdb",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/rocksdb/0.22.0/download",
-          "sha256": "6bd13e55d6d7b8cd0ea569161127567cd587676c99f4472f779a0279aa60a7a7"
+          "url": "https://static.crates.io/crates/rocksdb/0.23.0/download",
+          "sha256": "26ec73b20525cb235bad420f911473b69f9fe27cc856c5461bccd7e4af037f43"
         }
       },
       "targets": [
@@ -65287,14 +65276,14 @@
               "target": "libc"
             },
             {
-              "id": "librocksdb-sys 0.16.0+8.10.0",
+              "id": "librocksdb-sys 0.17.1+9.9.3",
               "target": "librocksdb_sys"
             }
           ],
           "selects": {}
         },
-        "edition": "2018",
-        "version": "0.22.0"
+        "edition": "2021",
+        "version": "0.23.0"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -94302,7 +94291,7 @@
     "ring 0.17.13",
     "ripemd 0.1.3",
     "rlp 0.5.2",
-    "rocksdb 0.22.0",
+    "rocksdb 0.23.0",
     "rolling-file 0.2.0",
     "rsa 0.9.6",
     "rstest 0.19.0",

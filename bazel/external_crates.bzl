@@ -1090,7 +1090,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.5.2",
             ),
             "rocksdb": crate.spec(
-                version = "^0.22.0",
+                version = "^0.23.0",
                 default_features = False,
             ),
             "rolling-file": crate.spec(
