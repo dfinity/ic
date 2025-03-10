@@ -13,6 +13,7 @@ use std::collections::BTreeMap;
 use std::sync::{Arc, RwLock, RwLockReadGuard};
 
 pub mod data_provider;
+pub mod stable_memory;
 
 type CacheState = (
     RegistryVersion,
