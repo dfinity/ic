@@ -281,7 +281,7 @@ impl SchedulerMetrics {
             open_signature_request_contexts: metrics_registry.histogram_vec(
                 "execution_open_signature_request_contexts",
                 "Number of open signature request contexts by key ID",
-                vec![1.0, 2.0, 3.0, 5.0, 10.0, 15.0, 20.0, 50.0, 100.0],
+                vec![1.0, 2.0, 3.0, 5.0, 10.0, 15.0, 20.0, 50.0],
                 &["key_id"],
             ),
             completed_signature_request_contexts: metrics_registry.int_counter_vec(
