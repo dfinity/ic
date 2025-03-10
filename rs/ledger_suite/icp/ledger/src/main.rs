@@ -35,13 +35,14 @@ use ic_stable_structures::writer::{BufferedWriter, Writer};
 #[cfg(feature = "icp-allowance-getter")]
 use icp_ledger::IcpAllowanceArgs;
 use icp_ledger::{
-    max_blocks_per_request, protobuf, tokens_into_proto, AccountBalanceArgs, AccountIdBlob,
-    AccountIdentifier, AccountIdentifierByteBuf, ArchiveInfo, ArchivedBlocksRange,
-    ArchivedEncodedBlocksRange, Archives, BinaryAccountBalanceArgs, Block, BlockArg, BlockRes,
-    CandidBlock, Decimals, FeatureFlags, GetBlocksArgs, InitArgs, IterBlocksArgs, IterBlocksRes,
-    LedgerCanisterPayload, Memo, Name, Operation, PaymentError, QueryBlocksResponse,
-    QueryEncodedBlocksResponse, SendArgs, Subaccount, Symbol, TipOfChainRes, TotalSupplyArgs,
-    Transaction, TransferArgs, TransferError, TransferFee, TransferFeeArgs, MEMO_SIZE_BYTES,
+    from_proto_bytes, max_blocks_per_request, protobuf, to_proto_bytes, tokens_into_proto,
+    AccountBalanceArgs, AccountIdBlob, AccountIdentifier, AccountIdentifierByteBuf, ArchiveInfo,
+    ArchivedBlocksRange, ArchivedEncodedBlocksRange, Archives, BinaryAccountBalanceArgs, Block,
+    BlockArg, BlockRes, CandidBlock, Decimals, FeatureFlags, GetBlocksArgs, InitArgs,
+    IterBlocksArgs, IterBlocksRes, LedgerCanisterPayload, Memo, Name, Operation, PaymentError,
+    QueryBlocksResponse, QueryEncodedBlocksResponse, SendArgs, Subaccount, Symbol, TipOfChainRes,
+    TotalSupplyArgs, Transaction, TransferArgs, TransferError, TransferFee, TransferFeeArgs,
+    MEMO_SIZE_BYTES,
 };
 use icrc_ledger_types::icrc1::transfer::TransferError as Icrc1TransferError;
 use icrc_ledger_types::icrc2::allowance::{Allowance, AllowanceArgs};
@@ -1269,9 +1270,13 @@ fn transfer_fee_() {
 
 #[export_name = "canister_query total_supply_pb"]
 fn total_supply_() {
-    over(protobuf, |_: TotalSupplyArgs| {
-        tokens_into_proto(total_supply())
-    })
+    let input = ic_cdk::api::call::arg_data_raw();
+    ic_cdk::setup();
+    let _: TotalSupplyArgs =
+        from_proto_bytes(input).expect("failed to decode total_supply_pb args");
+    let res = tokens_into_proto(total_supply());
+    let res_proto = to_proto_bytes(res).expect("failed encode total_supply_pb response");
+    ic_cdk::api::call::reply_raw(&res_proto)
 }
 
 /// Get multiple blocks by *offset into the container* (not BlockIndex) and
