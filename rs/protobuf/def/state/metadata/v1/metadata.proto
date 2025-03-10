@@ -147,6 +147,7 @@ message ReshareChainKeyContext {
   repeated types.v1.NodeId nodes = 3;
   uint64 registry_version = 4;
   Time time = 5;
+  bytes target_id = 6;
 }
 
 message ReshareChainKeyContextTree {
