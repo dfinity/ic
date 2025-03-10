@@ -2014,7 +2014,7 @@ fn test_archives_endpoint() {
                             max_message_size_bytes: None,
                             controller_id: minting_canister_id.into(),
                             more_controller_ids: None,
-                            cycles_for_archive_creation: None,
+                            cycles_for_archive_creation: Some(0),
                             max_transactions_per_response: None,
                         })
                         .build()
@@ -2343,6 +2343,40 @@ fn call_with_cleanup() {
             r.unwrap_err().contains("Failed successfully"),
             "The lock was not released so it can't successfully fail"
         );
+        Ok(())
+    })
+}
+
+#[test]
+fn transfer_fee_pb_test() {
+    local_test_e(|r| async move {
+        let proj = Project::new();
+
+        let minting_account = create_sender(0);
+
+        let ledger = proj
+            .cargo_bin("ledger-canister", &[])
+            .install_(
+                &r,
+                CandidOne(
+                    LedgerCanisterInitPayload::builder()
+                        .minting_account(
+                            CanisterId::try_from(minting_account.get_principal_id())
+                                .unwrap()
+                                .into(),
+                        )
+                        .transfer_fee(Tokens::from_e8s(12345))
+                        .build()
+                        .unwrap(),
+                ),
+            )
+            .await?;
+
+        let fee: TransferFee = ledger
+            .query_("transfer_fee_pb", protobuf, TransferFeeArgs {})
+            .await?;
+        assert_eq!(fee.transfer_fee.get_e8s(), 12345);
+
         Ok(())
     })
 }

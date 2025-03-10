@@ -123,6 +123,20 @@ type RefreshVotingPowerResponse = record {
   // minimal until we discover there is a "real need". YAGNI.
 };
 
+type DisburseMaturity = record {
+  percentage_to_disburse : nat32;
+  to_account : opt Account;
+};
+
+type Account = record {
+  owner: opt principal;
+  subaccount: opt blob;
+};
+
+type DisburseMaturityResponse = record {
+  amount_disbursed_e8s : opt nat64;
+};
+
 // KEEP THIS IN SYNC WITH ManageNeuronCommandRequest!
 type Command = variant {
   Spawn : Spawn;
@@ -138,6 +152,7 @@ type Command = variant {
   MergeMaturity : MergeMaturity;
   Disburse : Disburse;
   RefreshVotingPower : RefreshVotingPower;
+  DisburseMaturity : DisburseMaturity;
 
   // KEEP THIS IN SYNC WITH ManageNeuronCommandRequest!
 };
@@ -157,6 +172,7 @@ type Command_1 = variant {
   MergeMaturity : MergeMaturityResponse;
   Disburse : DisburseResponse;
   RefreshVotingPower : RefreshVotingPowerResponse;
+  DisburseMaturity : DisburseMaturityResponse;
 };
 
 type Command_2 = variant {
@@ -540,6 +556,7 @@ type ManageNeuronCommandRequest = variant {
   MergeMaturity : MergeMaturity;
   Disburse : Disburse;
   RefreshVotingPower : RefreshVotingPower;
+  DisburseMaturity : DisburseMaturity;
 
   // KEEP THIS IN SYNC WITH COMMAND!
 };
@@ -644,6 +661,15 @@ type VotingPowerEconomics = record {
   //
   // Initially, set to 1/12 years.
   clear_following_after_seconds : opt nat64;
+
+  // The minimum dissolve delay a neuron must have in order to be eligible to vote.
+  //
+  // Neurons with a dissolve delay lower than this threshold will not have 
+  // voting power, even if they are otherwise active.
+  //
+  // This value is an essential part of the staking mechanism, promoting
+  // long-term alignment with the network's governance.
+  neuron_minimum_dissolve_delay_to_vote_seconds : opt nat64;
 };
 
 type Neuron = record {

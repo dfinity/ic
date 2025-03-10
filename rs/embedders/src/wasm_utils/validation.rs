@@ -558,6 +558,16 @@ fn get_valid_system_apis_common(I: ValType) -> HashMap<String, HashMap<String, F
             )],
         ),
         (
+            "canister_liquid_cycle_balance128",
+            vec![(
+                API_VERSION_IC0,
+                FunctionSignature {
+                    param_types: vec![I],
+                    return_type: vec![],
+                },
+            )],
+        ),
+        (
             "msg_cycles_available128",
             vec![(
                 API_VERSION_IC0,
@@ -654,6 +664,66 @@ fn get_valid_system_apis_common(I: ValType) -> HashMap<String, HashMap<String, F
                 FunctionSignature {
                     param_types: vec![I, I, I],
                     return_type: vec![],
+                },
+            )],
+        ),
+        (
+            "cost_call",
+            vec![(
+                API_VERSION_IC0,
+                FunctionSignature {
+                    param_types: vec![ValType::I64, ValType::I64, I],
+                    return_type: vec![],
+                },
+            )],
+        ),
+        (
+            "cost_create_canister",
+            vec![(
+                API_VERSION_IC0,
+                FunctionSignature {
+                    param_types: vec![I],
+                    return_type: vec![],
+                },
+            )],
+        ),
+        (
+            "cost_http_request",
+            vec![(
+                API_VERSION_IC0,
+                FunctionSignature {
+                    param_types: vec![ValType::I64, ValType::I64, I],
+                    return_type: vec![],
+                },
+            )],
+        ),
+        (
+            "cost_sign_with_ecdsa",
+            vec![(
+                API_VERSION_IC0,
+                FunctionSignature {
+                    param_types: vec![I, I, ValType::I32, I],
+                    return_type: vec![ValType::I32],
+                },
+            )],
+        ),
+        (
+            "cost_sign_with_schnorr",
+            vec![(
+                API_VERSION_IC0,
+                FunctionSignature {
+                    param_types: vec![I, I, ValType::I32, I],
+                    return_type: vec![ValType::I32],
+                },
+            )],
+        ),
+        (
+            "cost_vetkd_derive_encrypted_key",
+            vec![(
+                API_VERSION_IC0,
+                FunctionSignature {
+                    param_types: vec![I, I, ValType::I32, I],
+                    return_type: vec![ValType::I32],
                 },
             )],
         ),

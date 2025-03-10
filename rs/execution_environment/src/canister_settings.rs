@@ -3,6 +3,7 @@ use ic_cycles_account_manager::{CyclesAccountManager, ResourceSaturation};
 use ic_error_types::{ErrorCode, UserError};
 use ic_interfaces::execution_environment::SubnetAvailableMemory;
 use ic_management_canister_types_private::{CanisterSettingsArgs, LogVisibilityV2};
+use ic_replicated_state::MessageMemoryUsage;
 use ic_types::{
     ComputeAllocation, Cycles, InvalidComputeAllocationError, InvalidMemoryAllocationError,
     MemoryAllocation, PrincipalId,
@@ -10,7 +11,7 @@ use ic_types::{
 use num_traits::{cast::ToPrimitive, SaturatingSub};
 use std::convert::TryFrom;
 
-use crate::canister_manager::CanisterManagerError;
+use crate::canister_manager::types::CanisterManagerError;
 
 /// These limit comes from the spec and is not expected to change,
 /// which is why it is not part of the replica config.
@@ -407,7 +408,7 @@ impl ValidatedCanisterSettings {
 pub(crate) fn validate_canister_settings(
     settings: CanisterSettings,
     canister_memory_usage: NumBytes,
-    canister_message_memory_usage: NumBytes,
+    canister_message_memory_usage: MessageMemoryUsage,
     canister_memory_allocation: MemoryAllocation,
     subnet_available_memory: &SubnetAvailableMemory,
     subnet_memory_saturation: &ResourceSaturation,

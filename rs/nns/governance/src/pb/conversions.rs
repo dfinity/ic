@@ -905,7 +905,6 @@ impl From<pb_api::manage_neuron::RefreshVotingPower> for pb::manage_neuron::Refr
         Self {}
     }
 }
-
 impl From<pb::manage_neuron::DisburseToNeuron> for pb_api::manage_neuron::DisburseToNeuron {
     fn from(item: pb::manage_neuron::DisburseToNeuron) -> Self {
         Self {
@@ -974,6 +973,23 @@ impl From<pb_api::manage_neuron::ClaimOrRefresh> for pb::manage_neuron::ClaimOrR
     fn from(item: pb_api::manage_neuron::ClaimOrRefresh) -> Self {
         Self {
             by: item.by.map(|x| x.into()),
+        }
+    }
+}
+
+impl From<pb::manage_neuron::DisburseMaturity> for pb_api::manage_neuron::DisburseMaturity {
+    fn from(item: pb::manage_neuron::DisburseMaturity) -> Self {
+        Self {
+            percentage_to_disburse: item.percentage_to_disburse,
+            to_account: item.to_account.map(|x| x.into()),
+        }
+    }
+}
+impl From<pb_api::manage_neuron::DisburseMaturity> for pb::manage_neuron::DisburseMaturity {
+    fn from(item: pb_api::manage_neuron::DisburseMaturity) -> Self {
+        Self {
+            percentage_to_disburse: item.percentage_to_disburse,
+            to_account: item.to_account.map(|x| x.into()),
         }
     }
 }
@@ -1091,6 +1107,9 @@ impl From<pb::manage_neuron::Command> for pb_api::manage_neuron::Command {
             pb::manage_neuron::Command::RefreshVotingPower(v) => {
                 pb_api::manage_neuron::Command::RefreshVotingPower(v.into())
             }
+            pb::manage_neuron::Command::DisburseMaturity(v) => {
+                pb_api::manage_neuron::Command::DisburseMaturity(v.into())
+            }
         }
     }
 }
@@ -1129,6 +1148,9 @@ impl From<pb_api::manage_neuron::Command> for pb::manage_neuron::Command {
             }
             pb_api::manage_neuron::Command::RefreshVotingPower(v) => {
                 pb::manage_neuron::Command::RefreshVotingPower(v.into())
+            }
+            pb_api::manage_neuron::Command::DisburseMaturity(v) => {
+                pb::manage_neuron::Command::DisburseMaturity(v.into())
             }
         }
     }
@@ -1174,6 +1196,9 @@ impl From<pb_api::ManageNeuronCommandRequest> for pb::manage_neuron::Command {
             }
             pb_api::ManageNeuronCommandRequest::RefreshVotingPower(v) => {
                 pb::manage_neuron::Command::RefreshVotingPower(v.into())
+            }
+            pb_api::ManageNeuronCommandRequest::DisburseMaturity(v) => {
+                pb::manage_neuron::Command::DisburseMaturity(v.into())
             }
         }
     }
@@ -1886,6 +1911,8 @@ impl From<pb_api::VotingPowerEconomics> for pb::VotingPowerEconomics {
             start_reducing_voting_power_after_seconds: item
                 .start_reducing_voting_power_after_seconds,
             clear_following_after_seconds: item.clear_following_after_seconds,
+            neuron_minimum_dissolve_delay_to_vote_seconds: item
+                .neuron_minimum_dissolve_delay_to_vote_seconds,
         }
     }
 }
@@ -1896,6 +1923,8 @@ impl From<pb::VotingPowerEconomics> for pb_api::VotingPowerEconomics {
             start_reducing_voting_power_after_seconds: item
                 .start_reducing_voting_power_after_seconds,
             clear_following_after_seconds: item.clear_following_after_seconds,
+            neuron_minimum_dissolve_delay_to_vote_seconds: item
+                .neuron_minimum_dissolve_delay_to_vote_seconds,
         }
     }
 }
@@ -3771,6 +3800,23 @@ impl From<pb_api::restore_aging_summary::NeuronGroupType>
             pb_api::restore_aging_summary::NeuronGroupType::StakeSameAgingSame => {
                 pb::restore_aging_summary::NeuronGroupType::StakeSameAgingSame
             }
+        }
+    }
+}
+
+impl From<pb::Account> for pb_api::Account {
+    fn from(item: pb::Account) -> Self {
+        Self {
+            owner: item.owner,
+            subaccount: item.subaccount.map(|x| x.subaccount),
+        }
+    }
+}
+impl From<pb_api::Account> for pb::Account {
+    fn from(item: pb_api::Account) -> Self {
+        Self {
+            owner: item.owner,
+            subaccount: item.subaccount.map(|x| pb::Subaccount { subaccount: x }),
         }
     }
 }

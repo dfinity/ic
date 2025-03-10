@@ -15,10 +15,10 @@ use crate::{
         test_env_api::{
             get_dependency_path, get_dependency_path_from_env, get_elasticsearch_hosts,
             get_ic_os_update_img_sha256, get_ic_os_update_img_url,
-            get_mainnet_ic_os_update_img_url, get_malicious_ic_os_update_img_sha256,
-            get_malicious_ic_os_update_img_url, read_dependency_from_env_to_string,
-            read_dependency_to_string, HasIcDependencies, HasTopologySnapshot, IcNodeContainer,
-            InitialReplicaVersion, NodesInfo,
+            get_mainnet_ic_os_update_img_url, get_mainnet_nns_revision,
+            get_malicious_ic_os_update_img_sha256, get_malicious_ic_os_update_img_url,
+            read_dependency_from_env_to_string, HasIcDependencies, HasTopologySnapshot,
+            IcNodeContainer, InitialReplicaVersion, NodesInfo,
         },
         test_setup::InfraProvider,
     },
@@ -91,8 +91,7 @@ pub fn init_ic(
     let dummy_hash = "60958ccac3e5dfa6ae74aa4f8d6206fd33a5fc9546b8abaad65e3f1c4023c5bf".to_string();
 
     let replica_version = if ic.with_mainnet_config {
-        let mainnet_nns_subnet_revisions_path = "mainnet_nns_subnet_revision.txt".to_string();
-        read_dependency_to_string(mainnet_nns_subnet_revisions_path.clone())?
+        get_mainnet_nns_revision()
     } else {
         read_dependency_from_env_to_string("ENV_DEPS__IC_VERSION_FILE")?
     };
@@ -594,7 +593,7 @@ fn configure_setupos_image(
     nns_url: &Url,
     nns_public_key: &str,
 ) -> anyhow::Result<PathBuf> {
-    let setupos_image = get_dependency_path_from_env("ENV_DEPS__DEV_SETUPOS_IMG_TAR_ZST");
+    let setupos_image = get_dependency_path_from_env("ENV_DEPS__SETUPOS_IMG_PATH");
     let setupos_inject_configs = get_dependency_path_from_env("ENV_DEPS__SETUPOS_INJECT_CONFIGS");
     let setupos_disable_checks = get_dependency_path_from_env("ENV_DEPS__SETUPOS_DISABLE_CHECKS");
 

@@ -50,10 +50,11 @@ common --flag_alias=k8s=//rs/tests:k8s
 common --flag_alias=timeout_value=//bazel:timeout_value
 
 common:stamped --workspace_status_command='$(pwd)/bazel/workspace_status.sh --stamp'
+common:release --config=stamped --s3_upload=True
 
 # Exclude system tests by default
 # https://github.com/bazelbuild/bazel/issues/8439
-build --build_tag_filters="-system_test,-upload,-fuzz_test"
+build --build_tag_filters="-system_test,-fuzz_test"
 test --test_tag_filters="-system_test,-fuzz_test"
 test:alltests --test_tag_filters=""
 test:paritytests --test_tag_filters="-system_test"
@@ -70,10 +71,6 @@ test:systest --test_output=streamed --test_tag_filters=
 
 build:testnet --build_tag_filters=
 test:testnet --test_output=streamed --test_tag_filters=
-
-# For sandboxed actions, mount an empty, writable directory at this absolute path
-# (if supported by the sandboxing implementation, ignored otherwise).
-test --sandbox_tmpfs_path=/tmp
 
 # TODO(IDX-2374): enable alltests in CI when we will have actual system tests.
 #test:ci --config=alltests

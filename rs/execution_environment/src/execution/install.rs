@@ -3,7 +3,7 @@
 //! See https://internetcomputer.org/docs/current/references/ic-interface-spec/#ic-install_code
 
 use crate::as_round_instructions;
-use crate::canister_manager::{
+use crate::canister_manager::types::{
     DtsInstallCodeResult, InstallCodeContext, PausedInstallCodeExecution,
 };
 use crate::execution::common::{ingress_status_with_processing_state, update_round_limits};

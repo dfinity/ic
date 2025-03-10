@@ -4,6 +4,7 @@ package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
     # Keep sorted.
+    "//packages/ic-error-types",
     "//rs/canister_sandbox:backend_lib",
     "//rs/config",
     "//rs/crypto/test_utils/ni-dkg",
@@ -26,7 +27,6 @@ DEPENDENCIES = [
     "//rs/test_utilities/consensus",
     "//rs/test_utilities/registry",
     "//rs/test_utilities/types",
-    "//rs/types/error_types",
     "//rs/types/management_canister_types",
     "//rs/types/types",
     "@crate_index//:clap",

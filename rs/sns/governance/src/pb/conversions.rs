@@ -574,6 +574,44 @@ impl From<pb::AdvanceSnsTargetVersion> for pb_api::AdvanceSnsTargetVersion {
     }
 }
 
+impl From<pb_api::SetTopicsForCustomProposals> for pb::SetTopicsForCustomProposals {
+    fn from(item: pb_api::SetTopicsForCustomProposals) -> Self {
+        Self {
+            custom_function_id_to_topic: item
+                .custom_function_id_to_topic
+                .into_iter()
+                .map(|(custom_function_id, topic)| {
+                    let topic = i32::from(pb::Topic::from(topic));
+                    (custom_function_id, topic)
+                })
+                .collect(),
+        }
+    }
+}
+impl From<pb::SetTopicsForCustomProposals> for pb_api::SetTopicsForCustomProposals {
+    fn from(item: pb::SetTopicsForCustomProposals) -> Self {
+        let custom_function_id_to_topic = item
+            .custom_function_id_to_topic
+            .into_iter()
+            .filter_map(|(custom_function_id, topic)| {
+                let Ok(topic) = pb::Topic::try_from(topic) else {
+                    return None;
+                };
+
+                let Ok(topic) = pb_api::topics::Topic::try_from(topic) else {
+                    return None;
+                };
+
+                Some((custom_function_id, topic))
+            })
+            .collect();
+
+        Self {
+            custom_function_id_to_topic,
+        }
+    }
+}
+
 impl From<pb::Proposal> for pb_api::Proposal {
     fn from(item: pb::Proposal) -> Self {
         Self {
@@ -642,6 +680,9 @@ impl From<pb::proposal::Action> for pb_api::proposal::Action {
             pb::proposal::Action::AdvanceSnsTargetVersion(v) => {
                 pb_api::proposal::Action::AdvanceSnsTargetVersion(v.into())
             }
+            pb::proposal::Action::SetTopicsForCustomProposals(v) => {
+                pb_api::proposal::Action::SetTopicsForCustomProposals(v.into())
+            }
         }
     }
 }
@@ -691,6 +732,9 @@ impl From<pb_api::proposal::Action> for pb::proposal::Action {
             }
             pb_api::proposal::Action::AdvanceSnsTargetVersion(v) => {
                 pb::proposal::Action::AdvanceSnsTargetVersion(v.into())
+            }
+            pb_api::proposal::Action::SetTopicsForCustomProposals(v) => {
+                pb::proposal::Action::SetTopicsForCustomProposals(v.into())
             }
         }
     }
@@ -924,6 +968,12 @@ impl From<pb::ProposalData> for pb_api::ProposalData {
             minimum_yes_proportion_of_total: item.minimum_yes_proportion_of_total,
             minimum_yes_proportion_of_exercised: item.minimum_yes_proportion_of_exercised,
             action_auxiliary: item.action_auxiliary.map(|x| x.into()),
+            topic: item.topic.and_then(|topic| {
+                let Ok(topic) = pb::Topic::try_from(topic) else {
+                    return None;
+                };
+                pb_api::topics::Topic::try_from(topic).ok()
+            }),
         }
     }
 }
@@ -956,6 +1006,7 @@ impl From<pb_api::ProposalData> for pb::ProposalData {
             minimum_yes_proportion_of_total: item.minimum_yes_proportion_of_total,
             minimum_yes_proportion_of_exercised: item.minimum_yes_proportion_of_exercised,
             action_auxiliary: item.action_auxiliary.map(|x| x.into()),
+            topic: item.topic.map(|topic| i32::from(pb::Topic::from(topic))),
         }
     }
 }
