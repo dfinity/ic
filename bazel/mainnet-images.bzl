@@ -27,7 +27,7 @@ def mainnet_images():
     )
 
     http_file(
-        name = "mainnet_hostos_shas",
+        name = "mainnet_hostos_update_img_shas",
         downloaded_file_path = "SHA256SUMS",
         url = base_download_url(MAINNET_REVISION, "host-os", True, False) + "SHA256SUMS",
     )
@@ -53,8 +53,8 @@ def mainnet_images_support():
 
     native.genrule(
         name = "mainnet_hostos_sha_file",
-        srcs = ["@mainnet_hostos_shas//file"],
+        srcs = ["@mainnet_hostos_update_img_shas//file"],
         outs = ["mainnet_hostos.sha256"],
-        cmd = "sed -n '2p' $(location @mainnet_hostos_shas//file) | cut -d ' ' -f 1 > $@",
+        cmd = "sed -n '2p' $(location @mainnet_hostos_update_img_shas//file) | cut -d ' ' -f 1 > $@",
         tags = ["manual"],
     )

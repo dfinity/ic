@@ -258,8 +258,8 @@ def system_test(
 
     if uses_hostos_mainnet:
         icos_images["ENV_DEPS__MAINNET_HOSTOS_VERSION_FILE"] = "//rs/tests:mainnet_hostos_version_file"
-        icos_images["ENV_DEPS__MAINNET_HOSTOS_URL_FILE"] = "//rs/tests:mainnet_hostos_url_file"
-        icos_images["ENV_DEPS__MAINNET_HOSTOS_SHA_FILE"] = "//rs/tests:mainnet_hostos_sha_file"
+        icos_images["ENV_DEPS__MAINNET_HOSTOS_UPDATE_IMG_URL_FILE"] = "//rs/tests:mainnet_hostos_url_file"
+        icos_images["ENV_DEPS__MAINNET_HOSTOS_UPDATE_IMG_SHA_FILE"] = "//rs/tests:mainnet_hostos_sha_file"
 
     if uses_setupos_dev:
         # Note: SetupOS is still passed directly by path, as it needs some local processing.
