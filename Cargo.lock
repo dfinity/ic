@@ -2032,7 +2032,7 @@ dependencies = [
  "certificate_orchestrator_interface",
  "chacha20poly1305",
  "clap 4.5.27",
- "cloudflare 0.12.0 (git+https://github.com/dfinity/cloudflare-rs.git?rev=a6538a036926bd756986c9c0a5de356daef48881)",
+ "cloudflare",
  "flate2",
  "futures",
  "http 1.2.0",
@@ -5934,7 +5934,7 @@ dependencies = [
 [[package]]
 name = "ic-bn-lib"
 version = "0.1.0"
-source = "git+https://github.com/luc-blaeser/ic-bn-lib?branch=luc/drun-build#102a64253d1ce7e58a31829b4dcc82ea44e7cf03"
+source = "git+https://github.com/luc-blaeser/ic-bn-lib?branch=luc%2Fdrun-build#102a64253d1ce7e58a31829b4dcc82ea44e7cf03"
 dependencies = [
  "ahash 0.8.11",
  "anyhow",
@@ -5947,7 +5947,7 @@ dependencies = [
  "chacha20poly1305",
  "clap 4.5.27",
  "clap_derive 4.5.24",
- "cloudflare 0.12.0 (git+https://github.com/cloudflare/cloudflare-rs.git?rev=f14720e42184ee176a97676e85ef2d2d85bc3aae)",
+ "cloudflare",
  "derive-new",
  "fqdn 0.4.5",
  "futures",
