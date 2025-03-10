@@ -1518,6 +1518,7 @@ fn test_deciding_voting_power_adjustment_factor() {
     let voting_power_economics = VotingPowerEconomics {
         start_reducing_voting_power_after_seconds: Some(60),
         clear_following_after_seconds: Some(30),
+        neuron_minimum_dissolve_delay_to_vote_seconds: Some(60),
     };
 
     let deciding_voting_power = |seconds_since_refresh| {

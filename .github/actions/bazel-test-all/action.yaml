@@ -8,6 +8,8 @@ inputs:
     required: true
   BUILDEVENT_APIKEY:
     required: false
+  CLOUD_CREDENTIALS_CONTENT:
+    required: false
   SSH_PRIVATE_KEY_BACKUP_POD:
     required: false
   GPG_PASSPHRASE:
