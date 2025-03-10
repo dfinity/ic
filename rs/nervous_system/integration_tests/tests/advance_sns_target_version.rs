@@ -1,11 +1,9 @@
-use ic_nervous_system_integration_tests::pocket_ic_helpers::{
-    await_with_timeout,
-    sns::{
-        self,
-        governance::{
-            set_automatically_advance_target_version_flag, EXPECTED_UPGRADE_DURATION_MAX_SECONDS,
-            EXPECTED_UPGRADE_STEPS_REFRESH_MAX_SECONDS,
-        },
+use ic_nervous_system_agent::helpers::await_with_timeout;
+use ic_nervous_system_integration_tests::pocket_ic_helpers::sns::{
+    self,
+    governance::{
+        set_automatically_advance_target_version_flag, EXPECTED_UPGRADE_DURATION_MAX_SECONDS,
+        EXPECTED_UPGRADE_STEPS_REFRESH_MAX_SECONDS,
     },
 };
 use ic_nervous_system_integration_tests::{
