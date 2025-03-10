@@ -1304,33 +1304,49 @@ fn total_supply_() {
 /// with height 100.
 #[export_name = "canister_query iter_blocks_pb"]
 fn iter_blocks_() {
-    over(protobuf, |IterBlocksArgs { start, length }| {
-        let length =
-            std::cmp::min(length, max_blocks_per_request(&PrincipalId::from(caller()))) as u64;
-        let start = start as u64;
-        let blocks = LEDGER
-            .read()
-            .unwrap()
-            .blockchain
-            .blocks
-            .get_blocks(start..start + length);
-        IterBlocksRes(blocks)
-    });
+    ic_cdk::setup();
+    let args: IterBlocksArgs =
+        from_proto_bytes(arg_data_raw()).expect("failed to decode iter_blocks_pb argument");
+
+    let length = std::cmp::min(
+        args.length,
+        max_blocks_per_request(&PrincipalId::from(caller())),
+    ) as u64;
+    let start = args.start as u64;
+    let blocks = LEDGER
+        .read()
+        .unwrap()
+        .blockchain
+        .blocks
+        .get_blocks(start..start + length);
+
+    let res =
+        to_proto_bytes(IterBlocksRes(blocks)).expect("failed to encode iter_blocks_pb response");
+    reply_raw(&res)
 }
 
 /// Get multiple blocks by BlockIndex and length. If the query is outside the
 /// range stored in the Node the result is an error.
 #[export_name = "canister_query get_blocks_pb"]
 fn get_blocks_() {
-    over(protobuf, |GetBlocksArgs { start, length }| {
-        let length = std::cmp::min(
-            length,
-            max_blocks_per_request(&PrincipalId::from(caller())) as u64,
-        );
-        let blockchain = &LEDGER.read().unwrap().blockchain;
-        let start_offset = blockchain.num_archived_blocks();
-        icp_ledger::get_blocks_ledger(&blockchain.blocks, start_offset, start, length as usize)
-    });
+    ic_cdk::setup();
+    let args: GetBlocksArgs =
+        from_proto_bytes(arg_data_raw()).expect("failed to decode get_blocks_pb argument");
+
+    let length = std::cmp::min(
+        args.length,
+        max_blocks_per_request(&PrincipalId::from(caller())) as u64,
+    );
+    let blockchain = &LEDGER.read().unwrap().blockchain;
+    let start_offset = blockchain.num_archived_blocks();
+    let res = icp_ledger::get_blocks_ledger(
+        &blockchain.blocks,
+        start_offset,
+        args.start,
+        length as usize,
+    );
+    let res_proto = to_proto_bytes(res).expect("failed to encode get_blocks_pb respone");
+    reply_raw(&res_proto)
 }
 
 #[query]
