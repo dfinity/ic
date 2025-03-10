@@ -1911,6 +1911,8 @@ impl From<pb_api::VotingPowerEconomics> for pb::VotingPowerEconomics {
             start_reducing_voting_power_after_seconds: item
                 .start_reducing_voting_power_after_seconds,
             clear_following_after_seconds: item.clear_following_after_seconds,
+            neuron_minimum_dissolve_delay_to_vote_seconds: item
+                .neuron_minimum_dissolve_delay_to_vote_seconds,
         }
     }
 }
@@ -1921,6 +1923,8 @@ impl From<pb::VotingPowerEconomics> for pb_api::VotingPowerEconomics {
             start_reducing_voting_power_after_seconds: item
                 .start_reducing_voting_power_after_seconds,
             clear_following_after_seconds: item.clear_following_after_seconds,
+            neuron_minimum_dissolve_delay_to_vote_seconds: item
+                .neuron_minimum_dissolve_delay_to_vote_seconds,
         }
     }
 }

@@ -1,3 +1,4 @@
+# Patch for issue: https://github.com/bytecodealliance/wasmtime/pull/10334
 diff --git a/cranelift/codegen/meta/src/isle.rs b/cranelift/codegen/meta/src/isle.rs
 index 844e45230..dcd23c3c4 100644
 --- a/cranelift/codegen/meta/src/isle.rs

@@ -1,3 +1,4 @@
+# Patch for issue: https://github.com/bytecodealliance/wasmtime/pull/10334
 diff --git a/cranelift/assembler-x64/src/main.rs b/cranelift/assembler-x64/src/main.rs
 index bd991233b..248667e05 100644
 --- a/cranelift/assembler-x64/src/main.rs
