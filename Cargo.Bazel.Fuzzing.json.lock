@@ -1,5 +1,5 @@
 {
-  "checksum": "3f337e88218cbcdc0efaf36384c5d8d3b651449ff3e6424222b6c5b52cbc37ef",
+  "checksum": "9d1b53d868b44112c302da4be6cd08fef496c04233d2e1d0dbeeca80d6a35512",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -65103,7 +65103,7 @@
             ],
             "cfg(all(any(all(target_arch = \"aarch64\", target_endian = \"little\"), all(target_arch = \"arm\", target_endian = \"little\")), any(target_os = \"android\", target_os = \"linux\")))": [
               {
-                "id": "libc 0.2.158",
+                "id": "libc 0.2.170",
                 "target": "libc"
               }
             ]
