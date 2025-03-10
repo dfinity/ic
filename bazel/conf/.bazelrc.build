@@ -83,6 +83,7 @@ test:ci --flaky_test_attempts=default
 # So that developers can build in debug mode.
 build:dev --compilation_mode=fastbuild
 build:macos_ci --build_tag_filters="-system_test,-fuzz_test"
+build:macos_ci --action_env="LIBCLANG_PATH=/opt/homebrew/opt/llvm/lib"
 
 # A config to get faster compilation feedback by skipping code generation.
 # We aim to do essentially the same thing as cargo check (https://doc.rust-lang.org/cargo/commands/cargo-check.html), which is to only emit metadata(.rmeta) files.
