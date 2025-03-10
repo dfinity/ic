@@ -600,7 +600,7 @@ async fn heartbeat() {
 fn manage_neuron_pb() {
     debug_log("manage_neuron_pb");
     panic_with_probability(
-        0.1,
+        0.7,
         "manage_neuron_pb is deprecated. Please use manage_neuron instead.",
     );
 
@@ -635,7 +635,7 @@ fn list_proposals_pb() {
 fn list_neurons_pb() {
     debug_log("list_neurons_pb");
     panic_with_probability(
-        0.1,
+        0.7,
         "list_neurons_pb is deprecated. Please use list_neurons instead.",
     );
 

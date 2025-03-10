@@ -81,8 +81,8 @@ fn test_neuron_migration_from_heap_to_stable() {
         "governance_garbage_collectable_neurons_count",
         0,
     );
-    assert_metric(&state_machine, "governance_heap_neuron_count", 1);
-    assert_metric(&state_machine, "governance_stable_memory_neuron_count", 0);
+    assert_metric(&state_machine, "governance_heap_neuron_count", 0);
+    assert_metric(&state_machine, "governance_stable_memory_neuron_count", 1);
 
     // Advance time and disburse the neuron so that it's empty.
     nns_start_dissolving(&state_machine, test_user_principal, neuron_id).unwrap();
