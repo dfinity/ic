@@ -27,15 +27,19 @@ use ic_types::{
 use ic_utils::deterministic_operations::deterministic_copy_from_slice;
 use ic_wasm_types::doc_ref;
 use request_in_prep::{into_request, RequestInPrep};
-use sandbox_safe_system_state::{CanisterStatusView, SandboxSafeSystemState, SystemStateChanges};
+use sandbox_safe_system_state::{
+    CanisterStatusView, SandboxSafeSystemState, SystemStateModifications,
+};
 use serde::{Deserialize, Serialize};
 use stable_memory::StableMemory;
 use std::{
+    collections::BTreeMap,
     convert::{From, TryFrom},
     rc::Rc,
 };
 
 pub mod cycles_balance_change;
+use cycles_balance_change::CyclesBalanceChange;
 mod request_in_prep;
 mod routing;
 pub mod sandbox_safe_system_state;
@@ -266,6 +270,7 @@ pub enum ApiType {
         #[serde(with = "serde_bytes")]
         incoming_payload: Vec<u8>,
         caller: PrincipalId,
+        call_context_id: CallContextId,
         #[serde(with = "serde_bytes")]
         response_data: Vec<u8>,
         response_status: ResponseStatus,
@@ -422,11 +427,17 @@ impl ApiType {
         }
     }
 
-    pub fn replicated_query(time: Time, incoming_payload: Vec<u8>, caller: PrincipalId) -> Self {
+    pub fn replicated_query(
+        time: Time,
+        incoming_payload: Vec<u8>,
+        caller: PrincipalId,
+        call_context_id: CallContextId,
+    ) -> Self {
         Self::ReplicatedQuery {
             time,
             incoming_payload,
             caller,
+            call_context_id,
             response_data: vec![],
             response_status: ResponseStatus::NotRepliedYet,
             max_reply_size: MAX_INTER_CANISTER_PAYLOAD_IN_BYTES,
@@ -582,12 +593,14 @@ impl ApiType {
             | ApiType::PreUpgrade { .. }
             | ApiType::Cleanup { .. }
             | ApiType::InspectMessage { .. }
-            | ApiType::ReplicatedQuery { .. }
             | ApiType::NonReplicatedQuery {
                 query_kind: NonReplicatedQueryKind::Pure,
                 ..
             } => None,
             ApiType::Update {
+                call_context_id, ..
+            }
+            | ApiType::ReplicatedQuery {
                 call_context_id, ..
             }
             | ApiType::NonReplicatedQuery {
@@ -1399,11 +1412,11 @@ impl SystemApiImpl {
             | ApiType::Init { .. }
             | ApiType::SystemTask { .. }
             | ApiType::Cleanup { .. }
-            | ApiType::ReplicatedQuery { .. }
             | ApiType::PreUpgrade { .. }
             | ApiType::NonReplicatedQuery { .. }
             | ApiType::InspectMessage { .. } => Err(self.error_for(method_name)),
             ApiType::Update { .. }
+            | ApiType::ReplicatedQuery { .. }
             | ApiType::ReplyCallback { .. }
             | ApiType::RejectCallback { .. } => {
                 if self.execution_parameters.execution_mode == ExecutionMode::NonReplicated {
@@ -1464,10 +1477,10 @@ impl SystemApiImpl {
             | ApiType::SystemTask { .. }
             | ApiType::PreUpgrade { .. }
             | ApiType::Cleanup { .. }
-            | ApiType::ReplicatedQuery { .. }
             | ApiType::NonReplicatedQuery { .. }
             | ApiType::InspectMessage { .. } => Err(self.error_for(method_name)),
             ApiType::Update { .. }
+            | ApiType::ReplicatedQuery { .. }
             | ApiType::ReplyCallback { .. }
             | ApiType::RejectCallback { .. } => {
                 if self.execution_parameters.execution_mode == ExecutionMode::NonReplicated {
@@ -1481,12 +1494,60 @@ impl SystemApiImpl {
         }
     }
 
-    pub fn into_system_state_changes(self) -> SystemStateChanges {
-        self.sandbox_safe_system_state.system_state_changes
-    }
-
-    pub fn take_system_state_changes(&mut self) -> SystemStateChanges {
-        self.sandbox_safe_system_state.take_changes()
+    pub fn take_system_state_modifications(&mut self) -> SystemStateModifications {
+        let system_state_modifications = self.sandbox_safe_system_state.take_changes();
+        match self.api_type {
+            // List all fields of `SystemStateModifications` so that
+            // there's an explicit decision that needs to be made
+            // for each context when a new field is added.
+            ApiType::InspectMessage { .. } => SystemStateModifications {
+                new_certified_data: None,
+                callback_updates: vec![],
+                cycles_balance_change: CyclesBalanceChange::zero(),
+                reserved_cycles: Cycles::zero(),
+                consumed_cycles_by_use_case: BTreeMap::new(),
+                call_context_balance_taken: None,
+                request_slots_used: BTreeMap::new(),
+                requests: vec![],
+                new_global_timer: None,
+                canister_log: Default::default(),
+                on_low_wasm_memory_hook_condition_check_result: None,
+            },
+            ApiType::NonReplicatedQuery { .. } => SystemStateModifications {
+                new_certified_data: None,
+                callback_updates: system_state_modifications.callback_updates,
+                cycles_balance_change: CyclesBalanceChange::zero(),
+                reserved_cycles: Cycles::zero(),
+                consumed_cycles_by_use_case: BTreeMap::new(),
+                call_context_balance_taken: None,
+                request_slots_used: system_state_modifications.request_slots_used,
+                requests: system_state_modifications.requests,
+                new_global_timer: None,
+                canister_log: Default::default(),
+                on_low_wasm_memory_hook_condition_check_result: None,
+            },
+            ApiType::ReplicatedQuery { .. } => SystemStateModifications {
+                new_certified_data: None,
+                callback_updates: vec![],
+                cycles_balance_change: system_state_modifications.cycles_balance_change,
+                reserved_cycles: Cycles::zero(),
+                consumed_cycles_by_use_case: system_state_modifications.consumed_cycles_by_use_case,
+                call_context_balance_taken: system_state_modifications.call_context_balance_taken,
+                request_slots_used: BTreeMap::new(),
+                requests: vec![],
+                new_global_timer: None,
+                canister_log: system_state_modifications.canister_log,
+                on_low_wasm_memory_hook_condition_check_result: None,
+            },
+            ApiType::Start { .. }
+            | ApiType::Init { .. }
+            | ApiType::SystemTask { .. }
+            | ApiType::PreUpgrade { .. }
+            | ApiType::Update { .. }
+            | ApiType::Cleanup { .. }
+            | ApiType::ReplyCallback { .. }
+            | ApiType::RejectCallback { .. } => system_state_modifications,
+        }
     }
 
     pub fn stable_memory_size(&self) -> NumWasmPages {
@@ -3126,7 +3187,7 @@ impl SystemApi for SystemApiImpl {
 
                 // Update the certified data.
                 self.sandbox_safe_system_state
-                    .system_state_changes
+                    .system_state_modifications
                     .new_certified_data = Some(heap[src..src + size].to_vec());
                 Ok(())
             }
@@ -3396,15 +3457,18 @@ impl SystemApi for SystemApiImpl {
         let result = match &self.api_type {
             ApiType::Start { .. }
             | ApiType::Init { .. }
-            | ApiType::ReplyCallback { .. }
-            | ApiType::RejectCallback { .. }
             | ApiType::Cleanup { .. }
             | ApiType::PreUpgrade { .. }
-            | ApiType::InspectMessage { .. }
             | ApiType::Update { .. }
             | ApiType::SystemTask { .. }
             | ApiType::ReplicatedQuery { .. } => Ok(1),
-            ApiType::NonReplicatedQuery { .. } => Ok(0),
+            ApiType::ReplyCallback { .. } | ApiType::RejectCallback { .. } => {
+                match self.execution_parameters.execution_mode {
+                    ExecutionMode::NonReplicated => Ok(0),
+                    ExecutionMode::Replicated => Ok(1),
+                }
+            }
+            ApiType::InspectMessage { .. } | ApiType::NonReplicatedQuery { .. } => Ok(0),
         };
         trace_syscall!(self, ic0_in_replicated_execution, result);
         result
@@ -3419,10 +3483,10 @@ impl SystemApi for SystemApiImpl {
         let method_name = "ic0_cycles_burn128";
         let result = match self.api_type {
             ApiType::Start { .. }
-            | ApiType::ReplicatedQuery { .. }
             | ApiType::NonReplicatedQuery { .. }
             | ApiType::InspectMessage { .. } => Err(self.error_for(method_name)),
             ApiType::Init { .. }
+            | ApiType::ReplicatedQuery { .. }
             | ApiType::PreUpgrade { .. }
             | ApiType::Cleanup { .. }
             | ApiType::Update { .. }
@@ -3445,6 +3509,68 @@ impl SystemApi for SystemApiImpl {
             }
         };
         trace_syscall!(self, CyclesBurn128, result, amount);
+        result
+    }
+
+    fn ic0_subnet_self_size(&self) -> HypervisorResult<usize> {
+        let result = match &self.api_type {
+            ApiType::Start { .. } => Err(self.error_for("ic0_subnet_self_size")),
+            ApiType::Init { .. }
+            | ApiType::SystemTask { .. }
+            | ApiType::Cleanup { .. }
+            | ApiType::Update { .. }
+            | ApiType::ReplicatedQuery { .. }
+            | ApiType::NonReplicatedQuery { .. }
+            | ApiType::ReplyCallback { .. }
+            | ApiType::RejectCallback { .. }
+            | ApiType::PreUpgrade { .. }
+            | ApiType::InspectMessage { .. } => {
+                let subnet_id = self.sandbox_safe_system_state.get_subnet_id();
+                Ok(subnet_id.get_ref().as_slice().len())
+            }
+        };
+
+        trace_syscall!(self, SubnetSelfSize, result);
+        result
+    }
+
+    fn ic0_subnet_self_copy(
+        &self,
+        dst: usize,
+        offset: usize,
+        size: usize,
+        heap: &mut [u8],
+    ) -> HypervisorResult<()> {
+        let result = match &self.api_type {
+            ApiType::Start { .. } => Err(self.error_for("ic0.subnet_self_copy")),
+            ApiType::Init { .. }
+            | ApiType::SystemTask { .. }
+            | ApiType::Cleanup { .. }
+            | ApiType::Update { .. }
+            | ApiType::ReplicatedQuery { .. }
+            | ApiType::NonReplicatedQuery { .. }
+            | ApiType::PreUpgrade { .. }
+            | ApiType::ReplyCallback { .. }
+            | ApiType::RejectCallback { .. }
+            | ApiType::InspectMessage { .. } => {
+                valid_subslice("ic0.subnet_self_copy heap", dst, size, heap)?;
+                let subnet_id = self.sandbox_safe_system_state.get_subnet_id();
+                let id_bytes = subnet_id.get_ref().as_slice();
+                let slice = valid_subslice("ic0.subnet_self_copy id", offset, size, id_bytes)?;
+                deterministic_copy_from_slice(&mut heap[dst..dst + size], slice);
+
+                Ok(())
+            }
+        };
+        trace_syscall!(
+            self,
+            SubnetSelfCopy,
+            dst,
+            offset,
+            size,
+            summarize(heap, dst, size)
+        );
+
         result
     }
 }

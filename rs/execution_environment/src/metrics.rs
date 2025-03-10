@@ -552,7 +552,7 @@ struct MeasurementScopeCore<'a> {
     record_zeros: bool,
 }
 
-impl<'a> Drop for MeasurementScopeCore<'a> {
+impl Drop for MeasurementScopeCore<'_> {
     fn drop(&mut self) {
         if let Some(outer) = &self.outer {
             outer.add(self.instructions, self.slices, self.messages);

@@ -21,6 +21,7 @@ use ic_management_canister_types::Method;
 use ic_nns_constants::CYCLES_MINTING_CANISTER_ID;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
+    canister_state::execution_state::WasmExecutionMode,
     canister_state::system_state::CyclesUseCase, CanisterState, SystemState,
 };
 use ic_types::{
@@ -61,24 +62,6 @@ impl std::fmt::Display for CyclesAccountManagerError {
             CyclesAccountManagerError::ContractViolation(msg) => {
                 write!(f, "Contract violation: {}", msg)
             }
-        }
-    }
-}
-
-/// Keeps track of how a canister is executing such that the `CyclesAccountManager`
-/// can charge cycles accordingly.
-#[derive(Debug, Copy, Clone)]
-pub enum WasmExecutionMode {
-    Wasm32,
-    Wasm64,
-}
-
-impl From<bool> for WasmExecutionMode {
-    fn from(is_wasm64: bool) -> Self {
-        if is_wasm64 {
-            WasmExecutionMode::Wasm64
-        } else {
-            WasmExecutionMode::Wasm32
         }
     }
 }

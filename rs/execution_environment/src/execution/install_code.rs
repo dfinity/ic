@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 
 use ic_base_types::{CanisterId, NumBytes, PrincipalId};
 use ic_config::flag_status::FlagStatus;
-use ic_embedders::wasm_executor::CanisterStateChanges;
+use ic_embedders::wasm_executor::{CanisterStateChanges, ExecutionStateChanges};
 use ic_interfaces::execution_environment::{
     HypervisorError, HypervisorResult, SubnetAvailableMemoryError, WasmExecutionOutput,
 };
@@ -33,7 +33,7 @@ use crate::{
     execution_environment::{log_dirty_pages, RoundContext},
     CompilationCostHandling, RoundLimits,
 };
-use ic_cycles_account_manager::WasmExecutionMode;
+use ic_replicated_state::canister_state::execution_state::WasmExecutionMode;
 
 #[cfg(test)]
 mod tests;
@@ -83,7 +83,7 @@ pub(crate) enum InstallCodeStep {
         module_hash: WasmHash,
     },
     HandleWasmExecution {
-        canister_state_changes: Option<CanisterStateChanges>,
+        canister_state_changes: CanisterStateChanges,
         output: WasmExecutionOutput,
     },
     ChargeForLargeWasmAssembly {
@@ -683,7 +683,7 @@ impl InstallCodeHelper {
     /// applying the state changes.
     pub fn handle_wasm_execution(
         &mut self,
-        canister_state_changes: Option<CanisterStateChanges>,
+        canister_state_changes: CanisterStateChanges,
         mut output: WasmExecutionOutput,
         original: &OriginalContext,
         round: &RoundContext,
@@ -741,48 +741,54 @@ impl InstallCodeHelper {
             }
         };
 
-        if let Some(CanisterStateChanges {
+        let CanisterStateChanges {
+            execution_state_changes,
+            system_state_modifications,
+        } = canister_state_changes;
+
+        if let Err(err) = system_state_modifications.apply_changes(
+            original.time,
+            &mut self.canister.system_state,
+            round.network_topology,
+            round.hypervisor.subnet_id(),
+            round.log,
+        ) {
+            debug_assert_eq!(err, HypervisorError::OutOfMemory);
+            match &err {
+                HypervisorError::WasmEngineError(err) => {
+                    round.counters.state_changes_error.inc();
+                    error!(
+                        round.log,
+                        "[EXC-BUG]: Failed to apply state changes due to a bug: {}", err
+                    )
+                }
+                HypervisorError::OutOfMemory => {
+                    warn!(
+                        round.log,
+                        "Failed to apply state changes due to DTS: {}", err
+                    )
+                }
+                _ => {
+                    round.counters.state_changes_error.inc();
+                    error!(
+                        round.log,
+                        "[EXC-BUG]: Failed to apply state changes due to an unexpected error: {}",
+                        err
+                    )
+                }
+            }
+            return (
+                instructions_consumed,
+                Err((self.canister.canister_id(), err).into()),
+            );
+        }
+
+        if let Some(ExecutionStateChanges {
             globals,
             wasm_memory,
             stable_memory,
-            system_state_changes,
-        }) = canister_state_changes
+        }) = execution_state_changes
         {
-            if let Err(err) = system_state_changes.apply_changes(
-                original.time,
-                &mut self.canister.system_state,
-                round.network_topology,
-                round.hypervisor.subnet_id(),
-                round.log,
-            ) {
-                debug_assert_eq!(err, HypervisorError::OutOfMemory);
-                match &err {
-                    HypervisorError::WasmEngineError(err) => {
-                        round.counters.state_changes_error.inc();
-                        error!(
-                            round.log,
-                            "[EXC-BUG]: Failed to apply state changes due to a bug: {}", err
-                        )
-                    }
-                    HypervisorError::OutOfMemory => {
-                        warn!(
-                            round.log,
-                            "Failed to apply state changes due to DTS: {}", err
-                        )
-                    }
-                    _ => {
-                        round.counters.state_changes_error.inc();
-                        error!(
-                            round.log,
-                            "[EXC-BUG]: Failed to apply state changes due to an unexpected error: {}", err
-                        )
-                    }
-                }
-                return (
-                    instructions_consumed,
-                    Err((self.canister.canister_id(), err).into()),
-                );
-            }
             let execution_state = self.canister.execution_state.as_mut().unwrap();
             execution_state.wasm_memory = wasm_memory;
             execution_state.stable_memory = stable_memory;

@@ -40,19 +40,19 @@ pub struct SignedTransaction<'a> {
     pub envelopes: Vec<Envelope<'a>>,
 }
 
-impl<'a> std::fmt::Display for SignedTransaction<'a> {
+impl std::fmt::Display for SignedTransaction<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", hex::encode(serde_cbor::ser::to_vec(self).unwrap()))
     }
 }
 
-impl<'a> FromStr for SignedTransaction<'a> {
+impl FromStr for SignedTransaction<'_> {
     type Err = anyhow::Error;
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         serde_cbor::from_slice(hex::decode(s)?.as_slice()).map_err(|err| anyhow!("{:?}", err))
     }
 }
-impl<'a> SignedTransaction<'a> {
+impl SignedTransaction<'_> {
     pub fn get_lowest_ingress_expiry(&self) -> Option<u64> {
         self.envelopes
             .iter()

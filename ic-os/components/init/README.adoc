@@ -6,7 +6,7 @@ serve as a guide on how to add further actions.
 
 == ssh key generation
 
-The +ssh/setup-ssh-keys+ (and corresponding shell script) service performs one of
+The +ssh/generate-host-ssh-keys+ (and corresponding shell script) service performs one of
 two things: If this is the first boot ever (on a newly installed system), it
 generates ssh keys and stashes them away in a location that is preserved across
 upgrades. On first boot after an upgrade, it integrates the keys from their

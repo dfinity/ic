@@ -1,3 +1,6 @@
+// TODO: Jira ticket NNS1-3556
+#![allow(static_mut_refs)]
+
 //! This is a special-purpose canister to create a large Governance proto and
 //! serialize it to stable memory in a format that is compatible with the real
 //! governance canister.

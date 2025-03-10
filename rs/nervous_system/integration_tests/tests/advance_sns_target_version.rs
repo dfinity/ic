@@ -11,9 +11,13 @@ use ic_nervous_system_integration_tests::{
     },
 };
 use ic_nns_test_utils::sns_wasm::create_modified_sns_wasm;
-use ic_sns_governance::pb::v1::upgrade_journal_entry::UpgradeStepsReset;
-use ic_sns_governance::{
-    governance::UPGRADE_STEPS_INTERVAL_REFRESH_BACKOFF_SECONDS,
+use ic_sns_governance::governance::UPGRADE_STEPS_INTERVAL_REFRESH_BACKOFF_SECONDS;
+use ic_sns_governance_api::pb::v1::{
+    governance::Versions,
+    upgrade_journal_entry::{upgrade_outcome, upgrade_started, UpgradeStepsReset},
+    Empty,
+};
+use ic_sns_governance_api::{
     pb::v1 as sns_pb,
     pb::v1::upgrade_journal_entry::{Event, TargetVersionSet, UpgradeStepsRefreshed},
 };
@@ -71,10 +75,14 @@ async fn test_get_upgrade_journal() {
     // Step 1: Check that the upgrade journal contains the initial version right after SNS creation.
     let mut expected_upgrade_journal_entries = vec![];
     {
-        expected_upgrade_journal_entries.push(Event::UpgradeStepsReset(UpgradeStepsReset::new(
-            "this message will be redacted to keep the test spec more abstract".to_string(),
-            vec![initial_sns_version.clone()],
-        )));
+        expected_upgrade_journal_entries.push(Event::UpgradeStepsReset(UpgradeStepsReset {
+            human_readable: Some(
+                "this message will be redacted to keep the test spec more abstract".to_string(),
+            ),
+            upgrade_steps: Some(Versions {
+                versions: vec![initial_sns_version.clone()],
+            }),
+        }));
 
         sns::governance::assert_upgrade_journal(
             &pocket_ic,
@@ -158,11 +166,15 @@ async fn test_get_upgrade_journal() {
 
     {
         expected_upgrade_journal_entries.push(Event::UpgradeStepsRefreshed(
-            UpgradeStepsRefreshed::new(vec![
-                initial_sns_version.clone(),
-                new_sns_version_1.clone(),
-                new_sns_version_2.clone(),
-            ]),
+            UpgradeStepsRefreshed {
+                upgrade_steps: Some(Versions {
+                    versions: vec![
+                        initial_sns_version.clone(),
+                        new_sns_version_1.clone(),
+                        new_sns_version_2.clone(),
+                    ],
+                }),
+            },
         ));
 
         sns::governance::assert_upgrade_journal(
@@ -178,10 +190,11 @@ async fn test_get_upgrade_journal() {
         .await
         .unwrap();
 
-    expected_upgrade_journal_entries.push(Event::TargetVersionSet(TargetVersionSet::new(
-        None,
-        Some(new_sns_version_2.clone()),
-    )));
+    expected_upgrade_journal_entries.push(Event::TargetVersionSet(TargetVersionSet {
+        old_target_version: None,
+        new_target_version: Some(new_sns_version_2.clone()),
+        is_advanced_automatically: Some(false),
+    }));
 
     sns::governance::assert_upgrade_journal(
         &pocket_ic,
@@ -224,35 +237,45 @@ async fn test_get_upgrade_journal() {
     {
         expected_upgrade_journal_entries.push(
             sns_pb::upgrade_journal_entry::Event::UpgradeStarted(
-                sns_pb::upgrade_journal_entry::UpgradeStarted::from_behind_target(
-                    initial_sns_version.clone(),
-                    new_sns_version_1.clone(),
-                ),
+                sns_pb::upgrade_journal_entry::UpgradeStarted {
+                    current_version: Some(initial_sns_version.clone()),
+                    expected_version: Some(new_sns_version_1.clone()),
+                    reason: Some(upgrade_started::Reason::BehindTargetVersion(Empty {})),
+                },
             ),
         );
 
         expected_upgrade_journal_entries.push(
             sns_pb::upgrade_journal_entry::Event::UpgradeOutcome(
-                sns_pb::upgrade_journal_entry::UpgradeOutcome::success(
-                    "this message will be redacted to keep the test spec more abstract".to_string(),
-                ),
+                sns_pb::upgrade_journal_entry::UpgradeOutcome {
+                    human_readable: Some(
+                        "this message will be redacted to keep the test spec more abstract"
+                            .to_string(),
+                    ),
+                    status: Some(upgrade_outcome::Status::Success(Empty {})),
+                },
             ),
         );
 
         expected_upgrade_journal_entries.push(
             sns_pb::upgrade_journal_entry::Event::UpgradeStarted(
-                sns_pb::upgrade_journal_entry::UpgradeStarted::from_behind_target(
-                    new_sns_version_1.clone(),
-                    new_sns_version_2.clone(),
-                ),
+                sns_pb::upgrade_journal_entry::UpgradeStarted {
+                    current_version: Some(new_sns_version_1.clone()),
+                    expected_version: Some(new_sns_version_2.clone()),
+                    reason: Some(upgrade_started::Reason::BehindTargetVersion(Empty {})),
+                },
             ),
         );
 
         expected_upgrade_journal_entries.push(
             sns_pb::upgrade_journal_entry::Event::UpgradeOutcome(
-                sns_pb::upgrade_journal_entry::UpgradeOutcome::success(
-                    "this message will be redacted to keep the test spec more abstract".to_string(),
-                ),
+                sns_pb::upgrade_journal_entry::UpgradeOutcome {
+                    human_readable: Some(
+                        "this message will be redacted to keep the test spec more abstract"
+                            .to_string(),
+                    ),
+                    status: Some(upgrade_outcome::Status::Success(Empty {})),
+                },
             ),
         );
 

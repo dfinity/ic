@@ -16,11 +16,12 @@ use ic_nns_constants::{
 use ic_nns_governance::{
     governance::{Environment, Governance, HeapGrowthPotential, RngError},
     pb::v1::{
-        manage_neuron, manage_neuron::NeuronIdOrSubaccount, manage_neuron_response, proposal,
-        ExecuteNnsFunction, GovernanceError, ManageNeuron, ManageNeuronResponse, Motion,
-        NetworkEconomics, Neuron, NnsFunction, Proposal, Vote,
+        manage_neuron, manage_neuron::NeuronIdOrSubaccount, proposal, ExecuteNnsFunction,
+        GovernanceError, ManageNeuron, Motion, NetworkEconomics, Neuron, NnsFunction, Proposal,
+        Vote,
     },
 };
+use ic_nns_governance_api::pb::v1::{manage_neuron_response, ManageNeuronResponse};
 use ic_sns_root::{GetSnsCanistersSummaryRequest, GetSnsCanistersSummaryResponse};
 use ic_sns_swap::pb::v1 as sns_swap_pb;
 use ic_sns_wasm::pb::v1::{DeployedSns, ListDeployedSnsesRequest, ListDeployedSnsesResponse};

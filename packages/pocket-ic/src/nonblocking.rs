@@ -5,7 +5,7 @@ use crate::common::rest::{
     MockCanisterHttpResponse, RawAddCycles, RawCanisterCall, RawCanisterHttpRequest, RawCanisterId,
     RawCanisterResult, RawCycles, RawEffectivePrincipal, RawIngressStatusArgs, RawMessageId,
     RawMockCanisterHttpResponse, RawPrincipalId, RawSetStableMemory, RawStableMemory, RawSubnetId,
-    RawTime, RawVerifyCanisterSigArg, SubnetId, Topology,
+    RawTime, RawVerifyCanisterSigArg, SubnetId, TickConfigs, Topology,
 };
 use crate::management_canister::{
     CanisterId, CanisterIdRecord, CanisterInstallMode, CanisterInstallModeUpgradeInner,
@@ -290,8 +290,15 @@ impl PocketIc {
     /// inter-canister calls or heartbeats.
     #[instrument(skip(self), fields(instance_id=self.instance_id))]
     pub async fn tick(&self) {
+        self.tick_with_configs(TickConfigs::default()).await;
+    }
+
+    /// Make the IC produce and progress by one block with custom
+    /// configs for the round.
+    #[instrument(skip(self), fields(instance_id=self.instance_id))]
+    pub async fn tick_with_configs(&self, configs: TickConfigs) {
         let endpoint = "update/tick";
-        self.post::<(), _>(endpoint, "").await;
+        self.post::<(), _>(endpoint, configs).await;
     }
 
     /// Configures the IC to make progress automatically,
@@ -302,7 +309,7 @@ impl PocketIc {
     #[instrument(skip(self), fields(instance_id=self.instance_id))]
     pub async fn auto_progress(&self) -> Url {
         let now = std::time::SystemTime::now();
-        self.set_time(now).await;
+        self.set_certified_time(now).await;
         let endpoint = "auto_progress";
         let auto_progress_config = AutoProgressConfig {
             artificial_delay_ms: None,
@@ -473,6 +480,22 @@ impl PocketIc {
     #[instrument(skip(self), fields(instance_id=self.instance_id, time = ?time))]
     pub async fn set_time(&self, time: SystemTime) {
         let endpoint = "update/set_time";
+        self.post::<(), _>(
+            endpoint,
+            RawTime {
+                nanos_since_epoch: time
+                    .duration_since(SystemTime::UNIX_EPOCH)
+                    .expect("Time went backwards")
+                    .as_nanos() as u64,
+            },
+        )
+        .await;
+    }
+
+    /// Set the current certified time of the IC, on all subnets.
+    #[instrument(skip(self), fields(instance_id=self.instance_id, time = ?time))]
+    pub async fn set_certified_time(&self, time: SystemTime) {
+        let endpoint = "update/set_certified_time";
         self.post::<(), _>(
             endpoint,
             RawTime {
@@ -1513,7 +1536,7 @@ impl PocketIc {
         result.into()
     }
 
-    pub(crate) async fn update_call_with_effective_principal(
+    pub async fn update_call_with_effective_principal(
         &self,
         canister_id: CanisterId,
         effective_principal: RawEffectivePrincipal,

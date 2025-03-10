@@ -43,8 +43,6 @@ use crate::{
     snapshot::{Node, RegistrySnapshot},
 };
 
-// TODO which one to use?
-const IC_API_VERSION: &str = "0.18.0";
 pub const ANONYMOUS_PRINCIPAL: Principal = Principal::anonymous();
 const METHOD_HTTP: &str = "http_request";
 
@@ -787,7 +785,6 @@ pub async fn status(
     let health = h.health().await;
 
     let status = HttpStatusResponse {
-        ic_api_version: IC_API_VERSION.to_string(),
         root_key: rk.root_key().await.map(|x| x.into()),
         impl_version: None,
         impl_hash: None,

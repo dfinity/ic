@@ -1510,6 +1510,8 @@ fn query_cache_future_proof_test() {
         | SystemApiCallId::MsgReplyDataAppend
         | SystemApiCallId::OutOfInstructions
         | SystemApiCallId::PerformanceCounter
+        | SystemApiCallId::SubnetSelfSize
+        | SystemApiCallId::SubnetSelfCopy
         | SystemApiCallId::Stable64Grow
         | SystemApiCallId::Stable64Read
         | SystemApiCallId::Stable64Size

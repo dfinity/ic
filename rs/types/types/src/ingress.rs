@@ -108,7 +108,7 @@ impl IngressStatus {
         match self {
             IngressStatus::Known { state, .. } => match state {
                 IngressState::Completed(result) => result.memory_bytes(),
-                IngressState::Failed(error) => error.description().as_bytes().len(),
+                IngressState::Failed(error) => error.description().len(),
                 _ => 0,
             },
             IngressStatus::Unknown => 0,
@@ -180,7 +180,7 @@ impl MemoryDiskBytes for WasmResult {
     fn memory_bytes(&self) -> usize {
         match self {
             WasmResult::Reply(bytes) => bytes.len(),
-            WasmResult::Reject(string) => string.as_bytes().len(),
+            WasmResult::Reject(string) => string.len(),
         }
     }
 

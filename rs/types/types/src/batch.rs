@@ -5,6 +5,7 @@ mod canister_http;
 mod execution_environment;
 mod ingress;
 mod self_validating;
+mod vetkd;
 mod xnet;
 
 pub use self::{
@@ -15,6 +16,10 @@ pub use self::{
     },
     ingress::{IngressPayload, IngressPayloadError},
     self_validating::{SelfValidatingPayload, MAX_BITCOIN_PAYLOAD_IN_BYTES},
+    vetkd::{
+        bytes_to_vetkd_payload, vetkd_payload_to_bytes, VetKdAgreement, VetKdErrorCode,
+        VetKdPayload,
+    },
     xnet::XNetPayload,
 };
 use crate::{
@@ -24,12 +29,13 @@ use crate::{
     xnet::CertifiedStreamSlice,
     Height, Randomness, RegistryVersion, ReplicaVersion, SubnetId, Time,
 };
-use ic_base_types::NodeId;
+use ic_base_types::{NodeId, NumBytes};
 use ic_btc_replica_types::BitcoinAdapterResponse;
 #[cfg(test)]
 use ic_exhaustive_derive::ExhaustiveSet;
 use ic_management_canister_types::MasterPublicKeyId;
 use ic_protobuf::{proxy::ProxyDecodeError, types::v1 as pb};
+use prost::{bytes::BufMut, DecodeError, Message};
 use serde::{Deserialize, Serialize};
 use std::{
     collections::{BTreeMap, BTreeSet},
@@ -194,6 +200,44 @@ impl BlockmakerMetrics {
             failed_blockmakers: vec![],
         }
     }
+}
+
+/// Given an iterator of [`Message`]s, this function will deserialize the messages
+/// into a byte vector.
+///
+/// The function is given a `max_size` limit, and guarantees that the buffer will be
+/// smaller or equal than the byte limit.
+/// It may drop messages from the iterator, if they don't fit.
+pub fn iterator_to_bytes<I, M>(iter: I, max_size: NumBytes) -> Vec<u8>
+where
+    M: Message,
+    I: Iterator<Item = M>,
+{
+    let mut buffer = vec![].limit(max_size.get() as usize);
+
+    for val in iter {
+        // NOTE: This call may fail due to the encoding hitting the
+        // byte limit. We continue trying the rest of the messages
+        // nonetheless, to give smaller messages a chance as well
+        let _ = val.encode_length_delimited(&mut buffer);
+    }
+
+    buffer.into_inner()
+}
+
+/// Parse a slice filled with protobuf encoded [`Message`]s into a vector
+pub fn slice_to_messages<M>(mut data: &[u8]) -> Result<Vec<M>, DecodeError>
+where
+    M: Message + Default,
+{
+    let mut msgs = vec![];
+
+    while !data.is_empty() {
+        let msg = M::decode_length_delimited(&mut data)?;
+        msgs.push(msg)
+    }
+
+    Ok(msgs)
 }
 
 /// Response to a subnet call that requires Consensus' involvement.

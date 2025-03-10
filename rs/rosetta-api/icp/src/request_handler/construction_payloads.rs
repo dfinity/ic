@@ -9,7 +9,6 @@ use on_wire::IntoWire;
 use rand::Rng;
 use std::{collections::HashMap, sync::Arc, time::Duration};
 
-use crate::request_types::RefreshVotingPower;
 use crate::{
     convert,
     convert::{make_read_state_from_update, to_arg, to_model_account_identifier},
@@ -25,8 +24,9 @@ use crate::{
     request_handler::{make_sig_data, verify_network_id, RosettaRequestHandler},
     request_types::{
         AddHotKey, ChangeAutoStakeMaturity, Disburse, Follow, ListNeurons, MergeMaturity,
-        NeuronInfo, PublicKeyOrPrincipal, RegisterVote, RemoveHotKey, RequestType,
-        SetDissolveTimestamp, Spawn, Stake, StakeMaturity, StartDissolve, StopDissolve,
+        NeuronInfo, PublicKeyOrPrincipal, RefreshVotingPower, RegisterVote, RemoveHotKey,
+        RequestType, SetDissolveTimestamp, Spawn, Stake, StakeMaturity, StartDissolve,
+        StopDissolve,
     },
 };
 use ic_nns_governance_api::pb::v1::{
@@ -435,6 +435,9 @@ fn handle_list_neurons(
         include_neurons_readable_by_caller: true,
         include_empty_neurons_readable_by_caller: None,
         include_public_neurons_in_full_neurons: None,
+        page_number: req.page_number,
+        page_size: None,
+        neuron_subaccounts: None,
     };
     let update = HttpCanisterUpdate {
         canister_id: Blob(ic_nns_constants::GOVERNANCE_CANISTER_ID.get().to_vec()),
@@ -451,7 +454,12 @@ fn handle_list_neurons(
         &update,
         SignatureType::from(pk.curve_type),
     );
-    updates.push((RequestType::ListNeurons, update));
+    updates.push((
+        RequestType::ListNeurons {
+            page_number: req.page_number.unwrap_or_default(),
+        },
+        update,
+    ));
     Ok(())
 }
 

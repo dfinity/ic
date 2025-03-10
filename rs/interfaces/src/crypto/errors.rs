@@ -432,10 +432,10 @@ impl ErrorReproducibility for VetKdKeyShareVerificationError {
         // to avoid defaults, which might be error-prone.
         // Upon addition of any new error this match has to be updated.
 
-        // VetKd key share verification does not depend on any local or private
-        // state and so is inherently replicated.
         match self {
-            Self::InvalidSignature => true,
+            Self::VerificationError(crypto_error) => crypto_error.is_reproducible(),
+            // false, as the result may change if the DKG transcript is reloaded.
+            Self::ThresholdSigDataNotFound(_) => false,
         }
     }
 }

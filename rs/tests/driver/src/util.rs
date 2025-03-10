@@ -29,7 +29,7 @@ use ic_agent::{
 use ic_canister_client::{Agent as DeprecatedAgent, Sender};
 use ic_config::ConfigOptional;
 use ic_limits::MAX_INGRESS_TTL;
-use ic_management_canister_types::{CanisterStatusResult, EmptyBlob, Payload};
+use ic_management_canister_types::{CanisterStatusResultV2, EmptyBlob, Payload};
 use ic_message::ForwardParams;
 use ic_nervous_system_proto::pb::v1::GlobalTimeOfDay;
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, ROOT_CANISTER_ID};
@@ -1237,7 +1237,7 @@ pub async fn get_balance_via_canister(
         )
         .await
         .map(|res| {
-            Decode!(res.as_slice(), CanisterStatusResult)
+            Decode!(res.as_slice(), CanisterStatusResultV2)
                 .unwrap()
                 .cycles()
                 .into()

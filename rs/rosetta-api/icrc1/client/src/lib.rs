@@ -72,7 +72,7 @@ impl RosettaClient {
             // Verify that the signature is correct
             match signer_keypair.get_curve_type() {
                 CurveType::Edwards25519 => {
-                    let verification_key = ic_crypto_ed25519::PublicKey::deserialize_raw(
+                    let verification_key = ic_ed25519::PublicKey::deserialize_raw(
                         signer_keypair.get_pb_key().as_slice(),
                     )
                     .with_context(|| {

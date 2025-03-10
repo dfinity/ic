@@ -77,20 +77,12 @@ fn should_upgrade_and_downgrade_ledger_canister_suite() {
     )
     .unwrap();
 
-    match env.upgrade_canister(
+    env.upgrade_canister(
         ledger_id,
         ledger_mainnet_wasm(),
         Encode!(&ledger_upgrade_arg).unwrap(),
-    ) {
-        Ok(_) => {
-            panic!("Upgrade to mainnet should fail!")
-        }
-        Err(e) => {
-            assert!(e
-                .description()
-                .contains("Trying to downgrade from incompatible version"))
-        }
-    };
+    )
+    .unwrap();
 }
 
 fn default_archive_options() -> ArchiveOptions {

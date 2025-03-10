@@ -9,14 +9,13 @@ use ic_types::{
     CanisterId, ComputeAllocation, Cycles, MemoryAllocation, NumBytes, NumInstructions,
 };
 
-use ic_cycles_account_manager::WasmExecutionMode;
 use ic_management_canister_types::InstallChunkedCodeArgsLegacy;
 use ic_management_canister_types::{
     CanisterChange, CanisterChangeDetails, CanisterChangeOrigin, CanisterInstallMode,
     CanisterInstallModeV2, EmptyBlob, InstallChunkedCodeArgs, InstallCodeArgs, InstallCodeArgsV2,
     Method, Payload, UploadChunkArgs, UploadChunkReply,
 };
-use ic_replicated_state::canister_state::NextExecution;
+use ic_replicated_state::canister_state::{execution_state::WasmExecutionMode, NextExecution};
 use ic_test_utilities_execution_environment::{
     check_ingress_status, get_reply, ExecutionTest, ExecutionTestBuilder,
 };

@@ -24,7 +24,7 @@ use ic_registry_local_registry::LocalRegistry;
 use ic_registry_local_store::{compact_delta_to_changelog, LocalStoreImpl, LocalStoreWriter};
 use ic_registry_proto_data_provider::{ProtoRegistryDataProvider, ProtoRegistryDataProviderError};
 use ic_registry_routing_table::{routing_table_insert_subnet, CanisterMigrations, RoutingTable};
-use ic_registry_subnet_features::{ChainKeyConfig, EcdsaConfig, KeyConfig};
+use ic_registry_subnet_features::{ChainKeyConfig, KeyConfig};
 use ic_replicated_state::Stream;
 use ic_test_utilities::state_manager::FakeStateManager;
 use ic_test_utilities_logger::with_test_replica_logger;
@@ -267,15 +267,11 @@ struct SubnetRecord<'a> {
     membership: &'a [NodeId],
     subnet_type: SubnetType,
     features: SubnetFeatures,
-    // TODO: Remove this field
-    #[allow(unused)]
-    ecdsa_config: EcdsaConfig,
-    /// This field will replace ecdsa_config.
     chain_key_config: ChainKeyConfig,
     max_number_of_canisters: u64,
 }
 
-impl<'a> From<SubnetRecord<'a>> for SubnetRecordProto {
+impl From<SubnetRecord<'_>> for SubnetRecordProto {
     fn from(record: SubnetRecord) -> SubnetRecordProto {
         SubnetRecordBuilder::new()
             .with_membership(record.membership)
@@ -732,7 +728,6 @@ fn try_read_registry_succeeds_with_fully_specified_registry_records() {
                 http_requests: true,
                 ..Default::default()
             },
-            ecdsa_config: EcdsaConfig::default(),
             chain_key_config: ChainKeyConfig {
                 key_configs: vec![
                     KeyConfig {
@@ -976,7 +971,7 @@ fn try_read_registry_succeeds_with_fully_specified_registry_records() {
             (node_test_id(2), &dummy_node_key_2),
         ] {
             assert_eq!(
-                ic_crypto_ed25519::PublicKey::deserialize_raw(&public_key.key_value)
+                ic_ed25519::PublicKey::deserialize_raw(&public_key.key_value)
                     .expect("invalid public key")
                     .serialize_rfc8410_der(),
                 *node_public_keys.get(&node_id).unwrap(),
@@ -1428,7 +1423,7 @@ fn try_read_registry_can_skip_missing_or_invalid_node_public_keys() {
         assert!(!node_public_keys.contains_key(&node_test_id(1)));
         assert!(!node_public_keys.contains_key(&node_test_id(2)));
         assert_eq!(
-            ic_crypto_ed25519::PublicKey::deserialize_raw(&valid_node_key.key_value)
+            ic_ed25519::PublicKey::deserialize_raw(&valid_node_key.key_value)
                 .expect("invalid public key")
                 .serialize_rfc8410_der(),
             *node_public_keys.get(&node_test_id(3)).unwrap(),
@@ -1715,24 +1710,28 @@ fn process_batch_updates_subnet_metrics() {
                 http_requests: true,
                 ..Default::default()
             },
-            ecdsa_config: EcdsaConfig {
-                key_ids: vec![
-                    EcdsaKeyId {
-                        curve: EcdsaCurve::Secp256k1,
-                        name: "ecdsa key 1".to_string(),
+            max_number_of_canisters: 387,
+            chain_key_config: ChainKeyConfig {
+                key_configs: vec![
+                    KeyConfig {
+                        key_id: MasterPublicKeyId::Ecdsa(EcdsaKeyId {
+                            curve: EcdsaCurve::Secp256k1,
+                            name: "ecdsa key 1".to_string(),
+                        }),
+                        max_queue_size: 891,
+                        pre_signatures_to_create_in_advance: 891,
                     },
-                    EcdsaKeyId {
-                        curve: EcdsaCurve::Secp256k1,
-                        name: "ecdsa key 2".to_string(),
+                    KeyConfig {
+                        key_id: MasterPublicKeyId::Ecdsa(EcdsaKeyId {
+                            curve: EcdsaCurve::Secp256k1,
+                            name: "ecdsa key 2".to_string(),
+                        }),
+                        max_queue_size: 891,
+                        pre_signatures_to_create_in_advance: 891,
                     },
                 ],
-                max_queue_size: Some(891),
                 ..Default::default()
             },
-            // TODO[NNS1-2969]: Use this field rather than ecdsa_config.
-            chain_key_config: ChainKeyConfig::default(),
-
-            max_number_of_canisters: 387,
         };
 
         let own_transcript = dummy_transcript_for_tests_with_params(

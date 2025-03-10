@@ -22,17 +22,15 @@ use ic_nns_constants::{
     LEDGER_CANISTER_INDEX_IN_NNS_SUBNET, LEDGER_INDEX_CANISTER_INDEX_IN_NNS_SUBNET,
 };
 use ic_nns_test_utils_golden_nns_state::new_state_machine_with_golden_nns_state_or_panic;
-use ic_state_machine_tests::{StateMachine, UserError};
+use ic_state_machine_tests::{ErrorCode, StateMachine, UserError};
 use icp_ledger::{
     AccountIdentifier, Archives, Block, FeatureFlags, LedgerCanisterPayload, UpgradeArgs,
 };
 use std::time::Instant;
 
-/// The number of instructions that can be executed in a single canister upgrade.
-/// The limit (<https://internetcomputer.org/docs/current/developer-docs/smart-contracts/maintain/resource-limits#resource-constraints-and-limits>)
-/// is actually 300B, but in the ledger implementation we use a value slightly lower than the old
-/// limit 200B.
-const CANISTER_UPGRADE_INSTRUCTION_LIMIT: u64 = 190_000_000_000;
+/// The number of instructions that can be executed in a single canister upgrade as per
+/// https://internetcomputer.org/docs/current/developer-docs/smart-contracts/maintain/resource-limits#resource-constraints-and-limits
+const CANISTER_UPGRADE_INSTRUCTION_LIMIT: u64 = 300_000_000_000;
 const INDEX_CANISTER_ID: CanisterId =
     CanisterId::from_u64(LEDGER_INDEX_CANISTER_INDEX_IN_NNS_SUBNET);
 const LEDGER_CANISTER_ID: CanisterId = CanisterId::from_u64(LEDGER_CANISTER_INDEX_IN_NNS_SUBNET);
@@ -320,8 +318,21 @@ impl Setup {
     pub fn downgrade_to_mainnet(&self) {
         println!("Downgrading to mainnet version");
         self.upgrade_index(&self.mainnet_wasms.index);
-        self.upgrade_ledger(&self.mainnet_wasms.ledger)
-            .expect("should successfully downgrade to the mainnet version");
+        match self.upgrade_ledger(&self.mainnet_wasms.ledger) {
+            Ok(_) => {
+                panic!("should fail to downgrade ledger to mainnet version");
+            }
+            Err(err) => {
+                // The ledger will still be running the master version, while the other canisters
+                // will be downgraded to the mainnet version. This is not an ideal situation, nor
+                // is it expected to happen in practice, but for the moment let's run the test to
+                // completion.
+                err.assert_contains(
+                    ErrorCode::CanisterCalledTrap,
+                    "Trying to downgrade from incompatible version",
+                );
+            }
+        }
         self.check_ledger_metrics(ExpectMigration::No);
         self.upgrade_archive_canisters(&self.mainnet_wasms.archive);
     }

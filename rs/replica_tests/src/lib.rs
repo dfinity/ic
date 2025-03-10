@@ -753,7 +753,7 @@ pub struct UniversalCanisterWithStateMachine<'a> {
     canister_id: CanisterId,
 }
 
-impl<'a> UniversalCanisterWithStateMachine<'a> {
+impl UniversalCanisterWithStateMachine<'_> {
     pub fn canister_id(&self) -> CanisterId {
         self.canister_id
     }

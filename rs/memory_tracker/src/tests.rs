@@ -795,7 +795,14 @@ mod random_ops {
             handler.sa_flags = libc::SA_SIGINFO | libc::SA_NODEFER | libc::SA_ONSTACK;
             handler.sa_sigaction = sigsegv_handler as usize;
             libc::sigemptyset(&mut handler.sa_mask);
-            if libc::sigaction(libc::SIGSEGV, &handler, PREV_SIGSEGV.as_mut_ptr()) != 0 {
+            if libc::sigaction(
+                libc::SIGSEGV,
+                &handler,
+                // TODO: EXC-1841
+                #[allow(static_mut_refs)]
+                PREV_SIGSEGV.as_mut_ptr(),
+            ) != 0
+            {
                 panic!(
                     "unable to install signal handler: {}",
                     io::Error::last_os_error(),
@@ -809,8 +816,13 @@ mod random_ops {
             TRACKER.with(|cell| {
                 let previous = cell.replace(None);
                 unsafe {
-                    if libc::sigaction(libc::SIGSEGV, PREV_SIGSEGV.as_ptr(), std::ptr::null_mut())
-                        != 0
+                    if libc::sigaction(
+                        libc::SIGSEGV,
+                        // TODO: EXC-1841
+                        #[allow(static_mut_refs)]
+                        PREV_SIGSEGV.as_ptr(),
+                        std::ptr::null_mut(),
+                    ) != 0
                     {
                         panic!(
                             "unable to unregister signal handler: {}",
@@ -846,6 +858,8 @@ mod random_ops {
 
             unsafe {
                 if !handled {
+                    // TODO: EXC-1841
+                    #[allow(static_mut_refs)]
                     let previous = *PREV_SIGSEGV.as_ptr();
                     if previous.sa_flags & libc::SA_SIGINFO != 0 {
                         mem::transmute::<

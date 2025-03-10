@@ -13,12 +13,10 @@ path = "src/lib.rs"
 [dependencies]
 async-trait = { workspace = true }
 candid = { workspace = true }
-dfn_candid = { path = "../../rust_canisters/dfn_candid" }
-dfn_core = { path = "../../rust_canisters/dfn_core" }
-dfn_http_metrics = { path = "../../rust_canisters/dfn_http_metrics" }
 futures = { workspace = true }
 hex = { workspace = true }
 ic-base-types = { path = "../../types/base_types" }
+ic-canisters-http-types = { path = "../../rust_canisters/http_types" }
 ic-cdk = { workspace = true }
 ic-crypto-sha2 = { path = "../../crypto/sha2/" }
 ic-management-canister-types = { path = "../../types/management_canister_types" }

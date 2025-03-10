@@ -99,6 +99,15 @@ impl ApiTypeBuilder {
         )
     }
 
+    pub fn build_replicated_query_api() -> ApiType {
+        ApiType::replicated_query(
+            UNIX_EPOCH,
+            vec![],
+            user_test_id(1).get(),
+            CallContextId::new(1),
+        )
+    }
+
     pub fn build_non_replicated_query_api() -> ApiType {
         ApiType::non_replicated_query(
             UNIX_EPOCH,
@@ -174,6 +183,27 @@ impl ApiTypeBuilder {
             ExecutionMode::NonReplicated,
             0.into(),
         )
+    }
+
+    pub fn build_inspect_message_api() -> ApiType {
+        ApiType::inspect_message(
+            PrincipalId::new_anonymous(),
+            "test".to_string(),
+            vec![],
+            UNIX_EPOCH,
+        )
+    }
+
+    pub fn build_start_api() -> ApiType {
+        ApiType::start(UNIX_EPOCH)
+    }
+
+    pub fn build_init_api() -> ApiType {
+        ApiType::init(UNIX_EPOCH, vec![], user_test_id(1).get())
+    }
+
+    pub fn build_pre_upgrade_api() -> ApiType {
+        ApiType::pre_upgrade(UNIX_EPOCH, user_test_id(1).get())
     }
 }
 

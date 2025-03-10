@@ -1,5 +1,4 @@
 use ic_base_types::{NumBytes, NumSeconds};
-use ic_config::flag_status::FlagStatus;
 use ic_logger::{error, info, warn, ReplicaLogger};
 use ic_management_canister_types::LogVisibilityV2;
 use ic_metrics::{buckets::decimal_buckets, MetricsRegistry};
@@ -112,14 +111,14 @@ impl AccessPolicy for WriteOnly {
 
 impl WritePolicy for WriteOnly {}
 
-impl<'a, T> AccessPolicy for RwPolicy<'a, T> {
+impl<T> AccessPolicy for RwPolicy<'_, T> {
     fn check_dir(p: &Path) -> Result<(), LayoutError> {
         WriteOnly::check_dir(p)
     }
 }
 
-impl<'a, T> ReadPolicy for RwPolicy<'a, T> {}
-impl<'a, T> WritePolicy for RwPolicy<'a, T> {}
+impl<T> ReadPolicy for RwPolicy<'_, T> {}
+impl<T> WritePolicy for RwPolicy<'_, T> {}
 
 pub type CompleteCheckpointLayout = CheckpointLayout<ReadOnly>;
 
@@ -378,7 +377,6 @@ impl TipHandler {
         &mut self,
         state_layout: &StateLayout,
         cp: &CheckpointLayout<ReadOnly>,
-        lsmt_storage: FlagStatus,
         thread_pool: Option<&mut scoped_threadpool::Pool>,
     ) -> Result<(), LayoutError> {
         let tip = self.tip_path();
@@ -397,21 +395,9 @@ impl TipHandler {
                 // Do not copy protobufs.
                 CopyInstruction::Skip
             } else if path == cp.unverified_checkpoint_marker() {
-                // With LSMT enabled, the unverified checkpoint marker should already be removed at this point.
-                debug_assert_eq!(lsmt_storage, FlagStatus::Disabled);
-                // With LSMT disabled, the unverified checkpoint marker is still present in the checkpoint at this point.
-                // We should not copy it back to the tip because it will be created later when promoting the tip as the next checkpoint.
-                // When we go for asynchronous checkpointing in the future, we should revisit this as the marker file will have a different lifespan.
+                // The unverified checkpoint marker should already be removed at this point.
+                debug_assert!(false);
                 CopyInstruction::Skip
-            } else if path.extension() == Some(OsStr::new("bin"))
-                && lsmt_storage == FlagStatus::Disabled
-                && !path.starts_with(cp.raw_path().join(SNAPSHOTS_DIR))
-            {
-                // PageMap files need to be modified in the tip,
-                // but only with non-LSMT storage layer that modifies these files.
-                // With LSMT we always write additional overlay files instead.
-                // PageMap files that belong to snapshots are not modified even without LSMT.
-                CopyInstruction::ReadWrite
             } else {
                 // Everything else should be readonly.
                 CopyInstruction::ReadOnly
@@ -1703,7 +1689,6 @@ impl<Permissions: AccessPolicy> PageMapLayout<Permissions> {
         log: &ReplicaLogger,
         src: &PageMapLayout<Permissions>,
         dst: &PageMapLayout<W>,
-        dst_permissions: FilePermissions,
     ) -> Result<(), LayoutError>
     where
         W: WritePolicy,
@@ -1711,8 +1696,8 @@ impl<Permissions: AccessPolicy> PageMapLayout<Permissions> {
         debug_assert_eq!(src.name_stem, dst.name_stem);
 
         if src.base().exists() {
-            copy_file_and_set_permissions(log, &src.base(), &dst.base(), dst_permissions).map_err(
-                |err| LayoutError::IoError {
+            copy_file_and_set_permissions(log, &src.base(), &dst.base()).map_err(|err| {
+                LayoutError::IoError {
                     path: dst.base(),
                     message: format!(
                         "Cannot copy or hardlink file {:?} to {:?}",
@@ -1720,21 +1705,21 @@ impl<Permissions: AccessPolicy> PageMapLayout<Permissions> {
                         dst.base()
                     ),
                     io_err: err,
-                },
-            )?;
+                }
+            })?;
         }
         for overlay in src.existing_overlays()? {
             let dst_path = dst.root.join(overlay.file_name().unwrap());
-            copy_file_and_set_permissions(log, &overlay, &dst_path, dst_permissions).map_err(
-                |err| LayoutError::IoError {
+            copy_file_and_set_permissions(log, &overlay, &dst_path).map_err(|err| {
+                LayoutError::IoError {
                     path: dst.base(),
                     message: format!(
                         "Cannot copy or hardlink file {:?} to {:?}",
                         overlay, dst_path
                     ),
                     io_err: err,
-                },
-            )?;
+                }
+            })?;
         }
 
         Ok(())
@@ -2697,12 +2682,6 @@ fn dir_file_names(p: &Path) -> std::io::Result<Vec<String>> {
     Ok(result)
 }
 
-#[derive(Copy, Clone, PartialEq)]
-pub enum FilePermissions {
-    ReadOnly,
-    ReadWrite,
-}
-
 fn mark_readonly_if_file(path: &Path) -> std::io::Result<()> {
     let metadata = path.metadata()?;
     if !metadata.is_dir() {
@@ -2835,7 +2814,7 @@ where
     let results = maybe_parallel_map(
         &mut thread_pool,
         copy_plan.copy_and_sync_file.iter(),
-        |op| copy_checkpoint_file(log, metrics, &op.src, &op.dst, op.dst_permissions, fsync),
+        |op| copy_checkpoint_file(log, metrics, &op.src, &op.dst, fsync),
     );
     results.into_iter().try_for_each(identity)?;
     if let FSync::Yes = fsync {
@@ -2859,7 +2838,6 @@ fn copy_checkpoint_file(
     metrics: &StateLayoutMetrics,
     src: &Path,
     dst: &Path,
-    dst_permissions: FilePermissions,
     fsync: FSync,
 ) -> std::io::Result<()> {
     // We don't expect to copy anything that isn't readonly, but just in case we handle it correctly below.
@@ -2872,7 +2850,7 @@ fn copy_checkpoint_file(
         debug_assert!(false);
     }
 
-    copy_file_and_set_permissions(log, src, dst, dst_permissions)?;
+    copy_file_and_set_permissions(log, src, dst)?;
 
     match fsync {
         FSync::Yes => sync_path(dst),
@@ -2882,13 +2860,8 @@ fn copy_checkpoint_file(
 
 /// Copies the given file and ensures that the `read/write` permission of the
 /// target file match the given permission.
-fn copy_file_and_set_permissions(
-    log: &ReplicaLogger,
-    src: &Path,
-    dst: &Path,
-    dst_permissions: FilePermissions,
-) -> Result<(), Error> {
-    if src.metadata()?.permissions().readonly() && dst_permissions == FilePermissions::ReadOnly {
+fn copy_file_and_set_permissions(log: &ReplicaLogger, src: &Path, dst: &Path) -> Result<(), Error> {
+    if src.metadata()?.permissions().readonly() {
         std::fs::hard_link(src, dst)?
     } else {
         do_copy(log, src, dst)?;
@@ -2900,20 +2873,7 @@ fn copy_file_and_set_permissions(
             debug_assert_eq!(dst_metadata.nlink(), 1);
         }
         let mut permissions = dst_metadata.permissions();
-        match dst_permissions {
-            FilePermissions::ReadOnly => permissions.set_readonly(true),
-            FilePermissions::ReadWrite => {
-                #[cfg(target_os = "linux")]
-                {
-                    use std::os::unix::fs::PermissionsExt;
-                    permissions.set_mode(0o640); // Read/write for owner and read for group.
-                }
-
-                #[cfg(not(target_os = "linux"))]
-                #[allow(clippy::permissions_set_readonly_false)]
-                permissions.set_readonly(false)
-            }
-        }
+        permissions.set_readonly(true);
         std::fs::set_permissions(dst, permissions)?;
     }
     Ok(())
@@ -2939,14 +2899,12 @@ struct CreateAndSyncDir {
 struct CopyAndSyncFile {
     src: PathBuf,
     dst: PathBuf,
-    dst_permissions: FilePermissions,
 }
 
+#[derive(PartialEq, Eq)]
 enum CopyInstruction {
     /// The file doesn't need to be copied
     Skip,
-    /// The file needs to be copied and should be writeable at the destination
-    ReadWrite,
     /// The file needs to be copied and should be readonly at the destination
     ReadOnly,
 }
@@ -2979,17 +2937,12 @@ where
             build_copy_plan(&entry.path(), &dst_entry, file_copy_instruction, plan)?;
         }
     } else {
-        let dst_permissions = match file_copy_instruction(src) {
-            CopyInstruction::Skip => {
-                return Ok(());
-            }
-            CopyInstruction::ReadWrite => FilePermissions::ReadWrite,
-            CopyInstruction::ReadOnly => FilePermissions::ReadOnly,
-        };
+        if file_copy_instruction(src) == CopyInstruction::Skip {
+            return Ok(());
+        }
         plan.copy_and_sync_file.push(CopyAndSyncFile {
             src: PathBuf::from(src),
             dst: PathBuf::from(dst),
-            dst_permissions,
         });
     }
     Ok(())

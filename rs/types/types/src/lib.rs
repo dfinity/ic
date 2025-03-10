@@ -489,9 +489,14 @@ pub const MAX_STABLE_MEMORY_IN_BYTES: u64 = 500 * GIB;
 /// it is public and `u64` (`NumBytes` cannot be used in const expressions).
 pub const MAX_WASM_MEMORY_IN_BYTES: u64 = 4 * GIB;
 
+/// The upper limit on the Wasm64 canister memory size.
+/// This constant is used by other crates to define other constants, that's why
+/// it is public and `u64` (`NumBytes` cannot be used in const expressions).
+pub const MAX_WASM64_MEMORY_IN_BYTES: u64 = 4 * GIB;
+
 const MIN_MEMORY_ALLOCATION: NumBytes = NumBytes::new(0);
 pub const MAX_MEMORY_ALLOCATION: NumBytes =
-    NumBytes::new(MAX_STABLE_MEMORY_IN_BYTES + MAX_WASM_MEMORY_IN_BYTES);
+    NumBytes::new(MAX_STABLE_MEMORY_IN_BYTES + MAX_WASM64_MEMORY_IN_BYTES);
 
 impl InvalidMemoryAllocationError {
     pub fn new(given: candid::Nat) -> Self {

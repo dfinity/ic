@@ -946,7 +946,7 @@ pub fn execute_update_bench(c: &mut Criterion) {
                 Result::No,
                 Wasm64::Disabled,
             ),
-            19000006,
+            519000006,
         ),
         common::Benchmark(
             "wasm64/ic0_cycles_burn128()".into(),
@@ -956,7 +956,7 @@ pub fn execute_update_bench(c: &mut Criterion) {
                 Result::No,
                 Wasm64::Enabled,
             ),
-            19000006,
+            519000006,
         ),
         common::Benchmark(
             "wasm32/ic0_msg_deadline()".into(),

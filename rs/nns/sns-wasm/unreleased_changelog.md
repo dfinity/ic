@@ -15,6 +15,10 @@ on the process that this file is part of, see
 
 ## Removed
 
+* Logos are no longer included into *serialized* initial SNS initialization parameters for newly
+  deployed SNSs. They are, of course, still included in the metadata responses: 
+  `SnsGov.get_metadata` and `SnsLedger.icrc1_metadata`.
+
 ## Fixed
 
 ## Security

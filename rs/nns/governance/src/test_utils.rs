@@ -314,3 +314,9 @@ impl Environment for MockEnvironment {
         result
     }
 }
+
+/// Useful for avoiding errors related to index corruption that happens when neurons
+/// share subaccounts.
+pub fn test_subaccount_for_neuron_id(neuron_id: u64) -> Vec<u8> {
+    [vec![0; 24], neuron_id.to_be_bytes().to_vec()].concat()
+}

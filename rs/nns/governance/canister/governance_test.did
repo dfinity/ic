@@ -438,11 +438,19 @@ type ListNeurons = record {
   neuron_ids : vec nat64;
   include_empty_neurons_readable_by_caller : opt bool;
   include_neurons_readable_by_caller : bool;
+  page_number: opt nat64;
+  page_size: opt nat64;
+  neuron_subaccounts: opt vec NeuronSubaccount;
+};
+
+type NeuronSubaccount = record {
+  subaccount : blob;
 };
 
 type ListNeuronsResponse = record {
   neuron_infos : vec record { nat64; NeuronInfo };
   full_neurons : vec Neuron;
+  total_pages_available: opt nat64;
 };
 
 type ListNodeProviderRewardsRequest = record {

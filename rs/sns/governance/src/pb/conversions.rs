@@ -181,7 +181,9 @@ impl From<pb::NervousSystemFunction> for pb_api::NervousSystemFunction {
             id: item.id,
             name: item.name,
             description: item.description,
-            function_type: item.function_type.map(|x| x.into()),
+            function_type: item
+                .function_type
+                .map(|x: pb::nervous_system_function::FunctionType| x.into()),
         }
     }
 }
@@ -1123,6 +1125,7 @@ impl From<pb::NervousSystemParameters> for pb_api::NervousSystemParameters {
             max_dissolve_delay_bonus_percentage: item.max_dissolve_delay_bonus_percentage,
             max_age_bonus_percentage: item.max_age_bonus_percentage,
             maturity_modulation_disabled: item.maturity_modulation_disabled,
+            automatically_advance_target_version: item.automatically_advance_target_version,
         }
     }
 }
@@ -1150,6 +1153,7 @@ impl From<pb_api::NervousSystemParameters> for pb::NervousSystemParameters {
             max_dissolve_delay_bonus_percentage: item.max_dissolve_delay_bonus_percentage,
             max_age_bonus_percentage: item.max_age_bonus_percentage,
             maturity_modulation_disabled: item.maturity_modulation_disabled,
+            automatically_advance_target_version: item.automatically_advance_target_version,
         }
     }
 }
@@ -3222,6 +3226,7 @@ impl From<pb::upgrade_journal_entry::TargetVersionSet>
         Self {
             old_target_version: item.old_target_version.map(|x| x.into()),
             new_target_version: item.new_target_version.map(|x| x.into()),
+            is_advanced_automatically: item.is_advanced_automatically,
         }
     }
 }
@@ -3232,6 +3237,7 @@ impl From<pb_api::upgrade_journal_entry::TargetVersionSet>
         Self {
             old_target_version: item.old_target_version.map(|x| x.into()),
             new_target_version: item.new_target_version.map(|x| x.into()),
+            is_advanced_automatically: item.is_advanced_automatically,
         }
     }
 }

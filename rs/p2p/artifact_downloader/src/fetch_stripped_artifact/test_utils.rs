@@ -4,7 +4,7 @@ use ic_test_utilities_consensus::{
     make_genesis,
 };
 use ic_types::{
-    artifact::{ConsensusMessageId, IngressMessageId},
+    artifact::ConsensusMessageId,
     batch::{BatchPayload, IngressPayload},
     consensus::{
         dkg::{DkgDataPayload, Summary},
@@ -13,22 +13,40 @@ use ic_types::{
     },
     crypto::{CryptoHash, CryptoHashOf},
     messages::{Blob, HttpCallContent, HttpCanisterUpdate, HttpRequestEnvelope, SignedIngress},
-    time::expiry_time_from_now,
+    time::UNIX_EPOCH,
     Height,
 };
 use ic_types_test_utils::ids::node_test_id;
 
-use super::types::stripped::{StrippedBlockProposal, StrippedIngressPayload};
+use super::types::{
+    stripped::{StrippedBlockProposal, StrippedIngressPayload},
+    SignedIngressId,
+};
 
-pub(crate) fn fake_ingress_message(method_name: &str) -> (SignedIngress, IngressMessageId) {
-    fake_ingress_message_with_arg_size(method_name, 0)
+pub(crate) fn fake_ingress_message(method_name: &str) -> (SignedIngress, SignedIngressId) {
+    fake_ingress_message_with_arg_size_and_sig(method_name, 0, vec![1; 32])
+}
+
+pub(crate) fn fake_ingress_message_with_sig(
+    method_name: &str,
+    sig: Vec<u8>,
+) -> (SignedIngress, SignedIngressId) {
+    fake_ingress_message_with_arg_size_and_sig(method_name, 0, sig)
 }
 
 pub(crate) fn fake_ingress_message_with_arg_size(
     method_name: &str,
     arg_size: usize,
-) -> (SignedIngress, IngressMessageId) {
-    let ingress_expiry = expiry_time_from_now();
+) -> (SignedIngress, SignedIngressId) {
+    fake_ingress_message_with_arg_size_and_sig(method_name, arg_size, vec![1; 32])
+}
+
+pub(crate) fn fake_ingress_message_with_arg_size_and_sig(
+    method_name: &str,
+    arg_size: usize,
+    sig: Vec<u8>,
+) -> (SignedIngress, SignedIngressId) {
+    let ingress_expiry = UNIX_EPOCH;
     let content = HttpCallContent::Call {
         update: HttpCanisterUpdate {
             canister_id: Blob(vec![42; 8]),
@@ -39,17 +57,18 @@ pub(crate) fn fake_ingress_message_with_arg_size(
             ingress_expiry: ingress_expiry.as_nanos_since_unix_epoch(),
         },
     };
-    let ingress = HttpRequestEnvelope::<HttpCallContent> {
+    let ingress: SignedIngress = HttpRequestEnvelope::<HttpCallContent> {
         content,
         sender_pubkey: Some(Blob(vec![2; 32])),
-        sender_sig: Some(Blob(vec![1; 32])),
+        sender_sig: Some(Blob(sig)),
         sender_delegation: None,
     }
     .try_into()
     .unwrap();
-    let ingress_id = IngressMessageId::from(&ingress);
 
-    (ingress, ingress_id)
+    let signed_ingress_id = SignedIngressId::from(&ingress);
+
+    (ingress, signed_ingress_id)
 }
 
 pub(crate) fn fake_block_proposal_with_ingresses(
@@ -77,7 +96,7 @@ pub(crate) fn fake_block_proposal_with_ingresses(
 }
 
 pub(crate) fn fake_stripped_block_proposal_with_ingresses(
-    ingress_messages: Vec<IngressMessageId>,
+    ingress_messages: Vec<SignedIngressId>,
 ) -> StrippedBlockProposal {
     StrippedBlockProposal {
         block_proposal_without_ingresses_proto: pb::BlockProposal::default(),

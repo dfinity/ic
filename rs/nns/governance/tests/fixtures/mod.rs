@@ -27,15 +27,17 @@ use ic_nns_governance::{
     pb::v1::{
         manage_neuron,
         manage_neuron::{Command, Merge, MergeMaturity, NeuronIdOrSubaccount},
-        manage_neuron_response,
-        manage_neuron_response::MergeMaturityResponse,
         neuron,
         neuron::DissolveState,
         proposal, ExecuteNnsFunction, Governance as GovernanceProto, GovernanceError, ManageNeuron,
-        ManageNeuronResponse, Motion, NetworkEconomics, Neuron, NeuronType, NnsFunction, Proposal,
-        ProposalData, RewardEvent, Topic, Vote, XdrConversionRate as XdrConversionRatePb,
+        Motion, NetworkEconomics, Neuron, NeuronType, NnsFunction, Proposal, ProposalData,
+        RewardEvent, Topic, Vote, XdrConversionRate as XdrConversionRatePb,
     },
     storage::reset_stable_memory,
+};
+use ic_nns_governance_api::pb::v1::{
+    manage_neuron_response::{self, MergeMaturityResponse},
+    ManageNeuronResponse,
 };
 use icp_ledger::{AccountIdentifier, Subaccount, Tokens};
 use rand::{prelude::StdRng, RngCore, SeedableRng};
@@ -882,7 +884,7 @@ impl NNS {
             .unwrap();
 
         match result {
-            manage_neuron_response::Command::Error(e) => Err(e),
+            manage_neuron_response::Command::Error(e) => Err(GovernanceError::from(e)),
             manage_neuron_response::Command::MergeMaturity(response) => Ok(response),
             _ => panic!("Merge maturity command returned unexpected response"),
         }
@@ -928,10 +930,7 @@ impl NNS {
     pub fn get_neuron(&self, ident: &NeuronId) -> Neuron {
         self.governance
             .neuron_store
-            .with_neuron(ident, |n| {
-                n.clone()
-                    .into_proto(self.governance.voting_power_economics(), self.now())
-            })
+            .with_neuron(ident, |n| Neuron::from(n.clone()))
             .unwrap()
     }
 

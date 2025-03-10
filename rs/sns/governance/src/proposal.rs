@@ -100,7 +100,7 @@ impl Proposal {
     pub(crate) fn allowed_when_resources_are_low(&self) -> bool {
         self.action
             .as_ref()
-            .map_or(false, |a| a.allowed_when_resources_are_low())
+            .is_some_and(|a| a.allowed_when_resources_are_low())
     }
 
     /// Returns a clone of self, except that "large blob fields" are replaced

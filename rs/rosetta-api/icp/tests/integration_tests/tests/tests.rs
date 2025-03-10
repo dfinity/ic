@@ -411,7 +411,7 @@ fn matches_blockchain_is_empty_error(error: &rosetta_core::miscellaneous::Error)
             .as_ref()
             .unwrap()
             .get("error_message")
-            .map_or(false, |e| {
+            .is_some_and( |e| {
                 e == "Blockchain is empty" || e == "Block not found: 0" || e == "RosettaBlocks was activated and there are no RosettaBlocks in the database yet. The synch is ongoing, please wait until the first RosettaBlock is written to the database."
             })
 }

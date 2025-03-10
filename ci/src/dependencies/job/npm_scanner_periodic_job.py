@@ -22,7 +22,7 @@ REPOS_TO_SCAN = [
             Project(
                 name="frontend",
                 path="nns-dapp/frontend",
-                owner=Team.GIX_TEAM,
+                owner=Team.NNS_TEAM,
             )
         ],
         "18.17.1",
@@ -34,7 +34,7 @@ REPOS_TO_SCAN = [
             Project(
                 name="internet-identity",
                 path="internet-identity",
-                owner=Team.GIX_TEAM,
+                owner=Team.IDENTITY_TEAM,
             )
         ],
         DEFAULT_NODE_VERSION,

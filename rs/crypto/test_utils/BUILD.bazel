@@ -15,7 +15,7 @@ rust_library(
     ],
     deps = [
         # Keep sorted.
-        "//rs/crypto/ed25519",
+        "//packages/ic-ed25519",
         "//rs/crypto/internal/csp_test_utils",
         "//rs/interfaces/registry",
         "//rs/registry/fake",

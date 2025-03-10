@@ -15,8 +15,8 @@ use ic_icp_rosetta_client::{
     RosettaStakeMaturityArgs,
 };
 use ic_icrc1_test_utils::basic_identity_strategy;
-use ic_nns_governance::pb::v1::neuron::DissolveState;
-use ic_nns_governance::pb::v1::KnownNeuronData;
+use ic_nns_governance_api::pb::v1::neuron::DissolveState;
+use ic_nns_governance_api::pb::v1::KnownNeuronData;
 use ic_rosetta_api::ledger_client::list_known_neurons_response::ListKnownNeuronsResponse;
 use ic_rosetta_api::ledger_client::list_neurons_response::ListNeuronsResponse;
 use ic_rosetta_api::ledger_client::neuron_response::NeuronResponse;
@@ -388,7 +388,7 @@ fn test_start_and_stop_neuron_dissolve() {
         let neuron = list_neurons(&agent).await.full_neurons[0].to_owned();
         assert!(
             matches!(
-                neuron.dissolve_state.unwrap(),
+                neuron.dissolve_state.clone().unwrap(),
                 DissolveState::WhenDissolvedTimestampSeconds(_)
             ),
             "Neuron should be in WhenDissolvedTimestampSeconds state, but is instead: {:?}",
@@ -611,9 +611,9 @@ fn test_disburse_neuron() {
         // We now update the neuron so it is in state DISSOLVED
         let now = env.pocket_ic.get_time().await.duration_since(UNIX_EPOCH).unwrap().as_secs();
         neuron.dissolve_state = Some(DissolveState::WhenDissolvedTimestampSeconds(now - 1));
-        update_neuron(&agent, neuron.into()).await;
+        update_neuron(&agent, neuron).await;
 
-        match list_neurons(&agent).await.full_neurons[0].dissolve_state.unwrap() {
+        match list_neurons(&agent).await.full_neurons[0].dissolve_state.clone().unwrap() {
             DissolveState::WhenDissolvedTimestampSeconds (d) => {
                 // The neuron should now be in DISSOLVED state
                 assert!(d<now);
@@ -703,7 +703,7 @@ fn test_list_known_neurons() {
             name: "KnownNeuron 0".to_owned(),
             description: Some("This is a known neuron".to_owned()),
         });
-        update_neuron(&agent, neuron.into()).await;
+        update_neuron(&agent, neuron).await;
 
         let known_neurons = ListKnownNeuronsResponse::try_from(Some(
             env.rosetta_client
@@ -728,7 +728,6 @@ fn test_list_known_neurons() {
                 name: "KnownNeuron 0".to_owned(),
                 description: Some("This is a known neuron".to_owned())
             }
-            .into()
         );
     });
 }
@@ -1047,7 +1046,7 @@ fn test_stake_maturity() {
 
         let new_maturity = 100_000_000;
         neuron.maturity_e8s_equivalent = new_maturity;
-        update_neuron(&agent, neuron.into()).await;
+        update_neuron(&agent, neuron).await;
         let neuron = list_neurons(&agent).await.full_neurons[0].to_owned();
         assert_eq!(neuron.maturity_e8s_equivalent, new_maturity);
 
@@ -1150,7 +1149,7 @@ fn test_spawn_neuron() {
 
                     let new_maturity = 100_000_000_000;
                     neuron.maturity_e8s_equivalent = new_maturity;
-                    update_neuron(&agent, neuron.into()).await;
+                    update_neuron(&agent, neuron).await;
 
                     let neuron = list_neurons(&agent).await.full_neurons[0].to_owned();
                     assert_eq!(neuron.maturity_e8s_equivalent, new_maturity);

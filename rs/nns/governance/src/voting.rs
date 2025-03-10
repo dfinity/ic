@@ -594,8 +594,9 @@ mod test {
         neuron::{DissolveStateAndAge, Neuron, NeuronBuilder},
         neuron_store::NeuronStore,
         pb::v1::{
-            neuron::Followees, proposal::Action, Ballot, Governance as GovernanceProto, Motion,
-            Proposal, ProposalData, Tally, Topic, Vote, VotingPowerEconomics, WaitForQuietState,
+            self as pb, neuron::Followees, proposal::Action, Ballot, Governance as GovernanceProto,
+            Motion, Proposal, ProposalData, Tally, Topic, Vote, VotingPowerEconomics,
+            WaitForQuietState,
         },
         storage::with_voting_state_machines_mut,
         test_utils::{
@@ -716,7 +717,7 @@ mod test {
         let governance_proto = crate::pb::v1::Governance {
             neurons: heap_neurons
                 .into_iter()
-                .map(|(id, neuron)| (id, neuron.into_proto(&VotingPowerEconomics::DEFAULT, now)))
+                .map(|(id, neuron)| (id, pb::Neuron::from(neuron)))
                 .collect(),
             proposals: btreemap! {
                 1 => ProposalData {
@@ -815,7 +816,7 @@ mod test {
         let governance_proto = crate::pb::v1::Governance {
             neurons: neurons
                 .into_iter()
-                .map(|(id, neuron)| (id, neuron.into_proto(&VotingPowerEconomics::DEFAULT, now)))
+                .map(|(id, neuron)| (id, pb::Neuron::from(neuron)))
                 .collect(),
             proposals: btreemap! {
                 1 => ProposalData {
@@ -1113,7 +1114,7 @@ mod test {
             },
             neurons: neurons
                 .into_iter()
-                .map(|(id, n)| (id, n.into_proto(&VotingPowerEconomics::DEFAULT, u64::MAX)))
+                .map(|(id, neuron)| (id, pb::Neuron::from(neuron)))
                 .collect(),
             ..Default::default()
         };
@@ -1188,7 +1189,7 @@ mod test {
             },
             neurons: neurons
                 .into_iter()
-                .map(|(id, n)| (id, n.into_proto(&VotingPowerEconomics::DEFAULT, u64::MAX)))
+                .map(|(id, neuron)| (id, pb::Neuron::from(neuron)))
                 .collect(),
             ..Default::default()
         };
@@ -1248,7 +1249,7 @@ mod test {
             },
             neurons: neurons
                 .into_iter()
-                .map(|(id, n)| (id, n.into_proto(&VotingPowerEconomics::DEFAULT, u64::MAX)))
+                .map(|(id, neuron)| (id, pb::Neuron::from(neuron)))
                 .collect(),
             ..Default::default()
         };
@@ -1356,7 +1357,7 @@ mod test {
             },
             neurons: neurons
                 .into_iter()
-                .map(|(id, n)| (id, n.into_proto(&VotingPowerEconomics::DEFAULT, u64::MAX)))
+                .map(|(id, neuron)| (id, pb::Neuron::from(neuron)))
                 .collect(),
             ..Default::default()
         };
@@ -1474,7 +1475,7 @@ mod test {
             },
             neurons: neurons
                 .into_iter()
-                .map(|(id, n)| (id, n.into_proto(&VotingPowerEconomics::DEFAULT, u64::MAX)))
+                .map(|(id, neuron)| (id, pb::Neuron::from(neuron)))
                 .collect(),
             ..Default::default()
         };

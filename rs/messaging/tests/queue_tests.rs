@@ -204,7 +204,7 @@ impl SubnetPairProxy {
         do_until_or_panic(MAX_TICKS, |_| {
             let exit_condition = self
                 .local_output_queue_snapshot()
-                .map_or(false, |q| q.len() >= min_num_messages);
+                .is_some_and(|q| q.len() >= min_num_messages);
             if !exit_condition {
                 self.local_env.tick();
             }

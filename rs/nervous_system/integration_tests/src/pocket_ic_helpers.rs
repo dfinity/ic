@@ -1,18 +1,21 @@
 use candid::{Decode, Encode, Nat, Principal};
 use canister_test::Wasm;
-use futures::stream;
-use futures::StreamExt;
+use futures::{stream, StreamExt};
 use ic_base_types::{CanisterId, PrincipalId, SubnetId};
+use ic_interfaces_registry::{RegistryDataProvider, ZERO_REGISTRY_VERSION};
 use ic_ledger_core::Tokens;
-use ic_nervous_system_agent::pocketic_impl::{PocketIcAgent, PocketIcCallError};
-use ic_nervous_system_agent::sns::Sns;
-use ic_nervous_system_agent::CallCanisters;
+use ic_nervous_system_agent::{
+    pocketic_impl::{PocketIcAgent, PocketIcCallError},
+    sns::Sns,
+    CallCanisters,
+};
 use ic_nervous_system_common::{E8, ONE_DAY_SECONDS};
 use ic_nervous_system_common_test_keys::{TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_PRINCIPAL};
 use ic_nns_common::pb::v1::{NeuronId, ProposalId};
 use ic_nns_constants::{
-    self, ALL_NNS_CANISTER_IDS, GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID, LIFELINE_CANISTER_ID,
-    REGISTRY_CANISTER_ID, ROOT_CANISTER_ID, SNS_WASM_CANISTER_ID,
+    self, ALL_NNS_CANISTER_IDS, CYCLES_MINTING_CANISTER_ID, GOVERNANCE_CANISTER_ID,
+    LEDGER_CANISTER_ID, LIFELINE_CANISTER_ID, REGISTRY_CANISTER_ID, ROOT_CANISTER_ID,
+    SNS_WASM_CANISTER_ID,
 };
 use ic_nns_governance_api::pb::v1::{
     install_code::CanisterInstallMode, manage_neuron_response, CreateServiceNervousSystem,
@@ -23,10 +26,11 @@ use ic_nns_governance_api::pb::v1::{
 };
 use ic_nns_test_utils::{
     common::{
-        build_governance_wasm, build_ledger_wasm, build_lifeline_wasm,
-        build_mainnet_governance_wasm, build_mainnet_ledger_wasm, build_mainnet_lifeline_wasm,
-        build_mainnet_registry_wasm, build_mainnet_root_wasm, build_mainnet_sns_wasms_wasm,
-        build_registry_wasm, build_root_wasm, build_sns_wasms_wasm, NnsInitPayloadsBuilder,
+        build_cmc_wasm, build_governance_wasm, build_ledger_wasm, build_lifeline_wasm,
+        build_mainnet_cmc_wasm, build_mainnet_governance_wasm, build_mainnet_ledger_wasm,
+        build_mainnet_lifeline_wasm, build_mainnet_registry_wasm, build_mainnet_root_wasm,
+        build_mainnet_sns_wasms_wasm, build_registry_wasm, build_root_wasm, build_sns_wasms_wasm,
+        NnsInitPayloadsBuilder,
     },
     sns_wasm::{
         build_archive_sns_wasm, build_governance_sns_wasm, build_index_ng_sns_wasm,
@@ -36,8 +40,11 @@ use ic_nns_test_utils::{
         build_swap_sns_wasm, ensure_sns_wasm_gzipped,
     },
 };
-use ic_registry_transport::pb::v1::RegistryAtomicMutateRequest;
-use ic_sns_governance::pb::v1::{
+use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
+use ic_registry_transport::pb::v1::{
+    registry_mutation, RegistryAtomicMutateRequest, RegistryMutation,
+};
+use ic_sns_governance_api::pb::v1::{
     self as sns_pb, governance::Version, AdvanceTargetVersionRequest, AdvanceTargetVersionResponse,
 };
 use ic_sns_init::SnsCanisterInitPayloads;
@@ -60,8 +67,7 @@ use icrc_ledger_types::icrc1::{
     account::Account,
     transfer::{TransferArg, TransferError},
 };
-use itertools::EitherOrBoth;
-use itertools::Itertools;
+use itertools::{EitherOrBoth, Itertools};
 use maplit::btreemap;
 use pocket_ic::{
     management_canister::CanisterSettings, nonblocking::PocketIc, ErrorCode, PocketIcBuilder,
@@ -69,10 +75,12 @@ use pocket_ic::{
 };
 use prost::Message;
 use rust_decimal::prelude::ToPrimitive;
-use std::ops::Range;
-use std::{collections::BTreeMap, fmt::Write, time::Duration};
+use std::{collections::BTreeMap, fmt::Write, ops::Range, path::Path, time::Duration};
 
 pub const STARTING_CYCLES_PER_CANISTER: u128 = 2_000_000_000_000_000;
+
+/// How frequently the canister should attempt to refresh the cached_upgrade_steps
+pub(crate) const UPGRADE_STEPS_INTERVAL_REFRESH_BACKOFF_SECONDS: u64 = 60 * 60; // 1 hour
 
 pub fn fmt_bytes(bytes: &[u8]) -> String {
     bytes.iter().fold(String::new(), |mut output, x| {
@@ -312,6 +320,370 @@ pub async fn add_wasms_to_sns_wasm(
     })
 }
 
+/// A builder for fine-tuning and installing the NNS canister suite in PocketIc.
+#[derive(Default)]
+pub struct NnsInstaller {
+    mainnet_nns_canister_versions: Option<bool>,
+    neurons_fund_hotkeys: Vec<PrincipalId>,
+    custom_registry_mutations: Option<Vec<RegistryAtomicMutateRequest>>,
+    initial_balances: Vec<(AccountIdentifier, Tokens)>,
+    with_cycles_minting_canister: bool,
+    with_cycles_ledger: bool,
+}
+
+impl NnsInstaller {
+    /// Requests the mainnet Wasm versions for all NNS canisters being installed.
+    pub fn with_mainnet_nns_canister_versions(&mut self) -> &mut Self {
+        self.mainnet_nns_canister_versions = Some(true);
+        self
+    }
+
+    /// Requests tip-of-this-branch Wasm versions for all NNS canisters being installed.
+    pub fn with_current_nns_canister_versions(&mut self) -> &mut Self {
+        self.mainnet_nns_canister_versions = Some(false);
+        self
+    }
+
+    /// Requests that the NNS Governance is initialized with a Neurons' Fund neuron with hotkeys
+    /// taken from `neurons_fund_hotkeys`. Hotkeys are principals that can control the neuron
+    /// in various ways, but generally less powerful than the neuron controller.
+    pub fn with_neurons_fund_hotkeys(
+        &mut self,
+        neurons_fund_hotkeys: Vec<PrincipalId>,
+    ) -> &mut Self {
+        self.neurons_fund_hotkeys = neurons_fund_hotkeys;
+        self
+    }
+
+    /// Requests that the NNS Registry is initialized with `custom_registry_mutations`.
+    ///
+    /// The custom mutations must result in an invariant-compliant Registry state.
+    ///
+    /// Without this specification, default initial Registry mutations will be used, which are
+    /// guaranteed to be compliant.
+    pub fn with_custom_registry_mutations(
+        &mut self,
+        custom_registry_mutations: Vec<RegistryAtomicMutateRequest>,
+    ) -> &mut Self {
+        self.custom_registry_mutations = Some(custom_registry_mutations);
+        self
+    }
+
+    /// Requests `initial_balances` as a Vec of `(test_user_icp_ledger_account,
+    /// test_user_icp_ledger_initial_balance)` pairs, representing some initial ICP balances.
+    pub fn with_ledger_balances(
+        &mut self,
+        initial_balances: Vec<(AccountIdentifier, Tokens)>,
+    ) -> &mut Self {
+        self.initial_balances = initial_balances;
+        self
+    }
+
+    pub fn with_cycles_minting_canister(&mut self) -> &mut Self {
+        self.with_cycles_minting_canister = true;
+        self
+    }
+
+    pub fn with_cycles_ledger(&mut self) -> &mut Self {
+        self.with_cycles_ledger = true;
+        self
+    }
+
+    /// Installs the NNS canister suite.
+    ///
+    /// Ensures that there is a whale neuron with `TEST_NEURON_1_ID`.
+    ///
+    /// Requires that the PocketIC instance has an NNS and an SNS subnet.
+    ///
+    /// Returns the list of `controller_principal_id`s of pre-configured NNS neurons.
+    pub async fn install(self, pocket_ic: &PocketIc) -> Vec<PrincipalId> {
+        let with_mainnet_canister_versions = self
+            .mainnet_nns_canister_versions
+            .expect("Please explicitly request either mainnet or tip-of-the-branch NNS version.");
+
+        let topology = pocket_ic.topology().await;
+
+        let sns_subnet_id = topology.get_sns().expect("No SNS subnet found");
+        let sns_subnet_id = SubnetId::from(PrincipalId::from(sns_subnet_id));
+
+        let mut nns_init_payload_builder = NnsInitPayloadsBuilder::new();
+
+        if let Some(custom_registry_mutations) = self.custom_registry_mutations {
+            nns_init_payload_builder.with_initial_mutations(custom_registry_mutations);
+        } else {
+            nns_init_payload_builder.with_initial_invariant_compliant_mutations();
+        }
+
+        let maturity_equivalent_icp_e8s = 1_500_000 * E8;
+        nns_init_payload_builder
+            .with_test_neurons_fund_neurons_with_hotkeys(
+                self.neurons_fund_hotkeys,
+                maturity_equivalent_icp_e8s,
+            )
+            .with_sns_dedicated_subnets(vec![sns_subnet_id])
+            .with_sns_wasm_access_controls(true);
+
+        for (test_user_icp_ledger_account, test_user_icp_ledger_initial_balance) in
+            self.initial_balances
+        {
+            nns_init_payload_builder.with_ledger_account(
+                test_user_icp_ledger_account,
+                test_user_icp_ledger_initial_balance,
+            );
+        }
+
+        let nns_init_payload = nns_init_payload_builder.build();
+
+        let (governance_wasm, ledger_wasm, root_wasm, lifeline_wasm, sns_wasm_wasm, registry_wasm) =
+            if with_mainnet_canister_versions {
+                (
+                    build_mainnet_governance_wasm(),
+                    build_mainnet_ledger_wasm(),
+                    build_mainnet_root_wasm(),
+                    build_mainnet_lifeline_wasm(),
+                    build_mainnet_sns_wasms_wasm(),
+                    build_mainnet_registry_wasm(),
+                )
+            } else {
+                (
+                    build_governance_wasm(),
+                    build_ledger_wasm(),
+                    build_root_wasm(),
+                    build_lifeline_wasm(),
+                    build_sns_wasms_wasm(),
+                    build_registry_wasm(),
+                )
+            };
+
+        install_canister(
+            pocket_ic,
+            "ICP Ledger",
+            LEDGER_CANISTER_ID,
+            Encode!(&nns_init_payload.ledger).unwrap(),
+            ledger_wasm,
+            Some(ROOT_CANISTER_ID.get()),
+        )
+        .await;
+        install_canister(
+            pocket_ic,
+            "NNS Root",
+            ROOT_CANISTER_ID,
+            Encode!(&nns_init_payload.root).unwrap(),
+            root_wasm,
+            Some(LIFELINE_CANISTER_ID.get()),
+        )
+        .await;
+        install_canister(
+            pocket_ic,
+            "NNS Governance",
+            GOVERNANCE_CANISTER_ID,
+            nns_init_payload.governance.encode_to_vec(),
+            governance_wasm,
+            Some(ROOT_CANISTER_ID.get()),
+        )
+        .await;
+        install_canister(
+            pocket_ic,
+            "Lifeline",
+            LIFELINE_CANISTER_ID,
+            Encode!(&nns_init_payload.lifeline).unwrap(),
+            lifeline_wasm,
+            Some(ROOT_CANISTER_ID.get()),
+        )
+        .await;
+        install_canister(
+            pocket_ic,
+            "NNS SNS-W",
+            SNS_WASM_CANISTER_ID,
+            Encode!(&nns_init_payload.sns_wasms).unwrap(),
+            sns_wasm_wasm,
+            Some(ROOT_CANISTER_ID.get()),
+        )
+        .await;
+        install_canister(
+            pocket_ic,
+            "Registry",
+            REGISTRY_CANISTER_ID,
+            Encode!(&nns_init_payload.registry).unwrap(),
+            registry_wasm,
+            Some(ROOT_CANISTER_ID.get()),
+        )
+        .await;
+
+        if self.with_cycles_minting_canister {
+            let cycles_minting_wasm = if with_mainnet_canister_versions {
+                build_mainnet_cmc_wasm()
+            } else {
+                build_cmc_wasm()
+            };
+            install_canister(
+                pocket_ic,
+                "Cycles Minting",
+                CYCLES_MINTING_CANISTER_ID,
+                Encode!(&nns_init_payload.cycles_minting).unwrap(),
+                cycles_minting_wasm,
+                Some(ROOT_CANISTER_ID.get()),
+            )
+            .await;
+
+            // Authorize canister creation on application subnets.
+            let application_subnets = pocket_ic
+                .topology()
+                .await
+                .subnet_configs
+                .keys()
+                .map(|subnet_id| SubnetId::from(PrincipalId(*subnet_id)))
+                .collect();
+            nns::cmc::set_authorized_subnetwork_list(
+                pocket_ic,
+                GOVERNANCE_CANISTER_ID.get(),
+                None,
+                application_subnets,
+            )
+            .await;
+        }
+
+        if self.with_cycles_ledger {
+            cycles_ledger::install(pocket_ic).await;
+        }
+
+        nns_init_payload
+            .governance
+            .neurons
+            .values()
+            .map(|neuron| neuron.controller.unwrap())
+            .collect()
+    }
+}
+
+pub fn load_registry_mutations<P: AsRef<Path>>(path: P) -> RegistryAtomicMutateRequest {
+    let registry_data_provider = ProtoRegistryDataProvider::load_from_file(path.as_ref());
+    let updates = registry_data_provider
+        .get_updates_since(ZERO_REGISTRY_VERSION)
+        .unwrap();
+
+    let mutations = updates
+        .into_iter()
+        .map(|update| {
+            let mut mutation = RegistryMutation::default();
+
+            let typ = if update.value.is_none() {
+                registry_mutation::Type::Delete
+            } else {
+                registry_mutation::Type::Insert
+            };
+            mutation.set_mutation_type(typ);
+            mutation.key = update.key.as_bytes().to_vec();
+            mutation.value = update.value.unwrap_or_default();
+            mutation
+        })
+        .collect::<Vec<_>>();
+
+    RegistryAtomicMutateRequest {
+        mutations,
+        ..Default::default()
+    }
+}
+
+pub mod cycles_ledger {
+    use super::{install_canister, nns};
+    use candid::{CandidType, Encode, Principal};
+    use canister_test::Wasm;
+    use cycles_minting_canister::{NotifyMintCyclesSuccess, MEMO_MINT_CYCLES};
+    use ic_base_types::PrincipalId;
+    use ic_nns_constants::{
+        CYCLES_LEDGER_CANISTER_ID, CYCLES_MINTING_CANISTER_ID, ROOT_CANISTER_ID,
+    };
+    use icp_ledger::{
+        account_identifier::Subaccount, AccountIdentifier, Tokens, TransferArgs,
+        DEFAULT_TRANSFER_FEE,
+    };
+    use pocket_ic::nonblocking::PocketIc;
+
+    #[derive(Clone, Eq, PartialEq, Hash, Debug, CandidType)]
+    struct CyclesLedgerInitArgs {
+        pub index_id: Option<Principal>,
+        pub max_transactions_per_request: u64,
+    }
+
+    /// Argument taken by the Cycles Ledger canister.
+    ///
+    /// See (https://github.com/dfinity/cycles-ledger/tree/main/cycles-ledger
+    ///
+    /// ```candid
+    /// (variant {
+    ///     Init = record {
+    ///         index_id : opt principal;
+    ///         max_transactions_per_request : nat64;
+    ///     }
+    /// })
+    /// ```
+    #[derive(Clone, Eq, PartialEq, Hash, Debug, CandidType)]
+    enum CyclesLedgerArgs {
+        Init(CyclesLedgerInitArgs),
+    }
+
+    pub async fn install(pocket_ic: &PocketIc) {
+        let features = &[];
+        let cycles_ledger_wasm =
+            Wasm::from_location_specified_by_env_var("cycles_ledger", features).unwrap();
+
+        let arg = Encode!(&CyclesLedgerArgs::Init(CyclesLedgerInitArgs {
+            index_id: None,
+            max_transactions_per_request: 1000,
+        }))
+        .unwrap();
+
+        install_canister(
+            pocket_ic,
+            "Cycles Ledger",
+            CYCLES_LEDGER_CANISTER_ID,
+            arg,
+            cycles_ledger_wasm,
+            Some(ROOT_CANISTER_ID.get()),
+        )
+        .await;
+    }
+
+    pub async fn mint_icp_and_convert_to_cycles(
+        pocket_ic: &PocketIc,
+        beneficiary: PrincipalId,
+        amount: Tokens,
+    ) {
+        nns::ledger::mint_icp(
+            pocket_ic,
+            AccountIdentifier::new(beneficiary, None),
+            amount.saturating_add(DEFAULT_TRANSFER_FEE),
+            None,
+        )
+        .await;
+
+        let beneficiary_cmc_account = AccountIdentifier::new(
+            CYCLES_MINTING_CANISTER_ID.into(),
+            Some(Subaccount::from(&beneficiary)),
+        );
+
+        let transfer_args = TransferArgs {
+            memo: MEMO_MINT_CYCLES,
+            amount,
+            fee: Tokens::from_e8s(10_000),
+            from_subaccount: None,
+            to: beneficiary_cmc_account.to_address(),
+            created_at_time: None,
+        };
+
+        let block_index = nns::ledger::transfer(pocket_ic, beneficiary, transfer_args)
+            .await
+            .unwrap();
+
+        let NotifyMintCyclesSuccess {
+            block_index: _,
+            minted: _,
+            balance: _,
+        } = nns::cmc::notify_mint_cycles(pocket_ic, beneficiary, None, None, block_index).await;
+    }
+}
+
 /// Installs the NNS canisters, ensuring that there is a whale neuron with `TEST_NEURON_1_ID`.
 /// Requires PocketIC to have at least an NNS and an SNS subnet.
 ///
@@ -320,7 +692,7 @@ pub async fn add_wasms_to_sns_wasm(
 ///    (or, therwise, tip-of-this-branch) WASM versions should be installed.
 /// 2. `initial_balances` is a `Vec` of `(test_user_icp_ledger_account,
 ///    test_user_icp_ledger_initial_balance)` pairs, representing some initial ICP balances.
-/// 3. `custom_initial_registry_mutations` are custom mutations for the inital Registry. These
+/// 3. `custom_registry_mutations` are custom mutations for the inital Registry. These
 ///    should mutations should comply with Registry invariants, otherwise this function will fail.
 /// 4. `maturity_equivalent_icp_e8s` - hotkeys of the 1st NNS (Neurons' Fund-participating) neuron.
 ///
@@ -330,125 +702,26 @@ pub async fn install_nns_canisters(
     pocket_ic: &PocketIc,
     initial_balances: Vec<(AccountIdentifier, Tokens)>,
     with_mainnet_nns_canister_versions: bool,
-    custom_initial_registry_mutations: Option<Vec<RegistryAtomicMutateRequest>>,
+    custom_registry_mutations: Option<Vec<RegistryAtomicMutateRequest>>,
     neurons_fund_hotkeys: Vec<PrincipalId>,
 ) -> Vec<PrincipalId> {
-    let topology = pocket_ic.topology().await;
+    let mut nns_installer = NnsInstaller::default();
 
-    let sns_subnet_id = topology.get_sns().expect("No SNS subnet found");
-    let sns_subnet_id = PrincipalId::from(sns_subnet_id);
-    let sns_subnet_id = SubnetId::from(sns_subnet_id);
-    println!("sns_subnet_id = {:?}", sns_subnet_id);
+    nns_installer
+        .with_ledger_balances(initial_balances)
+        .with_neurons_fund_hotkeys(neurons_fund_hotkeys);
 
-    let mut nns_init_payload_builder = NnsInitPayloadsBuilder::new();
-
-    if let Some(custom_initial_registry_mutations) = custom_initial_registry_mutations {
-        nns_init_payload_builder.with_initial_mutations(custom_initial_registry_mutations);
+    if with_mainnet_nns_canister_versions {
+        nns_installer.with_mainnet_nns_canister_versions();
     } else {
-        nns_init_payload_builder.with_initial_invariant_compliant_mutations();
-    }
-    let maturity_equivalent_icp_e8s = 1_500_000 * E8;
-    nns_init_payload_builder
-        .with_test_neurons_fund_neurons_with_hotkeys(
-            neurons_fund_hotkeys,
-            maturity_equivalent_icp_e8s,
-        )
-        .with_sns_dedicated_subnets(vec![sns_subnet_id])
-        .with_sns_wasm_access_controls(true);
-
-    for (test_user_icp_ledger_account, test_user_icp_ledger_initial_balance) in initial_balances {
-        nns_init_payload_builder.with_ledger_account(
-            test_user_icp_ledger_account,
-            test_user_icp_ledger_initial_balance,
-        );
+        nns_installer.with_current_nns_canister_versions();
     }
 
-    let nns_init_payload = nns_init_payload_builder.build();
+    if let Some(custom_registry_mutations) = custom_registry_mutations {
+        nns_installer.with_custom_registry_mutations(custom_registry_mutations);
+    }
 
-    let (governance_wasm, ledger_wasm, root_wasm, lifeline_wasm, sns_wasm_wasm, registry_wasm) =
-        if with_mainnet_nns_canister_versions {
-            (
-                build_mainnet_governance_wasm(),
-                build_mainnet_ledger_wasm(),
-                build_mainnet_root_wasm(),
-                build_mainnet_lifeline_wasm(),
-                build_mainnet_sns_wasms_wasm(),
-                build_mainnet_registry_wasm(),
-            )
-        } else {
-            (
-                build_governance_wasm(),
-                build_ledger_wasm(),
-                build_root_wasm(),
-                build_lifeline_wasm(),
-                build_sns_wasms_wasm(),
-                build_registry_wasm(),
-            )
-        };
-
-    install_canister(
-        pocket_ic,
-        "ICP Ledger",
-        LEDGER_CANISTER_ID,
-        Encode!(&nns_init_payload.ledger).unwrap(),
-        ledger_wasm,
-        Some(ROOT_CANISTER_ID.get()),
-    )
-    .await;
-    install_canister(
-        pocket_ic,
-        "NNS Root",
-        ROOT_CANISTER_ID,
-        Encode!(&nns_init_payload.root).unwrap(),
-        root_wasm,
-        Some(LIFELINE_CANISTER_ID.get()),
-    )
-    .await;
-    install_canister(
-        pocket_ic,
-        "NNS Governance",
-        GOVERNANCE_CANISTER_ID,
-        nns_init_payload.governance.encode_to_vec(),
-        governance_wasm,
-        Some(ROOT_CANISTER_ID.get()),
-    )
-    .await;
-    install_canister(
-        pocket_ic,
-        "Lifeline",
-        LIFELINE_CANISTER_ID,
-        Encode!(&nns_init_payload.lifeline).unwrap(),
-        lifeline_wasm,
-        Some(ROOT_CANISTER_ID.get()),
-    )
-    .await;
-    install_canister(
-        pocket_ic,
-        "NNS SNS-W",
-        SNS_WASM_CANISTER_ID,
-        Encode!(&nns_init_payload.sns_wasms).unwrap(),
-        sns_wasm_wasm,
-        Some(ROOT_CANISTER_ID.get()),
-    )
-    .await;
-    install_canister(
-        pocket_ic,
-        "Registry",
-        REGISTRY_CANISTER_ID,
-        Encode!(&nns_init_payload.registry).unwrap(),
-        registry_wasm,
-        Some(ROOT_CANISTER_ID.get()),
-    )
-    .await;
-
-    let nns_neurons = nns_init_payload
-        .governance
-        .neurons
-        .values()
-        .map(|neuron| neuron.controller.unwrap())
-        .collect();
-
-    nns_neurons
+    nns_installer.install(pocket_ic).await
 }
 
 #[derive(Copy, Clone, Debug)]
@@ -565,7 +838,7 @@ pub async fn install_sns_directly_with_snsw_versions(
         index_wasm_hash: index_sns_wasm.sha256_hash().to_vec(),
     };
 
-    governance.deployed_version = Some(deployed_version);
+    governance.deployed_version = Some(deployed_version.into());
 
     install_canister(
         root_canister_id,
@@ -831,8 +1104,11 @@ pub mod nns {
                     Encode!(&ListNeurons {
                         neuron_ids: vec![],
                         include_neurons_readable_by_caller: true,
-                        include_empty_neurons_readable_by_caller: None,
+                        include_empty_neurons_readable_by_caller: Some(true),
                         include_public_neurons_in_full_neurons: None,
+                        page_number: None,
+                        page_size: None,
+                        neuron_subaccounts: None,
                     })
                     .unwrap(),
                 )
@@ -1077,14 +1353,32 @@ pub mod nns {
             Decode!(&result, Tokens).unwrap()
         }
 
+        pub async fn transfer(
+            pocket_ic: &PocketIc,
+            sender: PrincipalId,
+            args: TransferArgs,
+        ) -> Result<u64, icp_ledger::TransferError> {
+            let result = pocket_ic
+                .update_call(
+                    LEDGER_CANISTER_ID.into(),
+                    sender.into(),
+                    "transfer",
+                    Encode!(&args).unwrap(),
+                )
+                .await
+                .unwrap();
+
+            Decode!(&result, Result<u64, icp_ledger::TransferError>).unwrap()
+        }
+
         // Test method to mint ICP to a principal
         pub async fn mint_icp(
             pocket_ic: &PocketIc,
             destination: AccountIdentifier,
             amount: Tokens,
-        ) {
-            // Construct request.
-            let transfer_request = TransferArgs {
+            memo: Option<Memo>,
+        ) -> u64 {
+            let args = TransferArgs {
                 to: destination.to_address(),
                 // An overwhelmingly large number, but not so large as to cause serious risk of
                 // addition overflow.
@@ -1093,25 +1387,14 @@ pub mod nns {
                 // Non-Operative
                 // -------------
                 fee: Tokens::ZERO, // Because we are minting.
-                memo: Memo(0),
+                memo: memo.unwrap_or(Memo(0)),
                 from_subaccount: None,
                 created_at_time: None,
             };
-            // Call ledger.
-            let result = pocket_ic
-                .update_call(
-                    LEDGER_CANISTER_ID.into(),
-                    GOVERNANCE_CANISTER_ID.get().0,
-                    "transfer",
-                    Encode!(&transfer_request).unwrap(),
-                )
-                .await;
 
-            // Assert result is ok.
-            match result {
-                Ok(_reply) => (), // Ok,
-                _ => panic!("{:?}", result),
-            }
+            let result = transfer(pocket_ic, GOVERNANCE_CANISTER_ID.into(), args).await;
+
+            result.unwrap()
         }
     }
 
@@ -1120,6 +1403,7 @@ pub mod nns {
         use ic_nns_test_utils::sns_wasm::create_modified_sns_wasm;
         use ic_sns_wasm::pb::v1::{
             GetWasmRequest, GetWasmResponse, ListUpgradeStepsRequest, ListUpgradeStepsResponse,
+            SnsVersion,
         };
 
         pub async fn get_deployed_sns_by_proposal_id(
@@ -1181,10 +1465,25 @@ pub mod nns {
                 .cloned()
                 .expect("No upgrade steps found")
                 .version
-                .expect("No version found")
-                .into();
+                .expect("No version found");
 
-            latest_version
+            let SnsVersion {
+                root_wasm_hash,
+                governance_wasm_hash,
+                ledger_wasm_hash,
+                swap_wasm_hash,
+                archive_wasm_hash,
+                index_wasm_hash,
+            } = latest_version;
+
+            Version {
+                root_wasm_hash,
+                governance_wasm_hash,
+                ledger_wasm_hash,
+                swap_wasm_hash,
+                archive_wasm_hash,
+                index_wasm_hash,
+            }
         }
 
         /// Modify the WASM for a given canister type and add it to SNS-W.
@@ -1231,10 +1530,66 @@ pub mod nns {
             version
         }
     }
+
+    pub mod cmc {
+        use super::*;
+        use cycles_minting_canister::{
+            NotifyMintCyclesArg, NotifyMintCyclesResult, NotifyMintCyclesSuccess,
+            SetAuthorizedSubnetworkListArgs,
+        };
+        use ic_nns_constants::CYCLES_MINTING_CANISTER_ID;
+        use icrc_ledger_types::icrc1::account::Subaccount;
+
+        pub async fn set_authorized_subnetwork_list(
+            pocket_ic: &PocketIc,
+            sender: PrincipalId,
+            who: Option<PrincipalId>,
+            subnets: Vec<SubnetId>,
+        ) {
+            let result = pocket_ic
+                .update_call(
+                    CYCLES_MINTING_CANISTER_ID.into(),
+                    sender.into(),
+                    "set_authorized_subnetwork_list",
+                    Encode!(&SetAuthorizedSubnetworkListArgs { who, subnets }).unwrap(),
+                )
+                .await
+                .unwrap();
+
+            Decode!(&result, ()).unwrap();
+        }
+
+        pub async fn notify_mint_cycles(
+            pocket_ic: &PocketIc,
+            sender: PrincipalId,
+            deposit_memo: Option<Vec<u8>>,
+            to_subaccount: Option<Subaccount>,
+            block_index: u64,
+        ) -> NotifyMintCyclesSuccess {
+            let result = pocket_ic
+                .update_call(
+                    CYCLES_MINTING_CANISTER_ID.into(),
+                    sender.into(),
+                    "notify_mint_cycles",
+                    Encode!(&NotifyMintCyclesArg {
+                        block_index,
+                        to_subaccount,
+                        deposit_memo
+                    })
+                    .unwrap(),
+                )
+                .await
+                .unwrap();
+
+            let result = Decode!(&result, NotifyMintCyclesResult).unwrap();
+            result.unwrap()
+        }
+    }
 }
 
 pub mod sns {
     use super::*;
+    use ic_nervous_system_agent::sns::root::SnsCanisters;
 
     #[derive(Clone, Debug, PartialEq)]
     pub enum SnsUpgradeError {
@@ -1256,7 +1611,10 @@ pub mod sns {
         expected_type_to_change: SnsCanisterType,
     ) -> Result<(), SnsUpgradeError> {
         // Ensure that we are working with knowledge of the latest archive canisters (if there are any).
-        let sns = sns.root.list_sns_canisters(pocket_ic).await.unwrap();
+        let sns = {
+            let response = sns.root.list_sns_canisters(pocket_ic).await.unwrap();
+            SnsCanisters::try_from(response).unwrap().sns
+        };
 
         let (canister_id, controller_id) = match expected_type_to_change {
             SnsCanisterType::Root => (sns.root.canister_id, sns.governance.canister_id),
@@ -1365,15 +1723,45 @@ pub mod sns {
         use super::*;
         use assert_matches::assert_matches;
         use ic_crypto_sha2::Sha256;
-        use ic_nervous_system_agent::sns::governance::{GovernanceCanister, SubmitProposalError};
-        use ic_sns_governance::governance::UPGRADE_STEPS_INTERVAL_REFRESH_BACKOFF_SECONDS;
-        use ic_sns_governance::pb::v1::get_neuron_response;
+        use ic_nervous_system_agent::sns::governance::{
+            GovernanceCanister, ProposalSubmissionError, SubmittedProposal,
+        };
+        use ic_sns_governance_api::pb::v1::{
+            get_neuron_response,
+            neuron::DissolveState,
+            upgrade_journal_entry::{self, Event},
+            Neuron,
+        };
         use pocket_ic::ErrorCode;
         use sns_pb::UpgradeSnsControlledCanister;
 
         pub const EXPECTED_UPGRADE_DURATION_MAX_SECONDS: u64 = 1000;
         pub const EXPECTED_UPGRADE_STEPS_REFRESH_MAX_SECONDS: u64 =
             UPGRADE_STEPS_INTERVAL_REFRESH_BACKOFF_SECONDS + 10;
+
+        pub fn redact_human_readable(event: Event) -> Event {
+            match event {
+                Event::UpgradeOutcome(upgrade_outcome) => {
+                    Event::UpgradeOutcome(upgrade_journal_entry::UpgradeOutcome {
+                        human_readable: None,
+                        ..upgrade_outcome
+                    })
+                }
+                Event::UpgradeStepsReset(upgrade_steps_reset) => {
+                    Event::UpgradeStepsReset(upgrade_journal_entry::UpgradeStepsReset {
+                        human_readable: None,
+                        ..upgrade_steps_reset
+                    })
+                }
+                Event::TargetVersionReset(target_version_reset) => {
+                    Event::TargetVersionReset(upgrade_journal_entry::TargetVersionReset {
+                        human_readable: None,
+                        ..target_version_reset
+                    })
+                }
+                event => event,
+            }
+        }
 
         /// Manage an SNS neuron, e.g., to make an SNS Governance proposal.
         async fn manage_neuron(
@@ -1384,14 +1772,14 @@ pub mod sns {
             neuron_id: sns_pb::NeuronId,
             command: sns_pb::manage_neuron::Command,
         ) -> sns_pb::ManageNeuronResponse {
-            let sub_account = neuron_id.subaccount().unwrap();
+            let subaccount = neuron_id.id.to_vec();
             let result = pocket_ic
                 .update_call(
                     canister_id.into(),
                     sender.into(),
                     "manage_neuron",
                     Encode!(&sns_pb::ManageNeuron {
-                        subaccount: sub_account.to_vec(),
+                        subaccount,
                         command: Some(command),
                     })
                     .unwrap(),
@@ -1427,11 +1815,15 @@ pub mod sns {
         ) -> Result<sns_pb::ProposalData, sns_pb::GovernanceError> {
             let agent = PocketIcAgent::new(pocket_ic, sender);
             let governance = GovernanceCanister::new(canister_id);
-            let proposal_id = governance
+
+            let response = governance
                 .submit_proposal(&agent, neuron_id, proposal)
                 .await
-                .map_err(|err| match err {
-                    SubmitProposalError::GovernanceError(e) => e,
+                .unwrap();
+
+            let SubmittedProposal { proposal_id } =
+                SubmittedProposal::try_from(response).map_err(|err| match err {
+                    ProposalSubmissionError::GovernanceError(e) => e,
                     e => panic!("Unexpected error: {e}"),
                 })?;
 
@@ -1439,7 +1831,7 @@ pub mod sns {
         }
 
         /// This function assumes that the proposal submission succeeded (and panics otherwise).
-        async fn wait_for_proposal_execution(
+        pub async fn wait_for_proposal_execution(
             pocket_ic: &PocketIc,
             canister_id: PrincipalId,
             proposal_id: sns_pb::ProposalId,
@@ -1527,6 +1919,16 @@ pub mod sns {
             Decode!(&result, sns_pb::ListNeuronsResponse).unwrap()
         }
 
+        pub fn dissolve_delay_seconds(neuron: &Neuron, now_seconds: u64) -> u64 {
+            match neuron.dissolve_state {
+                Some(DissolveState::DissolveDelaySeconds(d)) => d,
+                Some(DissolveState::WhenDissolvedTimestampSeconds(ts)) => {
+                    ts.saturating_sub(now_seconds)
+                }
+                None => 0,
+            }
+        }
+
         /// Searches for the ID and controller principal of an SNS neuron that can submit proposals,
         /// i.e., a neuron whose `dissolve_delay_seconds` is greater that or equal 6 months.
         pub async fn find_neuron_with_majority_voting_power(
@@ -1537,7 +1939,7 @@ pub mod sns {
             sns_neurons
                 .iter()
                 .find(|neuron| {
-                    neuron.dissolve_delay_seconds(neuron.created_timestamp_seconds)
+                    dissolve_delay_seconds(neuron, neuron.created_timestamp_seconds)
                         >= 6 * 30 * ONE_DAY_SECONDS
                 })
                 .map(|sns_neuron| {
@@ -1590,7 +1992,7 @@ pub mod sns {
                 },
             )
             .await
-            .map_err(|err| err.to_string())
+            .map_err(|err| format!("{err:?}"))
         }
 
         // Upgrade; one canister at a time.
@@ -1779,11 +2181,8 @@ pub mod sns {
                 };
                 assert!(actual.timestamp_seconds.is_some());
                 assert_eq!(
-                    &actual
-                        .event
-                        .clone()
-                        .map(|event| event.redact_human_readable()),
-                    &Some(expected.clone().redact_human_readable()),
+                    &actual.event.clone().map(redact_human_readable),
+                    &Some(redact_human_readable(expected.clone())),
                     "Upgrade journal entry at index {} does not match",
                     index
                 );
@@ -2803,6 +3202,7 @@ pub mod sns {
                     pocket_ic,
                     AccountIdentifier::new(participant_id, None),
                     amount.saturating_add(DEFAULT_TRANSFER_FEE),
+                    None,
                 )
                 .await;
                 participate_in_swap(

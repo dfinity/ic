@@ -364,8 +364,8 @@ pub async fn vote_execute_proposal_assert_executed(
     // Wait for the proposal to be accepted and executed.
     let proposal_info = vote_and_execute_proposal(governance_canister, proposal_id).await;
     assert_eq!(
-        proposal_info.status(),
-        ProposalStatus::Executed,
+        proposal_info.status,
+        ProposalStatus::Executed as i32,
         "proposal {proposal_id} did not execute: {proposal_info:?}"
     );
 }
@@ -384,7 +384,7 @@ pub async fn vote_execute_proposal_assert_failed(
     let expected_message_substring = expected_message_substring.to_string();
     // Wait for the proposal to be accepted and executed.
     let proposal_info = vote_and_execute_proposal(governance_canister, proposal_id).await;
-    assert_eq!(proposal_info.status(), ProposalStatus::Failed);
+    assert_eq!(proposal_info.status, ProposalStatus::Failed as i32);
     let reason = proposal_info.failure_reason.unwrap_or_default();
     assert!(
        reason

@@ -4,7 +4,9 @@
 use crate::execution_environment::ExecutionResponse;
 use crate::{as_round_instructions, metrics::CallTreeMetrics, ExecuteMessageResult, RoundLimits};
 use ic_base_types::{CanisterId, NumBytes, SubnetId};
-use ic_embedders::wasm_executor::{CanisterStateChanges, SliceExecutionOutput};
+use ic_embedders::wasm_executor::{
+    CanisterStateChanges, ExecutionStateChanges, SliceExecutionOutput,
+};
 use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_interfaces::execution_environment::{
     HypervisorError, HypervisorResult, SubnetAvailableMemory, WasmExecutionOutput,
@@ -16,7 +18,7 @@ use ic_replicated_state::{
     CallContext, CallContextAction, CallOrigin, CanisterState, ExecutionState, NetworkTopology,
     SystemState,
 };
-use ic_system_api::sandbox_safe_system_state::{RequestMetadataStats, SystemStateChanges};
+use ic_system_api::sandbox_safe_system_state::{RequestMetadataStats, SystemStateModifications};
 use ic_types::ingress::{IngressState, IngressStatus, WasmResult};
 use ic_types::messages::{
     CallContextId, CallbackId, CanisterCall, CanisterCallOrTask, MessageId, Payload, RejectContext,
@@ -408,7 +410,7 @@ pub fn update_round_limits(round_limits: &mut RoundLimits, slice: &SliceExecutio
 /// subnet available memory. In case of an error, the partially applied changes
 /// are not undone.
 fn try_apply_canister_state_changes(
-    system_state_changes: SystemStateChanges,
+    system_state_modifications: SystemStateModifications,
     output: &WasmExecutionOutput,
     system_state: &mut SystemState,
     subnet_available_memory: &mut SubnetAvailableMemory,
@@ -425,7 +427,7 @@ fn try_apply_canister_state_changes(
         )
         .map_err(|_| HypervisorError::OutOfMemory)?;
 
-    system_state_changes.apply_changes(time, system_state, network_topology, subnet_id, log)
+    system_state_modifications.apply_changes(time, system_state, network_topology, subnet_id, log)
 }
 
 /// Applies canister state change after Wasm execution if possible.
@@ -439,7 +441,7 @@ fn try_apply_canister_state_changes(
 /// - An escape from the Wasm sandbox that corrupts the execution output.
 #[allow(clippy::too_many_arguments)]
 pub fn apply_canister_state_changes(
-    canister_state_changes: Option<CanisterStateChanges>,
+    canister_state_changes: CanisterStateChanges,
     execution_state: &mut ExecutionState,
     system_state: &mut SystemState,
     output: &mut WasmExecutionOutput,
@@ -453,20 +455,19 @@ pub fn apply_canister_state_changes(
     call_context_creation_time: Time,
     deallocate: &dyn Fn(SystemState),
 ) {
-    if let Some(CanisterStateChanges {
-        globals,
-        wasm_memory,
-        stable_memory,
-        system_state_changes,
-    }) = canister_state_changes
-    {
-        let clean_system_state = system_state.clone();
-        let clean_subnet_available_memory = round_limits.subnet_available_memory;
-        let callbacks_created = system_state_changes.callbacks_created();
+    let CanisterStateChanges {
+        execution_state_changes,
+        system_state_modifications,
+    } = canister_state_changes;
+
+    let clean_system_state = system_state.clone();
+    let clean_subnet_available_memory = round_limits.subnet_available_memory;
+    let callbacks_created = system_state_modifications.callbacks_created();
+    if output.wasm_result.is_ok() {
         // Everything that is passed via a mutable reference in this function
         // should be cloned and restored in case of an error.
         match try_apply_canister_state_changes(
-            system_state_changes,
+            system_state_modifications,
             output,
             system_state,
             &mut round_limits.subnet_available_memory,
@@ -476,9 +477,16 @@ pub fn apply_canister_state_changes(
             log,
         ) {
             Ok(request_stats) => {
-                execution_state.wasm_memory = wasm_memory;
-                execution_state.stable_memory = stable_memory;
-                execution_state.exported_globals = globals;
+                if let Some(ExecutionStateChanges {
+                    globals,
+                    wasm_memory,
+                    stable_memory,
+                }) = execution_state_changes
+                {
+                    execution_state.wasm_memory = wasm_memory;
+                    execution_state.stable_memory = stable_memory;
+                    execution_state.exported_globals = globals;
+                }
                 // We increment the canister version here, as all the message execution
                 // functions (except messages executed during `install_code`,
                 // i.e., `(start)`, `canister_init`, `canister_pre_upgrade`, and `canister_post_upgrade`)
@@ -506,7 +514,8 @@ pub fn apply_canister_state_changes(
                         state_changes_error.inc();
                         error!(
                             log,
-                            "[EXC-BUG]: Failed to apply state changes due to an unexpected error: {}", err
+                            "[EXC-BUG]: Failed to apply state changes due to an unexpected error: {}",
+                            err
                         )
                     }
                 }
@@ -529,7 +538,8 @@ pub(crate) fn finish_call_with_error(
     log: &ReplicaLogger,
 ) -> ExecuteMessageResult {
     let response = match call_or_task {
-        CanisterCallOrTask::Call(CanisterCall::Request(request)) => {
+        CanisterCallOrTask::Update(CanisterCall::Request(request))
+        | CanisterCallOrTask::Query(CanisterCall::Request(request)) => {
             let response = Response {
                 originator: request.sender,
                 respondent: canister.canister_id(),
@@ -540,7 +550,8 @@ pub(crate) fn finish_call_with_error(
             };
             ExecutionResponse::Request(response)
         }
-        CanisterCallOrTask::Call(CanisterCall::Ingress(ingress)) => {
+        CanisterCallOrTask::Update(CanisterCall::Ingress(ingress))
+        | CanisterCallOrTask::Query(CanisterCall::Ingress(ingress)) => {
             let status = IngressStatus::Known {
                 receiver: canister.canister_id().get(),
                 user_id: ingress.source,

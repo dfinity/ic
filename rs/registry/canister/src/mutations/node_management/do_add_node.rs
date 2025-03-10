@@ -55,9 +55,7 @@ impl Registry {
         println!("{}do_add_node: The node id is {:?}", LOG_PREFIX, node_id);
 
         // 2. Clear out any nodes that already exist at this IP.
-        // This will only succeed if:
-        // - the same NO was in control of the original nodes.
-        // - the nodes are no longer in subnets.
+        // This will only succeed if the same NO was in control of the original nodes.
         //
         // (We use the http endpoint to be in line with what is used by the
         // release dashboard.)
@@ -118,7 +116,7 @@ impl Registry {
             .transpose()?
             .map(|node_reward_type| node_reward_type as i32);
 
-        // 5. Validate the domain is valid
+        // 5. Validate the domain
         let domain: Option<String> = payload
             .domain
             .as_ref()
@@ -132,7 +130,7 @@ impl Registry {
             })
             .transpose()?;
 
-        // 6. If there is an IPv4 config, make sure that the IPv4 is not used by anyone else
+        // 6. If there is an IPv4 config, make sure that the same IPv4 address is not used by any other node
         let ipv4_intf_config = payload.public_ipv4_config.clone().map(|ipv4_config| {
             ipv4_config.panic_on_invalid();
             IPv4InterfaceConfig {
@@ -322,10 +320,15 @@ mod tests {
     use ic_base_types::{NodeId, PrincipalId};
     use ic_config::crypto::CryptoConfig;
     use ic_crypto_node_key_generation::generate_node_keys_once;
-    use ic_protobuf::registry::node_operator::v1::NodeOperatorRecord;
+    use ic_protobuf::registry::{
+        api_boundary_node::v1::ApiBoundaryNodeRecord, node_operator::v1::NodeOperatorRecord,
+    };
     use ic_registry_canister_api::IPv4Config;
-    use ic_registry_keys::{make_node_operator_record_key, make_node_record_key};
+    use ic_registry_keys::{
+        make_api_boundary_node_record_key, make_node_operator_record_key, make_node_record_key,
+    };
     use ic_registry_transport::insert;
+    use ic_types::ReplicaVersion;
     use itertools::Itertools;
     use lazy_static::lazy_static;
     use prost::Message;
@@ -857,6 +860,59 @@ mod tests {
         for node_id in node_ids {
             assert!(registry.get_node(node_id).is_some());
         }
+    }
+
+    #[test]
+    fn should_add_node_and_replace_existing_api_boundary_node() {
+        // This test verifies that adding a new node replaces an existing node in a subnet
+        let mut registry = invariant_compliant_registry(0);
+
+        // Add a node to the registry
+        let (mutate_request, node_ids_and_dkg_pks) = prepare_registry_with_nodes(1, 1);
+        registry.maybe_apply_mutation_internal(mutate_request.mutations);
+        let node_ids: Vec<NodeId> = node_ids_and_dkg_pks.keys().cloned().collect();
+
+        let old_node_id = node_ids[0];
+        let old_node = registry.get_node(old_node_id).unwrap();
+
+        let node_operator_id = registry_add_node_operator_for_node(&mut registry, old_node_id, 0);
+
+        // Turn that node into an API boundary node
+        let api_bn = ApiBoundaryNodeRecord {
+            version: ReplicaVersion::default().to_string(),
+        };
+        registry.maybe_apply_mutation_internal(vec![insert(
+            make_api_boundary_node_record_key(old_node_id),
+            api_bn.encode_to_vec(),
+        )]);
+
+        // Add a new node with the same IP address and port as an existing node, which should replace the existing node
+        let (mut payload, _valid_pks) = prepare_add_node_payload(2);
+        let http = old_node.http.unwrap();
+        payload
+            .http_endpoint
+            .clone_from(&format!("[{}]:{}", http.ip_addr, http.port));
+        let new_node_id = registry
+            .do_add_node_(payload.clone(), node_operator_id)
+            .expect("failed to add a node");
+
+        // Verify that there is an API boundary node record for the new node
+        assert!(registry
+            .get(
+                make_api_boundary_node_record_key(new_node_id).as_bytes(),
+                registry.latest_version()
+            )
+            .is_some());
+
+        // Verify the old node is removed from the registry
+        assert!(registry.get_node(old_node_id).is_none());
+
+        // Verify the new node is present in the registry
+        assert!(registry.get_node(new_node_id).is_some());
+
+        // Verify node operator allowance is unchanged
+        let updated_operator = get_node_operator_record(&registry, node_operator_id).unwrap();
+        assert_eq!(updated_operator.node_allowance, 0);
     }
 
     #[test]

@@ -14,13 +14,35 @@ fn test_candid_service_arg_validation() {
 
     for (label, candid_service, upgrade_arg, expected_result) in [
         (
-            "Service without args",
+            "Service without args (no arguments)",
             r#"
                 service : {
                     g : () -> (int) query;
                 }
             "#,
-            "()",
+            None,
+            Ok(()),
+        ),
+        (
+            "Service with args, but none are supplied",
+            r#"
+                service : (x : nat32) -> {
+                    g : () -> (int) query;
+                }
+            "#,
+            None,
+            Err(CandidServiceArgValidationError::WrongArgumentCount(
+                dummy_error_text.clone(),
+            )),
+        ),
+        (
+            "Service without args (empty tuple of arguments)",
+            r#"
+                service : {
+                    g : () -> (int) query;
+                }
+            "#,
+            Some("()".to_string()),
             Ok(()),
         ),
         (
@@ -31,7 +53,7 @@ fn test_candid_service_arg_validation() {
                     g : (List) -> (int) query;
                 }
             "#,
-            "()",
+            Some("()".to_string()),
             Err(CandidServiceArgValidationError::BadService(
                 dummy_error_text.clone(),
             )),
@@ -45,7 +67,7 @@ fn test_candid_service_arg_validation() {
                     g : () -> (int) query;
                 }
             "#,
-            "",
+            Some("".to_string()),
             Err(CandidServiceArgValidationError::ArgsParseError(
                 dummy_error_text.clone(),
             )),
@@ -53,13 +75,13 @@ fn test_candid_service_arg_validation() {
         (
             "Complex service with two arguments (happy)",
             complex_service,
-            "(record {}, (11 : nat32))",
+            Some("(record {}, (11 : nat32))".to_string()),
             Ok(()),
         ),
         (
             "Complex service with two arguments (missing 1st arg)",
             complex_service,
-            "((11 : nat32))",
+            Some("((11 : nat32))".to_string()),
             Err(CandidServiceArgValidationError::WrongArgumentCount(
                 dummy_error_text.clone(),
             )),
@@ -67,7 +89,7 @@ fn test_candid_service_arg_validation() {
         (
             "Complex service with two arguments (missing 2nd arg)",
             complex_service,
-            "(record {})",
+            Some("(record {})".to_string()),
             Err(CandidServiceArgValidationError::WrongArgumentCount(
                 dummy_error_text.clone(),
             )),
@@ -75,7 +97,7 @@ fn test_candid_service_arg_validation() {
         (
             "Complex service with two arguments (missing both args)",
             complex_service,
-            "()",
+            Some("()".to_string()),
             Err(CandidServiceArgValidationError::WrongArgumentCount(
                 dummy_error_text.clone(),
             )),
@@ -87,7 +109,7 @@ fn test_candid_service_arg_validation() {
                     g : () -> (int) query;
                 }
             "#,
-            "((11 : nat32), record {})",
+            Some("((11 : nat32), record {})".to_string()),
             Err(CandidServiceArgValidationError::SubtypingErrors(
                 dummy_error_text.clone(),
             )),
@@ -99,7 +121,7 @@ fn test_candid_service_arg_validation() {
                     g : () -> (int) query;
                 }
             "#,
-            "(record { foobar = opt (1984 : nat); foo = opt (42 : nat) })",
+            Some("(record { foobar = opt (1984 : nat); foo = opt (42 : nat) })".to_string()),
             Ok(()),
         ),
         (
@@ -109,14 +131,13 @@ fn test_candid_service_arg_validation() {
                     g : () -> (int) query;
                 }
             "#,
-            "(record { bar = (1984 : nat) })",
+            Some("(record { bar = (1984 : nat) })".to_string()),
             Err(CandidServiceArgValidationError::SubtypingErrors(
                 dummy_error_text,
             )),
         ),
     ] {
-        let observed_result =
-            validate_upgrade_args(candid_service.to_string(), upgrade_arg.to_string());
+        let observed_result = encode_upgrade_args(candid_service.to_string(), upgrade_arg);
 
         match (observed_result, expected_result) {
             (Ok(_), Ok(())) => (),

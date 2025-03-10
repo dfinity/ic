@@ -87,12 +87,12 @@ rust_binary(
 
 rust_test(
     name = "orchestrator_test",
-    crate = ":lib",
-    data = [
+    compile_data = [
         "testdata/nftables_assigned_replica.conf.golden",
         "testdata/nftables_boundary_node.conf.golden",
         "//ic-os/components:ic/generate-ic-config/ic.json5.template",
     ],
+    crate = ":lib",
     deps = [
         # Keep sorted.
         "//rs/crypto/temp_crypto",

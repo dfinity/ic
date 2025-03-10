@@ -60,40 +60,35 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
     ) -> Result<VetKdEncryptedKeyShareContent, VetKdEncryptedKeyShareCreationVaultError> {
         let master_public_key =
             G2Affine::deserialize(&master_public_key).map_err(|_: PairingInvalidPoint| {
-                VetKdEncryptedKeyShareCreationVaultError::InvalidArgument(format!(
-                    "invalid master public key: 0x{}",
-                    hex::encode(&master_public_key)
-                ))
+                VetKdEncryptedKeyShareCreationVaultError::InvalidArgumentMasterPublicKey
             })?;
 
         let transport_public_key = TransportPublicKey::deserialize(&encryption_public_key)
             .map_err(|e| match e {
                 TransportPublicKeyDeserializationError::InvalidPublicKey => {
-                    VetKdEncryptedKeyShareCreationVaultError::InvalidArgument(format!(
-                        "invalid encryption public key: 0x{}",
-                        hex::encode(&encryption_public_key)
-                    ))
+                    VetKdEncryptedKeyShareCreationVaultError::InvalidArgumentEncryptionPublicKey
                 }
             })?;
 
         let secret_key_from_store = self.sks_read_lock().get(&key_id).ok_or(
-            VetKdEncryptedKeyShareCreationVaultError::InvalidArgument(format!(
-                "missing key with ID {key_id:?}",
+            VetKdEncryptedKeyShareCreationVaultError::SecretKeyMissingOrWrongType(format!(
+                "missing key with ID {key_id}"
             )),
         )?;
-        let secret_bls_scalar = if let CspSecretKey::ThresBls12_381(secret_key_bytes) =
-            &secret_key_from_store
-        {
-            // We use the unchecked deserialization here because it is slighly cheaper, but mainly because
-            // it cannot fail, and the data is anyway trusted as it comes from the secret key store.
-            Ok(Scalar::deserialize_unchecked(
-                secret_key_bytes.inner_secret().expose_secret(),
-            ))
-        } else {
-            Err(VetKdEncryptedKeyShareCreationVaultError::InvalidArgument(
-                format!("wrong secret key type for key with ID {key_id}: expected ThresBls12_381"),
-            ))
-        }?;
+        let secret_bls_scalar =
+            if let CspSecretKey::ThresBls12_381(secret_key_bytes) = &secret_key_from_store {
+                // We use the unchecked deserialization here because it is slighly cheaper, but mainly because
+                // it cannot fail, and the data is anyway trusted as it comes from the secret key store.
+                Ok(Scalar::deserialize_unchecked(
+                    secret_key_bytes.inner_secret().expose_secret(),
+                ))
+            } else {
+                Err(
+                    VetKdEncryptedKeyShareCreationVaultError::SecretKeyMissingOrWrongType(format!(
+                        "wrong secret key type for key with ID {key_id}: expected ThresBls12_381"
+                    )),
+                )
+            }?;
 
         // Create encrypted key share using our library
         let encrypted_key_share = EncryptedKeyShare::create(

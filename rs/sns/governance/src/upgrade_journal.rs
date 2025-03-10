@@ -27,10 +27,15 @@ impl upgrade_journal_entry::UpgradeStepsReset {
 
 impl upgrade_journal_entry::TargetVersionSet {
     /// Creates a new TargetVersionSet event with old and new versions
-    pub fn new(old_version: Option<Version>, new_version: Option<Version>) -> Self {
+    pub fn new(
+        old_version: Option<Version>,
+        new_version: Version,
+        is_advanced_automatically: bool,
+    ) -> Self {
         Self {
             old_target_version: old_version,
-            new_target_version: new_version,
+            new_target_version: Some(new_version),
+            is_advanced_automatically: Some(is_advanced_automatically),
         }
     }
 }
@@ -208,34 +213,6 @@ impl From<upgrade_journal_entry::TargetVersionSet> for upgrade_journal_entry::Ev
 impl From<upgrade_journal_entry::TargetVersionReset> for upgrade_journal_entry::Event {
     fn from(event: upgrade_journal_entry::TargetVersionReset) -> Self {
         upgrade_journal_entry::Event::TargetVersionReset(event)
-    }
-}
-
-impl upgrade_journal_entry::Event {
-    /// Useful for specifying expected states of the SNS upgrade journal in a way that isn't
-    /// overly fragile.
-    pub fn redact_human_readable(self) -> Self {
-        match self {
-            Self::UpgradeOutcome(upgrade_outcome) => {
-                Self::UpgradeOutcome(upgrade_journal_entry::UpgradeOutcome {
-                    human_readable: None,
-                    ..upgrade_outcome
-                })
-            }
-            Self::UpgradeStepsReset(upgrade_steps_reset) => {
-                Self::UpgradeStepsReset(upgrade_journal_entry::UpgradeStepsReset {
-                    human_readable: None,
-                    ..upgrade_steps_reset
-                })
-            }
-            Self::TargetVersionReset(target_version_reset) => {
-                Self::TargetVersionReset(upgrade_journal_entry::TargetVersionReset {
-                    human_readable: None,
-                    ..target_version_reset
-                })
-            }
-            event => event,
-        }
     }
 }
 

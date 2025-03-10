@@ -198,6 +198,20 @@ message CanisterQueryStats {
   uint64 egress_payload_size = 5;
 }
 
+enum VetKdErrorCode {
+  VET_KD_ERROR_CODE_UNSPECIFIED = 0;
+  VET_KD_ERROR_CODE_TIMED_OUT = 1;
+  VET_KD_ERROR_CODE_INVALID_KEY = 2;
+}
+
+message VetKdAgreement {
+  uint64 callback_id = 1;
+  oneof agreement {
+    bytes data = 2;
+    VetKdErrorCode reject = 3;
+  }
+}
+
 message IngressIdOffset {
   uint64 expiry = 1;
   bytes message_id = 2;
@@ -219,6 +233,7 @@ message IngressPayload {
 message GetIngressMessageInBlockRequest {
   IngressMessageId ingress_message_id = 1;
   ConsensusMessageId block_proposal_id = 2;
+  bytes ingress_bytes_hash = 3;
 }
 
 message GetIngressMessageInBlockResponse {
@@ -233,6 +248,7 @@ message StrippedBlockProposal {
 
 message StrippedIngressMessage {
   IngressMessageId stripped = 1;
+  bytes ingress_bytes_hash = 2;
 }
 
 message StrippedConsensusMessage {

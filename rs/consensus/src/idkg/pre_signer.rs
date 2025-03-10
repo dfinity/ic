@@ -1210,7 +1210,7 @@ impl<'a> IDkgTranscriptBuilderImpl<'a> {
     }
 }
 
-impl<'a> IDkgTranscriptBuilder for IDkgTranscriptBuilderImpl<'a> {
+impl IDkgTranscriptBuilder for IDkgTranscriptBuilderImpl<'_> {
     fn get_completed_transcript(&self, transcript_id: IDkgTranscriptId) -> Option<IDkgTranscript> {
         timed_call(
             "get_completed_transcript",
@@ -1278,7 +1278,7 @@ impl<'a> Action<'a> {
 }
 
 /// Needed as IDKGTranscriptParams doesn't implement Debug
-impl<'a> Debug for Action<'a> {
+impl Debug for Action<'_> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match &self {
             Self::Process(transcript_params) => {

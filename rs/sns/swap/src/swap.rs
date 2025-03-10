@@ -2535,7 +2535,7 @@ impl Swap {
         if request
             .subaccount
             .as_ref()
-            .map_or(false, |subaccount| subaccount.len() != 32)
+            .is_some_and(|subaccount| subaccount.len() != 32)
         {
             return NewSaleTicketResponse::err_invalid_subaccount();
         }
@@ -3768,7 +3768,7 @@ impl<'a> SwapDigest<'a> {
     }
 }
 
-impl<'a> fmt::Debug for SwapDigest<'a> {
+impl fmt::Debug for SwapDigest<'_> {
     fn fmt(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
         let Swap {
             lifecycle,

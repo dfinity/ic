@@ -8,14 +8,15 @@ DEPENDENCIES = [
     "//rs/types/error_types",
     "//rs/types/types",
     "@crate_index//:candid",
-    "@crate_index//:ic-cdk",
+    "@crate_index//:ic_cdk_next",
     "@crate_index//:futures",
     "@crate_index//:rand",
     "@crate_index//:serde",
+    "@crate_index//:serde_bytes",
 ]
 
 MACRO_DEPENDENCIES = [
-    "@crate_index//:ic-cdk-macros",
+    "@crate_index//:ic_cdk_macros_next",
 ]
 
 rust_library(

@@ -6,9 +6,21 @@ load("//bazel:defs.bzl", "rust_bench", "rust_test_suite_with_extra_srcs")
 load("//bazel:prost.bzl", "generated_files_check")
 load(":feature_flags.bzl", "test_with_tla")
 
-package(default_visibility = ["//visibility:public"])
+package(default_visibility = ["//rs/nervous_system:default_visibility"])
 
-exports_files(["canister/governance.did"])
+DID_FILES = glob([
+    "**/*.did",
+])
+
+exports_files(
+    # Notice that governance.proto is NOT included. This is very intentional. We
+    # only use that for storing things to stable memory, not for communication
+    # with clients.
+    DID_FILES,
+    visibility = [
+        "//visibility:public",
+    ],
+)
 
 # Allows temporarily disabling TLA checks from the command line;
 # just pass `--define tla_disabled=true` to your Bazel command
@@ -53,7 +65,6 @@ DEPENDENCIES = [
     "//rs/nns/sns-wasm",
     "//rs/protobuf",
     "//rs/registry/canister",
-    "//rs/rust_canisters/dfn_http_metrics",
     "//rs/rust_canisters/http_types",
     "//rs/rust_canisters/on_wire",
     "//rs/sns/init",
@@ -190,6 +201,7 @@ rust_library(
     crate_name = "ic_nns_governance",
     proc_macro_deps = MACRO_DEPENDENCIES,
     version = "0.9.0",
+    visibility = ["//visibility:private"],
     deps = DEPENDENCIES + [
         "@crate_index//:canbench-rs",
     ],
@@ -207,6 +219,7 @@ rust_canbench(
     name = "governance-canbench",
     srcs = ["canbench/main.rs"],
     add_test = True,
+    noise_threshold = 5.0,
     # For some reason, the NNS Governance benchmarks are sensitive to the optimization level.
     # We would like to figure out why and fix it, but for now, we are reducing the optimization
     # level so that tests against the optimization level can be added.
@@ -225,6 +238,7 @@ rust_canister(
     compile_data = ["canister/governance.did"],
     proc_macro_deps = MACRO_DEPENDENCIES,
     service_file = ":canister/governance.did",
+    visibility = ["//visibility:public"],
     deps = DEPENDENCIES + [
         ":build_script",
         ":governance",
@@ -244,6 +258,7 @@ rust_canister(
     crate_root = "canister/canister.rs",
     proc_macro_deps = MACRO_DEPENDENCIES,
     service_file = ":canister/governance_test.did",
+    visibility = ["//visibility:public"],
     deps = DEPENDENCIES + [
         ":build_script",
         ":governance--test_feature",

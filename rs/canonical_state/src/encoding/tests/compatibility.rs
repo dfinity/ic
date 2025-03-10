@@ -333,7 +333,6 @@ fn canonical_encoding_stream_header_v19_plus() {
 ///       00                  # unsigned(0)
 ///    03                     # field_index(SubnetMetrics::update_transactions_total)
 ///    19 1068                # unsigned(4200)
-
 /// ```
 /// Used http://cbor.me/ for printing the human friendly output.
 #[test]

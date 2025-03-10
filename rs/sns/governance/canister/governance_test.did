@@ -64,6 +64,7 @@ type CanisterStatusResultV2 = record {
   settings : DefiniteCanisterSettingsArgs;
   idle_cycles_burned_per_day : nat;
   module_hash : opt blob;
+  query_stats : opt QueryStats;
 };
 
 type CanisterStatusType = variant {
@@ -495,6 +496,7 @@ type NervousSystemParameters = record {
   voting_rewards_parameters : opt VotingRewardsParameters;
   maturity_modulation_disabled : opt bool;
   max_number_of_principals_per_neuron : opt nat64;
+  automatically_advance_target_version : opt bool;
 };
 
 type Neuron = record {
@@ -621,6 +623,13 @@ type ProposalData = record {
 
 type ProposalId = record {
   id : nat64;
+};
+
+type QueryStats = record {
+  num_calls_total : opt nat;
+  num_instructions_total : opt nat;
+  request_payload_bytes_total : opt nat;
+  response_payload_bytes_total : opt nat;
 };
 
 type RegisterDappCanisters = record {
@@ -798,6 +807,7 @@ type UpgradeStepsReset = record {
 type TargetVersionSet = record {
   new_target_version : opt Version;
   old_target_version : opt Version;
+  is_advanced_automatically : opt bool;
 };
 
 type TargetVersionReset = record {

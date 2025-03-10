@@ -1043,7 +1043,9 @@ impl From<&CanisterCall> for CallOrigin {
 impl From<&CanisterCallOrTask> for CallOrigin {
     fn from(call_or_task: &CanisterCallOrTask) -> Self {
         match call_or_task {
-            CanisterCallOrTask::Call(call) => CallOrigin::from(call),
+            CanisterCallOrTask::Update(call) | CanisterCallOrTask::Query(call) => {
+                CallOrigin::from(call)
+            }
             CanisterCallOrTask::Task(_) => CallOrigin::SystemTask,
         }
     }

@@ -2,10 +2,12 @@ use candid::{decode_one, encode_one, CandidType, Decode, Deserialize, Encode, Pr
 use ic_certification::Label;
 use ic_transport_types::Envelope;
 use ic_transport_types::EnvelopeContent::ReadState;
+use pocket_ic::common::rest::{BlockmakerConfigs, RawSubnetBlockmaker, TickConfigs};
 use pocket_ic::management_canister::{
     CanisterIdRecord, CanisterInstallMode, CanisterSettings, EcdsaPublicKeyResult,
-    HttpRequestResult, ProvisionalCreateCanisterWithCyclesArgs, SchnorrAlgorithm,
-    SchnorrPublicKeyArgsKeyId, SchnorrPublicKeyResult, SignWithBip341Aux, SignWithSchnorrAux,
+    HttpRequestResult, NodeMetricsHistoryArgs, NodeMetricsHistoryResultItem,
+    ProvisionalCreateCanisterWithCyclesArgs, SchnorrAlgorithm, SchnorrPublicKeyArgsKeyId,
+    SchnorrPublicKeyResult, SignWithBip341Aux, SignWithSchnorrAux,
 };
 use pocket_ic::{
     common::rest::{
@@ -350,40 +352,6 @@ fn test_multiple_large_xnet_payloads() {
     }
 }
 
-#[test]
-fn test_get_and_set_and_advance_time() {
-    let pic = PocketIc::new();
-
-    let unix_time_secs = 1630328630;
-    let set_time = SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(unix_time_secs);
-    pic.set_time(set_time);
-    assert_eq!(pic.get_time(), set_time);
-    pic.tick();
-    assert_eq!(pic.get_time(), set_time);
-
-    pic.advance_time(std::time::Duration::from_secs(420));
-    assert_eq!(
-        pic.get_time(),
-        set_time + std::time::Duration::from_secs(420)
-    );
-    pic.tick();
-    assert_eq!(
-        pic.get_time(),
-        set_time + std::time::Duration::from_secs(420)
-    );
-}
-
-#[test]
-#[should_panic(expected = "SettingTimeIntoPast")]
-fn set_time_into_past() {
-    let pic = PocketIc::new();
-
-    let now = SystemTime::now();
-    pic.set_time(now + std::time::Duration::from_secs(1));
-
-    pic.set_time(now);
-}
-
 fn query_and_check_time(pic: &PocketIc, test_canister: Principal) {
     let current_time = pic
         .get_time()
@@ -402,7 +370,7 @@ fn query_and_check_time(pic: &PocketIc, test_canister: Principal) {
 }
 
 #[test]
-fn query_call_after_advance_time() {
+fn test_get_and_set_and_advance_time() {
     let pic = PocketIc::new();
 
     // We create a test canister.
@@ -410,17 +378,54 @@ fn query_call_after_advance_time() {
     pic.add_cycles(canister, INIT_CYCLES);
     pic.install_canister(canister, test_canister_wasm(), vec![], None);
 
+    let unix_time_secs = 1650000000;
+    let time = SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(unix_time_secs);
+    pic.set_time(time);
+    // time is not certified so `query_and_check_time` would fail here
+    assert_eq!(pic.get_time(), time);
+    pic.tick();
     query_and_check_time(&pic, canister);
+    assert_eq!(pic.get_time(), time);
+    pic.tick();
+    query_and_check_time(&pic, canister);
+    assert_eq!(pic.get_time(), time + std::time::Duration::from_nanos(1));
 
+    let unix_time_secs = 1700000000;
+    let time = SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(unix_time_secs);
+    pic.set_certified_time(time);
+    query_and_check_time(&pic, canister);
+    assert_eq!(pic.get_time(), time);
+    pic.tick();
+    query_and_check_time(&pic, canister);
+    assert_eq!(pic.get_time(), time + std::time::Duration::from_nanos(1));
+    pic.tick();
+    query_and_check_time(&pic, canister);
+    assert_eq!(pic.get_time(), time + std::time::Duration::from_nanos(2));
+
+    let time = pic.get_time();
     pic.advance_time(std::time::Duration::from_secs(420));
+    // time is not certified so `query_and_check_time` would fail here
+    assert_eq!(pic.get_time(), time + std::time::Duration::from_secs(420));
     pic.tick();
-
     query_and_check_time(&pic, canister);
-
-    pic.advance_time(std::time::Duration::from_secs(0));
+    assert_eq!(pic.get_time(), time + std::time::Duration::from_secs(420));
     pic.tick();
-
     query_and_check_time(&pic, canister);
+    assert_eq!(
+        pic.get_time(),
+        time + std::time::Duration::from_secs(420) + std::time::Duration::from_nanos(1)
+    );
+}
+
+#[test]
+#[should_panic(expected = "SettingTimeIntoPast")]
+fn set_time_into_past() {
+    let pic = PocketIc::new();
+
+    let now = SystemTime::now();
+    pic.set_time(now + std::time::Duration::from_secs(1));
+
+    pic.set_time(now);
 }
 
 #[test]
@@ -2210,4 +2215,83 @@ fn test_reject_response_type() {
         // inspect message is always uncertified
         assert!(!err.certified);
     }
+}
+
+#[test]
+fn test_custom_blockmaker_metrics() {
+    const HOURS_IN_SECONDS: u64 = 60 * 60;
+
+    let pocket_ic = PocketIcBuilder::new().with_application_subnet().build();
+    let topology = pocket_ic.topology();
+    let application_subnet = topology.get_app_subnets()[0];
+
+    // Create and install test canister.
+    let canister = pocket_ic.create_canister_on_subnet(None, None, application_subnet);
+    pocket_ic.add_cycles(canister, INIT_CYCLES);
+    pocket_ic.install_canister(canister, test_canister_wasm(), vec![], None);
+
+    let nodes = topology
+        .subnet_configs
+        .get(&application_subnet)
+        .unwrap()
+        .clone();
+
+    let blockmaker_1 = nodes.node_ids[0].clone();
+    let blockmaker_2 = nodes.node_ids[1].clone();
+
+    let subnets_blockmakers = vec![RawSubnetBlockmaker {
+        subnet: application_subnet.into(),
+        blockmaker: blockmaker_1.clone(),
+        failed_blockmakers: vec![blockmaker_2.clone()],
+    }];
+
+    let tick_configs = TickConfigs {
+        blockmakers: Some(BlockmakerConfigs {
+            blockmakers_per_subnet: subnets_blockmakers,
+        }),
+    };
+    let daily_blocks = 5;
+
+    // Blockmaker metrics are recorded in the management canister
+    for _ in 0..daily_blocks {
+        pocket_ic.tick_with_configs(tick_configs.clone());
+    }
+    // Advance time until next day so that management canister can record blockmaker metrics
+    pocket_ic.advance_time(std::time::Duration::from_secs(HOURS_IN_SECONDS * 24));
+    pocket_ic.tick();
+
+    let response = pocket_ic
+        .update_call(
+            canister,
+            Principal::anonymous(),
+            // Calls the node_metrics_history method on the management canister
+            "node_metrics_history_proxy",
+            Encode!(&NodeMetricsHistoryArgs {
+                subnet_id: application_subnet,
+                start_at_timestamp_nanos: 0,
+            })
+            .unwrap(),
+        )
+        .unwrap();
+
+    let first_node_metrics = Decode!(&response, Vec<NodeMetricsHistoryResultItem>)
+        .unwrap()
+        .remove(0)
+        .node_metrics;
+
+    let blockmaker_1_metrics = first_node_metrics
+        .iter()
+        .find(|x| x.node_id == Principal::from(blockmaker_1.clone()))
+        .unwrap()
+        .clone();
+    let blockmaker_2_metrics = first_node_metrics
+        .into_iter()
+        .find(|x| x.node_id == Principal::from(blockmaker_2.clone()))
+        .unwrap();
+
+    assert_eq!(blockmaker_1_metrics.num_blocks_proposed_total, daily_blocks);
+    assert_eq!(blockmaker_1_metrics.num_block_failures_total, 0);
+
+    assert_eq!(blockmaker_2_metrics.num_blocks_proposed_total, 0);
+    assert_eq!(blockmaker_2_metrics.num_block_failures_total, daily_blocks);
 }

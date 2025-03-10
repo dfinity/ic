@@ -121,8 +121,8 @@ fn test_submit_and_accept_root_canister_upgrade_proposal() {
     let proposal_info =
         nns_governance_get_proposal_info_as_anonymous(&state_machine, proposal_id.id);
     assert_eq!(
-        proposal_info.status(),
-        ProposalStatus::Executed,
+        proposal_info.status,
+        ProposalStatus::Executed as i32,
         "{:#?}",
         proposal_info
     );
@@ -222,8 +222,8 @@ fn test_submit_and_accept_forced_root_canister_upgrade_proposal() {
     let proposal_info =
         nns_governance_get_proposal_info_as_anonymous(&state_machine, proposal_id.id);
     assert_eq!(
-        proposal_info.status(),
-        ProposalStatus::Executed,
+        proposal_info.status,
+        ProposalStatus::Executed as i32,
         "{:#?}",
         proposal_info
     );

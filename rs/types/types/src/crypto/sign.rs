@@ -10,6 +10,7 @@ use crate::consensus::{
     NotarizationContent, RandomBeaconContent, RandomTapeContent,
 };
 use crate::crypto::canister_threshold_sig::idkg::{IDkgDealing, SignedIDkgDealing};
+use crate::crypto::vetkd::VetKdEncryptedKeyShareContent;
 use crate::crypto::SignedBytesWithoutDomainSeparator;
 use crate::messages::{Delegation, MessageId, QueryResponseHash, WebAuthnEnvelope};
 use std::convert::TryFrom;
@@ -74,6 +75,7 @@ mod private {
     impl SignatureDomainSeal for RandomTapeContent {}
     impl SignatureDomainSeal for SignableMock {}
     impl SignatureDomainSeal for QueryResponseHash {}
+    impl SignatureDomainSeal for VetKdEncryptedKeyShareContent {}
 }
 
 impl SignatureDomain for CanisterHttpResponseMetadata {
@@ -187,6 +189,12 @@ impl SignatureDomain for RandomTapeContent {
 impl SignatureDomain for QueryResponseHash {
     fn domain(&self) -> Vec<u8> {
         domain_with_prepended_length(DomainSeparator::QueryResponse.as_str())
+    }
+}
+
+impl SignatureDomain for VetKdEncryptedKeyShareContent {
+    fn domain(&self) -> Vec<u8> {
+        domain_with_prepended_length(DomainSeparator::VetKdEncryptedKeyShareContent.as_str())
     }
 }
 

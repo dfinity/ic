@@ -46,7 +46,7 @@ mod sign_basic {
         let key_record =
             node_signing_record_with(NODE_1, pk.ed25519_bytes().unwrap().to_vec(), REG_V2);
         let mut csp = MockAllCryptoServiceProvider::new();
-        let key_id = KeyId::try_from(&pk).unwrap();
+        let key_id = KeyId::from(&pk);
         let expected_error = CryptoError::SecretKeyNotFound {
             algorithm: AlgorithmId::Ed25519,
             key_id: key_id.to_string(),

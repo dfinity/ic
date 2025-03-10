@@ -234,7 +234,6 @@ fn maliciously_notarize_all(notary: &Notary, pool: &PoolReader<'_>) -> Vec<Notar
 
 /// Generate finalization shares for each notarized block in the validated
 /// pool.
-
 fn maliciously_finalize_all(
     finalizer: &Finalizer,
     pool: &PoolReader<'_>,

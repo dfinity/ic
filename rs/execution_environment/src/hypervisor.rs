@@ -415,8 +415,8 @@ impl Hypervisor {
             network_topology,
         );
         let (slice, mut output, canister_state_changes) = match execution_result {
-            WasmExecutionResult::Finished(slice, output, system_state_changes) => {
-                (slice, output, system_state_changes)
+            WasmExecutionResult::Finished(slice, output, system_state_modifications) => {
+                (slice, output, system_state_modifications)
             }
             WasmExecutionResult::Paused(_, _) => {
                 unreachable!("DTS is not supported");
@@ -489,7 +489,7 @@ impl Hypervisor {
             request_metadata,
             api_type.caller(),
             api_type.call_context_id(),
-            execution_state.is_wasm64,
+            execution_state.wasm_execution_mode.is_wasm64(),
         );
         let api_type_str = api_type.as_str();
         let (compilation_result, mut execution_result) = Arc::clone(&self.wasm_executor).execute(
@@ -535,11 +535,11 @@ impl Hypervisor {
             if let Err(err) = &mut result.wasm_result {
                 let can_view = match &system_state.log_visibility {
                     LogVisibilityV2::Controllers => {
-                        caller.map_or(false, |c| system_state.controllers.contains(&c))
+                        caller.is_some_and(|c| system_state.controllers.contains(&c))
                     }
                     LogVisibilityV2::Public => true,
                     LogVisibilityV2::AllowedViewers(allowed) => {
-                        caller.map_or(false, |c| allowed.get().contains(&c))
+                        caller.is_some_and(|c| allowed.get().contains(&c))
                     }
                 };
                 if !can_view {

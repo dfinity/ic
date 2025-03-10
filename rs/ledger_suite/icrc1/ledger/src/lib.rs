@@ -22,9 +22,7 @@ use ic_ledger_canister_core::runtime::Runtime;
 use ic_ledger_canister_core::{
     archive::ArchiveCanisterWasm,
     blockchain::Blockchain,
-    ledger::{
-        apply_transaction_no_trimming, block_locations, LedgerContext, LedgerData, TransactionInfo,
-    },
+    ledger::{apply_transaction, block_locations, LedgerContext, LedgerData, TransactionInfo},
     range_utils,
 };
 use ic_ledger_core::balances::BalancesStore;
@@ -84,6 +82,9 @@ pub type Tokens = ic_icrc1_tokens_u256::U256;
 ///   * 0 - the whole ledger state is stored on the heap.
 ///   * 1 - the allowances are stored in stable structures.
 ///   * 2 - the balances are stored in stable structures.
+// TODO: When moving to version 3 consider adding `#[serde(default, skip_serializing)]`
+// to `balances` and `approvals` fields of the `Ledger` struct.
+// Since `balances` don't use a default, this can only be done with an incompatible change.
 #[cfg(not(feature = "next-ledger-version"))]
 pub const LEDGER_VERSION: u64 = 2;
 
@@ -582,12 +583,8 @@ pub struct Ledger {
     #[serde(default)]
     accounts_overflow_trim_quantity: usize,
 
-    #[serde(default = "default_ledger_version")]
+    #[serde(default)]
     pub ledger_version: u64,
-}
-
-fn default_ledger_version() -> u64 {
-    LEDGER_VERSION
 }
 
 #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
@@ -677,14 +674,12 @@ impl Ledger {
                 )
             });
             let mint = Transaction::mint(account, amount, Some(now), None);
-            apply_transaction_no_trimming(&mut ledger, mint, now, Tokens::ZERO).unwrap_or_else(
-                |err| {
-                    panic!(
-                        "failed to mint {} tokens to {}: {:?}",
-                        balance, account, err
-                    )
-                },
-            );
+            apply_transaction(&mut ledger, mint, now, Tokens::ZERO).unwrap_or_else(|err| {
+                panic!(
+                    "failed to mint {} tokens to {}: {:?}",
+                    balance, account, err
+                )
+            });
         }
 
         ledger
@@ -780,14 +775,6 @@ impl LedgerData for Ledger {
 
     fn max_transactions_to_purge(&self) -> usize {
         MAX_TRANSACTIONS_TO_PURGE
-    }
-
-    fn max_number_of_accounts(&self) -> usize {
-        self.maximum_number_of_accounts
-    }
-
-    fn accounts_overflow_trim_quantity(&self) -> usize {
-        self.accounts_overflow_trim_quantity
     }
 
     fn token_name(&self) -> &str {
@@ -947,22 +934,22 @@ impl Ledger {
                     let mut last_block_index_encoded = Vec::with_capacity(MAX_U64_ENCODING_BYTES);
                     leb128::write::unsigned(&mut last_block_index_encoded, last_block_index)
                         .expect("Failed to write LEB128");
-                    return fork(
+                    fork(
                         label(
                             last_block_hash_label,
                             leaf(last_block_hash.as_slice().to_vec()),
                         ),
                         label(last_block_index_label, leaf(last_block_index_encoded)),
-                    );
+                    )
                 }
                 #[cfg(not(feature = "icrc3-compatible-data-certificate"))]
                 {
                     let tip_hash_label = Label::from("tip_hash");
                     let last_block_index_encoded = last_block_index.to_be_bytes().to_vec();
-                    return fork(
+                    fork(
                         label(last_block_index_label, leaf(last_block_index_encoded)),
                         label(tip_hash_label, leaf(last_block_hash.as_slice().to_vec())),
-                    );
+                    )
                 }
             }
             None => empty(),

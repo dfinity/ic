@@ -32,7 +32,6 @@ async-trait = { workspace = true }
 bytes = { workspace = true }
 candid = { workspace = true }
 cycles-minting-canister = { path = "../cmc" }
-dfn_http_metrics = { path = "../../rust_canisters/dfn_http_metrics" }
 dyn-clone = "1.0.14"
 futures = { workspace = true }
 ic-base-types = { path = "../../types/base_types" }

@@ -209,10 +209,8 @@ impl Summary {
     /// Returns a reference to the current transcript for the given tag. Note
     /// that currently we expect that a valid summary contains the current
     /// transcript for any DKG tag.
-    pub fn current_transcript(&self, tag: &NiDkgTag) -> &NiDkgTranscript {
-        self.current_transcripts
-            .get(tag)
-            .unwrap_or_else(|| panic!("No current transcript available for tag {:?}", tag))
+    pub fn current_transcript(&self, tag: &NiDkgTag) -> Option<&NiDkgTranscript> {
+        self.current_transcripts.get(tag)
     }
 
     /// Returns a reference to the current transcripts.
@@ -238,20 +236,6 @@ impl Summary {
             .into_iter()
             .chain(self.next_transcripts)
             .map(|(_, t)| t)
-            .collect()
-    }
-
-    /// Return the set of next transcripts for all tags. If for some tag
-    /// the next transcript is not available, the current transcript is used.
-    /// This function avoids expensive copying when transcripts are large.
-    pub fn into_next_transcripts(self) -> BTreeMap<NiDkgTag, NiDkgTranscript> {
-        let mut next_transcripts = self.next_transcripts;
-        self.current_transcripts
-            .into_iter()
-            .map(|(tag, current)| {
-                let new_next_transcripts = next_transcripts.remove(&tag).unwrap_or(current);
-                (tag, new_next_transcripts)
-            })
             .collect()
     }
 
@@ -293,19 +277,12 @@ impl Summary {
     }
 }
 
-fn build_tagged_transcripts_vec(
+fn build_transcripts_vec(
     transcripts: &BTreeMap<NiDkgTag, NiDkgTranscript>,
-) -> Vec<pb::TaggedNiDkgTranscript> {
+) -> Vec<pb::NiDkgTranscript> {
     transcripts
-        .iter()
-        .map(|(tag, transcript)| pb::TaggedNiDkgTranscript {
-            tag: pb::NiDkgTag::from(tag) as i32,
-            transcript: Some(pb::NiDkgTranscript::from(transcript)),
-            key_id: match tag {
-                NiDkgTag::HighThresholdForKey(k) => Some(pb::MasterPublicKeyId::from(k)),
-                _ => None,
-            },
-        })
+        .values()
+        .map(pb::NiDkgTranscript::from)
         .collect()
 }
 
@@ -355,12 +332,10 @@ impl From<&Summary> for pb::Summary {
                 .values()
                 .map(pb::NiDkgConfig::from)
                 .collect(),
-            current_transcripts_deprecated: build_tagged_transcripts_vec(
-                &summary.current_transcripts,
-            ),
-            current_transcripts_new: Vec::new(),
-            next_transcripts_deprecated: build_tagged_transcripts_vec(&summary.next_transcripts),
-            next_transcripts_new: Vec::new(),
+            current_transcripts_new: build_transcripts_vec(&summary.current_transcripts),
+            current_transcripts_deprecated: Vec::new(),
+            next_transcripts_new: build_transcripts_vec(&summary.next_transcripts),
+            next_transcripts_deprecated: Vec::new(),
             interval_length: summary.interval_length.get(),
             next_interval_length: summary.next_interval_length.get(),
             height: summary.height.get(),

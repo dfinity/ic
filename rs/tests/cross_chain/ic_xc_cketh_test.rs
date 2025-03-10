@@ -871,7 +871,7 @@ struct LedgerCanister<'a> {
     canister: Canister<'a>,
 }
 
-impl<'a> LedgerCanister<'a> {
+impl LedgerCanister<'_> {
     fn principal(&self) -> Principal {
         self.canister.canister_id().get().0
     }
@@ -881,7 +881,7 @@ struct CkEthMinterCanister<'a> {
     canister: Canister<'a>,
 }
 
-impl<'a> CkEthMinterCanister<'a> {
+impl CkEthMinterCanister<'_> {
     async fn minter_address(&self) -> String {
         self.canister
             .update_("minter_address", candid, ())
@@ -919,7 +919,7 @@ struct LedgerSuiteOrchestratorCanister<'a> {
     canister: Canister<'a>,
 }
 
-impl<'a> LedgerSuiteOrchestratorCanister<'a> {
+impl LedgerSuiteOrchestratorCanister<'_> {
     async fn upgrade(&mut self, arg: LedgerSuiteOrchestratorUpgradeArg) {
         self.canister
             .upgrade_to_self_binary(Encode!(&OrchestratorArg::UpgradeArg(arg)).unwrap())

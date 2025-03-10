@@ -41,7 +41,10 @@ pub fn test_deposit_and_withdrawal(env: TestEnv) {
     let btc_rpc = get_btc_client(&env);
     ensure_wallet(&btc_rpc, &logger);
 
-    let default_btc_address = btc_rpc.get_new_address(None, None).unwrap();
+    let default_btc_address = btc_rpc
+        .get_new_address(None, None)
+        .unwrap()
+        .assume_checked();
     // Creating the 101 first block to reach the min confirmations to spend a coinbase utxo.
     debug!(
         &logger,
@@ -128,7 +131,10 @@ pub fn test_deposit_and_withdrawal(env: TestEnv) {
             "Transfer to the minter account occurred at block {}", transfer_result
         );
 
-        let destination_btc_address = btc_rpc.get_new_address(None, None).unwrap();
+        let destination_btc_address = btc_rpc
+            .get_new_address(None, None)
+            .unwrap()
+            .assume_checked();
 
         info!(&logger, "Call retrieve_btc");
 
@@ -165,7 +171,7 @@ pub fn test_deposit_and_withdrawal(env: TestEnv) {
         // We wait for the heartbeat to send the transaction to the mempool
         info!(&logger, "Waiting for tx to appear in mempool");
         let mempool_txids = wait_for_mempool_change(&btc_rpc, &logger).await;
-        let btc_txid = Txid::from_hash(Hash::from_slice(&txid_bytes).unwrap());
+        let btc_txid = Txid::from_raw_hash(Hash::from_slice(&txid_bytes).unwrap());
         // Check if we have the txid in the bitcoind mempool
         assert!(
             mempool_txids.contains(&btc_txid),
@@ -187,7 +193,7 @@ pub fn test_deposit_and_withdrawal(env: TestEnv) {
         // - a fee of 5 satoshis/vbytes
         // Hence a total fee of 705 satoshis
         const EXPECTED_FEE: u64 = 705;
-        assert_eq!(get_tx_infos.fees.base.as_sat(), EXPECTED_FEE);
+        assert_eq!(get_tx_infos.fees.base.to_sat(), EXPECTED_FEE);
 
         // Check that we can modify the fee
         assert!(get_tx_infos.bip125_replaceable);

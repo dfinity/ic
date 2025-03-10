@@ -109,7 +109,7 @@ rust_test(
     crate = ":ckbtc_minter_lib",
     deps = [
         # Keep sorted.
-        "@crate_index//:bitcoin",
+        "@crate_index//:bitcoin_0_28",
         "@crate_index//:maplit",
         "@crate_index//:mockall",
         "@crate_index//:proptest",
@@ -141,10 +141,11 @@ rust_test(
     deps = [
         # Keep sorted.
         ":ckbtc_minter_lib",
-        "@crate_index//:bitcoin",
+        "@crate_index//:bitcoin_0_28",
         "@crate_index//:candid",
         "@crate_index//:flate2",
         "@crate_index//:ic-agent",
+        "@crate_index//:ic-stable-structures",
         "@crate_index//:serde",
         "@crate_index//:tokio",
     ],
@@ -170,6 +171,7 @@ rust_ic_test(
     deps = [
         # Keep sorted.
         ":ckbtc_minter_lib",
+        "//packages/ic-metrics-assert",
         "//packages/icrc-ledger-types:icrc_ledger_types",
         "//rs/bitcoin/checker:btc_checker_lib",
         "//rs/bitcoin/mock",
@@ -183,7 +185,7 @@ rust_ic_test(
         "//rs/types/base_types",
         "//rs/types/types",
         "@crate_index//:assert_matches",
-        "@crate_index//:bitcoin",
+        "@crate_index//:bitcoin_0_28",
         "@crate_index//:candid",
         "@crate_index//:ic-btc-interface",
         "@crate_index//:minicbor",

@@ -9,13 +9,14 @@ use crate::{
 };
 use crossbeam_channel::{unbounded, Sender};
 use ic_base_types::subnet_id_into_protobuf;
-use ic_config::flag_status::FlagStatus;
 use ic_config::state_manager::LsmtConfig;
 use ic_logger::{error, fatal, info, ReplicaLogger};
 use ic_protobuf::state::{
     stats::v1::Stats,
     system_metadata::v1::{SplitFrom, SystemMetadata},
 };
+use ic_registry_subnet_type::SubnetType;
+use ic_replicated_state::page_map::PageAllocatorFileDescriptor;
 use ic_replicated_state::{
     canister_snapshots::{CanisterSnapshot, SnapshotOperation},
     page_map::{MergeCandidate, StorageMetrics, StorageResult, MAX_NUMBER_OF_FILES},
@@ -26,25 +27,17 @@ use ic_replicated_state::{
 };
 use ic_state_layout::{
     error::LayoutError, CanisterSnapshotBits, CanisterStateBits, CheckpointLayout,
-    ExecutionStateBits, FilePermissions, PageMapLayout, ReadOnly, RwPolicy, StateLayout,
-    TipHandler, WasmFile,
+    ExecutionStateBits, PageMapLayout, ReadOnly, RwPolicy, StateLayout, TipHandler, WasmFile,
 };
-use ic_sys::fs::defrag_file_partially;
 use ic_types::{malicious_flags::MaliciousFlags, CanisterId, Height, SnapshotId};
 use ic_utils::thread::parallel_map;
 use ic_utils_thread::JoinOnDrop;
 use prometheus::HistogramTimer;
-use rand::prelude::SliceRandom;
-use rand::{seq::IteratorRandom, Rng, SeedableRng};
-use rand_chacha::ChaChaRng;
 use std::collections::BTreeSet;
-use std::os::unix::prelude::MetadataExt;
-use std::path::PathBuf;
+use std::ops::Deref;
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
-const DEFRAG_SIZE: u64 = 1 << 29; // 500 MB
-const DEFRAG_SAMPLE: usize = 100;
 /// We merge starting from MAX_NUMBER_OF_FILES, we take up to 4 rounds to iterate over whole state,
 /// there are 2 overlays created each checkpoint.
 const NUMBER_OF_FILES_HARD_LIMIT: usize = MAX_NUMBER_OF_FILES + 8;
@@ -95,18 +88,10 @@ pub(crate) enum TipRequest {
     },
     /// Reset tip folder to the checkpoint with given height.
     /// Merge overlays in tip folder if necessary.
-    /// If is_initializing, we have a state with potentially different LSMT status.
     /// State: * -> ReadyForPageDeltas(checkpoint_layout.height())
     ResetTipAndMerge {
         checkpoint_layout: CheckpointLayout<ReadOnly>,
         pagemaptypes: Vec<PageMapType>,
-        is_initializing_tip: bool,
-    },
-    /// Run one round of tip defragmentation.
-    /// State: ReadyForPageDeltas(h) -> ReadyForPageDeltas(height), height >= h
-    DefragTip {
-        height: Height,
-        page_map_types: Vec<PageMapType>,
     },
     /// State: ReadyForPageDeltas(h) -> Serialized(height), height >= h
     SerializeToTip {
@@ -125,6 +110,9 @@ pub(crate) enum TipRequest {
     /// Crash if diverges.
     ValidateReplicatedState {
         checkpoint_layout: CheckpointLayout<ReadOnly>,
+        reference_state: Arc<ReplicatedState>,
+        own_subnet_type: SubnetType,
+        fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
     },
     /// Wait for the message to be executed and notify back via sender.
     /// State: *
@@ -340,7 +328,6 @@ pub(crate) fn spawn_tip_thread(
                         TipRequest::ResetTipAndMerge {
                             checkpoint_layout,
                             pagemaptypes,
-                            is_initializing_tip,
                         } => {
                             let _timer = request_timer(&metrics, "reset_tip_to");
                             if tip_downgrade != HasDowngrade::No {
@@ -357,7 +344,6 @@ pub(crate) fn spawn_tip_thread(
                                 .reset_tip_to(
                                     &state_layout,
                                     &checkpoint_layout,
-                                    lsmt_config.lsmt_status,
                                     Some(&mut thread_pool),
                                 )
                                 .unwrap_or_else(|err| {
@@ -368,58 +354,16 @@ pub(crate) fn spawn_tip_thread(
                                         err
                                     );
                                 });
-                            match lsmt_config.lsmt_status {
-                                FlagStatus::Enabled => merge(
-                                    &mut tip_handler,
-                                    &pagemaptypes,
-                                    height,
-                                    &mut thread_pool,
-                                    &log,
-                                    &lsmt_config,
-                                    &metrics,
-                                ),
-                                FlagStatus::Disabled => {
-                                    if is_initializing_tip
-                                        && merge_to_base(
-                                            &mut tip_handler,
-                                            &pagemaptypes,
-                                            height,
-                                            &mut thread_pool,
-                                            &log,
-                                            &metrics,
-                                        )
-                                    {
-                                        info!(
-                                            log,
-                                            "tip_downgrade changes from {:?} to {:?}",
-                                            tip_downgrade,
-                                            HasDowngrade::Yes,
-                                        );
-                                        tip_downgrade = HasDowngrade::Yes;
-                                    }
-                                }
-                            };
+                            merge(
+                                &mut tip_handler,
+                                &pagemaptypes,
+                                height,
+                                &mut thread_pool,
+                                &log,
+                                &lsmt_config,
+                                &metrics,
+                            );
                             tip_state = TipState::ReadyForPageDeltas(height);
-                        }
-                        TipRequest::DefragTip {
-                            height,
-                            page_map_types,
-                        } => {
-                            debug_assert_ne!(tip_state, TipState::Empty);
-                            tip_state = TipState::ReadyForPageDeltas(height);
-                            let _timer = request_timer(&metrics, "defrag_tip");
-                            defrag_tip(
-                                &tip_handler.tip(height).unwrap_or_else(|err| {
-                                    fatal!(log, "Failed to get tip @{} to defrag: {}", height, err);
-                                }),
-                                &page_map_types,
-                                DEFRAG_SIZE,
-                                DEFRAG_SAMPLE,
-                                height.get(),
-                            )
-                            .unwrap_or_else(|err| {
-                                fatal!(log, "Failed to defrag tip @{}: {}", height, err);
-                            });
                         }
 
                         TipRequest::Wait { sender } => {
@@ -448,9 +392,19 @@ pub(crate) fn spawn_tip_thread(
                             have_latest_manifest = true;
                         }
 
-                        TipRequest::ValidateReplicatedState { checkpoint_layout } => {
+                        TipRequest::ValidateReplicatedState {
+                            checkpoint_layout,
+                            reference_state,
+                            own_subnet_type,
+                            fd_factory,
+                        } => {
+                            let _timer = request_timer(&metrics, "validate_replicated_state");
                             if let Err(err) = validate_checkpoint_and_remove_unverified_marker(
                                 &checkpoint_layout,
+                                Some(reference_state.deref()),
+                                own_subnet_type,
+                                Arc::clone(&fd_factory),
+                                &metrics.checkpoint_metrics,
                                 Some(&mut thread_pool),
                             ) {
                                 fatal!(
@@ -516,19 +470,16 @@ fn backup<T>(
         log,
         &canister_layout.vmemory_0(),
         &snapshot_layout.vmemory_0(),
-        FilePermissions::ReadOnly,
     )?;
     PageMapLayout::copy_or_hardlink_files(
         log,
         &canister_layout.stable_memory(),
         &snapshot_layout.stable_memory(),
-        FilePermissions::ReadOnly,
     )?;
     PageMapLayout::copy_or_hardlink_files(
         log,
         &canister_layout.wasm_chunk_store(),
         &snapshot_layout.wasm_chunk_store(),
-        FilePermissions::ReadOnly,
     )?;
 
     WasmFile::hardlink_file(&canister_layout.wasm(), &snapshot_layout.wasm())?;
@@ -554,21 +505,18 @@ fn restore<T>(
         log,
         &snapshot_layout.vmemory_0(),
         &canister_layout.vmemory_0(),
-        FilePermissions::ReadOnly,
     )?;
     canister_layout.stable_memory().delete_files()?;
     PageMapLayout::copy_or_hardlink_files(
         log,
         &snapshot_layout.stable_memory(),
         &canister_layout.stable_memory(),
-        FilePermissions::ReadOnly,
     )?;
     canister_layout.wasm_chunk_store().delete_files()?;
     PageMapLayout::copy_or_hardlink_files(
         log,
         &snapshot_layout.wasm_chunk_store(),
         &canister_layout.wasm_chunk_store(),
-        FilePermissions::ReadOnly,
     )?;
 
     canister_layout.wasm().try_delete_file()?;
@@ -817,39 +765,6 @@ fn merge(
     });
 }
 
-/// Merge all the overlays (if any) into bases.
-/// Return true if any merge was done.
-fn merge_to_base(
-    tip_handler: &mut TipHandler,
-    pagemaptypes: &[PageMapType],
-    height: Height,
-    thread_pool: &mut scoped_threadpool::Pool,
-    log: &ReplicaLogger,
-    metrics: &StateManagerMetrics,
-) -> bool {
-    let layout = &tip_handler.tip(height).unwrap_or_else(|err| {
-        fatal!(log, "Failed to get layout for {}: {}", height, err);
-    });
-    let rewritten = parallel_map(thread_pool, pagemaptypes.iter(), |page_map_type| {
-        let pm_layout = page_map_type.layout(layout).unwrap_or_else(|err| {
-            fatal!(log, "Failed to get layout for {:?}: {}", page_map_type, err);
-        });
-        let num_pages = (&pm_layout as &dyn StorageLayout)
-            .memory_size_pages()
-            .unwrap_or_else(|err| fatal!(log, "Failed to get num storage host pages: {}", err));
-        let merge_candidate = MergeCandidate::merge_to_base(&pm_layout, num_pages as u64)
-            .unwrap_or_else(|err| fatal!(log, "Failed to merge page map: {}", err));
-        if let Some(m) = merge_candidate.as_ref() {
-            m.apply(&metrics.storage_metrics).unwrap_or_else(|err| {
-                fatal!(log, "Failed to apply MergeCandidate for downgrade: {}", err);
-            });
-        }
-        merge_candidate.is_some()
-    });
-
-    return rewritten.iter().any(|b| *b);
-}
-
 fn serialize_to_tip(
     log: &ReplicaLogger,
     state: &ReplicatedState,
@@ -982,7 +897,7 @@ fn serialize_canister_to_tip(
                 metadata: execution_state.metadata.clone(),
                 binary_hash: Some(execution_state.wasm_binary.binary.module_hash().into()),
                 next_scheduled_method: execution_state.next_scheduled_method,
-                is_wasm64: execution_state.is_wasm64,
+                is_wasm64: execution_state.wasm_execution_mode.is_wasm64(),
             })
         }
         None => {
@@ -1145,70 +1060,6 @@ fn serialize_snapshot_to_tip(
         metrics,
     )?;
 
-    Ok(())
-}
-
-/// Defragments part of the tip directory.
-///
-/// The way we use PageMap files in the tip, namely by having a
-/// long-living file, that we alternatively write to in small 4KB
-/// pages and reflink copy to the checkpoint folder, the files end up
-/// fragmented on disk. In particular, the metadata the file system
-/// keeps on which pages are shared between files and which pages are
-/// unique to a file grows quite complicated, which noticebly slows
-/// down reflink copying of those files. It can therefore be
-/// beneficial to defragment files, especially in situations where a
-/// file had a lot of writes in the past but is mostly being read now.
-///
-/// The current defragmentation strategy is to pseudorandomly choose a
-/// chunk of size max_size among the eligible files, read it to memory,
-/// and write it back to the file. The effect is that this chunk is
-/// definitely unique to the tip at the end of defragmentation.
-pub fn defrag_tip(
-    tip: &CheckpointLayout<RwPolicy<TipHandler>>,
-    page_maps: &[PageMapType],
-    max_size: u64,
-    max_files: usize,
-    seed: u64,
-) -> Result<(), CheckpointError> {
-    let mut rng = ChaChaRng::seed_from_u64(seed);
-
-    // We sample the set of page maps down in order to avoid reading
-    // the metadata of each file. This is a compromise between
-    // weighting the probabilities by size and picking a uniformly
-    // random file.  The former (without subsampling) would be
-    // unnecessarily expensive, the latter would perform poorly in a
-    // situation with many empty files and a few large ones, doing
-    // no-ops on empty files with high probability.
-    let page_map_subset = page_maps.iter().choose_multiple(&mut rng, max_files);
-
-    let path_with_sizes: Vec<(PathBuf, u64)> = page_map_subset
-        .iter()
-        .filter_map(|entry| {
-            let path = entry.layout(tip).ok()?.base();
-            let size = path.metadata().ok()?.size();
-            Some((path, size))
-        })
-        .collect();
-
-    // We choose a file weighted by its size. This way, every bit in
-    // the state has (roughly) the same probability of being
-    // defragmented. If we chose the file uniformaly at random, we
-    // would end up defragmenting the smallest file too often. The choice
-    // failing is not an error, as it will happen if all files are
-    // empty
-    if let Ok((path, size)) = path_with_sizes.choose_weighted(&mut rng, |entry| entry.1) {
-        let write_size = size.min(&max_size);
-        let offset = rng.gen_range(0..=size - write_size);
-
-        defrag_file_partially(path, offset, write_size.to_owned() as usize).map_err(|err| {
-            CheckpointError::IoError {
-                path: path.to_path_buf(),
-                message: "failed to defrag file".into(),
-                io_err: err.to_string(),
-            }
-        })?;
-    }
     Ok(())
 }
 
@@ -1390,7 +1241,6 @@ mod test {
     use ic_metrics::MetricsRegistry;
     use ic_test_utilities_logger::with_test_replica_logger;
     use ic_test_utilities_tmpdir::tmpdir;
-    use ic_test_utilities_types::ids::canister_test_id;
 
     #[test]
     fn dont_crash_or_hang() {
@@ -1409,66 +1259,6 @@ mod test {
                 metrics,
                 MaliciousFlags::default(),
             );
-        });
-    }
-
-    #[test]
-    fn defrag_is_safe() {
-        with_test_replica_logger(|log| {
-            let tmp = tmpdir("checkpoint");
-            let root = tmp.path().to_path_buf();
-            let mut tip_handler = StateLayout::try_new(log, root, &MetricsRegistry::new())
-                .unwrap()
-                .capture_tip_handler();
-            let tip = tip_handler.tip(Height::new(42)).unwrap();
-
-            let defrag_size = 1 << 20; // 1MB
-
-            let page_maps: Vec<PageMapType> = vec![
-                PageMapType::StableMemory(canister_test_id(100)),
-                PageMapType::WasmMemory(canister_test_id(100)),
-                PageMapType::WasmMemory(canister_test_id(101)),
-            ];
-
-            let paths: Vec<PathBuf> = page_maps
-                .iter()
-                .map(|page_map_type| page_map_type.layout(&tip).unwrap().base())
-                .collect();
-
-            for path in &paths {
-                assert!(!path.exists());
-            }
-
-            defrag_tip(&tip, &page_maps, defrag_size, 100, 0).unwrap();
-
-            for path in &paths {
-                assert!(!path.exists());
-            }
-
-            for factor in 1..3 {
-                let short_data: Vec<u8> = vec![42; (defrag_size / factor) as usize];
-                let long_data: Vec<u8> = vec![43; (defrag_size * factor) as usize];
-                let empty: &[u8] = &[];
-
-                std::fs::write(&paths[0], &short_data).unwrap();
-                std::fs::write(&paths[1], &long_data).unwrap();
-                // third file is an empty file
-                std::fs::write(&paths[2], empty).unwrap();
-
-                let check_files = || {
-                    assert_eq!(std::fs::read(&paths[0]).unwrap(), short_data);
-                    assert_eq!(std::fs::read(&paths[1]).unwrap(), long_data);
-                    assert!(paths[2].exists());
-                    assert_eq!(std::fs::read(&paths[2]).unwrap(), empty);
-                };
-
-                check_files();
-
-                for i in 0..100 {
-                    defrag_tip(&tip, &page_maps, defrag_size, i as usize, i).unwrap();
-                    check_files();
-                }
-            }
         });
     }
 

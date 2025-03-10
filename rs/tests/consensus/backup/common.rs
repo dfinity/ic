@@ -383,6 +383,7 @@ fn test(env: TestEnv, binary_version: String, target_version: String) {
         "Restart and wait for cold storage and divergence to happen"
     );
     child.kill().expect("Error killing backup process");
+    child.wait().expect("Error waiting for backup process");
 
     let checkpoint =
         some_checkpoint_dir(&backup_dir, &subnet_id).expect("Checkpoint doesn't exist");
@@ -453,6 +454,7 @@ fn test(env: TestEnv, binary_version: String, target_version: String) {
 
     info!(log, "Kill child process");
     child.kill().expect("Error killing backup process");
+    child.wait().expect("Error waiting for backup process");
 
     assert!(hash_mismatch);
     info!(log, "There was a divergence of the state");

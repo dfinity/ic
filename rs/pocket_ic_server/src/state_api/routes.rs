@@ -10,7 +10,7 @@ use crate::pocket_ic::{
     AddCycles, AwaitIngressMessage, CallRequest, CallRequestVersion, CanisterReadStateRequest,
     DashboardRequest, GetCanisterHttp, GetControllers, GetCyclesBalance, GetStableMemory,
     GetSubnet, GetTime, GetTopology, IngressMessageStatus, MockCanisterHttp, PubKey, Query,
-    QueryRequest, SetStableMemory, SetTime, StatusRequest, SubmitIngressMessage,
+    QueryRequest, SetCertifiedTime, SetStableMemory, SetTime, StatusRequest, SubmitIngressMessage,
     SubnetReadStateRequest, Tick,
 };
 use crate::{async_trait, pocket_ic::PocketIc, BlobStore, InstanceId, OpId, Operation};
@@ -40,7 +40,7 @@ use pocket_ic::common::rest::{
     HttpGatewayDetails, InstanceConfig, MockCanisterHttpResponse, RawAddCycles, RawCanisterCall,
     RawCanisterHttpRequest, RawCanisterId, RawCanisterResult, RawCycles, RawIngressStatusArgs,
     RawMessageId, RawMockCanisterHttpResponse, RawPrincipalId, RawSetStableMemory, RawStableMemory,
-    RawSubnetId, RawTime, Topology,
+    RawSubnetId, RawTime, TickConfigs, Topology,
 };
 use pocket_ic::RejectResponse;
 use serde::Serialize;
@@ -99,6 +99,7 @@ where
             post(handler_await_ingress_message),
         )
         .directory_route("/set_time", post(handler_set_time))
+        .directory_route("/set_certified_time", post(handler_set_certified_time))
         .directory_route("/add_cycles", post(handler_add_cycles))
         .directory_route("/set_stable_memory", post(handler_set_stable_memory))
         .directory_route("/tick", post(handler_tick))
@@ -1035,6 +1036,20 @@ pub async fn handler_set_time(
     (code, Json(response))
 }
 
+pub async fn handler_set_certified_time(
+    State(AppState { api_state, .. }): State<AppState>,
+    Path(instance_id): Path<InstanceId>,
+    headers: HeaderMap,
+    axum::extract::Json(time): axum::extract::Json<rest::RawTime>,
+) -> (StatusCode, Json<ApiResponse<()>>) {
+    let timeout = timeout_or_default(headers);
+    let op = SetCertifiedTime {
+        time: ic_types::Time::from_nanos_since_unix_epoch(time.nanos_since_epoch),
+    };
+    let (code, response) = run_operation(api_state, instance_id, timeout, op).await;
+    (code, Json(response))
+}
+
 pub async fn handler_add_cycles(
     State(AppState { api_state, .. }): State<AppState>,
     Path(instance_id): Path<InstanceId>,
@@ -1086,9 +1101,12 @@ pub async fn handler_tick(
     State(AppState { api_state, .. }): State<AppState>,
     Path(instance_id): Path<InstanceId>,
     headers: HeaderMap,
+    axum::extract::Json(ticks_configs): axum::extract::Json<TickConfigs>,
 ) -> (StatusCode, Json<ApiResponse<()>>) {
     let timeout = timeout_or_default(headers);
-    let op = Tick;
+    let op = Tick {
+        configs: ticks_configs,
+    };
     let (code, res) = run_operation(api_state, instance_id, timeout, op).await;
     (code, Json(res))
 }

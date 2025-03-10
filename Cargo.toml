@@ -6,7 +6,9 @@ members = [
     "packages/icrc-ledger-client",
     "packages/icrc-ledger-client-cdk",
     "packages/icrc-ledger-types",
+    "packages/ic-ed25519",
     "packages/ic-ethereum-types",
+    "packages/ic-metrics-assert",
     "packages/ic-sha3",
     "packages/ic-ledger-hash-of",
     "packages/ic-signature-verification",
@@ -36,6 +38,8 @@ members = [
     "rs/boundary_node/rate_limits",
     "rs/boundary_node/rate_limits/api",
     "rs/boundary_node/rate_limits/canister_client",
+    "rs/boundary_node/salt_sharing",
+    "rs/boundary_node/salt_sharing/api",
     "rs/boundary_node/systemd_journal_gatewayd_shim",
     "rs/canister_client",
     "rs/canister_client/read_state_response_parser",
@@ -62,7 +66,6 @@ members = [
     "rs/criterion_time",
     "rs/crypto",
     "rs/crypto/ecdsa_secp256r1",
-    "rs/crypto/ed25519",
     "rs/crypto/for_verification_only",
     "rs/crypto/iccsa",
     "rs/crypto/internal/crypto_lib/basic_sig/der_utils",
@@ -215,7 +218,6 @@ members = [
     "rs/nns/handlers/root/interface",
     "rs/nns/identity",
     "rs/nns/init",
-    "rs/nns/inspector",
     "rs/nns/integration_tests",
     "rs/nns/nns-ui",
     "rs/nns/test_utils",
@@ -377,6 +379,7 @@ members = [
     "rs/tests/consensus/tecdsa",
     "rs/tests/consensus/upgrade",
     "rs/tests/consensus/utils",
+    "rs/tests/consensus/vetkd",
     "rs/tests/cross_chain",
     "rs/tests/crypto",
     "rs/tests/driver",
@@ -486,11 +489,6 @@ opt-level = 3
 [profile.dev.package.p256]
 opt-level = 3
 
-[patch.crates-io]
-# Current jsonrpc version (0.12.1) does not support ipv6 addressing. When new version is
-# released this can be removed.
-jsonrpc = { git = "https://github.com/apoelstra/rust-jsonrpc", rev = "e42044d" }
-
 [workspace.dependencies]
 actix-web = "4.9.0"
 actix-rt = "2.10.0"
@@ -507,7 +505,8 @@ axum = "0.7.9"
 backoff = "0.4"
 base64 = { version = "0.13.1" }
 bincode = "1.3.3"
-bitcoin = { version = "0.28.2", features = ["default", "use-serde", "rand"] }
+bitcoin = { version = "0.32.5", features = ["default", "rand", "serde"] }
+bitcoincore-rpc = "0.19.0"
 # build-info and build-info-build MUST be kept in sync!
 build-info = { git = "https://github.com/dfinity-lab/build-info", rev = "701a696844fba5c87df162fbbc1ccef96f27c9d7" }
 build-info-build = { git = "https://github.com/dfinity-lab/build-info", rev = "701a696844fba5c87df162fbbc1ccef96f27c9d7", default-features = false }
@@ -520,7 +519,7 @@ chrono = { version = "0.4.38", default-features = false, features = [
     "serde",
 ] }
 ciborium = "0.2.1"
-clap = { version = "4.5.18", features = ["derive", "string"] }
+clap = { version = "4.5.20", features = ["derive", "string"] }
 # cloudflare v0.12 is broken, master is partly fixed but unreleased yet.
 # see:
 # - https://github.com/cloudflare/cloudflare-rs/issues/222
@@ -532,6 +531,7 @@ curve25519-dalek = { version = "4.1.3", features = [
     "group",
     "precomputed-tables",
 ] }
+dfx-core = { version = "0.1.3" }
 ed25519-dalek = { version = "2.1.1", features = [
     "std",
     "zeroize",
@@ -607,6 +607,7 @@ libflate = "2.1.0"
 libnss = "0.5.0"
 local-ip-address = "0.5.6"
 macaddr = "1.0"
+memmap2 = "0.9.5"
 minicbor = { version = "0.19.1", features = ["alloc", "derive"] }
 minicbor-derive = "0.13.0"
 mockall = "0.13.0"

@@ -1,26 +1,53 @@
 use crate::{null_request::NullRequest, CallCanisters};
 use ic_base_types::PrincipalId;
-use ic_sns_governance::pb::v1::{
+use ic_sns_governance_api::pb::v1::{
     manage_neuron, manage_neuron_response, GetMetadataRequest, GetMetadataResponse, GetMode,
-    GetModeResponse, GetRunningSnsVersionRequest, GetRunningSnsVersionResponse, GovernanceError,
-    ManageNeuron, ManageNeuronResponse, NervousSystemParameters, NeuronId, Proposal, ProposalId,
+    GetModeResponse, GetProposal, GetProposalResponse, GetRunningSnsVersionRequest,
+    GetRunningSnsVersionResponse, GovernanceError, ManageNeuron, ManageNeuronResponse,
+    NervousSystemParameters, NeuronId, Proposal, ProposalId,
 };
 use serde::{Deserialize, Serialize};
-use std::error::Error;
+use thiserror::Error;
+
+pub mod requests;
 
 #[derive(Copy, Clone, Debug, Deserialize, Serialize)]
 pub struct GovernanceCanister {
     pub canister_id: PrincipalId,
 }
 
-#[derive(Debug, thiserror::Error)]
-pub enum SubmitProposalError<C: Error> {
-    #[error("Failed to call SNS Governance")]
-    CallGovernanceError(#[source] C),
-    #[error("SNS Governance returned an error")]
-    GovernanceError(#[source] GovernanceError),
-    #[error("SNS Governance did not confirm that the proposal was made: {0:?}")]
-    ProposalNotMade(ManageNeuronResponse),
+pub struct SubmittedProposal {
+    pub proposal_id: ProposalId,
+}
+
+#[derive(Debug, Error)]
+pub enum ProposalSubmissionError {
+    #[error("SNS Governance returned an error: {0:?}")]
+    GovernanceError(GovernanceError),
+    #[error("SNS Governance did not confirm that the proposal was made.")]
+    NoConfirmation,
+}
+
+impl TryFrom<ManageNeuronResponse> for SubmittedProposal {
+    type Error = ProposalSubmissionError;
+
+    fn try_from(response: ManageNeuronResponse) -> Result<Self, Self::Error> {
+        let proposal_id = match response.command {
+            Some(manage_neuron_response::Command::MakeProposal(
+                manage_neuron_response::MakeProposalResponse {
+                    proposal_id: Some(proposal_id),
+                },
+            )) => proposal_id,
+            Some(manage_neuron_response::Command::Error(err)) => {
+                return Err(ProposalSubmissionError::GovernanceError(err));
+            }
+            _ => {
+                return Err(ProposalSubmissionError::NoConfirmation);
+            }
+        };
+
+        Ok(Self { proposal_id })
+    }
 }
 
 impl GovernanceCanister {
@@ -58,10 +85,7 @@ impl GovernanceCanister {
         neuron_id: NeuronId,
         command: manage_neuron::Command,
     ) -> Result<ManageNeuronResponse, C::Error> {
-        let subaccount = neuron_id
-            .subaccount()
-            .expect("Valid SNS neuron IDs should be ICRC1 sub-accounts.")
-            .to_vec();
+        let subaccount = neuron_id.id;
         let request = ManageNeuron {
             subaccount,
             command: Some(command),
@@ -74,27 +98,27 @@ impl GovernanceCanister {
         agent: &C,
         neuron_id: NeuronId,
         proposal: Proposal,
-    ) -> Result<ProposalId, SubmitProposalError<C::Error>> {
+    ) -> Result<ManageNeuronResponse, C::Error> {
         let response = self
             .manage_neuron(
                 agent,
                 neuron_id,
                 manage_neuron::Command::MakeProposal(proposal),
             )
-            .await
-            .map_err(SubmitProposalError::CallGovernanceError)?;
+            .await?;
 
-        match response.command {
-            Some(manage_neuron_response::Command::MakeProposal(
-                manage_neuron_response::MakeProposalResponse {
-                    proposal_id: Some(proposal_id),
-                },
-            )) => Ok(proposal_id),
-            Some(manage_neuron_response::Command::Error(e)) => {
-                Err(SubmitProposalError::GovernanceError(e))
-            }
-            _ => Err(SubmitProposalError::ProposalNotMade(response)),
-        }
+        Ok(response)
+    }
+
+    pub async fn get_proposal<C: CallCanisters>(
+        &self,
+        agent: &C,
+        proposal_id: ProposalId,
+    ) -> Result<GetProposalResponse, C::Error> {
+        let request = GetProposal {
+            proposal_id: Some(proposal_id),
+        };
+        agent.call(self.canister_id, request).await
     }
 }
 

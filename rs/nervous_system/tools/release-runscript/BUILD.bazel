@@ -12,6 +12,8 @@ DEPENDENCIES = [
     "//rs/types/base_types",
     "@crate_index//:anyhow",
     "@crate_index//:candid",
+    "@crate_index//:chrono",
+    "@crate_index//:clap",
     "@crate_index//:colored",
     "@crate_index//:futures",
     "@crate_index//:ic-agent",
@@ -20,12 +22,14 @@ DEPENDENCIES = [
     "@crate_index//:serde_json",
     "@crate_index//:tempfile",
     "@crate_index//:tokio",
+    "@crate_index//:url",
 ]
 
 rust_binary(
     name = "release-runscript",
     srcs = [
         "src/main.rs",
+        "src/utils.rs",
     ],
     deps = DEPENDENCIES,
 )

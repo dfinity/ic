@@ -29,8 +29,7 @@ use ic_nns_governance_api::pb::v1::{NnsFunction, ProposalStatus};
 use ic_nns_test_utils::{
     governance::submit_external_update_proposal, itest_helpers::install_rust_canister_from_path,
 };
-use ic_registry_subnet_features::SubnetFeatures;
-use ic_registry_subnet_features::{EcdsaConfig, DEFAULT_ECDSA_MAX_QUEUE_SIZE};
+use ic_registry_subnet_features::{SubnetFeatures, DEFAULT_ECDSA_MAX_QUEUE_SIZE};
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::{
     driver::{
@@ -49,6 +48,7 @@ use ic_types::Height;
 use ic_types_test_utils::ids::subnet_test_id;
 use icp_ledger::ArchiveOptions;
 use registry_canister::mutations::do_update_subnet::UpdateSubnetPayload;
+use registry_canister::mutations::do_update_subnet::{ChainKeyConfig, KeyConfig};
 use slog::{debug, info, Logger};
 use std::{
     env,
@@ -245,15 +245,19 @@ pub async fn activate_ecdsa_signature(
 }
 
 async fn enable_ecdsa_signing(governance: &Canister<'_>, subnet_id: SubnetId, key_id: EcdsaKeyId) {
+    let key_id = MasterPublicKeyId::Ecdsa(key_id);
+
     // The ECDSA key sharing process requires that a key first be added to a
     // subnet, and then enabling signing with that key must happen in a separate
     // proposal.
     let proposal_payload = UpdateSubnetPayload {
         subnet_id,
-        ecdsa_config: Some(EcdsaConfig {
-            quadruples_to_create_in_advance: 10,
-            key_ids: vec![key_id.clone()],
-            max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
+        chain_key_config: Some(ChainKeyConfig {
+            key_configs: vec![KeyConfig {
+                key_id: Some(key_id.clone()),
+                pre_signatures_to_create_in_advance: Some(10),
+                max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
+            }],
             signature_request_timeout_ns: None,
             idkg_key_rotation_period_ms: None,
         }),
@@ -263,7 +267,7 @@ async fn enable_ecdsa_signing(governance: &Canister<'_>, subnet_id: SubnetId, ke
 
     let proposal_payload = UpdateSubnetPayload {
         subnet_id,
-        ecdsa_key_signing_enable: Some(vec![key_id]),
+        chain_key_signing_enable: Some(vec![key_id]),
         ..empty_subnet_update()
     };
     execute_update_subnet_proposal(governance, proposal_payload).await;
@@ -284,7 +288,7 @@ async fn execute_update_subnet_proposal(
     )
     .await;
     let proposal_result = vote_and_execute_proposal(governance, proposal_id).await;
-    assert_eq!(proposal_result.status(), ProposalStatus::Executed);
+    assert_eq!(proposal_result.status, ProposalStatus::Executed as i32);
 }
 
 fn empty_subnet_update() -> UpdateSubnetPayload {
@@ -524,7 +528,7 @@ pub async fn install_bitcoin_canister_with_network(
     bitcoin_canister.canister_id()
 }
 
-pub async fn install_icrc1_ledger<'a>(canister: &mut Canister<'a>, args: &LedgerArgument) {
+pub async fn install_icrc1_ledger(canister: &mut Canister<'_>, args: &LedgerArgument) {
     install_rust_canister_from_path(
         canister,
         get_dependency_path(env::var("LEDGER_WASM_PATH").expect("LEDGER_WASM_PATH not set")),

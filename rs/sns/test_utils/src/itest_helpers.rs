@@ -1395,10 +1395,7 @@ pub async fn set_up_governance_canister(
 }
 
 /// Compiles the ledger canister, builds it's initial payload and installs it
-pub async fn install_ledger_canister<'runtime, 'a>(
-    canister: &mut Canister<'runtime>,
-    args: LedgerArgument,
-) {
+pub async fn install_ledger_canister(canister: &mut Canister<'_>, args: LedgerArgument) {
     install_rust_canister_with_memory_allocation(
         canister,
         "ic-icrc1-ledger",
@@ -1417,10 +1414,7 @@ pub async fn set_up_ledger_canister(runtime: &'_ Runtime, args: LedgerInitArgs) 
 }
 
 /// Compiles the ledger index canister, builds it's initial payload and installs it
-pub async fn install_index_ng_canister<'runtime, 'a>(
-    canister: &mut Canister<'runtime>,
-    args: Option<IndexArg>,
-) {
+pub async fn install_index_ng_canister(canister: &mut Canister<'_>, args: Option<IndexArg>) {
     install_rust_canister_with_memory_allocation(
         canister,
         "ic-icrc1-index-ng",

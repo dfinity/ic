@@ -956,62 +956,6 @@ impl DefiniteCanisterSettingsArgs {
 
 impl Payload<'_> for DefiniteCanisterSettingsArgs {}
 
-/// The deprecated version of CanisterStatusResult that is being
-/// used by NNS canisters.
-#[derive(Eq, PartialEq, Debug, CandidType, Deserialize)]
-pub struct CanisterStatusResult {
-    status: CanisterStatusType,
-    module_hash: Option<Vec<u8>>,
-    controller: candid::Principal,
-    memory_size: candid::Nat,
-    cycles: candid::Nat,
-    // this is for compat with Spec 0.12/0.13
-    balance: Vec<(Vec<u8>, candid::Nat)>,
-}
-
-impl CanisterStatusResult {
-    pub fn new(
-        status: CanisterStatusType,
-        module_hash: Option<Vec<u8>>,
-        controller: PrincipalId,
-        memory_size: NumBytes,
-        cycles: u128,
-    ) -> Self {
-        Self {
-            status,
-            module_hash,
-            controller: candid::Principal::from_text(controller.to_string()).unwrap(),
-            memory_size: candid::Nat::from(memory_size.get()),
-            cycles: candid::Nat::from(cycles),
-            // the following is spec 0.12/0.13 compat;
-            // "\x00" denotes cycles
-            balance: vec![(vec![0], candid::Nat::from(cycles))],
-        }
-    }
-
-    pub fn status(&self) -> CanisterStatusType {
-        self.status.clone()
-    }
-
-    pub fn module_hash(&self) -> Option<Vec<u8>> {
-        self.module_hash.clone()
-    }
-
-    pub fn controller(&self) -> PrincipalId {
-        PrincipalId::try_from(self.controller.as_slice()).unwrap()
-    }
-
-    pub fn memory_size(&self) -> NumBytes {
-        NumBytes::from(self.memory_size.0.to_u64().unwrap())
-    }
-
-    pub fn cycles(&self) -> u128 {
-        self.cycles.0.to_u128().unwrap()
-    }
-}
-
-impl Payload<'_> for CanisterStatusResult {}
-
 #[derive(Eq, PartialEq, Debug, CandidType, Deserialize)]
 pub struct QueryStats {
     num_calls_total: candid::Nat,

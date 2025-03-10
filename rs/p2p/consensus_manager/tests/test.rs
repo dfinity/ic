@@ -348,9 +348,9 @@ fn load_test(
         let (jh, cm) =
             start_consensus_manager(no_op_logger(), rt.handle().clone(), processor.clone());
         jhs.push(jh);
-        let (r, m) = cm.build();
+        let r = cm.router();
         nodes.push((node, r));
-        cms.push((node, m));
+        cms.push((node, cm));
         node_advert_map.insert(node, processor);
     }
     let (nodes, topology_watcher) = fully_connected_localhost_subnet(rt.handle(), log, id, nodes);

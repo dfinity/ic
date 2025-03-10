@@ -1152,7 +1152,7 @@ impl SystemState {
         &mut self,
         request: Request,
         reject_context: RejectContext,
-        subnet_ids: &[PrincipalId],
+        subnet_ids: &BTreeSet<PrincipalId>,
     ) -> Result<(), StateError> {
         assert_eq!(
             request.sender, self.canister_id,

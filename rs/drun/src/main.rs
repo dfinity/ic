@@ -67,9 +67,9 @@ async fn drun_main() -> Result<(), String> {
             .embedders_config
             .feature_flags
             .best_effort_responses = FlagStatus::Enabled;
-        hypervisor_config.embedders_config.max_wasm_memory_size = MAIN_MEMORY_CAPACITY;
-        hypervisor_config.max_canister_memory_size =
-            hypervisor_config.embedders_config.max_wasm_memory_size
+        hypervisor_config.embedders_config.max_wasm64_memory_size = MAIN_MEMORY_CAPACITY;
+        hypervisor_config.max_canister_memory_size_wasm64 =
+            hypervisor_config.embedders_config.max_wasm64_memory_size
                 + hypervisor_config.embedders_config.max_stable_memory_size;
         // Disable trap backtrace in `drun` to have less implementation-specific test outputs.
         hypervisor_config

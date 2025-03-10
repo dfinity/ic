@@ -1,8 +1,6 @@
 // Replicated messages.
-pub(crate) mod replicated_query;
+pub mod call_or_task;
 pub mod response;
-pub(crate) mod update;
-
 // Non-replicated messages.
 pub mod nonreplicated_query;
 mod nonreplicated_response;

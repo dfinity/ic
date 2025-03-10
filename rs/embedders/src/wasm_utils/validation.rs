@@ -637,6 +637,26 @@ fn get_valid_system_apis_common(I: ValType) -> HashMap<String, HashMap<String, F
                 },
             )],
         ),
+        (
+            "subnet_self_size",
+            vec![(
+                API_VERSION_IC0,
+                FunctionSignature {
+                    param_types: vec![],
+                    return_type: vec![I],
+                },
+            )],
+        ),
+        (
+            "subnet_self_copy",
+            vec![(
+                API_VERSION_IC0,
+                FunctionSignature {
+                    param_types: vec![I, I, I],
+                    return_type: vec![],
+                },
+            )],
+        ),
     ];
 
     valid_system_apis
@@ -1066,6 +1086,11 @@ fn validate_function_section(
         });
     }
     Ok(())
+}
+
+// Checks if the module has a Wasm64 memory.
+pub fn has_wasm64_memory(module: &Module) -> bool {
+    module.memories.first().is_some_and(|m| m.memory64)
 }
 
 // Checks that the initial size of the wasm (heap) memory is not larger than
@@ -1552,7 +1577,14 @@ pub(super) fn validate_wasm_binary<'a>(
     validate_data_section(&module)?;
     validate_global_section(&module, config.max_globals)?;
     validate_function_section(&module, config.max_functions)?;
-    validate_initial_wasm_memory_size(&module, config.max_wasm_memory_size)?;
+    // The maximum Wasm memory size is different for Wasm32 and Wasm64 and
+    // each needs to be validated accordingly.
+    let max_wasm_memory_size = if has_wasm64_memory(&module) {
+        config.max_wasm64_memory_size
+    } else {
+        config.max_wasm_memory_size
+    };
+    validate_initial_wasm_memory_size(&module, max_wasm_memory_size)?;
     let (largest_function_instruction_count, max_complexity) = validate_code_section(&module)?;
     let wasm_metadata = validate_custom_section(&module, config)?;
     Ok((

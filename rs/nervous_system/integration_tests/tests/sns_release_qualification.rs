@@ -31,7 +31,7 @@ use sns_upgrade_test_utils::test_sns_upgrade;
 /// since there is sometimes a dependency between them, so we test them in both orders.
 ///
 /// Note: FI canisters are considered fully tested elsewhere, and have stable APIs.
-
+///
 /// Deployment tests
 
 #[tokio::test]

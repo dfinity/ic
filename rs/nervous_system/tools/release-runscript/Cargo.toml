@@ -13,6 +13,8 @@ path = "src/main.rs"
 [dependencies]
 anyhow = { workspace = true }
 candid = { workspace = true }
+chrono = { workspace = true }
+clap = { workspace = true }
 colored = "2.0.0"
 futures = { workspace = true }
 ic-agent = { workspace = true }
@@ -27,3 +29,4 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 tempfile = { workspace = true }
 tokio = { workspace = true }
+url = { workspace = true }

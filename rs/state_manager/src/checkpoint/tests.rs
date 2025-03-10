@@ -69,19 +69,25 @@ fn make_checkpoint_and_get_state_impl(
     tip_channel: &Sender<TipRequest>,
     log: &ReplicaLogger,
 ) -> ReplicatedState {
-    let mut thread_pool = thread_pool();
-    let (cp_layout, state, _has_downgrade) = make_checkpoint(
+    let (cp_layout, _has_downgrade) = make_unvalidated_checkpoint(
         state,
         height,
         tip_channel,
         &state_manager_metrics(log).checkpoint_metrics,
-        &mut thread_pool,
-        Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
-        ic_config::state_manager::lsmt_config_default().lsmt_status,
     )
-    .unwrap_or_else(|err| panic!("Expected make_checkpoint to succeed, got {:?}", err));
-    validate_checkpoint_and_remove_unverified_marker(&cp_layout, Some(&mut thread_pool)).unwrap();
-    state
+    .unwrap_or_else(|err| {
+        panic!(
+            "Expected make_unvalidated_checkpoint to succeed, got {:?}",
+            err
+        )
+    });
+    load_checkpoint_and_validate_parallel(
+        &cp_layout,
+        state.metadata.own_subnet_type,
+        &state_manager_metrics(log).checkpoint_metrics,
+        Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
+    )
+    .unwrap()
 }
 
 fn make_checkpoint_and_get_state(
@@ -190,14 +196,11 @@ fn scratchpad_dir_is_deleted_if_checkpointing_failed() {
         // Scratchpad directory is "tmp/scatchpad_{hex(height)}"
         let expected_scratchpad_dir = root.join("tmp").join("scratchpad_000000000000002a");
 
-        let replicated_state = make_checkpoint(
+        let replicated_state = make_unvalidated_checkpoint(
             &state,
             HEIGHT,
             &tip_channel,
             &state_manager_metrics.checkpoint_metrics,
-            &mut thread_pool(),
-            Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
-            ic_config::state_manager::lsmt_config_default().lsmt_status,
         );
 
         match replicated_state {
