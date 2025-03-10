@@ -9,11 +9,10 @@ on the process that this file is part of, see
 
 ## Added
 
-* Collect metrics about timer tasks defined using ic_nervous_system_timer_task library.
+* Added `NetworkEconomics.voting_power_economics.neuron_minimum_dissolve_delay_to_vote_seconds`.
 
 ## Changed
-* Voting Rewards will be scheduled by a timer instead of by heartbeats.
-* 
+
 ## Deprecated
 
 ## Removed

@@ -140,6 +140,7 @@ use std::{
     io,
     time::{Duration, SystemTime},
 };
+use timer_tasks::encode_timer_task_metrics;
 
 #[cfg(any(test, feature = "canbench-rs"))]
 pub mod test_utils;
@@ -171,7 +172,7 @@ pub mod neurons_fund;
 mod node_provider_rewards;
 pub mod pb;
 pub mod proposals;
-mod reward;
+pub mod reward;
 pub mod storage;
 mod subaccount_index;
 pub mod timer_tasks;
@@ -207,7 +208,7 @@ thread_local! {
 
     static USE_STABLE_MEMORY_FOLLOWING_INDEX: Cell<bool> = const { Cell::new(true) };
 
-    static MIGRATE_ACTIVE_NEURONS_TO_STABLE_MEMORY: Cell<bool> = const { Cell::new(cfg!(feature = "test")) };
+    static MIGRATE_ACTIVE_NEURONS_TO_STABLE_MEMORY: Cell<bool> = const { Cell::new(true) };
 }
 
 thread_local! {
@@ -641,6 +642,9 @@ pub fn encode_metrics(
             .value(labels.as_slice(), Metric::into(*deadline_ts))
             .unwrap();
     }
+
+    // Timer tasks
+    encode_timer_task_metrics(w)?;
 
     // Periodically Calculated (almost entirely detailed neuron breakdowns/rollups)
 
@@ -1165,3 +1169,6 @@ impl NeuronSubsetMetricsPb {
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(feature = "canbench-rs")]
+mod benches_util;

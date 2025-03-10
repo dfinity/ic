@@ -85,18 +85,63 @@ async fn test_deployment_swap_upgrade() {
 
 /// Upgrade Tests
 #[tokio::test]
-async fn test_upgrade_swap() {
-    test_sns_upgrade(vec![SnsCanisterType::Swap]).await;
+async fn test_upgrade_swap_auto() {
+    let automatically_advance_target_version = true;
+    test_sns_upgrade(
+        vec![SnsCanisterType::Swap],
+        automatically_advance_target_version,
+    )
+    .await;
 }
 
 #[tokio::test]
-async fn test_upgrade_sns_gov_root() {
-    test_sns_upgrade(vec![SnsCanisterType::Root, SnsCanisterType::Governance]).await;
+async fn test_upgrade_swap_no_auto() {
+    let automatically_advance_target_version = false;
+    test_sns_upgrade(
+        vec![SnsCanisterType::Swap],
+        automatically_advance_target_version,
+    )
+    .await;
 }
 
 #[tokio::test]
-async fn test_upgrade_upgrade_sns_gov_root() {
-    test_sns_upgrade(vec![SnsCanisterType::Governance, SnsCanisterType::Root]).await;
+async fn test_upgrade_sns_gov_root_auto() {
+    let automatically_advance_target_version = true;
+    test_sns_upgrade(
+        vec![SnsCanisterType::Root, SnsCanisterType::Governance],
+        automatically_advance_target_version,
+    )
+    .await;
+}
+
+#[tokio::test]
+async fn test_upgrade_sns_gov_root_no_auto() {
+    let automatically_advance_target_version = false;
+    test_sns_upgrade(
+        vec![SnsCanisterType::Root, SnsCanisterType::Governance],
+        automatically_advance_target_version,
+    )
+    .await;
+}
+
+#[tokio::test]
+async fn test_upgrade_upgrade_sns_gov_root_auto() {
+    let automatically_advance_target_version: bool = true;
+    test_sns_upgrade(
+        vec![SnsCanisterType::Governance, SnsCanisterType::Root],
+        automatically_advance_target_version,
+    )
+    .await;
+}
+
+#[tokio::test]
+async fn test_upgrade_upgrade_sns_gov_root_no_auto() {
+    let automatically_advance_target_version = false;
+    test_sns_upgrade(
+        vec![SnsCanisterType::Governance, SnsCanisterType::Root],
+        automatically_advance_target_version,
+    )
+    .await;
 }
 
 /// Tests a deployment of the SNS.

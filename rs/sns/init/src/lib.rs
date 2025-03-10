@@ -1011,11 +1011,6 @@ impl SnsInitPayload {
                     .as_ref()
                     .ok_or_else(|| "Error: developer_distribution must be specified".to_string())?;
 
-                let airdrop_distribution = f
-                    .airdrop_distribution
-                    .as_ref()
-                    .ok_or_else(|| "Error: airdrop_distribution must be specified".to_string())?;
-
                 let min_stake_infringing_developer_neurons: Vec<(PrincipalId, u64)> =
                     developer_distribution
                         .developer_neurons
@@ -1039,32 +1034,6 @@ impl SnsInitPayload {
                         min_stake_infringing_developer_neurons.len(),
                         neuron_minimum_stake_e8s,
                         min_stake_infringing_developer_neurons,
-                    ));
-                }
-
-                let min_stake_infringing_airdrop_neurons: Vec<(PrincipalId, u64)> =
-                    airdrop_distribution
-                        .airdrop_neurons
-                        .iter()
-                        .filter_map(|neuron_distribution| {
-                            if neuron_distribution.stake_e8s < neuron_minimum_stake_e8s {
-                                // Safe to unwrap due to the checks done above
-                                Some((
-                                    neuron_distribution.controller.unwrap(),
-                                    neuron_distribution.stake_e8s,
-                                ))
-                            } else {
-                                None
-                            }
-                        })
-                        .collect();
-
-                if !min_stake_infringing_airdrop_neurons.is_empty() {
-                    return Err(format!(
-                        "Error: {} airdrop neurons have a stake below the minimum stake ({} e8s):  \n {:?}",
-                        min_stake_infringing_airdrop_neurons.len(),
-                        neuron_minimum_stake_e8s,
-                        min_stake_infringing_airdrop_neurons,
                     ));
                 }
             }
@@ -1963,8 +1932,8 @@ impl SnsInitPayload {
 mod test {
     use crate::{
         pb::v1::{
-            AirdropDistribution, DappCanisters, DeveloperDistribution,
-            FractionalDeveloperVotingPower as FractionalDVP, NeuronDistribution, SwapDistribution,
+            DappCanisters, DeveloperDistribution, FractionalDeveloperVotingPower as FractionalDVP,
+            NeuronDistribution, SwapDistribution,
         },
         FractionalDeveloperVotingPower, MaxNeuronsFundParticipationValidationError,
         MinDirectParticipationThresholdValidationError,
@@ -1994,6 +1963,7 @@ mod test {
     };
     use icrc_ledger_types::{icrc::generic_metadata_value::MetadataValue, icrc1::account::Account};
     use isocountry::CountryCode;
+    use pretty_assertions::assert_eq;
     use std::{
         collections::{BTreeMap, HashSet},
         convert::TryInto,
@@ -2271,8 +2241,6 @@ initial_token_distribution: !FractionalDeveloperVotingPower
   swap_distribution:
     total_e8s: 10000000000
     initial_swap_amount_e8s: 10000000000
-  airdrop_distribution:
-    airdrop_neurons: []
 ".to_string();
 
         assert_eq!(observed, Ok(expected));
@@ -2805,39 +2773,19 @@ initial_token_distribution: !FractionalDeveloperVotingPower
     fn test_build_canister_payloads_creates_neurons_with_correct_ledger_accounts() {
         use num_traits::ToPrimitive;
 
-        let controller1 = PrincipalId::new_user_test_id(2209);
-        let airdrop_neuron1 = NeuronDistribution {
-            controller: Some(controller1),
-            stake_e8s: 100_000_000,
-            memo: 5,
-            dissolve_delay_seconds: 0,
-            vesting_period_seconds: None,
-        };
-        let controller2 = PrincipalId::new_user_test_id(7184);
-        let airdrop_neuron2 = NeuronDistribution {
-            controller: Some(controller2),
-            stake_e8s: 770_000_000,
-            memo: 1644,
-            dissolve_delay_seconds: 9053,
-            vesting_period_seconds: None,
-        };
-        let airdrop_neurons = AirdropDistribution {
-            airdrop_neurons: vec![airdrop_neuron1, airdrop_neuron2],
-        };
-        let controller3 = PrincipalId::new_user_test_id(3209);
-        let developer_neuron1 = NeuronDistribution {
-            controller: Some(controller3),
+        let controller = PrincipalId::new_user_test_id(3209);
+        let developer_neuron = NeuronDistribution {
+            controller: Some(controller),
             stake_e8s: 330_000_000,
             memo: 8721,
             dissolve_delay_seconds: ONE_MONTH_SECONDS * 6,
             vesting_period_seconds: None,
         };
         let developer_neurons = DeveloperDistribution {
-            developer_neurons: vec![developer_neuron1],
+            developer_neurons: vec![developer_neuron],
         };
 
         let mut fdvp = FractionalDVP::with_valid_values_for_testing();
-        fdvp.airdrop_distribution = Some(airdrop_neurons);
         fdvp.developer_distribution = Some(developer_neurons);
 
         // Build an sns_init_payload with defaults for non-governance related configuration.
@@ -3485,7 +3433,6 @@ initial_token_distribution: !FractionalDeveloperVotingPower
             // Not used in this test.
             developer_distribution: None,
             treasury_distribution: None,
-            airdrop_distribution: None,
         };
         let sns_init_payload = SnsInitPayload {
             max_direct_participation_icp_e8s: Some(MAX_DIRECT_ICP_CONTRIBUTION_TO_SWAP),

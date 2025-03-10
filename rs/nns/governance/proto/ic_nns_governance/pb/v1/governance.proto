@@ -1686,6 +1686,15 @@ message VotingPowerEconomics {
   //
   // Initially, set to 1/12 years.
   optional uint64 clear_following_after_seconds = 2;
+
+  // The minimum dissolve delay a neuron must have in order to be eligible to vote.
+  //
+  // Neurons with a dissolve delay lower than this threshold will not have
+  // voting power, even if they are otherwise active.
+  //
+  // This value is an essential part of the staking mechanism, promoting
+  // long-term alignment with the network's governance.
+  optional uint64 neuron_minimum_dissolve_delay_to_vote_seconds = 3;
 }
 
 // The thresholds specify the shape of the ideal matching function used by the Neurons' Fund to
@@ -2747,4 +2756,11 @@ message Account {
   // The subaccount of the account. If not set then the default
   // subaccount (all bytes set to 0) is used.
   optional Subaccount subaccount = 2;
+}
+
+// A reward disbribution that has been calculated but not fully disbursed.
+// This supports large reward distributions that may need to be split into multiple
+// messages.
+message RewardsDistributionInProgress {
+  map<uint64, uint64> neuron_ids_to_e8_amounts = 1;
 }
