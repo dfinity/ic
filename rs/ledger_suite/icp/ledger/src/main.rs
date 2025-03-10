@@ -1214,30 +1214,31 @@ fn tip_of_chain_() {
 
 #[export_name = "canister_query get_archive_index_pb"]
 fn get_archive_index_() {
-    over(protobuf, |()| {
-        let state = LEDGER.read().unwrap();
-        let entries = match &state
-            .blockchain
-            .archive
-            .try_read()
-            .expect("Failed to get lock on archive")
-            .as_ref()
-        {
-            None => vec![],
-            Some(archive) => archive
-                .index()
-                .into_iter()
-                .map(
-                    |((height_from, height_to), canister_id)| protobuf::ArchiveIndexEntry {
-                        height_from,
-                        height_to,
-                        canister_id: Some(canister_id.get()),
-                    },
-                )
-                .collect(),
-        };
-        protobuf::ArchiveIndexResponse { entries }
-    });
+    ic_cdk::setup();
+    let state = LEDGER.read().unwrap();
+    let entries = match &state
+        .blockchain
+        .archive
+        .try_read()
+        .expect("Failed to get lock on archive")
+        .as_ref()
+    {
+        None => vec![],
+        Some(archive) => archive
+            .index()
+            .into_iter()
+            .map(
+                |((height_from, height_to), canister_id)| protobuf::ArchiveIndexEntry {
+                    height_from,
+                    height_to,
+                    canister_id: Some(canister_id.get()),
+                },
+            )
+            .collect(),
+    };
+    let res = to_proto_bytes(protobuf::ArchiveIndexResponse { entries })
+        .expect("failed to encode get_archive_index_pb response");
+    reply_raw(&res);
 }
 
 #[export_name = "canister_query account_balance_pb"]
