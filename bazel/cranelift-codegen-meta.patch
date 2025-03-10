@@ -1,3 +1,4 @@
+# Fix for https://github.com/bytecodealliance/wasmtime/issues/9553
 diff --git a/cranelift/codegen/meta/src/srcgen.rs b/cranelift/codegen/meta/src/srcgen.rs
 index d3c321e5b..5b94ddd19 100644
 --- a/cranelift/codegen/meta/src/srcgen.rs
