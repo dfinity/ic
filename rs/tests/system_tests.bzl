@@ -4,7 +4,6 @@ Rules for system-tests.
 
 load("@bazel_skylib//rules:common_settings.bzl", "BuildSettingInfo")
 load("@bazel_skylib//rules:copy_file.bzl", "copy_file")
-load("@kubeconfig//:defs.bzl", "k8s_tags")
 load("@rules_oci//oci:defs.bzl", "oci_load")
 load("@rules_rust//rust:defs.bzl", "rust_binary")
 load("//bazel:defs.bzl", "mcopy", "zstd_compress")
@@ -284,7 +283,6 @@ def system_test(
         icos_images = icos_images,
         env_inherit = env_inherit,
         tags = tags + ["requires-network", "system_test"] +
-               k8s_tags +
                (["manual"] if "experimental_system_test_colocation" in tags else []),
         target_compatible_with = ["@platforms//os:linux"],
         timeout = test_timeout,
