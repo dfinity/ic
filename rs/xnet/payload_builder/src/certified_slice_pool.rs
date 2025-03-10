@@ -377,7 +377,7 @@ impl Payload {
     #[allow(clippy::assertions_on_constants)]
     pub fn take_prefix(
         mut self,
-        message_limit: Option<usize>,
+        max_signals: usize,
         byte_limit: Option<usize>,
     ) -> CertifiedSliceResult<(Option<Self>, Option<Self>)> {
         // Consider an axis of stream indices along which we progress by inducting messages:
@@ -389,19 +389,17 @@ impl Payload {
         // them, we can not go above an upper limit of `max_message_index`. Since the messages
         // in the slice start at `messages_begin`, we can therefore induct a number of
         // `max_messages_index - messages_begin` messages and still stay below the stated limit.
-        let max_message_limit = {
+        let message_limit = {
             let messages_begin =
                 self.messages_begin().unwrap_or(self.header.begin()).get() as usize;
-            let max_message_index = max_message_index(self.header.begin()).get() as usize;
+            let max_message_index =
+                max_message_index(self.header.begin(), max_signals).get() as usize;
             // The use of `saturating_sub()` allows decreasing `max_message_index` since for this
             // case we could have `max_message_index < messages_begin`. This will result in empty
             // prefixes until `stream_begin` (and thus `max_message_index`) has progressed enough
             // such that we can start producing signals (by inducting messages) again.
             max_message_index.saturating_sub(messages_begin)
         };
-        let message_limit = message_limit.map_or(max_message_limit, |message_limit| {
-            message_limit.min(max_message_limit)
-        });
         let byte_limit = byte_limit.unwrap_or(usize::MAX);
 
         debug_assert!(EMPTY_PAYLOAD_BYTES <= NON_EMPTY_PAYLOAD_FIXED_BYTES);
@@ -787,7 +785,7 @@ impl UnpackedStreamSlice {
     /// `self.payload` is malformed.
     pub fn take_prefix(
         mut self,
-        msg_limit: Option<usize>,
+        max_signals: usize,
         mut byte_limit: Option<usize>,
     ) -> CertifiedSliceResult<(Option<Self>, Option<Self>)> {
         // Adjust the byte limit by subtracting the certification size.
@@ -799,7 +797,7 @@ impl UnpackedStreamSlice {
             byte_limit = Some(byte_limit_ - certification_count_bytes);
         }
 
-        match self.payload.take_prefix(msg_limit, byte_limit)? {
+        match self.payload.take_prefix(max_signals, byte_limit)? {
             (None, None) => unreachable!("slice with no messages or signals"),
 
             // Nothing taken, put back the payload.
@@ -1132,10 +1130,10 @@ impl CertifiedSlicePool {
         &mut self,
         subnet_id: SubnetId,
         begin: Option<&ExpectedIndices>,
-        msg_limit: Option<usize>,
+        max_signals: usize,
         byte_limit: Option<usize>,
     ) -> CertifiedSliceResult<Option<(CertifiedStreamSlice, usize)>> {
-        match self.take_slice_impl(subnet_id, begin, msg_limit, byte_limit) {
+        match self.take_slice_impl(subnet_id, begin, max_signals, byte_limit) {
             Ok(Some(slice)) => {
                 let slice_count_bytes = slice.count_bytes();
                 debug_assert!(slice_count_bytes <= byte_limit.unwrap_or(usize::MAX));
@@ -1172,7 +1170,7 @@ impl CertifiedSlicePool {
         &mut self,
         subnet_id: SubnetId,
         begin: Option<&ExpectedIndices>,
-        msg_limit: Option<usize>,
+        max_signals: usize,
         byte_limit: Option<usize>,
     ) -> CertifiedSliceResult<Option<UnpackedStreamSlice>> {
         // Update the stream position in case we bail out early with no slice returned.
@@ -1208,7 +1206,7 @@ impl CertifiedSlicePool {
             .observe_take_messages_gced(original_message_count - prefix_message_count);
         let signals_end = slice.payload.header.signals_end();
 
-        let (prefix, slice) = slice.take_prefix(msg_limit, byte_limit)?;
+        let (prefix, slice) = slice.take_prefix(max_signals, byte_limit)?;
 
         // Put back the rest of the slice, if any.
         if let Some(slice) = slice {
