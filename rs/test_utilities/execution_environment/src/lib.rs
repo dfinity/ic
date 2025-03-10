@@ -1800,7 +1800,7 @@ impl Default for ExecutionTestBuilder {
             canister_snapshot_baseline_instructions: scheduler_config
                 .canister_snapshot_baseline_instructions,
             replica_version: ReplicaVersion::default(),
-            precompiled_universal_canister: true,
+            precompiled_universal_canister: false,
             cycles_account_manager_config: None,
         }
     }
