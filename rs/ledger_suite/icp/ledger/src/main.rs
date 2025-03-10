@@ -10,6 +10,7 @@ use dfn_protobuf::protobuf;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_canister_log::{LogEntry, Sink};
 use ic_cdk::api::{
+    call::{arg_data_raw, reply_raw},
     caller, data_certificate, instruction_counter, print, set_certified_data, time, trap,
 };
 use ic_cdk_macros::query;
@@ -32,17 +33,18 @@ use ic_ledger_core::{
 };
 use ic_stable_structures::reader::{BufferedReader, Reader};
 use ic_stable_structures::writer::{BufferedWriter, Writer};
+#[cfg(feature = "notify-method")]
+use icp_ledger::BlockRes;
 #[cfg(feature = "icp-allowance-getter")]
 use icp_ledger::IcpAllowanceArgs;
 use icp_ledger::{
     from_proto_bytes, max_blocks_per_request, protobuf, to_proto_bytes, tokens_into_proto,
     AccountBalanceArgs, AccountIdBlob, AccountIdentifier, AccountIdentifierByteBuf, ArchiveInfo,
     ArchivedBlocksRange, ArchivedEncodedBlocksRange, Archives, BinaryAccountBalanceArgs, Block,
-    BlockArg, BlockRes, CandidBlock, Decimals, FeatureFlags, GetBlocksArgs, InitArgs,
-    IterBlocksArgs, IterBlocksRes, LedgerCanisterPayload, Memo, Name, Operation, PaymentError,
-    QueryBlocksResponse, QueryEncodedBlocksResponse, SendArgs, Subaccount, Symbol, TipOfChainRes,
-    TotalSupplyArgs, Transaction, TransferArgs, TransferError, TransferFee, TransferFeeArgs,
-    MEMO_SIZE_BYTES,
+    BlockArg, CandidBlock, Decimals, FeatureFlags, GetBlocksArgs, InitArgs, IterBlocksArgs,
+    IterBlocksRes, LedgerCanisterPayload, Memo, Name, Operation, PaymentError, QueryBlocksResponse,
+    QueryEncodedBlocksResponse, SendArgs, Subaccount, Symbol, TipOfChainRes, TotalSupplyArgs,
+    Transaction, TransferArgs, TransferError, TransferFee, TransferFeeArgs, MEMO_SIZE_BYTES,
 };
 use icrc_ledger_types::icrc1::transfer::TransferError as Icrc1TransferError;
 use icrc_ledger_types::icrc2::allowance::{Allowance, AllowanceArgs};
@@ -1193,12 +1195,22 @@ fn notify_dfx_() {
 
 #[export_name = "canister_query block_pb"]
 fn block_() {
-    over(protobuf, |BlockArg(height)| BlockRes(block(height)));
+    let input = arg_data_raw();
+    ic_cdk::setup();
+    let arg: BlockArg = from_proto_bytes(input).expect("failed to decode block_pb argument");
+    let res = to_proto_bytes(icp_ledger::BlockRes(block(arg.0)))
+        .expect("failed to encode block_pb response");
+    reply_raw(&res)
 }
 
 #[export_name = "canister_query tip_of_chain_pb"]
 fn tip_of_chain_() {
-    over(protobuf, |protobuf::TipOfChainRequest {}| tip_of_chain());
+    let input = arg_data_raw();
+    ic_cdk::setup();
+    let _: protobuf::TipOfChainRequest =
+        from_proto_bytes(input).expect("failed to decode tip_of_chain_pb argument");
+    let res = to_proto_bytes(tip_of_chain()).expect("failed to encode tip_of_chain_pb response");
+    reply_raw(&res)
 }
 
 #[export_name = "canister_query get_archive_index_pb"]
@@ -1270,13 +1282,13 @@ fn transfer_fee_() {
 
 #[export_name = "canister_query total_supply_pb"]
 fn total_supply_() {
-    let input = ic_cdk::api::call::arg_data_raw();
+    let input = arg_data_raw();
     ic_cdk::setup();
     let _: TotalSupplyArgs =
         from_proto_bytes(input).expect("failed to decode total_supply_pb args");
     let res = tokens_into_proto(total_supply());
     let res_proto = to_proto_bytes(res).expect("failed encode total_supply_pb response");
-    ic_cdk::api::call::reply_raw(&res_proto)
+    reply_raw(&res_proto)
 }
 
 /// Get multiple blocks by *offset into the container* (not BlockIndex) and
