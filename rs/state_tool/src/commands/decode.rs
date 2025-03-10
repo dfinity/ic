@@ -44,7 +44,7 @@ pub fn do_decode(path: PathBuf) -> Result<(), String> {
             )
         }
         CANISTER_FILE => display_proto_with_canister_id::<
-            pb_canister::CanisterStateBitsV2,
+            pb_canister::CanisterStateBits,
             CanisterStateBits,
         >(path.clone(), &dummy_canister_id),
         _ => Err(format!("don't know how to decode {}", fname)),

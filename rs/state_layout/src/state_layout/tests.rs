@@ -91,7 +91,7 @@ fn test_encode_decode_empty_controllers() {
     // A canister state with empty controllers.
     let canister_state_bits = default_canister_state_bits();
 
-    let pb_bits = pb_canister_state_bits::CanisterStateBitsV2::from(canister_state_bits);
+    let pb_bits = pb_canister_state_bits::CanisterStateBits::from(canister_state_bits);
     let canister_state_bits =
         CanisterStateBits::try_from((pb_bits, &CanisterId::from_u64(1))).unwrap();
 
@@ -111,7 +111,7 @@ fn test_encode_decode_non_empty_controllers() {
         ..default_canister_state_bits()
     };
 
-    let pb_bits = pb_canister_state_bits::CanisterStateBitsV2::from(canister_state_bits);
+    let pb_bits = pb_canister_state_bits::CanisterStateBits::from(canister_state_bits);
     let canister_state_bits =
         CanisterStateBits::try_from((pb_bits, &CanisterId::from_u64(1))).unwrap();
 
@@ -131,7 +131,7 @@ fn test_encode_decode_empty_history() {
         ..default_canister_state_bits()
     };
 
-    let pb_bits = pb_canister_state_bits::CanisterStateBitsV2::from(canister_state_bits);
+    let pb_bits = pb_canister_state_bits::CanisterStateBits::from(canister_state_bits);
     let canister_state_bits =
         CanisterStateBits::try_from((pb_bits, &CanisterId::from_u64(1))).unwrap();
 
@@ -196,7 +196,7 @@ fn test_encode_decode_non_empty_history() {
         ..default_canister_state_bits()
     };
 
-    let pb_bits = pb_canister_state_bits::CanisterStateBitsV2::from(canister_state_bits);
+    let pb_bits = pb_canister_state_bits::CanisterStateBits::from(canister_state_bits);
     let canister_state_bits =
         CanisterStateBits::try_from((pb_bits, &CanisterId::from_u64(1))).unwrap();
 
@@ -267,7 +267,7 @@ fn test_encode_decode_task_queue() {
             ..default_canister_state_bits()
         };
 
-        let pb_bits = pb_canister_state_bits::CanisterStateBitsV2::from(canister_state_bits);
+        let pb_bits = pb_canister_state_bits::CanisterStateBits::from(canister_state_bits);
         let canister_state_bits =
             CanisterStateBits::try_from((pb_bits, &CanisterId::from_u64(1))).unwrap();
         assert_eq!(canister_state_bits.task_queue, task_queue);
@@ -849,7 +849,7 @@ fn test_decode_v1_encode_v2_decode() {
 
     assert_eq!(canister_state_bits_initial, canister_state_bits_load_v1);
 
-    let pb_bits_v2 = pb_canister_state_bits::CanisterStateBitsV2::from(canister_state_bits_load_v1);
+    let pb_bits_v2 = pb_canister_state_bits::CanisterStateBits::from(canister_state_bits_load_v1);
 
     let canister_state_bits_load_v2 =
         CanisterStateBits::try_from((pb_bits_v2, &CanisterId::from_u64(1))).unwrap();
@@ -866,7 +866,7 @@ fn test_encode_decode_empty_task_queue() {
         ..default_canister_state_bits()
     };
 
-    let pb_bits = pb_canister_state_bits::CanisterStateBitsV2::from(canister_state_bits);
+    let pb_bits = pb_canister_state_bits::CanisterStateBits::from(canister_state_bits);
     let canister_state_bits =
         CanisterStateBits::try_from((pb_bits, &CanisterId::from_u64(1))).unwrap();
 
@@ -889,7 +889,7 @@ fn test_encode_decode_non_empty_task_queue() {
         ..default_canister_state_bits()
     };
 
-    let pb_bits = pb_canister_state_bits::CanisterStateBitsV2::from(canister_state_bits);
+    let pb_bits = pb_canister_state_bits::CanisterStateBits::from(canister_state_bits);
     let canister_state_bits =
         CanisterStateBits::try_from((pb_bits, &CanisterId::from_u64(1))).unwrap();
 
@@ -908,5 +908,5 @@ fn test_encode_task_queue_with_paused_task_fails() {
         ..default_canister_state_bits()
     };
 
-    let _ = pb_canister_state_bits::CanisterStateBitsV2::from(canister_state_bits);
+    let _ = pb_canister_state_bits::CanisterStateBits::from(canister_state_bits);
 }
