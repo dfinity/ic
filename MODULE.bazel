@@ -884,5 +884,5 @@ mainnet_versions = use_repo_rule("//bazel:mainnet-versions.bzl", "mainnet_versio
 
 mainnet_versions(
     name = "mainnet_versions",
-    path = "//:mainnet-subnet-revisions.json",
+    path = "//:mainnet-icos-revisions.json",
 )

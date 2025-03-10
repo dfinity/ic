@@ -9,7 +9,7 @@ import urllib.request
 from enum import Enum
 from typing import List
 
-SAVED_VERSIONS_SUBNETS_PATH = "mainnet-subnet-revisions.json"
+SAVED_VERSIONS_SUBNETS_PATH = "mainnet-icos-revisions.json"
 nns_subnet_id = "tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe"
 app_subnet_id = "io67a-2jmkw-zup3h-snbwi-g6a5n-rm5dn-b6png-lvdpl-nqnto-yih6l-gqe"
 PUBLIC_DASHBOARD_API = "https://ic-api.internetcomputer.org"
