@@ -5,7 +5,6 @@ use dfn_core::{
     endpoint::over_bytes,
     over, over_async, over_may_reject,
 };
-use dfn_protobuf::protobuf;
 use ic_base_types::PrincipalId;
 use icp_ledger::{Memo, Tokens, TransactionNotification};
 use lazy_static::lazy_static;
@@ -22,7 +21,7 @@ lazy_static! {
 
 #[export_name = "canister_update transaction_notification_pb"]
 fn transaction_notification_pb_() {
-    over_may_reject(protobuf, transaction_notification)
+    // over_may_reject(protobuf, transaction_notification)
 }
 
 #[export_name = "canister_update transaction_notification"]

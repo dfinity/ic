@@ -24,7 +24,6 @@ use crate::{
     },
     transaction_id::TransactionIdentifier,
 };
-use dfn_protobuf::ProtoBuf;
 use ic_crypto_tree_hash::Path;
 use ic_ledger_canister_blocks_synchronizer::blocks::HashedBlock;
 use ic_ledger_core::block::BlockType;
@@ -33,11 +32,11 @@ use ic_types::{
     messages::{HttpCanisterUpdate, HttpReadState},
     CanisterId, PrincipalId,
 };
+use icp_ledger::validate_endpoints::{from_proto_bytes_res, to_proto_bytes};
 use icp_ledger::{
     Block, BlockIndex, Operation as LedgerOperation, SendArgs, Subaccount, TimeStamp, Tokens,
     Transaction,
 };
-use on_wire::{FromWire, IntoWire};
 use rosetta_core::convert::principal_id_from_public_key;
 use serde_json::{from_value, map::Map, Number, Value};
 use std::convert::{TryFrom, TryInto};
@@ -433,13 +432,11 @@ pub fn principal_id_from_public_key_or_principal(
 
 // This is so I can keep track of where this conversion is done
 pub fn from_arg(encoded: Vec<u8>) -> Result<SendArgs, ApiError> {
-    ProtoBuf::from_bytes(encoded)
-        .map_err(ApiError::internal_error)
-        .map(|ProtoBuf(c)| c)
+    from_proto_bytes_res(encoded).map_err(ApiError::internal_error)
 }
 
 pub fn to_arg(args: SendArgs) -> Vec<u8> {
-    ProtoBuf(args).into_bytes().expect("Serialization failed")
+    to_proto_bytes(args)
 }
 
 pub fn from_hash<T>(hash: &HashOf<T>) -> String {

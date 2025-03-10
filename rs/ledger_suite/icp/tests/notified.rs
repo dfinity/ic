@@ -5,8 +5,8 @@ use dfn_core::{
     endpoint::over_bytes,
     over, over_async, over_may_reject,
 };
-use dfn_protobuf::protobuf;
 use ic_base_types::PrincipalId;
+use icp_ledger::validate_endpoints::protobuf;
 use icp_ledger::{Memo, Tokens, TransactionNotification};
 use lazy_static::lazy_static;
 use std::sync::RwLock;

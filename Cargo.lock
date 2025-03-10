@@ -9814,6 +9814,7 @@ dependencies = [
  "icp-ledger",
  "on_wire",
  "proptest 1.6.0",
+ "prost 0.13.4",
  "reqwest 0.12.12",
  "rusqlite",
  "serde",
@@ -9996,6 +9997,7 @@ dependencies = [
  "icrc-ledger-types",
  "on_wire",
  "pocket-ic",
+ "prost 0.13.4",
  "serde",
 ]
 
@@ -15626,6 +15628,7 @@ dependencies = [
  "icp-ledger",
  "lazy_static",
  "pocket-ic",
+ "prost 0.13.4",
  "serde",
  "serde_bytes",
 ]
@@ -15647,6 +15650,7 @@ dependencies = [
  "ic-base-types",
  "ic-canister-log 0.2.0",
  "ic-cdk 0.17.1",
+ "ic-cdk-macros 0.17.1",
  "ic-cdk-timers",
  "ic-error-types",
  "ic-icrc1",
@@ -15668,6 +15672,7 @@ dependencies = [
  "num-traits",
  "on_wire",
  "proptest 1.6.0",
+ "prost 0.13.4",
  "serde",
  "serde_bytes",
  "serde_cbor",
