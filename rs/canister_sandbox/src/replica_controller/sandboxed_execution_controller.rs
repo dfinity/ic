@@ -148,6 +148,7 @@ struct SandboxedExecutionMetrics {
     mmap_count: HistogramVec,
     mprotect_count: HistogramVec,
     copy_page_count: HistogramVec,
+    wasm_resident_pages: Histogram,
 }
 
 impl SandboxedExecutionMetrics {
@@ -381,6 +382,11 @@ impl SandboxedExecutionMetrics {
                 decimal_buckets_with_zero(0, 8),
                 &["api_type", "memory_type"],
             ),
+            wasm_resident_pages: metrics_registry.histogram(
+                "sandboxed_wasm_resident_pages",
+                "Number of pages that are currently active (i.e., as reported by libc mincore()).",
+                exponential_buckets(1.0, 2.0, 22),
+            ),
         }
     }
 
@@ -409,6 +415,8 @@ impl SandboxedExecutionMetrics {
         self.dirty_pages
             .with_label_values(&[api_type_label, "wasm"])
             .observe(instance_stats.wasm_dirty_pages as f64);
+        self.wasm_resident_pages
+            .observe(instance_stats.wasm_resident_pages as f64);
         self.read_before_write_count
             .with_label_values(&[api_type_label, "wasm"])
             .observe(instance_stats.wasm_read_before_write_count as f64);

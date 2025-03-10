@@ -2204,6 +2204,11 @@ impl ExecutionTestBuilder {
         self
     }
 
+    pub fn with_embedders_config(mut self, embedders_config: EmbeddersConfig) -> Self {
+        self.execution_config.embedders_config = embedders_config;
+        self
+    }
+
     pub fn build(self) -> ExecutionTest {
         let own_range = CanisterIdRange {
             start: CanisterId::from(CANISTER_IDS_PER_SUBNET),
