@@ -63,7 +63,7 @@ where
 
 // A setup function to initialize StateMachine with a dummy canister and expose the cansiter_id.
 // The same canister_id and StateMachine reference is used in the fuzzing runs, where the
-// canister is reinstalled under the same canister_id
+// canister is reinstalled under the same canister_id.
 fn setup_env(memory64_enabled: bool) -> (StateMachine, CanisterId) {
     let exec_config = ExecutionConfig {
         embedders_config: ic_embedders_config(memory64_enabled),
