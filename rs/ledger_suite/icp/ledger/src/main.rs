@@ -1195,9 +1195,9 @@ fn notify_dfx_() {
 
 #[export_name = "canister_query block_pb"]
 fn block_() {
-    let input = arg_data_raw();
     ic_cdk::setup();
-    let arg: BlockArg = from_proto_bytes(input).expect("failed to decode block_pb argument");
+    let arg: BlockArg =
+        from_proto_bytes(arg_data_raw()).expect("failed to decode block_pb argument");
     let res = to_proto_bytes(icp_ledger::BlockRes(block(arg.0)))
         .expect("failed to encode block_pb response");
     reply_raw(&res)
@@ -1205,10 +1205,9 @@ fn block_() {
 
 #[export_name = "canister_query tip_of_chain_pb"]
 fn tip_of_chain_() {
-    let input = arg_data_raw();
     ic_cdk::setup();
     let _: protobuf::TipOfChainRequest =
-        from_proto_bytes(input).expect("failed to decode tip_of_chain_pb argument");
+        from_proto_bytes(arg_data_raw()).expect("failed to decode tip_of_chain_pb argument");
     let res = to_proto_bytes(tip_of_chain()).expect("failed to encode tip_of_chain_pb response");
     reply_raw(&res)
 }
@@ -1243,9 +1242,12 @@ fn get_archive_index_() {
 
 #[export_name = "canister_query account_balance_pb"]
 fn account_balance_() {
-    over(protobuf, |AccountBalanceArgs { account }| {
-        tokens_into_proto(account_balance(account))
-    })
+    ic_cdk::setup();
+    let args: AccountBalanceArgs =
+        from_proto_bytes(arg_data_raw()).expect("failed to decode account_balance_pb argument");
+    let res = tokens_into_proto(account_balance(args.account));
+    let res_proto = to_proto_bytes(res).expect("failed to encode account_balance_pb response");
+    reply_raw(&res_proto)
 }
 
 #[query(name = "account_balance")]
@@ -1277,15 +1279,19 @@ fn compute_account_identifier(arg: Account) -> AccountIdBlob {
 
 #[export_name = "canister_query transfer_fee_pb"]
 fn transfer_fee_() {
-    over(protobuf, transfer_fee)
+    ic_cdk::setup();
+    let args: TransferFeeArgs =
+        from_proto_bytes(arg_data_raw()).expect("failed to decode transfer_fee_pb argument");
+    let fee = transfer_fee(args);
+    let res = to_proto_bytes(fee).expect("failed to encpde transfer_fee_pb response");
+    reply_raw(&res)
 }
 
 #[export_name = "canister_query total_supply_pb"]
 fn total_supply_() {
-    let input = arg_data_raw();
     ic_cdk::setup();
     let _: TotalSupplyArgs =
-        from_proto_bytes(input).expect("failed to decode total_supply_pb args");
+        from_proto_bytes(arg_data_raw()).expect("failed to decode total_supply_pb args");
     let res = tokens_into_proto(total_supply());
     let res_proto = to_proto_bytes(res).expect("failed encode total_supply_pb response");
     reply_raw(&res_proto)
