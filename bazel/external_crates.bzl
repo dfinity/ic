@@ -348,7 +348,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.1.2",
             ),
             "cc": crate.spec(
-                version = "=1.2.8",
+                version = "^1.2.16",
             ),
             "cddl": crate.spec(
                 version = "^0.9.4",
