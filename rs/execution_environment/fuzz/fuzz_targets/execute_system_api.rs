@@ -6,7 +6,7 @@ use ic_types::{CanisterId, Cycles, NumBytes};
 
 use libfuzzer_sys::fuzz_target;
 use std::cell::RefCell;
-use wasm_fuzzers::ic_wasm::{ic_embedders_config, ICWasmModule};
+use wasm_fuzzers::ic_wasm::{ic_embedders_config, SystemApiModule};
 
 thread_local! {
     static ENV_32: RefCell<(StateMachine, CanisterId)> = RefCell::new(setup_env(false));
@@ -24,14 +24,14 @@ const HELLO_WORLD_WAT: &str = r#"
 
 fn main() {
     let features = fuzzer_sandbox::SandboxFeatures {
-        syscall_tracing: true,
+        syscall_tracing: false,
     };
     fuzzer_sandbox::fuzzer_main(features);
 }
 
-fuzz_target!(|data: ICWasmModule| {
-    with_env(data.config.memory64_enabled, |env, canister_id| {
-        let wasm = data.module.to_bytes();
+fuzz_target!(|data: SystemApiModule| {
+    with_env(data.memory64_enabled, |env, canister_id| {
+        let wasm = data.module;
         if env
             .install_wasm_in_mode(*canister_id, CanisterInstallMode::Reinstall, wasm, vec![])
             .is_ok()
@@ -63,14 +63,14 @@ where
 
 // A setup function to initialize StateMachine with a dummy canister and expose the cansiter_id.
 // The same canister_id and StateMachine reference is used in the fuzzing runs, where the
-// canister is reinstalled under the same canister_id
+// canister is reinstalled under the same canister_id.
 fn setup_env(memory64_enabled: bool) -> (StateMachine, CanisterId) {
     let exec_config = ExecutionConfig {
         embedders_config: ic_embedders_config(memory64_enabled),
         max_compilation_cache_size: NumBytes::new(10 * 1024 * 1024), // 10MiB
         ..Default::default()
     };
-    let subnet_type = SubnetType::System;
+    let subnet_type = SubnetType::Application;
     let config = StateMachineConfig::new(SubnetConfig::new(subnet_type), exec_config);
     let env = StateMachineBuilder::new()
         .with_config(Some(config))
