@@ -352,7 +352,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.1.2",
             ),
             "cc": crate.spec(
-                version = "=1.1.37",
+                version = "^1.2.16",
             ),
             "cddl": crate.spec(
                 version = "^0.9.4",
@@ -1076,7 +1076,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 ],
             ),
             "ring": crate.spec(
-                version = "^0.17.7",
+                version = "^0.17.12",
                 features = [
                     "std",
                 ],
@@ -1088,7 +1088,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.5.2",
             ),
             "rocksdb": crate.spec(
-                version = "^0.22.0",
+                version = "^0.23.0",
                 default_features = False,
             ),
             "rolling-file": crate.spec(
