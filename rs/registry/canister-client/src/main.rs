@@ -1,8 +1,5 @@
 use ic_interfaces_registry::RegistryClient;
 use ic_registry_canister_client::CanisterRegistryClient;
-use ic_registry_canister_data_provider::{
-    CanisterDataProvider, StableMemoryBorrower, StorableRegistryKey, StorableRegistryValue,
-};
 use ic_stable_structures::memory_manager::{MemoryId, MemoryManager, VirtualMemory};
 use ic_stable_structures::{DefaultMemoryImpl, StableBTreeMap};
 use std::cell::RefCell;
@@ -10,14 +7,14 @@ use std::cell::RefCell;
 use ic_cdk::spawn;
 use std::sync::Arc;
 
-type Memory = VirtualMemory<DefaultMemoryImpl>;
+type VM = VirtualMemory<DefaultMemoryImpl>;
 thread_local! {
     /// Memory manager instance for handling stable memory allocation
     pub static MEMORY_MANAGER: RefCell<MemoryManager<DefaultMemoryImpl>> =
     RefCell::new(MemoryManager::init(DefaultMemoryImpl::default()));
 
     /// Stores registry data with typed keys and values in canister stable memory
-    pub static REGISTRY: RefCell<StableBTreeMap<StorableRegistryKey, StorableRegistryValue, Memory>> =
+    pub static REGISTRY: RefCell<StableBTreeMap<StorableRegistryKey, StorableRegistryValue, VM >> =
         RefCell::new(StableBTreeMap::init(
         MEMORY_MANAGER.with(|m| m.borrow().get(MemoryId::new(0)))
     ));

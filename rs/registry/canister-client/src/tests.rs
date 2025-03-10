@@ -1,9 +1,12 @@
-use std::collections::HashSet;
-
 use super::*;
 use ic_interfaces_registry::RegistryVersionedRecord;
 use ic_registry_keys::NODE_RECORD_KEY_PREFIX;
+use ic_stable_structures::memory_manager::VirtualMemory;
+use ic_stable_structures::DefaultMemoryImpl;
 use ic_types::{registry::RegistryDataProviderError, PrincipalId};
+use std::collections::HashSet;
+
+type VM = VirtualMemory<DefaultMemoryImpl>;
 
 const DELETED_KEY: &str = "\
     node_record_\

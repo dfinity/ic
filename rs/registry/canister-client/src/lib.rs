@@ -12,6 +12,8 @@ use ic_types::{
 use std::collections::BTreeMap;
 use std::sync::{Arc, RwLock, RwLockReadGuard};
 
+pub mod data_provider;
+
 type CacheState = (
     RegistryVersion,
     BTreeMap<RegistryVersion, Time>,

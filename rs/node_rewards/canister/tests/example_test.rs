@@ -1,8 +1,8 @@
 use candid::{Decode, Encode};
 use ic_nns_test_utils::common::build_node_rewards_wasm;
 use ic_nns_test_utils::state_test_helpers::query;
+use ic_node_rewards_canister_api::lifecycle_args::InitArgs;
 use ic_state_machine_tests::StateMachine;
-use node_rewards_canister_api::lifecycle_args::InitArgs;
 
 #[test]
 fn test_hello_endpoint() {
