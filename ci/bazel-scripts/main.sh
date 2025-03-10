@@ -47,22 +47,6 @@ fi
 echo "Building as user: $(whoami)"
 echo "Bazel version: $(bazel version)"
 
-AWS_CREDS="${HOME}/.aws/credentials"
-mkdir -p "$(dirname "${AWS_CREDS}")"
-
-# add aws credentials file if it's set
-if [ -n "${CLOUD_CREDENTIALS_CONTENT+x}" ]; then
-    echo "$CLOUD_CREDENTIALS_CONTENT" >"$AWS_CREDS"
-    unset CLOUD_CREDENTIALS_CONTENT
-fi
-
-if [ -z "${KUBECONFIG:-}" ] && [ -n "${KUBECONFIG_TNET_CREATOR_LN1:-}" ]; then
-    KUBECONFIG=$(mktemp -t kubeconfig-XXXXXX)
-    export KUBECONFIG
-    echo "$KUBECONFIG_TNET_CREATOR_LN1" >"$KUBECONFIG"
-    trap 'rm -f -- "$KUBECONFIG"' EXIT
-fi
-
 # An awk (mawk) program used to process STDERR to make it easier
 # to find the build event URL when going through logs.
 # Finally we record the URL to 'url_out' (passed via variable)

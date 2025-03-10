@@ -871,3 +871,10 @@ http_file(
     sha256 = "bb1782d281fe60d4a2dcf41bc229abe3e46c280212597d4abcc25bddf667739b",
     url = "https://curl.se/ca/cacert-2024-11-26.pem",
 )
+
+mainnet_versions = use_repo_rule("//bazel:mainnet-versions.bzl", "mainnet_versions")
+
+mainnet_versions(
+    name = "mainnet_versions",
+    path = "//:mainnet-subnet-revisions.json",
+)

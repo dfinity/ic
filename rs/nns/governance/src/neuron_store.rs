@@ -1,6 +1,6 @@
 use crate::{
     allow_active_neurons_in_stable_memory,
-    governance::{TimeWarp, LOG_PREFIX, MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS},
+    governance::{TimeWarp, LOG_PREFIX},
     migrate_active_neurons_to_stable_memory,
     neuron::types::Neuron,
     neurons_fund::neurons_fund_neuron::pick_most_important_hotkeys,
@@ -29,7 +29,7 @@ use ic_nns_common::pb::v1::{NeuronId, ProposalId};
 use icp_ledger::{AccountIdentifier, Subaccount};
 use std::{
     borrow::Cow,
-    collections::{BTreeMap, BTreeSet, HashMap},
+    collections::{BTreeMap, BTreeSet, HashMap, HashSet},
     fmt::{Debug, Display, Formatter},
     ops::{Bound, Deref, RangeBounds},
 };
@@ -953,10 +953,13 @@ impl NeuronStore {
         let mut deciding_voting_power: u128 = 0;
         let mut potential_voting_power: u128 = 0;
 
+        let min_dissolve_delay_seconds = voting_power_economics
+            .neuron_minimum_dissolve_delay_to_vote_seconds
+            .unwrap_or(VotingPowerEconomics::DEFAULT_NEURON_MINIMUM_DISSOLVE_DELAY_TO_VOTE_SECONDS);
+
         let mut process_neuron = |neuron: &Neuron| {
             if neuron.is_inactive(now_seconds)
-                || neuron.dissolve_delay_seconds(now_seconds)
-                    < MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS
+                || neuron.dissolve_delay_seconds(now_seconds) < min_dissolve_delay_seconds
             {
                 return;
             }
@@ -1436,6 +1439,52 @@ pub fn groom_some_neurons(
             return next;
         }
     }
+}
+
+/// Approves KYC for the neurons with the given principals. Returns an error if the number of
+/// neurons to approve KYC for exceeds the maximum allowed, in which case no neurons are approved.
+pub fn approve_genesis_kyc(
+    neuron_store: &mut NeuronStore,
+    principals: &[PrincipalId],
+) -> Result<(), GovernanceError> {
+    const APPROVE_GENESIS_KYC_MAX_NEURONS: usize = 1000;
+
+    let principal_set: HashSet<PrincipalId> = principals.iter().cloned().collect();
+    let neuron_id_to_principal = principal_set
+        .into_iter()
+        .flat_map(|principal| {
+            neuron_store
+                .get_neuron_ids_readable_by_caller(principal)
+                .into_iter()
+                .map(move |neuron_id| (neuron_id, principal))
+        })
+        .collect::<HashMap<_, _>>();
+
+    if neuron_id_to_principal.len() > APPROVE_GENESIS_KYC_MAX_NEURONS {
+        return Err(GovernanceError::new_with_message(
+            ErrorType::PreconditionFailed,
+            format!(
+                "ApproveGenesisKyc can only change the KYC status of up to {} neurons at a time",
+                APPROVE_GENESIS_KYC_MAX_NEURONS
+            ),
+        ));
+    }
+
+    for (neuron_id, principal) in neuron_id_to_principal {
+        let result = neuron_store.with_neuron_mut(&neuron_id, |neuron| {
+            if neuron.controller() == principal {
+                neuron.kyc_verified = true;
+            }
+        });
+        // Log errors but continue with the rest of the neurons.
+        if let Err(e) = result {
+            eprintln!(
+                "{}ERROR: Failed to approve KYC for neuron {:?}: {:?}",
+                LOG_PREFIX, neuron_id, e
+            );
+        }
+    }
+    Ok(())
 }
 
 /// Number of entries for each neuron indexes (in stable storage)

@@ -41,6 +41,14 @@ runs:
           chmod 0700 ~/.ssh
           echo -e "Host *\nUser github-runner\n" > ~/.ssh/config
 
+      - name: Write AWS credentials
+        shell: bash
+        if: inputs.CLOUD_CREDENTIALS_CONTENT != ''
+        run: |
+          AWS_CREDS="${HOME}/.aws/credentials"
+          mkdir -p "$(dirname "${AWS_CREDS}")"
+          echo '${{ inputs.CLOUD_CREDENTIALS_CONTENT }}' >"$AWS_CREDS"
+
       - name: Run Bazel Test All
         id: bazel-test-all
         shell: bash
