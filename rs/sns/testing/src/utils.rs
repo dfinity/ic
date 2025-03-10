@@ -20,7 +20,6 @@ use ic_nns_constants::{
     REGISTRY_CANISTER_ID, ROOT_CANISTER_ID, SNS_WASM_CANISTER_ID,
 };
 use ic_nns_governance_api::pb::v1::{ListNeurons, Neuron};
-use ic_sns_wasm::pb::v1::ListUpgradeStepsRequest;
 use k256::SecretKey;
 use reqwest::Client;
 use thiserror::Error;
@@ -171,16 +170,7 @@ pub async fn validate_network<C: CallCanisters>(
         }
     }
 
-    match list_upgrade_steps(
-        agent,
-        ListUpgradeStepsRequest {
-            starting_at: None,
-            sns_governance_canister_id: None,
-            limit: 0,
-        },
-    )
-    .await
-    {
+    match list_upgrade_steps(agent, None, None, 0).await {
         Ok(response) => {
             if response.steps.is_empty() {
                 validation_errors
