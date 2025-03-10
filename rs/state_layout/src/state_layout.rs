@@ -2324,7 +2324,6 @@ impl<Permissions> From<PathBuf> for WasmFile<Permissions> {
     }
 }
 
-// EXC-1752 This is used only in one test and it will be removed in follow-up.
 impl From<CanisterStateBits> for pb_canister_state_bits::CanisterStateBits {
     fn from(item: CanisterStateBits) -> Self {
         Self {
