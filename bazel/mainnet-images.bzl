@@ -40,7 +40,7 @@ def mainnet_images_support():
     native.genrule(
         name = "mainnet_hostos_version_file",
         outs = ["version.txt"],
-        cmd = "echo \"{revision}\" > $@".format(revision=MAINNET_REVISION),
+        cmd = "echo \"{revision}\" > $@".format(revision = MAINNET_REVISION),
         tags = ["manual"],
     )
 
@@ -48,7 +48,7 @@ def mainnet_images_support():
     native.genrule(
         name = "mainnet_hostos_url_file",
         outs = ["mainnet_hostos.url"],
-        cmd = "echo \"{hostos_url}\" > $@".format(hostos_url=hostos_url),
+        cmd = "echo \"{hostos_url}\" > $@".format(hostos_url = hostos_url),
     )
 
     native.genrule(
