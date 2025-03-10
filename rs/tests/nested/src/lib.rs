@@ -195,7 +195,6 @@ pub fn upgrade_hostos_to_test_version(env: TestEnv) {
 pub fn upgrade_hostos_to_mainnet_version(env: TestEnv) {
     let target_version_str =
         read_dependency_from_env_to_string("ENV_DEPS__MAINNET_HOSTOS_VERSION_FILE").unwrap();
-    println!("Target version string: {}", target_version_str);
     let target_version =
         HostosVersion::try_from(target_version_str.trim()).expect("Invalid mainnet hostos version");
 
@@ -203,10 +202,6 @@ pub fn upgrade_hostos_to_mainnet_version(env: TestEnv) {
         read_dependency_from_env_to_string("ENV_DEPS__MAINNET_HOSTOS_URL_FILE").unwrap();
     let update_image_url =
         Url::parse(update_image_url_str.trim()).expect("Invalid mainnet hostos update image URL");
-
-    println!("target version: {}", target_version);
-    println!("update image url: {}", update_image_url);
-
     let update_image_sha256 =
         read_dependency_from_env_to_string("ENV_DEPS__MAINNET_HOSTOS_SHA_FILE").unwrap();
 
