@@ -35,7 +35,7 @@ use ic_system_test_driver::{
         prometheus_vm::{HasPrometheus, PrometheusVm},
         test_env::{HasIcPrepDir, TestEnv, TestEnvAttribute},
         test_env_api::{
-            get_dependency_path, get_ic_os_update_img_sha256, get_ic_os_update_img_url,
+            get_dependency_path, get_guestos_update_img_sha256, get_guestos_update_img_url,
             get_mainnet_nns_revision, read_dependency_to_string, HasIcDependencies,
             HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, IcNodeSnapshot,
             NnsCustomizations, SshSession, TopologySnapshot,
@@ -1446,8 +1446,8 @@ fn bless_replica_version(
     let logger = env.logger();
     let nns_runtime = runtime_from_url(nns_node.get_public_url(), nns_node.effective_canister_id());
     let governance_canister = get_governance_canister(&nns_runtime);
-    let sha256 = get_ic_os_update_img_sha256().unwrap();
-    let upgrade_url = get_ic_os_update_img_url().unwrap();
+    let sha256 = get_guestos_update_img_sha256().unwrap();
+    let upgrade_url = get_guestos_update_img_url().unwrap();
 
     let proposal_id = {
         let logger = logger.clone();

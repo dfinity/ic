@@ -72,9 +72,9 @@ fn test(test_env: TestEnv) {
         get_assigned_replica_version(&nns_node).expect("Failed to get assigned replica version");
     info!(logger, "Target version: {}", target_version);
 
-    let upgrade_url = get_ic_os_update_img_url().unwrap();
+    let upgrade_url = get_guestos_update_img_url().unwrap();
     // Note: we're pulling a wrong hash on purpose to simulate a failed upgrade
-    let sha256 = get_ic_os_update_img_test_sha256().unwrap();
+    let sha256 = get_guestos_update_img_test_sha256().unwrap();
     block_on(bless_replica_version(
         &nns_node,
         &target_version,
@@ -139,7 +139,7 @@ fn test(test_env: TestEnv) {
         sudo chmod --reference=. image.bin
         sudo chown --reference=. image.bin
         "#,
-        get_ic_os_update_img_test_url().unwrap(),
+        get_guestos_update_img_test_url().unwrap(),
     );
     for n in &nodes {
         let s = n
