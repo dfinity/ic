@@ -2,6 +2,7 @@ use assert_matches::assert_matches;
 use canister_test::Wasm;
 use ic_base_types::CanisterId;
 use ic_management_canister_types_private::CanisterInstallMode;
+use ic_nervous_system_agent::helpers::await_with_timeout;
 use ic_nervous_system_agent::management_canister::canister_status;
 use ic_nervous_system_agent::pocketic_impl::{
     PocketIcAgent, PocketIcCallError::CanisterSubnetNotFound,
@@ -10,8 +11,7 @@ use ic_nervous_system_integration_tests::pocket_ic_helpers::sns::governance::{
     find_neuron_with_majority_voting_power, wait_for_proposal_execution,
 };
 use ic_nervous_system_integration_tests::pocket_ic_helpers::{
-    await_with_timeout, cycles_ledger, install_canister_on_subnet, load_registry_mutations, nns,
-    sns, NnsInstaller,
+    cycles_ledger, install_canister_on_subnet, load_registry_mutations, nns, sns, NnsInstaller,
 };
 use ic_nervous_system_integration_tests::{
     create_service_nervous_system_builder::CreateServiceNervousSystemBuilder,

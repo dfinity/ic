@@ -5,6 +5,7 @@ use std::fmt::Display;
 use std::time::Duration;
 
 pub mod agent_impl;
+pub mod helpers;
 pub mod ledger;
 pub mod management_canister;
 pub mod nns;

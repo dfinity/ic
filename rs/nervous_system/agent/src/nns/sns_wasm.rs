@@ -44,17 +44,30 @@ pub async fn get_deployed_sns_by_proposal_id<C: CallCanisters>(
 
 pub async fn get_wasm<C: CallCanisters>(
     agent: &C,
-    hash: Vec<u8>,
+    sns_canister_wasm_hash: Vec<u8>,
 ) -> Result<GetWasmResponse, C::Error> {
-    let request = GetWasmRequest { hash };
+    let request = GetWasmRequest {
+        hash: sns_canister_wasm_hash,
+    };
     agent.call(SNS_WASM_CANISTER_ID, request).await
 }
 
 pub async fn list_upgrade_steps<C: CallCanisters>(
     agent: &C,
-    request: ListUpgradeStepsRequest,
+    starting_at: Option<SnsVersion>,
+    sns_governance_canister_id: Option<PrincipalId>,
+    limit: u32,
 ) -> Result<ListUpgradeStepsResponse, C::Error> {
-    agent.call(SNS_WASM_CANISTER_ID, request).await
+    agent
+        .call(
+            SNS_WASM_CANISTER_ID,
+            ListUpgradeStepsRequest {
+                starting_at,
+                sns_governance_canister_id,
+                limit,
+            },
+        )
+        .await
 }
 
 /// Queries SNS-W to get the deployed SNSes. The returned SNSes are not guaranteed to be

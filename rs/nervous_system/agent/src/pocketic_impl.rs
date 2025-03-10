@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use crate::management_canister::requests::{
     CanisterStatusArgs, DeleteCanisterArgs, StopCanisterArgs, StoredChunksArgs, UploadChunkArgs,
 };
@@ -226,13 +228,13 @@ impl CallCanisters for PocketIc {
 }
 
 impl ProgressNetwork for PocketIcAgent<'_> {
-    async fn progress(&self, duration: std::time::Duration) {
+    async fn progress(&self, duration: Duration) {
         self.pocket_ic.progress(duration).await
     }
 }
 
 impl ProgressNetwork for PocketIc {
-    async fn progress(&self, duration: std::time::Duration) {
+    async fn progress(&self, duration: Duration) {
         // If PocketIC instance doesn't have a URL, thus it's not in the live mode and
         // we can progress it using 'advance_time' method.
         if self.url().is_none() {
@@ -240,6 +242,10 @@ impl ProgressNetwork for PocketIc {
             self.advance_time(duration).await;
         } else {
             // Otherwise, we have to wait for the time to pass "naturally".
+            if duration > Duration::from_secs(5) {
+                eprintln!("Waiting more than 5 seconds: {:?}", duration);
+                eprintln!("Consider checking 'progress' calls in the code.");
+            }
             std::thread::sleep(duration);
         }
     }

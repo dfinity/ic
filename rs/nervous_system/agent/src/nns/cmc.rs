@@ -3,7 +3,7 @@ use cycles_minting_canister::{
     CanisterSettingsArgs, CreateCanister, NotifyMintCyclesArg, NotifyMintCyclesResult,
     SetAuthorizedSubnetworkListArgs, SubnetSelection,
 };
-use ic_base_types::CanisterId;
+use ic_base_types::{CanisterId, PrincipalId, SubnetId};
 use ic_nns_constants::CYCLES_MINTING_CANISTER_ID;
 
 pub mod requests;
@@ -25,14 +25,31 @@ pub async fn create_canister<C: CallCanisters>(
 
 pub async fn set_authorized_subnetwork_list<C: CallCanisters>(
     agent: &C,
-    request: SetAuthorizedSubnetworkListArgs,
+    who: Option<PrincipalId>,
+    subnets: Vec<SubnetId>,
 ) -> Result<(), C::Error> {
-    agent.call(CYCLES_MINTING_CANISTER_ID, request).await
+    agent
+        .call(
+            CYCLES_MINTING_CANISTER_ID,
+            SetAuthorizedSubnetworkListArgs { who, subnets },
+        )
+        .await
 }
 
 pub async fn notify_mint_cycles<C: CallCanisters>(
     agent: &C,
-    request: NotifyMintCyclesArg,
+    block_index: u64,
+    to_subaccount: Option<[u8; 32]>,
+    deposit_memo: Option<Vec<u8>>,
 ) -> Result<NotifyMintCyclesResult, C::Error> {
-    agent.call(CYCLES_MINTING_CANISTER_ID, request).await
+    agent
+        .call(
+            CYCLES_MINTING_CANISTER_ID,
+            NotifyMintCyclesArg {
+                block_index,
+                to_subaccount,
+                deposit_memo,
+            },
+        )
+        .await
 }
