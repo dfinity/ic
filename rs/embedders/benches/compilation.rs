@@ -1,4 +1,6 @@
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
+
+use embedders_bench::PostSetupAction;
 use ic_config::embedders::Config as EmbeddersConfig;
 use ic_embedders::{
     wasm_utils::{compile, validate_and_instrument_for_testing},
@@ -19,49 +21,55 @@ fn set_production_rayon_threads() {
 
 /// Tuples of (benchmark_name, compilation_cost, wasm) to run compilation benchmarks on.
 fn generate_binaries() -> Vec<(String, BinaryEncodedWasm)> {
-    let mut result = vec![
-        (
-            "simple".to_string(),
-            BinaryEncodedWasm::new(
-                wat::parse_str(
-                    r#"
+    let mut result = vec![(
+        "minimal".to_string(),
+        BinaryEncodedWasm::new(
+            wat::parse_str(
+                r#"
 			        (module
-				        (import "ic0" "msg_arg_data_copy"
-				        (func $ic0_msg_arg_data_copy (param i32 i32 i32)))
-				        (func (export "canister_update should_fail_with_contract_violation")
-				        (call $ic0_msg_arg_data_copy (i32.const 0) (i32.const 0) (i32.const 0))
-				        )
+				        (import "ic0" "msg_reply" (func $ic0_msg_reply))
+                        (func (export "canister_update update_empty")
+                            (call $ic0_msg_reply)
+                        )
+                        (func (export "canister_query go")
+                            (call $ic0_msg_reply)
+                        )
 			        )
 			        "#,
-                )
-                .expect("Failed to convert wat to wasm"),
-            ),
+            )
+            .expect("Failed to convert wat to wasm"),
         ),
-        (
-            "empty".to_string(),
-            BinaryEncodedWasm::new(
-                wat::parse_str(
-                    r#"
-                    (module)
-			        "#,
-                )
-                .expect("Failed to convert wat to wasm"),
-            ),
-        ),
-    ];
+    )];
 
-    let mut many_adds = "(module (func (export \"go\") (result i64) (i64.const 1)".to_string();
+    let mut many_adds = r#"
+        (module
+            (import "ic0" "msg_reply" (func $ic0_msg_reply))
+            (func (export "canister_update update_empty")
+                (call $ic0_msg_reply)
+            )
+            (func (export "canister_query go") (i64.const 1)"#
+        .to_string();
     for _ in 0..100_000 {
         many_adds.push_str("(i64.add (i64.const 1))");
     }
-    many_adds.push_str("))");
+    many_adds.push_str("(drop) (call $ic0_msg_reply)))");
     result.push((
         "many_adds".to_string(),
         BinaryEncodedWasm::new(wat::parse_str(many_adds).expect("Failed to convert wat to wasm")),
     ));
 
-    let mut many_funcs = "(module".to_string();
-    for _ in 0..EmbeddersConfig::default().max_functions {
+    let mut many_funcs = r#"
+        (module
+            (import "ic0" "msg_reply" (func $ic0_msg_reply))
+            (func (export "canister_update update_empty")
+                (call $ic0_msg_reply)
+            )
+            (func (export "canister_query go")
+                (call $ic0_msg_reply)
+            )
+        "#
+    .to_string();
+    for _ in 0..EmbeddersConfig::default().max_functions - 2 {
         many_funcs.push_str("(func)");
     }
     many_funcs.push(')');
@@ -70,11 +78,12 @@ fn generate_binaries() -> Vec<(String, BinaryEncodedWasm)> {
         BinaryEncodedWasm::new(wat::parse_str(many_funcs).expect("Failed to convert wat to wasm")),
     ));
 
-    // This benchmark uses a real-world wasm which is stored as a binary file in this repo.
-    let real_world_wasm =
-        BinaryEncodedWasm::new(include_bytes!("test-data/user_canister_impl.wasm").to_vec());
+    // TODO(EXC-1985): Modify the open chat canister so that it runs.
+    // // This benchmark uses a real-world wasm which is stored as a binary file in this repo.
+    // let real_world_wasm =
+    //     BinaryEncodedWasm::new(include_bytes!("test-data/user_canister_impl.wasm").to_vec());
 
-    result.push(("real_world_wasm".to_string(), real_world_wasm));
+    // result.push(("real_world_wasm".to_string(), real_world_wasm));
 
     result
 }
@@ -214,11 +223,33 @@ fn wasm_validation_instrumentation(c: &mut Criterion) {
     group.finish();
 }
 
+fn execution(c: &mut Criterion) {
+    set_production_rayon_threads();
+
+    let binaries = generate_binaries();
+    // let mut group = c.benchmark_group("execution");
+    // let config = EmbeddersConfig::default();
+    for (name, wasm) in binaries {
+        embedders_bench::query_bench(
+            c,
+            &name,
+            wasm.as_slice(),
+            &[],
+            "go",
+            &[],
+            None,
+            PostSetupAction::None,
+        );
+    }
+    // group.finish();
+}
+
 criterion_group!(
     benchmarks,
     compilation_cost,
     wasm_compilation,
     wasm_deserialization,
-    wasm_validation_instrumentation
+    wasm_validation_instrumentation,
+    execution,
 );
 criterion_main!(benchmarks);
