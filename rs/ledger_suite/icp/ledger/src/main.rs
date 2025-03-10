@@ -10,6 +10,7 @@ use dfn_protobuf::protobuf;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_canister_log::{LogEntry, Sink};
 use ic_cdk::api::{
+    call::{arg_data_raw, reply_raw},
     caller, data_certificate, instruction_counter, print, set_certified_data, time, trap,
 };
 use ic_cdk_macros::query;
@@ -32,14 +33,16 @@ use ic_ledger_core::{
 };
 use ic_stable_structures::reader::{BufferedReader, Reader};
 use ic_stable_structures::writer::{BufferedWriter, Writer};
+#[cfg(feature = "notify-method")]
+use icp_ledger::BlockRes;
 #[cfg(feature = "icp-allowance-getter")]
 use icp_ledger::IcpAllowanceArgs;
 use icp_ledger::{
-    max_blocks_per_request, protobuf, tokens_into_proto, AccountBalanceArgs, AccountIdBlob,
-    AccountIdentifier, AccountIdentifierByteBuf, ArchiveInfo, ArchivedBlocksRange,
-    ArchivedEncodedBlocksRange, Archives, BinaryAccountBalanceArgs, Block, BlockArg, BlockRes,
-    CandidBlock, Decimals, FeatureFlags, GetBlocksArgs, InitArgs, IterBlocksArgs, IterBlocksRes,
-    LedgerCanisterPayload, Memo, Name, Operation, PaymentError, QueryBlocksResponse,
+    from_proto_bytes, max_blocks_per_request, protobuf, to_proto_bytes, tokens_into_proto,
+    AccountBalanceArgs, AccountIdBlob, AccountIdentifier, AccountIdentifierByteBuf, ArchiveInfo,
+    ArchivedBlocksRange, ArchivedEncodedBlocksRange, Archives, BinaryAccountBalanceArgs, Block,
+    BlockArg, CandidBlock, Decimals, FeatureFlags, GetBlocksArgs, InitArgs, IterBlocksArgs,
+    IterBlocksRes, LedgerCanisterPayload, Memo, Name, Operation, PaymentError, QueryBlocksResponse,
     QueryEncodedBlocksResponse, SendArgs, Subaccount, Symbol, TipOfChainRes, TotalSupplyArgs,
     Transaction, TransferArgs, TransferError, TransferFee, TransferFeeArgs, MEMO_SIZE_BYTES,
 };
@@ -1192,47 +1195,60 @@ fn notify_dfx_() {
 
 #[export_name = "canister_query block_pb"]
 fn block_() {
-    over(protobuf, |BlockArg(height)| BlockRes(block(height)));
+    ic_cdk::setup();
+    let arg: BlockArg =
+        from_proto_bytes(arg_data_raw()).expect("failed to decode block_pb argument");
+    let res = to_proto_bytes(icp_ledger::BlockRes(block(arg.0)))
+        .expect("failed to encode block_pb response");
+    reply_raw(&res)
 }
 
 #[export_name = "canister_query tip_of_chain_pb"]
 fn tip_of_chain_() {
-    over(protobuf, |protobuf::TipOfChainRequest {}| tip_of_chain());
+    ic_cdk::setup();
+    let _: protobuf::TipOfChainRequest =
+        from_proto_bytes(arg_data_raw()).expect("failed to decode tip_of_chain_pb argument");
+    let res = to_proto_bytes(tip_of_chain()).expect("failed to encode tip_of_chain_pb response");
+    reply_raw(&res)
 }
 
 #[export_name = "canister_query get_archive_index_pb"]
 fn get_archive_index_() {
-    over(protobuf, |()| {
-        let state = LEDGER.read().unwrap();
-        let entries = match &state
-            .blockchain
-            .archive
-            .try_read()
-            .expect("Failed to get lock on archive")
-            .as_ref()
-        {
-            None => vec![],
-            Some(archive) => archive
-                .index()
-                .into_iter()
-                .map(
-                    |((height_from, height_to), canister_id)| protobuf::ArchiveIndexEntry {
-                        height_from,
-                        height_to,
-                        canister_id: Some(canister_id.get()),
-                    },
-                )
-                .collect(),
-        };
-        protobuf::ArchiveIndexResponse { entries }
-    });
+    ic_cdk::setup();
+    let state = LEDGER.read().unwrap();
+    let entries = match &state
+        .blockchain
+        .archive
+        .try_read()
+        .expect("Failed to get lock on archive")
+        .as_ref()
+    {
+        None => vec![],
+        Some(archive) => archive
+            .index()
+            .into_iter()
+            .map(
+                |((height_from, height_to), canister_id)| protobuf::ArchiveIndexEntry {
+                    height_from,
+                    height_to,
+                    canister_id: Some(canister_id.get()),
+                },
+            )
+            .collect(),
+    };
+    let res = to_proto_bytes(protobuf::ArchiveIndexResponse { entries })
+        .expect("failed to encode get_archive_index_pb response");
+    reply_raw(&res);
 }
 
 #[export_name = "canister_query account_balance_pb"]
 fn account_balance_() {
-    over(protobuf, |AccountBalanceArgs { account }| {
-        tokens_into_proto(account_balance(account))
-    })
+    ic_cdk::setup();
+    let args: AccountBalanceArgs =
+        from_proto_bytes(arg_data_raw()).expect("failed to decode account_balance_pb argument");
+    let res = tokens_into_proto(account_balance(args.account));
+    let res_proto = to_proto_bytes(res).expect("failed to encode account_balance_pb response");
+    reply_raw(&res_proto)
 }
 
 #[query(name = "account_balance")]
@@ -1264,14 +1280,22 @@ fn compute_account_identifier(arg: Account) -> AccountIdBlob {
 
 #[export_name = "canister_query transfer_fee_pb"]
 fn transfer_fee_() {
-    over(protobuf, transfer_fee)
+    ic_cdk::setup();
+    let args: TransferFeeArgs =
+        from_proto_bytes(arg_data_raw()).expect("failed to decode transfer_fee_pb argument");
+    let fee = transfer_fee(args);
+    let res = to_proto_bytes(fee).expect("failed to encpde transfer_fee_pb response");
+    reply_raw(&res)
 }
 
 #[export_name = "canister_query total_supply_pb"]
 fn total_supply_() {
-    over(protobuf, |_: TotalSupplyArgs| {
-        tokens_into_proto(total_supply())
-    })
+    ic_cdk::setup();
+    let _: TotalSupplyArgs =
+        from_proto_bytes(arg_data_raw()).expect("failed to decode total_supply_pb args");
+    let res = tokens_into_proto(total_supply());
+    let res_proto = to_proto_bytes(res).expect("failed encode total_supply_pb response");
+    reply_raw(&res_proto)
 }
 
 /// Get multiple blocks by *offset into the container* (not BlockIndex) and
@@ -1281,33 +1305,49 @@ fn total_supply_() {
 /// with height 100.
 #[export_name = "canister_query iter_blocks_pb"]
 fn iter_blocks_() {
-    over(protobuf, |IterBlocksArgs { start, length }| {
-        let length =
-            std::cmp::min(length, max_blocks_per_request(&PrincipalId::from(caller()))) as u64;
-        let start = start as u64;
-        let blocks = LEDGER
-            .read()
-            .unwrap()
-            .blockchain
-            .blocks
-            .get_blocks(start..start + length);
-        IterBlocksRes(blocks)
-    });
+    ic_cdk::setup();
+    let args: IterBlocksArgs =
+        from_proto_bytes(arg_data_raw()).expect("failed to decode iter_blocks_pb argument");
+
+    let length = std::cmp::min(
+        args.length,
+        max_blocks_per_request(&PrincipalId::from(caller())),
+    ) as u64;
+    let start = args.start as u64;
+    let blocks = LEDGER
+        .read()
+        .unwrap()
+        .blockchain
+        .blocks
+        .get_blocks(start..start + length);
+
+    let res =
+        to_proto_bytes(IterBlocksRes(blocks)).expect("failed to encode iter_blocks_pb response");
+    reply_raw(&res)
 }
 
 /// Get multiple blocks by BlockIndex and length. If the query is outside the
 /// range stored in the Node the result is an error.
 #[export_name = "canister_query get_blocks_pb"]
 fn get_blocks_() {
-    over(protobuf, |GetBlocksArgs { start, length }| {
-        let length = std::cmp::min(
-            length,
-            max_blocks_per_request(&PrincipalId::from(caller())) as u64,
-        );
-        let blockchain = &LEDGER.read().unwrap().blockchain;
-        let start_offset = blockchain.num_archived_blocks();
-        icp_ledger::get_blocks_ledger(&blockchain.blocks, start_offset, start, length as usize)
-    });
+    ic_cdk::setup();
+    let args: GetBlocksArgs =
+        from_proto_bytes(arg_data_raw()).expect("failed to decode get_blocks_pb argument");
+
+    let length = std::cmp::min(
+        args.length,
+        max_blocks_per_request(&PrincipalId::from(caller())) as u64,
+    );
+    let blockchain = &LEDGER.read().unwrap().blockchain;
+    let start_offset = blockchain.num_archived_blocks();
+    let res = icp_ledger::get_blocks_ledger(
+        &blockchain.blocks,
+        start_offset,
+        args.start,
+        length as usize,
+    );
+    let res_proto = to_proto_bytes(res).expect("failed to encode get_blocks_pb respone");
+    reply_raw(&res_proto)
 }
 
 #[query]
