@@ -33,7 +33,7 @@ use ic_nns_governance::{
 };
 use ic_nns_governance_api::pb::v1::{
     claim_or_refresh_neuron_from_account_response::Result as ClaimOrRefreshNeuronFromAccountResponseResult,
-    governance::{GovernanceCachedMetrics, Migrations},
+    governance::GovernanceCachedMetrics,
     governance_error::ErrorType,
     manage_neuron::{
         claim_or_refresh::{By, MemoAndController},
@@ -600,7 +600,7 @@ async fn heartbeat() {
 fn manage_neuron_pb() {
     debug_log("manage_neuron_pb");
     panic_with_probability(
-        0.1,
+        0.7,
         "manage_neuron_pb is deprecated. Please use manage_neuron instead.",
     );
 
@@ -635,7 +635,7 @@ fn list_proposals_pb() {
 fn list_neurons_pb() {
     debug_log("list_neurons_pb");
     panic_with_probability(
-        0.1,
+        0.7,
         "list_neurons_pb is deprecated. Please use list_neurons instead.",
     );
 
@@ -716,16 +716,6 @@ fn get_most_recent_monthly_node_provider_rewards() -> Option<MonthlyNodeProvider
 #[query(hidden = true)]
 fn get_neuron_data_validation_summary() -> NeuronDataValidationSummary {
     governance().neuron_data_validation_summary()
-}
-
-#[query(hidden = true)]
-fn get_migrations() -> Migrations {
-    let response = governance()
-        .heap_data
-        .migrations
-        .clone()
-        .unwrap_or_default();
-    Migrations::from(response)
 }
 
 #[query]

@@ -1,72 +1,11 @@
 use crate::ExecutionTask;
 use ic_config::flag_status::FlagStatus;
 use ic_interfaces::execution_environment::ExecutionRoundType;
-use ic_protobuf::proxy::ProxyDecodeError;
-use ic_protobuf::state::canister_state_bits::v1 as pb;
+use ic_management_canister_types_private::OnLowWasmMemoryHookStatus;
 use ic_types::CanisterId;
 use ic_types::NumBytes;
 use num_traits::SaturatingSub;
-use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
-
-/// A wrapper around the different statuses of `OnLowWasmMemory` hook execution.
-#[derive(Clone, Copy, Eq, PartialEq, Debug, Default, Deserialize, Serialize)]
-pub enum OnLowWasmMemoryHookStatus {
-    #[default]
-    ConditionNotSatisfied,
-    Ready,
-    Executed,
-}
-
-impl OnLowWasmMemoryHookStatus {
-    pub(crate) fn update(&mut self, is_hook_condition_satisfied: bool) {
-        *self = if is_hook_condition_satisfied {
-            match *self {
-                Self::ConditionNotSatisfied | Self::Ready => Self::Ready,
-                Self::Executed => Self::Executed,
-            }
-        } else {
-            Self::ConditionNotSatisfied
-        };
-    }
-
-    fn is_ready(&self) -> bool {
-        *self == Self::Ready
-    }
-}
-
-impl From<OnLowWasmMemoryHookStatus> for pb::OnLowWasmMemoryHookStatus {
-    fn from(item: OnLowWasmMemoryHookStatus) -> Self {
-        use OnLowWasmMemoryHookStatus::*;
-
-        match item {
-            ConditionNotSatisfied => Self::ConditionNotSatisfied,
-            Ready => Self::Ready,
-            Executed => Self::Executed,
-        }
-    }
-}
-
-impl TryFrom<pb::OnLowWasmMemoryHookStatus> for OnLowWasmMemoryHookStatus {
-    type Error = ProxyDecodeError;
-
-    fn try_from(value: pb::OnLowWasmMemoryHookStatus) -> Result<Self, Self::Error> {
-        match value {
-            pb::OnLowWasmMemoryHookStatus::Unspecified => Err(ProxyDecodeError::ValueOutOfRange {
-                typ: "OnLowWasmMemoryHookStatus",
-                err: format!(
-                    "Unexpected value of status of on low wasm memory hook: {:?}",
-                    value
-                ),
-            }),
-            pb::OnLowWasmMemoryHookStatus::ConditionNotSatisfied => {
-                Ok(OnLowWasmMemoryHookStatus::ConditionNotSatisfied)
-            }
-            pb::OnLowWasmMemoryHookStatus::Ready => Ok(OnLowWasmMemoryHookStatus::Ready),
-            pb::OnLowWasmMemoryHookStatus::Executed => Ok(OnLowWasmMemoryHookStatus::Executed),
-        }
-    }
-}
 
 /// `TaskQueue` represents the implementation of queue structure for canister tasks satisfying the following conditions:
 ///

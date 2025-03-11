@@ -71,7 +71,7 @@ pub struct QueryServiceBuilder {
 
 impl QueryService {
     pub(crate) fn route() -> &'static str {
-        "/api/v2/canister/:effective_canister_id/query"
+        "/api/v2/canister/{effective_canister_id}/query"
     }
 }
 

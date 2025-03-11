@@ -1,4 +1,4 @@
-load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
 load("//bazel:canisters.bzl", "rust_canister")
 load("//bazel:defs.bzl", "rust_ic_test")
 
@@ -131,6 +131,24 @@ rust_test(
     ],
 )
 
+rust_binary(
+    name = "ckbtc_minter_dump_stable_memory",
+    testonly = True,
+    srcs = ["tests/dump_stable_memory.rs"],
+    deps = [
+        # Keep sorted.
+        ":ckbtc_minter_lib",
+        "//packages/pocket-ic",
+        "//rs/config",
+        "//rs/test_utilities/load_wasm",
+        "//rs/types/base_types",
+        "@crate_index//:candid",
+        "@crate_index//:flate2",
+        "@crate_index//:ic-btc-interface",
+        "@crate_index//:serde",
+    ],
+)
+
 rust_test(
     name = "ckbtc_minter_replay_events_tests",
     srcs = ["tests/replay_events.rs"],
@@ -156,14 +174,14 @@ rust_ic_test(
     name = "ckbtc_minter_tests",
     srcs = ["tests/tests.rs"],
     data = [
-        ":ckbtc_minter_debug.wasm",
+        ":ckbtc_minter_debug.wasm.gz",
         "//rs/bitcoin/checker:btc_checker_canister",
         "//rs/bitcoin/mock:bitcoin_canister_mock",
         "//rs/ledger_suite/icrc1/ledger:ledger_canister",
     ],
     env = {
         "CARGO_MANIFEST_DIR": "rs/bitcoin/ckbtc/minter",
-        "IC_CKBTC_MINTER_WASM_PATH": "$(rootpath :ckbtc_minter_debug.wasm)",
+        "IC_CKBTC_MINTER_WASM_PATH": "$(rootpath :ckbtc_minter_debug.wasm.gz)",
         "IC_ICRC1_LEDGER_WASM_PATH": "$(rootpath //rs/ledger_suite/icrc1/ledger:ledger_canister)",
         "IC_BTC_CHECKER_WASM_PATH": "$(rootpath //rs/bitcoin/checker:btc_checker_canister)",
         "IC_BITCOIN_CANISTER_MOCK_WASM_PATH": "$(rootpath //rs/bitcoin/mock:bitcoin_canister_mock)",
@@ -193,4 +211,31 @@ rust_ic_test(
         "@crate_index//:serde_bytes",
         "@crate_index//:serde_json",
     ],
+)
+
+genrule(
+    name = "mainnet_events.mem.gz",
+    testonly = True,
+    srcs = [
+        ":ckbtc_minter_dump_stable_memory",
+        "test_resources/mainnet_events.gz",
+        ":ckbtc_minter_debug.wasm.gz",
+        "//:pocket-ic-server",
+        "//rs/bitcoin/mock:bitcoin_canister_mock",
+    ],
+    outs = ["test_resources/mainnet_events.mem.gz"],
+    cmd_bash = """
+    export CARGO_MANIFEST_DIR=rs/bitcoin/ckbtc/minter
+    export IC_BITCOIN_CANISTER_MOCK_WASM_PATH="$(location //rs/bitcoin/mock:bitcoin_canister_mock)"
+    export IC_CKBTC_MINTER_WASM_PATH="$(location :ckbtc_minter_debug.wasm.gz)"
+    export POCKET_IC_BIN="$(location //:pocket-ic-server)"
+
+    $(location :ckbtc_minter_dump_stable_memory) $(location test_resources/mainnet_events.gz) $@
+""",
+    # For some unknown reason this target can take well over an hour to run on MacOS x86_64 so we exclude that platform:
+    target_compatible_with = select({
+        "@platforms//os:osx": ["@platforms//cpu:arm"],
+        "//conditions:default": [],
+    }),
+    visibility = ["//visibility:private"],
 )
