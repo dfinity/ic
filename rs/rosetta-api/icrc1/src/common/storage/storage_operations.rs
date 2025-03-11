@@ -477,6 +477,19 @@ pub fn get_highest_block_idx_in_account_balance_table(
     }
 }
 
+pub fn get_highest_block_idx_in_blocks_table(
+    connection: &Connection,
+) -> anyhow::Result<Option<u64>> {
+    match connection
+        .prepare_cached("SELECT MAX(idx) FROM blocks")?
+        .query_map(params![], |row| row.get(0))?
+        .next()
+    {
+        None => Ok(None),
+        Some(res) => Ok(res?),
+    }
+}
+
 pub fn get_account_balance_at_highest_block_idx(
     connection: &Connection,
     account: &Account,

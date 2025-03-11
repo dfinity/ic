@@ -6,6 +6,7 @@ use icrc_ledger_types::icrc1::account::Account;
 use rusqlite::Connection;
 use serde_bytes::ByteBuf;
 use std::{path::Path, sync::Mutex};
+use tracing::info;
 
 #[derive(Debug)]
 pub struct StorageClient {
@@ -37,6 +38,25 @@ impl StorageClient {
             .execute("PRAGMA foreign_keys = 1", [])?;
         storage_client.create_tables()?;
         Ok(storage_client)
+    }
+
+    pub fn does_blockchain_have_gaps(&self) -> anyhow::Result<bool> {
+        let Some(highest_block_idx) = self.get_highest_block_idx()? else {
+            // If the blockchain is empty, there are no gaps.
+            return Ok(false);
+        };
+        let block_count = self.get_block_count()?;
+        match block_count == highest_block_idx.saturating_add(1) {
+            true => Ok(false),
+            false => {
+                info!(
+                    "block_count ({}) does not equal highest_block_idx.saturating_add(1) ({}) -> gaps!",
+                    block_count,
+                    highest_block_idx.saturating_add(1)
+                );
+                Ok(true)
+            }
+        }
     }
 
     // Gets a block with a certain index. Returns `None` if no block exists in the database with that index. Returns an error if multiple blocks with that index exist.
@@ -81,6 +101,11 @@ impl StorageClient {
     pub fn get_blockchain_gaps(&self) -> anyhow::Result<Vec<(RosettaBlock, RosettaBlock)>> {
         let open_connection = self.storage_connection.lock().unwrap();
         storage_operations::get_blockchain_gaps(&open_connection)
+    }
+
+    pub fn get_highest_block_idx(&self) -> Result<Option<u64>> {
+        let open_connection = self.storage_connection.lock().unwrap();
+        storage_operations::get_highest_block_idx_in_blocks_table(&open_connection)
     }
 
     // Gets a transaction with a certain hash. Returns [] if no transaction exists in the database with that hash. Returns a vector with multiple entries if more than one transaction
@@ -254,7 +279,7 @@ impl StorageClient {
     // Extracts the information from the transaction and blocks table and fills the account balance table with that information
     // Throws an error if there are gaps in the transaction or blocks table.
     pub fn update_account_balances(&self) -> anyhow::Result<()> {
-        if !self.get_blockchain_gaps()?.is_empty() {
+        if self.does_blockchain_have_gaps()? {
             bail!("Tried to update account balances but there exist gaps in the database.",);
         }
         let mut open_connection = self.storage_connection.lock().unwrap();
