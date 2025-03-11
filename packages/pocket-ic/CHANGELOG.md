@@ -7,23 +7,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+### Removed
+- The module `management_canister` used to contain interface types of the IC management canister. Those types have since been published on crates.io as `ic-management-canister-types`, so PocketIC can depend on that and remove the redundant types.
+
+
+
+## 7.0.0 - 2025-02-26
+
 ### Added
 - The function `PocketIcBuilder::with_bitcoind_addrs` to specify multiple addresses and ports at which `bitcoind` processes are listening.
-- The function `PocketIc::query_call_with_effective_principal` for making generic query calls (including management canister query calls).
+- The function `PocketIc::new_from_existing_instance` to create a PocketIC handle to an existing instance on a running server.
+- The function `PocketIc::get_server_url` returning the URL of the PocketIC server on which the PocketIC instance is running.
+- The functions `PocketIc::update_call_with_effective_principal` and `PocketIc::query_call_with_effective_principal` for making generic query calls (including management canister query calls).
 - The function `PocketIc::ingress_status` to fetch the status of an update call submitted through an ingress message.
 - The function `PocketIc::ingress_status_as` to fetch the status of an update call submitted through an ingress message.
   If the status of the update call is known, but the update call was submitted by a different caller, then an error is returned.
 - The function `PocketIc::await_call_no_ticks` to await the status of an update call (submitted through an ingress message) becoming known without triggering round execution
   (round execution must be triggered separarely, e.g., on a "live" instance or by separate PocketIC library calls).
 - The function `PocketIc::set_certified_time` to set the current certified time on all subnets of the PocketIC instance.
-- The function `PocketIc::update_call_with_effective_principal` is made public. It is helpful, e.g., for
-  modeling management canister calls that need to be routed to the right subnet using effective principals.
-- The function `PocketIcBuilder::with_server_binary` to provide a path to the PocketIC server binary used instead of the environment variable `POCKET_IC_BIN` and the current working directory.
+- The function `PocketIc::tick_with_configs` extending the function `PocketIc::tick` with an argument optionally containing the blockmaker and failed blockmakers
+  for every subnet used by the endpoint `node_metrics_history` of the management canister.
+- The function `PocketIcBuilder::with_server_binary` to provide the path to the PocketIC server binary used instead of the environment variable `POCKET_IC_BIN`.
 
 ### Changed
 - The response types `pocket_ic::WasmResult`, `pocket_ic::UserError`, and `pocket_ic::CallError` are replaced by a single reject response type `pocket_ic::RejectResponse`.
-
-
+- The PocketIC server binary is downloaded to a subdirectory of the temporary directory if neither the function `PocketIcBuilder::with_server_binary`
+  nor the environment variable `POCKET_IC_BIN` provide the path to the PocketIC server binary.
+- The current working directory is ignored when looking for the PocketIC server binary.
 
 ## 6.0.0 - 2024-11-13
 
@@ -39,8 +49,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The function `PocketIc::install_chunked_canister` to install a canister from WASM chunks in the WASM chunk store of a canister.
 - The function `PocketIc::fetch_canister_logs` to fetch canister logs via a query call to the management canister.
 - The function `Topology::get_subnet` to get a subnet to which a canister belongs independently of whether the canister exists.
-- The function `PocketIc::new_from_existing_instance` to create a PocketIC handle to an existing instance on a running server.
-- The function `PocketIc::get_server_url` returning the URL of the PocketIC server on which the PocketIC instance is running.
 
 ### Removed
 - Functions `PocketIc::from_config`, `PocketIc::from_config_and_max_request_time`, and `PocketIc::from_config_and_server_url`.

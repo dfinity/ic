@@ -1,5 +1,5 @@
 use crate::{
-    canister_manager::{uninstall_canister, AddCanisterChangeToHistory},
+    canister_manager::{types::AddCanisterChangeToHistory, uninstall_canister},
     execution_environment::{
         as_num_instructions, as_round_instructions, execute_canister, ExecuteCanisterResult,
         ExecutionEnvironment, RoundInstructions, RoundLimits,
@@ -13,7 +13,7 @@ use ic_crypto_prng::{Csprng, RandomnessPurpose::ExecutionThread};
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_error_types::{ErrorCode, UserError};
 use ic_interfaces::execution_environment::{
-    ExecutionRoundSummary, ExecutionRoundType, RegistryExecutionSettings,
+    ChainKeyData, ExecutionRoundSummary, ExecutionRoundType, RegistryExecutionSettings,
 };
 use ic_interfaces::execution_environment::{
     IngressHistoryWriter, Scheduler, SubnetAvailableMemory,
@@ -35,8 +35,6 @@ use ic_replicated_state::{
 };
 use ic_system_api::InstructionLimits;
 use ic_types::{
-    consensus::idkg::PreSigId,
-    crypto::canister_threshold_sig::MasterPublicKey,
     ingress::{IngressState, IngressStatus},
     messages::{CanisterMessage, Ingress, MessageId, Response, NO_DEADLINE},
     CanisterId, ComputeAllocation, Cycles, ExecutionRound, MemoryAllocation, NumBytes,
@@ -246,11 +244,12 @@ impl SchedulerImpl {
         &self,
         mut state: ReplicatedState,
         csprng: &mut Csprng,
+        current_round: ExecutionRound,
         round_limits: &mut RoundLimits,
         measurement_scope: &MeasurementScope,
         registry_settings: &RegistryExecutionSettings,
         replica_version: &ReplicaVersion,
-        chain_key_subnet_public_keys: &BTreeMap<MasterPublicKeyId, MasterPublicKey>,
+        chain_key_data: &ChainKeyData,
     ) -> ReplicatedState {
         let ongoing_long_install_code =
             state
@@ -284,11 +283,12 @@ impl SchedulerImpl {
                     msg,
                     state,
                     csprng,
+                    current_round,
                     round_limits,
                     registry_settings,
                     replica_version,
                     measurement_scope,
-                    chain_key_subnet_public_keys,
+                    chain_key_data,
                 );
                 state = new_state;
 
@@ -316,11 +316,12 @@ impl SchedulerImpl {
         msg: CanisterMessage,
         state: ReplicatedState,
         csprng: &mut Csprng,
+        current_round: ExecutionRound,
         round_limits: &mut RoundLimits,
         registry_settings: &RegistryExecutionSettings,
         replica_version: &ReplicaVersion,
         measurement_scope: &MeasurementScope,
-        chain_key_subnet_public_keys: &BTreeMap<MasterPublicKeyId, MasterPublicKey>,
+        chain_key_data: &ChainKeyData,
     ) -> (ReplicatedState, Option<NumInstructions>) {
         let instruction_limits = get_instructions_limits_for_subnet_message(
             self.deterministic_time_slicing,
@@ -334,9 +335,10 @@ impl SchedulerImpl {
             state,
             instruction_limits,
             csprng,
-            chain_key_subnet_public_keys,
+            chain_key_data,
             replica_version,
             registry_settings,
+            current_round,
             round_limits,
         );
         let round_instructions_executed =
@@ -417,7 +419,7 @@ impl SchedulerImpl {
         scheduler_round_limits: &mut SchedulerRoundLimits,
         registry_settings: &RegistryExecutionSettings,
         replica_version: &ReplicaVersion,
-        chain_key_subnet_public_keys: &BTreeMap<MasterPublicKeyId, MasterPublicKey>,
+        chain_key_data: &ChainKeyData,
     ) -> (ReplicatedState, BTreeSet<CanisterId>, BTreeSet<CanisterId>) {
         let measurement_scope =
             MeasurementScope::nested(&self.metrics.round_inner, root_measurement_scope);
@@ -454,11 +456,12 @@ impl SchedulerImpl {
                     state = self.drain_subnet_queues(
                         state,
                         csprng,
+                        current_round,
                         &mut subnet_round_limits,
                         &subnet_measurement_scope,
                         registry_settings,
                         replica_version,
-                        chain_key_subnet_public_keys,
+                        chain_key_data,
                     );
                     scheduler_round_limits.update_subnet_round_limits(&subnet_round_limits);
                 }
@@ -1217,8 +1220,7 @@ impl Scheduler for SchedulerImpl {
         &self,
         mut state: ReplicatedState,
         randomness: Randomness,
-        chain_key_subnet_public_keys: BTreeMap<MasterPublicKeyId, MasterPublicKey>,
-        idkg_pre_signature_ids: BTreeMap<MasterPublicKeyId, BTreeSet<PreSigId>>,
+        chain_key_data: ChainKeyData,
         replica_version: &ReplicaVersion,
         current_round: ExecutionRound,
         round_summary: Option<ExecutionRoundSummary>,
@@ -1380,11 +1382,12 @@ impl Scheduler for SchedulerImpl {
                     ),
                     state,
                     &mut csprng,
+                    current_round,
                     &mut subnet_round_limits,
                     registry_settings,
                     replica_version,
                     &measurement_scope,
-                    &chain_key_subnet_public_keys,
+                    &chain_key_data,
                 );
                 state = new_state;
             }
@@ -1439,11 +1442,12 @@ impl Scheduler for SchedulerImpl {
                     CanisterMessage::Request(raw_rand_context.request.into()),
                     state,
                     &mut csprng,
+                    current_round,
                     &mut subnet_round_limits,
                     registry_settings,
                     replica_version,
                     &measurement_scope,
-                    &chain_key_subnet_public_keys,
+                    &chain_key_data,
                 );
                 state = new_state;
             }
@@ -1502,7 +1506,7 @@ impl Scheduler for SchedulerImpl {
             &mut scheduler_round_limits,
             registry_settings,
             replica_version,
-            &chain_key_subnet_public_keys,
+            &chain_key_data,
         );
 
         // Update [`SignWithThresholdContext`]s by assigning randomness and matching pre-signatures.
@@ -1516,7 +1520,7 @@ impl Scheduler for SchedulerImpl {
 
             update_signature_request_contexts(
                 current_round,
-                idkg_pre_signature_ids,
+                chain_key_data.idkg_pre_signature_ids,
                 contexts,
                 &mut csprng,
                 registry_settings,
@@ -1965,6 +1969,8 @@ fn observe_replicated_state_metrics(
     let mut canisters_with_old_open_call_contexts = 0;
     let mut old_call_contexts_count = 0;
     let mut num_stop_canister_calls_without_call_id = 0;
+    let mut in_flight_signature_request_contexts_by_key_id =
+        BTreeMap::<MasterPublicKeyId, u32>::new();
 
     let canister_id_ranges = state.routing_table().ranges(own_subnet_id);
     state.canisters_iter().for_each(|canister| {
@@ -2081,6 +2087,18 @@ fn observe_replicated_state_metrics(
             .threshold_signature_agreements
             .with_label_values(&[&key_id.to_string()])
             .set(*count as i64);
+    }
+
+    for context in state.signature_request_contexts().values() {
+        *in_flight_signature_request_contexts_by_key_id
+            .entry(context.key_id())
+            .or_default() += 1;
+    }
+    for (key_id, count) in in_flight_signature_request_contexts_by_key_id {
+        metrics
+            .in_flight_signature_request_contexts
+            .with_label_values(&[&key_id.to_string()])
+            .observe(count as f64);
     }
 
     let observe_reading = |status: CanisterStatusType, num: i64| {

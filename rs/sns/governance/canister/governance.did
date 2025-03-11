@@ -6,6 +6,7 @@ type Account = record {
 type Action = variant {
   ManageNervousSystemParameters : NervousSystemParameters;
   AddGenericNervousSystemFunction : NervousSystemFunction;
+  SetTopicsForCustomProposals : SetTopicsForCustomProposals;
   ManageDappCanisterSettings : ManageDappCanisterSettings;
   RemoveGenericNervousSystemFunction : nat64;
   UpgradeSnsToNextVersion : record {};
@@ -226,7 +227,7 @@ type GenericNervousSystemFunction = record {
   target_canister_id : opt principal;
   validator_method_name : opt text;
   target_method_name : opt text;
-  topic: opt Topic;
+  topic : opt Topic;
 };
 
 type GetMaturityModulationResponse = record {
@@ -392,6 +393,10 @@ type SnsVersion = record {
 
 type AdvanceSnsTargetVersion = record {
   new_target : opt SnsVersion;
+};
+
+type SetTopicsForCustomProposals = record {
+  custom_function_id_to_topic : vec record { nat64; Topic };
 };
 
 type ManageLedgerParameters = record {
@@ -606,6 +611,7 @@ type ProposalData = record {
   minimum_yes_proportion_of_exercised : opt Percentage;
   is_eligible_for_rewards : bool;
   executed_timestamp_seconds : nat64;
+  topic : opt Topic;
 };
 
 type ProposalId = record {

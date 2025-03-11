@@ -20,8 +20,8 @@ use ic_embedders::{
 };
 use ic_error_types::UserError;
 use ic_interfaces::execution_environment::{
-    ChainKeySettings, ExecutionRoundSummary, ExecutionRoundType, HypervisorError, HypervisorResult,
-    IngressHistoryWriter, InstanceStats, RegistryExecutionSettings, Scheduler,
+    ChainKeyData, ChainKeySettings, ExecutionRoundSummary, ExecutionRoundType, HypervisorError,
+    HypervisorResult, IngressHistoryWriter, InstanceStats, RegistryExecutionSettings, Scheduler,
     SystemApiCallCounters, WasmExecutionOutput,
 };
 use ic_logger::{replica_logger::no_op_logger, ReplicaLogger};
@@ -519,8 +519,11 @@ impl SchedulerTest {
         let state = self.scheduler.execute_round(
             state,
             Randomness::from([0; 32]),
-            self.chain_key_subnet_public_keys.clone(),
-            self.idkg_pre_signature_ids.clone(),
+            ChainKeyData {
+                master_public_keys: self.chain_key_subnet_public_keys.clone(),
+                idkg_pre_signature_ids: self.idkg_pre_signature_ids.clone(),
+                nidkg_ids: BTreeMap::new(),
+            },
             &self.replica_version,
             self.round,
             self.round_summary.clone(),
@@ -568,11 +571,12 @@ impl SchedulerTest {
         self.scheduler.drain_subnet_queues(
             state,
             &mut csprng,
+            self.round,
             &mut round_limits,
             &measurements,
             self.registry_settings(),
             &self.replica_version,
-            &BTreeMap::new(),
+            &ChainKeyData::default(),
         )
     }
 
@@ -903,7 +907,6 @@ impl SchedulerTestBuilder {
         let hypervisor = Hypervisor::new_for_testing(
             &self.metrics_registry,
             self.own_subnet_id,
-            self.subnet_type,
             self.log.clone(),
             Arc::clone(&cycles_account_manager),
             Arc::<TestWasmExecutor>::clone(&wasm_executor),

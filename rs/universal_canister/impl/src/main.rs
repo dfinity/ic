@@ -485,6 +485,24 @@ fn eval(ops_bytes: OpsBytes) {
                     )),
                 }
             }
+            Ops::LiquidCyclesBalance128 => stack.push_blob(api::liquid_balance128()),
+            Ops::CallDataAppendCyclesAddMax => {
+                let method_name_size = stack.pop_int64();
+                let payload = stack.pop_blob();
+                api::call_data_append(&payload);
+                let payload_size = payload.len() as u64;
+                let cost_call = u128::from_le_bytes(
+                    api::cost_call(method_name_size, payload_size)
+                        .try_into()
+                        .unwrap(),
+                );
+                let liquid_balance =
+                    u128::from_le_bytes(api::liquid_balance128().try_into().unwrap());
+                let balance = liquid_balance.saturating_sub(cost_call);
+                let amount_low = (balance & 0xffff_ffff_ffff_ffff) as u64;
+                let amount_high = (balance >> 64) as u64;
+                api::call_cycles_add128(amount_high, amount_low)
+            }
         }
     }
 }

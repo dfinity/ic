@@ -26,6 +26,7 @@ use ic_sns_wasm::pb::v1::DeployedSns;
 use icp_ledger::AccountIdentifier;
 use interleaving::{InterleavingTestLedger, LedgerControlMessage};
 use rust_decimal_macros::dec;
+use std::sync::Arc;
 use std::{
     pin::Pin,
     sync::{atomic, atomic::Ordering as AOrdering},
@@ -60,7 +61,7 @@ fn test_cant_increase_dissolve_delay_while_disbursing() {
                 .set_kyc_verified(true),
         )
         .add_ledger_transform(Box::new(move |l| {
-            Box::new(InterleavingTestLedger::new(l, tx))
+            Arc::new(InterleavingTestLedger::new(l, tx))
         }))
         .set_economics(NetworkEconomics::default())
         .create();
@@ -256,7 +257,7 @@ fn test_cant_interleave_calls_to_settle_neurons_fund() {
         )
         .add_account_for(sns_governance_canister_id, 0) // Setup the treasury account
         .add_ledger_transform(Box::new(move |l| {
-            Box::new(InterleavingTestLedger::new(l, tx))
+            Arc::new(InterleavingTestLedger::new(l, tx))
         }))
         .set_economics(NetworkEconomics::default())
         .create();

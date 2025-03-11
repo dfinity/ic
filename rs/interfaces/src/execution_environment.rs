@@ -10,7 +10,7 @@ use ic_registry_subnet_type::SubnetType;
 use ic_sys::{PageBytes, PageIndex};
 use ic_types::{
     consensus::idkg::PreSigId,
-    crypto::canister_threshold_sig::MasterPublicKey,
+    crypto::{canister_threshold_sig::MasterPublicKey, threshold_sig::ni_dkg::NiDkgId},
     ingress::{IngressStatus, WasmResult},
     messages::{CertificateDelegation, MessageId, Query, SignedIngressContent},
     Cycles, ExecutionRound, Height, NumInstructions, NumOsPages, Randomness, ReplicaVersion, Time,
@@ -146,6 +146,8 @@ pub enum SystemApiCallId {
     CanisterCycleBalance,
     /// Tracker for `ic0.canister_cycle_balance128()`
     CanisterCycleBalance128,
+    /// Tracker for `ic0.canister_liquid_cycle_balance128()`
+    CanisterLiquidCycleBalance128,
     /// Tracker for `ic0.canister_self_copy()`
     CanisterSelfCopy,
     /// Tracker for `ic0.canister_self_size()`
@@ -268,6 +270,8 @@ pub struct SystemApiCallCounters {
     pub canister_cycle_balance: usize,
     /// Counter for `ic0.canister_cycle_balance128()`
     pub canister_cycle_balance128: usize,
+    /// Counter for `ic0.canister_liquid_cycle_balance128()`
+    pub canister_liquid_cycle_balance128: usize,
     /// Counter for `ic0.time()`
     pub time: usize,
 }
@@ -283,6 +287,9 @@ impl SystemApiCallCounters {
         self.canister_cycle_balance128 = self
             .canister_cycle_balance128
             .saturating_add(rhs.canister_cycle_balance128);
+        self.canister_liquid_cycle_balance128 = self
+            .canister_liquid_cycle_balance128
+            .saturating_add(rhs.canister_liquid_cycle_balance128);
         self.time = self.time.saturating_add(rhs.time);
     }
 }
@@ -1030,6 +1037,18 @@ pub trait SystemApi {
         heap: &mut [u8],
     ) -> HypervisorResult<()>;
 
+    /// This system call indicates the current liquid cycle balance
+    /// of the canister that the canister can spend without getting frozen.
+    ///
+    /// The amount of cycles is represented by a 128-bit value
+    /// and is copied in the canister memory starting
+    /// starting at the location `dst`.
+    fn ic0_canister_liquid_cycle_balance128(
+        &mut self,
+        dst: usize,
+        heap: &mut [u8],
+    ) -> HypervisorResult<()>;
+
     /// (deprecated) Please use `ic0_msg_cycles_available128` instead.
     /// This API supports only 64-bit values.
     ///
@@ -1365,6 +1384,13 @@ pub struct ChainKeySettings {
     pub pre_signatures_to_create_in_advance: u32,
 }
 
+#[derive(Clone, Eq, PartialEq, Debug, Default)]
+pub struct ChainKeyData {
+    pub master_public_keys: BTreeMap<MasterPublicKeyId, MasterPublicKey>,
+    pub idkg_pre_signature_ids: BTreeMap<MasterPublicKeyId, BTreeSet<PreSigId>>,
+    pub nidkg_ids: BTreeMap<MasterPublicKeyId, NiDkgId>,
+}
+
 pub trait Scheduler: Send {
     /// Type modelling the replicated state.
     ///
@@ -1419,8 +1445,7 @@ pub trait Scheduler: Send {
         &self,
         state: Self::State,
         randomness: Randomness,
-        chain_key_subnet_public_keys: BTreeMap<MasterPublicKeyId, MasterPublicKey>,
-        idkg_pre_signature_ids: BTreeMap<MasterPublicKeyId, BTreeSet<PreSigId>>,
+        chain_key_data: ChainKeyData,
         replica_version: &ReplicaVersion,
         current_round: ExecutionRound,
         round_summary: Option<ExecutionRoundSummary>,

@@ -7,16 +7,16 @@ use ic_management_canister_types_private::{
     CanisterHttpRequestArgs, CanisterIdRecord, CanisterSettingsArgsBuilder, CanisterStatusResultV2,
     CanisterStatusType, ClearChunkStoreArgs, DerivationPath, EcdsaKeyId, EmptyBlob,
     FetchCanisterLogsRequest, HttpMethod, LogVisibilityV2, MasterPublicKeyId, Method,
-    Payload as Ic00Payload, ProvisionalCreateCanisterWithCyclesArgs, ProvisionalTopUpCanisterArgs,
-    SchnorrAlgorithm, SchnorrKeyId, TakeCanisterSnapshotArgs, TransformContext, TransformFunc,
-    UpdateSettingsArgs, UploadChunkArgs, VetKdCurve, VetKdKeyId, IC_00,
+    OnLowWasmMemoryHookStatus, Payload as Ic00Payload, ProvisionalCreateCanisterWithCyclesArgs,
+    ProvisionalTopUpCanisterArgs, SchnorrAlgorithm, SchnorrKeyId, TakeCanisterSnapshotArgs,
+    TransformContext, TransformFunc, UpdateSettingsArgs, UploadChunkArgs, VetKdCurve, VetKdKeyId,
+    IC_00,
 };
 use ic_registry_routing_table::{canister_id_into_u64, CanisterIdRange, RoutingTable};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
     canister_state::{
-        system_state::{CyclesUseCase, OnLowWasmMemoryHookStatus},
-        DEFAULT_QUEUE_CAPACITY, WASM_PAGE_SIZE_IN_BYTES,
+        system_state::CyclesUseCase, DEFAULT_QUEUE_CAPACITY, WASM_PAGE_SIZE_IN_BYTES,
     },
     testing::{CanisterQueuesTesting, SystemStateTesting},
     CanisterStatus, ReplicatedState, SystemState,
@@ -35,11 +35,12 @@ use ic_types::{
     },
     nominal_cycles::NominalCycles,
     time::UNIX_EPOCH,
-    CanisterId, Cycles, PrincipalId, RegistryVersion,
+    CanisterId, CountBytes, Cycles, PrincipalId, RegistryVersion,
 };
 use ic_types_test_utils::ids::{canister_test_id, node_test_id, subnet_test_id, user_test_id};
 use ic_universal_canister::{call_args, wasm, UNIVERSAL_CANISTER_WASM};
 use maplit::btreemap;
+use more_asserts::assert_gt;
 use std::mem::size_of;
 
 #[cfg(test)]
@@ -217,7 +218,7 @@ fn sign_with_threshold_key_payload(method: Method, key_id: MasterPublicKeyId) ->
                 58, 81, 137, 170, 178, 61, 6, 208, 161, 20, 14, 134, 241, 34, 50, 176, 194, 32, 5,
                 19, 249, 66, 219, 9, 120, 165, 15, 9, 211,
             ],
-            derivation_path: DerivationPath::new(vec![]),
+            derivation_domain: vec![],
             key_id: into_inner_vetkd(key_id),
         }
         .encode(),
@@ -883,6 +884,188 @@ fn get_canister_status_of_nonexisting_canister() {
     let mut test = ExecutionTestBuilder::new().build();
     let err = test.canister_status(canister_test_id(10)).unwrap_err();
     assert_eq!(ErrorCode::CanisterNotFound, err.code());
+}
+
+fn get_canister_status(
+    test: &mut ExecutionTest,
+    canister_id: CanisterId,
+) -> CanisterStatusResultV2 {
+    match test.canister_status(canister_id).unwrap() {
+        WasmResult::Reply(reply) => CanisterStatusResultV2::decode(&reply).unwrap(),
+        WasmResult::Reject(msg) => panic!("unexpected reject: {}", msg),
+    }
+}
+
+#[test]
+fn get_canister_status_memory_metrics() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let canister_id = test.universal_canister().unwrap();
+    let csr: CanisterStatusResultV2 = get_canister_status(&mut test, canister_id);
+
+    let wasm_memory_size = csr.wasm_memory_size();
+    let stable_memory_size = csr.stable_memory_size();
+    let global_memory_size = csr.global_memory_size();
+    let wasm_binary_size = csr.wasm_binary_size();
+    let custom_sections_size = csr.custom_sections_size();
+
+    let execution_memory_size = wasm_memory_size
+        + stable_memory_size
+        + global_memory_size
+        + wasm_binary_size
+        + custom_sections_size;
+
+    let canister_history_size = csr.canister_history_size();
+    let wasm_chunk_store_size = csr.wasm_chunk_store_size();
+    let snapshots_size = csr.snapshots_size();
+
+    let system_memory_size = canister_history_size + wasm_chunk_store_size + snapshots_size;
+
+    let memory_size = csr.memory_size();
+    assert_eq!(memory_size, execution_memory_size + system_memory_size);
+}
+
+#[test]
+fn get_canister_status_memory_metrics_wasm_memory_size() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let canister_id = test.universal_canister().unwrap();
+    let csr: CanisterStatusResultV2 = get_canister_status(&mut test, canister_id);
+
+    assert_eq!(
+        get_canister_status(&mut test, canister_id).wasm_memory_size(),
+        csr.wasm_memory_size()
+    );
+
+    let canister_status_args = Encode!(&CanisterIdRecord::from(canister_id)).unwrap();
+    let get_canister_status = wasm()
+        .call_simple(
+            ic00::IC_00,
+            Method::CanisterStatus,
+            call_args().other_side(canister_status_args),
+        )
+        .build();
+    let result = test.ingress(canister_id, "update", get_canister_status);
+    let reply = get_reply(result);
+    let updated_csr = CanisterStatusResultV2::decode(&reply).unwrap();
+
+    assert_gt!(updated_csr.wasm_memory_size(), csr.wasm_memory_size());
+}
+
+#[test]
+fn get_canister_status_memory_metrics_stable_memory_size() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let canister_id = test.universal_canister().unwrap();
+    let csr: CanisterStatusResultV2 = get_canister_status(&mut test, canister_id);
+    test.ingress(
+        canister_id,
+        "update",
+        wasm()
+            .stable64_grow(1)
+            .stable64_read(WASM_PAGE_SIZE_IN_BYTES as u64 - 1, 1)
+            .push_bytes(&[])
+            .append_and_reply()
+            .build(),
+    )
+    .unwrap();
+    assert_eq!(
+        get_canister_status(&mut test, canister_id).stable_memory_size(),
+        csr.stable_memory_size() + NumBytes::from(WASM_PAGE_SIZE_IN_BYTES as u64)
+    );
+}
+
+#[test]
+fn get_canister_status_memory_metrics_global_memory_size() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let canister_id = test.universal_canister().unwrap();
+    let csr: CanisterStatusResultV2 = get_canister_status(&mut test, canister_id);
+    let exported_globals = test.execution_state(canister_id).exported_globals.clone();
+    assert_eq!(
+        csr.global_memory_size(),
+        NumBytes::new(8 * exported_globals.len() as u64)
+    );
+}
+
+#[test]
+fn get_canister_status_memory_metrics_wasm_binary_size() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let canister_id = test.universal_canister().unwrap();
+    let csr: CanisterStatusResultV2 = get_canister_status(&mut test, canister_id);
+    assert_eq!(
+        csr.wasm_binary_size(),
+        NumBytes::new(UNIVERSAL_CANISTER_WASM.len() as u64)
+    );
+}
+
+#[test]
+fn get_canister_status_memory_metrics_custom_sections_size() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let canister_id = test.universal_canister().unwrap();
+    let csr: CanisterStatusResultV2 = get_canister_status(&mut test, canister_id);
+    let metadata = test.execution_state(canister_id).metadata.clone();
+    assert_eq!(
+        csr.custom_sections_size(),
+        NumBytes::new(
+            metadata
+                .custom_sections()
+                .iter()
+                .map(|(k, v)| k.len() + v.count_bytes())
+                .sum::<usize>() as u64
+        ),
+    );
+}
+
+#[test]
+fn get_canister_status_memory_metrics_canister_history_size() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let canister_id = test.universal_canister().unwrap();
+    let csr: CanisterStatusResultV2 = get_canister_status(&mut test, canister_id);
+    test.set_controller(canister_id, test.user_id().get())
+        .unwrap();
+    let memory_difference =
+        NumBytes::from((size_of::<CanisterChange>() + size_of::<PrincipalId>()) as u64);
+    assert_eq!(
+        get_canister_status(&mut test, canister_id).canister_history_size(),
+        csr.canister_history_size() + memory_difference
+    );
+}
+
+#[test]
+fn get_canister_status_memory_metrics_wasm_chunk_store_size() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let canister_id = test.universal_canister().unwrap();
+    let csr: CanisterStatusResultV2 = get_canister_status(&mut test, canister_id);
+    test.subnet_message(
+        "upload_chunk",
+        UploadChunkArgs {
+            canister_id: canister_id.into(),
+            chunk: vec![1, 2, 3, 4, 5],
+        }
+        .encode(),
+    )
+    .unwrap();
+    assert_gt!(
+        get_canister_status(&mut test, canister_id).wasm_chunk_store_size(),
+        csr.wasm_chunk_store_size()
+    );
+}
+
+#[test]
+fn get_canister_status_memory_metrics_snapshots_size() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let canister_id = test.universal_canister().unwrap();
+    let csr: CanisterStatusResultV2 = get_canister_status(&mut test, canister_id);
+    test.subnet_message(
+        "take_canister_snapshot",
+        TakeCanisterSnapshotArgs {
+            canister_id: canister_id.into(),
+            replace_snapshot: None,
+        }
+        .encode(),
+    )
+    .unwrap();
+    assert_gt!(
+        get_canister_status(&mut test, canister_id).snapshots_size(),
+        csr.snapshots_size()
+    );
 }
 
 #[test]
@@ -3445,7 +3628,7 @@ fn test_vetkd_public_key_api_is_enabled() {
         Method::VetKdPublicKey,
         ic00::VetKdPublicKeyArgs {
             canister_id: None,
-            derivation_path: DerivationPath::new(vec![]),
+            derivation_domain: vec![],
             key_id: nonexistent_key_id.clone(),
         }
         .encode(),
@@ -3455,7 +3638,7 @@ fn test_vetkd_public_key_api_is_enabled() {
         Method::VetKdPublicKey,
         ic00::VetKdPublicKeyArgs {
             canister_id: None,
-            derivation_path: DerivationPath::new(vec![]),
+            derivation_domain: vec![],
             key_id: into_inner_vetkd(key_id),
         }
         .encode(),
@@ -3485,7 +3668,7 @@ fn test_vetkd_public_key_api_is_enabled() {
 }
 
 #[test]
-fn test_vetkd_derive_encrypted_key_api_is_disabled() {
+fn test_vetkd_derive_encrypted_key_api_is_disabled_without_key() {
     let own_subnet = subnet_test_id(1);
     let nns_subnet = subnet_test_id(2);
     let nns_canister = canister_test_id(0x10);
@@ -3504,8 +3687,95 @@ fn test_vetkd_derive_encrypted_key_api_is_disabled() {
     let response = test.xnet_messages()[0].clone();
     assert_eq!(
         get_reject_message(response),
-        "vetkd_derive_encrypted_key API is not yet implemented.",
+        "Subnet yndj2-3ybaa-aaaaa-aaaap-yai does not hold threshold key vetkd:Bls12_381_G2:some_key.",
     )
+}
+
+#[test]
+fn test_vetkd_derive_encrypted_key_rejects_invalid_transport_keys() {
+    let key_id = make_vetkd_key("some_key");
+    let own_subnet = subnet_test_id(1);
+    let nns_subnet = subnet_test_id(2);
+    let nns_canister = canister_test_id(0x10);
+    let mut test = ExecutionTestBuilder::new()
+        .with_own_subnet_id(own_subnet)
+        .with_nns_subnet_id(nns_subnet)
+        .with_caller(nns_subnet, nns_canister)
+        .with_chain_key(key_id.clone())
+        .build();
+    let method = Method::VetKdDeriveEncryptedKey;
+    let args = ic00::VetKdDeriveEncryptedKeyArgs {
+        derivation_id: vec![],
+        // invalid transport key
+        encryption_public_key: [1; 48],
+        derivation_domain: vec![],
+        key_id: into_inner_vetkd(key_id),
+    };
+    test.inject_call_to_ic00(method, args.encode(), Cycles::new(0));
+    test.execute_all();
+    let response = test.xnet_messages()[0].clone();
+    assert_eq!(
+        get_reject_message(response),
+        "The provided transport public key is invalid.",
+    )
+}
+
+#[test]
+fn test_vetkd_derive_encrypted_key_api_is_enabled() {
+    // Arrange.
+    let key_id = make_vetkd_key("some_key");
+    let own_subnet = subnet_test_id(1);
+    let nns_subnet = subnet_test_id(2);
+    let nns_canister = canister_test_id(0x10);
+    let mut test = ExecutionTestBuilder::new()
+        .with_own_subnet_id(own_subnet)
+        .with_nns_subnet_id(nns_subnet)
+        .with_caller(nns_subnet, nns_canister)
+        .with_chain_key(key_id.clone())
+        .build();
+    let canister_id = test.universal_canister().unwrap();
+    // Check that the SubnetCallContextManager is empty.
+    assert_eq!(
+        test.state()
+            .metadata
+            .subnet_call_context_manager
+            .sign_with_threshold_contexts_count(&key_id),
+        0
+    );
+
+    // Act.
+    let method = Method::VetKdDeriveEncryptedKey;
+    let run = wasm()
+        .call_with_cycles(
+            ic00::IC_00,
+            method,
+            call_args()
+                .other_side(sign_with_threshold_key_payload(method, key_id.clone()))
+                .on_reject(wasm().reject_message().reject()),
+            Cycles::from(100_000_000_000u128),
+        )
+        .build();
+    let (_, ingress_status) = test.ingress_raw(canister_id, "update", run);
+
+    // Assert.
+    // Check that the request is accepted and processing.
+    assert_eq!(
+        ingress_status,
+        IngressStatus::Known {
+            receiver: canister_id.get(),
+            user_id: test.user_id(),
+            time: test.time(),
+            state: IngressState::Processing,
+        }
+    );
+    // Check that the SubnetCallContextManager contains the request.
+    assert_eq!(
+        test.state()
+            .metadata
+            .subnet_call_context_manager
+            .sign_with_threshold_contexts_count(&key_id),
+        1
+    );
 }
 
 #[test]

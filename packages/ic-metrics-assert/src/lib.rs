@@ -12,7 +12,8 @@ use std::fmt::Debug;
 ///
 /// ```rust
 /// use ic_metrics_assert::{MetricsAssert, PocketIcHttpQuery};
-/// use pocket_ic::{management_canister::CanisterId, PocketIc};
+/// use pocket_ic::PocketIc;
+/// use ic_management_canister_types::CanisterId;
 ///
 /// struct Setup {
 ///     env: PocketIc,
@@ -135,7 +136,8 @@ pub use pocket_ic_query_call::PocketIcHttpQuery;
 mod pocket_ic_query_call {
     use super::*;
     use candid::Principal;
-    use pocket_ic::{management_canister::CanisterId, PocketIc, RejectResponse};
+    use ic_management_canister_types::CanisterId;
+    use pocket_ic::{PocketIc, RejectResponse};
 
     /// Provides an implementation of the [CanisterHttpQuery] trait in the case where the canister
     /// HTTP requests are made through an instance of [PocketIc].

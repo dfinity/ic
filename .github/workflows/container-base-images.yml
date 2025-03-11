@@ -18,16 +18,14 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
   cancel-in-progress: true
 
-permissions:
-  pull-requests: write
-  packages: write
-  contents: write
-
 jobs:
   build-base-image:
     name: Build Base Container Image
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    permissions:
+      packages: write
+      contents: write
     strategy:
       matrix:
         include:
@@ -119,6 +117,8 @@ jobs:
 
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          token: ${{ steps.app-token.outputs.token }}
 
       - name: Get Current Date
         id: date

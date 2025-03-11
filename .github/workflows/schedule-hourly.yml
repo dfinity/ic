@@ -23,25 +23,19 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-      - name: Before script
-        id: before-script
-        shell: bash
-        run: |
-          [ -n "${NODE_NAME:-}" ] && echo "Node: $NODE_NAME"
       - name: Run Bazel Build All No Cache
         uses: ./.github/actions/bazel-test-all/
-        env:
-          CLOUD_CREDENTIALS_CONTENT: ${{ secrets.CLOUD_CREDENTIALS_CONTENT }}
         with:
-          # --config=stamped is required for the BNs as they rely for both dev and prod deployment
+          # --config=release is required for the BNs as they rely for both dev and prod deployment
           # on images being uploaded to the S3 bucket
           BAZEL_COMMAND: >-
             build
 
 
-              --config=ci --config=stamped
+              --config=ci --config=release
               --repository_cache= --disk_cache= --noremote_accept_cached --remote_instance_name=${CI_COMMIT_SHA} --@rules_rust//rust/settings:pipelined_compilation=True
           BAZEL_TARGETS: //...
+          CLOUD_CREDENTIALS_CONTENT: ${{ secrets.CLOUD_CREDENTIALS_CONTENT }}
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
       - name: Upload bazel-bep
         # runs only if previous step succeeded or failed;
@@ -69,19 +63,14 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-      - name: Before script
-        id: before-script
-        shell: bash
-        run: |
-          [ -n "${NODE_NAME:-}" ] && echo "Node: $NODE_NAME"
       - name: Run Bazel System Test Hourly
         id: bazel-test-all
         uses: ./.github/actions/bazel-test-all/
         with:
-          # --config=stamped is required for the BNs as they rely for both dev and prod deployment
+          # --config=release is required for the BNs as they rely for both dev and prod deployment
           # on images being uploaded to the S3 bucket
           BAZEL_COMMAND: >-
-            test --config=ci --config=stamped --keep_going --test_tag_filters=system_test_hourly
+            test --config=ci --config=release --keep_going --test_tag_filters=system_test_hourly
           BAZEL_TARGETS: //rs/...
           BUILDEVENT_APIKEY: ${{ secrets.HONEYCOMB_TOKEN }}
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}

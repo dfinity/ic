@@ -8,6 +8,117 @@ The process that populates this file is described in
 here were moved from the adjacent `unreleased_changelog.md` file.
 
 
+INSERT NEW RELEASES HERE
+
+
+# 2025-03-08: Proposal 135702
+
+http://dashboard.internetcomputer.org/proposal/135702
+
+## Added
+
+* Collect metrics about timer tasks defined using ic_nervous_system_timer_task library.
+* Re-enable neuron migration to stable memory:
+  * Setting `MIGRATE_ACTIVE_NEURONS_TO_STABLE_MEMORY` to true, which will cause active neurons
+  to be continously moved from heap memory to stable memory.
+  * Compared to the last time it was enabled, several improvements were made:
+    * Distribute rewards is moved to timer, and has a mechanism to distribute in batches in
+    multiple messages.
+    * Unstaking maturity task has a limit of 100 neurons per message, which prevents it from 
+    exceeding instruction limit.
+    * The execution of `ApproveGenesisKyc` proposals have a limit of 1000 neurons, above which
+    the proposal will fail.
+    * More benchmarks were added.
+* Enable timer task metrics for better observability.
+
+## Changed
+
+* Voting Rewards will be scheduled by a timer instead of by heartbeats.
+* Unstaking maturity task will be processing up to 100 neurons in a single message, to avoid
+  exceeding the instruction limit in a single execution.
+* Voting Rewards will be distributed asynchronously in the background after being calculated.  
+  * This will allow rewards to be compatible with neurons being stored in Stable Memory. 
+* Ramp up the failure rate of _pb method to 0.7 again.
+
+## Fixed
+
+* Avoid applying `approve_genesis_kyc` to an unbounded number of neurons, but at most 1000 neurons.
+
+
+# 2025-03-01: Proposal 135613
+
+http://dashboard.internetcomputer.org/proposal/135613
+
+## Added
+
+* Define API for disburse maturity. While disburse maturity is not yet enabled, clients may already
+  start preparing for this new NNS neuron operation.
+
+## Deprecated
+
+* NnsCanisterUpgrade/NnsRootUpgrade NNS funtions are made obsolete.
+
+
+# 2025-02-21: Proposal 135436
+
+http://dashboard.internetcomputer.org/proposal/135436
+
+## Changed
+
+* ManageNetworkEconomics proposals can now modify deep fields one at a time.
+  Previously, this was only possible for top level fields.
+
+* Added validation for ManageNetworkEconomics proposals. Previously, there was
+  none. The result must have all the following properties:
+
+  * All "optional" fields are actually set.
+
+  * `maximum_icp_xdr_rate >= minimum_icp_xdr_rate`
+
+  * Decimal fields have parsable `human_readable` values.
+
+  * `one_third_participation_milestone_xdr < full_participation_milestone_xdr`
+
+
+# 2025-02-11: Proposal 135265
+
+https://dashboard.internetcomputer.org/proposal/135265
+
+## Removed
+
+* Neuron migration (`migrate_active_neurons_to_stable_memory`) is rolled back due to issues with
+  reward distribution. It has already been rolled back with a hotfix ([proposal
+  135265](https://dashboard.internetcomputer.org/proposal/135265))
+
+
+# 2025-02-07: Proposal 135206
+
+http://dashboard.internetcomputer.org/proposal/135206
+
+## Added
+
+### List Neurons API Change: Query by Subaccount
+
+The `list_neurons` API now supports querying by neuron subaccount.  This is useful for neuron holders who
+have many neurons and want to list only the neurons associated with a particular subaccount.
+
+A new field `neuron_subaccounts` is added to the request, which is a list of subaccounts to query
+for.  If this field is present, any neurons found will be added to the response.  If duplicate
+neurons are found between this field and others, they will be deduplicated before returning the value.
+
+This new field works in the same way that the existing `neuron_ids` field works.
+
+### Migrating Active Neurons to Stable Memory
+
+In this release, we turn on the feature to migrate active neurons to stable memory:
+`migrate_active_neurons_to_stable_memory`. After the feature is turned on, a timer task will
+gradually move active neurons from the heap to stable memory. Clients should not expect any
+functional behavior changes, since no APIs rely on where the neurons are stored.
+
+## Changed
+
+* The limit of the number of neurons is increased from 380K to 400K.
+
 # 2025-02-03: Proposal 135063
 
 http://dashboard.internetcomputer.org/proposal/135063
@@ -98,67 +209,3 @@ the neuron. More precisely,
 
 
 END
-
-
-INSERT NEW RELEASES HERE
-
-
-# 2025-02-21: Proposal 135436
-
-http://dashboard.internetcomputer.org/proposal/135436
-
-## Changed
-
-* ManageNetworkEconomics proposals can now modify deep fields one at a time.
-  Previously, this was only possible for top level fields.
-
-* Added validation for ManageNetworkEconomics proposals. Previously, there was
-  none. The result must have all the following properties:
-
-  * All "optional" fields are actually set.
-
-  * `maximum_icp_xdr_rate >= minimum_icp_xdr_rate`
-
-  * Decimal fields have parsable `human_readable` values.
-
-  * `one_third_participation_milestone_xdr < full_participation_milestone_xdr`
-
-
-# 2025-02-11: Proposal 135265
-
-https://dashboard.internetcomputer.org/proposal/135265
-
-## Removed
-
-* Neuron migration (`migrate_active_neurons_to_stable_memory`) is rolled back due to issues with
-  reward distribution. It has already been rolled back with a hotfix ([proposal
-  135265](https://dashboard.internetcomputer.org/proposal/135265))
-
-
-# 2025-02-07: Proposal 135206
-
-http://dashboard.internetcomputer.org/proposal/135206
-
-## Added
-
-### List Neurons API Change: Query by Subaccount
-
-The `list_neurons` API now supports querying by neuron subaccount.  This is useful for neuron holders who
-have many neurons and want to list only the neurons associated with a particular subaccount.
-
-A new field `neuron_subaccounts` is added to the request, which is a list of subaccounts to query
-for.  If this field is present, any neurons found will be added to the response.  If duplicate
-neurons are found between this field and others, they will be deduplicated before returning the value.
-
-This new field works in the same way that the existing `neuron_ids` field works.
-
-### Migrating Active Neurons to Stable Memory
-
-In this release, we turn on the feature to migrate active neurons to stable memory:
-`migrate_active_neurons_to_stable_memory`. After the feature is turned on, a timer task will
-gradually move active neurons from the heap to stable memory. Clients should not expect any
-functional behavior changes, since no APIs rely on where the neurons are stored.
-
-## Changed
-
-* The limit of the number of neurons is increased from 380K to 400K.

@@ -13,6 +13,7 @@ use ic_consensus_dkg::get_vetkey_public_keys;
 use ic_consensus_utils::{
     crypto_hashable_to_seed, membership::Membership, pool_reader::PoolReader,
 };
+use ic_consensus_vetkd::VetKdPayloadBuilderImpl;
 use ic_https_outcalls_consensus::payload_builder::CanisterHttpPayloadBuilderImpl;
 use ic_interfaces::{
     batch_payload::IntoMessages,
@@ -156,9 +157,8 @@ pub fn deliver_batches(
         chain_key_subnet_public_keys.append(&mut idkg_subnet_public_keys);
 
         // Add vetKD keys to this map as well
-        // TODO(CON-1420: Deliver the ni_dkg_ids to the batch as well)
-        let (mut nidkg_subnet_public_keys, _ni_dkg_ids) = get_vetkey_public_keys(dkg_summary, log);
-        chain_key_subnet_public_keys.append(&mut nidkg_subnet_public_keys);
+        let (mut ni_dkg_subnet_public_keys, ni_dkg_ids) = get_vetkey_public_keys(dkg_summary, log);
+        chain_key_subnet_public_keys.append(&mut ni_dkg_subnet_public_keys);
 
         let mut batch_stats = BatchStats::new(height);
 
@@ -228,6 +228,7 @@ pub fn deliver_batches(
             randomness,
             chain_key_subnet_public_keys,
             idkg_pre_signature_ids: get_pre_signature_ids_to_deliver(&block),
+            ni_dkg_ids,
             registry_version: block.context.registry_version,
             time: block.context.time,
             consensus_responses,
@@ -285,6 +286,10 @@ pub fn generate_responses_to_subnet_calls(
             CanisterHttpPayloadBuilderImpl::into_messages(&block_payload.batch.canister_http);
         consensus_responses.append(&mut http_responses);
         stats.canister_http = http_stats;
+
+        let mut vetkd_responses =
+            VetKdPayloadBuilderImpl::into_messages(&block_payload.batch.vetkd);
+        consensus_responses.append(&mut vetkd_responses);
     }
     consensus_responses
 }

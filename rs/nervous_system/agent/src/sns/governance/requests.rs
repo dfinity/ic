@@ -1,4 +1,5 @@
 use ic_sns_governance_api::pb::v1::{
+    topics::{ListTopicsRequest, ListTopicsResponse},
     AdvanceTargetVersionRequest, AdvanceTargetVersionResponse, ClaimSwapNeuronsRequest,
     ClaimSwapNeuronsResponse, FailStuckUpgradeInProgressRequest,
     FailStuckUpgradeInProgressResponse, GetMaturityModulationRequest,
@@ -234,4 +235,20 @@ impl Request for AdvanceTargetVersionRequest {
     }
 
     type Response = AdvanceTargetVersionResponse;
+}
+
+impl Request for ListTopicsRequest {
+    fn method(&self) -> &'static str {
+        "list_topics"
+    }
+
+    fn update(&self) -> bool {
+        false
+    }
+
+    fn payload(&self) -> Result<Vec<u8>, candid::Error> {
+        candid::encode_one(self)
+    }
+
+    type Response = ListTopicsResponse;
 }

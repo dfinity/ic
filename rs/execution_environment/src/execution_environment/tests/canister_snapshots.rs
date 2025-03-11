@@ -7,15 +7,15 @@ use ic_error_types::{ErrorCode, RejectCode};
 use ic_management_canister_types_private::{
     self as ic00, CanisterChange, CanisterChangeDetails, CanisterSettingsArgsBuilder,
     CanisterSnapshotResponse, ClearChunkStoreArgs, DeleteCanisterSnapshotArgs,
-    ListCanisterSnapshotArgs, LoadCanisterSnapshotArgs, Method, Payload as Ic00Payload,
-    TakeCanisterSnapshotArgs, UpdateSettingsArgs, UploadChunkArgs,
+    ListCanisterSnapshotArgs, LoadCanisterSnapshotArgs, Method, OnLowWasmMemoryHookStatus,
+    Payload as Ic00Payload, TakeCanisterSnapshotArgs, UpdateSettingsArgs, UploadChunkArgs,
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
     canister_snapshots::SnapshotOperation,
     canister_state::{
         execution_state::{WasmBinary, WasmExecutionMode},
-        system_state::{CyclesUseCase, OnLowWasmMemoryHookStatus},
+        system_state::CyclesUseCase,
     },
     CanisterState, ExecutionState, SchedulerState,
 };
@@ -387,9 +387,11 @@ fn take_canister_snapshot_fails_when_limit_is_reached() {
     const CYCLES: Cycles = Cycles::new(20_000_000_000_000);
     let own_subnet = subnet_test_id(1);
     let caller_canister = canister_test_id(1);
+    let max_snapshots_per_canister = 5;
     let mut test = ExecutionTestBuilder::new()
         .with_own_subnet_id(own_subnet)
         .with_caller(own_subnet, caller_canister)
+        .with_max_snapshots_per_canister(max_snapshots_per_canister)
         .build();
 
     // Create canister and update controllers.
@@ -438,8 +440,15 @@ fn take_canister_snapshot_fails_when_limit_is_reached() {
             .wasm_chunk_store
     );
 
+    // Take some more snapshots until just before the limit is reached. Should succeed.
+    for _ in 0..(max_snapshots_per_canister - 1) {
+        let args: TakeCanisterSnapshotArgs = TakeCanisterSnapshotArgs::new(canister_id, None);
+        test.subnet_message("take_canister_snapshot", args.encode())
+            .unwrap();
+    }
+
     // Take a new snapshot for the canister without providing a replacement ID.
-    // Should fail as only 1 snapshot per canister is allowed.
+    // Should fail as we have already created `max_snapshots_per_canister`` above.
     let args: TakeCanisterSnapshotArgs = TakeCanisterSnapshotArgs::new(canister_id, None);
     let error = test
         .subnet_message("take_canister_snapshot", args.encode())
@@ -448,8 +457,8 @@ fn take_canister_snapshot_fails_when_limit_is_reached() {
     assert_eq!(
         error.description(),
         format!(
-            "Canister {} has reached the maximum number of snapshots allowed: 1.",
-            canister_id,
+            "Canister {} has reached the maximum number of snapshots allowed: {}.",
+            canister_id, max_snapshots_per_canister,
         )
     );
 }
