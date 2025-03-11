@@ -1,6 +1,7 @@
 use candid::{Decode, Encode, Principal};
 use canister_test::Wasm;
 use ic_base_types::{CanisterId, PrincipalId};
+use ic_management_canister_types::CanisterSettings;
 use ic_nervous_system_integration_tests::pocket_ic_helpers::{
     install_canister_on_subnet, load_registry_mutations, NnsInstaller, STARTING_CYCLES_PER_CANISTER,
 };
@@ -15,7 +16,6 @@ use ic_sns_testing::utils::{
     SnsTestingNetworkValidationError,
 };
 use icp_ledger::Tokens;
-use pocket_ic::management_canister::CanisterSettings;
 use pocket_ic::PocketIcBuilder;
 use tempfile::TempDir;
 
