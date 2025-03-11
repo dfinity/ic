@@ -705,10 +705,7 @@ pub fn process(
         if execution_parameters.instruction_limits.slicing_enabled()
             && dirty_pages.get() > embedder.config().max_dirty_pages_without_optimization as u64
         {
-            // Passing zero instructions here means that heavy memory execution consumed
-            // all the round time, and the round should be finished now. It does not affect
-            // the actual canister charges.
-            if let Err(err) = system_api.yield_for_dirty_memory_copy(0) {
+            if let Err(err) = system_api.yield_for_dirty_memory_copy() {
                 // If there was an error slicing, propagate this error to the main result and return.
                 // Otherwise, the regular message path takes place.
                 return (
