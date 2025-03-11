@@ -841,8 +841,12 @@ fn test_decode_v1_encode_v2_decode() {
         ..default_canister_state_bits()
     };
 
-    let pb_bits_v1 =
+    let mut pb_bits_v1 =
         pb_canister_state_bits::CanisterStateBits::from(canister_state_bits_initial_copy);
+
+    // In order to make current serialized version of CanisterStateBits, equivalent
+    // to the previous version, we can just set `tasks` to `None`.
+    pb_bits_v1.tasks = None;
 
     let canister_state_bits_load_v1 =
         CanisterStateBits::try_from((pb_bits_v1, &CanisterId::from_u64(1))).unwrap();
