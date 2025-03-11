@@ -1,4 +1,4 @@
-use crate::stable_memory::{StableMemoryBorrower, StorableRegistryKey, StorableRegistryValue};
+use crate::stable_memory::{RegistryStoreStableMemory, StorableRegistryKey, StorableRegistryValue};
 use candid::Principal;
 use ic_interfaces_registry::{
     RegistryDataProvider, RegistryTransportRecord, ZERO_REGISTRY_VERSION,
@@ -21,15 +21,17 @@ use std::marker::PhantomData;
 /// - If `keys_to_keep` is `Some(keys)`, only the specified `keys` will be stored in stable memory,
 ///   while all other keys from the registry will be discarded.
 /// - If `keys_to_keep` is `None`, all keys from the registry will be retained in stable memory.
-pub struct CanisterDataProvider<S: StableMemoryBorrower> {
+pub struct RegistryDataSync<S: RegistryStoreStableMemory> {
     keys_to_keep: Option<HashSet<String>>,
+    latest_retrieved_version: RegistryVersion,
     _store: PhantomData<S>,
 }
 
-impl<S: StableMemoryBorrower> CanisterDataProvider<S> {
+impl<S: RegistryStoreStableMemory> RegistryDataSync<S> {
     pub fn new(keys_to_retain: Option<HashSet<String>>) -> Self {
         Self {
             keys_to_keep: keys_to_retain,
+            latest_retrieved_version: ZERO_REGISTRY_VERSION,
             _store: PhantomData,
         }
     }
@@ -51,7 +53,9 @@ impl<S: StableMemoryBorrower> CanisterDataProvider<S> {
     }
 
     fn get_latest_version(&self) -> Option<u64> {
-        S::with_borrow(|local_registry| local_registry.last_key_value().map(|(k, _)| k.version))
+        S::with_registry_map(|local_registry| {
+            local_registry.last_key_value().map(|(k, _)| k.version)
+        })
     }
 
     fn add_deltas(&self, deltas: Vec<RegistryDelta>) -> Result<(), String> {
@@ -66,7 +70,7 @@ impl<S: StableMemoryBorrower> CanisterDataProvider<S> {
             }
 
             for value in delta.values.into_iter() {
-                S::with_borrow_mut(|local_registry| {
+                S::with_registry_map_mut(|local_registry| {
                     local_registry.insert(
                         StorableRegistryKey {
                             key: string_key.to_string(),
@@ -140,12 +144,12 @@ impl<S: StableMemoryBorrower> CanisterDataProvider<S> {
     }
 }
 
-impl<S: StableMemoryBorrower> RegistryDataProvider for CanisterDataProvider<S> {
+impl<S: RegistryStoreStableMemory> RegistryDataProvider for RegistryDataSync<S> {
     fn get_updates_since(
         &self,
         version: RegistryVersion,
     ) -> Result<Vec<RegistryTransportRecord>, RegistryDataProviderError> {
-        S::with_borrow(|local_registry| {
+        S::with_registry_map(|local_registry| {
             let start_key = StorableRegistryKey {
                 version: version.get(),
                 ..Default::default()
@@ -168,8 +172,10 @@ impl<S: StableMemoryBorrower> RegistryDataProvider for CanisterDataProvider<S> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::data_provider::CanisterDataProvider;
-    use crate::stable_memory::{StableMemoryBorrower, StorableRegistryKey, StorableRegistryValue};
+    use crate::data_provider::RegistryDataSync;
+    use crate::stable_memory::{
+        RegistryStoreStableMemory, StorableRegistryKey, StorableRegistryValue,
+    };
     use ic_registry_transport::pb::v1::RegistryDelta;
     use ic_stable_structures::memory_manager::MemoryId;
     use ic_stable_structures::memory_manager::MemoryManager;
@@ -194,14 +200,14 @@ mod tests {
 
     #[derive(Default)]
     pub struct DummyStore;
-    impl StableMemoryBorrower for DummyStore {
-        fn with_borrow<R>(
+    impl RegistryStoreStableMemory for DummyStore {
+        fn with_registry_map<R>(
             f: impl FnOnce(&StableBTreeMap<StorableRegistryKey, StorableRegistryValue, VM>) -> R,
         ) -> R {
             DUMMY_REGISTRY.with_borrow(|registry_stored| f(registry_stored))
         }
 
-        fn with_borrow_mut<R>(
+        fn with_registry_map_mut<R>(
             f: impl FnOnce(&mut StableBTreeMap<StorableRegistryKey, StorableRegistryValue, VM>) -> R,
         ) -> R {
             DUMMY_REGISTRY.with_borrow_mut(|registry_stored| f(registry_stored))
@@ -223,7 +229,7 @@ mod tests {
 
     #[test]
     fn test_add_deltas_correctly() {
-        let provider = CanisterDataProvider::<DummyStore>::new(None);
+        let provider = RegistryDataSync::<DummyStore>::new(None);
         let deltas = generate_deltas(10);
 
         provider.add_deltas(deltas).unwrap();
@@ -253,7 +259,7 @@ mod tests {
     #[test]
     fn test_add_deltas_with_keys_to_retain() {
         let keys_to_retain = HashSet::from(["test_key1".to_string(), "test_key3".to_string()]);
-        let provider = CanisterDataProvider::<DummyStore>::new(Some(keys_to_retain));
+        let provider = RegistryDataSync::<DummyStore>::new(Some(keys_to_retain));
         let deltas = self::generate_deltas(5);
 
         provider.add_deltas(deltas).unwrap();

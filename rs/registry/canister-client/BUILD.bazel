@@ -20,6 +20,11 @@ DEV_DEPENDENCIES = [
     "//rs/registry/keys",
 ]
 
+MACRO_DEPENDENCIES = [
+    # Keep sorted.
+    "@crate_index//:async-trait",
+]
+
 SRCS = glob(
     ["src/**"],
     exclude = ["**/*tests.rs"],
@@ -29,6 +34,7 @@ rust_library(
     name = "canister-client",
     srcs = SRCS,
     crate_name = "ic_registry_canister_client",
+    proc_macro_deps = MACRO_DEPENDENCIES,
     version = "0.9.0",
     deps = DEPENDENCIES,
 )
@@ -36,5 +42,6 @@ rust_library(
 rust_test(
     name = "client_test",
     srcs = glob(["src/**/*.rs"]),
+    proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )

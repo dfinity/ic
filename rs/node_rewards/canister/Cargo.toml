@@ -18,7 +18,6 @@ ic-cdk = { workspace = true }
 ic-interfaces-registry = { path = "../../interfaces/registry" }
 ic-node-rewards-canister-api = { path = "./api" }
 ic-registry-canister-client = { path = "../../registry/canister-client" }
-ic-registry-canister-data-provider = { path = "../../registry/canister-data-provider" }
 ic-stable-structures = { workspace = true }
 ic-types = { path = "../../types/types" }
 candid = { workspace = true }

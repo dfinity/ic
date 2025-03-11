@@ -1,12 +1,16 @@
+use crate::stable_memory::{RegistryStoreStableMemory, StorableRegistryKey};
+use crate::CanisterRegistryClient;
 use ic_interfaces_registry::{
-    empty_zero_registry_record, RegistryClient, RegistryClientVersionedResult,
-    RegistryDataProvider, RegistryTransportRecord, ZERO_REGISTRY_VERSION,
+    empty_zero_registry_record, RegistryClient, RegistryClientResult,
+    RegistryClientVersionedResult, RegistryDataProvider, RegistryTransportRecord,
+    ZERO_REGISTRY_VERSION,
 };
 use ic_types::registry::RegistryClientError;
 #[cfg(not(target_arch = "wasm32"))]
 use ic_types::time::current_time as system_current_time;
 use ic_types::{RegistryVersion, Time};
 use std::collections::BTreeMap;
+use std::marker::PhantomData;
 use std::sync::{Arc, RwLock, RwLockReadGuard};
 
 type CacheState = (
@@ -15,9 +19,10 @@ type CacheState = (
     Vec<RegistryTransportRecord>,
 );
 
-pub struct CanisterRegistryClient {
-    data_provider: Arc<dyn RegistryDataProvider>,
-    cache: Arc<RwLock<CacheState>>,
+pub struct CanisterRegistryStore<S: RegistryStoreStableMemory> {
+    _stable_memory: PhantomData<S>,
+    // TODO make this cache work (where at)
+    latest_version: RegistryVersion,
 }
 
 #[cfg(target_arch = "wasm32")]
@@ -31,11 +36,11 @@ pub fn current_time() -> Time {
     system_current_time()
 }
 
-impl CanisterRegistryClient {
-    pub fn new(data_provider: Arc<dyn RegistryDataProvider>) -> Self {
+impl<S: RegistryStoreStableMemory> CanisterRegistryStore<S> {
+    pub fn new() -> Self {
         Self {
-            data_provider,
-            cache: Arc::new(RwLock::new(Default::default())),
+            _stable_memory: PhantomData,
+            latest_version: 0,
         }
     }
 
@@ -82,16 +87,15 @@ impl CanisterRegistryClient {
         &self,
         version: RegistryVersion,
     ) -> Result<RwLockReadGuard<CacheState>, RegistryClientError> {
-        let cache_state = self.cache.read().unwrap();
-        let (latest_version, _, _) = &*cache_state;
-        if &version > latest_version {
+        let latest_version = self.get_latest_version();
+        if version > latest_version {
             return Err(RegistryClientError::VersionNotAvailable { version });
         }
         Ok(cache_state)
     }
 }
 
-impl RegistryClient for CanisterRegistryClient {
+impl<S: RegistryStoreStableMemory> CanisterRegistryClient for CanisterRegistryStore<S> {
     fn get_versioned_value(
         &self,
         key: &str,
@@ -100,17 +104,24 @@ impl RegistryClient for CanisterRegistryClient {
         if version == ZERO_REGISTRY_VERSION {
             return Ok(empty_zero_registry_record(key));
         }
-        let cache_state = self.check_version(version)?;
-        let (_, _, records) = &*cache_state;
+        if self.get_latest_version() < version {
+            return Err(RegistryClientError::VersionNotAvailable { version });
+        }
 
-        let search_key = &(key, &version);
-        let record = match records.binary_search_by_key(search_key, |r| (&r.key, &r.version)) {
-            Ok(idx) => records[idx].clone(),
-            Err(idx) if idx > 0 && records[idx - 1].key == key => records[idx - 1].clone(),
-            _ => empty_zero_registry_record(key),
-        };
+        let search_key = StorableRegistryKey::new(key.to_string(), version.get());
 
-        Ok(record)
+        let result = S::with_registry_map(|map| {
+            map.range(..=search_key)
+                .rev()
+                .find(|(stored_key, _)| stored_key.key == key)
+                .map(|(_, value)| RegistryTransportRecord {
+                    key: key.to_string(),
+                    version,
+                    value: value.0,
+                })
+                .unwrap_or_else(|| empty_zero_registry_record(key))
+        });
+        Ok(result)
     }
 
     fn get_key_family(
@@ -121,33 +132,27 @@ impl RegistryClient for CanisterRegistryClient {
         if version == ZERO_REGISTRY_VERSION {
             return Ok(vec![]);
         }
-        let cache_state = self.check_version(version)?;
-        let (_, _, records) = &*cache_state;
 
-        let first_registry_version = RegistryVersion::from(1);
-        let search_key = &(key_prefix, &first_registry_version);
+        if self.get_latest_version() < version {
+            return Err(RegistryClientError::VersionNotAvailable { version });
+        }
 
-        let first_match_index =
-            match records.binary_search_by_key(search_key, |r| (&r.key, &r.version)) {
-                Ok(idx) => idx,
-                Err(idx) => {
-                    if !records[idx].key.starts_with(key_prefix) {
-                        return Ok(vec![]);
-                    }
-                    idx
-                }
-            };
-
-        let records = records
-            .iter()
-            .skip(first_match_index) // (1)
-            .filter(|r| r.version <= version) // (2)
-            .take_while(|r| r.key.starts_with(key_prefix)); // (3)
+        let start_range = StorableRegistryKey::new(key_prefix.to_string(), Default::default());
 
         let mut effective_records = BTreeMap::new();
-        for record in records {
-            effective_records.insert(record.key.clone(), &record.value);
-        }
+        S::with_registry_map(|map| {
+            let version = version.get();
+            for (key, value) in map
+                .range(start_range..)
+                .filter(|(k, _)| k.version <= version)
+                .take_while(|(k, _)| k.key.starts_with(key_prefix))
+            {
+                // For each key, keep only the record values for the latest record versions. We rely upon
+                // the fact that for a fixed key, the records are sorted by version.
+                effective_records.insert(key.key, value.0);
+            }
+        });
+
         let result = effective_records
             .into_iter()
             .filter_map(|(key, value)| value.is_some().then_some(key))
@@ -156,11 +161,29 @@ impl RegistryClient for CanisterRegistryClient {
     }
 
     fn get_latest_version(&self) -> RegistryVersion {
-        self.cache.read().unwrap().0
+        // TODO add cache for this, as it could be quite expensive.
+        S::with_registry_map(|map| {
+            map.keys()
+                .map(|k| k.version)
+                .max()
+                .map(RegistryVersion::new)
+                .unwrap_or(ZERO_REGISTRY_VERSION)
+        })
     }
 
-    fn get_version_timestamp(&self, registry_version: RegistryVersion) -> Option<Time> {
-        self.cache.read().unwrap().1.get(&registry_version).cloned()
+    fn get_value(&self, key: String, version: RegistryVersion) -> RegistryClientResult<Vec<u8>> {
+        if version > self.get_latest_version() {
+            return Err(RegistryClientError::VersionNotAvailable { version });
+        }
+
+        Ok(S::with_registry_map(|map| {
+            map.get(&StorableRegistryKey::new(key, version.get()))
+                .and_then(|v| v.0)
+        }))
+    }
+
+    async fn sync_registry_stored(&self) -> Result<RegistryVersion, String> {
+        todo!()
     }
 }
 

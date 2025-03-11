@@ -19,8 +19,14 @@ impl Storable for StorableRegistryValue {
 
 #[derive(Clone, Ord, PartialOrd, Eq, PartialEq, Default)]
 pub struct StorableRegistryKey {
-    pub version: u64,
     pub key: String,
+    pub version: u64,
+}
+
+impl StorableRegistryKey {
+    pub fn new(key: String, version: u64) -> Self {
+        Self { key, version }
+    }
 }
 
 // This value is set as 2 times the max key size present in the registry
@@ -32,19 +38,20 @@ impl Storable for StorableRegistryKey {
         let version_b = self.version.to_be_bytes().to_vec();
         let key_b = self.key.as_bytes().to_vec();
 
-        storable_key.extend_from_slice(&version_b);
         storable_key.extend_from_slice(&key_b);
+        storable_key.extend_from_slice(&version_b);
 
         Cow::Owned(storable_key)
     }
 
     fn from_bytes(bytes: Cow<[u8]>) -> Self {
         let bytes = bytes.as_ref();
-        let (version_bytes, key_bytes) = bytes.split_at(8);
-        let version = u64::from_be_bytes(version_bytes.try_into().expect("Invalid version bytes"));
+        let len = bytes.len();
+        let (version_bytes, key_bytes) = bytes.split_at(len - 8);
         let key = String::from_utf8(key_bytes.to_vec()).expect("Invalid UTF-8 in key");
+        let version = u64::from_be_bytes(version_bytes.try_into().expect("Invalid version bytes"));
 
-        Self { version, key }
+        Self { key, version }
     }
     const BOUND: Bound = Bound::Bounded {
         max_size: MAX_REGISTRY_KEY_SIZE + size_of::<u64>() as u32,
@@ -54,11 +61,12 @@ impl Storable for StorableRegistryKey {
 
 type VM = VirtualMemory<DefaultMemoryImpl>;
 
-pub trait StableMemoryBorrower: Send + Sync {
-    fn with_borrow<R>(
+pub trait RegistryStoreStableMemory: Send + Sync {
+    fn with_registry_map<R>(
         f: impl FnOnce(&StableBTreeMap<StorableRegistryKey, StorableRegistryValue, VM>) -> R,
     ) -> R;
-    fn with_borrow_mut<R>(
+
+    fn with_registry_map_mut<R>(
         f: impl FnOnce(&mut StableBTreeMap<StorableRegistryKey, StorableRegistryValue, VM>) -> R,
     ) -> R;
 }

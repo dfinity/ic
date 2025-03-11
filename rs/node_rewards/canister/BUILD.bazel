@@ -9,7 +9,6 @@ DEPENDENCIES = [
     "//rs/interfaces/registry",
     "//rs/node_rewards/canister/api",
     "//rs/registry/canister-client",
-    "//rs/registry/canister-data-provider",
     "//rs/types/types",
     "@crate_index//:candid",
     "@crate_index//:ic-cdk",

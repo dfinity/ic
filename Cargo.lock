@@ -11311,7 +11311,6 @@ dependencies = [
  "ic-nns-test-utils",
  "ic-node-rewards-canister-api",
  "ic-registry-canister-client",
- "ic-registry-canister-data-provider",
  "ic-stable-structures",
  "ic-state-machine-tests",
  "ic-types",
@@ -11650,29 +11649,13 @@ name = "ic-registry-canister-client"
 version = "0.9.0"
 dependencies = [
  "anyhow",
+ "async-trait",
  "candid",
  "ic-cdk 0.17.1",
  "ic-interfaces-registry",
  "ic-nns-common",
  "ic-nns-constants",
  "ic-registry-keys",
- "ic-registry-transport",
- "ic-stable-structures",
- "ic-types",
- "itertools 0.12.1",
-]
-
-[[package]]
-name = "ic-registry-canister-data-provider"
-version = "0.9.0"
-dependencies = [
- "anyhow",
- "candid",
- "ic-cdk 0.17.1",
- "ic-interfaces-registry",
- "ic-nns-common",
- "ic-nns-constants",
- "ic-registry-canister-client",
  "ic-registry-transport",
  "ic-stable-structures",
  "ic-types",

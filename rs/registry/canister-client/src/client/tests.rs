@@ -1,12 +1,12 @@
 use super::*;
+use crate::stable_memory::{StorableRegistryKey, StorableRegistryValue};
 use ic_interfaces_registry::RegistryVersionedRecord;
 use ic_registry_keys::NODE_RECORD_KEY_PREFIX;
-use ic_stable_structures::memory_manager::VirtualMemory;
-use ic_stable_structures::DefaultMemoryImpl;
+use ic_stable_structures::memory_manager::{MemoryId, MemoryManager, VirtualMemory};
+use ic_stable_structures::{DefaultMemoryImpl, StableBTreeMap};
 use ic_types::{registry::RegistryDataProviderError, PrincipalId};
+use std::cell::RefCell;
 use std::collections::HashSet;
-
-type VM = VirtualMemory<DefaultMemoryImpl>;
 
 const DELETED_KEY: &str = "\
     node_record_\
@@ -16,84 +16,41 @@ struct DummyRegistryDataProvider {
     data: Arc<RwLock<Vec<RegistryTransportRecord>>>,
 }
 
-impl DummyRegistryDataProvider {
-    pub fn new() -> Self {
-        Self {
-            data: Arc::new(RwLock::new(vec![])),
+pub type VM = VirtualMemory<DefaultMemoryImpl>;
+
+thread_local! {
+    static STATE: RefCell<DummyState> = RefCell::new({
+        let mgr = MemoryManager::init(DefaultMemoryImpl::default());
+        DummyState {
+            local_registry: StableBTreeMap::init(mgr.get(MemoryId::new(0))),
         }
+    });
+}
+struct DummyState {
+    local_registry: StableBTreeMap<StorableRegistryKey, StorableRegistryValue, VM>,
+}
+
+impl RegistryStoreStableMemory for DummyState {
+    fn with_registry_map<R>(
+        f: impl FnOnce(&StableBTreeMap<StorableRegistryKey, StorableRegistryValue, VM>) -> R,
+    ) -> R {
+        STATE.with_borrow(|state| f(&state.local_registry))
     }
 
-    pub fn add_dummy_data(&self) {
-        let mut data_mut = self.data.write().unwrap();
-        *data_mut = vec![
-            RegistryVersionedRecord {
-                key: DELETED_KEY.to_string(),
-                version: RegistryVersion::new(39662),
-                value: Some(vec![42]),
-            },
-            RegistryVersionedRecord {
-                key: DELETED_KEY.to_string(),
-                version: RegistryVersion::new(39663),
-                value: None,
-            },
-            RegistryVersionedRecord {
-                key: DELETED_KEY.to_string(),
-                version: RegistryVersion::new(39664),
-                value: Some(vec![42]),
-            },
-            RegistryVersionedRecord {
-                key: DELETED_KEY.to_string(),
-                version: RegistryVersion::new(39779),
-                value: Some(vec![42]),
-            },
-            RegistryVersionedRecord {
-                key: DELETED_KEY.to_string(),
-                version: RegistryVersion::new(39801),
-                value: None,
-            },
-            // Just so that the result set is not empty.
-            RegistryVersionedRecord {
-                key: format!(
-                    "{}{}",
-                    NODE_RECORD_KEY_PREFIX,
-                    PrincipalId::new_user_test_id(42),
-                ),
-                version: RegistryVersion::new(39_972),
-                value: Some(vec![0xCA, 0xFE]),
-            },
-        ];
-    }
-
-    pub fn add(&self, key: &str, version: u64, value: Option<u64>) {
-        let mut data_mut = self.data.write().unwrap();
-
-        data_mut.push(RegistryVersionedRecord {
-            key: key.to_string(),
-            version: RegistryVersion::new(version),
-            value: value.map(|v| vec![v as u8]),
-        });
+    fn with_registry_map_mut<R>(
+        f: impl FnOnce(&mut StableBTreeMap<StorableRegistryKey, StorableRegistryValue, VM>) -> R,
+    ) -> R {
+        STATE.with_borrow_mut(|state| f(&mut state.local_registry))
     }
 }
 
-impl RegistryDataProvider for DummyRegistryDataProvider {
-    fn get_updates_since(
-        &self,
-        registry_version: RegistryVersion,
-    ) -> Result<Vec<RegistryTransportRecord>, RegistryDataProviderError> {
-        let records = self.data.read().unwrap();
-
-        let records = records
-            .iter()
-            .filter(|r| r.version > registry_version)
-            .map(|r| RegistryTransportRecord {
-                key: r.key.clone(),
-                version: r.version,
-                value: r.value.to_owned(),
-            })
-            .collect();
-
-        Ok(records)
-    }
+pub fn add_record_helper(key: &str, version: u64, value: Option<u64>) {
+    STATE.with_borrow_mut(|store| {
+        store.local_registry.insert(
+            StorableRegistryKey::new(key.to_string(), version),
+            StorableRegistryValue(value.map(|v| vec![v as u8])),
+        );
+    });
 }
 
 #[derive(PartialEq, Eq, Debug)]
@@ -114,8 +71,8 @@ fn v(v: u64) -> RegistryVersion {
 #[test]
 fn test_absent_after_delete() {
     let dummy_registry = Arc::new(DummyRegistryDataProvider::new());
-    let client = CanisterRegistryClient::new(dummy_registry.clone());
-    dummy_registry.add_dummy_data();
+    let client = CanisterRegistryStore::new(dummy_registry.clone());
+    add_record_helper_dummy_data();
     client.update_to_latest_version();
 
     let result = client.get_key_family(NODE_RECORD_KEY_PREFIX, RegistryVersion::new(39_972));
@@ -132,18 +89,17 @@ fn test_absent_after_delete() {
 
 #[test]
 fn empty_registry_should_report_zero_as_latest_version() {
-    let client = CanisterRegistryClient::new(Arc::new(DummyRegistryDataProvider::new()));
+    let client = CanisterRegistryStore::<DummyState>::new();
 
     assert_eq!(client.get_latest_version(), ZERO_REGISTRY_VERSION);
 }
 
 #[test]
 fn can_retrieve_entries_correctly() {
-    let dummy_registry = Arc::new(DummyRegistryDataProvider::new());
-    let client = CanisterRegistryClient::new(dummy_registry.clone());
+    let client = CanisterRegistryStore::<DummyState>::new();
 
-    let set = |key: &str, ver: u64| dummy_registry.add(key, ver, Some(ver));
-    let rem = |key: &str, ver: u64| dummy_registry.add(key, ver, None);
+    let set = |key: &str, ver: u64| add_record_helper(key, ver, Some(ver));
+    let rem = |key: &str, ver: u64| add_record_helper(key, ver, None);
     let get = |key: &str, ver: u64| {
         client
             .get_versioned_value(key, v(ver))

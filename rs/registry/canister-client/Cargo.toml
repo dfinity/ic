@@ -7,6 +7,7 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
+async-trait = { workspace = true }
 ic-interfaces-registry = { path = "../../interfaces/registry" }
 ic-registry-transport = { path = "../transport" }
 ic-types = { path = "../../types/types" }

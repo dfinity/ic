@@ -257,7 +257,6 @@ members = [
     "rs/registry/canister",
     "rs/registry/canister/api",
     "rs/registry/canister/protobuf_generator",
-    "rs/registry/canister-data-provider",
     "rs/registry/client",
     "rs/registry/canister-client",
     "rs/registry/fake",
