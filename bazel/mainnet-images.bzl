@@ -16,18 +16,8 @@ def base_download_url(git_commit_id, variant, update, test):
     )
 
 def mainnet_images():
-    """
-    Provides Bazel targets for mainnet ICOS images.
-    """
-
     http_file(
         name = "mainnet_setupos_disk_image",
         downloaded_file_path = "disk-img.tar.zst",
         url = base_download_url(MAINNET_REVISION, "setup-os", False, False) + "disk-img.tar.zst",
-    )
-
-    http_file(
-        name = "mainnet_hostos_update_img_shas",
-        downloaded_file_path = "SHA256SUMS",
-        url = base_download_url(MAINNET_REVISION, "host-os", True, False) + "SHA256SUMS",
     )
