@@ -7356,6 +7356,7 @@ dependencies = [
  "ic-test-utilities-types",
  "ic-types",
  "ic-types-test-utils",
+ "num-traits",
  "prometheus",
  "prost 0.13.4",
  "slog",
