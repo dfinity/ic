@@ -13,7 +13,7 @@ use ic_cdk::api::{
     call::{arg_data_raw, reply_raw},
     caller, data_certificate, instruction_counter, print, set_certified_data, time, trap,
 };
-use ic_cdk_macros::query;
+use ic_cdk_macros::{query, update};
 use ic_icrc1::endpoints::{convert_transfer_error, StandardRecord};
 use ic_ledger_canister_core::ledger::LedgerContext;
 use ic_ledger_canister_core::runtime::heap_memory_size_bytes;
@@ -1726,7 +1726,8 @@ fn icp_allowance(arg: IcpAllowanceArgs) -> Allowance {
     get_allowance(arg.account, arg.spender)
 }
 
-#[candid_method(update, rename = "icrc21_canister_call_consent_message")]
+#[update]
+#[candid_method(update)]
 fn icrc21_canister_call_consent_message(
     consent_msg_request: ConsentMessageRequest,
 ) -> Result<ConsentInfo, Icrc21Error> {
@@ -1744,11 +1745,6 @@ fn icrc21_canister_call_consent_message(
     )
 }
 
-#[export_name = "canister_query icrc21_canister_call_consent_message"]
-fn icrc21_canister_call_consent_message_candid() {
-    over(candid_one, icrc21_canister_call_consent_message)
-}
-
 #[query]
 #[candid_method(query)]
 fn icrc10_supported_standards() -> Vec<StandardRecord> {
@@ -1763,9 +1759,9 @@ fn is_ledger_ready() -> bool {
 
 candid::export_service!();
 
-#[export_name = "canister_query __get_candid_interface_tmp_hack"]
-fn get_canidid_interface() {
-    over(candid_one, |()| -> String { __export_service() })
+#[query]
+fn __get_candid_interface_tmp_hack() -> String {
+    __export_service()
 }
 
 #[cfg(test)]
