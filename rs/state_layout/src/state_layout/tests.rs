@@ -866,10 +866,9 @@ fn test_decode_v1_encode_v2_decode() {
     // To test deserialization without old fields, we will set them on default value.
     pb_bits_v2.task_queue = VecDeque::new().into();
     pb_bits_v2.on_low_wasm_memory_hook_status = Some(
-        pb_canister_state_bits::OnLowWasmMemoryHookStatus::try_from(
+        pb_canister_state_bits::OnLowWasmMemoryHookStatus::from(
             OnLowWasmMemoryHookStatus::default(),
         )
-        .unwrap()
         .into(),
     );
 
