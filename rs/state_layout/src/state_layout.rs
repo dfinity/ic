@@ -123,7 +123,7 @@ pub type CompleteCheckpointLayout = CheckpointLayout<ReadOnly>;
 
 /// This struct contains bits of the `ExecutionState` that are not already
 /// covered somewhere else and are too small to be serialized separately.
-#[derive(Debug, PartialEq)]
+#[derive(Debug)]
 pub struct ExecutionStateBits {
     pub exported_globals: Vec<Global>,
     pub heap_size: NumWasmPages,
@@ -137,7 +137,7 @@ pub struct ExecutionStateBits {
 
 /// This struct contains bits of the `CanisterState` that are not already
 /// covered somewhere else and are too small to be serialized separately.
-#[derive(Debug, PartialEq)]
+#[derive(Debug)]
 pub struct CanisterStateBits {
     pub controllers: BTreeSet<PrincipalId>,
     pub last_full_execution_round: ExecutionRound,
