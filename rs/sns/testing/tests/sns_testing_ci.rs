@@ -13,7 +13,7 @@ use ic_sns_testing::sns::{
 };
 use ic_sns_testing::utils::{
     validate_network, validate_target_canister, SnsTestingCanisterValidationError,
-    SnsTestingNetworkValidationError,
+    SnsTestingNetworkValidationError, TREASURY_PRINCIPAL_ID,
 };
 use icp_ledger::Tokens;
 use pocket_ic::PocketIcBuilder;
@@ -36,7 +36,7 @@ async fn test_sns_testing_basic_scenario() {
     let registry_proto_path = state_dir.join("registry.proto");
     let initial_mutations = load_registry_mutations(registry_proto_path);
     let dev_participant_id = PrincipalId::new_user_test_id(1000);
-    let treasury_principal_id = PrincipalId::new_user_test_id(322);
+    let treasury_principal_id = *TREASURY_PRINCIPAL_ID;
 
     // Installing NNS canisters
     bootstrap_nns(

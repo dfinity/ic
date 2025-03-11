@@ -2,14 +2,12 @@
 
 ## Prerequisites
 
-SNS testing CLI uses identities managed by `dfx`. Currently, the scenario requires two identities:
-the first one represents developer identity and is used to submit NNS/SNS proposals, and the second one
-that is used to distribute ICP tokens to the SNS swap participants
+SNS testing CLI uses identities managed by `dfx`. Currently, the scenario requires a single developer
+identity to submit NNS/SNS proposals.
 
-We suggest creating dedicated identities to use with this scenario:
+We suggest creating dedicated identity to use with this scenario:
 ```
 dfx identity new sns-testing --storage-mode=plaintext
-dfx identity new icp-treasury --storage-mode=plaintext
 ```
 Mind the `--storage-mode=plaintext` as it is required to have `.pem` files in the `dfx` directory on the disk.
 
@@ -24,7 +22,7 @@ To run the scenario on the local PocketIC instance:
    ```
 2) Bootstrap the NNS on the launched PocketIC instance:
    ```
-   bazel run //rs/sns/testing:cli -- nns-init --server-url "http://127.0.0.1:8888" --state-dir "$PWD/sns-testing" --dev-identity sns-testing --treasury-identity icp-treasury
+   bazel run //rs/sns/testing:cli -- nns-init --server-url "http://127.0.0.1:8888" --state-dir "$PWD/sns-testing" --dev-identity sns-testing
    ```
 3) Build and deploy `test` canister:
    ```
@@ -36,7 +34,7 @@ To run the scenario on the local PocketIC instance:
 4) Launch the basic SNS testing scenario:
    ```
    bazel run //rs/sns/testing:cli -- run-basic-scenario --network http://127.0.0.1:8080 \
-     --dev-identity sns-testing --treasury-identity icp-treasury \
+     --dev-identity sns-testing \
      --test-canister-id "$(dfx canister --network http://127.0.0.1:8080 id test)"
    ```
 

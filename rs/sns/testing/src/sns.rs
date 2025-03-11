@@ -341,6 +341,7 @@ pub mod pocket_ic {
     use ::pocket_ic::nonblocking::PocketIc;
     use candid::Encode;
     use canister_test::Wasm;
+    use ic_agent::{identity::Secp256k1Identity, Identity};
     use ic_base_types::{CanisterId, PrincipalId};
     use ic_nervous_system_agent::{pocketic_impl::PocketIcAgent, sns::Sns};
     use ic_nervous_system_integration_tests::pocket_ic_helpers::{
@@ -349,7 +350,7 @@ pub mod pocket_ic {
     use ic_nns_constants::ROOT_CANISTER_ID;
     use icp_ledger::{Tokens, DEFAULT_TRANSFER_FEE};
 
-    use crate::utils::NNS_NEURON_ID;
+    use crate::utils::{NNS_NEURON_ID, SWAP_PARTICIPANT_SECRET_KEYS};
 
     pub async fn install_test_canister(
         pocket_ic: &PocketIc,
@@ -384,8 +385,12 @@ pub mod pocket_ic {
         let dev_participant = PocketIcAgent::new(pocket_ic, dev_participant_id);
 
         let swap_treasury_agent = PocketIcAgent::new(pocket_ic, treasury_principal_id);
-        let swap_partipants_agents = (1..20)
-            .map(|i| PocketIcAgent::new(pocket_ic, PrincipalId::new_user_test_id(1000 + i as u64)))
+        let swap_partipants_agents = SWAP_PARTICIPANT_SECRET_KEYS
+            .iter()
+            .map(|secret_key| {
+                let identity = Secp256k1Identity::from_private_key(secret_key.clone());
+                PocketIcAgent::new(pocket_ic, identity.sender().unwrap())
+            })
             .collect();
         super::create_sns(
             &dev_participant,

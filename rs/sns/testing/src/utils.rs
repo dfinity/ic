@@ -1,8 +1,10 @@
 use anyhow::{anyhow, Context, Result};
+use core::array::from_fn;
 use dfx_core::config::model::network_descriptor::NetworkDescriptor;
 use dfx_core::identity::identity_manager::InitializeIdentity;
 use dfx_core::identity::IdentityManager;
 use futures::future::join_all;
+use ic_agent::Identity;
 use ic_agent::{
     agent::route_provider::RoundRobinRouteProvider, identity::Secp256k1Identity, Agent,
 };
@@ -20,6 +22,7 @@ use ic_nns_constants::{
 };
 use ic_nns_governance_api::pb::v1::{ListNeurons, Neuron};
 use k256::SecretKey;
+use lazy_static::lazy_static;
 use reqwest::Client;
 use thiserror::Error;
 
@@ -38,6 +41,26 @@ pub const ALL_NNS_CANISTER_IDS: [&CanisterId; 9] = [
 pub const NNS_NEURON_ID: NeuronId = NeuronId {
     id: TEST_NEURON_1_ID,
 };
+
+// Predefined secret keys used in sns-testing
+lazy_static! {
+    pub static ref TREASURY_SECRET_KEY: SecretKey = {
+        let mut slice_vec = vec![0; 16];
+        slice_vec.extend_from_slice(&200_usize.to_ne_bytes());
+        SecretKey::from_slice(&slice_vec).unwrap()
+    };
+    pub static ref TREASURY_PRINCIPAL_ID: PrincipalId = {
+        let identity = Secp256k1Identity::from_private_key(TREASURY_SECRET_KEY.clone());
+        identity.sender().unwrap().into()
+    };
+    pub static ref SWAP_PARTICIPANT_SECRET_KEYS: [SecretKey; 20] = {
+        from_fn(|i| {
+            let mut slice_vec = vec![0; 16];
+            slice_vec.extend_from_slice(&(100 + i).to_ne_bytes());
+            SecretKey::from_slice(&slice_vec).unwrap()
+        })
+    };
+}
 
 pub async fn build_ephemeral_agent(
     secret_key: SecretKey,
