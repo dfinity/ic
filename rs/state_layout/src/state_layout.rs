@@ -2458,7 +2458,7 @@ impl TryFrom<(pb_canister_state_bits::CanisterStateBits, &CanisterId)> for Canis
         }
 
         let task_queue = match try_from_option_field(value.tasks, "CanisterStateBits::tasks") {
-            Ok(tasks) => TaskQueue::from_checkpoint_v2(tasks, canister_id),
+            Ok(tasks) => TaskQueue::try_from((tasks, canister_id)).unwrap(),
             Err(_) => {
                 let task_queue: VecDeque<ExecutionTask> = value
                     .task_queue
