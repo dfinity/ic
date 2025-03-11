@@ -70,11 +70,7 @@ impl WatchdogThread {
     /// * `create_thread` - A closure that receives a heartbeat callback and returns a JoinHandle of the spawned task.
     pub fn start<F>(&mut self, mut create_thread: F)
     where
-        F: FnMut(
-                Box<dyn Fn() + Send + Sync>
-            ) -> tokio::task::JoinHandle<()>
-            + Send
-            + 'static,
+        F: FnMut(Box<dyn Fn() + Send + Sync>) -> tokio::task::JoinHandle<()> + Send + 'static,
     {
         let stopped = self.stopped.clone();
         let heartbeat_timeout = self.heartbeat_timeout;
@@ -92,12 +88,9 @@ impl WatchdogThread {
                 // Clone for this iteration so the closures below have their own copies.
                 let last_heartbeat_clone = last_heartbeat_ms.clone();
 
-                let thread_handle = create_thread(
-                    Box::new(move || {
-                        last_heartbeat_clone
-                            .store(Self::current_timestamp(), Ordering::SeqCst);
-                    }),
-                );
+                let thread_handle = create_thread(Box::new(move || {
+                    last_heartbeat_clone.store(Self::current_timestamp(), Ordering::SeqCst);
+                }));
 
                 loop {
                     tokio::time::sleep(heartbeat_timeout).await;
@@ -310,9 +303,13 @@ mod tests {
         // When skip_first_heartbeat is disabled, absence of the first heartbeat should trigger a restart.
         let restart_count = Arc::new(AtomicUsize::new(0));
         let restart_clone = restart_count.clone();
-        let mut watchdog = WatchdogThread::new(Duration::from_secs(1), Some(Arc::new(move || {
-            restart_clone.fetch_add(1, Ordering::SeqCst);
-        })), false);
+        let mut watchdog = WatchdogThread::new(
+            Duration::from_secs(1),
+            Some(Arc::new(move || {
+                restart_clone.fetch_add(1, Ordering::SeqCst);
+            })),
+            false,
+        );
         // Spawn a task that deliberately delays the heartbeat beyond the timeout.
         watchdog.start(|heartbeat| {
             tokio::spawn(async move {
@@ -327,6 +324,9 @@ mod tests {
         });
         sleep(Duration::from_secs(3)).await;
         watchdog.stop().await;
-        assert!(restart_count.load(Ordering::SeqCst) > 0, "Expected at least one restart when skip_first_heartbeat is disabled");
+        assert!(
+            restart_count.load(Ordering::SeqCst) > 0,
+            "Expected at least one restart when skip_first_heartbeat is disabled"
+        );
     }
 }
