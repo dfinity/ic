@@ -5767,7 +5767,7 @@ dependencies = [
 [[package]]
 name = "ic-gateway"
 version = "0.1.0"
-source = "git+https://github.com/dfinity/ic-gateway?rev=a6cdd78692aa0715c38979aaa8447e70c4456b0b#a6cdd78692aa0715c38979aaa8447e70c4456b0b"
+source = "git+https://github.com/dfinity/ic-gateway?rev=469d2daee8b44aadb46400bcb2832d560baf7272#469d2daee8b44aadb46400bcb2832d560baf7272"
 dependencies = [
  "ahash 0.8.11",
  "anyhow",
@@ -9502,7 +9502,7 @@ checksum = "0c1318b19085f08681016926435853bbf7858f9c082d0999b80550ff5d9abe15"
 dependencies = [
  "bytes",
  "heck 0.5.0",
- "itertools 0.13.0",
+ "itertools 0.11.0",
  "log",
  "multimap",
  "once_cell",
@@ -9535,7 +9535,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e9552f850d5f0964a4e4d0bf306459ac29323ddfbae05e35a7c0d35cb0803cc5"
 dependencies = [
  "anyhow",
- "itertools 0.13.0",
+ "itertools 0.11.0",
  "proc-macro2",
  "quote",
  "syn 2.0.87",
