@@ -108,6 +108,11 @@ DEV_DEPENDENCIES = [
 
 MACRO_DEPENDENCIES = []
 
+MACRO_DEV_DEPENDENCIES = [
+    # Keep sorted.
+    "@crate_index//:test-strategy",
+]
+
 rust_binary(
     name = "ic-test-state-machine",
     testonly = True,
@@ -155,6 +160,7 @@ rust_ic_test(
 rust_ic_test(
     name = "state_machine_unit_test",
     crate = ":state_machine_tests",
+    proc_macro_deps = MACRO_DEV_DEPENDENCIES,
     deps = [
         # Keep sorted.
         "@crate_index//:proptest",

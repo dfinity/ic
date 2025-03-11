@@ -941,6 +941,23 @@ pub fn syscalls<
         .unwrap();
 
     linker
+        .func_wrap("ic0", "canister_liquid_cycle_balance128", {
+            move |mut caller: Caller<'_, StoreData>, dst: I| {
+                let dst: usize = dst.try_into().expect("Failed to convert I to usize");
+                charge_for_cpu(&mut caller, overhead::CANISTER_LIQUID_CYCLE_BALANCE128)?;
+                with_memory_and_system_api(&mut caller, |s, memory| {
+                    s.ic0_canister_liquid_cycle_balance128(dst, memory)
+                })?;
+                if feature_flags.write_barrier == FlagStatus::Enabled {
+                    mark_writes_on_bytemap(&mut caller, dst, 16)
+                } else {
+                    Ok(())
+                }
+            }
+        })
+        .unwrap();
+
+    linker
         .func_wrap("ic0", "msg_cycles_available", {
             move |mut caller: Caller<'_, StoreData>| {
                 charge_for_cpu(&mut caller, overhead::MSG_CYCLES_AVAILABLE)?;

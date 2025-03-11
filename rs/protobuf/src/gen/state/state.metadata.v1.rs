@@ -193,7 +193,7 @@ pub struct CanisterHttpRequestContextTree {
     pub context: ::core::option::Option<CanisterHttpRequestContext>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct IDkgDealingsContext {
+pub struct ReshareChainKeyContext {
     #[prost(message, optional, tag = "1")]
     pub request: ::core::option::Option<super::super::queues::v1::Request>,
     #[prost(message, optional, tag = "2")]
@@ -206,11 +206,11 @@ pub struct IDkgDealingsContext {
     pub time: ::core::option::Option<Time>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct IDkgDealingsContextTree {
+pub struct ReshareChainKeyContextTree {
     #[prost(uint64, tag = "1")]
     pub callback_id: u64,
     #[prost(message, optional, tag = "2")]
-    pub context: ::core::option::Option<IDkgDealingsContext>,
+    pub context: ::core::option::Option<ReshareChainKeyContext>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct BitcoinGetSuccessorsContext {
@@ -351,7 +351,7 @@ pub struct SubnetCallContextManager {
     #[prost(message, repeated, tag = "16")]
     pub raw_rand_contexts: ::prost::alloc::vec::Vec<RawRandContext>,
     #[prost(message, repeated, tag = "17")]
-    pub idkg_dealings_contexts: ::prost::alloc::vec::Vec<IDkgDealingsContextTree>,
+    pub reshare_chain_key_contexts: ::prost::alloc::vec::Vec<ReshareChainKeyContextTree>,
     #[prost(message, repeated, tag = "18")]
     pub sign_with_threshold_contexts: ::prost::alloc::vec::Vec<SignWithThresholdContextTree>,
 }

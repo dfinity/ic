@@ -348,6 +348,8 @@ impl VetKdPayloadBuilderImpl {
                     invalid_artifact(InvalidVetKdPayloadReason::VetKdKeyVerificationError(err))
                 } else {
                     warn!(self.log, "VetKD payload validation failure: {err:?}");
+                    self.metrics
+                        .payload_errors_inc("validation_failed", &context.key_id());
                     validation_failed(VetKdPayloadValidationFailure::VetKdKeyVerificationError(
                         err,
                     ))

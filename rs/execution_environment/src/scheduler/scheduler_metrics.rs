@@ -111,6 +111,7 @@ pub(super) struct SchedulerMetrics {
     pub(super) inducted_messages: IntCounterVec,
     pub(super) threshold_signature_agreements: IntGaugeVec,
     pub(super) delivered_pre_signatures: HistogramVec,
+    pub(super) in_flight_signature_request_contexts: HistogramVec,
     pub(super) completed_signature_request_contexts: IntCounterVec,
     // TODO(EXC-1466): Remove metric once all calls have `call_id` present.
     pub(super) stop_canister_calls_without_call_id: IntGauge,
@@ -275,6 +276,12 @@ impl SchedulerMetrics {
                 "execution_idkg_delivered_pre_signatures",
                 "Number of IDkg pre-signatures delivered to execution by key ID",
                 vec![0.0, 1.0, 2.0, 5.0, 10.0, 15.0, 20.0],
+                &["key_id"],
+            ),
+            in_flight_signature_request_contexts: metrics_registry.histogram_vec(
+                "execution_in_flight_signature_request_contexts",
+                "Number of in flight signature request contexts by key ID",
+                vec![1.0, 2.0, 3.0, 5.0, 10.0, 15.0, 20.0, 50.0],
                 &["key_id"],
             ),
             completed_signature_request_contexts: metrics_registry.int_counter_vec(
