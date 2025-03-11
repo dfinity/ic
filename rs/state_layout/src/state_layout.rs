@@ -1,6 +1,6 @@
 use ic_base_types::{NumBytes, NumSeconds};
 use ic_logger::{error, info, warn, ReplicaLogger};
-use ic_management_canister_types_private::{LogVisibilityV2, OnLowWasmMemoryHookStatus};
+use ic_management_canister_types_private::LogVisibilityV2;
 use ic_metrics::{buckets::decimal_buckets, MetricsRegistry};
 use ic_protobuf::{
     proxy::{try_from_option_field, ProxyDecodeError},
@@ -2395,7 +2395,7 @@ impl From<CanisterStateBits> for pb_canister_state_bits::CanisterStateBits {
             snapshots_memory_usage: item.snapshots_memory_usage.get(),
             on_low_wasm_memory_hook_status: Some(
                 pb_canister_state_bits::OnLowWasmMemoryHookStatus::from(
-                    item.task_queue.peek_hook_status(),
+                    &item.task_queue.peek_hook_status(),
                 )
                 .into(),
             ),

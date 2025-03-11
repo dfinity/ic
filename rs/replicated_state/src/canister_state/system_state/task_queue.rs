@@ -1,7 +1,9 @@
+use crate::canister_state::system_state::ProxyDecodeError;
 use crate::ExecutionTask;
 use ic_config::flag_status::FlagStatus;
 use ic_interfaces::execution_environment::ExecutionRoundType;
 use ic_management_canister_types_private::OnLowWasmMemoryHookStatus;
+use ic_protobuf::state::canister_state_bits::v1 as pb;
 use ic_types::CanisterId;
 use ic_types::NumBytes;
 use num_traits::SaturatingSub;
@@ -289,7 +291,7 @@ impl From<&TaskQueue> for pb::TaskQueue {
         Self {
             paused_or_aborted_task: item.paused_or_aborted_task.as_ref().map(|task| task.into()),
             on_low_wasm_memory_hook_status: pb::OnLowWasmMemoryHookStatus::from(
-                item.on_low_wasm_memory_hook_status,
+                &item.on_low_wasm_memory_hook_status,
             )
             .into(),
             queue: item.queue.iter().map(|task| task.into()).collect(),
@@ -376,13 +378,11 @@ pub fn is_low_wasm_memory_hook_condition_satisfied(
 mod tests {
     use std::sync::Arc;
 
-    use crate::{
-        canister_state::system_state::OnLowWasmMemoryHookStatus,
-        metadata_state::subnet_call_context_manager::InstallCodeCallId, ExecutionTask,
-    };
+    use crate::{metadata_state::subnet_call_context_manager::InstallCodeCallId, ExecutionTask};
 
     use super::TaskQueue;
     use crate::canister_state::system_state::PausedExecutionId;
+    use ic_management_canister_types_private::OnLowWasmMemoryHookStatus;
     use ic_test_utilities_types::messages::IngressBuilder;
     use ic_types::{
         messages::{CanisterCall, CanisterMessageOrTask, CanisterTask},
