@@ -2,9 +2,7 @@ mod call_context_manager;
 mod task_queue;
 pub mod wasm_chunk_store;
 
-pub use self::task_queue::{
-    is_low_wasm_memory_hook_condition_satisfied, OnLowWasmMemoryHookStatus, TaskQueue,
-};
+pub use self::task_queue::{is_low_wasm_memory_hook_condition_satisfied, TaskQueue};
 
 use self::wasm_chunk_store::{WasmChunkStore, WasmChunkStoreMetadata};
 use super::queues::{can_push, CanisterInput};
@@ -22,7 +20,7 @@ use ic_interfaces::execution_environment::HypervisorError;
 use ic_logger::{error, ReplicaLogger};
 use ic_management_canister_types_private::{
     CanisterChange, CanisterChangeDetails, CanisterChangeOrigin, CanisterStatusType,
-    LogVisibilityV2,
+    LogVisibilityV2, OnLowWasmMemoryHookStatus,
 };
 use ic_protobuf::proxy::{try_from_option_field, ProxyDecodeError};
 use ic_protobuf::state::canister_state_bits::v1 as pb;
