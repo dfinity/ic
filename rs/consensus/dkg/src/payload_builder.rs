@@ -1,26 +1,31 @@
-use super::{
-    utils, MAX_REMOTE_DKGS_PER_INTERVAL, MAX_REMOTE_DKG_ATTEMPTS,
-    REMOTE_DKG_REPEATED_FAILURE_ERROR, TAGS,
+use crate::{
+    utils::{self, tags_iter, vetkd_key_ids_for_subnet},
+    MAX_REMOTE_DKGS_PER_INTERVAL, MAX_REMOTE_DKG_ATTEMPTS, REMOTE_DKG_REPEATED_FAILURE_ERROR,
 };
 use ic_consensus_utils::{crypto::ConsensusCrypto, pool_reader::PoolReader};
 use ic_interfaces::{crypto::ErrorReproducibility, dkg::DkgPool};
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::{StateManager, StateManagerError};
 use ic_logger::{error, warn, ReplicaLogger};
-use ic_protobuf::registry::subnet::v1::CatchUpPackageContents;
+use ic_protobuf::registry::subnet::v1::{
+    chain_key_initialization::Initialization, CatchUpPackageContents,
+};
 use ic_registry_client_helpers::{
-    crypto::{initial_ni_dkg_transcript_from_registry_record, DkgTranscripts},
-    subnet::SubnetRegistry,
+    crypto::initial_ni_dkg_transcript_from_registry_record, subnet::SubnetRegistry,
 };
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
     batch::ValidationContext,
-    consensus::{dkg, dkg::Summary, get_faults_tolerated, Block},
+    consensus::{
+        dkg::{self, Summary},
+        get_faults_tolerated, Block,
+    },
     crypto::{
         threshold_sig::ni_dkg::{
             config::{errors::NiDkgConfigValidationError, NiDkgConfig, NiDkgConfigData},
             errors::create_transcript_error::DkgCreateTranscriptError,
-            NiDkgDealing, NiDkgId, NiDkgTag, NiDkgTargetId, NiDkgTargetSubnet, NiDkgTranscript,
+            NiDkgDealing, NiDkgId, NiDkgMasterPublicKeyId, NiDkgTag, NiDkgTargetId,
+            NiDkgTargetSubnet, NiDkgTranscript,
         },
         CryptoError,
     },
@@ -31,7 +36,6 @@ use ic_types::{
 use std::{
     collections::{BTreeMap, BTreeSet},
     sync::{Arc, RwLock},
-    time::Duration,
 };
 
 /// Errors which could occur when creating a Dkg payload.
@@ -43,6 +47,7 @@ pub enum PayloadCreationError {
     DkgCreateTranscriptError(DkgCreateTranscriptError),
     FailedToGetDkgIntervalSettingFromRegistry(RegistryClientError),
     FailedToGetSubnetMemberListFromRegistry(RegistryClientError),
+    FailedToGetVetKdKeyList(RegistryClientError),
     MissingDkgStartBlock,
 }
 
@@ -73,7 +78,7 @@ pub fn create_payload(
     if last_dkg_summary.get_next_start_height() == height {
         // Since `height` corresponds to the start of a new DKG interval, we create a
         // new summary.
-        return create_summary_payload(
+        create_summary_payload(
             subnet_id,
             registry_client,
             crypto,
@@ -85,11 +90,29 @@ pub fn create_payload(
             validation_context,
             logger,
         )
-        .map(dkg::Payload::Summary);
+        .map(dkg::Payload::Summary)
+    } else {
+        // If the height is not a start height, create a payload with new dealings.
+        create_data_payload(
+            pool_reader,
+            dkg_pool,
+            parent,
+            max_dealings_per_block,
+            &last_summary_block,
+            last_dkg_summary,
+        )
+        .map(dkg::Payload::Data)
     }
+}
 
-    // If the height is not a start height, create a payload with new dealings.
-
+fn create_data_payload(
+    pool_reader: &PoolReader<'_>,
+    dkg_pool: Arc<RwLock<dyn DkgPool>>,
+    parent: &Block,
+    max_dealings_per_block: usize,
+    last_summary_block: &Block,
+    last_dkg_summary: &Summary,
+) -> Result<dkg::DkgDataPayload, PayloadCreationError> {
     // Get all dealer ids from the chain.
     let dealers_from_chain = utils::get_dealers_from_chain(pool_reader, parent);
     // Filter from the validated pool all dealings whose dealer has no dealing on
@@ -107,10 +130,10 @@ pub fn create_payload(
         .take(max_dealings_per_block)
         .cloned()
         .collect();
-    Ok(dkg::Payload::Data(dkg::DkgDataPayload::new(
+    Ok(dkg::DkgDataPayload::new(
         last_summary_block.height,
         new_validated_dealings,
-    )))
+    ))
 }
 
 /// Creates a summary payload for the given parent and registry_version.
@@ -214,18 +237,35 @@ pub(super) fn create_summary_payload(
     // Current transcripts come from next transcripts of the last_summary.
     let current_transcripts = as_next_transcripts(last_summary, &logger);
 
+    let vet_key_ids = vetkd_key_ids_for_subnet(
+        subnet_id,
+        registry_client,
+        validation_context.registry_version,
+    )?;
+
     // If the config for the currently computed DKG intervals requires a transcript
     // resharing (currently for high-threshold DKG only), we are going to re-share
     // the next transcripts, as they are the newest ones.
     // If `next_transcripts` does not contain the required transcripts (due to
     // failed DKGs in the past interval) we reshare the current transcripts.
-    let reshared_transcripts = if next_transcripts.contains_key(&NiDkgTag::LowThreshold)
-        && next_transcripts.contains_key(&NiDkgTag::HighThreshold)
-    {
-        &next_transcripts
-    } else {
-        &current_transcripts
-    };
+    let reshared_transcripts = tags_iter(&vet_key_ids)
+        .filter_map(|tag| {
+            let transcript = next_transcripts
+                .get(&tag)
+                .or_else(|| current_transcripts.get(&tag))
+                .map(|transcript| (tag.clone(), transcript.clone()));
+
+            if transcript.is_none() {
+                warn!(
+                    logger,
+                    "Found tag {:?} in summary configs without any current or next transcripts",
+                    tag
+                );
+            }
+
+            transcript
+        })
+        .collect::<BTreeMap<_, _>>();
 
     // New configs are created using the new stable registry version proposed by this
     // block, which determines receivers of the dealings.
@@ -239,6 +279,7 @@ pub(super) fn create_summary_payload(
         height,
         reshared_transcripts,
         validation_context.registry_version,
+        &vet_key_ids,
     )?);
 
     Ok(Summary::new(
@@ -372,8 +413,6 @@ fn compute_remote_dkg_data(
 
     // Add errors into 'new_transcripts' for repeatedly failed configs and do not
     // attempt to create transcripts for them any more.
-    //
-    // TODO: use drain_filter once it's stable.
     config_groups.retain(|config_group| {
         let target = config_group
             .first()
@@ -424,66 +463,100 @@ pub fn get_dkg_summary_from_cup_contents(
     subnet_id: SubnetId,
     registry: &dyn RegistryClient,
     registry_version: RegistryVersion,
-) -> Summary {
+) -> Result<Summary, String> {
     // If we're in a NNS subnet recovery case with failover nodes, we extract the registry of the
     // NNS we're recovering.
     let registry_version_of_original_registry = cup_contents
         .registry_store_uri
         .as_ref()
         .map(|v| RegistryVersion::from(v.registry_version));
-    let mut transcripts = DkgTranscripts {
-        low_threshold: cup_contents
+
+    let mut transcripts: BTreeMap<NiDkgTag, NiDkgTranscript> = BTreeMap::new();
+
+    transcripts.insert(
+        NiDkgTag::LowThreshold,
+        cup_contents
             .initial_ni_dkg_transcript_low_threshold
+            .ok_or("Missing initial low-threshold DKG transcript".to_string())
             .map(|dkg_transcript_record| {
-                initial_ni_dkg_transcript_from_registry_record(dkg_transcript_record)
-                    .expect("Decoding initial low-threshold DKG transcript failed.")
-            })
-            .expect("Missing initial low-threshold DKG transcript"),
-        high_threshold: cup_contents
+                initial_ni_dkg_transcript_from_registry_record(dkg_transcript_record).map_err(
+                    |err| format!("Decoding initial low-threshold DKG transcript failed: {err}"),
+                )
+            })??,
+    );
+    transcripts.insert(
+        NiDkgTag::HighThreshold,
+        cup_contents
             .initial_ni_dkg_transcript_high_threshold
+            .ok_or("Missing initial high-threshold DKG transcript".to_string())
             .map(|dkg_transcript_record| {
-                initial_ni_dkg_transcript_from_registry_record(dkg_transcript_record)
-                    .expect("Decoding initial high-threshold DKG transcript failed.")
-            })
-            .expect("Missing initial high-threshold DKG transcript"),
-    };
+                initial_ni_dkg_transcript_from_registry_record(dkg_transcript_record).map_err(
+                    |err| format!("Decoding initial high-threshold DKG transcript failed: {err}"),
+                )
+            })??,
+    );
+
+    // Get the transcripts for vetkeys from the `chain_key_initializations`
+    for init in cup_contents.chain_key_initializations.into_iter() {
+        let key_id = init
+            .key_id
+            .ok_or("Initialization without a key id".to_string())?;
+        let init = init
+            .initialization
+            .ok_or("Empty initialization".to_string())?;
+        // IDkg initializations are handled in a different place. This is to include NiDkgTranscripts into the Summary only
+        let Initialization::TranscriptRecord(record) = init else {
+            continue;
+        };
+        let key_id = NiDkgMasterPublicKeyId::try_from(key_id)
+            .map_err(|err| format!("IDkg key combined with NiDkg initialization: {err}"))?;
+        let transcript = initial_ni_dkg_transcript_from_registry_record(record).map_err(|err| {
+            format!(
+                "Decoding high-threshold DKG for key-id {} failed: {}",
+                key_id, err
+            )
+        })?;
+        transcripts.insert(NiDkgTag::HighThresholdForKey(key_id), transcript);
+    }
+
+    // Extract vet key ids
+    let vet_key_ids = vetkd_key_ids_for_subnet(subnet_id, registry, registry_version)
+        .map_err(|err| format!("Failed to get vetKD key IDs: {err:?}"))?;
 
     // If we're in a NNS subnet recovery with failover nodes, we set the transcript versions to the
     // registry version of the recovered NNS, otherwise the oldest registry version used in a CUP is
     // computed incorrectly.
     if let Some(version) = registry_version_of_original_registry {
-        transcripts.low_threshold.registry_version = version;
-        transcripts.high_threshold.registry_version = version;
+        for transcript in transcripts.values_mut() {
+            transcript.registry_version = version;
+        }
     }
 
-    let transcripts = vec![
-        (NiDkgTag::LowThreshold, transcripts.low_threshold),
-        (NiDkgTag::HighThreshold, transcripts.high_threshold),
-    ]
-    .into_iter()
-    .collect();
-
     let committee = get_node_list(subnet_id, registry, registry_version)
-        .expect("Could not retrieve committee list");
+        .map_err(|err| format!("Could not retrieve committee list: {err:?}"))?;
 
     let height = Height::from(cup_contents.height);
     let configs = get_configs_for_local_transcripts(
         subnet_id,
         committee,
         height,
-        &transcripts,
+        transcripts.clone(),
         // If we are in a NNS subnet recovery with failover nodes, we use the registry version of
         // the recovered NNS so that the DKG configs point to the correct registry version and new
         // dealings can be created in the first DKG interval.
         registry_version_of_original_registry.unwrap_or(registry_version),
+        &vet_key_ids,
     )
-    .expect("Couldn't generate configs for the genesis summary");
+    .map_err(|err| format!("Couldn't generate configs for the genesis summary: {err:?}"))?;
+
     // For the first 2 intervals we use the length value contained in the
     // genesis subnet record.
-    let interval_length = get_dkg_interval_length(registry, registry_version, subnet_id)
-        .expect("Could not retrieve the interval length for the genesis summary.");
+    let interval_length =
+        get_dkg_interval_length(registry, registry_version, subnet_id).map_err(|err| {
+            format!("Could not retrieve the interval length for the genesis summary: {err:?}")
+        })?;
     let next_interval_length = interval_length;
-    Summary::new(
+    Ok(Summary::new(
         configs,
         transcripts,
         BTreeMap::new(), // next transcripts
@@ -495,7 +568,7 @@ pub fn get_dkg_summary_from_cup_contents(
         next_interval_length,
         height,
         BTreeMap::new(), // initial_dkg_attempts
-    )
+    ))
 }
 
 /// Creates DKG configs for the local subnet for the next DKG intervals.
@@ -503,14 +576,13 @@ pub(crate) fn get_configs_for_local_transcripts(
     subnet_id: SubnetId,
     node_ids: BTreeSet<NodeId>,
     start_block_height: Height,
-    reshared_transcripts: &BTreeMap<NiDkgTag, NiDkgTranscript>,
+    mut reshared_transcripts: BTreeMap<NiDkgTag, NiDkgTranscript>,
     registry_version: RegistryVersion,
+    vet_key_ids: &[NiDkgMasterPublicKeyId],
 ) -> Result<Vec<NiDkgConfig>, PayloadCreationError> {
     let mut new_configs = Vec::new();
-    ////////////////////////////////////////////////////////////////////////////////
-    // TODO(CON-1413): In addition to iterating over TAGS, also iterate over all vetKD keys that were requested by registry
-    ///////////////////////////////////////////////////////////////////////////////
-    for tag in TAGS.iter() {
+
+    for tag in tags_iter(vet_key_ids) {
         let dkg_id = NiDkgId {
             start_block_height,
             dealer_subnet: subnet_id,
@@ -520,15 +592,17 @@ pub(crate) fn get_configs_for_local_transcripts(
         let (dealers, resharing_transcript) = match tag {
             NiDkgTag::LowThreshold => (node_ids.clone(), None),
             NiDkgTag::HighThreshold | NiDkgTag::HighThresholdForKey(_) => {
-                let resharing_transcript = reshared_transcripts.get(tag);
+                let resharing_transcript = reshared_transcripts.remove(&tag);
                 (
                     resharing_transcript
+                        .as_ref()
                         .map(|transcript| transcript.committee.get().clone())
                         .unwrap_or_else(|| node_ids.clone()),
-                    resharing_transcript.cloned(),
+                    resharing_transcript,
                 )
             }
         };
+
         let threshold =
             NumberOfNodes::from(tag.threshold_for_subnet_of_size(node_ids.len()) as u32);
         let new_config = match NiDkgConfig::new(NiDkgConfigData {
@@ -777,43 +851,10 @@ fn do_create_remote_dkg_config(
     })
 }
 
-/// Generates the summary for the genesis block.
-pub fn make_genesis_summary(
-    registry: &dyn RegistryClient,
-    subnet_id: SubnetId,
-    registry_version_to_put_in_summary: Option<RegistryVersion>,
-) -> Summary {
-    let max_backoff = Duration::from_secs(32);
-    let mut backoff = Duration::from_secs(1);
-    loop {
-        match registry.get_cup_contents(subnet_id, registry.get_latest_version()) {
-            // Here the `registry_version` corresponds to the registry version at which the
-            // initial CUP contents were inserted.
-            Ok(versioned_record) => {
-                let registry_version = versioned_record.version;
-                let summary_registry_version =
-                    registry_version_to_put_in_summary.unwrap_or(registry_version);
-                let cup_contents = versioned_record.value.expect("Missing CUP contents");
-                return get_dkg_summary_from_cup_contents(
-                    cup_contents,
-                    subnet_id,
-                    registry,
-                    summary_registry_version,
-                );
-            }
-            _ => {
-                if backoff > max_backoff {
-                    panic!("Retrieving the Dkg transcripts from registry timed out.")
-                }
-                std::thread::sleep(backoff);
-                backoff *= 2;
-            }
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
+    use crate::tests::test_vet_key_config;
+
     use super::{super::test_utils::complement_state_manager_with_remote_dkg_requests, *};
     use ic_consensus_mocks::{
         dependencies_with_subnet_params, dependencies_with_subnet_records_with_raw_state_manager,
@@ -821,8 +862,10 @@ mod tests {
     };
     use ic_crypto_test_utils_ni_dkg::dummy_transcript_for_tests_with_params;
     use ic_logger::replica_logger::no_op_logger;
+    use ic_management_canister_types_private::{VetKdCurve, VetKdKeyId};
+    use ic_registry_client_helpers::subnet::SubnetRegistry;
     use ic_test_utilities_logger::with_test_replica_logger;
-    use ic_test_utilities_registry::SubnetRecordBuilder;
+    use ic_test_utilities_registry::{add_subnet_record, SubnetRecordBuilder};
     use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
     use ic_types::{
         crypto::threshold_sig::ni_dkg::{NiDkgId, NiDkgTag, NiDkgTargetSubnet},
@@ -835,35 +878,63 @@ mod tests {
     #[test]
     fn test_get_configs_for_local_transcripts() {
         let prev_committee: Vec<_> = (10..21).map(node_test_id).collect();
-        let reshared_transcript = Some(dummy_transcript_for_tests_with_params(
-            prev_committee.clone(),
-            NiDkgTag::HighThreshold,
-            NiDkgTag::HighThreshold.threshold_for_subnet_of_size(prev_committee.len()) as u32,
-            888,
-        ));
+
         let receivers: BTreeSet<_> = (3..8).map(node_test_id).collect();
         let start_block_height = Height::from(777);
         let subnet_id = subnet_test_id(123);
         let registry_version = RegistryVersion::from(888);
+
+        let vet_key_ids = vec![
+            NiDkgMasterPublicKeyId::VetKd(VetKdKeyId {
+                curve: VetKdCurve::Bls12_381_G2,
+                name: String::from("first_key"),
+            }),
+            NiDkgMasterPublicKeyId::VetKd(VetKdKeyId {
+                curve: VetKdCurve::Bls12_381_G2,
+                name: String::from("second_key"),
+            }),
+        ];
+
+        let mut reshared_transcripts = BTreeMap::new();
+        reshared_transcripts.insert(
+            NiDkgTag::HighThreshold,
+            dummy_transcript_for_tests_with_params(
+                prev_committee.clone(),
+                NiDkgTag::HighThreshold,
+                NiDkgTag::HighThreshold.threshold_for_subnet_of_size(prev_committee.len()) as u32,
+                888,
+            ),
+        );
+        for key in &vet_key_ids {
+            let tag = NiDkgTag::HighThresholdForKey(key.clone());
+
+            reshared_transcripts.insert(
+                tag.clone(),
+                dummy_transcript_for_tests_with_params(
+                    prev_committee.clone(),
+                    tag.clone(),
+                    tag.clone()
+                        .threshold_for_subnet_of_size(prev_committee.len())
+                        as u32,
+                    888,
+                ),
+            );
+        }
 
         // Tests the happy path.
         let configs = get_configs_for_local_transcripts(
             subnet_id,
             receivers.clone(),
             start_block_height,
-            &vec![(
-                NiDkgTag::HighThreshold,
-                reshared_transcript.clone().unwrap(),
-            )]
-            .into_iter()
-            .collect(),
+            reshared_transcripts.clone(),
             registry_version,
+            &vet_key_ids,
         )
         .unwrap_or_else(|err| panic!("Couldn't create configs: {:?}", err));
 
-        // We produced exactly two configs, and with expected ids.
-        assert_eq!(configs.len(), 2);
-        for (index, tag) in TAGS.iter().enumerate() {
+        // We produced exactly four configs (high, low and two vetkeys), and with expected ids.
+        assert_eq!(configs.len(), 4);
+        for (index, tag) in tags_iter(&vet_key_ids).enumerate() {
             let config = configs[index].clone();
             assert_eq!(
                 config.dkg_id(),
@@ -885,9 +956,9 @@ mod tests {
                 config.threshold().get().get(),
                 match tag {
                     // 5 receivers => committee size is 4 => high threshold is  4 - f with f = 1
-                    NiDkgTag::HighThreshold => 3,
+                    NiDkgTag::HighThreshold | NiDkgTag::HighThresholdForKey(_) => 3,
                     // low threshold is f + 1, with f same as for high threshold.
-                    _ => 2,
+                    NiDkgTag::LowThreshold => 2,
                 }
             );
 
@@ -897,26 +968,27 @@ mod tests {
             assert_eq!(
                 config.max_corrupt_dealers().get(),
                 match tag {
-                    NiDkgTag::HighThreshold => 3,
-                    _ => 1,
+                    NiDkgTag::HighThreshold | NiDkgTag::HighThresholdForKey(_) => 3,
+                    NiDkgTag::LowThreshold => 1,
                 }
             );
 
             // We use the committee of the reshared transcript as dealers for the high
             // threshold, or the current subnet members, for the low threshold.
             let expected_dealers = match tag {
-                NiDkgTag::HighThreshold => {
+                NiDkgTag::HighThreshold | NiDkgTag::HighThresholdForKey(_) => {
                     prev_committee.clone().into_iter().collect::<BTreeSet<_>>()
                 }
-                _ => receivers.clone().into_iter().collect::<BTreeSet<_>>(),
+                NiDkgTag::LowThreshold => receivers.clone().into_iter().collect::<BTreeSet<_>>(),
             };
             assert_eq!(config.dealers().get(), &expected_dealers);
 
             assert_eq!(
-                config.resharing_transcript(),
+                config.resharing_transcript().as_ref(),
                 match tag {
-                    NiDkgTag::HighThreshold => &reshared_transcript,
-                    _ => &None,
+                    NiDkgTag::HighThreshold | NiDkgTag::HighThresholdForKey(_) =>
+                        reshared_transcripts.get(&tag),
+                    NiDkgTag::LowThreshold => None,
                 }
             );
         }
@@ -941,6 +1013,7 @@ mod tests {
                         10,
                         SubnetRecordBuilder::from(&node_ids)
                             .with_dkg_interval_length(dkg_interval_length)
+                            .with_chain_key_config(test_vet_key_config())
                             .build(),
                     )],
                 );
@@ -1096,10 +1169,20 @@ mod tests {
                     initial_registry_version,
                     SubnetRecordBuilder::from(&nodes)
                         .with_dkg_interval_length(dkg_interval_len)
+                        .with_chain_key_config(test_vet_key_config())
                         .build(),
                 )],
             );
-            let mut genesis_summary = make_genesis_summary(&*registry, subnet_id, None);
+            let cup_contents = registry
+                .get_cup_contents(subnet_id, registry.get_latest_version())
+                .expect("Failed to retreive the DKG transcripts from registry");
+            let mut genesis_summary = get_dkg_summary_from_cup_contents(
+                cup_contents.value.expect("Missing CUP contents"),
+                subnet_id,
+                &*registry,
+                cup_contents.version,
+            )
+            .expect("Failed to get DKG summary from CUP contents");
 
             // Let's ensure we have no summaries for the whole DKG interval.
             for _ in 0..dkg_interval_len {
@@ -1132,14 +1215,13 @@ mod tests {
             // Test the regular case (Both DKGs succeeded)
             let next_summary = create_summary_payload(&genesis_summary);
             for (_, conf) in next_summary.configs.iter() {
-                if conf.dkg_id().dkg_tag == NiDkgTag::HighThreshold {
-                    assert_eq!(
-                        next_summary
-                            .clone()
-                            .next_transcript(&NiDkgTag::HighThreshold)
-                            .unwrap(),
+                let tag = &conf.dkg_id().dkg_tag;
+                match tag {
+                    NiDkgTag::HighThreshold | NiDkgTag::HighThresholdForKey(_) => assert_eq!(
+                        next_summary.clone().next_transcript(tag).unwrap(),
                         &conf.resharing_transcript().clone().unwrap()
-                    )
+                    ),
+                    NiDkgTag::LowThreshold => (),
                 }
             }
 
@@ -1149,23 +1231,22 @@ mod tests {
             genesis_summary.configs.clear();
             let next_summary = create_summary_payload(&genesis_summary);
             for (_, conf) in next_summary.configs.iter() {
-                if conf.dkg_id().dkg_tag == NiDkgTag::HighThreshold {
-                    assert_eq!(
-                        next_summary
-                            .clone()
-                            .current_transcript(&NiDkgTag::HighThreshold)
-                            .unwrap(),
+                let tag = &conf.dkg_id().dkg_tag;
+                match tag {
+                    NiDkgTag::HighThreshold | NiDkgTag::HighThresholdForKey(_) => assert_eq!(
+                        next_summary.clone().current_transcript(tag).unwrap(),
                         &conf.resharing_transcript().clone().unwrap()
-                    )
+                    ),
+                    NiDkgTag::LowThreshold => (),
                 }
             }
         });
     }
 
-    // Creates a summary from registry and tests that all fields of the summary
-    // contain the expected contents.
+    /// Creates a summary from registry and tests that all fields of the summary
+    /// contain the expected contents.
     #[test]
-    fn test_make_genesis_summary() {
+    fn test_get_dkg_summary_from_cup_contents() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             let nodes: Vec<_> = (7..14).map(node_test_id).collect();
             let initial_registry_version = 145;
@@ -1178,11 +1259,24 @@ mod tests {
                     initial_registry_version,
                     SubnetRecordBuilder::from(&nodes)
                         .with_dkg_interval_length(dkg_interval_len)
+                        .with_chain_key_config(test_vet_key_config())
                         .build(),
                 )],
             );
 
-            let summary = make_genesis_summary(&*registry, subnet_id, None);
+            let cup_contents = registry
+                .get_cup_contents(subnet_id, registry.get_latest_version())
+                .expect("Failed to retreive the DKG transcripts from registry");
+            let summary = get_dkg_summary_from_cup_contents(
+                cup_contents.value.expect("Missing CUP contents"),
+                subnet_id,
+                &*registry,
+                cup_contents.version,
+            )
+            .expect("Failed to get DKG summary from CUP contents");
+
+            let vet_key_ids =
+                vetkd_key_ids_for_subnet(subnet_id, &*registry, summary.registry_version).unwrap();
 
             assert_eq!(
                 summary.registry_version,
@@ -1191,14 +1285,21 @@ mod tests {
             assert_eq!(summary.height, Height::from(0));
             assert_eq!(summary.interval_length, Height::from(dkg_interval_len));
             assert_eq!(summary.next_interval_length, Height::from(dkg_interval_len));
+            assert_eq!(summary.configs.len(), 3);
             assert!(summary.next_transcript(&NiDkgTag::LowThreshold).is_none());
             assert!(summary.next_transcript(&NiDkgTag::HighThreshold).is_none());
+            assert_eq!(vet_key_ids.len(), 1);
+            for vet_key_id in &vet_key_ids {
+                assert!(summary
+                    .next_transcript(&NiDkgTag::HighThresholdForKey(vet_key_id.clone()))
+                    .is_none());
+            }
 
-            for tag in TAGS.iter() {
+            for tag in tags_iter(&vet_key_ids) {
                 let (id, conf) = summary
                     .configs
                     .iter()
-                    .find(|(id, _)| id.dkg_tag == *tag)
+                    .find(|(id, _)| id.dkg_tag == tag)
                     .unwrap();
 
                 assert_eq!(
@@ -1230,11 +1331,7 @@ mod tests {
                     conf.threshold().get().get(),
                     match tag {
                         NiDkgTag::LowThreshold => 3,
-                        NiDkgTag::HighThreshold => 5,
-                        /////////////////////////////////////////////////////
-                        // TODO(CON-1417): extend this test once we have support for vetKD transcripts in registry CUPs
-                        /////////////////////////////////////////////////////
-                        NiDkgTag::HighThresholdForKey(_) => todo!("CON-1417"),
+                        NiDkgTag::HighThreshold | NiDkgTag::HighThresholdForKey(_) => 5,
                     }
                 );
             }
@@ -1242,10 +1339,10 @@ mod tests {
     }
 
     #[test]
-    // In this test we check that all summary payloads are created at the expected
-    // heights and with the expected contents. Note, we do not test anything related
-    // to the presence or contents of transcripts, as this would require using a
-    // real CSP.
+    /// In this test we check that all summary payloads are created at the expected
+    /// heights and with the expected contents. Note, we do not test anything related
+    /// to the presence or contents of transcripts, as this would require using a
+    /// real CSP.
     fn test_create_regular_summaries() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             let nodes: Vec<_> = (7..14).map(node_test_id).collect();
@@ -1261,10 +1358,20 @@ mod tests {
                     initial_registry_version,
                     SubnetRecordBuilder::from(&nodes)
                         .with_dkg_interval_length(dkg_interval_len)
+                        .with_chain_key_config(test_vet_key_config())
                         .build(),
                 )],
             );
-            let genesis_summary = make_genesis_summary(&*registry, subnet_id, None);
+            let cup_contents = registry
+                .get_cup_contents(subnet_id, registry.get_latest_version())
+                .expect("Failed to retreive the DKG transcripts from registry");
+            let genesis_summary = get_dkg_summary_from_cup_contents(
+                cup_contents.value.expect("Missing CUP contents"),
+                subnet_id,
+                &*registry,
+                cup_contents.version,
+            )
+            .expect("Failed to get DKG summary from CUP contents");
             let block = pool.get_cache().finalized_block();
             // This first block is expected to contain the genesis summary.
             if block.payload.as_ref().is_summary() {
@@ -1302,12 +1409,17 @@ mod tests {
                     dkg_summary.next_interval_length,
                     Height::from(dkg_interval_len)
                 );
+                assert_eq!(dkg_summary.configs.len(), 3);
 
-                for tag in TAGS.iter() {
+                let vet_key_ids =
+                    vetkd_key_ids_for_subnet(subnet_id, &*registry, dkg_summary.registry_version)
+                        .unwrap();
+                assert_eq!(vet_key_ids.len(), 1);
+                for tag in tags_iter(&vet_key_ids) {
                     let (id, conf) = dkg_summary
                         .configs
                         .iter()
-                        .find(|(id, _)| id.dkg_tag == *tag)
+                        .find(|(id, _)| id.dkg_tag == tag)
                         .unwrap();
 
                     assert_eq!(
@@ -1339,30 +1451,265 @@ mod tests {
                         conf.threshold().get().get(),
                         match tag {
                             NiDkgTag::LowThreshold => 3,
-                            NiDkgTag::HighThreshold => 5,
-                            /////////////////////////////////////////////////////
-                            // TODO(CON-1413): extend this test once we can create local transcript configs for vetKeys that were requested by registry
-                            /////////////////////////////////////////////////////
-                            NiDkgTag::HighThresholdForKey(_) => todo!("CON-1413"),
+                            NiDkgTag::HighThreshold | NiDkgTag::HighThresholdForKey(_) => 5,
                         }
                     );
 
                     // In later intervals we can also check that the resharing transcript matches
                     // the expected value.
                     if interval > 0 {
-                        if tag == &NiDkgTag::HighThreshold {
-                            assert_eq!(
-                                dkg_summary
-                                    .clone()
-                                    .next_transcript(&NiDkgTag::HighThreshold)
-                                    .unwrap(),
-                                &conf.resharing_transcript().clone().unwrap()
-                            );
-                        } else {
-                            assert!(&conf.resharing_transcript().is_none());
+                        match tag {
+                            NiDkgTag::HighThreshold | NiDkgTag::HighThresholdForKey(_) => {
+                                assert_eq!(
+                                    dkg_summary.clone().next_transcript(&tag).unwrap(),
+                                    &conf.resharing_transcript().clone().unwrap()
+                                );
+                            }
+                            _ => assert!(&conf.resharing_transcript().is_none()),
                         }
                     }
                 }
+            }
+        });
+    }
+
+    /// Test the generation of vetkeys
+    ///
+    /// 1. Create a subnet with 4 nodes and a genesis summary
+    /// 2. Add registry entry to add a vetkey
+    /// 3. Check that a config ends up in the next summary
+    /// 4. Check that the summary after that has a matching next transcript
+    /// 5. CHeck that the summary after that has matching current and next transcripts
+    #[test]
+    fn test_vet_key_local_transcript_generation() {
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            // We'll have a DKG summary inside every 5th block.
+            let dkg_interval_length = 4;
+            // Committee are nodes 0, 1, 2, 3.
+            let committee = (0..4).map(node_test_id).collect::<Vec<_>>();
+            let Dependencies {
+                mut pool,
+                registry_data_provider,
+                registry,
+                replica_config,
+                ..
+            } = dependencies_with_subnet_params(
+                pool_config,
+                subnet_test_id(0),
+                vec![(
+                    5,
+                    SubnetRecordBuilder::from(&committee)
+                        .with_dkg_interval_length(dkg_interval_length)
+                        .build(),
+                )],
+            );
+
+            // Get the latest summary block, which is the genesis block
+            let cup = PoolReader::new(&pool).get_highest_catch_up_package();
+            let dkg_block = cup.content.block.as_ref();
+            assert_eq!(
+                dkg_block.context.registry_version,
+                RegistryVersion::from(5),
+                "The latest available version was used for the summary block."
+            );
+            let summary = dkg_block.payload.as_ref().as_summary();
+            let dkg_summary = &summary.dkg;
+
+            // The genesis summary does not have vetkeys enabled
+            let vet_key_ids = vetkd_key_ids_for_subnet(
+                replica_config.subnet_id,
+                &*registry,
+                dkg_block.context.registry_version,
+            )
+            .unwrap();
+            assert_eq!(vet_key_ids.len(), 0);
+
+            assert_eq!(dkg_summary.registry_version, RegistryVersion::from(5));
+            assert_eq!(dkg_summary.height, Height::from(0));
+            assert_eq!(
+                cup.get_oldest_registry_version_in_use(),
+                RegistryVersion::from(5)
+            );
+
+            // This summary does not contain a config for the vetkey yet
+            assert_eq!(dkg_summary.configs.len(), 2);
+            assert_eq!(dkg_summary.current_transcripts().len(), 2);
+
+            // Since it is the genesis summary, it also has no next transcripts
+            assert_eq!(dkg_summary.next_transcripts().len(), 0);
+            for tag in tags_iter(&vet_key_ids) {
+                // Check that every tag has a config in the summary
+                let _ = dkg_summary
+                    .configs
+                    .iter()
+                    .find(|(id, _)| id.dkg_tag == tag)
+                    .unwrap();
+                let _ = dkg_summary.current_transcript(&tag).unwrap();
+            }
+
+            // Add the vetkey to the registry
+            pool.advance_round_normal_operation();
+            add_subnet_record(
+                &registry_data_provider,
+                6,
+                replica_config.subnet_id,
+                SubnetRecordBuilder::from(&committee)
+                    .with_dkg_interval_length(dkg_interval_length)
+                    .with_chain_key_config(test_vet_key_config())
+                    .build(),
+            );
+            registry.update_to_latest_version();
+
+            pool.advance_round_normal_operation_n(dkg_interval_length);
+            let cup = PoolReader::new(&pool).get_highest_catch_up_package();
+            let dkg_block = cup.content.block.as_ref();
+            assert_eq!(
+                dkg_block.context.registry_version,
+                RegistryVersion::from(6),
+                "The newest registry version is used."
+            );
+            let summary = dkg_block.payload.as_ref().as_summary();
+            let dkg_summary = &summary.dkg;
+
+            // At this point the summary has a registry version with a vetkey
+            let vet_key_ids = vetkd_key_ids_for_subnet(
+                replica_config.subnet_id,
+                &*registry,
+                dkg_block.context.registry_version,
+            )
+            .unwrap();
+            assert_eq!(vet_key_ids.len(), 1);
+
+            // This membership registry version corresponds to the registry version from
+            // the block context of the previous summary.
+            assert_eq!(dkg_summary.configs.len(), 3);
+            assert_eq!(dkg_summary.registry_version, RegistryVersion::from(5));
+            assert_eq!(dkg_summary.height, Height::from(5));
+            assert_eq!(
+                cup.get_oldest_registry_version_in_use(),
+                RegistryVersion::from(5)
+            );
+
+            assert_eq!(dkg_summary.current_transcripts().len(), 2);
+            assert_eq!(dkg_summary.next_transcripts().len(), 2);
+            for tag in tags_iter(&vet_key_ids) {
+                // Check that every tag has a config in the summary
+                let _ = dkg_summary
+                    .configs
+                    .iter()
+                    .find(|(id, _)| id.dkg_tag == tag)
+                    .unwrap();
+                let current_transcript = dkg_summary.current_transcript(&tag);
+                let next_transcript = dkg_summary.next_transcript(&tag);
+
+                match tag {
+                    // Vetkeys should not have transcripts yet, since the configs where only added in
+                    // this summary
+                    NiDkgTag::HighThresholdForKey(_) => {
+                        assert!(current_transcript.is_none() && next_transcript.is_none())
+                    }
+                    NiDkgTag::LowThreshold | NiDkgTag::HighThreshold => {
+                        assert!(current_transcript.is_some() && next_transcript.is_some())
+                    }
+                };
+            }
+
+            pool.advance_round_normal_operation_n(dkg_interval_length + 1);
+            let cup = PoolReader::new(&pool).get_highest_catch_up_package();
+            let dkg_block = cup.content.block.as_ref();
+            assert_eq!(
+                dkg_block.context.registry_version,
+                RegistryVersion::from(6),
+                "The newest registry version is used."
+            );
+            let summary = dkg_block.payload.as_ref().as_summary();
+            let dkg_summary = &summary.dkg;
+
+            let vet_key_ids = vetkd_key_ids_for_subnet(
+                replica_config.subnet_id,
+                &*registry,
+                dkg_block.context.registry_version,
+            )
+            .unwrap();
+            assert_eq!(vet_key_ids.len(), 1);
+
+            // This membership registry version corresponds to the registry version from
+            // the block context of the previous summary.
+            assert_eq!(dkg_summary.configs.len(), 3);
+            assert_eq!(dkg_summary.registry_version, RegistryVersion::from(6));
+            assert_eq!(dkg_summary.height, Height::from(10));
+            assert_eq!(
+                cup.get_oldest_registry_version_in_use(),
+                RegistryVersion::from(5)
+            );
+
+            assert_eq!(dkg_summary.current_transcripts().len(), 2);
+            assert_eq!(dkg_summary.next_transcripts().len(), 3);
+            for tag in tags_iter(&vet_key_ids) {
+                // Check that every tag has a config in the summary
+                let _ = dkg_summary
+                    .configs
+                    .iter()
+                    .find(|(id, _)| id.dkg_tag == tag)
+                    .unwrap();
+                let current_transcript = dkg_summary.current_transcript(&tag);
+                let next_transcript = dkg_summary.next_transcript(&tag);
+
+                match tag {
+                    // There should be a vetkey next transcript but not a current one
+                    NiDkgTag::HighThresholdForKey(_) => {
+                        assert!(current_transcript.is_none() && next_transcript.is_some())
+                    }
+                    NiDkgTag::LowThreshold | NiDkgTag::HighThreshold => {
+                        assert!(current_transcript.is_some() && next_transcript.is_some())
+                    }
+                };
+            }
+
+            pool.advance_round_normal_operation_n(dkg_interval_length + 1);
+            let cup = PoolReader::new(&pool).get_highest_catch_up_package();
+            let dkg_block = cup.content.block.as_ref();
+            assert_eq!(
+                dkg_block.context.registry_version,
+                RegistryVersion::from(6),
+                "The newest registry version is used."
+            );
+            let summary = dkg_block.payload.as_ref().as_summary();
+            let dkg_summary = &summary.dkg;
+
+            let vet_key_ids = vetkd_key_ids_for_subnet(
+                replica_config.subnet_id,
+                &*registry,
+                dkg_block.context.registry_version,
+            )
+            .unwrap();
+            assert_eq!(vet_key_ids.len(), 1);
+
+            // This membership registry version corresponds to the registry version from
+            // the block context of the previous summary.
+            assert_eq!(dkg_summary.configs.len(), 3);
+            assert_eq!(dkg_summary.registry_version, RegistryVersion::from(6));
+            assert_eq!(dkg_summary.height, Height::from(15));
+            // The oldest registry in use is no longer 5
+            assert_eq!(
+                cup.get_oldest_registry_version_in_use(),
+                RegistryVersion::from(6)
+            );
+
+            assert_eq!(dkg_summary.current_transcripts().len(), 3);
+            assert_eq!(dkg_summary.next_transcripts().len(), 3);
+            for tag in tags_iter(&vet_key_ids) {
+                // Check that every tag has a config in the summary
+                let _ = dkg_summary
+                    .configs
+                    .iter()
+                    .find(|(id, _)| id.dkg_tag == tag)
+                    .unwrap();
+                let current_transcript = dkg_summary.current_transcript(&tag);
+                let next_transcript = dkg_summary.next_transcript(&tag);
+
+                // All tags have all transcripts now
+                assert!(current_transcript.is_some() && next_transcript.is_some());
             }
         });
     }

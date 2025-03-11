@@ -483,8 +483,7 @@ impl DkgKeyManager {
             .consensus_membership_registry_version
             .set(summary.registry_version.get() as i64);
 
-        for tag in [NiDkgTag::LowThreshold, NiDkgTag::HighThreshold].iter() {
-            let current_transcript = summary.current_transcript(tag).unwrap();
+        for (tag, current_transcript) in summary.current_transcripts() {
             let metric_label = &format!("{:?}", tag);
 
             self.metrics

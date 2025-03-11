@@ -25,15 +25,15 @@ use ic_query_stats::QueryStatsCollector;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
     canister_state::execution_state::WasmExecutionMode, CallContextAction, CallOrigin,
-    CanisterState, NetworkTopology, ReplicatedState,
+    CanisterState, MessageMemoryUsage, NetworkTopology, ReplicatedState,
 };
 use ic_system_api::{ApiType, ExecutionParameters, InstructionLimits};
 use ic_types::{
     batch::QueryStats,
     ingress::WasmResult,
     messages::{
-        CallContextId, CallbackId, Payload, Query, QuerySource, RejectContext, Request,
-        RequestOrResponse, Response, NO_DEADLINE,
+        CallContextId, CallbackId, Payload, Query, RejectContext, Request, RequestOrResponse,
+        Response, NO_DEADLINE,
     },
     methods::{FuncRef, WasmClosure, WasmMethod},
     CanisterId, Cycles, NumInstructions, NumMessages, NumSlices, PrincipalId, SubnetId, Time,
@@ -202,10 +202,7 @@ impl<'a> QueryContext<'a> {
     ) -> Result<WasmResult, UserError> {
         let canister_id = query.receiver;
         let old_canister = self.state.get_ref().get_active_canister(&canister_id)?;
-        let call_origin = match query.source {
-            QuerySource::User { user_id, .. } => CallOrigin::Query(user_id),
-            QuerySource::Anonymous => CallOrigin::Query(query.source().into()),
-        };
+        let call_origin = CallOrigin::Query(query.source().into());
 
         let method = match wasm_query_method(old_canister, query.method_name.to_string()) {
             Ok(method) => method,
@@ -676,8 +673,6 @@ impl<'a> QueryContext<'a> {
         );
 
         self.add_system_api_call_counters(output.system_api_call_counters);
-        let canister_current_memory_usage = canister.memory_usage();
-        let canister_current_message_memory_usage = canister.message_memory_usage();
         canister.execution_state = Some(output_execution_state);
         execution_parameters
             .instruction_limits
@@ -697,17 +692,21 @@ impl<'a> QueryContext<'a> {
                         // No cleanup closure present. Return the callback error as-is.
                         (output.num_instructions_left, Err(callback_err))
                     }
-                    Some(cleanup_closure) => self.execute_cleanup(
-                        time,
-                        &mut canister,
-                        cleanup_closure,
-                        &call_origin,
-                        callback_err,
-                        canister_current_memory_usage,
-                        canister_current_message_memory_usage,
-                        execution_parameters,
-                        call_context.instructions_executed(),
-                    ),
+                    Some(cleanup_closure) => {
+                        let canister_current_memory_usage = canister.memory_usage();
+                        let canister_current_message_memory_usage = canister.message_memory_usage();
+                        self.execute_cleanup(
+                            time,
+                            &mut canister,
+                            cleanup_closure,
+                            &call_origin,
+                            callback_err,
+                            canister_current_memory_usage,
+                            canister_current_message_memory_usage,
+                            execution_parameters,
+                            call_context.instructions_executed(),
+                        )
+                    }
                 }
             }
         };
@@ -743,7 +742,7 @@ impl<'a> QueryContext<'a> {
         call_origin: &CallOrigin,
         callback_err: HypervisorError,
         canister_current_memory_usage: NumBytes,
-        canister_current_message_memory_usage: NumBytes,
+        canister_current_message_memory_usage: MessageMemoryUsage,
         execution_parameters: ExecutionParameters,
         call_context_instructions_executed: NumInstructions,
     ) -> (NumInstructions, Result<Option<WasmResult>, HypervisorError>) {
@@ -1041,7 +1040,7 @@ impl<'a> QueryContext<'a> {
     /// Returns true if the total number of instructions executed by queries and
     /// response callbacks exceeds the limit in `round_limits`.
     pub fn instruction_limit_reached(&self) -> bool {
-        self.round_limits.reached()
+        self.round_limits.instructions_reached()
     }
 
     /// Return whether the time limit for this query context has been reached.

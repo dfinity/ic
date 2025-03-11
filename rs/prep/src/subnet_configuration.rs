@@ -314,7 +314,6 @@ impl SubnetConfig {
             max_number_of_canisters: self.max_number_of_canisters,
             ssh_readonly_access: self.ssh_readonly_access,
             ssh_backup_access: self.ssh_backup_access,
-            ecdsa_config: None,
             chain_key_config: self.chain_key_config,
         };
 

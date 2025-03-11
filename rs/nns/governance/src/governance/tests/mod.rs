@@ -22,7 +22,7 @@ use ic_sns_init::pb::v1::SnsInitPayload;
 use ic_sns_init::pb::v1::{self as sns_init_pb};
 use lazy_static::lazy_static;
 use maplit::{btreemap, hashmap};
-use std::convert::TryFrom;
+use std::{convert::TryFrom, time::Duration};
 
 mod list_neurons;
 mod neurons_fund;
@@ -1371,35 +1371,65 @@ fn test_validate_execute_nns_function() {
                 nns_function: NnsFunction::UpdateAllowedPrincipals as i32,
                 payload: vec![],
             },
-            "NNS_FUNCTION_UPDATE_ALLOWED_PRINCIPALS proposal is obsolete".to_string(),
+            "Proposal is obsolete because NNS_FUNCTION_UPDATE_ALLOWED_PRINCIPALS is only used \
+            for the old SNS initialization mechanism, which is now obsolete. Use \
+            CREATE_SERVICE_NERVOUS_SYSTEM instead."
+                .to_string(),
         ),
         (
             ExecuteNnsFunction {
                 nns_function: NnsFunction::UpdateApiBoundaryNodesVersion as i32,
                 payload: vec![],
             },
-            "NNS_FUNCTION_UPDATE_API_BOUNDARY_NODES_VERSION proposal is obsolete".to_string(),
+            "Proposal is obsolete because NNS_FUNCTION_UPDATE_API_BOUNDARY_NODES_VERSION is \
+            obsolete. Use NNS_FUNCTION_DEPLOY_GUESTOS_TO_SOME_API_BOUNDARY_NODES instead."
+                .to_string(),
         ),
         (
             ExecuteNnsFunction {
                 nns_function: NnsFunction::UpdateUnassignedNodesConfig as i32,
                 payload: vec![],
             },
-            "NNS_FUNCTION_UPDATE_UNASSIGNED_NODES_CONFIG proposal is obsolete".to_string(),
+            "Proposal is obsolete because NNS_FUNCTION_UPDATE_UNASSIGNED_NODES_CONFIG is \
+            obsolete. Use NNS_FUNCTION_DEPLOY_GUESTOS_TO_ALL_UNASSIGNED_NODES/\
+            NNS_FUNCTION_UPDATE_SSH_READONLY_ACCESS_FOR_ALL_UNASSIGNED_NODES instead."
+                .to_string(),
         ),
         (
             ExecuteNnsFunction {
                 nns_function: NnsFunction::UpdateElectedHostosVersions as i32,
                 payload: vec![],
             },
-            "NNS_FUNCTION_UPDATE_ELECTED_HOSTOS_VERSIONS proposal is obsolete".to_string(),
+            "Proposal is obsolete because NNS_FUNCTION_UPDATE_ELECTED_HOSTOS_VERSIONS is \
+            obsolete. Use NNS_FUNCTION_REVISE_ELECTED_HOSTOS_VERSIONS instead."
+                .to_string(),
         ),
         (
             ExecuteNnsFunction {
                 nns_function: NnsFunction::UpdateNodesHostosVersion as i32,
                 payload: vec![],
             },
-            "NNS_FUNCTION_UPDATE_NODES_HOSTOS_VERSION proposal is obsolete".to_string(),
+            "Proposal is obsolete because NNS_FUNCTION_UPDATE_NODES_HOSTOS_VERSION is obsolete. \
+            Use NNS_FUNCTION_DEPLOY_HOSTOS_TO_SOME_NODES instead."
+                .to_string(),
+        ),
+        (
+            ExecuteNnsFunction {
+                nns_function: NnsFunction::NnsCanisterUpgrade as i32,
+                payload: vec![],
+            },
+            "Proposal is obsolete because NNS_FUNCTION_NNS_CANISTER_UPGRADE is obsolete. \
+            Use InstallCode instead."
+                .to_string(),
+        ),
+        (
+            ExecuteNnsFunction {
+                nns_function: NnsFunction::NnsRootUpgrade as i32,
+                payload: vec![],
+            },
+            "Proposal is obsolete because NNS_FUNCTION_NNS_ROOT_UPGRADE is obsolete. \
+            Use InstallCode instead."
+                .to_string(),
         ),
     ];
 
@@ -1464,6 +1494,17 @@ fn test_validate_execute_nns_function() {
     for execute_nns_function in ok_test_cases {
         let actual_result = governance.validate_execute_nns_function(&execute_nns_function);
         assert_eq!(actual_result, Ok(()));
+    }
+}
+
+#[test]
+fn test_canister_and_function_no_unreachable() {
+    use strum::IntoEnumIterator;
+
+    for nns_function in NnsFunction::iter() {
+        // This will return either `Ok(_)` for nns functions that are still used, or `Err(_)` for
+        // obsolete ones. The test just makes sure that it doesn't panic.
+        let _ = nns_function.canister_and_function();
     }
 }
 

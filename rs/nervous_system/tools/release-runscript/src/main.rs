@@ -1,9 +1,13 @@
+mod commands;
+mod commit_switcher;
 mod utils;
+
 use anyhow::{bail, Result};
 use clap::{Parser, Subcommand};
 use colored::*;
+use commands::{run_script, run_script_in_current_process};
+use commit_switcher::CommitSwitcher;
 use std::path::PathBuf;
-use std::process::{Command, Stdio};
 use url::Url;
 use utils::*;
 
@@ -35,6 +39,8 @@ struct CreateProposalTexts {
 
 #[derive(Debug, Parser)]
 struct SubmitProposals {
+    #[arg(long)]
+    commit: String,
     #[arg(long, num_args = 0..,)]
     nns_proposal_text_paths: Vec<PathBuf>,
     #[arg(long, num_args = 0..,)]
@@ -43,6 +49,8 @@ struct SubmitProposals {
 
 #[derive(Debug, Parser)]
 struct CreateForumPost {
+    #[arg(long)]
+    commit: String,
     #[arg(long, num_args = 0..,)]
     nns_proposal_text_paths: Vec<PathBuf>,
     #[arg(long, num_args = 0..,)]
@@ -54,6 +62,8 @@ struct CreateForumPost {
 }
 #[derive(Debug, Parser)]
 struct ScheduleVote {
+    #[arg(long)]
+    commit: String,
     #[arg(long, num_args = 0..,)]
     nns_proposal_ids: Vec<String>,
     #[arg(long, num_args = 0..,)]
@@ -61,7 +71,14 @@ struct ScheduleVote {
 }
 
 #[derive(Debug, Parser)]
-struct UpdateChangelog;
+struct UpdateChangelog {
+    #[arg(long)]
+    commit: String,
+    #[arg(long, num_args = 0..,)]
+    nns_proposal_ids: Vec<String>,
+    #[arg(long, num_args = 0..,)]
+    sns_proposal_ids: Vec<String>,
+}
 
 #[derive(Debug, Subcommand)]
 enum Step {
@@ -102,6 +119,10 @@ fn main() -> Result<()> {
         }
     };
 
+    ensure_coreutils_setup()?;
+    ensure_code_setup()?;
+    ensure_gh_setup()?;
+
     print_header();
 
     match args.step {
@@ -124,10 +145,7 @@ fn run_pick_commit() -> Result<()> {
     let cmd_path = ic.join("testnet/tools/nns-tools/cmd.sh");
 
     // Run the command with the required argument.
-    let output = Command::new(cmd_path)
-        .arg("latest_commit_with_prebuilt_artifacts")
-        .current_dir(&ic)
-        .output()?;
+    let output = run_script(cmd_path, &["latest_commit_with_prebuilt_artifacts"], &ic)?;
 
     let commit = if output.status.success() {
         let commit = String::from_utf8_lossy(&output.stdout).trim().to_string();
@@ -238,7 +256,7 @@ fn run_create_proposal_texts(cmd: CreateProposalTexts) -> Result<()> {
         sns_canisters,
     } = cmd;
 
-    // Create proposals directory under ic_dir/proposals/release-{ISO_DATE}
+    // Create proposals directory under ic_dir/../proposals/release-{ISO_DATE}
     let ic = ic_dir();
     let today = chrono::Local::now().format("%Y-%m-%d").to_string();
     let proposals_dir = ic
@@ -256,97 +274,89 @@ fn run_create_proposal_texts(cmd: CreateProposalTexts) -> Result<()> {
 
     let proposals_dir = proposals_dir.canonicalize()?;
 
-    println!(
-        "Creating proposal texts for {} NNS canisters and {} SNS canisters at commit {}",
-        nns_canisters.len(),
-        sns_canisters.len(),
-        commit
-    );
-
     let mut nns_proposal_text_paths = Vec::new();
     let mut sns_proposal_text_paths = Vec::new();
 
-    // For each NNS canister, run the prepare-nns-upgrade-proposal-text.sh script and write its output to a file.
-    for canister in &nns_canisters {
-        println!("Creating proposal text for NNS canister: {}", canister);
-        let script = ic.join("testnet/tools/nns-tools/prepare-nns-upgrade-proposal-text.sh");
-        // cycles minting requires an upgrade arg, usually '()'
-        let output = if canister != "cycles-minting" {
-            Command::new(script)
-                .arg(canister)
-                .arg(&commit)
-                .current_dir(&ic)
-                .output()
-                .expect("Failed to run NNS proposal text script")
-        } else {
-            let upgrade_arg = input_with_default("Upgrade arg for CMC?", "'()'")?;
-            Command::new(script)
-                .arg(canister)
-                .arg(&commit)
-                .arg(upgrade_arg)
-                .current_dir(&ic)
-                .output()
-                .expect("Failed to run NNS proposal text script")
-        };
-        if !output.status.success() {
-            bail!(
+    {
+        // Switch to the commit being released while we generate the proposal texts
+        let _commit_switcher = CommitSwitcher::switch(commit.clone())?;
+
+        println!(
+            "Creating proposal texts for {} NNS canisters and {} SNS canisters at commit {}",
+            nns_canisters.len(),
+            sns_canisters.len(),
+            commit
+        );
+
+        // For each NNS canister, run the prepare-nns-upgrade-proposal-text.sh script and write its output to a file.
+        for canister in &nns_canisters {
+            println!("Creating proposal text for NNS canister: {}", canister);
+            let script = ic.join("testnet/tools/nns-tools/prepare-nns-upgrade-proposal-text.sh");
+            // cycles minting requires an upgrade arg, usually '()'
+            let output = if canister != "cycles-minting" {
+                run_script(script, &[canister, &commit], &ic)
+                    .expect("Failed to run NNS proposal text script")
+            } else {
+                let upgrade_arg = input_with_default("Upgrade arg for CMC?", "()")?;
+                run_script(script, &[canister, &commit, &upgrade_arg], &ic)
+                    .expect("Failed to run NNS proposal text script")
+            };
+            if !output.status.success() {
+                bail!(
                 "Failed to create proposal text for NNS canister {} due to error: stdout: {}, stderr: {}",
                 canister,
                 String::from_utf8_lossy(&output.stdout),
                 String::from_utf8_lossy(&output.stderr)
             );
+            }
+            let file_path = proposals_dir.join(format!("nns-{}.md", canister));
+            std::fs::write(&file_path, output.stdout).expect("Failed to write NNS proposal file");
+            nns_proposal_text_paths.push(file_path);
         }
-        let file_path = proposals_dir.join(format!("nns-{}.md", canister));
-        std::fs::write(&file_path, output.stdout).expect("Failed to write NNS proposal file");
-        nns_proposal_text_paths.push(file_path);
-    }
 
-    // For each SNS canister, run the prepare-publish-sns-wasm-proposal-text.sh script.
-    for canister in &sns_canisters {
-        println!("Creating proposal text for SNS canister: {}", canister);
-        let script = ic.join("testnet/tools/nns-tools/prepare-publish-sns-wasm-proposal-text.sh");
-        // The SNS script is expected to write directly to the file provided as an argument.
-        let file_path = proposals_dir.join(format!("sns-{}.md", canister));
-        let file_path_str = file_path.to_str().expect("Invalid file path");
-        let output = Command::new(script)
-            .arg(canister)
-            .arg(&commit)
-            .arg(file_path_str)
-            .current_dir(&ic)
-            .output()
-            .expect("Failed to run SNS proposal text script");
-        if !output.status.success() {
-            bail!(
-                "Failed to create proposal text for SNS canister {} due to error: {}",
-                canister,
-                String::from_utf8_lossy(&output.stderr)
-            );
+        // For each SNS canister, run the prepare-publish-sns-wasm-proposal-text.sh script.
+        for canister in &sns_canisters {
+            println!("Creating proposal text for SNS canister: {}", canister);
+            let script =
+                ic.join("testnet/tools/nns-tools/prepare-publish-sns-wasm-proposal-text.sh");
+            // The SNS script is expected to write directly to the file provided as an argument.
+            let file_path = proposals_dir.join(format!("sns-{}.md", canister));
+            let file_path_str = file_path.to_str().expect("Invalid file path");
+            let output = run_script(script, &[canister, &commit, file_path_str], &ic)
+                .expect("Failed to run SNS proposal text script");
+            if !output.status.success() {
+                bail!(
+                    "Failed to create proposal text for SNS canister {} due to error: {}",
+                    canister,
+                    String::from_utf8_lossy(&output.stderr)
+                );
+            }
+            sns_proposal_text_paths.push(file_path);
         }
-        sns_proposal_text_paths.push(file_path);
     }
 
-    for proposal_text_path in &nns_proposal_text_paths {
-        println!(
-            "Viewing NNS proposal with vscode: {}",
-            proposal_text_path.display()
-        );
-        let mut cmd = Command::new("code");
-        cmd.arg(proposal_text_path);
-        cmd.current_dir(&ic);
-        cmd.output()
-            .expect("Failed to view NNS proposal with vscode");
-    }
+    loop {
+        let proposals_with_todos = nns_proposal_text_paths
+            .iter()
+            .chain(sns_proposal_text_paths.iter())
+            .filter(|path| path.exists())
+            .filter(|path| std::fs::read_to_string(path).unwrap().contains("TODO"))
+            .collect::<Vec<_>>();
 
-    for proposal_text_path in &sns_proposal_text_paths {
-        println!(
-            "Viewing SNS proposal with vscode: {}",
-            proposal_text_path.display()
-        );
-        let mut cmd = Command::new("code");
-        cmd.arg(proposal_text_path);
-        cmd.current_dir(&ic);
-        cmd.output()
-            .expect("Failed to view SNS proposal with vscode");
+        if proposals_with_todos.is_empty() {
+            break;
+        }
+
+        println!("The following proposals have TODOs. Please review them and remove the TODOs before submitting.");
+        for proposal_text_path in &proposals_with_todos {
+            println!("  - {}", proposal_text_path.display());
+            let mut cmd = std::process::Command::new("code");
+            cmd.arg(proposal_text_path);
+            cmd.current_dir(&ic);
+            cmd.output()
+                .expect("Failed to view NNS proposal with vscode");
+        }
+        press_enter_to_continue()?;
     }
 
     use std::fmt::Write;
@@ -356,19 +366,19 @@ fn run_create_proposal_texts(cmd: CreateProposalTexts) -> Result<()> {
         &format!("I created proposal texts for each canister to be upgraded in the following directory: {}.
 NNS proposal texts: {}
 SNS proposal texts: {}",
-            proposals_dir.display(),
-            nns_proposal_text_paths.iter().fold(String::new(), |mut acc, path| {
-                let _ = write!(acc, "\n  - {}", path.display());
-                acc
-            }),
-            sns_proposal_text_paths.iter().fold(String::new(), |mut acc, path| {
-                let _ = write!(acc, "\n  - {}", path.display());
-                acc
-            })
-        )
-    )?;
+        proposals_dir.display(),
+        nns_proposal_text_paths.iter().fold(String::new(), |mut acc, path| {
+            let _ = write!(acc, "\n  - {}", path.display());
+            acc
+        }),
+        sns_proposal_text_paths.iter().fold(String::new(), |mut acc, path| {
+            let _ = write!(acc, "\n  - {}", path.display());
+            acc
+        })
+    ))?;
 
     run_submit_proposals(SubmitProposals {
+        commit,
         nns_proposal_text_paths,
         sns_proposal_text_paths,
     })
@@ -376,6 +386,7 @@ SNS proposal texts: {}",
 
 fn run_submit_proposals(cmd: SubmitProposals) -> Result<()> {
     let SubmitProposals {
+        commit,
         nns_proposal_text_paths,
         sns_proposal_text_paths,
     } = cmd;
@@ -406,15 +417,15 @@ fn run_submit_proposals(cmd: SubmitProposals) -> Result<()> {
     for proposal_path in &nns_proposal_text_paths {
         println!("Submitting NNS proposal: {}", proposal_path.display());
         let script = ic.join("testnet/tools/nns-tools/submit-mainnet-nns-upgrade-proposal.sh");
-        let output = Command::new(script)
-            .arg(proposal_path.to_str().expect("Invalid proposal path"))
-            .arg(&neuron_id)
-            .current_dir(&ic)
-            .stdin(Stdio::inherit())
-            .stdout(Stdio::inherit())
-            .stderr(Stdio::inherit())
-            .output()
-            .expect("Failed to run submit-mainnet-nns-upgrade-proposal.sh");
+        let output = run_script_in_current_process(
+            script,
+            &[
+                proposal_path.to_str().expect("Invalid proposal path"),
+                &neuron_id,
+            ],
+            &ic,
+        )
+        .expect("Failed to run submit-mainnet-nns-upgrade-proposal.sh");
         if !output.status.success() {
             bail!(
                 "Submission failed for {}: {}",
@@ -431,15 +442,15 @@ fn run_submit_proposals(cmd: SubmitProposals) -> Result<()> {
     for proposal_path in &sns_proposal_text_paths {
         println!("Submitting SNS proposal: {}", proposal_path.display());
         let script = ic.join("testnet/tools/nns-tools/submit-mainnet-publish-sns-wasm-proposal.sh");
-        let output = Command::new(script)
-            .arg(proposal_path.to_str().expect("Invalid proposal path"))
-            .arg(&neuron_id)
-            .current_dir(&ic)
-            .stdin(Stdio::inherit())
-            .stdout(Stdio::inherit())
-            .stderr(Stdio::inherit())
-            .output()
-            .expect("Failed to run submit-mainnet-publish-sns-wasm-proposal.sh");
+        let output = run_script_in_current_process(
+            script,
+            &[
+                proposal_path.to_str().expect("Invalid proposal path"),
+                &neuron_id,
+            ],
+            &ic,
+        )
+        .expect("Failed to run submit-mainnet-publish-sns-wasm-proposal.sh");
         if !output.status.success() {
             bail!(
                 "Submission failed for {}: {}",
@@ -480,6 +491,7 @@ fn run_submit_proposals(cmd: SubmitProposals) -> Result<()> {
     )?;
 
     run_create_forum_post(CreateForumPost {
+        commit,
         nns_proposal_text_paths,
         nns_proposal_ids,
         sns_proposal_text_paths,
@@ -489,6 +501,7 @@ fn run_submit_proposals(cmd: SubmitProposals) -> Result<()> {
 
 fn run_create_forum_post(cmd: CreateForumPost) -> Result<()> {
     let CreateForumPost {
+        commit,
         nns_proposal_text_paths,
         nns_proposal_ids,
         sns_proposal_text_paths,
@@ -500,18 +513,15 @@ fn run_create_forum_post(cmd: CreateForumPost) -> Result<()> {
     // --- Generate NNS forum post ---
     {
         let script = ic.join("testnet/tools/nns-tools/cmd.sh");
-        let output = Command::new(script)
-            .arg("generate_forum_post_nns_upgrades")
-            .args(nns_proposal_text_paths)
-            .output()
-            .expect("Failed to run generate_forum_post_nns_upgrades");
+        let mut args = vec!["generate_forum_post_nns_upgrades"];
+        let path_strs: Vec<&str> = nns_proposal_text_paths
+            .iter()
+            .map(|p| p.to_str().unwrap())
+            .collect();
+        args.extend(path_strs.iter());
 
-        if !output.status.success() {
-            bail!(
-                "Failed to generate NNS forum post: {}",
-                String::from_utf8_lossy(&output.stderr)
-            );
-        }
+        let output =
+            run_script(script, &args, &ic).expect("Failed to run generate_forum_post_nns_upgrades");
 
         copy(&output.stdout)?;
 
@@ -546,18 +556,15 @@ fn run_create_forum_post(cmd: CreateForumPost) -> Result<()> {
     // --- Generate SNS forum post ---
     {
         let script = ic.join("testnet/tools/nns-tools/cmd.sh");
-        let output = Command::new(script)
-            .arg("generate_forum_post_sns_wasm_publish")
-            .args(sns_proposal_text_paths)
-            .output()
-            .expect("Failed to run generate_forum_post_sns_wasm_publish");
+        let mut args = vec!["generate_forum_post_sns_wasm_publish"];
+        let path_strs: Vec<&str> = sns_proposal_text_paths
+            .iter()
+            .map(|p| p.to_str().unwrap())
+            .collect();
+        args.extend(path_strs.iter());
 
-        if !output.status.success() {
-            bail!(
-                "Failed to generate SNS forum post: {}",
-                String::from_utf8_lossy(&output.stderr)
-            );
-        }
+        let output = run_script(script, &args, &ic)
+            .expect("Failed to run generate_forum_post_sns_wasm_publish");
 
         copy(&output.stdout)?;
 
@@ -597,6 +604,7 @@ fn run_create_forum_post(cmd: CreateForumPost) -> Result<()> {
 
     // Continue to the next automated step.
     run_schedule_vote(ScheduleVote {
+        commit,
         nns_proposal_ids,
         sns_proposal_ids,
     })
@@ -604,6 +612,7 @@ fn run_create_forum_post(cmd: CreateForumPost) -> Result<()> {
 
 fn run_schedule_vote(cmd: ScheduleVote) -> Result<()> {
     let ScheduleVote {
+        commit,
         nns_proposal_ids,
         sns_proposal_ids,
     } = cmd;
@@ -667,28 +676,95 @@ Calendar Event Setup:
    - If people don't respond, ping @trusted-neurons in #eng-release channel",
     )?;
 
-    run_update_changelog(UpdateChangelog)
+    run_update_changelog(UpdateChangelog {
+        commit,
+        nns_proposal_ids,
+        sns_proposal_ids,
+    })
 }
 
-fn run_update_changelog(_: UpdateChangelog) -> Result<()> {
+fn run_update_changelog(cmd: UpdateChangelog) -> Result<()> {
+    let UpdateChangelog {
+        commit,
+        nns_proposal_ids,
+        sns_proposal_ids,
+    } = cmd;
+
+    let ic = ic_dir();
+
+    use std::fmt::Write;
     print_step(
         8,
         "Update Changelog",
-        "Update CHANGELOG.md file(s) for each proposal:
-
-1. For each proposal ID:
-   ```bash
-   PROPOSAL_IDS=...
-
-   for PROPOSAL_ID in $PROPOSAL_IDS do
-       ./testnet/tools/nns-tools/add-release-to-changelog.sh \\
-           $PROPOSAL_ID
-   done
-   ```
-
-2. Best Practice:
-   - Combine this change with mainnet-canisters.json update in the same PR",
+        &format!(
+            "Now I'm going to update the changelog for the released canisters. This applies to the following proposals:
+NNS: {}
+SNS: {}",
+            nns_proposal_ids.iter().fold(String::new(), |mut acc, id| {
+                let _ = write!(acc, "\n  - {}", id);
+                acc
+            }),
+            sns_proposal_ids.iter().fold(String::new(), |mut acc, id| {
+                let _ = write!(acc, "\n  - {}", id);
+                acc
+            }),
+        ),
     )?;
+
+    {
+        // switch to the commit being released
+        let _commit_switcher = CommitSwitcher::switch(commit)?;
+
+        // update the changelog for each proposal
+        for proposal_id in nns_proposal_ids.iter().chain(sns_proposal_ids.iter()) {
+            println!("Updating changelog for proposal {}", proposal_id);
+            let script = ic.join("testnet/tools/nns-tools/add-release-to-changelog.sh");
+            let output = run_script(script, &[proposal_id], &ic)?;
+
+            if !output.status.success() {
+                println!("{}", String::from_utf8_lossy(&output.stderr));
+                println!("Failed to update changelog for proposal {}", proposal_id);
+            }
+        }
+
+        println!("Changelogs updated. Now I'm going to create a branch, commit, push it, then create a PR using `gh`.");
+        press_enter_to_continue()?;
+
+        // Create branch with today's date
+        let today = chrono::Local::now().format("%Y-%m-%d").to_string();
+        let branch_name = format!("changelog-update-{}", today);
+        commit_all_into_branch(&branch_name)?;
+
+        // Create PR
+        let title = format!(
+            "chore(nervous-system): Update changelog for release {}",
+            today
+        );
+        let body = &format!(
+            "Update CHANGELOG.md for today's release.
+
+## NNS {}
+
+## SNS {}",
+            nns_proposal_ids.iter().fold(String::new(), |mut acc, id| {
+                let _ = write!(
+                    acc,
+                    "\n  - [{id}](https://dashboard.internetcomputer.org/proposal/{id})",
+                );
+                acc
+            }),
+            sns_proposal_ids.iter().fold(String::new(), |mut acc, id| {
+                let _ = write!(
+                    acc,
+                    "\n  - [{id}](https://dashboard.internetcomputer.org/proposal/{id})",
+                );
+                acc
+            }),
+        );
+        let pr_url = create_pr(&title, body)?;
+        open_webpage(&pr_url)?;
+        println!("PR created. Please share it with the team. It can be merged before the proposals are executed.");
+    }
 
     println!("{}", "\nRelease process complete!".bright_green().bold());
     println!("Please verify that all steps were completed successfully.");

@@ -6,7 +6,9 @@ use ic_btc_consensus::BitcoinPayloadBuilder;
 use ic_config::{
     adapters::AdaptersConfig,
     bitcoin_payload_builder_config::Config as BitcoinPayloadBuilderConfig,
-    execution_environment::Config as HypervisorConfig, state_manager::LsmtConfig,
+    execution_environment::Config as HypervisorConfig,
+    message_routing::{MAX_STREAM_MESSAGES, TARGET_STREAM_SIZE_BYTES},
+    state_manager::LsmtConfig,
     subnet_config::SubnetConfig,
 };
 use ic_consensus::{
@@ -45,10 +47,10 @@ use ic_interfaces_state_manager::{CertificationScope, StateHashError, StateManag
 use ic_limits::{MAX_INGRESS_TTL, PERMITTED_DRIFT, SMALL_APP_SUBNET_MAX_SIZE};
 use ic_logger::replica_logger::no_op_logger;
 use ic_logger::{error, ReplicaLogger};
-use ic_management_canister_types::{
+use ic_management_canister_types_private::{
     self as ic00, CanisterIdRecord, InstallCodeArgs, MasterPublicKeyId, Method, Payload,
 };
-use ic_management_canister_types::{
+use ic_management_canister_types_private::{
     CanisterHttpResponsePayload, CanisterInstallMode, CanisterSettingsArgs,
     CanisterSnapshotResponse, CanisterStatusResultV2, ClearChunkStoreArgs, EcdsaCurve, EcdsaKeyId,
     InstallChunkedCodeArgs, LoadCanisterSnapshotArgs, SchnorrAlgorithm, SignWithECDSAReply,
@@ -796,8 +798,8 @@ impl StateMachineNode {
 
 #[allow(clippy::large_enum_variant)]
 enum SignatureSecretKey {
-    EcdsaSecp256k1(ic_crypto_secp256k1::PrivateKey),
-    SchnorrBip340(ic_crypto_secp256k1::PrivateKey),
+    EcdsaSecp256k1(ic_secp256k1::PrivateKey),
+    SchnorrBip340(ic_secp256k1::PrivateKey),
     Ed25519(ic_ed25519::DerivedPrivateKey),
 }
 
@@ -908,6 +910,8 @@ pub struct StateMachineBuilder {
     subnet_size: usize,
     nns_subnet_id: Option<SubnetId>,
     subnet_id: Option<SubnetId>,
+    max_stream_messages: usize,
+    target_stream_size_bytes: usize,
     routing_table: RoutingTable,
     chain_keys_enabled_status: BTreeMap<MasterPublicKeyId, bool>,
     ecdsa_signature_fee: Option<Cycles>,
@@ -938,6 +942,8 @@ impl StateMachineBuilder {
             subnet_size: SMALL_APP_SUBNET_MAX_SIZE,
             nns_subnet_id: None,
             subnet_id: None,
+            max_stream_messages: MAX_STREAM_MESSAGES,
+            target_stream_size_bytes: TARGET_STREAM_SIZE_BYTES,
             routing_table: RoutingTable::new(),
             chain_keys_enabled_status: Default::default(),
             ecdsa_signature_fee: None,
@@ -1049,6 +1055,20 @@ impl StateMachineBuilder {
         }
     }
 
+    pub fn with_max_stream_messages(self, max_stream_messages: usize) -> Self {
+        Self {
+            max_stream_messages,
+            ..self
+        }
+    }
+
+    pub fn with_target_stream_size_bytes(self, target_stream_size_bytes: usize) -> Self {
+        Self {
+            target_stream_size_bytes,
+            ..self
+        }
+    }
+
     pub fn with_master_ecdsa_public_key(self) -> Self {
         self.with_chain_key(MasterPublicKeyId::Ecdsa(EcdsaKeyId {
             curve: EcdsaCurve::Secp256k1,
@@ -1154,6 +1174,8 @@ impl StateMachineBuilder {
             self.subnet_type,
             self.subnet_size,
             self.subnet_id,
+            self.max_stream_messages,
+            self.target_stream_size_bytes,
             self.chain_keys_enabled_status,
             self.ecdsa_signature_fee,
             self.schnorr_signature_fee,
@@ -1480,6 +1502,8 @@ impl StateMachine {
         subnet_type: SubnetType,
         subnet_size: usize,
         subnet_id: Option<SubnetId>,
+        max_stream_messages: usize,
+        target_stream_size_bytes: usize,
         chain_keys_enabled_status: BTreeMap<MasterPublicKeyId, bool>,
         ecdsa_signature_fee: Option<Cycles>,
         schnorr_signature_fee: Option<Cycles>,
@@ -1639,6 +1663,8 @@ impl StateMachine {
             hypervisor_config,
             cycles_account_manager.clone(),
             subnet_id,
+            max_stream_messages,
+            target_stream_size_bytes,
             &metrics_registry,
             replica_logger.clone(),
             Arc::clone(&registry_client) as _,
@@ -1670,10 +1696,9 @@ impl StateMachine {
                     )
                     .unwrap();
 
-                    let private_key = ic_crypto_secp256k1::PrivateKey::deserialize_sec1(
-                        private_key_bytes.as_slice(),
-                    )
-                    .unwrap();
+                    let private_key =
+                        ic_secp256k1::PrivateKey::deserialize_sec1(private_key_bytes.as_slice())
+                            .unwrap();
 
                     let public_key = MasterPublicKey {
                         algorithm_id: AlgorithmId::ThresholdEcdsaSecp256k1,
@@ -1685,7 +1710,7 @@ impl StateMachine {
                     (public_key, private_key)
                 }
                 MasterPublicKeyId::Ecdsa(id) => {
-                    use ic_crypto_secp256k1::{DerivationIndex, DerivationPath, PrivateKey};
+                    use ic_secp256k1::{DerivationIndex, DerivationPath, PrivateKey};
 
                     let path =
                         DerivationPath::new(vec![DerivationIndex(id.name.as_bytes().to_vec())]);
@@ -1706,7 +1731,7 @@ impl StateMachine {
                 }
                 MasterPublicKeyId::Schnorr(id) => match id.algorithm {
                     SchnorrAlgorithm::Bip340Secp256k1 => {
-                        use ic_crypto_secp256k1::{DerivationIndex, DerivationPath, PrivateKey};
+                        use ic_secp256k1::{DerivationIndex, DerivationPath, PrivateKey};
 
                         let path =
                             DerivationPath::new(vec![DerivationIndex(id.name.as_bytes().to_vec())]);
@@ -2173,7 +2198,7 @@ impl StateMachine {
         if let Some(SignatureSecretKey::EcdsaSecp256k1(k)) =
             self.chain_key_subnet_secret_keys.get(&context.key_id())
         {
-            let path = ic_crypto_secp256k1::DerivationPath::from_canister_id_and_path(
+            let path = ic_secp256k1::DerivationPath::from_canister_id_and_path(
                 context.request.sender.get().as_slice(),
                 &context.derivation_path,
             );
@@ -2202,7 +2227,7 @@ impl StateMachine {
 
         let signature = match self.chain_key_subnet_secret_keys.get(&context.key_id()) {
             Some(SignatureSecretKey::SchnorrBip340(k)) => {
-                let path = ic_crypto_secp256k1::DerivationPath::from_canister_id_and_path(
+                let path = ic_secp256k1::DerivationPath::from_canister_id_and_path(
                     context.request.sender.get().as_slice(),
                     &context.derivation_path[..],
                 );
@@ -2416,6 +2441,7 @@ impl StateMachine {
             randomness: Randomness::from(seed),
             chain_key_subnet_public_keys: self.chain_key_subnet_public_keys.clone(),
             idkg_pre_signature_ids: BTreeMap::new(),
+            ni_dkg_ids: BTreeMap::new(),
             registry_version: self.registry_client.get_latest_version(),
             time: time_of_next_round,
             consensus_responses: payload.consensus_responses,

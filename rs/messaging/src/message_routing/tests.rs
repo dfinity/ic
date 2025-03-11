@@ -11,7 +11,7 @@ use ic_crypto_test_utils_ni_dkg::{
 use ic_interfaces_registry::RegistryValue;
 use ic_interfaces_state_manager::StateReader;
 use ic_interfaces_state_manager_mocks::MockStateManager;
-use ic_management_canister_types::{EcdsaCurve, EcdsaKeyId, MasterPublicKeyId};
+use ic_management_canister_types_private::{EcdsaCurve, EcdsaKeyId, MasterPublicKeyId};
 use ic_protobuf::registry::crypto::v1::{ChainKeySigningSubnetList, PublicKey as PublicKeyProto};
 use ic_protobuf::registry::subnet::v1::SubnetRecord as SubnetRecordProto;
 use ic_protobuf::registry::{
@@ -1035,6 +1035,7 @@ fn try_read_registry_succeeds_with_fully_specified_registry_records() {
             randomness: Randomness::new([123; 32]),
             chain_key_subnet_public_keys: BTreeMap::default(),
             idkg_pre_signature_ids: BTreeMap::new(),
+            ni_dkg_ids: BTreeMap::new(),
             registry_version: fixture.registry.get_latest_version(),
             time: Time::from_nanos_since_unix_epoch(0),
             consensus_responses: Vec::new(),
@@ -1839,6 +1840,7 @@ fn process_batch_updates_subnet_metrics() {
             randomness: Randomness::new([123; 32]),
             chain_key_subnet_public_keys: BTreeMap::default(),
             idkg_pre_signature_ids: BTreeMap::new(),
+            ni_dkg_ids: BTreeMap::new(),
             registry_version: fixture.registry.get_latest_version(),
             time: Time::from_nanos_since_unix_epoch(0),
             consensus_responses: Vec::new(),

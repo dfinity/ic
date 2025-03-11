@@ -3,11 +3,11 @@
 
 use crate::execution::common::{
     action_to_response, apply_canister_state_changes, finish_call_with_error,
-    ingress_status_with_processing_state, update_round_limits, validate_message,
+    ingress_status_with_processing_state, log_dirty_pages, update_round_limits, validate_message,
     wasm_result_to_query_response,
 };
 use crate::execution_environment::{
-    log_dirty_pages, ExecuteMessageResult, PausedExecution, RoundContext, RoundLimits,
+    ExecuteMessageResult, PausedExecution, RoundContext, RoundLimits,
 };
 use crate::metrics::CallTreeMetrics;
 use ic_base_types::CanisterId;
@@ -18,7 +18,7 @@ use ic_interfaces::execution_environment::{
     CanisterOutOfCyclesError, HypervisorError, WasmExecutionOutput,
 };
 use ic_logger::{info, ReplicaLogger};
-use ic_management_canister_types::IC_00;
+use ic_management_canister_types_private::IC_00;
 use ic_replicated_state::{
     canister_state::execution_state::WasmExecutionMode, num_bytes_try_from, CallContextAction,
     CallOrigin, CanisterState,
@@ -482,7 +482,6 @@ impl CallOrTaskHelper {
         round_limits: &mut RoundLimits,
         call_tree_metrics: &dyn CallTreeMetrics,
     ) -> ExecuteMessageResult {
-        self.canister.append_log(&mut output.canister_log);
         self.canister
             .system_state
             .apply_ingress_induction_cycles_debit(
@@ -555,27 +554,23 @@ impl CallOrTaskHelper {
             }
             // Query methods only persist certain changes to the canister's state.
             CanisterCallOrTask::Query(_) => {
-                if output.wasm_result.is_ok() {
-                    match canister_state_changes
-                        .system_state_modifications
-                        .apply_changes(
-                            round.time,
-                            &mut self.canister.system_state,
-                            round.network_topology,
-                            round.hypervisor.subnet_id(),
-                            round.log,
-                        ) {
-                        Ok(_) => self.canister.system_state.canister_version += 1,
-                        Err(err) => {
-                            return finish_err(
-                                clean_canister,
-                                output.num_instructions_left,
-                                err.into_user_error(&original.canister_id),
-                                original,
-                                round,
-                            );
-                        }
-                    }
+                if let Err(err) = canister_state_changes
+                    .system_state_modifications
+                    .apply_changes(
+                        round.time,
+                        &mut self.canister.system_state,
+                        round.network_topology,
+                        round.hypervisor.subnet_id(),
+                        round.log,
+                    )
+                {
+                    return finish_err(
+                        clean_canister,
+                        output.num_instructions_left,
+                        err.into_user_error(&original.canister_id),
+                        original,
+                        round,
+                    );
                 }
                 NumBytes::from(0)
             }

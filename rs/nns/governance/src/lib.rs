@@ -146,6 +146,7 @@ pub mod test_utils;
 
 mod account_id_index;
 mod audit_event;
+pub mod canister_state;
 pub mod data_migration;
 mod garbage_collection;
 /// The 'governance' module contains the canister (smart contract)
@@ -162,6 +163,7 @@ pub mod governance_proto_builder;
 mod heap_governance_data;
 mod known_neuron_index;
 mod migrations;
+mod network_economics;
 mod neuron;
 pub mod neuron_data_validation;
 mod neuron_store;
@@ -172,6 +174,7 @@ pub mod proposals;
 mod reward;
 pub mod storage;
 mod subaccount_index;
+pub mod timer_tasks;
 mod voting;
 
 /// Limit the amount of work for skipping unneeded data on the wire when parsing Candid.

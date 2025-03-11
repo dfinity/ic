@@ -5,7 +5,7 @@ use ic_cdk::api::management_canister::provisional::ProvisionalCreateCanisterWith
 use ic_interfaces_registry::{
     RegistryDataProvider, RegistryVersionedRecord, ZERO_REGISTRY_VERSION,
 };
-use ic_management_canister_types::ProvisionalCreateCanisterWithCyclesArgs;
+use ic_management_canister_types_private::ProvisionalCreateCanisterWithCyclesArgs;
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_registry_transport::pb::v1::{
     registry_mutation::Type, RegistryAtomicMutateRequest, RegistryMutation,
@@ -1190,9 +1190,8 @@ fn test_unresponsive_gateway_backend() {
         .send()
         .unwrap();
     assert_eq!(resp.status(), StatusCode::BAD_GATEWAY);
-    assert!(String::from_utf8(resp.bytes().unwrap().as_ref().to_vec())
-        .unwrap()
-        .contains("connection_failure: HTTP request failed: error sending request for url"));
+    let page = String::from_utf8(resp.bytes().unwrap().as_ref().to_vec()).unwrap();
+    assert!(page.contains("ConnectionFailure: HTTP request failed: error sending request for url"));
 }
 
 #[test]
@@ -1369,7 +1368,7 @@ fn http_gateway_route_underscore() {
     let error_page = client.get(invalid_url).send().unwrap();
     assert_eq!(error_page.status(), StatusCode::BAD_REQUEST);
     let page = String::from_utf8(error_page.bytes().unwrap().to_vec()).unwrap();
-    assert!(page.contains("canister_id_not_found"));
+    assert!(page.contains("CanisterIdNotFound"));
 }
 
 #[test]

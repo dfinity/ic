@@ -6,8 +6,8 @@ use ic_base_types::PrincipalId;
 use ic_config::{execution_environment::Config as HypervisorConfig, subnet_config::SubnetConfig};
 use ic_crypto_sha2::Sha256;
 use ic_error_types::{ErrorCode, UserError};
-use ic_management_canister_types::CanisterInstallMode::{Install, Reinstall, Upgrade};
-use ic_management_canister_types::{
+use ic_management_canister_types_private::CanisterInstallMode::{Install, Reinstall, Upgrade};
+use ic_management_canister_types_private::{
     self as ic00, CanisterChange, CanisterChangeDetails, CanisterChangeOrigin, CanisterIdRecord,
     CanisterInfoRequest, CanisterInfoResponse, CreateCanisterArgs, InstallCodeArgs, Method,
     Payload, UpdateSettingsArgs,
