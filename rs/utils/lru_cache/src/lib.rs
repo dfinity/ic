@@ -127,6 +127,11 @@ where
         }
     }
 
+    /// Remove the least recently used entry from the cache.
+    pub fn pop_lru(&mut self) -> Option<(K, V)> {
+        self.cache.pop_lru()
+    }
+
     /// Clears the cache by removing all items.
     pub fn clear(&mut self) {
         self.cache.clear();
