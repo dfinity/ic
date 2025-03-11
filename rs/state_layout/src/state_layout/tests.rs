@@ -3,7 +3,9 @@ use super::*;
 use ic_management_canister_types_private::{
     CanisterChange, CanisterChangeDetails, CanisterChangeOrigin, CanisterInstallMode, IC_00,
 };
-use ic_replicated_state::canister_state::system_state::PausedExecutionId;
+use ic_replicated_state::canister_state::system_state::{
+    OnLowWasmMemoryHookStatus, PausedExecutionId,
+};
 use ic_replicated_state::{
     canister_state::system_state::CanisterHistory,
     metadata_state::subnet_call_context_manager::InstallCodeCallId, page_map::Shard, NumWasmPages,
@@ -829,6 +831,11 @@ fn test_decode_v1_encode_v2_decode() {
     let mut task_queue = TaskQueue::default();
     task_queue.enqueue(ExecutionTask::OnLowWasmMemory);
 
+    task_queue.enqueue(ExecutionTask::AbortedExecution {
+        input: CanisterMessageOrTask::Task(CanisterTask::Heartbeat),
+        prepaid_execution_cycles: Cycles::zero(),
+    });
+
     let canister_state_bits_initial = CanisterStateBits {
         controllers: controllers.clone(),
         task_queue: task_queue.clone(),
@@ -853,7 +860,19 @@ fn test_decode_v1_encode_v2_decode() {
 
     assert_eq!(canister_state_bits_initial, canister_state_bits_load_v1);
 
-    let pb_bits_v2 = pb_canister_state_bits::CanisterStateBits::from(canister_state_bits_load_v1);
+    let mut pb_bits_v2 =
+        pb_canister_state_bits::CanisterStateBits::from(canister_state_bits_load_v1);
+
+    // To test deserialization without old fields, we will set them on default value.
+    pb_bits_v2.task_queue = VecDeque::new().into();
+    pb_bits_v2.on_low_wasm_memory_hook_status = Some(
+        pb_canister_state_bits::OnLowWasmMemoryHookStatus::try_from(
+            OnLowWasmMemoryHookStatus::default(),
+        )
+        .unwrap()
+        .try_into()
+        .unwrap(),
+    );
 
     let canister_state_bits_load_v2 =
         CanisterStateBits::try_from((pb_bits_v2, &CanisterId::from_u64(1))).unwrap();
