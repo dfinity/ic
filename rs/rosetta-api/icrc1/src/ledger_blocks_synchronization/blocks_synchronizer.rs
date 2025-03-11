@@ -44,17 +44,19 @@ impl SyncRange {
 fn derive_synchronization_gaps(
     storage_client: Arc<StorageClient>,
 ) -> anyhow::Result<Vec<SyncRange>> {
-    let lowest_block_opt = storage_client.get_block_with_lowest_block_idx()?;
+    let Some(highest_block) = storage_client.get_block_with_highest_block_idx()? else {
+        // If the database is empty then there cannot exist any gaps.
+        return Ok(vec![]);
+    };
 
-    // If the database is empty then there cannot exist any gaps.
-    if lowest_block_opt.is_none() {
+    // If the database is not empty we have to determine whether there is a gap in the database.
+    let block_count = storage_client.get_block_count()?;
+    if block_count == highest_block.index {
+        // if the block count is equal to the highest block index then there is no gap.
         return Ok(vec![]);
     }
 
-    // Unwrap is safe.
-    let lowest_block = lowest_block_opt.unwrap();
-
-    // If the database is not empty we have to determine whether there is a gap in the database.
+    // If there is a gap, compute all the gaps.
     let gap = storage_client.get_blockchain_gaps()?;
 
     // The database should have at most one gap. Otherwise the database file was edited and it can no longer be guaranteed that it contains valid blocks.
@@ -76,6 +78,12 @@ fn derive_synchronization_gaps(
 
     // Gaps are only determined within stored block ranges. Blocks with indices that are below the lowest stored block and above the highest stored blocks are not considered.
     // Check if the lowest block that was stored is the genesis block.
+
+    let Some(lowest_block) = storage_client.get_block_with_lowest_block_idx()? else {
+        // If the database is empty then there cannot exist any gaps.
+        return Ok(vec![]);
+    };
+
     if lowest_block.index != 0 {
         // If the lowest stored block's index is not 0 that means there is a gap between the genesis block and the lowest stored block. Unwrapping parent hash is safe as only the genesis block does not have a parent hash.
         // The first interval to sync is between the genesis block and the lowest stored block.

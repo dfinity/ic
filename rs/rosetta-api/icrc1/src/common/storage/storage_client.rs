@@ -186,9 +186,40 @@ impl StorageClient {
             "#,
             [],
         )?;
+
+        // The counters table entry needs to have a unique name, so that we don't end up with
+        // multiple entries for the same counter.
         open_connection.execute(
             r#"
-            CREATE INDEX IF NOT EXISTS block_idx_account_balances 
+            CREATE TABLE IF NOT EXISTS counters (name TEXT PRIMARY KEY, value INTEGER NOT NULL)
+            "#,
+            [],
+        )?;
+
+        open_connection.execute(
+            r#"
+            INSERT OR IGNORE INTO counters (name, value) VALUES ("SyncedBlocks", 0)
+            "#,
+            [],
+        )?;
+
+        // The trigger increments the counter of `SyncedBlocks` by 1 whenever a new block is
+        // inserted into the blocks table. For transactions that call `INSERT OR IGNORE` and try to
+        // insert a block that already exists, the trigger will not be executed. The trigger is
+        // executed once for each row that is inserted.
+        open_connection.execute(
+            r#"
+            CREATE TRIGGER IF NOT EXISTS SyncedBlocksUpdate AFTER INSERT ON blocks
+                BEGIN
+                    UPDATE counters SET value = value + 1 WHERE name = "SyncedBlocks";
+                END
+            "#,
+            [],
+        )?;
+
+        open_connection.execute(
+            r#"
+            CREATE INDEX IF NOT EXISTS block_idx_account_balances
             ON account_balances(block_idx)
             "#,
             [],
@@ -196,7 +227,7 @@ impl StorageClient {
 
         open_connection.execute(
             r#"
-        CREATE INDEX IF NOT EXISTS tx_hash_index 
+        CREATE INDEX IF NOT EXISTS tx_hash_index
         ON blocks(tx_hash)
         "#,
             [],
@@ -204,7 +235,7 @@ impl StorageClient {
 
         open_connection.execute(
             r#"
-        CREATE INDEX IF NOT EXISTS block_hash_index 
+        CREATE INDEX IF NOT EXISTS block_hash_index
         ON blocks(hash)
         "#,
             [],
