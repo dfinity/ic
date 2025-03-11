@@ -81,8 +81,7 @@ pub const AGENT_REQUEST_TIMEOUT: Duration = Duration::from_secs(20);
 pub const IDENTITY_PEM:&str = "-----BEGIN PRIVATE KEY-----\nMFMCAQEwBQYDK2VwBCIEILhMGpmYuJ0JEhDwocj6pxxOmIpGAXZd40AjkNhuae6q\noSMDIQBeXC6ae2dkJ8QC50bBjlyLqsFQFsMsIThWB21H6t6JRA==\n-----END PRIVATE KEY-----";
 /// A short wasm module that is a legal canister binary.
 pub const _EMPTY_WASM: &[u8] = &[0, 97, 115, 109, 1, 0, 0, 0];
-/// The following definition is a temporary work-around. Please do not copy!
-pub const MESSAGE_CANISTER_WASM: &[u8] = include_bytes!("message.wasm");
+pub const MESSAGE_CANISTER_WASM: &[u8] = include_bytes!(env!("MESSAGE_CANISTER_WASM_PATH"));
 
 pub const CFG_TEMPLATE_BYTES: &[u8] =
     include_bytes!("../../../../ic-os/components/ic/generate-ic-config/ic.json5.template");
