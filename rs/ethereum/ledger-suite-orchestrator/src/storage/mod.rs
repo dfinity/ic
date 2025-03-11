@@ -247,19 +247,19 @@ pub fn record_icrc1_ledger_suite_wasms(
         wasm_store,
         timestamp,
         git_commit.clone(),
-        LedgerWasm::from(LEDGER_BYTECODE),
+        LedgerWasm::from(LEDGER_BYTECODE.to_vec()),
     )?;
     let index_compressed_wasm_hash = record_wasm(
         wasm_store,
         timestamp,
         git_commit.clone(),
-        IndexWasm::from(INDEX_BYTECODE),
+        IndexWasm::from(INDEX_BYTECODE.to_vec()),
     )?;
     let archive_compressed_wasm_hash = record_wasm(
         wasm_store,
         timestamp,
         git_commit,
-        ArchiveWasm::from(ARCHIVE_NODE_BYTECODE),
+        ArchiveWasm::from(ARCHIVE_NODE_BYTECODE.to_vec()),
     )?;
     Ok(LedgerSuiteVersion {
         ledger_compressed_wasm_hash,

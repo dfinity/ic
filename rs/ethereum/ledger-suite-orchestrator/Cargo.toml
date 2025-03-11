@@ -31,6 +31,7 @@ ic-metrics-encoder = "1"
 ic-stable-structures = { workspace = true }
 ic0 = "0.21.1"
 icrc-ledger-types = { path = "../../../packages/icrc-ledger-types" }
+lazy_static = { workspace = true }
 num-traits = { workspace = true }
 scopeguard = "1.1.0"
 serde = { workspace = true }

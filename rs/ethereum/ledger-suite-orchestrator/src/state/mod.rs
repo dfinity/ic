@@ -10,6 +10,7 @@ use crate::storage::WasmHashError;
 use candid::Principal;
 use ic_cdk::trap;
 use ic_stable_structures::{storable::Bound, Cell, Storable};
+use lazy_static::lazy_static;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde_bytes::ByteArray;
 use std::borrow::Cow;
@@ -20,13 +21,27 @@ use std::iter::once;
 use std::marker::PhantomData;
 use std::str::FromStr;
 
-pub(crate) const LEDGER_BYTECODE: &[u8] = include_bytes!(env!("LEDGER_CANISTER_WASM_PATH"));
-pub(crate) const INDEX_BYTECODE: &[u8] = include_bytes!(env!("INDEX_CANISTER_WASM_PATH"));
-pub(crate) const ARCHIVE_NODE_BYTECODE: &[u8] =
-    include_bytes!(env!("LEDGER_ARCHIVE_NODE_CANISTER_WASM_PATH"));
-
 const WASM_HASH_LENGTH: usize = 32;
 const GIT_COMMIT_HASH_LENGTH: usize = 20;
+
+lazy_static! {
+    /// The WASM of the Universal Canister.
+    pub(crate) static ref LEDGER_BYTECODE: Vec<u8> = {
+        let wasm_path = std::env::var("LEDGER_CANISTER_WASM_PATH") .expect("LEDGER_CANISTER_WASM_PATH");
+        std::fs::read(&wasm_path)
+            .unwrap_or_else(|e| panic!("Could not read WASM from {:?}: {e:?}", wasm_path))
+    };
+    pub(crate) static ref INDEX_BYTECODE: Vec<u8> = {
+        let wasm_path = std::env::var("INDEX_CANISTER_WASM_PATH") .expect("INDEX_CANISTER_WASM_PATH");
+        std::fs::read(&wasm_path)
+            .unwrap_or_else(|e| panic!("Could not read WASM from {:?}: {e:?}", wasm_path))
+    };
+    pub(crate) static ref ARCHIVE_NODE_BYTECODE: Vec<u8> = {
+        let wasm_path = std::env::var("LEDGER_ARCHIVE_NODE_CANISTER_WASM_PATH") .expect("LEDGER_ARCHIVE_NODE_CANISTER_WASM_PATH");
+        std::fs::read(&wasm_path)
+            .unwrap_or_else(|e| panic!("Could not read WASM from {:?}: {e:?}", wasm_path))
+    };
+}
 
 thread_local! {
     pub static STATE: RefCell<Cell<ConfigState, StableMemory>> = RefCell::new(Cell::init(
