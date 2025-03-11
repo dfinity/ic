@@ -36,7 +36,7 @@ use ic_interfaces::execution_environment::{
 use ic_logger::ReplicaLogger;
 use ic_replicated_state::{
     page_map::{PageAllocatorRegistry, PageMapSerialization},
-    EmbedderCache, Global, Memory, PageMap,
+    EmbedderCache, Memory, PageMap,
 };
 use ic_types::CanisterId;
 

@@ -13,7 +13,7 @@ use ic_replicated_state::{
         OverlayFileSerialization, PageAllocatorSerialization, PageMapSerialization,
         StorageSerialization,
     },
-    Global, NumWasmPages,
+    NumWasmPages,
 };
 use ic_types::CanisterId;
 use ic_utils;
