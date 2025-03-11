@@ -17,6 +17,8 @@ on the process that this file is part of, see
 
 ## Removed
 
+* Removed a migration mechanism previously used for data migrations through heartbeat.
+
 ## Fixed
 
 ## Security
