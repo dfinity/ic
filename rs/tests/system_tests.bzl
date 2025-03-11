@@ -7,6 +7,8 @@ load("@bazel_skylib//rules:copy_file.bzl", "copy_file")
 load("@rules_oci//oci:defs.bzl", "oci_load")
 load("@rules_rust//rust:defs.bzl", "rust_binary")
 load("//bazel:defs.bzl", "mcopy", "zstd_compress")
+load("//bazel:mainnet-images.bzl", "base_download_url")
+load("@mainnet_versions//:defs.bzl", "mainnet_versions")
 load("//rs/tests:common.bzl", "BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS", "GUESTOS_DEV_VERSION", "MAINNET_NNS_CANISTER_ENV", "MAINNET_NNS_CANISTER_RUNTIME_DEPS", "NNS_CANISTER_ENV", "NNS_CANISTER_RUNTIME_DEPS", "UNIVERSAL_VM_RUNTIME_DEPS")
 
 def _run_system_test(ctx):
@@ -257,9 +259,10 @@ def system_test(
         icos_images["ENV_DEPS__HOSTOS_UPDATE_IMG_TEST"] = "//ic-os/hostos/envs/dev:update-img-test.tar.zst"
 
     if uses_hostos_mainnet:
-        icos_images["ENV_DEPS__MAINNET_HOSTOS_VERSION_FILE"] = "//rs/tests:mainnet_hostos_version_file"
-        icos_images["ENV_DEPS__MAINNET_HOSTOS_UPDATE_IMG_URL_FILE"] = "//rs/tests:mainnet_hostos_url_file"
-        icos_images["ENV_DEPS__MAINNET_HOSTOS_UPDATE_IMG_SHA_FILE"] = "//rs/tests:mainnet_hostos_sha_file"
+        mainnet_hostos_version = mainnet_versions["deployments"]["hostos"]["version"]
+        env["ENV_DEPS__MAINNET_HOSTOS_VERSION"] = mainnet_hostos_version
+        env["ENV_DEPS__MAINNET_HOSTOS_UPDATE_IMG_URL"] = base_download_url(mainnet_hostos_version, "host-os", True, False) + "update-img.tar.zst"
+        env["ENV_DEPS__MAINNET_HOSTOS_UPDATE_IMG_SHA"] = mainnet_versions["deployments"]["hostos"]["upgrade-img-hash"]
 
     if uses_setupos_dev:
         # Note: SetupOS is still passed directly by path, as it needs some local processing.

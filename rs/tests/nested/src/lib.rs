@@ -193,17 +193,14 @@ pub fn upgrade_hostos_to_test_version(env: TestEnv) {
 /// Orchestrate the HostOS upgrade using mainnet images.
 /// Reads version, update URL, and SHA256 from the files produced by mainnet-images.bzl.
 pub fn upgrade_hostos_to_mainnet_version(env: TestEnv) {
-    let target_version_str =
-        read_dependency_from_env_to_string("ENV_DEPS__MAINNET_HOSTOS_VERSION_FILE").unwrap();
+    let target_version_str = std::env::var("ENV_DEPS__MAINNET_HOSTOS_VERSION").unwrap();
     let target_version =
         HostosVersion::try_from(target_version_str.trim()).expect("Invalid mainnet hostos version");
 
-    let update_image_url_str =
-        read_dependency_from_env_to_string("ENV_DEPS__MAINNET_HOSTOS_UPDATE_IMG_URL_FILE").unwrap();
+    let update_image_url_str = std::env::var("ENV_DEPS__MAINNET_HOSTOS_UPDATE_IMG_URL").unwrap();
     let update_image_url =
         Url::parse(update_image_url_str.trim()).expect("Invalid mainnet hostos update image URL");
-    let update_image_sha256 =
-        read_dependency_from_env_to_string("ENV_DEPS__MAINNET_HOSTOS_UPDATE_IMG_SHA_FILE").unwrap();
+    let update_image_sha256 = std::env::var("ENV_DEPS__MAINNET_HOSTOS_UPDATE_IMG_SHA").unwrap();
 
     upgrade_hostos(env, target_version, update_image_url, update_image_sha256);
 }
