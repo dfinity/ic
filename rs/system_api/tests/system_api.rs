@@ -269,6 +269,7 @@ fn is_supported(api_type: SystemApiCallId, context: &str) -> bool {
         SystemApiCallId::CanisterSelfCopy => vec!["*"],
         SystemApiCallId::CanisterCycleBalance => vec!["*"],
         SystemApiCallId::CanisterCycleBalance128 => vec!["*"],
+        SystemApiCallId::CanisterLiquidCycleBalance128 => vec!["*"],
         SystemApiCallId::CanisterStatus => vec!["*"],
         SystemApiCallId::CanisterVersion => vec!["*"],
         SystemApiCallId::MsgMethodNameSize => vec!["F"],
@@ -639,6 +640,16 @@ fn api_availability_test(
         SystemApiCallId::CanisterCycleBalance128 => {
             assert_api_availability(
                 |mut api| api.ic0_canister_cycle_balance128(0, &mut [42; 128]),
+                api_type,
+                &system_state,
+                cycles_account_manager,
+                api_type_enum,
+                context,
+            );
+        }
+        SystemApiCallId::CanisterLiquidCycleBalance128 => {
+            assert_api_availability(
+                |mut api| api.ic0_canister_liquid_cycle_balance128(0, &mut [42; 128]),
                 api_type,
                 &system_state,
                 cycles_account_manager,

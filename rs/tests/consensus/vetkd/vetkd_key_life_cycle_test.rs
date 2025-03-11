@@ -9,16 +9,20 @@ Runbook::
 . System subnet comprising N nodes, necessary NNS canisters
 . Wait one DKG interval
 . Enable vetkey on subnet
-. Wait two DKG intervals, check subnet health
+. Wait until public key becomes available
+. Encrypt some data to an IBE key
 . Fetch the public key from a canister
+. Use it to decrypt the data from the IBE key
+. Check that data matches
+
 
 end::catalog[] */
 
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use canister_test::Canister;
-use ic_bls12_381::G2Affine;
+use futures::FutureExt;
 use ic_consensus_threshold_sig_system_test_utils::{
-    enable_chain_key_signing, get_public_key_with_logger, DKG_INTERVAL,
+    enable_chain_key_signing, get_public_key_with_logger, vetkd_derive_encrypted_key,
 };
 use ic_management_canister_types_private::{MasterPublicKeyId, VetKdCurve, VetKdKeyId};
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
@@ -29,15 +33,24 @@ use ic_system_test_driver::{
         ic::{InternetComputer, Subnet},
         test_env::TestEnv,
         test_env_api::{
-            HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, NnsInstallationBuilder,
+            retry_async, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer,
+            NnsInstallationBuilder,
         },
     },
     systest,
     util::{block_on, runtime_from_url, MessageCanister},
 };
-use ic_types::Height;
+use ic_types::{Cycles, Height};
+use ic_vetkd_utils::{DerivedPublicKey, IBECiphertext, TransportSecretKey};
+use slog::info;
+use std::time::Duration;
 
 const NODES_COUNT: usize = 4;
+const DKG_INTERVAL: u64 = 20;
+
+const MSG: &str = "Secret message that is totally important";
+const DERIVATION_ID: &str = "secret_message";
+const SEED: [u8; 32] = [13; 32];
 
 fn setup(env: TestEnv) {
     InternetComputer::new()
@@ -75,11 +88,12 @@ fn test(env: TestEnv) {
     let nns_agent = nns_node.build_default_agent();
 
     let nns_runtime = runtime_from_url(nns_node.get_public_url(), nns_node.effective_canister_id());
-    let governance = Canister::new(&nns_runtime, GOVERNANCE_CANISTER_ID);
-    let key_ids = vec![MasterPublicKeyId::VetKd(VetKdKeyId {
+    let vetkd_key_id = VetKdKeyId {
         curve: VetKdCurve::Bls12_381_G2,
         name: String::from("some_vetkd_key"),
-    })];
+    };
+    let governance = Canister::new(&nns_runtime, GOVERNANCE_CANISTER_ID);
+    let key_ids = vec![MasterPublicKeyId::VetKd(vetkd_key_id.clone())];
 
     block_on(async {
         enable_chain_key_signing(&governance, nns_subnet.subnet_id, key_ids.clone(), &log).await;
@@ -87,14 +101,53 @@ fn test(env: TestEnv) {
 
         // Fetch public key from subnet
         for key_id in &key_ids {
-            let key = get_public_key_with_logger(key_id, &msg_can, &log)
+            let pub_key = get_public_key_with_logger(key_id, &msg_can, &log)
                 .await
                 .expect("Should successfully retrieve the public key");
 
-            let key: [u8; 96] = key
-                .try_into()
-                .expect("Unexpected vetkd key length returned from IC");
-            let _key = G2Affine::from_compressed(&key).expect("Failed to parse vetkd key");
+            // Check that the key is well formed
+            let _key =
+                DerivedPublicKey::deserialize(&pub_key).expect("Failed to parse vetkd public key");
+
+            let enc_msg =
+                IBECiphertext::encrypt(&pub_key, DERIVATION_ID.as_bytes(), MSG.as_bytes(), &SEED)
+                    .expect("Failed to encrypt message");
+
+            let transport_key = TransportSecretKey::from_seed(SEED.to_vec())
+                .expect("Failed to generate transport secret key");
+
+            info!(log, "Trying to fetch the key");
+
+            let encrypted_priv_key: Vec<u8> = retry_async(
+                "Trying to derive encrypted key",
+                &log,
+                Duration::from_secs(120),
+                Duration::from_secs(2),
+                || {
+                    vetkd_derive_encrypted_key(
+                        transport_key.public_key().try_into().unwrap(),
+                        vetkd_key_id.clone(),
+                        DERIVATION_ID.as_bytes().to_vec(),
+                        &msg_can,
+                        Cycles::zero(),
+                    )
+                    .map(|maybe_key| {
+                        maybe_key.map_err(|e| anyhow!("Failed to retrieve key: {e:?}"))
+                    })
+                },
+            )
+            .await
+            .expect("Failed to derive encrypted key");
+
+            let priv_key = transport_key
+                .decrypt(&encrypted_priv_key, &pub_key, DERIVATION_ID.as_bytes())
+                .expect("Failed to decrypt derived key");
+
+            let msg = enc_msg
+                .decrypt(&priv_key)
+                .expect("Failed to decrypt the message");
+
+            assert_eq!(&msg, MSG.as_bytes());
         }
     });
 }

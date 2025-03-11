@@ -196,7 +196,6 @@ wait_for_quiet_deadline_increase_seconds: 86400
 # The initial token distribution must satisfy the following preconditions to be valid:
 #    - developer_distribution.developer_neurons.stake_e8s.sum <= u64:MAX
 #    - developer_neurons.developer_neurons.stake_e8s.sum <= swap_distribution.total_e8s
-#    - airdrop_distribution.airdrop_neurons.stake_e8s.sum <= u64:MAX
 #    - swap_distribution.initial_swap_amount_e8s > 0
 #    - swap_distribution.initial_swap_amount_e8s <= swap_distribution.total_e8s
 #    - swap_distribution.total_e8s >= developer_distribution.developer_neurons.stake_e8s.sum
@@ -216,11 +215,6 @@ wait_for_quiet_deadline_increase_seconds: 86400
 #    - initial_swap_amount_e8s: The initial amount of tokens deposited in the Swap canister for
 #      the initial token swap.
 #
-# - airdrop_distribution has one field:
-#    - airdrop_neurons: A list of NeuronDistributions that specify the neuron's stake and
-#      controlling principal. These neurons will be available at genesis in PreInitializationSwap
-#      mode. No voting power multiplier is applied to these neurons.
-#
 # Example:
 # initial_token_distribution:
 #   FractionalDeveloperVotingPower:
@@ -239,12 +233,6 @@ wait_for_quiet_deadline_increase_seconds: 86400
 #     swap_distribution:
 #       total_e8s: 6000000000
 #       initial_swap_amount_e8s: 3000000000
-#     airdrop_distribution:
-#       airdrop_neurons:
-#         - controller: fod6j-klqsi-ljm4t-7v54x-2wd6s-6yduy-spdkk-d2vd4-iet7k-nakfi-qqe
-#           stake_e8s: 500000000
-#           memo: 0,
-#           dissolve_delay_seconds: 15780000 # 6 months
 #
 initial_token_distribution:
    FractionalDeveloperVotingPower:
@@ -259,5 +247,3 @@ initial_token_distribution:
      swap_distribution:
        total_e8s: 3000000000000
        initial_swap_amount_e8s: 3000000000000
-     airdrop_distribution:
-       airdrop_neurons: []

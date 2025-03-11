@@ -36,8 +36,9 @@ use ic_system_test_driver::{
         test_env::{HasIcPrepDir, TestEnv, TestEnvAttribute},
         test_env_api::{
             get_dependency_path, get_ic_os_update_img_sha256, get_ic_os_update_img_url,
-            read_dependency_to_string, HasIcDependencies, HasPublicApiUrl, HasTopologySnapshot,
-            IcNodeContainer, IcNodeSnapshot, NnsCustomizations, SshSession, TopologySnapshot,
+            get_mainnet_nns_revision, read_dependency_to_string, HasIcDependencies,
+            HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, IcNodeSnapshot,
+            NnsCustomizations, SshSession, TopologySnapshot,
         },
         universal_vm::{DeployedUniversalVm, UniversalVm, UniversalVms},
     },
@@ -681,7 +682,7 @@ fn with_ledger_account_for_tests(env: TestEnv, account_id: AccountIdentifier) {
 
 fn fetch_mainnet_ic_replay(env: TestEnv) {
     let logger = env.logger();
-    let version = read_dependency_to_string("mainnet_nns_subnet_revision.txt").unwrap();
+    let version = get_mainnet_nns_revision();
     let mainnet_ic_replica_url =
         format!("https://download.dfinity.systems/ic/{version}/release/ic-replay.gz");
     let ic_replay_path = env.get_path(IC_REPLAY);
@@ -733,7 +734,7 @@ fn prepare_nns_state(env: TestEnv, account_id: AccountIdentifier) -> NeuronId {
 
 fn fetch_mainnet_ic_recovery(env: TestEnv) {
     let logger = env.logger();
-    let version = read_dependency_to_string("mainnet_nns_subnet_revision.txt").unwrap();
+    let version = get_mainnet_nns_revision();
     let mainnet_ic_recovery_url =
         format!("https://download.dfinity.systems/ic/{version}/release/ic-recovery.gz");
     let ic_recovery_path = env.get_path(IC_RECOVERY);
