@@ -75,6 +75,11 @@ pub struct CompilationCacheBuilder {
     max_entries: usize,
 }
 
+impl Default for CompilationCacheBuilder {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 impl CompilationCacheBuilder {
     pub fn new() -> Self {
         Self {
