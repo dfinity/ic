@@ -34,16 +34,16 @@ use ic_management_canister_types_private::{
     CanisterInstallMode, CanisterInstallModeV2, CanisterSettingsArgsBuilder,
     CanisterStatusResultV2, CanisterStatusType, CanisterUpgradeOptions, ChunkHash,
     ClearChunkStoreArgs, CreateCanisterArgs, EmptyBlob, InstallCodeArgsV2, Method,
-    NodeMetricsHistoryArgs, NodeMetricsHistoryResponse, Payload, StoredChunksArgs,
-    StoredChunksReply, SubnetInfoArgs, SubnetInfoResponse, UpdateSettingsArgs, UploadChunkArgs,
-    UploadChunkReply, WasmMemoryPersistence,
+    NodeMetricsHistoryArgs, NodeMetricsHistoryResponse, OnLowWasmMemoryHookStatus, Payload,
+    StoredChunksArgs, StoredChunksReply, SubnetInfoArgs, SubnetInfoResponse, UpdateSettingsArgs,
+    UploadChunkArgs, UploadChunkReply, WasmMemoryPersistence,
 };
 use ic_metrics::MetricsRegistry;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable, CANISTER_IDS_PER_SUBNET};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
-    canister_state::system_state::{wasm_chunk_store, CyclesUseCase, OnLowWasmMemoryHookStatus},
+    canister_state::system_state::{wasm_chunk_store, CyclesUseCase},
     metadata_state::subnet_call_context_manager::InstallCodeCallId,
     page_map::TestPageAllocatorFileDescriptorImpl,
     testing::{CanisterQueuesTesting, SystemStateTesting},

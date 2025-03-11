@@ -7,16 +7,16 @@ use ic_management_canister_types_private::{
     CanisterHttpRequestArgs, CanisterIdRecord, CanisterSettingsArgsBuilder, CanisterStatusResultV2,
     CanisterStatusType, ClearChunkStoreArgs, DerivationPath, EcdsaKeyId, EmptyBlob,
     FetchCanisterLogsRequest, HttpMethod, LogVisibilityV2, MasterPublicKeyId, Method,
-    Payload as Ic00Payload, ProvisionalCreateCanisterWithCyclesArgs, ProvisionalTopUpCanisterArgs,
-    SchnorrAlgorithm, SchnorrKeyId, TakeCanisterSnapshotArgs, TransformContext, TransformFunc,
-    UpdateSettingsArgs, UploadChunkArgs, VetKdCurve, VetKdKeyId, IC_00,
+    OnLowWasmMemoryHookStatus, Payload as Ic00Payload, ProvisionalCreateCanisterWithCyclesArgs,
+    ProvisionalTopUpCanisterArgs, SchnorrAlgorithm, SchnorrKeyId, TakeCanisterSnapshotArgs,
+    TransformContext, TransformFunc, UpdateSettingsArgs, UploadChunkArgs, VetKdCurve, VetKdKeyId,
+    IC_00,
 };
 use ic_registry_routing_table::{canister_id_into_u64, CanisterIdRange, RoutingTable};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
     canister_state::{
-        system_state::{CyclesUseCase, OnLowWasmMemoryHookStatus},
-        DEFAULT_QUEUE_CAPACITY, WASM_PAGE_SIZE_IN_BYTES,
+        system_state::CyclesUseCase, DEFAULT_QUEUE_CAPACITY, WASM_PAGE_SIZE_IN_BYTES,
     },
     testing::{CanisterQueuesTesting, SystemStateTesting},
     CanisterStatus, ReplicatedState, SystemState,
