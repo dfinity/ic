@@ -1969,7 +1969,8 @@ fn observe_replicated_state_metrics(
     let mut canisters_with_old_open_call_contexts = 0;
     let mut old_call_contexts_count = 0;
     let mut num_stop_canister_calls_without_call_id = 0;
-    let mut open_signature_request_contexts_by_key_id = BTreeMap::<MasterPublicKeyId, u32>::new();
+    let mut in_flight_signature_request_contexts_by_key_id =
+        BTreeMap::<MasterPublicKeyId, u32>::new();
 
     let canister_id_ranges = state.routing_table().ranges(own_subnet_id);
     state.canisters_iter().for_each(|canister| {
@@ -2089,13 +2090,13 @@ fn observe_replicated_state_metrics(
     }
 
     for context in state.signature_request_contexts().values() {
-        *open_signature_request_contexts_by_key_id
+        *in_flight_signature_request_contexts_by_key_id
             .entry(context.key_id())
             .or_default() += 1;
     }
-    for (key_id, count) in open_signature_request_contexts_by_key_id {
+    for (key_id, count) in in_flight_signature_request_contexts_by_key_id {
         metrics
-            .open_signature_request_contexts
+            .in_flight_signature_request_contexts
             .with_label_values(&[&key_id.to_string()])
             .observe(count as f64);
     }

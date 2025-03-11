@@ -3816,12 +3816,12 @@ fn threshold_signature_agreements_metric_is_updated() {
     );
     test.execute_round(ExecutionRoundType::OrdinaryRound);
 
-    // Metrics are observed at the beginning of the round, so there should be no open contexts yet
-    let open_contexts_metric = fetch_histogram_vec_stats(
+    // Metrics are observed at the beginning of the round, so there should be no in flight contexts yet
+    let in_flight_contexts_metric = fetch_histogram_vec_stats(
         test.metrics_registry(),
-        "execution_open_signature_request_contexts",
+        "execution_in_flight_signature_request_contexts",
     );
-    assert!(open_contexts_metric.is_empty());
+    assert!(in_flight_contexts_metric.is_empty());
 
     // Check that the SubnetCallContextManager contains all requests.
     let sign_with_ecdsa_contexts = &test
@@ -3847,10 +3847,10 @@ fn threshold_signature_agreements_metric_is_updated() {
     test.state_mut().consensus_queue.push(response);
     test.execute_round(ExecutionRoundType::OrdinaryRound);
 
-    // At the beginning of the next round, open contexts should have been observed
-    let open_contexts_metric = fetch_histogram_vec_stats(
+    // At the beginning of the next round, the in flight contexts should have been observed
+    let in_flight_contexts_metric = fetch_histogram_vec_stats(
         test.metrics_registry(),
-        "execution_open_signature_request_contexts",
+        "execution_in_flight_signature_request_contexts",
     );
     assert_eq!(
         metric_vec(&[
@@ -3863,7 +3863,7 @@ fn threshold_signature_agreements_metric_is_updated() {
                 HistogramStats { count: 1, sum: 1.0 }
             ),
         ]),
-        open_contexts_metric,
+        in_flight_contexts_metric,
     );
 
     observe_replicated_state_metrics(
@@ -3875,9 +3875,9 @@ fn threshold_signature_agreements_metric_is_updated() {
     );
 
     // After the round, the rejected context should be observed
-    let open_contexts_metric = fetch_histogram_vec_stats(
+    let in_flight_contexts_metric = fetch_histogram_vec_stats(
         test.metrics_registry(),
-        "execution_open_signature_request_contexts",
+        "execution_in_flight_signature_request_contexts",
     );
     assert_eq!(
         metric_vec(&[
@@ -3890,7 +3890,7 @@ fn threshold_signature_agreements_metric_is_updated() {
                 HistogramStats { count: 2, sum: 2.0 }
             ),
         ]),
-        open_contexts_metric,
+        in_flight_contexts_metric,
     );
 
     let threshold_signature_agreements_before = &test
