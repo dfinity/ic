@@ -2,9 +2,9 @@ use candid::{candid_method, Decode, Nat, Principal};
 use dfn_candid::candid_one;
 #[cfg(feature = "notify-method")]
 use dfn_candid::CandidOne;
-#[allow(unused_imports)]
+use dfn_core::endpoint::reject_on_decode_error::over_async_may_reject;
+#[cfg(feature = "notify-method")]
 use dfn_core::BytesS;
-use dfn_core::{endpoint::reject_on_decode_error::over_async_may_reject, over_init};
 #[cfg(feature = "notify-method")]
 use dfn_protobuf::protobuf;
 use ic_base_types::{CanisterId, PrincipalId};
@@ -736,16 +736,17 @@ fn canister_init(arg: LedgerCanisterPayload) {
 
 #[export_name = "canister_init"]
 fn main() {
-    over_init(|bytes: BytesS| {
-        // We support the old init argument for backward
-        // compatibility. If decoding the bytes as the new
-        // init arguments fails then we fallback to the old
-        // init arguments.
-        match Decode!(&bytes.0, LedgerCanisterPayload) {
-            Ok(arg) => canister_init(arg),
-            Err(new_err) => {
-                // fallback to old init
-                match Decode!(&bytes.0, InitArgs) {
+    ic_cdk::setup();
+    let bytes = arg_data_raw();
+    // We support the old init argument for backward
+    // compatibility. If decoding the bytes as the new
+    // init arguments fails then we fallback to the old
+    // init arguments.
+    match Decode!(&bytes, LedgerCanisterPayload) {
+        Ok(arg) => canister_init(arg),
+        Err(new_err) => {
+            // fallback to old init
+            match Decode!(&bytes, InitArgs) {
                     Ok(arg) => init(
                         arg.minting_account,
                         arg.icrc1_minting_account,
@@ -762,9 +763,8 @@ fn main() {
                     Err(old_err) =>
                     trap(&format!("Unable to decode init argument.\nDecode as new init returned the error {}\nDecode as old init returned the error {}", new_err, old_err))
                 }
-            }
         }
-    })
+    }
 }
 
 // We use 8MiB buffer
