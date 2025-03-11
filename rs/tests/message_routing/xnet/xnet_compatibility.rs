@@ -36,7 +36,7 @@ use ic_system_test_driver::driver::pot_dsl::{PotSetupFn, SysTestFn};
 use ic_system_test_driver::driver::prometheus_vm::{HasPrometheus, PrometheusVm};
 use ic_system_test_driver::driver::test_env::TestEnv;
 use ic_system_test_driver::driver::test_env_api::{
-    get_guestos_update_img_test_sha256, get_guestos_update_img_test_url, get_mainnet_nns_revision,
+    get_ic_os_update_img_test_sha256, get_ic_os_update_img_test_url, get_mainnet_nns_revision,
     read_dependency_from_env_to_string, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer,
     IcNodeSnapshot,
 };
@@ -175,8 +175,8 @@ pub async fn test_async(env: TestEnv) {
 
     info!(&logger, "Blessing upgrade version.");
 
-    let sha256 = get_guestos_update_img_test_sha256().unwrap();
-    let upgrade_url = get_guestos_update_img_test_url().unwrap();
+    let sha256 = get_ic_os_update_img_test_sha256().unwrap();
+    let upgrade_url = get_ic_os_update_img_test_url().unwrap();
     bless_replica_version(
         &nns_node,
         &original_branch_version,

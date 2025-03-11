@@ -114,8 +114,8 @@ pub fn test_upgrade(env: TestEnv) {
     let branch_version = format!("{}-test", original_branch_version);
 
     // Bless branch version
-    let sha256 = get_guestos_update_img_test_sha256().unwrap();
-    let upgrade_url = get_guestos_update_img_test_url().unwrap();
+    let sha256 = get_ic_os_update_img_test_sha256().unwrap();
+    let upgrade_url = get_ic_os_update_img_test_url().unwrap();
     block_on(bless_replica_version(
         &nns_node,
         &original_branch_version,

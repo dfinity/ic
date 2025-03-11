@@ -15,9 +15,9 @@ use crate::{
         test_env::{HasIcPrepDir, TestEnv, TestEnvAttribute},
         test_env_api::{
             get_dependency_path, get_dependency_path_from_env, get_elasticsearch_hosts,
-            get_guestos_update_img_sha256, get_guestos_update_img_url,
-            get_mainnet_guestos_update_img_url, get_mainnet_nns_revision,
-            get_malicious_guestos_update_img_sha256, get_malicious_guestos_update_img_url,
+            get_ic_os_update_img_sha256, get_ic_os_update_img_url,
+            get_mainnet_ic_os_update_img_url, get_mainnet_nns_revision,
+            get_malicious_ic_os_update_img_sha256, get_malicious_ic_os_update_img_url,
             read_dependency_from_env_to_string, HasIcDependencies, HasTopologySnapshot, HasVmName,
             IcNodeContainer, InitialReplicaVersion, NodesInfo,
         },
@@ -190,19 +190,16 @@ pub fn init_ic(
                 "Using malicious guestos update image for IC config."
             );
             (
-                get_malicious_guestos_update_img_sha256()?,
-                get_malicious_guestos_update_img_url()?,
+                get_malicious_ic_os_update_img_sha256()?,
+                get_malicious_ic_os_update_img_url()?,
             )
         } else if ic.with_mainnet_config {
             (
-                test_env.get_mainnet_guestos_update_img_sha256()?,
-                get_mainnet_guestos_update_img_url()?,
+                test_env.get_mainnet_ic_os_update_img_sha256()?,
+                get_mainnet_ic_os_update_img_url()?,
             )
         } else {
-            (
-                get_guestos_update_img_sha256()?,
-                get_guestos_update_img_url()?,
-            )
+            (get_ic_os_update_img_sha256()?, get_ic_os_update_img_url()?)
         }
     };
     let mut ic_config = IcConfig::new(
