@@ -41,7 +41,6 @@ BASE_DEPENDENCIES = [
     "//rs/rust_canisters/canister_test",
     "//rs/rust_canisters/dfn_candid",
     "//rs/rust_canisters/dfn_http",
-    "//rs/rust_canisters/dfn_json",
     "//rs/rust_canisters/dfn_protobuf",
     "//rs/rust_canisters/on_wire",
     "//rs/sns/governance",

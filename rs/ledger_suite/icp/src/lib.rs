@@ -1,5 +1,6 @@
 use candid::CandidType;
 use dfn_protobuf::ProtoBuf;
+use dfn_protobuf::ToProto;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_crypto_sha2::Sha256;
 pub use ic_ledger_canister_core::archive::ArchiveOptions;
@@ -15,6 +16,7 @@ use ic_ledger_hash_of::HashOf;
 use ic_ledger_hash_of::HASH_LENGTH;
 use icrc_ledger_types::icrc1::account::Account;
 use on_wire::{FromWire, IntoWire};
+use prost::Message;
 use serde::{Deserialize, Serialize};
 use serde_bytes::ByteBuf;
 use std::collections::{HashMap, HashSet};
@@ -1264,6 +1266,17 @@ pub fn max_blocks_per_request(principal_id: &PrincipalId) -> usize {
         return MAX_BLOCKS_PER_INGRESS_REPLICATED_QUERY_REQUEST;
     }
     MAX_BLOCKS_PER_REQUEST
+}
+
+pub fn to_proto_bytes<T: ToProto>(msg: T) -> Result<Vec<u8>, String> {
+    let proto = msg.into_proto();
+    let mut proto_bytes = Vec::with_capacity(proto.encoded_len());
+    proto.encode(&mut proto_bytes).map_err(|e| e.to_string())?;
+    Ok(proto_bytes)
+}
+
+pub fn from_proto_bytes<T: ToProto>(msg: Vec<u8>) -> Result<T, String> {
+    T::from_proto(prost::Message::decode(&msg[..]).map_err(|e| e.to_string())?)
 }
 
 #[cfg(test)]

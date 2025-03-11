@@ -4,7 +4,7 @@
 //! and https://internetcomputer.org/docs/current/references/ic-interface-spec/#system-api-upgrades
 
 use crate::as_round_instructions;
-use crate::canister_manager::{
+use crate::canister_manager::types::{
     CanisterManagerError, DtsInstallCodeResult, InstallCodeContext, PausedInstallCodeExecution,
 };
 use crate::execution::common::{ingress_status_with_processing_state, update_round_limits};

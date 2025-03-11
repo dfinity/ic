@@ -109,6 +109,10 @@ pub fn set_governance(gov: Governance) {
         .validate()
         .expect("Error initializing the governance canister.");
 }
+#[cfg(any(test, not(target_arch = "wasm32")))]
+pub fn set_governance_for_tests(gov: Governance) {
+    GOVERNANCE.set(gov);
+}
 
 #[derive(Default)]
 pub struct CanisterEnv {

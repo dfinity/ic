@@ -34,7 +34,6 @@ use ic_types::{
     CanisterId, RegistryVersion, SubnetId,
 };
 use prometheus::Registry;
-use rand::Rng;
 use reqwest;
 
 use crate::{
@@ -55,7 +54,7 @@ macro_rules! principal {
 pub use principal;
 
 #[derive(Debug)]
-struct TestHttpClient(usize);
+pub struct TestHttpClient(pub usize);
 
 #[async_trait]
 impl HttpClient for TestHttpClient {
@@ -74,10 +73,9 @@ impl HttpClient for TestHttpClient {
     }
 }
 
-fn new_random_certified_data() -> Digest {
-    let mut random_certified_data: [u8; 32] = [0; 32];
-    rand::thread_rng().fill(&mut random_certified_data);
-    Digest(random_certified_data)
+fn new_certified_data() -> Digest {
+    let data: [u8; 32] = [0; 32];
+    Digest(data)
 }
 
 pub fn valid_tls_certificate_and_validation_time() -> (X509PublicKeyCert, Time) {
@@ -107,7 +105,7 @@ pub fn valid_tls_certificate_and_validation_time() -> (X509PublicKeyCert, Time) 
 pub fn new_threshold_key() -> ThresholdSigPublicKey {
     let (_, pk, _) = CertificateBuilder::new(CanisterData {
         canister_id: CanisterId::from_u64(1),
-        certified_data: new_random_certified_data(),
+        certified_data: new_certified_data(),
     })
     .build();
 
