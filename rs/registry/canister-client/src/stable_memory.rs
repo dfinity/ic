@@ -35,8 +35,8 @@ const MAX_REGISTRY_KEY_SIZE: u32 = 200;
 impl Storable for StorableRegistryKey {
     fn to_bytes(&self) -> Cow<[u8]> {
         let mut storable_key = vec![];
-        let version_b = self.version.to_be_bytes().to_vec();
         let key_b = self.key.as_bytes().to_vec();
+        let version_b = self.version.to_be_bytes().to_vec();
 
         storable_key.extend_from_slice(&key_b);
         storable_key.extend_from_slice(&version_b);
@@ -47,7 +47,8 @@ impl Storable for StorableRegistryKey {
     fn from_bytes(bytes: Cow<[u8]>) -> Self {
         let bytes = bytes.as_ref();
         let len = bytes.len();
-        let (version_bytes, key_bytes) = bytes.split_at(len - 8);
+        let (key_bytes, version_bytes) = bytes.split_at(len - 8);
+
         let key = String::from_utf8(key_bytes.to_vec()).expect("Invalid UTF-8 in key");
         let version = u64::from_be_bytes(version_bytes.try_into().expect("Invalid version bytes"));
 

@@ -2,11 +2,11 @@
 //! where polling in the background is not required because handed over to a timer.
 //! The code is entirely copied from `ic-registry-client-fake` and more tests added.
 use async_trait::async_trait;
-use ic_interfaces_registry::RegistryClientVersionedResult;
+use ic_interfaces_registry::{RegistryClientResult, RegistryClientVersionedResult};
+use ic_types::registry::RegistryClientError;
 use ic_types::RegistryVersion;
 
 pub mod client;
-pub mod data_provider;
 pub mod stable_memory;
 
 /// The CanisterRegistryClient provides methods to read a local cache of Registry data

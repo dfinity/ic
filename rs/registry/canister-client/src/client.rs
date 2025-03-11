@@ -1,5 +1,6 @@
 use crate::stable_memory::{RegistryStoreStableMemory, StorableRegistryKey};
 use crate::CanisterRegistryClient;
+use async_trait::async_trait;
 use ic_interfaces_registry::{
     empty_zero_registry_record, RegistryClient, RegistryClientResult,
     RegistryClientVersionedResult, RegistryDataProvider, RegistryTransportRecord,
@@ -40,61 +41,12 @@ impl<S: RegistryStoreStableMemory> CanisterRegistryStore<S> {
     pub fn new() -> Self {
         Self {
             _stable_memory: PhantomData,
-            latest_version: 0,
+            latest_version: ZERO_REGISTRY_VERSION,
         }
-    }
-
-    pub fn update_to_latest_version(&self) {
-        let mut cache = self.cache.write().unwrap();
-        let latest_version = cache.0;
-
-        let new_records = match self.data_provider.get_updates_since(latest_version) {
-            Ok(records) if !records.is_empty() => records,
-            Ok(_) => return,
-            Err(e) => panic!("Failed to query data provider: {}", e),
-        };
-
-        assert!(!new_records.is_empty());
-        let mut timestamps = cache.1.clone();
-        let mut new_version = ZERO_REGISTRY_VERSION;
-        for record in new_records {
-            assert!(record.version > latest_version);
-            timestamps.insert(new_version, current_time());
-            new_version = new_version.max(record.version);
-            let search_key = (&record.key, &record.version);
-            match cache
-                .2
-                .binary_search_by_key(&search_key, |r| (&r.key, &r.version))
-            {
-                Ok(_) => (),
-                Err(i) => {
-                    cache.2.insert(i, record);
-                }
-            };
-        }
-        *cache = (new_version, timestamps, cache.2.clone())
-    }
-
-    pub fn reload(&self) {
-        let mut cache = self.cache.write().unwrap();
-        cache.0 = ZERO_REGISTRY_VERSION;
-        cache.1.clear();
-        drop(cache);
-        self.update_to_latest_version();
-    }
-
-    fn check_version(
-        &self,
-        version: RegistryVersion,
-    ) -> Result<RwLockReadGuard<CacheState>, RegistryClientError> {
-        let latest_version = self.get_latest_version();
-        if version > latest_version {
-            return Err(RegistryClientError::VersionNotAvailable { version });
-        }
-        Ok(cache_state)
     }
 }
 
+#[async_trait]
 impl<S: RegistryStoreStableMemory> CanisterRegistryClient for CanisterRegistryStore<S> {
     fn get_versioned_value(
         &self,
@@ -108,10 +60,14 @@ impl<S: RegistryStoreStableMemory> CanisterRegistryClient for CanisterRegistrySt
             return Err(RegistryClientError::VersionNotAvailable { version });
         }
 
-        let search_key = StorableRegistryKey::new(key.to_string(), version.get());
+        let start_range = StorableRegistryKey::new(key.to_string(), Default::default());
+        let end_range = StorableRegistryKey::new(key.to_string(), version.get());
 
         let result = S::with_registry_map(|map| {
-            map.range(..=search_key)
+            map.range(start_range..=end_range)
+                // TODO DO NOT MERGE change this to use stable-structures' reverse after upgrade
+                .collect::<Vec<_>>()
+                .into_iter()
                 .rev()
                 .find(|(stored_key, _)| stored_key.key == key)
                 .map(|(_, value)| RegistryTransportRecord {
@@ -163,23 +119,16 @@ impl<S: RegistryStoreStableMemory> CanisterRegistryClient for CanisterRegistrySt
     fn get_latest_version(&self) -> RegistryVersion {
         // TODO add cache for this, as it could be quite expensive.
         S::with_registry_map(|map| {
-            map.keys()
-                .map(|k| k.version)
+            map.range(..)
+                .map(|(k, _)| k.version)
                 .max()
                 .map(RegistryVersion::new)
                 .unwrap_or(ZERO_REGISTRY_VERSION)
         })
     }
 
-    fn get_value(&self, key: String, version: RegistryVersion) -> RegistryClientResult<Vec<u8>> {
-        if version > self.get_latest_version() {
-            return Err(RegistryClientError::VersionNotAvailable { version });
-        }
-
-        Ok(S::with_registry_map(|map| {
-            map.get(&StorableRegistryKey::new(key, version.get()))
-                .and_then(|v| v.0)
-        }))
+    fn get_value(&self, key: &str, version: RegistryVersion) -> RegistryClientResult<Vec<u8>> {
+        self.get_versioned_value(key, version).map(|vr| vr.value)
     }
 
     async fn sync_registry_stored(&self) -> Result<RegistryVersion, String> {
