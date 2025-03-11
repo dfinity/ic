@@ -1,8 +1,8 @@
-use crate::canister_state::system_state::ProxyDecodeError;
 use crate::ExecutionTask;
 use ic_config::flag_status::FlagStatus;
 use ic_interfaces::execution_environment::ExecutionRoundType;
 use ic_management_canister_types_private::OnLowWasmMemoryHookStatus;
+use ic_protobuf::proxy::ProxyDecodeError;
 use ic_protobuf::state::canister_state_bits::v1 as pb;
 use ic_types::CanisterId;
 use ic_types::NumBytes;
@@ -306,18 +306,19 @@ impl TryFrom<pb::TaskQueue> for TaskQueue {
         Ok(Self {
             paused_or_aborted_task: item
                 .paused_or_aborted_task
-                .map(|task| task.try_into().unwrap()),
+                .map(|task| task.try_into())
+                .transpose()?,
             on_low_wasm_memory_hook_status: pb::OnLowWasmMemoryHookStatus::try_from(
                 item.on_low_wasm_memory_hook_status,
             )
-            .unwrap()
-            .try_into()
-            .unwrap(),
+            .map_err(|e| ProxyDecodeError::Other(
+                format!("Error while trying to decode pb::TaskQueue::on_low_wasm_memory_hook_status, {:?}", e)))?
+            .try_into()?,
             queue: item
                 .queue
                 .into_iter()
-                .map(|task| task.try_into().unwrap())
-                .collect(),
+                .map(|task| task.try_into())
+                .collect::<Result<VecDeque<_>, _>>()?,
         })
     }
 }
