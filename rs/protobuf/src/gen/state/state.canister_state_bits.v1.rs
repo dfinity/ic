@@ -604,6 +604,7 @@ pub struct CanisterStateBits {
     pub install_code_debit: u64,
     /// Contains tasks that need to be executed before processing any input of the
     /// canister.
+    /// This field will be deprecated after EXC-1752.
     #[prost(message, repeated, tag = "30")]
     pub task_queue: ::prost::alloc::vec::Vec<ExecutionTask>,
     /// Time of last charge for resource allocations.
@@ -661,6 +662,7 @@ pub struct CanisterStateBits {
     pub long_execution_mode: i32,
     #[prost(uint64, optional, tag = "50")]
     pub wasm_memory_threshold: ::core::option::Option<u64>,
+    /// This field will be deprecated after EXC-1752.
     #[prost(enumeration = "OnLowWasmMemoryHookStatus", optional, tag = "53")]
     pub on_low_wasm_memory_hook_status: ::core::option::Option<i32>,
     /// Contains tasks that need to be executed before processing any input of the
