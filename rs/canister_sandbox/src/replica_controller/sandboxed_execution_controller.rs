@@ -2225,9 +2225,7 @@ mod tests {
     use std::fs::{self, File};
 
     use super::*;
-    use ic_config::{
-        execution_environment::MAX_COMPILATION_CACHE_SIZE, logger::Config as LoggerConfig,
-    };
+    use ic_config::logger::Config as LoggerConfig;
     use ic_embedders::CompilationCacheBuilder;
     use ic_logger::{new_replica_logger, replica_logger::no_op_logger};
     use ic_test_utilities::state_manager::FakeStateManager;
