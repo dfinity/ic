@@ -1,9 +1,9 @@
 use candid::{candid_method, Decode, Nat, Principal};
-use dfn_candid::{candid, candid_one, CandidOne};
+use dfn_candid::{candid_one, CandidOne};
 #[allow(unused_imports)]
 use dfn_core::BytesS;
 use dfn_core::{
-    endpoint::reject_on_decode_error::{over, over_async, over_async_may_reject},
+    endpoint::reject_on_decode_error::{over_async, over_async_may_reject},
     over_init,
 };
 use dfn_protobuf::protobuf;
@@ -1413,13 +1413,13 @@ fn archives() -> Archives {
 
 #[export_name = "canister_query get_nodes"]
 fn get_nodes_() {
-    over(candid, |()| {
-        archives()
-            .archives
-            .iter()
-            .map(|archive| archive.canister_id)
-            .collect::<Vec<CanisterId>>()
-    });
+    ic_cdk::setup();
+    let result = archives()
+        .archives
+        .iter()
+        .map(|archive| archive.canister_id)
+        .collect::<Vec<CanisterId>>();
+    ic_cdk::api::call::reply((result,));
 }
 
 fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::io::Result<()> {
