@@ -13017,6 +13017,7 @@ dependencies = [
  "ic-sns-wasm",
  "icp-ledger",
  "k256 0.13.4",
+ "lazy_static",
  "pocket-ic",
  "rand 0.8.5",
  "rand_chacha 0.3.1",

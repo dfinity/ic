@@ -47,6 +47,7 @@ ic-sns-swap = { path = "../swap" }
 ic-sns-wasm = { path = "../../nns/sns-wasm" }
 icp-ledger = { path = "../../ledger_suite/icp" }
 k256 = { workspace = true }
+lazy_static = { workspace = true }
 pocket-ic = { path = "../../../packages/pocket-ic" }
 reqwest = { workspace = true }
 serde = { workspace = true }
