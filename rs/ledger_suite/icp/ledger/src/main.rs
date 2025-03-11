@@ -6,6 +6,7 @@ use dfn_core::{
     endpoint::reject_on_decode_error::{over_async, over_async_may_reject},
     over_init,
 };
+#[cfg(feature = "notify-method")]
 use dfn_protobuf::protobuf;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_canister_log::{LogEntry, Sink};
@@ -980,21 +981,26 @@ impl LedgerAccess for Access {
 #[export_name = "canister_update send_pb"]
 fn send_() {
     panic_if_not_ready();
-    over_async(
-        protobuf,
-        |SendArgs {
-             memo,
-             amount,
-             fee,
-             from_subaccount,
-             to,
-             created_at_time,
-         }| async move {
-            send(memo, amount, fee, from_subaccount, to, created_at_time)
-                .await
-                .unwrap_or_else(|e| trap(&e.to_string()))
-        },
-    );
+
+    ic_cdk::spawn(async move {
+        ic_cdk::setup();
+
+        let SendArgs {
+            memo,
+            amount,
+            fee,
+            from_subaccount,
+            to,
+            created_at_time,
+        } = from_proto_bytes(arg_data_raw()).expect("failed to decode send_pb argument");
+
+        let res = send(memo, amount, fee, from_subaccount, to, created_at_time)
+            .await
+            .unwrap_or_else(|e| trap(&e.to_string()));
+
+        let res_proto = to_proto_bytes(res).expect("failed to encode send_pb response");
+        reply_raw(&res_proto)
+    })
 }
 
 #[candid_method(update, rename = "send_dfx")]
