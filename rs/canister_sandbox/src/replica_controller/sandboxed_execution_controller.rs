@@ -2228,6 +2228,7 @@ mod tests {
     use ic_config::{
         execution_environment::MAX_COMPILATION_CACHE_SIZE, logger::Config as LoggerConfig,
     };
+    use ic_embedders::CompilationCacheBuilder;
     use ic_logger::{new_replica_logger, replica_logger::no_op_logger};
     use ic_test_utilities::state_manager::FakeStateManager;
     use ic_test_utilities_types::ids::canister_test_id;
@@ -2304,10 +2305,7 @@ mod tests {
                 canister_module,
                 PathBuf::new(),
                 canister_id,
-                Arc::new(CompilationCache::new(
-                    MAX_COMPILATION_CACHE_SIZE,
-                    tempfile::tempdir().unwrap(),
-                )),
+                Arc::new(CompilationCacheBuilder::new().build()),
             )
             .unwrap();
         let sandbox_pid = match controller

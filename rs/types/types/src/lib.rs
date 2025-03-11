@@ -534,8 +534,8 @@ pub trait CountBytes {
     fn count_bytes(&self) -> usize;
 }
 
-/// Allow an object to reprt its own byte size on disk and in memory. Not
-/// necessarilly exact.
+/// Allow an object to report its own byte size on disk and in memory. Not
+/// necessarily exact.
 pub trait MemoryDiskBytes {
     fn memory_bytes(&self) -> usize;
     fn disk_bytes(&self) -> usize;

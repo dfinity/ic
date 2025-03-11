@@ -2,6 +2,7 @@ use ic_canister_sandbox_backend_lib::replica_controller::sandboxed_execution_con
 use ic_config::execution_environment::{Config, MAX_COMPILATION_CACHE_SIZE};
 use ic_config::flag_status::FlagStatus;
 use ic_cycles_account_manager::CyclesAccountManager;
+use ic_embedders::CompilationCacheBuilder;
 use ic_embedders::{
     wasm_executor::{WasmExecutionResult, WasmExecutor, WasmExecutorImpl},
     wasm_utils::decoding::decoded_wasm_size,
@@ -225,10 +226,12 @@ impl Hypervisor {
             own_subnet_id,
             log,
             cycles_account_manager,
-            compilation_cache: Arc::new(CompilationCache::new(
-                MAX_COMPILATION_CACHE_SIZE,
-                tempfile::tempdir_in(temp_dir).unwrap(),
-            )),
+            compilation_cache: Arc::new(
+                CompilationCacheBuilder::new()
+                    .with_memory_capacity(MAX_COMPILATION_CACHE_SIZE)
+                    .with_dir(tempfile::tempdir_in(temp_dir).unwrap())
+                    .build(),
+            ),
             deterministic_time_slicing: config.deterministic_time_slicing,
             cost_to_compile_wasm_instruction: config
                 .embedders_config
@@ -256,10 +259,12 @@ impl Hypervisor {
             own_subnet_id,
             log,
             cycles_account_manager,
-            compilation_cache: Arc::new(CompilationCache::new(
-                MAX_COMPILATION_CACHE_SIZE,
-                tempfile::tempdir().unwrap(),
-            )),
+            compilation_cache: Arc::new(
+                CompilationCacheBuilder::new()
+                    .with_memory_capacity(MAX_COMPILATION_CACHE_SIZE)
+                    .with_dir(tempfile::tempdir().unwrap())
+                    .build(),
+            ),
             deterministic_time_slicing,
             cost_to_compile_wasm_instruction,
             dirty_page_overhead,
