@@ -33,8 +33,8 @@ pub enum InvalidVetKdPayloadReason {
 pub enum VetKdPayloadValidationFailure {
     /// The state was not available for a height
     StateUnavailable(StateManagerError),
-    /// The registry version was not available for a height
-    RegistryVersionUnavailable(Height),
+    /// The DKG summary was not available for a height
+    DkgSummaryUnavailable(Height),
     /// The registry client returned an error
     RegistryClientError(RegistryClientError),
     /// Crypto failed to determine the validity of the key

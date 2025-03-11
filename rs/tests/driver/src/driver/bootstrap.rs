@@ -1,4 +1,5 @@
 use crate::k8s::config::LOGS_URL;
+use crate::k8s::images::*;
 use crate::k8s::tnet::{TNet, TNode};
 use crate::util::block_on;
 use crate::{
@@ -289,16 +290,22 @@ pub fn setup_and_start_vms(
                 &group_name,
             )?;
 
-            let conf_img_path = PathBuf::from(&node.node_path).join(CONF_IMG_FNAME);
+            let conf_img_path = PathBuf::from(&node.node_path).join(mk_compressed_img_path());
             match InfraProvider::read_attribute(&t_env) {
                 InfraProvider::K8s => {
-                    block_on(
-                        tnet_node.build_oci_config_image(
-                            &conf_img_path,
-                            &tnet_node.name.clone().unwrap(),
-                        ),
-                    )
-                    .expect("deploying config image failed");
+                    let url = format!(
+                        "{}/{}",
+                        tnet_node.config_url.clone().expect("missing config_url"),
+                        mk_compressed_img_path()
+                    );
+                    info!(
+                        t_env.logger(),
+                        "Uploading image {} to {}",
+                        conf_img_path.clone().display().to_string(),
+                        url.clone()
+                    );
+                    block_on(upload_image(conf_img_path.as_path(), &url))
+                        .expect("Failed to upload config image");
                     // wait for job pulling the disk to complete
                     block_on(wait_for_job_completion(&tnet_node.name.clone().unwrap()))
                         .expect("waiting for job failed");

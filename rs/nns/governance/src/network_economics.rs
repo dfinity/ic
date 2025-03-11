@@ -7,6 +7,7 @@ use ic_nervous_system_linear_map::LinearMap;
 use ic_nervous_system_proto::pb::v1::{Decimal as DecimalProto, Percentage};
 use icp_ledger::DEFAULT_TRANSFER_FEE;
 use rust_decimal::Decimal;
+use std::ops::RangeInclusive;
 use std::time::Duration;
 
 impl NetworkEconomics {
@@ -273,8 +274,16 @@ impl VotingPowerEconomics {
             Self::DEFAULT_START_REDUCING_VOTING_POWER_AFTER_SECONDS,
         ),
         clear_following_after_seconds: Some(Self::DEFAULT_CLEAR_FOLLOWING_AFTER_SECONDS),
+        neuron_minimum_dissolve_delay_to_vote_seconds: Some(
+            Self::DEFAULT_NEURON_MINIMUM_DISSOLVE_DELAY_TO_VOTE_SECONDS,
+        ),
     };
 
+    // [DEFAULT_NEURON_MINIMUM_DISSOLVE_DELAY_TO_VOTE_SECONDS] represents the default time threshold (in seconds)
+    // after which voting power begins to decrease in the network economics configuration. This is a preset
+    // value for the system, but it should be updated to align with [MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS].
+    pub const DEFAULT_NEURON_MINIMUM_DISSOLVE_DELAY_TO_VOTE_SECONDS: u64 =
+        crate::governance::MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS;
     pub const DEFAULT_START_REDUCING_VOTING_POWER_AFTER_SECONDS: u64 = 6 * ONE_MONTH_SECONDS;
     pub const DEFAULT_CLEAR_FOLLOWING_AFTER_SECONDS: u64 = ONE_MONTH_SECONDS;
 
@@ -349,6 +358,21 @@ impl VotingPowerEconomics {
         if self.clear_following_after_seconds.is_none() {
             // Ditto comment regarding start_reducing_voting_power_after_seconds.
             defects.push("clear_following_after_seconds must be set.".to_string());
+        }
+
+        if let Some(delay) = self.neuron_minimum_dissolve_delay_to_vote_seconds {
+            pub const MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS_BOUNDS: RangeInclusive<u64> =
+                (3 * ONE_MONTH_SECONDS)..=(6 * ONE_MONTH_SECONDS);
+
+            if !MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS_BOUNDS.contains(&delay) {
+                let defect = format!(
+                    "neuron_minimum_dissolve_delay_to_vote_seconds ({:?}) must be between three and six months.",
+                    self.neuron_minimum_dissolve_delay_to_vote_seconds
+                 );
+                defects.push(defect);
+            }
+        } else {
+            defects.push("neuron_minimum_dissolve_delay_to_vote_seconds must be set.".to_string());
         }
 
         if !defects.is_empty() {
@@ -522,6 +546,9 @@ impl InheritFrom for VotingPowerEconomics {
             clear_following_after_seconds: self
                 .clear_following_after_seconds
                 .inherit_from(&base.clear_following_after_seconds),
+            neuron_minimum_dissolve_delay_to_vote_seconds: self
+                .neuron_minimum_dissolve_delay_to_vote_seconds
+                .inherit_from(&base.neuron_minimum_dissolve_delay_to_vote_seconds),
         }
     }
 }
