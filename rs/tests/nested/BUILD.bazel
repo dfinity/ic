@@ -38,7 +38,7 @@ rust_library(
 
 system_test_nns(
     name = "registration",
-    flaky = True,
+    flaky = True,  # flakiness rate of over 2% over the last month on 2024-03-11.
     tags = [
         "system_test_hourly",
     ],
@@ -52,7 +52,7 @@ system_test_nns(
 
 system_test_nns(
     name = "upgrade",
-    flaky = True,
+    flaky = True,  # flakiness rate of 5% over the last month on 2024-03-11.
     tags = [
         "system_test_hourly",
     ],
