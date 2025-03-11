@@ -1,5 +1,5 @@
 {
-  "checksum": "ed3af7bd49682359b3b636f080c0d4210145a51e4ec061cd8378b4a196ec747d",
+  "checksum": "6b9bbc73f19c134ab18c778db2cc6d1a0a19d3c2733e9403618a2efa3dd5a5d3",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -34126,7 +34126,7 @@
         "Git": {
           "remote": "https://github.com/dfinity/ic-gateway",
           "commitish": {
-            "Rev": "a6cdd78692aa0715c38979aaa8447e70c4456b0b"
+            "Rev": "469d2daee8b44aadb46400bcb2832d560baf7272"
           }
         }
       },
@@ -57210,7 +57210,7 @@
               "target": "heck"
             },
             {
-              "id": "itertools 0.13.0",
+              "id": "itertools 0.11.0",
               "target": "itertools"
             },
             {
@@ -57364,7 +57364,7 @@
               "target": "anyhow"
             },
             {
-              "id": "itertools 0.13.0",
+              "id": "itertools 0.11.0",
               "target": "itertools"
             },
             {
