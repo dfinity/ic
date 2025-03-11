@@ -1007,11 +1007,9 @@ fn send_() {
 #[candid_method(update)]
 async fn send_dfx(arg: SendArgs) -> BlockIndex {
     panic_if_not_ready();
-    transfer_candid(TransferArgs::from(arg))
-        .await
-        .unwrap_or_else(|e| {
-            trap(&e.to_string());
-        })
+    transfer(TransferArgs::from(arg)).await.unwrap_or_else(|e| {
+        trap(&e.to_string());
+    })
 }
 
 #[cfg(feature = "notify-method")]
@@ -1043,8 +1041,9 @@ fn notify_() {
     );
 }
 
-#[candid_method(update, rename = "transfer")]
-async fn transfer_candid(arg: TransferArgs) -> Result<BlockIndex, TransferError> {
+#[update]
+#[candid_method(update)]
+async fn transfer(arg: TransferArgs) -> Result<BlockIndex, TransferError> {
     panic_if_not_ready();
     let to_account = AccountIdentifier::from_address(arg.to).unwrap_or_else(|e| {
         trap(&format!("Invalid account identifier: {}", e));
@@ -1089,12 +1088,6 @@ async fn icrc1_transfer(
             err
         })?,
     ))
-}
-
-#[export_name = "canister_update transfer"]
-fn transfer() {
-    panic_if_not_ready();
-    over_async_may_reject(candid_one, |arg| async { Ok(transfer_candid(arg).await) })
 }
 
 #[export_name = "canister_update icrc1_transfer"]
