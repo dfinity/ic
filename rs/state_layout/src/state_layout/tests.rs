@@ -821,63 +821,6 @@ fn can_add_and_delete_canister_snapshots(
     }
 }
 
-// This will be removed after EXC-1752.
-#[test]
-fn test_decode_v1_encode_v2_decode() {
-    let mut controllers = BTreeSet::new();
-    controllers.insert(IC_00.into());
-    controllers.insert(canister_test_id(0).get());
-
-    let mut task_queue = TaskQueue::default();
-    task_queue.enqueue(ExecutionTask::OnLowWasmMemory);
-
-    task_queue.enqueue(ExecutionTask::AbortedExecution {
-        input: CanisterMessageOrTask::Task(CanisterTask::Heartbeat),
-        prepaid_execution_cycles: Cycles::zero(),
-    });
-
-    let canister_state_bits_initial = CanisterStateBits {
-        controllers: controllers.clone(),
-        task_queue: task_queue.clone(),
-        ..default_canister_state_bits()
-    };
-
-    let canister_state_bits_initial_copy = CanisterStateBits {
-        controllers,
-        task_queue,
-        ..default_canister_state_bits()
-    };
-
-    let mut pb_bits_v1 =
-        pb_canister_state_bits::CanisterStateBits::from(canister_state_bits_initial_copy);
-
-    // In order to make current serialized version of CanisterStateBits, equivalent
-    // to the previous version, we can just set `tasks` to `None`.
-    pb_bits_v1.tasks = None;
-
-    let canister_state_bits_load_v1 =
-        CanisterStateBits::try_from((pb_bits_v1, &CanisterId::from_u64(1))).unwrap();
-
-    assert_eq!(canister_state_bits_initial, canister_state_bits_load_v1);
-
-    let mut pb_bits_v2 =
-        pb_canister_state_bits::CanisterStateBits::from(canister_state_bits_load_v1);
-
-    // To test deserialization without old fields, we will set them on default value.
-    pb_bits_v2.task_queue = VecDeque::new().into();
-    pb_bits_v2.on_low_wasm_memory_hook_status = Some(
-        pb_canister_state_bits::OnLowWasmMemoryHookStatus::from(
-            OnLowWasmMemoryHookStatus::default(),
-        )
-        .into(),
-    );
-
-    let canister_state_bits_load_v2 =
-        CanisterStateBits::try_from((pb_bits_v2, &CanisterId::from_u64(1))).unwrap();
-
-    assert_eq!(canister_state_bits_load_v2, canister_state_bits_initial);
-}
-
 #[test]
 fn test_encode_decode_empty_task_queue() {
     let task_queue = TaskQueue::default();
