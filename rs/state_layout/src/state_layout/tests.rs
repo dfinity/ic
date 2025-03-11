@@ -870,8 +870,7 @@ fn test_decode_v1_encode_v2_decode() {
             OnLowWasmMemoryHookStatus::default(),
         )
         .unwrap()
-        .try_into()
-        .unwrap(),
+        .into(),
     );
 
     let canister_state_bits_load_v2 =
