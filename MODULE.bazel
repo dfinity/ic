@@ -14,10 +14,12 @@ bazel_dep(name = "aspect_bazel_lib", version = "2.9.0")
 bazel_dep(name = "rules_cc", version = "0.0.13")
 bazel_dep(name = "platforms", version = "0.0.10")
 bazel_dep(name = "hermetic_cc_toolchain", version = "3.1.1")
-single_version_override(
+archive_override(
     module_name = "hermetic_cc_toolchain",
+    integrity = "sha256-kHdFv5FVX3foI0wLlTNx5srFunFdHPEv9kFJbdG86dE=",
     patch_strip = 1,
     patches = ["//bazel:hermetic_cc_toolchain.patch"],
+    urls = ["https://github.com/uber/hermetic_cc_toolchain/releases/download/v3.1.1/hermetic_cc_toolchain-v3.1.1.tar.gz"],
 )
 
 # configure/make dependencies
