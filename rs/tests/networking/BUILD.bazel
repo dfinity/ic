@@ -141,7 +141,7 @@ system_test_nns(
 
 system_test_nns(
     name = "firewall_max_connections_test",
-    flaky = True,  # flakiness rate of 5% over the last month on 2024-03-11.
+    flaky = True,  # flakiness rate of 5% over the month from 2025-02-11 till 2025-03-11.
     tags = [
         "long_test",
     ],
@@ -175,7 +175,7 @@ system_test_nns(
 system_test_nns(
     name = "network_large_test",
     extra_head_nns_tags = ["manual"],  # only run this test with the mainnet NNS canisters.
-    flaky = True,  # flakiness rate of 20% over the last month on 2024-03-11.
+    flaky = True,  # flakiness rate of 20% over the month from 2025-02-11 till 2025-03-11.
     tags = [
         "k8s",
         "system_test_nightly",
@@ -193,7 +193,7 @@ system_test_nns(
 system_test_nns(
     name = "network_reliability_test",
     extra_head_nns_tags = ["manual"],  # only run this test with the mainnet NNS canisters.
-    flaky = True,  # flakiness rate of 3.45% over the last month on 2024-03-11.
+    flaky = True,  # flakiness rate of 3.45% over the month from 2025-02-11 till 2025-03-11.
     tags = [
         "experimental_system_test_colocation",
         "k8s",
@@ -226,7 +226,7 @@ system_test_nns(
 
 system_test_nns(
     name = "query_workload_long_test",
-    flaky = True,  # flakiness rate of over 1.1% over the last month on 2024-03-11.
+    flaky = True,  # flakiness rate of over 1.1% over the month from 2025-02-11 till 2025-03-11.
     tags = [
         "experimental_system_test_colocation",
         "k8s",
@@ -242,7 +242,7 @@ system_test_nns(
 
 system_test_nns(
     name = "update_workload_large_payload",
-    flaky = True,  # flakiness rate of 1.83% over the last month on 2024-03-11.
+    flaky = True,  # flakiness rate of 1.83% over the month from 2025-02-11 till 2025-03-11.
     tags = [
         "experimental_system_test_colocation",
         "system_test_hourly",

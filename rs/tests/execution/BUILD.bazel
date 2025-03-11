@@ -216,7 +216,7 @@ system_test_nns(
     env = UNIVERSAL_CANISTER_ENV | {
         "BTC_WASM_PATH": "$(rootpath @btc_canister//file)",
     },
-    flaky = True,  # flakiness rate of over 3% over the last month on 2024-03-11 only for the //rs/tests/execution:btc_get_balance_test_head_nns variant.
+    flaky = True,  # flakiness rate of over 3% over the month from 2025-02-11 till 2025-03-11 only for the //rs/tests/execution:btc_get_balance_test_head_nns variant.
     tags = [
         "k8s",
     ],

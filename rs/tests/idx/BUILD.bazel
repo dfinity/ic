@@ -27,7 +27,7 @@ rust_binary(
 system_test(
     name = "basic_health_test",
     env = UNIVERSAL_CANISTER_ENV,
-    flaky = True,  # flakiness rate of 1.22% over the last month on 2024-03-11
+    flaky = True,  # flakiness rate of 1.22% over the month from 2025-02-11 till 2025-03-11
     tags = [
         "k8s",
         "long_test",
