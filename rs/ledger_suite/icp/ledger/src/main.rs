@@ -1,8 +1,6 @@
 use candid::{candid_method, Decode, Nat, Principal};
-use dfn_candid::candid_one;
 #[cfg(feature = "notify-method")]
 use dfn_candid::CandidOne;
-use dfn_core::endpoint::reject_on_decode_error::over_async_may_reject;
 #[cfg(feature = "notify-method")]
 use dfn_core::BytesS;
 #[cfg(feature = "notify-method")]
@@ -1059,11 +1057,21 @@ async fn transfer(arg: TransferArgs) -> Result<BlockIndex, TransferError> {
     .await
 }
 
-#[candid_method(update, rename = "icrc1_transfer")]
+#[update]
+#[candid_method(update)]
 async fn icrc1_transfer(
     arg: TransferArg,
 ) -> Result<Nat, icrc_ledger_types::icrc1::transfer::TransferError> {
     panic_if_not_ready();
+
+    if !LEDGER
+        .read()
+        .unwrap()
+        .can_send(&PrincipalId::from(caller()))
+    {
+        trap("Anonymous principal cannot hold tokens on the ledger.");
+    }
+
     let from_account = Account {
         owner: caller(),
         subaccount: arg.from_subaccount,
@@ -1090,25 +1098,19 @@ async fn icrc1_transfer(
     ))
 }
 
-#[export_name = "canister_update icrc1_transfer"]
-fn icrc1_transfer_candid() {
-    panic_if_not_ready();
-    over_async_may_reject(candid_one, |arg: TransferArg| async {
-        if !LEDGER
-            .read()
-            .unwrap()
-            .can_send(&PrincipalId::from(caller()))
-        {
-            return Err("Anonymous principal cannot hold tokens on the ledger.".to_string());
-        }
-
-        Ok(icrc1_transfer(arg).await)
-    })
-}
-
-#[candid_method(update, rename = "icrc2_transfer_from")]
+#[update]
+#[candid_method(update)]
 async fn icrc2_transfer_from(arg: TransferFromArgs) -> Result<Nat, TransferFromError> {
     panic_if_not_ready();
+
+    if !LEDGER
+        .read()
+        .unwrap()
+        .can_send(&PrincipalId::from(caller()))
+    {
+        trap("Anonymous principal cannot hold tokens on the ledger.");
+    }
+
     if !LEDGER.read().unwrap().feature_flags.icrc2 {
         trap("ICRC-2 features are not enabled on the ledger.");
     }
@@ -1136,22 +1138,6 @@ async fn icrc2_transfer_from(arg: TransferFromArgs) -> Result<Nat, TransferFromE
             err
         })?,
     ))
-}
-
-#[export_name = "canister_update icrc2_transfer_from"]
-fn icrc2_transfer_from_candid() {
-    panic_if_not_ready();
-    over_async_may_reject(candid_one, |arg: TransferFromArgs| async {
-        if !LEDGER
-            .read()
-            .unwrap()
-            .can_send(&PrincipalId::from(caller()))
-        {
-            return Err("Anonymous principal cannot transfer tokens on the ledger.".to_string());
-        }
-
-        Ok(icrc2_transfer_from(arg).await)
-    })
 }
 
 /// See caveats of use on send_dfx
@@ -1575,9 +1561,19 @@ fn query_encoded_blocks(
     }
 }
 
-#[candid_method(update, rename = "icrc2_approve")]
+#[update]
+#[candid_method(update)]
 async fn icrc2_approve(arg: ApproveArgs) -> Result<Nat, ApproveError> {
     panic_if_not_ready();
+
+    if !LEDGER
+        .read()
+        .unwrap()
+        .can_send(&PrincipalId::from(caller()))
+    {
+        trap("Anonymous principal cannot approve token transfers on the ledger.");
+    }
+
     if !LEDGER.read().unwrap().feature_flags.icrc2 {
         trap("ICRC-2 features are not enabled on the ledger.");
     }
@@ -1667,24 +1663,6 @@ async fn icrc2_approve(arg: ApproveArgs) -> Result<Nat, ApproveError> {
     let max_msg_size = *MAX_MESSAGE_SIZE_BYTES.read().unwrap();
     archive_blocks::<Access>(DebugOutSink, max_msg_size as u64).await;
     Ok(Nat::from(block_index))
-}
-
-#[export_name = "canister_update icrc2_approve"]
-fn icrc2_approve_candid() {
-    panic_if_not_ready();
-    over_async_may_reject(candid_one, |arg: ApproveArgs| async {
-        if !LEDGER
-            .read()
-            .unwrap()
-            .can_send(&PrincipalId::from(caller()))
-        {
-            return Err(
-                "Anonymous principal cannot approve token transfers on the ledger.".to_string(),
-            );
-        }
-
-        Ok(icrc2_approve(arg).await)
-    })
 }
 
 fn get_allowance(from: AccountIdentifier, spender: AccountIdentifier) -> Allowance {
