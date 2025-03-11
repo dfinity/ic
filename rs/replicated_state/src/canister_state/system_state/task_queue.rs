@@ -90,7 +90,6 @@ impl TaskQueue {
     pub fn from_checkpoint(
         queue: VecDeque<ExecutionTask>,
         on_low_wasm_memory_hook_status: OnLowWasmMemoryHookStatus,
-        canister_id: &CanisterId,
     ) -> Self {
         let mut mut_queue = queue;
 
@@ -107,21 +106,11 @@ impl TaskQueue {
             | None => None,
         };
 
-        let queue = TaskQueue {
+        Self {
             paused_or_aborted_task,
             on_low_wasm_memory_hook_status,
             queue: mut_queue,
-        };
-
-        // Because paused tasks are not allowed in checkpoint rounds when
-        // checking dts invariants that is equivalent to disabling dts.
-        queue.check_dts_invariants(
-            FlagStatus::Disabled,
-            ExecutionRoundType::CheckpointRound,
-            canister_id,
-        );
-
-        queue
+        }
     }
 
     pub fn front(&self) -> Option<&ExecutionTask> {
@@ -369,12 +358,11 @@ impl From<&TaskQueue> for pb::TaskQueue {
     }
 }
 
-impl TryFrom<(pb::TaskQueue, &CanisterId)> for TaskQueue {
+impl TryFrom<pb::TaskQueue> for TaskQueue {
     type Error = ProxyDecodeError;
 
-    fn try_from(value: (pb::TaskQueue, &CanisterId)) -> Result<Self, Self::Error> {
-        let (item, canister_id) = value;
-        let queue = Self {
+    fn try_from(item: pb::TaskQueue) -> Result<Self, Self::Error> {
+        Ok(Self {
             paused_or_aborted_task: item
                 .paused_or_aborted_task
                 .map(|task| task.try_into().unwrap()),
@@ -389,17 +377,7 @@ impl TryFrom<(pb::TaskQueue, &CanisterId)> for TaskQueue {
                 .into_iter()
                 .map(|task| task.try_into().unwrap())
                 .collect(),
-        };
-
-        // Because paused tasks are not allowed in checkpoint rounds when
-        // checking dts invariants that is equivalent to disabling dts.
-        queue.check_dts_invariants(
-            FlagStatus::Disabled,
-            ExecutionRoundType::CheckpointRound,
-            canister_id,
-        );
-
-        Ok(queue)
+        })
     }
 }
 

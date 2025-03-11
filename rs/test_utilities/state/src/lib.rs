@@ -471,11 +471,8 @@ impl SystemStateBuilder {
         mut self,
         on_low_wasm_memory_hook_status: OnLowWasmMemoryHookStatus,
     ) -> Self {
-        self.system_state.task_queue = TaskQueue::from_checkpoint(
-            VecDeque::new(),
-            on_low_wasm_memory_hook_status,
-            &self.system_state.canister_id,
-        );
+        self.system_state.task_queue =
+            TaskQueue::from_checkpoint(VecDeque::new(), on_low_wasm_memory_hook_status);
         self
     }
 

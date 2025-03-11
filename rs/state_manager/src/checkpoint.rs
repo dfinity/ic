@@ -761,13 +761,12 @@ pub fn load_canister_state(
 
     let starting_time = Instant::now();
     let canister_state_bits: CanisterStateBits =
-        CanisterStateBits::try_from((canister_layout.canister().deserialize()?, canister_id))
-            .map_err(|err| {
-                into_checkpoint_error(
-                    format!("canister_states[{}]::canister_state_bits", canister_id),
-                    err,
-                )
-            })?;
+        CanisterStateBits::try_from(canister_layout.canister().deserialize()?).map_err(|err| {
+            into_checkpoint_error(
+                format!("canister_states[{}]::canister_state_bits", canister_id),
+                err,
+            )
+        })?;
 
     durations.insert("canister_state_bits", starting_time.elapsed());
 

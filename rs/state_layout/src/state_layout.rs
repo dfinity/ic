@@ -2404,13 +2404,10 @@ impl From<CanisterStateBits> for pb_canister_state_bits::CanisterStateBits {
     }
 }
 
-impl TryFrom<(pb_canister_state_bits::CanisterStateBits, &CanisterId)> for CanisterStateBits {
+impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
     type Error = ProxyDecodeError;
 
-    fn try_from(
-        v: (pb_canister_state_bits::CanisterStateBits, &CanisterId),
-    ) -> Result<Self, Self::Error> {
-        let (value, canister_id) = v;
+    fn try_from(value: pb_canister_state_bits::CanisterStateBits) -> Result<Self, Self::Error> {
         let execution_state_bits = value
             .execution_state_bits
             .map(|b| b.try_into())
@@ -2457,8 +2454,11 @@ impl TryFrom<(pb_canister_state_bits::CanisterStateBits, &CanisterId)> for Canis
             );
         }
 
-        let task_queue = match try_from_option_field(value.tasks, "CanisterStateBits::tasks") {
-            Ok(tasks) => TaskQueue::try_from((tasks, canister_id)).unwrap(),
+        let pb_task_queue: Result<pb_canister_state_bits::TaskQueue, ProxyDecodeError> =
+            try_from_option_field(value.tasks, "CanisterStateBits::tasks");
+
+        let task_queue = match pb_task_queue {
+            Ok(tasks) => TaskQueue::try_from(tasks).unwrap(),
             Err(_) => {
                 let task_queue: VecDeque<ExecutionTask> = value
                     .task_queue
@@ -2485,7 +2485,6 @@ impl TryFrom<(pb_canister_state_bits::CanisterStateBits, &CanisterId)> for Canis
                         "CanisterStateBits::on_low_wasm_memory_hook_status",
                     )
                     .unwrap_or_default(),
-                    canister_id,
                 )
             }
         };
