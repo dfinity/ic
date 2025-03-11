@@ -149,14 +149,13 @@ jobs:
       - name: Run System Tests on K8s
         id: bazel-test-all
         uses: ./.github/actions/bazel-test-all/
-        env:
-          CLOUD_CREDENTIALS_CONTENT: ${{ secrets.CLOUD_CREDENTIALS_CONTENT }}
         with:
           BAZEL_COMMAND: >-
             test
               --config=ci
               --local_test_jobs=${{ env.JOBS }} --test_tag_filters=k8s --k8s --flaky_test_attempts=3
           BAZEL_TARGETS: ${{ env.TARGETS }}
+          CLOUD_CREDENTIALS_CONTENT: ${{ secrets.CLOUD_CREDENTIALS_CONTENT }}
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
 
       - name: Upload bazel-bep

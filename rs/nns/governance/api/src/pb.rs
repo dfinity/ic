@@ -1,8 +1,8 @@
 use crate::pb::v1::{
-    governance::migration::MigrationStatus, governance_error::ErrorType, neuron::DissolveState,
-    CreateServiceNervousSystem, GovernanceError, ListNeurons, ListNeuronsProto, NetworkEconomics,
-    Neuron, NeuronState, NeuronsFundEconomics, NeuronsFundMatchedFundingCurveCoefficients,
-    VotingPowerEconomics, XdrConversionRate,
+    governance_error::ErrorType, neuron::DissolveState, CreateServiceNervousSystem,
+    GovernanceError, ListNeurons, ListNeuronsProto, NetworkEconomics, Neuron, NeuronState,
+    NeuronsFundEconomics, NeuronsFundMatchedFundingCurveCoefficients, VotingPowerEconomics,
+    XdrConversionRate,
 };
 use ic_nervous_system_common::{ONE_DAY_SECONDS, ONE_MONTH_SECONDS};
 use ic_nervous_system_proto::pb::v1::{Decimal, Duration, GlobalTimeOfDay, Percentage};
@@ -101,8 +101,12 @@ impl VotingPowerEconomics {
             Self::DEFAULT_START_REDUCING_VOTING_POWER_AFTER_SECONDS,
         ),
         clear_following_after_seconds: Some(Self::DEFAULT_CLEAR_FOLLOWING_AFTER_SECONDS),
+        neuron_minimum_dissolve_delay_to_vote_seconds: Some(
+            Self::DEFAULT_NEURON_MINIMUM_DISSOLVE_DELAY_TO_VOTE_SECONDS,
+        ),
     };
 
+    pub const DEFAULT_NEURON_MINIMUM_DISSOLVE_DELAY_TO_VOTE_SECONDS: u64 = 6 * ONE_MONTH_SECONDS;
     pub const DEFAULT_START_REDUCING_VOTING_POWER_AFTER_SECONDS: u64 = 6 * ONE_MONTH_SECONDS;
     pub const DEFAULT_CLEAR_FOLLOWING_AFTER_SECONDS: u64 = ONE_MONTH_SECONDS;
 
@@ -169,15 +173,6 @@ impl Neuron {
         cached_neuron_stake_e8s
             .saturating_sub(neuron_fees_e8s)
             .saturating_add(staked_maturity_e8s_equivalent.unwrap_or(0))
-    }
-}
-
-impl MigrationStatus {
-    pub fn is_terminal(self) -> bool {
-        match self {
-            Self::Unspecified | Self::InProgress => false,
-            Self::Succeeded | Self::Failed => true,
-        }
     }
 }
 
