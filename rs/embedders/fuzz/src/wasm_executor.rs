@@ -6,7 +6,7 @@ use ic_config::{
 use ic_cycles_account_manager::ResourceSaturation;
 use ic_embedders::{
     wasm_executor::{WasmExecutor, WasmExecutorImpl},
-    CompilationCache, WasmExecutionInput, WasmtimeEmbedder,
+    CompilationCacheBuilder, WasmExecutionInput, WasmtimeEmbedder,
 };
 use ic_interfaces::execution_environment::{ExecutionMode, SubnetAvailableMemory};
 use ic_logger::replica_logger::no_op_logger;
@@ -89,10 +89,7 @@ fn setup_wasm_execution_input(func_ref: FuncRef) -> WasmExecutionInput {
     let api_type = ApiType::init(UNIX_EPOCH, vec![], user_test_id(24).get());
     let canister_current_memory_usage = NumBytes::new(0);
     let canister_current_message_memory_usage = MessageMemoryUsage::ZERO;
-    let compilation_cache = Arc::new(CompilationCache::new(
-        NumBytes::new(0),
-        tempfile::tempdir().unwrap(),
-    ));
+    let compilation_cache = Arc::new(CompilationCacheBuilder::new().build());
     WasmExecutionInput {
         api_type: api_type.clone(),
         sandbox_safe_system_state: get_system_state(api_type),
