@@ -22,11 +22,11 @@ pub fn empty_task_queue() -> TaskQueue {
 
 pub fn embedded_ledger_suite_version() -> LedgerSuiteVersion {
     LedgerSuiteVersion {
-        ledger_compressed_wasm_hash: LedgerWasm::from(crate::state::LEDGER_BYTECODE)
+        ledger_compressed_wasm_hash: LedgerWasm::from(crate::state::LEDGER_BYTECODE.to_vec())
             .hash()
             .clone(),
-        index_compressed_wasm_hash: IndexWasm::from(crate::state::INDEX_BYTECODE).hash().clone(),
-        archive_compressed_wasm_hash: ArchiveWasm::from(crate::state::ARCHIVE_NODE_BYTECODE)
+        index_compressed_wasm_hash: IndexWasm::from(crate::state::INDEX_BYTECODE.to_vec()).hash().clone(),
+        archive_compressed_wasm_hash: ArchiveWasm::from(crate::state::ARCHIVE_NODE_BYTECODE.to_vec())
             .hash()
             .clone(),
     }

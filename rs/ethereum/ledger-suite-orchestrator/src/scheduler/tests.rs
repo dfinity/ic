@@ -1456,15 +1456,15 @@ fn ledger_init_arg() -> LedgerInitArg {
 }
 
 fn read_index_wasm_hash() -> WasmHash {
-    WasmHash::from(ic_crypto_sha2::Sha256::hash(INDEX_BYTECODE))
+    WasmHash::from(ic_crypto_sha2::Sha256::hash(&INDEX_BYTECODE))
 }
 
 fn read_ledger_wasm_hash() -> WasmHash {
-    WasmHash::from(ic_crypto_sha2::Sha256::hash(LEDGER_BYTECODE))
+    WasmHash::from(ic_crypto_sha2::Sha256::hash(&LEDGER_BYTECODE))
 }
 
 fn read_archive_wasm_hash() -> WasmHash {
-    WasmHash::from(ic_crypto_sha2::Sha256::hash(ARCHIVE_NODE_BYTECODE))
+    WasmHash::from(ic_crypto_sha2::Sha256::hash(&ARCHIVE_NODE_BYTECODE))
 }
 
 fn expect_create_canister_returning(
@@ -1877,10 +1877,10 @@ mod install_ledger_suite_args {
                 contract: Erc20Token(ChainId(1), ERC20_CONTRACT_ADDRESS.parse().unwrap()),
                 minter_id: MINTER_PRINCIPAL,
                 ledger_init_arg,
-                ledger_compressed_wasm_hash: LedgerWasm::from(crate::state::LEDGER_BYTECODE)
+                ledger_compressed_wasm_hash: LedgerWasm::from(crate::state::LEDGER_BYTECODE.to_vec())
                     .hash()
                     .clone(),
-                index_compressed_wasm_hash: IndexWasm::from(crate::state::INDEX_BYTECODE)
+                index_compressed_wasm_hash: IndexWasm::from(crate::state::INDEX_BYTECODE.to_vec())
                     .hash()
                     .clone(),
             }
