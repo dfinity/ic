@@ -189,8 +189,6 @@ impl Hypervisor {
         dirty_page_overhead: NumInstructions,
         fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
         state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
-        // TODO(EXC-1821): Create a temp dir in this directory for use in the
-        // compilation cache.
         temp_dir: &Path,
     ) -> Self {
         let mut embedder_config = config.embedders_config.clone();
