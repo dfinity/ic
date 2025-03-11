@@ -3627,6 +3627,74 @@ impl ListCanisterSnapshotArgs {
 
 impl Payload<'_> for ListCanisterSnapshotArgs {}
 
+/// Struct used for encoding/decoding
+/// `(record {
+///     canister_id : principal;
+///     snapshot_id : blob;
+/// })`
+
+#[derive(Clone, Eq, PartialEq, Debug, Default, CandidType, Deserialize)]
+pub struct CanisterSnapshotMetadataArgs {
+    canister_id: PrincipalId,
+    #[serde(with = "serde_bytes")]
+    snapshot_id: Vec<u8>,
+}
+
+impl Payload<'_> for CanisterSnapshotMetadataArgs {}
+
+#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
+pub enum SnapshotSource {
+    TakenFromCanister,
+    UploadedManually,
+}
+
+/// (record {
+///     source : variant {
+///         taken_from_canister;
+///         uploaded_manually;
+///     };
+///     taken_at_timestamp : nat64;
+///     wasm_module_size : nat64;
+///     exported_globals : vec variant {
+///         i32 : int32;
+///         i64 : int64;
+///         f32 : float32;
+///         f64 : float64;
+///         v128 : nat;
+///     };
+///     wasm_memory_size : nat64;
+///     stable_memory_size : nat64;
+///     wasm_chunk_store : vec record {
+///         hash : blob;
+///     };
+///     canister_version : nat64;
+///     certified_data : blob;
+///     global_timer : variant {
+///         inactive;
+///         active : nat64;
+///     };
+///     on_low_wasm_memory_hook_status : variant {
+///         condition_not_satisfied;
+///         ready;
+///         executed;
+///     };
+/// })
+
+pub struct CanisterSnapshotMetadataResponse {
+    pub source: SnapshotSource,
+    pub taken_at_timestamp: u64,
+    pub wasm_module_size: u64,
+    pub exported_globals: Vec<WasmGlobal>,
+    pub wasm_memory_size: u64,
+    pub stable_memory_size: u64,
+    pub wasm_chunk_store: Vec<ChunkHash>,
+    pub canister_version: u64,
+    #[serde(with = "serde_bytes")]
+    pub certified_data: Vec<u8>,
+    pub global_timer: GlobalTimer,
+    pub on_low_wasm_memory_hook_status: OnLowWasmMemoryHookStatus,
+}
+
 /// A wrapper around the different statuses of `OnLowWasmMemory` hook execution.
 #[derive(Clone, Copy, Eq, PartialEq, Debug, Default, Deserialize, Serialize)]
 pub enum OnLowWasmMemoryHookStatus {
