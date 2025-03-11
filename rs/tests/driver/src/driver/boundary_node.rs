@@ -469,7 +469,7 @@ impl BoundaryNode {
         let allocated_vm = match InfraProvider::read_attribute(env) {
             InfraProvider::K8s => {
                 let mut tnet = TNet::read_attribute(env);
-                let vm_res = block_on(tnet.vm_create(create_vm_req, ImageType::BoundaryImage))
+                let vm_res = block_on(tnet.vm_create(create_vm_req, ImageType::IcOsImage))
                     .expect("failed to create vm");
                 tnet.write_attribute(env);
                 vm_res

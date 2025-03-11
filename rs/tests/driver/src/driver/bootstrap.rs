@@ -286,13 +286,13 @@ pub fn setup_and_start_vms(
                 &group_name,
             )?;
 
-            let conf_img_path = PathBuf::from(&node.node_path).join(CONF_IMG_FNAME);
+            let conf_img_path = PathBuf::from(&node.node_path).join(mk_compressed_img_path());
             match InfraProvider::read_attribute(&t_env) {
                 InfraProvider::K8s => {
                     let url = format!(
                         "{}/{}",
                         tnet_node.config_url.clone().expect("missing config_url"),
-                        CONF_IMG_FNAME
+                        mk_compressed_img_path()
                     );
                     info!(
                         t_env.logger(),

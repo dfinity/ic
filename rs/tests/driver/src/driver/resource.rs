@@ -56,7 +56,6 @@ pub enum ImageType {
     IcOsImage,
     PrometheusImage,
     UniversalImage,
-    BoundaryImage,
 }
 
 impl From<DiskImage> for ImageLocation {
@@ -341,21 +340,9 @@ pub fn allocate_resources(
                 .into();
                 vm_responses.push((
                     vm_name,
-                    block_on(tnet.vm_create(
-                        CreateVmRequest {
-                            primary_image: ImageLocation::PersistentVolumeClaim {
-                                name: match req.primary_image.image_type {
-                                    ImageType::PrometheusImage => "img-prometheus-vm".into(),
-                                    ImageType::UniversalImage => "img-universal-vm".into(),
-                                    _ => {
-                                        format!("image-guestos-{}", tnet.image_sha)
-                                    }
-                                },
-                            },
-                            ..create_vm_request
-                        },
-                        req.primary_image.image_type.clone(),
-                    ))
+                    block_on(
+                        tnet.vm_create(create_vm_request, req.primary_image.image_type.clone()),
+                    )
                     .expect("failed to create vm"),
                 ));
                 tnet.write_attribute(env);
