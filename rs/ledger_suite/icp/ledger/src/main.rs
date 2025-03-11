@@ -2,10 +2,7 @@ use candid::{candid_method, Decode, Nat, Principal};
 use dfn_candid::{candid_one, CandidOne};
 #[allow(unused_imports)]
 use dfn_core::BytesS;
-use dfn_core::{
-    endpoint::reject_on_decode_error::{over_async, over_async_may_reject},
-    over_init,
-};
+use dfn_core::{endpoint::reject_on_decode_error::over_async_may_reject, over_init};
 #[cfg(feature = "notify-method")]
 use dfn_protobuf::protobuf;
 use ic_base_types::{CanisterId, PrincipalId};
@@ -1003,7 +1000,13 @@ fn send_() {
     })
 }
 
-#[candid_method(update, rename = "send_dfx")]
+/// Do not use call this from code, this is only here so dfx has something to
+/// call when making a payment. This will be changed in ways that are not
+/// backwards compatible with previous interfaces.
+///
+/// I STRONGLY recommend that you use "send_pb" instead.
+#[update]
+#[candid_method(update)]
 async fn send_dfx(arg: SendArgs) -> BlockIndex {
     panic_if_not_ready();
     transfer_candid(TransferArgs::from(arg))
@@ -1011,17 +1014,6 @@ async fn send_dfx(arg: SendArgs) -> BlockIndex {
         .unwrap_or_else(|e| {
             trap(&e.to_string());
         })
-}
-
-/// Do not use call this from code, this is only here so dfx has something to
-/// call when making a payment. This will be changed in ways that are not
-/// backwards compatible with previous interfaces.
-///
-/// I STRONGLY recommend that you use "send_pb" instead.
-#[export_name = "canister_update send_dfx"]
-fn send_dfx_() {
-    panic_if_not_ready();
-    over_async(candid_one, send_dfx);
 }
 
 #[cfg(feature = "notify-method")]
