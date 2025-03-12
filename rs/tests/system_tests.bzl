@@ -268,16 +268,8 @@ def system_test(
     if uses_hostos_dev_test:
         icos_images["ENV_DEPS__HOSTOS_UPDATE_IMG_TEST"] = "//ic-os/hostos/envs/dev:update-img-test.tar.zst"
 
-    if uses_hostos_mainnet:
-        mainnet_hostos_version = mainnet_versions["hostos"]["latest_upgrade"]["version"]
-        env["ENV_DEPS__HOSTOS_UPDATE_IMG_VERSION"] = mainnet_hostos_version
-        env["ENV_DEPS__HOSTOS_UPDATE_IMG_URL"] = base_download_url(mainnet_hostos_version, "host-os", True, False) + "update-img.tar.zst"
-        env["ENV_DEPS__HOSTOS_UPDATE_IMG_SHA"] = mainnet_versions["hostos"]["latest_upgrade"]["update_img_hash"]
-    else:
-        # Initialize variables to be overridden at runtime time
-        env["ENV_DEPS__HOSTOS_UPDATE_IMG_VERSION"] = ""
-        env["ENV_DEPS__HOSTOS_UPDATE_IMG_URL"] = ""
-        env["ENV_DEPS__HOSTOS_UPDATE_IMG_SHA"] = ""
+    # Use the helper function to set the HostOS variables
+    env |= compute_hostos_update_img_env_vars(uses_hostos_mainnet)
 
     if uses_setupos_dev:
         # Note: SetupOS is still passed directly by path, as it needs some local processing.
@@ -511,3 +503,18 @@ def oci_tar(name, image, repo_tags = []):
         ],
         tags = ["manual"],
     )
+
+def compute_hostos_update_img_env_vars(uses_hostos_mainnet):
+    if uses_hostos_mainnet:
+        mainnet_hostos_version = mainnet_versions["hostos"]["latest_upgrade"]["version"]
+        return {
+            "ENV_DEPS__HOSTOS_UPDATE_IMG_VERSION": mainnet_hostos_version,
+            "ENV_DEPS__HOSTOS_UPDATE_IMG_URL": base_download_url(mainnet_hostos_version, "host-os", True, False) + "update-img.tar.zst",
+            "ENV_DEPS__HOSTOS_UPDATE_IMG_SHA": mainnet_versions["hostos"]["latest_upgrade"]["update_img_hash"],
+        }
+    else:
+        return {
+            "ENV_DEPS__HOSTOS_UPDATE_IMG_VERSION": "",
+            "ENV_DEPS__HOSTOS_UPDATE_IMG_URL": "",
+            "ENV_DEPS__HOSTOS_UPDATE_IMG_SHA": "",
+        }
