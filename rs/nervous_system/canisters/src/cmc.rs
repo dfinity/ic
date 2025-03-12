@@ -2,8 +2,8 @@ use async_trait::async_trait;
 use ic_base_types::CanisterId;
 use ic_nervous_system_runtime::Runtime;
 use ic_nns_constants::CYCLES_MINTING_CANISTER_ID;
-use std::marker::PhantomData;
 use mockall::automock;
+use std::marker::PhantomData;
 
 /// A trait defining common patterns for accessing the CMC canister.
 #[automock]
@@ -66,4 +66,3 @@ impl<Rt: Runtime + Send + Sync> CMC for CMCCanister<Rt> {
         }
     }
 }
-

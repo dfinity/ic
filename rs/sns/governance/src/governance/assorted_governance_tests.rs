@@ -35,6 +35,7 @@ use async_trait::async_trait;
 use candid::Principal;
 use futures::{join, FutureExt};
 use ic_canister_client_sender::Sender;
+use ic_nervous_system_canisters::cmc::FakeCmc;
 use ic_nervous_system_clients::{
     canister_id_record::CanisterIdRecord, canister_status::CanisterStatusType,
 };
@@ -57,7 +58,6 @@ use std::{
     sync::{Arc, Mutex},
     time::{Duration, SystemTime},
 };
-use ic_nervous_system_canisters::cmc::FakeCmc;
 
 struct AlwaysSucceedingLedger {}
 
