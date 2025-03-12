@@ -11,7 +11,7 @@ We suggest creating dedicated identities to use with this scenario:
 dfx identity new sns-testing --storage-mode=plaintext
 dfx identity new icp-treasury --storage-mode=plaintext
 ```
-Mind the `--storage-mode=plaintext` as `dfx-core` used requires reading `.pem` files from the disk.
+Mind the `--storage-mode=plaintext` as it is required to have `.pem` files in the `dfx` directory on the disk.
 
 ## Run the basic scenario
 
