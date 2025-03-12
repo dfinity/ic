@@ -891,19 +891,19 @@ impl ApiState {
             // IC API proxy routers
             let router_api_v2 = Router::new()
                 .route(
-                    "/canister/:principal/query",
+                    "/canister/{principal}/query",
                     post(proxy_handler).layer(cors_post.clone()),
                 )
                 .route(
-                    "/canister/:principal/call",
+                    "/canister/{principal}/call",
                     post(proxy_handler).layer(cors_post.clone()),
                 )
                 .route(
-                    "/canister/:principal/read_state",
+                    "/canister/{principal}/read_state",
                     post(proxy_handler).layer(cors_post.clone()),
                 )
                 .route(
-                    "/subnet/:principal/read_state",
+                    "/subnet/{principal}/read_state",
                     post(proxy_handler).layer(cors_post.clone()),
                 )
                 .route("/status", get(proxy_handler).layer(cors_get.clone()))
@@ -911,7 +911,7 @@ impl ApiState {
                 .with_state((format!("{}/api/v2", replica_url), backend_client.clone()));
             let router_api_v3 = Router::new()
                 .route(
-                    "/canister/:principal/call",
+                    "/canister/{principal}/call",
                     post(proxy_handler).layer(cors_post.clone()),
                 )
                 .fallback(|| async { (StatusCode::NOT_FOUND, "") })

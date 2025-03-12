@@ -855,14 +855,6 @@ http_file(
     url = "https://download.dfinity.systems/ic/172f8c78653c93ad101af75b94251439b4ccf098/binaries/x86_64-linux/pocket-ic.gz",
 )
 
-# Patches
-
-http_file(
-    name = "rustix-patch",
-    sha256 = "ffe807170f06b579098f948eca42ba1ea1fd2cb7b8290c9d41101efe976337f7",
-    url = "https://github.com/nmattia/rustix/commit/330bcc07796f4b8e6443987fbb1b9be79c446bd2.diff",
-)
-
 # Management canister candid interface
 
 http_file(
@@ -878,4 +870,11 @@ http_file(
     downloaded_file_path = "cacert.pem",
     sha256 = "bb1782d281fe60d4a2dcf41bc229abe3e46c280212597d4abcc25bddf667739b",
     url = "https://curl.se/ca/cacert-2024-11-26.pem",
+)
+
+mainnet_versions = use_repo_rule("//bazel:mainnet-versions.bzl", "mainnet_versions")
+
+mainnet_versions(
+    name = "mainnet_versions",
+    path = "//:mainnet-subnet-revisions.json",
 )

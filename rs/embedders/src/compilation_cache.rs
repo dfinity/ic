@@ -21,9 +21,21 @@ use ic_wasm_types::{CanisterModule, WasmHash};
 
 const GB: u64 = 1024 * 1024 * 1024;
 
+/// Each entry holds two file descriptors, so this will limit us to 1M total
+/// descriptors used by the cache.
+const DEFAULT_MAX_ENTRIES: usize = 500_000;
+
+/// 100 GiB should be plenty. Otherwise a large portion of subnet memory would
+/// be in Wasm code even though the x86 is a bit larger.
+const DEFAULT_DISK_CAPACITY: NumBytes = NumBytes::new(100 * GB);
+
+/// 10 GiB is already more than we can support with the entry count limit anyway.
+const DEFAULT_MEMORY_CAPACITY: NumBytes = NumBytes::new(10 * GB);
+
 /// Stores the serialized modules of wasm code that has already been compiled so
 /// that it can be used again without recompiling.
 pub enum CompilationCache {
+    // TODO(EXC-1991): Deprecate in memory version.
     Memory {
         cache: Mutex<LruCache<WasmHash, HypervisorResult<Arc<SerializedModule>>>>,
     },
@@ -35,6 +47,8 @@ pub enum CompilationCache {
         cache: Mutex<LruCache<WasmHash, HypervisorResult<Arc<OnDiskSerializedModule>>>>,
         /// Atomic counter to deduplicate files in the case of concurrent compilations of the same module.
         counter: AtomicU64,
+        /// Limit on the total number of entries in the cache.
+        max_entries: usize,
     },
 }
 
@@ -54,28 +68,76 @@ impl MemoryDiskBytes for CompilationCache {
     }
 }
 
-impl CompilationCache {
-    pub fn new(capacity: NumBytes, dir: TempDir) -> Self {
-        Self::Disk {
-            dir,
-            cache: Mutex::new(LruCache::new(capacity, NumBytes::from(100 * GB))),
-            counter: AtomicU64::new(0),
+pub struct CompilationCacheBuilder {
+    memory_capacity: NumBytes,
+    disk_capacity: NumBytes,
+    dir: Option<TempDir>,
+    max_entries: usize,
+}
+
+impl Default for CompilationCacheBuilder {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+impl CompilationCacheBuilder {
+    pub fn new() -> Self {
+        Self {
+            memory_capacity: DEFAULT_MEMORY_CAPACITY,
+            disk_capacity: DEFAULT_DISK_CAPACITY,
+            dir: None,
+            max_entries: DEFAULT_MAX_ENTRIES,
         }
     }
 
+    pub fn with_memory_capacity(mut self, memory_capacity: NumBytes) -> Self {
+        self.memory_capacity = memory_capacity;
+        self
+    }
+
+    pub fn with_disk_capacity(mut self, disk_capacity: NumBytes) -> Self {
+        self.disk_capacity = disk_capacity;
+        self
+    }
+
+    pub fn with_dir(mut self, dir: TempDir) -> Self {
+        self.dir = Some(dir);
+        self
+    }
+
+    pub fn with_max_entries(mut self, max_entries: usize) -> Self {
+        self.max_entries = max_entries;
+        self
+    }
+
+    pub fn build(self) -> CompilationCache {
+        let dir = self.dir.unwrap_or_else(|| tempfile::tempdir().unwrap());
+        CompilationCache::Disk {
+            dir,
+            cache: Mutex::new(LruCache::new(self.memory_capacity, self.disk_capacity)),
+            counter: AtomicU64::new(0),
+            max_entries: self.max_entries,
+        }
+    }
+}
+
+impl CompilationCache {
     pub fn insert_err(&self, canister_module: &CanisterModule, err: HypervisorError) {
         match self {
             Self::Memory { cache } => {
-                cache
-                    .lock()
-                    .unwrap()
-                    .push(WasmHash::from(canister_module), Err(err));
-            }
-            Self::Disk { cache, .. } => {
                 let _ = cache
                     .lock()
                     .unwrap()
                     .push(WasmHash::from(canister_module), Err(err));
+            }
+            Self::Disk {
+                cache, max_entries, ..
+            } => {
+                let mut cache = cache.lock().unwrap();
+                if cache.len() >= *max_entries {
+                    let _ = cache.pop_lru();
+                }
+                let _ = cache.push(WasmHash::from(canister_module), Err(err));
             }
         }
     }
@@ -89,7 +151,7 @@ impl CompilationCache {
             Self::Memory { cache } => {
                 let serialized_module = Arc::new(serialized_module);
                 let copy = Arc::clone(&serialized_module);
-                cache
+                let _ = cache
                     .lock()
                     .unwrap()
                     .push(WasmHash::from(canister_module), Ok(serialized_module));
@@ -99,6 +161,7 @@ impl CompilationCache {
                 dir,
                 cache,
                 counter,
+                max_entries,
                 ..
             } => {
                 // The file paths must not have existing files. To ensure this
@@ -117,7 +180,11 @@ impl CompilationCache {
                     &initial_state_path,
                 ));
 
-                let _ = cache.lock().unwrap().push(hash, Ok(Arc::clone(&on_disk)));
+                let mut cache = cache.lock().unwrap();
+                if cache.len() >= *max_entries {
+                    let _ = cache.pop_lru();
+                }
+                let _ = cache.push(hash, Ok(Arc::clone(&on_disk)));
                 StoredCompilation::Disk(on_disk)
             }
         }
@@ -213,10 +280,7 @@ impl StoredCompilation {
 /// each other if they all try to insert in the cache at the same time.
 #[test]
 fn concurrent_insertions() {
-    let cache = CompilationCache::new(
-        NumBytes::from(30 * 1024 * 1024),
-        tempfile::tempdir().unwrap(),
-    );
+    let cache = CompilationCacheBuilder::new().build();
     let wasm = wat::parse_str("(module)").unwrap();
     let canister_module = CanisterModule::new(wasm.clone());
     let binary = ic_wasm_types::BinaryEncodedWasm::new(wasm.clone());

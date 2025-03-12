@@ -332,9 +332,6 @@ impl TryFrom<create_service_nervous_system::InitialTokenDistribution>
                 developer_distribution,
                 treasury_distribution,
                 swap_distribution,
-
-                // Obsolete fields.
-                airdrop_distribution: None,
             },
         ))
     }

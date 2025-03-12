@@ -6,8 +6,8 @@ use aide::{
     },
     openapi::{Info, OpenApi},
 };
+use async_trait::async_trait;
 use axum::{
-    async_trait,
     extract::{DefaultBodyLimit, Path, State},
     http,
     http::{HeaderMap, StatusCode},
@@ -164,13 +164,13 @@ async fn start(runtime: Arc<Runtime>) {
         .directory_route("/blobstore", post(set_blob_store_entry))
         //
         // Get a blob store entry.
-        .directory_route("/blobstore/:id", get(get_blob_store_entry))
+        .directory_route("/blobstore/{id}", get(get_blob_store_entry))
         //
         // Verify signature.
         .directory_route("/verify_signature", post(verify_signature))
         //
         // Read state: Poll a result based on a received Started{} reply.
-        .directory_route("/read_graph/:state_label/:op_id", get(handler_read_graph))
+        .directory_route("/read_graph/{state_label}/{op_id}", get(handler_read_graph))
         //
         // All instance routes.
         .nest("/instances", instances_routes::<AppState>())
@@ -505,7 +505,12 @@ mod test {
 
     #[test]
     fn test_setup_router() {
-        let args = vec!["", "--domain", "ic0.app"];
+        let args = vec![
+            "",
+            "--domain",
+            "ic0.app",
+            "--domain-canister-id-from-query-params",
+        ];
         let cli = Cli::parse_from(args);
 
         rustls::crypto::ring::default_provider()

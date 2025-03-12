@@ -3129,6 +3129,42 @@ impl SystemApi for SystemApiImpl {
         result
     }
 
+    fn ic0_canister_liquid_cycle_balance128(
+        &mut self,
+        dst: usize,
+        heap: &mut [u8],
+    ) -> HypervisorResult<()> {
+        self.call_counters.canister_liquid_cycle_balance128 += 1;
+        let method_name = "ic0_canister_liquid_cycle_balance128";
+        let result = match &self.api_type {
+            ApiType::Start { .. } => Err(self.error_for(method_name)),
+            ApiType::Init { .. }
+            | ApiType::SystemTask { .. }
+            | ApiType::Update { .. }
+            | ApiType::Cleanup { .. }
+            | ApiType::ReplicatedQuery { .. }
+            | ApiType::NonReplicatedQuery { .. }
+            | ApiType::PreUpgrade { .. }
+            | ApiType::ReplyCallback { .. }
+            | ApiType::RejectCallback { .. }
+            | ApiType::InspectMessage { .. } => {
+                let cycles = self.sandbox_safe_system_state.liquid_cycles_balance(
+                    self.memory_usage.current_usage,
+                    self.memory_usage.current_message_usage,
+                );
+                copy_cycles_to_heap(cycles, dst, heap, method_name)?;
+                Ok(())
+            }
+        };
+        trace_syscall!(
+            self,
+            CanisterLiquidCycleBalance128,
+            dst,
+            summarize(heap, dst, 16)
+        );
+        result
+    }
+
     fn ic0_msg_cycles_available(&self) -> HypervisorResult<u64> {
         let result = {
             let (high_amount, low_amount) = self
