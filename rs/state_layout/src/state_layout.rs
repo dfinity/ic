@@ -2458,13 +2458,13 @@ impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
             try_from_option_field(value.tasks, "CanisterStateBits::tasks");
 
         let task_queue = match pb_task_queue {
-            Ok(tasks) => TaskQueue::try_from(tasks).unwrap(),
+            Ok(tasks) => TaskQueue::try_from(tasks)?,
             Err(_) => {
                 let task_queue: VecDeque<ExecutionTask> = value
                     .task_queue
                     .into_iter()
-                    .map(|v| v.try_into().unwrap())
-                    .collect();
+                    .map(|v| v.try_into())
+                    .collect::<Result<VecDeque<_>, _>>()?;
                 if task_queue.len() > 1 {
                     return Err(ProxyDecodeError::Other(format!(
                         "Expecting at most one task queue entry. Found {:?}",
