@@ -1,3 +1,4 @@
+use crate::null_request::NullRequest;
 use crate::sns::Sns;
 use crate::CallCanisters;
 use anyhow::anyhow;
@@ -179,4 +180,11 @@ pub async fn get_next_sns_version<C: CallCanisters>(
     let response = agent.call(SNS_WASM_CANISTER_ID, request).await?;
 
     Ok(response.next_version)
+}
+
+pub async fn get_latest_sns_version_pretty<C: CallCanisters>(
+    agent: &C,
+) -> Result<Vec<(String, String)>, C::Error> {
+    let request = NullRequest::new("get_latest_sns_version_pretty", false);
+    agent.call(SNS_WASM_CANISTER_ID, request).await
 }
