@@ -295,6 +295,7 @@ pub fn generate_responses_to_subnet_calls(
     consensus_responses
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
 enum RemoteDkgResults {
     ReshareChainKey(Result<NiDkgTranscript, String>),
     SetupInitialDKG {
@@ -503,59 +504,19 @@ mod tests {
     use ic_crypto_test_utils_ni_dkg::dummy_transcript_for_tests;
     use ic_logger::replica_logger::no_op_logger;
     use ic_management_canister_types_private::{SetupInitialDKGResponse, VetKdCurve, VetKdKeyId};
-    use ic_registry_subnet_type::SubnetType;
-    use ic_replicated_state::{
-        metadata_state::subnet_call_context_manager::{
-            ReshareChainKeyContext, SetupInitialDkgContext,
-        },
-        SystemMetadata,
-    };
     use ic_test_utilities_types::ids::subnet_test_id;
     use ic_types::{
         crypto::threshold_sig::ni_dkg::{
             NiDkgId, NiDkgMasterPublicKeyId, NiDkgTag, NiDkgTargetId, NiDkgTargetSubnet,
         },
-        messages::{CallbackId, Payload, Request, NO_DEADLINE},
-        CanisterId, Cycles, PrincipalId, RegistryVersion, SubnetId,
+        messages::{CallbackId, Payload},
+        PrincipalId, SubnetId,
     };
-    use std::{
-        collections::{BTreeMap, BTreeSet},
-        str::FromStr,
-    };
+    use std::str::FromStr;
 
     #[test]
     fn test_generate_setup_initial_dkg_response() {
         const TARGET_ID: NiDkgTargetId = NiDkgTargetId::new([8; 32]);
-
-        // Manually create `SystemMetadata` with custom context
-        let mut metadata = SystemMetadata::new(subnet_test_id(0), SubnetType::System);
-
-        // TODO: It seems the test still works if we remove the context. This should not be the case, I think
-        metadata
-            .subnet_call_context_manager
-            .setup_initial_dkg_contexts = vec![(
-            CallbackId::from(0),
-            // NOTE: From this struct we only need the target id, therefore we will initialize the
-            // rest with dummy data
-            SetupInitialDkgContext {
-                request: Request {
-                    receiver: CanisterId::from(0),
-                    sender: CanisterId::from(0),
-                    sender_reply_callback: CallbackId::from(0),
-                    payment: Cycles::zero(),
-                    method_name: "".to_string(),
-                    method_payload: vec![],
-                    metadata: Default::default(),
-                    deadline: NO_DEADLINE,
-                },
-                nodes_in_target_subnet: BTreeSet::new(),
-                target_id: TARGET_ID,
-                registry_version: RegistryVersion::from(1),
-                time: metadata.batch_time,
-            },
-        )]
-        .drain(..)
-        .collect::<BTreeMap<_, _>>();
 
         // Build some transcipts with matching ids and tags
         let transcripts_for_remote_subnets = vec![
@@ -611,76 +572,22 @@ mod tests {
             name: String::from("test_vetkd_key"),
         });
 
-        // Manually create `SystemMetadata` with custom context
-        let mut metadata = SystemMetadata::new(subnet_test_id(0), SubnetType::System);
-        metadata
-            .subnet_call_context_manager
-            .reshare_chain_key_contexts = vec![(
-            CallbackId::from(0),
-            // NOTE: From this struct we only need the target id, therefore we will initialize the
-            // rest with dummy data
-            ReshareChainKeyContext {
-                request: Request {
-                    receiver: CanisterId::from(0),
-                    sender: CanisterId::from(0),
-                    sender_reply_callback: CallbackId::from(0),
-                    payment: Cycles::zero(),
-                    method_name: "".to_string(),
-                    method_payload: vec![],
-                    metadata: Default::default(),
-                    deadline: NO_DEADLINE,
-                },
-                registry_version: RegistryVersion::from(1),
-                time: metadata.batch_time,
-                key_id: key_id.into(),
-                nodes: BTreeSet::new(),
-            },
-        )]
-        .drain(..)
-        .collect::<BTreeMap<_, _>>();
-
         // Build some transcipts with matching ids and tags
-        let transcripts_for_remote_subnets = vec![
-            (
-                NiDkgId {
-                    start_block_height: Height::from(0),
-                    dealer_subnet: subnet_test_id(0),
-                    dkg_tag: NiDkgTag::LowThreshold,
-                    target_subnet: NiDkgTargetSubnet::Remote(TARGET_ID),
-                },
-                CallbackId::from(1),
-                Ok(dummy_transcript_for_tests()),
-            ),
-            (
-                NiDkgId {
-                    start_block_height: Height::from(0),
-                    dealer_subnet: subnet_test_id(0),
-                    dkg_tag: NiDkgTag::HighThreshold,
-                    target_subnet: NiDkgTargetSubnet::Remote(TARGET_ID),
-                },
-                CallbackId::from(1),
-                Ok(dummy_transcript_for_tests()),
-            ),
-        ];
+        let transcripts_for_remote_subnets = vec![(
+            NiDkgId {
+                start_block_height: Height::from(0),
+                dealer_subnet: subnet_test_id(0),
+                dkg_tag: NiDkgTag::HighThresholdForKey(key_id),
+                target_subnet: NiDkgTargetSubnet::Remote(TARGET_ID),
+            },
+            CallbackId::from(2),
+            Ok(dummy_transcript_for_tests()),
+        )];
 
         let result =
             generate_responses_to_remote_dkgs(&transcripts_for_remote_subnets[..], &no_op_logger());
-        assert_eq!(result.len(), 1);
+        assert_eq!(result.len(), 0);
 
-        // Deserialize the `SetupInitialDKGResponse` and check the subnet id
-        let payload = match &result[0].payload {
-            Payload::Data(data) => data,
-            Payload::Reject(_) => panic!("Payload was rejected unexpectedly"),
-        };
-        let initial_transcript_records = SetupInitialDKGResponse::decode(payload).unwrap();
-        assert_eq!(
-            initial_transcript_records.fresh_subnet_id,
-            SubnetId::from(
-                PrincipalId::from_str(
-                    "icdrs-3sfmz-hm6r3-cdzf5-cfroa-3cddh-aght7-azz25-eo34b-4strl-wae"
-                )
-                .unwrap()
-            )
-        );
+        // TODO(CON-1416: Extend this test)
     }
 }
