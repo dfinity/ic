@@ -5,8 +5,10 @@ use ic_nervous_system_integration_tests::{
     pocket_ic_helpers::{
         self, add_wasm_via_nns_proposal, nns,
         sns::{self, governance::set_automatically_advance_target_version_flag},
+        upgrade_nns_canister_to_tip_of_master_or_panic,
     },
 };
+use ic_nns_constants::SNS_WASM_CANISTER_ID;
 use ic_nns_test_utils::sns_wasm::{
     build_archive_sns_wasm, build_governance_sns_wasm, build_index_ng_sns_wasm,
     build_ledger_sns_wasm, build_root_sns_wasm, build_swap_sns_wasm, create_modified_sns_wasm,
