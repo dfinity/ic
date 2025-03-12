@@ -54,10 +54,10 @@ def _run_system_test(ctx):
                 export ENV_DEPS__HOSTOS_UPDATE_IMG_VERSION="$(cat ${{ENV_DEPS__IC_VERSION_FILE}})-test"
             fi
             if [ -z "${{ENV_DEPS__HOSTOS_UPDATE_IMG_URL}}" ]; then
-                export ENV_DEPS__HOSTOS_UPDATE_IMG_URL="${{ENV_DEPS__HOSTOS_UPDATE_IMG_TEST_URL}}"
+                export ENV_DEPS__HOSTOS_UPDATE_IMG_URL="${{ENV_DEPS__HOSTOS_UPDATE_IMG_TEST_URL:-}}"
             fi
             if [ -z "${{ENV_DEPS__HOSTOS_UPDATE_IMG_SHA}}" ]; then
-                export ENV_DEPS__HOSTOS_UPDATE_IMG_SHA="${{ENV_DEPS__HOSTOS_UPDATE_IMG_TEST_HASH}}"
+                export ENV_DEPS__HOSTOS_UPDATE_IMG_SHA="${{ENV_DEPS__HOSTOS_UPDATE_IMG_TEST_HASH:-}}"
             fi
 
             # We export RUNFILES such that the from_location_specified_by_env_var() function in
