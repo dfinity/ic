@@ -57,9 +57,8 @@ use ic_nns_governance::{
         Environment, Governance, HeapGrowthPotential,
         EXECUTE_NNS_FUNCTION_PAYLOAD_LISTING_BYTES_MAX, INITIAL_NEURON_DISSOLVE_DELAY,
         MAX_DISSOLVE_DELAY_SECONDS, MAX_NEURON_AGE_FOR_AGE_BONUS, MAX_NEURON_CREATION_SPIKE,
-        MAX_NUMBER_OF_PROPOSALS_WITH_BALLOTS, MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS,
-        PROPOSAL_MOTION_TEXT_BYTES_MAX, REWARD_DISTRIBUTION_PERIOD_SECONDS,
-        WAIT_FOR_QUIET_DEADLINE_INCREASE_SECONDS,
+        MAX_NUMBER_OF_PROPOSALS_WITH_BALLOTS, PROPOSAL_MOTION_TEXT_BYTES_MAX,
+        REWARD_DISTRIBUTION_PERIOD_SECONDS, WAIT_FOR_QUIET_DEADLINE_INCREASE_SECONDS,
     },
     governance_proto_builder::GovernanceProtoBuilder,
     pb::v1::{
@@ -247,9 +246,10 @@ fn check_proposal_status_after_voting_and_after_expiration_new(
     nns
 }
 
-const NOTDISSOLVING_MIN_DISSOLVE_DELAY_TO_VOTE: Option<DissolveState> = Some(
-    DissolveState::DissolveDelaySeconds(MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS),
-);
+const NOTDISSOLVING_MIN_DISSOLVE_DELAY_TO_VOTE: Option<DissolveState> =
+    Some(DissolveState::DissolveDelaySeconds(
+        VotingPowerEconomics::DEFAULT_NEURON_MINIMUM_DISSOLVE_DELAY_TO_VOTE_SECONDS,
+    ));
 
 const NOTDISSOLVING_MAX_DISSOLVE_DELAY: Option<DissolveState> = Some(
     DissolveState::DissolveDelaySeconds(MAX_DISSOLVE_DELAY_SECONDS),
@@ -5108,7 +5108,8 @@ fn create_mature_neuron(dissolved: bool) -> (fake::FakeDriver, Governance, Neuro
     let nonce = 1234u64;
 
     let block_height = 543212234;
-    let dissolve_delay_seconds = MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS;
+    let dissolve_delay_seconds =
+        VotingPowerEconomics::DEFAULT_NEURON_MINIMUM_DISSOLVE_DELAY_TO_VOTE_SECONDS;
     let neuron_stake_e8s = 100_000_000;
 
     let (mut driver, mut gov, id, to_subaccount) = governance_with_staked_neuron(
@@ -5161,7 +5162,9 @@ fn create_mature_neuron(dissolved: bool) -> (fake::FakeDriver, Governance, Neuro
             .expect("Neuron not found")
             .expect("Configure neuron failed.");
         // Advance the time in the env
-        driver.advance_time_by(MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS + 1);
+        driver.advance_time_by(
+            VotingPowerEconomics::DEFAULT_NEURON_MINIMUM_DISSOLVE_DELAY_TO_VOTE_SECONDS + 1,
+        );
 
         // The neuron state should now be "Dissolved", meaning we can
         // now disburse the neuron.
@@ -5180,7 +5183,9 @@ fn create_mature_neuron(dissolved: bool) -> (fake::FakeDriver, Governance, Neuro
             NeuronState::Dissolved
         );
     } else {
-        driver.advance_time_by(MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS + 1);
+        driver.advance_time_by(
+            VotingPowerEconomics::DEFAULT_NEURON_MINIMUM_DISSOLVE_DELAY_TO_VOTE_SECONDS + 1,
+        );
     }
 
     gov.neuron_store
@@ -5830,7 +5835,7 @@ fn test_rate_limiting_neuron_creation() {
                 maturity_e8s_equivalent: 10 * E8,
                 staked_maturity_e8s_equivalent: Some(10 * E8),
                 dissolve_state: Some(DissolveState::DissolveDelaySeconds(
-                    MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS,
+                    VotingPowerEconomics::DEFAULT_NEURON_MINIMUM_DISSOLVE_DELAY_TO_VOTE_SECONDS,
                 )),
                 ..Default::default()
             }
@@ -6050,7 +6055,8 @@ fn test_neuron_split_fails() {
     let nonce = 1234u64;
 
     let block_height = 543212234;
-    let dissolve_delay_seconds = MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS;
+    let dissolve_delay_seconds =
+        VotingPowerEconomics::DEFAULT_NEURON_MINIMUM_DISSOLVE_DELAY_TO_VOTE_SECONDS;
     let neuron_stake_e8s = 1_000_000_000;
 
     let (driver, mut gov, id, _) = governance_with_staked_neuron(
@@ -6180,7 +6186,8 @@ fn test_neuron_split() {
     let nonce = 1234u64;
 
     let block_height = 543212234;
-    let dissolve_delay_seconds = MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS;
+    let dissolve_delay_seconds =
+        VotingPowerEconomics::DEFAULT_NEURON_MINIMUM_DISSOLVE_DELAY_TO_VOTE_SECONDS;
     let neuron_stake_e8s = 1_000_000_000;
     let maturity_e8s = 500_000_000;
     let staked_maturity_e8s = 400_000_000;
@@ -6307,7 +6314,8 @@ fn test_seed_neuron_split() {
     let nonce = 1234u64;
 
     let block_height = 543212234;
-    let dissolve_delay_seconds = MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS;
+    let dissolve_delay_seconds =
+        VotingPowerEconomics::DEFAULT_NEURON_MINIMUM_DISSOLVE_DELAY_TO_VOTE_SECONDS;
     let neuron_stake_e8s = 1_000_000_000;
 
     let (driver, mut gov, id, _) = governance_with_staked_neuron(
@@ -6399,7 +6407,8 @@ fn test_neuron_spawn() {
     let nonce = 1234u64;
 
     let block_height = 543212234;
-    let dissolve_delay_seconds = MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS;
+    let dissolve_delay_seconds =
+        VotingPowerEconomics::DEFAULT_NEURON_MINIMUM_DISSOLVE_DELAY_TO_VOTE_SECONDS;
     let neuron_stake_e8s = 1_000_000_000;
 
     let (mut driver, mut gov, id, _) = governance_with_staked_neuron(
@@ -6589,7 +6598,8 @@ fn test_neuron_spawn_with_subaccount() {
     let nonce = 1234u64;
 
     let block_height = 543212234;
-    let dissolve_delay_seconds = MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS;
+    let dissolve_delay_seconds =
+        VotingPowerEconomics::DEFAULT_NEURON_MINIMUM_DISSOLVE_DELAY_TO_VOTE_SECONDS;
     let neuron_stake_e8s = 1_000_000_000;
 
     let (mut driver, mut gov, id, _) = governance_with_staked_neuron(
@@ -6746,7 +6756,8 @@ fn test_maturity_correctly_reset_if_spawn_fails() {
     let nonce = 1234u64;
 
     let block_height = 543212234;
-    let dissolve_delay_seconds = MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS;
+    let dissolve_delay_seconds =
+        VotingPowerEconomics::DEFAULT_NEURON_MINIMUM_DISSOLVE_DELAY_TO_VOTE_SECONDS;
     let neuron_stake_e8s = 1_000_000_000;
 
     let (mut driver, mut gov, id, _) = governance_with_staked_neuron(
@@ -6890,7 +6901,8 @@ fn assert_neuron_spawn_partial(
     let nonce = 1234u64;
 
     let block_height = 543212234;
-    let dissolve_delay_seconds = MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS;
+    let dissolve_delay_seconds =
+        VotingPowerEconomics::DEFAULT_NEURON_MINIMUM_DISSOLVE_DELAY_TO_VOTE_SECONDS;
     let neuron_stake_e8s = 1_000_000_000;
 
     let (mut driver, mut gov, id, _) = governance_with_staked_neuron(
@@ -7016,7 +7028,8 @@ fn test_staked_maturity() {
     let nonce = 1234u64;
 
     let block_height = 543212234;
-    let dissolve_delay_seconds = MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS;
+    let dissolve_delay_seconds =
+        VotingPowerEconomics::DEFAULT_NEURON_MINIMUM_DISSOLVE_DELAY_TO_VOTE_SECONDS;
     let neuron_stake_e8s = 10 * 100_000_000; // 10 ICP
 
     let (mut driver, gov, id, _to_subaccount) = governance_with_staked_neuron(
@@ -7142,7 +7155,9 @@ fn test_staked_maturity() {
         .expect("Neuron not found")
         .expect("Configuring neuron failed");
 
-    driver.advance_time_by(MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS);
+    driver.advance_time_by(
+        VotingPowerEconomics::DEFAULT_NEURON_MINIMUM_DISSOLVE_DELAY_TO_VOTE_SECONDS,
+    );
     run_pending_timers();
     gov.unstake_maturity_of_dissolved_neurons();
 
@@ -7232,7 +7247,8 @@ fn test_disburse_to_neuron() {
     let nonce = 1234u64;
 
     let block_height = 543212234;
-    let dissolve_delay_seconds = MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS;
+    let dissolve_delay_seconds =
+        VotingPowerEconomics::DEFAULT_NEURON_MINIMUM_DISSOLVE_DELAY_TO_VOTE_SECONDS;
     let neuron_stake_e8s = 10 * 100_000_000; // 10 ICP
 
     let (mut driver, mut gov, id, _to_subaccount) = governance_with_staked_neuron(
@@ -7284,7 +7300,9 @@ fn test_disburse_to_neuron() {
     }
 
     // Advance the time in the env
-    driver.advance_time_by(MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS + 1);
+    driver.advance_time_by(
+        VotingPowerEconomics::DEFAULT_NEURON_MINIMUM_DISSOLVE_DELAY_TO_VOTE_SECONDS + 1,
+    );
 
     let parent_neuron = gov.with_neuron(&id, |neuron| neuron.clone()).unwrap();
     // The neuron state should now be "Dissolved", meaning we can
@@ -7674,7 +7692,10 @@ fn test_manage_and_reward_node_providers() {
 
     let voter_neuron = init_neurons[&42].id.unwrap();
     init_neurons.get_mut(&42).unwrap().dissolve_state = Some(
-        DissolveState::DissolveDelaySeconds(MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS).into(),
+        DissolveState::DissolveDelaySeconds(
+            VotingPowerEconomics::DEFAULT_NEURON_MINIMUM_DISSOLVE_DELAY_TO_VOTE_SECONDS,
+        )
+        .into(),
     );
     let np_pid = PrincipalId::new_self_authenticating(&[14]);
 
@@ -8028,7 +8049,10 @@ fn test_manage_and_reward_multiple_node_providers() {
 
     let voter_neuron = init_neurons[&42].id.unwrap();
     init_neurons.get_mut(&42).unwrap().dissolve_state = Some(
-        DissolveState::DissolveDelaySeconds(MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS).into(),
+        DissolveState::DissolveDelaySeconds(
+            VotingPowerEconomics::DEFAULT_NEURON_MINIMUM_DISSOLVE_DELAY_TO_VOTE_SECONDS,
+        )
+        .into(),
     );
     let np_pid_0 = PrincipalId::new_self_authenticating(&[14]);
     let np_pid_1 = PrincipalId::new_self_authenticating(&[15]);
@@ -8406,7 +8430,10 @@ fn test_network_economics_proposal() {
     let voter_pid = *init_neurons[&42].controller.as_ref().unwrap();
     let voter_neuron = init_neurons[&42].id.unwrap();
     init_neurons.get_mut(&42).unwrap().dissolve_state = Some(
-        DissolveState::DissolveDelaySeconds(MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS).into(),
+        DissolveState::DissolveDelaySeconds(
+            VotingPowerEconomics::DEFAULT_NEURON_MINIMUM_DISSOLVE_DELAY_TO_VOTE_SECONDS,
+        )
+        .into(),
     );
     let (_, mut gov) = governance_with_neurons(
         &init_neurons
@@ -8431,12 +8458,19 @@ fn test_network_economics_proposal() {
             .voting_power_economics
             .unwrap()
             .neuron_minimum_dissolve_delay_to_vote_seconds,
-        Some(MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS),
+        Some(VotingPowerEconomics::DEFAULT_NEURON_MINIMUM_DISSOLVE_DELAY_TO_VOTE_SECONDS),
     );
 
-    // A value that differs from the default, useful for testing that the proposal has the intended effect.
-    let non_default_neuron_minimum_dissolve_delay_to_vote_seconds =
-        MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS / 2;
+    // A value that differs from the default, useful for testing that the proposal has
+    // the intended effect.
+    let nondefault_neuron_minimum_dissolve_delay_to_vote_seconds =
+        VotingPowerEconomics::DEFAULT_NEURON_MINIMUM_DISSOLVE_DELAY_TO_VOTE_SECONDS / 2;
+
+    // Smoke test
+    assert_ne!(
+        nondefault_neuron_minimum_dissolve_delay_to_vote_seconds,
+        VotingPowerEconomics::DEFAULT_NEURON_MINIMUM_DISSOLVE_DELAY_TO_VOTE_SECONDS,
+    );
 
     // Propose to change some, NetworkEconomics parameters.
     let pid = match gov
@@ -8455,7 +8489,7 @@ fn test_network_economics_proposal() {
                             start_reducing_voting_power_after_seconds: Some(42),
                             clear_following_after_seconds: Some(4242),
                             neuron_minimum_dissolve_delay_to_vote_seconds: Some(
-                                non_default_neuron_minimum_dissolve_delay_to_vote_seconds,
+                                nondefault_neuron_minimum_dissolve_delay_to_vote_seconds,
                             ),
                         }),
                         ..Default::default()
@@ -8488,8 +8522,8 @@ fn test_network_economics_proposal() {
                 start_reducing_voting_power_after_seconds: Some(42),
                 clear_following_after_seconds: Some(4242),
                 neuron_minimum_dissolve_delay_to_vote_seconds: Some(
-                    non_default_neuron_minimum_dissolve_delay_to_vote_seconds
-                )
+                    nondefault_neuron_minimum_dissolve_delay_to_vote_seconds
+                ),
             }),
 
             // No changes to the rest.
@@ -9413,7 +9447,7 @@ async fn test_make_proposal_message() {
                 hot_keys: vec![],
                 cached_neuron_stake_e8s: 10 * E8,
                 account: driver.random_byte_array().expect("Could not get random byte array").to_vec(),
-                dissolve_state: Some(DissolveState::DissolveDelaySeconds(MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS)),
+                dissolve_state: Some(DissolveState::DissolveDelaySeconds(VotingPowerEconomics::DEFAULT_NEURON_MINIMUM_DISSOLVE_DELAY_TO_VOTE_SECONDS)),
                 ..Default::default()
             },
         },
@@ -9972,10 +10006,9 @@ fn test_can_follow_by_subaccount_and_neuron_id() {
 #[test]
 fn test_merge_maturity_returns_expected_error() {
     let mut nns = NNSBuilder::new()
-        .add_neuron(
-            NeuronBuilder::new(100, 1, principal(1))
-                .set_dissolve_delay(MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS),
-        )
+        .add_neuron(NeuronBuilder::new(100, 1, principal(1)).set_dissolve_delay(
+            VotingPowerEconomics::DEFAULT_NEURON_MINIMUM_DISSOLVE_DELAY_TO_VOTE_SECONDS,
+        ))
         .create();
 
     let id = NeuronId { id: 100 };
@@ -10001,7 +10034,9 @@ fn test_manage_neuron_merge_maturity_returns_expected_error() {
     // This fixture works well for us since we just need a single neuron to make this call with.
     let fixture: GovernanceProto = fixture_for_dissolving_neuron_tests(
         id,
-        DissolveState::DissolveDelaySeconds(MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS),
+        DissolveState::DissolveDelaySeconds(
+            VotingPowerEconomics::DEFAULT_NEURON_MINIMUM_DISSOLVE_DELAY_TO_VOTE_SECONDS,
+        ),
         DEFAULT_TEST_START_TIMESTAMP_SECONDS,
     );
     let mut gov = Governance::new(
@@ -10072,7 +10107,9 @@ fn test_start_dissolving() {
     let id: u64 = 1;
     let fixture: GovernanceProto = fixture_for_dissolving_neuron_tests(
         id,
-        DissolveState::DissolveDelaySeconds(MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS),
+        DissolveState::DissolveDelaySeconds(
+            VotingPowerEconomics::DEFAULT_NEURON_MINIMUM_DISSOLVE_DELAY_TO_VOTE_SECONDS,
+        ),
         DEFAULT_TEST_START_TIMESTAMP_SECONDS,
     );
     let mut gov = Governance::new(
@@ -10091,7 +10128,7 @@ fn test_start_dissolving() {
         .unwrap();
     assert_eq!(
         neuron_info.dissolve_delay_seconds,
-        MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS
+        VotingPowerEconomics::DEFAULT_NEURON_MINIMUM_DISSOLVE_DELAY_TO_VOTE_SECONDS
     );
     assert_eq!(neuron_info.state, NeuronState::NotDissolving as i32);
     assert_eq!(neuron_info.age_seconds, 1);
@@ -10177,7 +10214,8 @@ fn test_stop_dissolving() {
     let fixture: GovernanceProto = fixture_for_dissolving_neuron_tests(
         id,
         DissolveState::WhenDissolvedTimestampSeconds(
-            DEFAULT_TEST_START_TIMESTAMP_SECONDS + MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS,
+            DEFAULT_TEST_START_TIMESTAMP_SECONDS
+                + VotingPowerEconomics::DEFAULT_NEURON_MINIMUM_DISSOLVE_DELAY_TO_VOTE_SECONDS,
         ),
         u64::MAX,
     );
@@ -10195,7 +10233,7 @@ fn test_stop_dissolving() {
     assert_eq!(neuron_info.state, NeuronState::Dissolving as i32);
     assert_eq!(
         neuron_info.dissolve_delay_seconds,
-        MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS
+        VotingPowerEconomics::DEFAULT_NEURON_MINIMUM_DISSOLVE_DELAY_TO_VOTE_SECONDS
     );
 
     gov.manage_neuron(
@@ -10225,7 +10263,7 @@ fn test_stop_dissolving() {
     assert_eq!(neuron_info.state, NeuronState::NotDissolving as i32);
     assert_eq!(
         neuron_info.dissolve_delay_seconds,
-        MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS
+        VotingPowerEconomics::DEFAULT_NEURON_MINIMUM_DISSOLVE_DELAY_TO_VOTE_SECONDS
     );
     assert_eq!(neuron_info.age_seconds, 1);
 }
@@ -10241,7 +10279,9 @@ fn test_stop_dissolving_panics() {
     let id: u64 = 1;
     let fixture: GovernanceProto = fixture_for_dissolving_neuron_tests(
         id,
-        DissolveState::DissolveDelaySeconds(MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS),
+        DissolveState::DissolveDelaySeconds(
+            VotingPowerEconomics::DEFAULT_NEURON_MINIMUM_DISSOLVE_DELAY_TO_VOTE_SECONDS,
+        ),
         DEFAULT_TEST_START_TIMESTAMP_SECONDS,
     );
     let mut gov = Governance::new(
@@ -10258,7 +10298,7 @@ fn test_stop_dissolving_panics() {
     assert_eq!(neuron_info.state, NeuronState::NotDissolving as i32);
     assert_eq!(
         neuron_info.dissolve_delay_seconds,
-        MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS
+        VotingPowerEconomics::DEFAULT_NEURON_MINIMUM_DISSOLVE_DELAY_TO_VOTE_SECONDS
     );
 
     gov.manage_neuron(
@@ -10390,7 +10430,7 @@ fn test_increase_dissolve_delay() {
                 account: account(1),
                 controller: Some(principal(principal_id)),
                 dissolve_state: Some(DissolveState::DissolveDelaySeconds(
-                    MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS,
+                    VotingPowerEconomics::DEFAULT_NEURON_MINIMUM_DISSOLVE_DELAY_TO_VOTE_SECONDS,
                 )),
                 ..Neuron::default()
             },
@@ -10400,7 +10440,7 @@ fn test_increase_dissolve_delay() {
                 controller: Some(principal(principal_id)),
                 dissolve_state: Some(DissolveState::WhenDissolvedTimestampSeconds(
                     DEFAULT_TEST_START_TIMESTAMP_SECONDS
-                        + MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS,
+                        + VotingPowerEconomics::DEFAULT_NEURON_MINIMUM_DISSOLVE_DELAY_TO_VOTE_SECONDS,
                 )),
                 aging_since_timestamp_seconds: u64::MAX,
                 ..Neuron::default()
@@ -10434,7 +10474,7 @@ fn test_increase_dissolve_delay() {
     assert_eq!(neuron_info.state, NeuronState::NotDissolving as i32);
     assert_eq!(
         neuron_info.dissolve_delay_seconds,
-        MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS + 1
+        VotingPowerEconomics::DEFAULT_NEURON_MINIMUM_DISSOLVE_DELAY_TO_VOTE_SECONDS + 1
     );
 
     increase_dissolve_delay(
@@ -10461,7 +10501,7 @@ fn test_increase_dissolve_delay() {
     assert_eq!(neuron_info.state, NeuronState::Dissolving as i32);
     assert_eq!(
         neuron_info.dissolve_delay_seconds,
-        MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS + 1
+        VotingPowerEconomics::DEFAULT_NEURON_MINIMUM_DISSOLVE_DELAY_TO_VOTE_SECONDS + 1
     );
 
     increase_dissolve_delay(
@@ -10485,8 +10525,8 @@ fn test_increase_dissolve_delay() {
         &mut gov,
         principal_id,
         3,
-        u32::try_from(MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS)
-            .expect("MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS larger than u32"),
+        u32::try_from(VotingPowerEconomics::DEFAULT_NEURON_MINIMUM_DISSOLVE_DELAY_TO_VOTE_SECONDS)
+            .expect("VotingPowerEconomics::DEFAULT_NEURON_MINIMUM_DISSOLVE_DELAY_TO_VOTE_SECONDS larger than u32"),
     );
     let neuron_info = gov
         .get_neuron_info(&NeuronId { id: 3 }, *RANDOM_PRINCIPAL_ID)
@@ -10494,7 +10534,7 @@ fn test_increase_dissolve_delay() {
     assert_eq!(neuron_info.state, NeuronState::NotDissolving as i32);
     assert_eq!(
         neuron_info.dissolve_delay_seconds,
-        MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS
+        VotingPowerEconomics::DEFAULT_NEURON_MINIMUM_DISSOLVE_DELAY_TO_VOTE_SECONDS
     );
 }
 

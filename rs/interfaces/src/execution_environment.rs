@@ -569,7 +569,7 @@ pub trait OutOfInstructionsHandler {
 
     // Invoked only when a long execution dirties many memory pages to yield control
     // and start the copy only in a new slice. This is a performance improvement.
-    fn yield_for_dirty_memory_copy(&self, instruction_counter: i64) -> HypervisorResult<i64>;
+    fn yield_for_dirty_memory_copy(&self) -> HypervisorResult<i64>;
 }
 
 /// Indicates the type of stable memory API being used.
@@ -993,7 +993,7 @@ pub trait SystemApi {
     /// This system call is not part of the public spec and it is invoked when
     /// Wasm execution has a large number of dirty pages that, for performance reasons,
     /// should be copied in a new execution slice.
-    fn yield_for_dirty_memory_copy(&mut self, instruction_counter: i64) -> HypervisorResult<i64>;
+    fn yield_for_dirty_memory_copy(&mut self) -> HypervisorResult<i64>;
 
     /// This system call is not part of the public spec. It's called after a
     /// native `memory.grow` has been executed to check whether there's enough

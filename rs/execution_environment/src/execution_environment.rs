@@ -43,7 +43,7 @@ use ic_management_canister_types_private::{
     EmptyBlob, InstallChunkedCodeArgs, InstallCodeArgsV2, ListCanisterSnapshotArgs,
     LoadCanisterSnapshotArgs, MasterPublicKeyId, Method as Ic00Method, NodeMetricsHistoryArgs,
     Payload as Ic00Payload, ProvisionalCreateCanisterWithCyclesArgs, ProvisionalTopUpCanisterArgs,
-    ReadCanisterSnapshotMetadataArgs, SchnorrAlgorithm, SchnorrPublicKeyArgs,
+    ReadCanisterSnapshotMetadataArgs, ReshareChainKeyArgs, SchnorrAlgorithm, SchnorrPublicKeyArgs,
     SchnorrPublicKeyResponse, SetupInitialDKGArgs, SignWithECDSAArgs, SignWithSchnorrArgs,
     SignWithSchnorrAux, StoredChunksArgs, SubnetInfoArgs, SubnetInfoResponse,
     TakeCanisterSnapshotArgs, UninstallCodeArgs, UpdateSettingsArgs, UploadChunkArgs,
@@ -1317,14 +1317,23 @@ impl ExecutionEnvironment {
                     }
                 }
             }
-            Ok(Ic00Method::ReshareChainKey) => ExecuteSubnetMessageResult::Finished {
-                response: Err(UserError::new(
-                    ErrorCode::CanisterRejectedMessage,
-                    format!("{} API is not yet implemented.", msg.method_name()),
-                )),
-                refund: msg.take_cycles(),
-            },
-
+            Ok(Ic00Method::ReshareChainKey) => {
+                let cycles = msg.take_cycles();
+                match msg {
+                    CanisterCall::Request(ref request) => self
+                        .reshare_chain_key(&mut state, rng, chain_key_data, request)
+                        .map_or_else(
+                            |err| ExecuteSubnetMessageResult::Finished {
+                                response: Err(err),
+                                refund: cycles,
+                            },
+                            |()| ExecuteSubnetMessageResult::Processing,
+                        ),
+                    CanisterCall::Ingress(_) => {
+                        self.reject_unexpected_ingress(Ic00Method::ReshareChainKey)
+                    }
+                }
+            }
             Ok(Ic00Method::VetKdDeriveEncryptedKey) => match &msg {
                 CanisterCall::Request(request) => {
                     if payload.is_empty() {
@@ -3023,6 +3032,7 @@ impl ExecutionEnvironment {
         Ok(())
     }
 
+    // TODO(CRP-2613): Remove this function after migrating registry to `reshare_chain_key`
     fn compute_initial_idkg_dealings(
         &self,
         state: &mut ReplicatedState,
@@ -3046,6 +3056,48 @@ impl ExecutionEnvironment {
                 nodes,
                 registry_version,
                 time: state.time(),
+                target_id: NiDkgTargetId::new([0; 32]),
+            }),
+        );
+        Ok(())
+    }
+
+    // TODO(CON-1416: Remove this directive)
+    #[allow(unreachable_code, unused_variables)]
+    fn reshare_chain_key(
+        &self,
+        state: &mut ReplicatedState,
+        rng: &mut dyn RngCore,
+        chain_key_data: &ChainKeyData,
+        request: &Request,
+    ) -> Result<(), UserError> {
+        let args = ReshareChainKeyArgs::decode(request.method_payload())?;
+        let _key = get_master_public_key(
+            &chain_key_data.master_public_keys,
+            self.own_subnet_id,
+            &args.key_id,
+        )?;
+
+        let mut target_id = [0u8; 32];
+        rng.fill_bytes(&mut target_id);
+
+        let nodes = args.get_set_of_nodes()?;
+        let registry_version = args.get_registry_version();
+
+        // TODO(CON-1416): Activate this endpoint
+        return Err(UserError::new(
+            ErrorCode::CanisterRejectedMessage,
+            "This key is not an idkg key",
+        ));
+
+        state.metadata.subnet_call_context_manager.push_context(
+            SubnetCallContext::ReshareChainKey(ReshareChainKeyContext {
+                request: request.clone(),
+                key_id: args.key_id,
+                nodes,
+                registry_version,
+                time: state.time(),
+                target_id: NiDkgTargetId::new(target_id),
             }),
         );
         Ok(())
