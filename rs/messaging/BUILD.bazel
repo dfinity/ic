@@ -84,12 +84,14 @@ rust_ic_test_suite(
     name = "messaging_integration",
     srcs = glob(["tests/**/*.rs"]),
     data = [
+        "//rs/pocket_ic_server:pocket-ic-server",
         "//rs/rust_canisters/downstream_calls_test:downstream-calls-test-canister",
         "//rs/rust_canisters/random_traffic_test:random-traffic-test-canister",
         "//rs/rust_canisters/xnet_test:xnet-test-canister",
     ],
     env = {
         "DOWNSTREAM_CALLS_TEST_CANISTER_WASM_PATH": "$(rootpath //rs/rust_canisters/downstream_calls_test:downstream-calls-test-canister)",
+        "POCKET_IC_BIN": "$(rootpath //rs/pocket_ic_server:pocket-ic-server)",
         "RANDOM_TRAFFIC_TEST_CANISTER_WASM_PATH": "$(rootpath //rs/rust_canisters/random_traffic_test:random-traffic-test-canister)",
         "XNET_TEST_CANISTER_WASM_PATH": "$(rootpath //rs/rust_canisters/xnet_test:xnet-test-canister)",
     },
@@ -100,6 +102,7 @@ rust_ic_test_suite(
     deps = [
         # Keep sorted.
         ":messaging",
+        "//packages/pocket-ic",
         "//rs/config",
         "//rs/interfaces/certified_stream_store",
         "//rs/registry/routing_table",

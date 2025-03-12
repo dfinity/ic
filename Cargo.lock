@@ -10201,6 +10201,7 @@ dependencies = [
  "lazy_static",
  "maplit",
  "mockall",
+ "pocket-ic",
  "pretty_assertions",
  "prometheus",
  "proptest 1.6.0",

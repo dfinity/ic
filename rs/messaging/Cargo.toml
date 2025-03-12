@@ -73,6 +73,9 @@ tempfile = { workspace = true }
 test-strategy = "0.3.1"
 xnet-test = { path = "../rust_canisters/xnet_test" }
 
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+pocket-ic = { path = "../../packages/pocket-ic" }
+
 [features]
 default = []
 malicious_code = []

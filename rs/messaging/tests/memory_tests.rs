@@ -321,6 +321,13 @@ fn check_canister_can_be_stopped_with_remote_subnet_stalling_impl(
     ))
 }
 
+#[test]
+fn pocket_ic_cosmodrome() {
+    use pocket_ic::PocketIcBuilder;
+
+    let _pocket_ic = PocketIcBuilder::new().with_application_subnet().build();
+}
+
 #[derive(Debug)]
 struct FixtureConfig {
     local_canisters_count: u64,
