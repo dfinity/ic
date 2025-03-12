@@ -1,7 +1,6 @@
-use candid::{CandidType, Encode, Principal};
+use candid::{CandidType, Decode, Encode, Principal};
 use candid_parser::utils::{service_equal, CandidSource};
 use canister_test::*;
-use dfn_candid::{candid, candid_one};
 use dfn_protobuf::protobuf;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_canister_client_sender::Sender;
@@ -22,6 +21,7 @@ use icp_ledger::{
     TransferFeeArgs, DEFAULT_TRANSFER_FEE,
 };
 use icrc_ledger_types::icrc1::account::Account;
+use on_wire::bytes;
 use serde::Deserialize;
 use serde_bytes::ByteBuf;
 use std::convert::TryFrom;
@@ -107,20 +107,28 @@ async fn query_balance(ledger: &Canister<'_>, acc: &Sender) -> Result<Tokens, St
 }
 
 async fn get_minting_account(ledger: &Canister<'_>) -> Result<Option<Account>, String> {
-    ledger.query_("icrc1_minting_account", candid, ()).await
+    ledger
+        .query_("icrc1_minting_account", bytes, Encode!(&()).unwrap())
+        .await
+        .map(|b| Decode!(&b, Option<Account>).unwrap())
 }
 
 async fn account_balance_candid(ledger: &Canister<'_>, acc: &AccountIdentifier) -> Tokens {
-    ledger
-        .query_(
-            "account_balance",
-            candid_one,
-            BinaryAccountBalanceArgs {
-                account: acc.to_address(),
-            },
-        )
-        .await
-        .expect("failed to query balance")
+    Decode!(
+        &ledger
+            .query_(
+                "account_balance",
+                bytes,
+                Encode!(&BinaryAccountBalanceArgs {
+                    account: acc.to_address(),
+                })
+                .unwrap(),
+            )
+            .await
+            .expect("failed to query balance"),
+        Tokens
+    )
+    .expect("failed to decode tokens")
 }
 
 async fn transfer_candid(
@@ -128,10 +136,11 @@ async fn transfer_candid(
     from: &Sender,
     args: TransferArgs,
 ) -> Result<BlockIndex, TransferError> {
-    ledger
-        .update_from_sender("transfer", candid_one, args, from)
+    Decode!(&ledger
+        .update_from_sender("transfer", bytes, Encode!(&args).unwrap(), from)
         .await
-        .expect("transfer call trapped")
+        .expect("transfer call trapped"), Result<BlockIndex, TransferError>)
+    .unwrap()
 }
 
 async fn get_blocks_pb(
@@ -151,41 +160,59 @@ async fn get_blocks_pb(
 }
 
 async fn get_blocks_candid(archive: &Canister<'_>, range: std::ops::Range<u64>) -> GetBlocksResult {
-    archive
-        .query_(
-            "get_blocks",
-            candid_one,
-            GetBlocksArgs {
-                start: range.start,
-                length: range.end.saturating_sub(range.start),
-            },
-        )
-        .await
-        .expect("get_blocks call trapped")
+    Decode!(
+        &archive
+            .query_(
+                "get_blocks",
+                bytes,
+                Encode!(&GetBlocksArgs {
+                    start: range.start,
+                    length: range.end.saturating_sub(range.start),
+                })
+                .unwrap(),
+            )
+            .await
+            .expect("get_blocks call trapped"),
+        GetBlocksResult
+    )
+    .unwrap()
 }
 
 async fn get_encoded_blocks_candid(
     archive: &Canister<'_>,
     range: std::ops::Range<u64>,
 ) -> GetEncodedBlocksResult {
-    archive
-        .query_(
-            "get_encoded_blocks",
-            candid_one,
-            GetBlocksArgs {
-                start: range.start,
-                length: range.end.saturating_sub(range.start),
-            },
-        )
-        .await
-        .expect("get_encoded_blocks call trapped")
+    Decode!(
+        &archive
+            .query_(
+                "get_encoded_blocks",
+                bytes,
+                Encode!(&GetBlocksArgs {
+                    start: range.start,
+                    length: range.end.saturating_sub(range.start),
+                })
+                .unwrap(),
+            )
+            .await
+            .expect("get_encoded_blocks call trapped"),
+        GetEncodedBlocksResult
+    )
+    .unwrap()
 }
 
 async fn query_blocks(ledger: &Canister<'_>, start: u64, length: u64) -> QueryBlocksResponse {
-    ledger
-        .query_("query_blocks", candid_one, GetBlocksArgs { start, length })
-        .await
-        .expect("failed to query blocks")
+    Decode!(
+        &ledger
+            .query_(
+                "query_blocks",
+                bytes,
+                Encode!(&GetBlocksArgs { start, length }).unwrap()
+            )
+            .await
+            .expect("failed to query blocks"),
+        QueryBlocksResponse
+    )
+    .unwrap()
 }
 
 async fn query_encoded_blocks(
@@ -193,24 +220,36 @@ async fn query_encoded_blocks(
     start: u64,
     length: u64,
 ) -> QueryEncodedBlocksResponse {
-    ledger
-        .query_(
-            "query_encoded_blocks",
-            candid_one,
-            GetBlocksArgs { start, length },
-        )
-        .await
-        .expect("failed to query blocks")
+    Decode!(
+        &ledger
+            .query_(
+                "query_encoded_blocks",
+                bytes,
+                Encode!(&GetBlocksArgs { start, length }).unwrap(),
+            )
+            .await
+            .expect("failed to query blocks"),
+        QueryEncodedBlocksResponse
+    )
+    .unwrap()
 }
 
 async fn fetch_candid_interface(canister: &Canister<'_>) -> Result<String, String> {
     canister
-        .query_("__get_candid_interface_tmp_hack", candid_one, ())
+        .query_(
+            "__get_candid_interface_tmp_hack",
+            bytes,
+            Encode!(&()).unwrap(),
+        )
         .await
+        .map(|b| Decode!(&b, String).unwrap())
 }
 
 async fn get_archives(canister: &Canister<'_>) -> Result<Archives, String> {
-    canister.query_("archives", candid_one, ()).await
+    canister
+        .query_("archives", bytes, Encode!(&()).unwrap())
+        .await
+        .map(|b| Decode!(&b, Archives).unwrap())
 }
 
 async fn get_metrics(canister: &Canister<'_>) -> String {
@@ -220,10 +259,14 @@ async fn get_metrics(canister: &Canister<'_>) -> String {
         url: "/metrics".to_string(),
         body: ByteBuf::from(Vec::new()),
     };
-    let HttpResponse { body, .. } = canister
-        .query_("http_request", candid_one, http_request)
-        .await
-        .expect("failed to get the metrics");
+    let HttpResponse { body, .. } = Decode!(
+        &canister
+            .query_("http_request", bytes, Encode!(&http_request).unwrap())
+            .await
+            .expect("failed to get the metrics"),
+        HttpResponse
+    )
+    .unwrap();
     body.escape_ascii().to_string()
 }
 
@@ -465,24 +508,29 @@ fn archive_blocks_small_test() {
         let all_blocks: Vec<_> = blocks.into_iter().chain(ledger_blocks.unwrap()).collect();
 
         let proxy = install_motoko_proxy(&r).await;
-        let () = proxy
-            .update_(
-                "testQueryBlocks",
-                candid_one,
-                TestQueryBlocksArgs {
-                    ledger: ledger.canister_id().into(),
-                    arg: GetBlocksArgs {
-                        start: 0,
-                        length: all_blocks.len() as u64,
-                    },
-                    result: all_blocks
-                        .iter()
-                        .map(|eb| CandidBlock::from(Block::decode(eb.clone()).unwrap()))
-                        .collect(),
-                },
-            )
-            .await
-            .expect("ledger proxy call failed");
+        let () = Decode!(
+            &proxy
+                .update_(
+                    "testQueryBlocks",
+                    bytes,
+                    Encode!(&TestQueryBlocksArgs {
+                        ledger: ledger.canister_id().into(),
+                        arg: GetBlocksArgs {
+                            start: 0,
+                            length: all_blocks.len() as u64,
+                        },
+                        result: all_blocks
+                            .iter()
+                            .map(|eb| CandidBlock::from(Block::decode(eb.clone()).unwrap()))
+                            .collect(),
+                    })
+                    .unwrap(),
+                )
+                .await
+                .expect("ledger proxy call failed"),
+            ()
+        )
+        .unwrap();
         Ok(())
     })
 }
@@ -898,8 +946,14 @@ fn notify_test() {
             .contains("ledger_notify_method_calls 1"));
 
         let r2: Result<(), String> = ledger_canister
-            .update_from_sender("notify_dfx", candid_one, notify.clone(), &sender)
-            .await;
+            .update_from_sender(
+                "notify_dfx",
+                bytes,
+                Encode!(&notify.clone()).unwrap(),
+                &sender,
+            )
+            .await
+            .map(|b| Decode!(&b, ()).unwrap());
 
         assert!(get_metrics(&ledger_canister)
             .await
@@ -913,7 +967,13 @@ fn notify_test() {
             .await
             .contains("ledger_notify_method_calls 3"));
 
-        let count: u32 = test_canister.query_("check_counter", candid, ()).await?;
+        let count: u32 = Decode!(
+            &test_canister
+                .query_("check_counter", bytes, Encode!(&()).unwrap())
+                .await?,
+            u32
+        )
+        .unwrap();
 
         assert_eq!(
             Err(
@@ -1102,8 +1162,14 @@ fn notify_disabled_test() {
                     .await;
 
                 let r2: Result<(), String> = ledger_canister
-                    .update_from_sender("notify_dfx", candid_one, notify.clone(), &sender)
-                    .await;
+                    .update_from_sender(
+                        "notify_dfx",
+                        bytes,
+                        Encode!(&notify.clone()).unwrap(),
+                        &sender,
+                    )
+                    .await
+                    .map(|b| Decode!(&b, ()).unwrap());
 
                 for r in &[r1, r2] {
                     assert!(
@@ -1277,9 +1343,13 @@ fn transfer_fee_test() {
             )
             .await?;
 
-        let res: TransferFee = ledger
-            .query_("transfer_fee", candid_one, TransferFeeArgs {})
-            .await?;
+        let res: TransferFee = Decode!(
+            &ledger
+                .query_("transfer_fee", bytes, Encode!(&TransferFeeArgs {}).unwrap())
+                .await?,
+            TransferFee
+        )
+        .unwrap();
 
         assert_eq!(TransferFee { transfer_fee }, res);
 
@@ -1930,11 +2000,12 @@ fn only_ledger_can_append_blocks_to_archive_nodes() {
             let result: Result<(), String> = node
                 .update_from_sender(
                     "append_blocks",
-                    dfn_candid::candid_one,
-                    Vec::<EncodedBlock>::new(),
+                    bytes,
+                    Encode!(&Vec::<EncodedBlock>::new()).unwrap(),
                     &sender,
                 )
-                .await;
+                .await
+                .map(|b| Decode!(&b, ()).unwrap());
 
             // It should've failed
             assert!(
@@ -2317,20 +2388,32 @@ fn call_with_cleanup() {
             .await?;
 
         // Check the dirty call behaves badly.
-        let r: Result<(), String> = test_canister.update_("dirty_call", candid, ()).await;
+        let r: Result<(), String> = test_canister
+            .update_("dirty_call", bytes, Encode!(&()).unwrap())
+            .await
+            .map(|b| Decode!(&b, ()).unwrap());
         println!("{:?}", r);
         assert!(r.unwrap_err().contains("Failed successfully"),);
 
-        let r: Result<(), String> = test_canister.update_("dirty_call", candid, ()).await;
+        let r: Result<(), String> = test_canister
+            .update_("dirty_call", bytes, Encode!(&()).unwrap())
+            .await
+            .map(|b| Decode!(&b, ()).unwrap());
         println!("{:?}", r);
         assert_eq!(r, Ok(()));
 
-        let r: Result<(), String> = test_canister.update_("clean_call", candid, ()).await;
+        let r: Result<(), String> = test_canister
+            .update_("clean_call", bytes, Encode!(&()).unwrap())
+            .await
+            .map(|b| Decode!(&b, ()).unwrap());
         println!("{:?}", r);
 
         assert!(r.unwrap_err().contains("Failed successfully"));
 
-        let r: Result<(), String> = test_canister.update_("clean_call", candid, ()).await;
+        let r: Result<(), String> = test_canister
+            .update_("clean_call", bytes, Encode!(&()).unwrap())
+            .await
+            .map(|b| Decode!(&b, ()).unwrap());
         println!("{:?}", r);
         assert!(
             r.unwrap_err().contains("Failed successfully"),
