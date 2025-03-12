@@ -221,9 +221,11 @@ impl StorageClient {
             [],
         )?;
 
+        // Set the initial counter value for `SyncedBlocks` to the number of blocks in the blocks
+        // table. If the counter already exists, the value will not be updated.
         open_connection.execute(
             r#"
-            INSERT OR IGNORE INTO counters (name, value) VALUES ("SyncedBlocks", 0)
+            INSERT OR IGNORE INTO counters (name, value) VALUES ("SyncedBlocks", (SELECT COUNT(*) FROM blocks))
             "#,
             [],
         )?;
