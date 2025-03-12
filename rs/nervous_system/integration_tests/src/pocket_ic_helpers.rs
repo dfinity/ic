@@ -967,7 +967,7 @@ pub async fn upgrade_nns_canister_to_tip_of_master_or_panic(
     pocket_ic: &PocketIc,
     canister_id: CanisterId,
 ) {
-    // What we really want here is `match canister_id { ... }`, but this does not work because
+    // What we really want here is test_upgrade_swap`match canister_id { ... }`, but this does not work because
     // `CanisterId` encapsulates `PrincipalId` which has a manual implementation for `PartialEq`,
     // whereas Rust requires constants used in match expressions to **derive** `PartialEq`.
     let (wasm, controller, label) = if canister_id == GOVERNANCE_CANISTER_ID {
