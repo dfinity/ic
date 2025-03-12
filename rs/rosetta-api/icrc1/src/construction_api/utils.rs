@@ -634,10 +634,7 @@ mod test {
                                             }
                                         );
                                         assert_eq!(fee, args.fee);
-                                        assert_eq!(
-                                            expected_allowance,
-                                            args.expected_allowance
-                                        );
+                                        assert_eq!(expected_allowance, args.expected_allowance);
                                         assert_eq!(expires_at, args.expires_at);
                                         assert_eq!(icrc1_transaction.memo, args.memo);
                                         assert_eq!(

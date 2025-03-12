@@ -4,8 +4,8 @@ use std::convert::TryFrom;
 
 /// A helper for serializing `TransactionResults`
 pub fn deserialize<'d, D: Deserializer<'d>>(d: D) -> Result<Operation, D::Error> {
-    Send::deserialize(d)
-        .map(Operation::from)}
+    Send::deserialize(d).map(Operation::from)
+}
 
 pub fn serialize<S: Serializer>(t: &Operation, s: S) -> Result<S::Ok, S::Error> {
     Send::try_from(t)
