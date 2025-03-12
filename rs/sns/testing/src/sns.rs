@@ -1,6 +1,6 @@
 use candid::{CandidType, Encode};
 use canister_test::Wasm;
-use ic_base_types::{CanisterId, PrincipalId};
+use ic_base_types::CanisterId;
 use ic_management_canister_types_private::CanisterInstallMode;
 use ic_nervous_system_agent::{
     helpers::await_with_timeout,
@@ -9,24 +9,19 @@ use ic_nervous_system_agent::{
         await_swap_lifecycle, get_caller_neuron, participate_in_swap, propose_and_wait,
     },
     nns::ledger::transfer,
-    pocketic_impl::PocketIcAgent,
     sns::{swap::SwapCanister, Sns},
     CallCanisters, ProgressNetwork,
 };
 use ic_nervous_system_clients::canister_status::CanisterStatusType;
 use ic_nervous_system_integration_tests::{
     create_service_nervous_system_builder::CreateServiceNervousSystemBuilder,
-    pocket_ic_helpers::{
-        install_canister_on_subnet,
-        nns::ledger::mint_icp,
-        sns::{
-            governance::EXPECTED_UPGRADE_DURATION_MAX_SECONDS,
-            swap::{is_auto_finalization_status_committed_or_err, swap_direct_participations},
-        },
+    pocket_ic_helpers::sns::{
+        governance::EXPECTED_UPGRADE_DURATION_MAX_SECONDS,
+        swap::{is_auto_finalization_status_committed_or_err, swap_direct_participations},
     },
 };
 use ic_nns_common::pb::v1::NeuronId;
-use ic_nns_constants::ROOT_CANISTER_ID;
+
 use ic_nns_governance_api::pb::v1::create_service_nervous_system::{
     initial_token_distribution::developer_distribution::NeuronDistribution, SwapParameters,
 };
@@ -36,64 +31,13 @@ use ic_sns_governance_api::pb::v1::{
     manage_neuron::Follow, proposal::Action, Proposal, UpgradeSnsControlledCanister,
 };
 use ic_sns_swap::pb::v1::Lifecycle;
-use icp_ledger::{AccountIdentifier, Memo, Tokens, TransferArgs, DEFAULT_TRANSFER_FEE};
-use pocket_ic::nonblocking::PocketIc;
-
-use crate::utils::NNS_NEURON_ID;
-
-// As per https://internetcomputer.org/docs/current/developer-docs/defi/rosetta/icp_rosetta/construction_api/staking/#dissolve-delay
-const MINIMUM_DISSOLVE_DELAY_TO_VOTE: u32 = 15778800;
+use icp_ledger::{AccountIdentifier, Memo, TransferArgs, DEFAULT_TRANSFER_FEE};
 
 // TODO @rvem: I don't like the fact that this struct definition is copy-pasted from 'canister/canister.rs'.
 // We should extract it into a separate crate and reuse in both canister and this crates.
 #[derive(CandidType)]
 pub struct TestCanisterInitArgs {
     pub greeting: Option<String>,
-}
-
-pub async fn install_test_canister(pocket_ic: &PocketIc, args: TestCanisterInitArgs) -> CanisterId {
-    let topology = pocket_ic.topology().await;
-    let application_subnet_ids = topology.get_app_subnets();
-    let application_subnet_id = application_subnet_ids[0];
-    let features = &[];
-    let test_canister_wasm =
-        Wasm::from_location_specified_by_env_var("sns_testing_canister", features).unwrap();
-    install_canister_on_subnet(
-        pocket_ic,
-        application_subnet_id,
-        Encode!(&args).unwrap(),
-        Some(test_canister_wasm),
-        vec![ROOT_CANISTER_ID.get()],
-    )
-    .await
-}
-
-// PocketIC-specific version of 'create_sns' function.
-// Generates all required identities internally
-// Takes the list of IDs of the DApps that will be added to the SNS as an argument.
-//
-// Returns SNS canisters IDs and the dev participant ID.
-pub async fn create_sns_pocket_ic(
-    pocket_ic: &PocketIc,
-    dev_participant_id: PrincipalId,
-    treasury_principal_id: PrincipalId,
-    dapp_canister_ids: Vec<CanisterId>,
-) -> Sns {
-    let dev_participant = PocketIcAgent::new(pocket_ic, dev_participant_id);
-
-    let swap_treasury_agent = PocketIcAgent::new(pocket_ic, treasury_principal_id);
-    let swap_partipants_agents = (1..20)
-        .map(|i| PocketIcAgent::new(pocket_ic, PrincipalId::new_user_test_id(1000 + i as u64)))
-        .collect();
-    create_sns(
-        &dev_participant,
-        NNS_NEURON_ID,
-        &dev_participant,
-        &swap_treasury_agent,
-        swap_partipants_agents,
-        dapp_canister_ids,
-    )
-    .await
 }
 
 // Creates SNS using agents provided as arguments:
@@ -121,8 +65,9 @@ pub async fn create_sns<C: CallCanisters + ProgressNetwork>(
         .neurons_fund_participation(true)
         .with_dapp_canisters(dapp_canister_ids)
         .build();
+    let governance_parameters = create_service_nervous_system.governance_parameters.clone();
 
-    // Ugly hack to set developer identity to have initial neuron eligeble for voting
+    // Set developer identity to have initial neuron eligible for voting
     create_service_nervous_system.initial_token_distribution = create_service_nervous_system
         .initial_token_distribution
         .map(|mut token_distribution| {
@@ -131,9 +76,8 @@ pub async fn create_sns<C: CallCanisters + ProgressNetwork>(
                 .map(|mut developer_distribution| {
                     developer_distribution.developer_neurons = vec![NeuronDistribution {
                         controller: Some(dev_participant_agent.caller().unwrap().into()),
-                        dissolve_delay: Some(ic_nervous_system_proto::pb::v1::Duration::from_secs(
-                            MINIMUM_DISSOLVE_DELAY_TO_VOTE as u64,
-                        )),
+                        dissolve_delay: governance_parameters
+                            .and_then(|p| p.neuron_minimum_dissolve_delay_to_vote),
                         memo: Some(400000),
                         stake: Some(ic_nervous_system_proto::pb::v1::Tokens { e8s: Some(400000) }),
                         vesting_period: Some(ic_nervous_system_proto::pb::v1::Duration::from_secs(
@@ -181,6 +125,12 @@ pub async fn create_sns<C: CallCanisters + ProgressNetwork>(
         .await
         .unwrap();
 
+    let sns_nervous_system_parameters = sns
+        .governance
+        .get_nervous_system_parameters(dev_participant_agent)
+        .await
+        .unwrap();
+
     for swap_participant_agent in swap_participants_agents[0..mininum_participants].iter() {
         let swap_participant_neuron_id = get_caller_neuron(swap_participant_agent, sns_governance)
             .await
@@ -203,7 +153,9 @@ pub async fn create_sns<C: CallCanisters + ProgressNetwork>(
             .increase_dissolve_delay(
                 swap_participant_agent,
                 swap_participant_neuron_id,
-                MINIMUM_DISSOLVE_DELAY_TO_VOTE,
+                sns_nervous_system_parameters
+                    .neuron_minimum_dissolve_delay_to_vote_seconds
+                    .unwrap() as u32,
             )
             .await
             .unwrap();
@@ -274,37 +226,6 @@ async fn complete_sns_swap<C: CallCanisters + ProgressNetwork>(
     )
     .await
     .unwrap();
-}
-
-// PocketIC-specific version of 'upgrade_sns_controlled_test_canister' function.
-// Upgrades the test canister controlled by the SNS using arguments:
-// 1) pocket_ic - PocketIC instance.
-// 2) dev_participant_id - ID of the identity that will be used to submit the proposal to upgrade the canister.
-//    It is expected that neuron associated with this identity has sufficient amount of voting power to adopt the proposal
-//    or it is followed by sufficient number of other neurons to have the proposal adopted using their voting power.
-// 3) sns - SNS canisters.
-// 4) canister_id - ID of the canister that will be upgraded.
-// 5) upgrade_arg - Arguments that will be passed to the canister during the upgrade.
-pub async fn upgrade_sns_controlled_test_canister_pocket_ic(
-    pocket_ic: &PocketIc,
-    dev_participant_id: PrincipalId,
-    sns: Sns,
-    canister_id: CanisterId,
-    upgrade_arg: TestCanisterInitArgs,
-) {
-    let dev_participant_agent = PocketIcAgent::new(pocket_ic, dev_participant_id);
-    mint_icp(
-        pocket_ic,
-        dev_participant_id.into(),
-        Tokens::from_tokens(10_u64)
-            .unwrap()
-            .saturating_add(DEFAULT_TRANSFER_FEE),
-        None,
-    )
-    .await;
-
-    upgrade_sns_controlled_test_canister(&dev_participant_agent, sns, canister_id, upgrade_arg)
-        .await;
 }
 
 // Upgrades the test canister controlled by the SNS using arguments:
@@ -411,4 +332,105 @@ pub async fn upgrade_sns_controlled_test_canister<C: CallCanisters + ProgressNet
     )
     .await
     .expect("Test canister failed to get into the 'Running' state after upgrade");
+}
+
+// Module with PocketIC-specific functions, mainly used in the tests.
+pub mod pocket_ic {
+    use super::TestCanisterInitArgs;
+
+    use ::pocket_ic::nonblocking::PocketIc;
+    use candid::Encode;
+    use canister_test::Wasm;
+    use ic_base_types::{CanisterId, PrincipalId};
+    use ic_nervous_system_agent::{pocketic_impl::PocketIcAgent, sns::Sns};
+    use ic_nervous_system_integration_tests::pocket_ic_helpers::{
+        install_canister_on_subnet, nns::ledger::mint_icp,
+    };
+    use ic_nns_constants::ROOT_CANISTER_ID;
+    use icp_ledger::{Tokens, DEFAULT_TRANSFER_FEE};
+
+    use crate::utils::NNS_NEURON_ID;
+
+    pub async fn install_test_canister(
+        pocket_ic: &PocketIc,
+        args: TestCanisterInitArgs,
+    ) -> CanisterId {
+        let topology = pocket_ic.topology().await;
+        let application_subnet_ids = topology.get_app_subnets();
+        let application_subnet_id = application_subnet_ids[0];
+        let features = &[];
+        let test_canister_wasm =
+            Wasm::from_location_specified_by_env_var("sns_testing_canister", features).unwrap();
+        install_canister_on_subnet(
+            pocket_ic,
+            application_subnet_id,
+            Encode!(&args).unwrap(),
+            Some(test_canister_wasm),
+            vec![ROOT_CANISTER_ID.get()],
+        )
+        .await
+    }
+
+    // PocketIC-specific version of 'create_sns' function.
+    // Takes the list of IDs of the DApps that will be added to the SNS as an argument.
+    //
+    // Returns SNS canisters IDs and the dev participant ID.
+    pub async fn create_sns(
+        pocket_ic: &PocketIc,
+        dev_participant_id: PrincipalId,
+        treasury_principal_id: PrincipalId,
+        dapp_canister_ids: Vec<CanisterId>,
+    ) -> Sns {
+        let dev_participant = PocketIcAgent::new(pocket_ic, dev_participant_id);
+
+        let swap_treasury_agent = PocketIcAgent::new(pocket_ic, treasury_principal_id);
+        let swap_partipants_agents = (1..20)
+            .map(|i| PocketIcAgent::new(pocket_ic, PrincipalId::new_user_test_id(1000 + i as u64)))
+            .collect();
+        super::create_sns(
+            &dev_participant,
+            NNS_NEURON_ID,
+            &dev_participant,
+            &swap_treasury_agent,
+            swap_partipants_agents,
+            dapp_canister_ids,
+        )
+        .await
+    }
+
+    // PocketIC-specific version of 'upgrade_sns_controlled_test_canister' function.
+    // Upgrades the test canister controlled by the SNS using arguments:
+    // 1) pocket_ic - PocketIC instance.
+    // 2) dev_participant_id - ID of the identity that will be used to submit the proposal to upgrade the canister.
+    //    It is expected that neuron associated with this identity has sufficient amount of voting power to adopt the proposal
+    //    or it is followed by sufficient number of other neurons to have the proposal adopted using their voting power.
+    // 3) sns - SNS canisters.
+    // 4) canister_id - ID of the canister that will be upgraded.
+    // 5) upgrade_arg - Arguments that will be passed to the canister during the upgrade.
+    pub async fn upgrade_sns_controlled_test_canister(
+        pocket_ic: &PocketIc,
+        dev_participant_id: PrincipalId,
+        sns: Sns,
+        canister_id: CanisterId,
+        upgrade_arg: TestCanisterInitArgs,
+    ) {
+        let dev_participant_agent = PocketIcAgent::new(pocket_ic, dev_participant_id);
+        mint_icp(
+            pocket_ic,
+            dev_participant_id.into(),
+            Tokens::from_tokens(10_u64)
+                .unwrap()
+                .saturating_add(DEFAULT_TRANSFER_FEE),
+            None,
+        )
+        .await;
+
+        super::upgrade_sns_controlled_test_canister(
+            &dev_participant_agent,
+            sns,
+            canister_id,
+            upgrade_arg,
+        )
+        .await;
+    }
 }
