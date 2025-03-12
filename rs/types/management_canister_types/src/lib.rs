@@ -3648,6 +3648,7 @@ pub enum SnapshotSource {
     UploadedManually,
 }
 
+/// Struct used for encoding/decoding
 /// (record {
 ///     source : variant {
 ///         taken_from_canister;
@@ -3680,11 +3681,12 @@ pub enum SnapshotSource {
 ///     };
 /// })
 
+#[derive(Clone, PartialEq, Debug, CandidType, Deserialize)]
 pub struct CanisterSnapshotMetadataResponse {
     pub source: SnapshotSource,
     pub taken_at_timestamp: u64,
     pub wasm_module_size: u64,
-    pub exported_globals: Vec<WasmGlobal>,
+    pub exported_globals: Vec<Global>,
     pub wasm_memory_size: u64,
     pub stable_memory_size: u64,
     pub wasm_chunk_store: Vec<ChunkHash>,
@@ -3695,8 +3697,26 @@ pub struct CanisterSnapshotMetadataResponse {
     pub on_low_wasm_memory_hook_status: OnLowWasmMemoryHookStatus,
 }
 
+/// An inner type of [`CanisterSnapshotMetadataResponse`].
+#[derive(Copy, Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
+pub enum GlobalTimer {
+    Inactive,
+    Active(u64),
+}
+
+/// The possible values of a global variable.
+/// An inner type of [`CanisterSnapshotMetadataResponse`].
+#[derive(Copy, Clone, PartialEq, Debug, CandidType, Deserialize, Serialize)]
+pub enum Global {
+    I32(i32),
+    I64(i64),
+    F32(f32),
+    F64(f64),
+    V128(u128),
+}
+
 /// A wrapper around the different statuses of `OnLowWasmMemory` hook execution.
-#[derive(Clone, Copy, Eq, PartialEq, Debug, Default, Deserialize, Serialize)]
+#[derive(Clone, Copy, Eq, PartialEq, Debug, Default, Deserialize, CandidType, Serialize)]
 pub enum OnLowWasmMemoryHookStatus {
     #[default]
     ConditionNotSatisfied,
