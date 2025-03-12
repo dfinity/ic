@@ -8,7 +8,7 @@ use ic_nervous_system_integration_tests::pocket_ic_helpers::{
 use ic_nns_constants::{LEDGER_INDEX_CANISTER_ID, ROOT_CANISTER_ID};
 use ic_sns_testing::nns_dapp::bootstrap_nns;
 use ic_sns_testing::sns::{
-    create_sns_pocket_ic, install_test_canister, upgrade_sns_controlled_test_canister_pocket_ic,
+    pocket_ic::{create_sns, install_test_canister, upgrade_sns_controlled_test_canister},
     TestCanisterInitArgs,
 };
 use ic_sns_testing::utils::{
@@ -21,6 +21,7 @@ use tempfile::TempDir;
 
 #[tokio::test]
 async fn test_sns_testing_basic_scenario() {
+    // Preparing the PocketIC-based network
     let state_dir = TempDir::new().unwrap();
     let state_dir = state_dir.path().to_path_buf();
 
@@ -37,6 +38,7 @@ async fn test_sns_testing_basic_scenario() {
     let dev_participant_id = PrincipalId::new_user_test_id(1000);
     let treasury_principal_id = PrincipalId::new_user_test_id(322);
 
+    // Installing NNS canisters
     bootstrap_nns(
         &pocket_ic,
         vec![initial_mutations],
@@ -48,6 +50,7 @@ async fn test_sns_testing_basic_scenario() {
     )
     .await;
     assert!(validate_network(&pocket_ic).await.is_empty());
+    // Installing a test canister
     let greeting = "Hello there".to_string();
     let test_canister_id = install_test_canister(
         &pocket_ic,
@@ -73,7 +76,8 @@ async fn test_sns_testing_basic_scenario() {
         Decode!(&test_canister_response, String).expect("Failed to decode test canister response"),
         format!("{}, {}!", greeting, test_call_arg.clone()),
     );
-    let sns = create_sns_pocket_ic(
+    // Creating an SNS
+    let sns = create_sns(
         &pocket_ic,
         dev_participant_id,
         treasury_principal_id,
@@ -81,7 +85,8 @@ async fn test_sns_testing_basic_scenario() {
     )
     .await;
     let new_greeting = "Hi".to_string();
-    upgrade_sns_controlled_test_canister_pocket_ic(
+    // Upgrading the test canister via SNS voting
+    upgrade_sns_controlled_test_canister(
         &pocket_ic,
         dev_participant_id,
         sns,
@@ -108,6 +113,7 @@ async fn test_sns_testing_basic_scenario() {
 
 #[tokio::test]
 pub async fn test_missing_nns_canisters() {
+    // Preparing the PocketIC-based network
     let pocket_ic = PocketIcBuilder::new()
         .with_nns_subnet()
         .with_sns_subnet()
@@ -115,7 +121,10 @@ pub async fn test_missing_nns_canisters() {
         .with_application_subnet()
         .build_async()
         .await;
+    // Installing NNS canisters
     bootstrap_nns(&pocket_ic, vec![], vec![], vec![]).await;
+
+    // Deleting the ledger-index canister
     pocket_ic
         .stop_canister(
             LEDGER_INDEX_CANISTER_ID.get().into(),
@@ -130,6 +139,8 @@ pub async fn test_missing_nns_canisters() {
         )
         .await
         .unwrap();
+
+    // Assert that the ledger-index canister is missing
     assert_eq!(
         validate_network(&pocket_ic).await,
         vec![SnsTestingNetworkValidationError::MissingNnsCanister(
@@ -140,6 +151,7 @@ pub async fn test_missing_nns_canisters() {
 
 #[tokio::test]
 pub async fn test_missing_sns_wasm_upgrade_steps() {
+    // Preparing the PocketIC-based network
     let pocket_ic = PocketIcBuilder::new()
         .with_nns_subnet()
         .with_sns_subnet()
@@ -147,6 +159,8 @@ pub async fn test_missing_sns_wasm_upgrade_steps() {
         .with_application_subnet()
         .build_async()
         .await;
+
+    // Install NNS canisters, but do not add SNS wasm modules to SNS-W canister
     let mut nns_installer = NnsInstaller::default();
     nns_installer.with_current_nns_canister_versions();
     nns_installer.with_test_governance_canister();
@@ -157,9 +171,11 @@ pub async fn test_missing_sns_wasm_upgrade_steps() {
     nns_installer.with_ledger_balances(vec![]);
     nns_installer.with_neurons_fund_hotkeys(vec![]);
     nns_installer.install(&pocket_ic).await;
+
+    // Assert that the SNS-W canister is missing wasm upgrade steps
     assert_eq!(
         validate_network(&pocket_ic).await,
-        vec![SnsTestingNetworkValidationError::MissingSnsWasmUpgradeSteps,]
+        vec![SnsTestingNetworkValidationError::MissingSnsWasmModules]
     )
 }
 

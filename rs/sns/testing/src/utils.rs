@@ -9,8 +9,7 @@ use ic_agent::{
 use ic_base_types::CanisterId;
 use ic_base_types::PrincipalId;
 use ic_nervous_system_agent::nns::governance::list_neurons;
-use ic_nervous_system_agent::nns::sns_wasm::get_sns_subnet_ids;
-use ic_nervous_system_agent::nns::sns_wasm::list_upgrade_steps;
+use ic_nervous_system_agent::nns::sns_wasm::{get_latest_sns_version_pretty, get_sns_subnet_ids};
 use ic_nervous_system_agent::CallCanisters;
 use ic_nervous_system_common_test_keys::TEST_NEURON_1_ID;
 use ic_nns_common::pb::v1::NeuronId;
@@ -111,10 +110,10 @@ pub enum SnsTestingNetworkValidationError {
     MissingSnsSubnets,
     #[error("Failed to get SNS subnet IDs: {0}")]
     FailedToGetSnsSubnetIds(String),
-    #[error("SNS WASM doesn't have any upgrade steps")]
-    MissingSnsWasmUpgradeSteps,
-    #[error("Failed to get SNS WASM upgrade steps: {0}")]
-    FailedToGetSnsWasmUpgradeSteps(String),
+    #[error("SNS WASM doesn't have all SNS WASM modules")]
+    MissingSnsWasmModules,
+    #[error("Failed to get the latest SNS version from SNS WASM: {0}")]
+    FailedToGetLatestSnsVersion(String),
 }
 
 #[derive(Error, Debug, PartialEq)]
@@ -169,16 +168,19 @@ pub async fn validate_network<C: CallCanisters>(
         }
     }
 
-    match list_upgrade_steps(agent, None, None, 0).await {
+    match get_latest_sns_version_pretty(agent).await {
         Ok(response) => {
-            if response.steps.is_empty() {
-                validation_errors
-                    .push(SnsTestingNetworkValidationError::MissingSnsWasmUpgradeSteps);
+            println!("{:?}", response);
+            if response
+                .iter()
+                .any(|(_canister, wasm_hash)| wasm_hash.is_empty())
+            {
+                validation_errors.push(SnsTestingNetworkValidationError::MissingSnsWasmModules);
             }
         }
         Err(err) => {
             validation_errors.push(
-                SnsTestingNetworkValidationError::FailedToGetSnsWasmUpgradeSteps(err.to_string()),
+                SnsTestingNetworkValidationError::FailedToGetLatestSnsVersion(err.to_string()),
             );
         }
     }
@@ -192,7 +194,6 @@ pub async fn validate_target_canister<C: CallCanisters>(
     canister_id: CanisterId,
 ) -> Vec<SnsTestingCanisterValidationError> {
     let mut validation_errors = vec![];
-    // let canister_info = agent.canister_info(canister_id).await;
     match agent.canister_info(canister_id).await {
         Ok(canister_info) => {
             if canister_info.module_hash.is_none() {
