@@ -5266,7 +5266,10 @@ pub mod archiving {
         }
         // Verify that the ledger reports block `0` to be present only in the ledger
         let get_blocks_res = icrc3_get_blocks(&env, ledger_id, 0, 1);
-        assert!(!ledger_reports_first_block_in_two_places(0, &get_blocks_res));
+        assert!(!ledger_reports_first_block_in_two_places(
+            0,
+            &get_blocks_res
+        ));
         // Verify that the response contained no archive info.
         assert_eq!(
             check_if_block_in_ledger_and_archive(&env, 0, &get_blocks_res),
