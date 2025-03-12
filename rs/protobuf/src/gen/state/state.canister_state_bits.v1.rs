@@ -551,7 +551,7 @@ pub struct TaskQueue {
     /// or `AbortedInstallCode` task if there is one.
     #[prost(message, optional, tag = "1")]
     pub paused_or_aborted_task: ::core::option::Option<ExecutionTask>,
-    /// Status of low_on_wasm_memory hook execution.
+    /// Status of on_low_wasm_memory hook execution.
     #[prost(enumeration = "OnLowWasmMemoryHookStatus", tag = "2")]
     pub on_low_wasm_memory_hook_status: i32,
     /// Queue of `Heartbeat` and `GlobalTimer` tasks.
