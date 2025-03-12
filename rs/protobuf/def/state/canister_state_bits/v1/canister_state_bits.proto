@@ -355,7 +355,7 @@ message TaskQueue {
   // Keeps `PausedExecution`, or `PausedInstallCode`, or `AbortedExecution`,
   // or `AbortedInstallCode` task if there is one.
   optional ExecutionTask paused_or_aborted_task = 1;
-  // Status of low_on_wasm_memory hook execution.
+  // Status of on_low_wasm_memory hook execution.
   OnLowWasmMemoryHookStatus on_low_wasm_memory_hook_status = 2;
   // Queue of `Heartbeat` and `GlobalTimer` tasks.
   repeated ExecutionTask queue = 3;
