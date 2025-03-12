@@ -277,7 +277,7 @@ impl SystemStateModifications {
             | Ok(Ic00Method::TakeCanisterSnapshot)
             | Ok(Ic00Method::ListCanisterSnapshots)
             | Ok(Ic00Method::DeleteCanisterSnapshot)
-            | Ok(Ic00Method::CanisterSnapshotMetadata) => Ok(None),
+            | Ok(Ic00Method::ReadCanisterSnapshotMetadata) => Ok(None),
             Err(_) => Err(UserError::new(
                 ErrorCode::CanisterMethodNotFound,
                 format!("Management canister has no method '{}'", msg.method_name),

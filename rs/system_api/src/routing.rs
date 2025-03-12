@@ -7,7 +7,7 @@ use ic_error_types::UserError;
 use ic_management_canister_types_private::{
     BitcoinGetBalanceArgs, BitcoinGetBlockHeadersArgs, BitcoinGetCurrentFeePercentilesArgs,
     BitcoinGetUtxosArgs, BitcoinSendTransactionArgs, CanisterIdRecord, CanisterInfoRequest,
-    CanisterSnapshotMetadataArgs, ClearChunkStoreArgs, ComputeInitialIDkgDealingsArgs,
+    ReadCanisterSnapshotMetadataArgs, ClearChunkStoreArgs, ComputeInitialIDkgDealingsArgs,
     DeleteCanisterSnapshotArgs, ECDSAPublicKeyArgs, InstallChunkedCodeArgs, InstallCodeArgsV2,
     ListCanisterSnapshotArgs, LoadCanisterSnapshotArgs, MasterPublicKeyId, Method as Ic00Method,
     NodeMetricsHistoryArgs, Payload, ProvisionalTopUpCanisterArgs, ReshareChainKeyArgs,
@@ -301,12 +301,12 @@ pub(super) fn resolve_destination(
                 network_topology,
             )
         }
-        Ok(Ic00Method::CanisterSnapshotMetadata) => {
-            let args = CanisterSnapshotMetadataArgs::decode(payload)?;
+        Ok(Ic00Method::ReadCanisterSnapshotMetadata) => {
+            let args = ReadCanisterSnapshotMetadataArgs::decode(payload)?;
             let canister_id = args.get_canister_id();
             route_canister_id(
                 canister_id,
-                Ic00Method::CanisterSnapshotMetadata,
+                Ic00Method::ReadCanisterSnapshotMetadata,
                 network_topology,
             )
         }

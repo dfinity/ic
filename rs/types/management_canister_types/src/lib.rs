@@ -129,7 +129,7 @@ pub enum Method {
     DeleteCanisterSnapshot,
 
     // Support for import and export of canister snapshots
-    CanisterSnapshotMetadata,
+    ReadCanisterSnapshotMetadata,
 }
 
 fn candid_error_to_user_error(err: candid::Error) -> UserError {
@@ -3637,13 +3637,13 @@ impl Payload<'_> for ListCanisterSnapshotArgs {}
 /// })`
 
 #[derive(Clone, Eq, PartialEq, Debug, Default, CandidType, Deserialize)]
-pub struct CanisterSnapshotMetadataArgs {
+pub struct ReadCanisterSnapshotMetadataArgs {
     canister_id: PrincipalId,
     #[serde(with = "serde_bytes")]
     snapshot_id: Vec<u8>,
 }
 
-impl CanisterSnapshotMetadataArgs {
+impl ReadCanisterSnapshotMetadataArgs {
     pub fn new(canister_id: CanisterId, snapshot_id: Vec<u8>) -> Self {
         Self {
             canister_id: canister_id.get(),
@@ -3655,7 +3655,7 @@ impl CanisterSnapshotMetadataArgs {
     }
 }
 
-impl Payload<'_> for CanisterSnapshotMetadataArgs {}
+impl Payload<'_> for ReadCanisterSnapshotMetadataArgs {}
 
 #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
 pub enum SnapshotSource {
@@ -3697,7 +3697,7 @@ pub enum SnapshotSource {
 /// })
 
 #[derive(Clone, PartialEq, Debug, CandidType, Deserialize)]
-pub struct CanisterSnapshotMetadataResponse {
+pub struct ReadCanisterSnapshotMetadataResponse {
     pub source: SnapshotSource,
     pub taken_at_timestamp: u64,
     pub wasm_module_size: u64,
@@ -3712,7 +3712,7 @@ pub struct CanisterSnapshotMetadataResponse {
     pub on_low_wasm_memory_hook_status: OnLowWasmMemoryHookStatus,
 }
 
-/// An inner type of [`CanisterSnapshotMetadataResponse`].
+/// An inner type of [`ReadCanisterSnapshotMetadataResponse`].
 #[derive(Copy, Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
 pub enum GlobalTimer {
     Inactive,
@@ -3720,7 +3720,7 @@ pub enum GlobalTimer {
 }
 
 /// The possible values of a global variable.
-/// An inner type of [`CanisterSnapshotMetadataResponse`].
+/// An inner type of [`ReadCanisterSnapshotMetadataResponse`].
 #[derive(Copy, Clone, PartialEq, Debug, CandidType, Deserialize, Serialize)]
 pub enum Global {
     I32(i32),

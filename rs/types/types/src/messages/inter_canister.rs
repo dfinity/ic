@@ -7,7 +7,7 @@ use ic_error_types::{RejectCode, UserError};
 #[cfg(test)]
 use ic_exhaustive_derive::ExhaustiveSet;
 use ic_management_canister_types_private::{
-    CanisterIdRecord, CanisterInfoRequest, CanisterSnapshotMetadataArgs, ClearChunkStoreArgs,
+    CanisterIdRecord, CanisterInfoRequest, ReadCanisterSnapshotMetadataArgs, ClearChunkStoreArgs,
     DeleteCanisterSnapshotArgs, InstallChunkedCodeArgs, InstallCodeArgsV2,
     ListCanisterSnapshotArgs, LoadCanisterSnapshotArgs, Method, Payload as _,
     ProvisionalTopUpCanisterArgs, StoredChunksArgs, TakeCanisterSnapshotArgs, UpdateSettingsArgs,
@@ -219,8 +219,8 @@ impl Request {
                     Err(_) => None,
                 }
             }
-            Ok(Method::CanisterSnapshotMetadata) => {
-                match CanisterSnapshotMetadataArgs::decode(&self.method_payload) {
+            Ok(Method::ReadCanisterSnapshotMetadata) => {
+                match ReadCanisterSnapshotMetadataArgs::decode(&self.method_payload) {
                     Ok(record) => Some(record.get_canister_id()),
                     Err(_) => None,
                 }

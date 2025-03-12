@@ -11,7 +11,7 @@ use ic_config::{
 };
 use ic_management_canister_types_private::{
     CanisterIdRecord, CanisterInfoRequest, CanisterInstallMode, CanisterInstallModeV2,
-    CanisterSettingsArgsBuilder, CanisterSnapshotMetadataArgs, ClearChunkStoreArgs,
+    CanisterSettingsArgsBuilder, ReadCanisterSnapshotMetadataArgs, ClearChunkStoreArgs,
     DeleteCanisterSnapshotArgs, EmptyBlob, InstallChunkedCodeArgs, InstallCodeArgs,
     ListCanisterSnapshotArgs, LoadCanisterSnapshotArgs, Method, Payload, StoredChunksArgs,
     TakeCanisterSnapshotArgs, UninstallCodeArgs, UpdateSettingsArgs, UploadChunkArgs, IC_00,
@@ -1270,8 +1270,8 @@ fn dts_aborted_execution_does_not_block_subnet_messages() {
                 .encode();
                 (method, call_args().other_side(args))
             }),
-            Method::CanisterSnapshotMetadata => test_supported(|aborted_canister_id| {
-                let args = CanisterSnapshotMetadataArgs::new(aborted_canister_id, vec![]).encode();
+            Method::ReadCanisterSnapshotMetadata => test_supported(|aborted_canister_id| {
+                let args = ReadCanisterSnapshotMetadataArgs::new(aborted_canister_id, vec![]).encode();
                 (method, call_args().other_side(args))
             }),
         }
