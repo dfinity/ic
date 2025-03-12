@@ -77,9 +77,9 @@ use ic_cdk::println;
 #[cfg(target_arch = "wasm32")]
 use ic_cdk::spawn;
 use ic_nervous_system_canisters::cmc::CMC;
+use ic_nervous_system_canisters::ledger::IcpLedger;
 use ic_nervous_system_common::{
-     ledger, ledger::IcpLedger, NervousSystemError, ONE_DAY_SECONDS, ONE_MONTH_SECONDS,
-    ONE_YEAR_SECONDS,
+    ledger, NervousSystemError, ONE_DAY_SECONDS, ONE_MONTH_SECONDS, ONE_YEAR_SECONDS,
 };
 use ic_nervous_system_governance::maturity_modulation::apply_maturity_modulation;
 use ic_nervous_system_proto::pb::v1::{GlobalTimeOfDay, Principals};

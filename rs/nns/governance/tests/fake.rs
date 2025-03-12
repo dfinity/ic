@@ -4,7 +4,9 @@ use cycles_minting_canister::{IcpXdrConversionRate, IcpXdrConversionRateCertifie
 use futures::future::FutureExt;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_ledger_core::tokens::CheckedSub;
-use ic_nervous_system_common::{ ledger::IcpLedger, NervousSystemError};
+use ic_nervous_system_canisters::cmc::CMC;
+use ic_nervous_system_canisters::ledger::IcpLedger;
+use ic_nervous_system_common::NervousSystemError;
 use ic_nervous_system_timers::test::{advance_time_for_timers, set_time_for_timers};
 use ic_nns_common::{
     pb::v1::{NeuronId, ProposalId},
@@ -38,7 +40,6 @@ use std::{
     sync::{Arc, Mutex},
     time::{SystemTime, UNIX_EPOCH},
 };
-use ic_nervous_system_canisters::cmc::CMC;
 
 const DEFAULT_TEST_START_TIMESTAMP_SECONDS: u64 = 999_111_000_u64;
 pub const NODE_PROVIDER_REWARD: u64 = 10_000;

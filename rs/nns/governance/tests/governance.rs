@@ -22,11 +22,11 @@ use futures::future::FutureExt;
 use ic_base_types::{CanisterId, NumBytes, PrincipalId};
 use ic_crypto_sha2::Sha256;
 use ic_nervous_system_canisters::cmc::CMC;
+use ic_nervous_system_canisters::ledger::IcpLedger;
 use ic_nervous_system_clients::canister_status::{CanisterStatusResultV2, CanisterStatusType};
 use ic_nervous_system_common::{
-    ledger,
-    ledger::{compute_neuron_staking_subaccount_bytes, IcpLedger},
-    NervousSystemError, E8, ONE_DAY_SECONDS, ONE_MONTH_SECONDS, ONE_YEAR_SECONDS,
+    ledger, ledger::compute_neuron_staking_subaccount_bytes, NervousSystemError, E8,
+    ONE_DAY_SECONDS, ONE_MONTH_SECONDS, ONE_YEAR_SECONDS,
 };
 use ic_nervous_system_common_test_keys::{
     TEST_NEURON_1_OWNER_PRINCIPAL, TEST_NEURON_2_OWNER_PRINCIPAL,
