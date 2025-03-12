@@ -1,4 +1,4 @@
-use candid::{CandidType, Principal};
+use candid::{CandidType, Encode, Principal};
 use candid_parser::utils::{service_equal, CandidSource};
 use canister_test::*;
 use dfn_candid::{candid, candid_one, CandidOne};
@@ -22,7 +22,6 @@ use icp_ledger::{
     TransferFeeArgs, DEFAULT_TRANSFER_FEE,
 };
 use icrc_ledger_types::icrc1::account::Account;
-use on_wire::IntoWire;
 use serde::Deserialize;
 use serde_bytes::ByteBuf;
 use std::convert::TryFrom;
@@ -257,7 +256,7 @@ async fn install_motoko_proxy(r: &canister_test::Runtime) -> Canister<'_> {
     let wasm_path = std::path::PathBuf::from(std::env::var("LEDGER_PROXY_WASM_PATH").unwrap());
 
     canister_test::Wasm::from_file(wasm_path)
-        .install_(r, CandidOne(()).into_bytes().unwrap())
+        .install_(r, Encode!(&()).unwrap())
         .await
         .expect("failed to install the ledger proxy canister")
 }
@@ -295,11 +294,7 @@ fn upgrade_test() {
 
         // Try upgrading with `None`.
         ledger
-            .upgrade_to_self_binary(
-                CandidOne(LedgerCanisterPayload::Upgrade(None))
-                    .into_bytes()
-                    .unwrap(),
-            )
+            .upgrade_to_self_binary(Encode!(&LedgerCanisterPayload::Upgrade(None)).unwrap())
             .await?;
 
         let GetBlocksRes(blocks_after) = get_blocks_pb(&ledger, 0..20).await?;
@@ -313,10 +308,9 @@ fn upgrade_test() {
         // Now try to update with some arguments.
         ledger
             .upgrade_to_self_binary(
-                CandidOne(Some(
+                Encode!(&Some(
                     LedgerCanisterUpgradePayload::builder().build().unwrap(),
                 ))
-                .into_bytes()
                 .unwrap(),
             )
             .await?;
@@ -331,13 +325,12 @@ fn upgrade_test() {
         // Now try to update with the minting account argument set.
         ledger
             .upgrade_to_self_binary(
-                CandidOne(Some(
+                Encode!(&Some(
                     LedgerCanisterUpgradePayload::builder()
                         .icrc1_minting_account(minting_account_principal.into())
                         .build()
                         .unwrap(),
                 ))
-                .into_bytes()
                 .unwrap(),
             )
             .await?;
@@ -403,7 +396,9 @@ fn archive_blocks_small_test() {
                 .unwrap();
             let mut install = proj.cargo_bin("ledger-canister", &[]).install(&r);
             install.memory_allocation = Some(128 * 1024 * 1024);
-            install.bytes(CandidOne(payload).into_bytes()?).await?
+            install
+                .bytes(Encode!(&payload).map_err(|e| e.to_string())?)
+                .await?
         };
         println!("[test] ledger canister id: {}", ledger.canister_id());
 
@@ -535,7 +530,9 @@ fn archive_blocks_large_test() {
                 .unwrap();
             let mut install = proj.cargo_bin("ledger-canister", &[]).install(&r);
             install.memory_allocation = Some(128 * 1024 * 1024);
-            install.bytes(CandidOne(payload).into_bytes()?).await?
+            install
+                .bytes(Encode!(&payload).map_err(|e| e.to_string())?)
+                .await?
         };
         println!("[test] ledger canister id: {}", ledger.canister_id());
 
@@ -665,7 +662,9 @@ fn archived_blocks_ranges() {
                 .unwrap();
             let mut install = proj.cargo_bin("ledger-canister", &[]).install(&r);
             install.memory_allocation = Some(128 * 1024 * 1024);
-            install.bytes(CandidOne(payload).into_bytes()?).await?
+            install
+                .bytes(Encode!(&payload).map_err(|e| e.to_string())?)
+                .await?
         };
 
         // Make a transfer to trigger archiving.
@@ -1537,7 +1536,9 @@ fn get_block_test() {
                 .unwrap();
             let mut install = proj.cargo_bin("ledger-canister", &[]).install(&r);
             install.memory_allocation = Some(128 * 1024 * 1024);
-            install.bytes(CandidOne(payload).into_bytes()?).await?
+            install
+                .bytes(Encode!(&payload).map_err(|e| e.to_string())?)
+                .await?
         };
         println!("[test] ledger canister id: {}", ledger.canister_id());
 
@@ -1699,7 +1700,9 @@ fn get_multiple_blocks_test() {
                 .unwrap();
             let mut install = proj.cargo_bin("ledger-canister", &[]).install(&r);
             install.memory_allocation = Some(128 * 1024 * 1024);
-            install.bytes(CandidOne(payload).into_bytes()?).await?
+            install
+                .bytes(Encode!(&payload).map_err(|e| e.to_string())?)
+                .await?
         };
         println!("[test] ledger canister id: {}", ledger.canister_id());
 
@@ -1904,7 +1907,9 @@ fn only_ledger_can_append_blocks_to_archive_nodes() {
                 .unwrap();
             let mut install = proj.cargo_bin("ledger-canister", &[]).install(&r);
             install.memory_allocation = Some(128 * 1024 * 1024);
-            install.bytes(CandidOne(payload).into_bytes()?).await?
+            install
+                .bytes(Encode!(&payload).map_err(|e| e.to_string())?)
+                .await?
         };
         println!("[test] ledger canister id: {}", ledger.canister_id());
 
