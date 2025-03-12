@@ -432,9 +432,7 @@ fn get_full_neuron_by_id_or_subaccount(
 fn get_full_neuron(neuron_id: NeuronId) -> Result<Neuron, GovernanceError> {
     debug_log("get_full_neuron");
     governance()
-        .get_full_neuron(&NeuronIdProto::from(neuron_id), &caller())
-        .map(Neuron::from)
-        .map_err(GovernanceError::from)
+        .get_full_neuron(&NeuronIdProto::from(neuron_id), &caller()).map_err(GovernanceError::from)
 }
 
 #[query]

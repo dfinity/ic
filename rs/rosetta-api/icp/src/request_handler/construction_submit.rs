@@ -37,9 +37,7 @@ impl RosettaRequestHandler {
 fn transaction_identifier(results: &TransactionResults) -> TransactionIdentifier {
     results
         .last_transaction_id()
-        .cloned()
-        .map(From::from)
-        .unwrap_or_else(|| {
+        .cloned().unwrap_or_else(|| {
             assert!(results
                 .operations
                 .iter()

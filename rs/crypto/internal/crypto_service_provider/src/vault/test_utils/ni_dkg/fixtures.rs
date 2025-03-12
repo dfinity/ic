@@ -126,9 +126,7 @@ impl MockNode {
                 epoch,
                 receiver_keys,
                 maybe_reshared_secret_id,
-            )
-            .map_err(ni_dkg_errors::CspDkgCreateReshareDealingError::from)
-    }
+            )}
 }
 
 /// A collection of nodes, from the perspective of the CSP.

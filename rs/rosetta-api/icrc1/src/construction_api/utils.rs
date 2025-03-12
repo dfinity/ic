@@ -535,7 +535,6 @@ pub fn handle_construction_parse(
 #[cfg(test)]
 mod test {
     use super::*;
-    use candid::Nat;
     use ic_agent::Identity;
     use ic_icrc1_test_utils::minter_identity;
     use ic_icrc1_test_utils::valid_transactions_strategy;
@@ -604,7 +603,7 @@ mod test {
                                                 subaccount: args.from_subaccount
                                             }
                                         );
-                                        assert_eq!(fee.map(Nat::from), args.fee);
+                                        assert_eq!(fee, args.fee);
                                         assert_eq!(args.memo, icrc1_transaction.memo);
                                         assert_eq!(
                                             args.created_at_time,
@@ -634,9 +633,9 @@ mod test {
                                                 subaccount: args.from_subaccount
                                             }
                                         );
-                                        assert_eq!(fee.map(Nat::from), args.fee);
+                                        assert_eq!(fee, args.fee);
                                         assert_eq!(
-                                            expected_allowance.map(Nat::from),
+                                            expected_allowance,
                                             args.expected_allowance
                                         );
                                         assert_eq!(expires_at, args.expires_at);
