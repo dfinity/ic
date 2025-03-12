@@ -2443,7 +2443,7 @@ impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
         }
 
         let tasks: pb_canister_state_bits::TaskQueue =
-            try_from_option_field(value.tasks, "CanisterStateBits::tasks")?;
+            try_from_option_field(value.tasks, "CanisterStateBits::tasks").unwrap_or_default();
 
         let task_queue = TaskQueue::try_from(tasks)?;
 
