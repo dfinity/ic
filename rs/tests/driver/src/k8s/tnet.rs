@@ -360,15 +360,27 @@ impl TNet {
             }
         );
 
+        // We make reservation for 42 vcpus only if VM uses 64 vcpus because there are
+        // already other k8s resources having resource requests that prevents reservation to succeeds.
+        // Note that VM still gets 64 vcpus.
+        let vcpus = if vm_req.vcpus.to_string() == "64" {
+            "42".to_string()
+        } else {
+            vm_req.vcpus.to_string()
+        };
+        // Same as above, we make reservation for 312142680 memory only if VM uses 512142680 memory because there are
+        // already other k8s resources having resource requests that prevents reservation to succeeds.
+        let mem = if vm_req.memory_kibibytes.to_string() == "512142680" {
+            "312142680".to_string()
+        } else {
+            vm_req.vcpus.to_string()
+        };
         let node = create_reservation(
             vm_name.clone(),
             vm_name.clone(),
             self.unique_name.clone().expect("missing unique name"),
             "1h".to_string().into(),
-            Some((
-                vm_req.vcpus.to_string(),
-                vm_req.memory_kibibytes.to_string() + "Ki",
-            )),
+            Some((vcpus, mem + "Ki")),
         )
         .await?;
 
