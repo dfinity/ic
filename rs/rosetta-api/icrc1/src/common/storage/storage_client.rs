@@ -6,7 +6,7 @@ use icrc_ledger_types::icrc1::account::Account;
 use rusqlite::Connection;
 use serde_bytes::ByteBuf;
 use std::{path::Path, sync::Mutex};
-use tracing::info;
+use tracing::{info, warn};
 
 #[derive(Debug)]
 pub struct StorageClient {
@@ -49,7 +49,7 @@ impl StorageClient {
         match block_count == highest_block_idx.saturating_add(1) {
             true => Ok(false),
             false => {
-                info!(
+                warn!(
                     "block_count ({}) does not equal highest_block_idx.saturating_add(1) ({}) -> gaps!",
                     block_count,
                     highest_block_idx.saturating_add(1)
