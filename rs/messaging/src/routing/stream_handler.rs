@@ -879,7 +879,7 @@ impl StreamHandlerImpl {
                                     self.log,
                                     "Inducting request failed: {}\n{:?}", &err, &request
                                 );
-                                return Err((reason, msg));
+                                Err((reason, msg))
                             }
                             RequestOrResponse::Response(response) => {
                                 // Responses should always be inducted successfully (or silently dropped,
