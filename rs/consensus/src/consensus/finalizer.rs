@@ -534,11 +534,8 @@ mod tests {
                 CallbackId::from(1),
                 Ok(dummy_transcript_for_tests()),
             ),
-        ]
-        .drain(..)
-        .collect::<Vec<_>>();
+        ];
 
-        // Run the
         let result =
             generate_responses_to_remote_dkgs(&transcripts_for_remote_subnets[..], &no_op_logger());
         assert_eq!(result.len(), 1);
