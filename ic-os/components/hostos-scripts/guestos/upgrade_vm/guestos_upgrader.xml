@@ -51,9 +51,18 @@
             <alias name='virtio-disk0'/>
             <address type='pci' domain='0x0000' bus='0x04' slot='0x00' function='0x0'/>
         </disk>
+<!--        <disk type='file' device='disk'>-->
+<!--            <source file='/run/ic-node/config.img'/>-->
+<!--            <target dev='sda' bus='usb' removable='on'/>-->
+<!--        </disk>-->
+<!--        <filesystem type='mount' accessmode='passthrough'>-->
+<!--            <driver type='virtiofs'/>-->
+<!--            <source dir='/tmp/guestos_upgrade'/>-->
+<!--            <target dir='guestos_upgrade'/>-->
+<!--        </filesystem>-->
         <disk type='file' device='disk'>
-            <source file='/run/ic-node/config.img'/>
-            <target dev='sda' bus='usb' removable='on'/>
+            <source file='/tmp/guestos_upgrade.img'/>
+            <target dev='sdb' bus='usb' removable='on'/>
         </disk>
         <controller type='usb' index='0' model='ich9-ehci1'>
             <alias name='usb'/>
@@ -128,7 +137,8 @@
             <address type='pci' domain='0x0000' bus='0x00' slot='0x01' function='0x6'/>
         </controller>
         <interface type='bridge'>
-            <mac address='{{ mac_address }}'/>
+<!--            <mac address='{{ mac_address }}'/>-->
+            <mac address='6a:03:95:d7:d4:75'/>
             <source bridge='br6'/>
             <target dev='vnet1'/>
             <model type='virtio'/>
@@ -141,7 +151,7 @@
                 <model name='isa-serial'/>
             </target>
             <alias name='serial0'/>
-            <log file='/var/log/libvirt/qemu/guestos-serial.log' append='off'/>
+            <log file='/var/log/libvirt/qemu/guestos_upgrader-serial.log' append='off'/>
         </serial>
         <console type='pty' tty='/dev/pts/3'>
             <source path='/dev/pts/3'/>

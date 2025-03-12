@@ -1,0 +1,9 @@
+[workspace]
+
+[package]
+name = "disk-encryption-key"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+sev = "5.0.0"

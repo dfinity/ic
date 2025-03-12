@@ -101,7 +101,10 @@ pub fn generate_networkd_config(
     let network_config_variables: HashMap<String, String> = config_map_from_path(network_config)?;
     eprintln!("Network parameters {:#?}", network_config_variables);
 
-    let network_info: NetworkInfo = create_network_info(&network_config_variables, ipv4_info)?;
+    let upgrade_vm = Path::new("/var/lib/ic/guestos_type/upgrade").exists();
+    eprintln!("IS UPGRADE: {:?}", upgrade_vm);
+    let network_info: NetworkInfo =
+        create_network_info(&network_config_variables, ipv4_info, upgrade_vm)?;
     eprintln!("{:#?}", network_info);
 
     let network_interface_name = get_interface_name()?;
@@ -150,9 +153,14 @@ pub fn validate_and_construct_ipv4_address_info(
 fn create_network_info(
     network_config_variables: &HashMap<String, String>,
     ipv4_info: Option<IpAddressInfo>,
+    upgrade_vm: bool,
 ) -> Result<NetworkInfo> {
     let ipv6_info = match (
-        network_config_variables.get("ipv6_address"),
+        network_config_variables.get(if upgrade_vm {
+            "upgrade_ipv6_address"
+        } else {
+            "ipv6_address"
+        }),
         network_config_variables.get("ipv6_gateway"),
     ) {
         (Some(ipv6_address_with_prefix), Some(ipv6_gateway)) => {
@@ -311,7 +319,7 @@ mod tests {
         let ipv4_info =
             Some(IpAddressInfo::new_ipv4_address("192.168.1.100", "30", "192.168.1.1").unwrap());
 
-        let result = create_network_info(&network_config_variables, ipv4_info).unwrap();
+        let result = create_network_info(&network_config_variables, ipv4_info, false).unwrap();
         assert!(result.ipv6_info.is_some());
 
         let ipv6_info = result.ipv6_info.as_ref().unwrap();
@@ -333,7 +341,7 @@ mod tests {
 
         let ipv4_info = None;
 
-        let result = create_network_info(&network_config_variables, ipv4_info).unwrap();
+        let result = create_network_info(&network_config_variables, ipv4_info, false).unwrap();
         assert!(result.ipv6_info.is_some());
 
         let ipv6_info = result.ipv6_info.as_ref().unwrap();
@@ -347,7 +355,7 @@ mod tests {
         network_config_variables.insert("ipv6_address".to_string(), "invalid_address".to_string());
         network_config_variables.insert("ipv6_gateway".to_string(), "invalid_gateway".to_string());
 
-        let result = create_network_info(&network_config_variables, None);
+        let result = create_network_info(&network_config_variables, None, false);
 
         assert!(result.is_err(), "Invalid ipv6 address configuration");
     }
@@ -359,7 +367,7 @@ mod tests {
         // ipv6 gateway intentionally omitted:
         // network_config_variables.insert("ipv6_gateway".to_string(), "invalid_gateway".to_string());
 
-        let result = create_network_info(&network_config_variables, None);
+        let result = create_network_info(&network_config_variables, None, false);
 
         assert!(
             result.is_err(),
@@ -371,7 +379,7 @@ mod tests {
     fn test_create_network_info_without_ipv6_or_ipv4_or_nameservers() {
         let network_config_variables = HashMap::new();
 
-        let result = create_network_info(&network_config_variables, None).unwrap();
+        let result = create_network_info(&network_config_variables, None, false).unwrap();
         assert!(result.ipv6_info.is_none());
     }
 

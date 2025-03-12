@@ -160,7 +160,7 @@ while [ ! -f /boot/config/CONFIGURED ]; do
     # But even if nothing can be mounted, just try and see if something usable
     # is there already -- this might be useful when operating this thing as a
     # docker container instead of full-blown VM.
-    if [ ! -d /mnt ] && [ "${DEV}" != "" ]; then
+    if [ "${DEV}" != "" ]; then
         echo "Found CONFIG device at ${DEV}"
         mount -t vfat -o ro "${DEV}" /mnt
     fi

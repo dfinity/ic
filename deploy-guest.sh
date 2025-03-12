@@ -1,8 +1,12 @@
-input="bazel-bin/ic-os/guestos/envs/dev/disk-img.tar.zst"
+set -e
+
+target="ic-os/guestos/envs/dev/disk-img.tar.zst"
+file="bazel-bin/${target}"
 hostos="2a00:fb01:400:44:6800:95ff:fed7:d475"
 
-chmod +w ${input}
-scp -o StrictHostKeyChecking=no -6 ${input} admin@[${hostos}]:/tmp
+bazel build ${target}
+chmod +w ${file}
+scp -o StrictHostKeyChecking=no -6 ${file} admin@[${hostos}]:/tmp
 
 ssh -o StrictHostKeyChecking=no -6 admin@${hostos} << EOF
    sudo systemctl stop monitor-guestos

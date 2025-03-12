@@ -5,13 +5,13 @@ After=cryptsetup-pre.target systemd-udevd-kernel.socket systemd-tpm2-setup-early
 Before=blockdev@dev-mapper-vda10-crypt.target
 Wants=blockdev@dev-mapper-vda10-crypt.target
 IgnoreOnIsolate=true
-Conflicts=umount.target
+Conflicts=umount.target network-online.target
 Before=umount.target
 Before=cryptsetup.target
 BindsTo=dev-vda10.device
 After=dev-vda10.device
-After=network-online.target
-Wants=network-online.target
+#After=network-online.target
+#Wants=network-online.target
 
 [Service]
 Type=oneshot
@@ -20,3 +20,8 @@ TimeoutSec=infinity
 KeyringMode=shared
 OOMScoreAdjust=500
 ExecStart=/opt/ic/bin/open-store.sh
+StandardOutput=journal+console
+StandardError=journal+console
+
+[Install]
+RequiredBy=cryptsetup.target

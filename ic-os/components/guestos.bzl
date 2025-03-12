@@ -44,6 +44,8 @@ component_files = {
     Label("init/bootstrap-ic-node/bootstrap-ic-node.sh"): "/opt/ic/bin/bootstrap-ic-node.sh",
     Label("init/bootstrap-ic-node/bootstrap-ic-node.service"): "/etc/systemd/system/bootstrap-ic-node.service",
     Label("init/setup-encryption/setup-encryption.sh"): "/opt/ic/bin/setup-encryption.sh",
+    Label("init/open-store/open-store.sh"): "/opt/ic/bin/open-store.sh",
+    Label("init/open-store/open-store.service"): "/etc/systemd/system/open-store.service",
     Label("init/setup-encryption/setup-encryption.service"): "/etc/systemd/system/setup-encryption.service",
     Label("init/setup-encryption/setup-var-encryption.sh"): "/opt/ic/bin/setup-var-encryption.sh",
     Label("init/setup-lvs/setup-lvs.service"): "/etc/systemd/system/setup-lvs.service",

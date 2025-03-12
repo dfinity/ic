@@ -123,7 +123,7 @@ function build_ic_bootstrap_tar() {
     local OUT_FILE="$1"
     shift
 
-    local IPV6_ADDRESS IPV6_GATEWAY DOMAIN HOSTNAME
+    local IPV6_ADDRESS UPGADE_IPV6_ADDRESS IPV6_GATEWAY DOMAIN HOSTNAME
     local IC_CRYPTO IC_STATE IC_REGISTRY_LOCAL_STORE
     local NNS_URLS NNS_PUBLIC_KEY NODE_OPERATOR_PRIVATE_KEY
     local BACKUP_RETENTION_TIME_SECS BACKUP_PURGING_INTERVAL_SECS
@@ -142,6 +142,9 @@ function build_ic_bootstrap_tar() {
 
             --ipv6_address)
                 IPV6_ADDRESS="$2"
+                ;;
+            --upgrade_ipv6_address)
+                UPGRADE_IPV6_ADDRESS="$2"
                 ;;
             --ipv6_gateway)
                 IPV6_GATEWAY="$2"
@@ -231,6 +234,7 @@ function build_ic_bootstrap_tar() {
 
     cat >"${BOOTSTRAP_TMPDIR}/network.conf" <<EOF
 ${IPV6_ADDRESS:+ipv6_address=$IPV6_ADDRESS}
+${UPGRADE_IPV6_ADDRESS:+upgrade_ipv6_address=$UPGRADE_IPV6_ADDRESS}
 ${IPV6_GATEWAY:+ipv6_gateway=$IPV6_GATEWAY}
 hostname=$HOSTNAME
 ${IPV4_ADDRESS:+ipv4_address=$IPV4_ADDRESS}

@@ -118,6 +118,7 @@ while [ ! -f /boot/config/CONFIGURED ]; do
     if [ "${DEV}" != "" ]; then
         echo "Found CONFIG device at ${DEV}"
         mount -t vfat -o ro "${DEV}" /mnt
+        trap "umount /mnt" EXIT # FIXME: only umount if exists
     fi
 
     if [ -e /mnt/ic-bootstrap.tar ]; then
