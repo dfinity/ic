@@ -85,12 +85,16 @@ pub fn registration(env: TestEnv) {
 
 /// Upgrade each HostOS VM to the target version, and verify that each is
 /// healthy before and after the upgrade.
-pub fn upgrade_hostos(
-    env: TestEnv,
-    target_version: HostosVersion,
-    update_image_url: Url,
-    update_image_sha256: String,
-) {
+pub fn upgrade_hostos(env: TestEnv) {
+    let target_version_str = std::env::var("ENV_DEPS__HOSTOS_UPDATE_IMG_VERSION").unwrap();
+    let target_version =
+        HostosVersion::try_from(target_version_str.trim()).expect("Invalid mainnet hostos version");
+
+    let update_image_url_str = std::env::var("ENV_DEPS__HOSTOS_UPDATE_IMG_URL").unwrap();
+    let update_image_url =
+        Url::parse(update_image_url_str.trim()).expect("Invalid mainnet hostos update image URL");
+    let update_image_sha256 = std::env::var("ENV_DEPS__HOSTOS_UPDATE_IMG_SHA").unwrap();
+
     let logger = env.logger();
 
     let initial_topology = env.topology_snapshot();
@@ -176,31 +180,4 @@ pub fn upgrade_hostos(
     info!(logger, "Version found is: '{}'", new_version);
 
     assert!(new_version != original_version);
-}
-
-/// Orchestrate the HostOS upgrade by determining the `test` target version,
-/// retrieving the update image info, and calling upgrade_hostos.
-pub fn upgrade_hostos_to_test_version(env: TestEnv) {
-    let starting_version = read_dependency_from_env_to_string("ENV_DEPS__IC_VERSION_FILE").unwrap();
-    let target_version = HostosVersion::try_from(format!("{starting_version}-test")).unwrap();
-
-    let update_image_url = get_hostos_update_img_test_url().unwrap();
-    let update_image_sha256 = get_hostos_update_img_test_sha256().unwrap();
-
-    upgrade_hostos(env, target_version, update_image_url, update_image_sha256);
-}
-
-/// Orchestrate the HostOS upgrade using mainnet images.
-/// Reads version, update URL, and SHA256 from the files produced by mainnet-images.bzl.
-pub fn upgrade_hostos_to_mainnet_version(env: TestEnv) {
-    let target_version_str = std::env::var("ENV_DEPS__MAINNET_HOSTOS_VERSION").unwrap();
-    let target_version =
-        HostosVersion::try_from(target_version_str.trim()).expect("Invalid mainnet hostos version");
-
-    let update_image_url_str = std::env::var("ENV_DEPS__MAINNET_HOSTOS_UPDATE_IMG_URL").unwrap();
-    let update_image_url =
-        Url::parse(update_image_url_str.trim()).expect("Invalid mainnet hostos update image URL");
-    let update_image_sha256 = std::env::var("ENV_DEPS__MAINNET_HOSTOS_UPDATE_IMG_SHA").unwrap();
-
-    upgrade_hostos(env, target_version, update_image_url, update_image_sha256);
 }

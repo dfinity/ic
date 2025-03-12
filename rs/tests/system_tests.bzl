@@ -27,10 +27,9 @@ def _run_system_test(ctx):
 
             # RUN_SCRIPT_ICOS_IMAGES:
             # For every ic-os image specified, first ensure it's in remote
-            # storage, then export its download URL and HASH as environment
-            # variables.
+            # storage, then export its download URL and HASH as environment variables.
             if [ -n "$RUN_SCRIPT_ICOS_IMAGES" ]; then
-              # split the ";"-delimited list of "env_prefixr:filepath;env_prefix2:filepath2;..."
+              # split the ";"-delimited list of "env_prefix:filepath;env_prefix2:filepath2;..."
               # into an array
               IFS=';' read -ra icos_images <<<"$RUN_SCRIPT_ICOS_IMAGES"
               for image in "${{icos_images[@]}}"; do
@@ -50,6 +49,16 @@ def _run_system_test(ctx):
               done
             fi
             unset RUN_SCRIPT_ICOS_IMAGES RUN_SCRIPT_UPLOAD_SYSTEST_DEP # clean up the env for the test
+
+            if [ -z "${{ENV_DEPS__HOSTOS_UPDATE_IMG_VERSION}}" ]; then
+                export ENV_DEPS__HOSTOS_UPDATE_IMG_VERSION="$(cat ${{ENV_DEPS__IC_VERSION_FILE}})-test"
+            fi
+            if [ -z "${{ENV_DEPS__HOSTOS_UPDATE_IMG_URL}}" ]; then
+                export ENV_DEPS__HOSTOS_UPDATE_IMG_URL="${{ENV_DEPS__HOSTOS_UPDATE_IMG_TEST_URL}}"
+            fi
+            if [ -z "${{ENV_DEPS__HOSTOS_UPDATE_IMG_SHA}}" ]; then
+                export ENV_DEPS__HOSTOS_UPDATE_IMG_SHA="${{ENV_DEPS__HOSTOS_UPDATE_IMG_TEST_HASH}}"
+            fi
 
             # We export RUNFILES such that the from_location_specified_by_env_var() function in
             # rs/rust_canisters/canister_test/src/canister.rs can find canisters
@@ -261,9 +270,14 @@ def system_test(
 
     if uses_hostos_mainnet:
         mainnet_hostos_version = mainnet_versions["hostos"]["latest_upgrade"]["version"]
-        env["ENV_DEPS__MAINNET_HOSTOS_VERSION"] = mainnet_hostos_version
-        env["ENV_DEPS__MAINNET_HOSTOS_UPDATE_IMG_URL"] = base_download_url(mainnet_hostos_version, "host-os", True, False) + "update-img.tar.zst"
-        env["ENV_DEPS__MAINNET_HOSTOS_UPDATE_IMG_SHA"] = mainnet_versions["hostos"]["latest_upgrade"]["update_img_hash"]
+        env["ENV_DEPS__HOSTOS_UPDATE_IMG_VERSION"] = mainnet_hostos_version
+        env["ENV_DEPS__HOSTOS_UPDATE_IMG_URL"] = base_download_url(mainnet_hostos_version, "host-os", True, False) + "update-img.tar.zst"
+        env["ENV_DEPS__HOSTOS_UPDATE_IMG_SHA"] = mainnet_versions["hostos"]["latest_upgrade"]["update_img_hash"]
+    else:
+        # Initialize variables to be overridden at runtime time
+        env["ENV_DEPS__HOSTOS_UPDATE_IMG_VERSION"] = ""
+        env["ENV_DEPS__HOSTOS_UPDATE_IMG_URL"] = ""
+        env["ENV_DEPS__HOSTOS_UPDATE_IMG_SHA"] = ""
 
     if uses_setupos_dev:
         # Note: SetupOS is still passed directly by path, as it needs some local processing.
