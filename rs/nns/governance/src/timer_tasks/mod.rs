@@ -1,3 +1,4 @@
+use ic_metrics_encoder::MetricsEncoder;
 use ic_nervous_system_timer_task::{RecurringAsyncTask, TimerTaskMetricsRegistry};
 use seeding::SeedingTask;
 use std::cell::RefCell;
@@ -21,4 +22,9 @@ pub fn schedule_tasks() {
 
 pub fn run_distribute_rewards_periodic_task() {
     distribute_rewards::run_distribute_rewards_periodic_task(&GOVERNANCE, &METRICS_REGISTRY);
+}
+
+/// Encodes the metrics for timer tasks.
+pub fn encode_timer_task_metrics(encoder: &mut MetricsEncoder<Vec<u8>>) -> std::io::Result<()> {
+    METRICS_REGISTRY.with(|registry| registry.borrow().encode("governance", encoder))
 }

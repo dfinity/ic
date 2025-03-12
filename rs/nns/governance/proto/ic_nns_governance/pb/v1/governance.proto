@@ -1686,6 +1686,15 @@ message VotingPowerEconomics {
   //
   // Initially, set to 1/12 years.
   optional uint64 clear_following_after_seconds = 2;
+
+  // The minimum dissolve delay a neuron must have in order to be eligible to vote.
+  //
+  // Neurons with a dissolve delay lower than this threshold will not have
+  // voting power, even if they are otherwise active.
+  //
+  // This value is an essential part of the staking mechanism, promoting
+  // long-term alignment with the network's governance.
+  optional uint64 neuron_minimum_dissolve_delay_to_vote_seconds = 3;
 }
 
 // The thresholds specify the shape of the ideal matching function used by the Neurons' Fund to
@@ -2269,48 +2278,6 @@ message Governance {
 
   MakingSnsProposal making_sns_proposal = 20;
 
-  // Progress of a migration that (potentially) is performed over the course of more than one heartbeat call.
-  message Migration {
-    enum MigrationStatus {
-      // Unspecified.
-      MIGRATION_STATUS_UNSPECIFIED = 0;
-      // Migration is in progress.
-      MIGRATION_STATUS_IN_PROGRESS = 1;
-      // Migration succeeded.
-      MIGRATION_STATUS_SUCCEEDED = 2;
-      // Migration failed.
-      MIGRATION_STATUS_FAILED = 3;
-    }
-
-    // Migration status.
-    optional MigrationStatus status = 1;
-
-    // The reason why it failed. Should only be present when the status is FAILED.
-    // This is only for debugging and it should not be used programmatically (other than its presence).
-    optional string failure_reason = 2;
-
-    // Migration progress (cursor).
-    oneof progress {
-      // Last neuron id migrated.
-      ic_nns_common.pb.v1.NeuronId last_neuron_id = 3;
-    }
-  }
-
-  // The status of all on-going (and recently completed) migrations (that take
-  // place over the course of multiple heartbeat calls).
-  //
-  // Each Migration field corresponds to one (ongoing or recently completed) migration.
-  //
-  // After a migration is finished, it should be OK to reserve the tag and lose the data.
-  message Migrations {
-    // Migrates neuron indexes to stable storage.
-    Migration neuron_indexes_migration = 1;
-    Migration copy_inactive_neurons_to_stable_memory_migration = 2;
-  }
-
-  // Migration related data.
-  Migrations migrations = 21;
-
   // A map of followees to their followers.
   message FollowersMap {
     message Followers {
@@ -2326,17 +2293,6 @@ message Governance {
   // This is the inverse of what is stored in a Neuron (its followees).
   map<int32, FollowersMap> topic_followee_index = 22;
 
-  reserved 6;
-  reserved "authz";
-
-  // Reserved id for deprecated `seed_accounts`
-  reserved 23;
-  reserved "seed_accounts";
-
-  // Reserved id for deprecated `genesis_neuron_accounts`
-  reserved 24;
-  reserved "genesis_neuron_accounts";
-
   // Local cache for XDR-related conversion rates (the source of truth is in the CMC canister).
   optional XdrConversionRate xdr_conversion_rate = 26;
 
@@ -2346,6 +2302,21 @@ message Governance {
   // Used to initialize an internal pseudorandom number generator. This gets replaced periodically using a secure
   // source of randomness (from the platform)
   optional bytes rng_seed = 28;
+
+  reserved 6;
+  reserved "authz";
+
+  // Reserved id for deprecated `migrations`.
+  reserved 21;
+  reserved "migrations";
+
+  // Reserved id for deprecated `seed_accounts`
+  reserved 23;
+  reserved "seed_accounts";
+
+  // Reserved id for deprecated `genesis_neuron_accounts`
+  reserved 24;
+  reserved "genesis_neuron_accounts";
 }
 
 message XdrConversionRate {

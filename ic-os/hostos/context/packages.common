@@ -61,43 +61,27 @@ ethtool
 ipmitool
 libarchive-zip-perl
 libusb-1.0-0
-libvirt-daemon-system 
-libvirt-dev
 locales
 moreutils
 mtools
 nvme-cli
-ovmf
 pciutils
 python3-libvirt
 python3-requests
 xxd
 
-# QEMU required dependencies for version 6.2
-ipxe-qemu
-ipxe-qemu-256k-compat-efi-roms
-libaio1t64
-libatomic1
-libc6
-libfdt1
-libfuse3-3
-libgcc-s1
-libglib2.0-0
-libgnutls30
-libibverbs1
-libjpeg8
-# libnettle8    - Not available in Ubuntu 20.04
-libnuma1
-libpixman-1-0
-libpmem1
-libpng16-16
-librdmacm1
-libsasl2-2
-libseccomp2
-libslirp0
-libstdc++6
-libudev1
-# liburing2     - Not available in Ubuntu 20.04
-libzstd1
-seabios
-zlib1g
+# Install select components from future releases
+# Install >=9.1 qemu
+qemu-system-x86/plucky # Top level
+
+# Install >=2024-05-24 OVMF
+ovmf/oracular # Top level
+
+# Install >=10.5.0 libvirt
+libvirt-daemon-system/oracular # Top level
+libvirt-dev/oracular # Top level
+libvirt-daemon-system-systemd/oracular # Dependency
+libvirt-daemon-config-nwfilter/oracular # Dependency
+libvirt-daemon-config-network/oracular # Dependency
+libvirt-daemon/oracular # Dependency
+libvirt-clients/oracular # Dependency
