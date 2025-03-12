@@ -17,6 +17,7 @@ use prometheus::{
     register_int_counter_vec, register_int_gauge, Encoder, Gauge, Histogram, HistogramVec,
     IntCounter, IntCounterVec, IntGauge,
 };
+use rosetta_core::watchdog::WatchdogThread;
 use std::{
     io,
     mem::replace,
@@ -31,9 +32,15 @@ use std::{
     time::{Duration, Instant},
 };
 use tokio::sync::Mutex;
-use tracing::{debug, error, info};
+use tracing::{error, info};
 
 use lazy_static::lazy_static;
+
+// Interval for syncing blocks from the ledger
+const BLOCK_SYNC_INTERVAL: Duration = Duration::from_secs(1);
+
+// Timeout for syncing blocks from the ledger. If no synchronization is attempted within this time, the sync thread will be restarted.
+const BLOCK_SYNC_TIMEOUT: Duration = Duration::from_secs(10);
 
 struct RosettaEndpointsMetrics {
     request_duration: HistogramVec,
@@ -81,6 +88,11 @@ lazy_static! {
         "ledger_sync_attempt_duration_seconds_hist",
         "Number of seconds since last successful sync",
         vec![0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 5.0, 10.0, 15.0]
+    )
+    .unwrap();
+    pub static ref SYNC_THREAD_RESTARTS: IntCounter = register_int_counter!(
+        "blockchain_sync_thread_restarts_total",
+        "Number of times the sync thread has been restarted"
     )
     .unwrap();
 }
@@ -329,10 +341,9 @@ async fn status(req_handler: web::Data<RosettaRequestHandler>) -> HttpResponse {
 
 enum ServerState {
     Unstarted(Server),
-    Started(tokio::task::JoinHandle<()>),
+    Started,
     OfflineStarted,
     Failed,
-    Finished,
 }
 
 pub struct RosettaApiServer {
@@ -428,11 +439,11 @@ impl RosettaApiServer {
             not_whitelisted,
         } = options;
 
-        let mut server_lock = self.server.lock().await;
         info!("Starting Rosetta API server");
+        let mut server_lock = self.server.lock().await;
+
         *server_lock = match replace(&mut *server_lock, ServerState::Failed) {
-            ServerState::Finished => ServerState::Finished,
-            ServerState::Started(handle) => ServerState::Started(handle),
+            ServerState::Started => ServerState::Started,
             ServerState::OfflineStarted => ServerState::OfflineStarted,
             ServerState::Failed => {
                 return Err(io::Error::new(
@@ -446,50 +457,36 @@ impl RosettaApiServer {
                 ServerState::OfflineStarted
             }
             ServerState::Unstarted(server) => {
+                let skip_first_heartbeat_check = true;
+                let on_restart_callback: Option<Arc<dyn Fn() + Send + Sync>> =
+                    Some(Arc::new(|| {
+                        SYNC_THREAD_RESTARTS.inc();
+                    }));
+                let mut watchdog_thread = WatchdogThread::new(
+                    BLOCK_SYNC_TIMEOUT,
+                    on_restart_callback,
+                    skip_first_heartbeat_check,
+                );
+                let server_handle = self.server_handle.clone();
                 let ledger = self.ledger.clone();
                 let stopped = self.stopped.clone();
-                let server_handle = self.server_handle.clone();
-                // Every second start downloading new blocks, when that's done update the index
-                let join_handle = tokio::task::spawn(async move {
-                    let mut interval = interval(Duration::from_secs(1));
-                    let mut synced_at = std::time::Instant::now();
-                    while !stopped.load(Relaxed) {
-                        interval.tick().await;
-
-                        if let Err(err) = ledger.sync_blocks(stopped.clone()).await {
-                            let msg_403 = if mainnet
-                                && !not_whitelisted
-                                && err.is_internal_error_403()
-                            {
-                                ", You may not be whitelisted; please try running the Rosetta server again with the '--not_whitelisted' flag"
-                            } else {
-                                ""
-                            };
-                            error!("Error in syncing blocks{}: {:?}", msg_403, err);
-                            SYNC_ERR_COUNTER.inc();
-                            OUT_OF_SYNC_TIME
-                                .set(Instant::now().duration_since(synced_at).as_secs_f64());
-                        } else {
-                            let t = Instant::now().duration_since(synced_at).as_secs_f64();
-                            OUT_OF_SYNC_TIME.set(t);
-                            OUT_OF_SYNC_TIME_HIST.observe(t);
-                            synced_at = std::time::Instant::now();
-                        }
-
-                        if exit_on_sync {
-                            info!("Blockchain synced, exiting");
-                            server_handle.stop(true).await;
-                            info!("Stopping blockchain sync thread");
-                            break;
-                        }
-                    }
-                    ledger.cleanup().await;
-                    info!("Blockchain sync thread finished");
+                watchdog_thread.start(move |heartbeat| {
+                    let ledger = ledger.clone();
+                    let stopped = stopped.clone();
+                    let server_handle = server_handle.clone();
+                    start_sync_thread(
+                        ledger,
+                        stopped,
+                        server_handle,
+                        mainnet,
+                        not_whitelisted,
+                        exit_on_sync,
+                        heartbeat,
+                    )
                 });
-
                 server.await?;
-
-                ServerState::Started(join_handle)
+                watchdog_thread.stop().await;
+                ServerState::Started
             }
         };
 
@@ -500,15 +497,52 @@ impl RosettaApiServer {
         info!("Stopping server");
         self.stopped.store(true, SeqCst);
         self.server_handle.stop(true).await;
-
-        // wait for the sync_thread to finish
-        let mut server_lock = self.server.lock().await;
-        if let ServerState::Started(jh) = replace(&mut *server_lock, ServerState::Finished) {
-            jh.await
-                .expect("Error on waiting for sync thread to finish");
-        }
-        debug!("Joined with blockchain sync thread");
     }
+}
+
+fn start_sync_thread(
+    ledger: Arc<dyn LedgerAccess + Send + Sync>,
+    stopped: Arc<AtomicBool>,
+    server_handle: ServerHandle,
+    mainnet: bool,
+    not_whitelisted: bool,
+    exit_on_sync: bool,
+    heartbeat_fn: Box<dyn Fn() + Send + Sync>,
+) -> tokio::task::JoinHandle<()> {
+    // Every second start downloading new blocks, when that's done update the index
+    tokio::task::spawn(async move {
+        info!("Starting blockchain sync thread");
+        let mut interval = interval(BLOCK_SYNC_INTERVAL);
+        let mut synced_at = std::time::Instant::now();
+        while !stopped.load(Relaxed) {
+            interval.tick().await;
+            if let Err(err) = ledger.sync_blocks(stopped.clone()).await {
+                let msg_403 = if mainnet && !not_whitelisted && err.is_internal_error_403() {
+                    ", You may not be whitelisted; please try running the Rosetta server again with the '--not_whitelisted' flag"
+                } else {
+                    ""
+                };
+                error!("Error in syncing blocks{}: {:?}", msg_403, err);
+                SYNC_ERR_COUNTER.inc();
+                OUT_OF_SYNC_TIME.set(Instant::now().duration_since(synced_at).as_secs_f64());
+            } else {
+                let t = Instant::now().duration_since(synced_at).as_secs_f64();
+                OUT_OF_SYNC_TIME.set(t);
+                OUT_OF_SYNC_TIME_HIST.observe(t);
+                synced_at = std::time::Instant::now();
+            }
+            heartbeat_fn();
+
+            if exit_on_sync {
+                info!("Blockchain synced, exiting");
+                server_handle.stop(true).await;
+                info!("Stopping blockchain sync thread");
+                break;
+            }
+        }
+        ledger.cleanup().await;
+        info!("Blockchain sync thread finished");
+    })
 }
 
 #[derive(Default)]
