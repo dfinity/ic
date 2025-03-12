@@ -282,6 +282,8 @@ impl VotingPowerEconomics {
     /// The minimum dissolve delay so that a neuron may vote.
     pub const DEFAULT_NEURON_MINIMUM_DISSOLVE_DELAY_TO_VOTE_SECONDS: u64 = 6 * ONE_MONTH_SECONDS;
 
+    /// A proposal to set `NetworkEconomics.VotingPowerEconomics.min_dissolve_delay_seconds` must
+    /// specify a value for this field that falls within this range.
     pub const NEURON_MINIMUM_DISSOLVE_DELAY_TO_VOTE_SECONDS_BOUNDS: RangeInclusive<u64> =
         (3 * ONE_MONTH_SECONDS)..=(6 * ONE_MONTH_SECONDS);
 
