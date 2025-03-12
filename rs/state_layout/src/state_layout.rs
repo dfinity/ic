@@ -29,7 +29,7 @@ use ic_types::{
 use ic_utils::thread::maybe_parallel_map;
 use ic_wasm_types::{CanisterModule, WasmHash};
 use prometheus::{Histogram, IntCounterVec};
-use std::collections::{BTreeMap, BTreeSet, VecDeque};
+use std::collections::{BTreeMap, BTreeSet};
 use std::convert::{identity, From, TryFrom, TryInto};
 use std::ffi::OsStr;
 use std::fs::OpenOptions;
