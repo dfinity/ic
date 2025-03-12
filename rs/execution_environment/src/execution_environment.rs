@@ -1319,44 +1319,21 @@ impl ExecutionEnvironment {
             }
             Ok(Ic00Method::ReshareChainKey) => {
                 let cycles = msg.take_cycles();
-                match &msg {
-                    CanisterCall::Request(request) => {
-                        match ReshareChainKeyArgs::decode(request.method_payload()) {
-                            Ok(args) => match get_master_public_key(
-                                &chain_key_data.master_public_keys,
-                                self.own_subnet_id,
-                                &args.key_id,
-                            ) {
-                                Ok(_) => {
-                                    let mut target_id = [0u8; 32];
-                                    rng.fill_bytes(&mut target_id);
-
-                                    self.reshare_chain_key(&mut state, args, request, target_id)
-                                        .map_or_else(
-                                            |err| ExecuteSubnetMessageResult::Finished {
-                                                response: Err(err),
-                                                refund: cycles,
-                                            },
-                                            |()| ExecuteSubnetMessageResult::Processing,
-                                        )
-                                }
-                                Err(err) => ExecuteSubnetMessageResult::Finished {
-                                    response: Err(err),
-                                    refund: cycles,
-                                },
-                            },
-                            Err(err) => ExecuteSubnetMessageResult::Finished {
+                match msg {
+                    CanisterCall::Request(ref request) => self
+                        .reshare_chain_key(&mut state, rng, chain_key_data, request)
+                        .map_or_else(
+                            |err| ExecuteSubnetMessageResult::Finished {
                                 response: Err(err),
                                 refund: cycles,
                             },
-                        }
-                    }
+                            |()| ExecuteSubnetMessageResult::Processing,
+                        ),
                     CanisterCall::Ingress(_) => {
                         self.reject_unexpected_ingress(Ic00Method::ReshareChainKey)
                     }
                 }
             }
-
             Ok(Ic00Method::VetKdDeriveEncryptedKey) => match &msg {
                 CanisterCall::Request(request) => {
                     if payload.is_empty() {
@@ -3077,10 +3054,20 @@ impl ExecutionEnvironment {
     fn reshare_chain_key(
         &self,
         state: &mut ReplicatedState,
-        args: ReshareChainKeyArgs,
+        rng: &mut dyn RngCore,
+        chain_key_data: &ChainKeyData,
         request: &Request,
-        target_id: [u8; 32],
     ) -> Result<(), UserError> {
+        let args = ReshareChainKeyArgs::decode(request.method_payload())?;
+        let _key = get_master_public_key(
+            &chain_key_data.master_public_keys,
+            self.own_subnet_id,
+            &args.key_id,
+        )?;
+
+        let mut target_id = [0u8; 32];
+        rng.fill_bytes(&mut target_id);
+
         let nodes = args.get_set_of_nodes()?;
         let registry_version = args.get_registry_version();
 
