@@ -6,7 +6,7 @@ use icrc_ledger_types::icrc1::account::Account;
 use rusqlite::Connection;
 use serde_bytes::ByteBuf;
 use std::{path::Path, sync::Mutex};
-use tracing::{info, warn};
+use tracing::warn;
 
 #[derive(Debug)]
 pub struct StorageClient {
