@@ -71,16 +71,15 @@ pub async fn get_nns_neuron_hotkeys<C: CallCanisters>(
         neuron_ids: vec![neuron_id.id],
         ..Default::default()
     };
-    let response = list_neurons(agent, request).await.unwrap();
+    let response = list_neurons(agent, request)
+        .await
+        .map_err(|err| anyhow!("Failed to list neurons {}", err))?;
     let neuron: Vec<Neuron> = response
         .full_neurons
         .into_iter()
         .filter(|n| n.id == Some(neuron_id))
         .collect();
-    neuron
-        .first()
-        .map(|n| n.hot_keys.clone())
-        .ok_or_else(|| anyhow!("Neuron {:?} not found", neuron_id))
+    Ok(neuron.iter().flat_map(|n| n.hot_keys.clone()).collect())
 }
 
 pub fn get_identity_principal(identity_name: &str) -> Result<PrincipalId> {
