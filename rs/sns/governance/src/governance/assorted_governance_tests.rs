@@ -39,7 +39,7 @@ use ic_nervous_system_clients::{
     canister_id_record::CanisterIdRecord, canister_status::CanisterStatusType,
 };
 use ic_nervous_system_common::{
-    assert_is_err, assert_is_ok, cmc::FakeCmc, ledger::compute_neuron_staking_subaccount_bytes, E8,
+    assert_is_err, assert_is_ok, ledger::compute_neuron_staking_subaccount_bytes, E8,
     ONE_DAY_SECONDS, START_OF_2022_TIMESTAMP_SECONDS,
 };
 use ic_nervous_system_common_test_keys::{
@@ -57,6 +57,8 @@ use std::{
     sync::{Arc, Mutex},
     time::{Duration, SystemTime},
 };
+use ic_nervous_system_canisters::cmc::FakeCmc;
+
 struct AlwaysSucceedingLedger {}
 
 #[async_trait]

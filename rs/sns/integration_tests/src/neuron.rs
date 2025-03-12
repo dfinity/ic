@@ -12,7 +12,7 @@ use ic_ledger_core::{
 };
 use ic_nervous_system_clients::ledger_client::ICRC1Ledger;
 use ic_nervous_system_common::{
-    cmc::FakeCmc, i2d, NervousSystemError, DEFAULT_TRANSFER_FEE, ONE_YEAR_SECONDS,
+    i2d, NervousSystemError, DEFAULT_TRANSFER_FEE, ONE_YEAR_SECONDS,
 };
 use ic_nervous_system_common_test_keys::{
     TEST_USER1_KEYPAIR, TEST_USER2_KEYPAIR, TEST_USER3_KEYPAIR, TEST_USER4_KEYPAIR,
@@ -64,6 +64,7 @@ use std::{
     iter::{zip, FromIterator},
     time::SystemTime,
 };
+use ic_nervous_system_canisters::cmc::FakeCmc;
 
 const E8: u64 = 1_0000_0000;
 

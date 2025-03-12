@@ -23,7 +23,7 @@ use crate::{
 use ic_nervous_system_clients::{
     canister_id_record::CanisterIdRecord, canister_status::CanisterStatusType,
 };
-use ic_nervous_system_common::cmc::FakeCmc;
+use ic_nervous_system_canisters::cmc::FakeCmc;
 use ic_nns_constants::SNS_WASM_CANISTER_ID;
 use maplit::btreemap;
 use pretty_assertions::assert_eq;
