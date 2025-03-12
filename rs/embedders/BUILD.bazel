@@ -1,5 +1,5 @@
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
-load("//bazel:defs.bzl", "rust_bench", "rust_ic_bench", "rust_ic_test_suite_with_extra_srcs")
+load("//bazel:defs.bzl", "rust_ic_bench", "rust_ic_test_suite_with_extra_srcs")
 load("//bazel:fuzz_testing.bzl", "DEFAULT_RUSTC_FLAGS_FOR_FUZZING")
 load("//rs/tests:common.bzl", "UNIVERSAL_CANISTER_ENV", "UNIVERSAL_CANISTER_RUNTIME_DEPS")
 
@@ -200,10 +200,13 @@ rust_ic_bench(
     testonly = True,
     srcs = ["benches/compilation.rs"],
     compile_data = glob(["benches/test-data/*"]),
-    with_test = True,
     data = DATA + UNIVERSAL_CANISTER_TEST_DEPS,
     env = ENV | UNIVERSAL_CANISTER_TEST_ENV,
-    deps = [":embedders", ":embedders_bench"] + DEPENDENCIES + DEV_DEPENDENCIES,
+    with_test = True,
+    deps = [
+        ":embedders",
+        ":embedders_bench",
+    ] + DEPENDENCIES + DEV_DEPENDENCIES,
 )
 
 rust_ic_bench(
