@@ -1349,7 +1349,7 @@ impl ExecutionEnvironment {
                         }
                     }
                     CanisterCall::Ingress(_) => {
-                        self.reject_unexpected_ingress(Ic00Method::ComputeInitialIDkgDealings)
+                        self.reject_unexpected_ingress(Ic00Method::ReshareChainKey)
                     }
                 }
             }
