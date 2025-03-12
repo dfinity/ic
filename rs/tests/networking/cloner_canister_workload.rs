@@ -33,6 +33,7 @@ use ic_system_test_driver::{
     },
     systest,
 };
+use ic_types::malicious_behaviour::MaliciousBehaviour;
 use slog::info;
 use std::time::Duration;
 
@@ -118,7 +119,22 @@ pub fn install_cloner_canisters(env: TestEnv) {
         .subnets()
         .find(|s| s.subnet_type() == SubnetType::Application)
         .unwrap();
-    let app_node = app_subnet.nodes().next().unwrap();
+
+    // let malicious_node = app_subnet
+    //     .nodes()
+    //     .find(|node| node.is_malicious())
+    //     .expect("no malicious node found");
+    // info!(
+    //     &logger,
+    //     "malicious_node is {:?}.",
+    //     malicious_node.get_public_url().to_string()
+    // );
+
+    let app_node = app_subnet
+        .nodes()
+        .filter(|node| !node.is_malicious())
+        .next()
+        .unwrap();
     let counter_canister_bytes = load_wasm(COUNTER_CANISTER_WAT);
 
     info!(

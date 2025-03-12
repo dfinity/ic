@@ -34,3 +34,7 @@ ic-test-utilities-types = { path = "../test_utilities/types" }
 itertools = { workspace = true }
 proptest = { workspace = true }
 test-strategy = "0.4.0"
+
+[features]
+default = []
+malicious_code = []
