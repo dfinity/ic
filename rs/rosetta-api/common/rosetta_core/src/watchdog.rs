@@ -72,10 +72,10 @@ impl WatchdogThread {
     where
         F: FnMut(Box<dyn Fn() + Send + Sync>) -> tokio::task::JoinHandle<()> + Send + 'static,
     {
-        let stopped = self.stopped.clone();
+        let stopped = Arc::clone(&self.stopped);
         let heartbeat_timeout = self.heartbeat_timeout;
         let on_restart = self.on_restart.clone();
-        let last_heartbeat_ms = self.last_heartbeat_ms.clone();
+        let last_heartbeat_ms = Arc::clone(&self.last_heartbeat_ms);
         let skip_first = self.skip_first_heartbeat_check;
 
         let handle = tokio::spawn(async move {
@@ -184,9 +184,7 @@ mod tests {
         watchdog.start(|heartbeat| {
             tokio::spawn(async move {
                 heartbeat();
-                println!(">> HERE 0");
                 loop {
-                    println!(">> HERE 1");
                     // Do not send heartbeats.
                     sleep(Duration::from_secs(2)).await;
                 }
