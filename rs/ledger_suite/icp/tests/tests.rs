@@ -467,7 +467,13 @@ fn archive_blocks_small_test() {
         // First we get the CanisterId of each archive node that has been
         // created.
         println!("[test] retrieving nodes");
-        let nodes: Vec<CanisterId> = ledger.query_("get_nodes", dfn_candid::candid, ()).await?;
+        let nodes: Vec<CanisterId> = Decode!(
+            &ledger
+                .query_("get_nodes", bytes, Encode!(&()).unwrap())
+                .await?,
+            Vec<CanisterId>
+        )
+        .unwrap();
         // 12 blocks, 2 blocks per archive node = 6 archive nodes.
         assert_eq!(nodes.len(), 6, "expected 6 archive nodes");
         println!("[test] retrieved {} nodes: {:?}", nodes.len(), nodes);
@@ -621,7 +627,13 @@ fn archive_blocks_large_test() {
         // First we get the CanisterId of each archive node that has been
         // created.
         println!("[test] retrieving nodes");
-        let nodes: Vec<CanisterId> = ledger.query_("get_nodes", dfn_candid::candid, ()).await?;
+        let nodes: Vec<CanisterId> = Decode!(
+            &ledger
+                .query_("get_nodes", bytes, Encode!(&()).unwrap())
+                .await?,
+            Vec<CanisterId>
+        )
+        .unwrap();
         assert_eq!(nodes.len(), 1, "expected 1 archive node");
         println!("[test] retrieved {} nodes: {:?}", nodes.len(), nodes);
 
@@ -2368,10 +2380,14 @@ async fn ledger_assert_num_blocks(ledger: &Canister<'_>, num_expected: usize) {
 // Helper function to assert the number of Archive Nodes. Also, returns
 // CanisterId's for convenience.
 async fn ledger_assert_num_nodes(ledger: &Canister<'_>, num_expected: usize) -> Vec<CanisterId> {
-    let nodes: Vec<CanisterId> = ledger
-        .update_("get_nodes", dfn_candid::candid, ())
-        .await
-        .unwrap();
+    let nodes: Vec<CanisterId> = Decode!(
+        &ledger
+            .update_("get_nodes", bytes, Encode!(&()).unwrap())
+            .await
+            .unwrap(),
+        Vec<CanisterId>
+    )
+    .unwrap();
     println!("[test] retrieved {} archive nodes", nodes.len());
     assert_eq!(nodes.len(), num_expected);
     nodes
