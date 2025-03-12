@@ -1095,13 +1095,13 @@ pub fn syscalls<
                                 }
                             })
                         })
-                        .and_then(|mem| {
+                        .map(|mem| {
                             // False positive clippy lint.
                             // Issue: https://github.com/rust-lang/rust-clippy/issues/12856
                             // Fixed in: https://github.com/rust-lang/rust-clippy/pull/12892
                             #[allow(clippy::needless_borrows_for_generic_args)]
                             let (mem, _) = mem.data_and_store_mut(&mut c);
-                            Ok(mem)
+                            mem
                         })
                         .unwrap();
 

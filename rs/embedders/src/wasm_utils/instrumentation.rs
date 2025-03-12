@@ -1457,11 +1457,6 @@ fn export_additional_symbols<'a>(
     debug_assert!(super::validation::RESERVED_SYMBOLS.contains(&prev_resident_pages_export.name));
     module.exports.push(prev_resident_pages_export);
 
-    // Print all module exports.
-    for export in &module.exports {
-        println!("Exported: {:?}", export);
-    }
-
     // push the instructions counter
     module.globals.push(Global {
         ty: GlobalType {
