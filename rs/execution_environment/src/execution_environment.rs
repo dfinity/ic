@@ -38,15 +38,16 @@ use ic_limits::{LOG_CANISTER_OPERATION_CYCLES_THRESHOLD, SMALL_APP_SUBNET_MAX_SI
 use ic_logger::{error, info, warn, ReplicaLogger};
 use ic_management_canister_types_private::{
     CanisterChangeOrigin, CanisterHttpRequestArgs, CanisterIdRecord, CanisterInfoRequest,
-    CanisterInfoResponse, CanisterStatusType, ClearChunkStoreArgs, ComputeInitialIDkgDealingsArgs,
-    CreateCanisterArgs, DeleteCanisterSnapshotArgs, ECDSAPublicKeyArgs, ECDSAPublicKeyResponse,
-    EmptyBlob, InstallChunkedCodeArgs, InstallCodeArgsV2, ListCanisterSnapshotArgs,
-    LoadCanisterSnapshotArgs, MasterPublicKeyId, Method as Ic00Method, NodeMetricsHistoryArgs,
-    Payload as Ic00Payload, ProvisionalCreateCanisterWithCyclesArgs, ProvisionalTopUpCanisterArgs,
-    SchnorrAlgorithm, SchnorrPublicKeyArgs, SchnorrPublicKeyResponse, SetupInitialDKGArgs,
-    SignWithECDSAArgs, SignWithSchnorrArgs, SignWithSchnorrAux, StoredChunksArgs, SubnetInfoArgs,
-    SubnetInfoResponse, TakeCanisterSnapshotArgs, UninstallCodeArgs, UpdateSettingsArgs,
-    UploadChunkArgs, VetKdDeriveEncryptedKeyArgs, VetKdPublicKeyArgs, VetKdPublicKeyResult, IC_00,
+    CanisterInfoResponse, CanisterSnapshotMetadataArgs, CanisterStatusType, ClearChunkStoreArgs,
+    ComputeInitialIDkgDealingsArgs, CreateCanisterArgs, DeleteCanisterSnapshotArgs,
+    ECDSAPublicKeyArgs, ECDSAPublicKeyResponse, EmptyBlob, InstallChunkedCodeArgs,
+    InstallCodeArgsV2, ListCanisterSnapshotArgs, LoadCanisterSnapshotArgs, MasterPublicKeyId,
+    Method as Ic00Method, NodeMetricsHistoryArgs, Payload as Ic00Payload,
+    ProvisionalCreateCanisterWithCyclesArgs, ProvisionalTopUpCanisterArgs, SchnorrAlgorithm,
+    SchnorrPublicKeyArgs, SchnorrPublicKeyResponse, SetupInitialDKGArgs, SignWithECDSAArgs,
+    SignWithSchnorrArgs, SignWithSchnorrAux, StoredChunksArgs, SubnetInfoArgs, SubnetInfoResponse,
+    TakeCanisterSnapshotArgs, UninstallCodeArgs, UpdateSettingsArgs, UploadChunkArgs,
+    VetKdDeriveEncryptedKeyArgs, VetKdPublicKeyArgs, VetKdPublicKeyResult, IC_00,
 };
 use ic_metrics::MetricsRegistry;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
@@ -1643,6 +1644,17 @@ impl ExecutionEnvironment {
                     self.delete_canister_snapshot(*msg.sender(), &mut state, args, round_limits)
                         .map(|res| (res, Some(canister_id)))
                 });
+                ExecuteSubnetMessageResult::Finished {
+                    response: res,
+                    refund: msg.take_cycles(),
+                }
+            }
+
+            Ok(Ic00Method::CanisterSnapshotMetadata) => {
+                // TODO: EXC-1955
+                #[allow(clippy::bind_instead_of_map)]
+                let res = CanisterSnapshotMetadataArgs::decode(payload)
+                    .and_then(|_args| Ok((vec![], None)));
                 ExecuteSubnetMessageResult::Finished {
                     response: res,
                     refund: msg.take_cycles(),

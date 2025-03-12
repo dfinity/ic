@@ -11,10 +11,10 @@ use ic_config::{
 };
 use ic_management_canister_types_private::{
     CanisterIdRecord, CanisterInfoRequest, CanisterInstallMode, CanisterInstallModeV2,
-    CanisterSettingsArgsBuilder, ClearChunkStoreArgs, DeleteCanisterSnapshotArgs, EmptyBlob,
-    InstallChunkedCodeArgs, InstallCodeArgs, ListCanisterSnapshotArgs, LoadCanisterSnapshotArgs,
-    Method, Payload, StoredChunksArgs, TakeCanisterSnapshotArgs, UninstallCodeArgs,
-    UpdateSettingsArgs, UploadChunkArgs, IC_00,
+    CanisterSettingsArgsBuilder, CanisterSnapshotMetadataArgs, ClearChunkStoreArgs,
+    DeleteCanisterSnapshotArgs, EmptyBlob, InstallChunkedCodeArgs, InstallCodeArgs,
+    ListCanisterSnapshotArgs, LoadCanisterSnapshotArgs, Method, Payload, StoredChunksArgs,
+    TakeCanisterSnapshotArgs, UninstallCodeArgs, UpdateSettingsArgs, UploadChunkArgs, IC_00,
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::canister_state::{execution_state::NextScheduledMethod, NextExecution};
@@ -1268,6 +1268,10 @@ fn dts_aborted_execution_does_not_block_subnet_messages() {
                     (aborted_canister_id, 0).into(),
                 )
                 .encode();
+                (method, call_args().other_side(args))
+            }),
+            Method::CanisterSnapshotMetadata => test_supported(|aborted_canister_id| {
+                let args = CanisterSnapshotMetadataArgs::new(aborted_canister_id, vec![]).encode();
                 (method, call_args().other_side(args))
             }),
         }

@@ -204,7 +204,8 @@ impl ExecutionEnvironmentMetrics {
                     | ic00::Method::TakeCanisterSnapshot
                     | ic00::Method::LoadCanisterSnapshot
                     | ic00::Method::ListCanisterSnapshots
-                    | ic00::Method::DeleteCanisterSnapshot => String::from("fast"),
+                    | ic00::Method::DeleteCanisterSnapshot
+                    | ic00::Method::CanisterSnapshotMetadata => String::from("fast"),
 
                     // "Slow" management methods that might require several execution
                     // rounds to be completed, either due to using DTS or due to

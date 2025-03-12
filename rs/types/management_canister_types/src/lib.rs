@@ -127,6 +127,9 @@ pub enum Method {
     LoadCanisterSnapshot,
     ListCanisterSnapshots,
     DeleteCanisterSnapshot,
+
+    // Support for import and export of canister snapshots
+    CanisterSnapshotMetadata,
 }
 
 fn candid_error_to_user_error(err: candid::Error) -> UserError {
@@ -3638,6 +3641,18 @@ pub struct CanisterSnapshotMetadataArgs {
     canister_id: PrincipalId,
     #[serde(with = "serde_bytes")]
     snapshot_id: Vec<u8>,
+}
+
+impl CanisterSnapshotMetadataArgs {
+    pub fn new(canister_id: CanisterId, snapshot_id: Vec<u8>) -> Self {
+        Self {
+            canister_id: canister_id.get(),
+            snapshot_id,
+        }
+    }
+    pub fn get_canister_id(&self) -> CanisterId {
+        CanisterId::unchecked_from_principal(self.canister_id)
+    }
 }
 
 impl Payload<'_> for CanisterSnapshotMetadataArgs {}
