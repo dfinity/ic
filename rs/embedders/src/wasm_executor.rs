@@ -799,11 +799,6 @@ pub fn process(
         Err(_) => None,
     };
 
-    // If the dirty page optimization slicing has been performed, we know the dirty page copying
-    // was a heavy operation, therefore we take into account its overhead in number of instructions
-    // accounted for this round, when only dirty page copying has happened.
-    // If the optimization wasn't triggered, then num_dirty_pages = 0, therefore the overhead is 0
-    // and the number of instructions is the one accounted for at the beginning of this function.
     let output_slice = SliceExecutionOutput {
         executed_instructions: NumInstructions::from(slice_instructions_executed.get()),
     };
