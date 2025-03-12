@@ -418,11 +418,19 @@ impl Health for ProxyRouter {
             self.published_registry_snapshot.load_full(),
         ) {
             (Some(rt), Some(snap)) => {
+                if snap.subnets.is_empty() {
+                    return ReplicaHealthStatus::CertifiedStateBehind;
+                }
+
                 // Count the number of healthy subnets
                 let healthy_subnets_count = snap
                     .subnets
                     .iter()
                     .filter(|&subnet| {
+                        if subnet.nodes.is_empty() {
+                            return false;
+                        }
+
                         // Get number of nodes in this subnet from the active routing table.
                         // If, for some reason, the subnet isn't there (it should be) - assume the number is 0
                         let healthy_nodes = rt

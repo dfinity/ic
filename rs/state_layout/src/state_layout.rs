@@ -1,6 +1,6 @@
 use ic_base_types::{NumBytes, NumSeconds};
 use ic_logger::{error, info, warn, ReplicaLogger};
-use ic_management_canister_types_private::LogVisibilityV2;
+use ic_management_canister_types_private::{LogVisibilityV2, OnLowWasmMemoryHookStatus};
 use ic_metrics::{buckets::decimal_buckets, MetricsRegistry};
 use ic_protobuf::{
     proxy::{try_from_option_field, ProxyDecodeError},
@@ -13,10 +13,7 @@ use ic_protobuf::{
 use ic_replicated_state::{
     canister_state::{
         execution_state::{NextScheduledMethod, WasmMetadata},
-        system_state::{
-            wasm_chunk_store::WasmChunkStoreMetadata, CanisterHistory, CyclesUseCase,
-            OnLowWasmMemoryHookStatus,
-        },
+        system_state::{wasm_chunk_store::WasmChunkStoreMetadata, CanisterHistory, CyclesUseCase},
     },
     page_map::{Shard, StorageLayout, StorageResult},
     CallContextManager, CanisterStatus, ExecutionTask, ExportedFunctions, Global, NumWasmPages,

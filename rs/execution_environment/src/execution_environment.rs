@@ -1,7 +1,10 @@
 use crate::{
     canister_manager::{
-        CanisterManager, CanisterManagerError, CanisterMgrConfig, DtsInstallCodeResult,
-        InstallCodeContext, PausedInstallCodeExecution, StopCanisterResult, UploadChunkResult,
+        types::{
+            CanisterManagerError, CanisterMgrConfig, DtsInstallCodeResult, InstallCodeContext,
+            PausedInstallCodeExecution, StopCanisterResult, UploadChunkResult,
+        },
+        CanisterManager,
     },
     canister_settings::CanisterSettings,
     execution::{
