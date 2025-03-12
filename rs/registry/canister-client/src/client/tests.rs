@@ -239,4 +239,6 @@ fn can_retrieve_entries_correctly() {
 }
 
 #[test]
-fn test_sync_registry_stored() {}
+fn test_sync_registry_stored() {
+    let client = CanisterRegistryStore::<DummyState>::new();
+}

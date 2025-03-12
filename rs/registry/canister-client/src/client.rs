@@ -22,7 +22,7 @@ type CacheState = (
 
 pub struct CanisterRegistryStore<S: RegistryStoreStableMemory> {
     _stable_memory: PhantomData<S>,
-    // TODO make this cache work (where at)
+    // TODO DO NOT MERGE make this cache work (where at)
     latest_version: RegistryVersion,
 }
 

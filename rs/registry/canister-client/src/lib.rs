@@ -87,6 +87,7 @@ pub trait CanisterRegistryClient: Send + Sync {
     fn get_latest_version(&self) -> RegistryVersion;
 
     /// Updates the local version to the latest from the Registry. This may execute
-    /// over multiple messages
+    /// over multiple messages.  It should generally be scheduled in a timer, but if it's never called
+    /// the local registry data will not be in sync with the data in the Registry canister.
     async fn sync_registry_stored(&self) -> Result<RegistryVersion, String>;
 }
