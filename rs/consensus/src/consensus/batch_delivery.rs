@@ -342,7 +342,7 @@ impl RemoteDkgResults {
             NiDkgTag::HighThresholdForKey(_) => {
                 error!(
                     logger,
-                    "Cannot add a ReshareChainKey key to a SetupInitialDKG request"
+                    "Cannot add a ReshareChainKey transcript to a SetupInitialDKG request: {id}"
                 );
                 return;
             }
