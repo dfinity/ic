@@ -161,6 +161,10 @@ pub fn has_timer_task(timer_id: TimerId) -> bool {
     TIMER_TASKS.with(|timers| timers.borrow().contains_key(timer_id))
 }
 
+pub fn existing_timer_ids() -> Vec<TimerId> {
+    TIMER_TASKS.with(|timers| timers.borrow().keys().collect())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

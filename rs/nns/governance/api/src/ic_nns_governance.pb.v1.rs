@@ -2338,6 +2338,17 @@ pub struct VotingPowerEconomics {
     /// Initially, set to 1/12 years.
     #[prost(uint64, optional, tag = "2")]
     pub clear_following_after_seconds: ::core::option::Option<u64>,
+
+    /// The minimum dissolve delay a neuron must have in order to be eligible to vote or
+    /// make proposals.
+    ///
+    /// Neurons with a dissolve delay lower than this threshold will not have
+    /// voting power, even if they are otherwise active.
+    ///
+    /// This value is an essential part of the staking mechanism, promoting
+    /// long-term alignment with the network's governance.
+    #[prost(uint64, optional, tag = "3")]
+    pub neuron_minimum_dissolve_delay_to_vote_seconds: ::core::option::Option<u64>,
 }
 
 /// The thresholds specify the shape of the ideal matching function used by the Neurons' Fund to
@@ -3069,9 +3080,6 @@ pub struct Governance {
     pub spawning_neurons: Option<bool>,
     #[prost(message, optional, tag = "20")]
     pub making_sns_proposal: Option<governance::MakingSnsProposal>,
-    /// Migration related data.
-    #[prost(message, optional, tag = "21")]
-    pub migrations: Option<governance::Migrations>,
     /// A Structure used during upgrade to store the index of topics for neurons to their followers.
     /// This is the inverse of what is stored in a Neuron (its followees).
     #[prost(map = "int32, message", tag = "22")]
@@ -3317,104 +3325,6 @@ pub mod governance {
         pub caller: Option<PrincipalId>,
         #[prost(message, optional, tag = "3")]
         pub proposal: Option<super::Proposal>,
-    }
-    /// Progress of a migration that (potentially) is performed over the course of more than one heartbeat call.
-    #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
-    #[allow(clippy::derive_partial_eq_without_eq)]
-    #[derive(Clone, PartialEq, ::prost::Message)]
-    pub struct Migration {
-        /// Migration status.
-        #[prost(enumeration = "migration::MigrationStatus", optional, tag = "1")]
-        pub status: Option<i32>,
-        /// The reason why it failed. Should only be present when the status is FAILED.
-        /// This is only for debugging and it should not be used programmatically (other than its presence).
-        #[prost(string, optional, tag = "2")]
-        pub failure_reason: Option<::prost::alloc::string::String>,
-        /// Migration progress (cursor).
-        #[prost(oneof = "migration::Progress", tags = "3")]
-        pub progress: Option<migration::Progress>,
-    }
-    /// Nested message and enum types in `Migration`.
-    pub mod migration {
-        use super::*;
-
-        #[derive(
-            candid::CandidType,
-            candid::Deserialize,
-            serde::Serialize,
-            comparable::Comparable,
-            Clone,
-            Copy,
-            Debug,
-            PartialEq,
-            Eq,
-            Hash,
-            PartialOrd,
-            Ord,
-            ::prost::Enumeration,
-        )]
-        #[repr(i32)]
-        pub enum MigrationStatus {
-            /// Unspecified.
-            Unspecified = 0,
-            /// Migration is in progress.
-            InProgress = 1,
-            /// Migration succeeded.
-            Succeeded = 2,
-            /// Migration failed.
-            Failed = 3,
-        }
-        impl MigrationStatus {
-            /// String value of the enum field names used in the ProtoBuf definition.
-            ///
-            /// The values are not transformed in any way and thus are considered stable
-            /// (if the ProtoBuf definition does not change) and safe for programmatic use.
-            pub fn as_str_name(&self) -> &'static str {
-                match self {
-                    MigrationStatus::Unspecified => "MIGRATION_STATUS_UNSPECIFIED",
-                    MigrationStatus::InProgress => "MIGRATION_STATUS_IN_PROGRESS",
-                    MigrationStatus::Succeeded => "MIGRATION_STATUS_SUCCEEDED",
-                    MigrationStatus::Failed => "MIGRATION_STATUS_FAILED",
-                }
-            }
-            /// Creates an enum from field names used in the ProtoBuf definition.
-            pub fn from_str_name(value: &str) -> Option<Self> {
-                match value {
-                    "MIGRATION_STATUS_UNSPECIFIED" => Some(Self::Unspecified),
-                    "MIGRATION_STATUS_IN_PROGRESS" => Some(Self::InProgress),
-                    "MIGRATION_STATUS_SUCCEEDED" => Some(Self::Succeeded),
-                    "MIGRATION_STATUS_FAILED" => Some(Self::Failed),
-                    _ => None,
-                }
-            }
-        }
-        /// Migration progress (cursor).
-        #[derive(
-            candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable,
-        )]
-        #[allow(clippy::derive_partial_eq_without_eq)]
-        #[derive(Clone, PartialEq, ::prost::Oneof)]
-        pub enum Progress {
-            /// Last neuron id migrated.
-            #[prost(message, tag = "3")]
-            LastNeuronId(NeuronId),
-        }
-    }
-    /// The status of all on-going (and recently completed) migrations (that take
-    /// place over the course of multiple heartbeat calls).
-    ///
-    /// Each Migration field corresponds to one (ongoing or recently completed) migration.
-    ///
-    /// After a migration is finished, it should be OK to reserve the tag and lose the data.
-    #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
-    #[allow(clippy::derive_partial_eq_without_eq)]
-    #[derive(Clone, PartialEq, ::prost::Message)]
-    pub struct Migrations {
-        /// Migrates neuron indexes to stable storage.
-        #[prost(message, optional, tag = "1")]
-        pub neuron_indexes_migration: Option<Migration>,
-        #[prost(message, optional, tag = "2")]
-        pub copy_inactive_neurons_to_stable_memory_migration: Option<Migration>,
     }
     /// A map of followees to their followers.
     #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]

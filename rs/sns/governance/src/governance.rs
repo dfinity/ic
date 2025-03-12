@@ -3489,6 +3489,10 @@ impl Governance {
         let proposal_num = self.next_proposal_id();
         let proposal_id = ProposalId { id: proposal_num };
 
+        let proposal_topic = self
+            .get_topic_for_action(action)
+            .map_err(|err| GovernanceError::new_with_message(ErrorType::InvalidProposal, err))?;
+
         // Create the proposal.
         let mut proposal_data = ProposalData {
             action: u64::from(action),
@@ -3520,6 +3524,7 @@ impl Governance {
             // TODO(NNS1-2731): Delete this.
             is_eligible_for_rewards: true,
             action_auxiliary,
+            topic: proposal_topic.map(i32::from),
         };
 
         proposal_data.wait_for_quiet_state = Some(WaitForQuietState {
@@ -6065,6 +6070,9 @@ mod fail_stuck_upgrade_in_progress_tests;
 
 #[cfg(test)]
 mod advance_target_sns_version_tests;
+
+#[cfg(test)]
+mod proposal_topics_tests;
 
 #[cfg(test)]
 mod test_helpers;

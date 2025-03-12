@@ -7,16 +7,16 @@ use ic_management_canister_types_private::{
     CanisterHttpRequestArgs, CanisterIdRecord, CanisterSettingsArgsBuilder, CanisterStatusResultV2,
     CanisterStatusType, ClearChunkStoreArgs, DerivationPath, EcdsaKeyId, EmptyBlob,
     FetchCanisterLogsRequest, HttpMethod, LogVisibilityV2, MasterPublicKeyId, Method,
-    Payload as Ic00Payload, ProvisionalCreateCanisterWithCyclesArgs, ProvisionalTopUpCanisterArgs,
-    SchnorrAlgorithm, SchnorrKeyId, TakeCanisterSnapshotArgs, TransformContext, TransformFunc,
-    UpdateSettingsArgs, UploadChunkArgs, VetKdCurve, VetKdKeyId, IC_00,
+    OnLowWasmMemoryHookStatus, Payload as Ic00Payload, ProvisionalCreateCanisterWithCyclesArgs,
+    ProvisionalTopUpCanisterArgs, SchnorrAlgorithm, SchnorrKeyId, TakeCanisterSnapshotArgs,
+    TransformContext, TransformFunc, UpdateSettingsArgs, UploadChunkArgs, VetKdCurve, VetKdKeyId,
+    IC_00,
 };
 use ic_registry_routing_table::{canister_id_into_u64, CanisterIdRange, RoutingTable};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
     canister_state::{
-        system_state::{CyclesUseCase, OnLowWasmMemoryHookStatus},
-        DEFAULT_QUEUE_CAPACITY, WASM_PAGE_SIZE_IN_BYTES,
+        system_state::CyclesUseCase, DEFAULT_QUEUE_CAPACITY, WASM_PAGE_SIZE_IN_BYTES,
     },
     testing::{CanisterQueuesTesting, SystemStateTesting},
     CanisterStatus, ReplicatedState, SystemState,
@@ -3688,6 +3688,35 @@ fn test_vetkd_derive_encrypted_key_api_is_disabled_without_key() {
     assert_eq!(
         get_reject_message(response),
         "Subnet yndj2-3ybaa-aaaaa-aaaap-yai does not hold threshold key vetkd:Bls12_381_G2:some_key.",
+    )
+}
+
+#[test]
+fn test_vetkd_derive_encrypted_key_rejects_invalid_transport_keys() {
+    let key_id = make_vetkd_key("some_key");
+    let own_subnet = subnet_test_id(1);
+    let nns_subnet = subnet_test_id(2);
+    let nns_canister = canister_test_id(0x10);
+    let mut test = ExecutionTestBuilder::new()
+        .with_own_subnet_id(own_subnet)
+        .with_nns_subnet_id(nns_subnet)
+        .with_caller(nns_subnet, nns_canister)
+        .with_chain_key(key_id.clone())
+        .build();
+    let method = Method::VetKdDeriveEncryptedKey;
+    let args = ic00::VetKdDeriveEncryptedKeyArgs {
+        derivation_id: vec![],
+        // invalid transport key
+        encryption_public_key: [1; 48],
+        derivation_domain: vec![],
+        key_id: into_inner_vetkd(key_id),
+    };
+    test.inject_call_to_ic00(method, args.encode(), Cycles::new(0));
+    test.execute_all();
+    let response = test.xnet_messages()[0].clone();
+    assert_eq!(
+        get_reject_message(response),
+        "The provided transport public key is invalid.",
     )
 }
 

@@ -249,7 +249,7 @@ fn test_compute_initial_idkg_dealings_sender_on_nns() {
             env.get_latest_state()
                 .metadata
                 .subnet_call_context_manager
-                .idkg_dealings_contexts
+                .reshare_chain_key_contexts
                 .len(),
             0
         );
@@ -280,7 +280,7 @@ fn test_compute_initial_idkg_dealings_sender_on_nns() {
             env.get_latest_state()
                 .metadata
                 .subnet_call_context_manager
-                .idkg_dealings_contexts
+                .reshare_chain_key_contexts
                 .len(),
             1
         );
@@ -535,6 +535,69 @@ fn test_sign_with_threshold_key_unknown_key_rejected() {
                 format_keys(vec![correct_key]),
             )))
         );
+    }
+}
+
+#[test]
+fn test_schnorr_sign_with_invalid_aux_field_rejected() {
+    let test_cases = vec![
+        (make_bip340_key("bip340_key"), 8),
+        (make_bip340_key("bip340_key"), 100),
+        (make_ed25519_key("ed25519_key"), 0),
+        (make_ed25519_key("ed25519_key"), 32),
+    ];
+
+    let method = Method::SignWithSchnorr;
+
+    for (key, aux_len) in test_cases {
+        let own_subnet = subnet_test_id(1);
+        let nns_subnet = subnet_test_id(2);
+        let env = StateMachineBuilder::new()
+            .with_checkpoints_enabled(false)
+            .with_subnet_id(own_subnet)
+            .with_nns_subnet_id(nns_subnet)
+            .with_chain_key(key.clone())
+            .build();
+
+        let canister_id = create_universal_canister(&env);
+
+        let sign_with_schnorr_args = {
+            let aux = SignWithSchnorrAux::Bip341(SignWithBip341Aux {
+                merkle_root_hash: vec![0; aux_len].into(),
+            });
+
+            ic00::SignWithSchnorrArgs {
+                message: vec![],
+                derivation_path: DerivationPath::new(vec![]),
+                key_id: into_inner_schnorr(key.clone()),
+                aux: Some(aux),
+            }
+        };
+
+        let result = env.execute_ingress(
+            canister_id,
+            "update",
+            wasm()
+                .call_with_cycles(
+                    ic00::IC_00,
+                    method,
+                    call_args()
+                        .other_side(sign_with_schnorr_args.encode())
+                        .on_reject(wasm().reject_message().reject()),
+                    Cycles::from(100_000_000_000u128),
+                )
+                .build(),
+        );
+
+        let expected_reason = match key {
+            MasterPublicKeyId::Schnorr(kid) => match kid.algorithm {
+                SchnorrAlgorithm::Bip340Secp256k1 => "Invalid aux field for Bip340Secp256k1",
+                SchnorrAlgorithm::Ed25519 => "Schnorr algorithm Ed25519 does not support aux input",
+            },
+            _ => panic!("Unexpected master key type for this test"),
+        };
+
+        assert_eq!(result, Ok(WasmResult::Reject(expected_reason.to_string())));
     }
 }
 

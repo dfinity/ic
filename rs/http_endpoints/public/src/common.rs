@@ -156,7 +156,6 @@ fn cbor_content_type(headers: &HeaderMap) -> bool {
     content_type.to_lowercase() == CONTENT_TYPE_CBOR
 }
 
-#[async_trait::async_trait]
 impl<T, S> FromRequest<S> for Cbor<T>
 where
     T: for<'a> Deserialize<'a>,
@@ -186,7 +185,6 @@ where
 
 pub(crate) struct WithTimeout<E>(pub E);
 
-#[async_trait::async_trait]
 impl<S, E> FromRequest<S> for WithTimeout<E>
 where
     S: Send + Sync,

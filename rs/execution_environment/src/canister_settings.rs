@@ -11,7 +11,7 @@ use ic_types::{
 use num_traits::{cast::ToPrimitive, SaturatingSub};
 use std::convert::TryFrom;
 
-use crate::canister_manager::CanisterManagerError;
+use crate::canister_manager::types::CanisterManagerError;
 
 /// These limit comes from the spec and is not expected to change,
 /// which is why it is not part of the replica config.

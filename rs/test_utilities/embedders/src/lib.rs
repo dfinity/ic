@@ -33,6 +33,7 @@ pub struct WasmtimeInstanceBuilder {
     network_topology: NetworkTopology,
     config: ic_config::embedders::Config,
     canister_memory_limit: NumBytes,
+    memory_usage: NumBytes,
 }
 
 impl Default for WasmtimeInstanceBuilder {
@@ -47,6 +48,7 @@ impl Default for WasmtimeInstanceBuilder {
             network_topology: NetworkTopology::default(),
             config: ic_config::embedders::Config::default(),
             canister_memory_limit: NumBytes::from(4 << 30), // Set to 4 GiB by default
+            memory_usage: NumBytes::from(0),
         }
     }
 }
@@ -103,6 +105,13 @@ impl WasmtimeInstanceBuilder {
         }
     }
 
+    pub fn with_memory_usage(self, memory_usage: NumBytes) -> Self {
+        Self {
+            memory_usage,
+            ..self
+        }
+    }
+
     pub fn try_build(self) -> Result<WasmtimeInstance, (HypervisorError, SystemApiImpl)> {
         let log = no_op_logger();
 
@@ -145,7 +154,7 @@ impl WasmtimeInstanceBuilder {
         let api = ic_system_api::SystemApiImpl::new(
             self.api_type,
             sandbox_safe_system_state,
-            ic_types::NumBytes::from(0),
+            self.memory_usage,
             ic_replicated_state::MessageMemoryUsage::ZERO,
             ExecutionParameters {
                 instruction_limits: InstructionLimits::new(

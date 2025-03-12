@@ -1084,7 +1084,10 @@ where
         standards.push(standard.name);
     }
     standards.sort();
-    assert_eq!(standards, vec!["ICRC-1", "ICRC-2", "ICRC-21", "ICRC-3"]);
+    assert_eq!(
+        standards,
+        vec!["ICRC-1", "ICRC-10", "ICRC-2", "ICRC-21", "ICRC-3"]
+    );
 }
 
 pub fn test_total_supply<T>(ledger_wasm: Vec<u8>, encode_init_args: fn(InitArgs) -> T)
@@ -5133,7 +5136,10 @@ pub mod archiving {
             );
             // Verify that block `0` is only reported to exist in one place.
             let get_blocks_res = icrc3_get_blocks(&env, ledger_id, 0, 1);
-            assert!(!ledger_reports_block_in_two_places(0, &get_blocks_res));
+            assert!(!ledger_reports_first_block_in_two_places(
+                0,
+                &get_blocks_res
+            ));
 
             // Tick until the transfer completes, meaning the archiving also completes.
             const MAX_TICKS: usize = 500;
@@ -5146,7 +5152,10 @@ pub mod archiving {
                 transfer_status = message_status(&env, &transfer_message_id);
                 // Verify that block `0` is only reported to exist in one place.
                 let get_blocks_res = icrc3_get_blocks(&env, ledger_id, 0, 1);
-                assert!(!ledger_reports_block_in_two_places(0, &get_blocks_res));
+                assert!(!ledger_reports_first_block_in_two_places(
+                    0,
+                    &get_blocks_res
+                ));
             }
             let transfer_result = Decode!(
                 &transfer_status.unwrap()
@@ -5257,7 +5266,7 @@ pub mod archiving {
         }
         // Verify that the ledger reports block `0` to be present only in the ledger
         let get_blocks_res = icrc3_get_blocks(&env, ledger_id, 0, 1);
-        assert!(!ledger_reports_block_in_two_places(0, &get_blocks_res));
+        assert!(!ledger_reports_first_block_in_two_places(0, &get_blocks_res));
         // Verify that the response contained no archive info.
         assert_eq!(
             check_if_block_in_ledger_and_archive(&env, 0, &get_blocks_res),
@@ -5305,7 +5314,10 @@ pub mod archiving {
         .unwrap()
     }
 
-    fn ledger_reports_block_in_two_places(
+    // Verify that the ledger reports that the first block is present in both the ledger and the
+    // first and only archive. This function assumes that the `icrc3_get_blocks_result` is the
+    // result of a query of length 1.
+    fn ledger_reports_first_block_in_two_places(
         block_id: u64,
         icrc3_get_blocks_result: &GetBlocksResult,
     ) -> bool {

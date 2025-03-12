@@ -64,7 +64,7 @@ use ic_nns_governance::{
     governance_proto_builder::GovernanceProtoBuilder,
     pb::v1::{
         add_or_remove_node_provider::Change,
-        governance::{GovernanceCachedMetrics, GovernanceCachedMetricsChange, MigrationsDesc},
+        governance::{GovernanceCachedMetrics, GovernanceCachedMetricsChange},
         governance_error::ErrorType::{
             self, InsufficientFunds, NotAuthorized, NotFound, ResourceExhausted,
         },
@@ -567,17 +567,6 @@ fn test_single_neuron_proposal_new() {
                 GovernanceChange::MaturityModulationLastUpdatedAtTimestampSeconds(
                     OptionChange::Different(None, Some(999111017),)
                 ),
-                GovernanceChange::Migrations(
-                    OptionChange::Different(
-                            None,
-                            Some(
-                                MigrationsDesc {
-                                    neuron_indexes_migration: None,
-                                    copy_inactive_neurons_to_stable_memory_migration: None
-                                },
-                            ),
-                        ),
-                    ),
             ]),
             NNSStateChange::LatestGcNumProposals(
                 comparable::UsizeChange(
@@ -3647,9 +3636,8 @@ async fn test_reward_event_proposals_last_longer_than_reward_period() {
     gov.run_periodic_tasks().now_or_never();
     assert_eq!(gov.latest_reward_event().day_after_genesis, 6);
     // let's advance far enough to trigger a reward event
-    fake_driver.advance_time_by(REWARD_DISTRIBUTION_PERIOD_SECONDS);
-    run_pending_timers();
-    gov.run_periodic_tasks().now_or_never();
+    fake_driver.advance_time_by(REWARD_DISTRIBUTION_PERIOD_SECONDS + 1);
+    run_pending_timers_every_interval_for_count(std::time::Duration::from_secs(3), 3);
 
     // Inspect latest_reward_event.
     let fully_elapsed_reward_rounds = 7;
@@ -3708,7 +3696,7 @@ async fn test_reward_event_proposals_last_longer_than_reward_period() {
     // Now let's advance again -- a new empty reward event should happen
     fake_driver.advance_time_by(REWARD_DISTRIBUTION_PERIOD_SECONDS);
     run_pending_timers();
-    gov.run_periodic_tasks().now_or_never();
+
     assert_eq!(
         *gov.latest_reward_event(),
         RewardEvent {
@@ -4292,6 +4280,8 @@ fn compute_maturities(
     fake_driver.advance_time_by(1);
     run_pending_timers();
 
+    run_pending_timers_every_interval_for_count(core::time::Duration::from_secs(10), 3);
+
     // Inspect latest_reward_event.
     let actual_reward_event = gov.latest_reward_event();
     assert_eq!(
@@ -4859,7 +4849,7 @@ fn test_approve_kyc() {
         .with_neuron(&NeuronId::from_u64(4), |n| n.kyc_verified)
         .expect("Neuron not found"));
 
-    gov.approve_genesis_kyc(&[principal1, principal2]);
+    gov.approve_genesis_kyc(&[principal1, principal2]).unwrap();
 
     assert!(gov
         .neuron_store
@@ -8432,6 +8422,22 @@ fn test_network_economics_proposal() {
         .unwrap()
         .neuron_minimum_stake_e8s = 1234;
 
+    // Verify that neuron_minimum_dissolve_delay_to_vote_seconds is set to 6 months by default.
+    assert_eq!(
+        gov.heap_data
+            .economics
+            .as_ref()
+            .unwrap()
+            .voting_power_economics
+            .unwrap()
+            .neuron_minimum_dissolve_delay_to_vote_seconds,
+        Some(MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS),
+    );
+
+    // A value that differs from the default, useful for testing that the proposal has the intended effect.
+    let non_default_neuron_minimum_dissolve_delay_to_vote_seconds =
+        MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS / 2;
+
     // Propose to change some, NetworkEconomics parameters.
     let pid = match gov
         .manage_neuron(
@@ -8448,6 +8454,9 @@ fn test_network_economics_proposal() {
                         voting_power_economics: Some(VotingPowerEconomics {
                             start_reducing_voting_power_after_seconds: Some(42),
                             clear_following_after_seconds: Some(4242),
+                            neuron_minimum_dissolve_delay_to_vote_seconds: Some(
+                                non_default_neuron_minimum_dissolve_delay_to_vote_seconds,
+                            ),
                         }),
                         ..Default::default()
                     })),
@@ -8478,6 +8487,9 @@ fn test_network_economics_proposal() {
             voting_power_economics: Some(VotingPowerEconomics {
                 start_reducing_voting_power_after_seconds: Some(42),
                 clear_following_after_seconds: Some(4242),
+                neuron_minimum_dissolve_delay_to_vote_seconds: Some(
+                    non_default_neuron_minimum_dissolve_delay_to_vote_seconds
+                )
             }),
 
             // No changes to the rest.
@@ -14350,7 +14362,7 @@ async fn distribute_rewards_test() {
     // Step 1.1: Craft many neurons.
     // A number whose only significance is that it is not Protocol Buffers default (i.e. 0.0).
     let starting_maturity = 3;
-    let neuron_range = 1000..2000;
+    let neuron_range = 100..200;
     let neurons = neuron_range
         .clone()
         .map(|id| Neuron {
@@ -14450,7 +14462,7 @@ async fn distribute_rewards_test() {
 
     // Step 2: Run code under test.
     governance.run_periodic_tasks().await;
-    run_pending_timers_every_interval_for_count(std::time::Duration::from_secs(2), 10);
+    run_pending_timers_every_interval_for_count(std::time::Duration::from_secs(2), 200);
 
     // Step 3: Inspect results.
 
