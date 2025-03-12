@@ -1589,8 +1589,11 @@ fn can_compile(
 ) -> Result<(), WasmValidationError> {
     let config = wasmtime_validation_config(embedders_config);
     let engine = wasmtime::Engine::new(&config).expect("Failed to create wasmtime::Engine");
-    wasmtime::Module::validate(&engine, wasm.as_slice()).map_err(|_err| {
-        WasmValidationError::WasmtimeValidation("wasmtime::Module::validate() failed".into())
+    wasmtime::Module::validate(&engine, wasm.as_slice()).map_err(|err| {
+        WasmValidationError::WasmtimeValidation(format!(
+            "wasmtime::Module::validate() failed with {}",
+            err
+        ))
     })
 }
 
