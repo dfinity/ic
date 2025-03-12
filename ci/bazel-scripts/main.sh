@@ -38,27 +38,14 @@ fi
 # if bazel targets is empty we don't need to run any tests
 if [ -z "${BAZEL_TARGETS:-}" ]; then
     echo "No bazel targets to build"
+    # create empty SHA256SUMS for build determinism
+    # (not ideal but temporary until we can improve or get rid of diff.sh)
+    touch SHA256SUMS
     exit 0
 fi
 
 echo "Building as user: $(whoami)"
 echo "Bazel version: $(bazel version)"
-
-AWS_CREDS="${HOME}/.aws/credentials"
-mkdir -p "$(dirname "${AWS_CREDS}")"
-
-# add aws credentials file if it's set
-if [ -n "${CLOUD_CREDENTIALS_CONTENT+x}" ]; then
-    echo "$CLOUD_CREDENTIALS_CONTENT" >"$AWS_CREDS"
-    unset CLOUD_CREDENTIALS_CONTENT
-fi
-
-if [ -z "${KUBECONFIG:-}" ] && [ -n "${KUBECONFIG_TNET_CREATOR_LN1:-}" ]; then
-    KUBECONFIG=$(mktemp -t kubeconfig-XXXXXX)
-    export KUBECONFIG
-    echo "$KUBECONFIG_TNET_CREATOR_LN1" >"$KUBECONFIG"
-    trap 'rm -f -- "$KUBECONFIG"' EXIT
-fi
 
 # An awk (mawk) program used to process STDERR to make it easier
 # to find the build event URL when going through logs.
@@ -97,7 +84,10 @@ if [[ ! " ${bazel_args[*]} " =~ [[:space:]]--repository_cache[[:space:]] ]] && [
     bazel_args+=(--repository_cache=/cache/bazel)
 fi
 
-bazel "${bazel_args[@]}" 2>&1 | awk -v url_out="$url_out" "$stream_awk_program"
+echo "running build command 'bazel ${bazel_args[@]}'"
+
+bazel_exitcode="0"
+bazel "${bazel_args[@]}" 2>&1 | awk -v url_out="$url_out" "$stream_awk_program" || bazel_exitcode="$?"
 
 # Write the bes link & summary
 echo "Build results uploaded to $(<"$url_out")"
@@ -108,8 +98,15 @@ fi
 rm "$url_out"
 
 # List and aggregate all SHA256SUMS files.
-for shafile in $(find bazel-out/ -name SHA256SUMS); do
-    if [ -f "$shafile" ]; then
-        echo "$shafile"
-    fi
-done | xargs cat | sort | uniq >SHA256SUMS
+if [ -e ./bazel-out/ ]; then
+    for shafile in $(find bazel-out/ -name SHA256SUMS); do
+        if [ -f "$shafile" ]; then
+            echo "$shafile"
+        fi
+    done | xargs cat | sort | uniq >SHA256SUMS
+else
+    # if no bazel-out, assume no targets were built
+    touch SHA256SUMS
+fi
+
+exit "$bazel_exitcode"

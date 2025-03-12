@@ -23,7 +23,7 @@ use ic_management_canister_types_private::{
 };
 use ic_metrics::MetricsRegistry;
 use ic_replicated_state::metadata_state::subnet_call_context_manager::{
-    EcdsaArguments, IDkgDealingsContext, IDkgSignWithThresholdContext, SchnorrArguments,
+    EcdsaArguments, IDkgSignWithThresholdContext, ReshareChainKeyContext, SchnorrArguments,
     SignWithThresholdContext, ThresholdArguments, VetKdArguments,
 };
 use ic_replicated_state::ReplicatedState;
@@ -58,7 +58,7 @@ use ic_types::crypto::canister_threshold_sig::{
     ThresholdSchnorrSigShare,
 };
 use ic_types::crypto::threshold_sig::ni_dkg::{
-    NiDkgId, NiDkgMasterPublicKeyId, NiDkgTag, NiDkgTargetSubnet,
+    NiDkgId, NiDkgMasterPublicKeyId, NiDkgTag, NiDkgTargetId, NiDkgTargetSubnet,
 };
 use ic_types::crypto::vetkd::{
     VetKdArgs, VetKdDerivationDomain, VetKdEncryptedKeyShare, VetKdEncryptedKeyShareContent,
@@ -80,13 +80,14 @@ use super::utils::algorithm_for_key_id;
 
 pub(crate) fn dealings_context_from_reshare_request(
     request: idkg::IDkgReshareRequest,
-) -> IDkgDealingsContext {
-    IDkgDealingsContext {
+) -> ReshareChainKeyContext {
+    ReshareChainKeyContext {
         request: RequestBuilder::new().build(),
-        key_id: request.key_id(),
+        key_id: request.key_id().into(),
         nodes: request.receiving_node_ids.into_iter().collect(),
         registry_version: request.registry_version,
         time: time::UNIX_EPOCH,
+        target_id: NiDkgTargetId::new([0; 32]),
     }
 }
 

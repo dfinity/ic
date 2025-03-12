@@ -1,5 +1,6 @@
 use crate::{governance::LOG_PREFIX, pb::v1::AuditEvent};
 
+use crate::reward::distribution::RewardsDistributionStateMachine;
 use crate::{pb::v1::ArchivedMonthlyNodeProviderRewards, voting::VotingStateMachines};
 use ic_cdk::println;
 use ic_stable_structures::{
@@ -31,6 +32,8 @@ const NODE_PROVIDER_REWARDS_LOG_DATA_MEMORY_ID: MemoryId = MemoryId::new(15);
 
 const VOTING_STATE_MACHINES_MEMORY_ID: MemoryId = MemoryId::new(16);
 
+const REWARDS_DISTRIBUTION_STATE_MACHINE_MEMORY_ID: MemoryId = MemoryId::new(17);
+
 pub mod neuron_indexes;
 pub mod neurons;
 
@@ -49,7 +52,14 @@ thread_local! {
             let memory = memory_manager.borrow().get(VOTING_STATE_MACHINES_MEMORY_ID);
             VotingStateMachines::new(memory)
         })
-    })
+    });
+
+    static REWARDS_DISTRIBUTION_STATE_MACHINE: RefCell<RewardsDistributionStateMachine<VM>> = RefCell::new({
+        MEMORY_MANAGER.with(|memory_manager| {
+            let memory = memory_manager.borrow().get(REWARDS_DISTRIBUTION_STATE_MACHINE_MEMORY_ID);
+            RewardsDistributionStateMachine::new(memory)
+        })
+    });
 }
 
 struct State {
@@ -202,6 +212,16 @@ pub(crate) fn with_voting_state_machines_mut<R>(
     VOTING_STATE_MACHINES.with(|voting_state_machines| {
         let voting_state_machines = &mut voting_state_machines.borrow_mut();
         f(voting_state_machines)
+    })
+}
+
+pub(crate) fn with_rewards_distribution_state_machine_mut<R>(
+    f: impl FnOnce(&mut RewardsDistributionStateMachine<VM>) -> R,
+) -> R {
+    REWARDS_DISTRIBUTION_STATE_MACHINE.with(|rewards_distribution_state_machine| {
+        let rewards_distribution_state_machine =
+            &mut rewards_distribution_state_machine.borrow_mut();
+        f(rewards_distribution_state_machine)
     })
 }
 

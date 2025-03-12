@@ -1,5 +1,5 @@
 use crate::cached_upgrade_steps::render_two_versions_as_markdown_table;
-use crate::pb::v1::AdvanceSnsTargetVersion;
+use crate::pb::v1::{AdvanceSnsTargetVersion, SetTopicsForCustomProposals, Topic};
 use crate::types::Wasm;
 use crate::{
     canister_control::perform_execute_generic_nervous_system_function_validate_and_render_call,
@@ -491,6 +491,12 @@ pub(crate) async fn validate_and_render_action(
                 governance_proto,
                 advance_sns_target_version,
             );
+        }
+        proposal::Action::SetTopicsForCustomProposals(set_topics_for_custom_proposals) => {
+            validate_and_render_set_topics_for_custom_proposals(
+                set_topics_for_custom_proposals,
+                &governance_proto.custom_functions_to_topics(),
+            )
         }
     }
     .map(|rendering| (rendering, ActionAuxiliary::None))
@@ -1345,23 +1351,6 @@ impl TryFrom<&NervousSystemFunction> for ValidGenericNervousSystemFunction {
                     }
                 };
 
-                // TODO(NNS1-3625): Remove this once proposal criticality is determined by the topic
-                match topic {
-                    Some(pb_api::topics::Topic::CriticalDappOperations) => {
-                        defects.push(
-                            "CriticalDappOperations is not yet supported for custom functions"
-                                .to_string(),
-                        );
-                    }
-                    Some(pb_api::topics::Topic::TreasuryAssetManagement) => {
-                        defects.push(
-                            "CriticalDappOperations is not yet supported for custom functions"
-                                .to_string(),
-                        );
-                    }
-                    _ => {}
-                }
-
                 if !defects.is_empty() {
                     return Err(format!(
                         "ExecuteNervousSystemFunction was invalid for the following reason(s):\n{}",
@@ -1824,6 +1813,120 @@ fn validate_and_render_advance_sns_target_version_proposal(
         render,
         ActionAuxiliary::AdvanceSnsTargetVersion(target_version),
     ))
+}
+
+fn topic_to_str(topic: &Topic) -> &'static str {
+    match topic {
+        Topic::Unspecified => "Unspecified",
+        Topic::DaoCommunitySettings => "DaoCommunitySettings",
+        Topic::SnsFrameworkManagement => "SnsFrameworkManagement",
+        Topic::DappCanisterManagement => "DappCanisterManagement",
+        Topic::ApplicationBusinessLogic => "ApplicationBusinessLogic",
+        Topic::Governance => "Governance",
+        Topic::TreasuryAssetManagement => "TreasuryAssetManagement",
+        Topic::CriticalDappOperations => "CriticalDappOperations",
+    }
+}
+
+pub(crate) fn validate_and_render_set_topics_for_custom_proposals(
+    set_topics_for_custom_proposals: &SetTopicsForCustomProposals,
+    existing_custom_functions: &BTreeMap<u64, (String, Option<Topic>)>,
+) -> Result<String, String> {
+    let SetTopicsForCustomProposals {
+        custom_function_id_to_topic,
+    } = set_topics_for_custom_proposals;
+
+    if custom_function_id_to_topic.is_empty() {
+        return Err(
+            "SetTopicsForCustomProposals.custom_function_id_to_topic must not be empty."
+                .to_string(),
+        );
+    }
+
+    let mut table = vec!["".to_string()]; // "" ensures joining this string works well.
+    let mut functions_with_unknown_topics = vec![];
+    let mut functions_with_unspecified_topics = vec![];
+    let mut not_registered_as_custom_functions = vec![];
+
+    for (custom_function_id, proposed_topic) in custom_function_id_to_topic.iter() {
+        let Ok(proposed_topic) = Topic::try_from(*proposed_topic) else {
+            functions_with_unknown_topics.push(format!(
+                "function ID: {custom_function_id}, invalid topic: {proposed_topic}"
+            ));
+            continue;
+        };
+
+        if matches!(proposed_topic, Topic::Unspecified) {
+            functions_with_unspecified_topics.push(format!("{custom_function_id}"));
+            continue;
+        }
+
+        let Some((function_name, current_topic)) =
+            existing_custom_functions.get(custom_function_id)
+        else {
+            not_registered_as_custom_functions.push(format!("{custom_function_id}"));
+            continue;
+        };
+
+        let proposed_topic_str = topic_to_str(&proposed_topic);
+
+        let topic_change_str = if let Some(current_topic) = current_topic {
+            // Is this proposal trying to modify a previously set topic?
+
+            if proposed_topic == *current_topic {
+                format!("{proposed_topic_str} (keeping unchanged)")
+            } else {
+                let existing_topic_str = topic_to_str(current_topic);
+
+                format!("{proposed_topic_str} (changing from {existing_topic_str})")
+            }
+        } else {
+            format!("{proposed_topic_str} (topic not currently set)")
+        };
+
+        table.push(format!("{function_name} under topic {topic_change_str}"));
+    }
+
+    if !functions_with_unknown_topics.is_empty() {
+        return Err(format!(
+            "Invalid topics detected: {}.\
+                 To list available topics, please query `SnsGovernance.list_topics`.",
+            functions_with_unspecified_topics.join("; "),
+        ));
+    }
+
+    if !functions_with_unspecified_topics.is_empty() {
+        return Err(format!(
+            "Cannot set the unspecified topic ({}) for proposal(s) with ID(s) {}.\
+                 To list available topics, please query `SnsGovernance.list_topics`.",
+            Topic::Unspecified as i32,
+            functions_with_unspecified_topics.join(", "),
+        ));
+    }
+
+    if !not_registered_as_custom_functions.is_empty() {
+        return Err(format!(
+            "Cannot set topic for proposal(s) with ID(s) {} since they have not been registered \
+             as custom proposals in this SNS yet. Please use `AddGenericNervousSystemFunction` \
+             proposals to register new custom SNS proposals.",
+            not_registered_as_custom_functions.join(", "),
+        ));
+    }
+
+    let render = table.join("\n  - ");
+
+    let render = format!(
+        "### If adopted, the following proposals will be categorized under \
+         the specified topics:\n\
+         {render}"
+    );
+
+    let render = format!(
+        "# Set topics for custom SNS proposal types\n\n\
+         {render}"
+    );
+
+    Ok(render)
 }
 
 impl ProposalData {
@@ -2319,6 +2422,7 @@ impl ProposalData {
             minimum_yes_proportion_of_total,
             minimum_yes_proportion_of_exercised,
             action_auxiliary,
+            topic,
         } = self;
 
         let limited_ballots: BTreeMap<_, _> = ballots
@@ -2348,6 +2452,7 @@ impl ProposalData {
             minimum_yes_proportion_of_total: *minimum_yes_proportion_of_total,
             minimum_yes_proportion_of_exercised: *minimum_yes_proportion_of_exercised,
             action_auxiliary: action_auxiliary.clone(),
+            topic: *topic,
 
             // The following fields are truncated:
             payload_text_rendering: None,
@@ -2606,13 +2711,16 @@ mod minting_tests;
 mod advance_sns_target_version;
 
 #[cfg(test)]
+mod set_topics_for_custom_proposals;
+
+#[cfg(test)]
 mod tests {
     use super::*;
     use crate::{
         pb::v1::{
             governance::{self, Version},
             Ballot, ChunkedCanisterWasm, Empty, Governance as GovernanceProto, NeuronId, Proposal,
-            ProposalId, Subaccount, WaitForQuietState,
+            ProposalId, Subaccount, Topic, WaitForQuietState,
         },
         sns_upgrade::{
             CanisterSummary, GetNextSnsVersionRequest, GetNextSnsVersionResponse,
@@ -4658,6 +4766,7 @@ Version {
             // This is because the proposal was rejected (see the latest_tally field).
             executed_timestamp_seconds: 0,
             action_auxiliary: None,
+            topic: Some(Topic::Governance as i32),
         };
     }
 

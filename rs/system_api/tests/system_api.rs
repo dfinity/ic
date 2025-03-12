@@ -13,10 +13,10 @@ use ic_interfaces::execution_environment::{
 };
 use ic_limits::SMALL_APP_SUBNET_MAX_SIZE;
 use ic_logger::replica_logger::no_op_logger;
+use ic_management_canister_types_private::OnLowWasmMemoryHookStatus;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
-    canister_state::system_state::OnLowWasmMemoryHookStatus, testing::CanisterQueuesTesting,
-    CallOrigin, Memory, NetworkTopology, NumWasmPages, SystemState,
+    testing::CanisterQueuesTesting, CallOrigin, Memory, NetworkTopology, NumWasmPages, SystemState,
 };
 use ic_system_api::{
     sandbox_safe_system_state::SandboxSafeSystemState, ApiType, DefaultOutOfInstructionsHandler,
@@ -269,6 +269,7 @@ fn is_supported(api_type: SystemApiCallId, context: &str) -> bool {
         SystemApiCallId::CanisterSelfCopy => vec!["*"],
         SystemApiCallId::CanisterCycleBalance => vec!["*"],
         SystemApiCallId::CanisterCycleBalance128 => vec!["*"],
+        SystemApiCallId::CanisterLiquidCycleBalance128 => vec!["*"],
         SystemApiCallId::CanisterStatus => vec!["*"],
         SystemApiCallId::CanisterVersion => vec!["*"],
         SystemApiCallId::MsgMethodNameSize => vec!["F"],
@@ -639,6 +640,16 @@ fn api_availability_test(
         SystemApiCallId::CanisterCycleBalance128 => {
             assert_api_availability(
                 |mut api| api.ic0_canister_cycle_balance128(0, &mut [42; 128]),
+                api_type,
+                &system_state,
+                cycles_account_manager,
+                api_type_enum,
+                context,
+            );
+        }
+        SystemApiCallId::CanisterLiquidCycleBalance128 => {
+            assert_api_availability(
+                |mut api| api.ic0_canister_liquid_cycle_balance128(0, &mut [42; 128]),
                 api_type,
                 &system_state,
                 cycles_account_manager,

@@ -8,7 +8,7 @@ use futures::channel::{
 use ic_base_types::CanisterId;
 use ic_nervous_system_common::{ledger::IcpLedger, NervousSystemError};
 use icp_ledger::{AccountIdentifier, Subaccount, Tokens};
-use std::sync::{atomic, atomic::Ordering as AOrdering};
+use std::sync::{atomic, atomic::Ordering as AOrdering, Arc};
 
 pub mod test_data;
 
@@ -27,7 +27,7 @@ pub type LedgerObserver = USender<LedgerControlMessage>;
 
 /// A mock ledger to test interleavings of governance method calls.
 pub struct InterleavingTestLedger {
-    underlying: Box<dyn IcpLedger>,
+    underlying: Arc<dyn IcpLedger>,
     observer: LedgerObserver,
 }
 
@@ -39,7 +39,7 @@ impl InterleavingTestLedger {
     /// underlying ledger, or, alternatively, return an error. This is done
     /// through a one-shot channel, the sender side of which is sent to the
     /// observer.
-    pub fn new(underlying: Box<dyn IcpLedger>, observer: LedgerObserver) -> Self {
+    pub fn new(underlying: Arc<dyn IcpLedger>, observer: LedgerObserver) -> Self {
         InterleavingTestLedger {
             underlying,
             observer,

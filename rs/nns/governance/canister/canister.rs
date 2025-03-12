@@ -33,7 +33,7 @@ use ic_nns_governance::{
 };
 use ic_nns_governance_api::pb::v1::{
     claim_or_refresh_neuron_from_account_response::Result as ClaimOrRefreshNeuronFromAccountResponseResult,
-    governance::{GovernanceCachedMetrics, Migrations},
+    governance::GovernanceCachedMetrics,
     governance_error::ErrorType,
     manage_neuron::{
         claim_or_refresh::{By, MemoAndController},
@@ -55,11 +55,12 @@ use ic_nns_governance_api::test_api::TimeWarp;
 use prost::Message;
 use rand::{RngCore, SeedableRng};
 use rand_chacha::ChaCha20Rng;
+use std::sync::Arc;
 use std::{boxed::Box, ops::Bound, time::Duration};
 
 #[cfg(not(feature = "tla"))]
 use ic_nervous_system_canisters::ledger::IcpLedgerCanister;
-use ic_nns_governance::canister_state::with_governance;
+use ic_nns_governance::canister_state::{with_governance, CanisterRandomnessGenerator};
 
 #[cfg(feature = "tla")]
 mod tla_ledger;
@@ -225,15 +226,18 @@ fn canister_init_(init_payload: ApiGovernanceProto) {
         init_payload.neurons.len()
     );
 
-    schedule_timers();
-
     let governance_proto = InternalGovernanceProto::from(init_payload);
     set_governance(Governance::new(
         governance_proto,
-        Box::new(CanisterEnv::new()),
-        Box::new(IcpLedgerCanister::<CdkRuntime>::new(LEDGER_CANISTER_ID)),
-        Box::new(CMCCanister::<CdkRuntime>::new()),
+        Arc::new(CanisterEnv::new()),
+        Arc::new(IcpLedgerCanister::<CdkRuntime>::new(LEDGER_CANISTER_ID)),
+        Arc::new(CMCCanister::<CdkRuntime>::new()),
+        Box::new(CanisterRandomnessGenerator::new()),
     ));
+
+    // Timers etc should not be scheduled until after Governance has been initialized, since
+    // some of them may rely on Governance state to determine when they should run.
+    schedule_timers();
 }
 
 #[pre_upgrade]
@@ -271,15 +275,19 @@ fn canister_post_upgrade() {
         restored_state.xdr_conversion_rate,
     );
 
-    schedule_timers();
     set_governance(Governance::new_restored(
         restored_state,
-        Box::new(CanisterEnv::new()),
-        Box::new(IcpLedgerCanister::<CdkRuntime>::new(LEDGER_CANISTER_ID)),
-        Box::new(CMCCanister::<CdkRuntime>::new()),
+        Arc::new(CanisterEnv::new()),
+        Arc::new(IcpLedgerCanister::<CdkRuntime>::new(LEDGER_CANISTER_ID)),
+        Arc::new(CMCCanister::<CdkRuntime>::new()),
+        Box::new(CanisterRandomnessGenerator::new()),
     ));
 
     validate_stable_storage();
+
+    // Timers etc should not be scheduled until after Governance has been initialized, since
+    // some of them may rely on Governance state to determine when they should run.
+    schedule_timers();
 }
 
 #[cfg(feature = "test")]
@@ -592,7 +600,7 @@ async fn heartbeat() {
 fn manage_neuron_pb() {
     debug_log("manage_neuron_pb");
     panic_with_probability(
-        0.1,
+        0.7,
         "manage_neuron_pb is deprecated. Please use manage_neuron instead.",
     );
 
@@ -627,7 +635,7 @@ fn list_proposals_pb() {
 fn list_neurons_pb() {
     debug_log("list_neurons_pb");
     panic_with_probability(
-        0.1,
+        0.7,
         "list_neurons_pb is deprecated. Please use list_neurons instead.",
     );
 
@@ -708,16 +716,6 @@ fn get_most_recent_monthly_node_provider_rewards() -> Option<MonthlyNodeProvider
 #[query(hidden = true)]
 fn get_neuron_data_validation_summary() -> NeuronDataValidationSummary {
     governance().neuron_data_validation_summary()
-}
-
-#[query(hidden = true)]
-fn get_migrations() -> Migrations {
-    let response = governance()
-        .heap_data
-        .migrations
-        .clone()
-        .unwrap_or_default();
-    Migrations::from(response)
 }
 
 #[query]

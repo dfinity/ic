@@ -32,6 +32,7 @@ use crate::{
             manage_neuron_response::{
                 DisburseMaturityResponse, MergeMaturityResponse, StakeMaturityResponse,
             },
+            nervous_system_function::FunctionType,
             neuron::{DissolveState, Followees},
             proposal::Action,
             proposal_data::ActionAuxiliary as ActionAuxiliaryPb,
@@ -52,14 +53,15 @@ use crate::{
             MintTokensRequest, MintTokensResponse, NervousSystemFunction, NervousSystemParameters,
             Neuron, NeuronId, NeuronPermission, NeuronPermissionList, NeuronPermissionType,
             Proposal, ProposalData, ProposalDecisionStatus, ProposalId, ProposalRewardStatus,
-            RegisterDappCanisters, RewardEvent, Tally, TransferSnsTreasuryFunds,
-            UpgradeSnsControlledCanister, Vote, WaitForQuietState,
+            RegisterDappCanisters, RewardEvent, SetTopicsForCustomProposals, Tally,
+            TransferSnsTreasuryFunds, UpgradeSnsControlledCanister, Vote, WaitForQuietState,
         },
     },
     proposal::{
         get_action_auxiliary,
         transfer_sns_treasury_funds_amount_is_small_enough_at_execution_time_or_err,
-        validate_and_render_proposal, ValidGenericNervousSystemFunction, MAX_LIST_PROPOSAL_RESULTS,
+        validate_and_render_proposal, validate_and_render_set_topics_for_custom_proposals,
+        ValidGenericNervousSystemFunction, MAX_LIST_PROPOSAL_RESULTS,
         MAX_NUMBER_OF_PROPOSALS_WITH_BALLOTS,
     },
     sns_upgrade::{
@@ -2140,6 +2142,9 @@ impl Governance {
                     })
                     .and_then(|new_target| self.perform_advance_target_version(new_target))
             }
+            Action::SetTopicsForCustomProposals(set_topics_for_custom_proposals) => {
+                self.perform_set_topics_for_custom_proposals(set_topics_for_custom_proposals)
+            }
             // This should not be possible, because Proposal validation is performed when
             // a proposal is first made.
             Action::Unspecified(_) => Err(GovernanceError::new_with_message(
@@ -3121,6 +3126,53 @@ impl Governance {
         Ok(())
     }
 
+    // Make a change to the mapping from custom proposal types to topics.
+    fn perform_set_topics_for_custom_proposals(
+        &mut self,
+        set_topics_for_custom_proposals: SetTopicsForCustomProposals,
+    ) -> Result<(), GovernanceError> {
+        // This proposal had already been validated at submission time, but the state may have
+        // change since then, which is why it is being validated again.
+        if let Err(message) = validate_and_render_set_topics_for_custom_proposals(
+            &set_topics_for_custom_proposals,
+            &self.proto.custom_functions_to_topics(),
+        ) {
+            return Err(GovernanceError::new_with_message(
+                ErrorType::InvalidProposal,
+                message,
+            ));
+        }
+
+        let SetTopicsForCustomProposals {
+            custom_function_id_to_topic,
+        } = set_topics_for_custom_proposals;
+
+        for (custom_function_id, new_topic) in custom_function_id_to_topic {
+            let nervous_system_function = self
+                .proto
+                .id_to_nervous_system_functions
+                .get_mut(&custom_function_id);
+
+            if let Some(nervous_system_function) = nervous_system_function {
+                let proposal_type = nervous_system_function.function_type.as_mut();
+
+                if let Some(FunctionType::GenericNervousSystemFunction(custom_proposal_type)) =
+                    proposal_type
+                {
+                    custom_proposal_type.topic = Some(new_topic);
+                } else {
+                    log!(
+                        ERROR,
+                        "Unexpected situation: Cannot change the topic of a native proposal type: \
+                        {proposal_type:?}",
+                    )
+                }
+            }
+        }
+
+        Ok(())
+    }
+
     // Returns an option with the NervousSystemParameters
     fn nervous_system_parameters(&self) -> Option<&NervousSystemParameters> {
         self.proto.parameters.as_ref()
@@ -3437,6 +3489,10 @@ impl Governance {
         let proposal_num = self.next_proposal_id();
         let proposal_id = ProposalId { id: proposal_num };
 
+        let proposal_topic = self
+            .get_topic_for_action(action)
+            .map_err(|err| GovernanceError::new_with_message(ErrorType::InvalidProposal, err))?;
+
         // Create the proposal.
         let mut proposal_data = ProposalData {
             action: u64::from(action),
@@ -3468,6 +3524,7 @@ impl Governance {
             // TODO(NNS1-2731): Delete this.
             is_eligible_for_rewards: true,
             action_auxiliary,
+            topic: proposal_topic.map(i32::from),
         };
 
         proposal_data.wait_for_quiet_state = Some(WaitForQuietState {
@@ -6013,6 +6070,9 @@ mod fail_stuck_upgrade_in_progress_tests;
 
 #[cfg(test)]
 mod advance_target_sns_version_tests;
+
+#[cfg(test)]
+mod proposal_topics_tests;
 
 #[cfg(test)]
 mod test_helpers;

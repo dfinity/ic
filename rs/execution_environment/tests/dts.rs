@@ -3063,3 +3063,105 @@ fn dts_abort_after_dropping_memory_on_state_switch() {
     let result = env.execute_ingress(canister_id, "update", vec![]).unwrap();
     assert_eq!(result, WasmResult::Reply(vec![]));
 }
+
+const WRITE_MORE_THAN_1G_WAT: &str = r#"
+(module
+    (import "ic0" "msg_reply" (func $msg_reply))
+    (func (export "canister_update write")
+        (local $i i32)
+        (local.set $i (i32.const 1073745920)) ;; 1GiB + 4096
+        (loop $loop
+            (i32.store (local.get $i) (i32.const 1))
+            (br_if $loop (local.tee $i (i32.sub (local.get $i) (i32.const 4096))))
+        )
+        (call $msg_reply)
+    )
+    (memory 16385) ;; 1GiB + 65536
+)"#;
+
+#[test]
+fn yield_for_dirty_pages_copy_works() {
+    let env = ic_state_machine_tests::StateMachineBuilder::new()
+        .with_subnet_type(SubnetType::Application)
+        .build();
+
+    let wasm = wat::parse_str(WRITE_MORE_THAN_1G_WAT).unwrap();
+    let canister_id = env
+        .install_canister_with_cycles(wasm, vec![], None, INITIAL_CYCLES_BALANCE)
+        .unwrap();
+
+    let mut payload = ic_state_machine_tests::PayloadBuilder::new().with_nonce(0);
+    // Send two ingress messages to the same canister.
+    for _ in 0..2 {
+        payload = payload.ingress(PrincipalId::new_anonymous(), canister_id, "write", vec![]);
+    }
+    let message_ids = payload.ingress_ids();
+    env.execute_payload(payload);
+
+    // Neither of messages should be completed after the first round.
+    assert_matches!(
+        ingress_state(env.ingress_status(&message_ids[0])),
+        Some(IngressState::Processing)
+    );
+    assert_matches!(
+        ingress_state(env.ingress_status(&message_ids[1])),
+        Some(IngressState::Received)
+    );
+
+    env.tick();
+
+    // Only the first message must be completed after two rounds.
+    assert_matches!(
+        ingress_state(env.ingress_status(&message_ids[0])),
+        Some(IngressState::Completed(_))
+    );
+    assert_matches!(
+        ingress_state(env.ingress_status(&message_ids[1])),
+        Some(IngressState::Received)
+    );
+}
+
+#[test]
+fn yield_for_dirty_pages_copy_works_for_many_canisters() {
+    let scheduler_cores = 4;
+    let num_canisters = scheduler_cores;
+    let num_messages = 2;
+    let env = ic_state_machine_tests::StateMachineBuilder::new()
+        .with_subnet_type(SubnetType::Application)
+        .build();
+
+    let wasm = wat::parse_str(WRITE_MORE_THAN_1G_WAT).unwrap();
+    let mut canister_ids = vec![];
+    let mut payload = ic_state_machine_tests::PayloadBuilder::new().with_nonce(0);
+    for _ in 0..num_canisters {
+        let canister_id = env
+            .install_canister_with_cycles(wasm.clone(), vec![], None, INITIAL_CYCLES_BALANCE)
+            .unwrap();
+        canister_ids.push(canister_id);
+
+        for _ in 0..num_messages {
+            payload = payload.ingress(PrincipalId::new_anonymous(), canister_id, "write", vec![]);
+        }
+    }
+    let message_ids = payload.ingress_ids();
+    env.execute_payload(payload);
+
+    let num_completed = || {
+        message_ids
+            .iter()
+            .filter_map(|id| match ingress_state(env.ingress_status(id)) {
+                Some(IngressState::Completed(_)) => Some(()),
+                Some(IngressState::Received) | Some(IngressState::Processing) => None,
+                _ => panic!("Unexpected ingress state"),
+            })
+            .count()
+    };
+
+    // Neither of messages should be completed after the first round.
+    assert_eq!(num_completed(), 0);
+
+    env.tick();
+
+    // Only the first message per scheduler core must be completed after two rounds.
+    assert_eq!(num_completed(), scheduler_cores);
+}
