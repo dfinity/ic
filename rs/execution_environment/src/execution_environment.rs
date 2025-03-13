@@ -3002,9 +3002,12 @@ impl ExecutionEnvironment {
 
         state.metadata.subnet_call_context_manager.push_context(
             SubnetCallContext::SignWithThreshold(SignWithThresholdContext {
-                request,
                 args,
-                derivation_path: Arc::new(derivation_path),
+                extended_derivation_path: Arc::new(ExtendedDerivationPath {
+                    caller: request.sender.into(),
+                    derivation_path,
+                }),
+                request,
                 pseudo_random_id,
                 batch_time: state.metadata.batch_time,
                 matched_pre_signature: None,

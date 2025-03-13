@@ -15,6 +15,7 @@ use ic_protobuf::types::v1 as pb;
 use serde::{Deserialize, Serialize};
 use std::convert::{AsMut, AsRef, TryFrom, TryInto};
 use std::hash::Hash;
+use std::sync::Arc;
 
 use super::{
     IDkgBlockReader, IDkgTranscriptParamsRef, MaskedTranscript, RandomTranscriptParams,
@@ -399,7 +400,7 @@ impl TryFrom<&pb::PreSignatureQuadrupleRef> for PreSignatureQuadrupleRef {
 #[derive(Clone, Eq, PartialEq, Hash, Debug)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct ThresholdEcdsaSigInputsRef {
-    pub derivation_path: ExtendedDerivationPath,
+    pub derivation_path: Arc<ExtendedDerivationPath>,
     pub hashed_message: [u8; 32],
     pub nonce: Randomness,
     pub presig_quadruple_ref: PreSignatureQuadrupleRef,
@@ -414,7 +415,7 @@ pub enum ThresholdEcdsaSigInputsError {
 
 impl ThresholdEcdsaSigInputsRef {
     pub fn new(
-        derivation_path: ExtendedDerivationPath,
+        derivation_path: Arc<ExtendedDerivationPath>,
         hashed_message: [u8; 32],
         nonce: Randomness,
         presig_quadruple_ref: PreSignatureQuadrupleRef,

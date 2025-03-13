@@ -12,7 +12,10 @@ use ic_protobuf::{
 use ic_types::{
     canister_http::CanisterHttpRequestContext,
     consensus::idkg::PreSigId,
-    crypto::threshold_sig::ni_dkg::{id::ni_dkg_target_id, NiDkgId, NiDkgTargetId},
+    crypto::{
+        threshold_sig::ni_dkg::{id::ni_dkg_target_id, NiDkgId, NiDkgTargetId},
+        ExtendedDerivationPath,
+    },
     messages::{CallbackId, CanisterCall, Request, StopCanisterCallId},
     node_id_into_protobuf, node_id_try_from_option, CanisterId, ExecutionRound, Height, NodeId,
     RegistryVersion, Time,
@@ -947,7 +950,7 @@ impl std::borrow::Borrow<SignWithThresholdContext> for IDkgSignWithThresholdCont
 pub struct SignWithThresholdContext {
     pub request: Request,
     pub args: ThresholdArguments,
-    pub derivation_path: Arc<Vec<Vec<u8>>>,
+    pub extended_derivation_path: Arc<ExtendedDerivationPath>,
     pub pseudo_random_id: [u8; PSEUDO_RANDOM_ID_SIZE],
     pub batch_time: Time,
     pub matched_pre_signature: Option<(PreSigId, Height)>,
@@ -1023,7 +1026,7 @@ impl From<&SignWithThresholdContext> for pb_metadata::SignWithThresholdContext {
         Self {
             request: Some((&context.request).into()),
             args: Some((&context.args).into()),
-            derivation_path_vec: context.derivation_path.to_vec(),
+            derivation_path_vec: context.extended_derivation_path.derivation_path.to_vec(),
             pseudo_random_id: context.pseudo_random_id.to_vec(),
             batch_time: context.batch_time.as_nanos_since_unix_epoch(),
             pre_signature_id: context.matched_pre_signature.as_ref().map(|q| q.0.id()),
@@ -1041,9 +1044,12 @@ impl TryFrom<pb_metadata::SignWithThresholdContext> for SignWithThresholdContext
         let args: ThresholdArguments =
             try_from_option_field(context.args, "SignWithThresholdContext::args")?;
         Ok(SignWithThresholdContext {
-            request,
             args,
-            derivation_path: Arc::new(context.derivation_path_vec),
+            extended_derivation_path: Arc::new(ExtendedDerivationPath {
+                caller: request.sender.into(),
+                derivation_path: context.derivation_path_vec,
+            }),
+            request,
             pseudo_random_id: try_into_array_pseudo_random_id(context.pseudo_random_id)?,
             batch_time: Time::from_nanos_since_unix_epoch(context.batch_time),
             matched_pre_signature: context

@@ -205,7 +205,7 @@ impl TryFrom<&pb::PreSignatureTranscriptRef> for PreSignatureTranscriptRef {
 #[derive(Clone, Eq, PartialEq, Hash)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct ThresholdSchnorrSigInputsRef {
-    pub derivation_path: ExtendedDerivationPath,
+    pub derivation_path: Arc<ExtendedDerivationPath>,
     pub message: Arc<Vec<u8>>,
     pub nonce: Randomness,
     pub presig_transcript_ref: PreSignatureTranscriptRef,
@@ -232,7 +232,7 @@ pub enum ThresholdSchnorrSigInputsError {
 
 impl ThresholdSchnorrSigInputsRef {
     pub fn new(
-        derivation_path: ExtendedDerivationPath,
+        derivation_path: Arc<ExtendedDerivationPath>,
         message: Arc<Vec<u8>>,
         nonce: Randomness,
         presig_transcript_ref: PreSignatureTranscriptRef,

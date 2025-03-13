@@ -143,10 +143,14 @@ pub(super) fn fake_signature_request_args(key_id: MasterPublicKeyId) -> Threshol
 pub(super) fn fake_signature_request_context(
     key_id: MasterPublicKeyId,
 ) -> SignWithThresholdContext {
+    let request = RequestBuilder::new().build();
     SignWithThresholdContext {
-        request: RequestBuilder::new().build(),
         args: fake_signature_request_args(key_id),
-        derivation_path: Arc::new(vec![]),
+        extended_derivation_path: Arc::new(ExtendedDerivationPath {
+            caller: request.sender.into(),
+            derivation_path: vec![],
+        }),
+        request,
         batch_time: UNIX_EPOCH,
         pseudo_random_id: [0; 32],
         matched_pre_signature: None,

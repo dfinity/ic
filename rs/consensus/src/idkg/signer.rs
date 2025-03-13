@@ -2003,14 +2003,18 @@ mod tests {
                 let pre_sig_id = PreSigId(1);
                 let message_hash = [0; 32];
                 let callback_id = CallbackId::from(1);
+                let request = RequestBuilder::new().sender(canister_test_id(1)).build();
                 let context = SignWithThresholdContext {
-                    request: RequestBuilder::new().sender(canister_test_id(1)).build(),
                     args: ThresholdArguments::Ecdsa(EcdsaArguments {
                         key_id: fake_ecdsa_key_id(),
                         message_hash,
                     }),
                     pseudo_random_id: [1; 32],
-                    derivation_path: Arc::new(vec![]),
+                    extended_derivation_path: Arc::new(ExtendedDerivationPath {
+                        caller: request.sender.into(),
+                        derivation_path: vec![],
+                    }),
+                    request,
                     batch_time: UNIX_EPOCH,
                     matched_pre_signature: Some((pre_sig_id, req_id.height)),
                     nonce: Some([2; 32]),
@@ -2140,15 +2144,19 @@ mod tests {
                 let pre_sig_id = PreSigId(1);
                 let message = vec![0; 32];
                 let callback_id = CallbackId::from(1);
+                let request = RequestBuilder::new().sender(canister_test_id(1)).build();
                 let context = SignWithThresholdContext {
-                    request: RequestBuilder::new().sender(canister_test_id(1)).build(),
                     args: ThresholdArguments::Schnorr(SchnorrArguments {
                         key_id: fake_schnorr_key_id(schnorr_algorithm(algorithm)),
                         message: Arc::new(message.clone()),
                         taproot_tree_root: None,
                     }),
                     pseudo_random_id: [1; 32],
-                    derivation_path: Arc::new(vec![]),
+                    extended_derivation_path: Arc::new(ExtendedDerivationPath {
+                        caller: request.sender.into(),
+                        derivation_path: vec![],
+                    }),
+                    request,
                     batch_time: UNIX_EPOCH,
                     matched_pre_signature: Some((pre_sig_id, req_id.height)),
                     nonce: Some([2; 32]),
@@ -2260,8 +2268,8 @@ mod tests {
                 let callback_id = CallbackId::from(1);
                 let key_id = fake_vetkd_key_id();
                 let height = Height::from(100);
+                let request = RequestBuilder::new().sender(canister_test_id(1)).build();
                 let context = SignWithThresholdContext {
-                    request: RequestBuilder::new().sender(canister_test_id(1)).build(),
                     args: ThresholdArguments::VetKd(VetKdArguments {
                         key_id: key_id.clone(),
                         input: Arc::new(vec![]),
@@ -2270,7 +2278,11 @@ mod tests {
                         height,
                     }),
                     pseudo_random_id: [1; 32],
-                    derivation_path: Arc::new(vec![]),
+                    extended_derivation_path: Arc::new(ExtendedDerivationPath {
+                        caller: request.sender.into(),
+                        derivation_path: vec![],
+                    }),
+                    request,
                     batch_time: UNIX_EPOCH,
                     matched_pre_signature: None,
                     nonce: None,

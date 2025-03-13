@@ -642,8 +642,8 @@ mod tests {
         pre_signature_id: Option<PreSigId>,
         key_id: &MasterPublicKeyId,
     ) -> SignWithThresholdContext {
+        let request = RequestBuilder::new().build();
         SignWithThresholdContext {
-            request: RequestBuilder::new().build(),
             args: match key_id {
                 MasterPublicKeyId::Ecdsa(key_id) => ThresholdArguments::Ecdsa(EcdsaArguments {
                     message_hash: [0; 32],
@@ -658,7 +658,11 @@ mod tests {
                 }
                 MasterPublicKeyId::VetKd(_) => panic!("not applicable to vetKD"),
             },
-            derivation_path: Arc::new(vec![]),
+            extended_derivation_path: Arc::new(ExtendedDerivationPath {
+                caller: request.sender.into(),
+                derivation_path: vec![],
+            }),
+            request,
             pseudo_random_id: [0; 32],
             matched_pre_signature: pre_signature_id.map(|qid| (qid, Height::from(0))),
             nonce: None,

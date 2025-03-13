@@ -232,7 +232,13 @@ impl VetKdPayloadBuilderImpl {
                 let args = VetKdArgs {
                     context: VetKdDerivationContext {
                         caller: context.request.sender.into(),
-                        context: context.derivation_path.iter().flatten().cloned().collect(),
+                        context: context
+                            .extended_derivation_path
+                            .derivation_path
+                            .iter()
+                            .flatten()
+                            .cloned()
+                            .collect(),
                     },
                     ni_dkg_id: ctxt_args.ni_dkg_id.clone(),
                     input: ctxt_args.input.to_vec(),
@@ -349,7 +355,13 @@ impl VetKdPayloadBuilderImpl {
         let args = VetKdArgs {
             context: VetKdDerivationContext {
                 caller: context.request.sender.into(),
-                context: context.derivation_path.iter().flatten().cloned().collect(),
+                context: context
+                    .extended_derivation_path
+                    .derivation_path
+                    .iter()
+                    .flatten()
+                    .cloned()
+                    .collect(),
             },
             ni_dkg_id: ctxt_args.ni_dkg_id.clone(),
             input: ctxt_args.input.to_vec(),

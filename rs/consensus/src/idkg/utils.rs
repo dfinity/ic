@@ -34,7 +34,7 @@ use ic_types::crypto::canister_threshold_sig::idkg::{
 };
 use ic_types::crypto::canister_threshold_sig::MasterPublicKey;
 use ic_types::crypto::vetkd::{VetKdArgs, VetKdDerivationContext};
-use ic_types::crypto::{AlgorithmId, ExtendedDerivationPath};
+use ic_types::crypto::AlgorithmId;
 use ic_types::messages::CallbackId;
 use ic_types::registry::RegistryClientError;
 use ic_types::{Height, RegistryVersion, SubnetId};
@@ -281,10 +281,7 @@ pub(super) fn build_signature_inputs(
                     .ok_or(BuildSignatureInputsError::ContextIncomplete)?,
             );
             let inputs = ThresholdSigInputsRef::Ecdsa(ThresholdEcdsaSigInputsRef::new(
-                ExtendedDerivationPath {
-                    caller: context.request.sender.into(),
-                    derivation_path: context.derivation_path.to_vec(),
-                },
+                context.extended_derivation_path.clone(),
                 args.message_hash,
                 nonce,
                 pre_sig,
@@ -315,10 +312,7 @@ pub(super) fn build_signature_inputs(
                     .ok_or(BuildSignatureInputsError::ContextIncomplete)?,
             );
             let inputs = ThresholdSigInputsRef::Schnorr(ThresholdSchnorrSigInputsRef::new(
-                ExtendedDerivationPath {
-                    caller: context.request.sender.into(),
-                    derivation_path: context.derivation_path.to_vec(),
-                },
+                context.extended_derivation_path.clone(),
                 args.message.clone(),
                 nonce,
                 pre_sig,
@@ -333,8 +327,14 @@ pub(super) fn build_signature_inputs(
             };
             let inputs = ThresholdSigInputsRef::VetKd(VetKdArgs {
                 context: VetKdDerivationContext {
-                    caller: context.request.sender.into(),
-                    context: context.derivation_path.iter().flatten().cloned().collect(),
+                    caller: context.extended_derivation_path.caller,
+                    context: context
+                        .extended_derivation_path
+                        .derivation_path
+                        .iter()
+                        .flatten()
+                        .cloned()
+                        .collect(),
                 },
                 ni_dkg_id: args.ni_dkg_id.clone(),
                 input: args.input.to_vec(),

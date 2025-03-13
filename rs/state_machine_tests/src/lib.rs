@@ -2205,7 +2205,7 @@ impl StateMachine {
         {
             let path = ic_secp256k1::DerivationPath::from_canister_id_and_path(
                 context.request.sender.get().as_slice(),
-                &context.derivation_path,
+                &context.extended_derivation_path.derivation_path,
             );
             let dk = k.derive_subkey(&path).0;
             let signature = dk
@@ -2234,7 +2234,7 @@ impl StateMachine {
             Some(SignatureSecretKey::SchnorrBip340(k)) => {
                 let path = ic_secp256k1::DerivationPath::from_canister_id_and_path(
                     context.request.sender.get().as_slice(),
-                    &context.derivation_path[..],
+                    &context.extended_derivation_path.derivation_path[..],
                 );
                 let (dk, _cc) = k.derive_subkey(&path);
 
@@ -2258,7 +2258,7 @@ impl StateMachine {
             Some(SignatureSecretKey::Ed25519(k)) => {
                 let path = ic_ed25519::DerivationPath::from_canister_id_and_path(
                     context.request.sender.get().as_slice(),
-                    &context.derivation_path[..],
+                    &context.extended_derivation_path.derivation_path[..],
                 );
                 let (dk, _cc) = k.derive_subkey(&path);
 
