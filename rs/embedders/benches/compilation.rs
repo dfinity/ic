@@ -8,6 +8,7 @@ use ic_embedders::{
 };
 use ic_logger::replica_logger::no_op_logger;
 use ic_wasm_types::BinaryEncodedWasm;
+use std::io::Read;
 
 /// Enable using the same number of rayon threads that we have in production.
 fn set_production_rayon_threads() {
@@ -78,12 +79,16 @@ fn generate_binaries() -> Vec<(String, BinaryEncodedWasm)> {
         BinaryEncodedWasm::new(wat::parse_str(many_funcs).expect("Failed to convert wat to wasm")),
     ));
 
-    // TODO(EXC-1985): Modify the open chat canister so that it runs.
-    // // This benchmark uses a real-world wasm which is stored as a binary file in this repo.
-    // let real_world_wasm =
-    //     BinaryEncodedWasm::new(include_bytes!("test-data/user_canister_impl.wasm").to_vec());
+    // This benchmark uses the open chat user canister which is stored as a
+    // binary file in this repo.  It is generated from
+    // https://github.com/dfinity/open-chat/tree/abk/for-replica-benchmarking
+    let mut decoder =
+        libflate::gzip::Decoder::new(&include_bytes!("test-data/user.wasm.gz")[..]).unwrap();
+    let mut buf = vec![];
+    decoder.read_to_end(&mut buf).unwrap();
+    let open_chat_wasm = BinaryEncodedWasm::new(buf);
 
-    // result.push(("real_world_wasm".to_string(), real_world_wasm));
+    result.push(("open_chat".to_string(), open_chat_wasm));
 
     result
 }
