@@ -5,6 +5,7 @@ use candid::Nat;
 use icrc_ledger_types::icrc1::account::Account;
 use rusqlite::Connection;
 use serde_bytes::ByteBuf;
+use std::cmp::Ordering;
 use std::{path::Path, sync::Mutex};
 use tracing::warn;
 
@@ -46,21 +47,23 @@ impl StorageClient {
             return Ok(false);
         };
         let block_count = self.get_block_count()?;
-        if block_count == highest_block_idx.saturating_add(1) {
-            Ok(false)
-        } else if block_count < highest_block_idx.saturating_add(1) {
-            warn!(
+        match block_count.cmp(&highest_block_idx.saturating_add(1)) {
+            Ordering::Equal => Ok(false),
+            Ordering::Less => {
+                warn!(
                 "block_count ({}) is less than highest_block_idx.saturating_add(1) ({}), indicating one of more gaps in the blockchain.",
                 block_count,
                 highest_block_idx.saturating_add(1)
             );
-            Ok(true)
-        } else {
-            panic!(
+                Ok(true)
+            }
+            Ordering::Greater => {
+                panic!(
                     "block_count ({}) is larger than highest_block_idx.saturating_add(1) ({}) -> invalid state!",
                     block_count,
                     highest_block_idx.saturating_add(1)
                 );
+            }
         }
     }
 
@@ -167,8 +170,8 @@ impl StorageClient {
     }
 
     pub fn reset_blocks_counter(&self) -> Result<()> {
-        let mut open_connection = self.storage_connection.lock().unwrap();
-        storage_operations::reset_blocks_counter(&mut open_connection)
+        let open_connection = self.storage_connection.lock().unwrap();
+        storage_operations::reset_blocks_counter(&open_connection)
     }
 
     fn create_tables(&self) -> Result<(), rusqlite::Error> {
