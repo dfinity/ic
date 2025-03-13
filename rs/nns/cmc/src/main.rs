@@ -51,9 +51,6 @@ mod exchange_rate_canister;
 mod limiter;
 mod stable_utils;
 
-// TODO DO NOT MERGE - ensure all endpoints have a test
-// especially the ones that currently serve protobuf
-
 /// The past 30 days are used for the average ICP/XDR rate.
 const NUM_DAYS_FOR_ICP_XDR_AVERAGE: usize = 30;
 /// The ICP/XDR start-of-day conversion rate of the past 60 days is cached.
