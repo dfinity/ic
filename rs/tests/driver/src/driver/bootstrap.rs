@@ -668,6 +668,7 @@ pub fn configure_setupos_image(
     let mut cmd = Command::new(setupos_inject_configs);
     cmd.arg("--image-path")
         .arg(&uncompressed_image)
+        .arg("--node-operator-private-key")
         .arg("--deployment-environment")
         .arg("Testnet")
         .arg("--mgmt-mac")
