@@ -3797,6 +3797,86 @@ impl TryFrom<pb_canister_state_bits::OnLowWasmMemoryHookStatus> for OnLowWasmMem
     }
 }
 
+/// Struct for encoding/decoding
+/// (record {
+///  canister_id : principal;
+///  snapshot_id : blob;
+///  kind : variant {
+///         wasm_module : record {
+///         offset : nat64;
+///         size : nat64;
+///     };
+///     main_memory : record {
+///         offset : nat64;
+///         size : nat64;
+///     };
+///     stable_memory : record {
+///         offset : nat64;
+///         size : nat64;
+///     };
+///     wasm_chunk : record {
+///         hash : blob;
+///     };
+///  };
+/// })
+
+#[derive(Clone, Debug, Deserialize, CandidType, Serialize)]
+pub struct ReadCanisterSnapshotDataArgs {
+    pub canister_id: PrincipalId,
+    #[serde(with = "serde_bytes")]
+    pub snapshot_id: Vec<u8>,
+    pub kind: CanisterSnapshotDataKind,
+}
+
+impl Payload<'_> for ReadCanisterSnapshotDataArgs {}
+
+impl ReadCanisterSnapshotDataArgs {
+    pub fn new(
+        canister_id: CanisterId,
+        snapshot_id: Vec<u8>,
+        kind: CanisterSnapshotDataKind,
+    ) -> Self {
+        Self {
+            canister_id: canister_id.get(),
+            snapshot_id,
+            kind,
+        }
+    }
+
+    pub fn get_canister_id(&self) -> CanisterId {
+        CanisterId::unchecked_from_principal(self.canister_id)
+    }
+}
+
+#[derive(Clone, Debug, Deserialize, CandidType, Serialize)]
+pub enum CanisterSnapshotDataKind {
+    WasmModule {
+        offset: u64,
+        size: u64,
+    },
+    MainMemory {
+        offset: u64,
+        size: u64,
+    },
+    StableMemory {
+        offset: u64,
+        size: u64,
+    },
+    WasmChunk {
+        #[serde(with = "serde_bytes")]
+        hash: Vec<u8>,
+    },
+}
+
+#[derive(Clone, Debug, Deserialize, CandidType, Serialize)]
+
+/// Struct to encode/decode
+/// (record { chunk: blob }; )
+pub struct ReadCanisterSnapshotDataResponse {
+    #[serde(with = "serde_bytes")]
+    pub chunk: Vec<u8>,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
