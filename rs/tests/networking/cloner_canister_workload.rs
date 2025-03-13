@@ -87,7 +87,8 @@ pub fn setup(env: TestEnv) {
         .with_required_host_features(vec![HostFeature::Performance])
         .add_subnet(
             Subnet::new(SubnetType::Application)
-                .add_nodes(SUBNET_SIZE)
+                .add_nodes(SUBNET_SIZE - 1)
+                .add_malicious_nodes(1, MaliciousBehaviour::new(true))
                 .with_initial_notary_delay(INITIAL_NOTARY_DELAY),
         )
         .setup_and_start(&env)
