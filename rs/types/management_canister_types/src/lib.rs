@@ -3877,6 +3877,48 @@ pub struct ReadCanisterSnapshotDataResponse {
     pub chunk: Vec<u8>,
 }
 
+/// Struct to encode/decode
+/// (record {
+///     canister_id : principal;
+///     replace_snapshot : opt blob;
+///     wasm_module_size : nat64;
+///     exported_globals : vec variant {
+///         i32 : int32;
+///         i64 : int64;
+///         f32 : float32;
+///         f64 : float64;
+///         v128 : nat;
+///     };
+///     wasm_memory_size : nat64;
+///     stable_memory_size : nat64;
+///     certified_data : blob;
+///     global_timer : variant {
+///         inactive;
+///         active : nat64;
+///     };
+///     on_low_wasm_memory_hook_status : variant {
+///         condition_not_satisfied;
+///         ready;
+///         executed;
+///     };
+/// };)
+
+#[derive(Clone, Debug, Deserialize, CandidType, Serialize)]
+pub struct UploadCanisterSnapshotMetadataArgs {
+    pub canister_id: PrincipalId,
+    pub replace_snapshot: Option<Vec<u8>>,
+    pub wasm_module_size: u64,
+    pub exported_globals: Vec<Global>,
+    pub wasm_memory_size: u64,
+    pub stable_memory_size: u64,
+    #[serde(with = "serde_bytes")]
+    pub certified_data: Vec<u8>,
+    pub global_timer: GlobalTimer,
+    pub on_low_wasm_memory_hook_status: OnLowWasmMemoryHookStatus,
+}
+
+impl Payload<'_> for UploadCanisterSnapshotMetadataArgs {}
+
 #[cfg(test)]
 mod tests {
     use super::*;
