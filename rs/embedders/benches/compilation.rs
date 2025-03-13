@@ -90,7 +90,7 @@ fn generate_binaries() -> Vec<(String, BinaryEncodedWasm)> {
 
     result.push(("open_chat".to_string(), open_chat_wasm));
 
-    // This benchmark uses the open chat user canister which is stored as a
+    // This benchmark uses the QR code generator canister which is stored as a
     // binary file in this repo.  It is generated from the directory
     // `rust/qrcode` in
     // https://github.com/dfinity/examples/tree/abk/for-replica-benchmarking
