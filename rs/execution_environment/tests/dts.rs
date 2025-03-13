@@ -11,10 +11,12 @@ use ic_config::{
 };
 use ic_management_canister_types_private::{
     CanisterIdRecord, CanisterInfoRequest, CanisterInstallMode, CanisterInstallModeV2,
-    CanisterSettingsArgsBuilder, ClearChunkStoreArgs, DeleteCanisterSnapshotArgs, EmptyBlob,
-    InstallChunkedCodeArgs, InstallCodeArgs, ListCanisterSnapshotArgs, LoadCanisterSnapshotArgs,
-    Method, Payload, ReadCanisterSnapshotMetadataArgs, StoredChunksArgs, TakeCanisterSnapshotArgs,
-    UninstallCodeArgs, UpdateSettingsArgs, UploadChunkArgs, IC_00,
+    CanisterSettingsArgsBuilder, CanisterSnapshotDataKind, ClearChunkStoreArgs,
+    DeleteCanisterSnapshotArgs, EmptyBlob, InstallChunkedCodeArgs, InstallCodeArgs,
+    ListCanisterSnapshotArgs, LoadCanisterSnapshotArgs, Method, Payload,
+    ReadCanisterSnapshotDataArgs, ReadCanisterSnapshotMetadataArgs, StoredChunksArgs,
+    TakeCanisterSnapshotArgs, UninstallCodeArgs, UpdateSettingsArgs,
+    UploadCanisterSnapshotDataArgs, UploadCanisterSnapshotMetadataArgs, UploadChunkArgs, IC_00,
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::canister_state::{execution_state::NextScheduledMethod, NextExecution};
@@ -1273,6 +1275,40 @@ fn dts_aborted_execution_does_not_block_subnet_messages() {
             Method::ReadCanisterSnapshotMetadata => test_supported(|aborted_canister_id| {
                 let args =
                     ReadCanisterSnapshotMetadataArgs::new(aborted_canister_id, vec![]).encode();
+                (method, call_args().other_side(args))
+            }),
+            Method::ReadCanisterSnapshotData => test_supported(|aborted_canister_id| {
+                let args = ReadCanisterSnapshotDataArgs::new(
+                    aborted_canister_id,
+                    vec![],
+                    CanisterSnapshotDataKind::WasmModule { size: 0, offset: 0 },
+                )
+                .encode();
+                (method, call_args().other_side(args))
+            }),
+            Method::UploadCanisterSnapshotMetadata => test_supported(|aborted_canister_id| {
+                let args = UploadCanisterSnapshotMetadataArgs::new(
+                    aborted_canister_id,
+                    None,
+                    0,
+                    vec![],
+                    0,
+                    0,
+                    vec![],
+                    GlobalTimer::Inactive,
+                    OnLowWasmMemoryHookStatus::Ready,
+                )
+                .encode();
+                (method, call_args().other_side(args))
+            }),
+            Method::UploadCanisterSnapshotData => test_supported(|aborted_canister_id| {
+                let args = UploadCanisterSnapshotDataArgs::new(
+                    aborted_canister_id,
+                    vec![],
+                    CanisterSnapshotDataKind::WasmChunk,
+                    vec![],
+                )
+                .encode();
                 (method, call_args().other_side(args))
             }),
         }

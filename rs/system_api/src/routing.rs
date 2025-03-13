@@ -310,6 +310,33 @@ pub(super) fn resolve_destination(
                 network_topology,
             )
         }
+        Ok(Ic00Method::ReadCanisterSnapshotData) => {
+            let args = ReadCanisterSnapshotDataArgs::decode(payload)?;
+            let canister_id = args.get_canister_id();
+            route_canister_id(
+                canister_id,
+                Ic00Method::ReadCanisterSnapshotData,
+                network_topology,
+            )
+        }
+        Ok(Ic00Method::UploadCanisterSnapshotMetadata) => {
+            let args = UploadCanisterSnapshotMetadataArgs::decode(payload)?;
+            let canister_id = args.get_canister_id();
+            route_canister_id(
+                canister_id,
+                Ic00Method::UploadCanisterSnapshotMetadata,
+                network_topology,
+            )
+        }
+        Ok(Ic00Method::UploadCanisterSnapshotData) => {
+            let args = UploadCanisterSnapshotDataArgs::decode(payload)?;
+            let canister_id = args.get_canister_id();
+            route_canister_id(
+                canister_id,
+                Ic00Method::UploadCanisterSnapshotData,
+                network_topology,
+            )
+        }
         Err(_) => Err(ResolveDestinationError::MethodNotFound(
             method_name.to_string(),
         )),

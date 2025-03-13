@@ -130,6 +130,9 @@ pub enum Method {
 
     // Support for import and export of canister snapshots
     ReadCanisterSnapshotMetadata,
+    ReadCanisterSnapshotData,
+    UploadCanisterSnapshotMetadata,
+    UploadCanisterSnapshotData,
 }
 
 fn candid_error_to_user_error(err: candid::Error) -> UserError {
