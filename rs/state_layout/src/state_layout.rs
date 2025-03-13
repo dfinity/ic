@@ -485,6 +485,11 @@ fn spawn_checkpoint_removal_thread(
                 while let Ok(req) = checkpoint_removal_receiver.recv() {
                     match req {
                         CheckpointRemovalRequest::Remove(path) => {
+                            info!(
+                                log,
+                                "checkpoint_removal_thread handles CheckpointRemovalRequest::Remove {}",
+                                path.display(),
+                            );
                             let start = Instant::now();
                             if let Err(err) = std::fs::remove_dir_all(&path) {
                                 error!(
@@ -506,6 +511,10 @@ fn spawn_checkpoint_removal_thread(
                             );
                         }
                         CheckpointRemovalRequest::Wait { sender } => {
+                            info!(
+                                log,
+                                "checkpoint_removal_thread handles CheckpointRemovalRequest::Wait",
+                            );
                             sender.send(()).expect("Failed to send completion signal");
                         }
                     }
@@ -988,6 +997,7 @@ impl StateLayout {
         // Drops drop_after_rename once the checkpoint path is renamed to tmp_path.
         std::mem::drop(drop_after_rename);
 
+        eprintln!("checkpoint_removal_channel_length: {}", self.checkpoint_removal_sender.len());
         self.metrics
             .checkpoint_removal_channel_length
             .set(self.checkpoint_removal_sender.len() as i64);
@@ -1123,6 +1133,7 @@ impl StateLayout {
     }
 
     pub fn flush_checkpoint_removal_channel(&self) {
+        eprintln!("checkpoint_removal_channel_length: {}", self.checkpoint_removal_sender.len());
         self.metrics
             .checkpoint_removal_channel_length
             .set(self.checkpoint_removal_sender.len() as i64);
@@ -1131,6 +1142,7 @@ impl StateLayout {
         self.checkpoint_removal_sender
             .send(CheckpointRemovalRequest::Wait { sender })
             .expect("failed to send completion signal");
+        eprintln!("Sent CheckpointRemovalRequest::Wait");
         receiver
             .recv()
             .expect("failed to receive completion signal");
