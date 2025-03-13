@@ -17525,13 +17525,17 @@ version = "0.9.0"
 dependencies = [
  "anyhow",
  "futures",
+ "ic-agent",
+ "ic-boundary-nodes-system-test-utils",
  "ic-canister-client",
  "ic-nervous-system-common-test-keys",
  "ic-nns-common",
+ "ic-nns-constants",
  "ic-protobuf",
  "ic-registry-subnet-type",
  "ic-system-test-driver",
  "ic-types",
+ "ic-utils 0.39.3",
  "ic_consensus_system_test_utils",
  "itertools 0.12.1",
  "reqwest 0.12.12",
@@ -17539,6 +17543,7 @@ dependencies = [
  "slog",
  "tokio",
  "url",
+ "wat",
  "xnet-slo-test-lib",
 ]
 
