@@ -109,9 +109,8 @@ fn test(env: TestEnv) {
             let _key =
                 DerivedPublicKey::deserialize(&pub_key).expect("Failed to parse vetkd public key");
 
-            let enc_msg =
-                IBECiphertext::encrypt(&pub_key, INPUT.as_bytes(), MSG.as_bytes(), &SEED)
-                    .expect("Failed to encrypt message");
+            let enc_msg = IBECiphertext::encrypt(&pub_key, INPUT.as_bytes(), MSG.as_bytes(), &SEED)
+                .expect("Failed to encrypt message");
 
             let transport_key = TransportSecretKey::from_seed(SEED.to_vec())
                 .expect("Failed to generate transport secret key");

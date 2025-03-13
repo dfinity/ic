@@ -735,8 +735,7 @@ pub async fn get_vetkd_with_logger(
                 if count < 5 {
                     debug!(
                         logger,
-                        "vetkd_derive_key returns `{}`. Trying again in 2 seconds...",
-                        err
+                        "vetkd_derive_key returns `{}`. Trying again in 2 seconds...", err
                     );
                     tokio::time::sleep(Duration::from_secs(2)).await;
                 } else {
@@ -1099,8 +1098,7 @@ pub async fn vetkd_derive_key(
         )
         .await?;
 
-    let res =
-        VetKdDeriveKeyResult::decode(&res).expect("Failed to decode VetKdDeriveKeyResult");
+    let res = VetKdDeriveKeyResult::decode(&res).expect("Failed to decode VetKdDeriveKeyResult");
 
     Ok(res.encrypted_key)
 }
