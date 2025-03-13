@@ -99,6 +99,30 @@ REPOS_TO_SCAN = [
         ],
         "22.11.0",
     ),
+    Repository(
+        "oisy-wallet",
+        "https://github.com/dfinity/oisy-wallet",
+        [
+            Project(
+                name="oisy-wallet",
+                path="oisy-wallet",
+                owner=Team.GIX_TEAM,
+            )
+        ],
+        "22.11.0",
+    ),
+    Repository(
+        "chain-fusion-signer",
+        "https://github.com/dfinity/chain-fusion-signer",
+        [
+            Project(
+                name="chain-fusion-signer",
+                path="chain-fusion-signer",
+                owner=Team.GIX_TEAM,
+            )
+        ],
+        DEFAULT_NODE_VERSION,
+    ),
     # Removing ic-docutrack temporarily since it supports
     # only pnpm and not npm
     # Repository(
