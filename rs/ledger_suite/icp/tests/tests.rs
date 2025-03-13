@@ -2390,12 +2390,9 @@ fn send_dfx_test() {
         let minting_account = create_sender(0);
 
         let account1 = create_sender(1);
-        let ai1 = AccountIdentifier::new(account1.get_principal_id().into(), None);
+        let ai1 = AccountIdentifier::new(account1.get_principal_id(), None);
         let subaccount = [1u8; 32];
-        let ai2 = AccountIdentifier::new(
-            account1.get_principal_id().into(),
-            Some(Subaccount(subaccount)),
-        );
+        let ai2 = AccountIdentifier::new(account1.get_principal_id(), Some(Subaccount(subaccount)));
         let accounts = HashMap::from([
             (ai1, Tokens::from_e8s(1_000_000_000)),
             (ai2, Tokens::from_e8s(1_000_000_000)),
