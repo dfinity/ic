@@ -1,7 +1,6 @@
 use crate::governance::test_helpers::basic_governance_proto;
 use crate::governance::ValidGovernanceProto;
 use crate::governance::{test_helpers::DoNothingLedger, Governance};
-use crate::pb::v1::proposal::Action;
 use crate::pb::v1::{self as pb, nervous_system_function};
 use crate::types::{native_action_ids::nervous_system_functions, test_helpers::NativeEnvironment};
 use ic_base_types::PrincipalId;
