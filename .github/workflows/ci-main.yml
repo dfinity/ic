@@ -97,10 +97,9 @@ jobs:
           CLOUD_CREDENTIALS_CONTENT: ${{ secrets.CLOUD_CREDENTIALS_CONTENT }}
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
       - name: Upload SHA256SUMS (cache)
-        uses: actions/upload-artifact@v4
+        uses: ./.github/actions/bazel-upload-checksums/
         with:
-          name: shasums-cache
-          path: SHA256SUMS
+          artifact-name: shasums-cache
       - name: Upload bazel-bep
         # runs only if previous step succeeded or failed;
         # we avoid collecting artifacts of jobs that were cancelled
@@ -291,13 +290,6 @@ jobs:
           ln -s "/cache/job/${CI_JOB_NAME}/${CI_RUN_ID}/artifacts" /__w/$REPO_NAME/$REPO_NAME/artifacts
           "$CI_PROJECT_DIR"/ci/scripts/run-build-ic.sh
           rm -rf "/cache/job/${CI_JOB_NAME}/${CI_RUN_ID}"
-
-          # List and aggregate all SHA256SUMS files (if bazel-out exists)
-          if [ -e bazel-out]; then
-            find -L bazel-out -name SHA256SUMS | xargs cat | sort | uniq > SHA256SUMS
-          else
-            touch SHA256SUMS
-          fi
         env:
           BAZEL_COMMAND: build --config=ci
           BAZEL_TARGETS: //...
@@ -305,10 +297,9 @@ jobs:
           BRANCH_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           RUN_ON_DIFF_ONLY: ${{ github.event_name == 'pull_request' && !contains(github.event.pull_request.labels.*.name, 'CI_ALL_BAZEL_TARGETS') }}
       - name: Upload SHA256SUMS (nocache)
-        uses: actions/upload-artifact@v4
+        uses: ./.github/actions/bazel-upload-checksums/
         with:
-          name: shasums-nocache
-          path: SHA256SUMS
+          artifact-name: shasums-nocache
   build-determinism:
     name: Build Determinism
     runs-on: ubuntu-latest
