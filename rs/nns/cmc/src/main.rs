@@ -1082,9 +1082,9 @@ fn transaction_notification_pb() {
         match do_transaction_notification(request).await {
             Ok(response) => match ProtoBuf::new(response).into_bytes() {
                 Ok(buf) => reply_raw(&buf),
-                Err(e) => ic_cdk::trap(&format!("Error: {:?}", e)),
+                Err(e) => ic_cdk::api::call::reject(&format!("Error: {:?}", e)),
             },
-            Err(e) => ic_cdk::trap(&format!("Error: {:?}", e)),
+            Err(e) => ic_cdk::api::call::reject(&format!("Error: {:?}", e)),
         }
     })
 }
