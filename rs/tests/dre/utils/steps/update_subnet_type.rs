@@ -209,6 +209,7 @@ impl Step for UpdateApiBoundaryNodes {
             .map(|n| n.node_id)
             .collect();
 
+        info!(logger, "Submit the proposal to upgrade the API BNs");
         let proposal_id = rt.block_on(submit_update_api_boundary_node_version_proposal(
             &governance_canister,
             proposal_sender,
@@ -216,11 +217,17 @@ impl Step for UpdateApiBoundaryNodes {
             node_ids,
             self.version.clone(),
         ));
+
+        info!(logger, "Vote on the proposal");
         rt.block_on(vote_execute_proposal_assert_executed(
             &governance_canister,
             proposal_id,
         ));
 
+        info!(
+            logger,
+            "Wait for the proposal to pass and update the registry"
+        );
         rt.block_on(env.topology_snapshot().block_for_newer_registry_version())?;
 
         Ok(())
