@@ -40,8 +40,8 @@ pub(crate) fn sigsegv_memory_tracker_handler(
     move |signum: i32, siginfo_ptr: *const libc::siginfo_t, ucontext_ptr: *const libc::c_void| {
         use nix::sys::signal::Signal;
 
-        // The timer starts immediately. The guard will capture this timer and report it
-        // to the corresponding metric when the `memory_tracker` object is locked.
+        // The timer starts immediately. Later, the guard will capture and report this timer
+        // to the corresponding metric once the `memory_tracker` object is locked (see below).
         let timer = std::time::Instant::now();
 
         let signal = Signal::try_from(signum).expect("signum is a valid signal");

@@ -1028,28 +1028,28 @@ impl WasmtimeInstance {
 
     fn set_instance_stats(&mut self, access_results: &PageAccessResults) {
         // Wasm stats.
-        self.instance_stats.wasm_accessed_pages += access_results.wasm_num_accessed_pages;
-        self.instance_stats.wasm_dirty_pages += access_results.wasm_dirty_pages.len();
-        self.instance_stats.wasm_read_before_write_count +=
+        self.instance_stats.wasm_accessed_pages = access_results.wasm_num_accessed_pages;
+        self.instance_stats.wasm_dirty_pages = access_results.wasm_dirty_pages.len();
+        self.instance_stats.wasm_read_before_write_count =
             access_results.wasm_read_before_write_count;
-        self.instance_stats.wasm_direct_write_count += access_results.wasm_direct_write_count;
-        self.instance_stats.wasm_sigsegv_count += access_results.wasm_sigsegv_count;
-        self.instance_stats.wasm_mmap_count += access_results.wasm_mmap_count;
-        self.instance_stats.wasm_mprotect_count += access_results.wasm_mprotect_count;
-        self.instance_stats.wasm_copy_page_count += access_results.wasm_copy_page_count;
-        self.instance_stats.wasm_sigsegv_handler_duration +=
+        self.instance_stats.wasm_direct_write_count = access_results.wasm_direct_write_count;
+        self.instance_stats.wasm_sigsegv_count = access_results.wasm_sigsegv_count;
+        self.instance_stats.wasm_mmap_count = access_results.wasm_mmap_count;
+        self.instance_stats.wasm_mprotect_count = access_results.wasm_mprotect_count;
+        self.instance_stats.wasm_copy_page_count = access_results.wasm_copy_page_count;
+        self.instance_stats.wasm_sigsegv_handler_duration =
             access_results.wasm_sigsegv_handler_duration;
         // Stable stats.
-        self.instance_stats.stable_accessed_pages += access_results.stable_accessed_pages;
-        self.instance_stats.stable_dirty_pages += access_results.stable_dirty_pages.len();
-        self.instance_stats.stable_read_before_write_count +=
+        self.instance_stats.stable_accessed_pages = access_results.stable_accessed_pages;
+        self.instance_stats.stable_dirty_pages = access_results.stable_dirty_pages.len();
+        self.instance_stats.stable_read_before_write_count =
             access_results.stable_read_before_write_count;
-        self.instance_stats.stable_direct_write_count += access_results.stable_direct_write_count;
-        self.instance_stats.stable_sigsegv_count += access_results.stable_sigsegv_count;
-        self.instance_stats.stable_mmap_count += access_results.stable_mmap_count;
-        self.instance_stats.stable_mprotect_count += access_results.stable_mprotect_count;
-        self.instance_stats.stable_copy_page_count += access_results.stable_copy_page_count;
-        self.instance_stats.stable_sigsegv_handler_duration +=
+        self.instance_stats.stable_direct_write_count = access_results.stable_direct_write_count;
+        self.instance_stats.stable_sigsegv_count = access_results.stable_sigsegv_count;
+        self.instance_stats.stable_mmap_count = access_results.stable_mmap_count;
+        self.instance_stats.stable_mprotect_count = access_results.stable_mprotect_count;
+        self.instance_stats.stable_copy_page_count = access_results.stable_copy_page_count;
+        self.instance_stats.stable_sigsegv_handler_duration =
             access_results.stable_sigsegv_handler_duration;
     }
 

@@ -2709,9 +2709,10 @@ mod tests {
             "sandboxed_execution_sigsegv_handler_duration_seconds",
         );
 
+        const SOME_TINY_NON_ZERO_DURATION_SECONDS: f64 = 0.000001; // 1 µs
         let value = metrics.get(&api_memory_key("update", "wasm")).unwrap();
         assert_eq!(value.count, 1);
-        assert!(value.sum > 0.000001); // 1 µs
+        assert!(value.sum > SOME_TINY_NON_ZERO_DURATION_SECONDS);
 
         let value = metrics.get(&api_memory_key("update", "stable")).unwrap();
         assert_eq!(value.count, 1);
@@ -2728,11 +2729,11 @@ mod tests {
 
         let value = metrics.get(&api_memory_key("update", "wasm")).unwrap();
         assert_eq!(value.count, 2);
-        assert!(value.sum > 0.000001); // 1 µs
+        assert!(value.sum > SOME_TINY_NON_ZERO_DURATION_SECONDS);
 
         let value = metrics.get(&api_memory_key("update", "stable")).unwrap();
         assert_eq!(value.count, 2);
-        assert!(value.sum > 0.000001); // 1 µs
+        assert!(value.sum > SOME_TINY_NON_ZERO_DURATION_SECONDS);
     }
 
     #[cfg(not(all(target_arch = "aarch64", target_vendor = "apple")))]
@@ -2784,9 +2785,10 @@ mod tests {
             "sandboxed_execution_sigsegv_handler_duration_seconds",
         );
 
+        const SOME_BIGGER_DURATION_SECONDS: f64 = 0.001; // 1 ms
         let value = metrics.get(&api_memory_key("update", "wasm")).unwrap();
         assert_eq!(value.count, 1);
-        assert!(value.sum > 0.001); // 1 ms
+        assert!(value.sum > SOME_BIGGER_DURATION_SECONDS);
 
         let value = metrics.get(&api_memory_key("update", "stable")).unwrap();
         assert_eq!(value.count, 1);
@@ -2803,10 +2805,10 @@ mod tests {
 
         let value = metrics.get(&api_memory_key("update", "wasm")).unwrap();
         assert_eq!(value.count, 2);
-        assert!(value.sum > 0.001); // 1 ms
+        assert!(value.sum > SOME_BIGGER_DURATION_SECONDS);
 
         let value = metrics.get(&api_memory_key("update", "stable")).unwrap();
         assert_eq!(value.count, 2);
-        assert!(value.sum > 0.001); // 1 ms
+        assert!(value.sum > SOME_BIGGER_DURATION_SECONDS);
     }
 }
