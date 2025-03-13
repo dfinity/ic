@@ -46,16 +46,21 @@ impl StorageClient {
             return Ok(false);
         };
         let block_count = self.get_block_count()?;
-        match block_count == highest_block_idx.saturating_add(1) {
-            true => Ok(false),
-            false => {
-                warn!(
-                    "block_count ({}) does not equal highest_block_idx.saturating_add(1) ({}) -> gaps!",
+        if block_count == highest_block_idx.saturating_add(1) {
+            Ok(false)
+        } else if block_count < highest_block_idx.saturating_add(1) {
+            warn!(
+                "block_count ({}) is less than highest_block_idx.saturating_add(1) ({}), indicating one of more gaps in the blockchain.",
+                block_count,
+                highest_block_idx.saturating_add(1)
+            );
+            Ok(true)
+        } else {
+            panic!(
+                    "block_count ({}) is larger than highest_block_idx.saturating_add(1) ({}) -> invalid state!",
                     block_count,
                     highest_block_idx.saturating_add(1)
                 );
-                Ok(true)
-            }
         }
     }
 
@@ -159,6 +164,11 @@ impl StorageClient {
     pub fn write_metadata(&self, metadata: Vec<MetadataEntry>) -> anyhow::Result<()> {
         let mut open_connection = self.storage_connection.lock().unwrap();
         storage_operations::store_metadata(&mut open_connection, metadata)
+    }
+
+    pub fn reset_blocks_counter(&self) -> Result<()> {
+        let mut open_connection = self.storage_connection.lock().unwrap();
+        storage_operations::reset_blocks_counter(&mut open_connection)
     }
 
     fn create_tables(&self) -> Result<(), rusqlite::Error> {

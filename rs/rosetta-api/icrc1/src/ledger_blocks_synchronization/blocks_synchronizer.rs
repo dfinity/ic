@@ -12,7 +12,7 @@ use num_traits::ToPrimitive;
 use serde_bytes::ByteBuf;
 use std::{cmp, collections::HashMap, ops::RangeInclusive, sync::Arc};
 use tokio::sync::Mutex as AsyncMutex;
-use tracing::info;
+use tracing::{info, warn};
 
 // The Range of indices to be synchronized.
 // Contains the hashes of the top and end of the index range, which is used to ensure the fetched block interval is valid.
@@ -54,6 +54,9 @@ fn derive_synchronization_gaps(
     // The database should have at most one gap. Otherwise the database file was edited and it can no longer be guaranteed that it contains valid blocks.
     if gap.len() > 1 {
         bail!("The database has {} gaps. More than one gap means the database has been tampered with and can no longer be guaranteed to contain valid blocks",gap.len());
+    } else if gap.is_empty() {
+        warn!("The database has a gap but the list of gaps is empty. This should not happen. Resetting the blocks counter by counting the actual number of synced blocks.");
+        storage_client.reset_blocks_counter()?;
     }
 
     let mut sync_ranges = gap

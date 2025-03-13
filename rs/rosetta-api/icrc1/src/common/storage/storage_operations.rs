@@ -542,6 +542,13 @@ where
     read_blocks(&mut stmt, params)
 }
 
+pub fn reset_blocks_counter(connection: &Connection) -> anyhow::Result<()> {
+    connection
+        .prepare_cached("UPDATE counters SET value = (SELECT COUNT(*) FROM blocks) WHERE name IS 'SyncedBlocks'")?
+        .execute(params![])?;
+    Ok(())
+}
+
 fn read_single_block<P>(
     stmt: &mut CachedStatement,
     params: P,
