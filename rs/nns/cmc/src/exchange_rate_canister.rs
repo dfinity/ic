@@ -7,6 +7,7 @@ use candid::CandidType;
 use cycles_minting_canister::IcpXdrConversionRate;
 use ic_base_types::CanisterId;
 use ic_cdk::api::call::CallResult;
+use ic_nervous_system_time_helpers::now_seconds;
 use ic_nns_common::types::UpdateIcpXdrConversionRatePayloadReason;
 use ic_xrc_types::{
     Asset, AssetClass, ExchangeRate, ExchangeRateError, GetExchangeRateRequest,
@@ -499,7 +500,6 @@ mod test {
         DEFAULT_ICP_XDR_CONVERSION_RATE_TIMESTAMP_SECONDS,
         DEFAULT_XDR_PERMYRIAD_PER_ICP_CONVERSION_RATE,
     };
-    use cycles_minting_canister::now_seconds;
     use futures::FutureExt;
     use ic_xrc_types::ExchangeRateMetadata;
     use std::{

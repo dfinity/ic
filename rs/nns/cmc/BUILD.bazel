@@ -14,6 +14,7 @@ DEPENDENCIES = [
     "//rs/nervous_system/clients",
     "//rs/nervous_system/common",
     "//rs/nervous_system/governance",
+    "//rs/nervous_system/time_helpers",
     "//rs/nns/common",
     "//rs/nns/constants",
     "//rs/protobuf",
