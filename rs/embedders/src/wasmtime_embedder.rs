@@ -1053,34 +1053,6 @@ impl WasmtimeInstance {
     pub fn run(&mut self, func_ref: FuncRef) -> HypervisorResult<InstanceRunResult> {
         let _alt_sig_stack = unsafe { self.signal_stack.register() };
 
-        // Use the libc::mlock2() API to lock the wasm heap pages in memory.
-        // This is done to prevent the OS from swapping out the wasm heap pages
-        // to disk. Only do this on Linux.
-        #[cfg(target_os = "linux")]
-        unsafe {
-            let heap_address = self.heap_addr(CanisterMemoryType::Heap);
-            let heap_size =
-                self.heap_size(CanisterMemoryType::Heap).get() * WASM_PAGE_SIZE_IN_BYTES;
-            println!(
-                "heap_address: {:?}, heap_size: {:?}",
-                heap_address, heap_size
-            );
-            if !heap_address.is_null() && heap_size > 0 {
-                let ret = libc::mlock2(
-                    heap_address as *const libc::c_void,
-                    heap_size,
-                    libc::MLOCK_ONFAULT,
-                );
-                if ret != 0 {
-                    let err = std::io::Error::last_os_error();
-                    error!(
-                        self.log,
-                        "Failed to lock wasm heap pages in memory: {:?}", err
-                    );
-                }
-            }
-        }
-
         let result = match &func_ref {
             FuncRef::Method(wasm_method) => self.invoke_export(&wasm_method.to_string(), &[]),
             FuncRef::QueryClosure(closure) | FuncRef::UpdateClosure(closure) => {

@@ -651,7 +651,22 @@ pub fn sigsegv_fault_handler_new(
                         ProtFlags::PROT_READ | ProtFlags::PROT_WRITE,
                     )
                     .map_err(print_enomem_help)
-                    .unwrap()
+                    .unwrap();
+
+                    // Call mlock2 to lock the pages in memory. This is needed to prevent the kernel
+                    // from swapping out the pages to disk.
+                    // If it fails, we just log a warning.
+                    let ret = libc::mlock2(
+                        page_start_addr,
+                        range_size_in_bytes(&prefetch_range),
+                        libc::MLOCK_ONFAULT,
+                    );
+                    if ret != 0 {
+                        let err = std::io::Error::last_os_error();
+                        eprintln!("mlock2 failed 1: {}", err);
+                    } else {
+                        eprintln!("mlock2 success 1");
+                    }
                 };
                 tracker
                     .memory_instructions_stats
@@ -777,7 +792,22 @@ fn apply_memory_instructions(
                             current_prot_flags,
                         )
                         .map_err(print_enomem_help)
-                        .unwrap()
+                        .unwrap();
+
+                        // Call mlock2 to lock the pages in memory. This is needed to prevent the kernel
+                        // from swapping out the pages to disk.
+                        // If it fails, we just log a warning.
+                        let ret = libc::mlock2(
+                            tracker.page_start_addr_from(prefetch_range.start),
+                            range_size_in_bytes(&prefetch_range),
+                            libc::MLOCK_ONFAULT,
+                        );
+                        if ret != 0 {
+                            let err = std::io::Error::last_os_error();
+                            println!("mlock2 failed 2: {}", err);
+                        } else {
+                            println!("mlock2 success 2");
+                        }
                     };
                     tracker
                         .memory_instructions_stats
@@ -808,7 +838,20 @@ fn apply_memory_instructions(
                 page_protection_flags,
             )
             .map_err(print_enomem_help)
-            .unwrap()
+            .unwrap();
+
+            // Call mlock2 to lock the pages in memory. This is needed to prevent the kernel
+            // from swapping out the pages to disk.
+            // If it fails, we just log a warning.
+            let ret = libc::mlock2(
+                tracker.page_start_addr_from(prefetch_range.start),
+                range_size_in_bytes(&prefetch_range),
+                libc::MLOCK_ONFAULT,
+            );
+            if ret != 0 {
+                let err = std::io::Error::last_os_error();
+                println!("mlock2 failed 3: {}", err);
+            }
         };
         tracker
             .memory_instructions_stats
