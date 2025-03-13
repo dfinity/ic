@@ -3919,6 +3919,94 @@ pub struct UploadCanisterSnapshotMetadataArgs {
 
 impl Payload<'_> for UploadCanisterSnapshotMetadataArgs {}
 
+impl UploadCanisterSnapshotMetadataArgs {
+    pub fn new(
+        canister_id: CanisterId,
+        replace_snapshot: Option<Vec<u8>>,
+        wasm_module_size: u64,
+        exported_globals: Vec<Global>,
+        wasm_memory_size: u64,
+        stable_memory_size: u64,
+        certified_data: Vec<u8>,
+        global_timer: GlobalTimer,
+        on_low_wasm_memory_hook_status: OnLowWasmMemoryHookStatus,
+    ) -> Self {
+        Self {
+            canister_id: canister_id.get(),
+            replace_snapshot,
+            wasm_module_size,
+            exported_globals,
+            wasm_memory_size,
+            stable_memory_size,
+            certified_data,
+            global_timer,
+            on_low_wasm_memory_hook_status,
+        }
+    }
+
+    pub fn get_canister_id(&self) -> CanisterId {
+        CanisterId::unchecked_from_principal(self.canister_id)
+    }
+}
+
+/// Struct to encode/decode
+/// (record {
+///     canister_id : principal;
+///     snapshot_id : blob;
+///     kind : variant {
+///         wasm_module : record {
+///             offset : nat64;
+///         };
+///         main_memory : record {
+///             offset : nat64;
+///         };
+///         stable_memory : record {
+///             offset : nat64;
+///         };
+///         wasm_chunk;
+///     };
+///     chunk : blob;
+/// };)
+
+#[derive(Clone, Debug, Deserialize, CandidType, Serialize)]
+pub struct UploadCanisterSnapshotDataArgs {
+    pub canister_id: PrincipalId,
+    pub snapshot_id: Vec<u8>,
+    pub kind: CanisterSnapshotDataKind,
+    #[serde(with = "serde_bytes")]
+    pub chunk: Vec<u8>,
+}
+
+impl Payload<'_> for UploadCanisterSnapshotDataArgs {}
+
+impl UploadCanisterSnapshotDataArgs {
+    pub fn new(
+        canister_id: CanisterId,
+        snapshot_id: Vec<u8>,
+        kind: CanisterSnapshotDataKind,
+        chunk: Vec<u8>,
+    ) -> Self {
+        Self {
+            canister_id: canister_id.get(),
+            snapshot_id,
+            kind,
+            chunk,
+        }
+    }
+
+    pub fn get_canister_id(&self) -> CanisterId {
+        CanisterId::unchecked_from_principal(self.canister_id)
+    }
+}
+
+#[derive(Clone, Debug, Deserialize, CandidType, Serialize)]
+pub enum CanisterSnapshotDataOffset {
+    WasmModule { offset: u64 },
+    MainMemory { offset: u64 },
+    StableMemory { offset: u64 },
+    WasmChunk,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
