@@ -500,6 +500,8 @@ mod tests {
 
               // Fetch the database gaps and map them to indices tuples.
               let derived_gaps = storage_client_memory.get_blockchain_gaps().unwrap().into_iter().map(|(a,b)| (a.index,b.index)).collect::<Vec<(u64,u64)>>();
+              // Does the blockchain have gaps?
+              let has_gaps = storage_client_memory.does_blockchain_have_gaps().unwrap();
 
               // If the database is empty the returned gaps vector should simply be empty.
               if rosetta_blocks.last().is_some(){
@@ -507,9 +509,13 @@ mod tests {
 
                   // Compare the storage with the test function.
                   assert_eq!(gaps,derived_gaps);
+
+                  assert!(has_gaps);
               }
               else{
-                  assert!(derived_gaps.is_empty())
+                  assert!(derived_gaps.is_empty());
+
+                  assert!(!has_gaps);
               }
            }
 
