@@ -81,7 +81,7 @@ fn generate_binaries() -> Vec<(String, BinaryEncodedWasm)> {
 
     // This benchmark uses the open chat user canister which is stored as a
     // binary file in this repo.  It is generated from
-    // https://github.com/adambratschikaye/open-chat/tree/abk/for-replica-benchmarking
+    // https://github.com/dfinity/open-chat/tree/abk/for-replica-benchmarking
     let mut decoder =
         libflate::gzip::Decoder::new(&include_bytes!("test-data/user.wasm.gz")[..]).unwrap();
     let mut buf = vec![];
