@@ -92,6 +92,9 @@ async fn test_upgrade_existing_sns() {
         pocket_ic
     };
 
+    // TODO[NNS1-3657]: Do not upgrade SNS-W, use the mainnet version.
+    upgrade_nns_canister_to_tip_of_master_or_panic(&pocket_ic, SNS_WASM_CANISTER_ID).await;
+
     // We don't publish or upgrade any release candidate canisters yet. We want to deploy a mainnet
     // version of the SNS first, then upgrade and validate.
 

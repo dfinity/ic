@@ -7,15 +7,15 @@ use ic_error_types::{ErrorCode, RejectCode};
 use ic_management_canister_types_private::{
     self as ic00, CanisterChange, CanisterChangeDetails, CanisterSettingsArgsBuilder,
     CanisterSnapshotResponse, ClearChunkStoreArgs, DeleteCanisterSnapshotArgs,
-    ListCanisterSnapshotArgs, LoadCanisterSnapshotArgs, Method, Payload as Ic00Payload,
-    TakeCanisterSnapshotArgs, UpdateSettingsArgs, UploadChunkArgs,
+    ListCanisterSnapshotArgs, LoadCanisterSnapshotArgs, Method, OnLowWasmMemoryHookStatus,
+    Payload as Ic00Payload, TakeCanisterSnapshotArgs, UpdateSettingsArgs, UploadChunkArgs,
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
     canister_snapshots::SnapshotOperation,
     canister_state::{
         execution_state::{WasmBinary, WasmExecutionMode},
-        system_state::{CyclesUseCase, OnLowWasmMemoryHookStatus},
+        system_state::CyclesUseCase,
     },
     CanisterState, ExecutionState, SchedulerState,
 };

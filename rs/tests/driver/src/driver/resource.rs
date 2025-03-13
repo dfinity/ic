@@ -65,7 +65,7 @@ impl From<DiskImage> for ImageLocation {
                 url: src.url.clone(),
                 sha256: src.sha256,
             },
-            ImageType::PrometheusImage | ImageType::UniversalImage => ImageViaUrl {
+            _ => ImageViaUrl {
                 url: src.url.clone(),
                 sha256: src.sha256,
             },
@@ -340,21 +340,9 @@ pub fn allocate_resources(
                 .into();
                 vm_responses.push((
                     vm_name,
-                    block_on(tnet.vm_create(
-                        CreateVmRequest {
-                            primary_image: ImageLocation::PersistentVolumeClaim {
-                                name: match req.primary_image.image_type {
-                                    ImageType::IcOsImage => {
-                                        format!("image-guestos-{}", tnet.image_sha)
-                                    }
-                                    ImageType::PrometheusImage => "img-prometheus-vm".into(),
-                                    ImageType::UniversalImage => "img-universal-vm".into(),
-                                },
-                            },
-                            ..create_vm_request
-                        },
-                        req.primary_image.image_type.clone(),
-                    ))
+                    block_on(
+                        tnet.vm_create(create_vm_request, req.primary_image.image_type.clone()),
+                    )
                     .expect("failed to create vm"),
                 ));
                 tnet.write_attribute(env);
