@@ -721,10 +721,10 @@ impl PayloadBuilder {
         self
     }
 
-    pub fn cost_vetkd_derive_encrypted_key(mut self, data: &[u8], curve: u32) -> Self {
+    pub fn cost_vetkd_derive_key(mut self, data: &[u8], curve: u32) -> Self {
         self = self.push_bytes(data);
         self = self.push_int(curve);
-        self.0.push(Ops::CostVetkdDeriveEncryptedKey as u8);
+        self.0.push(Ops::CostVetkdDeriveKey as u8);
         self
     }
 
