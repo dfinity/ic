@@ -272,7 +272,6 @@ impl BlockMaker {
             context,
             parent,
             height,
-            certified_height,
             rank,
             registry_version,
             &subnet_records,
@@ -282,14 +281,12 @@ impl BlockMaker {
     /// Construct a block proposal with specified validation context, parent
     /// block, rank, and batch payload. This function completes the block by
     /// adding a DKG payload and signs the block to obtain a block proposal.
-    #[allow(clippy::too_many_arguments)]
     pub(crate) fn construct_block_proposal(
         &self,
         pool: &PoolReader<'_>,
         context: ValidationContext,
         parent: HashedBlock,
         height: Height,
-        certified_height: Height,
         rank: Rank,
         registry_version: RegistryVersion,
         subnet_records: &SubnetRecords,
@@ -358,7 +355,6 @@ impl BlockMaker {
                             let batch_payload = self.build_batch_payload(
                                 pool,
                                 height,
-                                certified_height,
                                 &context,
                                 parent.as_ref(),
                                 subnet_records,
@@ -417,18 +413,16 @@ impl BlockMaker {
         }
     }
 
-    #[allow(clippy::too_many_arguments)]
     fn build_batch_payload(
         &self,
         pool: &PoolReader<'_>,
         height: Height,
-        certified_height: Height,
         context: &ValidationContext,
         parent: &Block,
         subnet_records: &SubnetRecords,
     ) -> BatchPayload {
         let past_payloads =
-            pool.get_payloads_from_height(certified_height.increment(), parent.clone());
+            pool.get_payloads_from_height(context.certified_height.increment(), parent.clone());
         let payload =
             self.payload_builder
                 .get_payload(height, &past_payloads, context, subnet_records);

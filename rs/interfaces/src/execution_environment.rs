@@ -146,6 +146,8 @@ pub enum SystemApiCallId {
     CanisterCycleBalance,
     /// Tracker for `ic0.canister_cycle_balance128()`
     CanisterCycleBalance128,
+    /// Tracker for `ic0.canister_liquid_cycle_balance128()`
+    CanisterLiquidCycleBalance128,
     /// Tracker for `ic0.canister_self_copy()`
     CanisterSelfCopy,
     /// Tracker for `ic0.canister_self_size()`
@@ -268,6 +270,8 @@ pub struct SystemApiCallCounters {
     pub canister_cycle_balance: usize,
     /// Counter for `ic0.canister_cycle_balance128()`
     pub canister_cycle_balance128: usize,
+    /// Counter for `ic0.canister_liquid_cycle_balance128()`
+    pub canister_liquid_cycle_balance128: usize,
     /// Counter for `ic0.time()`
     pub time: usize,
 }
@@ -283,6 +287,9 @@ impl SystemApiCallCounters {
         self.canister_cycle_balance128 = self
             .canister_cycle_balance128
             .saturating_add(rhs.canister_cycle_balance128);
+        self.canister_liquid_cycle_balance128 = self
+            .canister_liquid_cycle_balance128
+            .saturating_add(rhs.canister_liquid_cycle_balance128);
         self.time = self.time.saturating_add(rhs.time);
     }
 }
@@ -562,7 +569,7 @@ pub trait OutOfInstructionsHandler {
 
     // Invoked only when a long execution dirties many memory pages to yield control
     // and start the copy only in a new slice. This is a performance improvement.
-    fn yield_for_dirty_memory_copy(&self, instruction_counter: i64) -> HypervisorResult<i64>;
+    fn yield_for_dirty_memory_copy(&self) -> HypervisorResult<i64>;
 }
 
 /// Indicates the type of stable memory API being used.
@@ -986,7 +993,7 @@ pub trait SystemApi {
     /// This system call is not part of the public spec and it is invoked when
     /// Wasm execution has a large number of dirty pages that, for performance reasons,
     /// should be copied in a new execution slice.
-    fn yield_for_dirty_memory_copy(&mut self, instruction_counter: i64) -> HypervisorResult<i64>;
+    fn yield_for_dirty_memory_copy(&mut self) -> HypervisorResult<i64>;
 
     /// This system call is not part of the public spec. It's called after a
     /// native `memory.grow` has been executed to check whether there's enough
@@ -1025,6 +1032,18 @@ pub trait SystemApi {
     /// and is copied in the canister memory starting
     /// starting at the location `dst`.
     fn ic0_canister_cycle_balance128(
+        &mut self,
+        dst: usize,
+        heap: &mut [u8],
+    ) -> HypervisorResult<()>;
+
+    /// This system call indicates the current liquid cycle balance
+    /// of the canister that the canister can spend without getting frozen.
+    ///
+    /// The amount of cycles is represented by a 128-bit value
+    /// and is copied in the canister memory starting
+    /// starting at the location `dst`.
+    fn ic0_canister_liquid_cycle_balance128(
         &mut self,
         dst: usize,
         heap: &mut [u8],

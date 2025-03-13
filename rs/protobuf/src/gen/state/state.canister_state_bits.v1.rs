@@ -546,6 +546,19 @@ pub struct SnapshotId {
     pub content: ::prost::alloc::vec::Vec<u8>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
+pub struct TaskQueue {
+    /// Keeps `PausedExecution`, or `PausedInstallCode`, or `AbortedExecution`,
+    /// or `AbortedInstallCode` task if there is one.
+    #[prost(message, optional, tag = "1")]
+    pub paused_or_aborted_task: ::core::option::Option<ExecutionTask>,
+    /// Status of on_low_wasm_memory hook execution.
+    #[prost(enumeration = "OnLowWasmMemoryHookStatus", tag = "2")]
+    pub on_low_wasm_memory_hook_status: i32,
+    /// Queue of `Heartbeat` and `GlobalTimer` tasks.
+    #[prost(message, repeated, tag = "3")]
+    pub queue: ::prost::alloc::vec::Vec<ExecutionTask>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CanisterStateBits {
     #[prost(uint64, tag = "2")]
     pub last_full_execution_round: u64,
@@ -591,6 +604,7 @@ pub struct CanisterStateBits {
     pub install_code_debit: u64,
     /// Contains tasks that need to be executed before processing any input of the
     /// canister.
+    /// This field will be deprecated after EXC-1752.
     #[prost(message, repeated, tag = "30")]
     pub task_queue: ::prost::alloc::vec::Vec<ExecutionTask>,
     /// Time of last charge for resource allocations.
@@ -648,8 +662,13 @@ pub struct CanisterStateBits {
     pub long_execution_mode: i32,
     #[prost(uint64, optional, tag = "50")]
     pub wasm_memory_threshold: ::core::option::Option<u64>,
+    /// This field will be deprecated after EXC-1752.
     #[prost(enumeration = "OnLowWasmMemoryHookStatus", optional, tag = "53")]
     pub on_low_wasm_memory_hook_status: ::core::option::Option<i32>,
+    /// Contains tasks that need to be executed before processing any input of the
+    /// canister.
+    #[prost(message, optional, tag = "54")]
+    pub tasks: ::core::option::Option<TaskQueue>,
     #[prost(oneof = "canister_state_bits::CanisterStatus", tags = "11, 12, 13")]
     pub canister_status: ::core::option::Option<canister_state_bits::CanisterStatus>,
 }
@@ -744,6 +763,7 @@ pub enum CyclesUseCase {
     BurnedCycles = 12,
     SchnorrOutcalls = 13,
     VetKd = 14,
+    DroppedMessages = 15,
 }
 impl CyclesUseCase {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -769,6 +789,7 @@ impl CyclesUseCase {
             Self::BurnedCycles => "CYCLES_USE_CASE_BURNED_CYCLES",
             Self::SchnorrOutcalls => "CYCLES_USE_CASE_SCHNORR_OUTCALLS",
             Self::VetKd => "CYCLES_USE_CASE_VET_KD",
+            Self::DroppedMessages => "CYCLES_USE_CASE_DROPPED_MESSAGES",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -791,6 +812,7 @@ impl CyclesUseCase {
             "CYCLES_USE_CASE_BURNED_CYCLES" => Some(Self::BurnedCycles),
             "CYCLES_USE_CASE_SCHNORR_OUTCALLS" => Some(Self::SchnorrOutcalls),
             "CYCLES_USE_CASE_VET_KD" => Some(Self::VetKd),
+            "CYCLES_USE_CASE_DROPPED_MESSAGES" => Some(Self::DroppedMessages),
             _ => None,
         }
     }

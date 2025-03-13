@@ -9,5 +9,5 @@ index d3c321e5b..5b94ddd19 100644
          let path = directory.join(&filename);
 -        eprintln!("Writing generated file: {}", path.display());
          let mut f = fs::File::create(path)?;
-
+ 
          for l in self.lines.iter().map(|l| l.as_bytes()) {

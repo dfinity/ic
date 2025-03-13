@@ -1,7 +1,10 @@
 use crate::{
     canister_manager::{
-        CanisterManager, CanisterManagerError, CanisterMgrConfig, DtsInstallCodeResult,
-        InstallCodeContext, PausedInstallCodeExecution, StopCanisterResult, UploadChunkResult,
+        types::{
+            CanisterManagerError, CanisterMgrConfig, DtsInstallCodeResult, InstallCodeContext,
+            PausedInstallCodeExecution, StopCanisterResult, UploadChunkResult,
+        },
+        CanisterManager,
     },
     canister_settings::CanisterSettings,
     execution::{
@@ -40,10 +43,11 @@ use ic_management_canister_types_private::{
     EmptyBlob, InstallChunkedCodeArgs, InstallCodeArgsV2, ListCanisterSnapshotArgs,
     LoadCanisterSnapshotArgs, MasterPublicKeyId, Method as Ic00Method, NodeMetricsHistoryArgs,
     Payload as Ic00Payload, ProvisionalCreateCanisterWithCyclesArgs, ProvisionalTopUpCanisterArgs,
-    ReshareChainKeyArgs, SchnorrPublicKeyArgs, SchnorrPublicKeyResponse, SetupInitialDKGArgs,
-    SignWithECDSAArgs, SignWithSchnorrArgs, SignWithSchnorrAux, StoredChunksArgs, SubnetInfoArgs,
-    SubnetInfoResponse, TakeCanisterSnapshotArgs, UninstallCodeArgs, UpdateSettingsArgs,
-    UploadChunkArgs, VetKdDeriveEncryptedKeyArgs, VetKdPublicKeyArgs, VetKdPublicKeyResult, IC_00,
+    ReshareChainKeyArgs, SchnorrAlgorithm, SchnorrPublicKeyArgs, SchnorrPublicKeyResponse,
+    SetupInitialDKGArgs, SignWithECDSAArgs, SignWithSchnorrArgs, SignWithSchnorrAux,
+    StoredChunksArgs, SubnetInfoArgs, SubnetInfoResponse, TakeCanisterSnapshotArgs,
+    UninstallCodeArgs, UpdateSettingsArgs, UploadChunkArgs, VetKdDeriveEncryptedKeyArgs,
+    VetKdPublicKeyArgs, VetKdPublicKeyResult, IC_00,
 };
 use ic_metrics::MetricsRegistry;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
@@ -1315,44 +1319,21 @@ impl ExecutionEnvironment {
             }
             Ok(Ic00Method::ReshareChainKey) => {
                 let cycles = msg.take_cycles();
-                match &msg {
-                    CanisterCall::Request(request) => {
-                        match ReshareChainKeyArgs::decode(request.method_payload()) {
-                            Ok(args) => match get_master_public_key(
-                                &chain_key_data.master_public_keys,
-                                self.own_subnet_id,
-                                &args.key_id,
-                            ) {
-                                Ok(_) => {
-                                    let mut target_id = [0u8; 32];
-                                    rng.fill_bytes(&mut target_id);
-
-                                    self.reshare_chain_key(&mut state, args, request, target_id)
-                                        .map_or_else(
-                                            |err| ExecuteSubnetMessageResult::Finished {
-                                                response: Err(err),
-                                                refund: cycles,
-                                            },
-                                            |()| ExecuteSubnetMessageResult::Processing,
-                                        )
-                                }
-                                Err(err) => ExecuteSubnetMessageResult::Finished {
-                                    response: Err(err),
-                                    refund: cycles,
-                                },
-                            },
-                            Err(err) => ExecuteSubnetMessageResult::Finished {
+                match msg {
+                    CanisterCall::Request(ref request) => self
+                        .reshare_chain_key(&mut state, rng, chain_key_data, request)
+                        .map_or_else(
+                            |err| ExecuteSubnetMessageResult::Finished {
                                 response: Err(err),
                                 refund: cycles,
                             },
-                        }
-                    }
+                            |()| ExecuteSubnetMessageResult::Processing,
+                        ),
                     CanisterCall::Ingress(_) => {
-                        self.reject_unexpected_ingress(Ic00Method::ComputeInitialIDkgDealings)
+                        self.reject_unexpected_ingress(Ic00Method::ReshareChainKey)
                     }
                 }
             }
-
             Ok(Ic00Method::VetKdDeriveEncryptedKey) => match &msg {
                 CanisterCall::Request(request) => {
                     if payload.is_empty() {
@@ -2938,6 +2919,27 @@ impl ExecutionEnvironment {
         rng: &mut dyn RngCore,
         subnet_size: usize,
     ) -> Result<(), UserError> {
+        if let ThresholdArguments::Schnorr(schnorr) = &args {
+            let alg = schnorr.key_id.algorithm;
+            match (alg, &schnorr.taproot_tree_root) {
+                (SchnorrAlgorithm::Bip340Secp256k1, Some(aux)) => {
+                    if aux.len() != 0 && aux.len() != 32 {
+                        return Err(UserError::new(
+                            ErrorCode::CanisterRejectedMessage,
+                            format!("Invalid aux field for {}", alg),
+                        ));
+                    }
+                }
+                (_, None) => {}
+                (_, Some(_)) => {
+                    return Err(UserError::new(
+                        ErrorCode::CanisterRejectedMessage,
+                        format!("Schnorr algorithm {} does not support aux input", alg),
+                    ));
+                }
+            }
+        }
+
         let topology = &state.metadata.network_topology;
         // If the request isn't from the NNS, then we need to charge for it.
         let source_subnet = topology.routing_table.route(request.sender.get());
@@ -3049,23 +3051,33 @@ impl ExecutionEnvironment {
         Ok(())
     }
 
+    // TODO(CON-1416: Remove this directive)
+    #[allow(unreachable_code, unused_variables)]
     fn reshare_chain_key(
         &self,
         state: &mut ReplicatedState,
-        args: ReshareChainKeyArgs,
+        rng: &mut dyn RngCore,
+        chain_key_data: &ChainKeyData,
         request: &Request,
-        target_id: [u8; 32],
     ) -> Result<(), UserError> {
+        let args = ReshareChainKeyArgs::decode(request.method_payload())?;
+        let _key = get_master_public_key(
+            &chain_key_data.master_public_keys,
+            self.own_subnet_id,
+            &args.key_id,
+        )?;
+
+        let mut target_id = [0u8; 32];
+        rng.fill_bytes(&mut target_id);
+
         let nodes = args.get_set_of_nodes()?;
         let registry_version = args.get_registry_version();
 
-        // TODO(CON-1416): Remove this safety check, once resharing VetKeys also works
-        if !args.key_id.is_idkg_key() {
-            return Err(UserError::new(
-                ErrorCode::CanisterRejectedMessage,
-                "This key is not an idkg key",
-            ));
-        }
+        // TODO(CON-1416): Activate this endpoint
+        return Err(UserError::new(
+            ErrorCode::CanisterRejectedMessage,
+            "This key is not an idkg key",
+        ));
 
         state.metadata.subnet_call_context_manager.push_context(
             SubnetCallContext::ReshareChainKey(ReshareChainKeyContext {
