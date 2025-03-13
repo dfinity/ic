@@ -335,16 +335,11 @@ mod tests {
 
     fn get_mainnet_delta_00_6d_c1() -> (TempDir, LocalStoreImpl) {
         let tempdir = TempDir::new().unwrap();
-        let store = LocalStoreImpl::new(tempdir.path());
         let changelog =
             compact_delta_to_changelog(ic_registry_local_store_artifacts::MAINNET_DELTA_00_6D_C1)
                 .expect("")
                 .1;
-
-        for (v, changelog_entry) in changelog.into_iter().enumerate() {
-            let v = RegistryVersion::from((v + 1) as u64);
-            store.store(v, changelog_entry).unwrap();
-        }
+        let store = LocalStoreImpl::from_changelog(changelog, tempdir.path()).unwrap();
         (tempdir, store)
     }
 
