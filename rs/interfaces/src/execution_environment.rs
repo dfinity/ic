@@ -61,7 +61,7 @@ pub struct InstanceStats {
     /// Number of pages loaded by copying the data.
     pub wasm_copy_page_count: usize,
 
-    /// Total time spent in SIGSEGV handler.
+    /// Total time spent in SIGSEGV handler for heap.
     pub wasm_sigsegv_handler_duration: Duration,
 
     /// Number of accessed OS pages (4KiB) in stable memory.
