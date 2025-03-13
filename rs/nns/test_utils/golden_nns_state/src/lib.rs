@@ -5,9 +5,12 @@ use ic_state_machine_tests::{StateMachine, StateMachineBuilder, StateMachineConf
 
 use ic_config::flag_status::FlagStatus;
 use ic_nns_test_utils_prepare_golden_state::{
-    maybe_download_and_untar_golden_state_or_panic, StateSource,
+    maybe_download_and_untar_golden_state_or_panic, golden_state_dir_from_env, StateSource
 };
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable, CANISTER_IDS_PER_SUBNET};
+use pocket_ic::common::rest::SubnetKind;
+use pocket_ic::nonblocking::PocketIc;
+use pocket_ic::PocketIcBuilder;
 use std::ops::RangeInclusive;
 use std::str::FromStr;
 // TODO: Add support for PocketIc.
@@ -109,6 +112,23 @@ fn new_state_machine_with_golden_state_or_panic(setup_config: SetupConfig) -> St
     println!("Done building StateMachine...");
 
     state_machine
+}
+
+pub async fn new_pocket_ic_with_golden_state_or_panic() -> PocketIc {
+    let sns_state_dir = golden_state_dir_from_env(StateSource::Sns);
+
+    let sns_subnet_id = 
+        PrincipalId::from_str("x33ed-h457x-bsgyx-oqxqf-6pzwv-wkhzr-rm2j3-npodi-purzm-n66cg-gae")
+            .unwrap()
+            .0;
+
+    let pocket_ic = PocketIcBuilder::new()
+        .with_subnet_state(SubnetKind::SNS, sns_subnet_id, sns_state_dir)
+        .with_nns_subnet()
+        .build_async()
+        .await;
+
+    pocket_ic
 }
 
 struct SetupConfig {

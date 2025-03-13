@@ -1,5 +1,6 @@
 load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 load("//bazel:defs.bzl", "rust_test_suite_with_extra_srcs")
+load("//bazel:defs.bzl", "rust_ic_test")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -192,6 +193,7 @@ rust_test_suite_with_extra_srcs(
             "tests/upgrade_sns_controlled_canister_with_large_wasm.rs",
             "tests/custom_upgrade_path.rs",
             "tests/sns_topics.rs",
+            "tests/golden_sns_state.rs",
         ],
     ),
     aliases = ALIASES,
@@ -343,4 +345,28 @@ rust_test(
         "cpu:4",
     ],
     deps = [":nervous_system_integration_tests"] + DEPENDENCIES_WITH_TEST_FEATURES + DEV_DEPENDENCIES,
+)
+
+# bazel test --test_env=SSH_AUTH_SOCK --test_output=streamed --test_arg=--nocapture //rs/nervous_system/integration_tests:golden_sns_state
+rust_ic_test(
+    name = "golden_sns_state",
+    # This uses on the order of 10 GB of disk space.
+    # Therefore, size = "large" is not large enough.
+    size = "enormous",
+    srcs = [
+        "tests/golden_sns_state.rs",
+    ],
+    aliases = ALIASES,
+    data = DEV_DATA,
+    env = DEV_ENV | {"RUST_TEST_NOCAPTURE": "1"},
+    flaky = False,
+    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    tags = [
+        "nns_tests_nightly",  # Run this test in the nns-tests-nightly GitHub Action job.
+        "no-sandbox",  # such that the test can access the file $SSH_AUTH_SOCK.
+        "requires-network",  # Because mainnet state is downloaded (and used).
+    ],
+    deps = [":nervous_system_integration_tests"] + DEPENDENCIES_WITH_TEST_FEATURES + DEV_DEPENDENCIES + [
+        "//rs/nns/test_utils/golden_nns_state",
+    ],
 )
