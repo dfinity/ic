@@ -10,6 +10,7 @@ use ic_management_canister_types_private::{
     LogVisibilityV2,
 };
 
+use ic_nervous_system_time_helpers::now_nanoseconds;
 use ic_nns_common::types::UpdateIcpXdrConversionRatePayload;
 use ic_types::{CanisterId, Cycles, PrincipalId, SubnetId};
 use ic_xrc_types::ExchangeRate;
@@ -82,23 +83,6 @@ where
             .map_err(|e| (RejectionCode::Unknown, e.to_string()))?
             .into_inner())
     })
-}
-
-pub fn now_nanoseconds() -> u64 {
-    if cfg!(target_arch = "wasm32") {
-        ic_cdk::api::time()
-    } else {
-        SystemTime::now()
-            .duration_since(SystemTime::UNIX_EPOCH)
-            .expect("Failed to get time since epoch")
-            .as_nanos()
-            .try_into()
-            .expect("Failed to convert time to u64")
-    }
-}
-
-pub fn now_seconds() -> u64 {
-    Duration::from_nanos(now_nanoseconds()).as_secs()
 }
 
 pub fn now_system_time() -> SystemTime {
