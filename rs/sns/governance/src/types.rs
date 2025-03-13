@@ -1751,48 +1751,6 @@ impl Action {
     }
 }
 
-// DO NOT MERGE
-// Use this in testing.
-//
-// pub(crate) fn function_id_to_proposal_criticality(function_id: u64) -> ProposalCriticality {
-//     lazy_static! {
-//         static ref FUNCTION_ID_TO_PROPOSAL_CRITICALITY: HashMap</* function_id */ u64, ProposalCriticality> = {
-//             let mut result = HashMap::new();
-
-//             for action in Action::iter() {
-//                 // Skip non-native, aka generic functions.
-//                 if let Action::ExecuteGenericNervousSystemFunction(_) = action {
-//                     continue;
-//                 }
-
-//                 let function_id = u64::from(&action);
-//                 let previous_value = result.insert(function_id, action.proposal_criticality());
-//                 debug_assert!(previous_value.is_none(), "{:#?}", previous_value);
-//             }
-
-//             result
-//         };
-//     }
-
-//     if let Some(result) = FUNCTION_ID_TO_PROPOSAL_CRITICALITY.get(&function_id) {
-//         return *result;
-//     }
-
-//     // Default to Normal. This is not unusual; it happens when the function is a generic
-//     // (user-defined) nervous system functions. Such functions have IDs that are >= MIN_ID.
-
-//     if function_id < ValidGenericNervousSystemFunction::MIN_ID {
-//         log!(
-//             ERROR,
-//             "Defaulting to ProposalCriticality::Normal, but the function ID is too small \
-//              to be that of a generic nervous system function: {}",
-//             function_id,
-//         );
-//     }
-
-//     ProposalCriticality::Normal
-// }
-
 impl UpgradeSnsControlledCanister {
     /// Returns a clone of self, except that "large blob fields" are replaced
     /// with a (UTF-8 encoded) textual summary of their contents. See

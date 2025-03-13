@@ -204,12 +204,12 @@ impl Governance {
         }
     }
 
-    pub fn get_topic_for_action(
+    pub fn get_topic_and_criticality_for_action(
         &self,
         action: &pb::proposal::Action,
-    ) -> Result<Option<pb::Topic>, String> {
+    ) -> Result<(Option<pb::Topic>, ProposalCriticality), String> {
         if let Some(topic) = pb::Topic::get_topic_for_native_action(action) {
-            return Ok(Some(topic));
+            return Ok((Some(topic), topic.proposal_criticality()));
         };
 
         let action_code = u64::from(action);
@@ -233,22 +233,16 @@ impl Governance {
         };
 
         let Some(custom_proposal_topic_id) = custom_proposal_topic_id else {
-            return Ok(None);
+            // Fall back to legacy, action-specific proposal criticality (if a topic isn't defined).
+            return Ok((None, action.proposal_criticality()));
         };
 
         let Ok(topic) = pb::Topic::try_from(custom_proposal_topic_id) else {
             return Err(format!("Invalid topic ID {custom_proposal_topic_id}."));
         };
 
-        Ok(Some(topic))
+        Ok((Some(topic), topic.proposal_criticality()))
     }
-
-    // pub fn voting_power_thresholds_for_action(
-    //     &self,
-    //     action: &pb::proposal::Action,
-    // ) -> Result<VotingPowerThresholds, String> {
-
-    // }
 }
 
 impl pb::Governance {

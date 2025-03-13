@@ -3434,18 +3434,10 @@ impl Governance {
             .seconds
             .expect("Unable to determine the wait for quiet deadline increase amount.");
 
-        let proposal_topic = self
-            .get_topic_for_action(action)
-            .map_err(|err| GovernanceError::new_with_message(ErrorType::InvalidProposal, err))?;
-
         // Define topic-based criticality based on the current mapping from proposals to topics.
-        let proposal_criticality = if let Some(proposal_topic) = proposal_topic {
-            // Prefer topic-specific proposal criticality.
-            proposal_topic.proposal_criticality()
-        } else {
-            // Fall back to legacy, action-specific proposal criticality (if a topic isn't defined).
-            action.proposal_criticality()
-        };
+        let (proposal_topic, proposal_criticality) = self
+            .get_topic_and_criticality_for_action(action)
+            .map_err(|err| GovernanceError::new_with_message(ErrorType::InvalidProposal, err))?;
 
         // Voting power threshold parameters.
 
@@ -3779,7 +3771,8 @@ impl Governance {
             .expect("Proposal must have an action");
 
         // Take topic-based criticality as it was defined when the proposal was made.
-        let proposal_criticality = if proposal.topic() != Topic::Unspecified {
+        let proposal_topic = proposal.topic();
+        let proposal_criticality = if proposal_topic != Topic::Unspecified {
             // Prefer topic-specific proposal criticality.
             proposal_topic.proposal_criticality()
         } else {
