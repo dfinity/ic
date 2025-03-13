@@ -10299,6 +10299,7 @@ dependencies = [
  "ic-nns-constants",
  "icp-ledger",
  "icrc-ledger-types",
+ "mockall",
 ]
 
 [[package]]
@@ -10314,6 +10315,7 @@ dependencies = [
  "ic-error-types",
  "ic-ledger-core",
  "ic-management-canister-types-private",
+ "ic-nervous-system-canisters",
  "ic-nervous-system-common",
  "ic-nervous-system-proxied-canister-calls-tracker",
  "ic-nervous-system-runtime",
@@ -10411,6 +10413,7 @@ dependencies = [
  "async-trait",
  "dfn_core",
  "futures",
+ "ic-nervous-system-canisters",
  "ic-nervous-system-common",
  "ic-wasm",
  "icp-ledger",
@@ -12687,6 +12690,7 @@ dependencies = [
  "ic-ledger-canister-core",
  "ic-ledger-core",
  "ic-management-canister-types-private",
+ "ic-nervous-system-canisters",
  "ic-nervous-system-clients",
  "ic-nervous-system-common",
  "ic-nervous-system-common-test-keys",
