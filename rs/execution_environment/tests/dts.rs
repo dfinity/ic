@@ -11,12 +11,13 @@ use ic_config::{
 };
 use ic_management_canister_types_private::{
     CanisterIdRecord, CanisterInfoRequest, CanisterInstallMode, CanisterInstallModeV2,
-    CanisterSettingsArgsBuilder, CanisterSnapshotDataKind, ClearChunkStoreArgs,
-    DeleteCanisterSnapshotArgs, EmptyBlob, InstallChunkedCodeArgs, InstallCodeArgs,
-    ListCanisterSnapshotArgs, LoadCanisterSnapshotArgs, Method, Payload,
-    ReadCanisterSnapshotDataArgs, ReadCanisterSnapshotMetadataArgs, StoredChunksArgs,
-    TakeCanisterSnapshotArgs, UninstallCodeArgs, UpdateSettingsArgs,
-    UploadCanisterSnapshotDataArgs, UploadCanisterSnapshotMetadataArgs, UploadChunkArgs, IC_00,
+    CanisterSettingsArgsBuilder, CanisterSnapshotDataKind, CanisterSnapshotDataOffset,
+    ClearChunkStoreArgs, DeleteCanisterSnapshotArgs, EmptyBlob, GlobalTimer,
+    InstallChunkedCodeArgs, InstallCodeArgs, ListCanisterSnapshotArgs, LoadCanisterSnapshotArgs,
+    Method, OnLowWasmMemoryHookStatus, Payload, ReadCanisterSnapshotDataArgs,
+    ReadCanisterSnapshotMetadataArgs, StoredChunksArgs, TakeCanisterSnapshotArgs,
+    UninstallCodeArgs, UpdateSettingsArgs, UploadCanisterSnapshotDataArgs,
+    UploadCanisterSnapshotMetadataArgs, UploadChunkArgs, IC_00,
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::canister_state::{execution_state::NextScheduledMethod, NextExecution};
@@ -1305,7 +1306,7 @@ fn dts_aborted_execution_does_not_block_subnet_messages() {
                 let args = UploadCanisterSnapshotDataArgs::new(
                     aborted_canister_id,
                     vec![],
-                    CanisterSnapshotDataKind::WasmChunk,
+                    CanisterSnapshotDataOffset::WasmChunk,
                     vec![],
                 )
                 .encode();

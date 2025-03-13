@@ -3975,7 +3975,7 @@ impl UploadCanisterSnapshotMetadataArgs {
 pub struct UploadCanisterSnapshotDataArgs {
     pub canister_id: PrincipalId,
     pub snapshot_id: Vec<u8>,
-    pub kind: CanisterSnapshotDataKind,
+    pub kind: CanisterSnapshotDataOffset,
     #[serde(with = "serde_bytes")]
     pub chunk: Vec<u8>,
 }
@@ -3986,7 +3986,7 @@ impl UploadCanisterSnapshotDataArgs {
     pub fn new(
         canister_id: CanisterId,
         snapshot_id: Vec<u8>,
-        kind: CanisterSnapshotDataKind,
+        kind: CanisterSnapshotDataOffset,
         chunk: Vec<u8>,
     ) -> Self {
         Self {
