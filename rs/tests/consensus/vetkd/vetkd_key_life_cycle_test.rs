@@ -22,7 +22,7 @@ use anyhow::{anyhow, Result};
 use canister_test::Canister;
 use futures::FutureExt;
 use ic_consensus_threshold_sig_system_test_utils::{
-    enable_chain_key_signing, get_public_key_with_logger, vetkd_derive_encrypted_key,
+    enable_chain_key_signing, get_public_key_with_logger, vetkd_derive_key,
 };
 use ic_management_canister_types_private::{MasterPublicKeyId, VetKdCurve, VetKdKeyId};
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
@@ -49,7 +49,7 @@ const NODES_COUNT: usize = 4;
 const DKG_INTERVAL: u64 = 20;
 
 const MSG: &str = "Secret message that is totally important";
-const DERIVATION_ID: &str = "secret_message";
+const INPUT: &str = "secret_message";
 const SEED: [u8; 32] = [13; 32];
 
 fn setup(env: TestEnv) {
@@ -110,7 +110,7 @@ fn test(env: TestEnv) {
                 DerivedPublicKey::deserialize(&pub_key).expect("Failed to parse vetkd public key");
 
             let enc_msg =
-                IBECiphertext::encrypt(&pub_key, DERIVATION_ID.as_bytes(), MSG.as_bytes(), &SEED)
+                IBECiphertext::encrypt(&pub_key, INPUT.as_bytes(), MSG.as_bytes(), &SEED)
                     .expect("Failed to encrypt message");
 
             let transport_key = TransportSecretKey::from_seed(SEED.to_vec())
@@ -124,10 +124,10 @@ fn test(env: TestEnv) {
                 Duration::from_secs(120),
                 Duration::from_secs(2),
                 || {
-                    vetkd_derive_encrypted_key(
+                    vetkd_derive_key(
                         transport_key.public_key().try_into().unwrap(),
                         vetkd_key_id.clone(),
-                        DERIVATION_ID.as_bytes().to_vec(),
+                        INPUT.as_bytes().to_vec(),
                         &msg_can,
                         Cycles::zero(),
                     )
@@ -140,7 +140,7 @@ fn test(env: TestEnv) {
             .expect("Failed to derive encrypted key");
 
             let priv_key = transport_key
-                .decrypt(&encrypted_priv_key, &pub_key, DERIVATION_ID.as_bytes())
+                .decrypt(&encrypted_priv_key, &pub_key, INPUT.as_bytes())
                 .expect("Failed to decrypt derived key");
 
             let msg = enc_msg

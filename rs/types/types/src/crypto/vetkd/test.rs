@@ -7,7 +7,7 @@ use ic_base_types::PrincipalId;
 use ic_base_types::SubnetId;
 
 mod display_and_debug {
-    use crate::crypto::vetkd::VetKdDerivationDomain;
+    use crate::crypto::vetkd::VetKdDerivationContext;
 
     use super::*;
 
@@ -22,19 +22,19 @@ mod display_and_debug {
                     [42; NiDkgTargetId::SIZE],
                 )),
             },
-            derivation_domain: VetKdDerivationDomain {
+            context: VetKdDerivationContext {
                 caller: PrincipalId::new_node_test_id(17),
-                domain: b"domain-123".to_vec(),
+                context: b"context-123".to_vec(),
             },
-            derivation_id: b"did".to_vec(),
-            encryption_public_key: b"ek".to_vec(),
+            input: b"input".to_vec(),
+            transport_public_key: b"tpk".to_vec(),
         };
         let output = "VetKdArgs { \
             ni_dkg_id: NiDkgId { start_block_height: 7, dealer_subnet: ot5wk-sbkaa-aaaaa-aaaap-yai, dkg_tag: HighThreshold, target_subnet: Remote(0x2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a) }, \
-            derivation_domain: VetKdDerivationDomain { caller: 7xzs3-rqraa-aaaaa-aaaap-2ai, \
-            domain: 0x646f6d61696e2d313233 }, \
-            derivation_id: 0x646964, \
-            encryption_public_key: 0x656b \
+            context: VetKdDerivationContext { caller: 7xzs3-rqraa-aaaaa-aaaap-2ai, \
+            context: 0x646f6d61696e2d313233 }, \
+            input: 0x646964, \
+            transport_public_key: 0x656b \
         }"
         .to_string();
 

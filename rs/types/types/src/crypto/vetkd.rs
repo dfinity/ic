@@ -14,22 +14,22 @@ mod test;
 #[derive(Clone, Eq, PartialEq, Hash, Deserialize, Serialize)]
 pub struct VetKdArgs {
     pub ni_dkg_id: NiDkgId,
-    pub derivation_domain: VetKdDerivationDomain,
     #[serde(with = "serde_bytes")]
-    pub derivation_id: Vec<u8>,
+    pub input: Vec<u8>,
+    pub context: VetKdDerivationContext,
     #[serde(with = "serde_bytes")]
-    pub encryption_public_key: Vec<u8>,
+    pub transport_public_key: Vec<u8>,
 }
 
 impl fmt::Debug for VetKdArgs {
     fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
         fmt.debug_struct("VetKdArgs")
             .field("ni_dkg_id", &self.ni_dkg_id)
-            .field("derivation_domain", &self.derivation_domain)
-            .field("derivation_id", &HexEncoding::from(&self.derivation_id))
+            .field("input", &HexEncoding::from(&self.input))
+            .field("context", &self.context)
             .field(
-                "encryption_public_key",
-                &HexEncoding::from(&self.encryption_public_key),
+                "transport_public_key",
+                &HexEncoding::from(&self.transport_public_key),
             )
             .finish()
     }
@@ -89,21 +89,21 @@ impl_display_using_debug!(VetKdEncryptedKey);
 
 /// Metadata used to derive keys for vetKD.
 #[derive(Clone, Eq, PartialEq, Hash, Deserialize, Serialize)]
-pub struct VetKdDerivationDomain {
+pub struct VetKdDerivationContext {
     pub caller: PrincipalId,
     #[serde(with = "serde_bytes")]
-    pub domain: Vec<u8>,
+    pub context: Vec<u8>,
 }
 
-impl std::fmt::Debug for VetKdDerivationDomain {
+impl std::fmt::Debug for VetKdDerivationContext {
     fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
-        fmt.debug_struct("VetKdDerivationDomain")
+        fmt.debug_struct("VetKdDerivationContext")
             .field("caller", &self.caller)
-            .field("domain", &HexEncoding::from(&self.domain))
+            .field("context", &HexEncoding::from(&self.context))
             .finish()
     }
 }
-impl_display_using_debug!(VetKdDerivationDomain);
+impl_display_using_debug!(VetKdDerivationContext);
 
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub enum VetKdKeyShareCreationError {

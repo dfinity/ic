@@ -10,8 +10,8 @@ use ic_management_canister_types_private::{
     DerivationPath, ECDSAPublicKeyArgs, ECDSAPublicKeyResponse, EcdsaCurve, EcdsaKeyId,
     MasterPublicKeyId, Payload, SchnorrAlgorithm, SchnorrKeyId, SchnorrPublicKeyArgs,
     SchnorrPublicKeyResponse, SignWithECDSAArgs, SignWithECDSAReply, SignWithSchnorrArgs,
-    SignWithSchnorrReply, VetKdCurve, VetKdDeriveEncryptedKeyArgs, VetKdDeriveEncryptedKeyResult,
-    VetKdKeyId, VetKdPublicKeyArgs, VetKdPublicKeyResult,
+    SignWithSchnorrReply, VetKdCurve, VetKdDeriveKeyArgs, VetKdDeriveKeyResult, VetKdKeyId,
+    VetKdPublicKeyArgs, VetKdPublicKeyResult,
 };
 use ic_message::ForwardParams;
 use ic_nervous_system_common_test_keys::{TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_KEYPAIR};
@@ -451,7 +451,7 @@ pub async fn get_vetkd_public_key_with_retries(
 ) -> Result<Vec<u8>, AgentError> {
     let public_key_request = VetKdPublicKeyArgs {
         canister_id: None,
-        derivation_domain: vec![],
+        context: vec![],
         key_id: key_id.clone(),
     };
     info!(
@@ -718,7 +718,7 @@ pub async fn get_vetkd_with_logger(
 
     let mut count = 0;
     let result = loop {
-        let res = vetkd_derive_encrypted_key(
+        let res = vetkd_derive_key(
             transport_public_key,
             key_id.clone(),
             input.clone(),
@@ -735,7 +735,7 @@ pub async fn get_vetkd_with_logger(
                 if count < 5 {
                     debug!(
                         logger,
-                        "vetkd_derive_encrypted_key returns `{}`. Trying again in 2 seconds...",
+                        "vetkd_derive_key returns `{}`. Trying again in 2 seconds...",
                         err
                     );
                     tokio::time::sleep(Duration::from_secs(2)).await;
@@ -746,7 +746,7 @@ pub async fn get_vetkd_with_logger(
         }
     };
 
-    info!(logger, "vetkd_derive_encrypted_key returns {:?}", result);
+    info!(logger, "vetkd_derive_key returns {:?}", result);
     Ok(result)
 }
 
@@ -967,7 +967,7 @@ pub fn verify_signature(key_id: &MasterPublicKeyId, msg: &[u8], pk: &[u8], sig: 
 pub enum SignWithChainKeyReply {
     Ecdsa(SignWithECDSAReply),
     Schnorr(SignWithSchnorrReply),
-    VetKd(VetKdDeriveEncryptedKeyResult),
+    VetKd(VetKdDeriveKeyResult),
 }
 
 #[derive(Clone)]
@@ -1029,15 +1029,15 @@ impl ChainSignatureRequest {
     }
 
     fn vetkd_params(vetkd_key_id: VetKdKeyId) -> ForwardParams {
-        let vetkd_request = VetKdDeriveEncryptedKeyArgs {
-            derivation_domain: vec![1; 32],
-            derivation_id: vec![],
+        let vetkd_request = VetKdDeriveKeyArgs {
+            context: vec![1; 32],
+            input: vec![],
             key_id: vetkd_key_id,
-            encryption_public_key: G1Affine::generator().to_compressed(),
+            transport_public_key: G1Affine::generator().to_compressed(),
         };
         ForwardParams {
             receiver: Principal::management_canister(),
-            method: "vetkd_derive_encrypted_key".to_string(),
+            method: "vetkd_derive_key".to_string(),
             cycles: VETKD_FEE.get() * 2,
             payload: Encode!(&vetkd_request).unwrap(),
         }
@@ -1070,37 +1070,37 @@ impl Request<SignWithChainKeyReply> for ChainSignatureRequest {
                 SignWithChainKeyReply::Schnorr(SignWithSchnorrReply::decode(raw_response)?)
             }
             MasterPublicKeyId::VetKd(_) => {
-                SignWithChainKeyReply::VetKd(VetKdDeriveEncryptedKeyResult::decode(raw_response)?)
+                SignWithChainKeyReply::VetKd(VetKdDeriveKeyResult::decode(raw_response)?)
             }
         })
     }
 }
 
-pub async fn vetkd_derive_encrypted_key(
-    encryption_public_key: [u8; 48],
+pub async fn vetkd_derive_key(
+    transport_public_key: [u8; 48],
     key_id: VetKdKeyId,
-    derivation_id: Vec<u8>,
+    input: Vec<u8>,
     msg_can: &MessageCanister<'_>,
     cycles: Cycles,
 ) -> Result<Vec<u8>, AgentError> {
-    let args = VetKdDeriveEncryptedKeyArgs {
-        derivation_domain: vec![],
-        derivation_id,
+    let args = VetKdDeriveKeyArgs {
+        context: vec![],
+        input,
         key_id,
-        encryption_public_key,
+        transport_public_key,
     };
 
     let res = msg_can
         .forward_with_cycles_to(
             &Principal::management_canister(),
-            "vetkd_derive_encrypted_key",
+            "vetkd_derive_key",
             Encode!(&args).unwrap(),
             cycles,
         )
         .await?;
 
-    let res = VetKdDeriveEncryptedKeyResult::decode(&res)
-        .expect("Failed to decode VetKdDeriveEncryptedKeyResult");
+    let res =
+        VetKdDeriveKeyResult::decode(&res).expect("Failed to decode VetKdDeriveKeyResult");
 
     Ok(res.encrypted_key)
 }
