@@ -77,7 +77,7 @@ system_test_nns(
     uses_guestos_dev = True,
     uses_hostos_dev_test = True,
     uses_hostos_mainnet = True,
-    uses_setupos_dev = True,
+    uses_setupos_mainnet = True,
     runtime_deps = GUESTOS_RUNTIME_DEPS,
     deps = RUNNER_DEPENDENCIES,
 )

@@ -182,6 +182,7 @@ def system_test(
         uses_guestos_dev = False,
         uses_guestos_dev_test = False,
         uses_setupos_dev = False,
+        uses_setupos_mainnet = False,
         uses_hostos_dev_test = False,
         uses_hostos_mainnet = False,
         uses_boundary_guestos = False,
@@ -216,7 +217,8 @@ def system_test(
       uses_guestos_dev_test: the test uses //ic-os/guestos/envs/dev:update-img-test (will be also automatically added as dependency).
       uses_setupos_dev: the test uses ic-os/setupos/envs/dev (will be also automatically added as dependency).
       uses_hostos_dev_test: the test uses ic-os/hostos/envs/dev:update-img-test (will be also automatically added as dependency).
-      uses_hostos_mainnet: the test uses mainnet HostOS images versions marked in mainnet-icos-revisions.json.
+      uses_hostos_mainnet: the test uses mainnet HostOS image version marked in mainnet-icos-revisions.json.
+      uses_setupos_mainnet: the test uses mainnet SetupOS image version marked in mainnet-icos-revisions.json.
       uses_boundary_guestos: the test uses ic-os/boundary-guestos/envs/dev:disk-img (will be also automatically added as dependency).
       env: environment variables to set in the test (subject to Make variable expansion)
       env_inherit: specifies additional environment variables to inherit from
@@ -273,6 +275,13 @@ def system_test(
         env["ENV_DEPS__HOSTOS_UPDATE_IMG_VERSION"] = mainnet_hostos_version
         env["ENV_DEPS__HOSTOS_UPDATE_IMG_URL"] = base_download_url(mainnet_hostos_version, "host-os", True, False) + "update-img.tar.zst"
         env["ENV_DEPS__HOSTOS_UPDATE_IMG_SHA"] = mainnet_versions["hostos"]["latest_upgrade"]["update_img_hash"]
+
+    if uses_setupos_mainnet:
+        # Note: SetupOS is still passed directly by path, as it needs some local processing.
+        _env_deps["ENV_DEPS__SETUPOS_IMG_PATH"] = "@mainnet_setupos_disk_image//file"
+
+        _env_deps["ENV_DEPS__SETUPOS_DISABLE_CHECKS"] = "//rs/ic_os/dev_test_tools/setupos-disable-checks"
+        _env_deps["ENV_DEPS__SETUPOS_INJECT_CONFIGS"] = "//rs/ic_os/dev_test_tools/setupos-inject-configuration"
 
     if uses_setupos_dev:
         # Note: SetupOS is still passed directly by path, as it needs some local processing.
