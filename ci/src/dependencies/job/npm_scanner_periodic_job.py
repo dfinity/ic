@@ -100,18 +100,6 @@ REPOS_TO_SCAN = [
         "22.11.0",
     ),
     Repository(
-        "oisy-wallet",
-        "https://github.com/dfinity/oisy-wallet",
-        [
-            Project(
-                name="oisy-wallet",
-                path="oisy-wallet",
-                owner=Team.GIX_TEAM,
-            )
-        ],
-        "22.11.0",
-    ),
-    Repository(
         "chain-fusion-signer",
         "https://github.com/dfinity/chain-fusion-signer",
         [
