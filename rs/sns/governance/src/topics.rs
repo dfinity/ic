@@ -4,6 +4,7 @@ use crate::types::native_action_ids::{self, SET_CUSTOM_TOPICS_FOR_CUSTOM_PROPOSA
 use crate::{governance::Governance, pb::v1::nervous_system_function::FunctionType};
 use ic_canister_log::log;
 use ic_sns_governance_api::pb::v1::topics::Topic;
+use ic_sns_governance_proposal_criticality::ProposalCriticality;
 use itertools::Itertools;
 use std::collections::{BTreeMap, HashMap};
 
@@ -241,6 +242,13 @@ impl Governance {
 
         Ok(Some(topic))
     }
+
+    // pub fn voting_power_thresholds_for_action(
+    //     &self,
+    //     action: &pb::proposal::Action,
+    // ) -> Result<VotingPowerThresholds, String> {
+
+    // }
 }
 
 impl pb::Governance {
@@ -295,10 +303,18 @@ impl pb::Governance {
 }
 
 impl pb::Topic {
-    pub fn is_critical(&self) -> bool {
+    fn is_critical(&self) -> bool {
         topic_descriptions()
             .iter()
             .any(|topic| Self::from(topic.topic) == *self && topic.is_critical)
+    }
+
+    pub fn proposal_criticality(&self) -> ProposalCriticality {
+        if self.is_critical() {
+            ProposalCriticality::Critical
+        } else {
+            ProposalCriticality::Normal
+        }
     }
 
     pub fn get_topic_for_native_action(action: &pb::proposal::Action) -> Option<Self> {

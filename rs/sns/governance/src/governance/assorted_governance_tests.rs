@@ -4747,7 +4747,7 @@ fn test_cast_vote_and_cascade_follow_critical_vs_normal_proposals() {
         };
 
         // Code under test.
-        let cast_vote_and_cascade_follow = |function_id| {
+        let cast_vote_and_cascade_follow = |function_id, proposal_criticality| {
             // Give all neurons an empty ballot.
             let mut ballots = [
                 &voting_neuron_id,
@@ -4770,6 +4770,7 @@ fn test_cast_vote_and_cascade_follow_critical_vs_normal_proposals() {
                 &neurons,
                 now_seconds,
                 &mut ballots,
+                proposal_criticality,
             );
 
             ballots
@@ -4777,7 +4778,8 @@ fn test_cast_vote_and_cascade_follow_critical_vs_normal_proposals() {
 
         // Step 2A: Consider following on non-critical proposal. Here catch-all/fallback
         // following should be used.
-        let non_critical_ballots = cast_vote_and_cascade_follow(non_critical_function_id);
+        let non_critical_ballots =
+            cast_vote_and_cascade_follow(non_critical_function_id, ProposalCriticality::Normal);
 
         // Step 3: Inspect results.
 
@@ -4807,7 +4809,8 @@ fn test_cast_vote_and_cascade_follow_critical_vs_normal_proposals() {
 
         // Step 2B: Critical proposal following. Here catch-all/fallback following should NOT be
         // used.
-        let critical_ballots = cast_vote_and_cascade_follow(critical_function_id);
+        let critical_ballots =
+            cast_vote_and_cascade_follow(critical_function_id, ProposalCriticality::Critical);
 
         // Step 3B: Critical proposal.
         assert_eq!(
@@ -4834,9 +4837,10 @@ fn test_cast_vote_and_cascade_follow_critical_vs_normal_proposals() {
         );
 
         // Step 2C: A different critical proposal -> only direct voting happens here.
-        let no_following_ballots = cast_vote_and_cascade_follow(u64::from(
-            &Action::DeregisterDappCanisters(Default::default()),
-        ));
+        let function_id = u64::from(&Action::DeregisterDappCanisters(Default::default()));
+        let no_following_ballots =
+            cast_vote_and_cascade_follow(function_id, ProposalCriticality::Critical);
+
         // Step 3C: A different critical proposal.
         assert_eq!(
             no_following_ballots,

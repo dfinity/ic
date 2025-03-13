@@ -1,6 +1,6 @@
 use crate::{
     governance::{Governance, TimeWarp, NERVOUS_SYSTEM_FUNCTION_DELETION_MARKER},
-    logs::{ERROR, INFO},
+    logs::INFO,
     pb::{
         sns_root_types::{
             set_dapp_controllers_request::CanisterIds, ManageDappCanisterSettingsRequest,
@@ -55,14 +55,12 @@ use ic_nervous_system_common::{
 use ic_nervous_system_common_validation::validate_proposal_url;
 use ic_nervous_system_proto::pb::v1::{Duration as PbDuration, Percentage};
 use ic_sns_governance_api::format_full_hash;
-use ic_sns_governance_proposal_criticality::{
-    ProposalCriticality, VotingDurationParameters, VotingPowerThresholds,
-};
+use ic_sns_governance_proposal_criticality::{ProposalCriticality, VotingDurationParameters};
 use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue;
 use lazy_static::lazy_static;
 use maplit::btreemap;
 use std::{
-    collections::{BTreeMap, BTreeSet, HashMap, HashSet},
+    collections::{BTreeMap, BTreeSet, HashSet},
     convert::TryFrom,
     fmt,
 };
@@ -1690,12 +1688,6 @@ impl Action {
         }
     }
 
-    pub(crate) fn voting_power_thresholds(&self) -> VotingPowerThresholds {
-        // This just reduces to the method of the same name in
-        // ProposalCriticality
-        self.proposal_criticality().voting_power_thresholds()
-    }
-
     pub(crate) fn voting_duration_parameters(
         &self,
         nervous_system_parameters: &NervousSystemParameters,
@@ -1734,7 +1726,7 @@ impl Action {
         }
     }
 
-    fn proposal_criticality(&self) -> ProposalCriticality {
+    pub(crate) fn proposal_criticality(&self) -> ProposalCriticality {
         use Action::*;
         match self {
             DeregisterDappCanisters(_)
@@ -1759,44 +1751,47 @@ impl Action {
     }
 }
 
-pub(crate) fn function_id_to_proposal_criticality(function_id: u64) -> ProposalCriticality {
-    lazy_static! {
-        static ref FUNCTION_ID_TO_PROPOSAL_CRITICALITY: HashMap</* function_id */ u64, ProposalCriticality> = {
-            let mut result = HashMap::new();
+// DO NOT MERGE
+// Use this in testing.
+//
+// pub(crate) fn function_id_to_proposal_criticality(function_id: u64) -> ProposalCriticality {
+//     lazy_static! {
+//         static ref FUNCTION_ID_TO_PROPOSAL_CRITICALITY: HashMap</* function_id */ u64, ProposalCriticality> = {
+//             let mut result = HashMap::new();
 
-            for action in Action::iter() {
-                // Skip non-native, aka generic functions.
-                if let Action::ExecuteGenericNervousSystemFunction(_) = action {
-                    continue;
-                }
+//             for action in Action::iter() {
+//                 // Skip non-native, aka generic functions.
+//                 if let Action::ExecuteGenericNervousSystemFunction(_) = action {
+//                     continue;
+//                 }
 
-                let function_id = u64::from(&action);
-                let previous_value = result.insert(function_id, action.proposal_criticality());
-                debug_assert!(previous_value.is_none(), "{:#?}", previous_value);
-            }
+//                 let function_id = u64::from(&action);
+//                 let previous_value = result.insert(function_id, action.proposal_criticality());
+//                 debug_assert!(previous_value.is_none(), "{:#?}", previous_value);
+//             }
 
-            result
-        };
-    }
+//             result
+//         };
+//     }
 
-    if let Some(result) = FUNCTION_ID_TO_PROPOSAL_CRITICALITY.get(&function_id) {
-        return *result;
-    }
+//     if let Some(result) = FUNCTION_ID_TO_PROPOSAL_CRITICALITY.get(&function_id) {
+//         return *result;
+//     }
 
-    // Default to Normal. This is not unusual; it happens when the function is a generic
-    // (user-defined) nervous system functions. Such functions have IDs that are >= MIN_ID.
+//     // Default to Normal. This is not unusual; it happens when the function is a generic
+//     // (user-defined) nervous system functions. Such functions have IDs that are >= MIN_ID.
 
-    if function_id < ValidGenericNervousSystemFunction::MIN_ID {
-        log!(
-            ERROR,
-            "Defaulting to ProposalCriticality::Normal, but the function ID is too small \
-             to be that of a generic nervous system function: {}",
-            function_id,
-        );
-    }
+//     if function_id < ValidGenericNervousSystemFunction::MIN_ID {
+//         log!(
+//             ERROR,
+//             "Defaulting to ProposalCriticality::Normal, but the function ID is too small \
+//              to be that of a generic nervous system function: {}",
+//             function_id,
+//         );
+//     }
 
-    ProposalCriticality::Normal
-}
+//     ProposalCriticality::Normal
+// }
 
 impl UpgradeSnsControlledCanister {
     /// Returns a clone of self, except that "large blob fields" are replaced
