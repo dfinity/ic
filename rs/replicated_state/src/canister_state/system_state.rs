@@ -2,9 +2,7 @@ mod call_context_manager;
 mod task_queue;
 pub mod wasm_chunk_store;
 
-pub use self::task_queue::{
-    is_low_wasm_memory_hook_condition_satisfied, OnLowWasmMemoryHookStatus, TaskQueue,
-};
+pub use self::task_queue::{is_low_wasm_memory_hook_condition_satisfied, TaskQueue};
 
 use self::wasm_chunk_store::{WasmChunkStore, WasmChunkStoreMetadata};
 use super::queues::{can_push, CanisterInput};
@@ -800,7 +798,7 @@ impl SystemState {
         ingress_induction_cycles_debit: Cycles,
         reserved_balance: Cycles,
         reserved_balance_limit: Option<Cycles>,
-        task_queue: VecDeque<ExecutionTask>,
+        task_queue: TaskQueue,
         global_timer: CanisterTimer,
         canister_version: u64,
         canister_history: CanisterHistory,
@@ -812,7 +810,6 @@ impl SystemState {
         next_snapshot_id: u64,
         snapshots_memory_usage: NumBytes,
         metrics: &dyn CheckpointLoadingMetrics,
-        on_low_wasm_memory_hook_status: OnLowWasmMemoryHookStatus,
     ) -> Self {
         let system_state = Self {
             controllers,
@@ -828,11 +825,7 @@ impl SystemState {
             ingress_induction_cycles_debit,
             reserved_balance,
             reserved_balance_limit,
-            task_queue: TaskQueue::from_checkpoint(
-                task_queue,
-                on_low_wasm_memory_hook_status,
-                &canister_id,
-            ),
+            task_queue,
             global_timer,
             canister_version,
             canister_history,

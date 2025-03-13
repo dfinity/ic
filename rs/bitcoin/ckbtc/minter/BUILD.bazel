@@ -232,5 +232,10 @@ genrule(
 
     $(location :ckbtc_minter_dump_stable_memory) $(location test_resources/mainnet_events.gz) $@
 """,
+    # For some unknown reason this target can take well over an hour to run on MacOS x86_64 so we exclude that platform:
+    target_compatible_with = select({
+        "@platforms//os:osx": ["@platforms//cpu:arm"],
+        "//conditions:default": [],
+    }),
     visibility = ["//visibility:private"],
 )

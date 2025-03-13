@@ -7356,6 +7356,7 @@ dependencies = [
  "ic-test-utilities-types",
  "ic-types",
  "ic-types-test-utils",
+ "num-traits",
  "prometheus",
  "prost 0.13.4",
  "slog",
@@ -8861,7 +8862,7 @@ dependencies = [
 [[package]]
 name = "ic-gateway"
 version = "0.1.0"
-source = "git+https://github.com/dfinity/ic-gateway?rev=a6cdd78692aa0715c38979aaa8447e70c4456b0b#a6cdd78692aa0715c38979aaa8447e70c4456b0b"
+source = "git+https://github.com/dfinity/ic-gateway?rev=469d2daee8b44aadb46400bcb2832d560baf7272#469d2daee8b44aadb46400bcb2832d560baf7272"
 dependencies = [
  "ahash 0.8.11",
  "anyhow",
@@ -19825,6 +19826,8 @@ dependencies = [
  "serde_bytes",
  "serde_json",
  "serde_with 1.14.0",
+ "tokio",
+ "tracing",
 ]
 
 [[package]]

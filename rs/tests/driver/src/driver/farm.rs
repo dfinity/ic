@@ -641,7 +641,6 @@ pub enum ImageLocation {
     ImageViaUrl { url: Url, sha256: String },
     IcOsImageViaId { id: FileId },
     IcOsImageViaUrl { url: Url, sha256: String },
-    PersistentVolumeClaim { name: String },
 }
 
 #[derive(Debug, Error)]

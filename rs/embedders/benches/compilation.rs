@@ -232,8 +232,6 @@ fn execution(c: &mut Criterion) {
     set_production_rayon_threads();
 
     let binaries = generate_binaries();
-    // let mut group = c.benchmark_group("execution");
-    // let config = EmbeddersConfig::default();
     for (name, wasm) in binaries {
         embedders_bench::query_bench(
             c,
@@ -246,7 +244,6 @@ fn execution(c: &mut Criterion) {
             PostSetupAction::None,
         );
     }
-    // group.finish();
 }
 
 criterion_group!(
