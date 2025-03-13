@@ -57,6 +57,11 @@ REPOS_TO_SCAN = [
         "https://github.com/dfinity/papi",
         [Project(name="papi", path="papi", owner=Team.GIX_TEAM)],
     ),
+    Repository(
+        "oisy-wallet",
+        "https://github.com/dfinity/oisy-wallet",
+        [Project(name="oisy-wallet", path="oisy-wallet", owner=Team.GIX_TEAM)],
+    ),
 ]
 
 
