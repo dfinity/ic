@@ -90,6 +90,19 @@ fn generate_binaries() -> Vec<(String, BinaryEncodedWasm)> {
 
     result.push(("open_chat".to_string(), open_chat_wasm));
 
+    // This benchmark uses the QR code generator canister which is stored as a
+    // binary file in this repo.  It is generated from the directory
+    // `rust/qrcode` in
+    // https://github.com/dfinity/examples/tree/abk/for-replica-benchmarking
+    let mut decoder =
+        libflate::gzip::Decoder::new(&include_bytes!("test-data/qrcode_backend.wasm.gz")[..])
+            .unwrap();
+    let mut buf = vec![];
+    decoder.read_to_end(&mut buf).unwrap();
+    let qrcode_wasm = BinaryEncodedWasm::new(buf);
+
+    result.push(("qrcode".to_string(), qrcode_wasm));
+
     result
 }
 
