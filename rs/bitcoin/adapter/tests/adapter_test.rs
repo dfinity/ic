@@ -904,10 +904,10 @@ fn test_bfs_order() {
         .get_new_address(None, None)
         .unwrap()
         .assume_checked();
-    let shared_blocks = client1.generate_to_address(5, &address1).unwrap();
+    let shared_blocks = client1.generate_to_address(2, &address1).unwrap();
 
-    wait_for_blocks(&client1, 5);
-    wait_for_blocks(&client2, 5);
+    wait_for_blocks(&client1, 2);
+    wait_for_blocks(&client2, 2);
 
     // Disconnect the nodes to create a fork
     client1
@@ -925,8 +925,8 @@ fn test_bfs_order() {
         .assume_checked();
     let fork2 = client2.generate_to_address(6, &address2).unwrap();
 
-    wait_for_blocks(&client1, 11);
-    wait_for_blocks(&client2, 11);
+    wait_for_blocks(&client1, 8);
+    wait_for_blocks(&client2, 8);
 
     assert_eq!(fork1.len() + fork2.len(), 12);
 
