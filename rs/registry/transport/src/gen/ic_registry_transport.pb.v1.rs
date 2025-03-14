@@ -198,6 +198,37 @@ pub struct RegistryGetLatestVersionResponse {
     #[prost(uint64, tag = "1")]
     pub version: u64,
 }
+/// In the not too distant future, the `get_certified_changes_since` canister
+/// method will use this instead of RegistryAtomicMutateRequest. However, there
+/// is no intention for the `atomic_mutate` canister method to ever use this. See
+/// the "Migrating to Large Values/High-Capacity Types" section in the file-level
+/// comments.
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct HighCapacityRegistryAtomicMutateRequest {
+    #[prost(message, repeated, tag = "1")]
+    pub mutations: ::prost::alloc::vec::Vec<HighCapacityRegistryMutation>,
+    #[prost(message, repeated, tag = "5")]
+    pub preconditions: ::prost::alloc::vec::Vec<Precondition>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct HighCapacityRegistryMutation {
+    #[prost(enumeration = "registry_mutation::Type", tag = "1")]
+    pub mutation_type: i32,
+    #[prost(bytes = "vec", tag = "2")]
+    pub key: ::prost::alloc::vec::Vec<u8>,
+    #[prost(oneof = "high_capacity_registry_mutation::Content", tags = "3, 4")]
+    pub content: ::core::option::Option<high_capacity_registry_mutation::Content>,
+}
+/// Nested message and enum types in `HighCapacityRegistryMutation`.
+pub mod high_capacity_registry_mutation {
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    pub enum Content {
+        #[prost(bytes, tag = "3")]
+        Value(::prost::alloc::vec::Vec<u8>),
+        #[prost(message, tag = "4")]
+        LargeValueChunkKeys(super::LargeValueChunkKeys),
+    }
+}
 /// A single mutation in the registry.
 #[derive(candid::CandidType, candid::Deserialize, Eq, Clone, PartialEq, ::prost::Message)]
 pub struct RegistryMutation {
@@ -271,6 +302,12 @@ pub struct Precondition {
     #[prost(uint64, tag = "2")]
     pub expected_version: u64,
 }
+/// Deprecated for `get_certified_changes_since` responses; instead, use
+/// HighCapacityRegistryAtomicMutateRequest. See the "Migrating to Large
+/// Values/High-Capacity Types" section in the file-level comments.
+///
+/// This is NOT deprecated for `atomic_mutate` requests though!
+///
 /// Message corresponding to a list of mutations to apply, atomically, to the
 /// registry canister. If any of the mutations fails, the whole operation will fail.
 #[derive(candid::CandidType, candid::Deserialize, Eq, Clone, PartialEq, ::prost::Message)]

@@ -242,6 +242,25 @@ message RegistryGetLatestVersionResponse {
   uint64 version = 1;
 }
 
+// In the not too distant future, the `get_certified_changes_since` canister
+// method will use this instead of RegistryAtomicMutateRequest. However, there
+// is no intention for the `atomic_mutate` canister method to ever use this. See
+// the "Migrating to Large Values/High-Capacity Types" section in the file-level
+// comments.
+message HighCapacityRegistryAtomicMutateRequest {
+  repeated HighCapacityRegistryMutation mutations = 1;
+  repeated Precondition preconditions = 5;
+  reserved 4;
+}
+message HighCapacityRegistryMutation {
+  RegistryMutation.Type mutation_type = 1;
+  bytes key = 2;
+  oneof content {
+    bytes value = 3;
+    LargeValueChunkKeys large_value_chunk_keys = 4;
+  }
+}
+
 // A single mutation in the registry.
 message RegistryMutation {
   enum Type {
@@ -285,6 +304,12 @@ message Precondition {
   uint64 expected_version = 2;
 }
 
+// Deprecated for `get_certified_changes_since` responses; instead, use
+// HighCapacityRegistryAtomicMutateRequest. See the "Migrating to Large
+// Values/High-Capacity Types" section in the file-level comments.
+//
+// This is NOT deprecated for `atomic_mutate` requests though!
+//
 // Message corresponding to a list of mutations to apply, atomically, to the
 // registry canister. If any of the mutations fails, the whole operation will fail.
 message RegistryAtomicMutateRequest {
