@@ -163,7 +163,7 @@ impl<S: RegistryStoreStableMemory> CanisterRegistryClient for CanisterRegistrySt
         let mut current_local_version = self.get_latest_version();
 
         loop {
-            let remote_latest_version = self.registry.get_latest_version().await;
+            let remote_latest_version = self.registry.get_latest_version().await?;
 
             match current_local_version.cmp(&remote_latest_version) {
                 Ordering::Less => {
