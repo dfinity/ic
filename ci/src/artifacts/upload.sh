@@ -35,15 +35,16 @@ rclone_common_flags=(
     )
 
 if [ "${UPLOAD_BUILD_ARTIFACTS:-}" == "1" ]; then
-    echo "uploading $f to cluster S3"
+    echo "uploading $f to cluster S3" >&2
     "$RCLONE" \
         "${rclone_common_flags[@]}" \
         --s3-endpoint=https://s3-upload.idx.dfinity.network \
         copy \
         "$f" \
         ":s3:dfinity-download-public/ic/${VERSION}/$REMOTE_SUBDIR/"
+    echo "done uploading to cluster S3" >&2
 
-    echo "uploading $f to AWS"
+    echo "uploading $f to AWS" >&2
     AWS_PROFILE=default "$RCLONE" \
         "${rclone_common_flags[@]}" \
         --s3-provider=AWS \
@@ -52,10 +53,11 @@ if [ "${UPLOAD_BUILD_ARTIFACTS:-}" == "1" ]; then
         copy \
         "$f" \
         ":s3:dfinity-download-public/ic/${VERSION}/$REMOTE_SUBDIR/"
+    echo "done uploading to AWS" >&2
 
     # Upload to Cloudflare's R2 (S3)
     # using profile 'cf' to look up the right creds in ~/.aws/credentials
-    echo "uploading $f to Cloudflare"
+    echo "uploading $f to Cloudflare" >&2
     echo AWS_PROFILE=cf "$RCLONE" -v \
         "${rclone_common_flags[@]}" \
         --s3-provider=Cloudflare \
@@ -64,6 +66,7 @@ if [ "${UPLOAD_BUILD_ARTIFACTS:-}" == "1" ]; then
         copy \
         "$f" \
         ":s3:dfinity-download-public/ic/${VERSION}/$REMOTE_SUBDIR/"
+    echo "done uploading to Cloudflare" >&2
 else
     echo "dry run for $f"
 fi
