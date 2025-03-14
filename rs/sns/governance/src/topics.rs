@@ -43,7 +43,7 @@ pub struct ListTopicsResponse {
 
 /// Returns an exhaustive list of topic descriptions, each corresponding to a topic.
 /// Topics may be nested within other topics, and each topic may have a list of built-in functions that are categorized within that topic.
-pub fn topic_descriptions() -> Vec<TopicInfo<NativeFunctions>> {
+pub fn topic_descriptions() -> [TopicInfo<NativeFunctions>; 7] {
     use crate::types::native_action_ids::{
         ADD_GENERIC_NERVOUS_SYSTEM_FUNCTION, ADVANCE_SNS_TARGET_VERSION, DEREGISTER_DAPP_CANISTERS,
         MANAGE_DAPP_CANISTER_SETTINGS, MANAGE_LEDGER_PARAMETERS, MANAGE_NERVOUS_SYSTEM_PARAMETERS,
@@ -52,7 +52,7 @@ pub fn topic_descriptions() -> Vec<TopicInfo<NativeFunctions>> {
         UPGRADE_SNS_CONTROLLED_CANISTER, UPGRADE_SNS_TO_NEXT_VERSION,
     };
 
-    vec![
+    [
         TopicInfo::<NativeFunctions> {
             topic: Topic::DaoCommunitySettings,
             name: "DAO community settings".to_string(),
@@ -173,10 +173,7 @@ impl Governance {
             })
             .into_group_map();
 
-        let topics: Vec<TopicInfo<NativeFunctions>> = topic_descriptions();
-
-        let topics = topics
-            .into_iter()
+        let topics = topic_descriptions()
             .map(|topic| TopicInfo {
                 topic: topic.topic,
                 name: topic.name,
@@ -196,7 +193,7 @@ impl Governance {
                 },
                 is_critical: topic.is_critical,
             })
-            .collect();
+            .to_vec();
 
         ListTopicsResponse {
             topics,
@@ -298,9 +295,16 @@ impl pb::Governance {
 
 impl pb::Topic {
     fn is_critical(&self) -> bool {
+        // Fall back to default proposal criticality (if a topic isn't defined).
+        //
+        // Handled explicitly to avoid any doubts.
+        if *self == Self::Unspecified {
+            return false;
+        }
+
         topic_descriptions()
             .iter()
-            .any(|topic| Self::from(topic.topic) == *self && topic.is_critical)
+            .any(|topic| *self == Self::from(topic.topic) && topic.is_critical)
     }
 
     pub fn proposal_criticality(&self) -> ProposalCriticality {

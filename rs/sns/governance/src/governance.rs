@@ -53,7 +53,7 @@ use crate::{
             MintTokensRequest, MintTokensResponse, NervousSystemFunction, NervousSystemParameters,
             Neuron, NeuronId, NeuronPermission, NeuronPermissionList, NeuronPermissionType,
             Proposal, ProposalData, ProposalDecisionStatus, ProposalId, ProposalRewardStatus,
-            RegisterDappCanisters, RewardEvent, SetTopicsForCustomProposals, Tally, Topic,
+            RegisterDappCanisters, RewardEvent, SetTopicsForCustomProposals, Tally,
             TransferSnsTreasuryFunds, UpgradeSnsControlledCanister, Vote, WaitForQuietState,
         },
     },
@@ -3771,13 +3771,7 @@ impl Governance {
 
         // Take topic-based criticality as it was defined when the proposal was made.
         let proposal_topic = proposal.topic();
-        let proposal_criticality = if proposal_topic != Topic::Unspecified {
-            // Prefer topic-specific proposal criticality.
-            proposal_topic.proposal_criticality()
-        } else {
-            // Fall back to default proposal criticality if a topic isn't defined.
-            ProposalCriticality::default()
-        };
+        let proposal_criticality = proposal_topic.proposal_criticality();
 
         let vote = Vote::try_from(request.vote).unwrap_or(Vote::Unspecified);
         if vote == Vote::Unspecified {
