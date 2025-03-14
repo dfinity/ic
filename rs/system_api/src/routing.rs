@@ -10,8 +10,8 @@ use ic_management_canister_types_private::{
     ClearChunkStoreArgs, ComputeInitialIDkgDealingsArgs, DeleteCanisterSnapshotArgs,
     ECDSAPublicKeyArgs, InstallChunkedCodeArgs, InstallCodeArgsV2, ListCanisterSnapshotArgs,
     LoadCanisterSnapshotArgs, MasterPublicKeyId, Method as Ic00Method, NodeMetricsHistoryArgs,
-    Payload, ProvisionalTopUpCanisterArgs, ReshareChainKeyArgs, SchnorrPublicKeyArgs,
-    SignWithECDSAArgs, SignWithSchnorrArgs, StoredChunksArgs, SubnetInfoArgs,
+    Payload, ProvisionalTopUpCanisterArgs, ReadCanisterSnapshotMetadataArgs, ReshareChainKeyArgs,
+    SchnorrPublicKeyArgs, SignWithECDSAArgs, SignWithSchnorrArgs, StoredChunksArgs, SubnetInfoArgs,
     TakeCanisterSnapshotArgs, UninstallCodeArgs, UpdateSettingsArgs, UploadChunkArgs,
     VetKdDeriveKeyArgs, VetKdPublicKeyArgs,
 };
@@ -298,6 +298,15 @@ pub(super) fn resolve_destination(
             route_canister_id(
                 canister_id,
                 Ic00Method::DeleteCanisterSnapshot,
+                network_topology,
+            )
+        }
+        Ok(Ic00Method::ReadCanisterSnapshotMetadata) => {
+            let args = ReadCanisterSnapshotMetadataArgs::decode(payload)?;
+            let canister_id = args.get_canister_id();
+            route_canister_id(
+                canister_id,
+                Ic00Method::ReadCanisterSnapshotMetadata,
                 network_topology,
             )
         }
