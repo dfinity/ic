@@ -1,4 +1,4 @@
-use crate::stable_memory::{RegistryStoreStableMemory, StorableRegistryKey};
+use crate::stable_memory::{RegistryStoreStableMemory, StorableRegistryKey, StorableRegistryValue};
 use crate::CanisterRegistryClient;
 use async_trait::async_trait;
 use ic_interfaces_registry::{
@@ -6,10 +6,13 @@ use ic_interfaces_registry::{
     RegistryClientVersionedResult, RegistryDataProvider, RegistryTransportRecord,
     ZERO_REGISTRY_VERSION,
 };
+use ic_nervous_system_canisters::registry::Registry;
+use ic_registry_transport::pb::v1::RegistryDelta;
 use ic_types::registry::RegistryClientError;
 #[cfg(not(target_arch = "wasm32"))]
 use ic_types::time::current_time as system_current_time;
 use ic_types::{RegistryVersion, Time};
+use std::cmp::Ordering;
 use std::collections::BTreeMap;
 use std::marker::PhantomData;
 use std::sync::{Arc, RwLock, RwLockReadGuard};
@@ -24,6 +27,8 @@ pub struct CanisterRegistryStore<S: RegistryStoreStableMemory> {
     _stable_memory: PhantomData<S>,
     // TODO DO NOT MERGE make this cache work (where at)
     latest_version: RegistryVersion,
+
+    registry: Box<dyn Registry>,
 }
 
 #[cfg(target_arch = "wasm32")]
@@ -38,11 +43,34 @@ pub fn current_time() -> Time {
 }
 
 impl<S: RegistryStoreStableMemory> CanisterRegistryStore<S> {
-    pub fn new() -> Self {
+    pub fn new(registry: Box<dyn Registry>) -> Self {
         Self {
             _stable_memory: PhantomData,
             latest_version: ZERO_REGISTRY_VERSION,
+            registry,
         }
+    }
+
+    fn add_deltas(&self, deltas: Vec<RegistryDelta>) -> Result<(), String> {
+        for delta in deltas {
+            let string_key = std::str::from_utf8(&delta.key[..]).map_err(|e| format!("{e:?}"))?;
+
+            S::with_registry_map_mut(|local_registry| {
+                for v in delta.values {
+                    let registry_version = RegistryVersion::from(v.version);
+                    let key =
+                        StorableRegistryKey::new(string_key.to_string(), registry_version.get());
+                    let value = StorableRegistryValue(if v.deletion_marker {
+                        None
+                    } else {
+                        Some(v.value)
+                    });
+
+                    local_registry.insert(key, value);
+                }
+            });
+        }
+        Ok(())
     }
 }
 
@@ -132,7 +160,52 @@ impl<S: RegistryStoreStableMemory> CanisterRegistryClient for CanisterRegistrySt
     }
 
     async fn sync_registry_stored(&self) -> Result<RegistryVersion, String> {
-        todo!()
+        let mut current_local_version = self.get_latest_version();
+
+        loop {
+            let remote_latest_version = self.registry.get_latest_version().await;
+
+            match current_local_version.cmp(&remote_latest_version) {
+                Ordering::Less => {
+                    ic_cdk::println!(
+                        "Registry version local {} < remote {}",
+                        current_local_version,
+                        remote_latest_version
+                    );
+                }
+                Ordering::Equal => {
+                    ic_cdk::println!(
+                        "Local Registry version {} is up to date",
+                        current_local_version
+                    );
+                    break;
+                }
+                Ordering::Greater => {
+                    return Err(format!(
+                        "Registry version local {} > remote {}, this should never happen",
+                        current_local_version, remote_latest_version
+                    ));
+                }
+            }
+
+            let remote_deltas = self
+                .registry
+                .registry_changes_since(current_local_version)
+                .await
+                .map_err(|e| format!("{:?}", e))?;
+
+            // Update the local version to the latest remote version for this iteration.
+            current_local_version = RegistryVersion::new(
+                remote_deltas
+                    .iter()
+                    .flat_map(|delta| delta.values.iter().map(|v| v.version))
+                    .max()
+                    .unwrap_or(current_local_version.get()),
+            );
+
+            self.add_deltas(remote_deltas)?;
+        }
+        Ok(current_local_version)
     }
 }
 

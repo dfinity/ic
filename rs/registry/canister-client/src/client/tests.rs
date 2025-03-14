@@ -1,7 +1,10 @@
 use super::*;
 use crate::stable_memory::{StorableRegistryKey, StorableRegistryValue};
+use futures::FutureExt;
 use ic_interfaces_registry::RegistryVersionedRecord;
+use ic_nervous_system_canisters::registry::{FakeRegistry, FakeRegistryResponses};
 use ic_registry_keys::NODE_RECORD_KEY_PREFIX;
+use ic_registry_transport::pb::v1::{RegistryDelta, RegistryValue};
 use ic_stable_structures::memory_manager::{MemoryId, MemoryManager, VirtualMemory};
 use ic_stable_structures::{DefaultMemoryImpl, StableBTreeMap};
 use ic_types::{registry::RegistryDataProviderError, PrincipalId};
@@ -81,9 +84,19 @@ fn v(v: u64) -> RegistryVersion {
     RegistryVersion::new(v)
 }
 
+fn client_for_tests(
+    latest_version: u64,
+    responses: FakeRegistryResponses,
+) -> CanisterRegistryStore<DummyState> {
+    CanisterRegistryStore::<DummyState>::new(Box::new(FakeRegistry::new(
+        RegistryVersion::new(latest_version),
+        responses,
+    )))
+}
+
 #[test]
 fn test_absent_after_delete() {
-    let client = CanisterRegistryStore::<DummyState>::new();
+    let client = client_for_tests(0, Default::default());
     add_dummy_data();
 
     let result = client.get_key_family(NODE_RECORD_KEY_PREFIX, RegistryVersion::new(39_972));
@@ -100,14 +113,14 @@ fn test_absent_after_delete() {
 
 #[test]
 fn empty_registry_should_report_zero_as_latest_version() {
-    let client = CanisterRegistryStore::<DummyState>::new();
+    let client = client_for_tests(0, Default::default());
 
     assert_eq!(client.get_latest_version(), ZERO_REGISTRY_VERSION);
 }
 
 #[test]
 fn can_retrieve_entries_correctly() {
-    let client = CanisterRegistryStore::<DummyState>::new();
+    let client = client_for_tests(0, Default::default());
 
     let set = |key: &str, ver: u64| add_record_helper(key, ver, Some(ver));
     let rem = |key: &str, ver: u64| add_record_helper(key, ver, None);
@@ -240,5 +253,109 @@ fn can_retrieve_entries_correctly() {
 
 #[test]
 fn test_sync_registry_stored() {
-    let client = CanisterRegistryStore::<DummyState>::new();
+    let mut responses = FakeRegistryResponses::new();
+    responses.insert(
+        0,
+        Ok(vec![
+            RegistryDelta {
+                key: "Foo".as_bytes().to_vec(),
+                values: vec![
+                    RegistryValue {
+                        value: vec![1],
+                        version: 1,
+                        deletion_marker: false,
+                    },
+                    RegistryValue {
+                        value: vec![2],
+                        version: 2,
+                        deletion_marker: false,
+                    },
+                    RegistryValue {
+                        value: vec![3],
+                        version: 3,
+                        deletion_marker: false,
+                    },
+                    RegistryValue {
+                        value: vec![4],
+                        version: 4,
+                        deletion_marker: false,
+                    },
+                    RegistryValue {
+                        value: vec![],
+                        version: 5,
+                        deletion_marker: true,
+                    },
+                ],
+            },
+            RegistryDelta {
+                key: "Bar".as_bytes().to_vec(),
+                values: vec![RegistryValue {
+                    value: vec![50],
+                    version: 5,
+                    deletion_marker: false,
+                }],
+            },
+        ]),
+    );
+    let client = client_for_tests(5, responses);
+
+    let current_latest = client.get_latest_version();
+    assert_eq!(current_latest, ZERO_REGISTRY_VERSION);
+
+    client
+        .sync_registry_stored()
+        .now_or_never()
+        .unwrap()
+        .expect("TODO: panic message");
+
+    let current_latest = client.get_latest_version();
+    assert_eq!(current_latest, RegistryVersion::new(5));
+
+    for version in 1..=4u8 {
+        let value = client.get_value("Foo", v(version as u64)).unwrap().unwrap();
+        assert_eq!(value, vec![version]);
+    }
+
+    assert!(client.get_value("Foo", v(5)).unwrap().is_none());
+
+    assert_eq!(client.get_value("Bar", v(5)).unwrap().unwrap(), vec![50u8]);
+}
+
+#[test]
+fn test_error_on_local_too_large() {
+    let mut responses = FakeRegistryResponses::new();
+    responses.insert(
+        0,
+        Ok(vec![RegistryDelta {
+            key: "Foo".as_bytes().to_vec(),
+            values: vec![
+                RegistryValue {
+                    value: vec![1],
+                    version: 1,
+                    deletion_marker: false,
+                },
+                RegistryValue {
+                    value: vec![2],
+                    version: 2,
+                    deletion_marker: false,
+                },
+            ],
+        }]),
+    );
+    let client = client_for_tests(1, responses);
+
+    let current_latest = client.get_latest_version();
+    assert_eq!(current_latest, ZERO_REGISTRY_VERSION);
+
+    let error = client
+        .sync_registry_stored()
+        .now_or_never()
+        .unwrap()
+        .unwrap_err();
+
+    // This can only happen if the Registry returns an invalid response, like in the test setup.
+    assert_eq!(
+        error,
+        "Registry version local 2 > remote 1, this should never happen"
+    );
 }

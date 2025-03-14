@@ -8,10 +8,12 @@ documentation.workspace = true
 
 [dependencies]
 async-trait = { workspace = true }
+futures = "0.3.31"
 ic-interfaces-registry = { path = "../../interfaces/registry" }
 ic-registry-transport = { path = "../transport" }
 ic-types = { path = "../../types/types" }
 ic-stable-structures = { workspace = true }
+ic-nervous-system-canisters = { path = "../../nervous_system/canisters" }
 ic-nns-constants = { path = "../../nns/constants" }
 itertools = { workspace = true }
 ic-nns-common = { path = "../../nns/common" }
