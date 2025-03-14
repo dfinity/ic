@@ -2827,7 +2827,7 @@ fn mark_files_readonly_and_sync_with_delay(
     path: &Path,
     mut thread_pool: Option<&mut scoped_threadpool::Pool>,
 ) -> std::io::Result<()> {
-    let paths = dir_list_recursive(path)?;
+    let mut paths = dir_list_recursive(path)?;
     eprintln!("listed files {:?}", paths);
     let contains_marker = paths.iter().any(|p| p.ends_with("unverified_checkpoint_marker"));
     eprintln!("Do paths contains marker? : {:?}", contains_marker);
@@ -2838,6 +2838,8 @@ fn mark_files_readonly_and_sync_with_delay(
     eprintln!("listed files again {:?}", paths_new);
     let contains_marker = paths_new.iter().any(|p| p.ends_with("unverified_checkpoint_marker"));
     eprintln!("Do paths_new contains marker? : {:?}", contains_marker);
+    // remove path ends_with "unverified_checkpoint_marker" from paths
+    paths.retain(|p| !p.ends_with("unverified_checkpoint_marker"));
     let results = maybe_parallel_map(&mut thread_pool, paths.iter(), |p| {
         if let Err(e) = mark_readonly_if_file(p) {
             eprintln!("failed to mark file {:?} as readonly: {:?}", p, e);
