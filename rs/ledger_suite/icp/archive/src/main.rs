@@ -1,9 +1,12 @@
-use candid::candid_method;
+use candid::{candid_method, Decode};
 use dfn_candid::candid_one;
 use dfn_core::stable;
 use dfn_protobuf::protobuf;
 use ic_base_types::PrincipalId;
-use ic_cdk::api::{call::reply, caller, print};
+use ic_cdk::api::{
+    call::{arg_data_raw, reply},
+    caller, print,
+};
 use ic_ledger_canister_core::range_utils;
 use ic_ledger_canister_core::runtime::heap_memory_size_bytes;
 use ic_ledger_core::block::{BlockIndex, BlockType, EncodedBlock};
@@ -55,7 +58,7 @@ impl ArchiveNodeState {
 fn append_blocks(mut blocks: Vec<EncodedBlock>) {
     let mut archive_state = ARCHIVE_STATE.write().unwrap();
     assert_eq!(
-        dfn_core::api::caller(),
+        PrincipalId::from(caller()),
         archive_state.ledger_canister_id.get(),
         "Only Ledger canister is allowed to append blocks to an Archive Node"
     );
@@ -152,7 +155,11 @@ fn remaining_capacity_() {
 
 #[export_name = "canister_update append_blocks"]
 fn append_blocks_() {
-    dfn_core::over(dfn_candid::candid_one, append_blocks);
+    ic_cdk::setup();
+    let blocks = Decode!(&arg_data_raw(), Vec<EncodedBlock>)
+        .expect("failed to decode append_blocks argument");
+    append_blocks(blocks);
+    reply(());
 }
 
 /// Get multiple blocks by *offset into the container* (not BlockIndex) and
@@ -202,7 +209,10 @@ fn get_blocks(GetBlocksArgs { start, length }: GetBlocksArgs) -> GetBlocksResult
 /// range stored in the Node the result is an error.
 #[export_name = "canister_query get_blocks"]
 fn get_blocks_candid_() {
-    dfn_core::over(candid_one, get_blocks);
+    ic_cdk::setup();
+    let args =
+        Decode!(&arg_data_raw(), GetBlocksArgs).expect("failed to decode get_blocks argument");
+    reply((get_blocks(args),));
 }
 
 #[export_name = "canister_post_upgrade"]
