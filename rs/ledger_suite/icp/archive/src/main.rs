@@ -328,7 +328,10 @@ fn read_encoded_blocks(start: u64, length: usize) -> Result<Vec<EncodedBlock>, G
 /// range stored in the Node the result is an error.
 #[export_name = "canister_query get_encoded_blocks"]
 fn get_encoded_blocks_blocks_() {
-    dfn_core::over(candid_one, get_encoded_blocks);
+    ic_cdk::setup();
+    let args = Decode!(&arg_data_raw(), GetBlocksArgs)
+        .expect("failed to decode get_encoded_blocks argument");
+    reply((get_encoded_blocks(args),));
 }
 
 #[export_name = "canister_query __get_candid_interface_tmp_hack"]
