@@ -31,12 +31,15 @@ use pretty_assertions::assert_eq;
 
 const DUMMY_URL_FOR_PROPOSALS: &str = "https://forum.dfinity.org";
 
+/// Runbook:
+/// 1. Custom proposal type can be added to an SNS under a critical topic.
+/// 2. Listing topics of that SNS indicates the expected information.
+/// 3. Topic of a custom proposal can be changed, in particular, from critical to non-critical.
+/// 4. Proposals on this custom type can actually be submitted, and their criticality
+///    (and the voting parameters affected by criticality) are defined as expected, both
+///    before and after the change of topic.
 #[tokio::test]
 async fn set_custom_sns_topics_test() {
-    run_set_custom_sns_topics_test().await
-}
-
-async fn run_set_custom_sns_topics_test() {
     // Prepare the world
     let pocket_ic = PocketIcBuilder::new()
         .with_nns_subnet()
