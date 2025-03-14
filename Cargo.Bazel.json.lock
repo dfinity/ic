@@ -1,5 +1,5 @@
 {
-  "checksum": "aa03956d3cc1fb0bf8e71cc635c0ecf4d4cac08a54ad52d48609b22ee79814d8",
+  "checksum": "988578f0fa34d651cb59c1cac6db97ae145e0977e344617c0b5a4aa68302718e",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -20773,7 +20773,7 @@
               "target": "ic0"
             },
             {
-              "id": "ic_bls12_381 0.10.0",
+              "id": "ic_bls12_381 0.10.1",
               "target": "ic_bls12_381"
             },
             {
@@ -35257,7 +35257,7 @@
               "target": "hex"
             },
             {
-              "id": "ic_bls12_381 0.10.0",
+              "id": "ic_bls12_381 0.10.1",
               "target": "ic_bls12_381",
               "alias": "bls12_381"
             },
@@ -35333,7 +35333,7 @@
               "target": "hex"
             },
             {
-              "id": "ic_bls12_381 0.10.0",
+              "id": "ic_bls12_381 0.10.1",
               "target": "ic_bls12_381",
               "alias": "bls12_381"
             },
@@ -35667,14 +35667,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "ic_bls12_381 0.10.0": {
+    "ic_bls12_381 0.10.1": {
       "name": "ic_bls12_381",
-      "version": "0.10.0",
+      "version": "0.10.1",
       "package_url": "https://github.com/dfinity/bls12_381",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/ic_bls12_381/0.10.0/download",
-          "sha256": "22c65787944f32af084dffd0c68c1e544237b76e215654ddea8cd9f527dd8b69"
+          "url": "https://static.crates.io/crates/ic_bls12_381/0.10.1/download",
+          "sha256": "a1e828f9e804ccefe4b9b15b2195f474c60fd4f95ccd14fcb554eb6d7dfafde3"
         }
       },
       "targets": [
@@ -35750,7 +35750,7 @@
           ],
           "selects": {}
         },
-        "version": "0.10.0"
+        "version": "0.10.1"
       },
       "license": "MIT/Apache-2.0",
       "license_ids": [
@@ -57045,7 +57045,7 @@
               "target": "heck"
             },
             {
-              "id": "itertools 0.11.0",
+              "id": "itertools 0.13.0",
               "target": "itertools"
             },
             {
@@ -57199,7 +57199,7 @@
               "target": "anyhow"
             },
             {
-              "id": "itertools 0.11.0",
+              "id": "itertools 0.13.0",
               "target": "itertools"
             },
             {
@@ -94372,7 +94372,7 @@
     "ic-wasm 0.8.4",
     "ic-xrc-types 1.2.0",
     "ic0 0.18.11",
-    "ic_bls12_381 0.10.0",
+    "ic_bls12_381 0.10.1",
     "ic_principal 0.1.1",
     "icrc1-test-env 0.1.1",
     "icrc1-test-suite 0.1.1",
