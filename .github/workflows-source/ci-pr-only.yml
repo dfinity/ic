@@ -17,7 +17,7 @@ env:
 
 anchors:
   image: &image
-    image: ghcr.io/dfinity/ic-build@sha256:908c9b2abe0647cd54a2485117c263b0dae4a8aba8f25bc073813b09be9b1d59
+    image: ghcr.io/dfinity/ic-build@sha256:1de2eef8662eb58cbb911b844bb0afcc19ba89009272f40803a49640211565e7
   dind-small-setup: &dind-small-setup
     timeout-minutes: 30
     runs-on:

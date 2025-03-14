@@ -23,7 +23,7 @@ pub trait KeyManager {
     /// * [`AllKeysRegistered`]: Registry contains all required public keys and
     ///   secret key store contains all corresponding secret keys.
     ///
-    /// * [`AllKeysRegistered`]: PublicKeyRegistrationStatus::AllKeysRegistered
+    /// * [`AllKeysRegistered`][]: PublicKeyRegistrationStatus::AllKeysRegistered
     ///
     /// # Errors
     /// * [`CheckKeysWithRegistryError::PublicKeyNotFound`] in case a public key of the node was
