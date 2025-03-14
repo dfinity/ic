@@ -69,6 +69,16 @@ pub mod registry_error {
         }
     }
 }
+/// When a "monolithic" blob is too large to fit in a single response, this is
+/// used instead (in the ICP, messages can be at most 2 MiB in size). The
+/// `get_chunk` canister method can then be called to fetch the original
+/// monolithic blob in chunks (which can then be cancatenated to reconstitute the
+/// original monolithic blob).
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct LargeValueChunkKeys {
+    #[prost(bytes = "vec", repeated, tag = "1")]
+    pub chunk_content_sha256s: ::prost::alloc::vec::Vec<::prost::alloc::vec::Vec<u8>>,
+}
 /// A single change made to a key in the registry.
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct RegistryValue {

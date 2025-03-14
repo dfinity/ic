@@ -66,6 +66,15 @@ message RegistryError {
   bytes key = 3;
 }
 
+// When a "monolithic" blob is too large to fit in a single response, this is
+// used instead (in the ICP, messages can be at most 2 MiB in size). The
+// `get_chunk` canister method can then be called to fetch the original
+// monolithic blob in chunks (which can then be cancatenated to reconstitute the
+// original monolithic blob).
+message LargeValueChunkKeys {
+  repeated bytes chunk_content_sha256s = 1;
+}
+
 // A single change made to a key in the registry.
 message RegistryValue {
   // The value that was set in this mutation. If the
