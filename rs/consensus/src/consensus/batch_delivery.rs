@@ -583,7 +583,7 @@ mod tests {
             NiDkgId {
                 start_block_height: Height::from(0),
                 dealer_subnet: subnet_test_id(0),
-                dkg_tag: NiDkgTag::HighThresholdForKey(key_id),
+                dkg_tag: NiDkgTag::HighThresholdForKey(key_id.clone()),
                 target_subnet: NiDkgTargetSubnet::Remote(TARGET_ID),
             },
             CallbackId::from(2),
@@ -592,8 +592,16 @@ mod tests {
 
         let result =
             generate_responses_to_remote_dkgs(&transcripts_for_remote_subnets[..], &no_op_logger());
-        assert_eq!(result.len(), 0);
+        assert_eq!(result.len(), 1);
 
-        // TODO(CON-1416: Extend this test)
+        // Deserialize the `ReshareChainKeyResponse` and check the subnet id
+        let payload = match &result[0].payload {
+            Payload::Data(data) => data,
+            Payload::Reject(_) => panic!("Payload was rejected unexpectedly"),
+        };
+        let response = ReshareChainKeyResponse::decode(payload).unwrap();
+        let ReshareChainKeyResponse::NiDkg(response) = response else {
+            panic!("Expected a NiDkg response");
+        };
     }
 }
