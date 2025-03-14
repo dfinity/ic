@@ -454,11 +454,14 @@ impl Payload {
         let cutoff = cutoff.unwrap_or_else(|| {
             // `count_bytes()` returned a value above `byte_limit`, but
             // `byte_size` (computed the same way) is below `byte_limit`.
-            panic!(
+            debug_assert!(
+                false,
                 "Invalid `messages_count_bytes`: was {}, expecting {}",
                 messages.count_bytes(),
                 byte_size
-            )
+            );
+            // Cut off before the last message.
+            messages.iter().rev().next().unwrap().0.clone()
         });
 
         // Take the messages prefix, expect non-empty leftover postfix.
