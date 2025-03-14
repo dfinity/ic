@@ -44,22 +44,6 @@ fi
 echo "Building as user: $(whoami)"
 echo "Bazel version: $(bazel version)"
 
-AWS_CREDS="${HOME}/.aws/credentials"
-mkdir -p "$(dirname "${AWS_CREDS}")"
-
-# add aws credentials file if it's set
-if [ -n "${CLOUD_CREDENTIALS_CONTENT+x}" ]; then
-    echo "$CLOUD_CREDENTIALS_CONTENT" >"$AWS_CREDS"
-    unset CLOUD_CREDENTIALS_CONTENT
-fi
-
-if [ -z "${KUBECONFIG:-}" ] && [ -n "${KUBECONFIG_TNET_CREATOR_LN1:-}" ]; then
-    KUBECONFIG=$(mktemp -t kubeconfig-XXXXXX)
-    export KUBECONFIG
-    echo "$KUBECONFIG_TNET_CREATOR_LN1" >"$KUBECONFIG"
-    trap 'rm -f -- "$KUBECONFIG"' EXIT
-fi
-
 # An awk (mawk) program used to process STDERR to make it easier
 # to find the build event URL when going through logs.
 # Finally we record the URL to 'url_out' (passed via variable)
@@ -97,7 +81,10 @@ if [[ ! " ${bazel_args[*]} " =~ [[:space:]]--repository_cache[[:space:]] ]] && [
     bazel_args+=(--repository_cache=/cache/bazel)
 fi
 
-bazel "${bazel_args[@]}" 2>&1 | awk -v url_out="$url_out" "$stream_awk_program"
+echo "running build command 'bazel ${bazel_args[@]}'"
+
+bazel_exitcode="0"
+bazel "${bazel_args[@]}" 2>&1 | awk -v url_out="$url_out" "$stream_awk_program" || bazel_exitcode="$?"
 
 # Write the bes link & summary
 echo "Build results uploaded to $(<"$url_out")"
@@ -107,9 +94,4 @@ if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
 fi
 rm "$url_out"
 
-# List and aggregate all SHA256SUMS files.
-for shafile in $(find bazel-out/ -name SHA256SUMS); do
-    if [ -f "$shafile" ]; then
-        echo "$shafile"
-    fi
-done | xargs cat | sort | uniq >SHA256SUMS
+exit "$bazel_exitcode"

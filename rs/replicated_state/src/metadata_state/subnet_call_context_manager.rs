@@ -592,12 +592,12 @@ impl TryFrom<(Time, pb_metadata::SubnetCallContextManager)> for SubnetCallContex
             canister_http_request_contexts.insert(CallbackId::new(entry.callback_id), context);
         }
 
-        let mut idkg_dealings_contexts = BTreeMap::<CallbackId, ReshareChainKeyContext>::new();
+        let mut reshare_chain_key_contexts = BTreeMap::<CallbackId, ReshareChainKeyContext>::new();
         for entry in item.reshare_chain_key_contexts {
             let pb_context =
                 try_from_option_field(entry.context, "SystemMetadata::ReshareChainKeyContext")?;
             let context = ReshareChainKeyContext::try_from((time, pb_context))?;
-            idkg_dealings_contexts.insert(CallbackId::new(entry.callback_id), context);
+            reshare_chain_key_contexts.insert(CallbackId::new(entry.callback_id), context);
         }
 
         let mut bitcoin_get_successors_contexts =
@@ -672,7 +672,7 @@ impl TryFrom<(Time, pb_metadata::SubnetCallContextManager)> for SubnetCallContex
                 stop_canister_call_manager,
             },
             raw_rand_contexts,
-            reshare_chain_key_contexts: idkg_dealings_contexts,
+            reshare_chain_key_contexts,
         })
     }
 }

@@ -453,7 +453,7 @@ pub fn legacy_asset_canister_test(env: TestEnv) {
                 .to_vec();
 
             if res != hello_world_gzip {
-                bail!("gzipped hello world response did not match uploaded content")
+                bail!("gzipped hello world response did not match uploaded content (got {res:?}, expected {hello_world_gzip:?}")
             }
 
             Ok(())

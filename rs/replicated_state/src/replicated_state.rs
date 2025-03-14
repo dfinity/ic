@@ -709,7 +709,7 @@ impl ReplicatedState {
             .sign_with_threshold_contexts
     }
 
-    /// Returns all IDKG dealings contexts.
+    /// Returns all reshare chain key contexts.
     pub fn reshare_chain_key_contexts(&self) -> &BTreeMap<CallbackId, ReshareChainKeyContext> {
         &self
             .metadata
