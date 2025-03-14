@@ -18,6 +18,9 @@ MERGE_BASE="${MERGE_BASE_SHA:-HEAD}"
 COMMIT_RANGE="$MERGE_BASE..${BRANCH_HEAD_SHA:-}"
 DIFF_FILES=$(git diff --name-only "${COMMIT_RANGE}")
 
+echo "${BAZEL_TARGETS:-"//..."}"
+exit 0
+
 if grep -qE "(.*\.bazel|.*\.bzl|\.bazelrc|\.bazelversion|mainnet-canister-revisions\.json|^\.github)" <<<"$DIFF_FILES"; then
     echo "Changes detected in bazel files. Considering all targets." >&2
     echo ${BAZEL_TARGETS:-"//..."}
