@@ -79,6 +79,44 @@ pub struct LargeValueChunkKeys {
     #[prost(bytes = "vec", repeated, tag = "1")]
     pub chunk_content_sha256s: ::prost::alloc::vec::Vec<::prost::alloc::vec::Vec<u8>>,
 }
+/// In the not too distant future, this will be used instead of
+/// RegistryGetChangesSinceResponse. See the "Migrating to Large
+/// Values/High-Capacity Types" section in the file-level comments.
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct HighCapacityRegistryGetChangesSinceResponse {
+    #[prost(message, optional, tag = "1")]
+    pub error: ::core::option::Option<RegistryError>,
+    #[prost(uint64, tag = "2")]
+    pub version: u64,
+    #[prost(message, repeated, tag = "3")]
+    pub deltas: ::prost::alloc::vec::Vec<HighCapacityRegistryDelta>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct HighCapacityRegistryDelta {
+    #[prost(bytes = "vec", tag = "1")]
+    pub key: ::prost::alloc::vec::Vec<u8>,
+    #[prost(message, repeated, tag = "2")]
+    pub values: ::prost::alloc::vec::Vec<HighCapacityRegistryValue>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct HighCapacityRegistryValue {
+    #[prost(uint64, tag = "2")]
+    pub version: u64,
+    #[prost(oneof = "high_capacity_registry_value::Content", tags = "1, 3, 4")]
+    pub content: ::core::option::Option<high_capacity_registry_value::Content>,
+}
+/// Nested message and enum types in `HighCapacityRegistryValue`.
+pub mod high_capacity_registry_value {
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    pub enum Content {
+        #[prost(bytes, tag = "1")]
+        Value(::prost::alloc::vec::Vec<u8>),
+        #[prost(bool, tag = "3")]
+        DeletionMarker(bool),
+        #[prost(message, tag = "4")]
+        LargeValueChunkKeys(super::LargeValueChunkKeys),
+    }
+}
 /// A single change made to a key in the registry.
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct RegistryValue {
@@ -108,6 +146,10 @@ pub struct RegistryGetChangesSinceRequest {
     #[prost(uint64, tag = "1")]
     pub version: u64,
 }
+/// Deprecated; instead, use HighCapacityRegistryGetChangesSinceResponse. See the
+/// "Migrating to Large Values/High-Capacity Types" section in the file-level
+/// comments.
+///
 /// Message corresponding to the response from the registry
 /// canister to a get_latest_version() request.
 #[derive(Clone, PartialEq, ::prost::Message)]

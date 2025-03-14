@@ -151,6 +151,28 @@ message LargeValueChunkKeys {
   repeated bytes chunk_content_sha256s = 1;
 }
 
+// In the not too distant future, this will be used instead of
+// RegistryGetChangesSinceResponse. See the "Migrating to Large
+// Values/High-Capacity Types" section in the file-level comments.
+message HighCapacityRegistryGetChangesSinceResponse {
+  RegistryError error = 1;
+  uint64 version = 2;
+  repeated HighCapacityRegistryDelta deltas = 3;
+}
+message HighCapacityRegistryDelta {
+  bytes key = 1;
+  repeated HighCapacityRegistryValue values = 2;
+}
+message HighCapacityRegistryValue {
+  uint64 version = 2;
+
+  oneof content {
+    bytes value = 1;
+    bool deletion_marker = 3;
+    LargeValueChunkKeys large_value_chunk_keys = 4;
+  }
+}
+
 // A single change made to a key in the registry.
 message RegistryValue {
   // The value that was set in this mutation. If the
@@ -174,6 +196,10 @@ message RegistryDelta {
 // since 'version'.
 message RegistryGetChangesSinceRequest { uint64 version = 1; }
 
+// Deprecated; instead, use HighCapacityRegistryGetChangesSinceResponse. See the
+// "Migrating to Large Values/High-Capacity Types" section in the file-level
+// comments.
+//
 // Message corresponding to the response from the registry
 // canister to a get_latest_version() request.
 message RegistryGetChangesSinceResponse {
