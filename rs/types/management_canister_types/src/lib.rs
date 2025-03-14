@@ -2957,7 +2957,7 @@ impl Payload<'_> for VetKdDeriveKeyResult {}
 /// ```text
 /// (record {
 ///   canister_id : opt canister_id;
-///   derivation_path : vec blob;
+///   context : blob;
 ///   key_id : record { curve : vetkd_curve; name : text };
 /// })
 /// ```

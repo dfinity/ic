@@ -198,7 +198,6 @@ rust_test_suite_with_extra_srcs(
     data = DEV_DATA,
     env = DEV_ENV,
     extra_srcs = ["tests/sns_upgrade_test_utils.rs"],
-    flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     tags = [
         "cpu:6",
@@ -217,7 +216,6 @@ rust_test(
     crate_root = "tests/upgrade_everything_test.rs",
     data = DEV_DATA,
     env = DEV_ENV | {"RUST_TEST_NOCAPTURE": "1"},
-    flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     tags = [
         "cpu:6",
@@ -234,7 +232,6 @@ rust_test(
     aliases = ALIASES,
     data = DEV_DATA,
     env = DEV_ENV | {"RUST_TEST_NOCAPTURE": "1"},
-    flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     tags = [
         "cpu:4",
@@ -251,7 +248,6 @@ rust_test(
     aliases = ALIASES,
     data = DEV_DATA,
     env = DEV_ENV | {"RUST_TEST_NOCAPTURE": "1"},
-    flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     tags = [
         "cpu:4",
@@ -268,7 +264,6 @@ rust_test(
     aliases = ALIASES,
     data = DEV_DATA,
     env = DEV_ENV | {"RUST_TEST_NOCAPTURE": "1"},
-    flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     tags = [
         "cpu:4",
@@ -286,7 +281,6 @@ rust_test(
     aliases = ALIASES,
     data = DEV_DATA,
     env = DEV_ENV | {"RUST_TEST_NOCAPTURE": "1"},
-    flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     tags = [
         "cpu:4",
@@ -303,7 +297,6 @@ rust_test(
     aliases = ALIASES,
     data = DEV_DATA,
     env = DEV_ENV | {"RUST_TEST_NOCAPTURE": "1"},
-    flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     tags = [
         "cpu:4",
@@ -320,7 +313,6 @@ rust_test(
     aliases = ALIASES,
     data = DEV_DATA,
     env = DEV_ENV | {"RUST_TEST_NOCAPTURE": "1"},
-    flaky = False,
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     tags = [
         "cpu:4",
@@ -337,7 +329,6 @@ rust_test(
     aliases = ALIASES,
     data = DEV_DATA,
     env = DEV_ENV | {"RUST_TEST_NOCAPTURE": "1"},
-    flaky = False,
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     tags = [
         "cpu:4",
