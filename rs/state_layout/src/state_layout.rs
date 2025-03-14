@@ -38,7 +38,7 @@ use std::marker::PhantomData;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use crate::error::LayoutError;
 use crate::utils::do_copy;
@@ -1565,6 +1565,22 @@ impl<Permissions: AccessPolicy> CheckpointLayout<Permissions> {
             }
         })
     }
+
+    pub fn mark_files_readonly_and_sync_with_delay(
+        &self,
+        thread_pool: Option<&mut scoped_threadpool::Pool>,
+    ) -> Result<(), LayoutError> {
+        mark_files_readonly_and_sync_with_delay(self.raw_path(), thread_pool).map_err(|err| {
+            LayoutError::IoError {
+                path: self.raw_path().to_path_buf(),
+                message: format!(
+                    "Could not mark files readonly and sync for checkpoint {}",
+                    self.height()
+                ),
+                io_err: err,
+            }
+        })
+    }
 }
 
 impl<P> CheckpointLayout<P>
@@ -1633,7 +1649,21 @@ impl CheckpointLayout<ReadOnly> {
         thread_pool: Option<&mut scoped_threadpool::Pool>,
     ) -> Result<(), LayoutError> {
         self.mark_files_readonly_and_sync(thread_pool)?;
-        self.remove_unverified_checkpoint_marker()
+        eprintln!("Tip thread sleeps for 5 seconds before removing the unverified checkpoint marker");
+        std::thread::sleep(std::time::Duration::from_secs(5));
+        self.remove_unverified_checkpoint_marker()?;
+        eprintln!("Tip thread removed unverified checkpoint marker");
+        Ok(())
+    }
+
+    pub fn finalize_and_remove_unverified_marker_with_delay(
+        &self,
+        thread_pool: Option<&mut scoped_threadpool::Pool>,
+    ) -> Result<(), LayoutError> {
+        self.mark_files_readonly_and_sync_with_delay(thread_pool)?;
+        std::thread::sleep(std::time::Duration::from_secs(5));
+        self.remove_unverified_checkpoint_marker()?;
+        Ok(())
     }
 }
 
@@ -2774,6 +2804,45 @@ fn mark_files_readonly_and_sync(
     let paths = dir_list_recursive(path)?;
     let results = maybe_parallel_map(&mut thread_pool, paths.iter(), |p| {
         mark_readonly_if_file(p)?;
+        #[cfg(not(target_os = "linux"))]
+        sync_path(p)?;
+        Ok::<(), std::io::Error>(())
+    });
+
+    results.into_iter().try_for_each(identity)?;
+    #[cfg(target_os = "linux")]
+    {
+        let f = std::fs::File::open(path)?;
+        use std::os::fd::AsRawFd;
+        unsafe {
+            if libc::syncfs(f.as_raw_fd()) == -1 {
+                return Err(std::io::Error::last_os_error());
+            }
+        }
+    }
+    Ok(())
+}
+
+fn mark_files_readonly_and_sync_with_delay(
+    path: &Path,
+    mut thread_pool: Option<&mut scoped_threadpool::Pool>,
+) -> std::io::Result<()> {
+    let paths = dir_list_recursive(path)?;
+    eprintln!("listed files {:?}", paths);
+    let contains_marker = paths.iter().any(|p| p.ends_with("unverified_checkpoint_marker"));
+    eprintln!("Do paths contains marker? : {:?}", contains_marker);
+    let duration = std::time::Duration::from_secs(10);
+    eprintln!("sleeping for {:?} before mark_readonly", duration);
+    std::thread::sleep(duration);
+    let paths_new = dir_list_recursive(path)?;
+    eprintln!("listed files again {:?}", paths_new);
+    let contains_marker = paths_new.iter().any(|p| p.ends_with("unverified_checkpoint_marker"));
+    eprintln!("Do paths_new contains marker? : {:?}", contains_marker);
+    let results = maybe_parallel_map(&mut thread_pool, paths.iter(), |p| {
+        if let Err(e) = mark_readonly_if_file(p) {
+            eprintln!("failed to mark file {:?} as readonly: {:?}", p, e);
+            return Err(e);
+        }
         #[cfg(not(target_os = "linux"))]
         sync_path(p)?;
         Ok::<(), std::io::Error>(())

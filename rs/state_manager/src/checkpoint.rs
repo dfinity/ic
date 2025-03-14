@@ -143,6 +143,37 @@ pub(crate) fn validate_and_finalize_checkpoint_and_remove_unverified_marker(
     Ok(())
 }
 
+pub(crate) fn validate_and_finalize_checkpoint_and_remove_unverified_marker_with_delay(
+    checkpoint_layout: &CheckpointLayout<ReadOnly>,
+    reference_state: Option<&ReplicatedState>,
+    own_subnet_type: SubnetType,
+    fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
+    metrics: &CheckpointMetrics,
+    mut thread_pool: Option<&mut scoped_threadpool::Pool>,
+) -> Result<(), CheckpointError> {
+    maybe_parallel_map(
+        &mut thread_pool,
+        checkpoint_layout.all_existing_pagemaps()?.into_iter(),
+        |pm| validate(pm),
+    )
+    .into_iter()
+    .try_for_each(identity)?;
+    if let Some(reference_state) = reference_state {
+        validate_eq_checkpoint(
+            checkpoint_layout,
+            reference_state,
+            own_subnet_type,
+            &mut thread_pool,
+            fd_factory,
+            metrics,
+        );
+    }
+    checkpoint_layout
+        .finalize_and_remove_unverified_marker_with_delay(thread_pool)
+        .map_err(CheckpointError::from)?;
+    Ok(())
+}
+
 /// Loads checkpoint and validates correctness of the overlays in parallel, if success removes the
 /// unverified checkpoint marker.
 /// This combination is useful when marking a checkpoint as verified immediately after a
@@ -162,7 +193,7 @@ pub fn load_checkpoint_and_validate_parallel(
         Arc::clone(&fd_factory),
     )?;
 
-    validate_and_finalize_checkpoint_and_remove_unverified_marker(
+    validate_and_finalize_checkpoint_and_remove_unverified_marker_with_delay(
         checkpoint_layout,
         None,
         own_subnet_type,
