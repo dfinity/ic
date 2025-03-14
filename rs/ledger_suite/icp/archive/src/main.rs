@@ -1,9 +1,10 @@
 use candid::candid_method;
 use dfn_candid::candid_one;
-use dfn_core::api::{caller, print, stable_memory_size_in_pages};
+use dfn_core::api::{print, stable_memory_size_in_pages};
 use dfn_core::{over_init, stable, BytesS};
 use dfn_protobuf::protobuf;
-use ic_cdk::api::call::reply;
+use ic_base_types::PrincipalId;
+use ic_cdk::api::{call::reply, caller};
 use ic_ledger_canister_core::range_utils;
 use ic_ledger_canister_core::runtime::heap_memory_size_bytes;
 use ic_ledger_core::block::{BlockIndex, BlockType, EncodedBlock};
@@ -166,7 +167,9 @@ fn iter_blocks_() {
     dfn_core::over(protobuf, |IterBlocksArgs { start, length }| {
         let archive_state = ARCHIVE_STATE.read().unwrap();
         let blocks = &archive_state.blocks;
-        let length = length.min(icp_ledger::max_blocks_per_request(&caller()));
+        let length = length.min(icp_ledger::max_blocks_per_request(&PrincipalId::from(
+            caller(),
+        )));
         icp_ledger::iter_blocks(blocks, start, length)
     });
 }
@@ -181,7 +184,7 @@ fn get_blocks_() {
         let from_offset = archive_state.block_height_offset;
         let length = length
             .min(usize::MAX as u64)
-            .min(icp_ledger::max_blocks_per_request(&caller()) as u64)
+            .min(icp_ledger::max_blocks_per_request(&PrincipalId::from(caller())) as u64)
             as usize;
         icp_ledger::get_blocks(blocks, from_offset, start, length)
     });
@@ -301,7 +304,7 @@ fn read_encoded_blocks(start: u64, length: usize) -> Result<Vec<EncodedBlock>, G
         &block_range,
         &range_utils::take(
             &requested_range,
-            icp_ledger::max_blocks_per_request(&caller()),
+            icp_ledger::max_blocks_per_request(&PrincipalId::from(caller())),
         ),
     ) {
         Ok(range) => range,
