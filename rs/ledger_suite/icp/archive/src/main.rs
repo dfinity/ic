@@ -191,8 +191,7 @@ fn iter_blocks_() {
 #[export_name = "canister_query get_blocks_pb"]
 fn get_blocks_() {
     let GetBlocksArgs { start, length } =
-        from_proto_bytes(arg_data_raw()).expect("failed to decode iter_blocks_pb argument");
-
+        from_proto_bytes(arg_data_raw()).expect("failed to decode get_blocks_pb argument");
     let archive_state = ARCHIVE_STATE.read().unwrap();
     let blocks = &archive_state.blocks;
     let from_offset = archive_state.block_height_offset;
@@ -201,7 +200,7 @@ fn get_blocks_() {
         .min(icp_ledger::max_blocks_per_request(&PrincipalId::from(caller())) as u64)
         as usize;
     let res = icp_ledger::get_blocks(blocks, from_offset, start, length);
-    let res_proto = to_proto_bytes(res).expect("failed to encode iter_blocks_pb response");
+    let res_proto = to_proto_bytes(res).expect("failed to encode get_blocks_pb response");
     reply_raw(&res_proto)
 }
 
