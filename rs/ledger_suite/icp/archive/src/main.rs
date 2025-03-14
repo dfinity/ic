@@ -1,5 +1,4 @@
 use candid::{candid_method, Decode};
-use dfn_candid::candid_one;
 use dfn_core::stable;
 use dfn_protobuf::protobuf;
 use ic_base_types::PrincipalId;
@@ -336,9 +335,8 @@ fn get_encoded_blocks_blocks_() {
 
 #[export_name = "canister_query __get_candid_interface_tmp_hack"]
 fn get_canidid_interface() {
-    dfn_core::over(candid_one, |()| -> &'static str {
-        include_str!(env!("LEDGER_ARCHIVE_DID_PATH"))
-    })
+    ic_cdk::setup();
+    reply((include_str!(env!("LEDGER_ARCHIVE_DID_PATH")),));
 }
 
 #[test]
