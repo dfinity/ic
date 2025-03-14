@@ -461,7 +461,7 @@ impl Payload {
                 byte_size
             );
             // Cut off before the last message.
-            messages.iter().rev().next().unwrap().0.clone()
+            messages.iter().next_back().unwrap().0.clone()
         });
 
         // Take the messages prefix, expect non-empty leftover postfix.
