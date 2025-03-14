@@ -22,7 +22,7 @@ use ic_interfaces::{
 };
 use ic_interfaces_registry::RegistryClient;
 use ic_logger::{debug, error, info, warn, ReplicaLogger};
-use ic_management_canister_types_private::SetupInitialDKGResponse;
+use ic_management_canister_types_private::{ReshareChainKeyResponse, SetupInitialDKGResponse};
 use ic_protobuf::{
     log::consensus_log_entry::v1::ConsensusLogEntry,
     registry::{crypto::v1::PublicKey as PublicKeyProto, subnet::v1::InitialNiDkgTranscriptRecord},
@@ -376,24 +376,30 @@ pub fn generate_responses_to_remote_dkgs(
 
     dkg_results
         .into_iter()
-        .filter_map(|(callback_id, transcript_result)| match transcript_result {
-            RemoteDkgResults::ReshareChainKey(_ni_dkg_transcript) => {
-                // TODO(CON-1416): Implement this case
-                error!(
+        .filter_map(|(callback_id, transcript_result)| {
+            match transcript_result {
+                RemoteDkgResults::ReshareChainKey(key_transcript) => {
+                    Some(generate_reshare_chain_key_response(key_transcript))
+                }
+                RemoteDkgResults::SetupInitialDKG {
+                    low_threshold,
+                    high_threshold,
+                } => generate_dkg_response_payload(
+                    low_threshold.as_ref(),
+                    high_threshold.as_ref(),
                     log,
-                    "ReshareChainKey for callback ID {callback_id} is unimplemented",
-                );
-                None
+                ),
             }
-            RemoteDkgResults::SetupInitialDKG {
-                low_threshold,
-                high_threshold,
-            } => {
-                generate_dkg_response_payload(low_threshold.as_ref(), high_threshold.as_ref(), log)
-                    .map(|payload| ConsensusResponse::new(callback_id, payload))
-            }
+            .map(|payload| ConsensusResponse::new(callback_id, payload))
         })
         .collect()
+}
+
+fn generate_reshare_chain_key_response(key_transcript: Result<NiDkgTranscript, String>) -> Payload {
+    match key_transcript {
+        Ok(transcript) => Payload::Data(ReshareChainKeyResponse::NiDkg(transcript.into()).encode()),
+        Err(err) => Payload::Reject(RejectContext::new(RejectCode::CanisterReject, err)),
+    }
 }
 
 /// Generate a response payload given the low and high threshold transcripts
