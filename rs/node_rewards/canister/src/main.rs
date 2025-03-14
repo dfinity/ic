@@ -1,24 +1,26 @@
-use ic_cdk::{init, post_upgrade, pre_upgrade, query};
+use ic_cdk::{init, post_upgrade, pre_upgrade, query, spawn};
+use ic_nervous_system_canisters::registry::RegistryCanister;
 use ic_node_rewards_canister::canister::NodeRewardsCanister;
 use ic_node_rewards_canister::storage::RegistryStoreStableMemoryBorrower;
 use ic_node_rewards_canister_api::lifecycle_args::{InitArgs, UpgradeArgs};
+use ic_registry_canister_client::client::CanisterRegistryStore;
 use ic_registry_canister_client::CanisterRegistryClient;
-use ic_registry_canister_data_provider::CanisterDataProvider;
-use ic_types::registry::RegistryClientError;
 use std::cell::RefCell;
 use std::sync::Arc;
+use std::time::Duration;
 
 fn main() {}
 
 thread_local! {
-    static CANISTER_DATA_PROVIDER: Arc<CanisterDataProvider<RegistryStoreStableMemoryBorrower>> = {
-        let data_provider = CanisterDataProvider::new(None);
-        Arc::new(data_provider)
+    static REGISTRY_STORE: Arc<CanisterRegistryStore<RegistryStoreStableMemoryBorrower>> = {
+        let store = CanisterRegistryStore::<RegistryStoreStableMemoryBorrower>::new(
+            Box::new(RegistryCanister::new_prod()));
+        Arc::new(store)
     };
-
     static CANISTER: RefCell<NodeRewardsCanister> = {
-        let client = CanisterRegistryClient::new(CANISTER_DATA_PROVIDER.with(|dp| dp.clone()));
-        RefCell::new(NodeRewardsCanister::new(Arc::new(client)))
+        RefCell::new(NodeRewardsCanister::new(REGISTRY_STORE.with(|store| {
+            store.clone()
+        })))
     };
 }
 
@@ -30,6 +32,29 @@ fn pre_upgrade() {}
 
 #[post_upgrade]
 fn post_upgrade(_args: Option<UpgradeArgs>) {}
+
+fn schedule_timers() {
+    schedule_registry_sync();
+}
+
+// The frquency of regular registry syncs.  This is set to 1 hour to avoid
+// making too many requests.  Before meaningful calculations are made, however, the
+// registry data should be updated.
+const REGISTRY_SYNC_INTERVAL_SECONDS: Duration = Duration::from_secs(60 * 60); // 1 hour
+
+fn schedule_registry_sync() {
+    ic_cdk_timers::set_timer_interval(REGISTRY_SYNC_INTERVAL_SECONDS, move || {
+        spawn(async move {
+            let store = REGISTRY_STORE.with(|s| s.clone());
+            // panicking here is okay because we are using an interval instead of a timer that '
+            // has to reschedule itself.
+            store
+                .sync_registry_stored()
+                .await
+                .expect("Could not sync registry store!");
+        });
+    });
+}
 
 #[query(hidden = true)]
 fn hello() -> String {

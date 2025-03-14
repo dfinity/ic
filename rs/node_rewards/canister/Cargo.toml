@@ -15,7 +15,9 @@ path = "src/lib.rs"
 
 [dependencies]
 ic-cdk = { workspace = true }
+ic-cdk-timers = { workspace = true }
 ic-interfaces-registry = { path = "../../interfaces/registry" }
+ic-nervous-system-canisters = { path = "../../nervous_system/canisters" }
 ic-node-rewards-canister-api = { path = "./api" }
 ic-registry-canister-client = { path = "../../registry/canister-client" }
 ic-stable-structures = { workspace = true }

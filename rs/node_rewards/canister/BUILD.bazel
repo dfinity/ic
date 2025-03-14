@@ -7,11 +7,13 @@ package(default_visibility = ["//visibility:public"])
 DEPENDENCIES = [
     # Keep sorted.
     "//rs/interfaces/registry",
+    "//rs/nervous_system/canisters",
     "//rs/node_rewards/canister/api",
     "//rs/registry/canister-client",
     "//rs/types/types",
     "@crate_index//:candid",
     "@crate_index//:ic-cdk",
+    "@crate_index//:ic-cdk-timers",
     "@crate_index//:ic-stable-structures",
 ]
 

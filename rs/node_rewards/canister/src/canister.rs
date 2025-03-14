@@ -1,13 +1,12 @@
-use ic_interfaces_registry::{RegistryClient, RegistryClientResult, RegistryDataProvider};
-
+use ic_registry_canister_client::CanisterRegistryClient;
 use std::sync::Arc;
 
 pub struct NodeRewardsCanister {
-    registry_client: Arc<dyn RegistryClient>,
+    registry_client: Arc<dyn CanisterRegistryClient>,
 }
 
 impl NodeRewardsCanister {
-    pub fn new(registry_client: Arc<dyn RegistryClient>) -> Self {
+    pub fn new(registry_client: Arc<dyn CanisterRegistryClient>) -> Self {
         Self { registry_client }
     }
 }

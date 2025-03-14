@@ -2,9 +2,8 @@ use crate::stable_memory::{RegistryStoreStableMemory, StorableRegistryKey, Stora
 use crate::CanisterRegistryClient;
 use async_trait::async_trait;
 use ic_interfaces_registry::{
-    empty_zero_registry_record, RegistryClient, RegistryClientResult,
-    RegistryClientVersionedResult, RegistryDataProvider, RegistryTransportRecord,
-    ZERO_REGISTRY_VERSION,
+    empty_zero_registry_record, RegistryClientResult, RegistryClientVersionedResult,
+    RegistryTransportRecord, ZERO_REGISTRY_VERSION,
 };
 use ic_nervous_system_canisters::registry::Registry;
 use ic_registry_transport::pb::v1::RegistryDelta;
@@ -15,13 +14,6 @@ use ic_types::{RegistryVersion, Time};
 use std::cmp::Ordering;
 use std::collections::BTreeMap;
 use std::marker::PhantomData;
-use std::sync::{Arc, RwLock, RwLockReadGuard};
-
-type CacheState = (
-    RegistryVersion,
-    BTreeMap<RegistryVersion, Time>,
-    Vec<RegistryTransportRecord>,
-);
 
 pub struct CanisterRegistryStore<S: RegistryStoreStableMemory> {
     _stable_memory: PhantomData<S>,
