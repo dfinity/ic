@@ -4,7 +4,7 @@ use crate::governance::{test_helpers::DoNothingLedger, Governance};
 use crate::pb::v1::{self as pb, nervous_system_function};
 use crate::types::{native_action_ids::nervous_system_functions, test_helpers::NativeEnvironment};
 use ic_base_types::PrincipalId;
-use ic_nervous_system_common::cmc::FakeCmc;
+use ic_nervous_system_canisters::cmc::FakeCmc;
 use ic_sns_governance_proposal_criticality::ProposalCriticality;
 use maplit::btreemap;
 use pb::{ExecuteGenericNervousSystemFunction, NervousSystemFunction};
