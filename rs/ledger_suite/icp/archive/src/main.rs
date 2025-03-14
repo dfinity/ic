@@ -1,18 +1,19 @@
 use candid::{candid_method, Decode};
 use dfn_core::stable;
-use dfn_protobuf::protobuf;
 use ic_base_types::PrincipalId;
+use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_cdk::api::{
-    call::{arg_data_raw, reply},
+    call::{arg_data_raw, reply, reply_raw},
     caller, print,
 };
+use ic_cdk::query;
 use ic_ledger_canister_core::range_utils;
 use ic_ledger_canister_core::runtime::heap_memory_size_bytes;
 use ic_ledger_core::block::{BlockIndex, BlockType, EncodedBlock};
 use ic_metrics_encoder::MetricsEncoder;
 use icp_ledger::{
-    Block, BlockRange, BlockRes, CandidBlock, GetBlocksArgs, GetBlocksError, GetBlocksResult,
-    GetEncodedBlocksResult, IterBlocksArgs,
+    from_proto_bytes, to_proto_bytes, Block, BlockRange, BlockRes, CandidBlock, GetBlocksArgs,
+    GetBlocksError, GetBlocksResult, GetEncodedBlocksResult, IterBlocksArgs,
 };
 use serde::{Deserialize, Serialize};
 use std::sync::RwLock;
@@ -134,7 +135,10 @@ fn get_block(block_height: BlockIndex) -> BlockRes {
 
 #[export_name = "canister_query get_block_pb"]
 fn get_block_() {
-    dfn_core::over(protobuf, get_block);
+    let arg: BlockIndex =
+        from_proto_bytes(arg_data_raw()).expect("failed to decode get_block_pb argument");
+    let res = to_proto_bytes(get_block(arg)).expect("failed to encode get_block_pb response");
+    reply_raw(&res)
 }
 
 #[export_name = "canister_init"]
@@ -170,30 +174,35 @@ fn append_blocks_() {
 /// 100.
 #[export_name = "canister_query iter_blocks_pb"]
 fn iter_blocks_() {
-    dfn_core::over(protobuf, |IterBlocksArgs { start, length }| {
-        let archive_state = ARCHIVE_STATE.read().unwrap();
-        let blocks = &archive_state.blocks;
-        let length = length.min(icp_ledger::max_blocks_per_request(&PrincipalId::from(
-            caller(),
-        )));
-        icp_ledger::iter_blocks(blocks, start, length)
-    });
+    let IterBlocksArgs { start, length } =
+        from_proto_bytes(arg_data_raw()).expect("failed to decode iter_blocks_pb argument");
+    let archive_state = ARCHIVE_STATE.read().unwrap();
+    let blocks = &archive_state.blocks;
+    let length = length.min(icp_ledger::max_blocks_per_request(&PrincipalId::from(
+        caller(),
+    )));
+    let res = icp_ledger::iter_blocks(blocks, start, length);
+    let res_proto = to_proto_bytes(res).expect("failed to encode iter_blocks_pb response");
+    reply_raw(&res_proto)
 }
 
 /// Get multiple Blocks by BlockIndex and length. If the query is outside the
 /// range stored in the Node the result is an error.
 #[export_name = "canister_query get_blocks_pb"]
 fn get_blocks_() {
-    dfn_core::over(protobuf, |GetBlocksArgs { start, length }| {
-        let archive_state = ARCHIVE_STATE.read().unwrap();
-        let blocks = &archive_state.blocks;
-        let from_offset = archive_state.block_height_offset;
-        let length = length
-            .min(usize::MAX as u64)
-            .min(icp_ledger::max_blocks_per_request(&PrincipalId::from(caller())) as u64)
-            as usize;
-        icp_ledger::get_blocks(blocks, from_offset, start, length)
-    });
+    let GetBlocksArgs { start, length } =
+        from_proto_bytes(arg_data_raw()).expect("failed to decode iter_blocks_pb argument");
+
+    let archive_state = ARCHIVE_STATE.read().unwrap();
+    let blocks = &archive_state.blocks;
+    let from_offset = archive_state.block_height_offset;
+    let length = length
+        .min(usize::MAX as u64)
+        .min(icp_ledger::max_blocks_per_request(&PrincipalId::from(caller())) as u64)
+        as usize;
+    let res = icp_ledger::get_blocks(blocks, from_offset, start, length);
+    let res_proto = to_proto_bytes(res).expect("failed to encode iter_blocks_pb response");
+    reply_raw(&res_proto)
 }
 
 #[candid_method(query, rename = "get_blocks")]
@@ -222,7 +231,7 @@ fn post_upgrade() {
     let mut state = ARCHIVE_STATE.write().unwrap();
     *state = ciborium::de::from_reader(std::io::Cursor::new(&bytes))
         .expect("Decoding stable memory failed");
-    state.last_upgrade_timestamp = dfn_core::api::time_nanos();
+    state.last_upgrade_timestamp = ic_cdk::api::time();
 }
 
 #[export_name = "canister_pre_upgrade"]
@@ -282,9 +291,25 @@ fn encode_metrics(w: &mut MetricsEncoder<Vec<u8>>) -> std::io::Result<()> {
     Ok(())
 }
 
-#[export_name = "canister_query http_request"]
-fn http_request() {
-    dfn_http_metrics::serve_metrics(encode_metrics);
+#[query(hidden = true, decoding_quota = 10000)]
+fn http_request(req: HttpRequest) -> HttpResponse {
+    if req.path() == "/metrics" {
+        let mut writer =
+            ic_metrics_encoder::MetricsEncoder::new(vec![], ic_cdk::api::time() as i64 / 1_000_000);
+
+        match encode_metrics(&mut writer) {
+            Ok(()) => HttpResponseBuilder::ok()
+                .header("Content-Type", "text/plain; version=0.0.4")
+                .with_body_and_content_length(writer.into_inner())
+                .build(),
+            Err(err) => {
+                HttpResponseBuilder::server_error(format!("Failed to encode metrics: {}", err))
+                    .build()
+            }
+        }
+    } else {
+        HttpResponseBuilder::not_found().build()
+    }
 }
 
 #[candid_method(query, rename = "get_encoded_blocks")]
