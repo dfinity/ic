@@ -140,6 +140,35 @@ pub struct RegistryGetValueRequest {
     #[prost(bytes = "vec", tag = "2")]
     pub key: ::prost::alloc::vec::Vec<u8>,
 }
+/// In the not too distant future, this will be used instead of
+/// RegistryGetValueResponse. See the "Migrating to Large Values/High-Capacity
+/// Types" section in the file-level comments.
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct HighCapacityRegistryGetValueResponse {
+    #[prost(message, optional, tag = "1")]
+    pub error: ::core::option::Option<RegistryError>,
+    #[prost(uint64, tag = "2")]
+    pub version: u64,
+    #[prost(
+        oneof = "high_capacity_registry_get_value_response::Content",
+        tags = "3, 4"
+    )]
+    pub content: ::core::option::Option<high_capacity_registry_get_value_response::Content>,
+}
+/// Nested message and enum types in `HighCapacityRegistryGetValueResponse`.
+pub mod high_capacity_registry_get_value_response {
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    pub enum Content {
+        #[prost(bytes, tag = "3")]
+        Value(::prost::alloc::vec::Vec<u8>),
+        #[prost(message, tag = "4")]
+        LargeValueChunkKeys(super::LargeValueChunkKeys),
+    }
+}
+/// Deprecated; instead, use HighCapacityRegistryGetValueResponse. See the
+/// "Migrating to Large Values/High-Capacity Types" section in the file-level
+/// comments.
+///
 /// Message corresponding to the response from the canister
 /// to a get_value() request.
 ///

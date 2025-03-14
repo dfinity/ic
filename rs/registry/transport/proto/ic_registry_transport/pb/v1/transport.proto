@@ -201,6 +201,22 @@ message RegistryGetValueRequest {
   bytes key = 2;
 }
 
+// In the not too distant future, this will be used instead of
+// RegistryGetValueResponse. See the "Migrating to Large Values/High-Capacity
+// Types" section in the file-level comments.
+message HighCapacityRegistryGetValueResponse {
+  RegistryError error = 1;
+  uint64 version = 2;
+  oneof content {
+    bytes value = 3;
+    LargeValueChunkKeys large_value_chunk_keys = 4;
+  }
+}
+
+// Deprecated; instead, use HighCapacityRegistryGetValueResponse. See the
+// "Migrating to Large Values/High-Capacity Types" section in the file-level
+// comments.
+//
 // Message corresponding to the response from the canister
 // to a get_value() request.
 //
