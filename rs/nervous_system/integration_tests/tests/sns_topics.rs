@@ -4,6 +4,7 @@ use canister_test::Wasm;
 use ic_base_types::PrincipalId;
 use ic_nervous_system_agent::pocketic_impl::PocketIcAgent;
 use ic_nervous_system_agent::sns::governance::{GovernanceCanister, SubmittedProposal};
+use ic_nervous_system_common::ONE_DAY_SECONDS;
 use ic_nervous_system_integration_tests::pocket_ic_helpers::{
     install_canister_on_subnet, nns, sns, universal_canister, NnsInstaller,
 };
@@ -36,7 +37,7 @@ async fn set_custom_sns_topics_test() {
 }
 
 async fn run_set_custom_sns_topics_test() {
-    // 1. Prepare the world
+    // Prepare the world
     let pocket_ic = PocketIcBuilder::new()
         .with_nns_subnet()
         .with_sns_subnet()
@@ -58,7 +59,20 @@ async fn run_set_custom_sns_topics_test() {
         .unwrap();
 
     let sns = {
-        let create_service_nervous_system = CreateServiceNervousSystemBuilder::default().build();
+        // Setting these two values to over 5 and 2.5 days, resp., so that critical proposals have
+        // a different `initial_voting_period` than normal proposals.
+        // See `Action.voting_duration_parameters`.
+        let initial_voting_period_seconds = 4 * ONE_DAY_SECONDS;
+        let wait_for_quiet_deadline_increase_seconds = 2 * ONE_DAY_SECONDS;
+
+        let create_service_nervous_system = CreateServiceNervousSystemBuilder::default()
+            .with_governance_parameters_proposal_initial_voting_period(
+                initial_voting_period_seconds,
+            )
+            .with_governance_parameters_proposal_wait_for_quiet_deadline_increase(
+                wait_for_quiet_deadline_increase_seconds,
+            )
+            .build();
 
         let sns_instance_label = "1";
         let (sns, _) = nns::governance::propose_to_deploy_sns_and_wait(
@@ -211,21 +225,36 @@ async fn run_set_custom_sns_topics_test() {
     let custom_proposal_topics = topics
         .unwrap()
         .into_iter()
-        .map(|topic_info| (topic_info.name.unwrap(), topic_info.custom_functions))
+        .map(|topic_info| {
+            (
+                topic_info.name.unwrap(),
+                topic_info.custom_functions,
+                topic_info.is_critical.unwrap(),
+            )
+        })
         .collect::<Vec<_>>();
 
     assert_eq!(
         custom_proposal_topics,
         vec![
-            ("DAO community settings".to_string(), Some(vec![])),
-            ("SNS framework management".to_string(), Some(vec![])),
-            ("Dapp canister management".to_string(), Some(vec![])),
-            ("Application Business Logic".to_string(), Some(vec![])),
-            ("Governance".to_string(), Some(vec![])),
-            ("Treasury & asset management".to_string(), Some(vec![])),
+            ("DAO community settings".to_string(), Some(vec![]), false),
+            ("SNS framework management".to_string(), Some(vec![]), false),
+            ("Dapp canister management".to_string(), Some(vec![]), false),
+            (
+                "Application Business Logic".to_string(),
+                Some(vec![]),
+                false
+            ),
+            ("Governance".to_string(), Some(vec![]), false),
+            (
+                "Treasury & asset management".to_string(),
+                Some(vec![]),
+                true
+            ),
             (
                 "Critical Dapp Operations".to_string(),
                 Some(vec![initial_function]),
+                true,
             ),
         ],
     );
@@ -297,22 +326,33 @@ async fn run_set_custom_sns_topics_test() {
     let custom_proposal_topics = topics
         .unwrap()
         .into_iter()
-        .map(|topic_info| (topic_info.name.unwrap(), topic_info.custom_functions))
+        .map(|topic_info| {
+            (
+                topic_info.name.unwrap(),
+                topic_info.custom_functions,
+                topic_info.is_critical.unwrap(),
+            )
+        })
         .collect::<Vec<_>>();
 
     assert_eq!(
         custom_proposal_topics,
         vec![
-            ("DAO community settings".to_string(), Some(vec![])),
-            ("SNS framework management".to_string(), Some(vec![])),
-            ("Dapp canister management".to_string(), Some(vec![])),
+            ("DAO community settings".to_string(), Some(vec![]), false),
+            ("SNS framework management".to_string(), Some(vec![]), false),
+            ("Dapp canister management".to_string(), Some(vec![]), false),
             (
                 "Application Business Logic".to_string(),
-                Some(vec![expected_function])
+                Some(vec![expected_function]),
+                false,
             ),
-            ("Governance".to_string(), Some(vec![])),
-            ("Treasury & asset management".to_string(), Some(vec![])),
-            ("Critical Dapp Operations".to_string(), Some(vec![])),
+            ("Governance".to_string(), Some(vec![]), false),
+            (
+                "Treasury & asset management".to_string(),
+                Some(vec![]),
+                true
+            ),
+            ("Critical Dapp Operations".to_string(), Some(vec![]), true),
         ],
     );
 
@@ -372,8 +412,8 @@ async fn run_set_custom_sns_topics_test() {
             topic: Some(Topic::CriticalDappOperations),
             // The following fields are affected by proposal criticality, so we assert that they
             // ended up having the expected values.
-            initial_voting_period_seconds: 709499,
-            wait_for_quiet_deadline_increase_seconds: 216000,
+            initial_voting_period_seconds,
+            wait_for_quiet_deadline_increase_seconds,
             minimum_yes_proportion_of_total: Some(Percentage {
                 basis_points: Some(2000),
             }),
@@ -381,6 +421,11 @@ async fn run_set_custom_sns_topics_test() {
                 basis_points: Some(6700),
             }),
             ..
+        } => {
+            // Critical proposals have the following two parameters at least 5 and 2.5 days, resp.
+            // See `Action.voting_duration_parameters`.
+            assert_eq!(initial_voting_period_seconds, 5 * ONE_DAY_SECONDS);
+            assert_eq!(wait_for_quiet_deadline_increase_seconds, 2 * ONE_DAY_SECONDS + ONE_DAY_SECONDS / 2);
         }
     );
 
@@ -391,8 +436,8 @@ async fn run_set_custom_sns_topics_test() {
             topic: Some(Topic::ApplicationBusinessLogic),
             // The following fields are affected by proposal criticality, so we assert that they
             // ended up having the expected values.
-            initial_voting_period_seconds: 709499,
-            wait_for_quiet_deadline_increase_seconds: 75891,
+            initial_voting_period_seconds,
+            wait_for_quiet_deadline_increase_seconds,
             minimum_yes_proportion_of_total: Some(Percentage {
                 basis_points: Some(300),
             }),
@@ -400,6 +445,9 @@ async fn run_set_custom_sns_topics_test() {
                 basis_points: Some(5000),
             }),
             ..
+        } => {
+            assert_eq!(initial_voting_period_seconds, 4 * ONE_DAY_SECONDS);
+            assert_eq!(wait_for_quiet_deadline_increase_seconds, 2 * ONE_DAY_SECONDS);
         }
     );
 }
