@@ -24,6 +24,82 @@ syntax = "proto3";
 //
 // Note that registry versions are always strictly >= 0, a -1 value is used
 // to signal that no version was assigned.
+//
+// # Migrating to Large Values/High-Capacity Types
+//
+// Clients need to migrate if they fetch `CatchUpPackageContents`(s) via one (or
+// more) of the following methods:
+//
+//     1. get_certified_changes_since
+//     2. get_value
+//     3. get_changes_since
+//
+// (Such entries have keys of the form `catch_up_package_contents_${subnet_id}`.)
+//
+// Many types here have corresponding "high-capacity" types. E.g. we define both
+// RegistryValue and HighCapacityRegistryValue. We refer to the former as the
+// "legacy" type; whereas, we call the later the "high-capacity" type. We are
+// transitioning to the high-capacity types. Although clients need to do some
+// work, the migration will be "nice and gradual". This section explains what
+// clients can and must do, and when.
+//
+// The key observation is that as long as
+//
+//     1. the `large_value_chunk_keys` field is not populated, and
+//     2. whenever `deletion_marker` is true, `value` is empty
+//
+// then, it is possible to convert from a high-capacity object to a equivalent
+// legacy object by encoding, and then decoding. Furthermore, the other
+// direction also works. This allows a window during which clients can start
+// using high-capacity types at any time.
+//
+// Once the high-capacity type definitions are in the master branch of the ic
+// GitHub repo, the migration window has "opened". An announcement will be sent
+// shortly after this event. This will occur as soon as possible to give clients
+// as much time as possible to migrate.
+//
+// At this point, client CAN migrate. That is, they can (develop and) deploy
+// versions of their application that use high-capacity types instead of legacy
+// types. Once they do that, they will be ready for the Registry canister to
+// start emiting large data.
+//
+// During this time, Registry will also migrate to high-capacity types, but will
+// not actually start emitting large data right away.
+//
+// After clients have had a "reasonable" amount of time to migrate, large data
+// will start appearing in Registry. At that point, the migration window is
+// "closed", and clients will need to have migrated. An announcement will be
+// sent shortly before this event. The appearance of large data might be delayed
+// if clients need more time to migrate.
+//
+// After the migration window, the legacy types will be obsolete. Therefore, it
+// will be a bit silly for "HighCapacity" to be in the name of the types, and it
+// will be confusing for the legacy types to be retained. Therefore, what will
+// happen shortly after the migration window is that the legacy type definitions
+// will be replaced/modified with a copy of the high-capacity type definitions.
+// After a "long" time has passed, the "HighCapacity" names will go away.
+//
+// To ease this secondary/cleanup transition (where "HighCapacity" is deleted),
+// it is recommended that clients create some aliases. E.g. in Rust,
+//
+// ```rust
+// use ic_registry_transport::pb::v1::{
+//     HighCapacityRegistryValue as RegistryValue,
+// };
+// ```
+//
+// Then, when the legacy definitions are replaced, clients can change the above
+// line to this:
+//
+// ```rust
+// use ic_registry_transport::pb::v1::{
+//     RegistryValue,
+// };
+// ```
+//
+// Once all clients have made such changes, it will be possible to delete
+// "HighCapacity" definitions from this file. (Ofc, such clean up is not
+// strictly necessary, and can easily be deferred for a long time.)
 package ic_registry_transport.pb.v1;
 
 import "google/protobuf/wrappers.proto";
