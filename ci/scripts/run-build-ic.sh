@@ -22,6 +22,8 @@ if [ "$TARGETS" == "//..." ]; then
     exit 0
 fi
 
+ARGS=()
+
 if [[ $TARGETS =~ ic-os ]]; then
     ARGS+=(-i)
 fi
