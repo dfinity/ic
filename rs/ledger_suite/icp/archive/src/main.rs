@@ -139,11 +139,12 @@ fn get_block_() {
 
 #[export_name = "canister_init"]
 fn main() {
-    dfn_core::over_init(
-        |dfn_candid::Candid((archive_canister_id, block_height_offset, opt_max_size))| {
-            init(archive_canister_id, block_height_offset, opt_max_size)
-        },
-    )
+    ic_cdk::setup();
+    let bytes = arg_data_raw();
+    let (archive_canister_id, block_height_offset, opt_max_size) =
+        Decode!(&bytes, ic_base_types::CanisterId, u64, Option<usize>)
+            .expect("failed to decode init arguments");
+    init(archive_canister_id, block_height_offset, opt_max_size);
 }
 
 #[export_name = "canister_update remaining_capacity"]
