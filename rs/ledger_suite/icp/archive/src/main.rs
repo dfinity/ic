@@ -3,6 +3,7 @@ use dfn_candid::candid_one;
 use dfn_core::api::{caller, print, stable_memory_size_in_pages};
 use dfn_core::{over_init, stable, BytesS};
 use dfn_protobuf::protobuf;
+use ic_cdk::api::call::reply;
 use ic_ledger_canister_core::range_utils;
 use ic_ledger_canister_core::runtime::heap_memory_size_bytes;
 use ic_ledger_core::block::{BlockIndex, BlockType, EncodedBlock};
@@ -145,7 +146,8 @@ fn main() {
 
 #[export_name = "canister_update remaining_capacity"]
 fn remaining_capacity_() {
-    dfn_core::over(dfn_candid::candid, |()| remaining_capacity());
+    ic_cdk::setup();
+    reply((remaining_capacity(),))
 }
 
 #[export_name = "canister_update append_blocks"]
