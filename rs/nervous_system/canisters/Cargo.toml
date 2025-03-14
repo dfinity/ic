@@ -21,3 +21,4 @@ ic-nervous-system-runtime = { path = "../runtime" }
 ic-nns-constants = { path = "../../nns/constants" }
 icp-ledger = { path = "../../ledger_suite/icp" }
 icrc-ledger-types = { path = "../../../packages/icrc-ledger-types" }
+mockall = { workspace = true }
