@@ -1691,12 +1691,13 @@ impl Action {
     pub(crate) fn voting_duration_parameters(
         &self,
         nervous_system_parameters: &NervousSystemParameters,
+        proposal_criticality: ProposalCriticality,
     ) -> VotingDurationParameters {
         let initial_voting_period_seconds = nervous_system_parameters.initial_voting_period_seconds;
         let wait_for_quiet_deadline_increase_seconds =
             nervous_system_parameters.wait_for_quiet_deadline_increase_seconds;
 
-        match self.proposal_criticality() {
+        match proposal_criticality {
             ProposalCriticality::Normal => VotingDurationParameters {
                 initial_voting_period: PbDuration {
                     seconds: initial_voting_period_seconds,
@@ -1723,30 +1724,6 @@ impl Action {
                     },
                 }
             }
-        }
-    }
-
-    pub(crate) fn proposal_criticality(&self) -> ProposalCriticality {
-        use Action::*;
-        match self {
-            DeregisterDappCanisters(_)
-            | TransferSnsTreasuryFunds(_)
-            | MintSnsTokens(_)
-            | SetTopicsForCustomProposals(_) => ProposalCriticality::Critical,
-
-            Unspecified(_)
-            | ManageNervousSystemParameters(_)
-            | UpgradeSnsControlledCanister(_)
-            | Motion(_)
-            | AddGenericNervousSystemFunction(_)
-            | RemoveGenericNervousSystemFunction(_)
-            | ExecuteGenericNervousSystemFunction(_)
-            | UpgradeSnsToNextVersion(_)
-            | AdvanceSnsTargetVersion(_)
-            | ManageSnsMetadata(_)
-            | ManageLedgerParameters(_)
-            | RegisterDappCanisters(_)
-            | ManageDappCanisterSettings(_) => ProposalCriticality::Normal,
         }
     }
 }

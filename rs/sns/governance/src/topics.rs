@@ -233,8 +233,8 @@ impl Governance {
         };
 
         let Some(custom_proposal_topic_id) = custom_proposal_topic_id else {
-            // Fall back to legacy, action-specific proposal criticality (if a topic isn't defined).
-            return Ok((None, action.proposal_criticality()));
+            // Fall back to default proposal criticality (if a topic isn't defined).
+            return Ok((None, ProposalCriticality::default()));
         };
 
         let Ok(topic) = pb::Topic::try_from(custom_proposal_topic_id) else {

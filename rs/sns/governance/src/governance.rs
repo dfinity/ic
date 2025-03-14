@@ -3420,9 +3420,14 @@ impl Governance {
             .max_age_bonus_percentage
             .expect("NervousSystemParameters must have max_age_bonus_percentage");
 
+        // Define topic-based criticality based on the current mapping from proposals to topics.
+        let (proposal_topic, proposal_criticality) = self
+            .get_topic_and_criticality_for_action(action)
+            .map_err(|err| GovernanceError::new_with_message(ErrorType::InvalidProposal, err))?;
+
         // Voting duration parameters.
         let voting_duration_parameters =
-            action.voting_duration_parameters(nervous_system_parameters);
+            action.voting_duration_parameters(nervous_system_parameters, proposal_criticality);
         let initial_voting_period_seconds = voting_duration_parameters
             .initial_voting_period
             .seconds
@@ -3434,13 +3439,7 @@ impl Governance {
             .seconds
             .expect("Unable to determine the wait for quiet deadline increase amount.");
 
-        // Define topic-based criticality based on the current mapping from proposals to topics.
-        let (proposal_topic, proposal_criticality) = self
-            .get_topic_and_criticality_for_action(action)
-            .map_err(|err| GovernanceError::new_with_message(ErrorType::InvalidProposal, err))?;
-
         // Voting power threshold parameters.
-
         let (minimum_yes_proportion_of_total, minimum_yes_proportion_of_exercised) = {
             let voting_power_thresholds = proposal_criticality.voting_power_thresholds();
             (
@@ -3776,8 +3775,8 @@ impl Governance {
             // Prefer topic-specific proposal criticality.
             proposal_topic.proposal_criticality()
         } else {
-            // Fall back to legacy, action-specific proposal criticality (if a topic isn't defined).
-            action.proposal_criticality()
+            // Fall back to default proposal criticality if a topic isn't defined.
+            ProposalCriticality::default()
         };
 
         let vote = Vote::try_from(request.vote).unwrap_or(Vote::Unspecified);
