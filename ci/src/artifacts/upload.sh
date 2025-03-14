@@ -35,15 +35,6 @@ rclone_common_flags=(
     )
 
 if [ "${UPLOAD_BUILD_ARTIFACTS:-}" == "1" ]; then
-    echo "uploading $f to cluster S3" >&2
-    "$RCLONE" \
-        "${rclone_common_flags[@]}" \
-        --s3-endpoint=https://s3-upload.idx.dfinity.network \
-        copy \
-        "$f" \
-        ":s3:dfinity-download-public/ic/${VERSION}/$REMOTE_SUBDIR/"
-    echo "done uploading to cluster S3" >&2
-
     echo "uploading $f to AWS" >&2
     AWS_PROFILE=default "$RCLONE" \
         "${rclone_common_flags[@]}" \
