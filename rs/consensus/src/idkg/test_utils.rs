@@ -61,7 +61,7 @@ use ic_types::crypto::threshold_sig::ni_dkg::{
     NiDkgId, NiDkgMasterPublicKeyId, NiDkgTag, NiDkgTargetId, NiDkgTargetSubnet,
 };
 use ic_types::crypto::vetkd::{
-    VetKdArgs, VetKdDerivationDomain, VetKdEncryptedKeyShare, VetKdEncryptedKeyShareContent,
+    VetKdArgs, VetKdDerivationContext, VetKdEncryptedKeyShare, VetKdEncryptedKeyShareContent,
 };
 use ic_types::crypto::{AlgorithmId, ExtendedDerivationPath};
 use ic_types::messages::CallbackId;
@@ -111,8 +111,8 @@ fn fake_signature_request_args(key_id: MasterPublicKeyId, height: Height) -> Thr
         }),
         MasterPublicKeyId::VetKd(key_id) => ThresholdArguments::VetKd(VetKdArguments {
             key_id: key_id.clone(),
-            derivation_id: vec![1; 32],
-            encryption_public_key: vec![1; 32],
+            input: vec![1; 32],
+            transport_public_key: vec![1; 32],
             ni_dkg_id: fake_dkg_id(key_id),
             height,
         }),
@@ -1374,12 +1374,12 @@ pub(crate) fn create_schnorr_sig_inputs_with_args(
 pub(crate) fn create_vetkd_inputs_with_args(caller: u8, key_id: &VetKdKeyId) -> TestSigInputs {
     let inputs = VetKdArgs {
         ni_dkg_id: fake_dkg_id(key_id.clone()),
-        derivation_domain: VetKdDerivationDomain {
+        context: VetKdDerivationContext {
             caller: PrincipalId::try_from(&vec![caller]).unwrap(),
-            domain: vec![],
+            context: vec![],
         },
-        derivation_id: vec![],
-        encryption_public_key: vec![1; 32],
+        input: vec![],
+        transport_public_key: vec![1; 32],
     };
 
     TestSigInputs {

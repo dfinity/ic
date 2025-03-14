@@ -47,7 +47,7 @@ use ic_management_canister_types_private::{
     SchnorrPublicKeyResponse, SetupInitialDKGArgs, SignWithECDSAArgs, SignWithSchnorrArgs,
     SignWithSchnorrAux, StoredChunksArgs, SubnetInfoArgs, SubnetInfoResponse,
     TakeCanisterSnapshotArgs, UninstallCodeArgs, UpdateSettingsArgs, UploadChunkArgs,
-    VetKdDeriveEncryptedKeyArgs, VetKdPublicKeyArgs, VetKdPublicKeyResult, IC_00,
+    VetKdDeriveKeyArgs, VetKdPublicKeyArgs, VetKdPublicKeyResult, IC_00,
 };
 use ic_metrics::MetricsRegistry;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
@@ -72,7 +72,7 @@ use ic_types::{
     crypto::{
         canister_threshold_sig::{MasterPublicKey, PublicKey},
         threshold_sig::ni_dkg::NiDkgTargetId,
-        vetkd::VetKdDerivationDomain,
+        vetkd::VetKdDerivationContext,
         ExtendedDerivationPath,
     },
     ingress::{IngressState, IngressStatus, WasmResult},
@@ -1296,14 +1296,10 @@ impl ExecutionEnvironment {
                                         Some(id) => id.into(),
                                         None => *msg.sender(),
                                     };
-                                    self.get_vetkd_public_key(
-                                        pubkey,
-                                        canister_id,
-                                        args.derivation_domain,
-                                    )
-                                    .map(|public_key| {
-                                        (VetKdPublicKeyResult { public_key }.encode(), None)
-                                    })
+                                    self.get_vetkd_public_key(pubkey, canister_id, args.context)
+                                        .map(|public_key| {
+                                            (VetKdPublicKeyResult { public_key }.encode(), None)
+                                        })
                                 }
                             },
                         };
@@ -1334,7 +1330,7 @@ impl ExecutionEnvironment {
                     }
                 }
             }
-            Ok(Ic00Method::VetKdDeriveEncryptedKey) => match &msg {
+            Ok(Ic00Method::VetKdDeriveKey) => match &msg {
                 CanisterCall::Request(request) => {
                     if payload.is_empty() {
                         use ic_types::messages;
@@ -1357,7 +1353,7 @@ impl ExecutionEnvironment {
                         return (state, Some(NumInstructions::from(0)));
                     }
 
-                    match self.vetkd_derive_encrypted_key(
+                    match self.vetkd_derive_key(
                         request,
                         payload,
                         chain_key_data,
@@ -1382,7 +1378,7 @@ impl ExecutionEnvironment {
                     }
                 }
                 CanisterCall::Ingress(_) => {
-                    self.reject_unexpected_ingress(Ic00Method::VetKdDeriveEncryptedKey)
+                    self.reject_unexpected_ingress(Ic00Method::VetKdDeriveKey)
                 }
             },
 
@@ -2836,14 +2832,11 @@ impl ExecutionEnvironment {
         &self,
         subnet_public_key: &MasterPublicKey,
         caller: PrincipalId,
-        derivation_domain: Vec<u8>,
+        context: Vec<u8>,
     ) -> Result<Vec<u8>, UserError> {
         derive_vetkd_public_key(
             subnet_public_key,
-            &VetKdDerivationDomain {
-                caller,
-                domain: derivation_domain,
-            },
+            &VetKdDerivationContext { caller, context },
         )
         .map_err(|err| {
             UserError::new(
@@ -2853,7 +2846,7 @@ impl ExecutionEnvironment {
         })
     }
 
-    fn vetkd_derive_encrypted_key(
+    fn vetkd_derive_key(
         &self,
         request: &Request,
         payload: &[u8],
@@ -2863,7 +2856,7 @@ impl ExecutionEnvironment {
         registry_settings: &RegistryExecutionSettings,
         current_round: ExecutionRound,
     ) -> Result<(), UserError> {
-        let args = VetKdDeriveEncryptedKeyArgs::decode(payload)?;
+        let args = VetKdDeriveKeyArgs::decode(payload)?;
         let key_id = MasterPublicKeyId::VetKd(args.key_id.clone());
         let _master_public_key_exists = get_master_public_key(
             &chain_key_data.master_public_keys,
@@ -2883,7 +2876,7 @@ impl ExecutionEnvironment {
                 ),
             ));
         };
-        if !is_valid_transport_public_key(&args.encryption_public_key) {
+        if !is_valid_transport_public_key(&args.transport_public_key) {
             return Err(UserError::new(
                 ErrorCode::CanisterRejectedMessage,
                 "The provided transport public key is invalid.",
@@ -2893,12 +2886,12 @@ impl ExecutionEnvironment {
             (*request).clone(),
             ThresholdArguments::VetKd(VetKdArguments {
                 key_id: args.key_id,
-                derivation_id: args.derivation_id,
-                encryption_public_key: args.encryption_public_key.to_vec(),
+                input: args.input,
+                transport_public_key: args.transport_public_key.to_vec(),
                 ni_dkg_id: ni_dkg_id.clone(),
                 height: Height::new(current_round.get()),
             }),
-            vec![args.derivation_domain],
+            vec![args.context],
             registry_settings
                 .chain_key_settings
                 .get(&key_id)

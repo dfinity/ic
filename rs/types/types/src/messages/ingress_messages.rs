@@ -570,7 +570,7 @@ pub fn extract_effective_canister_id(
         | Ok(Method::SchnorrPublicKey)
         | Ok(Method::SignWithSchnorr)
         | Ok(Method::VetKdPublicKey)
-        | Ok(Method::VetKdDeriveEncryptedKey)
+        | Ok(Method::VetKdDeriveKey)
         | Ok(Method::BitcoinGetBalance)
         | Ok(Method::BitcoinGetUtxos)
         | Ok(Method::BitcoinGetBlockHeaders)

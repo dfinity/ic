@@ -730,7 +730,7 @@ fn get_valid_system_apis_common(I: ValType) -> HashMap<String, HashMap<String, F
             )],
         ),
         (
-            "cost_vetkd_derive_encrypted_key",
+            "cost_vetkd_derive_key",
             vec![(
                 API_VERSION_IC0,
                 FunctionSignature {
