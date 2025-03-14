@@ -17,11 +17,9 @@ on the process that this file is part of, see
 
 ## Fixed
 
-### Backfill node_reward_type for existing nodes
+### Disable replacement of nodes that are active in subnets
 
-A one-time migration to fill in the `node_reward_type` field for existing nodes was added.  Previously, there was no
-on-chain connection between the specific nodes and their reward types.  This data came from off-chain sources
-at DFINITY.  In the future, the `node_reward_type` will be used to determine the reward type for each node, and
-it will be a required field for node registration in the IC.
+Direct node replacements of nodes that are active in a subnet may result in unexpected behavior and potential problems in the current Consensus code.
+So to be on the safe side we need to disable the functionality on the Registry side until the rest of the core protocol can handle it safely.
 
 ## Security

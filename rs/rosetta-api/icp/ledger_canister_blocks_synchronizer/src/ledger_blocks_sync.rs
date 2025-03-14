@@ -10,7 +10,8 @@ use ic_ledger_core::block::{BlockIndex, BlockType, EncodedBlock};
 use ic_ledger_hash_of::HashOf;
 use icp_ledger::{Block, TipOfChainRes};
 use tokio::sync::RwLock;
-use tracing::{debug, error, info, trace, warn};
+use tokio::time::Duration;
+use tracing::{debug, error, info, trace};
 
 use crate::blocks::BlockStoreError;
 use crate::blocks::{Blocks, HashedBlock};
@@ -28,6 +29,9 @@ const PRINT_SYNC_PROGRESS_THRESHOLD: u64 = 1000;
 const DATABASE_WRITE_BLOCKS_BATCH_SIZE: u64 = 500000;
 // Max number of retry in case of query failure while retrieving blocks.
 const MAX_RETRY: u8 = 5;
+
+const MAX_RETRIES_QUERY_TIP_BLOCK: u8 = 5;
+const RETRY_DELAY_QUERY_TIP_BLOCK: Duration = Duration::from_millis(500);
 
 struct BlockWithIndex {
     block: Block,
@@ -212,10 +216,23 @@ impl<B: BlocksAccess> LedgerBlocksSynchronizer<B> {
             tip_index,
             certification,
         } = canister.query_tip().await?;
-        let encoded_block = canister.query_raw_block(tip_index).await?.ok_or(format!(
-            "Tip of the chain has index {} but no block found at that index!",
-            tip_index
-        ))?;
+        // Gets tip block with retries
+        let mut retry = 0;
+        let encoded_block = loop {
+            let tip_block = canister.query_raw_block(tip_index).await?;
+            if tip_block.is_some() {
+                break Ok(tip_block.unwrap());
+            }
+            if retry == MAX_RETRIES_QUERY_TIP_BLOCK {
+                break Err(format!(
+                    "Failed to retrieve tip block after {} retries",
+                    MAX_RETRIES_QUERY_TIP_BLOCK
+                ));
+            }
+            retry += 1;
+            tokio::time::sleep(RETRY_DELAY_QUERY_TIP_BLOCK).await;
+        }?;
+
         let block = Block::decode(encoded_block.clone())?;
         if let Some(info) = &self.verification_info {
             let hash = HashedBlock::hash_block(
@@ -343,7 +360,7 @@ impl<B: BlocksAccess> LedgerBlocksSynchronizer<B> {
             }
 
             debug!("Asking for blocks [{},{})", i, range.end);
-            let retry = 0;
+            let mut retry = 0;
             let batch = loop {
                 let batch = canister
                     .clone()
@@ -358,14 +375,15 @@ impl<B: BlocksAccess> LedgerBlocksSynchronizer<B> {
                     break batch;
                 }
                 RosettaMetrics::inc_fetch_retries();
-                let retry = retry + 1;
-                warn!(
-                    "Failed query while retrieving blocks, retry {}/{} (error: {:?})",
-                    retry,
-                    MAX_RETRY,
-                    batch.unwrap_err()
+                retry += 1;
+            }
+            .map_err(|e| {
+                error!(
+                    "Failed to fetch blocks [{},{}] after {} attempts: {:?}",
+                    i, range.end, MAX_RETRY, e
                 );
-            }?;
+                e
+            })?;
 
             debug!("Got batch of len: {}", batch.len());
             if batch.is_empty() {

@@ -66,13 +66,13 @@ impl TransportSecretKey {
         &self,
         encrypted_key_bytes: &[u8],
         derived_public_key_bytes: &[u8],
-        derivation_id: &[u8],
+        input: &[u8],
     ) -> Result<Vec<u8>, String> {
         let encrypted_key = EncryptedKey::deserialize(encrypted_key_bytes)?;
         let derived_public_key = DerivedPublicKey::deserialize(derived_public_key_bytes)
             .map_err(|e| format!("failed to deserialize public key: {:?}", e))?;
         Ok(encrypted_key
-            .decrypt_and_verify(self, derived_public_key, derivation_id)?
+            .decrypt_and_verify(self, derived_public_key, input)?
             .to_compressed()
             .to_vec())
     }
@@ -87,11 +87,11 @@ impl TransportSecretKey {
         &self,
         encrypted_key_bytes: &[u8],
         derived_public_key_bytes: &[u8],
-        derivation_id: &[u8],
+        input: &[u8],
         symmetric_key_bytes: usize,
         symmetric_key_associated_data: &[u8],
     ) -> Result<Vec<u8>, String> {
-        let key = self.decrypt(encrypted_key_bytes, derived_public_key_bytes, derivation_id)?;
+        let key = self.decrypt(encrypted_key_bytes, derived_public_key_bytes, input)?;
 
         let mut ro = ro::RandomOracle::new(&format!(
             "ic-crypto-vetkd-bls12-381-create-secret-key-{}-bytes",
@@ -107,7 +107,7 @@ impl TransportSecretKey {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 /// A derived public key
-struct DerivedPublicKey {
+pub struct DerivedPublicKey {
     point: G2Affine,
 }
 
@@ -119,16 +119,25 @@ impl From<DerivedPublicKey> for G2Affine {
 
 #[derive(Copy, Clone, Debug)]
 /// Error indicating deserializing a derived public key failed
-enum DerivedPublicKeyDeserializationError {
-    /// The public key was invalid
+pub enum DerivedPublicKeyDeserializationError {
+    /// The public key is invalid
     InvalidPublicKey,
 }
 
 impl DerivedPublicKey {
     const BYTES: usize = G2AFFINE_BYTES;
 
-    /// Deserialize a derived public key
-    fn deserialize(bytes: &[u8]) -> Result<Self, DerivedPublicKeyDeserializationError> {
+    /// Deserializes a (derived) public key.
+    ///
+    /// Only compressed points are supported.
+    ///
+    /// Normally the bytes provided here will have been returned by the
+    /// Internet Computer's `vetkd_public_key`` management canister interface.
+    ///
+    /// Returns an error if the key is invalid (e.g., it has invalid length,
+    /// i.e., not 96 bytes, it is not in compressed format, is is not a point
+    /// on the curve, it is not torsion-free).
+    pub fn deserialize(bytes: &[u8]) -> Result<Self, DerivedPublicKeyDeserializationError> {
         let dpk_bytes: &[u8; Self::BYTES] = bytes.try_into().map_err(|_e: TryFromSliceError| {
             DerivedPublicKeyDeserializationError::InvalidPublicKey
         })?;
@@ -162,11 +171,11 @@ impl EncryptedKey {
         &self,
         tsk: &TransportSecretKey,
         derived_public_key: DerivedPublicKey,
-        derivation_id: &[u8],
+        input: &[u8],
     ) -> Result<G1Affine, String> {
         let k = G1Affine::from(G1Projective::from(&self.c3) - self.c1 * tsk.secret_key);
 
-        let msg = augmented_hash_to_g1(&derived_public_key.point, derivation_id);
+        let msg = augmented_hash_to_g1(&derived_public_key.point, input);
         let dpk_prep = G2Prepared::from(G2Affine::from(derived_public_key));
         use pairing::group::Group;
         let is_valid = gt_multipairing(&[(&k, &G2PREPARED_NEG_G), (&msg, &dpk_prep)]).is_identity();
@@ -296,7 +305,7 @@ impl IBECiphertext {
     /// not reuse the seed for encrypting another message or any other purpose.
     pub fn encrypt(
         derived_public_key_bytes: &[u8],
-        derivation_id: &[u8],
+        input: &[u8],
         msg: &[u8],
         seed: &[u8],
     ) -> Result<IBECiphertext, String> {
@@ -308,7 +317,7 @@ impl IBECiphertext {
             .map_err(|_e| format!("Provided seed must be {} bytes long ", IBE_SEED_BYTES))?;
 
         let t = Self::hash_to_mask(seed, msg);
-        let pt = augmented_hash_to_g1(&dpk.point, derivation_id);
+        let pt = augmented_hash_to_g1(&dpk.point, input);
         let tsig = ic_bls12_381::pairing(&pt, &dpk.point) * t;
 
         let c1 = G2Affine::from(G2Affine::generator() * t);
@@ -322,7 +331,7 @@ impl IBECiphertext {
     ///
     /// For proper operation k_bytes should be the result of calling
     /// TransportSecretKey::decrypt where the same `derived_public_key_bytes`
-    /// and `derivation_id` were used when creating the ciphertext (with
+    /// and `input` were used when creating the ciphertext (with
     /// IBECiphertext::encrypt).
     ///
     /// Returns the plaintext, or Err if decryption failed

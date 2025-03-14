@@ -9,7 +9,7 @@ use ic_config::{
     flag_status::FlagStatus,
     subnet_config::{SchedulerConfig, SubnetConfig},
 };
-use ic_management_canister_types::{
+use ic_management_canister_types_private::{
     CanisterIdRecord, CanisterInfoRequest, CanisterInstallMode, CanisterInstallModeV2,
     CanisterSettingsArgsBuilder, ClearChunkStoreArgs, DeleteCanisterSnapshotArgs, EmptyBlob,
     InstallChunkedCodeArgs, InstallCodeArgs, ListCanisterSnapshotArgs, LoadCanisterSnapshotArgs,
@@ -119,27 +119,6 @@ const DTS_WAT: &str = r#"
 
 fn wat2wasm(wat: &str) -> Vec<u8> {
     wat::parse_str(wat).unwrap()
-}
-
-/// This is a tentative workaround for the issue that `StateMachine` disables DTS
-/// and sandboxing if it cannot find the sandboxing binaries, which happens in
-/// local builds with `cargo`.
-fn should_skip_test_due_to_disabled_dts() -> bool {
-    if !(std::env::var("SANDBOX_BINARY").is_ok()
-        && std::env::var("LAUNCHER_BINARY").is_ok()
-        && std::env::var("COMPILER_BINARY").is_ok())
-    {
-        eprintln!(
-            "Skipping the test because DTS is not supported without \
-             canister sandboxing binaries.\n\
-             To fix this:\n\
-             - either run the test with `bazel test`\n\
-             - or define the SANDBOX_BINARY and LAUNCHER_BINARY and COMPILER_BINARY environment variables \
-             with the paths to the corresponding binaries."
-        );
-        return true;
-    }
-    false
 }
 
 fn dts_subnet_config(
@@ -341,25 +320,23 @@ const INSTALL_CODE_INGRESS_COST: u128 = 1_952_000;
 const INSTALL_CODE_EXECUTION_COST: u128 = 5_986_224;
 const NORMAL_INGRESS_COST: u128 = 1_224_000;
 const MAX_EXECUTION_COST: u128 = 6_000_000;
-const ACTUAL_EXECUTION_COST: u128 = match EmbeddersConfig::new()
-    .feature_flags
-    .wasm_native_stable_memory
-{
-    FlagStatus::Enabled => 5_985_224,
-    FlagStatus::Disabled => 5_685_230,
-};
+
+fn actual_execution_cost() -> Cycles {
+    match EmbeddersConfig::new()
+        .feature_flags
+        .wasm_native_stable_memory
+    {
+        FlagStatus::Enabled => Cycles::new(5_985_224),
+        FlagStatus::Disabled => Cycles::new(5_685_230),
+    }
+}
 
 #[test]
 fn dts_install_code_with_concurrent_ingress_sufficient_cycles() {
-    if should_skip_test_due_to_disabled_dts() {
-        // Skip this test if DTS is not supported.
-        return;
-    }
     let install_code_ingress_cost = Cycles::new(INSTALL_CODE_INGRESS_COST);
     let install_code_execution_cost = Cycles::new(INSTALL_CODE_EXECUTION_COST);
     let normal_ingress_cost = Cycles::new(NORMAL_INGRESS_COST);
     let max_execution_cost = Cycles::new(MAX_EXECUTION_COST);
-    let actual_execution_cost = Cycles::new(ACTUAL_EXECUTION_COST);
 
     // The initial balance is sufficient to run `install_code` and to send an
     // ingress message concurrently.
@@ -432,7 +409,7 @@ fn dts_install_code_with_concurrent_ingress_sufficient_cycles() {
             - install_code_execution_cost
             - install_code_ingress_cost
             - normal_ingress_cost
-            - actual_execution_cost
+            - actual_execution_cost()
             - config.dirty_page_overhead_cycles(1))
         .get()
     );
@@ -440,14 +417,9 @@ fn dts_install_code_with_concurrent_ingress_sufficient_cycles() {
 
 #[test]
 fn dts_install_code_with_concurrent_ingress_insufficient_cycles() {
-    if should_skip_test_due_to_disabled_dts() {
-        // Skip this test if DTS is not supported.
-        return;
-    }
     let install_code_ingress_cost = Cycles::new(INSTALL_CODE_INGRESS_COST);
     let normal_ingress_cost = Cycles::new(NORMAL_INGRESS_COST);
     let max_execution_cost = Cycles::new(MAX_EXECUTION_COST);
-    let actual_execution_cost = Cycles::new(ACTUAL_EXECUTION_COST);
 
     // The initial balance is not sufficient for both execution and concurrent ingress message.
     let initial_balance = install_code_ingress_cost + normal_ingress_cost.max(max_execution_cost);
@@ -485,7 +457,7 @@ fn dts_install_code_with_concurrent_ingress_insufficient_cycles() {
         env.cycle_balance(canister_id),
         (initial_balance
             - install_code_ingress_cost
-            - actual_execution_cost
+            - actual_execution_cost()
             - config.dirty_page_overhead_cycles(1))
         .get()
     );
@@ -493,14 +465,9 @@ fn dts_install_code_with_concurrent_ingress_insufficient_cycles() {
 
 #[test]
 fn dts_install_code_with_concurrent_ingress_and_freezing_threshold_insufficient_cycles() {
-    if should_skip_test_due_to_disabled_dts() {
-        // Skip this test if DTS is not supported.
-        return;
-    }
     let install_code_ingress_cost = Cycles::new(INSTALL_CODE_INGRESS_COST);
     let normal_ingress_cost = Cycles::new(NORMAL_INGRESS_COST);
     let max_execution_cost = Cycles::new(MAX_EXECUTION_COST);
-    let actual_execution_cost = Cycles::new(ACTUAL_EXECUTION_COST);
     let freezing_threshold = Cycles::new(10000000);
 
     // The initial balance is not sufficient for both execution and concurrent ingress message.
@@ -540,7 +507,7 @@ fn dts_install_code_with_concurrent_ingress_and_freezing_threshold_insufficient_
         env.cycle_balance(canister_id),
         (initial_balance
             - install_code_ingress_cost
-            - actual_execution_cost
+            - actual_execution_cost()
             - config.dirty_page_overhead_cycles(1))
         .get()
     );
@@ -548,11 +515,6 @@ fn dts_install_code_with_concurrent_ingress_and_freezing_threshold_insufficient_
 
 #[test]
 fn dts_pending_upgrade_with_heartbeat() {
-    if should_skip_test_due_to_disabled_dts() {
-        // Skip this test if DTS is not supported.
-        return;
-    }
-
     let env = dts_env(
         NumInstructions::from(1_000_000_000),
         NumInstructions::from(30_000),
@@ -645,11 +607,6 @@ fn dts_pending_upgrade_with_heartbeat() {
 ///   for the canister on which the code install is running.
 #[test]
 fn dts_scheduling_of_install_code() {
-    if should_skip_test_due_to_disabled_dts() {
-        // Skip this test if DTS is not supported.
-        return;
-    }
-
     let (env, _) = dts_install_code_env(
         NumInstructions::from(5_000_000_000),
         NumInstructions::from(10_000),
@@ -807,11 +764,6 @@ fn dts_scheduling_of_install_code() {
 /// long-running install code messages.
 #[test]
 fn dts_pending_install_code_does_not_block_subnet_messages_of_other_canisters() {
-    if should_skip_test_due_to_disabled_dts() {
-        // Skip this test if DTS is not supported.
-        return;
-    }
-
     let (env, _) = dts_install_code_env(
         NumInstructions::from(5_000_000_000),
         NumInstructions::from(10_000),
@@ -938,11 +890,6 @@ fn dts_pending_install_code_does_not_block_subnet_messages_of_other_canisters() 
 /// long-running update message.
 #[test]
 fn dts_pending_execution_blocks_subnet_messages_to_the_same_canister() {
-    if should_skip_test_due_to_disabled_dts() {
-        // Skip this test if DTS is not supported.
-        return;
-    }
-
     let env = dts_env(
         NumInstructions::from(1_000_000_000),
         NumInstructions::from(10_000),
@@ -1158,7 +1105,7 @@ fn dts_aborted_execution_does_not_block_subnet_messages() {
             | Method::SchnorrPublicKey
             | Method::SignWithSchnorr
             | Method::VetKdPublicKey
-            | Method::VetKdDeriveEncryptedKey
+            | Method::VetKdDeriveKey
             | Method::BitcoinGetBalance
             | Method::BitcoinGetUtxos
             | Method::BitcoinGetBlockHeaders
@@ -1358,11 +1305,6 @@ fn dts_paused_execution_blocks_deposit_cycles() {
 /// The expectation is that the update message is blocked.
 #[test]
 fn dts_pending_install_code_blocks_update_messages_to_the_same_canister() {
-    if should_skip_test_due_to_disabled_dts() {
-        // Skip this test if DTS is not supported.
-        return;
-    }
-
     let env = dts_env(
         NumInstructions::from(1_000_000_000),
         NumInstructions::from(10_000),
@@ -1436,11 +1378,6 @@ fn dts_pending_install_code_blocks_update_messages_to_the_same_canister() {
 /// The expectation that all messages eventually complete.
 #[test]
 fn dts_long_running_install_and_update() {
-    if should_skip_test_due_to_disabled_dts() {
-        // Skip this test if DTS is not supported.
-        return;
-    }
-
     let slice_instruction_limit = 15_000_000;
     let env = dts_env(
         NumInstructions::from(100_000_000),
@@ -1569,11 +1506,6 @@ fn dts_long_running_install_and_update() {
 /// The expectation that all messages eventually complete.
 #[test]
 fn dts_long_running_calls() {
-    if should_skip_test_due_to_disabled_dts() {
-        // Skip this test if DTS is not supported.
-        return;
-    }
-
     let env = dts_env(
         NumInstructions::from(100_000_000),
         NumInstructions::from(1_000_000),
@@ -1657,11 +1589,6 @@ fn dts_long_running_calls() {
 
 #[test]
 fn dts_unrelated_subnet_messages_make_progress() {
-    if should_skip_test_due_to_disabled_dts() {
-        // Skip this test if DTS is not supported.
-        return;
-    }
-
     let env = dts_env(
         NumInstructions::from(1_000_000_000),
         NumInstructions::from(10_000),
@@ -1731,11 +1658,6 @@ fn dts_unrelated_subnet_messages_make_progress() {
 
 #[test]
 fn dts_ingress_status_of_update_is_correct() {
-    if should_skip_test_due_to_disabled_dts() {
-        // Skip this test if DTS is not supported.
-        return;
-    }
-
     let env = dts_env(
         NumInstructions::from(1_000_000_000),
         NumInstructions::from(10_000),
@@ -1803,11 +1725,6 @@ fn dts_ingress_status_of_update_is_correct() {
 
 #[test]
 fn dts_ingress_status_of_install_is_correct() {
-    if should_skip_test_due_to_disabled_dts() {
-        // Skip this test if DTS is not supported.
-        return;
-    }
-
     let env = dts_env(
         NumInstructions::from(1_000_000_000),
         NumInstructions::from(10_000),
@@ -1886,11 +1803,6 @@ fn dts_ingress_status_of_install_is_correct() {
 
 #[test]
 fn dts_ingress_status_of_upgrade_is_correct() {
-    if should_skip_test_due_to_disabled_dts() {
-        // Skip this test if DTS is not supported.
-        return;
-    }
-
     let env = dts_env(
         NumInstructions::from(1_000_000_000),
         NumInstructions::from(10_000),
@@ -1969,11 +1881,6 @@ fn dts_ingress_status_of_upgrade_is_correct() {
 
 #[test]
 fn dts_ingress_status_of_update_with_call_is_correct() {
-    if should_skip_test_due_to_disabled_dts() {
-        // Skip this test if DTS is not supported.
-        return;
-    }
-
     let env = dts_env(
         NumInstructions::from(1_000_000_000),
         NumInstructions::from(10_000),
@@ -2068,11 +1975,6 @@ fn dts_ingress_status_of_update_with_call_is_correct() {
 
 #[test]
 fn dts_canister_uninstalled_due_to_resource_charges_with_aborted_updrade() {
-    if should_skip_test_due_to_disabled_dts() {
-        // Skip this test if DTS is not supported.
-        return;
-    }
-
     let env = dts_env(
         NumInstructions::from(1_000_000_000),
         NumInstructions::from(10_000),
@@ -2128,11 +2030,6 @@ fn dts_canister_uninstalled_due_to_resource_charges_with_aborted_updrade() {
 
 #[test]
 fn dts_canister_uninstalled_due_resource_charges_with_aborted_update() {
-    if should_skip_test_due_to_disabled_dts() {
-        // Skip this test if DTS is not supported.
-        return;
-    }
-
     let env = dts_env(
         NumInstructions::from(1_000_000_000),
         NumInstructions::from(10_000),
@@ -2210,11 +2107,6 @@ fn dts_canister_uninstalled_due_resource_charges_with_aborted_update() {
 
 #[test]
 fn dts_serialized_and_runtime_states_are_equal() {
-    if should_skip_test_due_to_disabled_dts() {
-        // Skip this test if DTS is not supported.
-        return;
-    }
-
     fn run(restart_node: bool) -> CryptoHashOfState {
         let subnet_config = dts_subnet_config(
             NumInstructions::from(1_000_000_000),
@@ -2287,11 +2179,6 @@ fn get_canister_version(env: &StateMachine, canister_id: CanisterId) -> u64 {
 
 #[test]
 fn dts_heartbeat_works() {
-    if should_skip_test_due_to_disabled_dts() {
-        // Skip this test if DTS is not supported.
-        return;
-    }
-
     let env = dts_env(
         NumInstructions::from(1_000_000_000),
         NumInstructions::from(50_000),
@@ -2340,11 +2227,6 @@ fn dts_heartbeat_works() {
 
 #[test]
 fn dts_heartbeat_resume_after_abort() {
-    if should_skip_test_due_to_disabled_dts() {
-        // Skip this test if DTS is not supported.
-        return;
-    }
-
     let env = dts_env(
         NumInstructions::from(1_000_000_000),
         NumInstructions::from(50_000),
@@ -2406,11 +2288,6 @@ fn dts_heartbeat_resume_after_abort() {
 
 #[test]
 fn dts_heartbeat_with_trap() {
-    if should_skip_test_due_to_disabled_dts() {
-        // Skip this test if DTS is not supported.
-        return;
-    }
-
     let env = dts_env(
         NumInstructions::from(1_000_000_000),
         NumInstructions::from(50_000),
@@ -2459,11 +2336,6 @@ fn dts_heartbeat_with_trap() {
 
 #[test]
 fn dts_heartbeat_does_not_prevent_canister_from_stopping() {
-    if should_skip_test_due_to_disabled_dts() {
-        // Skip this test if DTS is not supported.
-        return;
-    }
-
     let env = dts_env(
         NumInstructions::from(1_000_000_000),
         NumInstructions::from(50_000),
@@ -2508,11 +2380,6 @@ fn dts_heartbeat_does_not_prevent_canister_from_stopping() {
 
 #[test]
 fn dts_heartbeat_does_not_prevent_upgrade() {
-    if should_skip_test_due_to_disabled_dts() {
-        // Skip this test if DTS is not supported.
-        return;
-    }
-
     let env = dts_env(
         NumInstructions::from(1_000_000_000),
         NumInstructions::from(50_000),
@@ -2556,11 +2423,6 @@ fn dts_heartbeat_does_not_prevent_upgrade() {
 
 #[test]
 fn dts_global_timer_one_shot_works() {
-    if should_skip_test_due_to_disabled_dts() {
-        // Skip this test if DTS is not supported.
-        return;
-    }
-
     let env = dts_env(
         NumInstructions::from(1_000_000_000),
         NumInstructions::from(50_000),
@@ -2625,11 +2487,6 @@ fn dts_global_timer_one_shot_works() {
 
 #[test]
 fn dts_heartbeat_does_not_starve_when_global_timer_is_long() {
-    if should_skip_test_due_to_disabled_dts() {
-        // Skip this test if DTS is not supported.
-        return;
-    }
-
     let env = dts_env(
         NumInstructions::from(1_000_000_000),
         NumInstructions::from(75_000),
@@ -2713,11 +2570,6 @@ fn dts_heartbeat_does_not_starve_when_global_timer_is_long() {
 
 #[test]
 fn dts_global_timer_resume_after_abort() {
-    if should_skip_test_due_to_disabled_dts() {
-        // Skip this test if DTS is not supported.
-        return;
-    }
-
     let env = dts_env(
         NumInstructions::from(1_000_000_000),
         NumInstructions::from(60_000),
@@ -2768,11 +2620,6 @@ fn dts_global_timer_resume_after_abort() {
 
 #[test]
 fn dts_global_timer_does_not_prevent_canister_from_stopping() {
-    if should_skip_test_due_to_disabled_dts() {
-        // Skip this test if DTS is not supported.
-        return;
-    }
-
     let env = dts_env(
         NumInstructions::from(1_000_000_000),
         NumInstructions::from(60_000),
@@ -2821,11 +2668,6 @@ fn dts_global_timer_does_not_prevent_canister_from_stopping() {
 
 #[test]
 fn dts_global_timer_with_trap() {
-    if should_skip_test_due_to_disabled_dts() {
-        // Skip this test if DTS is not supported.
-        return;
-    }
-
     let env = dts_env(
         NumInstructions::from(1_000_000_000),
         NumInstructions::from(50_000),
@@ -2881,11 +2723,6 @@ fn dts_global_timer_with_trap() {
 
 #[test]
 fn dts_global_timer_does_not_prevent_upgrade() {
-    if should_skip_test_due_to_disabled_dts() {
-        // Skip this test if DTS is not supported.
-        return;
-    }
-
     let env = dts_env(
         NumInstructions::from(1_000_000_000),
         NumInstructions::from(60_000),
@@ -2933,11 +2770,6 @@ fn dts_global_timer_does_not_prevent_upgrade() {
 
 #[test]
 fn dts_abort_paused_execution_on_state_switch() {
-    if should_skip_test_due_to_disabled_dts() {
-        // Skip this test if DTS is not supported.
-        return;
-    }
-
     let env = dts_env(
         NumInstructions::from(1_000_000_000),
         NumInstructions::from(50_000),
@@ -2986,11 +2818,6 @@ fn dts_abort_paused_execution_on_state_switch() {
 
 #[test]
 fn dts_abort_after_dropping_memory_on_state_switch() {
-    if should_skip_test_due_to_disabled_dts() {
-        // Skip this test if DTS is not supported.
-        return;
-    }
-
     let env = dts_env(
         NumInstructions::from(1_000_000_000),
         NumInstructions::from(100_000_000),
@@ -3062,4 +2889,106 @@ fn dts_abort_after_dropping_memory_on_state_switch() {
     // doesn't try to access a dropped page.
     let result = env.execute_ingress(canister_id, "update", vec![]).unwrap();
     assert_eq!(result, WasmResult::Reply(vec![]));
+}
+
+const WRITE_MORE_THAN_1G_WAT: &str = r#"
+(module
+    (import "ic0" "msg_reply" (func $msg_reply))
+    (func (export "canister_update write")
+        (local $i i32)
+        (local.set $i (i32.const 1073745920)) ;; 1GiB + 4096
+        (loop $loop
+            (i32.store (local.get $i) (i32.const 1))
+            (br_if $loop (local.tee $i (i32.sub (local.get $i) (i32.const 4096))))
+        )
+        (call $msg_reply)
+    )
+    (memory 16385) ;; 1GiB + 65536
+)"#;
+
+#[test]
+fn yield_for_dirty_pages_copy_works() {
+    let env = ic_state_machine_tests::StateMachineBuilder::new()
+        .with_subnet_type(SubnetType::Application)
+        .build();
+
+    let wasm = wat::parse_str(WRITE_MORE_THAN_1G_WAT).unwrap();
+    let canister_id = env
+        .install_canister_with_cycles(wasm, vec![], None, INITIAL_CYCLES_BALANCE)
+        .unwrap();
+
+    let mut payload = ic_state_machine_tests::PayloadBuilder::new().with_nonce(0);
+    // Send two ingress messages to the same canister.
+    for _ in 0..2 {
+        payload = payload.ingress(PrincipalId::new_anonymous(), canister_id, "write", vec![]);
+    }
+    let message_ids = payload.ingress_ids();
+    env.execute_payload(payload);
+
+    // Neither of messages should be completed after the first round.
+    assert_matches!(
+        ingress_state(env.ingress_status(&message_ids[0])),
+        Some(IngressState::Processing)
+    );
+    assert_matches!(
+        ingress_state(env.ingress_status(&message_ids[1])),
+        Some(IngressState::Received)
+    );
+
+    env.tick();
+
+    // Only the first message must be completed after two rounds.
+    assert_matches!(
+        ingress_state(env.ingress_status(&message_ids[0])),
+        Some(IngressState::Completed(_))
+    );
+    assert_matches!(
+        ingress_state(env.ingress_status(&message_ids[1])),
+        Some(IngressState::Received)
+    );
+}
+
+#[test]
+fn yield_for_dirty_pages_copy_works_for_many_canisters() {
+    let scheduler_cores = 4;
+    let num_canisters = scheduler_cores;
+    let num_messages = 2;
+    let env = ic_state_machine_tests::StateMachineBuilder::new()
+        .with_subnet_type(SubnetType::Application)
+        .build();
+
+    let wasm = wat::parse_str(WRITE_MORE_THAN_1G_WAT).unwrap();
+    let mut canister_ids = vec![];
+    let mut payload = ic_state_machine_tests::PayloadBuilder::new().with_nonce(0);
+    for _ in 0..num_canisters {
+        let canister_id = env
+            .install_canister_with_cycles(wasm.clone(), vec![], None, INITIAL_CYCLES_BALANCE)
+            .unwrap();
+        canister_ids.push(canister_id);
+
+        for _ in 0..num_messages {
+            payload = payload.ingress(PrincipalId::new_anonymous(), canister_id, "write", vec![]);
+        }
+    }
+    let message_ids = payload.ingress_ids();
+    env.execute_payload(payload);
+
+    let num_completed = || {
+        message_ids
+            .iter()
+            .filter_map(|id| match ingress_state(env.ingress_status(id)) {
+                Some(IngressState::Completed(_)) => Some(()),
+                Some(IngressState::Received) | Some(IngressState::Processing) => None,
+                _ => panic!("Unexpected ingress state"),
+            })
+            .count()
+    };
+
+    // Neither of messages should be completed after the first round.
+    assert_eq!(num_completed(), 0);
+
+    env.tick();
+
+    // Only the first message per scheduler core must be completed after two rounds.
+    assert_eq!(num_completed(), scheduler_cores);
 }

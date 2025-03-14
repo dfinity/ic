@@ -40,8 +40,8 @@ pub struct Cli {
     #[command(flatten, next_help_heading = "Registry")]
     pub registry: Registry,
 
-    #[command(flatten, next_help_heading = "Health Checking")]
-    pub health: HealthChecks,
+    #[command(flatten, next_help_heading = "Health")]
+    pub health: Health,
 
     #[command(flatten, next_help_heading = "Observability")]
     pub obs: Observability,
@@ -149,7 +149,7 @@ pub struct Network {
 }
 
 #[derive(Args)]
-pub struct HealthChecks {
+pub struct Health {
     /// How frequently to run health checks
     #[clap(env, long, default_value = "1s", value_parser = parse_duration)]
     pub health_check_interval: Duration,
@@ -167,6 +167,14 @@ pub struct HealthChecks {
     /// Maximum block height lag for a replica to be included in the routing table
     #[clap(env, long, default_value = "50")]
     pub health_max_height_lag: u64,
+
+    /// Fraction of nodes that should be healthy in the subnet to consider the subnet healthy
+    #[clap(env, long, default_value = "0.6666")]
+    pub health_nodes_per_subnet_alive_threshold: f64,
+
+    /// Fraction of subnets that should be healthy to consider our node healthy
+    #[clap(env, long, default_value = "0.51")]
+    pub health_subnets_alive_threshold: f64,
 }
 
 #[derive(Args)]
@@ -241,6 +249,10 @@ pub struct Observability {
     /// Log Anonymization Canister ID
     #[clap(env, long)]
     pub obs_log_anonymization_canister_id: Option<Principal>,
+
+    /// Frequency to poll the canister for the anonymization salt
+    #[clap(env, long, default_value = "60s", value_parser = parse_duration)]
+    pub obs_log_anonymization_poll_interval: Duration,
 }
 
 #[derive(Args)]

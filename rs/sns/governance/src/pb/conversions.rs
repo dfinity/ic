@@ -1,4 +1,5 @@
 use crate::pb::v1 as pb;
+use crate::topics;
 use ic_sns_governance_api::pb::v1 as pb_api;
 
 impl From<pb::NeuronPermission> for pb_api::NeuronPermission {
@@ -202,7 +203,12 @@ impl From<pb::nervous_system_function::GenericNervousSystemFunction>
     for pb_api::nervous_system_function::GenericNervousSystemFunction
 {
     fn from(item: pb::nervous_system_function::GenericNervousSystemFunction) -> Self {
+        let topic = item
+            .topic
+            .and_then(|topic| pb::Topic::try_from(topic).ok())
+            .and_then(|topic| pb_api::topics::Topic::try_from(topic).ok());
         Self {
+            topic,
             target_canister_id: item.target_canister_id,
             target_method_name: item.target_method_name,
             validator_canister_id: item.validator_canister_id,
@@ -215,6 +221,7 @@ impl From<pb_api::nervous_system_function::GenericNervousSystemFunction>
 {
     fn from(item: pb_api::nervous_system_function::GenericNervousSystemFunction) -> Self {
         Self {
+            topic: item.topic.map(pb::Topic::from).map(i32::from),
             target_canister_id: item.target_canister_id,
             target_method_name: item.target_method_name,
             validator_canister_id: item.validator_canister_id,
@@ -567,6 +574,44 @@ impl From<pb::AdvanceSnsTargetVersion> for pb_api::AdvanceSnsTargetVersion {
     }
 }
 
+impl From<pb_api::SetTopicsForCustomProposals> for pb::SetTopicsForCustomProposals {
+    fn from(item: pb_api::SetTopicsForCustomProposals) -> Self {
+        Self {
+            custom_function_id_to_topic: item
+                .custom_function_id_to_topic
+                .into_iter()
+                .map(|(custom_function_id, topic)| {
+                    let topic = i32::from(pb::Topic::from(topic));
+                    (custom_function_id, topic)
+                })
+                .collect(),
+        }
+    }
+}
+impl From<pb::SetTopicsForCustomProposals> for pb_api::SetTopicsForCustomProposals {
+    fn from(item: pb::SetTopicsForCustomProposals) -> Self {
+        let custom_function_id_to_topic = item
+            .custom_function_id_to_topic
+            .into_iter()
+            .filter_map(|(custom_function_id, topic)| {
+                let Ok(topic) = pb::Topic::try_from(topic) else {
+                    return None;
+                };
+
+                let Ok(topic) = pb_api::topics::Topic::try_from(topic) else {
+                    return None;
+                };
+
+                Some((custom_function_id, topic))
+            })
+            .collect();
+
+        Self {
+            custom_function_id_to_topic,
+        }
+    }
+}
+
 impl From<pb::Proposal> for pb_api::Proposal {
     fn from(item: pb::Proposal) -> Self {
         Self {
@@ -635,6 +680,9 @@ impl From<pb::proposal::Action> for pb_api::proposal::Action {
             pb::proposal::Action::AdvanceSnsTargetVersion(v) => {
                 pb_api::proposal::Action::AdvanceSnsTargetVersion(v.into())
             }
+            pb::proposal::Action::SetTopicsForCustomProposals(v) => {
+                pb_api::proposal::Action::SetTopicsForCustomProposals(v.into())
+            }
         }
     }
 }
@@ -684,6 +732,9 @@ impl From<pb_api::proposal::Action> for pb::proposal::Action {
             }
             pb_api::proposal::Action::AdvanceSnsTargetVersion(v) => {
                 pb::proposal::Action::AdvanceSnsTargetVersion(v.into())
+            }
+            pb_api::proposal::Action::SetTopicsForCustomProposals(v) => {
+                pb::proposal::Action::SetTopicsForCustomProposals(v.into())
             }
         }
     }
@@ -917,6 +968,12 @@ impl From<pb::ProposalData> for pb_api::ProposalData {
             minimum_yes_proportion_of_total: item.minimum_yes_proportion_of_total,
             minimum_yes_proportion_of_exercised: item.minimum_yes_proportion_of_exercised,
             action_auxiliary: item.action_auxiliary.map(|x| x.into()),
+            topic: item.topic.and_then(|topic| {
+                let Ok(topic) = pb::Topic::try_from(topic) else {
+                    return None;
+                };
+                pb_api::topics::Topic::try_from(topic).ok()
+            }),
         }
     }
 }
@@ -949,6 +1006,7 @@ impl From<pb_api::ProposalData> for pb::ProposalData {
             minimum_yes_proportion_of_total: item.minimum_yes_proportion_of_total,
             minimum_yes_proportion_of_exercised: item.minimum_yes_proportion_of_exercised,
             action_auxiliary: item.action_auxiliary.map(|x| x.into()),
+            topic: item.topic.map(|topic| i32::from(pb::Topic::from(topic))),
         }
     }
 }
@@ -3754,5 +3812,96 @@ impl From<pb_api::RefreshCachedUpgradeStepsRequest> for pb::RefreshCachedUpgrade
 impl From<pb::RefreshCachedUpgradeStepsResponse> for pb_api::RefreshCachedUpgradeStepsResponse {
     fn from(_: pb::RefreshCachedUpgradeStepsResponse) -> Self {
         Self {}
+    }
+}
+
+impl From<pb_api::topics::Topic> for pb::Topic {
+    fn from(value: pb_api::topics::Topic) -> Self {
+        match value {
+            pb_api::topics::Topic::DaoCommunitySettings => pb::Topic::DaoCommunitySettings,
+            pb_api::topics::Topic::SnsFrameworkManagement => pb::Topic::SnsFrameworkManagement,
+            pb_api::topics::Topic::DappCanisterManagement => pb::Topic::DappCanisterManagement,
+            pb_api::topics::Topic::ApplicationBusinessLogic => pb::Topic::ApplicationBusinessLogic,
+            pb_api::topics::Topic::Governance => pb::Topic::Governance,
+            pb_api::topics::Topic::TreasuryAssetManagement => pb::Topic::TreasuryAssetManagement,
+            pb_api::topics::Topic::CriticalDappOperations => pb::Topic::CriticalDappOperations,
+        }
+    }
+}
+
+impl TryFrom<pb::Topic> for pb_api::topics::Topic {
+    type Error = String;
+
+    fn try_from(value: pb::Topic) -> Result<Self, Self::Error> {
+        match value {
+            pb::Topic::DaoCommunitySettings => Ok(pb_api::topics::Topic::DaoCommunitySettings),
+            pb::Topic::SnsFrameworkManagement => Ok(pb_api::topics::Topic::SnsFrameworkManagement),
+            pb::Topic::DappCanisterManagement => Ok(pb_api::topics::Topic::DappCanisterManagement),
+            pb::Topic::ApplicationBusinessLogic => {
+                Ok(pb_api::topics::Topic::ApplicationBusinessLogic)
+            }
+            pb::Topic::Governance => Ok(pb_api::topics::Topic::Governance),
+            pb::Topic::TreasuryAssetManagement => {
+                Ok(pb_api::topics::Topic::TreasuryAssetManagement)
+            }
+            pb::Topic::CriticalDappOperations => Ok(pb_api::topics::Topic::CriticalDappOperations),
+            pb::Topic::Unspecified => Err("Unspecified topic".to_string()),
+        }
+    }
+}
+
+impl From<pb_api::topics::ListTopicsRequest> for topics::ListTopicsRequest {
+    fn from(value: pb_api::topics::ListTopicsRequest) -> Self {
+        let pb_api::topics::ListTopicsRequest {} = value;
+        topics::ListTopicsRequest {}
+    }
+}
+
+impl From<topics::ListTopicsResponse> for pb_api::topics::ListTopicsResponse {
+    fn from(value: topics::ListTopicsResponse) -> Self {
+        pb_api::topics::ListTopicsResponse {
+            topics: Some(value.topics.into_iter().map(|x| x.into()).collect()),
+            uncategorized_functions: Some(
+                value
+                    .uncategorized_functions
+                    .into_iter()
+                    .map(pb_api::NervousSystemFunction::from)
+                    .collect(),
+            ),
+        }
+    }
+}
+
+impl From<topics::TopicInfo<topics::NervousSystemFunctions>> for pb_api::topics::TopicInfo {
+    fn from(value: topics::TopicInfo<topics::NervousSystemFunctions>) -> Self {
+        let topics::TopicInfo {
+            topic,
+            name,
+            description,
+            functions:
+                topics::NervousSystemFunctions {
+                    native_functions,
+                    custom_functions,
+                },
+            is_critical,
+        } = value;
+        pb_api::topics::TopicInfo {
+            topic: Some(topic),
+            name: Some(name),
+            description: Some(description),
+            native_functions: Some(
+                native_functions
+                    .into_iter()
+                    .map(pb_api::NervousSystemFunction::from)
+                    .collect(),
+            ),
+            custom_functions: Some(
+                custom_functions
+                    .into_iter()
+                    .map(pb_api::NervousSystemFunction::from)
+                    .collect(),
+            ),
+            is_critical: Some(is_critical),
+        }
     }
 }

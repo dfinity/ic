@@ -45,9 +45,10 @@ fn test_can_tag_seed_neurons_handles_corrupted_state() {
     // Setup
     let mut governance = Governance::new(
         GovernanceProto::default(),
-        Box::new(create_mock_environment(None)),
-        Box::<MockIcpLedger>::default(),
-        Box::<MockCMC>::default(),
+        Arc::new(create_mock_environment(None)),
+        Arc::<MockIcpLedger>::default(),
+        Arc::<MockCMC>::default(),
+        Box::new(MockRandomness::new()),
     );
 
     // Corrupt the state
@@ -107,9 +108,10 @@ fn test_can_tag_seed_neurons_transitions() {
     // Setup
     let mut governance = Governance::new(
         GovernanceProto::default(),
-        Box::new(create_mock_environment(None)),
-        Box::<MockIcpLedger>::default(),
-        Box::<MockCMC>::default(),
+        Arc::new(create_mock_environment(None)),
+        Arc::<MockIcpLedger>::default(),
+        Arc::<MockCMC>::default(),
+        Box::new(MockRandomness::new()),
     );
 
     // Execute / verify
@@ -137,9 +139,10 @@ fn test_can_tag_seed_neurons_exits_early_if_data_is_processed() {
     // Setup
     let mut governance = Governance::new(
         GovernanceProto::default(),
-        Box::new(create_mock_environment(None)),
-        Box::<MockIcpLedger>::default(),
-        Box::<MockCMC>::default(),
+        Arc::new(create_mock_environment(None)),
+        Arc::<MockIcpLedger>::default(),
+        Arc::<MockCMC>::default(),
+        Box::new(MockRandomness::new()),
     );
 
     // Execute / Verify
@@ -195,9 +198,10 @@ async fn test_tag_seed_neurons_happy() {
             genesis_timestamp_seconds: now_timestamp_seconds - ONE_MONTH_SECONDS,
             ..Default::default()
         },
-        Box::new(environment),
-        Box::<MockIcpLedger>::default(),
-        Box::<MockCMC>::default(),
+        Arc::new(environment),
+        Arc::<MockIcpLedger>::default(),
+        Arc::<MockCMC>::default(),
+        Box::new(MockRandomness::new()),
     );
 
     let expected_seed_account = SeedAccount {
@@ -281,9 +285,10 @@ async fn test_tag_neuron_sad() {
             genesis_timestamp_seconds: now_timestamp_seconds - ONE_MONTH_SECONDS,
             ..Default::default()
         },
-        Box::new(environment),
-        Box::<MockIcpLedger>::default(),
-        Box::<MockCMC>::default(),
+        Arc::new(environment),
+        Arc::<MockIcpLedger>::default(),
+        Arc::<MockCMC>::default(),
+        Box::new(MockRandomness::new()),
     );
 
     let expected_seed_account = SeedAccount {
@@ -374,9 +379,10 @@ async fn test_tag_seed_neurons_handles_neuron_splits() {
             genesis_timestamp_seconds: now_timestamp_seconds,
             ..Default::default()
         },
-        Box::new(environment),
-        Box::<MockIcpLedger>::default(),
-        Box::<MockCMC>::default(),
+        Arc::new(environment),
+        Arc::<MockIcpLedger>::default(),
+        Arc::<MockCMC>::default(),
+        Box::new(MockRandomness::new()),
     );
 
     // Execute
@@ -439,9 +445,10 @@ async fn test_tag_seed_neurons_doesnt_over_tag_seed_neurons() {
             genesis_timestamp_seconds,
             ..Default::default()
         },
-        Box::new(environment),
-        Box::<MockIcpLedger>::default(),
-        Box::<MockCMC>::default(),
+        Arc::new(environment),
+        Arc::<MockIcpLedger>::default(),
+        Arc::<MockCMC>::default(),
+        Box::new(MockRandomness::new()),
     );
 
     // Execute
@@ -484,9 +491,10 @@ fn test_calculate_genesis_account_expected_stake_e8s() {
             genesis_timestamp_seconds,
             ..Default::default()
         },
-        Box::new(create_mock_environment(None)),
-        Box::<MockIcpLedger>::default(),
-        Box::<MockCMC>::default(),
+        Arc::new(create_mock_environment(None)),
+        Arc::<MockIcpLedger>::default(),
+        Arc::<MockCMC>::default(),
+        Box::new(MockRandomness::new()),
     );
 
     // At genesis_timestamp_seconds, expected stake e8s should

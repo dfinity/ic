@@ -19,6 +19,8 @@ rust_library(
         # Keep sorted.
         "@crate_index//:bitcoin",
         "@crate_index//:candid",
+        "@crate_index//:ic-btc-interface",
+        "@crate_index//:ic-management-canister-types",
         "@crate_index//:serde",
     ],
 )
@@ -39,6 +41,7 @@ rust_test(
         # Keep sorted.
         "@crate_index//:candid_parser",
         "@crate_index//:ic-btc-interface",
+        "@crate_index//:ic-management-canister-types",
         "@crate_index//:proptest",
         "@crate_index//:scraper",
         "@crate_index//:tokio",
@@ -71,6 +74,7 @@ rust_canister(
         "@crate_index//:ic-btc-interface",
         "@crate_index//:ic-canister-log",
         "@crate_index//:ic-cdk",
+        "@crate_index//:ic-management-canister-types",
         "@crate_index//:ic-metrics-encoder",
         "@crate_index//:ic-stable-structures",
         "@crate_index//:serde",
@@ -107,6 +111,7 @@ rust_ic_test(
         "@crate_index//:candid",
         "@crate_index//:ic-btc-interface",
         "@crate_index//:ic-cdk",
+        "@crate_index//:ic-management-canister-types",
         "@crate_index//:regex",
     ],
 )

@@ -8,6 +8,7 @@ load("//bazel:prost.bzl", "generated_files_check")
 package(default_visibility = ["//visibility:public"])
 
 exports_files([
+    "canister_ids.json",
     "ledger.did",
     "ledger_archive.did",
 ])

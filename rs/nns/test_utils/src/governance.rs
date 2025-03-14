@@ -28,18 +28,6 @@ pub use ic_nns_handler_lifeline_interface::{
 };
 use std::time::Duration;
 
-/// Thin-wrapper around submit_proposal to handle
-/// serialization/deserialization
-pub async fn submit_proposal(
-    governance_canister: &Canister<'_>,
-    proposal: &MakeProposalRequest,
-) -> ProposalId {
-    governance_canister
-        .update_("submit_proposal", candid_one, proposal)
-        .await
-        .unwrap()
-}
-
 /// Wraps the given nns_function_input into a proposal; sends it to the governance
 /// canister; returns the proposal id or, in case of failure, a
 /// `GovernanceError`.
@@ -311,30 +299,13 @@ async fn change_nns_canister_by_proposal(
     let wasm = wasm.bytes();
     let new_module_hash = &ic_crypto_sha2::Sha256::hash(&wasm);
 
-    let status: CanisterStatusResult = root
-        .update_(
-            "canister_status",
-            candid_one,
-            CanisterIdRecord::from(canister.canister_id()),
-        )
-        .await
-        .unwrap();
-    let old_module_hash = status.module_hash.unwrap();
-    assert_ne!(
-        old_module_hash.as_slice(),
-        new_module_hash,
-        "change_nns_canister_by_proposal: both module hashes prev, cur are \
-         the same {:?}, but they should be different for upgrade",
-        old_module_hash
-    );
-
     let proposal = MakeProposalRequest {
         title: Some("Upgrade NNS Canister".to_string()),
         summary: "<proposal created by change_nns_canister_by_proposal>".to_string(),
         url: "".to_string(),
         action: Some(ProposalActionRequest::InstallCode(InstallCodeRequest {
             canister_id: Some(canister.canister_id().get()),
-            wasm_module: Some(wasm.clone()),
+            wasm_module: Some(wasm),
             install_mode: Some(how as i32),
             arg: Some(arg.unwrap_or_default()),
             skip_stopping_before_installing: Some(stop_before_installing),
@@ -391,12 +362,32 @@ async fn change_nns_canister_by_proposal(
         else {
             continue;
         };
-        if status.module_hash.unwrap().as_slice() == new_module_hash
+        if status.module_hash.unwrap_or_default().as_slice() == new_module_hash
             && status.status == CanisterStatusType::Running
         {
             break;
         }
     }
+}
+
+/// Installs the given root-controlled canister with the specified Wasm module and args.
+pub async fn install_nns_canister_by_proposal(
+    canister: &Canister<'_>,
+    governance: &Canister<'_>,
+    root: &Canister<'_>,
+    wasm: Wasm,
+    arg: Option<Vec<u8>>,
+) {
+    change_nns_canister_by_proposal(
+        CanisterInstallMode::Install,
+        canister,
+        governance,
+        root,
+        false,
+        wasm,
+        arg,
+    )
+    .await
 }
 
 /// Upgrade the given root-controlled canister to the specified Wasm module.

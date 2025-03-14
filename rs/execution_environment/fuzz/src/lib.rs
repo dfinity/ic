@@ -97,6 +97,7 @@ where
                 Sysno::clone,
                 Sysno::sched_yield,
                 Sysno::sched_getaffinity,
+                Sysno::set_robust_list,
                 Sysno::prctl,
                 Sysno::getrandom, // probably due to hashbrown dependency
                 // Execution
@@ -107,8 +108,10 @@ where
                 Sysno::sendmsg,
                 Sysno::sigaltstack,
                 Sysno::futex,
+                Sysno::fcntl,
                 Sysno::close,
                 Sysno::restart_syscall,
+                Sysno::write,
             ]);
 
             let mut threads: Vec<_> = vec![];

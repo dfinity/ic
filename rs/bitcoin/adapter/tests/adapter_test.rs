@@ -496,7 +496,7 @@ fn check_fork_bfs_order(
             .collect::<Vec<Vec<u8>>>(),
         anchor,
         expected_len,
-        200,
+        400,
     );
     assert_eq!(blocks.len(), expected_len);
     let block_hashes: Vec<BlockHash> = blocks.iter().map(|block| block.block_hash()).collect();
@@ -830,19 +830,19 @@ fn test_receives_blocks_from_forks() {
         .get_new_address(None, None)
         .unwrap()
         .assume_checked();
-    client1.generate_to_address(25, &address1).unwrap();
+    client1.generate_to_address(10, &address1).unwrap();
 
-    wait_for_blocks(&client1, 25);
-    wait_for_blocks(&client2, 25);
+    wait_for_blocks(&client1, 10);
+    wait_for_blocks(&client2, 10);
 
     let address2 = client2
         .get_new_address(None, None)
         .unwrap()
         .assume_checked();
-    client2.generate_to_address(25, &address2).unwrap();
+    client2.generate_to_address(10, &address2).unwrap();
 
-    wait_for_blocks(&client1, 50);
-    wait_for_blocks(&client2, 50);
+    wait_for_blocks(&client1, 20);
+    wait_for_blocks(&client2, 20);
 
     // Disconnect the nodes to create a fork
     client1
@@ -852,15 +852,15 @@ fn test_receives_blocks_from_forks() {
     wait_for_connection(&client1, 1);
     wait_for_connection(&client2, 1);
 
-    client1.generate_to_address(10, &address1).unwrap();
-    client2.generate_to_address(15, &address2).unwrap();
+    client1.generate_to_address(3, &address1).unwrap();
+    client2.generate_to_address(6, &address2).unwrap();
 
-    wait_for_blocks(&client1, 60);
-    wait_for_blocks(&client2, 65);
+    wait_for_blocks(&client1, 23);
+    wait_for_blocks(&client2, 26);
 
     let anchor = client1.get_block_hash(0).unwrap()[..].to_vec();
-    let blocks = sync_blocks(&adapter_client, &mut vec![], anchor, 75, 200);
-    assert_eq!(blocks.len(), 75);
+    let blocks = sync_blocks(&adapter_client, &mut vec![], anchor, 29, 201);
+    assert_eq!(blocks.len(), 29);
 }
 
 /// Checks that the adapter returns blocks in BFS order.
@@ -904,10 +904,17 @@ fn test_bfs_order() {
         .get_new_address(None, None)
         .unwrap()
         .assume_checked();
-    let shared_blocks = client1.generate_to_address(5, &address1).unwrap();
+    // IMPORTANT:
+    // Increasing the number of blocks in this test could lead to flakiness due to the number of "request rounds"
+    // alligning with the round robin of the adapter's peers. Currently all blocks are tried and retried in a single round.
+    let shared_blocks_count = 2;
+    let branch_length = 6;
+    let shared_blocks = client1
+        .generate_to_address(shared_blocks_count, &address1)
+        .unwrap();
 
-    wait_for_blocks(&client1, 5);
-    wait_for_blocks(&client2, 5);
+    wait_for_blocks(&client1, 2);
+    wait_for_blocks(&client2, 2);
 
     // Disconnect the nodes to create a fork
     client1
@@ -917,18 +924,22 @@ fn test_bfs_order() {
     wait_for_connection(&client1, 1);
     wait_for_connection(&client2, 1);
 
-    let fork1 = client1.generate_to_address(15, &address1).unwrap();
+    let fork1 = client1
+        .generate_to_address(branch_length, &address1)
+        .unwrap();
 
     let address2 = client2
         .get_new_address(None, None)
         .unwrap()
         .assume_checked();
-    let fork2 = client2.generate_to_address(15, &address2).unwrap();
+    let fork2 = client2
+        .generate_to_address(branch_length, &address2)
+        .unwrap();
 
-    wait_for_blocks(&client1, 20);
-    wait_for_blocks(&client2, 20);
+    wait_for_blocks(&client1, shared_blocks_count + branch_length);
+    wait_for_blocks(&client2, shared_blocks_count + branch_length);
 
-    assert_eq!(fork1.len() + fork2.len(), 30);
+    assert_eq!(fork1.len() + fork2.len(), (branch_length * 2) as usize);
 
     client1
         .onetry_node(&url2.to_string())
@@ -953,8 +964,8 @@ fn test_bfs_order() {
     );
     assert!(bfs_order1 == block_hashes || bfs_order2 == block_hashes);
 
-    fork_test_data1.update_excluded(5, 10);
-    fork_test_data2.update_excluded(10, 15);
+    fork_test_data1.update_excluded(2, 4);
+    fork_test_data2.update_excluded(4, 6);
     let (block_hashes, bfs_order1, bfs_order2) = check_fork_bfs_order(
         &shared_blocks,
         &fork_test_data1,
@@ -964,8 +975,8 @@ fn test_bfs_order() {
     );
     assert!(bfs_order1 == block_hashes || bfs_order2 == block_hashes);
 
-    fork_test_data1.update_excluded(0, 15);
-    fork_test_data2.update_excluded(10, 15);
+    fork_test_data1.update_excluded(0, 6);
+    fork_test_data2.update_excluded(4, 6);
     let (block_hashes, bfs_order1, bfs_order2) = check_fork_bfs_order(
         &shared_blocks,
         &fork_test_data1,

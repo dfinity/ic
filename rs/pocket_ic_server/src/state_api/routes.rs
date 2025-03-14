@@ -40,7 +40,7 @@ use pocket_ic::common::rest::{
     HttpGatewayDetails, InstanceConfig, MockCanisterHttpResponse, RawAddCycles, RawCanisterCall,
     RawCanisterHttpRequest, RawCanisterId, RawCanisterResult, RawCycles, RawIngressStatusArgs,
     RawMessageId, RawMockCanisterHttpResponse, RawPrincipalId, RawSetStableMemory, RawStableMemory,
-    RawSubnetId, RawTime, Topology,
+    RawSubnetId, RawTime, TickConfigs, Topology,
 };
 use pocket_ic::RejectResponse;
 use serde::Serialize;
@@ -114,7 +114,7 @@ where
     ApiRouter::new()
         .directory_route("/status", get(handler_status))
         .directory_route(
-            "/canister/:ecid/call",
+            "/canister/{ecid}/call",
             post(handler_call_v2)
                 .layer(RequestBodyLimitLayer::new(
                     4 * 1024 * 1024, // MAX_REQUEST_BODY_SIZE in BN
@@ -122,7 +122,7 @@ where
                 .layer(axum::middleware::from_fn(verify_cbor_content_header)),
         )
         .directory_route(
-            "/canister/:ecid/query",
+            "/canister/{ecid}/query",
             post(handler_query)
                 .layer(RequestBodyLimitLayer::new(
                     4 * 1024 * 1024, // MAX_REQUEST_BODY_SIZE in BN
@@ -130,7 +130,7 @@ where
                 .layer(axum::middleware::from_fn(verify_cbor_content_header)),
         )
         .directory_route(
-            "/canister/:ecid/read_state",
+            "/canister/{ecid}/read_state",
             post(handler_canister_read_state)
                 .layer(RequestBodyLimitLayer::new(
                     4 * 1024 * 1024, // MAX_REQUEST_BODY_SIZE in BN
@@ -138,7 +138,7 @@ where
                 .layer(axum::middleware::from_fn(verify_cbor_content_header)),
         )
         .directory_route(
-            "/subnet/:sid/read_state",
+            "/subnet/{sid}/read_state",
             post(handler_subnet_read_state)
                 .layer(RequestBodyLimitLayer::new(
                     4 * 1024 * 1024, // MAX_REQUEST_BODY_SIZE in BN
@@ -153,7 +153,7 @@ where
     AppState: extract::FromRef<S>,
 {
     ApiRouter::new().directory_route(
-        "/canister/:ecid/call",
+        "/canister/{ecid}/call",
         post(handler_call_v3)
             .layer(RequestBodyLimitLayer::new(
                 4 * 1024 * 1024, // MAX_REQUEST_BODY_SIZE in BN
@@ -177,32 +177,32 @@ where
         .api_route("/", post(create_instance))
         //
         // Deletes an instance.
-        .directory_route("/:id", delete(delete_instance))
+        .directory_route("/{id}", delete(delete_instance))
         //
         // All the read-only endpoints
-        .nest("/:id/read", instance_read_routes())
+        .nest("/{id}/read", instance_read_routes())
         //
         // All the state-changing endpoints
-        .nest("/:id/update", instance_update_routes())
+        .nest("/{id}/update", instance_update_routes())
         //
         // All the api v2 endpoints
-        .nest("/:id/api/v2", instance_api_v2_routes())
+        .nest("/{id}/api/v2", instance_api_v2_routes())
         //
         // All the api v3 endpoints
-        .nest("/:id/api/v3", instance_api_v3_routes())
+        .nest("/{id}/api/v3", instance_api_v3_routes())
         //
         // The instance dashboard
-        .api_route("/:id/_/dashboard", get(handler_dashboard))
+        .api_route("/{id}/_/dashboard", get(handler_dashboard))
         // The topology to be retrieved via an HTTP gateway that cannot route `/read/topology`.
-        .api_route("/:id/_/topology", get(handler_topology))
+        .api_route("/{id}/_/topology", get(handler_topology))
         // Configures an IC instance to make progress automatically,
         // i.e., periodically update the time of the IC instance
         // to the real time and execute rounds on the subnets.
-        .api_route("/:id/auto_progress", post(auto_progress))
+        .api_route("/{id}/auto_progress", post(auto_progress))
         //
         // Stop automatic progress (see endpoint `auto_progress`)
         // on an IC instance.
-        .api_route("/:id/stop_progress", post(stop_progress))
+        .api_route("/{id}/stop_progress", post(stop_progress))
         .layer(cors_layer())
 }
 
@@ -218,7 +218,7 @@ where
         // Returns an InstanceId and the HTTP gateway's port.
         .api_route("/", post(create_http_gateway))
         // Stops an HTTP gateway.
-        .api_route("/:id/stop", post(stop_http_gateway))
+        .api_route("/{id}/stop", post(stop_http_gateway))
 }
 
 async fn run_operation<T: Serialize + FromOpOut>(
@@ -1101,9 +1101,12 @@ pub async fn handler_tick(
     State(AppState { api_state, .. }): State<AppState>,
     Path(instance_id): Path<InstanceId>,
     headers: HeaderMap,
+    axum::extract::Json(ticks_configs): axum::extract::Json<TickConfigs>,
 ) -> (StatusCode, Json<ApiResponse<()>>) {
     let timeout = timeout_or_default(headers);
-    let op = Tick;
+    let op = Tick {
+        configs: ticks_configs,
+    };
     let (code, res) = run_operation(api_state, instance_id, timeout, op).await;
     (code, Json(res))
 }

@@ -43,6 +43,12 @@ lazy_static! {
         "Number of retries when fetching blocks from the ledger"
     ).unwrap();
 
+    pub static ref SYNC_THREAD_RESTARTS: IntCounter = register_int_counter!(
+        "blockchain_sync_thread_restarts_total",
+        "Number of times the sync thread has been restarted"
+    )
+    .unwrap();
+
     static ref METRICS: Mutex<Option<PrometheusMetrics>> = Mutex::new(None);
 }
 
@@ -117,6 +123,10 @@ impl RosettaMetrics {
 
     pub fn inc_sync_errors() {
         SYNC_ERR_COUNTER.inc();
+    }
+
+    pub fn inc_sync_thread_restarts() {
+        SYNC_THREAD_RESTARTS.inc();
     }
 
     pub fn http_metrics_wrapper(expose: bool) -> PrometheusMetrics {

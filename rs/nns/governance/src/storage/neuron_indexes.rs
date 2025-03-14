@@ -437,7 +437,7 @@ where
     Memory: ic_stable_structures::Memory,
 {
     fn add_neuron(&mut self, new_neuron: &Neuron) -> Result<(), NeuronIndexDefect> {
-        let known_neuron_name = match new_neuron.known_neuron_data.as_ref() {
+        let known_neuron_name = match new_neuron.known_neuron_data() {
             Some(known_neuron_data) => &known_neuron_data.name,
             // This is fine. Only some (a small number) of Neurons are known.
             None => return Ok(()),
@@ -469,7 +469,7 @@ where
     fn remove_neuron(&mut self, existing_neuron: &Neuron) -> Result<(), NeuronIndexDefect> {
         // StableNeuronIndexes::remove_neuron checks neuron id before calling this method.
         let neuron_id = existing_neuron.id();
-        let known_neuron_name = match existing_neuron.known_neuron_data.as_ref() {
+        let known_neuron_name = match existing_neuron.known_neuron_data() {
             Some(known_neuron_data) => &known_neuron_data.name,
             // This is fine. Only some (a small number) of Neurons are known.
             None => return Ok(()),
@@ -500,12 +500,10 @@ where
         new_neuron: &Neuron,
     ) -> Result<(), Vec<NeuronIndexDefect>> {
         let old_known_neuron_name = old_neuron
-            .known_neuron_data
-            .as_ref()
+            .known_neuron_data()
             .map(|known_neuron_data| &known_neuron_data.name);
         let new_known_neuron_name = new_neuron
-            .known_neuron_data
-            .as_ref()
+            .known_neuron_data()
             .map(|known_neuron_data| &known_neuron_data.name);
 
         // The comparison can catch 3 cases: adding/removing/updating a known neuron name.

@@ -1,5 +1,7 @@
 use std::collections::BTreeMap;
 
+pub mod topics;
+
 /// A principal with a particular set of permissions over a neuron.
 #[derive(Default, candid::CandidType, candid::Deserialize, Debug, Clone, PartialEq)]
 pub struct NeuronPermission {
@@ -217,6 +219,8 @@ pub struct NervousSystemFunction {
 }
 /// Nested message and enum types in `NervousSystemFunction`.
 pub mod nervous_system_function {
+    use super::*;
+
     #[derive(Default, candid::CandidType, candid::Deserialize, Debug, Clone, PartialEq)]
     pub struct GenericNervousSystemFunction {
         /// The id of the target canister that will be called to execute the proposal.
@@ -233,6 +237,8 @@ pub mod nervous_system_function {
         /// The signature of the method must be equivalent to the following:
         /// <method_name>(proposal_data: ProposalData) -> Result<String, String>
         pub validator_method_name: Option<String>,
+        /// The topic this function belongs to
+        pub topic: Option<topics::Topic>,
     }
     #[derive(candid::CandidType, candid::Deserialize, Debug, Clone, PartialEq)]
     pub enum FunctionType {
@@ -303,7 +309,9 @@ pub struct UpgradeSnsControlledCanister {
     /// Arguments passed to the post-upgrade method of the new wasm module.
     #[serde(deserialize_with = "ic_utils::deserialize::deserialize_option_blob")]
     pub canister_upgrade_arg: Option<Vec<u8>>,
-    /// Canister install_code mode.
+    /// Canister install_code mode. If specified, the integer value corresponds to
+    /// `ic_protobuf::types::v1::v1CanisterInstallMode` or `canister_install_mode`
+    /// (as per https://internetcomputer.org/docs/current/references/ic-interface-spec#ic-candid).
     pub mode: Option<i32>,
     /// If the entire WASM does not fit into the 2 MiB ingress limit, then `new_canister_wasm` should be
     /// an empty, and this field should be set instead.
@@ -465,6 +473,12 @@ pub struct AdvanceSnsTargetVersion {
     /// If not specified, the target will advance to the latest SNS version known to this SNS.
     pub new_target: Option<SnsVersion>,
 }
+#[derive(
+    candid::CandidType, candid::Deserialize, comparable::Comparable, Clone, Debug, PartialEq,
+)]
+pub struct SetTopicsForCustomProposals {
+    pub custom_function_id_to_topic: BTreeMap<u64, topics::Topic>,
+}
 /// A proposal is the immutable input of a proposal submission.
 #[derive(Default, candid::CandidType, candid::Deserialize, Debug, Clone, PartialEq)]
 pub struct Proposal {
@@ -576,6 +590,10 @@ pub mod proposal {
         ///
         /// Id = 15.
         AdvanceSnsTargetVersion(super::AdvanceSnsTargetVersion),
+        /// Set mapping from custom proposal types to topics.
+        ///
+        /// Id = 16;
+        SetTopicsForCustomProposals(super::SetTopicsForCustomProposals),
     }
 }
 #[derive(Default, candid::CandidType, candid::Deserialize, Debug, Clone, PartialEq)]
@@ -754,7 +772,7 @@ pub struct WaitForQuietState {
 }
 /// The ProposalData that contains everything related to a proposal:
 /// the proposal itself (immutable), as well as mutable data such as ballots.
-#[derive(Default, candid::CandidType, candid::Deserialize, Debug, Clone, PartialEq)]
+#[derive(candid::CandidType, candid::Deserialize, Debug, Clone, PartialEq)]
 pub struct ProposalData {
     /// The proposal's action.
     /// Types 0-999 are reserved for current (and future) core governance
@@ -777,6 +795,7 @@ pub struct ProposalData {
     /// Id 13 - ManageLedgerParameters proposals.
     /// Id 14 - ManageDappCanisterSettings proposals.
     /// Id 15 - AdvanceSnsTargetVersion proposals.
+    /// Id 16 - SetTopicsForCustomProposals proposals.
     pub action: u64,
     /// This is stored here temporarily. It is also stored on the map
     /// that contains proposals.
@@ -878,6 +897,8 @@ pub struct ProposalData {
     /// In general, this holds data retrieved at proposal submission/creation time and used later
     /// during execution. This varies based on the action of the proposal.
     pub action_auxiliary: Option<proposal_data::ActionAuxiliary>,
+    /// This proposal's topic.
+    pub topic: Option<topics::Topic>,
 }
 /// Nested message and enum types in `ProposalData`.
 pub mod proposal_data {

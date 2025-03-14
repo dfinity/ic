@@ -37,7 +37,7 @@ use ic_interfaces::crypto::{ThresholdEcdsaSigVerifier, ThresholdSchnorrSigVerifi
 use ic_interfaces::validation::{ValidationError, ValidationResult};
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::{StateManager, StateManagerError};
-use ic_management_canister_types::{Payload, SignWithECDSAReply, SignWithSchnorrReply};
+use ic_management_canister_types_private::{Payload, SignWithECDSAReply, SignWithSchnorrReply};
 use ic_replicated_state::metadata_state::subnet_call_context_manager::{
     IDkgSignWithThresholdContext, SignWithThresholdContext,
 };
@@ -511,7 +511,7 @@ fn validate_reshare_dealings(
     for (request, config) in prev_payload.ongoing_xnet_reshares.iter() {
         if !curr_payload.ongoing_xnet_reshares.contains_key(request) {
             if let Some(response) = new_reshare_agreement.get(request) {
-                use ic_management_canister_types::ComputeInitialIDkgDealingsResponse;
+                use ic_management_canister_types_private::ComputeInitialIDkgDealingsResponse;
                 if let ic_types::messages::Payload::Data(data) = &response.payload {
                     let dealings_response = ComputeInitialIDkgDealingsResponse::decode(data)
                         .map_err(|err| {
@@ -617,6 +617,7 @@ mod test {
     use super::*;
     use crate::idkg::{
         payload_builder::{
+            filter_idkg_reshare_chain_key_contexts,
             resharing::{initiate_reshare_requests, update_completed_reshare_requests},
             signatures::update_signature_agreements,
         },
@@ -629,7 +630,7 @@ mod test {
     use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
     use ic_interfaces_state_manager::CertifiedStateSnapshot;
     use ic_logger::replica_logger::no_op_logger;
-    use ic_management_canister_types::{
+    use ic_management_canister_types_private::{
         MasterPublicKeyId, Payload, SchnorrAlgorithm, SignWithECDSAReply,
     };
     use ic_test_utilities::crypto::CryptoReturningOk;
@@ -648,7 +649,7 @@ mod test {
 
     #[test]
     fn test_validate_transcript_refs_all_algorithms() {
-        for key_id in fake_master_public_key_ids_for_all_algorithms() {
+        for key_id in fake_master_public_key_ids_for_all_idkg_algorithms() {
             println!("Running test for key ID {key_id}");
             test_validate_transcript_refs(key_id);
         }
@@ -763,7 +764,7 @@ mod test {
 
     #[test]
     fn test_validate_reshare_dealings_all_algorithms() {
-        for key_id in fake_master_public_key_ids_for_all_algorithms() {
+        for key_id in fake_master_public_key_ids_for_all_idkg_algorithms() {
             println!("Running test for key ID {key_id}");
             test_validate_reshare_dealings(key_id);
         }
@@ -794,6 +795,7 @@ mod test {
                 dealings_context_from_reshare_request(req_2.clone()),
             ),
         ]);
+        let contexts = filter_idkg_reshare_chain_key_contexts(&contexts);
 
         let (key_transcript, key_transcript_ref) =
             payload.generate_current_key(&key_id, &env, &mut rng);
@@ -868,7 +870,7 @@ mod test {
 
     #[test]
     fn test_validate_new_signature_agreements_all_algorithms() {
-        for key_id in fake_master_public_key_ids_for_all_algorithms() {
+        for key_id in fake_master_public_key_ids_for_all_idkg_algorithms() {
             println!("Running test for key ID {key_id}");
             test_validate_new_signature_agreements(key_id);
         }
@@ -899,8 +901,8 @@ mod test {
         // There are three requests in state, two are completed, one is still
         // missing its nonce.
         let signature_request_contexts = BTreeMap::from_iter([
-            fake_signature_request_context_from_id(key_id.clone(), pre_sig_id1, ids[0]),
-            fake_signature_request_context_from_id(key_id.clone(), pre_sig_id2, ids[1]),
+            fake_signature_request_context_from_id(key_id.clone().into(), pre_sig_id1, ids[0]),
+            fake_signature_request_context_from_id(key_id.clone().into(), pre_sig_id2, ids[1]),
             fake_signature_request_context_with_pre_sig(ids[2], key_id.clone(), Some(pre_sig_id3)),
         ]);
         let snapshot =
@@ -1034,7 +1036,7 @@ mod test {
 
     #[test]
     fn test_validate_new_signature_agreements_missing_input_all_algorithms() {
-        for key_id in fake_master_public_key_ids_for_all_algorithms() {
+        for key_id in fake_master_public_key_ids_for_all_idkg_algorithms() {
             println!("Running test for key ID {key_id}");
             test_validate_new_signature_agreements_missing_input(key_id);
         }
@@ -1055,7 +1057,7 @@ mod test {
 
         let signature_request_contexts = BTreeMap::from_iter([
             fake_signature_request_context_with_pre_sig(id1, key_id.clone(), Some(pre_sig_id)),
-            fake_signature_request_context_from_id(key_id.clone(), pre_sig_id2, id2),
+            fake_signature_request_context_from_id(key_id.clone().into(), pre_sig_id2, id2),
         ]);
         let snapshot =
             fake_state_with_signature_requests(height, signature_request_contexts.clone());

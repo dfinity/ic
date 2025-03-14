@@ -45,7 +45,7 @@ use ic_btc_replica_types::{
 use ic_crypto_internal_types::NodeIndex;
 use ic_error_types::RejectCode;
 use ic_exhaustive_derive::ExhaustiveSet;
-use ic_management_canister_types::{
+use ic_management_canister_types_private::{
     EcdsaCurve, EcdsaKeyId, MasterPublicKeyId, SchnorrAlgorithm, SchnorrKeyId, VetKdCurve,
     VetKdKeyId,
 };
@@ -559,6 +559,15 @@ impl ExhaustiveSet for BitcoinAdapterResponse {
                 response,
                 callback_id,
             })
+            .collect()
+    }
+}
+
+// TODO(CRP-2703): Remove once the AlgorithmId::VetKD variant is supported on mainnet
+impl ExhaustiveSet for AlgorithmId {
+    fn exhaustive_set<R: RngCore + CryptoRng>(_: &mut R) -> Vec<Self> {
+        AlgorithmId::iter()
+            .filter(|alg_id| *alg_id != AlgorithmId::VetKD)
             .collect()
     }
 }

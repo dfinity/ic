@@ -1,12 +1,7 @@
 [Unit]
 Description=Bootstrap the IC node
 After=upgrade-shared-data-store.service
-Requires=var-lib-ic-data.mount
-After=var-lib-ic-data.mount
-Requires=var-lib-ic-crypto.mount
-After=var-lib-ic-crypto.mount
-Requires=var-lib-ic-backup.mount
-After=var-lib-ic-backup.mount
+RequiresMountsFor=/boot/config /var/lib/ic/data /var/lib/ic/crypto
 Before=setup-ssh-user-keys.service
 
 [Install]
@@ -17,8 +12,10 @@ RequiredBy=setup-ssh-user-keys.service
 Type=oneshot
 RemainAfterExit=true
 ExecStart=/opt/ic/bin/bootstrap-ic-node.sh
+Restart=on-failure
+RestartSec=10
 
-# All services that networking depends on log their outputs to the console 
-# and are piped to the host terminal if the verbose flag is enabled.
+# All guestos services that networking depends on log their outputs to the 
+# console to be piped to the host terminal if the verbose flag is enabled.
 StandardOutput=journal+console
 StandardError=journal+console

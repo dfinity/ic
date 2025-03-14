@@ -6,11 +6,6 @@ use std::{
     time::{Duration, Instant},
 };
 
-use anonymization_client::{
-    Canister as AnonymizationCanister,
-    CanisterMethodsBuilder as AnonymizationCanisterMethodsBuilder, Track,
-    Tracker as AnonymizationTracker,
-};
 use anyhow::{anyhow, Context, Error};
 use arc_swap::ArcSwapOption;
 use async_scoped::TokioScope;
@@ -49,7 +44,6 @@ use ic_registry_replicator::RegistryReplicator;
 use ic_types::{crypto::threshold_sig::ThresholdSigPublicKey, messages::MessageId};
 use nix::unistd::{getpgid, setpgid, Pid};
 use prometheus::Registry;
-use rand::rngs::OsRng;
 use tokio::sync::watch;
 use tokio_util::sync::CancellationToken;
 use tower::{limit::ConcurrencyLimitLayer, util::MapResponseLayer, ServiceBuilder};
@@ -73,6 +67,7 @@ use crate::{
     rate_limiting::{generic, RateLimit},
     retry::{retry_request, RetryParams},
     routes::{self, ErrorCause, Health, Lookup, Proxy, ProxyRouter, RootKey},
+    salt_fetcher::AnonymizationSaltFetcher,
     snapshot::{
         generate_stub_snapshot, generate_stub_subnet, RegistrySnapshot, SnapshotPersister,
         Snapshotter,
@@ -447,15 +442,24 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
     }
 
     // HTTP Logs Anonymization
-    let tracker = if let Some(v) = cli.obs.obs_log_anonymization_canister_id {
-        let canister = AnonymizationCanister::new(agent.clone().unwrap(), v);
-        let cm = AnonymizationCanisterMethodsBuilder::new(canister)
-            .with_metrics(&metrics_registry)
-            .build();
-        Some(AnonymizationTracker::new(Box::new(OsRng), cm)?)
-    } else {
-        None
-    };
+    let salt_fetcher = cli
+        .obs
+        .obs_log_anonymization_canister_id
+        .and_then(|canister_id| {
+            agent.as_ref().map(|agent| {
+                Arc::new(AnonymizationSaltFetcher::new(
+                    agent.clone(),
+                    canister_id,
+                    cli.obs.obs_log_anonymization_poll_interval,
+                    anonymization_salt,
+                    &metrics_registry,
+                ))
+            })
+        });
+
+    if let Some(fetcher) = salt_fetcher {
+        runners.push(Box::new(fetcher));
+    }
 
     TokioScope::scope_and_block(move |s| {
         if let Some(v) = registry_replicator {
@@ -467,16 +471,6 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
                     .context("registry replicator failed")?;
 
                 Ok::<(), Error>(())
-            });
-        }
-
-        // Anonymization Tracker
-        if let Some(mut t) = tracker {
-            s.spawn(async move {
-                t.track(|value| {
-                    anonymization_salt.store(Some(Arc::new(value)));
-                })
-                .await
             });
         }
 
@@ -844,6 +838,8 @@ pub fn setup_router(
         http_client.clone(),
         Arc::clone(&routing_table),
         Arc::clone(&registry_snapshot),
+        cli.health.health_subnets_alive_threshold,
+        cli.health.health_nodes_per_subnet_alive_threshold,
     );
 
     let proxy_router = Arc::new(proxy_router);

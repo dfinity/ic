@@ -1,5 +1,5 @@
 use ic_error_types::{ErrorCode, UserError};
-use ic_management_canister_types::Method as Ic00Method;
+use ic_management_canister_types_private::Method as Ic00Method;
 use ic_replicated_state::ReplicatedState;
 use ic_types::messages::CanisterCall;
 use ic_types::{CanisterId, SubnetId};
@@ -123,7 +123,7 @@ impl Ic00MethodPermissions {
                 allow_remote_subnet_sender: true,
                 allow_only_nns_subnet_sender: false,
             },
-            Ic00Method::VetKdDeriveEncryptedKey => Self {
+            Ic00Method::VetKdDeriveKey => Self {
                 method,
                 allow_remote_subnet_sender: true,
                 allow_only_nns_subnet_sender: false,

@@ -1,4 +1,4 @@
-use candid::{CandidType, Principal};
+use candid::{CandidType, Decode, Encode, Principal};
 use candid_parser::utils::{service_equal, CandidSource};
 use canister_test::*;
 use dfn_candid::{candid, candid_one, CandidOne};
@@ -22,6 +22,7 @@ use icp_ledger::{
     TransferFeeArgs, DEFAULT_TRANSFER_FEE,
 };
 use icrc_ledger_types::icrc1::account::Account;
+use on_wire::bytes;
 use on_wire::IntoWire;
 use serde::Deserialize;
 use serde_bytes::ByteBuf;
@@ -2014,7 +2015,7 @@ fn test_archives_endpoint() {
                             max_message_size_bytes: None,
                             controller_id: minting_canister_id.into(),
                             more_controller_ids: None,
-                            cycles_for_archive_creation: None,
+                            cycles_for_archive_creation: Some(0),
                             max_transactions_per_response: None,
                         })
                         .build()
@@ -2343,6 +2344,119 @@ fn call_with_cleanup() {
             r.unwrap_err().contains("Failed successfully"),
             "The lock was not released so it can't successfully fail"
         );
+        Ok(())
+    })
+}
+
+#[test]
+fn transfer_fee_pb_test() {
+    local_test_e(|r| async move {
+        let proj = Project::new();
+
+        let minting_account = create_sender(0);
+
+        let ledger = proj
+            .cargo_bin("ledger-canister", &[])
+            .install_(
+                &r,
+                CandidOne(
+                    LedgerCanisterInitPayload::builder()
+                        .minting_account(
+                            CanisterId::try_from(minting_account.get_principal_id())
+                                .unwrap()
+                                .into(),
+                        )
+                        .transfer_fee(Tokens::from_e8s(12345))
+                        .build()
+                        .unwrap(),
+                ),
+            )
+            .await?;
+
+        let fee: TransferFee = ledger
+            .query_("transfer_fee_pb", protobuf, TransferFeeArgs {})
+            .await?;
+        assert_eq!(fee.transfer_fee.get_e8s(), 12345);
+
+        Ok(())
+    })
+}
+
+#[test]
+fn send_dfx_test() {
+    local_test_e(|r| async move {
+        let proj = Project::new();
+
+        let minting_account = create_sender(0);
+
+        let account1 = create_sender(1);
+        let ai1 = AccountIdentifier::new(account1.get_principal_id(), None);
+        let subaccount = [1u8; 32];
+        let ai2 = AccountIdentifier::new(account1.get_principal_id(), Some(Subaccount(subaccount)));
+        let accounts = HashMap::from([
+            (ai1, Tokens::from_e8s(1_000_000_000)),
+            (ai2, Tokens::from_e8s(1_000_000_000)),
+        ]);
+
+        let ledger = proj
+            .cargo_bin("ledger-canister", &[])
+            .install_(
+                &r,
+                CandidOne(
+                    LedgerCanisterInitPayload::builder()
+                        .minting_account(
+                            CanisterId::try_from(minting_account.get_principal_id())
+                                .unwrap()
+                                .into(),
+                        )
+                        .transfer_fee(Tokens::from_e8s(12345))
+                        .initial_values(accounts)
+                        .build()
+                        .unwrap(),
+                ),
+            )
+            .await?;
+
+        let account2 = create_sender(2);
+
+        let mut send_args = SendArgs {
+            memo: Memo(1),
+            amount: Tokens::from_e8s(1000),
+            fee: Tokens::from_e8s(12345),
+            from_subaccount: None,
+            to: account2.get_principal_id().into(),
+            created_at_time: None,
+        };
+
+        let block_index = ledger
+            .update_from_sender("send_dfx", bytes, Encode!(&send_args).unwrap(), &account1)
+            .await
+            .map(|b| Decode!(&b, BlockIndex).unwrap());
+        assert_eq!(block_index, Ok(2));
+        assert_eq!(query_balance(&ledger, &account2).await?, Tokens::from(1000));
+
+        // Specify subaccount
+        send_args.from_subaccount = Some(Subaccount(subaccount));
+        let block_index = ledger
+            .update_from_sender("send_dfx", bytes, Encode!(&send_args).unwrap(), &account1)
+            .await
+            .map(|b| Decode!(&b, BlockIndex).unwrap());
+        assert_eq!(block_index, Ok(3));
+        assert_eq!(query_balance(&ledger, &account2).await?, Tokens::from(2000));
+
+        // Specify created_at_time
+        let timestamp_nanos = SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos() as u64;
+        send_args.created_at_time = Some(TimeStamp::from_nanos_since_unix_epoch(timestamp_nanos));
+        let block_index = ledger
+            .update_from_sender("send_dfx", bytes, Encode!(&send_args).unwrap(), &account1)
+            .await
+            .map(|b| Decode!(&b, BlockIndex).unwrap());
+        assert_eq!(block_index, Ok(4));
+        assert_eq!(query_balance(&ledger, &account2).await?, Tokens::from(3000));
+
         Ok(())
     })
 }

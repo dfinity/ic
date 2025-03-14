@@ -11,6 +11,7 @@ package(default_visibility = ["//visibility:public"])
         deps = [
             # Keep sorted.
             "@crate_index//:candid",
+            "@crate_index//:ic-management-canister-types",
             "@crate_index//:regex",
             "@crate_index//:serde",
             "@crate_index//:serde_bytes",

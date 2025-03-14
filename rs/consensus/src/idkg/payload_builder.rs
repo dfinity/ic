@@ -39,6 +39,58 @@ mod pre_signatures;
 pub(super) mod resharing;
 pub(super) mod signatures;
 
+/// A helper wrapper around [`ReshareChainKeyContext`], that guarantees,
+/// that the context is about an IDKG key.
+///
+/// Since the wrapper is borrowing, no additional clones are necessary.
+pub(crate) struct IDkgDealingContext<'a>(&'a ReshareChainKeyContext);
+
+impl<'a> TryFrom<&'a ReshareChainKeyContext> for IDkgDealingContext<'a> {
+    type Error = String;
+
+    fn try_from(value: &'a ReshareChainKeyContext) -> Result<Self, Self::Error> {
+        if value.key_id.is_idkg_key() {
+            Ok(Self(value))
+        } else {
+            Err(String::from("Cannot convert non-IDKG key"))
+        }
+    }
+}
+
+impl IDkgDealingContext<'_> {
+    /// Return the [`IDkgMasterPublicKeyId`] of this context
+    ///
+    /// Since we already established that this is an IDKG key, we can avoid
+    /// the error handling.
+    fn key_id(&self) -> IDkgMasterPublicKeyId {
+        self.0.key_id.clone().try_into().unwrap()
+    }
+}
+
+impl Deref for IDkgDealingContext<'_> {
+    type Target = ReshareChainKeyContext;
+
+    fn deref(&self) -> &Self::Target {
+        self.0
+    }
+}
+
+/// Filter a map of [`ReshareChainKeyContext`] for contexts that contain IDKG keys
+/// and convert them to a map of [`IDkgDealingContext`]
+pub(crate) fn filter_idkg_reshare_chain_key_contexts(
+    contexts: &BTreeMap<CallbackId, ReshareChainKeyContext>,
+) -> BTreeMap<CallbackId, IDkgDealingContext<'_>> {
+    contexts
+        .iter()
+        .filter_map(
+            |(&id, context)| match IDkgDealingContext::try_from(context) {
+                Ok(context) => Some((id, context)),
+                Err(_) => None,
+            },
+        )
+        .collect()
+}
+
 /// Builds the very first idkg summary block. This would trigger the subsequent
 /// data blocks to create the initial key transcript.
 pub(crate) fn make_bootstrap_summary(
@@ -539,7 +591,9 @@ pub(crate) fn create_data_payload_helper(
         .iter()
         .flat_map(|(id, ctxt)| IDkgSignWithThresholdContext::try_from(ctxt).map(|ctxt| (*id, ctxt)))
         .collect();
-    let idkg_dealings_contexts = state.get_ref().idkg_dealings_contexts();
+
+    let reshare_contexts = state.get_ref().reshare_chain_key_contexts();
+    let idkg_dealings_contexts = filter_idkg_reshare_chain_key_contexts(reshare_contexts);
 
     let certified_height = if context.certified_height >= summary_block.height() {
         CertifiedHeight::ReachedSummaryHeight
@@ -557,7 +611,7 @@ pub(crate) fn create_data_payload_helper(
         certified_height,
         &receivers,
         all_signing_requests,
-        idkg_dealings_contexts,
+        &idkg_dealings_contexts,
         block_reader,
         transcript_builder,
         signature_builder,
@@ -579,7 +633,7 @@ pub(crate) fn create_data_payload_helper_2(
     certified_height: CertifiedHeight,
     receivers: &[NodeId],
     all_signing_requests: BTreeMap<CallbackId, IDkgSignWithThresholdContext<'_>>,
-    idkg_dealings_contexts: &BTreeMap<CallbackId, IDkgDealingsContext>,
+    idkg_dealings_contexts: &BTreeMap<CallbackId, IDkgDealingContext<'_>>,
     block_reader: &dyn IDkgBlockReader,
     transcript_builder: &dyn IDkgTranscriptBuilder,
     signature_builder: &dyn ThresholdSignatureBuilder,
@@ -696,7 +750,7 @@ mod tests {
     use ic_crypto_test_utils_reproducible_rng::{reproducible_rng, ReproducibleRng};
     use ic_interfaces_registry::RegistryValue;
     use ic_logger::replica_logger::no_op_logger;
-    use ic_management_canister_types::MasterPublicKeyId;
+    use ic_management_canister_types_private::MasterPublicKeyId;
     use ic_metrics::MetricsRegistry;
     use ic_protobuf::types::v1 as pb;
     use ic_registry_subnet_features::KeyConfig;
@@ -835,7 +889,7 @@ mod tests {
 
     #[test]
     fn test_pre_signature_recreation_all_algorithms() {
-        for key_id in fake_master_public_key_ids_for_all_algorithms() {
+        for key_id in fake_master_public_key_ids_for_all_idkg_algorithms() {
             println!("Running test for key ID {key_id}");
             test_pre_signature_recreation(key_id);
         }
@@ -931,7 +985,7 @@ mod tests {
 
     #[test]
     fn test_signing_request_timeout_all_algorithms() {
-        for key_id in fake_master_public_key_ids_for_all_algorithms() {
+        for key_id in fake_master_public_key_ids_for_all_idkg_algorithms() {
             println!("Running test for key ID {key_id}");
             test_signing_request_timeout(key_id);
         }
@@ -1000,7 +1054,7 @@ mod tests {
 
     #[test]
     fn test_request_with_invalid_key_all_algorithms() {
-        for key_id in fake_master_public_key_ids_for_all_algorithms() {
+        for key_id in fake_master_public_key_ids_for_all_idkg_algorithms() {
             println!("Running test for key ID {key_id}");
             test_request_with_invalid_key(key_id);
         }
@@ -1070,7 +1124,7 @@ mod tests {
 
     #[test]
     fn test_signature_is_only_delivered_once_all_algorithms() {
-        for key_id in fake_master_public_key_ids_for_all_algorithms() {
+        for key_id in fake_master_public_key_ids_for_all_idkg_algorithms() {
             println!("Running test for key ID {key_id}");
             test_signature_is_only_delivered_once(key_id);
         }
@@ -1081,7 +1135,7 @@ mod tests {
         let pre_sig_id = create_available_pre_signature(&mut idkg_payload, key_id.clone(), 13);
         let request_id = request_id(0, Height::from(0));
         let context =
-            fake_signature_request_context_from_id(key_id.clone(), pre_sig_id, request_id);
+            fake_signature_request_context_from_id(key_id.clone().into(), pre_sig_id, request_id);
         let signature_request_contexts = BTreeMap::from([context.clone()]);
         let signature_request_contexts = into_idkg_contexts(&signature_request_contexts);
 
@@ -1159,7 +1213,7 @@ mod tests {
 
     #[test]
     fn test_update_summary_refs_all_algorithms() {
-        for key_id in fake_master_public_key_ids_for_all_algorithms() {
+        for key_id in fake_master_public_key_ids_for_all_idkg_algorithms() {
             println!("Running test for key ID {key_id}");
             test_update_summary_refs(key_id);
         }
@@ -1196,8 +1250,8 @@ mod tests {
             let mut reshare_refs = BTreeMap::new();
             reshare_refs.insert(*reshare_key_transcript_ref.as_ref(), reshare_key_transcript);
 
-            let inputs_1 = create_sig_inputs_with_height(91, summary_height, key_id.clone());
-            let inputs_2 = create_sig_inputs_with_height(92, summary_height, key_id.clone());
+            let inputs_1 = create_sig_inputs_with_height(91, summary_height, key_id.clone().into());
+            let inputs_2 = create_sig_inputs_with_height(92, summary_height, key_id.clone().into());
             let summary_block = create_summary_block_with_transcripts(
                 key_id.clone(),
                 subnet_id,
@@ -1210,12 +1264,14 @@ mod tests {
                 ],
             );
             add_block(summary_block, summary_height.get(), &mut pool);
-            let presig_1 = inputs_2.sig_inputs_ref.pre_signature();
+            let presig_1 = inputs_2.sig_inputs_ref.pre_signature().unwrap();
 
             // Create payload blocks with transcripts
             let payload_height_1 = Height::new(10);
-            let inputs_1 = create_sig_inputs_with_height(93, payload_height_1, key_id.clone());
-            let inputs_2 = create_sig_inputs_with_height(94, payload_height_1, key_id.clone());
+            let inputs_1 =
+                create_sig_inputs_with_height(93, payload_height_1, key_id.clone().into());
+            let inputs_2 =
+                create_sig_inputs_with_height(94, payload_height_1, key_id.clone().into());
             let (reshare_key_transcript, reshare_key_transcript_ref, _) =
                 generate_key_transcript(&key_id, &env, &mut rng, payload_height_1);
             let mut reshare_refs = BTreeMap::new();
@@ -1235,7 +1291,7 @@ mod tests {
                 payload_height_1.get() - summary_height.get(),
                 &mut pool,
             );
-            let presig_2 = inputs_2.sig_inputs_ref.pre_signature();
+            let presig_2 = inputs_2.sig_inputs_ref.pre_signature().unwrap();
 
             // Create a payload block with references to these past blocks
             let mut idkg_payload = empty_idkg_payload_with_key_ids(subnet_id, vec![key_id.clone()]);
@@ -1419,7 +1475,7 @@ mod tests {
 
     #[test]
     fn test_summary_proto_conversion_all_algorithms() {
-        for key_id in fake_master_public_key_ids_for_all_algorithms() {
+        for key_id in fake_master_public_key_ids_for_all_idkg_algorithms() {
             println!("Running test for key ID {key_id}");
             test_summary_proto_conversion(key_id);
         }
@@ -1449,8 +1505,8 @@ mod tests {
             let mut reshare_refs = BTreeMap::new();
             reshare_refs.insert(*reshare_key_transcript_ref.as_ref(), reshare_key_transcript);
 
-            let inputs_1 = create_sig_inputs_with_height(91, summary_height, key_id.clone());
-            let inputs_2 = create_sig_inputs_with_height(92, summary_height, key_id.clone());
+            let inputs_1 = create_sig_inputs_with_height(91, summary_height, key_id.clone().into());
+            let inputs_2 = create_sig_inputs_with_height(92, summary_height, key_id.clone().into());
             let summary_block = create_summary_block_with_transcripts(
                 key_id.clone(),
                 subnet_id,
@@ -1465,12 +1521,14 @@ mod tests {
             let b = add_block(summary_block, summary_height.get(), &mut pool);
             assert_proposal_conversion(b);
 
-            let presig_1 = inputs_2.sig_inputs_ref.pre_signature();
+            let presig_1 = inputs_2.sig_inputs_ref.pre_signature().unwrap();
 
             // Create payload blocks with transcripts
             let payload_height_1 = Height::new(10);
-            let inputs_1 = create_sig_inputs_with_height(93, payload_height_1, key_id.clone());
-            let inputs_2 = create_sig_inputs_with_height(94, payload_height_1, key_id.clone());
+            let inputs_1 =
+                create_sig_inputs_with_height(93, payload_height_1, key_id.clone().into());
+            let inputs_2 =
+                create_sig_inputs_with_height(94, payload_height_1, key_id.clone().into());
             let (reshare_key_transcript, reshare_key_transcript_ref, _) =
                 generate_key_transcript(&key_id, &env, &mut rng, payload_height_1);
             let mut reshare_refs = BTreeMap::new();
@@ -1493,7 +1551,7 @@ mod tests {
             );
             assert_proposal_conversion(b);
 
-            let presig_2 = inputs_2.sig_inputs_ref.pre_signature();
+            let presig_2 = inputs_2.sig_inputs_ref.pre_signature().unwrap();
 
             // Create a payload block with references to these past blocks
             let mut idkg_payload = empty_idkg_payload_with_key_ids(subnet_id, vec![key_id.clone()]);
@@ -1710,7 +1768,7 @@ mod tests {
 
     #[test]
     fn test_no_creation_after_successful_creation_all_algorithms() {
-        for key_id in fake_master_public_key_ids_for_all_algorithms() {
+        for key_id in fake_master_public_key_ids_for_all_idkg_algorithms() {
             println!("Running test for key ID {key_id}");
             test_no_creation_after_successful_creation(key_id);
         }
@@ -1850,7 +1908,7 @@ mod tests {
 
     #[test]
     fn test_incomplete_reshare_doesnt_purge_pre_signatures_all_algorithms() {
-        for key_id in fake_master_public_key_ids_for_all_algorithms() {
+        for key_id in fake_master_public_key_ids_for_all_idkg_algorithms() {
             println!("Running test for key ID {key_id}");
             test_incomplete_reshare_doesnt_purge_pre_signatures(key_id);
         }
@@ -1952,7 +2010,7 @@ mod tests {
             };
             payload_0.available_pre_signatures.insert(
                 payload_0.uid_generator.next_pre_signature_id(),
-                test_inputs.sig_inputs_ref.pre_signature(),
+                test_inputs.sig_inputs_ref.pre_signature().unwrap(),
             );
             for (transcript_ref, transcript) in test_inputs.idkg_transcripts {
                 block_reader.add_transcript(transcript_ref, transcript);
@@ -2199,7 +2257,7 @@ mod tests {
 
     #[test]
     fn test_if_next_in_creation_continues_all_algorithms() {
-        for key_id in fake_master_public_key_ids_for_all_algorithms() {
+        for key_id in fake_master_public_key_ids_for_all_idkg_algorithms() {
             println!("Running test for key ID {key_id}");
             test_if_next_in_creation_continues(key_id);
         }
@@ -2349,7 +2407,7 @@ mod tests {
 
     #[test]
     fn test_next_in_creation_with_initial_dealings_all_algorithms() {
-        for key_id in fake_master_public_key_ids_for_all_algorithms() {
+        for key_id in fake_master_public_key_ids_for_all_idkg_algorithms() {
             println!("Running test for key ID {key_id}");
             test_next_in_creation_with_initial_dealings(key_id);
         }

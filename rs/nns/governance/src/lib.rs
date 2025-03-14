@@ -140,12 +140,14 @@ use std::{
     io,
     time::{Duration, SystemTime},
 };
+use timer_tasks::encode_timer_task_metrics;
 
 #[cfg(any(test, feature = "canbench-rs"))]
 pub mod test_utils;
 
 mod account_id_index;
 mod audit_event;
+pub mod canister_state;
 pub mod data_migration;
 mod garbage_collection;
 /// The 'governance' module contains the canister (smart contract)
@@ -161,7 +163,7 @@ pub mod governance;
 pub mod governance_proto_builder;
 mod heap_governance_data;
 mod known_neuron_index;
-mod migrations;
+mod network_economics;
 mod neuron;
 pub mod neuron_data_validation;
 mod neuron_store;
@@ -169,9 +171,10 @@ pub mod neurons_fund;
 mod node_provider_rewards;
 pub mod pb;
 pub mod proposals;
-mod reward;
+pub mod reward;
 pub mod storage;
 mod subaccount_index;
+pub mod timer_tasks;
 mod voting;
 
 /// Limit the amount of work for skipping unneeded data on the wire when parsing Candid.
@@ -195,16 +198,16 @@ pub const DEFAULT_VOTING_POWER_REFRESHED_TIMESTAMP_SECONDS: u64 = 1725148800;
 // leave this here indefinitely, but it will just be clutter after a modest
 // amount of time.
 thread_local! {
-
+    // TODO(NNS1-3601): Delete these (assuming all goes well, ofc) in mid March.
+    // There is already a draft PR for this.
     static IS_VOTING_POWER_ADJUSTMENT_ENABLED: Cell<bool> = const { Cell::new(true) };
-
     static IS_PRUNE_FOLLOWING_ENABLED: Cell<bool> = const { Cell::new(true) };
 
     static ALLOW_ACTIVE_NEURONS_IN_STABLE_MEMORY: Cell<bool> = const { Cell::new(true) };
 
     static USE_STABLE_MEMORY_FOLLOWING_INDEX: Cell<bool> = const { Cell::new(true) };
 
-    static MIGRATE_ACTIVE_NEURONS_TO_STABLE_MEMORY: Cell<bool> = const { Cell::new(cfg!(feature = "test")) };
+    static MIGRATE_ACTIVE_NEURONS_TO_STABLE_MEMORY: Cell<bool> = const { Cell::new(true) };
 }
 
 thread_local! {
@@ -638,6 +641,9 @@ pub fn encode_metrics(
             .value(labels.as_slice(), Metric::into(*deadline_ts))
             .unwrap();
     }
+
+    // Timer tasks
+    encode_timer_task_metrics(w)?;
 
     // Periodically Calculated (almost entirely detailed neuron breakdowns/rollups)
 
@@ -1162,3 +1168,6 @@ impl NeuronSubsetMetricsPb {
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(feature = "canbench-rs")]
+mod benches_util;

@@ -1,6 +1,6 @@
 use ic_error_types::ErrorCode;
 use ic_logger::replica_logger::LogEntryLogger;
-use ic_management_canister_types::{CanisterUpgradeOptions, EmptyBlob, Payload};
+use ic_management_canister_types_private::{CanisterUpgradeOptions, EmptyBlob, Payload};
 use ic_replicated_state::{
     canister_state::execution_state::WasmExecutionMode, canister_state::NextExecution,
     CanisterState,

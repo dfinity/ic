@@ -10,7 +10,9 @@ use ic_btc_replica_types::BlockBlob;
 use ic_certification_version::{CertificationVersion, CURRENT_CERTIFICATION_VERSION};
 use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_limits::MAX_INGRESS_TTL;
-use ic_management_canister_types::{MasterPublicKeyId, NodeMetrics, NodeMetricsHistoryResponse};
+use ic_management_canister_types_private::{
+    MasterPublicKeyId, NodeMetrics, NodeMetricsHistoryResponse,
+};
 use ic_protobuf::state::system_metadata::v1::ThresholdSignatureAgreementsEntry;
 use ic_protobuf::{
     proxy::{try_from_option_field, ProxyDecodeError},
@@ -472,6 +474,7 @@ impl SubnetMetrics {
                 | CyclesUseCase::CanisterCreation
                 | CyclesUseCase::SchnorrOutcalls
                 | CyclesUseCase::VetKd
+                | CyclesUseCase::DroppedMessages
                 | CyclesUseCase::BurnedCycles => total += *cycles,
             }
         }

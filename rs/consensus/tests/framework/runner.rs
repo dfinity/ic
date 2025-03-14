@@ -160,6 +160,7 @@ impl<'a> ConsensusRunner<'a> {
             deps.self_validating_payload_builder.clone(),
             deps.canister_http_payload_builder.clone(),
             deps.query_stats_payload_builder.clone(),
+            deps.vetkd_payload_builder.clone(),
             deps.dkg_pool.clone(),
             deps.idkg_pool.clone(),
             dkg_key_manager.clone(),
