@@ -3051,8 +3051,6 @@ impl ExecutionEnvironment {
         Ok(())
     }
 
-    // TODO(CON-1416: Remove this directive)
-    #[allow(unreachable_code, unused_variables)]
     fn reshare_chain_key(
         &self,
         state: &mut ReplicatedState,
@@ -3072,12 +3070,6 @@ impl ExecutionEnvironment {
 
         let nodes = args.get_set_of_nodes()?;
         let registry_version = args.get_registry_version();
-
-        // TODO(CON-1416): Activate this endpoint
-        return Err(UserError::new(
-            ErrorCode::CanisterRejectedMessage,
-            "This key is not an idkg key",
-        ));
 
         state.metadata.subnet_call_context_manager.push_context(
             SubnetCallContext::ReshareChainKey(ReshareChainKeyContext {
