@@ -1,5 +1,3 @@
-load("//publish:defs.bzl", "release_strip_binary")
-
 package(default_visibility = ["//visibility:public"])
 
 cc_binary(
@@ -9,9 +7,9 @@ cc_binary(
         "infogetty-cpp/network_info.cc",
         "infogetty-cpp/network_info.h",
     ],
-    copts = ["-std=c++17"],
-    linkopts = [
-        "-lsystemd",
+    copts = [
+        "-std=c++17",
+        "-Wl,--strip-debug",
     ],
     target_compatible_with = [
         "@platforms//os:linux",
@@ -19,14 +17,9 @@ cc_binary(
     deps = ["@libsystemd"],
 )
 
-release_strip_binary(
-    name = "infogetty_stripped",
-    binary = "infogetty_bin",
-)
-
 genrule(
     name = "infogetty_cleaned",
-    srcs = ["infogetty_stripped"],
+    srcs = ["infogetty_bin"],
     outs = ["infogetty"],
     cmd = "objcopy -R .comment -R .note -R .note.gnu.build-id $< $@",
     executable = True,
