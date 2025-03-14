@@ -837,7 +837,7 @@ impl TryFrom<pb_metadata::VetKdArguments> for VetKdArguments {
         Ok(VetKdArguments {
             key_id: try_from_option_field(context.key_id, "VetKdArguments::key_id")?,
             input: Arc::new(context.input),
-            transport_public_key: context.transport_public_key.to_vec(),
+            transport_public_key: context.transport_public_key,
             ni_dkg_id: try_from_option_field(context.ni_dkg_id, "VetKdArguments::ni_dkg_id")?,
             height: Height::from(context.height),
         })
