@@ -13,7 +13,7 @@ use ic_management_canister_types_private::{
     Payload, ProvisionalTopUpCanisterArgs, ReshareChainKeyArgs, SchnorrPublicKeyArgs,
     SignWithECDSAArgs, SignWithSchnorrArgs, StoredChunksArgs, SubnetInfoArgs,
     TakeCanisterSnapshotArgs, UninstallCodeArgs, UpdateSettingsArgs, UploadChunkArgs,
-    VetKdDeriveEncryptedKeyArgs, VetKdPublicKeyArgs,
+    VetKdDeriveKeyArgs, VetKdPublicKeyArgs,
 };
 use ic_replicated_state::NetworkTopology;
 use itertools::Itertools;
@@ -241,8 +241,8 @@ pub(super) fn resolve_destination(
                 ChainKeySubnetKind::OnlyHoldsKey,
             )
         }
-        Ok(Ic00Method::VetKdDeriveEncryptedKey) => {
-            let args = VetKdDeriveEncryptedKeyArgs::decode(payload)?;
+        Ok(Ic00Method::VetKdDeriveKey) => {
+            let args = VetKdDeriveKeyArgs::decode(payload)?;
             route_chain_key_message(
                 &MasterPublicKeyId::VetKd(args.key_id),
                 network_topology,
@@ -553,12 +553,12 @@ mod tests {
         Encode!(&args).unwrap()
     }
 
-    fn vetkd_derive_encrypted_key_request(key_id: VetKdKeyId) -> Vec<u8> {
-        let args = VetKdDeriveEncryptedKeyArgs {
+    fn vetkd_derive_key_request(key_id: VetKdKeyId) -> Vec<u8> {
+        let args = VetKdDeriveKeyArgs {
             key_id,
-            derivation_domain: vec![0; 10],
-            derivation_id: vec![1; 32],
-            encryption_public_key: [1; 48],
+            context: vec![0; 10],
+            input: vec![1; 32],
+            transport_public_key: [1; 48],
         };
         Encode!(&args).unwrap()
     }
@@ -584,7 +584,7 @@ mod tests {
     fn vetkd_public_key_request(key_id: VetKdKeyId) -> Vec<u8> {
         let args = VetKdPublicKeyArgs {
             canister_id: Some(canister_test_id(1)),
-            derivation_domain: vec![0; 10],
+            context: vec![0; 10],
             key_id,
         };
         Encode!(&args).unwrap()
@@ -860,8 +860,8 @@ mod tests {
             ),
             (
                 network_with_vetkd_subnets(),
-                Ic00Method::VetKdDeriveEncryptedKey,
-                vetkd_derive_encrypted_key_request(vetkd_key_id(1)),
+                Ic00Method::VetKdDeriveKey,
+                vetkd_derive_key_request(vetkd_key_id(1)),
             ),
         ] {
             assert_eq!(
@@ -891,8 +891,8 @@ mod tests {
                 schnorr_master_key_id(1),
             ),
             (
-                Ic00Method::VetKdDeriveEncryptedKey,
-                vetkd_derive_encrypted_key_request(vetkd_key_id(1)),
+                Ic00Method::VetKdDeriveKey,
+                vetkd_derive_key_request(vetkd_key_id(1)),
                 vetkd_master_key_id(1),
             ),
         ] {

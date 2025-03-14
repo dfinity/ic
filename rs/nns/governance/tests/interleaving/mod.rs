@@ -6,7 +6,8 @@ use futures::channel::{
     oneshot::{self, Sender as OSender},
 };
 use ic_base_types::CanisterId;
-use ic_nervous_system_common::{ledger::IcpLedger, NervousSystemError};
+use ic_nervous_system_canisters::ledger::IcpLedger;
+use ic_nervous_system_common::NervousSystemError;
 use icp_ledger::{AccountIdentifier, Subaccount, Tokens};
 use std::sync::{atomic, atomic::Ordering as AOrdering, Arc};
 
