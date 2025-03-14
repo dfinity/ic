@@ -41,7 +41,7 @@ if [ "${UPLOAD_BUILD_ARTIFACTS:-}" == "1" ]; then
         --s3-endpoint=https://s3-upload.idx.dfinity.network \
         copy \
         "$f" \
-        "dfinity-download-public/ic/${VERSION}/$REMOTE_SUBDIR/"
+        ":s3:dfinity-download-public/ic/${VERSION}/$REMOTE_SUBDIR/"
 
     echo "uploading $f to AWS"
     AWS_PROFILE=default "$RCLONE" \
@@ -51,19 +51,19 @@ if [ "${UPLOAD_BUILD_ARTIFACTS:-}" == "1" ]; then
         --s3-env-auth \
         copy \
         "$f" \
-        "dfinity-download-public/ic/${VERSION}/$REMOTE_SUBDIR/"
+        ":s3:dfinity-download-public/ic/${VERSION}/$REMOTE_SUBDIR/"
 
     # Upload to Cloudflare's R2 (S3)
     # using profile 'cf' to look up the right creds in ~/.aws/credentials
     echo "uploading $f to Cloudflare"
-    AWS_PROFILE=cf "$RCLONE" \
+    echo AWS_PROFILE=cf "$RCLONE" -v \
         "${rclone_common_flags[@]}" \
         --s3-provider=Cloudflare \
         --s3-endpoint=https://64059940cc95339fc7e5888f431876ee.r2.cloudflarestorage.com \
         --s3-env-auth \
         copy \
         "$f" \
-        "dfinity-download-public/ic/${VERSION}/$REMOTE_SUBDIR/"
+        ":s3:dfinity-download-public/ic/${VERSION}/$REMOTE_SUBDIR/"
 else
     echo "dry run for $f"
 fi
