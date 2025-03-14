@@ -358,8 +358,14 @@ impl RemoteDkgResults {
     }
 }
 
-/// This function creates responses to the SetupInitialDKG system calls with the
-/// computed DKG key material for remote subnets, without needing values from the state.
+/// This function creates responses to finished remote DKGs
+///
+/// Responses can either be information about a failed DKG or contain the DKG transcript(s)
+/// necessary to complete the request.
+///
+/// The responses generate by this function are:
+/// - Responses to `setup_initial_dkg` system calls
+/// - Responses to `reshare_chain_key`, if the requested key is a NiDkg key
 pub fn generate_responses_to_remote_dkgs(
     transcripts_for_remote_subnets: &[(NiDkgId, CallbackId, Result<NiDkgTranscript, String>)],
     log: &ReplicaLogger,
@@ -600,7 +606,7 @@ mod tests {
             Payload::Reject(_) => panic!("Payload was rejected unexpectedly"),
         };
         let response = ReshareChainKeyResponse::decode(payload).unwrap();
-        let ReshareChainKeyResponse::NiDkg(response) = response else {
+        let ReshareChainKeyResponse::NiDkg(_response) = response else {
             panic!("Expected a NiDkg response");
         };
     }

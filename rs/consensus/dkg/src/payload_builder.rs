@@ -746,7 +746,7 @@ fn process_reshare_chain_key_contexts(
                 new_configs.push(vec![config]);
                 valid_target_ids.push(context.target_id);
             }
-            Err(err) => errors.push(err),
+            Err(err) => errors.push(*err),
         }
     }
     Ok((new_configs, errors, valid_target_ids))
@@ -939,7 +939,7 @@ fn create_remote_dkg_config_for_key_id(
     dealers: &BTreeSet<NodeId>,
     receivers: &BTreeSet<NodeId>,
     registry_version: &RegistryVersion,
-) -> Result<NiDkgConfig, (NiDkgId, String)> {
+) -> Result<NiDkgConfig, Box<(NiDkgId, String)>> {
     let dkg_id = NiDkgId {
         start_block_height,
         dealer_subnet,
@@ -948,7 +948,7 @@ fn create_remote_dkg_config_for_key_id(
     };
 
     create_remote_dkg_config(dkg_id.clone(), dealers, receivers, registry_version)
-        .map_err(|err| (dkg_id, format!("{:?}", err)))
+        .map_err(|err| Box::new((dkg_id, format!("{:?}", err))))
 }
 
 fn create_remote_dkg_config(
