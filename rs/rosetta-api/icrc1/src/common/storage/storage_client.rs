@@ -3,7 +3,7 @@ use crate::common::storage::types::{MetadataEntry, RosettaBlock};
 use anyhow::{bail, Result};
 use candid::Nat;
 use icrc_ledger_types::icrc1::account::Account;
-use rusqlite::Connection;
+use rusqlite::{Connection, OpenFlags};
 use serde_bytes::ByteBuf;
 use std::cmp::Ordering;
 use std::{path::Path, sync::Mutex};
@@ -25,6 +25,15 @@ impl StorageClient {
     /// Constructs a new SQLite in-memory store.
     pub fn new_in_memory() -> anyhow::Result<Self> {
         let connection = rusqlite::Connection::open_in_memory()?;
+        Self::new(connection)
+    }
+
+    /// Constructs a new SQLite in-memory store with a named DB that can be shared across instances.
+    pub fn new_named_in_memory(name: &str) -> anyhow::Result<Self> {
+        let connection = Connection::open_with_flags(
+            format!("'file:{}?mode=memory&cache=shared', uri=True", name),
+            OpenFlags::default(),
+        )?;
         Self::new(connection)
     }
 
