@@ -34,7 +34,6 @@ ic-read-state-response-parser = { path = "../../canister_client/read_state_respo
 ic-types = { path = "../../types/types" }
 icp-ledger = { path = "../../ledger_suite/icp" }
 lazy_static = { workspace = true }
-metrics = { path = "metrics" }
 num-bigint = { workspace = true }
 on_wire = { path = "../../rust_canisters/on_wire" }
 prometheus = { workspace = true }

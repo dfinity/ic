@@ -286,7 +286,6 @@ members = [
     "rs/rosetta-api/common/rosetta_core",
     "rs/rosetta-api/icp/runner",
     "rs/rosetta-api/icp/client",
-    "rs/rosetta-api/icp/metrics",
     "rs/ledger_suite/icp",
     "rs/ledger_suite/icp/archive",
     "rs/ledger_suite/icp/ledger",
