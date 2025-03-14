@@ -1,6 +1,6 @@
 use candid::candid_method;
 use dfn_candid::candid_one;
-use dfn_core::api::{print, stable_memory_size_in_pages};
+use dfn_core::api::print;
 use dfn_core::{over_init, stable, BytesS};
 use dfn_protobuf::protobuf;
 use ic_base_types::PrincipalId;
@@ -255,12 +255,12 @@ fn encode_metrics(w: &mut MetricsEncoder<Vec<u8>>) -> std::io::Result<()> {
     )?;
     w.encode_gauge(
         "archive_node_stable_memory_pages",
-        stable_memory_size_in_pages() as f64,
+        ic_cdk::api::stable::stable_size() as f64,
         "Size of the stable memory allocated by this canister measured in 64K Wasm pages.",
     )?;
     w.encode_gauge(
         "stable_memory_bytes",
-        (stable_memory_size_in_pages() * 64 * 1024) as f64,
+        (ic_cdk::api::stable::stable_size() * 64 * 1024) as f64,
         "Size of the stable memory allocated by this canister measured in bytes.",
     )?;
     w.encode_gauge(
