@@ -1,6 +1,6 @@
 use candid::candid_method;
 use dfn_candid::candid_one;
-use dfn_core::{over_init, stable, BytesS};
+use dfn_core::stable;
 use dfn_protobuf::protobuf;
 use ic_base_types::PrincipalId;
 use ic_cdk::api::{call::reply, caller, print};
@@ -207,13 +207,12 @@ fn get_blocks_candid_() {
 
 #[export_name = "canister_post_upgrade"]
 fn post_upgrade() {
-    over_init(|_: BytesS| {
-        let bytes = stable::get();
-        let mut state = ARCHIVE_STATE.write().unwrap();
-        *state = ciborium::de::from_reader(std::io::Cursor::new(&bytes))
-            .expect("Decoding stable memory failed");
-        state.last_upgrade_timestamp = dfn_core::api::time_nanos();
-    });
+    ic_cdk::setup();
+    let bytes = stable::get();
+    let mut state = ARCHIVE_STATE.write().unwrap();
+    *state = ciborium::de::from_reader(std::io::Cursor::new(&bytes))
+        .expect("Decoding stable memory failed");
+    state.last_upgrade_timestamp = dfn_core::api::time_nanos();
 }
 
 #[export_name = "canister_pre_upgrade"]
