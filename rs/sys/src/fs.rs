@@ -133,7 +133,7 @@ where
 /// in_kernel copy without the additional cost of transferring data
 /// from the kernel to user space and then back into the kernel. Also
 /// on certain file systems that support COW (btrfs/zfs), copy_file_range
-/// is a metadata operation and is extremely efficient   
+/// is a metadata operation and is extremely efficient.
 pub fn copy_file_sparse(from: &Path, to: &Path) -> io::Result<u64> {
     if *crate::IS_WSL {
         return copy_file_sparse_portable(from, to);
@@ -399,6 +399,21 @@ where
 }
 
 #[cfg(target_family = "unix")]
+/// Serialize given protobuf message to file `dest` without a temp file or
+/// `fsync`. This is intended for batch writing multiple files with as little
+/// overhead as possible.
+pub fn write_protobuf_simple<P>(dest: P, message: &impl prost::Message) -> io::Result<()>
+where
+    P: AsRef<Path>,
+{
+    write_to_file_simple(dest, |writer| {
+        let encoded_message = message.encode_to_vec();
+        writer.write_all(&encoded_message)?;
+        Ok(())
+    })
+}
+
+#[cfg(target_family = "unix")]
 /// Determines if two regular POSIX files reference the same data, i.e., both point to the same
 /// inode number. Returns `true` if the files are hard links to the same inode, `false` if either
 /// file is not a regular file. If either file does not exist, an error with
@@ -524,6 +539,27 @@ where
     fs::rename(dest_tmp.as_path(), dest)?;
 
     sync_path(dest.parent().unwrap_or_else(|| Path::new("/")))?;
+    Ok(())
+}
+
+#[cfg(target_family = "unix")]
+/// Write to file `dest` using `action` without a temp file or `fsync`.
+/// This is intended for batch writing multiple files with as little
+/// overhead as possible.
+///
+/// If the file already exists, it will be deleted first. The file will
+/// be opened in exclusive mode and `action` executed with the BufWriter
+/// to that file.
+///
+/// The function will fail if `dest` exists but is a directory.
+pub fn write_to_file_simple<P, F>(dest: P, action: F) -> io::Result<()>
+where
+    P: AsRef<Path>,
+    F: FnOnce(&mut io::BufWriter<&std::fs::File>) -> io::Result<()>,
+{
+    let file = create_file_exclusive_and_open(&dest)?;
+    let mut w = io::BufWriter::new(&file);
+    action(&mut w)?;
     Ok(())
 }
 
