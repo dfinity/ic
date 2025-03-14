@@ -10552,6 +10552,7 @@ dependencies = [
  "maplit",
  "num-traits",
  "pocket-ic",
+ "pretty_assertions",
  "prost 0.13.4",
  "registry-canister",
  "rust_decimal",

@@ -3316,3 +3316,58 @@ pub mod sns {
         }
     }
 }
+
+pub mod universal_canister {
+    use ic_test_utilities::universal_canister::wasm;
+
+    use super::*;
+
+    pub fn init_payload(additional_pages: u32) -> Vec<u8> {
+        wasm().stable_grow(additional_pages).build()
+    }
+
+    pub async fn stable_write(
+        pocket_ic: &PocketIc,
+        universal_canister_id: PrincipalId,
+        offset: u32,
+        data: &[u8],
+    ) -> Result<(), String> {
+        let payload = wasm().stable_write(offset, data).reply().build();
+
+        pocket_ic
+            .update_call(
+                universal_canister_id.into(),
+                Principal::anonymous(),
+                "update",
+                payload,
+            )
+            .await
+            .map_err(|err| err.to_string())
+            .map(|_| ())
+    }
+
+    pub fn stable_read_payload(offset: u32, size: u32) -> Vec<u8> {
+        wasm()
+            .stable_read(offset, size)
+            .reply_data_append()
+            .reply()
+            .build()
+    }
+
+    pub async fn stable_read(
+        pocket_ic: &PocketIc,
+        universal_canister_id: PrincipalId,
+        offset: u32,
+        size: u32,
+    ) -> Result<Vec<u8>, String> {
+        pocket_ic
+            .query_call(
+                universal_canister_id.into(),
+                Principal::anonymous(),
+                "query",
+                stable_read_payload(offset, size),
+            )
+            .await
+            .map_err(|err| err.to_string())
+    }
+}
