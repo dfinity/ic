@@ -74,13 +74,13 @@ STACK_DEPS = [
 ]
 
 disable_hermetic_cc_binary(
-    name = "ic-ref-test-wrapped",
+    name = "ic-ref-test",
     binary = ":ic-ref-test",
     visibility = ["//visibility:public"],
 )
 
 haskell_binary(
-    name = "ic-ref-test",
+    name = "ic-ref-test-inner",
     srcs = [
         "bin/ic-ref-test.hs",
     ],
