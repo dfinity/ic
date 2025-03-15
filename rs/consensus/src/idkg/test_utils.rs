@@ -130,10 +130,14 @@ pub fn fake_signature_request_context(
     key_id: MasterPublicKeyId,
     pseudo_random_id: [u8; 32],
 ) -> SignWithThresholdContext {
+    let request = RequestBuilder::new().build();
     SignWithThresholdContext {
-        request: RequestBuilder::new().build(),
         args: fake_signature_request_args(key_id, Height::from(0)),
-        derivation_path: Arc::new(vec![]),
+        extended_derivation_path: Arc::new(ExtendedDerivationPath {
+            caller: request.sender.into(),
+            derivation_path: vec![],
+        }),
+        request,
         batch_time: UNIX_EPOCH,
         pseudo_random_id,
         matched_pre_signature: None,
@@ -147,10 +151,14 @@ pub fn fake_signature_request_context_with_pre_sig(
     pre_signature: Option<PreSigId>,
 ) -> (CallbackId, SignWithThresholdContext) {
     let height = Height::from(1);
+    let request = RequestBuilder::new().build();
     let context = SignWithThresholdContext {
-        request: RequestBuilder::new().build(),
         args: fake_signature_request_args(key_id.into(), height),
-        derivation_path: Arc::new(vec![]),
+        extended_derivation_path: Arc::new(ExtendedDerivationPath {
+            caller: request.sender.into(),
+            derivation_path: vec![],
+        }),
+        request,
         batch_time: UNIX_EPOCH,
         pseudo_random_id: [request_id.callback_id.get() as u8; 32],
         matched_pre_signature: pre_signature.map(|pid| (pid, height)),
@@ -165,10 +173,14 @@ pub fn fake_signature_request_context_from_id(
     request_id: RequestId,
 ) -> (CallbackId, SignWithThresholdContext) {
     let height = request_id.height;
+    let request = RequestBuilder::new().build();
     let context = SignWithThresholdContext {
-        request: RequestBuilder::new().build(),
         args: fake_signature_request_args(key_id, height),
-        derivation_path: Arc::new(vec![]),
+        extended_derivation_path: Arc::new(ExtendedDerivationPath {
+            caller: request.sender.into(),
+            derivation_path: vec![],
+        }),
+        request,
         batch_time: UNIX_EPOCH,
         pseudo_random_id: [request_id.callback_id.get() as u8; 32],
         matched_pre_signature: Some((pre_sig_id, height)),
@@ -313,7 +325,7 @@ impl From<&ThresholdEcdsaSigInputs> for TestSigInputs {
             idkg_transcripts.insert(TranscriptRef::new(height, t.transcript_id), t);
         }
         let sig_inputs_ref = ThresholdEcdsaSigInputsRef {
-            derivation_path: inputs.derivation_path().clone(),
+            derivation_path: Arc::new(inputs.derivation_path().clone()),
             hashed_message: inputs.hashed_message().try_into().unwrap(),
             nonce: *inputs.nonce(),
             presig_quadruple_ref: PreSignatureQuadrupleRef {
@@ -351,7 +363,7 @@ impl From<&ThresholdSchnorrSigInputs> for TestSigInputs {
             idkg_transcripts.insert(TranscriptRef::new(height, t.transcript_id), t);
         }
         let sig_inputs_ref = ThresholdSchnorrSigInputsRef {
-            derivation_path: inputs.derivation_path().clone(),
+            derivation_path: Arc::new(inputs.derivation_path().clone()),
             message: Arc::new(inputs.message().into()),
             nonce: *inputs.nonce(),
             presig_transcript_ref: PreSignatureTranscriptRef {
@@ -1292,10 +1304,10 @@ pub(crate) fn create_ecdsa_sig_inputs_with_args(
         key_unmasked_ref,
     );
     let sig_inputs_ref = ThresholdEcdsaSigInputsRef::new(
-        ExtendedDerivationPath {
+        Arc::new(ExtendedDerivationPath {
             caller: PrincipalId::try_from(&vec![caller]).unwrap(),
             derivation_path: vec![],
-        },
+        }),
         [0u8; 32],
         Randomness::from([0_u8; 32]),
         presig_quadruple_ref,
@@ -1354,10 +1366,10 @@ pub(crate) fn create_schnorr_sig_inputs_with_args(
     let presig_transcript_ref =
         PreSignatureTranscriptRef::new(key_id.clone(), blinder_unmasked_ref, key_unmasked_ref);
     let sig_inputs_ref = ThresholdSchnorrSigInputsRef::new(
-        ExtendedDerivationPath {
+        Arc::new(ExtendedDerivationPath {
             caller: PrincipalId::try_from(&vec![caller]).unwrap(),
             derivation_path: vec![],
-        },
+        }),
         Arc::new(vec![0; 128]),
         Randomness::from([0_u8; 32]),
         presig_transcript_ref,

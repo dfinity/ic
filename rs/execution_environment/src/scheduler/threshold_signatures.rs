@@ -111,7 +111,7 @@ mod tests {
         EcdsaArguments, SchnorrArguments, SignWithThresholdContext, ThresholdArguments,
     };
     use ic_test_utilities_types::messages::RequestBuilder;
-    use ic_types::{messages::CallbackId, time::UNIX_EPOCH};
+    use ic_types::{crypto::ExtendedDerivationPath, messages::CallbackId, time::UNIX_EPOCH};
 
     fn ecdsa_key_id(i: u8) -> MasterPublicKeyId {
         MasterPublicKeyId::Ecdsa(EcdsaKeyId {
@@ -145,11 +145,15 @@ mod tests {
             }),
             MasterPublicKeyId::VetKd(_) => panic!("vetKD does not have pre-signatures"),
         };
+        let request = RequestBuilder::new().build();
         let context = SignWithThresholdContext {
-            request: RequestBuilder::new().build(),
             args,
             pseudo_random_id: [id as u8; 32],
-            derivation_path: Arc::new(vec![]),
+            extended_derivation_path: Arc::new(ExtendedDerivationPath {
+                caller: request.sender.into(),
+                derivation_path: vec![],
+            }),
+            request,
             batch_time: UNIX_EPOCH,
             matched_pre_signature: matched_pre_signature.map(|(id, h)| (PreSigId(id), h)),
             nonce: None,
