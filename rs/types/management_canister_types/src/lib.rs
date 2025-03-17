@@ -3909,7 +3909,7 @@ pub struct ReadCanisterSnapshotDataResponse {
 #[derive(Clone, Debug, Deserialize, CandidType, Serialize)]
 pub struct UploadCanisterSnapshotMetadataArgs {
     pub canister_id: PrincipalId,
-    pub replace_snapshot: Option<Vec<u8>>,
+    pub replace_snapshot: Option<ByteBuf>,
     pub wasm_module_size: u64,
     pub exported_globals: Vec<Global>,
     pub wasm_memory_size: u64,
@@ -3936,7 +3936,7 @@ impl UploadCanisterSnapshotMetadataArgs {
     ) -> Self {
         Self {
             canister_id: canister_id.get(),
-            replace_snapshot,
+            replace_snapshot: replace_snapshot.map(ByteBuf::from),
             wasm_module_size,
             exported_globals,
             wasm_memory_size,
