@@ -3724,7 +3724,7 @@ pub enum GlobalTimer {
 
 /// The possible values of a global variable.
 /// An inner type of [`ReadCanisterSnapshotMetadataResponse`].
-#[derive(Copy, Clone, PartialEq, Debug, CandidType, Deserialize, Serialize)]
+#[derive(Copy, Clone, PartialEq, Debug, EnumIter, CandidType, Deserialize, Serialize)]
 pub enum Global {
     I32(i32),
     I64(i64),
