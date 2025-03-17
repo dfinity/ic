@@ -103,7 +103,7 @@ fn test_time_warp() {
         // disbursal.
         let duration_since_start_s = get_timestamp_s() - start_timestamp_s;
         println!("duration_since_start_s = {duration_since_start_s}");
-        let mut delta_s = (TWELVE_MONTHS_SECONDS - duration_since_start_s - 100) as i64;
+        let delta_s = (TWELVE_MONTHS_SECONDS - duration_since_start_s - 100) as i64;
         () = nns_canisters
             .governance
             .update_("set_time_warp", candid_one, TimeWarp { delta_s })
@@ -150,7 +150,7 @@ fn test_time_warp() {
         }
 
         // Advance time slightly such that the neuron would be considered dissolved.
-        delta_s += 1000;
+        let delta_s = (TWELVE_MONTHS_SECONDS + 1000) as i64;
         () = nns_canisters
             .governance
             .update_("set_time_warp", candid_one, TimeWarp { delta_s })
