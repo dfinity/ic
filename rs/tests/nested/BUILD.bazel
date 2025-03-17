@@ -59,6 +59,7 @@ rust_binary(
     deps = DEPENDENCIES + [":nested"],
 )
 
+# Checks if current commit is "upgradeable" and can be used as an upgrade image
 system_test_nns(
     name = "hostos_upgrade_smoke_test",
     env = MAINNET_ENV,
@@ -74,6 +75,7 @@ system_test_nns(
     deps = RUNNER_DEPENDENCIES,
 )
 
+# Checks if "latest_release" in mainnet-icos-revisions.json can successfully upgrade to current commit	
 system_test_nns(
     name = "hostos_upgrade_from_latest_release_to_current",
     env = MAINNET_ENV,
@@ -91,8 +93,11 @@ system_test_nns(
     deps = RUNNER_DEPENDENCIES,
 )
 
+# Used to manually check if can upgrade
+# *from* an arbitrary mainnet version (mainnet_setupos_disk_image target)
+# *to* an arbitrary mainnet version ("latest_release" in mainnet-icos-revisions.json)
 system_test_nns(
-    name = "hostos_upgrade_from_current_to_latest_release",
+    name = "hostos_upgrade_from_mainnet_to_mainnet",
     env = MAINNET_ENV,
     flaky = True,
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
