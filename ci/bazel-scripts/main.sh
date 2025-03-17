@@ -7,7 +7,7 @@
 set -eufo pipefail
 
 # default behavior is to build targets specified in BAZEL_TARGETS and not upload to s3
-release_build="false"
+release_build="true"
 
 # List of "protected" branches, i.e. branches (not necessarily "protected" in the GitHub sense) where we need
 # the full build to occur (including versioning
@@ -93,5 +93,16 @@ if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
     echo "BuildBuddy [$invocation]($(<"$url_out"))" >>"$GITHUB_STEP_SUMMARY"
 fi
 rm "$url_out"
+
+if [[ $release_build == true ]]; then
+    for tgt in //publish/canisters:upload //publish/binaries:upload; do
+        bazel \
+            --output_base=/var/tmp/bazel-output \
+            run \
+            --check_up_to_date \
+            "$tgt" \
+            --color=yes
+    done
+fi
 
 exit "$bazel_exitcode"

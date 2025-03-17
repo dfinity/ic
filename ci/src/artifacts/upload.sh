@@ -2,7 +2,6 @@
 
 set -eEuo pipefail
 
-
 if [ -n "${UPLOADABLES:-}" ]; then
     for foo in $UPLOADABLES; do
         #echo will upload: "$foo"

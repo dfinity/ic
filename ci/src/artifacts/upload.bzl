@@ -12,12 +12,12 @@ def upload_artifacts(name, inputs, remote_subdir, visibility = ["//visibility:pu
       **kwargs: TODO
     """
 
-    input_locations = [ "$(execpaths {})".format(ipt) for ipt in inputs ]
+    input_locations = ["$(execpaths {})".format(ipt) for ipt in inputs]
 
     native.sh_binary(
         name = name,
-        testonly = True, # TODO
-        srcs = [ "//ci/src/artifacts:upload.sh" ],
+        testonly = True,  # TODO
+        srcs = ["//ci/src/artifacts:upload.sh"],
         env = {
             "RCLONE": "$(location @rclone//:rclone)",
             "UPLOADABLES": " ".join(input_locations),
