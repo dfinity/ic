@@ -160,8 +160,6 @@ pub async fn sync_from_the_tip(
 
     // The starting point of the synchronization process is either 0 if the database is empty or the highest stored block index plus one.
     // The trailing parent hash is either `None` if the database is empty or the block hash of the block with the highest block index in storage.
-    // FIXME: Could we cache the block with the highest block index? It seems we are reading this from the DB each round.
-    //  We could also cache the tip from the previous call, and in case it hasn't changed, skip the rest of `sync_from_the_tip`.
     let sync_range = storage_client.get_block_with_highest_block_idx()?.map_or(
         SyncRange::new(0, tip_block_index, ByteBuf::from(tip_block_hash), None),
         |block| {
