@@ -33,14 +33,13 @@ pub fn config(env: TestEnv) {
             .unwrap();
 
     // Setup "testnet"
-    let mut ic = InternetComputer::new()
+    let ic = InternetComputer::new()
         .add_fast_single_node_subnet(SubnetType::System)
         .with_api_boundary_nodes(1)
         .with_node_provider(principal)
         .with_node_operator(principal)
-        .with_mainnet_config();
-
-    ic.setup_and_start(&env)
+        .with_mainnet_config()
+        .setup_and_start(&env)
         .expect("failed to setup IC under test");
 
     install_nns_and_check_progress(env.topology_snapshot());
