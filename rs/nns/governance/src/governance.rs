@@ -66,6 +66,7 @@ use crate::{
         },
     },
     proposals::{call_canister::CallCanister, sum_weighted_voting_power},
+    voting_power_snapshots::VotingPowerSnapshots,
 };
 use async_trait::async_trait;
 use candid::{Decode, Encode};
@@ -1452,6 +1453,9 @@ pub struct Governance {
 
     /// Current neurons available to create
     neuron_rate_limits: NeuronRateLimits,
+
+    /// Snapshots of the voting power over a recent period.
+    pub voting_power_snapshots: VotingPowerSnapshots,
 }
 
 pub fn governance_minting_account() -> AccountIdentifier {
@@ -1622,6 +1626,7 @@ impl Governance {
             neuron_data_validator: NeuronDataValidator::new(),
             minting_node_provider_rewards: false,
             neuron_rate_limits: NeuronRateLimits::default(),
+            voting_power_snapshots: VotingPowerSnapshots::default(),
         }
     }
 
@@ -1667,9 +1672,15 @@ impl Governance {
         // memory, while others are stored in heap. "inactive" Neurons live in stable memory, while
         // the rest live in heap.
 
-        // Note: We do not carry over the RNG seed in new governance, only in restored governance.
-        let (neurons, topic_followee_index, heap_governance_proto, _maybe_rng_seed) =
-            split_governance_proto(governance_proto);
+        // Note: We do not carry over the RNG seed and voting power snapshots in new governance,
+        // only in restored governance.
+        let (
+            neurons,
+            topic_followee_index,
+            heap_governance_proto,
+            _maybe_rng_seed,
+            _voting_power_snapshots,
+        ) = split_governance_proto(governance_proto);
 
         assert!(
             topic_followee_index.is_empty(),
@@ -1696,6 +1707,7 @@ impl Governance {
             neuron_data_validator: NeuronDataValidator::new(),
             minting_node_provider_rewards: false,
             neuron_rate_limits: NeuronRateLimits::default(),
+            voting_power_snapshots: VotingPowerSnapshots::default(),
         }
     }
 
@@ -1707,8 +1719,13 @@ impl Governance {
         cmc: Arc<dyn CMC>,
         mut randomness: Box<dyn RandomnessGenerator>,
     ) -> Self {
-        let (heap_neurons, topic_followee_map, heap_governance_proto, maybe_rng_seed) =
-            split_governance_proto(governance_proto);
+        let (
+            heap_neurons,
+            topic_followee_map,
+            heap_governance_proto,
+            maybe_rng_seed,
+            voting_power_snapshots,
+        ) = split_governance_proto(governance_proto);
 
         // Carry over the previous rng seed to avoid race conditions in handling queued ingress
         // messages that may require a functioning RNG.
@@ -1729,6 +1746,7 @@ impl Governance {
             neuron_data_validator: NeuronDataValidator::new(),
             minting_node_provider_rewards: false,
             neuron_rate_limits: NeuronRateLimits::default(),
+            voting_power_snapshots: VotingPowerSnapshots::from(voting_power_snapshots),
         }
     }
 
@@ -1739,11 +1757,13 @@ impl Governance {
         let (neurons, heap_topic_followee_index) = neuron_store.take();
         let heap_governance_proto = std::mem::take(&mut self.heap_data);
         let rng_seed = self.randomness.get_rng_seed();
+        let voting_power_snapshots = std::mem::take(&mut self.voting_power_snapshots).into();
         reassemble_governance_proto(
             neurons,
             heap_topic_followee_index,
             heap_governance_proto,
             rng_seed,
+            voting_power_snapshots,
         )
     }
 
@@ -1752,11 +1772,13 @@ impl Governance {
         let heap_topic_followee_index = self.neuron_store.clone_topic_followee_index();
         let heap_governance_proto = self.heap_data.clone();
         let rng_seed = self.randomness.get_rng_seed();
+        let voting_power_snapshots = self.voting_power_snapshots.clone().into();
         reassemble_governance_proto(
             neurons,
             heap_topic_followee_index,
             heap_governance_proto,
             rng_seed,
+            voting_power_snapshots,
         )
     }
 
