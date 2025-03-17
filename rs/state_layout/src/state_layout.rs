@@ -1665,6 +1665,12 @@ where
         self.mark_files_readonly_and_sync(thread_pool)?;
         self.remove_unverified_checkpoint_marker()
     }
+    pub fn vmemory_snapshot(
+        &self,
+        snapshot_id: &SnapshotId,
+    ) -> Result<PageMapLayout<Permissions>, LayoutError> {
+        Ok(self.snapshot(snapshot_id)?.vmemory_0())
+    }
 }
 
 impl<P> CheckpointLayout<P>
@@ -1698,13 +1704,37 @@ pub struct PageMapLayout<Permissions: AccessPolicy> {
     _checkpoint: CheckpointLayout<Permissions>,
 }
 
-pub struct PageMapLayoutW<'a, Permissions: WritePolicy> {
+pub struct PageMapLayoutRef<'a, Permissions: AccessPolicy> {
     root: PathBuf,
     name_stem: String,
     permissions_tag: PhantomData<Permissions>,
     _checkpoint: &'a CheckpointLayout<Permissions>,
 }
 
+impl<P: AccessPolicy> PageMapLayout<P> {
+    fn as_ref(&self) -> PageMapLayoutRef<P> {
+        PageMapLayoutRef {
+            root: self.root.clone(),
+            name_stem: self.name_stem.clone(),
+            permissions_tag: self.permissions_tag,
+            _checkpoint: &self._checkpoint,
+        }
+    }
+}
+
+impl<'a, P: AccessPolicy> PageMapLayoutRef<'a, P>
+where
+    P: ReadPolicy,
+{
+    pub fn as_owned(&self) -> PageMapLayout<P> {
+        PageMapLayout {
+            root: self.root.clone(),
+            name_stem: self.name_stem.clone(),
+            permissions_tag: self.permissions_tag,
+            _checkpoint: self._checkpoint.clone(),
+        }
+    }
+}
 impl<P> PageMapLayout<P>
 where
     P: ReadPolicy + WritePolicy,
@@ -1732,7 +1762,7 @@ where
     }
 }
 
-impl<P> PageMapLayout<P>
+impl<'a, P> PageMapLayoutRef<'a, P>
 where
     P: ReadPolicy,
 {
@@ -1774,30 +1804,30 @@ where
     /// Helper function to copy the files from `PageMapsLayout` `src` to another `PageMapLayout` `dst`.
     /// This is used in the context of canister snapshots, where files need to be copied from a canister
     /// to a snaphsot or vice versa.
-    pub fn copy_or_hardlink_files<RW>(
+    pub fn copy_or_hardlink_files_to<'b, RW>(
+        &self,
+        dst: &PageMapLayoutRef<'b, RW>,
         log: &ReplicaLogger,
-        src: &PageMapLayout<P>,
-        dst: &PageMapLayout<RW>,
     ) -> Result<(), LayoutError>
     where
         RW: ReadPolicy + WritePolicy,
     {
-        debug_assert_eq!(src.name_stem, dst.name_stem);
+        debug_assert_eq!(self.name_stem, dst.name_stem);
 
-        if src.base().exists() {
-            copy_file_and_set_permissions(log, &src.base(), &dst.base()).map_err(|err| {
+        if self.base().exists() {
+            copy_file_and_set_permissions(log, &self.base(), &dst.base()).map_err(|err| {
                 LayoutError::IoError {
                     path: dst.base(),
                     message: format!(
                         "Cannot copy or hardlink file {:?} to {:?}",
-                        src.base(),
+                        self.base(),
                         dst.base()
                     ),
                     io_err: err,
                 }
             })?;
         }
-        for overlay in src.existing_overlays()? {
+        for overlay in self.existing_overlays()? {
             let dst_path = dst.root.join(overlay.file_name().unwrap());
             copy_file_and_set_permissions(log, &overlay, &dst_path).map_err(|err| {
                 LayoutError::IoError {
@@ -1820,7 +1850,43 @@ where
     }
 }
 
-impl<Permissions> StorageLayoutW for PageMapLayout<Permissions>
+impl<P> PageMapLayout<P>
+where
+    P: ReadPolicy,
+{
+    /// List of overlay files on disk.
+    ///
+    /// All overlay files have the format {numbers}{name_stem}.overlay`, where `name_stem` distinguises
+    /// between wasm memory, stable memory etc, and the numbers impose an ordering of the
+    /// overlay files, with later alphabetically denoting a higher-priority overlay. The numbers are
+    /// typically the height when the overlay was written and a shard number.
+    ///
+    /// Note that this function returns a `LayoutError`. There is a function implementing the `StorageLayoutR` trait
+    /// with the same name, return a `Box<dyn Error>`. Calling `existing_overlays()` on a `PageMapLayout` will call
+    /// this function, calling it on a `dyn StorageLayoutR` will call the trait function. This simplifies error propagation.
+    pub fn existing_overlays(&self) -> Result<Vec<PathBuf>, LayoutError> {
+        self.as_ref().existing_overlays()
+    }
+
+    /// Helper function to copy the files from `PageMapsLayout` `src` to another `PageMapLayout` `dst`.
+    /// This is used in the context of canister snapshots, where files need to be copied from a canister
+    /// to a snaphsot or vice versa.
+    pub fn copy_or_hardlink_files_to<RW>(
+        &self,
+        dst: &PageMapLayout<RW>,
+        log: &ReplicaLogger,
+    ) -> Result<(), LayoutError>
+    where
+        RW: ReadPolicy + WritePolicy,
+    {
+        self.as_ref().copy_or_hardlink_files_to(&dst.as_ref(), log)
+    }
+    pub fn exists(&self) -> Result<bool, LayoutError> {
+        self.as_ref().exists()
+    }
+}
+
+impl<'a, Permissions> StorageLayoutW for PageMapLayoutRef<'a, Permissions>
 where
     Permissions: WritePolicy,
 {
@@ -1835,11 +1901,95 @@ where
     }
 }
 
+impl<Permissions> StorageLayoutW for PageMapLayout<Permissions>
+where
+    Permissions: WritePolicy,
+{
+    /// Overlay path encoding, consistent with `overlay_height()` and `overlay_shard()`
+    fn overlay(&self, height: Height, shard: Shard) -> PathBuf {
+        (&self.as_ref() as &dyn StorageLayoutW).overlay(height, shard)
+    }
+}
+
+impl<'a, P> StorageLayoutR for PageMapLayoutRef<'a, P>
+where
+    P: ReadPolicy,
+{
+    /// The path to the base file.
+    fn base(&self) -> PathBuf {
+        self.root.join(format!("{}.bin", self.name_stem))
+    }
+
+    /// List of overlay files on disk.
+    fn existing_overlays(&self) -> StorageResult<Vec<PathBuf>> {
+        self.existing_overlays()
+            .map_err(|err| Box::new(err) as Box<dyn std::error::Error + Send>)
+    }
+
+    /// Get overlay height as encoded in the file name.
+    fn overlay_height(&self, overlay: &Path) -> StorageResult<Height> {
+        let file_name = overlay
+            .file_name()
+            .ok_or(Box::new(LayoutError::CorruptedLayout {
+                path: overlay.to_path_buf(),
+                message: "No file name".to_owned(),
+            }) as Box<dyn std::error::Error + Send>)?
+            .to_str()
+            .ok_or(Box::new(LayoutError::CorruptedLayout {
+                path: overlay.to_path_buf(),
+                message: "Cannot convert file name to string".to_owned(),
+            }) as Box<dyn std::error::Error + Send>)?;
+        let hex = file_name
+            .split('_')
+            .next()
+            .ok_or(Box::new(LayoutError::CorruptedLayout {
+                path: overlay.to_path_buf(),
+                message: "Cannot parse file name".to_owned(),
+            }) as Box<dyn std::error::Error + Send>)?;
+        u64::from_str_radix(hex, 16)
+            .map(Height::new)
+            .map_err(|err| {
+                Box::new(LayoutError::CorruptedLayout {
+                    path: overlay.to_path_buf(),
+                    message: format!("failed to get height for overlay {}: {}", hex, err),
+                }) as Box<dyn std::error::Error + Send>
+            })
+    }
+
+    /// Get overlay shard as encoded in the file name.
+    fn overlay_shard(&self, overlay: &Path) -> StorageResult<Shard> {
+        let file_name = overlay
+            .file_name()
+            .ok_or(Box::new(LayoutError::CorruptedLayout {
+                path: overlay.to_path_buf(),
+                message: "No file name".to_owned(),
+            }) as Box<dyn std::error::Error + Send>)?
+            .to_str()
+            .ok_or(Box::new(LayoutError::CorruptedLayout {
+                path: overlay.to_path_buf(),
+                message: "Cannot convert file name to string".to_owned(),
+            }) as Box<dyn std::error::Error + Send>)?;
+        let hex = file_name
+            .split('_')
+            .nth(1)
+            .ok_or(Box::new(LayoutError::CorruptedLayout {
+                path: overlay.to_path_buf(),
+                message: "Cannot parse file name".to_owned(),
+            }) as Box<dyn std::error::Error + Send>)?;
+        u64::from_str_radix(hex, 16).map(Shard::new).map_err(|err| {
+            Box::new(LayoutError::CorruptedLayout {
+                path: overlay.to_path_buf(),
+                message: format!("failed to get shard for overlay {}: {}", hex, err),
+            }) as Box<dyn std::error::Error + Send>
+        })
+    }
+}
+
 impl<P> StorageLayoutR for PageMapLayout<P>
 where
     P: ReadPolicy,
 {
-    // The path to the base file.
+    /// The path to the base file.
     fn base(&self) -> PathBuf {
         self.root.join(format!("{}.bin", self.name_stem))
     }
@@ -1948,7 +2098,7 @@ where
     }
 
     /// List all PageMaps with at least one file.
-    pub fn all_existing_pagemaps(&self) -> Result<Vec<PageMapLayout<Permissions>>, LayoutError> {
+    fn all_existing_pagemaps(&self) -> Result<Vec<PageMapLayout<Permissions>>, LayoutError> {
         let mut result = Vec::new();
         for pagemap in [
             self.vmemory_0(),
@@ -2029,7 +2179,7 @@ where
     }
 
     /// List all PageMaps with at least one file.
-    pub fn all_existing_pagemaps(&self) -> Result<Vec<PageMapLayout<Permissions>>, LayoutError> {
+    fn all_existing_pagemaps(&self) -> Result<Vec<PageMapLayout<Permissions>>, LayoutError> {
         let mut result = Vec::new();
         for pagemap in [
             self.vmemory_0(),

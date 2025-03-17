@@ -4,6 +4,7 @@
 use std::path::PathBuf;
 
 use crate::execution::common::log_dirty_pages;
+use ic_replicated_state::MessageMemoryUsage;
 use ic_base_types::{CanisterId, NumBytes, PrincipalId};
 use ic_config::flag_status::FlagStatus;
 use ic_embedders::wasm_executor::{CanisterStateChanges, ExecutionStateChanges};

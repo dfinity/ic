@@ -27,7 +27,7 @@ use ic_replicated_state::{
 };
 use ic_state_layout::{
     error::LayoutError, CanisterSnapshotBits, CanisterStateBits, CheckpointLayout,
-    ExecutionStateBits, PageMapLayout, ReadOnly, RwPolicy, StateLayout, TipHandler, WasmFile,
+    ExecutionStateBits,  ReadOnly, RwPolicy, StateLayout, TipHandler, WasmFile,
 };
 use ic_types::{malicious_flags::MaliciousFlags, CanisterId, Height, SnapshotId};
 use ic_utils::thread::parallel_map;
@@ -463,21 +463,15 @@ fn backup<T>(
     let canister_layout = layout.canister(&canister_id)?;
     let snapshot_layout = layout.snapshot(&snapshot_id)?;
 
-    PageMapLayout::copy_or_hardlink_files(
-        log,
-        &canister_layout.vmemory_0(),
-        &snapshot_layout.vmemory_0(),
-    )?;
-    PageMapLayout::copy_or_hardlink_files(
-        log,
-        &canister_layout.stable_memory(),
-        &snapshot_layout.stable_memory(),
-    )?;
-    PageMapLayout::copy_or_hardlink_files(
-        log,
-        &canister_layout.wasm_chunk_store(),
-        &snapshot_layout.wasm_chunk_store(),
-    )?;
+    canister_layout
+        .vmemory_0()
+        .copy_or_hardlink_files_to(&snapshot_layout.vmemory_0(), log)?;
+    canister_layout
+        .stable_memory()
+        .copy_or_hardlink_files_to(&snapshot_layout.stable_memory(), log)?;
+    canister_layout
+        .wasm_chunk_store()
+        .copy_or_hardlink_files_to(&snapshot_layout.wasm_chunk_store(), log)?;
 
     WasmFile::hardlink_file(
         &layout.wasm(&canister_id)?,
@@ -501,23 +495,17 @@ fn restore<T>(
     let snapshot_layout = layout.snapshot(&snapshot_id)?;
 
     canister_layout.vmemory_0().delete_files()?;
-    PageMapLayout::copy_or_hardlink_files(
-        log,
-        &snapshot_layout.vmemory_0(),
-        &canister_layout.vmemory_0(),
-    )?;
+    snapshot_layout
+        .vmemory_0()
+        .copy_or_hardlink_files_to(&canister_layout.vmemory_0(), log)?;
     canister_layout.stable_memory().delete_files()?;
-    PageMapLayout::copy_or_hardlink_files(
-        log,
-        &snapshot_layout.stable_memory(),
-        &canister_layout.stable_memory(),
-    )?;
+    snapshot_layout
+        .stable_memory()
+        .copy_or_hardlink_files_to(&canister_layout.stable_memory(), log)?;
     canister_layout.wasm_chunk_store().delete_files()?;
-    PageMapLayout::copy_or_hardlink_files(
-        log,
-        &snapshot_layout.wasm_chunk_store(),
-        &canister_layout.wasm_chunk_store(),
-    )?;
+    snapshot_layout
+        .wasm_chunk_store()
+        .copy_or_hardlink_files_to(&canister_layout.wasm_chunk_store(), log)?;
 
     layout.wasm(&canister_id)?.try_delete_file()?;
     WasmFile::hardlink_file(
