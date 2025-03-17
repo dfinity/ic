@@ -170,7 +170,6 @@ pub async fn validate_network<C: CallCanisters>(
 
     match get_latest_sns_version_pretty(agent).await {
         Ok(response) => {
-            println!("{:?}", response);
             if response
                 .iter()
                 .any(|(_canister, wasm_hash)| wasm_hash.is_empty())
