@@ -99,7 +99,7 @@ system_test_nns(
     test_driver_target = ":upgrade_test_bin",
     test_timeout = "eternal",
     uses_guestos_dev = True,
-    uses_hostos_mainnet = True,
+    uses_hostos_mainnet_update_img = True,
     uses_setupos_dev = True,
     runtime_deps = GUESTOS_RUNTIME_DEPS,
     deps = RUNNER_DEPENDENCIES,

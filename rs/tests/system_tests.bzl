@@ -184,7 +184,7 @@ def system_test(
         uses_setupos_dev = False,
         uses_setupos_mainnet = False,
         uses_hostos_dev_test = False,
-        uses_hostos_mainnet = False,
+        uses_hostos_mainnet_update_img = False,
         uses_boundary_guestos = False,
         env = {},
         env_inherit = [],
@@ -217,7 +217,7 @@ def system_test(
       uses_guestos_dev_test: the test uses //ic-os/guestos/envs/dev:update-img-test (will be also automatically added as dependency).
       uses_setupos_dev: the test uses ic-os/setupos/envs/dev (will be also automatically added as dependency).
       uses_hostos_dev_test: the test uses ic-os/hostos/envs/dev:update-img-test (will be also automatically added as dependency).
-      uses_hostos_mainnet: the test uses mainnet HostOS image version marked in mainnet-icos-revisions.json.
+      uses_hostos_mainnet_update_img: the test uses mainnet HostOS update image version marked in mainnet-icos-revisions.json.
       uses_setupos_mainnet: the test uses mainnet SetupOS image version marked in mainnet-icos-revisions.json.
       uses_boundary_guestos: the test uses ic-os/boundary-guestos/envs/dev:disk-img (will be also automatically added as dependency).
       env: environment variables to set in the test (subject to Make variable expansion)
@@ -270,7 +270,7 @@ def system_test(
     if uses_hostos_dev_test:
         icos_images["ENV_DEPS__HOSTOS_UPDATE_IMG_TEST"] = "//ic-os/hostos/envs/dev:update-img-test.tar.zst"
 
-    if uses_hostos_mainnet:
+    if uses_hostos_mainnet_update_img:
         mainnet_hostos_version = mainnet_versions["hostos"]["latest_release"]["version"]
         env["ENV_DEPS__HOSTOS_UPDATE_IMG_VERSION"] = mainnet_hostos_version
         env["ENV_DEPS__HOSTOS_UPDATE_IMG_URL"] = base_download_url(mainnet_hostos_version, "host-os", True, False) + "update-img.tar.zst"
