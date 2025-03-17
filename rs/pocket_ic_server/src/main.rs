@@ -366,6 +366,8 @@ async fn bump_last_request_timestamp(
         *min_alive_until = alive_until;
     }
     drop(min_alive_until);
+    // Only mark the pending request as completed (by subtracting the counter)
+    // *after* updating TTL!
     pending_requests.fetch_sub(1, Ordering::Relaxed);
     resp
 }
