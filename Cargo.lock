@@ -11596,6 +11596,7 @@ dependencies = [
  "ic-registry-keys",
  "ic-registry-transport-protobuf-generator",
  "ic-test-utilities-compare-dirs",
+ "pretty_assertions",
  "prost 0.13.4",
  "serde",
  "tempfile",
