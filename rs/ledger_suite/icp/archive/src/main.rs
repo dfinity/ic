@@ -221,6 +221,7 @@ fn get_block(block_height: BlockIndex) -> BlockRes {
 
 #[export_name = "canister_query get_block_pb"]
 fn get_block_() {
+    ic_cdk::setup();
     let arg: BlockIndex =
         from_proto_bytes(arg_data_raw()).expect("failed to decode get_block_pb argument");
     let res = to_proto_bytes(get_block(arg)).expect("failed to encode get_block_pb response");
@@ -260,6 +261,7 @@ fn append_blocks_() {
 /// 100.
 #[export_name = "canister_query iter_blocks_pb"]
 fn iter_blocks_() {
+    ic_cdk::setup();
     let IterBlocksArgs { start, length } =
         from_proto_bytes(arg_data_raw()).expect("failed to decode iter_blocks_pb argument");
     let length = length.min(icp_ledger::max_blocks_per_request(&PrincipalId::from(
@@ -281,6 +283,7 @@ fn iter_blocks_() {
 /// range stored in the Node the result is an error.
 #[export_name = "canister_query get_blocks_pb"]
 fn get_blocks_() {
+    ic_cdk::setup();
     let GetBlocksArgs { start, length } =
         from_proto_bytes(arg_data_raw()).expect("failed to decode get_blocks_pb argument");
     let from_offset = block_height_offset();
