@@ -1,14 +1,13 @@
 use candid::{candid_method, Decode, Nat, Principal};
-use dfn_candid::candid_one;
 #[cfg(feature = "notify-method")]
 use dfn_candid::CandidOne;
-use dfn_core::endpoint::reject_on_decode_error::over_async_may_reject;
 #[cfg(feature = "notify-method")]
 use dfn_core::BytesS;
 #[cfg(feature = "notify-method")]
 use dfn_protobuf::protobuf;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_canister_log::{LogEntry, Sink};
+use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_cdk::api::{
     call::{arg_data_raw, reply_raw},
     caller, data_certificate, instruction_counter, print, set_certified_data, time, trap,
@@ -1007,11 +1006,9 @@ fn send_() {
 #[candid_method(update)]
 async fn send_dfx(arg: SendArgs) -> BlockIndex {
     panic_if_not_ready();
-    transfer_candid(TransferArgs::from(arg))
-        .await
-        .unwrap_or_else(|e| {
-            trap(&e.to_string());
-        })
+    transfer(TransferArgs::from(arg)).await.unwrap_or_else(|e| {
+        trap(&e.to_string());
+    })
 }
 
 #[cfg(feature = "notify-method")]
@@ -1043,8 +1040,9 @@ fn notify_() {
     );
 }
 
-#[candid_method(update, rename = "transfer")]
-async fn transfer_candid(arg: TransferArgs) -> Result<BlockIndex, TransferError> {
+#[update]
+#[candid_method(update)]
+async fn transfer(arg: TransferArgs) -> Result<BlockIndex, TransferError> {
     panic_if_not_ready();
     let to_account = AccountIdentifier::from_address(arg.to).unwrap_or_else(|e| {
         trap(&format!("Invalid account identifier: {}", e));
@@ -1060,11 +1058,21 @@ async fn transfer_candid(arg: TransferArgs) -> Result<BlockIndex, TransferError>
     .await
 }
 
-#[candid_method(update, rename = "icrc1_transfer")]
+#[update]
+#[candid_method(update)]
 async fn icrc1_transfer(
     arg: TransferArg,
 ) -> Result<Nat, icrc_ledger_types::icrc1::transfer::TransferError> {
     panic_if_not_ready();
+
+    if !LEDGER
+        .read()
+        .unwrap()
+        .can_send(&PrincipalId::from(caller()))
+    {
+        trap("Anonymous principal cannot hold tokens on the ledger.");
+    }
+
     let from_account = Account {
         owner: caller(),
         subaccount: arg.from_subaccount,
@@ -1091,31 +1099,19 @@ async fn icrc1_transfer(
     ))
 }
 
-#[export_name = "canister_update transfer"]
-fn transfer() {
-    panic_if_not_ready();
-    over_async_may_reject(candid_one, |arg| async { Ok(transfer_candid(arg).await) })
-}
-
-#[export_name = "canister_update icrc1_transfer"]
-fn icrc1_transfer_candid() {
-    panic_if_not_ready();
-    over_async_may_reject(candid_one, |arg: TransferArg| async {
-        if !LEDGER
-            .read()
-            .unwrap()
-            .can_send(&PrincipalId::from(caller()))
-        {
-            return Err("Anonymous principal cannot hold tokens on the ledger.".to_string());
-        }
-
-        Ok(icrc1_transfer(arg).await)
-    })
-}
-
-#[candid_method(update, rename = "icrc2_transfer_from")]
+#[update]
+#[candid_method(update)]
 async fn icrc2_transfer_from(arg: TransferFromArgs) -> Result<Nat, TransferFromError> {
     panic_if_not_ready();
+
+    if !LEDGER
+        .read()
+        .unwrap()
+        .can_send(&PrincipalId::from(caller()))
+    {
+        trap("Anonymous principal cannot hold tokens on the ledger.");
+    }
+
     if !LEDGER.read().unwrap().feature_flags.icrc2 {
         trap("ICRC-2 features are not enabled on the ledger.");
     }
@@ -1143,22 +1139,6 @@ async fn icrc2_transfer_from(arg: TransferFromArgs) -> Result<Nat, TransferFromE
             err
         })?,
     ))
-}
-
-#[export_name = "canister_update icrc2_transfer_from"]
-fn icrc2_transfer_from_candid() {
-    panic_if_not_ready();
-    over_async_may_reject(candid_one, |arg: TransferFromArgs| async {
-        if !LEDGER
-            .read()
-            .unwrap()
-            .can_send(&PrincipalId::from(caller()))
-        {
-            return Err("Anonymous principal cannot transfer tokens on the ledger.".to_string());
-        }
-
-        Ok(icrc2_transfer_from(arg).await)
-    })
 }
 
 /// See caveats of use on send_dfx
@@ -1538,9 +1518,25 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
     Ok(())
 }
 
-#[export_name = "canister_query http_request"]
-fn http_request() {
-    dfn_http_metrics::serve_metrics(encode_metrics);
+#[query(hidden = true, decoding_quota = 10000)]
+fn http_request(req: HttpRequest) -> HttpResponse {
+    if req.path() == "/metrics" {
+        let mut writer =
+            ic_metrics_encoder::MetricsEncoder::new(vec![], ic_cdk::api::time() as i64 / 1_000_000);
+
+        match encode_metrics(&mut writer) {
+            Ok(()) => HttpResponseBuilder::ok()
+                .header("Content-Type", "text/plain; version=0.0.4")
+                .with_body_and_content_length(writer.into_inner())
+                .build(),
+            Err(err) => {
+                HttpResponseBuilder::server_error(format!("Failed to encode metrics: {}", err))
+                    .build()
+            }
+        }
+    } else {
+        HttpResponseBuilder::not_found().build()
+    }
 }
 
 #[query]
@@ -1582,9 +1578,19 @@ fn query_encoded_blocks(
     }
 }
 
-#[candid_method(update, rename = "icrc2_approve")]
+#[update]
+#[candid_method(update)]
 async fn icrc2_approve(arg: ApproveArgs) -> Result<Nat, ApproveError> {
     panic_if_not_ready();
+
+    if !LEDGER
+        .read()
+        .unwrap()
+        .can_send(&PrincipalId::from(caller()))
+    {
+        trap("Anonymous principal cannot approve token transfers on the ledger.");
+    }
+
     if !LEDGER.read().unwrap().feature_flags.icrc2 {
         trap("ICRC-2 features are not enabled on the ledger.");
     }
@@ -1674,24 +1680,6 @@ async fn icrc2_approve(arg: ApproveArgs) -> Result<Nat, ApproveError> {
     let max_msg_size = *MAX_MESSAGE_SIZE_BYTES.read().unwrap();
     archive_blocks::<Access>(DebugOutSink, max_msg_size as u64).await;
     Ok(Nat::from(block_index))
-}
-
-#[export_name = "canister_update icrc2_approve"]
-fn icrc2_approve_candid() {
-    panic_if_not_ready();
-    over_async_may_reject(candid_one, |arg: ApproveArgs| async {
-        if !LEDGER
-            .read()
-            .unwrap()
-            .can_send(&PrincipalId::from(caller()))
-        {
-            return Err(
-                "Anonymous principal cannot approve token transfers on the ledger.".to_string(),
-            );
-        }
-
-        Ok(icrc2_approve(arg).await)
-    })
 }
 
 fn get_allowance(from: AccountIdentifier, spender: AccountIdentifier) -> Allowance {
