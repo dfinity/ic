@@ -675,13 +675,8 @@ pub async fn metrics_middleware(
             };
 
             let mut hasher = SipHasher::new_with_keys(key0, key1);
-
-            // First hash the salt
-            salt.hash(&mut hasher);
-            // Aftewards hash the input
+            
             input.hash(&mut hasher);
-            // Then salt once again
-            salt.hash(&mut hasher);
 
             format!("{:x}", hasher.finish())
         };
