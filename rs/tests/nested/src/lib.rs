@@ -8,7 +8,6 @@ use ic_consensus_system_test_utils::rw_message::install_nns_and_check_progress;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::{
     driver::{ic::InternetComputer, nested::NestedVms, test_env::TestEnv, test_env_api::*},
-    nns::add_nodes_to_subnet,
     util::block_on,
 };
 use ic_types::hostos_version::HostosVersion;
@@ -86,6 +85,8 @@ pub fn registration(env: TestEnv) {
 /// Upgrade each HostOS VM to the target version, and verify that each is
 /// healthy before and after the upgrade.
 pub fn upgrade_hostos(env: TestEnv) {
+    let logger = env.logger();
+
     let target_version_str = std::env::var("ENV_DEPS__HOSTOS_UPDATE_IMG_VERSION").unwrap();
     let target_version =
         HostosVersion::try_from(target_version_str.trim()).expect("Invalid mainnet hostos version");
@@ -94,8 +95,6 @@ pub fn upgrade_hostos(env: TestEnv) {
     let update_image_url =
         Url::parse(update_image_url_str.trim()).expect("Invalid mainnet hostos update image URL");
     let update_image_sha256 = std::env::var("ENV_DEPS__HOSTOS_UPDATE_IMG_SHA").unwrap();
-
-    let logger = env.logger();
 
     let initial_topology = env.topology_snapshot();
     start_nested_vm(env.clone());
@@ -124,26 +123,13 @@ pub fn upgrade_hostos(env: TestEnv) {
     // Add the node to a subnet to start the replica
     let node_id = new_topology.unassigned_nodes().next().unwrap().node_id;
 
-    // Choose a node from the nns subnet
-    let nns_subnet = new_topology.root_subnet();
-    let nns_node = nns_subnet.nodes().next().unwrap();
-    info!(
-        logger,
-        "Adding node '{}' to subnet '{}'", node_id, nns_subnet.subnet_id
-    );
-    block_on(add_nodes_to_subnet(
-        nns_node.get_public_url(),
-        nns_subnet.subnet_id,
-        &[node_id],
-    ))
-    .unwrap();
-    host.await_status_is_healthy().unwrap();
-
     // Elect target HostOS version
     info!(
         logger,
         "Electing target HostOS version '{target_version}' with sha256 '{update_image_sha256}' and upgrade urls: '{update_image_url}'"
     );
+    let nns_subnet = new_topology.root_subnet();
+    let nns_node = nns_subnet.nodes().next().unwrap();
     block_on(elect_hostos_version(
         &nns_node,
         &target_version,
@@ -167,10 +153,11 @@ pub fn upgrade_hostos(env: TestEnv) {
     // the new system.
     info!(logger, "Waiting for the upgrade to apply...");
     host.await_status_is_unavailable().unwrap();
-    info!(logger, "Waiting for the replica to come back healthy...");
-    host.await_status_is_healthy().unwrap();
 
-    // Check the HostOS version again
+    info!(logger, "Waiting for GuestOS metrics...");
+    host.await_guestos_metrics_available().unwrap();
+
+    // Check the HostOS version again after upgrade
     info!(
         logger,
         "Checking version via SSH on HostOS: '{}'",
