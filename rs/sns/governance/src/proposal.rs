@@ -1351,23 +1351,6 @@ impl TryFrom<&NervousSystemFunction> for ValidGenericNervousSystemFunction {
                     }
                 };
 
-                // TODO(NNS1-3625): Remove this once proposal criticality is determined by the topic
-                match topic {
-                    Some(pb_api::topics::Topic::CriticalDappOperations) => {
-                        defects.push(
-                            "CriticalDappOperations is not yet supported for custom functions"
-                                .to_string(),
-                        );
-                    }
-                    Some(pb_api::topics::Topic::TreasuryAssetManagement) => {
-                        defects.push(
-                            "CriticalDappOperations is not yet supported for custom functions"
-                                .to_string(),
-                        );
-                    }
-                    _ => {}
-                }
-
                 if !defects.is_empty() {
                     return Err(format!(
                         "ExecuteNervousSystemFunction was invalid for the following reason(s):\n{}",

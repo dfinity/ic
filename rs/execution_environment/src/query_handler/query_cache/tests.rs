@@ -1474,6 +1474,7 @@ fn query_cache_future_proof_test() {
         | SystemApiCallId::CallWithBestEffortResponse
         | SystemApiCallId::CanisterCycleBalance
         | SystemApiCallId::CanisterCycleBalance128
+        | SystemApiCallId::CanisterLiquidCycleBalance128
         | SystemApiCallId::CanisterSelfCopy
         | SystemApiCallId::CanisterSelfSize
         | SystemApiCallId::CanisterStatus
@@ -1484,7 +1485,7 @@ fn query_cache_future_proof_test() {
         | SystemApiCallId::CostHttpRequest
         | SystemApiCallId::CostSignWithEcdsa
         | SystemApiCallId::CostSignWithSchnorr
-        | SystemApiCallId::CostVetkdDeriveEncryptedKey
+        | SystemApiCallId::CostVetkdDeriveKey
         | SystemApiCallId::CyclesBurn128
         | SystemApiCallId::DataCertificateCopy
         | SystemApiCallId::DataCertificatePresent

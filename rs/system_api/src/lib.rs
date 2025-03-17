@@ -2937,25 +2937,16 @@ impl SystemApi for SystemApiImpl {
     /// dirty pages is large enough to warrant an extra round of execution.
     /// Therefore, we yield control back to the replica and we wait for the
     /// next round to start copying dirty pages.
-    fn yield_for_dirty_memory_copy(&mut self, instruction_counter: i64) -> HypervisorResult<i64> {
+    fn yield_for_dirty_memory_copy(&mut self) -> HypervisorResult<i64> {
         let result = self
             .out_of_instructions_handler
-            .yield_for_dirty_memory_copy(instruction_counter);
+            .yield_for_dirty_memory_copy();
         if let Ok(new_slice_instruction_limit) = result {
             // A new slice has started, update the instruction sum and limit.
-            let slice_instructions = self
-                .current_slice_instruction_limit
-                .saturating_sub(instruction_counter)
-                .max(0);
-            self.instructions_executed_before_current_slice += slice_instructions;
+            self.instructions_executed_before_current_slice += self.current_slice_instruction_limit;
             self.current_slice_instruction_limit = new_slice_instruction_limit;
         }
-        trace_syscall!(
-            self,
-            yield_for_dirty_memory_copy,
-            result,
-            instruction_counter
-        );
+        trace_syscall!(self, yield_for_dirty_memory_copy, result);
         result
     }
 
@@ -3104,6 +3095,42 @@ impl SystemApi for SystemApiImpl {
             Ok(())
         };
         trace_syscall!(self, CanisterCycleBalance128, dst, summarize(heap, dst, 16));
+        result
+    }
+
+    fn ic0_canister_liquid_cycle_balance128(
+        &mut self,
+        dst: usize,
+        heap: &mut [u8],
+    ) -> HypervisorResult<()> {
+        self.call_counters.canister_liquid_cycle_balance128 += 1;
+        let method_name = "ic0_canister_liquid_cycle_balance128";
+        let result = match &self.api_type {
+            ApiType::Start { .. } => Err(self.error_for(method_name)),
+            ApiType::Init { .. }
+            | ApiType::SystemTask { .. }
+            | ApiType::Update { .. }
+            | ApiType::Cleanup { .. }
+            | ApiType::ReplicatedQuery { .. }
+            | ApiType::NonReplicatedQuery { .. }
+            | ApiType::PreUpgrade { .. }
+            | ApiType::ReplyCallback { .. }
+            | ApiType::RejectCallback { .. }
+            | ApiType::InspectMessage { .. } => {
+                let cycles = self.sandbox_safe_system_state.liquid_cycles_balance(
+                    self.memory_usage.current_usage,
+                    self.memory_usage.current_message_usage,
+                );
+                copy_cycles_to_heap(cycles, dst, heap, method_name)?;
+                Ok(())
+            }
+        };
+        trace_syscall!(
+            self,
+            CanisterLiquidCycleBalance128,
+            dst,
+            summarize(heap, dst, 16)
+        );
         result
     }
 
@@ -3850,7 +3877,7 @@ impl SystemApi for SystemApiImpl {
         Ok(CostReturnCode::Success as u32)
     }
 
-    fn ic0_cost_vetkd_derive_encrypted_key(
+    fn ic0_cost_vetkd_derive_key(
         &self,
         src: usize,
         size: usize,
@@ -3859,7 +3886,7 @@ impl SystemApi for SystemApiImpl {
         heap: &mut [u8],
     ) -> HypervisorResult<u32> {
         let key_bytes = valid_subslice(
-            "ic0.cost_vetkd_derive_encrypted_key heap",
+            "ic0.cost_vetkd_derive_key heap",
             InternalAddress::new(src),
             InternalAddress::new(size),
             heap,
@@ -3886,7 +3913,7 @@ impl SystemApi for SystemApiImpl {
             .sandbox_safe_system_state
             .get_cycles_account_manager()
             .vetkd_fee(subnet_size);
-        copy_cycles_to_heap(cost, dst, heap, "ic0_cost_vetkd_derive_encrypted_key")?;
+        copy_cycles_to_heap(cost, dst, heap, "ic0_cost_vetkd_derive_key")?;
         trace_syscall!(self, CostVetkdDeriveEncryptedKey, cost);
         Ok(CostReturnCode::Success as u32)
     }
@@ -3986,7 +4013,7 @@ impl OutOfInstructionsHandler for DefaultOutOfInstructionsHandler {
         ))
     }
 
-    fn yield_for_dirty_memory_copy(&self, _instruction_counter: i64) -> HypervisorResult<i64> {
+    fn yield_for_dirty_memory_copy(&self) -> HypervisorResult<i64> {
         // This is a no-op, should only happen if it is called on a subnet where DTS is completely disabled.
         // 0 instructions were executed as a result.
         Ok(0)

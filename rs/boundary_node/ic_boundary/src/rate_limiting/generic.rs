@@ -465,13 +465,14 @@ pub async fn middleware(
     Extension(ctx): Extension<Arc<RequestContext>>,
     Extension(subnet): Extension<Arc<RouteSubnet>>,
     Extension(conn_info): Extension<Arc<ConnInfo>>,
-    canister_id: Option<Extension<CanisterId>>,
     request: Request<Body>,
     next: Next,
 ) -> Result<impl IntoResponse, ErrorCause> {
+    let canister_id = request.extensions().get::<CanisterId>().copied();
+
     let ctx = Context {
         subnet_id: subnet.id,
-        canister_id: canister_id.map(|x| x.0.get().into()),
+        canister_id: canister_id.map(|x| x.get().into()),
         method: ctx.method_name.as_deref(),
         request_type: ctx.request_type,
         ip: conn_info.remote_addr.ip(),

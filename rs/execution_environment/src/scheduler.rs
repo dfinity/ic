@@ -1,5 +1,5 @@
 use crate::{
-    canister_manager::{uninstall_canister, AddCanisterChangeToHistory},
+    canister_manager::{types::AddCanisterChangeToHistory, uninstall_canister},
     execution_environment::{
         as_num_instructions, as_round_instructions, execute_canister, ExecuteCanisterResult,
         ExecutionEnvironment, RoundInstructions, RoundLimits,
@@ -19,7 +19,9 @@ use ic_interfaces::execution_environment::{
     IngressHistoryWriter, Scheduler, SubnetAvailableMemory,
 };
 use ic_logger::{debug, error, fatal, info, new_logger, warn, ReplicaLogger};
-use ic_management_canister_types_private::{CanisterStatusType, Method as Ic00Method};
+use ic_management_canister_types_private::{
+    CanisterStatusType, MasterPublicKeyId, Method as Ic00Method,
+};
 use ic_metrics::MetricsRegistry;
 use ic_replicated_state::{
     canister_state::{
@@ -1967,6 +1969,8 @@ fn observe_replicated_state_metrics(
     let mut canisters_with_old_open_call_contexts = 0;
     let mut old_call_contexts_count = 0;
     let mut num_stop_canister_calls_without_call_id = 0;
+    let mut in_flight_signature_request_contexts_by_key_id =
+        BTreeMap::<MasterPublicKeyId, u32>::new();
 
     let canister_id_ranges = state.routing_table().ranges(own_subnet_id);
     state.canisters_iter().for_each(|canister| {
@@ -2083,6 +2087,18 @@ fn observe_replicated_state_metrics(
             .threshold_signature_agreements
             .with_label_values(&[&key_id.to_string()])
             .set(*count as i64);
+    }
+
+    for context in state.signature_request_contexts().values() {
+        *in_flight_signature_request_contexts_by_key_id
+            .entry(context.key_id())
+            .or_default() += 1;
+    }
+    for (key_id, count) in in_flight_signature_request_contexts_by_key_id {
+        metrics
+            .in_flight_signature_request_contexts
+            .with_label_values(&[&key_id.to_string()])
+            .observe(count as f64);
     }
 
     let observe_reading = |status: CanisterStatusType, num: i64| {
@@ -2223,7 +2239,7 @@ fn can_execute_subnet_msg(
         | Ic00Method::SchnorrPublicKey
         | Ic00Method::SignWithSchnorr
         | Ic00Method::VetKdPublicKey
-        | Ic00Method::VetKdDeriveEncryptedKey
+        | Ic00Method::VetKdDeriveKey
         | Ic00Method::BitcoinGetBalance
         | Ic00Method::BitcoinGetUtxos
         | Ic00Method::BitcoinGetBlockHeaders
@@ -2241,7 +2257,8 @@ fn can_execute_subnet_msg(
         | Ic00Method::ClearChunkStore
         | Ic00Method::TakeCanisterSnapshot
         | Ic00Method::ListCanisterSnapshots
-        | Ic00Method::DeleteCanisterSnapshot => true,
+        | Ic00Method::DeleteCanisterSnapshot
+        | Ic00Method::ReadCanisterSnapshotMetadata => true,
     }
 }
 
@@ -2286,7 +2303,7 @@ fn get_instructions_limits_for_subnet_message(
             | SchnorrPublicKey
             | SignWithSchnorr
             | VetKdPublicKey
-            | VetKdDeriveEncryptedKey
+            | VetKdDeriveKey
             | StartCanister
             | StopCanister
             | UninstallCode
@@ -2309,7 +2326,8 @@ fn get_instructions_limits_for_subnet_message(
             | TakeCanisterSnapshot
             | LoadCanisterSnapshot
             | ListCanisterSnapshots
-            | DeleteCanisterSnapshot => default_limits,
+            | DeleteCanisterSnapshot
+            | ReadCanisterSnapshotMetadata => default_limits,
             InstallCode | InstallChunkedCode => InstructionLimits::new(
                 dts,
                 config.max_instructions_per_install_code,

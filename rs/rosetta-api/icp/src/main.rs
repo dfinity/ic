@@ -97,6 +97,7 @@ fn init_logging(level: Level) -> std::io::Result<WorkerGuard> {
     fn rosetta_filter(module: &str) -> bool {
         module.starts_with("ic_rosetta_api")
             || module.starts_with("ic_ledger_canister_blocks_synchronizer")
+            || module.starts_with("rosetta_core")
     }
     let rosetta_filter =
         FilterFn::new(|metadata| metadata.module_path().map_or(true, rosetta_filter));
