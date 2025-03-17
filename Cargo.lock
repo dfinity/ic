@@ -6975,6 +6975,7 @@ dependencies = [
  "bech32 0.9.1",
  "bitcoin 0.28.2",
  "bs58 0.5.1",
+ "canbench-rs",
  "candid",
  "candid_parser",
  "canister-test",
