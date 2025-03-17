@@ -851,13 +851,9 @@ pub fn setup_router(
         proxy_router.clone() as Arc<dyn Health>,
     );
 
-    let query_route = Router::new()
-        .route(routes::PATH_QUERY, {
-            post(routes::handle_canister).with_state(proxy.clone())
-        })
-        .layer(option_layer(cache.map(|x| {
-            middleware::from_fn_with_state(x.clone(), cache_middleware)
-        })));
+    let query_route = Router::new().route(routes::PATH_QUERY, {
+        post(routes::handle_canister).with_state(proxy.clone())
+    });
 
     let call_route = {
         let mut route = Router::new()
@@ -1006,6 +1002,9 @@ pub fn setup_router(
         .layer(common_service_layers.clone())
         .layer(middleware_subnet_lookup.clone())
         .layer(middleware_generic_limiter.clone())
+        .layer(option_layer(cache.map(|x| {
+            middleware::from_fn_with_state(x.clone(), cache_middleware)
+        })))
         .layer(middleware_retry.clone());
 
     let service_subnet_read = ServiceBuilder::new()
