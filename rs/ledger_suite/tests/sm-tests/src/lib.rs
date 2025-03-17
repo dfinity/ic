@@ -5369,7 +5369,7 @@ pub mod archiving {
         let archive_blocks_res = icrc3_get_blocks(
             env,
             CanisterId::try_from(PrincipalId::from(archived_blocks.callback.canister_id)).unwrap(),
-            0,
+            block_id,
             1,
         );
         let first_block_from_archive = archive_blocks_res
