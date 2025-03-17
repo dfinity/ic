@@ -40,7 +40,7 @@ rust_library(
 system_test_nns(
     name = "registration",
     env = MAINNET_ENV,
-    flaky = True,
+    flaky = True,  # flakiness rate of over 2% over the month from 2025-02-11 till 2025-03-11.
     tags = [
         "system_test_hourly",
     ],
@@ -77,7 +77,7 @@ system_test_nns(
 system_test_nns(
     name = "hostos_upgrade_from_latest_release_to_current",
     env = MAINNET_ENV,
-    flaky = True,
+    flaky = True,  # flakiness rate of 5% over the month from 2025-02-11 till 2025-03-11.
     tags = [
         "system_test_hourly",
     ],

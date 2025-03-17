@@ -301,7 +301,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.5.0",
             ),
             "ic_bls12_381": crate.spec(
-                version = "0.10.0",
+                version = "0.10.1",
                 features = [
                     "alloc",
                     "experimental",
@@ -655,7 +655,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^1.0.0",
             ),
             "ic-stable-structures": crate.spec(
-                version = "^0.6.5",
+                version = "^0.6.8",
             ),
             "icrc1-test-env": crate.spec(
                 git = "https://github.com/dfinity/ICRC-1",

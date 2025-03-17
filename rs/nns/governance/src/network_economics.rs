@@ -279,12 +279,20 @@ impl VotingPowerEconomics {
         ),
     };
 
-    // [DEFAULT_NEURON_MINIMUM_DISSOLVE_DELAY_TO_VOTE_SECONDS] represents the default time threshold (in seconds)
-    // after which voting power begins to decrease in the network economics configuration. This is a preset
-    // value for the system, but it should be updated to align with [MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS].
-    pub const DEFAULT_NEURON_MINIMUM_DISSOLVE_DELAY_TO_VOTE_SECONDS: u64 =
-        crate::governance::MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS;
+    /// Only neurons with at least this dissolve delay may submit proposals.
+    ///
+    /// When a proposal is created, neurons with dissolve delay (in seconds) less than
+    /// `VotingPowerEconomics.min_dissolve_delay_seconds` receive no ballot (to be filled out)
+    /// for that proposal. Thus, such neurons cannot vote on the proposal.
+    pub const DEFAULT_NEURON_MINIMUM_DISSOLVE_DELAY_TO_VOTE_SECONDS: u64 = 6 * ONE_MONTH_SECONDS;
+
+    /// A proposal to set `VotingPowerEconomics.min_dissolve_delay_seconds` must specify a value
+    /// for this field that falls within this range.
+    pub const NEURON_MINIMUM_DISSOLVE_DELAY_TO_VOTE_SECONDS_BOUNDS: RangeInclusive<u64> =
+        (3 * ONE_MONTH_SECONDS)..=(6 * ONE_MONTH_SECONDS);
+
     pub const DEFAULT_START_REDUCING_VOTING_POWER_AFTER_SECONDS: u64 = 6 * ONE_MONTH_SECONDS;
+
     pub const DEFAULT_CLEAR_FOLLOWING_AFTER_SECONDS: u64 = ONE_MONTH_SECONDS;
 
     pub fn with_default_values() -> Self {
@@ -361,14 +369,14 @@ impl VotingPowerEconomics {
         }
 
         if let Some(delay) = self.neuron_minimum_dissolve_delay_to_vote_seconds {
-            pub const MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS_BOUNDS: RangeInclusive<u64> =
-                (3 * ONE_MONTH_SECONDS)..=(6 * ONE_MONTH_SECONDS);
-
-            if !MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS_BOUNDS.contains(&delay) {
+            if !VotingPowerEconomics::NEURON_MINIMUM_DISSOLVE_DELAY_TO_VOTE_SECONDS_BOUNDS
+                .contains(&delay)
+            {
                 let defect = format!(
-                    "neuron_minimum_dissolve_delay_to_vote_seconds ({:?}) must be between three and six months.",
+                    "neuron_minimum_dissolve_delay_to_vote_seconds ({:?}) must be between three \
+                     and six months.",
                     self.neuron_minimum_dissolve_delay_to_vote_seconds
-                 );
+                );
                 defects.push(defect);
             }
         } else {

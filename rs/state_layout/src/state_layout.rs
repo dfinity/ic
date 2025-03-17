@@ -1,6 +1,6 @@
 use ic_base_types::{NumBytes, NumSeconds};
 use ic_logger::{error, info, warn, ReplicaLogger};
-use ic_management_canister_types_private::{LogVisibilityV2, OnLowWasmMemoryHookStatus};
+use ic_management_canister_types_private::LogVisibilityV2;
 use ic_metrics::{buckets::decimal_buckets, MetricsRegistry};
 use ic_protobuf::{
     proxy::{try_from_option_field, ProxyDecodeError},
@@ -13,7 +13,9 @@ use ic_protobuf::{
 use ic_replicated_state::{
     canister_state::{
         execution_state::{NextScheduledMethod, WasmMetadata},
-        system_state::{wasm_chunk_store::WasmChunkStoreMetadata, CanisterHistory, CyclesUseCase},
+        system_state::{
+            wasm_chunk_store::WasmChunkStoreMetadata, CanisterHistory, CyclesUseCase, TaskQueue,
+        },
     },
     page_map::{Shard, StorageLayout, StorageResult},
     CallContextManager, CanisterStatus, ExecutionTask, ExportedFunctions, Global, NumWasmPages,
@@ -27,7 +29,7 @@ use ic_types::{
 use ic_utils::thread::maybe_parallel_map;
 use ic_wasm_types::{CanisterModule, WasmHash};
 use prometheus::{Histogram, IntCounterVec};
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::convert::{identity, From, TryFrom, TryInto};
 use std::ffi::OsStr;
 use std::fs::OpenOptions;
@@ -162,7 +164,6 @@ pub struct CanisterStateBits {
     pub stable_memory_size: NumWasmPages,
     pub heap_delta_debit: NumBytes,
     pub install_code_debit: NumInstructions,
-    pub task_queue: Vec<ExecutionTask>,
     pub time_of_last_allocation_charge_nanos: u64,
     pub global_timer_nanos: Option<u64>,
     pub canister_version: u64,
@@ -175,7 +176,7 @@ pub struct CanisterStateBits {
     pub wasm_memory_limit: Option<NumBytes>,
     pub next_snapshot_id: u64,
     pub snapshots_memory_usage: NumBytes,
-    pub on_low_wasm_memory_hook_status: OnLowWasmMemoryHookStatus,
+    pub task_queue: TaskQueue,
 }
 
 /// This struct contains bits of the `CanisterSnapshot` that are not already
@@ -2359,7 +2360,12 @@ impl From<CanisterStateBits> for pb_canister_state_bits::CanisterStateBits {
             heap_delta_debit: item.heap_delta_debit.get(),
             install_code_debit: item.install_code_debit.get(),
             time_of_last_allocation_charge_nanos: Some(item.time_of_last_allocation_charge_nanos),
-            task_queue: item.task_queue.iter().map(|v| v.into()).collect(),
+            task_queue: item
+                .task_queue
+                .get_queue()
+                .iter()
+                .map(|v| v.into())
+                .collect(),
             global_timer_nanos: item.global_timer_nanos,
             canister_version: item.canister_version,
             consumed_cycles_by_use_cases: item
@@ -2389,10 +2395,11 @@ impl From<CanisterStateBits> for pb_canister_state_bits::CanisterStateBits {
             snapshots_memory_usage: item.snapshots_memory_usage.get(),
             on_low_wasm_memory_hook_status: Some(
                 pb_canister_state_bits::OnLowWasmMemoryHookStatus::from(
-                    &item.on_low_wasm_memory_hook_status,
+                    &item.task_queue.peek_hook_status(),
                 )
                 .into(),
             ),
+            tasks: Some((&item.task_queue).into()),
         }
     }
 }
@@ -2432,18 +2439,6 @@ impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
             .map(|c| c.into())
             .unwrap_or_else(Cycles::zero);
 
-        let task_queue: Vec<_> = value
-            .task_queue
-            .into_iter()
-            .map(|v| v.try_into())
-            .collect::<Result<_, _>>()?;
-        if task_queue.len() > 1 {
-            return Err(ProxyDecodeError::Other(format!(
-                "Expecting at most one task queue entry. Found {:?}",
-                task_queue
-            )));
-        }
-
         let mut consumed_cycles_by_use_cases = BTreeMap::new();
         for x in value.consumed_cycles_by_use_cases.into_iter() {
             consumed_cycles_by_use_cases.insert(
@@ -2459,11 +2454,40 @@ impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
             );
         }
 
-        let on_low_wasm_memory_hook_status: Option<
-            pb_canister_state_bits::OnLowWasmMemoryHookStatus,
-        > = value.on_low_wasm_memory_hook_status.map(|v| {
-            pb_canister_state_bits::OnLowWasmMemoryHookStatus::try_from(v).unwrap_or_default()
-        });
+        let pb_task_queue: Result<pb_canister_state_bits::TaskQueue, ProxyDecodeError> =
+            try_from_option_field(value.tasks, "CanisterStateBits::tasks");
+
+        let task_queue = match pb_task_queue {
+            Ok(tasks) => TaskQueue::try_from(tasks)?,
+            Err(_) => {
+                let task_queue: VecDeque<ExecutionTask> = value
+                    .task_queue
+                    .into_iter()
+                    .map(|v| v.try_into())
+                    .collect::<Result<VecDeque<_>, _>>()?;
+                if task_queue.len() > 1 {
+                    return Err(ProxyDecodeError::Other(format!(
+                        "Expecting at most one task queue entry. Found {:?}",
+                        task_queue
+                    )));
+                }
+
+                let on_low_wasm_memory_hook_status: Option<
+                    pb_canister_state_bits::OnLowWasmMemoryHookStatus,
+                > = value.on_low_wasm_memory_hook_status.map(|v| {
+                    pb_canister_state_bits::OnLowWasmMemoryHookStatus::try_from(v)
+                        .unwrap_or_default()
+                });
+                TaskQueue::from_checkpoint(
+                    task_queue,
+                    try_from_option_field(
+                        on_low_wasm_memory_hook_status,
+                        "CanisterStateBits::on_low_wasm_memory_hook_status",
+                    )
+                    .unwrap_or_default(),
+                )
+            }
+        };
 
         Ok(Self {
             controllers,
@@ -2511,7 +2535,6 @@ impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
                 value.time_of_last_allocation_charge_nanos,
                 "CanisterStateBits::time_of_last_allocation_charge_nanos",
             )?,
-            task_queue,
             global_timer_nanos: value.global_timer_nanos,
             canister_version: value.canister_version,
             consumed_cycles_by_use_cases,
@@ -2547,11 +2570,7 @@ impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
             wasm_memory_limit: value.wasm_memory_limit.map(NumBytes::from),
             next_snapshot_id: value.next_snapshot_id,
             snapshots_memory_usage: NumBytes::from(value.snapshots_memory_usage),
-            on_low_wasm_memory_hook_status: try_from_option_field(
-                on_low_wasm_memory_hook_status,
-                "CanisterStateBits::on_low_wasm_memory_hook_status",
-            )
-            .unwrap_or_default(),
+            task_queue,
         })
     }
 }
