@@ -835,35 +835,38 @@ fn add_callback_ids_to_transcript_results(
     state: &ReplicatedState,
     log: &ReplicaLogger,
 ) -> Vec<(NiDkgId, CallbackId, Result<NiDkgTranscript, String>)> {
-    let setup_initial_dkg_contexts = &state
-        .metadata
-        .subnet_call_context_manager
-        .setup_initial_dkg_contexts;
+    // Build a map from target id to callback id
+    let call_contexts = &state.metadata.subnet_call_context_manager;
+    let callback_id_map = call_contexts
+        .setup_initial_dkg_contexts
+        .iter()
+        .map(|(&callback_id, context)| (context.target_id, callback_id))
+        .chain(
+            call_contexts
+                .reshare_chain_key_contexts
+                .iter()
+                .map(|(&callback_id, context)| (context.target_id, callback_id)),
+        )
+        .collect::<BTreeMap<NiDkgTargetId, CallbackId>>();
 
     new_transcripts
         .into_iter()
         .filter_map(|(id, result)| {
-            if let Some(callback_id) = setup_initial_dkg_contexts
-                .iter()
-                .filter_map(|(callback_id, context)| {
-                    if NiDkgTargetSubnet::Remote(context.target_id) == id.target_subnet {
-                        Some(*callback_id)
-                    } else {
+            match id.target_subnet {
+                NiDkgTargetSubnet::Local => None,
+                NiDkgTargetSubnet::Remote(target_id) => {match callback_id_map.get(&target_id) {
+                    Some(&callback_id) => Some((id, callback_id, result)),
+                    None => {
+                        error!(
+                            log,
+                            "Unable to find callback id associated with remote dkg id {}, this should not happen",
+                            id
+                        );
                         None
-                    }
-                })
-                .last()
-            {
-                Some((id, callback_id, result))
-            } else {
-                error!(
-                    log,
-                    "Unable to find callback id associated with remote dkg id {}, this should not happen",
-                    id
-                );
-                None
-            }
-        })
+                    },
+                }}
+            }}
+           )
         .collect()
 }
 
