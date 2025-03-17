@@ -184,7 +184,7 @@ fn test_time_warp() {
                     .update_from_sender(
                         "get_neuron_info",
                         candid_one,
-                        neuron_id_4,
+                        neuron_id_4.id,
                         &Sender::from_keypair(&TEST_NEURON_1_OWNER_KEYPAIR),
                     )
                     .await
