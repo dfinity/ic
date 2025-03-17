@@ -171,7 +171,6 @@ filegroup(
 
 upload_artifacts(
     name = "upload",
-    testonly = True,
     inputs = [":canisters"] + [":canisters.did"],
     remote_subdir = "canisters",
     visibility = [

@@ -122,20 +122,20 @@ checksum_rule(
     inputs = [":binaries"],
 )
 
-upload_artifacts(
-    name = "upload",
-    testonly = True,
-    inputs = [":binaries"],
-    remote_subdir = "binaries/" + select({
-        "@platforms//cpu:x86_64": "x86_64",
-        "@platforms//cpu:arm64": "arm64",
-        "//conditions:default": "unknown",
-    }) + "-" + select({
-        "@platforms//os:linux": "linux",
-        "@platforms//os:osx": "darwin",
-        "//conditions:default": "unknown",
-    }),
-)
+#upload_artifacts(
+#    name = "upload",
+#    testonly = True,
+#    inputs = [":binaries"],
+#    remote_subdir = "binaries/" + select({
+#        "@platforms//cpu:x86_64": "x86_64",
+#        "@platforms//cpu:arm64": "arm64",
+#        "//conditions:default": "unknown",
+#    }) + "-" + select({
+#        "@platforms//os:linux": "linux",
+#        "@platforms//os:osx": "darwin",
+#        "//conditions:default": "unknown",
+#    }),
+#)
 
 # https://dfinity.atlassian.net/browse/IDX-2599
 # various places in the source code, and possibly other repositories reference
@@ -145,8 +145,8 @@ upload_artifacts(
     testonly = True,
     inputs = [":binaries"],
     remote_subdir = "release",
-    target_compatible_with = ["@platforms//os:linux"],
-    visibility = ["//testnet/tools:__pkg__"],
+    #target_compatible_with = ["@platforms//os:linux"],
+    #visibility = ["//testnet/tools:__pkg__"],
 )
 
 BINS_TO_TEST = [":" + name for name in ALL_BINARIES]

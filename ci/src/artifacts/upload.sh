@@ -2,6 +2,20 @@
 
 set -eEuo pipefail
 
+
+if [ -n "${UPLOADABLES:-}" ]; then
+    for foo in $UPLOADABLES; do
+        #echo will upload: "$foo"
+        abs_path="$BUILD_WORKING_DIRECTORY/$foo"
+        env -u "UPLOADABLES" "$0" "$abs_path"
+        echo "$0 $abs_path"
+    done
+
+    exit 0
+fi
+
+echo "uploading $1"
+
 # ~/.aws/credentials is needed by rclone. If home is not set, expect
 # VERSION_FILE to contain the $HOME.
 if [ -z "${HOME:-}" ]; then
@@ -40,7 +54,7 @@ rclone_common_flags=(
 REMOTE_SUBDIR="${REMOTE_SUBDIR:?Remote subdirectory not set}"
 
 echo "uploading $f to AWS" >&2
-AWS_PROFILE=default "$RCLONE" \
+echo AWS_PROFILE=default "$RCLONE" \
     "${rclone_common_flags[@]}" \
     --s3-provider=AWS \
     --s3-region=eu-central-1 \
@@ -53,7 +67,7 @@ echo "done uploading to AWS" >&2
 # Upload to Cloudflare's R2 (S3)
 # using profile 'cf' to look up the right creds in ~/.aws/credentials
 echo "uploading $f to Cloudflare" >&2
-echo AWS_PROFILE=cf "$RCLONE" -v \
+echo echo AWS_PROFILE=cf "$RCLONE" -v \
     "${rclone_common_flags[@]}" \
     --s3-provider=Cloudflare \
     --s3-endpoint=https://64059940cc95339fc7e5888f431876ee.r2.cloudflarestorage.com \
