@@ -1,72 +1,13 @@
 use crate::ExecutionTask;
 use ic_config::flag_status::FlagStatus;
 use ic_interfaces::execution_environment::ExecutionRoundType;
+use ic_management_canister_types_private::OnLowWasmMemoryHookStatus;
 use ic_protobuf::proxy::ProxyDecodeError;
 use ic_protobuf::state::canister_state_bits::v1 as pb;
 use ic_types::CanisterId;
 use ic_types::NumBytes;
 use num_traits::SaturatingSub;
-use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
-
-/// A wrapper around the different statuses of `OnLowWasmMemory` hook execution.
-#[derive(Clone, Copy, Eq, PartialEq, Debug, Default, Deserialize, Serialize)]
-pub enum OnLowWasmMemoryHookStatus {
-    #[default]
-    ConditionNotSatisfied,
-    Ready,
-    Executed,
-}
-
-impl OnLowWasmMemoryHookStatus {
-    pub(crate) fn update(&mut self, is_hook_condition_satisfied: bool) {
-        *self = if is_hook_condition_satisfied {
-            match *self {
-                Self::ConditionNotSatisfied | Self::Ready => Self::Ready,
-                Self::Executed => Self::Executed,
-            }
-        } else {
-            Self::ConditionNotSatisfied
-        };
-    }
-
-    fn is_ready(&self) -> bool {
-        *self == Self::Ready
-    }
-}
-
-impl From<&OnLowWasmMemoryHookStatus> for pb::OnLowWasmMemoryHookStatus {
-    fn from(item: &OnLowWasmMemoryHookStatus) -> Self {
-        use OnLowWasmMemoryHookStatus::*;
-
-        match *item {
-            ConditionNotSatisfied => Self::ConditionNotSatisfied,
-            Ready => Self::Ready,
-            Executed => Self::Executed,
-        }
-    }
-}
-
-impl TryFrom<pb::OnLowWasmMemoryHookStatus> for OnLowWasmMemoryHookStatus {
-    type Error = ProxyDecodeError;
-
-    fn try_from(value: pb::OnLowWasmMemoryHookStatus) -> Result<Self, Self::Error> {
-        match value {
-            pb::OnLowWasmMemoryHookStatus::Unspecified => Err(ProxyDecodeError::ValueOutOfRange {
-                typ: "OnLowWasmMemoryHookStatus",
-                err: format!(
-                    "Unexpected value of status of on low wasm memory hook: {:?}",
-                    value
-                ),
-            }),
-            pb::OnLowWasmMemoryHookStatus::ConditionNotSatisfied => {
-                Ok(OnLowWasmMemoryHookStatus::ConditionNotSatisfied)
-            }
-            pb::OnLowWasmMemoryHookStatus::Ready => Ok(OnLowWasmMemoryHookStatus::Ready),
-            pb::OnLowWasmMemoryHookStatus::Executed => Ok(OnLowWasmMemoryHookStatus::Executed),
-        }
-    }
-}
 
 /// `TaskQueue` represents the implementation of queue structure for canister tasks satisfying the following conditions:
 ///
@@ -90,7 +31,6 @@ impl TaskQueue {
     pub fn from_checkpoint(
         queue: VecDeque<ExecutionTask>,
         on_low_wasm_memory_hook_status: OnLowWasmMemoryHookStatus,
-        canister_id: &CanisterId,
     ) -> Self {
         let mut mut_queue = queue;
 
@@ -107,21 +47,11 @@ impl TaskQueue {
             | None => None,
         };
 
-        let queue = TaskQueue {
+        Self {
             paused_or_aborted_task,
             on_low_wasm_memory_hook_status,
             queue: mut_queue,
-        };
-
-        // Because paused tasks are not allowed in checkpoint rounds when
-        // checking dts invariants that is equivalent to disabling dts.
-        queue.check_dts_invariants(
-            FlagStatus::Disabled,
-            ExecutionRoundType::CheckpointRound,
-            canister_id,
-        );
-
-        queue
+        }
     }
 
     pub fn front(&self) -> Option<&ExecutionTask> {
@@ -356,6 +286,43 @@ impl TaskQueue {
     }
 }
 
+impl From<&TaskQueue> for pb::TaskQueue {
+    fn from(item: &TaskQueue) -> Self {
+        Self {
+            paused_or_aborted_task: item.paused_or_aborted_task.as_ref().map(|task| task.into()),
+            on_low_wasm_memory_hook_status: pb::OnLowWasmMemoryHookStatus::from(
+                &item.on_low_wasm_memory_hook_status,
+            )
+            .into(),
+            queue: item.queue.iter().map(|task| task.into()).collect(),
+        }
+    }
+}
+
+impl TryFrom<pb::TaskQueue> for TaskQueue {
+    type Error = ProxyDecodeError;
+
+    fn try_from(item: pb::TaskQueue) -> Result<Self, Self::Error> {
+        Ok(Self {
+            paused_or_aborted_task: item
+                .paused_or_aborted_task
+                .map(|task| task.try_into())
+                .transpose()?,
+            on_low_wasm_memory_hook_status: pb::OnLowWasmMemoryHookStatus::try_from(
+                item.on_low_wasm_memory_hook_status,
+            )
+            .map_err(|e| ProxyDecodeError::Other(
+                format!("Error while trying to decode pb::TaskQueue::on_low_wasm_memory_hook_status, {:?}", e)))?
+            .try_into()?,
+            queue: item
+                .queue
+                .into_iter()
+                .map(|task| task.try_into())
+                .collect::<Result<VecDeque<_>, _>>()?,
+        })
+    }
+}
+
 /// Condition for `OnLowWasmMemoryHook` is satisfied if the following holds:
 ///
 /// 1. In the case of `memory_allocation`
@@ -412,13 +379,11 @@ pub fn is_low_wasm_memory_hook_condition_satisfied(
 mod tests {
     use std::sync::Arc;
 
-    use crate::{
-        canister_state::system_state::OnLowWasmMemoryHookStatus,
-        metadata_state::subnet_call_context_manager::InstallCodeCallId, ExecutionTask,
-    };
+    use crate::{metadata_state::subnet_call_context_manager::InstallCodeCallId, ExecutionTask};
 
     use super::TaskQueue;
     use crate::canister_state::system_state::PausedExecutionId;
+    use ic_management_canister_types_private::OnLowWasmMemoryHookStatus;
     use ic_test_utilities_types::messages::IngressBuilder;
     use ic_types::{
         messages::{CanisterCall, CanisterMessageOrTask, CanisterTask},

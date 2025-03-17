@@ -7,7 +7,7 @@ pub struct Metrics {
     pub transform_execution_duration: Histogram,
     /// Execution time of http request via adapter.
     pub http_request_duration: HistogramVec,
-    /// Request results returned to conesusus.
+    /// Request results returned to consensus.
     pub request_total: IntCounterVec,
 }
 
@@ -16,7 +16,7 @@ impl Metrics {
         Self {
             transform_execution_duration: metrics_registry.histogram(
                 "canister_http_transform_duration_seconds",
-                "Execiton time of response transformation.",
+                "Execution time of response transformation.",
                 // 10ms, 20ms, 50ms, …, 1s, 2s, 5s
                 decimal_buckets(-2, 0),
             ),
