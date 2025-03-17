@@ -27,7 +27,7 @@ const NODE_REGISTRATION_BACKOFF: Duration = Duration::from_secs(5);
 
 /// Prepare the environment for nested tests.
 /// SetupOS -> HostOS -> GuestOS
-pub fn config(env: TestEnv, mainnet_version: bool) {
+pub fn config(env: TestEnv) {
     let principal =
         PrincipalId::from_str("7532g-cd7sa-3eaay-weltl-purxe-qliyt-hfuto-364ru-b3dsz-kw5uz-kqe")
             .unwrap();
@@ -37,11 +37,8 @@ pub fn config(env: TestEnv, mainnet_version: bool) {
         .add_fast_single_node_subnet(SubnetType::System)
         .with_api_boundary_nodes(1)
         .with_node_provider(principal)
-        .with_node_operator(principal);
-
-    if mainnet_version {
-        ic = ic.with_mainnet_config();
-    }
+        .with_node_operator(principal)
+        .with_mainnet_config();
 
     ic.setup_and_start(&env)
         .expect("failed to setup IC under test");
