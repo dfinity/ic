@@ -1,4 +1,4 @@
-load("@rules_rust//rust:defs.bzl", "rust_library")
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library")
 load("//rs/tests:common.bzl", "GUESTOS_RUNTIME_DEPS", "MAINNET_ENV")
 load("//rs/tests:system_tests.bzl", "system_test_nns")
 
@@ -16,6 +16,7 @@ DEPENDENCIES = [
     "//rs/tests/driver:ic-system-test-driver",
     "//rs/types/types",
     "@crate_index//:anyhow",
+    "@crate_index//:reqwest",
     "@crate_index//:slog",
     "@crate_index//:url",
 ]
@@ -51,14 +52,20 @@ system_test_nns(
     deps = RUNNER_DEPENDENCIES,
 )
 
+rust_binary(
+    name = "upgrade_test_bin",
+    testonly = True,
+    srcs = ["upgrade.rs"],
+    deps = DEPENDENCIES + [":nested"],
+)
+
 system_test_nns(
-    name = "upgrade",
+    name = "hostos_upgrade_smoke_test",
     env = MAINNET_ENV,
     flaky = True,
-    tags = [
-        "system_test_hourly",
-    ],
+    tags = ["system_test_hourly"],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
+    test_driver_target = ":upgrade_test_bin",
     test_timeout = "eternal",
     uses_guestos_dev = True,
     uses_hostos_dev_test = True,
@@ -68,16 +75,32 @@ system_test_nns(
 )
 
 system_test_nns(
-    name = "upgrade_mainnet",
+    name = "hostos_upgrade_from_latest_release_to_current",
     env = MAINNET_ENV,
     flaky = True,
-    tags = ["system_test_hourly"],
-    target_compatible_with = ["@platforms//os:linux"],
+    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
+    test_driver_target = ":upgrade_test_bin",
+    test_timeout = "eternal",
+    uses_guestos_dev = True,
+    uses_hostos_dev_test = True,
+    uses_setupos_mainnet = True,
+    runtime_deps = GUESTOS_RUNTIME_DEPS,
+    deps = RUNNER_DEPENDENCIES,
+)
+
+system_test_nns(
+    name = "hostos_upgrade_from_current_to_latest_release",
+    env = MAINNET_ENV,
+    flaky = True,
+    tags = [
+        "system_test_hourly",
+    ],
+    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
+    test_driver_target = ":upgrade_test_bin",
     test_timeout = "eternal",
     uses_guestos_dev = True,
     uses_hostos_dev_test = True,
     uses_hostos_mainnet = True,
-    uses_setupos_mainnet = True,
     runtime_deps = GUESTOS_RUNTIME_DEPS,
     deps = RUNNER_DEPENDENCIES,
 )
