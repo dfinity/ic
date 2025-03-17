@@ -3974,6 +3974,7 @@ impl UploadCanisterSnapshotMetadataArgs {
 #[derive(Clone, Debug, Deserialize, CandidType, Serialize)]
 pub struct UploadCanisterSnapshotDataArgs {
     pub canister_id: PrincipalId,
+    #[serde(with = "serde_bytes")]
     pub snapshot_id: Vec<u8>,
     pub kind: CanisterSnapshotDataOffset,
     #[serde(with = "serde_bytes")]
