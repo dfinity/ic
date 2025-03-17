@@ -78,54 +78,6 @@ impl TransportSecretKey {
         use pairing::group::Curve;
         public_key.to_affine().to_compressed().to_vec()
     }
-
-    /// Decrypts and verifies an encrypted key
-    ///
-    /// Returns the encoding of an elliptic curve point in BLS12-381 G1 group
-    ///
-    /// This is primarily useful for IBE; for symmetric key encryption use
-    /// decrypt_and_hash
-    pub fn decrypt(
-        &self,
-        encrypted_key_bytes: &[u8],
-        derived_public_key_bytes: &[u8],
-        input: &[u8],
-    ) -> Result<Vec<u8>, String> {
-        let encrypted_key = EncryptedKey::deserialize(encrypted_key_bytes)?;
-        let derived_public_key = DerivedPublicKey::deserialize(derived_public_key_bytes)
-            .map_err(|e| format!("failed to deserialize public key: {:?}", e))?;
-        Ok(encrypted_key
-            .decrypt_and_verify(self, derived_public_key, input)?
-            .to_compressed()
-            .to_vec())
-    }
-
-    /// Decrypts and verifies an encrypted key, and hashes it to a symmetric key
-    ///
-    /// The output length can be arbitrary and is specified by the caller
-    ///
-    /// The `symmetric_key_associated_data` field should include information about
-    /// the protocol and cipher that this key will be used for.
-    pub fn decrypt_and_hash(
-        &self,
-        encrypted_key_bytes: &[u8],
-        derived_public_key_bytes: &[u8],
-        input: &[u8],
-        symmetric_key_bytes: usize,
-        symmetric_key_associated_data: &[u8],
-    ) -> Result<Vec<u8>, String> {
-        let key = self.decrypt(encrypted_key_bytes, derived_public_key_bytes, input)?;
-
-        let mut ro = ro::RandomOracle::new(&format!(
-            "ic-crypto-vetkd-bls12-381-create-secret-key-{}-bytes",
-            symmetric_key_bytes
-        ));
-        ro.update_bin(symmetric_key_associated_data);
-        ro.update_bin(&key);
-        let hash = ro.finalize_to_vec(symmetric_key_bytes);
-
-        Ok(hash)
-    }
 }
 
 #[cfg_attr(feature = "js", wasm_bindgen)]
