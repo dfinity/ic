@@ -22,7 +22,6 @@ use icp_ledger::{
 };
 use icrc_ledger_types::icrc1::account::Account;
 use on_wire::bytes;
-use on_wire::IntoWire;
 use serde::Deserialize;
 use serde_bytes::ByteBuf;
 use std::convert::TryFrom;
@@ -2491,20 +2490,19 @@ fn send_dfx_test() {
 
         let ledger = proj
             .cargo_bin("ledger-canister", &[])
-            .install_(
-                &r,
-                CandidOne(
-                    LedgerCanisterInitPayload::builder()
-                        .minting_account(
-                            CanisterId::try_from(minting_account.get_principal_id())
-                                .unwrap()
-                                .into(),
-                        )
-                        .transfer_fee(Tokens::from_e8s(12345))
-                        .initial_values(accounts)
-                        .build()
-                        .unwrap(),
-                ),
+            .install(&r)
+            .bytes(
+                Encode!(&LedgerCanisterInitPayload::builder()
+                    .minting_account(
+                        CanisterId::try_from(minting_account.get_principal_id())
+                            .unwrap()
+                            .into(),
+                    )
+                    .transfer_fee(Tokens::from_e8s(12345))
+                    .initial_values(accounts)
+                    .build()
+                    .unwrap())
+                .unwrap(),
             )
             .await?;
 
