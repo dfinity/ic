@@ -28,7 +28,3 @@ path = "registration.rs"
 [[bin]]
 name = "upgrade"
 path = "upgrade.rs"
-
-[[bin]]
-name = "upgrade_mainnet"
-path = "upgrade_mainnet.rs"
