@@ -1658,8 +1658,9 @@ impl ExecutionEnvironment {
 
             Ok(Ic00Method::ReadCanisterSnapshotMetadata) => {
                 let res = ReadCanisterSnapshotMetadataArgs::decode(payload).and_then(|args| {
-                    let x = 0;
+                    let canister_id = args.get_canister_id();
                     self.read_canister_snapshot_metadata(*msg.sender(), &state, args)
+                        .map(|x| (x, Some(canister_id)))
                 });
                 ExecuteSubnetMessageResult::Finished {
                     response: res,
@@ -2428,13 +2429,12 @@ impl ExecutionEnvironment {
         result
     }
 
-    ///
     fn read_canister_snapshot_metadata(
         &self,
         sender: PrincipalId,
         state: &ReplicatedState,
         args: ReadCanisterSnapshotMetadataArgs,
-    ) -> Result<(Vec<u8>, Option<CanisterId>), UserError> {
+    ) -> Result<Vec<u8>, UserError> {
         todo!()
     }
 
