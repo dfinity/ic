@@ -123,7 +123,7 @@ impl Ic00MethodPermissions {
                 allow_remote_subnet_sender: true,
                 allow_only_nns_subnet_sender: false,
             },
-            Ic00Method::VetKdDeriveEncryptedKey => Self {
+            Ic00Method::VetKdDeriveKey => Self {
                 method,
                 allow_remote_subnet_sender: true,
                 allow_only_nns_subnet_sender: false,
@@ -200,7 +200,8 @@ impl Ic00MethodPermissions {
             Ic00Method::TakeCanisterSnapshot
             | Ic00Method::LoadCanisterSnapshot
             | Ic00Method::ListCanisterSnapshots
-            | Ic00Method::DeleteCanisterSnapshot => Self {
+            | Ic00Method::DeleteCanisterSnapshot
+            | Ic00Method::ReadCanisterSnapshotMetadata => Self {
                 method,
                 allow_remote_subnet_sender: true,
                 allow_only_nns_subnet_sender: false,
