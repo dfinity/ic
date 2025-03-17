@@ -33,7 +33,7 @@ pub fn config(env: TestEnv) {
             .unwrap();
 
     // Setup "testnet"
-    let ic = InternetComputer::new()
+    InternetComputer::new()
         .add_fast_single_node_subnet(SubnetType::System)
         .with_api_boundary_nodes(1)
         .with_node_provider(principal)
