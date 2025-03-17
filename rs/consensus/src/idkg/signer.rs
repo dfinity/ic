@@ -2264,8 +2264,8 @@ mod tests {
                     request: RequestBuilder::new().sender(canister_test_id(1)).build(),
                     args: ThresholdArguments::VetKd(VetKdArguments {
                         key_id: key_id.clone(),
-                        derivation_id: vec![],
-                        encryption_public_key: vec![],
+                        input: vec![],
+                        transport_public_key: vec![],
                         ni_dkg_id: fake_dkg_id(key_id),
                         height,
                     }),

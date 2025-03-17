@@ -207,7 +207,9 @@ fn large_http_request() {
             large_http_request_bytes,
         )
         .unwrap_err();
-    assert!(err.reject_message.contains("Deserialization Failed"));
+    assert!(err
+        .reject_message
+        .contains("failed to decode call arguments"));
 }
 
 #[test]
