@@ -155,6 +155,8 @@ pub struct FeatureFlags {
     pub best_effort_responses: BestEffortResponsesFeature,
     /// Collect a backtrace from the canister when it panics.
     pub canister_backtrace: FlagStatus,
+    /// Use libc::mincore() as a metric for resident pages.
+    pub use_mincore_for_resident_pages: FlagStatus,
 }
 
 impl Default for FeatureFlags {
@@ -175,6 +177,7 @@ impl Default for FeatureFlags {
             wasm64: FlagStatus::Enabled,
             best_effort_responses: BestEffortResponsesFeature::SpecificSubnets(enabled_subnets),
             canister_backtrace: FlagStatus::Enabled,
+            use_mincore_for_resident_pages: FlagStatus::Disabled,
         }
     }
 }

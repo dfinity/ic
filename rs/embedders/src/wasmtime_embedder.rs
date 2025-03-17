@@ -581,6 +581,10 @@ impl WasmtimeEmbedder {
             stable_memory_dirty_page_limit: current_dirty_page_limit,
             stable_memory_page_access_limit: current_accessed_limit,
             main_memory_type,
+            use_mincore_for_resident_pages: self
+                .config
+                .feature_flags
+                .use_mincore_for_resident_pages,
         })
     }
 
@@ -809,6 +813,7 @@ pub struct PageAccessResults {
     pub wasm_mmap_count: usize,
     pub wasm_mprotect_count: usize,
     pub wasm_copy_page_count: usize,
+    pub wasm_resident_pages: usize,
     pub stable_dirty_pages: Vec<PageIndex>,
     pub stable_accessed_pages: usize,
     pub stable_read_before_write_count: usize,
@@ -838,6 +843,7 @@ pub struct WasmtimeInstance {
     stable_memory_dirty_page_limit: ic_types::NumOsPages,
     stable_memory_page_access_limit: ic_types::NumOsPages,
     main_memory_type: WasmMemoryType,
+    use_mincore_for_resident_pages: FlagStatus,
 }
 
 impl WasmtimeInstance {
@@ -913,6 +919,7 @@ impl WasmtimeInstance {
                 wasm_mmap_count: 0,
                 wasm_mprotect_count: 0,
                 wasm_copy_page_count: 0,
+                wasm_resident_pages: 0,
                 stable_dirty_pages,
                 stable_accessed_pages: 0,
                 stable_read_before_write_count: 0,
@@ -970,6 +977,8 @@ impl WasmtimeInstance {
                     wasm_mmap_count: wasm_tracker.mmap_count(),
                     wasm_mprotect_count: wasm_tracker.mprotect_count(),
                     wasm_copy_page_count: wasm_tracker.copy_page_count(),
+                    wasm_resident_pages: wasm_tracker
+                        .num_resident_pages(self.use_mincore_for_resident_pages),
                     stable_dirty_pages,
                     stable_accessed_pages,
                     ..Default::default()
@@ -992,6 +1001,8 @@ impl WasmtimeInstance {
                 wasm_mmap_count: wasm_tracker.mmap_count(),
                 wasm_mprotect_count: wasm_tracker.mprotect_count(),
                 wasm_copy_page_count: wasm_tracker.copy_page_count(),
+                wasm_resident_pages: wasm_tracker
+                    .num_resident_pages(self.use_mincore_for_resident_pages),
                 stable_dirty_pages,
                 stable_accessed_pages,
                 stable_read_before_write_count: stable_tracker.read_before_write_count(),
@@ -1030,6 +1041,8 @@ impl WasmtimeInstance {
         self.instance_stats.wasm_mmap_count += access_results.wasm_mmap_count;
         self.instance_stats.wasm_mprotect_count += access_results.wasm_mprotect_count;
         self.instance_stats.wasm_copy_page_count += access_results.wasm_copy_page_count;
+        self.instance_stats.wasm_resident_pages += access_results.wasm_resident_pages;
+
         // Stable stats.
         self.instance_stats.stable_accessed_pages += access_results.stable_accessed_pages;
         self.instance_stats.stable_dirty_pages += access_results.stable_dirty_pages.len();
