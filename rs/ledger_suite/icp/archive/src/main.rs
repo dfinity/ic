@@ -294,6 +294,7 @@ fn get_blocks_() {
                 requested_range.start, requested_range.end, local_blocks_range.start, local_blocks_range.end)));
         let res_proto = to_proto_bytes(res).expect("failed to encode get_blocks_pb response");
         reply_raw(&res_proto);
+        return;
     }
     let mut blocks = vec![];
     let offset_requested_range =
