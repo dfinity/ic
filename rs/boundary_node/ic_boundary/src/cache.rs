@@ -178,8 +178,7 @@ impl Cache {
         self.cache.run_pending_tasks().await;
     }
 
-    // For now stuff below is used only in tests, but belongs here
-    #[allow(dead_code)]
+    #[cfg(test)]
     async fn clear(&self) {
         self.cache.invalidate_all();
         self.housekeep().await;

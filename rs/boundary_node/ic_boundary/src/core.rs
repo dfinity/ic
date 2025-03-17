@@ -1069,12 +1069,6 @@ impl<T: Run> Run for WithMetrics<T> {
     }
 }
 
-#[allow(dead_code)]
-pub struct WithRetry<T>(
-    pub T,
-    pub Duration, // attempt_interval
-);
-
 pub struct ThrottleParams {
     pub throttle_duration: Duration,
     pub next_time: Option<Instant>,
