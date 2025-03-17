@@ -38,7 +38,6 @@ pub fn config(env: TestEnv) {
         .with_api_boundary_nodes(1)
         .with_node_provider(principal)
         .with_node_operator(principal)
-        .with_mainnet_config()
         .setup_and_start(&env)
         .expect("failed to setup IC under test");
 
