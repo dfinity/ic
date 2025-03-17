@@ -151,7 +151,7 @@ pub fn upgrade_hostos(env: TestEnv) {
     // The HostOS upgrade is applied with a reboot to the host VM.
     // Wait for the HostOS upgrade to begin before checking GuestOS metrics connection
     info!(logger, "Waiting for the HostOS upgrade to apply...");
-    std::thread::sleep(std::time::Duration::from_secs(120));
+    std::thread::sleep(std::time::Duration::from_secs(180));
 
     info!(logger, "Waiting for GuestOS metrics...");
     host.await_guestos_metrics_available().unwrap();
