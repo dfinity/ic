@@ -1657,10 +1657,10 @@ impl ExecutionEnvironment {
             }
 
             Ok(Ic00Method::ReadCanisterSnapshotMetadata) => {
-                // TODO: EXC-1955
-                #[allow(clippy::bind_instead_of_map)]
-                let res = ReadCanisterSnapshotMetadataArgs::decode(payload)
-                    .and_then(|_args| Ok((vec![], None)));
+                let res = ReadCanisterSnapshotMetadataArgs::decode(payload).and_then(|args| {
+                    let x = 0;
+                    self.read_canister_snapshot_metadata(*msg.sender(), &state, args)
+                });
                 ExecuteSubnetMessageResult::Finished {
                     response: res,
                     refund: msg.take_cycles(),
@@ -2426,6 +2426,16 @@ impl ExecutionEnvironment {
         // Put canister back.
         state.put_canister_state(canister);
         result
+    }
+
+    ///
+    fn read_canister_snapshot_metadata(
+        &self,
+        sender: PrincipalId,
+        state: &ReplicatedState,
+        args: ReadCanisterSnapshotMetadataArgs,
+    ) -> Result<(Vec<u8>, Option<CanisterId>), UserError> {
+        todo!()
     }
 
     fn node_metrics_history(
