@@ -1,11 +1,5 @@
 #![allow(clippy::disallowed_types)]
 
-use std::{
-    hash::{DefaultHasher, Hash, Hasher},
-    sync::{Arc, RwLock},
-    time::Instant,
-};
-
 use anyhow::Error;
 use arc_swap::ArcSwapOption;
 use async_trait::async_trait;
@@ -23,6 +17,13 @@ use prometheus::{
     register_int_counter_vec_with_registry, register_int_gauge_vec_with_registry,
     register_int_gauge_with_registry, Encoder, HistogramOpts, HistogramVec, IntCounterVec,
     IntGauge, IntGaugeVec, Registry, TextEncoder,
+};
+use salt_sharing_api::SALT_SIZE;
+use siphasher::sip::SipHasher;
+use std::{
+    hash::{Hash, Hasher},
+    sync::{Arc, RwLock},
+    time::Instant,
 };
 use tikv_jemalloc_ctl::{epoch, stats};
 use tower_http::request_id::RequestId;
@@ -651,18 +652,38 @@ pub async fn metrics_middleware(
             .observe(response_size as f64);
 
         // Anonymization
-        let s = anonymization_salt.load();
+        let salt = anonymization_salt.load();
 
-        let hash_fn = |v: &str| -> String {
-            if s.is_none() {
-                return "N/A".to_string();
-            }
+        let hash_fn = |input: &str| -> String {
+            let err_str = "N/A".to_string();
 
-            let mut h = DefaultHasher::new();
-            v.hash(&mut h);
-            s.hash(&mut h);
+            let salt = match salt.as_ref() {
+                Some(s) if s.len() == SALT_SIZE => s,
+                _ => return err_str,
+            };
 
-            format!("{:x}", h.finish())
+            // Convert first 8 bytes to u64, return N/A if it fails
+            let key0 = match salt[0..8].try_into() {
+                Ok(bytes) => u64::from_le_bytes(bytes),
+                Err(_) => return err_str,
+            };
+
+            // Convert next 8 bytes to u64, return N/A if it fails
+            let key1 = match salt[8..16].try_into() {
+                Ok(bytes) => u64::from_le_bytes(bytes),
+                Err(_) => return err_str,
+            };
+
+            let mut hasher = SipHasher::new_with_keys(key0, key1);
+
+            // First hash the salt
+            salt.hash(&mut hasher);
+            // Aftewards hash the input
+            input.hash(&mut hasher);
+            // Then salt once again
+            salt.hash(&mut hasher);
+
+            format!("{:x}", hasher.finish())
         };
 
         let remote_addr = hash_fn(&remote_addr);

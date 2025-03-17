@@ -74,6 +74,7 @@ DEPENDENCIES = [
     "@crate_index//:serde_regex",
     "@crate_index//:serde_yaml",
     "@crate_index//:simple_moving_average",
+    "@crate_index//:siphasher",
     "@crate_index//:slog",
     "@crate_index//:strum",
     "@crate_index//:thiserror",
