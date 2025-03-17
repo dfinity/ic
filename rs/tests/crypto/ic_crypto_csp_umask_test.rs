@@ -129,8 +129,10 @@ impl From<String> for SecretKeyStoreMetadata {
 }
 
 impl SecretKeyStoreMetadata {
+    /// Treats the metadata to have been updated if either the timestamp or the inode number has
+    /// changed.
     fn has_been_updated(&self, previous: &SecretKeyStoreMetadata) -> bool {
-        self.timestamp > previous.timestamp && self.inode != previous.inode
+        self.timestamp != previous.timestamp || self.inode != previous.inode
     }
 
     fn has_correct_permissions(&self) -> bool {
