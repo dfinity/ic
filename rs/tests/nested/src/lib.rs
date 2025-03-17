@@ -122,7 +122,7 @@ pub fn upgrade_hostos(env: TestEnv) {
     // Elect target HostOS version
     info!(
         logger,
-        "Electing target HostOS version '{target_version}' with sha256 '{update_image_sha256}' and upgrade urls: '{update_image_url}'"
+        "Electing target HostOS version '{target_version}' with sha256 '{update_image_sha256}' and upgrade url: '{update_image_url}'"
     );
     let nns_subnet = new_topology.root_subnet();
     let nns_node = nns_subnet.nodes().next().unwrap();
@@ -144,8 +144,8 @@ pub fn upgrade_hostos(env: TestEnv) {
         vec![node_id],
     ));
 
-    // The HostOS upgrade is applied with a reboot to the host VM.
-    // Wait for the HostOS upgrade to begin before checking GuestOS metrics connection
+    // The HostOS upgrade is applied with a reboot to the host machine.
+    // Wait for the host to reboot before checking GuestOS metrics connection
     info!(logger, "Waiting for the HostOS upgrade to apply...");
     std::thread::sleep(std::time::Duration::from_secs(180));
 
