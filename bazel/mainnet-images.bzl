@@ -5,7 +5,7 @@ This module defines Bazel targets for the mainnet versions of ICOS images
 load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_file")
 load("@mainnet_versions//:defs.bzl", "mainnet_versions")
 
-MAINNET_REVISION = mainnet_versions["hostos"]["latest_upgrade"]["version"]
+MAINNET_REVISION = mainnet_versions["hostos"]["latest_release"]["version"]
 
 def base_download_url(git_commit_id, variant, update, test):
     return "https://download.dfinity.systems/ic/{git_commit_id}/{variant}/{component}{test}/".format(
