@@ -10,6 +10,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 - The module `management_canister` used to contain interface types of the IC management canister. Those types have since been published on crates.io as `ic-management-canister-types`, so PocketIC can depend on that and remove the redundant types.
 
+### Changed
+
+- The functions `PocketIcBuilder::with_nns_subnet`, `PocketIcBuilder::with_sns_subnet`, `PocketIcBuilder::with_ii_subnet`, `PocketIcBuilder::with_fiduciary_subnet`, and `PocketIcBuilder::with_bitcoin_subnet` do not add a new empty subnet if a subnet of the corresponding kind has already been specified (e.g., with state loaded from a given state directory).
+
 
 
 ## 7.0.0 - 2025-02-26
