@@ -48,7 +48,7 @@ use ic_management_canister_types_private::{
     SignWithECDSAArgs, SignWithSchnorrArgs, SignWithSchnorrAux, StoredChunksArgs, SubnetInfoArgs,
     SubnetInfoResponse, TakeCanisterSnapshotArgs, UninstallCodeArgs, UpdateSettingsArgs,
     UploadCanisterSnapshotDataArgs, UploadCanisterSnapshotMetadataArgs, UploadChunkArgs,
-    VetKdDeriveEncryptedKeyArgs, VetKdPublicKeyArgs, VetKdPublicKeyResult, IC_00,
+    VetKdDeriveKeyArgs, VetKdPublicKeyArgs, VetKdPublicKeyResult, IC_00,
 };
 use ic_metrics::MetricsRegistry;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;

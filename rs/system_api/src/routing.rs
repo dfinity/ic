@@ -14,8 +14,7 @@ use ic_management_canister_types_private::{
     ReadCanisterSnapshotMetadataArgs, ReshareChainKeyArgs, SchnorrPublicKeyArgs, SignWithECDSAArgs,
     SignWithSchnorrArgs, StoredChunksArgs, SubnetInfoArgs, TakeCanisterSnapshotArgs,
     UninstallCodeArgs, UpdateSettingsArgs, UploadCanisterSnapshotDataArgs,
-    UploadCanisterSnapshotMetadataArgs, UploadChunkArgs, VetKdDeriveEncryptedKeyArgs,
-    VetKdPublicKeyArgs,
+    UploadCanisterSnapshotMetadataArgs, UploadChunkArgs, VetKdDeriveKeyArgs, VetKdPublicKeyArgs,
 };
 use ic_replicated_state::NetworkTopology;
 use itertools::Itertools;
