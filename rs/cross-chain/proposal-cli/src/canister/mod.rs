@@ -22,6 +22,7 @@ pub enum TargetCanister {
     IcpArchive1,
     IcpArchive2,
     IcpArchive3,
+    IcpArchive4,
     IcpIndex,
     IcpLedger,
     LedgerSuiteOrchestrator,
@@ -41,6 +42,7 @@ impl TargetCanister {
             TargetCanister::IcpArchive1 => "icp-archive1",
             TargetCanister::IcpArchive2 => "icp-archive2",
             TargetCanister::IcpArchive3 => "icp-archive3",
+            TargetCanister::IcpArchive4 => "icp-archive4",
             TargetCanister::IcpIndex => "icp-index",
             TargetCanister::IcpLedger => "icp-ledger",
             TargetCanister::LedgerSuiteOrchestrator => "orchestrator",
@@ -64,6 +66,7 @@ impl TargetCanister {
             | TargetCanister::IcpArchive1
             | TargetCanister::IcpArchive2
             | TargetCanister::IcpArchive3
+            | TargetCanister::IcpArchive4
             | TargetCanister::IcpIndex
             | TargetCanister::IcpLedger
             | TargetCanister::LedgerSuiteOrchestrator => "https://github.com/dfinity/ic.git",
@@ -99,7 +102,8 @@ impl TargetCanister {
             }
             TargetCanister::IcpArchive1
             | TargetCanister::IcpArchive2
-            | TargetCanister::IcpArchive3 => {
+            | TargetCanister::IcpArchive3
+            | TargetCanister::IcpArchive4 => {
                 PathBuf::from("rs/ledger_suite/icp/ledger_archive.did")
             }
             TargetCanister::IcpIndex => PathBuf::from("rs/ledger_suite/icp/index/index.did"),
@@ -127,6 +131,7 @@ impl TargetCanister {
             | TargetCanister::IcpArchive1
             | TargetCanister::IcpArchive2
             | TargetCanister::IcpArchive3
+            | TargetCanister::IcpArchive4
             | TargetCanister::IcpIndex
             | TargetCanister::IcpLedger
             | TargetCanister::LedgerSuiteOrchestrator => {
@@ -142,7 +147,8 @@ impl TargetCanister {
         match &self {
             TargetCanister::IcpArchive1
             | TargetCanister::IcpArchive2
-            | TargetCanister::IcpArchive3 => {
+            | TargetCanister::IcpArchive3
+            | TargetCanister::IcpArchive4 => {
                 vec![
                     PathBuf::from("packages/icrc-ledger_types"),
                     PathBuf::from("rs/ledger_suite/icp/archive"),
@@ -201,6 +207,7 @@ impl TargetCanister {
             | TargetCanister::IcpArchive1
             | TargetCanister::IcpArchive2
             | TargetCanister::IcpArchive3
+            | TargetCanister::IcpArchive4
             | TargetCanister::IcpIndex
             | TargetCanister::IcpLedger
             | TargetCanister::LedgerSuiteOrchestrator => {
@@ -225,7 +232,8 @@ impl TargetCanister {
             TargetCanister::CkEthMinter => "ic-cketh-minter.wasm.gz",
             TargetCanister::IcpArchive1
             | TargetCanister::IcpArchive2
-            | TargetCanister::IcpArchive3 => "ledger-archive-node-canister.wasm.gz",
+            | TargetCanister::IcpArchive3
+            | TargetCanister::IcpArchive4 => "ledger-archive-node-canister.wasm.gz",
             TargetCanister::IcpIndex => "ic-icp-index-canister.wasm.gz",
             TargetCanister::IcpLedger => "ledger-canister_notify-method.wasm.gz",
             TargetCanister::LedgerSuiteOrchestrator => {
@@ -251,6 +259,7 @@ impl TargetCanister {
             | TargetCanister::IcpArchive1
             | TargetCanister::IcpArchive2
             | TargetCanister::IcpArchive3
+            | TargetCanister::IcpArchive4
             | TargetCanister::IcpIndex
             | TargetCanister::IcpLedger
             | TargetCanister::LedgerSuiteOrchestrator => {
@@ -292,6 +301,7 @@ impl TargetCanister {
             TargetCanister::IcpArchive1
             | TargetCanister::IcpArchive2
             | TargetCanister::IcpArchive3
+            | TargetCanister::IcpArchive4
             | TargetCanister::IcpIndex
             | TargetCanister::IcpLedger => PathBuf::from("rs/ledger_suite/icp/canister_ids.json"),
             TargetCanister::EvmRpc
@@ -326,6 +336,7 @@ impl FromStr for TargetCanister {
             ["icp", "archive1"] => Ok(TargetCanister::IcpArchive1),
             ["icp", "archive2"] => Ok(TargetCanister::IcpArchive2),
             ["icp", "archive3"] => Ok(TargetCanister::IcpArchive3),
+            ["icp", "archive4"] => Ok(TargetCanister::IcpArchive4),
             ["icp", "index"] => Ok(TargetCanister::IcpIndex),
             ["icp", "ledger"] => Ok(TargetCanister::IcpLedger),
             ["evm", "rpc"] => Ok(TargetCanister::EvmRpc),
@@ -351,6 +362,7 @@ impl Display for TargetCanister {
             TargetCanister::IcpArchive1 => write!(f, "ICP archive1"),
             TargetCanister::IcpArchive2 => write!(f, "ICP archive2"),
             TargetCanister::IcpArchive3 => write!(f, "ICP archive3"),
+            TargetCanister::IcpArchive4 => write!(f, "ICP archive4"),
             TargetCanister::IcpIndex => write!(f, "ICP index"),
             TargetCanister::IcpLedger => write!(f, "ICP ledger"),
             TargetCanister::LedgerSuiteOrchestrator => write!(f, "ledger suite orchestrator"),

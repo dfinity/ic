@@ -15,6 +15,7 @@ rust_library(
     deps = [
         # Keep sorted.
         "//packages/ic-ed25519",
+        "//packages/ic-error-types",
         "//rs/canonical_state/certification_version",
         "//rs/config",
         "//rs/crypto/utils/threshold_sig_der",
@@ -36,7 +37,6 @@ rust_library(
         "//rs/registry/subnet_type",
         "//rs/replicated_state",
         "//rs/types/base_types",
-        "//rs/types/error_types",
         "//rs/types/management_canister_types",
         "//rs/types/types",
         "//rs/utils/thread",
@@ -55,8 +55,6 @@ rust_test(
         "//rs/interfaces/state_manager/mocks",
         "//rs/registry/fake",
         "//rs/registry/local_registry",
-        "//rs/registry/local_store",
-        "//rs/registry/local_store/artifacts",
         "//rs/registry/proto_data_provider",
         "//rs/registry/transport",
         "//rs/state_manager",
@@ -76,7 +74,6 @@ rust_test(
         "@crate_index//:pretty_assertions",
         "@crate_index//:rand",
         "@crate_index//:rand_chacha",
-        "@crate_index//:tempfile",
     ],
 )
 

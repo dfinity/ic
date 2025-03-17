@@ -970,6 +970,17 @@ impl Validator {
             .get_by_height_range(range)
         {
             // Handle integrity check and verification errors early
+            let verification_result = self.verify_artifact(pool_reader, &proposal);
+            if let Err(error) = verification_result {
+                if let Some(action) = self.compute_action_from_validation_error(
+                    pool_reader,
+                    error,
+                    proposal.into_message(),
+                ) {
+                    change_set.push(action);
+                }
+                continue;
+            }
             if !proposal.check_integrity() {
                 change_set.push(ChangeAction::HandleInvalid(
                     proposal.clone().into_message(),
@@ -980,17 +991,6 @@ impl Validator {
                         proposal.as_ref().payload.as_ref()
                     ),
                 ));
-                continue;
-            }
-            let verification_result = self.verify_artifact(pool_reader, &proposal);
-            if let Err(error) = verification_result {
-                if let Some(action) = self.compute_action_from_validation_error(
-                    pool_reader,
-                    error,
-                    proposal.into_message(),
-                ) {
-                    change_set.push(action);
-                }
                 continue;
             }
 

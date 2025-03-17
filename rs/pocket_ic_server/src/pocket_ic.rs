@@ -1,5 +1,5 @@
 use crate::state_api::state::{HasStateLabel, OpOut, PocketIcError, StateLabel};
-use crate::{async_trait, copy_dir, BlobStore, OpId, Operation, SubnetBlockmaker};
+use crate::{copy_dir, BlobStore, OpId, Operation, SubnetBlockmaker};
 use askama::Template;
 use axum::{
     extract::State,
@@ -1375,7 +1375,7 @@ impl SingleResponseAdapter {
     }
 }
 
-#[tonic::async_trait]
+#[async_trait::async_trait]
 impl HttpsOutcallsService for SingleResponseAdapter {
     async fn https_outcall(
         &self,
@@ -1942,18 +1942,16 @@ pub struct StatusRequest {
 
 struct PocketHealth;
 
-#[async_trait]
 impl Health for PocketHealth {
-    async fn health(&self) -> ReplicaHealthStatus {
+    fn health(&self) -> ReplicaHealthStatus {
         ReplicaHealthStatus::Healthy
     }
 }
 
 struct PocketRootKey(pub Option<Vec<u8>>);
 
-#[async_trait]
 impl RootKey for PocketRootKey {
-    async fn root_key(&self) -> Option<Vec<u8>> {
+    fn root_key(&self) -> Option<Vec<u8>> {
         self.0.clone()
     }
 }
@@ -2040,6 +2038,7 @@ impl Operation for CallRequest {
                     Arc::new(RwLock::new(PocketIngressPoolThrottler)),
                     s,
                 )
+                .with_time_source(subnet.time_source.clone())
                 .build();
 
                 // Task that waits for call service to submit the ingress message, and
@@ -2170,6 +2169,7 @@ impl Operation for QueryRequest {
                     Arc::new(OnceCell::new_with(delegation)),
                     query_handler,
                 )
+                .with_time_source(subnet.time_source.clone())
                 .build_service();
 
                 let request = axum::http::Request::builder()
@@ -2225,6 +2225,7 @@ impl Operation for CanisterReadStateRequest {
                     Arc::new(StandaloneIngressSigVerifier),
                     Arc::new(OnceCell::new_with(delegation)),
                 )
+                .with_time_source(subnet.time_source.clone())
                 .build_service();
 
                 let request = axum::http::Request::builder()

@@ -8,6 +8,7 @@ load("//bazel:prost.bzl", "generated_files_check")
 package(default_visibility = ["//visibility:public"])
 
 exports_files([
+    "canister_ids.json",
     "ledger.did",
     "ledger_archive.did",
 ])
@@ -138,7 +139,6 @@ rust_ic_test_suite(
         "//rs/ledger_suite/icp/test_utils",
         "//rs/nns/constants",
         "//rs/rust_canisters/canister_test",
-        "//rs/rust_canisters/dfn_candid",
         "//rs/rust_canisters/dfn_protobuf",
         "//rs/rust_canisters/http_types",
         "//rs/rust_canisters/on_wire",

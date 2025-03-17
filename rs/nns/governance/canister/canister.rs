@@ -5,13 +5,12 @@ use ic_cdk::{
     api::{call::arg_data_raw, call_context_instruction_counter},
     caller as ic_cdk_caller, heartbeat, post_upgrade, pre_upgrade, println, query, spawn, update,
 };
-use ic_management_canister_types_private::IC_00;
 use ic_nervous_system_canisters::cmc::CMCCanister;
 use ic_nervous_system_common::{
     memory_manager_upgrade_storage::{load_protobuf, store_protobuf},
     serve_metrics,
 };
-use ic_nervous_system_runtime::{CdkRuntime, Runtime};
+use ic_nervous_system_runtime::CdkRuntime;
 use ic_nervous_system_time_helpers::now_seconds;
 use ic_nns_common::{
     access_control::{check_caller_is_gtc, check_caller_is_ledger},
@@ -30,10 +29,11 @@ use ic_nns_governance::{
     neuron_data_validation::NeuronDataValidationSummary,
     pb::v1::{self as gov_pb, Governance as InternalGovernanceProto},
     storage::{grow_upgrades_memory_to, validate_stable_storage, with_upgrades_memory},
+    timer_tasks::schedule_tasks,
 };
 use ic_nns_governance_api::pb::v1::{
     claim_or_refresh_neuron_from_account_response::Result as ClaimOrRefreshNeuronFromAccountResponseResult,
-    governance::{GovernanceCachedMetrics, Migrations},
+    governance::GovernanceCachedMetrics,
     governance_error::ErrorType,
     manage_neuron::{
         claim_or_refresh::{By, MemoAndController},
@@ -55,11 +55,12 @@ use ic_nns_governance_api::test_api::TimeWarp;
 use prost::Message;
 use rand::{RngCore, SeedableRng};
 use rand_chacha::ChaCha20Rng;
+use std::sync::Arc;
 use std::{boxed::Box, ops::Bound, time::Duration};
 
 #[cfg(not(feature = "tla"))]
 use ic_nervous_system_canisters::ledger::IcpLedgerCanister;
-use ic_nns_governance::canister_state::with_governance;
+use ic_nns_governance::canister_state::{with_governance, CanisterRandomnessGenerator};
 
 #[cfg(feature = "tla")]
 mod tla_ledger;
@@ -75,19 +76,15 @@ const WASM_PAGES_RESERVED_FOR_UPGRADES_MEMORY: u64 = 65_536;
 pub(crate) const LOG_PREFIX: &str = "[Governance] ";
 
 fn schedule_timers() {
-    schedule_seeding(Duration::from_nanos(0));
     schedule_adjust_neurons_storage(Duration::from_nanos(0), Bound::Unbounded);
     schedule_prune_following(Duration::from_secs(0), Bound::Unbounded);
     schedule_spawn_neurons();
     schedule_unstake_maturity_of_dissolved_neurons();
     schedule_neuron_data_validation();
     schedule_vote_processing();
+    schedule_tasks();
 }
 
-// Seeding interval seeks to find a balance between the need for rng secrecy, and
-// avoiding the overhead of frequent reseeding.
-const SEEDING_INTERVAL: Duration = Duration::from_secs(3600);
-const RETRY_SEEDING_INTERVAL: Duration = Duration::from_secs(30);
 const PRUNE_FOLLOWING_INTERVAL: Duration = Duration::from_secs(10);
 
 // Once this amount of instructions is used by the
@@ -108,31 +105,6 @@ const PRUNE_FOLLOWING_INTERVAL: Duration = Duration::from_secs(10);
 // prune_some_following. If we assume 1 terainstruction costs 1 XDR,
 // prune_some_following uses less than half an XDR per day.
 const MAX_PRUNE_SOME_FOLLOWING_INSTRUCTIONS: u64 = 50_000_000;
-
-fn schedule_seeding(delay: Duration) {
-    ic_cdk_timers::set_timer(delay, || {
-        spawn(async {
-            let result: Result<([u8; 32],), (i32, String)> =
-                CdkRuntime::call_with_cleanup(IC_00, "raw_rand", ()).await;
-
-            let seed = match result {
-                Ok((seed,)) => seed,
-                Err((code, msg)) => {
-                    println!(
-                        "{}Error seeding RNG. Error Code: {}. Error Message: {}",
-                        LOG_PREFIX, code, msg
-                    );
-                    schedule_seeding(RETRY_SEEDING_INTERVAL);
-                    return;
-                }
-            };
-
-            () = governance_mut().env.seed_rng(seed);
-            // Schedule reseeding on a timer with duration SEEDING_INTERVAL
-            schedule_seeding(SEEDING_INTERVAL);
-        })
-    });
-}
 
 fn schedule_prune_following(delay: Duration, original_begin: Bound<NeuronIdProto>) {
     if !is_prune_following_enabled() {
@@ -254,15 +226,18 @@ fn canister_init_(init_payload: ApiGovernanceProto) {
         init_payload.neurons.len()
     );
 
-    schedule_timers();
-
     let governance_proto = InternalGovernanceProto::from(init_payload);
     set_governance(Governance::new(
         governance_proto,
-        Box::new(CanisterEnv::new()),
-        Box::new(IcpLedgerCanister::<CdkRuntime>::new(LEDGER_CANISTER_ID)),
-        Box::new(CMCCanister::<CdkRuntime>::new()),
+        Arc::new(CanisterEnv::new()),
+        Arc::new(IcpLedgerCanister::<CdkRuntime>::new(LEDGER_CANISTER_ID)),
+        Arc::new(CMCCanister::<CdkRuntime>::new()),
+        Box::new(CanisterRandomnessGenerator::new()),
     ));
+
+    // Timers etc should not be scheduled until after Governance has been initialized, since
+    // some of them may rely on Governance state to determine when they should run.
+    schedule_timers();
 }
 
 #[pre_upgrade]
@@ -300,15 +275,19 @@ fn canister_post_upgrade() {
         restored_state.xdr_conversion_rate,
     );
 
-    schedule_timers();
     set_governance(Governance::new_restored(
         restored_state,
-        Box::new(CanisterEnv::new()),
-        Box::new(IcpLedgerCanister::<CdkRuntime>::new(LEDGER_CANISTER_ID)),
-        Box::new(CMCCanister::<CdkRuntime>::new()),
+        Arc::new(CanisterEnv::new()),
+        Arc::new(IcpLedgerCanister::<CdkRuntime>::new(LEDGER_CANISTER_ID)),
+        Arc::new(CMCCanister::<CdkRuntime>::new()),
+        Box::new(CanisterRandomnessGenerator::new()),
     ));
 
     validate_stable_storage();
+
+    // Timers etc should not be scheduled until after Governance has been initialized, since
+    // some of them may rely on Governance state to determine when they should run.
+    schedule_timers();
 }
 
 #[cfg(feature = "test")]
@@ -621,7 +600,7 @@ async fn heartbeat() {
 fn manage_neuron_pb() {
     debug_log("manage_neuron_pb");
     panic_with_probability(
-        0.1,
+        0.7,
         "manage_neuron_pb is deprecated. Please use manage_neuron instead.",
     );
 
@@ -656,7 +635,7 @@ fn list_proposals_pb() {
 fn list_neurons_pb() {
     debug_log("list_neurons_pb");
     panic_with_probability(
-        0.1,
+        0.7,
         "list_neurons_pb is deprecated. Please use list_neurons instead.",
     );
 
@@ -737,16 +716,6 @@ fn get_most_recent_monthly_node_provider_rewards() -> Option<MonthlyNodeProvider
 #[query(hidden = true)]
 fn get_neuron_data_validation_summary() -> NeuronDataValidationSummary {
     governance().neuron_data_validation_summary()
-}
-
-#[query(hidden = true)]
-fn get_migrations() -> Migrations {
-    let response = governance()
-        .heap_data
-        .migrations
-        .clone()
-        .unwrap_or_default();
-    Migrations::from(response)
 }
 
 #[query]

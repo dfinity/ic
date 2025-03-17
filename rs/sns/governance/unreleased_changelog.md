@@ -11,38 +11,18 @@ on the process that this file is part of, see
 
 ## Changed
 
-* Enable
-[automatic target version advancement](https://forum.dfinity.org/t/proposal-opt-in-mechanism-for-automatic-sns-target-version-advancement/39874)
-for newly deployed SNSs. To opt out, please submit a `ManageNervousSystemParameters` proposal, e.g.:
+* Proposal criticality is now defined based on topics. This makes the following two native proposal
+  types critical:
+    * `AddGenericNervousSystemFunction`
+    * `RemoveGenericNervousSystemFunction`
 
-    ```bash
-    dfx canister --ic call ${SNS_GOVERNANCE_CANISTER_ID} manage_neuron '(
-        record {
-            subaccount = blob "'${PROPOSER_SNS_NEURON_SUBACCOUNT}'";
-            command = opt variant {
-                MakeProposal = record {
-                    url = "https://forum.dfinity.org/t/proposal-opt-in-mechanism-for-automatic-sns-target-version-advancement";
-                    title = "Opt out from automatic advancement of SNS target versions";
-                    action = opt variant {
-                        ManageNervousSystemParameters = record {
-                            automatically_advance_target_version = opt false;
-                        }
-                    };
-                    summary = "Disable automatically advancing the target version \
-                            of this SNS to have full control over the delivery of SNS framework \
-                            upgrades blessed by the NNS.";
-                }
-            };
-        },
-    )'
-    ```
+    For more details, please refer to
+    [PSA(SNS): Proposal criticality to be defined based on proposal topics](https://forum.dfinity.org/t/psa-sns-proposal-criticality-to-be-defined-based-on-proposal-topics/41685).
 
 ## Deprecated
 
 ## Removed
 
 ## Fixed
-
-`ManageNervousSystemParameters` proposals now enforce that at least one field is set.
 
 ## Security

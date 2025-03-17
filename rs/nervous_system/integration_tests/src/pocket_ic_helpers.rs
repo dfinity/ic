@@ -4,6 +4,7 @@ use futures::{stream, StreamExt};
 use ic_base_types::{CanisterId, PrincipalId, SubnetId};
 use ic_interfaces_registry::{RegistryDataProvider, ZERO_REGISTRY_VERSION};
 use ic_ledger_core::Tokens;
+use ic_management_canister_types::CanisterSettings;
 use ic_nervous_system_agent::{
     pocketic_impl::{PocketIcAgent, PocketIcCallError},
     sns::Sns,
@@ -70,10 +71,7 @@ use icrc_ledger_types::icrc1::{
 };
 use itertools::{EitherOrBoth, Itertools};
 use maplit::btreemap;
-use pocket_ic::{
-    management_canister::CanisterSettings, nonblocking::PocketIc, ErrorCode, PocketIcBuilder,
-    RejectResponse,
-};
+use pocket_ic::{nonblocking::PocketIc, ErrorCode, PocketIcBuilder, RejectResponse};
 use prost::Message;
 use rust_decimal::prelude::ToPrimitive;
 use std::{collections::BTreeMap, fmt::Write, ops::Range, path::Path, time::Duration};
@@ -277,10 +275,10 @@ pub fn hash_sns_wasms(wasms: &SnsWasms) -> Version {
 
 pub async fn add_wasms_to_sns_wasm(
     pocket_ic: &PocketIc,
-    with_mainnet_ledger_wasms: bool,
+    with_mainnet_sns_canisters: bool,
 ) -> Result<DeployedSnsStartingInfo, String> {
     let (root_wasm, governance_wasm, swap_wasm, index_wasm, ledger_wasm, archive_wasm) =
-        if with_mainnet_ledger_wasms {
+        if with_mainnet_sns_canisters {
             (
                 ensure_sns_wasm_gzipped(build_mainnet_root_sns_wasm()),
                 ensure_sns_wasm_gzipped(build_mainnet_governance_sns_wasm()),
@@ -3316,5 +3314,60 @@ pub mod sns {
             .await
             .unwrap();
         }
+    }
+}
+
+pub mod universal_canister {
+    use ic_test_utilities::universal_canister::wasm;
+
+    use super::*;
+
+    pub fn init_payload(additional_pages: u32) -> Vec<u8> {
+        wasm().stable_grow(additional_pages).build()
+    }
+
+    pub async fn stable_write(
+        pocket_ic: &PocketIc,
+        universal_canister_id: PrincipalId,
+        offset: u32,
+        data: &[u8],
+    ) -> Result<(), String> {
+        let payload = wasm().stable_write(offset, data).reply().build();
+
+        pocket_ic
+            .update_call(
+                universal_canister_id.into(),
+                Principal::anonymous(),
+                "update",
+                payload,
+            )
+            .await
+            .map_err(|err| err.to_string())
+            .map(|_| ())
+    }
+
+    pub fn stable_read_payload(offset: u32, size: u32) -> Vec<u8> {
+        wasm()
+            .stable_read(offset, size)
+            .reply_data_append()
+            .reply()
+            .build()
+    }
+
+    pub async fn stable_read(
+        pocket_ic: &PocketIc,
+        universal_canister_id: PrincipalId,
+        offset: u32,
+        size: u32,
+    ) -> Result<Vec<u8>, String> {
+        pocket_ic
+            .query_call(
+                universal_canister_id.into(),
+                Principal::anonymous(),
+                "query",
+                stable_read_payload(offset, size),
+            )
+            .await
+            .map_err(|err| err.to_string())
     }
 }

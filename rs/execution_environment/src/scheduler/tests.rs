@@ -19,8 +19,8 @@ use ic_interfaces::execution_environment::SubnetAvailableMemory;
 use ic_logger::replica_logger::no_op_logger;
 use ic_management_canister_types_private::{
     self as ic00, BoundedHttpHeaders, CanisterHttpResponsePayload, CanisterIdRecord,
-    CanisterStatusType, DerivationPath, EcdsaKeyId, EmptyBlob, Method, Payload as _, SchnorrKeyId,
-    SignWithSchnorrArgs, TakeCanisterSnapshotArgs, UninstallCodeArgs,
+    CanisterStatusType, DerivationPath, EcdsaKeyId, EmptyBlob, MasterPublicKeyId, Method,
+    Payload as _, SchnorrKeyId, SignWithSchnorrArgs, TakeCanisterSnapshotArgs, UninstallCodeArgs,
 };
 use ic_registry_routing_table::CanisterIdRange;
 use ic_registry_subnet_type::SubnetType;
@@ -28,13 +28,14 @@ use ic_replicated_state::canister_state::system_state::{CyclesUseCase, PausedExe
 use ic_replicated_state::testing::{CanisterQueuesTesting, SystemStateTesting};
 use ic_state_machine_tests::{PayloadBuilder, StateMachineBuilder};
 use ic_test_utilities_metrics::{
-    fetch_counter, fetch_gauge, fetch_gauge_vec, fetch_histogram_stats, fetch_int_gauge,
-    fetch_int_gauge_vec, metric_vec, HistogramStats,
+    fetch_counter, fetch_gauge, fetch_gauge_vec, fetch_histogram_stats, fetch_histogram_vec_stats,
+    fetch_int_gauge, fetch_int_gauge_vec, metric_vec, HistogramStats,
 };
 use ic_test_utilities_state::{get_running_canister, get_stopped_canister, get_stopping_canister};
 use ic_test_utilities_types::messages::RequestBuilder;
 use ic_types::{
     batch::ConsensusResponse,
+    consensus::idkg::PreSigId,
     ingress::IngressStatus,
     messages::{
         CallbackId, CanisterMessageOrTask, CanisterTask, Payload, RejectContext,
@@ -3815,6 +3816,13 @@ fn threshold_signature_agreements_metric_is_updated() {
     );
     test.execute_round(ExecutionRoundType::OrdinaryRound);
 
+    // Metrics are observed at the beginning of the round, so there should be no in flight contexts yet
+    let in_flight_contexts_metric = fetch_histogram_vec_stats(
+        test.metrics_registry(),
+        "execution_in_flight_signature_request_contexts",
+    );
+    assert!(in_flight_contexts_metric.is_empty());
+
     // Check that the SubnetCallContextManager contains all requests.
     let sign_with_ecdsa_contexts = &test
         .state()
@@ -3839,12 +3847,50 @@ fn threshold_signature_agreements_metric_is_updated() {
     test.state_mut().consensus_queue.push(response);
     test.execute_round(ExecutionRoundType::OrdinaryRound);
 
+    // At the beginning of the next round, the in flight contexts should have been observed
+    let in_flight_contexts_metric = fetch_histogram_vec_stats(
+        test.metrics_registry(),
+        "execution_in_flight_signature_request_contexts",
+    );
+    assert_eq!(
+        metric_vec(&[
+            (
+                &[("key_id", &master_ecdsa_key_id.to_string())],
+                HistogramStats { count: 1, sum: 2.0 }
+            ),
+            (
+                &[("key_id", &master_schnorr_key_id.to_string())],
+                HistogramStats { count: 1, sum: 1.0 }
+            ),
+        ]),
+        in_flight_contexts_metric,
+    );
+
     observe_replicated_state_metrics(
         test.scheduler().own_subnet_id,
         test.state(),
         1.into(),
         &test.scheduler().metrics,
         &no_op_logger(),
+    );
+
+    // After the round, the rejected context should be observed
+    let in_flight_contexts_metric = fetch_histogram_vec_stats(
+        test.metrics_registry(),
+        "execution_in_flight_signature_request_contexts",
+    );
+    assert_eq!(
+        metric_vec(&[
+            (
+                &[("key_id", &master_ecdsa_key_id.to_string())],
+                HistogramStats { count: 2, sum: 3.0 }
+            ),
+            (
+                &[("key_id", &master_schnorr_key_id.to_string())],
+                HistogramStats { count: 2, sum: 2.0 }
+            ),
+        ]),
+        in_flight_contexts_metric,
     );
 
     let threshold_signature_agreements_before = &test

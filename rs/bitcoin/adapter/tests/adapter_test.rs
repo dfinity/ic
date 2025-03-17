@@ -904,10 +904,17 @@ fn test_bfs_order() {
         .get_new_address(None, None)
         .unwrap()
         .assume_checked();
-    let shared_blocks = client1.generate_to_address(5, &address1).unwrap();
+    // IMPORTANT:
+    // Increasing the number of blocks in this test could lead to flakiness due to the number of "request rounds"
+    // alligning with the round robin of the adapter's peers. Currently all blocks are tried and retried in a single round.
+    let shared_blocks_count = 2;
+    let branch_length = 6;
+    let shared_blocks = client1
+        .generate_to_address(shared_blocks_count, &address1)
+        .unwrap();
 
-    wait_for_blocks(&client1, 5);
-    wait_for_blocks(&client2, 5);
+    wait_for_blocks(&client1, 2);
+    wait_for_blocks(&client2, 2);
 
     // Disconnect the nodes to create a fork
     client1
@@ -917,18 +924,22 @@ fn test_bfs_order() {
     wait_for_connection(&client1, 1);
     wait_for_connection(&client2, 1);
 
-    let fork1 = client1.generate_to_address(6, &address1).unwrap();
+    let fork1 = client1
+        .generate_to_address(branch_length, &address1)
+        .unwrap();
 
     let address2 = client2
         .get_new_address(None, None)
         .unwrap()
         .assume_checked();
-    let fork2 = client2.generate_to_address(6, &address2).unwrap();
+    let fork2 = client2
+        .generate_to_address(branch_length, &address2)
+        .unwrap();
 
-    wait_for_blocks(&client1, 11);
-    wait_for_blocks(&client2, 11);
+    wait_for_blocks(&client1, shared_blocks_count + branch_length);
+    wait_for_blocks(&client2, shared_blocks_count + branch_length);
 
-    assert_eq!(fork1.len() + fork2.len(), 12);
+    assert_eq!(fork1.len() + fork2.len(), (branch_length * 2) as usize);
 
     client1
         .onetry_node(&url2.to_string())

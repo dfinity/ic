@@ -414,7 +414,6 @@ impl BlockchainManager {
         if !self.peer_info.contains_key(addr) {
             return Err(ReceivedBlockMessageError::UnknownPeer);
         }
-
         let block_hash = block.block_hash();
         //Remove the corresponding `getdata` request from peer_info and getdata_request_info.
         let request = match self.getdata_request_info.remove(&block_hash) {

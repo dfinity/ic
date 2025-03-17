@@ -15,6 +15,7 @@ futures = { workspace = true }
 ic-base-types = { path = "../../types/base_types" }
 ic-interfaces-registry = { path = "../../interfaces/registry" }
 ic-ledger-core = { path = "../../ledger_suite/common/ledger_core" }
+ic-management-canister-types = { workspace = true }
 ic-nervous-system-agent = { path = "../agent" }
 ic-nervous-system-clients = { path = "../clients" }
 ic-nervous-system-common = { path = "../common" }
@@ -35,6 +36,7 @@ icrc-ledger-types = { path = "../../../packages/icrc-ledger-types" }
 itertools = { workspace = true }
 lazy_static = { workspace = true }
 lifeline = { path = "../../nns/handlers/lifeline/impl" }
+pretty_assertions = { workspace = true }
 pocket-ic = { path = "../../../packages/pocket-ic" }
 prost = { workspace = true }
 rust_decimal = "1.36.0"
@@ -48,7 +50,7 @@ url = { workspace = true }
 assert_matches = { workspace = true }
 canister-test = { path = "../../rust_canisters/canister_test" }
 ic-crypto-sha2 = { path = "../../crypto/sha2" }
-ic-error-types = { path = "../../types/error_types" }
+ic-error-types = { path = "../../../packages/ic-error-types" }
 ic-icrc1 = { path = "../../ledger_suite/icrc1/" }
 ic-icrc1-index-ng = { path = "../../ledger_suite/icrc1/index-ng" }
 ic-icrc1-tokens-u64 = { path = "../../ledger_suite/icrc1/tokens_u64" }

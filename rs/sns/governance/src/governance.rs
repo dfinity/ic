@@ -32,6 +32,7 @@ use crate::{
             manage_neuron_response::{
                 DisburseMaturityResponse, MergeMaturityResponse, StakeMaturityResponse,
             },
+            nervous_system_function::FunctionType,
             neuron::{DissolveState, Followees},
             proposal::Action,
             proposal_data::ActionAuxiliary as ActionAuxiliaryPb,
@@ -52,24 +53,22 @@ use crate::{
             MintTokensRequest, MintTokensResponse, NervousSystemFunction, NervousSystemParameters,
             Neuron, NeuronId, NeuronPermission, NeuronPermissionList, NeuronPermissionType,
             Proposal, ProposalData, ProposalDecisionStatus, ProposalId, ProposalRewardStatus,
-            RegisterDappCanisters, RewardEvent, Tally, TransferSnsTreasuryFunds,
-            UpgradeSnsControlledCanister, Vote, WaitForQuietState,
+            RegisterDappCanisters, RewardEvent, SetTopicsForCustomProposals, Tally,
+            TransferSnsTreasuryFunds, UpgradeSnsControlledCanister, Vote, WaitForQuietState,
         },
     },
     proposal::{
         get_action_auxiliary,
         transfer_sns_treasury_funds_amount_is_small_enough_at_execution_time_or_err,
-        validate_and_render_proposal, ValidGenericNervousSystemFunction, MAX_LIST_PROPOSAL_RESULTS,
+        validate_and_render_proposal, validate_and_render_set_topics_for_custom_proposals,
+        ValidGenericNervousSystemFunction, MAX_LIST_PROPOSAL_RESULTS,
         MAX_NUMBER_OF_PROPOSALS_WITH_BALLOTS,
     },
     sns_upgrade::{
         canister_type_and_wasm_hash_for_upgrade, get_all_sns_canisters, get_canisters_to_upgrade,
         get_running_version, get_upgrade_params, get_wasm, SnsCanisterType, UpgradeSnsParams,
     },
-    types::{
-        function_id_to_proposal_criticality, is_registered_function_id, Environment,
-        HeapGrowthPotential, LedgerUpdateLock, Wasm,
-    },
+    types::{is_registered_function_id, Environment, HeapGrowthPotential, LedgerUpdateLock, Wasm},
 };
 use candid::{Decode, Encode};
 #[cfg(not(target_arch = "wasm32"))]
@@ -83,10 +82,10 @@ use ic_ledger_core::Tokens;
 use ic_management_canister_types_private::{
     CanisterChangeDetails, CanisterInfoRequest, CanisterInfoResponse, CanisterInstallMode,
 };
+use ic_nervous_system_canisters::cmc::CMC;
 use ic_nervous_system_clients::ledger_client::ICRC1Ledger;
 use ic_nervous_system_collections_union_multi_map::UnionMultiMap;
 use ic_nervous_system_common::{
-    cmc::CMC,
     i2d,
     ledger::{self, compute_distribution_subaccount_bytes},
     NervousSystemError, ONE_DAY_SECONDS,
@@ -2140,6 +2139,9 @@ impl Governance {
                     })
                     .and_then(|new_target| self.perform_advance_target_version(new_target))
             }
+            Action::SetTopicsForCustomProposals(set_topics_for_custom_proposals) => {
+                self.perform_set_topics_for_custom_proposals(set_topics_for_custom_proposals)
+            }
             // This should not be possible, because Proposal validation is performed when
             // a proposal is first made.
             Action::Unspecified(_) => Err(GovernanceError::new_with_message(
@@ -3121,6 +3123,53 @@ impl Governance {
         Ok(())
     }
 
+    // Make a change to the mapping from custom proposal types to topics.
+    fn perform_set_topics_for_custom_proposals(
+        &mut self,
+        set_topics_for_custom_proposals: SetTopicsForCustomProposals,
+    ) -> Result<(), GovernanceError> {
+        // This proposal had already been validated at submission time, but the state may have
+        // change since then, which is why it is being validated again.
+        if let Err(message) = validate_and_render_set_topics_for_custom_proposals(
+            &set_topics_for_custom_proposals,
+            &self.proto.custom_functions_to_topics(),
+        ) {
+            return Err(GovernanceError::new_with_message(
+                ErrorType::InvalidProposal,
+                message,
+            ));
+        }
+
+        let SetTopicsForCustomProposals {
+            custom_function_id_to_topic,
+        } = set_topics_for_custom_proposals;
+
+        for (custom_function_id, new_topic) in custom_function_id_to_topic {
+            let nervous_system_function = self
+                .proto
+                .id_to_nervous_system_functions
+                .get_mut(&custom_function_id);
+
+            if let Some(nervous_system_function) = nervous_system_function {
+                let proposal_type = nervous_system_function.function_type.as_mut();
+
+                if let Some(FunctionType::GenericNervousSystemFunction(custom_proposal_type)) =
+                    proposal_type
+                {
+                    custom_proposal_type.topic = Some(new_topic);
+                } else {
+                    log!(
+                        ERROR,
+                        "Unexpected situation: Cannot change the topic of a native proposal type: \
+                        {proposal_type:?}",
+                    )
+                }
+            }
+        }
+
+        Ok(())
+    }
+
     // Returns an option with the NervousSystemParameters
     fn nervous_system_parameters(&self) -> Option<&NervousSystemParameters> {
         self.proto.parameters.as_ref()
@@ -3371,9 +3420,14 @@ impl Governance {
             .max_age_bonus_percentage
             .expect("NervousSystemParameters must have max_age_bonus_percentage");
 
+        // Define topic-based criticality based on the current mapping from proposals to topics.
+        let (proposal_topic, proposal_criticality) = self
+            .get_topic_and_criticality_for_action(action)
+            .map_err(|err| GovernanceError::new_with_message(ErrorType::InvalidProposal, err))?;
+
         // Voting duration parameters.
         let voting_duration_parameters =
-            action.voting_duration_parameters(nervous_system_parameters);
+            action.voting_duration_parameters(nervous_system_parameters, proposal_criticality);
         let initial_voting_period_seconds = voting_duration_parameters
             .initial_voting_period
             .seconds
@@ -3386,11 +3440,13 @@ impl Governance {
             .expect("Unable to determine the wait for quiet deadline increase amount.");
 
         // Voting power threshold parameters.
-        let voting_power_thresholds = action.voting_power_thresholds();
-        let minimum_yes_proportion_of_total =
-            voting_power_thresholds.minimum_yes_proportion_of_total;
-        let minimum_yes_proportion_of_exercised =
-            voting_power_thresholds.minimum_yes_proportion_of_exercised;
+        let (minimum_yes_proportion_of_total, minimum_yes_proportion_of_exercised) = {
+            let voting_power_thresholds = proposal_criticality.voting_power_thresholds();
+            (
+                voting_power_thresholds.minimum_yes_proportion_of_total,
+                voting_power_thresholds.minimum_yes_proportion_of_exercised,
+            )
+        };
 
         for (k, v) in self.proto.neurons.iter() {
             // If this neuron is eligible to vote, record its
@@ -3468,6 +3524,7 @@ impl Governance {
             // TODO(NNS1-2731): Delete this.
             is_eligible_for_rewards: true,
             action_auxiliary,
+            topic: proposal_topic.map(i32::from),
         };
 
         proposal_data.wait_for_quiet_state = Some(WaitForQuietState {
@@ -3487,6 +3544,7 @@ impl Governance {
             .neuron_fees_e8s += proposal_data.reject_cost_e8s;
 
         let function_id = u64::from(action);
+
         // Cast a 'yes'-vote for the proposer, including following.
         Governance::cast_vote_and_cascade_follow(
             &proposal_id,
@@ -3497,6 +3555,7 @@ impl Governance {
             &self.proto.neurons,
             now_seconds,
             &mut proposal_data.ballots,
+            proposal_criticality,
         );
 
         // Finally, add this proposal as an open proposal.
@@ -3526,6 +3585,7 @@ impl Governance {
         // particular, this has no impact on how the implications of following are deduced.
         now_seconds: u64,
         ballots: &mut BTreeMap<String, Ballot>, // This is ultimately what gets changed.
+        proposal_criticality: ProposalCriticality,
     ) {
         let fallback_pseudo_function_id = u64::from(&Action::Unspecified(Empty {}));
         assert!(function_id != fallback_pseudo_function_id);
@@ -3551,7 +3611,6 @@ impl Governance {
 
             push_member(function_id);
 
-            let proposal_criticality = function_id_to_proposal_criticality(function_id);
             match proposal_criticality {
                 ProposalCriticality::Normal => push_member(fallback_pseudo_function_id),
                 ProposalCriticality::Critical => (), // Do not use catch-all/fallback following.
@@ -3639,7 +3698,12 @@ impl Governance {
                     }
                 };
 
-                let follower_vote = follower_neuron.would_follow_ballots(function_id, ballots);
+                let follower_vote = follower_neuron.would_follow_ballots(
+                    function_id,
+                    ballots,
+                    proposal_criticality,
+                );
+
                 if follower_vote != Vote::Unspecified {
                     // follower_neuron would be swayed by its followees!
                     //
@@ -3696,6 +3760,7 @@ impl Governance {
         let proposal = self.proto.proposals.get_mut(&proposal_id.id).ok_or_else(||
             // Proposal not found.
             GovernanceError::new_with_message(ErrorType::NotFound, "Can't find proposal."))?;
+
         let action = proposal
             .proposal
             .as_ref()
@@ -3703,6 +3768,10 @@ impl Governance {
             .action
             .as_ref()
             .expect("Proposal must have an action");
+
+        // Take topic-based criticality as it was defined when the proposal was made.
+        let proposal_topic = proposal.topic();
+        let proposal_criticality = proposal_topic.proposal_criticality();
 
         let vote = Vote::try_from(request.vote).unwrap_or(Vote::Unspecified);
         if vote == Vote::Unspecified {
@@ -3744,6 +3813,7 @@ impl Governance {
             &self.proto.neurons,
             now_seconds,
             &mut proposal.ballots,
+            proposal_criticality,
         );
 
         self.process_proposal(proposal_id.id);
@@ -6013,6 +6083,9 @@ mod fail_stuck_upgrade_in_progress_tests;
 
 #[cfg(test)]
 mod advance_target_sns_version_tests;
+
+#[cfg(test)]
+mod proposal_topics_tests;
 
 #[cfg(test)]
 mod test_helpers;

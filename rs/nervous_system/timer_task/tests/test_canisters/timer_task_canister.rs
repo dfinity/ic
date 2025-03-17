@@ -1,7 +1,9 @@
 use async_trait::async_trait;
 use ic_cdk::{init, query};
+use ic_metrics_encoder::MetricsEncoder;
 use ic_nervous_system_timer_task::{
     PeriodicAsyncTask, PeriodicSyncTask, RecurringAsyncTask, RecurringSyncTask,
+    TimerTaskMetricsRegistry,
 };
 use std::{cell::RefCell, collections::BTreeMap, time::Duration};
 
@@ -13,30 +15,45 @@ fn increase_counter(name: &'static str) {
 }
 
 thread_local! {
-    static COUNTERS : RefCell<BTreeMap<String, u64>> = RefCell::new(BTreeMap::new());
+    static COUNTERS : RefCell<BTreeMap<String, u64>> = const { RefCell::new(BTreeMap::new()) };
+    static METRICS_REGISTRY: RefCell<TimerTaskMetricsRegistry> = RefCell::new(TimerTaskMetricsRegistry::default());
 }
 
 fn schedule(name: &str) {
     match name {
-        SuccessRecurringSyncTask::NAME => SuccessRecurringSyncTask::default().schedule(),
+        SuccessRecurringSyncTask::NAME => {
+            SuccessRecurringSyncTask::default().schedule(&METRICS_REGISTRY);
+        }
         IncrementalDelayRecurringSyncTask::NAME => {
-            IncrementalDelayRecurringSyncTask::default().schedule()
+            IncrementalDelayRecurringSyncTask::default().schedule(&METRICS_REGISTRY);
         }
-        PanicRecurringSyncTask::NAME => PanicRecurringSyncTask::default().schedule(),
+        PanicRecurringSyncTask::NAME => {
+            PanicRecurringSyncTask::default().schedule(&METRICS_REGISTRY);
+        }
         OutOfInstructionsRecurringSyncTask::NAME => {
-            OutOfInstructionsRecurringSyncTask::default().schedule()
+            OutOfInstructionsRecurringSyncTask::default().schedule(&METRICS_REGISTRY);
         }
-        SuccessRecurringAsyncTask::NAME => SuccessRecurringAsyncTask::default().schedule(),
-        PanicRecurringAsyncTask::NAME => PanicRecurringAsyncTask::default().schedule(),
+        SuccessRecurringAsyncTask::NAME => {
+            SuccessRecurringAsyncTask::default().schedule(&METRICS_REGISTRY);
+        }
+        PanicRecurringAsyncTask::NAME => {
+            PanicRecurringAsyncTask::default().schedule(&METRICS_REGISTRY);
+        }
         OutOfInstructionsBeforeCallRecurringAsyncTask::NAME => {
-            OutOfInstructionsBeforeCallRecurringAsyncTask::default().schedule()
+            OutOfInstructionsBeforeCallRecurringAsyncTask::default().schedule(&METRICS_REGISTRY);
         }
         OutOfInstructionsAfterCallRecurringAsyncTask::NAME => {
-            OutOfInstructionsAfterCallRecurringAsyncTask::default().schedule()
+            OutOfInstructionsAfterCallRecurringAsyncTask::default().schedule(&METRICS_REGISTRY);
         }
-        SuccessPeriodicSyncTask::NAME => SuccessPeriodicSyncTask::default().schedule(),
-        SuccessPeriodicAsyncTask::NAME => SuccessPeriodicAsyncTask::default().schedule(),
-        PanicPeriodicAsyncTask::NAME => PanicPeriodicAsyncTask::default().schedule(),
+        SuccessPeriodicSyncTask::NAME => {
+            SuccessPeriodicSyncTask::default().schedule(&METRICS_REGISTRY);
+        }
+        SuccessPeriodicAsyncTask::NAME => {
+            SuccessPeriodicAsyncTask::default().schedule(&METRICS_REGISTRY);
+        }
+        PanicPeriodicAsyncTask::NAME => {
+            PanicPeriodicAsyncTask::default().schedule(&METRICS_REGISTRY);
+        }
         _ => panic!("Unknown task: {}", name),
     }
 }
@@ -51,6 +68,17 @@ fn canister_init(tasks: Vec<String>) {
 #[query]
 fn get_counter(name: String) -> u64 {
     COUNTERS.with_borrow(|counters| *counters.get(&name).unwrap_or(&0))
+}
+
+#[query]
+fn get_metrics() -> String {
+    METRICS_REGISTRY.with_borrow(|metrics_registry| {
+        let mut encoder = MetricsEncoder::new(vec![], (ic_cdk::api::time() / 1_000_000) as i64);
+        metrics_registry
+            .encode("test_canister", &mut encoder)
+            .unwrap();
+        String::from_utf8(encoder.into_inner()).unwrap()
+    })
 }
 
 #[query]
@@ -77,7 +105,7 @@ impl RecurringSyncTask for SuccessRecurringSyncTask {
         Duration::from_secs(0)
     }
 
-    const NAME: &'static str = "SuccessRecurringSyncTask";
+    const NAME: &'static str = "success_recurring_sync_task";
 }
 
 #[derive(Default)]
@@ -102,7 +130,7 @@ impl RecurringSyncTask for IncrementalDelayRecurringSyncTask {
         Duration::from_secs(0)
     }
 
-    const NAME: &'static str = "IncrementalDelayRecurringSyncTask";
+    const NAME: &'static str = "incremental_delay_recurring_sync_task";
 }
 
 #[derive(Default)]
@@ -118,7 +146,7 @@ impl RecurringSyncTask for PanicRecurringSyncTask {
         Duration::from_secs(0)
     }
 
-    const NAME: &'static str = "PanicRecurringSyncTask";
+    const NAME: &'static str = "panic_recurring_sync_task";
 }
 
 #[derive(Default)]
@@ -138,7 +166,7 @@ impl RecurringSyncTask for OutOfInstructionsRecurringSyncTask {
         Duration::from_secs(0)
     }
 
-    const NAME: &'static str = "OutOfInstructionsRecurringSyncTask";
+    const NAME: &'static str = "out_of_instructions_recurring_sync_task";
 }
 
 #[derive(Default)]
@@ -157,7 +185,7 @@ impl RecurringAsyncTask for SuccessRecurringAsyncTask {
         Duration::from_secs(0)
     }
 
-    const NAME: &'static str = "SuccessRecurringAsyncTask";
+    const NAME: &'static str = "success_recurring_async_task";
 }
 
 #[derive(Default)]
@@ -175,7 +203,7 @@ impl RecurringAsyncTask for PanicRecurringAsyncTask {
         Duration::from_secs(0)
     }
 
-    const NAME: &'static str = "PanicRecurringAsyncTask";
+    const NAME: &'static str = "panic_recurring_async_task";
 }
 
 #[derive(Default)]
@@ -199,7 +227,7 @@ impl RecurringAsyncTask for OutOfInstructionsBeforeCallRecurringAsyncTask {
         Duration::from_secs(0)
     }
 
-    const NAME: &'static str = "OutOfInstructionsBeforeCallRecurringAsyncTask";
+    const NAME: &'static str = "out_of_instructions_before_call_recurring_async_task";
 }
 
 #[derive(Default)]
@@ -223,7 +251,7 @@ impl RecurringAsyncTask for OutOfInstructionsAfterCallRecurringAsyncTask {
         Duration::from_secs(0)
     }
 
-    const NAME: &'static str = "OutOfInstructionsAfterCallRecurringAsyncTask";
+    const NAME: &'static str = "out_of_instructions_after_call_recurring_async_task";
 }
 
 #[derive(Default, Clone, Copy)]
@@ -234,7 +262,7 @@ impl PeriodicSyncTask for SuccessPeriodicSyncTask {
         increase_counter(Self::NAME);
     }
 
-    const NAME: &'static str = "SuccessPeriodicSyncTask";
+    const NAME: &'static str = "success_periodic_sync_task";
     const INTERVAL: Duration = Duration::from_secs(1);
 }
 
@@ -247,7 +275,7 @@ impl PeriodicAsyncTask for SuccessPeriodicAsyncTask {
         increase_counter(Self::NAME);
     }
 
-    const NAME: &'static str = "SuccessPeriodicAsyncTask";
+    const NAME: &'static str = "success_periodic_async_task";
     const INTERVAL: Duration = Duration::from_secs(1);
 }
 
@@ -262,6 +290,6 @@ impl PeriodicAsyncTask for PanicPeriodicAsyncTask {
         panic!("This task always panics");
     }
 
-    const NAME: &'static str = "PanicPeriodicAsyncTask";
+    const NAME: &'static str = "panic_periodic_async_task";
     const INTERVAL: Duration = Duration::from_secs(1);
 }
