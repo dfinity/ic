@@ -78,6 +78,9 @@ system_test_nns(
     name = "hostos_upgrade_from_latest_release_to_current",
     env = MAINNET_ENV,
     flaky = True,
+    tags = [
+        "system_test_hourly",
+    ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     test_driver_target = ":upgrade_test_bin",
     test_timeout = "eternal",
@@ -92,9 +95,6 @@ system_test_nns(
     name = "hostos_upgrade_from_current_to_latest_release",
     env = MAINNET_ENV,
     flaky = True,
-    tags = [
-        "system_test_hourly",
-    ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     test_driver_target = ":upgrade_test_bin",
     test_timeout = "eternal",
