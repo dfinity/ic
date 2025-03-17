@@ -75,7 +75,7 @@ system_test_nns(
     deps = RUNNER_DEPENDENCIES,
 )
 
-# Checks if "latest_release" in mainnet-icos-revisions.json can successfully upgrade to current commit	
+# Checks if "latest_release" in mainnet-icos-revisions.json can successfully upgrade to current commit
 system_test_nns(
     name = "hostos_upgrade_from_latest_release_to_current",
     env = MAINNET_ENV,
