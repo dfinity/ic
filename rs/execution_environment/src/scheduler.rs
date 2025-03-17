@@ -2239,7 +2239,7 @@ fn can_execute_subnet_msg(
         | Ic00Method::SchnorrPublicKey
         | Ic00Method::SignWithSchnorr
         | Ic00Method::VetKdPublicKey
-        | Ic00Method::VetKdDeriveEncryptedKey
+        | Ic00Method::VetKdDeriveKey
         | Ic00Method::BitcoinGetBalance
         | Ic00Method::BitcoinGetUtxos
         | Ic00Method::BitcoinGetBlockHeaders
@@ -2257,7 +2257,11 @@ fn can_execute_subnet_msg(
         | Ic00Method::ClearChunkStore
         | Ic00Method::TakeCanisterSnapshot
         | Ic00Method::ListCanisterSnapshots
-        | Ic00Method::DeleteCanisterSnapshot => true,
+        | Ic00Method::DeleteCanisterSnapshot
+        | Ic00Method::ReadCanisterSnapshotMetadata
+        | Ic00Method::ReadCanisterSnapshotData
+        | Ic00Method::UploadCanisterSnapshotMetadata
+        | Ic00Method::UploadCanisterSnapshotData => true,
     }
 }
 
@@ -2302,7 +2306,7 @@ fn get_instructions_limits_for_subnet_message(
             | SchnorrPublicKey
             | SignWithSchnorr
             | VetKdPublicKey
-            | VetKdDeriveEncryptedKey
+            | VetKdDeriveKey
             | StartCanister
             | StopCanister
             | UninstallCode
@@ -2325,7 +2329,11 @@ fn get_instructions_limits_for_subnet_message(
             | TakeCanisterSnapshot
             | LoadCanisterSnapshot
             | ListCanisterSnapshots
-            | DeleteCanisterSnapshot => default_limits,
+            | DeleteCanisterSnapshot
+            | ReadCanisterSnapshotMetadata
+            | ReadCanisterSnapshotData
+            | UploadCanisterSnapshotMetadata
+            | UploadCanisterSnapshotData => default_limits,
             InstallCode | InstallChunkedCode => InstructionLimits::new(
                 dts,
                 config.max_instructions_per_install_code,

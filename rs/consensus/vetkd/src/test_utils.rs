@@ -132,8 +132,8 @@ pub(super) fn fake_signature_request_args(key_id: MasterPublicKeyId) -> Threshol
         }),
         MasterPublicKeyId::VetKd(key_id) => ThresholdArguments::VetKd(VetKdArguments {
             key_id: key_id.clone(),
-            derivation_id: vec![1; 32],
-            encryption_public_key: vec![1; 32],
+            input: vec![1; 32],
+            transport_public_key: vec![1; 32],
             ni_dkg_id: fake_dkg_id(key_id),
             height: Height::from(100),
         }),

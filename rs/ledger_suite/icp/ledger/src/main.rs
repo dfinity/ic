@@ -1,19 +1,18 @@
 use candid::{candid_method, Decode, Nat, Principal};
-use dfn_candid::{candid, candid_one, CandidOne};
-#[allow(unused_imports)]
+#[cfg(feature = "notify-method")]
+use dfn_candid::CandidOne;
+#[cfg(feature = "notify-method")]
 use dfn_core::BytesS;
-use dfn_core::{
-    endpoint::reject_on_decode_error::{over, over_async, over_async_may_reject},
-    over_init,
-};
+#[cfg(feature = "notify-method")]
 use dfn_protobuf::protobuf;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_canister_log::{LogEntry, Sink};
+use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_cdk::api::{
     call::{arg_data_raw, reply_raw},
     caller, data_certificate, instruction_counter, print, set_certified_data, time, trap,
 };
-use ic_cdk_macros::query;
+use ic_cdk_macros::{post_upgrade, pre_upgrade, query, update};
 use ic_icrc1::endpoints::{convert_transfer_error, StandardRecord};
 use ic_ledger_canister_core::ledger::LedgerContext;
 use ic_ledger_canister_core::runtime::heap_memory_size_bytes;
@@ -736,16 +735,17 @@ fn canister_init(arg: LedgerCanisterPayload) {
 
 #[export_name = "canister_init"]
 fn main() {
-    over_init(|bytes: BytesS| {
-        // We support the old init argument for backward
-        // compatibility. If decoding the bytes as the new
-        // init arguments fails then we fallback to the old
-        // init arguments.
-        match Decode!(&bytes.0, LedgerCanisterPayload) {
-            Ok(arg) => canister_init(arg),
-            Err(new_err) => {
-                // fallback to old init
-                match Decode!(&bytes.0, InitArgs) {
+    ic_cdk::setup();
+    let bytes = arg_data_raw();
+    // We support the old init argument for backward
+    // compatibility. If decoding the bytes as the new
+    // init arguments fails then we fallback to the old
+    // init arguments.
+    match Decode!(&bytes, LedgerCanisterPayload) {
+        Ok(arg) => canister_init(arg),
+        Err(new_err) => {
+            // fallback to old init
+            match Decode!(&bytes, InitArgs) {
                     Ok(arg) => init(
                         arg.minting_account,
                         arg.icrc1_minting_account,
@@ -762,9 +762,8 @@ fn main() {
                     Err(old_err) =>
                     trap(&format!("Unable to decode init argument.\nDecode as new init returned the error {}\nDecode as old init returned the error {}", new_err, old_err))
                 }
-            }
         }
-    })
+    }
 }
 
 // We use 8MiB buffer
@@ -780,6 +779,7 @@ const MAX_INSTRUCTIONS_PER_UPGRADE: u64 = 5_000_000;
 #[cfg(feature = "low-upgrade-instruction-limits")]
 const MAX_INSTRUCTIONS_PER_TIMER_CALL: u64 = 500_000;
 
+#[post_upgrade]
 fn post_upgrade(args: Option<LedgerCanisterPayload>) {
     let start = instruction_counter();
 
@@ -927,12 +927,7 @@ fn migrate_next_part(instruction_limit: u64) {
     }
 }
 
-#[export_name = "canister_post_upgrade"]
-fn post_upgrade_() {
-    over_init(|CandidOne(args)| post_upgrade(args));
-}
-
-#[export_name = "canister_pre_upgrade"]
+#[pre_upgrade]
 fn pre_upgrade() {
     let start = instruction_counter();
 
@@ -980,31 +975,26 @@ impl LedgerAccess for Access {
 #[export_name = "canister_update send_pb"]
 fn send_() {
     panic_if_not_ready();
-    over_async(
-        protobuf,
-        |SendArgs {
-             memo,
-             amount,
-             fee,
-             from_subaccount,
-             to,
-             created_at_time,
-         }| async move {
-            send(memo, amount, fee, from_subaccount, to, created_at_time)
-                .await
-                .unwrap_or_else(|e| trap(&e.to_string()))
-        },
-    );
-}
 
-#[candid_method(update, rename = "send_dfx")]
-async fn send_dfx(arg: SendArgs) -> BlockIndex {
-    panic_if_not_ready();
-    transfer_candid(TransferArgs::from(arg))
-        .await
-        .unwrap_or_else(|e| {
-            trap(&e.to_string());
-        })
+    ic_cdk::spawn(async move {
+        ic_cdk::setup();
+
+        let SendArgs {
+            memo,
+            amount,
+            fee,
+            from_subaccount,
+            to,
+            created_at_time,
+        } = from_proto_bytes(arg_data_raw()).expect("failed to decode send_pb argument");
+
+        let res = send(memo, amount, fee, from_subaccount, to, created_at_time)
+            .await
+            .unwrap_or_else(|e| trap(&e.to_string()));
+
+        let res_proto = to_proto_bytes(res).expect("failed to encode send_pb response");
+        reply_raw(&res_proto)
+    })
 }
 
 /// Do not use call this from code, this is only here so dfx has something to
@@ -1012,10 +1002,13 @@ async fn send_dfx(arg: SendArgs) -> BlockIndex {
 /// backwards compatible with previous interfaces.
 ///
 /// I STRONGLY recommend that you use "send_pb" instead.
-#[export_name = "canister_update send_dfx"]
-fn send_dfx_() {
+#[update]
+#[candid_method(update)]
+async fn send_dfx(arg: SendArgs) -> BlockIndex {
     panic_if_not_ready();
-    over_async(candid_one, send_dfx);
+    transfer(TransferArgs::from(arg)).await.unwrap_or_else(|e| {
+        trap(&e.to_string());
+    })
 }
 
 #[cfg(feature = "notify-method")]
@@ -1047,8 +1040,9 @@ fn notify_() {
     );
 }
 
-#[candid_method(update, rename = "transfer")]
-async fn transfer_candid(arg: TransferArgs) -> Result<BlockIndex, TransferError> {
+#[update]
+#[candid_method(update)]
+async fn transfer(arg: TransferArgs) -> Result<BlockIndex, TransferError> {
     panic_if_not_ready();
     let to_account = AccountIdentifier::from_address(arg.to).unwrap_or_else(|e| {
         trap(&format!("Invalid account identifier: {}", e));
@@ -1064,11 +1058,21 @@ async fn transfer_candid(arg: TransferArgs) -> Result<BlockIndex, TransferError>
     .await
 }
 
-#[candid_method(update, rename = "icrc1_transfer")]
+#[update]
+#[candid_method(update)]
 async fn icrc1_transfer(
     arg: TransferArg,
 ) -> Result<Nat, icrc_ledger_types::icrc1::transfer::TransferError> {
     panic_if_not_ready();
+
+    if !LEDGER
+        .read()
+        .unwrap()
+        .can_send(&PrincipalId::from(caller()))
+    {
+        trap("Anonymous principal cannot hold tokens on the ledger.");
+    }
+
     let from_account = Account {
         owner: caller(),
         subaccount: arg.from_subaccount,
@@ -1095,31 +1099,19 @@ async fn icrc1_transfer(
     ))
 }
 
-#[export_name = "canister_update transfer"]
-fn transfer() {
-    panic_if_not_ready();
-    over_async_may_reject(candid_one, |arg| async { Ok(transfer_candid(arg).await) })
-}
-
-#[export_name = "canister_update icrc1_transfer"]
-fn icrc1_transfer_candid() {
-    panic_if_not_ready();
-    over_async_may_reject(candid_one, |arg: TransferArg| async {
-        if !LEDGER
-            .read()
-            .unwrap()
-            .can_send(&PrincipalId::from(caller()))
-        {
-            return Err("Anonymous principal cannot hold tokens on the ledger.".to_string());
-        }
-
-        Ok(icrc1_transfer(arg).await)
-    })
-}
-
-#[candid_method(update, rename = "icrc2_transfer_from")]
+#[update]
+#[candid_method(update)]
 async fn icrc2_transfer_from(arg: TransferFromArgs) -> Result<Nat, TransferFromError> {
     panic_if_not_ready();
+
+    if !LEDGER
+        .read()
+        .unwrap()
+        .can_send(&PrincipalId::from(caller()))
+    {
+        trap("Anonymous principal cannot hold tokens on the ledger.");
+    }
+
     if !LEDGER.read().unwrap().feature_flags.icrc2 {
         trap("ICRC-2 features are not enabled on the ledger.");
     }
@@ -1147,22 +1139,6 @@ async fn icrc2_transfer_from(arg: TransferFromArgs) -> Result<Nat, TransferFromE
             err
         })?,
     ))
-}
-
-#[export_name = "canister_update icrc2_transfer_from"]
-fn icrc2_transfer_from_candid() {
-    panic_if_not_ready();
-    over_async_may_reject(candid_one, |arg: TransferFromArgs| async {
-        if !LEDGER
-            .read()
-            .unwrap()
-            .can_send(&PrincipalId::from(caller()))
-        {
-            return Err("Anonymous principal cannot transfer tokens on the ledger.".to_string());
-        }
-
-        Ok(icrc2_transfer_from(arg).await)
-    })
 }
 
 /// See caveats of use on send_dfx
@@ -1413,13 +1389,13 @@ fn archives() -> Archives {
 
 #[export_name = "canister_query get_nodes"]
 fn get_nodes_() {
-    over(candid, |()| {
-        archives()
-            .archives
-            .iter()
-            .map(|archive| archive.canister_id)
-            .collect::<Vec<CanisterId>>()
-    });
+    ic_cdk::setup();
+    let result = archives()
+        .archives
+        .iter()
+        .map(|archive| archive.canister_id)
+        .collect::<Vec<CanisterId>>();
+    ic_cdk::api::call::reply((result,));
 }
 
 fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::io::Result<()> {
@@ -1542,9 +1518,25 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
     Ok(())
 }
 
-#[export_name = "canister_query http_request"]
-fn http_request() {
-    dfn_http_metrics::serve_metrics(encode_metrics);
+#[query(hidden = true, decoding_quota = 10000)]
+fn http_request(req: HttpRequest) -> HttpResponse {
+    if req.path() == "/metrics" {
+        let mut writer =
+            ic_metrics_encoder::MetricsEncoder::new(vec![], ic_cdk::api::time() as i64 / 1_000_000);
+
+        match encode_metrics(&mut writer) {
+            Ok(()) => HttpResponseBuilder::ok()
+                .header("Content-Type", "text/plain; version=0.0.4")
+                .with_body_and_content_length(writer.into_inner())
+                .build(),
+            Err(err) => {
+                HttpResponseBuilder::server_error(format!("Failed to encode metrics: {}", err))
+                    .build()
+            }
+        }
+    } else {
+        HttpResponseBuilder::not_found().build()
+    }
 }
 
 #[query]
@@ -1586,9 +1578,19 @@ fn query_encoded_blocks(
     }
 }
 
-#[candid_method(update, rename = "icrc2_approve")]
+#[update]
+#[candid_method(update)]
 async fn icrc2_approve(arg: ApproveArgs) -> Result<Nat, ApproveError> {
     panic_if_not_ready();
+
+    if !LEDGER
+        .read()
+        .unwrap()
+        .can_send(&PrincipalId::from(caller()))
+    {
+        trap("Anonymous principal cannot approve token transfers on the ledger.");
+    }
+
     if !LEDGER.read().unwrap().feature_flags.icrc2 {
         trap("ICRC-2 features are not enabled on the ledger.");
     }
@@ -1680,24 +1682,6 @@ async fn icrc2_approve(arg: ApproveArgs) -> Result<Nat, ApproveError> {
     Ok(Nat::from(block_index))
 }
 
-#[export_name = "canister_update icrc2_approve"]
-fn icrc2_approve_candid() {
-    panic_if_not_ready();
-    over_async_may_reject(candid_one, |arg: ApproveArgs| async {
-        if !LEDGER
-            .read()
-            .unwrap()
-            .can_send(&PrincipalId::from(caller()))
-        {
-            return Err(
-                "Anonymous principal cannot approve token transfers on the ledger.".to_string(),
-            );
-        }
-
-        Ok(icrc2_approve(arg).await)
-    })
-}
-
 fn get_allowance(from: AccountIdentifier, spender: AccountIdentifier) -> Allowance {
     let now = TimeStamp::from_nanos_since_unix_epoch(time());
     let ledger = LEDGER.read().unwrap();
@@ -1726,7 +1710,8 @@ fn icp_allowance(arg: IcpAllowanceArgs) -> Allowance {
     get_allowance(arg.account, arg.spender)
 }
 
-#[candid_method(update, rename = "icrc21_canister_call_consent_message")]
+#[update]
+#[candid_method(update)]
 fn icrc21_canister_call_consent_message(
     consent_msg_request: ConsentMessageRequest,
 ) -> Result<ConsentInfo, Icrc21Error> {
@@ -1744,11 +1729,6 @@ fn icrc21_canister_call_consent_message(
     )
 }
 
-#[export_name = "canister_query icrc21_canister_call_consent_message"]
-fn icrc21_canister_call_consent_message_candid() {
-    over(candid_one, icrc21_canister_call_consent_message)
-}
-
 #[query]
 #[candid_method(query)]
 fn icrc10_supported_standards() -> Vec<StandardRecord> {
@@ -1763,9 +1743,9 @@ fn is_ledger_ready() -> bool {
 
 candid::export_service!();
 
-#[export_name = "canister_query __get_candid_interface_tmp_hack"]
-fn get_canidid_interface() {
-    over(candid_one, |()| -> String { __export_service() })
+#[query]
+fn __get_candid_interface_tmp_hack() -> String {
+    __export_service()
 }
 
 #[cfg(test)]
