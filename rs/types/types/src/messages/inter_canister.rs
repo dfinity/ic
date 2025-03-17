@@ -255,7 +255,7 @@ impl Request {
             | Ok(Method::SchnorrPublicKey)
             | Ok(Method::SignWithSchnorr)
             | Ok(Method::VetKdPublicKey)
-            | Ok(Method::VetKdDeriveEncryptedKey)
+            | Ok(Method::VetKdDeriveKey)
             | Ok(Method::BitcoinGetBalance)
             | Ok(Method::BitcoinGetUtxos)
             | Ok(Method::BitcoinGetBlockHeaders)

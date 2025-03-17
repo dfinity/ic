@@ -29,7 +29,10 @@ fn test_voting_period_parameters() {
         ..Default::default()
     };
     assert_eq!(
-        non_critical_action.voting_duration_parameters(&normal_nervous_system_parameters),
+        non_critical_action.voting_duration_parameters(
+            &normal_nervous_system_parameters,
+            ProposalCriticality::Normal
+        ),
         VotingDurationParameters {
             initial_voting_period: PbDuration {
                 seconds: Some(4 * ONE_DAY_SECONDS),
@@ -40,7 +43,10 @@ fn test_voting_period_parameters() {
         },
     );
     assert_eq!(
-        critical_action.voting_duration_parameters(&normal_nervous_system_parameters),
+        critical_action.voting_duration_parameters(
+            &normal_nervous_system_parameters,
+            ProposalCriticality::Critical
+        ),
         VotingDurationParameters {
             initial_voting_period: PbDuration {
                 seconds: Some(5 * ONE_DAY_SECONDS),
@@ -60,7 +66,10 @@ fn test_voting_period_parameters() {
         ..Default::default()
     };
     assert_eq!(
-        non_critical_action.voting_duration_parameters(&slow_nervous_system_parameters),
+        non_critical_action.voting_duration_parameters(
+            &slow_nervous_system_parameters,
+            ProposalCriticality::Normal
+        ),
         VotingDurationParameters {
             initial_voting_period: PbDuration {
                 seconds: Some(7 * ONE_DAY_SECONDS),
@@ -71,7 +80,10 @@ fn test_voting_period_parameters() {
         },
     );
     assert_eq!(
-        critical_action.voting_duration_parameters(&slow_nervous_system_parameters),
+        critical_action.voting_duration_parameters(
+            &slow_nervous_system_parameters,
+            ProposalCriticality::Critical
+        ),
         VotingDurationParameters {
             initial_voting_period: PbDuration {
                 seconds: Some(7 * ONE_DAY_SECONDS),

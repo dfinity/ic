@@ -93,8 +93,8 @@ pub enum Method {
     // VetKd interface.
     #[strum(serialize = "vetkd_public_key")]
     VetKdPublicKey,
-    #[strum(serialize = "vetkd_derive_encrypted_key")]
-    VetKdDeriveEncryptedKey,
+    #[strum(serialize = "vetkd_derive_key")]
+    VetKdDeriveKey,
 
     // Bitcoin Interface.
     BitcoinGetBalance,
@@ -2923,27 +2923,27 @@ impl ComputeInitialIDkgDealingsResponse {
     }
 }
 
-// Represents the argument of the vetkd_derive_encrypted_key API.
+// Represents the argument of the vetkd_derive_key API.
 /// ```text
 /// (record {
-///   derivation_id: blob;
-///   derivation_path : vec blob;
+///   input: blob;
+///   context : blob;
+///   transport_public_key: blob;
 ///   key_id : record { curve : vetkd_curve; name : text };
-///   encryption_public_key: blob;
 /// })
 /// ```
 #[derive(Eq, PartialEq, Debug, CandidType, Deserialize)]
-pub struct VetKdDeriveEncryptedKeyArgs {
+pub struct VetKdDeriveKeyArgs {
     #[serde(with = "serde_bytes")]
-    pub derivation_domain: Vec<u8>,
+    pub context: Vec<u8>,
     #[serde(with = "serde_bytes")]
-    pub derivation_id: Vec<u8>,
+    pub input: Vec<u8>,
     pub key_id: VetKdKeyId,
     #[serde(with = "serde_bytes")]
-    pub encryption_public_key: [u8; 48],
+    pub transport_public_key: [u8; 48],
 }
 
-impl Payload<'_> for VetKdDeriveEncryptedKeyArgs {}
+impl Payload<'_> for VetKdDeriveKeyArgs {}
 
 /// Struct used to return vet KD result.
 /// ```text
@@ -2952,18 +2952,18 @@ impl Payload<'_> for VetKdDeriveEncryptedKeyArgs {}
 /// })
 /// ```
 #[derive(Debug, CandidType, Deserialize)]
-pub struct VetKdDeriveEncryptedKeyResult {
+pub struct VetKdDeriveKeyResult {
     #[serde(with = "serde_bytes")]
     pub encrypted_key: Vec<u8>,
 }
 
-impl Payload<'_> for VetKdDeriveEncryptedKeyResult {}
+impl Payload<'_> for VetKdDeriveKeyResult {}
 
 /// Represents the argument of the vetkd_public_key API.
 /// ```text
 /// (record {
 ///   canister_id : opt canister_id;
-///   derivation_path : vec blob;
+///   context : blob;
 ///   key_id : record { curve : vetkd_curve; name : text };
 /// })
 /// ```
@@ -2971,7 +2971,7 @@ impl Payload<'_> for VetKdDeriveEncryptedKeyResult {}
 pub struct VetKdPublicKeyArgs {
     pub canister_id: Option<CanisterId>,
     #[serde(with = "serde_bytes")]
-    pub derivation_domain: Vec<u8>,
+    pub context: Vec<u8>,
     pub key_id: VetKdKeyId,
 }
 

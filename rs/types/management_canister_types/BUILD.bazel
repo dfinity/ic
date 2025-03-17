@@ -43,7 +43,6 @@ temporary_whitelist = [
     "//rs/replica_tests:__subpackages__",
     "//rs/replicated_state:__subpackages__",  # permanent?
     "//rs/rust_canisters:__subpackages__",
-    "//rs/artifact_pool:__subpackages__",
     "//rs/sns:__subpackages__",
     "//rs/starter:__subpackages__",
     "//rs/state_layout:__subpackages__",  # permanent?

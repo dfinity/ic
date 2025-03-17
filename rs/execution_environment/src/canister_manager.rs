@@ -119,7 +119,7 @@ impl CanisterManager {
             | Ok(Ic00Method::SchnorrPublicKey)
             | Ok(Ic00Method::SignWithSchnorr)
             | Ok(Ic00Method::VetKdPublicKey)
-            | Ok(Ic00Method::VetKdDeriveEncryptedKey)
+            | Ok(Ic00Method::VetKdDeriveKey)
             // "DepositCycles" can be called by anyone however as ingress message
             // cannot carry cycles, it does not make sense to allow them from users.
             | Ok(Ic00Method::DepositCycles)

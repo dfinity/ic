@@ -27,7 +27,7 @@ rust_binary(
 system_test(
     name = "basic_health_test",
     env = UNIVERSAL_CANISTER_ENV,
-    flaky = True,
+    flaky = True,  # flakiness rate of 1.22% over the month from 2025-02-11 till 2025-03-11
     tags = [
         "k8s",
         "long_test",
@@ -48,7 +48,6 @@ system_test(
     env = UNIVERSAL_CANISTER_ENV | {
         "II_WASM_PATH": "$(rootpath @ii_dev_canister//file)",
     },
-    flaky = True,
     tags = [
         "long_test",
     ],

@@ -5,10 +5,8 @@ use ic_nervous_system_integration_tests::{
     pocket_ic_helpers::{
         self, add_wasm_via_nns_proposal, nns,
         sns::{self, governance::set_automatically_advance_target_version_flag},
-        upgrade_nns_canister_to_tip_of_master_or_panic,
     },
 };
-use ic_nns_constants::SNS_WASM_CANISTER_ID;
 use ic_nns_test_utils::sns_wasm::{
     build_archive_sns_wasm, build_governance_sns_wasm, build_index_ng_sns_wasm,
     build_ledger_sns_wasm, build_root_sns_wasm, build_swap_sns_wasm, create_modified_sns_wasm,
@@ -21,9 +19,6 @@ use ic_sns_wasm::pb::v1::SnsCanisterType;
 pub async fn test_sns_upgrade_legacy(sns_canisters_to_upgrade: Vec<SnsCanisterType>) {
     let (pocket_ic, _initial_sns_version) =
         pocket_ic_helpers::pocket_ic_for_sns_tests_with_mainnet_versions().await;
-
-    // TODO[NNS1-3657]: Do not upgrade SNS-W, use the mainnet version.
-    upgrade_nns_canister_to_tip_of_master_or_panic(&pocket_ic, SNS_WASM_CANISTER_ID).await;
 
     eprintln!("Creating SNS ...");
     let create_service_nervous_system = CreateServiceNervousSystemBuilder::default()
