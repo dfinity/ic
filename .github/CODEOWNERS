@@ -300,3 +300,4 @@ go_deps.bzl               @dfinity/idx
 Cargo.toml
 .gitignore
 stackage_snapshot.json
+mainnet-canister-revisions.json # this file is auto-approved by mergify, therefore we remove condeowners
