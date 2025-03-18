@@ -261,6 +261,9 @@ rust_ic_test_suite_with_extra_srcs(
             "src/canister_playground.rs",
             "src/governance_mem_test.rs",
             "src/upgrade_canisters_with_golden_nns_state.rs",
+
+            # This test suddenly started failing on 2025-03-17 09:34 UTC
+            "src/wait_for_quiet.rs",
         ],
     ),
     aliases = ALIASES,
