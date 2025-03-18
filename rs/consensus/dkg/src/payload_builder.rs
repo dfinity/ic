@@ -217,29 +217,6 @@ pub(super) fn create_summary_payload(
 
     let height = parent.height.increment();
 
-    let (mut configs, transcripts_for_remote_subnets, initial_dkg_attempts) =
-        compute_remote_dkg_data(
-            subnet_id,
-            height,
-            registry_client,
-            state_manager,
-            validation_context,
-            transcripts_for_remote_subnets,
-            &last_summary
-                .transcripts_for_remote_subnets
-                .iter()
-                .map(|(id, _, result)| (id.clone(), result.clone()))
-                .collect(),
-            &last_summary.initial_dkg_attempts,
-            &logger,
-        )?;
-
-    let interval_length = last_summary.next_interval_length;
-    let next_interval_length = get_dkg_interval_length(
-        registry_client,
-        validation_context.registry_version,
-        subnet_id,
-    )?;
     // Current transcripts come from next transcripts of the last_summary.
     let current_transcripts = as_next_transcripts(last_summary, &logger);
 
@@ -272,6 +249,33 @@ pub(super) fn create_summary_payload(
             transcript
         })
         .collect::<BTreeMap<_, _>>();
+
+    let previous_transcripts = last_summary
+        .transcripts_for_remote_subnets
+        .iter()
+        .map(|(id, _, result)| (id.clone(), result.clone()))
+        .collect();
+
+    let (mut configs, transcripts_for_remote_subnets, initial_dkg_attempts) =
+        compute_remote_dkg_data(
+            subnet_id,
+            height,
+            registry_client,
+            state_manager,
+            validation_context,
+            transcripts_for_remote_subnets,
+            &previous_transcripts,
+            &reshared_transcripts,
+            &last_summary.initial_dkg_attempts,
+            &logger,
+        )?;
+
+    let interval_length = last_summary.next_interval_length;
+    let next_interval_length = get_dkg_interval_length(
+        registry_client,
+        validation_context.registry_version,
+        subnet_id,
+    )?;
 
     // New configs are created using the new stable registry version proposed by this
     // block, which determines receivers of the dealings.
@@ -353,6 +357,7 @@ fn compute_remote_dkg_data(
     validation_context: &ValidationContext,
     mut new_transcripts: BTreeMap<NiDkgId, Result<NiDkgTranscript, String>>,
     previous_transcripts: &BTreeMap<NiDkgId, Result<NiDkgTranscript, String>>,
+    reshared_transcripts: &BTreeMap<NiDkgTag, NiDkgTranscript>,
     previous_attempts: &BTreeMap<NiDkgTargetId, u32>,
     logger: &ReplicaLogger,
 ) -> Result<
@@ -372,6 +377,7 @@ fn compute_remote_dkg_data(
         registry_client,
         state.get_ref(),
         validation_context,
+        reshared_transcripts,
         logger,
     )?;
 
@@ -670,6 +676,7 @@ fn process_subnet_call_context(
     registry_client: &dyn RegistryClient,
     state: &ReplicatedState,
     validation_context: &ValidationContext,
+    reshared_transcripts: &BTreeMap<NiDkgTag, NiDkgTranscript>,
     logger: &ReplicaLogger,
 ) -> Result<
     (
@@ -696,6 +703,7 @@ fn process_subnet_call_context(
             registry_client,
             state,
             validation_context,
+            reshared_transcripts,
         )?;
 
     let dkg_configs = init_dkg_configs
@@ -721,6 +729,7 @@ fn process_reshare_chain_key_contexts(
     registry_client: &dyn RegistryClient,
     state: &ReplicatedState,
     validation_context: &ValidationContext,
+    reshared_transcripts: &BTreeMap<NiDkgTag, NiDkgTranscript>,
 ) -> Result<
     (
         Vec<Vec<NiDkgConfig>>,
@@ -743,7 +752,7 @@ fn process_reshare_chain_key_contexts(
             continue;
         }
 
-        // Only process NiDkgIds
+        // Only process NiDkgMasterPublicKeyId
         let Ok(key_id) = NiDkgMasterPublicKeyId::try_from(context.key_id.clone()) else {
             continue;
         };
@@ -758,6 +767,7 @@ fn process_reshare_chain_key_contexts(
             context.target_id,
             &dealers,
             &context.nodes,
+            reshared_transcripts,
             &context.registry_version,
         ) {
             Ok(config) => {
@@ -914,13 +924,19 @@ fn create_low_high_remote_dkg_configs(
         target_subnet: NiDkgTargetSubnet::Remote(target_subnet),
     };
 
-    let low_thr_config =
-        create_remote_dkg_config(low_thr_dkg_id.clone(), dealers, receivers, registry_version);
+    let low_thr_config = create_remote_dkg_config(
+        low_thr_dkg_id.clone(),
+        dealers,
+        receivers,
+        registry_version,
+        None,
+    );
     let high_thr_config = create_remote_dkg_config(
         high_thr_dkg_id.clone(),
         dealers,
         receivers,
         registry_version,
+        None,
     );
 
     // TODO: Is it really an error, if only one of the two configs was created?
@@ -959,6 +975,7 @@ fn create_remote_dkg_config_for_key_id(
     target_id: NiDkgTargetId,
     dealers: &BTreeSet<NodeId>,
     receivers: &BTreeSet<NodeId>,
+    reshared_transcripts: &BTreeMap<NiDkgTag, NiDkgTranscript>,
     registry_version: &RegistryVersion,
 ) -> Result<NiDkgConfig, Box<(NiDkgId, String)>> {
     let dkg_id = NiDkgId {
@@ -968,8 +985,23 @@ fn create_remote_dkg_config_for_key_id(
         target_subnet: NiDkgTargetSubnet::Remote(target_id),
     };
 
-    create_remote_dkg_config(dkg_id.clone(), dealers, receivers, registry_version)
-        .map_err(|err| Box::new((dkg_id, format!("{:?}", err))))
+    // Find the resharing transcript corresponding to the remote dkg id
+    let Some(resharing_transcript) = reshared_transcripts.get(&dkg_id.dkg_tag) else {
+        let err = format!(
+            "Failed to find resharing transcript for a remote dkg for tag {:?}",
+            &dkg_id.dkg_tag
+        );
+        return Err(Box::new((dkg_id, err)));
+    };
+
+    create_remote_dkg_config(
+        dkg_id.clone(),
+        dealers,
+        receivers,
+        registry_version,
+        Some(resharing_transcript.clone()),
+    )
+    .map_err(|err| Box::new((dkg_id, format!("{:?}", err))))
 }
 
 fn create_remote_dkg_config(
@@ -977,6 +1009,7 @@ fn create_remote_dkg_config(
     dealers: &BTreeSet<NodeId>,
     receivers: &BTreeSet<NodeId>,
     registry_version: &RegistryVersion,
+    resharing_transcript: Option<NiDkgTranscript>,
 ) -> Result<NiDkgConfig, NiDkgConfigValidationError> {
     NiDkgConfig::new(NiDkgConfigData {
         threshold: NumberOfNodes::from(
@@ -988,7 +1021,7 @@ fn create_remote_dkg_config(
         dealers: dealers.clone(),
         receivers: receivers.clone(),
         registry_version: *registry_version,
-        resharing_transcript: None,
+        resharing_transcript,
     })
 }
 
@@ -1198,6 +1231,7 @@ mod tests {
                     BTreeMap::new(),
                     &BTreeMap::new(),
                     &BTreeMap::new(),
+                    &BTreeMap::new(),
                     &logger,
                 )
                 .unwrap();
@@ -1230,6 +1264,7 @@ mod tests {
                         state_manager.as_ref(),
                         &validation_context,
                         BTreeMap::new(),
+                        &BTreeMap::new(),
                         &BTreeMap::new(),
                         &initial_dkg_attempts,
                         &logger,
@@ -1273,6 +1308,7 @@ mod tests {
                         state_manager.as_ref(),
                         &validation_context,
                         BTreeMap::new(),
+                        &BTreeMap::new(),
                         &BTreeMap::new(),
                         &initial_dkg_attempts,
                         &logger,
@@ -1854,4 +1890,6 @@ mod tests {
             }
         });
     }
+
+    // TODO: Test vet key remote transcript generation
 }
