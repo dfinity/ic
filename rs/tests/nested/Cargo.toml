@@ -17,7 +17,6 @@ ic-registry-subnet-type = { path = "../../registry/subnet_type" }
 ic-system-test-driver = { path = "../driver" }
 ic-types = { path = "../../types/types" }
 ic_consensus_system_test_utils = { path = "../consensus/utils" }
-reqwest = { workspace = true }
 slog = { workspace = true }
 url = { workspace = true }
 

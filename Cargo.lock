@@ -16619,7 +16619,6 @@ dependencies = [
  "ic-system-test-driver",
  "ic-types",
  "ic_consensus_system_test_utils",
- "reqwest 0.12.12",
  "slog",
  "url",
 ]

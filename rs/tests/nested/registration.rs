@@ -3,7 +3,6 @@ use ic_system_test_driver::{driver::group::SystemTestGroup, systest};
 use std::time::Duration;
 
 fn main() -> Result<()> {
-    // Start with the current branch version.
     SystemTestGroup::new()
         .with_setup(nested::config)
         .add_test(systest!(nested::registration))
