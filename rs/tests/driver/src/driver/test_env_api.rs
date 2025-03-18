@@ -1598,36 +1598,39 @@ pub trait HasPublicApiUrl: HasTestEnv + Send + Sync {
         )
     }
 
-    /// Checks if the GuestOS metrics endpoint is accessible and returns a valid `guestos_version` metric.
-    fn check_guestos_metrics_version(ip: &str, timeout_secs: u64) -> bool {
-        let metrics_endpoint = format!("https://[{}]:9100/metrics", ip);
-        let client = reqwest::blocking::Client::builder()
+    /// Checks if the Orchestrator dashboard endpoint is accessible
+    fn check_orchestrator_dashboard(ip: &str, timeout_secs: u64) -> bool {
+        let dashboard_endpoint = format!("http://[{}]:7070", ip);
+
+        let client = match reqwest::blocking::Client::builder()
             .danger_accept_invalid_certs(true)
             .timeout(Duration::from_secs(timeout_secs))
-            .build();
-
-        let client = match client {
-            Ok(c) => c,
+            .build()
+        {
+            Ok(client) => client,
             Err(e) => {
                 eprintln!("Failed to build HTTP client: {}", e);
                 return false;
             }
         };
 
-        let response = client.get(&metrics_endpoint).send();
-        if let Ok(resp) = response {
-            if !resp.status().is_success() {
-                eprintln!(
-                    "Metrics endpoint returned non-success status: {}",
-                    resp.status()
-                );
+        let resp = match client.get(&dashboard_endpoint).send() {
+            Ok(resp) => resp,
+            Err(e) => {
+                eprintln!("Failed to send request: {}", e);
                 return false;
             }
-            if let Ok(body) = resp.text() {
-                return body.lines().any(|line| line.contains("guestos_version{"));
-            }
+        };
+
+        if !resp.status().is_success() {
+            eprintln!(
+                "Orchestrator dashboard returned non-success status: {}",
+                resp.status()
+            );
+            return false;
         }
-        false
+
+        resp.text().is_ok()
     }
 
     /// Waits until the is_healthy() returns an error three times in a row
@@ -1655,25 +1658,24 @@ pub trait HasPublicApiUrl: HasTestEnv + Send + Sync {
         )
     }
 
-    /// Waits until the GuestOS metrics endpoint is accessible and returns a valid `guestos_version` metric.
-    fn await_guestos_metrics_available(&self) -> anyhow::Result<()> {
+    /// Waits until the Orchestrator dashboard endpoint is accessible
+    fn await_orchestrator_dashboard_available(&self) -> anyhow::Result<()> {
         let mut count = 0;
         retry_with_msg!(
             &format!(
-                "await_guestos_metrics_available for {}",
+                "await_orchestrator_dashboard_available for {}",
                 self.get_public_addr().ip()
             ),
             self.test_env().logger(),
             READY_WAIT_TIMEOUT,
             RETRY_BACKOFF,
             || {
-                if Self::check_guestos_metrics_version(&self.get_public_addr().ip().to_string(), 5)
-                {
+                if Self::check_orchestrator_dashboard(&self.get_public_addr().ip().to_string(), 5) {
                     Ok(())
                 } else {
                     count += 1;
                     Err(anyhow::anyhow!(
-                        "GuestOS metrics not available, attempt {count}"
+                        "Orchestrator dashboard not available, attempt {count}"
                     ))
                 }
             }

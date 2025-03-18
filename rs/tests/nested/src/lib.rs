@@ -144,12 +144,12 @@ pub fn upgrade_hostos(env: TestEnv) {
     ));
 
     // The HostOS upgrade is applied with a reboot to the host machine.
-    // Wait for the host to reboot before checking GuestOS metrics connection
+    // Wait for the host to reboot before checking Orchestrator dashboard status
     info!(logger, "Waiting for the HostOS upgrade to apply...");
     std::thread::sleep(std::time::Duration::from_secs(180));
 
-    info!(logger, "Waiting for GuestOS metrics...");
-    host.await_guestos_metrics_available().unwrap();
+    info!(logger, "Waiting for Orchestrator dashboard...");
+    host.await_orchestrator_dashboard_available().unwrap();
 
     // Check the HostOS version again after upgrade
     info!(
