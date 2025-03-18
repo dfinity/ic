@@ -21,6 +21,7 @@ DEV_DEPENDENCIES = [
     # Keep sorted.
     "//rs/nervous_system/common/test_keys",
     "//rs/registry/keys",
+    "@crate_index//:pretty_assertions",
 ]
 
 rust_library(
