@@ -7,6 +7,7 @@ use ic_cdk::api::{
     caller, print,
 };
 use ic_cdk::query;
+use ic_icp_archive::ArchiveUpgradeArgument;
 use ic_ledger_canister_core::range_utils;
 use ic_ledger_canister_core::runtime::heap_memory_size_bytes;
 use ic_ledger_core::block::{BlockIndex, BlockType, EncodedBlock};
@@ -340,8 +341,8 @@ fn post_upgrade() {
         print("Upgrading archive without an upgrade argument.");
         None
     } else {
-        match Decode!(&args, u64) {
-            Ok(max_memory_size_bytes) => Some(max_memory_size_bytes),
+        match Decode!(&args, ArchiveUpgradeArgument) {
+            Ok(args) => args.max_memory_size_bytes,
             Err(e) => {
                 ic_cdk::trap(&format!("Unable to decode archive upgrade argument: {}", e));
             }

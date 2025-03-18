@@ -1,6 +1,7 @@
 use candid::{Decode, Encode, Principal};
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_canisters_http_types::{HttpRequest, HttpResponse};
+use ic_icp_archive::ArchiveUpgradeArgument;
 use ic_ledger_core::block::{BlockType, EncodedBlock};
 use ic_ledger_core::timestamp::TimeStamp;
 use ic_ledger_core::Tokens;
@@ -77,9 +78,9 @@ impl Setup {
             .expect("failed to send append_blocks request");
     }
 
-    fn upgrade(&self, upgrade_arg_max_capacity: Option<u64>, expected_error: Option<String>) {
-        let upgrade_arg = if let Some(upgrade_arg_max_capacity) = upgrade_arg_max_capacity {
-            Encode!(&upgrade_arg_max_capacity).expect("should encode archive upgrade args")
+    fn upgrade(&self, upgrade_arg: Option<ArchiveUpgradeArgument>, expected_error: Option<String>) {
+        let upgrade_arg = if let Some(upgrade_arg) = upgrade_arg {
+            Encode!(&upgrade_arg).expect("should encode archive upgrade args")
         } else {
             vec![]
         };
@@ -223,20 +224,32 @@ fn should_update_max_capacity_with_upgrade_arg() {
     setup.upgrade(None, None);
     setup.assert_remaining_capacity(7);
 
-    setup.upgrade(Some(2 * encoded_block_size + 7), None);
+    let mut upgrade_arg = ArchiveUpgradeArgument {
+        max_memory_size_bytes: None,
+    };
+
+    // Check upgrade arg without specifying the max capacity.
+    setup.upgrade(Some(upgrade_arg.clone()), None);
+    setup.assert_remaining_capacity(7);
+
+    upgrade_arg.max_memory_size_bytes = Some(2 * encoded_block_size + 7);
+    setup.upgrade(Some(upgrade_arg.clone()), None);
     setup.assert_remaining_capacity(encoded_block_size + 7);
     setup.append_block(encoded_block);
     setup.assert_remaining_capacity(7);
 
+    upgrade_arg.max_memory_size_bytes = Some(encoded_block_size);
     setup.upgrade(
-        Some(encoded_block_size),
+        Some(upgrade_arg.clone()),
         Some("Cannot set max_memory_size_bytes to".to_string()),
     );
     setup.assert_remaining_capacity(7);
 
-    setup.upgrade(Some(2 * encoded_block_size), None);
+    upgrade_arg.max_memory_size_bytes = Some(2 * encoded_block_size);
+    setup.upgrade(Some(upgrade_arg.clone()), None);
     setup.assert_remaining_capacity(0);
 
-    setup.upgrade(Some(u64::MAX), None);
+    upgrade_arg.max_memory_size_bytes = Some(u64::max_value());
+    setup.upgrade(Some(upgrade_arg), None);
     setup.assert_remaining_capacity(u64::MAX - 2 * encoded_block_size);
 }
