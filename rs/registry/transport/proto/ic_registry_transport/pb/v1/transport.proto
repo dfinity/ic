@@ -100,6 +100,8 @@ syntax = "proto3";
 // Once all clients have made such changes, it will be possible to delete
 // "HighCapacity" definitions from this file. (Ofc, such clean up is not
 // strictly necessary, and can easily be deferred for a long time.)
+//
+// TODO(NNS1-3679): Delete this section once all the steps here are completed.
 package ic_registry_transport.pb.v1;
 
 import "google/protobuf/wrappers.proto";
