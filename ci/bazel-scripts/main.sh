@@ -38,9 +38,6 @@ fi
 # if bazel targets is empty we don't need to run any tests
 if [ -z "${BAZEL_TARGETS:-}" ]; then
     echo "No bazel targets to build"
-    # create empty SHA256SUMS for build determinism
-    # (not ideal but temporary until we can improve or get rid of diff.sh)
-    touch SHA256SUMS
     exit 0
 fi
 
@@ -96,17 +93,5 @@ if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
     echo "BuildBuddy [$invocation]($(<"$url_out"))" >>"$GITHUB_STEP_SUMMARY"
 fi
 rm "$url_out"
-
-# List and aggregate all SHA256SUMS files.
-if [ -e ./bazel-out/ ]; then
-    for shafile in $(find bazel-out/ -name SHA256SUMS); do
-        if [ -f "$shafile" ]; then
-            echo "$shafile"
-        fi
-    done | xargs cat | sort | uniq >SHA256SUMS
-else
-    # if no bazel-out, assume no targets were built
-    touch SHA256SUMS
-fi
 
 exit "$bazel_exitcode"

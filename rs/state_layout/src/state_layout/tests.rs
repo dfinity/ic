@@ -3,17 +3,16 @@ use super::*;
 use ic_management_canister_types_private::{
     CanisterChange, CanisterChangeDetails, CanisterChangeOrigin, CanisterInstallMode, IC_00,
 };
+use ic_replicated_state::canister_state::system_state::PausedExecutionId;
 use ic_replicated_state::{
-    canister_state::system_state::{CanisterHistory, OnLowWasmMemoryHookStatus},
-    metadata_state::subnet_call_context_manager::InstallCodeCallId,
-    page_map::Shard,
-    NumWasmPages,
+    canister_state::system_state::CanisterHistory,
+    metadata_state::subnet_call_context_manager::InstallCodeCallId, page_map::Shard, NumWasmPages,
 };
 use ic_test_utilities_logger::with_test_replica_logger;
 use ic_test_utilities_tmpdir::tmpdir;
 use ic_test_utilities_types::messages::{IngressBuilder, RequestBuilder, ResponseBuilder};
 use ic_test_utilities_types::{ids::canister_test_id, ids::user_test_id};
-use ic_types::messages::{CanisterCall, CanisterMessage, CanisterMessageOrTask};
+use ic_types::messages::{CanisterCall, CanisterMessage, CanisterMessageOrTask, CanisterTask};
 use ic_types::time::UNIX_EPOCH;
 use itertools::Itertools;
 use proptest::prelude::*;
@@ -48,7 +47,7 @@ fn default_canister_state_bits() -> CanisterStateBits {
         heap_delta_debit: NumBytes::from(0),
         install_code_debit: NumInstructions::from(0),
         time_of_last_allocation_charge_nanos: 0,
-        task_queue: vec![],
+        task_queue: TaskQueue::default(),
         global_timer_nanos: None,
         canister_version: 0,
         consumed_cycles_by_use_cases: BTreeMap::new(),
@@ -60,7 +59,6 @@ fn default_canister_state_bits() -> CanisterStateBits {
         wasm_memory_limit: None,
         next_snapshot_id: 0,
         snapshots_memory_usage: NumBytes::from(0),
-        on_low_wasm_memory_hook_status: OnLowWasmMemoryHookStatus::default(),
     }
 }
 
@@ -258,7 +256,8 @@ fn test_encode_decode_task_queue() {
             prepaid_execution_cycles: Cycles::new(5),
         },
     ] {
-        let task_queue = vec![task];
+        let mut task_queue = TaskQueue::default();
+        task_queue.enqueue(task);
         let canister_state_bits = CanisterStateBits {
             task_queue: task_queue.clone(),
             ..default_canister_state_bits()
@@ -813,4 +812,56 @@ fn can_add_and_delete_canister_snapshots(
             .unwrap();
         check_snapshot_layout(&checkpoint_layout, &snapshot_ids[(i + 1)..]);
     }
+}
+
+#[test]
+fn test_encode_decode_empty_task_queue() {
+    let task_queue = TaskQueue::default();
+    // A canister state with empty TaskQueue.
+    let canister_state_bits = CanisterStateBits {
+        task_queue: task_queue.clone(),
+        ..default_canister_state_bits()
+    };
+
+    let pb_bits = pb_canister_state_bits::CanisterStateBits::from(canister_state_bits);
+    let canister_state_bits = CanisterStateBits::try_from(pb_bits).unwrap();
+
+    assert_eq!(canister_state_bits.task_queue, task_queue);
+}
+
+#[test]
+fn test_encode_decode_non_empty_task_queue() {
+    let mut task_queue = TaskQueue::default();
+    task_queue.enqueue(ExecutionTask::OnLowWasmMemory);
+
+    task_queue.enqueue(ExecutionTask::AbortedExecution {
+        input: CanisterMessageOrTask::Task(CanisterTask::Heartbeat),
+        prepaid_execution_cycles: Cycles::zero(),
+    });
+
+    // A canister state with non empty TaskQueue.
+    let canister_state_bits = CanisterStateBits {
+        task_queue: task_queue.clone(),
+        ..default_canister_state_bits()
+    };
+
+    let pb_bits = pb_canister_state_bits::CanisterStateBits::from(canister_state_bits);
+    let canister_state_bits = CanisterStateBits::try_from(pb_bits).unwrap();
+
+    assert_eq!(canister_state_bits.task_queue, task_queue);
+}
+
+#[test]
+#[should_panic = "Attempt to serialize ephemeral task"]
+fn test_encode_task_queue_with_paused_task_fails() {
+    let mut task_queue = TaskQueue::default();
+    task_queue.enqueue(ExecutionTask::PausedInstallCode(PausedExecutionId(1)));
+
+    // A canister state with non empty TaskQueue.
+    let canister_state_bits = CanisterStateBits {
+        task_queue: task_queue.clone(),
+        ..default_canister_state_bits()
+    };
+
+    let _ = pb_canister_state_bits::CanisterStateBits::from(canister_state_bits);
 }
