@@ -67,10 +67,10 @@ use candid::{
 };
 use flate2::read::GzDecoder;
 use ic_management_canister_types::{
-    CanisterId, CanisterInstallMode, CanisterSettings, CanisterStatusResult, Snapshot,
+    CanisterId, CanisterInstallMode, CanisterLogRecord, CanisterSettings, CanisterStatusResult,
+    Snapshot,
 };
 use ic_transport_types::SubnetMetrics;
-use management_canister::CanisterLogRecord;
 use reqwest::Url;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -95,7 +95,6 @@ use tracing::{instrument, warn};
 use wslpath::windows_to_wsl;
 
 pub mod common;
-pub mod management_canister;
 pub mod nonblocking;
 
 const EXPECTED_SERVER_VERSION: &str = "8.0.0";
@@ -207,21 +206,21 @@ impl PocketIcBuilder {
         }
     }
 
-    /// Add an empty NNS subnet
+    /// Add an empty NNS subnet unless an NNS subnet has already been added.
     pub fn with_nns_subnet(mut self) -> Self {
         let mut config = self.config.unwrap_or_default();
-        config.nns = Some(SubnetSpec::default());
+        config.nns = Some(config.nns.unwrap_or_default());
         self.config = Some(config);
         self
     }
 
-    /// Add an NNS subnet loaded form the given state directory. Note that the provided path must
-    /// be accessible for the PocketIC server process.
+    /// Add an NNS subnet with state loaded from the given state directory.
+    /// Note that the provided path must be accessible for the PocketIC server process.
     ///
-    /// `path_to_nns_state` should lead to the `ic_state` directory which is expected to have
+    /// `path_to_state` should lead to a directory which is expected to have
     /// the following structure:
     ///
-    /// ic_state/
+    /// path_to_state/
     ///  |-- backups
     ///  |-- checkpoints
     ///  |-- diverged_checkpoints
@@ -242,7 +241,7 @@ impl PocketIcBuilder {
     /// ).unwrap().into();
     /// ```
     ///
-    /// The value can be obtained, e.g., via the following command:
+    /// The subnet ID of the NNS subnet can be obtained, e.g., via the following command:
     /// ```sh
     /// ic-regedit snapshot <path-to-ic_registry_local_store> | jq -r ".nns_subnet_id"
     /// ```
@@ -250,13 +249,13 @@ impl PocketIcBuilder {
         self.with_subnet_state(SubnetKind::NNS, nns_subnet_id, path_to_state)
     }
 
-    /// Add a subnet with state loaded form the given state directory.
+    /// Add a subnet with state loaded from the given state directory.
     /// Note that the provided path must be accessible for the PocketIC server process.
     ///
-    /// `state_dir` should point to a directory which is expected to have
+    /// `path_to_state` should point to a directory which is expected to have
     /// the following structure:
     ///
-    /// state_dir/
+    /// path_to_state/
     ///  |-- backups
     ///  |-- checkpoints
     ///  |-- diverged_checkpoints
@@ -272,10 +271,10 @@ impl PocketIcBuilder {
         mut self,
         subnet_kind: SubnetKind,
         subnet_id: Principal,
-        state_dir: PathBuf,
+        path_to_state: PathBuf,
     ) -> Self {
         let mut config = self.config.unwrap_or_default();
-        let subnet_spec = SubnetSpec::default().with_state_dir(state_dir, subnet_id);
+        let subnet_spec = SubnetSpec::default().with_state_dir(path_to_state, subnet_id);
         match subnet_kind {
             SubnetKind::NNS => config.nns = Some(subnet_spec),
             SubnetKind::SNS => config.sns = Some(subnet_spec),
@@ -290,39 +289,39 @@ impl PocketIcBuilder {
         self
     }
 
-    /// Add an empty sns subnet
+    /// Add an empty sns subnet unless an SNS subnet has already been added.
     pub fn with_sns_subnet(mut self) -> Self {
         let mut config = self.config.unwrap_or_default();
-        config.sns = Some(SubnetSpec::default());
+        config.sns = Some(config.sns.unwrap_or_default());
         self.config = Some(config);
         self
     }
 
-    /// Add an empty internet identity subnet
+    /// Add an empty II subnet unless an II subnet has already been added.
     pub fn with_ii_subnet(mut self) -> Self {
         let mut config = self.config.unwrap_or_default();
-        config.ii = Some(SubnetSpec::default());
+        config.ii = Some(config.ii.unwrap_or_default());
         self.config = Some(config);
         self
     }
 
-    /// Add an empty fiduciary subnet
+    /// Add an empty fiduciary subnet unless a fiduciary subnet has already been added.
     pub fn with_fiduciary_subnet(mut self) -> Self {
         let mut config = self.config.unwrap_or_default();
-        config.fiduciary = Some(SubnetSpec::default());
+        config.fiduciary = Some(config.fiduciary.unwrap_or_default());
         self.config = Some(config);
         self
     }
 
-    /// Add an empty bitcoin subnet
+    /// Add an empty bitcoin subnet unless a bitcoin subnet has already been added.
     pub fn with_bitcoin_subnet(mut self) -> Self {
         let mut config = self.config.unwrap_or_default();
-        config.bitcoin = Some(SubnetSpec::default());
+        config.bitcoin = Some(config.bitcoin.unwrap_or_default());
         self.config = Some(config);
         self
     }
 
-    /// Add an empty generic system subnet
+    /// Add an empty generic system subnet.
     pub fn with_system_subnet(mut self) -> Self {
         let mut config = self.config.unwrap_or_default();
         config.system.push(SubnetSpec::default());
@@ -330,7 +329,7 @@ impl PocketIcBuilder {
         self
     }
 
-    /// Add an empty generic application subnet
+    /// Add an empty generic application subnet.
     pub fn with_application_subnet(mut self) -> Self {
         let mut config = self.config.unwrap_or_default();
         config.application.push(SubnetSpec::default());
@@ -338,7 +337,7 @@ impl PocketIcBuilder {
         self
     }
 
-    /// Add an empty verified application subnet
+    /// Add an empty generic verified application subnet.
     pub fn with_verified_application_subnet(mut self) -> Self {
         let mut config = self.config.unwrap_or_default();
         config.verified_application.push(SubnetSpec::default());
@@ -346,6 +345,7 @@ impl PocketIcBuilder {
         self
     }
 
+    /// Add an empty generic application subnet with benchmarking instruction configuration.
     pub fn with_benchmarking_application_subnet(mut self) -> Self {
         let mut config = self.config.unwrap_or_default();
         config
@@ -355,6 +355,7 @@ impl PocketIcBuilder {
         self
     }
 
+    /// Add an empty generic system subnet with benchmarking instruction configuration.
     pub fn with_benchmarking_system_subnet(mut self) -> Self {
         let mut config = self.config.unwrap_or_default();
         config

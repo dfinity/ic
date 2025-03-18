@@ -822,6 +822,7 @@ fn test_prune_some_following_super_strict_voting_power_refresh() {
                 // supposed to be cleared.
                 start_reducing_voting_power_after_seconds: Some(42),
                 clear_following_after_seconds: Some(58),
+                neuron_minimum_dissolve_delay_to_vote_seconds: Some(42)
             },
             &mut neuron_store,
             Bound::Unbounded, // Start new cycle.
@@ -953,6 +954,53 @@ fn test_batch_adjust_neurons_storage() {
 }
 
 #[test]
+fn test_unstake_maturity() {
+    let mut neuron_store = NeuronStore::new(BTreeMap::new());
+    let now_seconds = neuron_store.now();
+    for id in 1..=5 {
+        let neuron = simple_neuron_builder(id)
+            .with_dissolve_state_and_age(DissolveStateAndAge::DissolvingOrDissolved {
+                when_dissolved_timestamp_seconds: now_seconds,
+            })
+            .with_staked_maturity_e8s_equivalent(1_000_000)
+            .build();
+        neuron_store.add_neuron(neuron).unwrap();
+    }
+
+    let neuron_has_staked_maturity = |neuron_store: &NeuronStore, id: u64| {
+        neuron_store
+            .with_neuron(&NeuronId { id }, |neuron| {
+                neuron.staked_maturity_e8s_equivalent.is_some()
+            })
+            .unwrap()
+    };
+
+    // Initially all neurons have staked maturity.
+    for id in 1..=5 {
+        assert!(neuron_has_staked_maturity(&neuron_store, id));
+    }
+
+    // Unstake the maturity of the first 3 neurons.
+    neuron_store.unstake_maturity_of_dissolved_neurons(now_seconds, 3);
+
+    // Verify that the first 3 neurons have no staked maturity, while the rest do.
+    for id in 1..=3 {
+        assert!(!neuron_has_staked_maturity(&neuron_store, id));
+    }
+    for id in 4..=5 {
+        assert!(neuron_has_staked_maturity(&neuron_store, id));
+    }
+
+    // Unstake the maturity of the remaining neurons.
+    neuron_store.unstake_maturity_of_dissolved_neurons(now_seconds, 3);
+
+    // Verify that all neurons have no staked maturity.
+    for id in 1..=5 {
+        assert!(!neuron_has_staked_maturity(&neuron_store, id));
+    }
+}
+
+#[test]
 fn test_batch_adjust_neurons_storage_exceeds_instructions_limit() {
     // This test doesn't make sense after neurons are migrated completely to stable memory.
     let _a = temporarily_disable_allow_active_neurons_in_stable_memory();
@@ -1074,4 +1122,146 @@ fn test_get_full_neuron() {
             principal_id,
         })
     );
+}
+
+#[test]
+fn test_approve_genesis_kyc() {
+    let principal_1 = PrincipalId::new_self_authenticating(b"SID1");
+    let principal_2 = PrincipalId::new_self_authenticating(b"SID2");
+    let principal_3 = PrincipalId::new_self_authenticating(b"SID3");
+    let neuron_1 = simple_neuron_builder(1)
+        .with_controller(principal_1)
+        .with_kyc_verified(false)
+        .build();
+    let neuron_2 = simple_neuron_builder(2)
+        .with_controller(principal_2)
+        .with_kyc_verified(false)
+        .build();
+    let neuron_3 = simple_neuron_builder(3)
+        .with_controller(principal_2)
+        .with_kyc_verified(false)
+        .build();
+    let neuron_4 = simple_neuron_builder(4)
+        .with_controller(principal_3)
+        .with_kyc_verified(false)
+        .build();
+    let mut neuron_store = NeuronStore::new(btreemap! {
+        neuron_1.id().id => neuron_1.clone(),
+        neuron_2.id().id => neuron_2.clone(),
+        neuron_3.id().id => neuron_3.clone(),
+        neuron_4.id().id => neuron_4.clone(),
+    });
+    // Before calling `approve_genesis_kyc`, none of the neurons have KYC verified.
+    assert!(!neuron_store
+        .with_neuron(&neuron_1.id(), |n| n.kyc_verified)
+        .unwrap());
+    assert!(!neuron_store
+        .with_neuron(&neuron_2.id(), |n| n.kyc_verified)
+        .unwrap());
+    assert!(!neuron_store
+        .with_neuron(&neuron_3.id(), |n| n.kyc_verified)
+        .unwrap());
+    assert!(!neuron_store
+        .with_neuron(&neuron_4.id(), |n| n.kyc_verified)
+        .unwrap());
+
+    // Approve KYC for neuron_1, neuron_2 and neuron_3.
+    approve_genesis_kyc(&mut neuron_store, &[principal_1, principal_2]).unwrap();
+
+    assert!(neuron_store
+        .with_neuron(&neuron_1.id(), |n| n.kyc_verified)
+        .unwrap());
+    assert!(neuron_store
+        .with_neuron(&neuron_2.id(), |n| n.kyc_verified)
+        .unwrap());
+    assert!(neuron_store
+        .with_neuron(&neuron_3.id(), |n| n.kyc_verified)
+        .unwrap());
+    assert!(!neuron_store
+        .with_neuron(&neuron_4.id(), |n| n.kyc_verified)
+        .unwrap());
+}
+
+// Prepares `num_neurons_same_controller` neurons with the same controller and
+// `num_neurons_diff_controllers` neurons with different controllers.
+fn prepare_neurons_for_kyc(
+    num_neurons_same_controller: u64,
+    num_neurons_diff_controllers: u64,
+) -> (Vec<Neuron>, Vec<PrincipalId>) {
+    let mut neurons = Vec::new();
+    let principal_id = PrincipalId::new_self_authenticating(b"SID");
+    let mut principal_ids = hashset! { principal_id };
+    for id in 1..=num_neurons_same_controller {
+        let neuron = simple_neuron_builder(id)
+            .with_controller(principal_id)
+            .with_kyc_verified(false)
+            .build();
+        neurons.push(neuron);
+    }
+    for id in (num_neurons_same_controller + 1)
+        ..=(num_neurons_same_controller + num_neurons_diff_controllers)
+    {
+        let neuron = simple_neuron_builder(id).with_kyc_verified(false).build();
+        principal_ids.insert(neuron.controller());
+        neurons.push(neuron);
+    }
+    (neurons, principal_ids.into_iter().collect())
+}
+
+#[test]
+fn test_approve_genesis_kyc_cap_not_exceeded() {
+    let mut neuron_store = NeuronStore::new(BTreeMap::new());
+    // Set up 1000 neurons that should be KYC verified.
+    let (neurons, principal_ids) = prepare_neurons_for_kyc(500, 500);
+    for neuron in &neurons {
+        neuron_store.add_neuron(neuron.clone()).unwrap();
+    }
+    // Set up a neuron that should not be KYC verified.
+    let neuron_should_not_have_kyc_verified =
+        simple_neuron_builder(1001).with_kyc_verified(false).build();
+    neuron_store
+        .add_neuron(neuron_should_not_have_kyc_verified.clone())
+        .unwrap();
+
+    // Approve KYC for 1000 neurons.
+    approve_genesis_kyc(&mut neuron_store, &principal_ids).unwrap();
+
+    // All 1000 neurons should have KYC verified.
+    for neuron in &neurons {
+        assert!(neuron_store
+            .with_neuron(&neuron.id(), |n| n.kyc_verified)
+            .unwrap());
+    }
+
+    // The neuron with id 1001 should not have KYC verified.
+    assert!(!neuron_store
+        .with_neuron(&neuron_should_not_have_kyc_verified.id(), |n| n
+            .kyc_verified)
+        .unwrap());
+}
+
+#[test]
+fn test_approve_genesis_kyc_cap_exceeded() {
+    let mut neuron_store = NeuronStore::new(BTreeMap::new());
+    let (neurons, principal_ids) = prepare_neurons_for_kyc(500, 501);
+    for neuron in &neurons {
+        neuron_store.add_neuron(neuron.clone()).unwrap();
+    }
+
+    // Approve KYC for 1001 neurons.
+    let result = approve_genesis_kyc(&mut neuron_store, &principal_ids);
+    assert_eq!(
+        result,
+        Err(GovernanceError::new_with_message(
+            ErrorType::PreconditionFailed,
+            "ApproveGenesisKyc can only change the KYC status of up to 1000 neurons at a time",
+        ),)
+    );
+
+    // None of the neurons should have KYC verified.
+    for neuron in &neurons {
+        assert!(!neuron_store
+            .with_neuron(&neuron.id(), |n| n.kyc_verified)
+            .unwrap());
+    }
 }

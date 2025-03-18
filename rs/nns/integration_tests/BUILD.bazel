@@ -1,4 +1,3 @@
-load("@rules_rust//rust:defs.bzl", "rust_library")
 load("//bazel:canisters.bzl", "rust_canister")
 load("//bazel:defs.bzl", "rust_ic_test", "rust_ic_test_suite_with_extra_srcs")
 
@@ -197,18 +196,6 @@ DEV_ENV = {
     "UNIVERSAL_CANISTER_WASM_PATH": "$(rootpath //rs/universal_canister/impl:universal_canister.wasm.gz)",
 }
 
-rust_library(
-    name = "integration_tests",
-    testonly = True,
-    srcs = glob(["src/**/*.rs"]),
-    aliases = ALIASES,
-    crate_features = ["test"],
-    crate_name = "ic_nns_integration_tests",
-    proc_macro_deps = MACRO_DEPENDENCIES,
-    version = "0.9.0",
-    deps = DEPENDENCIES_WITH_TEST_FEATURES,
-)
-
 rust_canister(
     name = "mem-utils-test-canister",
     testonly = True,
@@ -216,7 +203,7 @@ rust_canister(
     aliases = ALIASES,
     proc_macro_deps = MACRO_DEPENDENCIES,
     service_file = ":test_canisters/empty.did",
-    deps = DEPENDENCIES + [":integration_tests"],
+    deps = DEPENDENCIES,
 )
 
 rust_canister(
@@ -226,7 +213,7 @@ rust_canister(
     aliases = ALIASES,
     proc_macro_deps = MACRO_DEPENDENCIES,
     service_file = ":test_canisters/empty.did",
-    deps = DEPENDENCIES + [":integration_tests"],
+    deps = DEPENDENCIES,
 )
 
 rust_canister(
@@ -236,7 +223,7 @@ rust_canister(
     aliases = ALIASES,
     proc_macro_deps = MACRO_DEPENDENCIES,
     service_file = ":test_canisters/empty.did",
-    deps = DEPENDENCIES + [":integration_tests"],
+    deps = DEPENDENCIES,
 )
 
 rust_canister(
@@ -246,9 +233,7 @@ rust_canister(
     aliases = ALIASES,
     proc_macro_deps = MACRO_DEPENDENCIES,
     service_file = ":test_canisters/empty.did",
-    deps = DEPENDENCIES + [
-        ":integration_tests",
-    ],
+    deps = DEPENDENCIES,
 )
 
 rust_canister(
@@ -259,14 +244,13 @@ rust_canister(
     proc_macro_deps = MACRO_DEPENDENCIES,
     service_file = ":test_canisters/empty.did",
     deps = DEPENDENCIES + [
-        ":integration_tests",
         "//rs/nervous_system/runtime",
         "//rs/sns/root",
     ],
 )
 
 rust_ic_test_suite_with_extra_srcs(
-    name = "integration_tests_test",
+    name = "integration_tests",
     timeout = "long",
     srcs = glob(
         ["src/**/*.rs"],
@@ -275,7 +259,6 @@ rust_ic_test_suite_with_extra_srcs(
             # Tests that are broken out into their own rules below,
             # mostly due to long running times.
             "src/canister_playground.rs",
-            "src/copy_inactive_neurons_to_stable_memory.rs",
             "src/governance_mem_test.rs",
             "src/upgrade_canisters_with_golden_nns_state.rs",
         ],
@@ -284,7 +267,7 @@ rust_ic_test_suite_with_extra_srcs(
     data = DEV_DATA,
     env = DEV_ENV,
     extra_srcs = ["src/lib.rs"],
-    flaky = True,
+    flaky = True,  # flakiness rate of 1.29% over the month from 2025-02-11 till 2025-03-11 for the "governance_time_warp" test
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     deps = DEPENDENCIES_WITH_TEST_FEATURES + DEV_DEPENDENCIES,
 )
@@ -321,46 +304,6 @@ rust_ic_test(
     env = DEV_ENV,
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     tags = ["manual"],
-    deps = DEPENDENCIES + DEV_DEPENDENCIES,
-)
-
-# To run this test,
-#
-#     bazel \
-#         test \
-#         --test_env=SSH_AUTH_SOCK \
-#         //rs/nns/integration_tests:copy_inactive_neurons_to_stable_memory_test
-#
-# The only unusual thing in this command is `--test_env=SSH_AUTH_SOCK`. That causes the
-# SSH_AUTH_SOCK environment variable to be "forwarded" from your shell to the sandbox where the test
-# is run. This authorizes the test to download the test data.
-#
-# Additionally, the following flags are recommended (but not required):
-#
-# --test_output=streamed
-# --test_arg=--nocapture
-#
-# These let you watch the progress of the test, rather than only being able to see the output only
-# at the end.
-#
-# See the .bazelrc for more configuration information.
-rust_ic_test(
-    name = "copy_inactive_neurons_to_stable_memory_test",
-    # This uses on the order of 10 GB of disk space.
-    # Therefore, size = "large" is not large enough.
-    size = "enormous",
-    srcs = [
-        "src/copy_inactive_neurons_to_stable_memory.rs",
-    ],
-    aliases = ALIASES,
-    crate_root = "src/copy_inactive_neurons_to_stable_memory.rs",
-    data = DEV_DATA,
-    env = DEV_ENV,
-    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
-    tags = [
-        "manual",  # CI should not be downloading nns_state.tar.zst.
-        "requires-network",  # Because mainnet state is downloaded (and used).
-    ],
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )
 

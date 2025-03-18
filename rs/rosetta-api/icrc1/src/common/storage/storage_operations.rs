@@ -333,10 +333,10 @@ pub fn store_blocks(
         insert_tx.prepare_cached(
         "INSERT OR IGNORE INTO blocks (idx, hash, serialized_block, parent_hash, timestamp,tx_hash,operation_type,from_principal,from_subaccount,to_principal,to_subaccount,spender_principal,spender_subaccount,memo,amount,expected_allowance,fee,transaction_created_at_time,approval_expires_at) VALUES (:idx, :hash, :serialized_block, :parent_hash, :timestamp,:tx_hash,:operation_type,:from_principal,:from_subaccount,:to_principal,:to_subaccount,:spender_principal,:spender_subaccount,:memo,:amount,:expected_allowance,:fee,:transaction_created_at_time,:approval_expires_at)")?
                     .execute(named_params! {
-                        ":idx":rosetta_block.index, 
-                        ":hash":rosetta_block.clone().get_block_hash().as_slice().to_vec(), 
-                        ":serialized_block":rosetta_block.block, 
-                        ":parent_hash":rosetta_block.get_parent_hash().clone().map(|hash| hash.as_slice().to_vec()), 
+                        ":idx":rosetta_block.index,
+                        ":hash":rosetta_block.clone().get_block_hash().as_slice().to_vec(),
+                        ":serialized_block":rosetta_block.block,
+                        ":parent_hash":rosetta_block.get_parent_hash().clone().map(|hash| hash.as_slice().to_vec()),
                         ":timestamp":rosetta_block.get_timestamp(),
                         ":tx_hash":rosetta_block.clone().get_transaction_hash().as_slice().to_vec(),
                         ":operation_type":operation_type,
@@ -446,7 +446,7 @@ pub fn get_blockchain_gaps(
 }
 
 pub fn get_block_count(connection: &Connection) -> anyhow::Result<u64> {
-    let command = "SELECT COUNT(*) FROM blocks";
+    let command = r#"SELECT value FROM counters WHERE name IS "SyncedBlocks""#;
     let mut stmt = connection.prepare_cached(command)?;
     let mut rows = stmt.query(params![])?;
     let count: u64 = rows.next()?.unwrap().get(0)?;
@@ -469,6 +469,19 @@ pub fn get_highest_block_idx_in_account_balance_table(
 ) -> anyhow::Result<Option<u64>> {
     match connection
         .prepare_cached("SELECT block_idx FROM account_balances WHERE block_idx = (SELECT MAX(block_idx) FROM account_balances)")?
+        .query_map(params![], |row| row.get(0))?
+        .next()
+    {
+        None => Ok(None),
+        Some(res) => Ok(res?),
+    }
+}
+
+pub fn get_highest_block_idx_in_blocks_table(
+    connection: &Connection,
+) -> anyhow::Result<Option<u64>> {
+    match connection
+        .prepare_cached("SELECT MAX(idx) FROM blocks")?
         .query_map(params![], |row| row.get(0))?
         .next()
     {
@@ -527,6 +540,13 @@ where
 {
     let mut stmt = connection.prepare_cached(&sql_query)?;
     read_blocks(&mut stmt, params)
+}
+
+pub fn reset_blocks_counter(connection: &Connection) -> anyhow::Result<()> {
+    connection
+        .prepare_cached("UPDATE counters SET value = (SELECT COUNT(*) FROM blocks) WHERE name IS 'SyncedBlocks'")?
+        .execute(params![])?;
+    Ok(())
 }
 
 fn read_single_block<P>(

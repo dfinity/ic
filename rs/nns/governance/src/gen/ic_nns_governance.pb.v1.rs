@@ -780,7 +780,7 @@ pub struct ManageNeuron {
     pub neuron_id_or_subaccount: ::core::option::Option<manage_neuron::NeuronIdOrSubaccount>,
     #[prost(
         oneof = "manage_neuron::Command",
-        tags = "2, 3, 4, 5, 6, 7, 8, 9, 10, 13, 14, 15, 16"
+        tags = "2, 3, 4, 5, 6, 7, 8, 9, 10, 13, 14, 15, 16, 17"
     )]
     pub command: ::core::option::Option<manage_neuron::Command>,
 }
@@ -1270,6 +1270,28 @@ pub mod manage_neuron {
         ::prost::Message,
     )]
     pub struct RefreshVotingPower {}
+    /// Disburse the maturity of a neuron to any ledger account. If an account
+    /// is not specified, the caller's account will be used. The caller can choose
+    /// a percentage of the current maturity to disburse to the ledger account. The
+    /// resulting amount to disburse must be greater than or equal to the
+    /// transaction fee.
+    #[derive(
+        candid::CandidType,
+        candid::Deserialize,
+        serde::Serialize,
+        comparable::Comparable,
+        Clone,
+        PartialEq,
+        ::prost::Message,
+    )]
+    pub struct DisburseMaturity {
+        /// The percentage to disburse, from 1 to 100
+        #[prost(uint32, tag = "1")]
+        pub percentage_to_disburse: u32,
+        /// The (optional) principal to which to transfer the stake.
+        #[prost(message, optional, tag = "2")]
+        pub to_account: ::core::option::Option<super::Account>,
+    }
     /// The ID of the neuron to manage. This can either be a subaccount or a neuron ID.
     #[derive(
         candid::CandidType,
@@ -1323,6 +1345,8 @@ pub mod manage_neuron {
         StakeMaturity(StakeMaturity),
         #[prost(message, tag = "16")]
         RefreshVotingPower(RefreshVotingPower),
+        #[prost(message, tag = "17")]
+        DisburseMaturity(DisburseMaturity),
     }
 }
 #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
@@ -2124,6 +2148,15 @@ pub struct VotingPowerEconomics {
     /// Initially, set to 1/12 years.
     #[prost(uint64, optional, tag = "2")]
     pub clear_following_after_seconds: ::core::option::Option<u64>,
+    /// The minimum dissolve delay a neuron must have in order to be eligible to vote.
+    ///
+    /// Neurons with a dissolve delay lower than this threshold will not have
+    /// voting power, even if they are otherwise active.
+    ///
+    /// This value is an essential part of the staking mechanism, promoting
+    /// long-term alignment with the network's governance.
+    #[prost(uint64, optional, tag = "3")]
+    pub neuron_minimum_dissolve_delay_to_vote_seconds: ::core::option::Option<u64>,
 }
 /// The thresholds specify the shape of the ideal matching function used by the Neurons' Fund to
 /// determine how much to contribute for a given direct participation amount. Note that the actual
@@ -2975,9 +3008,6 @@ pub struct Governance {
     pub spawning_neurons: ::core::option::Option<bool>,
     #[prost(message, optional, tag = "20")]
     pub making_sns_proposal: ::core::option::Option<governance::MakingSnsProposal>,
-    /// Migration related data.
-    #[prost(message, optional, tag = "21")]
-    pub migrations: ::core::option::Option<governance::Migrations>,
     /// A Structure used during upgrade to store the index of topics for neurons to their followers.
     /// This is the inverse of what is stored in a Neuron (its followees).
     #[prost(map = "int32, message", tag = "22")]
@@ -3243,119 +3273,6 @@ pub mod governance {
         pub caller: ::core::option::Option<::ic_base_types::PrincipalId>,
         #[prost(message, optional, tag = "3")]
         pub proposal: ::core::option::Option<super::Proposal>,
-    }
-    /// Progress of a migration that (potentially) is performed over the course of more than one heartbeat call.
-    #[derive(
-        candid::CandidType,
-        candid::Deserialize,
-        serde::Serialize,
-        comparable::Comparable,
-        Clone,
-        PartialEq,
-        ::prost::Message,
-    )]
-    pub struct Migration {
-        /// Migration status.
-        #[prost(enumeration = "migration::MigrationStatus", optional, tag = "1")]
-        pub status: ::core::option::Option<i32>,
-        /// The reason why it failed. Should only be present when the status is FAILED.
-        /// This is only for debugging and it should not be used programmatically (other than its presence).
-        #[prost(string, optional, tag = "2")]
-        pub failure_reason: ::core::option::Option<::prost::alloc::string::String>,
-        /// Migration progress (cursor).
-        #[prost(oneof = "migration::Progress", tags = "3")]
-        pub progress: ::core::option::Option<migration::Progress>,
-    }
-    /// Nested message and enum types in `Migration`.
-    pub mod migration {
-        #[derive(
-            candid::CandidType,
-            candid::Deserialize,
-            serde::Serialize,
-            comparable::Comparable,
-            Clone,
-            Copy,
-            Debug,
-            PartialEq,
-            Eq,
-            Hash,
-            PartialOrd,
-            Ord,
-            ::prost::Enumeration,
-        )]
-        #[repr(i32)]
-        pub enum MigrationStatus {
-            /// Unspecified.
-            Unspecified = 0,
-            /// Migration is in progress.
-            InProgress = 1,
-            /// Migration succeeded.
-            Succeeded = 2,
-            /// Migration failed.
-            Failed = 3,
-        }
-        impl MigrationStatus {
-            /// String value of the enum field names used in the ProtoBuf definition.
-            ///
-            /// The values are not transformed in any way and thus are considered stable
-            /// (if the ProtoBuf definition does not change) and safe for programmatic use.
-            pub fn as_str_name(&self) -> &'static str {
-                match self {
-                    Self::Unspecified => "MIGRATION_STATUS_UNSPECIFIED",
-                    Self::InProgress => "MIGRATION_STATUS_IN_PROGRESS",
-                    Self::Succeeded => "MIGRATION_STATUS_SUCCEEDED",
-                    Self::Failed => "MIGRATION_STATUS_FAILED",
-                }
-            }
-            /// Creates an enum from field names used in the ProtoBuf definition.
-            pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
-                match value {
-                    "MIGRATION_STATUS_UNSPECIFIED" => Some(Self::Unspecified),
-                    "MIGRATION_STATUS_IN_PROGRESS" => Some(Self::InProgress),
-                    "MIGRATION_STATUS_SUCCEEDED" => Some(Self::Succeeded),
-                    "MIGRATION_STATUS_FAILED" => Some(Self::Failed),
-                    _ => None,
-                }
-            }
-        }
-        /// Migration progress (cursor).
-        #[derive(
-            candid::CandidType,
-            candid::Deserialize,
-            serde::Serialize,
-            comparable::Comparable,
-            Clone,
-            Copy,
-            PartialEq,
-            ::prost::Oneof,
-        )]
-        pub enum Progress {
-            /// Last neuron id migrated.
-            #[prost(message, tag = "3")]
-            LastNeuronId(::ic_nns_common::pb::v1::NeuronId),
-        }
-    }
-    /// The status of all on-going (and recently completed) migrations (that take
-    /// place over the course of multiple heartbeat calls).
-    ///
-    /// Each Migration field corresponds to one (ongoing or recently completed) migration.
-    ///
-    /// After a migration is finished, it should be OK to reserve the tag and lose the data.
-    #[derive(
-        candid::CandidType,
-        candid::Deserialize,
-        serde::Serialize,
-        comparable::Comparable,
-        Clone,
-        PartialEq,
-        ::prost::Message,
-    )]
-    pub struct Migrations {
-        /// Migrates neuron indexes to stable storage.
-        #[prost(message, optional, tag = "1")]
-        pub neuron_indexes_migration: ::core::option::Option<Migration>,
-        #[prost(message, optional, tag = "2")]
-        pub copy_inactive_neurons_to_stable_memory_migration: ::core::option::Option<Migration>,
     }
     /// A map of followees to their followers.
     #[derive(
@@ -4213,6 +4130,57 @@ pub struct ProposalVotingStateMachine {
     pub followers_to_check: ::prost::alloc::vec::Vec<::ic_nns_common::pb::v1::NeuronId>,
     #[prost(map = "uint64, enumeration(Vote)", tag = "5")]
     pub recent_neuron_ballots_to_record: ::std::collections::HashMap<u64, i32>,
+}
+/// A Ledger subaccount.
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    serde::Serialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct Subaccount {
+    #[prost(bytes = "vec", tag = "1")]
+    pub subaccount: ::prost::alloc::vec::Vec<u8>,
+}
+/// A Ledger account identified by the owner of the account `of` and
+/// the `subaccount`. If the `subaccount` is not specified then the default
+/// one is used.
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    serde::Serialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct Account {
+    /// The owner of the account.
+    #[prost(message, optional, tag = "1")]
+    pub owner: ::core::option::Option<::ic_base_types::PrincipalId>,
+    /// The subaccount of the account. If not set then the default
+    /// subaccount (all bytes set to 0) is used.
+    #[prost(message, optional, tag = "2")]
+    pub subaccount: ::core::option::Option<Subaccount>,
+}
+/// A reward disbribution that has been calculated but not fully disbursed.
+/// This supports large reward distributions that may need to be split into multiple
+/// messages.
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    serde::Serialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct RewardsDistributionInProgress {
+    #[prost(map = "uint64, uint64", tag = "1")]
+    pub neuron_ids_to_e8_amounts: ::std::collections::HashMap<u64, u64>,
 }
 /// Proposal types are organized into topics. Neurons can automatically
 /// vote based on following other neurons, and these follow
