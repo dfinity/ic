@@ -117,6 +117,13 @@ fn set_stable_memory_version() {
         .is_ok());
 }
 
+fn set_archive_state(archive_state: ArchiveState) {
+    ARCHIVE_STATE_CACHE.with(|c| *c.borrow_mut() = Some(archive_state));
+    assert!(ARCHIVE_STATE
+        .with(|cell| cell.borrow_mut().set(archive_state))
+        .is_ok());
+}
+
 fn max_memory_size_bytes() -> u64 {
     if let Some(archive_state) = ARCHIVE_STATE_CACHE.with(|c| *c.borrow()) {
         return archive_state.max_memory_size_bytes;
@@ -136,10 +143,7 @@ fn set_max_memory_size_bytes(max_memory_size_bytes: u64) {
     }
     let mut archive_state = ARCHIVE_STATE.with(|cell| *cell.borrow().get());
     archive_state.max_memory_size_bytes = max_memory_size_bytes;
-    ARCHIVE_STATE_CACHE.with(|c| *c.borrow_mut() = Some(archive_state));
-    assert!(ARCHIVE_STATE
-        .with(|cell| cell.borrow_mut().set(archive_state))
-        .is_ok());
+    set_archive_state(archive_state);
 }
 
 fn block_height_offset() -> u64 {
@@ -154,10 +158,7 @@ fn block_height_offset() -> u64 {
 fn set_block_height_offset(block_height_offset: u64) {
     let mut archive_state = ARCHIVE_STATE.with(|cell| *cell.borrow().get());
     archive_state.block_height_offset = block_height_offset;
-    ARCHIVE_STATE_CACHE.with(|c| *c.borrow_mut() = Some(archive_state));
-    assert!(ARCHIVE_STATE
-        .with(|cell| cell.borrow_mut().set(archive_state))
-        .is_ok());
+    set_archive_state(archive_state);
 }
 
 fn total_block_size() -> u64 {
@@ -176,10 +177,7 @@ fn ledger_canister_id() -> CanisterId {
 fn set_ledger_canister_id(ledger_canister_id: CanisterId) {
     let mut archive_state = ARCHIVE_STATE.with(|cell| *cell.borrow().get());
     archive_state.ledger_canister_id = ledger_canister_id;
-    ARCHIVE_STATE_CACHE.with(|c| *c.borrow_mut() = Some(archive_state));
-    assert!(ARCHIVE_STATE
-        .with(|cell| cell.borrow_mut().set(archive_state))
-        .is_ok());
+    set_archive_state(archive_state);
 }
 
 fn last_upgrade_timestamp() -> u64 {
