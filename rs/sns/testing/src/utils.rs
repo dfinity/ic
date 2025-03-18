@@ -1,5 +1,4 @@
 use anyhow::{anyhow, Context, Result};
-use core::array::from_fn;
 use dfx_core::config::model::network_descriptor::NetworkDescriptor;
 use dfx_core::identity::identity_manager::InitializeIdentity;
 use dfx_core::identity::IdentityManager;
@@ -53,13 +52,16 @@ lazy_static! {
         let identity = Secp256k1Identity::from_private_key(TREASURY_SECRET_KEY.clone());
         identity.sender().unwrap().into()
     };
-    pub static ref SWAP_PARTICIPANT_SECRET_KEYS: [SecretKey; 20] = {
-        from_fn(|i| {
+}
+
+pub fn swap_participant_secret_keys(number_of_participants: usize) -> Vec<SecretKey> {
+    (0..number_of_participants)
+        .map(|i| {
             let mut slice_vec = vec![0; 16];
             slice_vec.extend_from_slice(&(100 + i).to_ne_bytes());
             SecretKey::from_slice(&slice_vec).unwrap()
         })
-    };
+        .collect()
 }
 
 pub async fn build_ephemeral_agent(

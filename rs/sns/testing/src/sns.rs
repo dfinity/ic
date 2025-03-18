@@ -40,6 +40,8 @@ pub struct TestCanisterInitArgs {
     pub greeting: Option<String>,
 }
 
+pub const DEFAULT_SWAP_PARTICIPANTS_NUMBER: usize = 20;
+
 // Creates SNS using agents provided as arguments:
 // 1) neuron_agent - agent that controlls 'neuron_id'.
 // 2) neuron_id - ID of the neuron that has a sufficient amount of stake to propose the SNS creation and adopt the proposal.
@@ -336,7 +338,7 @@ pub async fn upgrade_sns_controlled_test_canister<C: CallCanisters + ProgressNet
 
 // Module with PocketIC-specific functions, mainly used in the tests.
 pub mod pocket_ic {
-    use super::TestCanisterInitArgs;
+    use super::{TestCanisterInitArgs, DEFAULT_SWAP_PARTICIPANTS_NUMBER};
 
     use ::pocket_ic::nonblocking::PocketIc;
     use candid::Encode;
@@ -350,7 +352,7 @@ pub mod pocket_ic {
     use ic_nns_constants::ROOT_CANISTER_ID;
     use icp_ledger::{Tokens, DEFAULT_TRANSFER_FEE};
 
-    use crate::utils::{NNS_NEURON_ID, SWAP_PARTICIPANT_SECRET_KEYS};
+    use crate::utils::{swap_participant_secret_keys, NNS_NEURON_ID};
 
     pub async fn install_test_canister(
         pocket_ic: &PocketIc,
@@ -385,7 +387,7 @@ pub mod pocket_ic {
         let dev_participant = PocketIcAgent::new(pocket_ic, dev_participant_id);
 
         let swap_treasury_agent = PocketIcAgent::new(pocket_ic, treasury_principal_id);
-        let swap_partipants_agents = SWAP_PARTICIPANT_SECRET_KEYS
+        let swap_partipants_agents = swap_participant_secret_keys(DEFAULT_SWAP_PARTICIPANTS_NUMBER)
             .iter()
             .map(|secret_key| {
                 let identity = Secp256k1Identity::from_private_key(secret_key.clone());

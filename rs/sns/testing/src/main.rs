@@ -7,11 +7,14 @@ use ic_nervous_system_agent::CallCanisters;
 use ic_nervous_system_integration_tests::pocket_ic_helpers::load_registry_mutations;
 use ic_sns_cli::utils::dfx_interface;
 use ic_sns_testing::nns_dapp::bootstrap_nns;
-use ic_sns_testing::sns::{create_sns, upgrade_sns_controlled_test_canister, TestCanisterInitArgs};
+use ic_sns_testing::sns::{
+    create_sns, upgrade_sns_controlled_test_canister, TestCanisterInitArgs,
+    DEFAULT_SWAP_PARTICIPANTS_NUMBER,
+};
 use ic_sns_testing::utils::{
-    build_ephemeral_agent, get_identity_principal, get_nns_neuron_hotkeys, validate_network,
-    validate_target_canister, NNS_NEURON_ID, SWAP_PARTICIPANT_SECRET_KEYS, TREASURY_PRINCIPAL_ID,
-    TREASURY_SECRET_KEY,
+    build_ephemeral_agent, get_identity_principal, get_nns_neuron_hotkeys,
+    swap_participant_secret_keys, validate_network, validate_target_canister, NNS_NEURON_ID,
+    TREASURY_PRINCIPAL_ID, TREASURY_SECRET_KEY,
 };
 use icp_ledger::Tokens;
 use pocket_ic::PocketIcBuilder;
@@ -129,9 +132,9 @@ async fn run_basic_scenario(opts: RunBasicScenarioOpts) {
     }
 
     let swap_participants_agents = join_all(
-        SWAP_PARTICIPANT_SECRET_KEYS
-            .clone()
-            .map(|k| async { build_ephemeral_agent(k, &network.clone()).await.unwrap() }),
+        swap_participant_secret_keys(DEFAULT_SWAP_PARTICIPANTS_NUMBER)
+            .iter()
+            .map(|k| async { build_ephemeral_agent(k.clone(), network).await.unwrap() }),
     )
     .await;
 
