@@ -1615,6 +1615,9 @@ pub struct ProposalData {
     /// power) in proportion to this.
     #[prost(uint64, optional, tag = "22")]
     pub total_potential_voting_power: ::core::option::Option<u64>,
+    /// / Whether early adoption is disabled for this proposal.
+    #[prost(bool, optional, tag = "23")]
+    pub early_adoption_disabled: ::core::option::Option<bool>,
 }
 /// This structure contains data for settling the Neurons' Fund participation in an SNS token swap.
 #[derive(

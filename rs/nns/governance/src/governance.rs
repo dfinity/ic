@@ -1070,11 +1070,16 @@ impl ProposalData {
             let can_accept_votes = self.accepts_vote(now_seconds, voting_period_seconds);
             let votes_still_processing = self.has_unprocessed_votes();
             let polls_open_or_still_counting = can_accept_votes || votes_still_processing;
-            let expired = !polls_open_or_still_counting;
+            let can_make_decision_by_expiration = !polls_open_or_still_counting;
+            let can_make_decision_by_majority =
+                majority && !self.early_adoption_disabled.unwrap_or(false);
 
             // NOTE: expired is not exactly the right concept in the case where votes are still
             // processing.
-            let decision_reason = match (majority, expired) {
+            let decision_reason = match (
+                can_make_decision_by_majority,
+                can_make_decision_by_expiration,
+            ) {
                 (true, true) => Some("majority and expiration"),
                 (true, false) => Some("majority"),
                 (false, true) => Some("expiration"),
@@ -5433,7 +5438,7 @@ impl Governance {
             }
         }
 
-        let (ballots, total_potential_voting_power) =
+        let (ballots, total_potential_voting_power, early_adoption_disabled) =
             self.compute_ballots_for_new_proposal(&action, proposer_id, now_seconds)?;
 
         if ballots.is_empty() {
@@ -5503,6 +5508,7 @@ impl Governance {
             ballots,
             wait_for_quiet_state,
             total_potential_voting_power: Some(total_potential_voting_power),
+            early_adoption_disabled: Some(early_adoption_disabled),
             ..Default::default()
         };
 
@@ -5565,8 +5571,15 @@ impl Governance {
         action: &Action,
         proposer_id: &NeuronId,
         now_seconds: u64,
-    ) -> Result<(HashMap<u64, Ballot>, u64 /*potential_voting_power*/), GovernanceError> {
-        let (ballots, potential_voting_power) = match *action {
+    ) -> Result<
+        (
+            HashMap<u64, Ballot>,
+            u64,  /*potential_voting_power*/
+            bool, /*early_adoption_disabled*/
+        ),
+        GovernanceError,
+    > {
+        let (ballots, potential_voting_power, early_adoption_disabled) = match *action {
             // A neuron can be managed only by its followees on the
             // 'manage neuron' topic.
             Action::ManageNeuron(ref manage_neuron) => {
@@ -5614,7 +5627,8 @@ impl Governance {
                     .collect();
                 // Conversion is safe because usize is u32, and in far future perhaps u64
                 let potential_voting_power = ballots.len() as u64;
-                (ballots, potential_voting_power)
+                let early_adoption_disabled = false;
+                (ballots, potential_voting_power, early_adoption_disabled)
             }
             // For normal proposals, every neuron with a
             // dissolve delay over six months is allowed to
@@ -5643,12 +5657,19 @@ impl Governance {
                         "Potential voting power overflow.",
                     ));
                 }
+                let early_adoption_disabled = self
+                    .voting_power_snapshots
+                    .should_disable_early_adoption(total_deciding_power as u64);
 
-                (ballots, potential_voting_power as u64)
+                (
+                    ballots,
+                    potential_voting_power as u64,
+                    early_adoption_disabled,
+                )
             }
         };
 
-        Ok((ballots, potential_voting_power))
+        Ok((ballots, potential_voting_power, early_adoption_disabled))
     }
 
     /// Calculate the reject_cost_e8s of a proposal. This value is set in `ProposalData` and

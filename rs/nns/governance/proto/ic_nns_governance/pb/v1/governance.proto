@@ -1355,6 +1355,9 @@ message ProposalData {
   // amount of voting power that it exercised (so called "deciding" voting
   // power) in proportion to this.
   optional uint64 total_potential_voting_power = 22;
+
+  /// Whether early adoption is disabled for this proposal.
+  optional bool early_adoption_disabled = 23;
 }
 
 // This structure contains data for settling the Neurons' Fund participation in an SNS token swap.
