@@ -77,8 +77,35 @@ impl From<pb_api::DisburseMaturityInProgress> for pb::DisburseMaturityInProgress
     }
 }
 
+/// Converts an internal encoding of a topic into an optional `pb_api::Topic` instance.
+fn topic_id_to_api(topic_id: i32) -> Option<pb_api::topics::Topic> {
+    let Ok(topic) = pb::Topic::try_from(topic_id) else {
+        // The topic ID is invalid; this could happen in a highly unexpected situation, e.g.,
+        // if Governance is downgraded from a version that had new topics to an older version
+        // with fewer topics.
+        return None;
+    };
+    let Ok(topic) = pb_api::topics::Topic::try_from(topic) else {
+        // This is `pb::Topic::Unspecified`, which should be a forbidden value throughout
+        // the implementation of Governance. This case is there because of Prost's encoding
+        // of enumerations, which always starts with a special `0_i32` value.
+        return None;
+    };
+    Some(topic)
+}
+
 impl From<pb::Neuron> for pb_api::Neuron {
     fn from(item: pb::Neuron) -> Self {
+        let topic_followees = Some(
+            item.topic_followees
+                .into_iter()
+                .filter_map(|(topic_id, followees)| {
+                    let followees = pb_api::neuron::Followees::from(followees);
+                    topic_id_to_api(topic_id).map(|topic| (topic, followees))
+                })
+                .collect(),
+        );
+
         Self {
             id: item.id.map(|x| x.into()),
             permissions: item.permissions.into_iter().map(|x| x.into()).collect(),
@@ -91,6 +118,7 @@ impl From<pb::Neuron> for pb_api::Neuron {
                 .into_iter()
                 .map(|(k, v)| (k, v.into()))
                 .collect(),
+            topic_followees,
             maturity_e8s_equivalent: item.maturity_e8s_equivalent,
             voting_power_percentage_multiplier: item.voting_power_percentage_multiplier,
             source_nns_neuron_id: item.source_nns_neuron_id,
@@ -108,6 +136,17 @@ impl From<pb::Neuron> for pb_api::Neuron {
 }
 impl From<pb_api::Neuron> for pb::Neuron {
     fn from(item: pb_api::Neuron) -> Self {
+        let topic_followees = item
+            .topic_followees
+            .unwrap_or_default()
+            .into_iter()
+            .map(|(topic, followees)| {
+                let topic = i32::from(pb::Topic::from(topic));
+                let followees = pb::neuron::Followees::from(followees);
+                (topic, followees)
+            })
+            .collect();
+
         Self {
             id: item.id.map(|x| x.into()),
             permissions: item.permissions.into_iter().map(|x| x.into()).collect(),
@@ -120,6 +159,7 @@ impl From<pb_api::Neuron> for pb::Neuron {
                 .into_iter()
                 .map(|(k, v)| (k, v.into()))
                 .collect(),
+            topic_followees,
             maturity_e8s_equivalent: item.maturity_e8s_equivalent,
             voting_power_percentage_multiplier: item.voting_power_percentage_multiplier,
             source_nns_neuron_id: item.source_nns_neuron_id,
@@ -203,12 +243,8 @@ impl From<pb::nervous_system_function::GenericNervousSystemFunction>
     for pb_api::nervous_system_function::GenericNervousSystemFunction
 {
     fn from(item: pb::nervous_system_function::GenericNervousSystemFunction) -> Self {
-        let topic = item
-            .topic
-            .and_then(|topic| pb::Topic::try_from(topic).ok())
-            .and_then(|topic| pb_api::topics::Topic::try_from(topic).ok());
         Self {
-            topic,
+            topic: item.topic.and_then(topic_id_to_api),
             target_canister_id: item.target_canister_id,
             target_method_name: item.target_method_name,
             validator_canister_id: item.validator_canister_id,
@@ -593,16 +629,8 @@ impl From<pb::SetTopicsForCustomProposals> for pb_api::SetTopicsForCustomProposa
         let custom_function_id_to_topic = item
             .custom_function_id_to_topic
             .into_iter()
-            .filter_map(|(custom_function_id, topic)| {
-                let Ok(topic) = pb::Topic::try_from(topic) else {
-                    return None;
-                };
-
-                let Ok(topic) = pb_api::topics::Topic::try_from(topic) else {
-                    return None;
-                };
-
-                Some((custom_function_id, topic))
+            .filter_map(|(custom_function_id, topic_id)| {
+                topic_id_to_api(topic_id).map(|topic| (custom_function_id, topic))
             })
             .collect();
 
@@ -968,12 +996,7 @@ impl From<pb::ProposalData> for pb_api::ProposalData {
             minimum_yes_proportion_of_total: item.minimum_yes_proportion_of_total,
             minimum_yes_proportion_of_exercised: item.minimum_yes_proportion_of_exercised,
             action_auxiliary: item.action_auxiliary.map(|x| x.into()),
-            topic: item.topic.and_then(|topic| {
-                let Ok(topic) = pb::Topic::try_from(topic) else {
-                    return None;
-                };
-                pb_api::topics::Topic::try_from(topic).ok()
-            }),
+            topic: item.topic.and_then(topic_id_to_api),
         }
     }
 }

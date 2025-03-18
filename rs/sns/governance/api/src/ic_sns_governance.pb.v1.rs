@@ -88,9 +88,12 @@ pub struct Neuron {
     /// dissolving neurons always has age zero. The canonical value of
     /// this field for a dissolving neuron is `u64::MAX`.
     pub aging_since_timestamp_seconds: u64,
-    /// The neuron's followees, specified as a map of proposal functions IDs to followees neuron IDs.
-    /// The map's keys are represented by integers as Protobuf does not support enum keys in maps.
+    /// The neuron's legacy followees (per proposal type), specified as a map of
+    /// proposal functions IDs. The map's keys are represented by integers as Protobuf does
+    /// not support enum keys in maps.
     pub followees: BTreeMap<u64, neuron::Followees>,
+    /// The neuron's followees, specified as a map of proposal topics IDs to followees neuron IDs.
+    pub topic_followees: Option<BTreeMap<topics::Topic, neuron::Followees>>,
     /// The accumulated unstaked maturity of the neuron, measured in "e8s equivalent", i.e., in equivalent of
     /// 10E-8 of a governance token.
     ///

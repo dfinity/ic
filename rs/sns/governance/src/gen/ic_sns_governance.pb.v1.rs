@@ -114,10 +114,14 @@ pub struct Neuron {
     /// this field for a dissolving neuron is `u64::MAX`.
     #[prost(uint64, tag = "6")]
     pub aging_since_timestamp_seconds: u64,
-    /// The neuron's followees, specified as a map of proposal functions IDs to followees neuron IDs.
-    /// The map's keys are represented by integers as Protobuf does not support enum keys in maps.
+    /// The neuron's legacy followees (per proposal type), specified as a map of proposal functions IDs
+    /// to followees neuron IDs. The map's keys are represented by integers as Protobuf does not
+    /// support enum keys in maps.
     #[prost(btree_map = "uint64, message", tag = "11")]
     pub followees: ::prost::alloc::collections::BTreeMap<u64, neuron::Followees>,
+    /// The neuron's followees, specified as a map of proposal topics IDs to followees neuron IDs.
+    #[prost(btree_map = "int32, message", tag = "19")]
+    pub topic_followees: ::prost::alloc::collections::BTreeMap<i32, neuron::Followees>,
     /// The accumulated unstaked maturity of the neuron, measured in "e8s equivalent", i.e., in equivalent of
     /// 10E-8 of a governance token.
     ///
@@ -3248,8 +3252,7 @@ pub struct ClaimSwapNeuronsRequest {
 }
 /// Nested message and enum types in `ClaimSwapNeuronsRequest`.
 pub mod claim_swap_neurons_request {
-    /// Replacement for NeuronParameters. Contains the information needed to set up
-    /// a neuron for a swap participant.
+    /// Contains the information needed to set up a neuron for a swap participant.
     #[derive(
         candid::CandidType,
         candid::Deserialize,
