@@ -52,6 +52,8 @@ rclone_common_flags=(
 
 REMOTE_SUBDIR="${REMOTE_SUBDIR:?Remote subdirectory not set}"
 
+echo uploading to "$REMOTE_SUBDIR" >&2
+
 echo "uploading $f to AWS" >&2
 echo AWS_PROFILE=default "$RCLONE" \
     "${rclone_common_flags[@]}" \

@@ -2,6 +2,8 @@
 Macro to upload artifacts.
 """
 
+# TODO: re-upload SHA256SUMS
+
 # To avoid shooting ourselves in the foot, make sure that the upload rule invoker
 # states explicitly whether it expects statically linked openssl.
 def upload_artifacts(name, inputs, remote_subdir, visibility = ["//visibility:public"], testonly = ""):
