@@ -39,6 +39,17 @@ pub fn generate_prost_files(proto: ProtoPaths<'_>, out: &Path) {
         );
     }
 
+    // Speed up deserialization of `opt blob`/`Option<Vec<u8>>` fields.
+    for option_blob_field_name in [
+        "GetChunkRequest.content_sha256", // This is small, but why not.
+        "Chunk.content",
+    ] {
+        config.field_attribute(
+            format!("ic_registry_canister.pb.v1.{}", option_blob_field_name),
+            r#"#[serde(deserialize_with = "ic_utils::deserialize::deserialize_option_blob")]"#,
+        );
+    }
+
     std::fs::create_dir_all(out).expect("failed to create output directory");
     config.out_dir(out);
 

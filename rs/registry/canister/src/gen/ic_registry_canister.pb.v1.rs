@@ -133,6 +133,7 @@ pub struct SubnetForCanister {
 #[derive(candid::CandidType, candid::Deserialize, Clone, PartialEq, ::prost::Message)]
 pub struct GetChunkRequest {
     #[prost(bytes = "vec", optional, tag = "1")]
+    #[serde(deserialize_with = "ic_utils::deserialize::deserialize_option_blob")]
     pub content_sha256: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
 }
 /// When an entry is too large to fit into a "normal" response, the response
@@ -141,6 +142,7 @@ pub struct GetChunkRequest {
 #[derive(candid::CandidType, candid::Deserialize, Clone, PartialEq, ::prost::Message)]
 pub struct Chunk {
     #[prost(bytes = "vec", optional, tag = "1")]
+    #[serde(deserialize_with = "ic_utils::deserialize::deserialize_option_blob")]
     pub content: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
 }
 /// API boundary nodes IDs request payload.

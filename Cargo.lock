@@ -19007,6 +19007,7 @@ dependencies = [
  "ic-test-utilities-types",
  "ic-types",
  "ic-types-test-utils",
+ "ic-utils 0.9.0",
  "idna 1.0.3",
  "ipnet",
  "itertools 0.12.1",

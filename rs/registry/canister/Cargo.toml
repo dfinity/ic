@@ -44,6 +44,7 @@ ic-registry-transport = { path = "../transport" }
 ic-registry-node-provider-rewards = { path = "../node_provider_rewards" }
 ic-stable-structures = { workspace = true }
 ic-types = { path = "../../types/types" }
+ic-utils = { path = "../../utils" }
 idna = { workspace = true }
 lazy_static = { workspace = true }
 leb128 = "0.2.4"
