@@ -662,20 +662,20 @@ pub async fn metrics_middleware(
                 _ => return err_str,
             };
 
-            // Convert first 8 bytes to u64, return N/A if it fails
-            let key0 = match salt[0..8].try_into() {
-                Ok(bytes) => u64::from_le_bytes(bytes),
-                Err(_) => return err_str,
+            let mut hasher = {
+                // Convert first 8 bytes to u64, return N/A if it fails
+                let key0 = match salt[0..8].try_into() {
+                    Ok(bytes) => u64::from_le_bytes(bytes),
+                    Err(_) => return err_str,
+                };
+                // Convert next 8 bytes to u64, return N/A if it fails
+                let key1 = match salt[8..16].try_into() {
+                    Ok(bytes) => u64::from_le_bytes(bytes),
+                    Err(_) => return err_str,
+                };
+                SipHasher::new_with_keys(key0, key1)
             };
 
-            // Convert next 8 bytes to u64, return N/A if it fails
-            let key1 = match salt[8..16].try_into() {
-                Ok(bytes) => u64::from_le_bytes(bytes),
-                Err(_) => return err_str,
-            };
-
-            let mut hasher = SipHasher::new_with_keys(key0, key1);
-            
             input.hash(&mut hasher);
 
             format!("{:x}", hasher.finish())
