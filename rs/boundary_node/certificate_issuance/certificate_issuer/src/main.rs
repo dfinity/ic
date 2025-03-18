@@ -289,7 +289,12 @@ async fn main() -> Result<(), Error> {
         registration::CanisterUpdater(agent.clone(), cli.orchestrator_canister_id);
     let registration_updater = WithMetrics(
         registration_updater,
-        MetricParams::new(&registry, SERVICE_NAME, "update_registration", &["status"]),
+        MetricParams::new(
+            &registry,
+            SERVICE_NAME,
+            "update_registration",
+            &["status", "type"],
+        ),
     );
     let registration_updater = Arc::new(registration_updater);
 
