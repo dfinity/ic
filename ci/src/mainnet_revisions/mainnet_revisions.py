@@ -49,6 +49,7 @@ def commit_and_create_pr(
     logger: logging.Logger,
     commit_message: str,
     description: str,
+    enable_auto_merge: bool = False,
 ):
     git_modified_files = subprocess.check_output(["git", "ls-files", "--modified", "--others"], cwd=repo_root).decode(
         "utf8"
@@ -98,6 +99,11 @@ def commit_and_create_pr(
                 ],
                 cwd=repo_root,
             )
+        if enable_auto_merge:
+            pr_number = subprocess.check_output(
+                ["gh", "pr", "view", "--json", "number", "-q", ".number"], cwd=repo_root, text=True
+            ).strip()
+            subprocess.check_call(["gh", "pr", "merge", pr_number, "--auto"], cwd=repo_root)
 
 
 def get_saved_versions(repo_root: pathlib.Path, file_path: pathlib.Path):
@@ -268,6 +274,7 @@ This PR is created automatically using [`mainnet_revisions.py`](https://github.c
             pr_description.format(
                 description="Update mainnet system canisters revisions file to include the latest WASM version released on the mainnet."
             ),
+            enable_auto_merge=True,
         )
     else:
         raise Exception("This shouldn't happen")
