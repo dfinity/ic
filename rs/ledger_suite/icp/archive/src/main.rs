@@ -26,7 +26,6 @@ use icp_ledger::{
     IterBlocksRes,
 };
 use serde::{Deserialize, Serialize};
-use std::io::Read;
 use std::{borrow::Cow, cell::RefCell};
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -75,7 +74,9 @@ impl Storable for ArchiveState {
 
 const DEFAULT_MAX_MEMORY_SIZE: u64 = 10 * 1024 * 1024 * 1024;
 
-const CURRENT_STABLE_MEMORY_VERSION: u64 = 0;
+// 0 - no stable structures
+// 1 - first version of stable structures
+const CURRENT_STABLE_MEMORY_VERSION: u64 = 1;
 
 const STABLE_MEMORY_VERSION_MEMORY_ID: MemoryId = MemoryId::new(0);
 const ARCHIVE_STATE_MEMORY_ID: MemoryId = MemoryId::new(1);
@@ -104,6 +105,10 @@ thread_local! {
     static BLOCKS: RefCell<StableLog<Vec<u8>, VirtualMemory<DefaultMemoryImpl>, VirtualMemory<DefaultMemoryImpl>>> =
         MEMORY_MANAGER.with(|memory_manager| RefCell::new(StableLog::init(memory_manager.borrow().get(BLOCK_LOG_INDEX_MEMORY_ID),
         memory_manager.borrow().get(BLOCK_LOG_DATA_MEMORY_ID)).expect("failed to initialize blocks stable memory")));
+}
+
+fn stable_memory_version() -> u64 {
+    STABLE_MEMORY_VERSION.with(|cell| *cell.borrow().get())
 }
 
 fn set_stable_memory_version() {
@@ -389,10 +394,10 @@ fn get_blocks_candid_() {
 #[export_name = "canister_post_upgrade"]
 fn post_upgrade() {
     ic_cdk::setup();
-    let args = arg_data_raw();
 
     set_last_upgrade_timestamp(ic_cdk::api::time());
 
+    let args = arg_data_raw();
     let arg_max_memory_size_bytes = if args.is_empty() {
         print("Upgrading archive without an upgrade argument.");
         None
@@ -405,22 +410,26 @@ fn post_upgrade() {
         }
     };
 
-    if memory_manager_installed() {
-        set_stable_memory_version();
-        if let Some(max_memory_size_bytes) = arg_max_memory_size_bytes {
-            print(format!(
-                "Changing the max_memory_size_bytes to {}",
-                max_memory_size_bytes
-            ));
-            set_max_memory_size_bytes(max_memory_size_bytes);
-        }
-        print("Archive state already migrated to stable structures, exiting post_upgrade.");
-        return;
-    }
-
     let bytes = stable::get();
-    let state: ArchiveNodeState = ciborium::de::from_reader(std::io::Cursor::new(&bytes))
-        .expect("Decoding stable memory failed");
+    let state: ArchiveNodeState = match ciborium::de::from_reader(std::io::Cursor::new(&bytes)) {
+        Ok(state) => state,
+        Err(_) => {
+            // Already migrated to stable structures
+            assert_eq!(stable_memory_version(), CURRENT_STABLE_MEMORY_VERSION);
+            if let Some(max_memory_size_bytes) = arg_max_memory_size_bytes {
+                print(format!(
+                    "Changing the max_memory_size_bytes to {}",
+                    max_memory_size_bytes
+                ));
+                set_max_memory_size_bytes(max_memory_size_bytes);
+            }
+            print("Archive state already migrated to stable structures, exiting post_upgrade.");
+            return;
+        }
+    };
+
+    assert_eq!(stable_memory_version(), 0);
+    set_stable_memory_version();
 
     for block in &state.blocks {
         append_block(block);
@@ -439,17 +448,6 @@ fn post_upgrade() {
         None => set_max_memory_size_bytes(state.max_memory_size_bytes as u64),
     }
     assert_eq!(state.total_block_size as u64, total_block_size());
-    set_stable_memory_version();
-}
-
-fn memory_manager_installed() -> bool {
-    let mut magic_bytes_reader = ic_cdk::api::stable::StableReader::default();
-    const MAGIC_BYTES: &[u8; 3] = b"MGR";
-    let mut first_bytes = [0u8; 3];
-    match magic_bytes_reader.read_exact(&mut first_bytes) {
-        Ok(_) => first_bytes == *MAGIC_BYTES,
-        Err(_) => false,
-    }
 }
 
 fn encode_metrics(w: &mut MetricsEncoder<Vec<u8>>) -> std::io::Result<()> {
