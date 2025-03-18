@@ -3,7 +3,7 @@ use ic_nervous_system_canisters::registry::RegistryCanister;
 use ic_node_rewards_canister::canister::NodeRewardsCanister;
 use ic_node_rewards_canister::storage::RegistryStoreStableMemoryBorrower;
 use ic_node_rewards_canister_api::lifecycle_args::{InitArgs, UpgradeArgs};
-use ic_registry_canister_client::client::CanisterRegistryStore;
+use ic_registry_canister_client::canister_registry_store::CanisterRegistryStore;
 use ic_registry_canister_client::CanisterRegistryClient;
 use std::cell::RefCell;
 use std::sync::Arc;

@@ -6,10 +6,10 @@ use ic_interfaces_registry::{RegistryClientResult, RegistryClientVersionedResult
 use ic_types::registry::RegistryClientError;
 use ic_types::RegistryVersion;
 
-pub mod client;
+pub mod canister_registry_store;
 pub mod stable_memory;
 
-/// The CanisterRegistryClient provides methods to read a local cache of Registry data
+/// The CanisterRegistryClient provides methods to maintain and read a local cache of Registry data
 /// This is similar to the RegistryClient interface use in the protocol, but without the
 /// method to retrieve the "timestamp" that a version was first added to the local
 /// canister.
