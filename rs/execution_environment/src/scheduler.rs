@@ -4,6 +4,7 @@ use crate::{
         as_num_instructions, as_round_instructions, execute_canister, ExecuteCanisterResult,
         ExecutionEnvironment, RoundInstructions, RoundLimits,
     },
+    ic00_permissions::Ic00MethodPermissions,
     metrics::MeasurementScope,
     util::process_responses,
 };
@@ -2217,59 +2218,12 @@ fn can_execute_subnet_msg(
     // Some heavy methods use round instructions.
     let instructions_reached = round_limits.instructions_reached();
 
-    match method {
-        // Only one install code message allowed at a time.
-        Ic00Method::InstallCode | Ic00Method::InstallChunkedCode => {
-            !instructions_reached && !ongoing_long_install_code && !effective_canister_is_aborted
-        }
-        // Deleting an aborted canister requires to stop it first.
-        Ic00Method::DeleteCanister => !effective_canister_is_aborted,
-        // Stopping an aborted canister does not generate a reply.
-        Ic00Method::StopCanister => !effective_canister_is_aborted,
-        // Loading a snapshot is similar to the install code.
-        Ic00Method::LoadCanisterSnapshot => !instructions_reached && !effective_canister_is_aborted,
-        // Some heavy methods.
-        Ic00Method::UploadChunk | Ic00Method::TakeCanisterSnapshot => !instructions_reached,
-        // It's safe to allow other subnet messages on aborted canisters.
-        Ic00Method::CanisterStatus
-        | Ic00Method::CanisterInfo
-        | Ic00Method::CreateCanister
-        | Ic00Method::DepositCycles
-        | Ic00Method::HttpRequest
-        | Ic00Method::ECDSAPublicKey
-        | Ic00Method::RawRand
-        | Ic00Method::SetupInitialDKG
-        | Ic00Method::SignWithECDSA
-        | Ic00Method::StartCanister
-        | Ic00Method::UninstallCode
-        | Ic00Method::UpdateSettings
-        | Ic00Method::ComputeInitialIDkgDealings
-        | Ic00Method::ReshareChainKey
-        | Ic00Method::SchnorrPublicKey
-        | Ic00Method::SignWithSchnorr
-        | Ic00Method::VetKdPublicKey
-        | Ic00Method::VetKdDeriveKey
-        | Ic00Method::BitcoinGetBalance
-        | Ic00Method::BitcoinGetUtxos
-        | Ic00Method::BitcoinGetBlockHeaders
-        | Ic00Method::BitcoinSendTransaction
-        | Ic00Method::BitcoinGetCurrentFeePercentiles
-        | Ic00Method::BitcoinSendTransactionInternal
-        | Ic00Method::BitcoinGetSuccessors
-        | Ic00Method::NodeMetricsHistory
-        | Ic00Method::SubnetInfo
-        | Ic00Method::FetchCanisterLogs
-        | Ic00Method::ProvisionalCreateCanisterWithCycles
-        | Ic00Method::ProvisionalTopUpCanister
-        | Ic00Method::StoredChunks
-        | Ic00Method::ClearChunkStore
-        | Ic00Method::ListCanisterSnapshots
-        | Ic00Method::DeleteCanisterSnapshot
-        | Ic00Method::ReadCanisterSnapshotMetadata
-        | Ic00Method::ReadCanisterSnapshotData
-        | Ic00Method::UploadCanisterSnapshotMetadata
-        | Ic00Method::UploadCanisterSnapshotData => true,
-    }
+    let permissions = Ic00MethodPermissions::new(method);
+    permissions.can_be_executed(
+        instructions_reached,
+        ongoing_long_install_code,
+        effective_canister_is_aborted,
+    )
 }
 
 /// Based on the type of the subnet message to execute, figure out its
