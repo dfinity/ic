@@ -35,6 +35,8 @@ const BURN_MULTIPLIER: u64 = 1;
 // Corresponds to ic_icrc1_ledger::LEDGER_VERSION where allowances and balances are
 // migrated to stable structures
 const LEDGER_VERSION_2: u64 = 2;
+// Corresponds to ic_icrc1_ledger::LEDGER_VERSION where blocks are migrated to stable structures
+const LEDGER_VERSION_3: u64 = 3;
 
 #[cfg(not(feature = "u256-tokens"))]
 type Tokens = ic_icrc1_tokens_u64::U64;
@@ -67,7 +69,7 @@ lazy_static! {
         Wasm::from_bytes(load_wasm_using_env_var(
             "IC_ICRC1_ARCHIVE_DEPLOYED_VERSION_WASM_PATH",
         )),
-        LEDGER_VERSION_2,
+        LEDGER_VERSION_3,
         Some(Wasm::from_bytes(load_wasm_using_env_var(
             "IC_ICRC1_LEDGER_DEPLOYED_VERSION_2_WASM_PATH"
         ))),
