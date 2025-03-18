@@ -104,7 +104,7 @@ impl Finalizer {
             &*self.registry_client,
             self.replica_config.subnet_id,
             &self.log,
-            None,
+            /*max_batch_height_to_deliver=*/ None,
             |result, block_stats, batch_stats| {
                 self.process_batch_delivery_result(result, block_stats, batch_stats)
             },
