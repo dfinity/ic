@@ -230,23 +230,8 @@ impl PocketIcBuilder {
     ///  |-- states_metadata.pbuf
     ///  |-- tip
     ///  `-- tmp
-    ///
-    /// `nns_subnet_id` should be the subnet ID of the NNS subnet in the state under
-    /// `path_to_state`, e.g.:
-    /// ```rust
-    /// use pocket_ic::common::rest::SubnetId;
-    ///
-    /// let nns_subnet_id: SubnetId = candid::Principal::from_text(
-    ///     "tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe",
-    /// ).unwrap().into();
-    /// ```
-    ///
-    /// The subnet ID of the NNS subnet can be obtained, e.g., via the following command:
-    /// ```sh
-    /// ic-regedit snapshot <path-to-ic_registry_local_store> | jq -r ".nns_subnet_id"
-    /// ```
-    pub fn with_nns_state(self, nns_subnet_id: SubnetId, path_to_state: PathBuf) -> Self {
-        self.with_subnet_state(SubnetKind::NNS, nns_subnet_id, path_to_state)
+    pub fn with_nns_state(self, path_to_state: PathBuf) -> Self {
+        self.with_subnet_state(SubnetKind::NNS, path_to_state)
     }
 
     /// Add a subnet with state loaded from the given state directory.
@@ -265,16 +250,9 @@ impl PocketIcBuilder {
     ///  |-- states_metadata.pbuf
     ///  |-- tip
     ///  `-- tmp
-    ///
-    /// `subnet_id` should be the subnet ID of the subnet in the state to be loaded
-    pub fn with_subnet_state(
-        mut self,
-        subnet_kind: SubnetKind,
-        subnet_id: Principal,
-        path_to_state: PathBuf,
-    ) -> Self {
+    pub fn with_subnet_state(mut self, subnet_kind: SubnetKind, path_to_state: PathBuf) -> Self {
         let mut config = self.config.unwrap_or_default();
-        let subnet_spec = SubnetSpec::default().with_state_dir(path_to_state, subnet_id);
+        let subnet_spec = SubnetSpec::default().with_state_dir(path_to_state);
         match subnet_kind {
             SubnetKind::NNS => config.nns = Some(subnet_spec),
             SubnetKind::SNS => config.sns = Some(subnet_spec),

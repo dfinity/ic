@@ -844,8 +844,8 @@ fn canister_state_dir(shutdown_signal: Option<Signal>) {
     let app_state_dir = state_dir.path().join(hex::encode(app_subnet_seed));
     let pic = PocketIcBuilder::new()
         .with_server_url(newest_server_url)
-        .with_nns_state(nns_subnet, nns_state_dir)
-        .with_subnet_state(SubnetKind::Application, app_subnet, app_state_dir)
+        .with_nns_state(nns_state_dir)
+        .with_subnet_state(SubnetKind::Application, app_state_dir)
         .build();
 
     // Check that the topology has been properly restored.
