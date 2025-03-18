@@ -88,12 +88,12 @@ thread_local! {
 
     static LAST_UPGRADE_TIMESTAMP: RefCell<u64> = const { RefCell::new(0) };
 
-    // Max memory size
+    // Version of the stable memory layout
     static STABLE_MEMORY_VERSION: RefCell<StableCell<u64, VirtualMemory<DefaultMemoryImpl>>> =
         MEMORY_MANAGER.with(|memory_manager|  RefCell::new(StableCell::init(memory_manager.borrow().get(STABLE_MEMORY_VERSION_MEMORY_ID), 0)
         .expect("failed to initialize stable cell")));
 
-    // Max memory size
+    // Archive state
     static ARCHIVE_STATE: RefCell<StableCell<ArchiveState, VirtualMemory<DefaultMemoryImpl>>> =
         MEMORY_MANAGER.with(|memory_manager|  RefCell::new(StableCell::init(memory_manager.borrow().get(ARCHIVE_STATE_MEMORY_ID), Default::default())
         .expect("failed to initialize stable cell")));
