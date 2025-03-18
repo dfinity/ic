@@ -57,11 +57,21 @@ def commit_and_create_pr(
 
     paths_to_add = [path for path in check_for_updates_in_paths if path in git_modified_files]
 
-    if len(paths_to_add) > 0:
-        logger.info("Creating/updating a MR that updates the saved NNS subnet revision")
-        cmd = ["git", "add"] + paths_to_add
-        logger.info("Running command '%s'", " ".join(cmd))
-        subprocess.check_call(cmd, cwd=repo_root)
+    if len(paths_to_add) == 0:
+        logger.info("Creating/updating a PR that updates the saved NNS subnet revision")
+        # cmd = ["git", "add"] + paths_to_add
+        # logger.info("Running command '%s'", " ".join(cmd))
+        # subprocess.check_call(cmd, cwd=repo_root)
+        # cmd = [
+        #     "git",
+        #     "-c",
+        #     "user.name=CI Automation",
+        #     "-c",
+        #     "user.email=infra+github-automation@dfinity.org",
+        #     "commit",
+        #     "-m",
+        #     commit_message,
+        # ] + paths_to_add
         cmd = [
             "git",
             "-c",
@@ -70,8 +80,9 @@ def commit_and_create_pr(
             "user.email=infra+github-automation@dfinity.org",
             "commit",
             "-m",
-            commit_message,
-        ] + paths_to_add
+            "test",
+            "--allow-empty",
+        ]
         logger.info("Running command '%s'", " ".join(cmd))
         subprocess.check_call(
             cmd,
