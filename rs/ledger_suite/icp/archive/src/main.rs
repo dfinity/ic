@@ -74,9 +74,8 @@ impl Storable for ArchiveState {
 
 const DEFAULT_MAX_MEMORY_SIZE: u64 = 10 * 1024 * 1024 * 1024;
 
-// 0 - no stable structures
-// 1 - first version of stable structures
-const CURRENT_STABLE_MEMORY_VERSION: u64 = 1;
+const MEMORY_VERSION_NO_MEM_MGR: u64 = 0;
+const MEMORY_VERSION_MEM_MGR_INSTALLED: u64 = 1;
 
 const STABLE_MEMORY_VERSION_MEMORY_ID: MemoryId = MemoryId::new(0);
 const ARCHIVE_STATE_MEMORY_ID: MemoryId = MemoryId::new(1);
@@ -91,7 +90,7 @@ thread_local! {
 
     // Version of the stable memory layout
     static STABLE_MEMORY_VERSION: RefCell<StableCell<u64, VirtualMemory<DefaultMemoryImpl>>> =
-        MEMORY_MANAGER.with(|memory_manager|  RefCell::new(StableCell::init(memory_manager.borrow().get(STABLE_MEMORY_VERSION_MEMORY_ID), 0)
+        MEMORY_MANAGER.with(|memory_manager|  RefCell::new(StableCell::init(memory_manager.borrow().get(STABLE_MEMORY_VERSION_MEMORY_ID), MEMORY_VERSION_NO_MEM_MGR)
         .expect("failed to initialize stable cell")));
 
     // Archive state
@@ -113,7 +112,7 @@ fn stable_memory_version() -> u64 {
 
 fn set_stable_memory_version() {
     assert!(STABLE_MEMORY_VERSION
-        .with(|cell| cell.borrow_mut().set(CURRENT_STABLE_MEMORY_VERSION))
+        .with(|cell| cell.borrow_mut().set(MEMORY_VERSION_MEM_MGR_INSTALLED))
         .is_ok());
 }
 
@@ -413,7 +412,7 @@ fn post_upgrade() {
         Ok(state) => state,
         Err(_) => {
             // Already migrated to stable structures
-            assert_eq!(stable_memory_version(), CURRENT_STABLE_MEMORY_VERSION);
+            assert_eq!(stable_memory_version(), MEMORY_VERSION_MEM_MGR_INSTALLED);
             if let Some(max_memory_size_bytes) = arg_max_memory_size_bytes {
                 print(format!(
                     "Changing the max_memory_size_bytes to {}",
@@ -426,7 +425,7 @@ fn post_upgrade() {
         }
     };
 
-    assert_eq!(stable_memory_version(), 0);
+    assert_eq!(stable_memory_version(), MEMORY_VERSION_NO_MEM_MGR);
     set_stable_memory_version();
 
     for block in &state.blocks {
