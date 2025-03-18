@@ -2258,7 +2258,10 @@ fn can_execute_subnet_msg(
         | Ic00Method::TakeCanisterSnapshot
         | Ic00Method::ListCanisterSnapshots
         | Ic00Method::DeleteCanisterSnapshot
-        | Ic00Method::ReadCanisterSnapshotMetadata => true,
+        | Ic00Method::ReadCanisterSnapshotMetadata
+        | Ic00Method::ReadCanisterSnapshotData
+        | Ic00Method::UploadCanisterSnapshotMetadata
+        | Ic00Method::UploadCanisterSnapshotData => true,
     }
 }
 
@@ -2327,7 +2330,10 @@ fn get_instructions_limits_for_subnet_message(
             | LoadCanisterSnapshot
             | ListCanisterSnapshots
             | DeleteCanisterSnapshot
-            | ReadCanisterSnapshotMetadata => default_limits,
+            | ReadCanisterSnapshotMetadata
+            | ReadCanisterSnapshotData
+            | UploadCanisterSnapshotMetadata
+            | UploadCanisterSnapshotData => default_limits,
             InstallCode | InstallChunkedCode => InstructionLimits::new(
                 dts,
                 config.max_instructions_per_install_code,

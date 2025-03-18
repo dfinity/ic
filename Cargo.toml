@@ -688,6 +688,7 @@ rustls = { version = "0.23.18", default-features = false, features = [
     "brotli",
 ] }
 schemars = { version = "0.8.21", features = ["derive"] }
+scopeguard = "1.2.0"
 serde = { version = "1.0.203", features = ["derive"] }
 serde_bytes = "0.11.15"
 serde_cbor = "0.11.2"
