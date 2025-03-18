@@ -370,6 +370,10 @@ fn test_single_neuron_proposal_new() {
                             None,
                             Some(1),
                         )),
+                        ProposalDataChange::EarlyAdoptionDisabled(OptionChange::Different(
+                            None,
+                            Some(false)
+                        )),
                     ],
                 )]),
                 GovernanceChange::Metrics(OptionChange::Different(
@@ -1190,6 +1194,10 @@ async fn test_cascade_following_new() {
                     ProposalDataChange::TotalPotentialVotingPower(OptionChange::Different(
                         None,
                         Some(10_125_000_000)
+                    )),
+                    ProposalDataChange::EarlyAdoptionDisabled(OptionChange::Different(
+                        None,
+                        Some(false)
                     )),
                 ],
             )]),
