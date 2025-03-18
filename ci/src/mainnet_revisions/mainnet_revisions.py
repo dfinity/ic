@@ -94,7 +94,7 @@ def commit_and_create_pr(
             ["gh", "pr", "list", "--head", branch, "--repo", repo],
             cwd=repo_root,
         ).decode("utf8"):
-            pr_number = subprocess.check_call(
+            pr_number = subprocess.check_output(
                 [
                     "gh",
                     "pr",
@@ -110,10 +110,11 @@ def commit_and_create_pr(
                     "--json",
                     "number",
                     "-q",
-                    "'.number'"
+                    ".number"
                 ],
                 cwd=repo_root,
-            )
+                text=True
+            ).strip()
         if enable_auto_merge:
             subprocess.check_call(
                 [
