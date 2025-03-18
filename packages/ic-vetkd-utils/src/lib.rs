@@ -194,8 +194,25 @@ impl VetKey {
      * "my-app" is deriving two keys, one for usage "foo" and the other for
      * "bar". You might use as domain separators "my-app-foo" and "my-app-bar".
      */
-    pub fn derive_symmetric_key(&self, output_len: usize, domain_sep: &str) -> Vec<u8> {
+    pub fn derive_symmetric_key(&self, domain_sep: &str, output_len: usize) -> Vec<u8> {
         derive_symmetric_key(&self.pt_bytes, domain_sep, output_len)
+    }
+
+    /**
+     * Deserialize a VetKey from the byte encoding
+     *
+     * Typically this would have been created using [`VetKey::signature_bytes`]
+     */
+    pub fn deserialize(bytes: &[u8]) -> Result<Self, String> {
+        let bytes48 : [u8; 48] = bytes.try_into().map_err(|_e: TryFromSliceError| {
+            format!("Vetkey is unexpected length {}", bytes.len())
+        })?;
+
+        if let Some(pt) = option_from_ctoption(G1Affine::from_compressed(&bytes48)) {
+            Ok(Self { pt, pt_bytes: bytes48 })
+        } else {
+            Err("Invalid VetKey".to_string())
+        }
     }
 }
 

@@ -93,6 +93,16 @@ fn protocol_flow_with_emulated_server_side() {
 }
 
 #[test]
+fn derivation_matches_expected_value() {
+    let vetkey = VetKey::deserialize(&hex::decode("ad19676dd92f116db11f326ff0822f295d87cc00cf65d9f132b5a618bb7381e5b0c3cb814f15e4a0f015359dcfa8a1da").unwrap()).unwrap();
+
+    let domain_sep = "ic-test-domain-sep";
+
+    let key = vetkey.derive_symmetric_key(&domain_sep, 32);
+    assert_eq!(hex::encode(key), "3b7bd854033cdc119865ba3019dc1e35010fdaf90f8ff5c9cfe9d1d557dddb29");
+}
+
+#[test]
 fn protocol_flow_with_fixed_rng_has_expected_outputs() {
     let tsk = TransportSecretKey::from_seed(vec![0x42; 32]).unwrap();
 
