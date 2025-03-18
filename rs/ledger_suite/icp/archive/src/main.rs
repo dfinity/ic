@@ -25,7 +25,7 @@ use serde::{Deserialize, Serialize};
 use std::cell::RefCell;
 use std::io::Read;
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize)]
 struct ArchiveNodeState {
     pub max_memory_size_bytes: usize,
     pub block_height_offset: u64,
