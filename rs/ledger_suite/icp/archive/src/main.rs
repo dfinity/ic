@@ -381,6 +381,7 @@ fn post_upgrade() {
         }
         None => set_max_memory_size_bytes(state.max_memory_size_bytes as u64),
     }
+    assert_eq!(state.total_block_size as u64, total_block_size());
 }
 
 fn memory_manager_installed() -> bool {
