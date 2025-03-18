@@ -286,10 +286,14 @@ impl EncryptedKey {
 
 const IBE_SEED_BYTES: usize = 32;
 
+const IBE_HEADER_BYTES: usize = 8;
+const IBE_HEADER : [u8; IBE_HEADER_BYTES] = [ b'I', b'C', b' ', b'I', b'B', b'E', 0x00, 0x01 ];
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 /// An IBE (identity based encryption) ciphertext
 #[cfg_attr(feature = "js", wasm_bindgen)]
 pub struct IBECiphertext {
+    hdr: Vec<u8>,
     c1: G2Affine,
     c2: [u8; IBE_SEED_BYTES],
     c3: Vec<u8>,
@@ -305,9 +309,9 @@ impl IBEDomainSep {
     #[allow(clippy::inherent_to_string)]
     fn to_string(&self) -> String {
         match self {
-            Self::HashToMask => "ic-crypto-vetkd-bls12-381-ibe-hash-to-mask".to_owned(),
-            Self::MaskSeed => "ic-crypto-vetkd-bls12-381-ibe-mask-seed".to_owned(),
-            Self::MaskMsg(len) => format!("ic-crypto-vetkd-bls12-381-ibe-mask-msg-{}", len),
+            Self::HashToMask => "ic-vetkd-bls12-381-ibe-hash-to-mask".to_owned(),
+            Self::MaskSeed => "ic-vetkd-bls12-381-ibe-mask-seed".to_owned(),
+            Self::MaskMsg(len) => format!("ic-vetkd-bls12-381-ibe-mask-msg-{}", len),
         }
     }
 }
@@ -316,8 +320,9 @@ impl IBEDomainSep {
 impl IBECiphertext {
     /// Serialize this IBE ciphertext
     pub fn serialize(&self) -> Vec<u8> {
-        let mut output = Vec::with_capacity(G2AFFINE_BYTES + IBE_SEED_BYTES + self.c3.len());
+        let mut output = Vec::with_capacity(self.hdr.len() + G2AFFINE_BYTES + IBE_SEED_BYTES + self.c3.len());
 
+        output.extend_from_slice(&self.hdr);
         output.extend_from_slice(&self.c1.to_compressed());
         output.extend_from_slice(&self.c2);
         output.extend_from_slice(&self.c3);
@@ -329,23 +334,29 @@ impl IBECiphertext {
     ///
     /// Returns Err if the encoding is not valid
     pub fn deserialize(bytes: &[u8]) -> Result<IBECiphertext, String> {
-        if bytes.len() < G2AFFINE_BYTES + IBE_SEED_BYTES {
+        if bytes.len() < IBE_HEADER_BYTES + G2AFFINE_BYTES + IBE_SEED_BYTES {
             return Err("IBECiphertext too short to be valid".to_string());
         }
 
-        let c1 = deserialize_g2(&bytes[0..G2AFFINE_BYTES])?;
+        let hdr = bytes[0..IBE_HEADER_BYTES].to_vec();
+        let c1 = deserialize_g2(&bytes[IBE_HEADER_BYTES..(IBE_HEADER_BYTES + G2AFFINE_BYTES)])?;
 
         let mut c2 = [0u8; IBE_SEED_BYTES];
-        c2.copy_from_slice(&bytes[G2AFFINE_BYTES..(G2AFFINE_BYTES + IBE_SEED_BYTES)]);
+        c2.copy_from_slice(&bytes[IBE_HEADER_BYTES + G2AFFINE_BYTES..(IBE_HEADER_BYTES + G2AFFINE_BYTES + IBE_SEED_BYTES)]);
 
-        let c3 = bytes[G2AFFINE_BYTES + IBE_SEED_BYTES..].to_vec();
+        let c3 = bytes[IBE_HEADER_BYTES + G2AFFINE_BYTES + IBE_SEED_BYTES..].to_vec();
 
-        Ok(Self { c1, c2, c3 })
+        if hdr != IBE_HEADER {
+            return Err("IBECiphertext has unknown header".to_string());
+        }
+
+        Ok(Self { hdr, c1, c2, c3 })
     }
 
-    fn hash_to_mask(seed: &[u8; IBE_SEED_BYTES], msg: &[u8]) -> Scalar {
+    fn hash_to_mask(hdr: &[u8], seed: &[u8; IBE_SEED_BYTES], msg: &[u8]) -> Scalar {
         let domain_sep = IBEDomainSep::HashToMask;
         let mut ro_input = Vec::with_capacity(seed.len() + msg.len());
+        ro_input.extend_from_slice(hdr);
         ro_input.extend_from_slice(seed);
         ro_input.extend_from_slice(msg);
 
@@ -409,7 +420,9 @@ impl IBECiphertext {
             .try_into()
             .map_err(|_e| format!("Provided seed must be {} bytes long ", IBE_SEED_BYTES))?;
 
-        let t = Self::hash_to_mask(seed, msg);
+        let hdr = IBE_HEADER.to_vec();
+
+        let t = Self::hash_to_mask(&hdr, seed, msg);
 
         let pt = augmented_hash_to_g1(&dpk.point, context);
 
@@ -419,7 +432,7 @@ impl IBECiphertext {
         let c2 = Self::mask_seed(seed, &tsig);
         let c3 = Self::mask_msg(msg, seed);
 
-        Ok(Self { c1, c2, c3 })
+        Ok(Self { hdr, c1, c2, c3 })
     }
 
     /// Decrypt an IBE ciphertext
@@ -437,7 +450,7 @@ impl IBECiphertext {
 
         let msg = Self::mask_msg(&self.c3, &seed);
 
-        let t = Self::hash_to_mask(&seed, &msg);
+        let t = Self::hash_to_mask(&self.hdr, &seed, &msg);
 
         let g_t = G2Affine::from(G2Affine::generator() * t);
 
