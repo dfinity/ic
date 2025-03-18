@@ -213,7 +213,7 @@ fn init(
 /// Get Block by BlockIndex. If the BlockIndex is outside the range stored in
 /// this Node the result is None
 fn get_block(block_height: BlockIndex) -> BlockRes {
-    let adjusted_height = block_height - block_height_offset();
+    let adjusted_height = block_height.checked_sub(block_height_offset()).unwrap();
     let block: Option<EncodedBlock> = get_block_stable(adjusted_height);
     // Will never return CanisterId like its counterpart in Ledger. Want to
     // keep the same signature though
