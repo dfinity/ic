@@ -249,7 +249,7 @@ fn should_update_max_capacity_with_upgrade_arg() {
     setup.upgrade(Some(upgrade_arg.clone()), None);
     setup.assert_remaining_capacity(0);
 
-    upgrade_arg.max_memory_size_bytes = Some(u64::max_value());
+    upgrade_arg.max_memory_size_bytes = Some(u64::MAX);
     setup.upgrade(Some(upgrade_arg), None);
     setup.assert_remaining_capacity(u64::MAX - 2 * encoded_block_size);
 }
