@@ -29,6 +29,7 @@ fn gen_request_with_params(
     let mut req = Request::post("/").body(Body::from("foobar")).unwrap();
 
     let mut ctx = RequestContext {
+        request_type: RequestType::Query,
         canister_id: Some(Principal::from_text(canister_id).unwrap()),
         sender: Some(if anonymous {
             ANONYMOUS_PRINCIPAL

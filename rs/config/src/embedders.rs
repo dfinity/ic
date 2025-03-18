@@ -159,21 +159,12 @@ pub struct FeatureFlags {
 
 impl Default for FeatureFlags {
     fn default() -> Self {
-        use ic_types::PrincipalId;
-        use std::str::FromStr;
-        let subnet_id = |id_str: &str| SubnetId::new(PrincipalId::from_str(id_str).unwrap());
-        let enabled_subnets = vec![
-            subnet_id("eq6en-6jqla-fbu5s-daskr-h6hx2-376n5-iqabl-qgrng-gfqmv-n3yjr-mqe"),
-            subnet_id("2fq7c-slacv-26cgz-vzbx2-2jrcs-5edph-i5s2j-tck77-c3rlz-iobzx-mqe"),
-            subnet_id("4zbus-z2bmt-ilreg-xakz4-6tyre-hsqj4-slb4g-zjwqo-snjcc-iqphi-3qe"),
-        ];
-
         Self {
             rate_limiting_of_debug_prints: FlagStatus::Enabled,
             write_barrier: FlagStatus::Disabled,
             wasm_native_stable_memory: FlagStatus::Enabled,
             wasm64: FlagStatus::Enabled,
-            best_effort_responses: BestEffortResponsesFeature::SpecificSubnets(enabled_subnets),
+            best_effort_responses: BestEffortResponsesFeature::ApplicationSubnetsOnly,
             canister_backtrace: FlagStatus::Enabled,
         }
     }
