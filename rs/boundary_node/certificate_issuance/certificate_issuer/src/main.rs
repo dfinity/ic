@@ -409,21 +409,29 @@ async fn main() -> Result<(), Error> {
         .route("/registrations/:id", delete(remove_registration_handler))
         .route("/certificates", get(export_handler));
 
+    let metrics_middleware_args = {
+        let counter = CounterVec::new(
+            prometheus::Opts::new("requests_total", "Counts occurrences of requests"),
+            &["path", "method", "status_code"],
+        )
+        .unwrap();
+
+        let recorder = HistogramVec::new(
+            prometheus::HistogramOpts::new("request_duration", "Duration of requests"),
+            &["path", "method", "status_code"],
+        )
+        .unwrap();
+
+        registry.register(Box::new(counter.clone())).unwrap();
+        registry.register(Box::new(recorder.clone())).unwrap();
+
+        MetricsMiddlewareArgs { counter, recorder }
+    };
+
     // API (Instrument)
     let api_router = api_router.layer(
         ServiceBuilder::new()
-            .layer(Extension(MetricsMiddlewareArgs {
-                counter: CounterVec::new(
-                    prometheus::Opts::new("requests_total", "Counts occurrences of requests"),
-                    &["path", "method", "status_code"],
-                )
-                .unwrap(),
-                recorder: HistogramVec::new(
-                    prometheus::HistogramOpts::new("request_duration", "Duration of requests"),
-                    &["path", "method", "status_code"],
-                )
-                .unwrap(),
-            }))
+            .layer(Extension(metrics_middleware_args))
             .layer(middleware::from_fn(metrics_mw))
             .layer(middleware::from_fn(headers::middleware)),
     );
