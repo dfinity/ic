@@ -2435,6 +2435,11 @@ impl ExecutionEnvironment {
         state: &ReplicatedState,
         args: ReadCanisterSnapshotMetadataArgs,
     ) -> Result<Vec<u8>, UserError> {
+        let canister = get_canister(args.get_canister_id(), state)?;
+        let snapshot_id = args.get_snapshot_id();
+        let result = self
+            .canister_manager
+            .snapshot_metadata(sender, snapshot_id, canister, state);
         todo!()
     }
 

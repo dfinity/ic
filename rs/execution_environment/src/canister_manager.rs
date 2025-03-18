@@ -20,8 +20,8 @@ use ic_interfaces::execution_environment::{IngressHistoryWriter, SubnetAvailable
 use ic_logger::{error, fatal, info, ReplicaLogger};
 use ic_management_canister_types_private::{
     CanisterChangeDetails, CanisterChangeOrigin, CanisterInstallModeV2, CanisterSnapshotResponse,
-    CanisterStatusResultV2, CanisterStatusType, ChunkHash, Method as Ic00Method, StoredChunksReply,
-    UploadChunkReply,
+    CanisterStatusResultV2, CanisterStatusType, ChunkHash, Method as Ic00Method,
+    ReadCanisterSnapshotMetadataResponse, StoredChunksReply, UploadChunkReply,
 };
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_replicated_state::{
@@ -1981,6 +1981,39 @@ impl CanisterManager {
             WasmExecutionMode::Wasm32 => self.config.max_canister_memory_size_wasm32,
             WasmExecutionMode::Wasm64 => self.config.max_canister_memory_size_wasm64,
         }
+    }
+
+    pub(crate) fn snapshot_metadata(
+        &self,
+        sender: PrincipalId,
+        snapshot_id: SnapshotId,
+        canister: &CanisterState,
+        state: &ReplicatedState,
+    ) -> Result<ReadCanisterSnapshotMetadataResponse, CanisterManagerError> {
+        // Check sender is a controller.
+        validate_controller(canister, &sender)?;
+        let CanisterSnapshot {
+            canister_id,
+            taken_at_timestamp,
+            canister_version,
+            size,
+            certified_data,
+            chunk_store,
+            execution_snapshot,
+        } = state.canister_snapshots.get(snapshot_id);
+        Ok(ReadCanisterSnapshotMetadataResponse {
+            source: todo!(),
+            taken_at_timestamp: todo!(),
+            wasm_module_size: todo!(),
+            exported_globals: todo!(),
+            wasm_memory_size: todo!(),
+            stable_memory_size: todo!(),
+            wasm_chunk_store: todo!(),
+            canister_version: todo!(),
+            certified_data: todo!(),
+            global_timer: todo!(),
+            on_low_wasm_memory_hook_status: todo!(),
+        })
     }
 }
 

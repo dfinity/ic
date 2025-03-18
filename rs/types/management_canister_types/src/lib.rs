@@ -3590,11 +3590,13 @@ impl DeleteCanisterSnapshotArgs {
         CanisterId::unchecked_from_principal(self.canister_id)
     }
 
+    // TODO: EXC-1997.
     pub fn get_snapshot_id(&self) -> SnapshotId {
         SnapshotId::try_from(&self.snapshot_id).unwrap()
     }
 }
 
+// TODO: EXC-1997.
 impl<'a> Payload<'a> for DeleteCanisterSnapshotArgs {
     fn decode(blob: &'a [u8]) -> Result<Self, UserError> {
         let args = Decode!([decoder_config()]; blob, Self).map_err(candid_error_to_user_error)?;
@@ -3656,9 +3658,27 @@ impl ReadCanisterSnapshotMetadataArgs {
     pub fn get_canister_id(&self) -> CanisterId {
         CanisterId::unchecked_from_principal(self.canister_id)
     }
+    // TODO: EXC-1997.
+    pub fn get_snapshot_id(&self) -> SnapshotId {
+        SnapshotId::try_from(&self.snapshot_id).unwrap()
+    }
 }
 
-impl Payload<'_> for ReadCanisterSnapshotMetadataArgs {}
+// TODO: EXC-1997.
+impl<'a> Payload<'a> for ReadCanisterSnapshotMetadataArgs {
+    fn decode(blob: &'a [u8]) -> Result<Self, UserError> {
+        let args = Decode!([decoder_config()]; blob, Self).map_err(candid_error_to_user_error)?;
+
+        // Verify that snapshot ID has the correct format.
+        if let Err(err) = SnapshotId::try_from(&args.snapshot_id) {
+            return Err(UserError::new(
+                ErrorCode::InvalidManagementPayload,
+                format!("Payload deserialization error: {err:?}"),
+            ));
+        }
+        Ok(args)
+    }
+}
 
 #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
 pub enum SnapshotSource {
