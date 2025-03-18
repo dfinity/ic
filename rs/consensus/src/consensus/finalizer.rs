@@ -105,9 +105,9 @@ impl Finalizer {
             self.replica_config.subnet_id,
             &self.log,
             None,
-            Some(&|result, block_stats, batch_stats| {
+            |result, block_stats, batch_stats| {
                 self.process_batch_delivery_result(result, block_stats, batch_stats)
-            }),
+            },
         );
 
         // Try to finalize rounds from finalized_height + 1 up to (and including)

@@ -38,7 +38,7 @@ pub(crate) struct BlockMakerMetrics {
 }
 
 impl BlockMakerMetrics {
-    pub fn new(metrics_registry: MetricsRegistry) -> Self {
+    pub(crate) fn new(metrics_registry: MetricsRegistry) -> Self {
         Self {
             get_payload_calls: metrics_registry.int_counter_vec(
                 "consensus_get_payload_calls",
@@ -57,7 +57,7 @@ impl BlockMakerMetrics {
     }
 
     /// Reports byte estimate metrics.
-    pub fn report_byte_estimate_metrics(&self, xnet_bytes: usize, ingress_bytes: usize) {
+    pub(crate) fn report_byte_estimate_metrics(&self, xnet_bytes: usize, ingress_bytes: usize) {
         self.block_size_bytes_estimate
             .with_label_values(&["xnet"])
             .set(xnet_bytes as i64);
@@ -67,16 +67,16 @@ impl BlockMakerMetrics {
     }
 }
 
-pub struct ConsensusMetrics {
-    pub on_state_change_duration: HistogramVec,
-    pub on_state_change_invocations: IntCounterVec,
-    pub on_state_change_change_set_size: HistogramVec,
-    pub time_since_last_invoked: GaugeVec,
-    pub starvation_counter: IntCounterVec,
+pub(crate) struct ConsensusMetrics {
+    pub(crate) on_state_change_duration: HistogramVec,
+    pub(crate) on_state_change_invocations: IntCounterVec,
+    pub(crate) on_state_change_change_set_size: HistogramVec,
+    pub(crate) time_since_last_invoked: GaugeVec,
+    pub(crate) starvation_counter: IntCounterVec,
 }
 
 impl ConsensusMetrics {
-    pub fn new(metrics_registry: MetricsRegistry) -> Self {
+    pub(crate) fn new(metrics_registry: MetricsRegistry) -> Self {
         Self {
             on_state_change_duration: metrics_registry.histogram_vec(
                 "consensus_on_state_change_duration_seconds",
@@ -113,12 +113,12 @@ impl ConsensusMetrics {
 }
 
 // Block related stats
-pub struct BlockStats {
-    pub block_hash: String,
-    pub block_height: u64,
-    pub block_time: Time,
-    pub block_context_certified_height: u64,
-    pub idkg_stats: Option<IDkgStats>,
+pub(crate) struct BlockStats {
+    pub(crate) block_hash: String,
+    pub(crate) block_height: u64,
+    pub(crate) block_time: Time,
+    pub(crate) block_context_certified_height: u64,
+    pub(crate) idkg_stats: Option<IDkgStats>,
 }
 
 impl From<&Block> for BlockStats {
@@ -135,13 +135,13 @@ impl From<&Block> for BlockStats {
 
 // Batch payload stats
 #[derive(Debug, Default)]
-pub struct BatchStats {
-    pub batch_height: u64,
-    pub ingress_messages_delivered: usize,
-    pub ingress_message_bytes_delivered: usize,
-    pub xnet_bytes_delivered: usize,
-    pub ingress_ids: Vec<ic_types::artifact::IngressMessageId>,
-    pub canister_http: CanisterHttpBatchStats,
+pub(crate) struct BatchStats {
+    pub(crate) batch_height: u64,
+    pub(crate) ingress_messages_delivered: usize,
+    pub(crate) ingress_message_bytes_delivered: usize,
+    pub(crate) xnet_bytes_delivered: usize,
+    pub(crate) ingress_ids: Vec<ic_types::artifact::IngressMessageId>,
+    pub(crate) canister_http: CanisterHttpBatchStats,
 }
 
 impl BatchStats {
@@ -162,13 +162,13 @@ impl BatchStats {
 }
 
 // IDkg payload stats
-pub struct IDkgStats {
-    pub signature_agreements: usize,
-    pub key_transcripts_created: CounterPerMasterPublicKeyId,
-    pub available_pre_signatures: CounterPerMasterPublicKeyId,
-    pub pre_signatures_in_creation: CounterPerMasterPublicKeyId,
-    pub ongoing_xnet_reshares: CounterPerMasterPublicKeyId,
-    pub xnet_reshare_agreements: CounterPerMasterPublicKeyId,
+pub(crate) struct IDkgStats {
+    pub(crate) signature_agreements: usize,
+    pub(crate) key_transcripts_created: CounterPerMasterPublicKeyId,
+    pub(crate) available_pre_signatures: CounterPerMasterPublicKeyId,
+    pub(crate) pre_signatures_in_creation: CounterPerMasterPublicKeyId,
+    pub(crate) ongoing_xnet_reshares: CounterPerMasterPublicKeyId,
+    pub(crate) xnet_reshare_agreements: CounterPerMasterPublicKeyId,
 }
 
 impl From<&IDkgPayload> for IDkgStats {
@@ -222,30 +222,30 @@ impl From<&IDkgPayload> for IDkgStats {
     }
 }
 
-pub struct FinalizerMetrics {
-    pub batches_delivered: IntCounterVec,
-    pub batch_height: IntGauge,
-    pub batch_delivery_interval: Histogram,
-    pub batch_delivery_latency: Histogram,
-    pub ingress_messages_delivered: Histogram,
-    pub ingress_message_bytes_delivered: Histogram,
-    pub xnet_bytes_delivered: Histogram,
-    pub finalization_certified_state_difference: IntGauge,
+pub(crate) struct FinalizerMetrics {
+    pub(crate) batches_delivered: IntCounterVec,
+    pub(crate) batch_height: IntGauge,
+    pub(crate) batch_delivery_interval: Histogram,
+    pub(crate) batch_delivery_latency: Histogram,
+    pub(crate) ingress_messages_delivered: Histogram,
+    pub(crate) ingress_message_bytes_delivered: Histogram,
+    pub(crate) xnet_bytes_delivered: Histogram,
+    pub(crate) finalization_certified_state_difference: IntGauge,
     // idkg payload related metrics
-    pub master_key_transcripts_created: IntCounterVec,
-    pub threshold_signature_agreements: IntCounter,
-    pub idkg_available_pre_signatures: IntGaugeVec,
-    pub idkg_pre_signatures_in_creation: IntGaugeVec,
-    pub idkg_ongoing_xnet_reshares: IntGaugeVec,
-    pub idkg_xnet_reshare_agreements: IntCounterVec,
+    pub(crate) master_key_transcripts_created: IntCounterVec,
+    pub(crate) threshold_signature_agreements: IntCounter,
+    pub(crate) idkg_available_pre_signatures: IntGaugeVec,
+    pub(crate) idkg_pre_signatures_in_creation: IntGaugeVec,
+    pub(crate) idkg_ongoing_xnet_reshares: IntGaugeVec,
+    pub(crate) idkg_xnet_reshare_agreements: IntCounterVec,
     // canister http payload metrics
-    pub canister_http_success_delivered: IntCounter,
-    pub canister_http_timeouts_delivered: IntCounter,
-    pub canister_http_divergences_delivered: IntCounter,
+    pub(crate) canister_http_success_delivered: IntCounter,
+    pub(crate) canister_http_timeouts_delivered: IntCounter,
+    pub(crate) canister_http_divergences_delivered: IntCounter,
 }
 
 impl FinalizerMetrics {
-    pub fn new(metrics_registry: MetricsRegistry) -> Self {
+    pub(crate) fn new(metrics_registry: MetricsRegistry) -> Self {
         Self {
             batches_delivered: metrics_registry.int_counter_vec(
                 "consensus_batches_delivered",
@@ -336,7 +336,7 @@ impl FinalizerMetrics {
         }
     }
 
-    pub fn process(&self, block_stats: &BlockStats, batch_stats: &BatchStats) {
+    pub(crate) fn process(&self, block_stats: &BlockStats, batch_stats: &BatchStats) {
         self.batches_delivered.with_label_values(&["success"]).inc();
         self.batch_height.set(batch_stats.batch_height as i64);
         self.ingress_messages_delivered
@@ -398,12 +398,12 @@ impl FinalizerMetrics {
     }
 }
 
-pub struct NotaryMetrics {
-    pub time_to_notary_sign: HistogramVec,
+pub(crate) struct NotaryMetrics {
+    pub(crate) time_to_notary_sign: HistogramVec,
 }
 
 impl NotaryMetrics {
-    pub fn new(metrics_registry: MetricsRegistry) -> Self {
+    pub(crate) fn new(metrics_registry: MetricsRegistry) -> Self {
         Self {
             time_to_notary_sign: metrics_registry.histogram_vec(
                 "consensus_time_to_notary_sign",
@@ -415,7 +415,7 @@ impl NotaryMetrics {
     }
 
     /// Report metrics after notarizing `block`
-    pub fn report_notarization(&self, block: &Block, elapsed: std::time::Duration) {
+    pub(crate) fn report_notarization(&self, block: &Block, elapsed: std::time::Duration) {
         let rank = block.rank().0 as usize;
         if rank < RANKS_TO_RECORD.len() {
             self.time_to_notary_sign
@@ -425,25 +425,25 @@ impl NotaryMetrics {
     }
 }
 
-pub struct PayloadBuilderMetrics {
-    pub get_payload_duration: Histogram,
-    pub validate_payload_duration: Histogram,
-    pub past_payloads_length: Histogram,
-    pub payload_size_bytes: Histogram,
-    pub payload_section_size_bytes: HistogramVec,
+pub(crate) struct PayloadBuilderMetrics {
+    pub(crate) get_payload_duration: Histogram,
+    pub(crate) validate_payload_duration: Histogram,
+    pub(crate) past_payloads_length: Histogram,
+    pub(crate) payload_size_bytes: Histogram,
+    pub(crate) payload_section_size_bytes: HistogramVec,
 
     /// Critical error for payloads above the maximum supported size
-    pub critical_error_payload_too_large: IntCounter,
+    pub(crate) critical_error_payload_too_large: IntCounter,
 
     /// Critical error for newly created payloads that do not pass their own validation function
-    pub critical_error_validation_not_passed: IntCounter,
+    pub(crate) critical_error_validation_not_passed: IntCounter,
 
     /// Critical error triggered if the subnet record contains entries that would not make sense to consensus
-    pub critical_error_subnet_record_data_issue: IntCounter,
+    pub(crate) critical_error_subnet_record_data_issue: IntCounter,
 }
 
 impl PayloadBuilderMetrics {
-    pub fn new(metrics_registry: MetricsRegistry) -> Self {
+    pub(crate) fn new(metrics_registry: MetricsRegistry) -> Self {
         Self {
             get_payload_duration: metrics_registry.histogram(
                 "consensus_get_payload_duration_seconds",
@@ -486,7 +486,7 @@ impl PayloadBuilderMetrics {
 }
 
 /// Metrics for a consensus validator.
-pub struct ValidatorMetrics {
+pub(crate) struct ValidatorMetrics {
     pub(crate) time_to_receive_block: HistogramVec,
     pub(crate) duplicate_artifact: IntCounterVec,
     pub(crate) validation_duration: HistogramVec,
@@ -503,7 +503,7 @@ pub struct ValidatorMetrics {
 
 impl ValidatorMetrics {
     /// The constructor creates a [`ValidatorMetrics`] instance.
-    pub fn new(metrics_registry: MetricsRegistry) -> Self {
+    pub(crate) fn new(metrics_registry: &MetricsRegistry) -> Self {
         Self {
             time_to_receive_block: metrics_registry.histogram_vec(
                 "consensus_time_to_receive_block",
@@ -609,16 +609,16 @@ impl ValidatorMetrics {
     }
 }
 
-pub struct PurgerMetrics {
-    pub unvalidated_pool_purge_height: IntGauge,
-    pub validated_pool_purge_height: IntGauge,
-    pub replicated_state_purge_height: IntGauge,
-    pub replicated_state_purge_height_disk: IntGauge,
-    pub validated_pool_bounds_exceeded: IntCounter,
+pub(crate) struct PurgerMetrics {
+    pub(crate) unvalidated_pool_purge_height: IntGauge,
+    pub(crate) validated_pool_purge_height: IntGauge,
+    pub(crate) replicated_state_purge_height: IntGauge,
+    pub(crate) replicated_state_purge_height_disk: IntGauge,
+    pub(crate) validated_pool_bounds_exceeded: IntCounter,
 }
 
 impl PurgerMetrics {
-    pub fn new(metrics_registry: MetricsRegistry) -> Self {
+    pub(crate) fn new(metrics_registry: MetricsRegistry) -> Self {
         Self {
             unvalidated_pool_purge_height: metrics_registry.int_gauge(
                 "unvalidated_pool_purge_height",

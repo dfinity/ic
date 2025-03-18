@@ -45,8 +45,7 @@ use std::collections::BTreeMap;
 /// Deliver all finalized blocks from
 /// `message_routing.expected_batch_height` to `finalized_height` via
 /// `MessageRouting` and return the last delivered batch height.
-#[allow(clippy::too_many_arguments, clippy::type_complexity)]
-pub fn deliver_batches(
+pub fn deliver_batches_without_metrics(
     message_routing: &dyn MessageRouting,
     membership: &Membership,
     pool: &PoolReader<'_>,
@@ -57,7 +56,34 @@ pub fn deliver_batches(
     // deliver all batches until the finalized height. If it is set to `Some(h)`, we will
     // deliver all bathes up to the height `min(h, finalized_height)`.
     max_batch_height_to_deliver: Option<Height>,
-    result_processor: Option<&dyn Fn(&Result<(), MessageRoutingError>, BlockStats, BatchStats)>,
+) -> Result<Height, MessageRoutingError> {
+    deliver_batches(
+        message_routing,
+        membership,
+        pool,
+        registry_client,
+        subnet_id,
+        log,
+        max_batch_height_to_deliver,
+        |_, _, _| {},
+    )
+}
+
+/// Deliver all finalized blocks from
+/// `message_routing.expected_batch_height` to `finalized_height` via
+/// `MessageRouting` and return the last delivered batch height.
+pub(crate) fn deliver_batches(
+    message_routing: &dyn MessageRouting,
+    membership: &Membership,
+    pool: &PoolReader<'_>,
+    registry_client: &dyn RegistryClient,
+    subnet_id: SubnetId,
+    log: &ReplicaLogger,
+    // This argument should only be used by the ic-replay tool. If it is set to `None`, we will
+    // deliver all batches until the finalized height. If it is set to `Some(h)`, we will
+    // deliver all bathes up to the height `min(h, finalized_height)`.
+    max_batch_height_to_deliver: Option<Height>,
+    result_processor: impl Fn(&Result<(), MessageRoutingError>, BlockStats, BatchStats),
 ) -> Result<Height, MessageRoutingError> {
     let finalized_height = pool.get_finalized_height();
     // If `max_batch_height_to_deliver` is specified and smaller than
@@ -238,9 +264,7 @@ pub fn deliver_batches(
         };
 
         let result = message_routing.deliver_batch(batch);
-        if let Some(f) = result_processor {
-            f(&result, block_stats, batch_stats);
-        }
+        result_processor(&result, block_stats, batch_stats);
         if let Err(err) = result {
             warn!(every_n_seconds => 5, log, "Batch delivery failed: {:?}", err);
             return Err(err);
@@ -256,7 +280,7 @@ pub fn deliver_batches(
 /// - Initial NiDKG transcript creation, where a response may come from summary payloads.
 /// - Canister threshold signature creation, where a response may come from from data payloads.
 /// - CanisterHttpResponse handling, where a response to a canister http request may come from data payloads.
-pub fn generate_responses_to_subnet_calls(
+fn generate_responses_to_subnet_calls(
     block: &Block,
     stats: &mut BatchStats,
     log: &ReplicaLogger,
