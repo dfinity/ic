@@ -10278,6 +10278,7 @@ dependencies = [
  "ic-sns-root",
  "ic-sns-swap",
  "ic-sns-wasm",
+ "ic-state-machine-tests",
  "itertools 0.12.1",
  "pocket-ic",
  "registry-canister",
