@@ -3,9 +3,11 @@ use crate::common::storage::types::{MetadataEntry, RosettaBlock};
 use anyhow::{bail, Result};
 use candid::Nat;
 use icrc_ledger_types::icrc1::account::Account;
-use rusqlite::Connection;
+use rusqlite::{Connection, OpenFlags};
 use serde_bytes::ByteBuf;
+use std::cmp::Ordering;
 use std::{path::Path, sync::Mutex};
+use tracing::warn;
 
 #[derive(Debug)]
 pub struct StorageClient {
@@ -26,6 +28,15 @@ impl StorageClient {
         Self::new(connection)
     }
 
+    /// Constructs a new SQLite in-memory store with a named DB that can be shared across instances.
+    pub fn new_named_in_memory(name: &str) -> anyhow::Result<Self> {
+        let connection = Connection::open_with_flags(
+            format!("'file:{}?mode=memory&cache=shared', uri=True", name),
+            OpenFlags::default(),
+        )?;
+        Self::new(connection)
+    }
+
     fn new(connection: rusqlite::Connection) -> anyhow::Result<Self> {
         let storage_client = Self {
             storage_connection: Mutex::new(connection),
@@ -37,6 +48,32 @@ impl StorageClient {
             .execute("PRAGMA foreign_keys = 1", [])?;
         storage_client.create_tables()?;
         Ok(storage_client)
+    }
+
+    pub fn does_blockchain_have_gaps(&self) -> anyhow::Result<bool> {
+        let Some(highest_block_idx) = self.get_highest_block_idx()? else {
+            // If the blockchain is empty, there are no gaps.
+            return Ok(false);
+        };
+        let block_count = self.get_block_count()?;
+        match block_count.cmp(&highest_block_idx.saturating_add(1)) {
+            Ordering::Equal => Ok(false),
+            Ordering::Less => {
+                warn!(
+                "block_count ({}) is less than highest_block_idx.saturating_add(1) ({}), indicating one of more gaps in the blockchain.",
+                block_count,
+                highest_block_idx.saturating_add(1)
+            );
+                Ok(true)
+            }
+            Ordering::Greater => {
+                panic!(
+                    "block_count ({}) is larger than highest_block_idx.saturating_add(1) ({}) -> invalid state!",
+                    block_count,
+                    highest_block_idx.saturating_add(1)
+                );
+            }
+        }
     }
 
     // Gets a block with a certain index. Returns `None` if no block exists in the database with that index. Returns an error if multiple blocks with that index exist.
@@ -81,6 +118,11 @@ impl StorageClient {
     pub fn get_blockchain_gaps(&self) -> anyhow::Result<Vec<(RosettaBlock, RosettaBlock)>> {
         let open_connection = self.storage_connection.lock().unwrap();
         storage_operations::get_blockchain_gaps(&open_connection)
+    }
+
+    pub fn get_highest_block_idx(&self) -> Result<Option<u64>> {
+        let open_connection = self.storage_connection.lock().unwrap();
+        storage_operations::get_highest_block_idx_in_blocks_table(&open_connection)
     }
 
     // Gets a transaction with a certain hash. Returns [] if no transaction exists in the database with that hash. Returns a vector with multiple entries if more than one transaction
@@ -136,6 +178,11 @@ impl StorageClient {
         storage_operations::store_metadata(&mut open_connection, metadata)
     }
 
+    pub fn reset_blocks_counter(&self) -> Result<()> {
+        let open_connection = self.storage_connection.lock().unwrap();
+        storage_operations::reset_blocks_counter(&open_connection)
+    }
+
     fn create_tables(&self) -> Result<(), rusqlite::Error> {
         let open_connection = self.storage_connection.lock().unwrap();
         open_connection.execute(
@@ -186,9 +233,42 @@ impl StorageClient {
             "#,
             [],
         )?;
+
+        // The counters table entry needs to have a unique name, so that we don't end up with
+        // multiple entries for the same counter.
         open_connection.execute(
             r#"
-            CREATE INDEX IF NOT EXISTS block_idx_account_balances 
+            CREATE TABLE IF NOT EXISTS counters (name TEXT PRIMARY KEY, value INTEGER NOT NULL)
+            "#,
+            [],
+        )?;
+
+        // Set the initial counter value for `SyncedBlocks` to the number of blocks in the blocks
+        // table. If the counter already exists, the value will not be updated.
+        open_connection.execute(
+            r#"
+            INSERT OR IGNORE INTO counters (name, value) VALUES ("SyncedBlocks", (SELECT COUNT(*) FROM blocks))
+            "#,
+            [],
+        )?;
+
+        // The trigger increments the counter of `SyncedBlocks` by 1 whenever a new block is
+        // inserted into the blocks table. For transactions that call `INSERT OR IGNORE` and try to
+        // insert a block that already exists, the trigger will not be executed. The trigger is
+        // executed once for each row that is inserted.
+        open_connection.execute(
+            r#"
+            CREATE TRIGGER IF NOT EXISTS SyncedBlocksUpdate AFTER INSERT ON blocks
+                BEGIN
+                    UPDATE counters SET value = value + 1 WHERE name = "SyncedBlocks";
+                END
+            "#,
+            [],
+        )?;
+
+        open_connection.execute(
+            r#"
+            CREATE INDEX IF NOT EXISTS block_idx_account_balances
             ON account_balances(block_idx)
             "#,
             [],
@@ -196,7 +276,7 @@ impl StorageClient {
 
         open_connection.execute(
             r#"
-        CREATE INDEX IF NOT EXISTS tx_hash_index 
+        CREATE INDEX IF NOT EXISTS tx_hash_index
         ON blocks(tx_hash)
         "#,
             [],
@@ -204,7 +284,7 @@ impl StorageClient {
 
         open_connection.execute(
             r#"
-        CREATE INDEX IF NOT EXISTS block_hash_index 
+        CREATE INDEX IF NOT EXISTS block_hash_index
         ON blocks(hash)
         "#,
             [],
@@ -223,7 +303,7 @@ impl StorageClient {
     // Extracts the information from the transaction and blocks table and fills the account balance table with that information
     // Throws an error if there are gaps in the transaction or blocks table.
     pub fn update_account_balances(&self) -> anyhow::Result<()> {
-        if !self.get_blockchain_gaps()?.is_empty() {
+        if self.does_blockchain_have_gaps()? {
             bail!("Tried to update account balances but there exist gaps in the database.",);
         }
         let mut open_connection = self.storage_connection.lock().unwrap();
@@ -429,6 +509,8 @@ mod tests {
 
               // Fetch the database gaps and map them to indices tuples.
               let derived_gaps = storage_client_memory.get_blockchain_gaps().unwrap().into_iter().map(|(a,b)| (a.index,b.index)).collect::<Vec<(u64,u64)>>();
+              // Does the blockchain have gaps?
+              let has_gaps = storage_client_memory.does_blockchain_have_gaps().unwrap();
 
               // If the database is empty the returned gaps vector should simply be empty.
               if rosetta_blocks.last().is_some(){
@@ -436,9 +518,13 @@ mod tests {
 
                   // Compare the storage with the test function.
                   assert_eq!(gaps,derived_gaps);
+
+                  assert!(has_gaps);
               }
               else{
-                  assert!(derived_gaps.is_empty())
+                  assert!(derived_gaps.is_empty());
+
+                  assert!(!has_gaps);
               }
            }
 
