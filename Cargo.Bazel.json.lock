@@ -1,5 +1,5 @@
 {
-  "checksum": "988578f0fa34d651cb59c1cac6db97ae145e0977e344617c0b5a4aa68302718e",
+  "checksum": "21cd90d7b67e4e1cdf9884a0d21f4eaa3f9629d4a0d7090cdc2af80c2164cdf3",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -20921,7 +20921,7 @@
               "target": "mockall"
             },
             {
-              "id": "mockito 1.2.0",
+              "id": "mockito 1.7.0",
               "target": "mockito"
             },
             {
@@ -31583,7 +31583,6 @@
           "common": [
             "client",
             "default",
-            "full",
             "h2",
             "http1",
             "http2",
@@ -46235,14 +46234,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "mockito 1.2.0": {
+    "mockito 1.7.0": {
       "name": "mockito",
-      "version": "1.2.0",
+      "version": "1.7.0",
       "package_url": "https://github.com/lipanski/mockito",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/mockito/1.2.0/download",
-          "sha256": "f8d3038e23466858569c2d30a537f691fa0d53b51626630ae08262943e3bbb8b"
+          "url": "https://static.crates.io/crates/mockito/1.7.0/download",
+          "sha256": "7760e0e418d9b7e5777c0374009ca4c93861b9066f18cb334a20ce50ab63aa48"
         }
       },
       "targets": [
@@ -46268,7 +46267,8 @@
           "common": [
             "color",
             "colored",
-            "default"
+            "default",
+            "parking_lot"
           ],
           "selects": {}
         },
@@ -46279,23 +46279,43 @@
               "target": "assert_json_diff"
             },
             {
+              "id": "bytes 1.9.0",
+              "target": "bytes"
+            },
+            {
               "id": "colored 2.0.4",
               "target": "colored"
             },
             {
-              "id": "futures 0.3.31",
-              "target": "futures"
+              "id": "futures-util 0.3.31",
+              "target": "futures_util"
             },
             {
-              "id": "hyper 0.14.27",
+              "id": "http 1.2.0",
+              "target": "http"
+            },
+            {
+              "id": "http-body 1.0.1",
+              "target": "http_body"
+            },
+            {
+              "id": "http-body-util 0.1.2",
+              "target": "http_body_util"
+            },
+            {
+              "id": "hyper 1.5.1",
               "target": "hyper"
+            },
+            {
+              "id": "hyper-util 0.1.10",
+              "target": "hyper_util"
             },
             {
               "id": "log 0.4.20",
               "target": "log"
             },
             {
-              "id": "rand 0.8.5",
+              "id": "rand 0.9.0",
               "target": "rand"
             },
             {
@@ -46322,7 +46342,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "1.2.0"
+        "version": "1.7.0"
       },
       "license": "MIT",
       "license_ids": [
@@ -94411,7 +94431,7 @@
     "minicbor 0.19.1",
     "minicbor-derive 0.13.0",
     "mockall 0.13.0",
-    "mockito 1.2.0",
+    "mockito 1.7.0",
     "moka 0.12.8",
     "more-asserts 0.3.1",
     "nftables 0.4.1",

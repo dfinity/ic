@@ -36,4 +36,5 @@ rust_test(
     name = "http_utils_test",
     crate = ":http_utils",
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
+    tags = [ "requires-network" ]
 )
