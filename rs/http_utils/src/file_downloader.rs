@@ -369,13 +369,14 @@ mod tests {
     }
 
     impl Setup {
-        fn new(body: &str) -> Self {
-            let mut server = mockito::Server::new();
+        async fn new(body: &str) -> Self {
+            let mut server = mockito::Server::new_async().await;
             let redirect = server
                 .mock("GET", "/redirect")
                 .with_status(301)
                 .with_header("Location", &server.url())
-                .create();
+                .create_async()
+                .await;
             let body_owned = body.to_string();
             let data = server
                 .mock("GET", "/")
@@ -403,7 +404,8 @@ mod tests {
                         body_owned[offset..].into()
                     }
                 })
-                .create();
+                .create_async()
+                .await;
 
             let temp = NamedTempFile::new()
                 .expect("Failed to create tmp file")
@@ -447,7 +449,7 @@ mod tests {
     async fn test_file_downloader_handles_redirects() {
         let body = String::from("Success");
         let hash = hash(&body);
-        let setup = Setup::new(&body).expect_routes(1, 1);
+        let setup = Setup::new(&body).await.expect_routes(1, 1);
 
         let downloader = FileDownloader::new(None);
         downloader
@@ -469,7 +471,7 @@ mod tests {
         let body = String::from("Success");
         let hash = hash(&body);
         let invalid_hash = format!("invalid_{}", hash);
-        let setup = Setup::new(&body).expect_routes(1, 0);
+        let setup = Setup::new(&body).await.expect_routes(1, 0);
 
         let downloader = FileDownloader::new(Some(ReplicaLogger::from(&setup.logger)));
 
@@ -490,7 +492,7 @@ mod tests {
         let body = String::from("Success");
         let hash = hash(&body);
 
-        let setup = Setup::new(&body).expect_routes(2, 0);
+        let setup = Setup::new(&body).await.expect_routes(2, 0);
 
         // Correct file already exists
         std::fs::write(&setup.temp, &body).unwrap();
@@ -537,7 +539,7 @@ mod tests {
         let body = String::from("Success");
         let hash = hash(&body);
 
-        let setup = Setup::new(&body).expect_routes(2, 0);
+        let setup = Setup::new(&body).await.expect_routes(2, 0);
 
         // An unexpected file already exists
         std::fs::write(&setup.temp, "unexpected content").unwrap();
