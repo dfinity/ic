@@ -101,9 +101,7 @@ def commit_and_create_pr(
             )
         if enable_auto_merge:
             pr_number = subprocess.check_output(
-                ["gh", "pr", "view", "--json", "number", "-q", ".number"],
-                cwd=repo_root,
-                text=True
+                ["gh", "pr", "view", "--json", "number", "-q", ".number"], cwd=repo_root, text=True
             ).strip()
             subprocess.check_call(
                 [
@@ -112,9 +110,9 @@ def commit_and_create_pr(
                     "merge",
                     pr_number,
                     "--auto",
-                    ],
-                    cwd=repo_root,
-                )
+                ],
+                cwd=repo_root,
+            )
 
 
 def get_saved_versions(repo_root: pathlib.Path, file_path: pathlib.Path):
