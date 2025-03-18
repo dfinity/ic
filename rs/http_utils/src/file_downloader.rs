@@ -110,21 +110,11 @@ impl FileDownloader {
                     response.headers()
                 );
             }
-            let mut file = fs::OpenOptions::new()
+            let file = fs::OpenOptions::new()
                 .create(true)
                 .append(true)
                 .open(file_path)
                 .map_err(|e| FileDownloadError::file_open_error(file_path, e))?;
-            file.seek(SeekFrom::Start(offset)).map_err(|e| {
-                FileDownloadError::IoError(
-                    format!(
-                        "Failed to seek offset {} in file {}",
-                        offset,
-                        file_path.display()
-                    ),
-                    e,
-                )
-            })?;
 
             self.stream_response_body_to_file(response, file, file_path)
                 .await?;
@@ -159,8 +149,7 @@ impl FileDownloader {
             .send()
             .await?;
 
-        if response.status().is_success() || response.status() == http::StatusCode::REQUEST_TIMEOUT
-        {
+        if response.status().is_success() {
             Ok(Some(response))
         } else if response.status() == http::StatusCode::RANGE_NOT_SATISFIABLE {
             Ok(None)
