@@ -350,12 +350,12 @@ impl<T: Process> Process for WithMetrics<T> {
 
         let duration = start_time.elapsed().as_secs_f64();
 
-        let is_renewal = self.0.get_renewal().await;
-        let is_important = self.0.get_importance().await;
+        let is_renewal = self.0.get_renewal().await as u32;
+        let is_important = self.0.get_importance().await as u32;
 
         let apex_domain = match is_important {
-            true => extract_domain(&task.name),
-            false => "N/A",
+            1 => extract_domain(&task.name),
+            _ => "N/A",
         };
 
         let MetricParams {
