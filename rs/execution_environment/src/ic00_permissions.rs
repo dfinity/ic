@@ -200,7 +200,11 @@ impl Ic00MethodPermissions {
             Ic00Method::TakeCanisterSnapshot
             | Ic00Method::LoadCanisterSnapshot
             | Ic00Method::ListCanisterSnapshots
-            | Ic00Method::DeleteCanisterSnapshot => Self {
+            | Ic00Method::DeleteCanisterSnapshot
+            | Ic00Method::ReadCanisterSnapshotMetadata
+            | Ic00Method::ReadCanisterSnapshotData
+            | Ic00Method::UploadCanisterSnapshotMetadata
+            | Ic00Method::UploadCanisterSnapshotData => Self {
                 method,
                 allow_remote_subnet_sender: true,
                 allow_only_nns_subnet_sender: false,

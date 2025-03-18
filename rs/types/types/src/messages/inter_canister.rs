@@ -9,8 +9,10 @@ use ic_exhaustive_derive::ExhaustiveSet;
 use ic_management_canister_types_private::{
     CanisterIdRecord, CanisterInfoRequest, ClearChunkStoreArgs, DeleteCanisterSnapshotArgs,
     InstallChunkedCodeArgs, InstallCodeArgsV2, ListCanisterSnapshotArgs, LoadCanisterSnapshotArgs,
-    Method, Payload as _, ProvisionalTopUpCanisterArgs, StoredChunksArgs, TakeCanisterSnapshotArgs,
-    UpdateSettingsArgs, UploadChunkArgs,
+    Method, Payload as _, ProvisionalTopUpCanisterArgs, ReadCanisterSnapshotDataArgs,
+    ReadCanisterSnapshotMetadataArgs, StoredChunksArgs, TakeCanisterSnapshotArgs,
+    UpdateSettingsArgs, UploadCanisterSnapshotDataArgs, UploadCanisterSnapshotMetadataArgs,
+    UploadChunkArgs,
 };
 use ic_protobuf::{
     proxy::{try_from_option_field, ProxyDecodeError},
@@ -214,6 +216,30 @@ impl Request {
             }
             Ok(Method::DeleteCanisterSnapshot) => {
                 match DeleteCanisterSnapshotArgs::decode(&self.method_payload) {
+                    Ok(record) => Some(record.get_canister_id()),
+                    Err(_) => None,
+                }
+            }
+            Ok(Method::ReadCanisterSnapshotMetadata) => {
+                match ReadCanisterSnapshotMetadataArgs::decode(&self.method_payload) {
+                    Ok(record) => Some(record.get_canister_id()),
+                    Err(_) => None,
+                }
+            }
+            Ok(Method::ReadCanisterSnapshotData) => {
+                match ReadCanisterSnapshotDataArgs::decode(&self.method_payload) {
+                    Ok(record) => Some(record.get_canister_id()),
+                    Err(_) => None,
+                }
+            }
+            Ok(Method::UploadCanisterSnapshotMetadata) => {
+                match UploadCanisterSnapshotMetadataArgs::decode(&self.method_payload) {
+                    Ok(record) => Some(record.get_canister_id()),
+                    Err(_) => None,
+                }
+            }
+            Ok(Method::UploadCanisterSnapshotData) => {
+                match UploadCanisterSnapshotDataArgs::decode(&self.method_payload) {
                     Ok(record) => Some(record.get_canister_id()),
                     Err(_) => None,
                 }
