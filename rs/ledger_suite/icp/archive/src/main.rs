@@ -293,7 +293,7 @@ fn get_blocks_() {
     let local_blocks_range = from_offset..from_offset + blocks_len();
     let requested_range = start..start + length;
     if !range_utils::is_subrange(&requested_range, &local_blocks_range) {
-        let res = GetBlocksRes(Err(format!("Requested blocks outside the range stored in the ledger node. Requested [{} .. {}]. Available [{} .. {}].",
+        let res = GetBlocksRes(Err(format!("Requested blocks outside the range stored in the archive node. Requested [{} .. {}]. Available [{} .. {}].",
                 requested_range.start, requested_range.end, local_blocks_range.start, local_blocks_range.end)));
         let res_proto = to_proto_bytes(res).expect("failed to encode get_blocks_pb response");
         reply_raw(&res_proto);
