@@ -1,5 +1,5 @@
 [package]
-name = "ledger-archive-node-canister"
+name = "ic-icp-archive"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
