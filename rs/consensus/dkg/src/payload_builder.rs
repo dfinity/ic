@@ -3,10 +3,13 @@ use crate::{
     MAX_REMOTE_DKGS_PER_INTERVAL, MAX_REMOTE_DKG_ATTEMPTS, REMOTE_DKG_REPEATED_FAILURE_ERROR,
 };
 use ic_consensus_utils::{crypto::ConsensusCrypto, pool_reader::PoolReader};
-use ic_interfaces::{crypto::ErrorReproducibility, dkg::DkgPool};
+use ic_interfaces::{
+    crypto::{ErrorReproducibility, NiDkgAlgorithm},
+    dkg::DkgPool,
+};
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::{StateManager, StateManagerError};
-use ic_logger::{error, warn, ReplicaLogger};
+use ic_logger::{error, info, warn, ReplicaLogger};
 use ic_protobuf::registry::subnet::v1::{
     chain_key_initialization::Initialization, CatchUpPackageContents,
 };
@@ -21,11 +24,14 @@ use ic_types::{
         get_faults_tolerated, Block,
     },
     crypto::{
-        threshold_sig::ni_dkg::{
-            config::{errors::NiDkgConfigValidationError, NiDkgConfig, NiDkgConfigData},
-            errors::create_transcript_error::DkgCreateTranscriptError,
-            NiDkgDealing, NiDkgId, NiDkgMasterPublicKeyId, NiDkgTag, NiDkgTargetId,
-            NiDkgTargetSubnet, NiDkgTranscript,
+        threshold_sig::{
+            ni_dkg::{
+                config::{errors::NiDkgConfigValidationError, NiDkgConfig, NiDkgConfigData},
+                errors::create_transcript_error::DkgCreateTranscriptError,
+                NiDkgDealing, NiDkgId, NiDkgMasterPublicKeyId, NiDkgTag, NiDkgTargetId,
+                NiDkgTargetSubnet, NiDkgTranscript,
+            },
+            ThresholdSigPublicKey,
         },
         CryptoError,
     },
@@ -299,12 +305,24 @@ fn create_transcript(
     crypto: &dyn ConsensusCrypto,
     config: &NiDkgConfig,
     all_dealings: &BTreeMap<NiDkgId, BTreeMap<NodeId, NiDkgDealing>>,
-    _logger: &ReplicaLogger,
+    logger: &ReplicaLogger,
 ) -> Result<NiDkgTranscript, DkgCreateTranscriptError> {
     let no_dealings = BTreeMap::new();
     let dealings = all_dealings.get(config.dkg_id()).unwrap_or(&no_dealings);
 
-    ic_interfaces::crypto::NiDkgAlgorithm::create_transcript(crypto, config, dealings)
+    let transcript = NiDkgAlgorithm::create_transcript(crypto, config, dealings)?;
+
+    let pk = ThresholdSigPublicKey::try_from(&transcript).unwrap();
+    let pk_bytes = &pk.into_bytes();
+    info!(
+        logger,
+        "Created a new transcript for tag {:?} target {:?} key_bytes {:?}",
+        config.dkg_id().dkg_tag,
+        config.dkg_id().target_subnet,
+        pk_bytes
+    );
+
+    Ok(transcript)
 }
 
 /// Return the set of next transcripts for all tags. If for some tag
