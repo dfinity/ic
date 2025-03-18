@@ -646,11 +646,12 @@ fn get_dkg_interval_length(
         })
 }
 
-// TODO: Recheck this documentation
-/// Reads the SubnetCallContext and attempts to create DKG configs for new
-/// subnets for the next round. An Ok return value contains:
-/// * configs grouped by subnet (low and high threshold configs per subnet)
-/// * errors produced while generating the configs.
+/// Reads the SubnetCallContext and attempts to create DKG configs for remote subnets for the next round
+///
+/// An Ok return value contains:
+/// - configs grouped by subnet, either low and high threshold configs for `setup_initial_dkg` or
+///     a high threshold for a vetkey for `reshare_chain_key`
+/// - errors produced while generating the configs
 #[allow(clippy::type_complexity)]
 fn process_subnet_call_context(
     this_subnet_id: SubnetId,
@@ -880,7 +881,7 @@ fn add_callback_ids_to_transcript_results(
         .collect()
 }
 
-/// This function is on for each entry on the SetupInitialDkgContext. It returns
+/// This function is called on each entry on the SetupInitialDkgContext. It returns
 /// either the created high and low configs for the entry or returns two errors
 /// identified by the NiDkgId.
 fn create_low_high_remote_dkg_configs(
