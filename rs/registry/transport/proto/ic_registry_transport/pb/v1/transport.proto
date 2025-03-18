@@ -153,26 +153,48 @@ message LargeValueChunkKeys {
   repeated bytes chunk_content_sha256s = 1;
 }
 
-// In the not too distant future, this will be used instead of
-// RegistryGetChangesSinceResponse. See the "Migrating to Large
-// Values/High-Capacity Types" section in the file-level comments.
-message HighCapacityRegistryGetChangesSinceResponse {
-  RegistryError error = 1;
+// In the not so distant future, this will be used instead of RegistryValue. See
+// the "Migrating to Large Values/High-Capacity Types" section in the file-level
+// comments.
+message HighCapacityRegistryValue {
+  // The version at which this mutation happened.
   uint64 version = 2;
-  repeated HighCapacityRegistryDelta deltas = 3;
+
+  oneof content {
+    // The value that was set in this mutation.
+    bytes value = 1;
+
+    // If true, this change represents a deletion.
+    bool deletion_marker = 3;
+
+    // If the value is too large, this is used instead of the `value` field.
+    LargeValueChunkKeys large_value_chunk_keys = 4;
+  }
 }
+
+// In the not so distant future, this will be used instead of RegistryDelta. See
+// the "Migrating to Large Values/High-Capacity Types" section in the file-level
+// comments.
 message HighCapacityRegistryDelta {
   bytes key = 1;
   repeated HighCapacityRegistryValue values = 2;
 }
-message HighCapacityRegistryValue {
+
+// In the not too distant future, this will be used instead of
+// RegistryGetChangesSinceResponse. See the "Migrating to Large
+// Values/High-Capacity Types" section in the file-level comments.
+message HighCapacityRegistryGetChangesSinceResponse {
+  // If anything went wrong, the registry canister
+  // will set this error.
+  RegistryError error = 1;
+
+  // The last version of the registry.
   uint64 version = 2;
 
-  oneof content {
-    bytes value = 1;
-    bool deletion_marker = 3;
-    LargeValueChunkKeys large_value_chunk_keys = 4;
-  }
+  // A list of all the keys and all the values that change
+  // and all the intermediate changes since the version
+  // requested.
+  repeated HighCapacityRegistryDelta deltas = 3;
 }
 
 // A single change made to a key in the registry.
@@ -233,10 +255,22 @@ message RegistryGetValueRequest {
 // RegistryGetValueResponse. See the "Migrating to Large Values/High-Capacity
 // Types" section in the file-level comments.
 message HighCapacityRegistryGetValueResponse {
+  // If anything went wrong, the registry canister
+  // will set this error.
   RegistryError error = 1;
+
+  // the version at which the value corresponding to the queried
+  // key was last mutated (inserted, updated, or deleted)
+  // before at or at the version specified
+  // in the RegistryGetValueRequest.
   uint64 version = 2;
+
   oneof content {
+    // The value retrieved from the registry.
     bytes value = 3;
+
+    // If the value is too large, this will be used instead of the `value`
+    // field.
     LargeValueChunkKeys large_value_chunk_keys = 4;
   }
 }
@@ -271,22 +305,43 @@ message RegistryGetLatestVersionResponse {
 }
 
 // In the not too distant future, the `get_certified_changes_since` canister
+// method will use this instead of RegistryMutation. However, there is no
+// intention for the `atomic_mutate` canister method to ever use this. See the
+// "Migrating to Large Values/High-Capacity Types" section in the file-level
+// comments.
+message HighCapacityRegistryMutation {
+  // The type of the mutation to apply to the registry.
+  // Always required.
+  RegistryMutation.Type mutation_type = 1;
+
+  // The key of the entry to mutate in the registry.
+  // Always required.
+  bytes key = 2;
+
+  oneof content {
+    // The value to mutate in the registry.
+    // Required for insert, update, but not for delete.
+    bytes value = 3;
+
+    // If the value is too large, this will be used instead of the `value`
+    // field.
+    LargeValueChunkKeys large_value_chunk_keys = 4;
+  }
+}
+
+// In the not too distant future, the `get_certified_changes_since` canister
 // method will use this instead of RegistryAtomicMutateRequest. However, there
 // is no intention for the `atomic_mutate` canister method to ever use this. See
 // the "Migrating to Large Values/High-Capacity Types" section in the file-level
 // comments.
 message HighCapacityRegistryAtomicMutateRequest {
+  // The set of mutations to apply to the registry.
   repeated HighCapacityRegistryMutation mutations = 1;
+
+  // Preconditions at the key level.
   repeated Precondition preconditions = 5;
+
   reserved 4;
-}
-message HighCapacityRegistryMutation {
-  RegistryMutation.Type mutation_type = 1;
-  bytes key = 2;
-  oneof content {
-    bytes value = 3;
-    LargeValueChunkKeys large_value_chunk_keys = 4;
-  }
 }
 
 // A single mutation in the registry.
