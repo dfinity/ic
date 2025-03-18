@@ -54,7 +54,6 @@ pub struct Finalizer {
 }
 
 impl Finalizer {
-    #[allow(clippy::too_many_arguments)]
     pub fn new(
         replica_config: ReplicaConfig,
         registry_client: Arc<dyn RegistryClient>,

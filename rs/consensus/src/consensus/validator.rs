@@ -691,7 +691,6 @@ pub struct Validator {
 }
 
 impl Validator {
-    #[allow(clippy::too_many_arguments)]
     /// The constructor creates a new [`Validator`] instance.
     pub fn new(
         replica_config: ReplicaConfig,
