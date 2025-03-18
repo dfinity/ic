@@ -20,6 +20,7 @@ DEPENDENCIES = [
 DEV_DEPENDENCIES = [
     # Keep sorted.
     "//rs/nns/test_utils",
+    "//rs/registry/keys",
     "//rs/state_machine_tests",
     "@crate_index//:candid_parser",
 ]
@@ -35,6 +36,7 @@ DEV_MACRO_DEPENDENCIES = [
 DEV_DATA = [
     # Keep sorted.
     ":node-rewards-canister",
+    ":node-rewards-canister-test",
     "//rs/nns/governance:governance-canister",
     "//rs/nns/governance:governance-canister-test",
     "//rs/registry/canister:registry-canister",
@@ -44,6 +46,7 @@ DEV_ENV = {
     # Keep sorted.
     "CARGO_MANIFEST_DIR": "rs/node_rewards/canister",
     "NODE_REWARDS_CANISTER_WASM_PATH": "$(rootpath //rs/node_rewards/canister:node-rewards-canister)",
+    "NODE_REWARDS_CANISTER_TEST_WASM_PATH": "$(rootpath //rs/node_rewards/canister:node-rewards-canister-test)",
     "GOVERNANCE_CANISTER_WASM_PATH": "$(rootpath //rs/nns/governance:governance-canister)",
     "GOVERNANCE_CANISTER_TEST_WASM_PATH": "$(rootpath //rs/nns/governance:governance-canister-test)",
     "REGISTRY_CANISTER_WASM_PATH": "$(rootpath //rs/registry/canister:registry-canister)",
@@ -68,6 +71,17 @@ rust_library(
 rust_canister(
     name = "node-rewards-canister",
     srcs = ["src/main.rs"],
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    service_file = ":node-rewards-canister.did",
+    deps = DEPENDENCIES + [
+        ":nrc",
+    ],
+)
+
+rust_canister(
+    name = "node-rewards-canister-test",
+    srcs = ["src/main.rs"],
+    crate_features = ["test"],
     proc_macro_deps = MACRO_DEPENDENCIES,
     service_file = ":node-rewards-canister.did",
     deps = DEPENDENCIES + [

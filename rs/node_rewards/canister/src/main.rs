@@ -56,11 +56,7 @@ fn schedule_registry_sync() {
     });
 }
 
-#[query(hidden = true)]
-fn hello() -> String {
-    "Hello, world!".to_string()
-}
-
+#[cfg(feature = "test")]
 #[query(hidden = true)]
 fn get_registry_value(key: String) -> Result<Option<Vec<u8>>, String> {
     CANISTER.with(|canister| canister.borrow().get_registry_value(key))

@@ -11314,6 +11314,7 @@ dependencies = [
  "ic-nns-test-utils",
  "ic-node-rewards-canister-api",
  "ic-registry-canister-client",
+ "ic-registry-keys",
  "ic-stable-structures",
  "ic-state-machine-tests",
  "ic-types",
