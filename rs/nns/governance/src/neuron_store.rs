@@ -940,6 +940,23 @@ impl NeuronStore {
         )
     }
 
+    /// Returns the total deciding voting power for a standard proposal. If the total deciding
+    /// voting power is greater than `u64::MAX` (which should be impossible in reality), it returns
+    /// `u64::MAX`.
+    pub fn total_deciding_voting_power_for_standard_proposal(
+        &self,
+        voting_power_economics: &VotingPowerEconomics,
+        now_seconds: u64,
+    ) -> u64 {
+        let (_, deciding_voting_power, _) =
+            self.create_ballots_for_standard_proposal(voting_power_economics, now_seconds);
+        if deciding_voting_power > u64::MAX as u128 {
+            u64::MAX
+        } else {
+            deciding_voting_power as u64
+        }
+    }
+
     pub fn create_ballots_for_standard_proposal(
         &self,
         voting_power_economics: &VotingPowerEconomics,
