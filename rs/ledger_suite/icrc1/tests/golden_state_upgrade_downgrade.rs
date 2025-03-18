@@ -35,6 +35,7 @@ const BURN_MULTIPLIER: u64 = 1;
 // Corresponds to ic_icrc1_ledger::LEDGER_VERSION where allowances and balances are
 // migrated to stable structures
 const LEDGER_VERSION_2: u64 = 2;
+#[cfg(not(feature = "u256-tokens"))]
 // Corresponds to ic_icrc1_ledger::LEDGER_VERSION where blocks are migrated to stable structures
 const LEDGER_VERSION_3: u64 = 3;
 
