@@ -15,6 +15,7 @@ crate-type = ["cdylib", "rlib"]
 [dependencies]
 # Enable `custom` feature of getrandom dependency. See lib.rs for more details.
 getrandom = { version = "0.2", features = ["custom"], optional = true }
+hkdf = { version = "0.12" }
 ic_bls12_381 = { workspace = true }
 lazy_static = { workspace = true }
 pairing = { workspace = true }

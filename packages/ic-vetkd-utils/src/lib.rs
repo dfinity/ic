@@ -35,10 +35,12 @@ pub struct TransportSecretKey {
     secret_key: Scalar,
 }
 
-/// Derive a symmetric key using XMD-SHA256
+/// Derive a symmetric key using HKDF-SHA256
 pub fn derive_symmetric_key(input: &[u8], domain_sep: &str, len: usize) -> Vec<u8> {
-    use ic_bls12_381::hash_to_curve::{ExpandMessageState, InitExpandMessage};
-    ExpandMsgXmd::<sha2::Sha256>::init_expand(input, domain_sep.as_bytes(), len).into_vec()
+    let hk = hkdf::Hkdf::<sha2::Sha256>::new(None, input);
+    let mut okm = vec![0u8; len];
+    hk.expand(domain_sep.as_bytes(), &mut okm).expect("Unsupported output length for HKDF");
+    okm
 }
 
 fn hash_to_scalar(input: &[u8], domain_sep: &str) -> ic_bls12_381::Scalar {
@@ -134,6 +136,10 @@ impl DerivedPublicKey {
     /// function. This is useful if you wish to derive multiple keys without having to interact with
     /// the IC each time.
     pub fn derive_sub_key(&self, context: &[u8]) -> Self {
+        if context.is_empty() {
+            return self.clone();
+        }
+
         let dst = "ic-vetkd-bls12-381-g2-derivation-domain";
 
         let offset = hash_to_scalar(&prefix_with_len(context), dst);
