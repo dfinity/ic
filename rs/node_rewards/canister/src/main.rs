@@ -25,13 +25,17 @@ thread_local! {
 }
 
 #[init]
-fn canister_init(_args: InitArgs) {}
+fn canister_init(_args: InitArgs) {
+    schedule_timers();
+}
 
 #[pre_upgrade]
 fn pre_upgrade() {}
 
 #[post_upgrade]
-fn post_upgrade(_args: Option<UpgradeArgs>) {}
+fn post_upgrade(_args: Option<UpgradeArgs>) {
+    schedule_timers();
+}
 
 fn schedule_timers() {
     schedule_registry_sync();
@@ -56,7 +60,7 @@ fn schedule_registry_sync() {
     });
 }
 
-#[cfg(feature = "test")]
+#[cfg(any(feature = "test", test))]
 #[query(hidden = true)]
 fn get_registry_value(key: String) -> Result<Option<Vec<u8>>, String> {
     CANISTER.with(|canister| canister.borrow().get_registry_value(key))

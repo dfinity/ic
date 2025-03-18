@@ -20,6 +20,7 @@ DEPENDENCIES = [
 DEV_DEPENDENCIES = [
     # Keep sorted.
     "//rs/nns/test_utils",
+    "//rs/protobuf",
     "//rs/registry/keys",
     "//rs/state_machine_tests",
     "@crate_index//:candid_parser",
@@ -37,19 +38,31 @@ DEV_DATA = [
     # Keep sorted.
     ":node-rewards-canister",
     ":node-rewards-canister-test",
+    "//rs/ledger_suite/icp/ledger:ledger-canister-wasm-notify-method",
+    "//rs/nns/cmc:cycles-minting-canister",
     "//rs/nns/governance:governance-canister",
     "//rs/nns/governance:governance-canister-test",
+    "//rs/nns/gtc:genesis-token-canister",
+    "//rs/nns/handlers/lifeline/impl:lifeline_canister",
+    "//rs/nns/handlers/root/impl:root-canister",
+    "//rs/nns/sns-wasm:sns-wasm-canister",
     "//rs/registry/canister:registry-canister",
 ]
 
 DEV_ENV = {
     # Keep sorted.
     "CARGO_MANIFEST_DIR": "rs/node_rewards/canister",
+    "CYCLES_MINTING_CANISTER_WASM_PATH": "$(rootpath //rs/nns/cmc:cycles-minting-canister)",
     "NODE_REWARDS_CANISTER_WASM_PATH": "$(rootpath //rs/node_rewards/canister:node-rewards-canister)",
     "NODE_REWARDS_CANISTER_TEST_WASM_PATH": "$(rootpath //rs/node_rewards/canister:node-rewards-canister-test)",
+    "GENESIS_TOKEN_CANISTER_WASM_PATH": "$(rootpath //rs/nns/gtc:genesis-token-canister)",
     "GOVERNANCE_CANISTER_WASM_PATH": "$(rootpath //rs/nns/governance:governance-canister)",
     "GOVERNANCE_CANISTER_TEST_WASM_PATH": "$(rootpath //rs/nns/governance:governance-canister-test)",
+    "LEDGER_CANISTER_NOTIFY_METHOD_WASM_PATH": "$(rootpath //rs/ledger_suite/icp/ledger:ledger-canister-wasm-notify-method)",
+    "LIFELINE_CANISTER_WASM_PATH": "$(rootpath //rs/nns/handlers/lifeline/impl:lifeline_canister)",
     "REGISTRY_CANISTER_WASM_PATH": "$(rootpath //rs/registry/canister:registry-canister)",
+    "ROOT_CANISTER_WASM_PATH": "$(rootpath //rs/nns/handlers/root/impl:root-canister)",
+    "SNS_WASM_CANISTER_WASM_PATH": "$(rootpath //rs/nns/sns-wasm:sns-wasm-canister)",
 }
 
 LIB_SRCS = glob(

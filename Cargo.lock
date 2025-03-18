@@ -11313,6 +11313,7 @@ dependencies = [
  "ic-nervous-system-canisters",
  "ic-nns-test-utils",
  "ic-node-rewards-canister-api",
+ "ic-protobuf",
  "ic-registry-canister-client",
  "ic-registry-keys",
  "ic-stable-structures",

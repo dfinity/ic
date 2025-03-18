@@ -13,6 +13,7 @@ impl NodeRewardsCanister {
 
 /// API methods
 impl NodeRewardsCanister {
+    #[cfg(any(feature = "test", test))]
     pub fn get_registry_value(&self, key: String) -> Result<Option<Vec<u8>>, String> {
         self.registry_client
             .get_value(key.as_ref(), self.registry_client.get_latest_version())

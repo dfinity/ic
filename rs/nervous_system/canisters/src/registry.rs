@@ -4,7 +4,10 @@ use ic_nervous_system_common::NervousSystemError;
 use ic_nervous_system_runtime::{CdkRuntime, Runtime};
 use ic_nns_constants::REGISTRY_CANISTER_ID;
 use ic_registry_transport::pb::v1::RegistryDelta;
-use ic_registry_transport::{deserialize_get_latest_version_response, Error};
+use ic_registry_transport::{
+    deserialize_get_changes_since_response, deserialize_get_latest_version_response,
+    serialize_get_changes_since_request, Error,
+};
 use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex};
 
@@ -42,8 +45,7 @@ impl Default for RegistryCanister {
 impl Registry for RegistryCanister {
     async fn get_latest_version(&self) -> Result<RegistryVersion, NervousSystemError> {
         let response: Result<Vec<u8>, (i32, String)> =
-            CdkRuntime::call_bytes_with_cleanup(REGISTRY_CANISTER_ID, "get_latest_version", &[])
-                .await;
+            CdkRuntime::call_bytes_with_cleanup(self.canister_id, "get_latest_version", &[]).await;
         response
             .map_err(|(code, msg)| {
                 NervousSystemError::new_with_message(format!(
@@ -65,7 +67,28 @@ impl Registry for RegistryCanister {
         &self,
         version: RegistryVersion,
     ) -> Result<Vec<RegistryDelta>, NervousSystemError> {
-        todo!()
+        let bytes = serialize_get_changes_since_request(version.get()).map_err(|e| {
+            NervousSystemError::new_with_message(format!(
+                "Could not encode request for get_changes_since for version {:?}: {}",
+                version, e
+            ))
+        })?;
+        CdkRuntime::call_bytes_with_cleanup(self.canister_id, "get_changes_since", &bytes)
+            .await
+            .map_err(|(code, msg)| {
+                NervousSystemError::new_with_message(format!(
+                    "Request to get_changes_since failed with code {code} and message: {msg}",
+                ))
+            })
+            .and_then(|r| {
+                deserialize_get_changes_since_response(r)
+                    .map_err(|e| {
+                        NervousSystemError::new_with_message(format!(
+                            "Could not decode response {e:?}"
+                        ))
+                    })
+                    .and_then(|(deltas, _)| Ok(deltas))
+            })
     }
 }
 
