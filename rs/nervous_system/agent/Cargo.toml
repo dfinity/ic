@@ -31,3 +31,6 @@ serde_cbor = { workspace = true }
 tempfile = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
+
+[features]
+test = []
