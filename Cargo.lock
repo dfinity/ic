@@ -14642,6 +14642,7 @@ dependencies = [
  "ic-canisters-http-types",
  "ic-cdk 0.17.1",
  "ic-crypto-sha2",
+ "ic-icp-archive",
  "ic-icp-index",
  "ic-ledger-canister-core",
  "ic-ledger-core",

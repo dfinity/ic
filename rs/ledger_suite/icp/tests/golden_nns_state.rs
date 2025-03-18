@@ -1,6 +1,7 @@
 use candid::{Decode, Encode};
 use canister_test::{Wasm, WasmResult};
 use ic_base_types::CanisterId;
+use ic_icp_archive::ArchiveUpgradeArgument;
 use ic_ledger_core::block::BlockType;
 use ic_ledger_core::Tokens;
 use ic_ledger_suite_state_machine_tests::in_memory_ledger::{
@@ -450,7 +451,10 @@ impl Setup {
         let (upgrade_arg, expect_large_capacity) =
             if let Some(upgrade_arg_max_capacity) = upgrade_arg_max_capacity {
                 (
-                    Encode!(&upgrade_arg_max_capacity).expect("should encode archive upgrade args"),
+                    Encode!(&ArchiveUpgradeArgument {
+                        max_memory_size_bytes: Some(upgrade_arg_max_capacity)
+                    })
+                    .expect("should encode archive upgrade args"),
                     archive_is_upgradable,
                 )
             } else {
@@ -472,6 +476,8 @@ impl Setup {
                         "should successfully upgrade archive '{}' to new local version: {}",
                         archive_canister_id, e
                     )
+                } else {
+                    assert!(e.description().contains("Decoding stable memory failed"));
                 }
             }
         }
