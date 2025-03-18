@@ -59,7 +59,7 @@ impl Registry for RegistryCanister {
                             "Could not decode response {e:?}"
                         ))
                     })
-                    .and_then(|version| Ok(RegistryVersion::new(version)))
+                    .map(RegistryVersion::new)
             })
     }
 
@@ -87,7 +87,7 @@ impl Registry for RegistryCanister {
                             "Could not decode response {e:?}"
                         ))
                     })
-                    .and_then(|(deltas, _)| Ok(deltas))
+                    .map(|(deltas, _)| deltas)
             })
     }
 }
