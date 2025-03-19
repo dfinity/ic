@@ -8,15 +8,16 @@ use ic_interfaces_registry::{
 use ic_nervous_system_canisters::registry::Registry;
 use ic_registry_transport::pb::v1::RegistryDelta;
 use ic_types::registry::RegistryClientError;
-#[cfg(not(target_arch = "wasm32"))]
-use ic_types::time::current_time as system_current_time;
-use ic_types::{RegistryVersion, Time};
+use ic_types::RegistryVersion;
 use std::cmp::Ordering;
 use std::collections::BTreeMap;
 use std::marker::PhantomData;
 use std::sync::atomic::AtomicU64;
 use std::sync::atomic::Ordering as AtomicOrdering;
 
+/// This implementation of CanisterRegistryClient uses StableMemory to store a copy of the
+/// Registry data in the canister.  An implementation of RegistryDataStableMemory trait that
+/// provides the StableBTreeMap is required to use it.
 pub struct CanisterRegistryStore<S: RegistryDataStableMemory> {
     // The type of the accessor for StableBTreeMap that holds the registry data.
     _stable_memory: PhantomData<S>,
@@ -24,18 +25,6 @@ pub struct CanisterRegistryStore<S: RegistryDataStableMemory> {
     latest_version: AtomicU64,
     // Registry client to interact with the canister
     registry: Box<dyn Registry>,
-}
-
-// TODO do not merge, make these functions  depend on nervous_system/time_helpers
-#[cfg(target_arch = "wasm32")]
-pub fn current_time() -> Time {
-    let current_time = ic_cdk::api::time();
-    Time::from_nanos_since_unix_epoch(current_time)
-}
-
-#[cfg(not(any(target_arch = "wasm32")))]
-pub fn current_time() -> Time {
-    system_current_time()
 }
 
 impl<S: RegistryDataStableMemory> CanisterRegistryStore<S> {
