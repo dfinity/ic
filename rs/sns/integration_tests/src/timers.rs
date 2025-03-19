@@ -4,7 +4,7 @@ use ic_nervous_system_proto::pb::v1::{
     GetTimersRequest, GetTimersResponse, ResetTimersRequest, ResetTimersResponse, Timers,
 };
 use ic_nns_test_utils::sns_wasm::{build_governance_sns_wasm, build_root_sns_wasm};
-use ic_sns_governance::{init::GovernanceCanisterInitPayloadBuilder, pb::v1::Governance};
+use ic_sns_governance_api::pb::v1::{governance::Mode, Governance, NervousSystemParameters};
 use ic_sns_root::pb::v1::SnsRootCanister;
 use ic_sns_swap::pb::v1::{
     GetStateRequest, GetStateResponse, Init, Lifecycle, NeuronBasketConstructionParameters,
@@ -56,12 +56,14 @@ fn swap_init(now: SystemTime) -> Init {
 }
 
 fn governance_init() -> Governance {
-    GovernanceCanisterInitPayloadBuilder::new()
-        .with_root_canister_id(PrincipalId::new_anonymous())
-        .with_ledger_canister_id(PrincipalId::new_anonymous())
-        .with_swap_canister_id(PrincipalId::new_anonymous())
-        .with_ledger_canister_id(PrincipalId::new_anonymous())
-        .build()
+    Governance {
+        parameters: Some(NervousSystemParameters::default()),
+        mode: Mode::PreInitializationSwap as i32,
+        root_canister_id: Some(PrincipalId::new_anonymous()),
+        swap_canister_id: Some(PrincipalId::new_anonymous()),
+        ledger_canister_id: Some(PrincipalId::new_anonymous()),
+        ..Default::default()
+    }
 }
 
 fn root_init() -> SnsRootCanister {

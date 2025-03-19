@@ -1,20 +1,25 @@
 use candid::{Encode, Nat, Principal};
+use futures_util::future::FutureExt;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_ledger_core::Tokens;
+use ic_nervous_system_agent::{
+    sns::governance::{GovernanceCanister, SubmittedProposal},
+    state_machine_impl::StateMachineAgent,
+};
 use ic_nervous_system_common::ledger::compute_neuron_staking_subaccount;
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
     sns_wasm::{add_wasm_via_proposal, build_ledger_sns_wasm},
     state_test_helpers::{
         icrc1_fee, icrc1_token_logo, icrc1_token_name, icrc1_token_symbol, icrc1_transfer, query,
-        setup_nns_canisters, sns_claim_staked_neuron, sns_make_proposal,
-        sns_wait_for_proposal_execution, update,
+        setup_nns_canisters, sns_claim_staked_neuron, sns_wait_for_proposal_execution, update,
     },
 };
-use ic_sns_governance::pb::v1::{
+use ic_sns_governance_api::pb::v1::{
     proposal::Action, ManageLedgerParameters, NervousSystemParameters, NeuronId,
     NeuronPermissionList, NeuronPermissionType, Proposal,
 };
+use ic_sns_governance_api_helpers::default_nervous_system_parameters;
 use ic_sns_test_utils::{
     itest_helpers::SnsTestsInitPayloadBuilder,
     state_test_helpers::{
@@ -24,6 +29,7 @@ use ic_sns_test_utils::{
 use ic_state_machine_tests::StateMachine;
 use icrc_ledger_types::icrc1::{account::Account, transfer::TransferArg};
 use num_traits::cast::ToPrimitive;
+use strum::IntoEnumIterator;
 
 const DEFAULT_LEDGER_TRANSFER_FEE: u64 = 10_000;
 const DEFAULT_NEURON_STAKE: u64 = 500500000000;
@@ -47,26 +53,34 @@ fn test_manage_ledger_parameters_change_transfer_fee() {
     // change ledger transfer_fee with the ManageLedgerParameters proposal
     let new_fee = 34;
 
-    let change_ledger_transfer_fee_proposal_id = sns_make_proposal(
-        &state_machine,
-        sns_canisters.governance_canister_id,
-        user,
-        neuron.clone(),
-        Proposal {
-            title: "Change ledger transfer fee".to_string(),
-            action: Some(Action::ManageLedgerParameters(ManageLedgerParameters {
-                transfer_fee: Some(new_fee),
-                ..ManageLedgerParameters::default()
-            })),
-            ..Default::default()
-        },
-    )
-    .unwrap();
+    let state_machine_agent = StateMachineAgent::new(&state_machine, user);
+    let sns_governance = GovernanceCanister {
+        canister_id: sns_canisters.governance_canister_id.get(),
+    };
+    let response = sns_governance
+        .submit_proposal(
+            &state_machine_agent,
+            neuron.clone(),
+            Proposal {
+                title: "Change ledger transfer fee".to_string(),
+                action: Some(Action::ManageLedgerParameters(ManageLedgerParameters {
+                    transfer_fee: Some(new_fee),
+                    ..ManageLedgerParameters::default()
+                })),
+                ..Default::default()
+            },
+        )
+        .now_or_never()
+        .unwrap()
+        .unwrap();
+
+    let change_ledger_transfer_fee_proposal_id =
+        SubmittedProposal::try_from(response).unwrap().proposal_id;
 
     sns_wait_for_proposal_execution(
         &state_machine,
         sns_canisters.governance_canister_id,
-        change_ledger_transfer_fee_proposal_id,
+        change_ledger_transfer_fee_proposal_id.into(),
     );
 
     wait_for_ledger_canister_to_start_after_an_upgrade(
@@ -161,28 +175,35 @@ fn test_manage_ledger_parameters_change_name_and_symbol_and_logo() {
     let new_name = "MySns".to_string();
     let new_symbol = "MYS".to_string();
 
-    let change_ledger_info_proposal_id = sns_make_proposal(
-        &state_machine,
-        sns_canisters.governance_canister_id,
-        user,
-        neuron.clone(),
-        Proposal {
-            title: "Change ledger transfer fee".to_string(),
-            action: Some(Action::ManageLedgerParameters(ManageLedgerParameters {
-                transfer_fee: None,
-                token_name: Some(new_name.clone()),
-                token_symbol: Some(new_symbol.clone()),
-                token_logo: Some(new_logo.clone()),
-            })),
-            ..Default::default()
-        },
-    )
-    .unwrap();
+    let state_machine_agent = StateMachineAgent::new(&state_machine, user);
+    let sns_governance = GovernanceCanister {
+        canister_id: sns_canisters.governance_canister_id.get(),
+    };
+    let response = sns_governance
+        .submit_proposal(
+            &state_machine,
+            neuron.clone(),
+            Proposal {
+                title: "Change ledger transfer fee".to_string(),
+                action: Some(Action::ManageLedgerParameters(ManageLedgerParameters {
+                    transfer_fee: None,
+                    token_name: Some(new_name.clone()),
+                    token_symbol: Some(new_symbol.clone()),
+                    token_logo: Some(new_logo.clone()),
+                })),
+                ..Default::default()
+            },
+        )
+        .now_or_never()
+        .unwrap()
+        .unwrap();
+
+    let change_ledger_info_proposal_id = SubmittedProposal::try_from(response).unwrap().proposal_id;
 
     sns_wait_for_proposal_execution(
         &state_machine,
         sns_canisters.governance_canister_id,
-        change_ledger_info_proposal_id,
+        change_ledger_info_proposal_id.into(),
     );
 
     wait_for_ledger_canister_to_start_after_an_upgrade(
@@ -236,14 +257,16 @@ fn set_up_sns_for_mlp(
 
     let system_params = NervousSystemParameters {
         neuron_claimer_permissions: Some(NeuronPermissionList {
-            permissions: NeuronPermissionType::all(),
+            permissions: NeuronPermissionType::iter()
+                .map(|permission| permission as i32)
+                .collect(),
         }),
-        ..NervousSystemParameters::with_default_values()
+        ..default_nervous_system_parameters()
     };
 
     let sns_init_payload = SnsTestsInitPayloadBuilder::new()
         .with_ledger_account(user_account, Tokens::new(10001, 0).unwrap())
-        .with_nervous_system_parameters(system_params)
+        .with_nervous_system_parameters(system_params.into())
         .with_ledger_transfer_fee(DEFAULT_LEDGER_TRANSFER_FEE)
         .build();
 
@@ -279,5 +302,5 @@ fn set_up_sns_for_mlp(
         Some(100_000_000), // dissolve delay
     );
 
-    (sns_canisters, neuron)
+    (sns_canisters, neuron.into())
 }

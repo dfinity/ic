@@ -6,13 +6,8 @@ use ic_crypto_sha2::Sha256;
 use ic_ledger_core::{tokens::TOKEN_SUBDIVIDABLE_BY, Tokens};
 use ic_nervous_system_common::DEFAULT_TRANSFER_FEE;
 use ic_nervous_system_common_test_keys::TEST_USER1_KEYPAIR;
-use ic_sns_governance::pb::v1::manage_neuron_response::Command as CommandResponse;
-use icrc_ledger_types::icrc1::{
-    account::Account,
-    transfer::{Memo, TransferArg},
-};
-
-use ic_sns_governance::pb::v1::{
+use ic_sns_governance_api::pb::v1::manage_neuron_response::Command as CommandResponse;
+use ic_sns_governance_api::pb::v1::{
     manage_neuron::{
         claim_or_refresh::{By, MemoAndController},
         ClaimOrRefresh, Command, Disburse,
@@ -20,10 +15,18 @@ use ic_sns_governance::pb::v1::{
     Account as AccountProto, ManageNeuron, ManageNeuronResponse, NervousSystemParameters,
     NeuronPermissionList, NeuronPermissionType,
 };
+use ic_sns_governance_api_helpers::{
+    default_nervous_system_parameters, neuron_id_subaccount_or_err,
+};
 use ic_sns_test_utils::{
     icrc1,
     itest_helpers::{local_test_on_sns_subnet, SnsCanisters, SnsTestsInitPayloadBuilder},
 };
+use icrc_ledger_types::icrc1::{
+    account::Account,
+    transfer::{Memo, TransferArg},
+};
+use strum::IntoEnumIterator;
 
 // This tests the whole neuron lifecycle in integration with the ledger. Namely
 // tests that the neuron can be staked from a ledger account. That the neuron
@@ -38,14 +41,16 @@ fn test_stake_and_disburse_neuron_with_notification() {
 
             let system_params = NervousSystemParameters {
                 neuron_claimer_permissions: Some(NeuronPermissionList {
-                    permissions: NeuronPermissionType::all(),
+                    permissions: NeuronPermissionType::iter()
+                        .map(|permission| permission as i32)
+                        .collect(),
                 }),
-                ..NervousSystemParameters::with_default_values()
+                ..default_nervous_system_parameters()
             };
 
             let sns_init_payload = SnsTestsInitPayloadBuilder::new()
                 .with_ledger_account(user.get_principal_id().0.into(), alloc)
-                .with_nervous_system_parameters(system_params)
+                .with_nervous_system_parameters(system_params.into())
                 .build();
 
             let sns_canisters = SnsCanisters::set_up(&runtime, sns_init_payload).await;
@@ -137,9 +142,8 @@ fn test_stake_and_disburse_neuron_with_notification() {
                 alloc
             );
 
-            let subaccount = neuron_id
-                .subaccount()
-                .expect("Error creating the subaccount");
+            let subaccount =
+                neuron_id_subaccount_or_err(&neuron_id).expect("Error creating the subaccount");
 
             // Disburse the neuron.
             let result: ManageNeuronResponse = sns_canisters
@@ -161,7 +165,8 @@ fn test_stake_and_disburse_neuron_with_notification() {
                 )
                 .await
                 .expect("Error calling the manage_neuron api.");
-            result.expect("Error disbursing the neuron.");
+
+            result.command.expect("Error disbursing the neuron.");
 
             // Check the balance again.
             //
