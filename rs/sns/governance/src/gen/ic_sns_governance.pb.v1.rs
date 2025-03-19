@@ -120,8 +120,8 @@ pub struct Neuron {
     #[prost(btree_map = "uint64, message", tag = "11")]
     pub followees: ::prost::alloc::collections::BTreeMap<u64, neuron::Followees>,
     /// The neuron's followees, specified as a map of proposal topics IDs to followees neuron IDs.
-    #[prost(btree_map = "uint64, message", tag = "19")]
-    pub topic_followees: ::prost::alloc::collections::BTreeMap<u64, neuron::Followees>,
+    #[prost(message, optional, tag = "19")]
+    pub topic_followees: ::core::option::Option<neuron::TopicFollowees>,
     /// The accumulated unstaked maturity of the neuron, measured in "e8s equivalent", i.e., in equivalent of
     /// 10E-8 of a governance token.
     ///
@@ -203,6 +203,19 @@ pub mod neuron {
     pub struct Followees {
         #[prost(message, repeated, tag = "1")]
         pub followees: ::prost::alloc::vec::Vec<super::NeuronId>,
+    }
+    /// A collection of a neuron's followees (per topic).
+    #[derive(
+        candid::CandidType,
+        candid::Deserialize,
+        comparable::Comparable,
+        Clone,
+        PartialEq,
+        ::prost::Message,
+    )]
+    pub struct TopicFollowees {
+        #[prost(btree_map = "uint64, message", tag = "1")]
+        pub topic_id_to_followees: ::prost::alloc::collections::BTreeMap<u64, Followees>,
     }
     /// The neuron's dissolve state, specifying whether the neuron is dissolving,
     /// non-dissolving, or dissolved.

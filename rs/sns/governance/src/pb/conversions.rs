@@ -79,14 +79,21 @@ impl From<pb_api::DisburseMaturityInProgress> for pb::DisburseMaturityInProgress
 
 impl From<pb::Neuron> for pb_api::Neuron {
     fn from(item: pb::Neuron) -> Self {
-        let topic_followees = Some(
-            item.topic_followees
-                .into_iter()
-                .map(|(topic, followees)| {
-                    let followees = pb_api::neuron::Followees::from(followees);
-                    (topic, followees)
-                })
-                .collect(),
+        let topic_followees = item.topic_followees.map(
+            |pb::neuron::TopicFollowees {
+                 topic_id_to_followees,
+             }| {
+                let topic_id_to_followees = topic_id_to_followees
+                    .into_iter()
+                    .map(|(topic, followees)| {
+                        let followees = pb_api::neuron::Followees::from(followees);
+                        (topic, followees)
+                    })
+                    .collect();
+                pb_api::neuron::TopicFollowees {
+                    topic_id_to_followees,
+                }
+            },
         );
 
         Self {
@@ -119,15 +126,22 @@ impl From<pb::Neuron> for pb_api::Neuron {
 }
 impl From<pb_api::Neuron> for pb::Neuron {
     fn from(item: pb_api::Neuron) -> Self {
-        let topic_followees = item
-            .topic_followees
-            .unwrap_or_default()
-            .into_iter()
-            .map(|(topic, followees)| {
-                let followees = pb::neuron::Followees::from(followees);
-                (topic, followees)
-            })
-            .collect();
+        let topic_followees = item.topic_followees.map(
+            |pb_api::neuron::TopicFollowees {
+                 topic_id_to_followees,
+             }| {
+                let topic_id_to_followees = topic_id_to_followees
+                    .into_iter()
+                    .map(|(topic, followees)| {
+                        let followees = pb::neuron::Followees::from(followees);
+                        (topic, followees)
+                    })
+                    .collect();
+                pb::neuron::TopicFollowees {
+                    topic_id_to_followees,
+                }
+            },
+        );
 
         Self {
             id: item.id.map(|x| x.into()),

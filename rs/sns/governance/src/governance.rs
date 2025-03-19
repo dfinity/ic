@@ -33,7 +33,7 @@ use crate::{
                 DisburseMaturityResponse, MergeMaturityResponse, StakeMaturityResponse,
             },
             nervous_system_function::FunctionType,
-            neuron::{DissolveState, Followees},
+            neuron::{DissolveState, Followees, TopicFollowees},
             proposal::Action,
             proposal_data::ActionAuxiliary as ActionAuxiliaryPb,
             transfer_sns_treasury_funds::TransferFrom,
@@ -4112,7 +4112,9 @@ impl Governance {
             created_timestamp_seconds: now,
             aging_since_timestamp_seconds: now,
             followees: self.default_followees_or_panic().followees,
-            topic_followees: btreemap! {},
+            topic_followees: Some(TopicFollowees {
+                topic_id_to_followees: btreemap! {},
+            }),
             maturity_e8s_equivalent: 0,
             dissolve_state: Some(DissolveState::DissolveDelaySeconds(0)),
             // A neuron created through the `claim_or_refresh` ManageNeuron command will
@@ -4279,7 +4281,7 @@ impl Governance {
                 created_timestamp_seconds: now,
                 aging_since_timestamp_seconds: now,
                 followees: neuron_recipe.construct_followees(),
-                topic_followees: neuron_recipe.construct_topic_followees(),
+                topic_followees: Some(neuron_recipe.construct_topic_followees()),
                 maturity_e8s_equivalent: 0,
                 dissolve_state: Some(DissolveState::DissolveDelaySeconds(
                     neuron_recipe.get_dissolve_delay_seconds_or_panic(),

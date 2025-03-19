@@ -93,7 +93,7 @@ pub struct Neuron {
     /// not support enum keys in maps.
     pub followees: BTreeMap<u64, neuron::Followees>,
     /// The neuron's followees, specified as a map of proposal topics IDs to followees neuron IDs.
-    pub topic_followees: Option<BTreeMap<u64, neuron::Followees>>,
+    pub topic_followees: Option<neuron::TopicFollowees>,
     /// The accumulated unstaked maturity of the neuron, measured in "e8s equivalent", i.e., in equivalent of
     /// 10E-8 of a governance token.
     ///
@@ -155,11 +155,20 @@ pub struct Neuron {
 }
 /// Nested message and enum types in `Neuron`.
 pub mod neuron {
+    use std::collections::BTreeMap;
+
     /// A list of a neuron's followees for a specific function.
     #[derive(Default, candid::CandidType, candid::Deserialize, Debug, Clone, PartialEq)]
     pub struct Followees {
         pub followees: Vec<super::NeuronId>,
     }
+
+    // A collection of a neuron's followees (per topic).
+    #[derive(candid::CandidType, candid::Deserialize, Clone, Debug, PartialEq)]
+    pub struct TopicFollowees {
+        pub topic_id_to_followees: BTreeMap<u64, Followees>,
+    }
+
     /// The neuron's dissolve state, specifying whether the neuron is dissolving,
     /// non-dissolving, or dissolved.
     ///

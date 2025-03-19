@@ -164,13 +164,18 @@ message Neuron {
     repeated NeuronId followees = 1;
   }
 
+  // A collection of a neuron's followees (per topic).
+  message TopicFollowees {
+    map<uint64, Followees> topic_id_to_followees = 1;
+  }
+
   // The neuron's legacy followees (per proposal type), specified as a map of proposal functions IDs
   // to followees neuron IDs. The map's keys are represented by integers as Protobuf does not
   // support enum keys in maps.
   map<uint64, Followees> followees = 11;
 
   // The neuron's followees, specified as a map of proposal topics IDs to followees neuron IDs.
-  map<uint64, Followees> topic_followees = 19;
+  optional TopicFollowees topic_followees = 19;
 
   // The accumulated unstaked maturity of the neuron, measured in "e8s equivalent", i.e., in equivalent of
   // 10E-8 of a governance token.
