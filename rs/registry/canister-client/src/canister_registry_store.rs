@@ -18,10 +18,11 @@ use std::sync::atomic::AtomicU64;
 use std::sync::atomic::Ordering as AtomicOrdering;
 
 pub struct CanisterRegistryStore<S: RegistryDataStableMemory> {
+    // The type of the accessor for StableBTreeMap that holds the registry data.
     _stable_memory: PhantomData<S>,
-    // TODO DO NOT MERGE make this cache work (where at)
+    // cache of latest_version
     latest_version: AtomicU64,
-
+    // Registry client to interact with the canister
     registry: Box<dyn Registry>,
 }
 
