@@ -3,6 +3,9 @@ use crate::{
     canister_state::system_state::wasm_chunk_store::WasmChunkStore,
     CanisterState, NumWasmPages, PageMap,
 };
+use ic_management_canister_types_private::{
+    GlobalTimer, OnLowWasmMemoryHookStatus, SnapshotSource,
+};
 use ic_sys::PAGE_SIZE;
 use ic_types::{CanisterId, NumBytes, SnapshotId, Time};
 use ic_validate_eq::ValidateEq;
@@ -297,6 +300,10 @@ pub struct ExecutionStateSnapshot {
     /// Snapshot of wasm memory.
     #[validate_eq(CompareWithValidateEq)]
     pub wasm_memory: PageMemory,
+    /// Status of global timer
+    pub global_timer: GlobalTimer,
+    /// Whether the hook is inactive, ready or executed.
+    pub on_low_wasm_memory_hook_status: OnLowWasmMemoryHookStatus,
 }
 
 /// Contains all information related to a canister snapshot.
@@ -304,6 +311,8 @@ pub struct ExecutionStateSnapshot {
 pub struct CanisterSnapshot {
     /// Identifies the canister to which this snapshot belongs.
     canister_id: CanisterId,
+    /// Whether this snapshot was created from the canister or uploaded manually.
+    source: SnapshotSource,
     /// The timestamp indicating the moment the snapshot was captured.
     taken_at_timestamp: Time,
     /// The canister version at the time of taking the snapshot.
@@ -322,6 +331,7 @@ pub struct CanisterSnapshot {
 impl CanisterSnapshot {
     pub fn new(
         canister_id: CanisterId,
+        source: SnapshotSource,
         taken_at_timestamp: Time,
         canister_version: u64,
         certified_data: Vec<u8>,
@@ -331,6 +341,7 @@ impl CanisterSnapshot {
     ) -> CanisterSnapshot {
         Self {
             canister_id,
+            source,
             taken_at_timestamp,
             canister_version,
             certified_data,
@@ -350,15 +361,20 @@ impl CanisterSnapshot {
             .execution_state
             .as_ref()
             .ok_or(CanisterSnapshotError::EmptyExecutionState(canister_id))?;
+        let global_timer = canister.system_state.global_timer;
+        let hook_status = canister.system_state.task_queue.peek_hook_status();
         let execution_snapshot = ExecutionStateSnapshot {
             wasm_binary: execution_state.wasm_binary.binary.clone(),
             exported_globals: execution_state.exported_globals.clone(),
             stable_memory: PageMemory::from(&execution_state.stable_memory),
             wasm_memory: PageMemory::from(&execution_state.wasm_memory),
+            global_timer: global_timer.into(),
+            on_low_wasm_memory_hook_status: hook_status,
         };
 
         Ok(CanisterSnapshot {
             canister_id,
+            source: SnapshotSource::TakenFromCanister,
             taken_at_timestamp,
             canister_version: canister.system_state.canister_version,
             certified_data: canister.system_state.certified_data.clone(),
@@ -370,6 +386,10 @@ impl CanisterSnapshot {
 
     pub fn canister_id(&self) -> CanisterId {
         self.canister_id
+    }
+
+    pub fn source(&self) -> SnapshotSource {
+        self.source
     }
 
     pub fn canister_version(&self) -> u64 {
@@ -478,9 +498,12 @@ mod tests {
                 page_map: PageMap::new_for_testing(),
                 size: NumWasmPages::new(10),
             },
+            global_timer: GlobalTimer::Inactive,
+            on_low_wasm_memory_hook_status: OnLowWasmMemoryHookStatus::ConditionNotSatisfied,
         };
         let snapshot = CanisterSnapshot::new(
             canister_id,
+            SnapshotSource::TakenFromCanister,
             UNIX_EPOCH,
             0,
             vec![],

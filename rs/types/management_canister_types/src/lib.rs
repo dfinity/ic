@@ -3660,10 +3660,34 @@ impl ReadCanisterSnapshotMetadataArgs {
 
 impl Payload<'_> for ReadCanisterSnapshotMetadataArgs {}
 
-#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
+#[derive(Clone, Copy, Eq, PartialEq, Debug, CandidType, Deserialize)]
 pub enum SnapshotSource {
     TakenFromCanister,
     UploadedManually,
+}
+
+impl From<SnapshotSource> for i32 {
+    fn from(value: SnapshotSource) -> Self {
+        match value {
+            SnapshotSource::TakenFromCanister => 1,
+            SnapshotSource::UploadedManually => 2,
+        }
+    }
+}
+
+impl TryFrom<i32> for SnapshotSource {
+    type Error = ProxyDecodeError;
+
+    fn try_from(val: i32) -> Result<Self, Self::Error> {
+        match val {
+            1 => Ok(SnapshotSource::TakenFromCanister),
+            2 => Ok(SnapshotSource::UploadedManually),
+            _ => Err(ProxyDecodeError::ValueOutOfRange {
+                typ: "SnapshotSource",
+                err: format!("Unexpected value {}", val),
+            }),
+        }
+    }
 }
 
 /// Struct used for encoding/decoding
@@ -3715,6 +3739,7 @@ pub struct ReadCanisterSnapshotMetadataResponse {
     pub on_low_wasm_memory_hook_status: OnLowWasmMemoryHookStatus,
 }
 
+// TODO: consolidate with rs/types/types/src/lib.rs
 /// An inner type of [`ReadCanisterSnapshotMetadataResponse`].
 #[derive(Copy, Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
 pub enum GlobalTimer {
@@ -3722,6 +3747,16 @@ pub enum GlobalTimer {
     Active(u64),
 }
 
+impl GlobalTimer {
+    pub fn to_nanos_since_epoch(&self) -> u64 {
+        match self {
+            GlobalTimer::Inactive => 0,
+            GlobalTimer::Active(time) => *time,
+        }
+    }
+}
+
+// TODO: consolidate with rs/replicated_state/src/canister_state/execution_state.rs
 /// The possible values of a global variable.
 /// An inner type of [`ReadCanisterSnapshotMetadataResponse`].
 #[derive(Copy, Clone, PartialEq, Debug, EnumIter, CandidType, Deserialize, Serialize)]
@@ -3740,6 +3775,16 @@ pub enum OnLowWasmMemoryHookStatus {
     ConditionNotSatisfied,
     Ready,
     Executed,
+}
+
+impl From<OnLowWasmMemoryHookStatus> for i32 {
+    fn from(val: OnLowWasmMemoryHookStatus) -> i32 {
+        match val {
+            OnLowWasmMemoryHookStatus::ConditionNotSatisfied => 1,
+            OnLowWasmMemoryHookStatus::Ready => 2,
+            OnLowWasmMemoryHookStatus::Executed => 3,
+        }
+    }
 }
 
 impl OnLowWasmMemoryHookStatus {
