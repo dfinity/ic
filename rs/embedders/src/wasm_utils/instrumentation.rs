@@ -1486,20 +1486,23 @@ fn inject_metering(
     metering_type: MeteringType,
     mem_type: WasmMemoryType,
 ) {
-    let points = match metering_type {
+    let initial_points = match metering_type {
         MeteringType::None => Vec::new(),
         MeteringType::New => injections(code, mem_type),
     };
-    let points = points.iter().filter(|point| match point.cost_detail {
-        InjectionPointCostDetail::StaticCost {
-            scope: Scope::ReentrantBlockStart,
-            cost: _,
-        } => true,
-        InjectionPointCostDetail::StaticCost { scope: _, cost } => cost > 0,
-        InjectionPointCostDetail::DynamicCost { .. } => true,
-    });
+    let expected_size = code.len() + initial_points.len();
+    let points = initial_points
+        .iter()
+        .filter(|point| match point.cost_detail {
+            InjectionPointCostDetail::StaticCost {
+                scope: Scope::ReentrantBlockStart,
+                cost: _,
+            } => true,
+            InjectionPointCostDetail::StaticCost { scope: _, cost } => cost > 0,
+            InjectionPointCostDetail::DynamicCost { .. } => true,
+        });
     let orig_elems = code;
-    let mut elems: Vec<Operator> = Vec::new();
+    let mut elems: Vec<Operator> = Vec::with_capacity(expected_size);
     let mut last_injection_position = 0;
 
     use Operator::*;
