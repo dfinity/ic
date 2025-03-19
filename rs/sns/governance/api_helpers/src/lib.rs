@@ -11,7 +11,7 @@ use maplit::btreemap;
 /// The number of e8s per governance token;
 pub const E8S_PER_TOKEN: u64 = 100_000_000;
 
-pub const DEFAULT_NEURON_CLAIMER_PERMISSIONS: &'static [NeuronPermissionType] = &[
+pub const DEFAULT_NEURON_CLAIMER_PERMISSIONS: &[NeuronPermissionType] = &[
     NeuronPermissionType::ManagePrincipals,
     NeuronPermissionType::Vote,
     NeuronPermissionType::SubmitProposal,
