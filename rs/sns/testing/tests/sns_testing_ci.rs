@@ -77,13 +77,7 @@ async fn test_sns_testing_basic_scenario() {
         format!("{}, {}!", greeting, test_call_arg.clone()),
     );
     // Creating an SNS
-    let sns = create_sns(
-        &pocket_ic,
-        dev_participant_id,
-        treasury_principal_id,
-        vec![test_canister_id],
-    )
-    .await;
+    let sns = create_sns(&pocket_ic, dev_participant_id, vec![test_canister_id]).await;
     let new_greeting = "Hi".to_string();
     // Upgrading the test canister via SNS voting
     upgrade_sns_controlled_test_canister(

@@ -1,16 +1,14 @@
-use anyhow::{anyhow, Context, Result};
-use dfx_core::config::model::network_descriptor::NetworkDescriptor;
+use anyhow::{anyhow, Result};
 use dfx_core::identity::identity_manager::InitializeIdentity;
 use dfx_core::identity::IdentityManager;
 use futures::future::join_all;
 use ic_agent::Identity;
-use ic_agent::{
-    agent::route_provider::RoundRobinRouteProvider, identity::Secp256k1Identity, Agent,
-};
+use ic_agent::{identity::Secp256k1Identity, Agent};
 use ic_base_types::CanisterId;
 use ic_base_types::PrincipalId;
 use ic_nervous_system_agent::nns::governance::list_neurons;
 use ic_nervous_system_agent::nns::sns_wasm::{get_latest_sns_version_pretty, get_sns_subnet_ids};
+use ic_nervous_system_agent::pocketic_impl::PocketIcAgent;
 use ic_nervous_system_agent::CallCanisters;
 use ic_nervous_system_common_test_keys::TEST_NEURON_1_ID;
 use ic_nns_common::pb::v1::NeuronId;
@@ -22,7 +20,6 @@ use ic_nns_constants::{
 use ic_nns_governance_api::pb::v1::{ListNeurons, Neuron};
 use k256::SecretKey;
 use lazy_static::lazy_static;
-use reqwest::Client;
 use thiserror::Error;
 
 pub const ALL_SNS_TESTING_CANISTER_IDS: [&CanisterId; 9] = [
@@ -54,41 +51,44 @@ lazy_static! {
     };
 }
 
-pub fn swap_participant_secret_keys(number_of_participants: usize) -> Vec<SecretKey> {
+/// Trait that allows to build ephemeral agents with a given secret key based on the provided agent.
+///
+/// "Ephemeral" agents are used for testing purposes and do not necessarily have a DFX identity
+/// associated with them.
+pub trait BuildEphemeralAgent {
+    fn build_ephemeral_agent(&self, secret_key: SecretKey) -> Self;
+}
+
+impl<'a> BuildEphemeralAgent for PocketIcAgent<'a> {
+    fn build_ephemeral_agent(&self, secret_key: SecretKey) -> PocketIcAgent<'a> {
+        let principal = Secp256k1Identity::from_private_key(secret_key)
+            .sender()
+            .unwrap();
+        PocketIcAgent::new(self.pocket_ic, principal)
+    }
+}
+
+impl BuildEphemeralAgent for Agent {
+    fn build_ephemeral_agent(&self, secret_key: SecretKey) -> Agent {
+        let identity = Secp256k1Identity::from_private_key(secret_key);
+        let mut agent = self.clone();
+        agent.set_identity(identity);
+        agent
+    }
+}
+
+pub fn swap_participant_agents<C: BuildEphemeralAgent>(
+    agent: &C,
+    number_of_participants: usize,
+) -> Vec<C> {
     (0..number_of_participants)
         .map(|i| {
             let mut slice_vec = vec![0; 16];
             slice_vec.extend_from_slice(&(100 + i).to_ne_bytes());
-            SecretKey::from_slice(&slice_vec).unwrap()
+            let secret_key = SecretKey::from_slice(&slice_vec).unwrap();
+            agent.build_ephemeral_agent(secret_key)
         })
         .collect()
-}
-
-/// Create a new agent with the given secret key and network descriptor.
-///
-/// "Ephemeral" agents are used for testing purposes and do not necessarily have a DFX identity
-/// associated with them.
-pub async fn build_ephemeral_agent(
-    secret_key: SecretKey,
-    network_descriptor: &NetworkDescriptor,
-) -> Result<Agent> {
-    let identity = Secp256k1Identity::from_private_key(secret_key);
-    let route_provider = RoundRobinRouteProvider::new(network_descriptor.providers.clone())?;
-    let client = Client::builder().use_rustls_tls().build()?;
-
-    let agent = Agent::builder()
-        .with_http_client(client)
-        .with_route_provider(route_provider)
-        .with_identity(identity)
-        .build()?;
-    if !network_descriptor.is_ic {
-        let name = network_descriptor.name.clone();
-        agent
-            .fetch_root_key()
-            .await
-            .context(format!("Failed to fetch root key from network `{name}`."))?;
-    }
-    Ok(agent)
 }
 
 pub async fn get_nns_neuron_hotkeys<C: CallCanisters>(

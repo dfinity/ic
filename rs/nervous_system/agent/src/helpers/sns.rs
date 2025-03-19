@@ -1,3 +1,4 @@
+use ic_base_types::PrincipalId;
 use std::time::Duration;
 use thiserror::Error;
 
@@ -104,21 +105,36 @@ pub async fn wait_for_proposal_execution<C: CallCanisters + ProgressNetwork>(
     ))
 }
 
-pub async fn get_caller_neuron<C: CallCanisters>(
+pub async fn get_principal_neurons<C: CallCanisters>(
     agent: &C,
     governance_canister: GovernanceCanister,
-) -> Result<NeuronId, C::Error> {
-    governance_canister
+    principal: PrincipalId,
+) -> Result<Vec<NeuronId>, C::Error> {
+    let response = governance_canister
         .list_neurons(
             agent,
             ListNeurons {
-                limit: 1,
-                of_principal: Some(agent.caller().unwrap().into()),
+                // should be enough for now, we may consider pagination later
+                limit: 100,
+                of_principal: Some(principal),
                 start_page_at: None,
             },
         )
+        .await?;
+    Ok(response
+        .neurons
+        .into_iter()
+        .map(|n| n.id.expect("NeuronId must be set."))
+        .collect())
+}
+
+pub async fn get_caller_neuron<C: CallCanisters>(
+    agent: &C,
+    governance_canister: GovernanceCanister,
+) -> Result<Option<NeuronId>, C::Error> {
+    get_principal_neurons(agent, governance_canister, agent.caller().unwrap().into())
         .await
-        .map(|n| n.neurons[0].id.clone().expect("NeuronId must be set."))
+        .map(|v| v.first().cloned())
 }
 
 pub async fn await_swap_lifecycle<C: CallCanisters + ProgressNetwork>(
@@ -152,6 +168,7 @@ pub async fn participate_in_swap<C: CallCanisters>(
     agent: &C,
     sns_swap_canister: SwapCanister,
     amount_icp_excluding_fees: Tokens,
+    confirmation_text: Option<String>,
 ) -> Result<(), String> {
     let direct_participant = agent.caller().unwrap().into();
     let direct_participant_swap_subaccount = Some(principal_to_subaccount(&direct_participant));
@@ -177,7 +194,7 @@ pub async fn participate_in_swap<C: CallCanisters>(
     .unwrap();
 
     let response = sns_swap_canister
-        .refresh_buyer_tokens(agent, direct_participant, None)
+        .refresh_buyer_tokens(agent, direct_participant, confirmation_text)
         .await
         .map_err(|err| err.to_string())?;
 

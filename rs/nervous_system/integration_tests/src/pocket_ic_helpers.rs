@@ -2755,24 +2755,25 @@ pub mod sns {
         ) {
             let agent = PocketIcAgent::new(pocket_ic, direct_participant);
             let canister = SwapCanister::new(swap_canister_id);
-            sns_agent_helpers::participate_in_swap(&agent, canister, amount_icp_excluding_fees)
-                .await
-                .unwrap()
+            sns_agent_helpers::participate_in_swap(
+                &agent,
+                canister,
+                amount_icp_excluding_fees,
+                None,
+            )
+            .await
+            .unwrap()
         }
 
-        pub fn swap_direct_participations(swap_parameters: SwapParameters) -> Vec<Tokens> {
-            let SwapParameters {
-                minimum_participants,
-                maximum_direct_participation_icp,
-                ..
-            } = swap_parameters;
-            let icp_needed_to_immediately_close_e8s =
-                maximum_direct_participation_icp.unwrap().e8s.unwrap();
-            let minimum_participants_to_close = minimum_participants.unwrap();
+        pub fn swap_direct_participations(
+            minimum_participants: u64,
+            maximum_direct_participation_icp: Tokens,
+        ) -> Vec<Tokens> {
+            let icp_needed_to_immediately_close_e8s = maximum_direct_participation_icp.get_e8s();
             let per_participant_amount_e8s =
-                icp_needed_to_immediately_close_e8s / minimum_participants_to_close;
-            let remainder = icp_needed_to_immediately_close_e8s % minimum_participants_to_close;
-            (0..minimum_participants_to_close)
+                icp_needed_to_immediately_close_e8s / minimum_participants;
+            let remainder = icp_needed_to_immediately_close_e8s % minimum_participants;
+            (0..minimum_participants)
                 .map(|i| {
                     let amount = per_participant_amount_e8s + if i == 0 { remainder } else { 0 };
                     Tokens::from_e8s(amount)
@@ -2785,9 +2786,18 @@ pub mod sns {
             swap_canister_id: PrincipalId,
             swap_parameters: SwapParameters,
         ) {
-            for (i, amount) in swap_direct_participations(swap_parameters)
-                .iter()
-                .enumerate()
+            for (i, amount) in swap_direct_participations(
+                swap_parameters.minimum_participants.unwrap(),
+                Tokens::from_e8s(
+                    swap_parameters
+                        .maximum_direct_participation_icp
+                        .unwrap()
+                        .e8s
+                        .unwrap(),
+                ),
+            )
+            .iter()
+            .enumerate()
             {
                 let participant_id = PrincipalId::new_user_test_id(1000 + i as u64);
                 nns::ledger::mint_icp(

@@ -1,15 +1,17 @@
+use futures::future::join_all;
+
 use candid::{CandidType, Encode};
 use canister_test::Wasm;
 use ic_base_types::CanisterId;
 use ic_management_canister_types_private::CanisterInstallMode;
 use ic_nervous_system_agent::{
-    helpers::await_with_timeout,
-    helpers::nns::propose_to_deploy_sns_and_wait,
-    helpers::sns::{
-        await_swap_lifecycle, get_caller_neuron, participate_in_swap, propose_and_wait,
+    helpers::{
+        await_with_timeout,
+        nns::propose_to_deploy_sns_and_wait,
+        sns::{await_swap_lifecycle, get_caller_neuron, participate_in_swap, propose_and_wait},
     },
-    nns::ledger::transfer,
-    sns::{swap::SwapCanister, Sns},
+    nns::{ledger::transfer, sns_wasm::list_deployed_snses},
+    sns::{governance::GovernanceCanister, swap::SwapCanister, Sns},
     CallCanisters, ProgressNetwork,
 };
 use ic_nervous_system_clients::canister_status::CanisterStatusType;
@@ -22,16 +24,17 @@ use ic_nervous_system_integration_tests::{
 };
 use ic_nns_common::pb::v1::NeuronId;
 
-use ic_nns_governance_api::pb::v1::create_service_nervous_system::{
-    initial_token_distribution::developer_distribution::NeuronDistribution, SwapParameters,
-};
+use ic_nns_governance_api::pb::v1::create_service_nervous_system::initial_token_distribution::developer_distribution::NeuronDistribution;
 
 use ic_nns_test_utils::common::modify_wasm_bytes;
 use ic_sns_governance_api::pb::v1::{
-    manage_neuron::Follow, proposal::Action, Proposal, UpgradeSnsControlledCanister,
+    manage_neuron::Follow, proposal::Action, NeuronId as SnsNeuronId, Proposal,
+    UpgradeSnsControlledCanister,
 };
-use ic_sns_swap::pb::v1::Lifecycle;
-use icp_ledger::{AccountIdentifier, Memo, TransferArgs, DEFAULT_TRANSFER_FEE};
+use ic_sns_swap::pb::v1::{BuyerState, Lifecycle, TransferableAmount};
+use icp_ledger::{AccountIdentifier, Memo, Tokens, TransferArgs, DEFAULT_TRANSFER_FEE};
+
+use crate::utils::{swap_participant_agents, BuildEphemeralAgent, TREASURY_SECRET_KEY};
 
 // TODO @rvem: I don't like the fact that this struct definition is copy-pasted from 'canister/canister.rs'.
 // We should extract it into a separate crate and reuse in both canister and this crates.
@@ -55,12 +58,10 @@ pub const DEFAULT_SWAP_PARTICIPANTS_NUMBER: usize = 20;
 // 5) dapp_canister_ids - Canister IDs of the DApps that will be added to the SNS.
 //
 // Returns SNS canisters IDs.
-pub async fn create_sns<C: CallCanisters + ProgressNetwork>(
+pub async fn create_sns<C: CallCanisters + ProgressNetwork + BuildEphemeralAgent>(
     neuron_agent: &C,
     neuron_id: NeuronId,
     dev_participant_agent: &C,
-    swap_treasury_agent: &C,
-    swap_participants_agents: Vec<C>,
     dapp_canister_ids: Vec<CanisterId>,
 ) -> Sns {
     let mut create_service_nervous_system = CreateServiceNervousSystemBuilder::default()
@@ -94,7 +95,6 @@ pub async fn create_sns<C: CallCanisters + ProgressNetwork>(
         .swap_parameters
         .clone()
         .unwrap();
-    let mininum_participants = swap_parameters.minimum_participants.unwrap_or_default() as usize;
     assert_eq!(
         swap_parameters.start_time, None,
         "Expecting the swap start time to be None to start the swap immediately"
@@ -109,83 +109,151 @@ pub async fn create_sns<C: CallCanisters + ProgressNetwork>(
     )
     .await
     .unwrap();
-    println!("Proposal to create the SNS was adopted and executed");
-    println!("Waiting for the swap to be opened...");
-    let sns_swap = sns.swap;
-    await_swap_lifecycle(swap_treasury_agent, sns_swap, Lifecycle::Open, true)
-        .await
-        .expect("Expecting the swap to be open after creation");
-    complete_sns_swap(
-        swap_treasury_agent,
-        &swap_participants_agents,
-        swap_parameters,
-        sns_swap,
-    )
-    .await;
 
     let sns_governance = sns.governance;
 
     let dev_participant_neuron_id = get_caller_neuron(dev_participant_agent, sns_governance)
         .await
-        .unwrap();
+        .unwrap()
+        .expect("Expecting the identity to have a Neuron");
 
-    let sns_nervous_system_parameters = sns
-        .governance
-        .get_nervous_system_parameters(dev_participant_agent)
-        .await
-        .unwrap();
-
-    for swap_participant_agent in swap_participants_agents[0..mininum_participants].iter() {
-        let swap_participant_neuron_id = get_caller_neuron(swap_participant_agent, sns_governance)
-            .await
-            .expect("Failed to get the caller neuron");
-        let follow = Follow {
-            followees: vec![dev_participant_neuron_id.clone()],
-            // UpgradeSnsControlledCanister
-            function_id: 3,
-        };
-        sns_governance
-            .follow(
-                swap_participant_agent,
-                swap_participant_neuron_id.clone(),
-                follow,
-            )
-            .await
-            .expect("Failed to follow the dev neuron");
-
-        sns_governance
-            .increase_dissolve_delay(
-                swap_participant_agent,
-                swap_participant_neuron_id,
-                sns_nervous_system_parameters
-                    .neuron_minimum_dissolve_delay_to_vote_seconds
-                    .unwrap() as u32,
-            )
-            .await
-            .unwrap();
-    }
+    let sns_swap = sns.swap;
+    complete_sns_swap(
+        neuron_agent,
+        sns_swap,
+        sns_governance,
+        vec![dev_participant_neuron_id],
+    )
+    .await
+    .unwrap();
 
     sns
+}
+
+// Find all SNSes with the given name.
+pub async fn find_sns_by_name<C: CallCanisters>(agent: &C, sns_name: String) -> Vec<Sns> {
+    let deployed_snses = list_deployed_snses(agent)
+        .await
+        .expect("Failed to list deployed SNSes");
+    let deployed_snses_names = join_all(
+        deployed_snses
+            .iter()
+            .map(|sns| async { sns.governance.metadata(agent).await.map(|r| r.name) }),
+    )
+    .await;
+    deployed_snses_names
+        .iter()
+        .zip(deployed_snses.iter())
+        .filter_map(|(name, sns)| {
+            if name
+                .as_ref()
+                .map(|n| n == &Some(sns_name.clone()))
+                .unwrap_or_default()
+            {
+                Some(sns.clone())
+            } else {
+                None
+            }
+        })
+        .collect()
+}
+
+// helper to get the current participation of the given swap participant
+async fn get_current_participation<C: CallCanisters>(
+    agent: &C,
+    swap_canister: SwapCanister,
+) -> u64 {
+    let buyer_state = swap_canister
+        .get_buyer_state(agent, agent.caller().unwrap().into())
+        .await
+        .map(|r| r.buyer_state);
+    match buyer_state {
+        Ok(Some(BuyerState {
+            icp: Some(TransferableAmount { amount_e8s, .. }),
+            ..
+        })) => amount_e8s,
+        _ => 0u64,
+    }
 }
 
 // Completes the swap by transferring the required amount of ICP from the "treasury" account
 // and participating in the swap for each participant using agents provided as arguments:
 // 1) swap_treasury_agent - Agent for the identity that has sufficient amout of ICP tokens to close the swap.
 // 2) swap_participants_agents - Agents for the identities that will participate in the swap.
-// 3) swap_parameters - Swap parameters that define the swap.
-// 4) swap_canister - SNS Swap canister on which the swap will be completed.
-async fn complete_sns_swap<C: CallCanisters + ProgressNetwork>(
-    swap_treasury_agent: &C,
-    swap_participants_agents: &[C],
-    swap_parameters: SwapParameters,
+// 3) swap_canister - SNS Swap canister IDs.
+pub async fn complete_sns_swap<C: CallCanisters + ProgressNetwork + BuildEphemeralAgent>(
+    agent: &C,
     swap_canister: SwapCanister,
-) {
-    println!("Performing direct swap participations...");
-    let swap_participations = swap_direct_participations(swap_parameters);
-    for (swap_participant_amount, swap_participant_agent) in swap_participations
-        .iter()
-        .zip(swap_participants_agents.iter())
-    {
+    governance_canister: GovernanceCanister,
+    neurons_to_follow: Vec<SnsNeuronId>,
+) -> Result<(), String> {
+    let swap_treasury_agent = &agent.build_ephemeral_agent(TREASURY_SECRET_KEY.clone());
+
+    println!("Waiting for the swap to be open...");
+    await_swap_lifecycle(agent, swap_canister, Lifecycle::Open, true).await?;
+
+    let swap_init = swap_canister
+        .get_init(agent)
+        .await
+        .unwrap()
+        .init
+        .ok_or("Expecting the swap init to be set")?;
+    let minimum_participants = swap_init
+        .min_participants
+        .ok_or("Expecting the minimum number of participants to be set")?
+        as u64;
+    let maximum_direct_participation = Tokens::from_e8s(
+        swap_init
+            .max_direct_participation_icp_e8s
+            .ok_or("Expecting the maximum direct participation to be set")?,
+    );
+
+    let swap_derived_state = swap_canister
+        .get_derived_state(agent)
+        .await
+        .map_err(|e| format!("Failed to get swap derived state: {e}"))?;
+
+    let direct_participant_count = swap_derived_state.direct_participant_count.unwrap_or(0);
+    let direct_participation_icp =
+        Tokens::from_e8s(swap_derived_state.direct_participation_icp_e8s.unwrap_or(0));
+
+    // Do exactly one direct participation to close the swap since minimum_participants is already reached.
+    let remaining_direct_participation_count = if direct_participant_count >= minimum_participants {
+        1
+    } else {
+        minimum_participants.saturating_sub(direct_participant_count)
+    };
+
+    let remaining_direct_participation =
+        if direct_participation_icp.get_e8s() >= maximum_direct_participation.get_e8s() {
+            println!("Maximum direct participation reached, no more direct participation possible");
+            return Ok(());
+        } else {
+            Tokens::from_e8s(
+                maximum_direct_participation
+                    .get_e8s()
+                    .saturating_sub(direct_participation_icp.get_e8s()),
+            )
+        };
+
+    println!(
+        "Performing {} direct swap participations with cumulative amount of {}",
+        remaining_direct_participation_count, remaining_direct_participation
+    );
+    let swap_participations = swap_direct_participations(
+        remaining_direct_participation_count,
+        remaining_direct_participation,
+    );
+    let swap_participants = swap_participant_agents(agent, minimum_participants as usize);
+    let mut swap_participants_iter = swap_participants.iter();
+
+    for swap_participant_amount in swap_participations.iter() {
+        // Some of the swap_participants might have already participated in the swap,
+        // since we need to gather the required number of participants, we skip the ones that already participated.
+        let mut swap_participant_agent = swap_participants_iter.next().unwrap();
+        while get_current_participation(swap_participant_agent, swap_canister).await != 0 {
+            swap_participant_agent = swap_participants_iter.next().unwrap();
+        }
         let transfer_args = TransferArgs {
             to: AccountIdentifier::new(swap_participant_agent.caller().unwrap().into(), None)
                 .to_address(),
@@ -198,40 +266,98 @@ async fn complete_sns_swap<C: CallCanisters + ProgressNetwork>(
 
         transfer(swap_treasury_agent, transfer_args)
             .await
-            .unwrap()
-            .unwrap();
+            .map_err(|e| format!("Failed to transfer ICP to swap participant: {e}"))?
+            .map_err(|e| format!("ICP transfer returned an error: {e}"))?;
 
         participate_in_swap(
             swap_participant_agent,
             swap_canister,
             *swap_participant_amount,
+            swap_init.confirmation_text.clone(),
         )
-        .await
-        .unwrap();
+        .await?;
     }
+
     println!("Waiting for the swap to be completed...");
-    await_swap_lifecycle(
-        swap_treasury_agent,
-        swap_canister,
-        Lifecycle::Committed,
-        true,
-    )
-    .await
-    .expect("Expecting the swap to be commited after creation and swap completion");
+    await_swap_lifecycle(agent, swap_canister, Lifecycle::Committed, true).await?;
     await_with_timeout(
-        swap_treasury_agent,
+        agent,
         0..EXPECTED_UPGRADE_DURATION_MAX_SECONDS,
         |agent| async {
             let auto_finalization_status = swap_canister
                 .get_auto_finalization_status(agent)
                 .await
-                .expect("Failed to get auto finalization status");
+                .map_err(|e| format!("Failed to get auto finalization status: {e}"))?;
             is_auto_finalization_status_committed_or_err(&auto_finalization_status)
         },
         &Ok(true),
     )
-    .await
-    .unwrap();
+    .await?;
+
+    let sns_nervous_system_parameters = governance_canister
+        .get_nervous_system_parameters(agent)
+        .await
+        .map_err(|e| format!("Failed to get nervous system parameters: {e}"))?;
+    let neuron_mininum_disolve_delay = sns_nervous_system_parameters
+        .neuron_minimum_dissolve_delay_to_vote_seconds
+        .ok_or("Expecting the neuron minimum dissolve delay to be set")?
+        as u32;
+
+    println!(
+        "Increasing dissolve delay to {} for swap participants...",
+        neuron_mininum_disolve_delay
+    );
+    for swap_participant_agent in swap_participants {
+        let swap_participant_neuron_id =
+            get_caller_neuron(&swap_participant_agent, governance_canister)
+                .await
+                .map_err(|e| {
+                    format!(
+                        "Failed to get the caller neuron for {}: {e}",
+                        swap_participant_agent.caller().unwrap()
+                    )
+                })?;
+        if let Some(swap_participant_neuron_id) = swap_participant_neuron_id {
+            for neuron_to_follow in &neurons_to_follow {
+                let follow = Follow {
+                    followees: vec![neuron_to_follow.clone()],
+                    // UpgradeSnsControlledCanister
+                    // TODO: @rvem: Do we need to enable other functions following too?
+                    function_id: 3,
+                };
+                governance_canister
+                    .follow(
+                        &swap_participant_agent,
+                        swap_participant_neuron_id.clone(),
+                        follow,
+                    )
+                    .await
+                    .map_err(|e| {
+                        format!(
+                            "Neuron {:?} failed to follow the neuron: {}",
+                            swap_participant_neuron_id.clone(),
+                            e
+                        )
+                    })?;
+            }
+
+            governance_canister
+                .increase_dissolve_delay(
+                    &swap_participant_agent,
+                    swap_participant_neuron_id.clone(),
+                    neuron_mininum_disolve_delay,
+                )
+                .await
+                .map_err(|e| {
+                    format!(
+                        "Failed to increase dissolve delay for neuron {:?}: {}",
+                        swap_participant_neuron_id, e
+                    )
+                })?;
+        }
+    }
+
+    Ok(())
 }
 
 // Upgrades the test canister controlled by the SNS using arguments:
@@ -293,7 +419,8 @@ pub async fn upgrade_sns_controlled_test_canister<C: CallCanisters + ProgressNet
 
     let neuron_id = get_caller_neuron(dev_participant_agent, sns.governance)
         .await
-        .unwrap();
+        .unwrap()
+        .expect("Expecting the identity to have a Neuron");
     let _ = propose_and_wait(
         dev_participant_agent,
         neuron_id,
@@ -344,12 +471,11 @@ pub async fn upgrade_sns_controlled_test_canister<C: CallCanisters + ProgressNet
 
 // Module with PocketIC-specific functions, mainly used in the tests.
 pub mod pocket_ic {
-    use super::{TestCanisterInitArgs, DEFAULT_SWAP_PARTICIPANTS_NUMBER};
+    use super::TestCanisterInitArgs;
 
     use ::pocket_ic::nonblocking::PocketIc;
     use candid::Encode;
     use canister_test::Wasm;
-    use ic_agent::{identity::Secp256k1Identity, Identity};
     use ic_base_types::{CanisterId, PrincipalId};
     use ic_nervous_system_agent::{pocketic_impl::PocketIcAgent, sns::Sns};
     use ic_nervous_system_integration_tests::pocket_ic_helpers::{
@@ -358,7 +484,7 @@ pub mod pocket_ic {
     use ic_nns_constants::ROOT_CANISTER_ID;
     use icp_ledger::{Tokens, DEFAULT_TRANSFER_FEE};
 
-    use crate::utils::{swap_participant_secret_keys, NNS_NEURON_ID};
+    use crate::utils::NNS_NEURON_ID;
 
     pub async fn install_test_canister(
         pocket_ic: &PocketIc,
@@ -387,25 +513,14 @@ pub mod pocket_ic {
     pub async fn create_sns(
         pocket_ic: &PocketIc,
         dev_participant_id: PrincipalId,
-        treasury_principal_id: PrincipalId,
         dapp_canister_ids: Vec<CanisterId>,
     ) -> Sns {
         let dev_participant = PocketIcAgent::new(pocket_ic, dev_participant_id);
 
-        let swap_treasury_agent = PocketIcAgent::new(pocket_ic, treasury_principal_id);
-        let swap_partipants_agents = swap_participant_secret_keys(DEFAULT_SWAP_PARTICIPANTS_NUMBER)
-            .iter()
-            .map(|secret_key| {
-                let identity = Secp256k1Identity::from_private_key(secret_key.clone());
-                PocketIcAgent::new(pocket_ic, identity.sender().unwrap())
-            })
-            .collect();
         super::create_sns(
             &dev_participant,
             NNS_NEURON_ID,
             &dev_participant,
-            &swap_treasury_agent,
-            swap_partipants_agents,
             dapp_canister_ids,
         )
         .await
