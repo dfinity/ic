@@ -23,9 +23,8 @@ use ic_quic_transport::{create_udp_socket, ConnId, QuicTransport, SubnetTopology
 use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_keys::make_node_record_key;
 use ic_registry_local_registry::LocalRegistry;
-use ic_registry_local_store::{compact_delta_to_changelog, LocalStoreImpl, LocalStoreWriter};
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
-use ic_test_utilities_registry::add_subnet_record;
+use ic_test_utilities_registry::{add_subnet_record, get_mainnet_delta_00_6d_c1};
 use ic_test_utilities_types::ids::subnet_test_id;
 use rcgen::{generate_simple_self_signed, CertifiedKey};
 use rustls::pki_types::{CertificateDer, PrivatePkcs8KeyDer, ServerName, UnixTime};
@@ -224,22 +223,6 @@ pub fn fully_connected_localhost_subnet(
         node_ids.push((node, transport));
     }
     (node_ids, topology_watcher)
-}
-
-/// Get protobuf-encoded snapshot of the mainnet registry state (around jan. 2022)
-fn get_mainnet_delta_00_6d_c1() -> (TempDir, LocalStoreImpl) {
-    let tempdir = TempDir::new().unwrap();
-    let store = LocalStoreImpl::new(tempdir.path());
-    let changelog =
-        compact_delta_to_changelog(ic_registry_local_store_artifacts::MAINNET_DELTA_00_6D_C1)
-            .expect("")
-            .1;
-
-    for (v, changelog_entry) in changelog.into_iter().enumerate() {
-        let v = RegistryVersion::from((v + 1) as u64);
-        store.store(v, changelog_entry).unwrap();
-    }
-    (tempdir, store)
 }
 
 pub fn create_peer_manager_with_local_store(

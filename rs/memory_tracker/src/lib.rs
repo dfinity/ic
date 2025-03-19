@@ -13,7 +13,7 @@ use nix::{
 use std::{
     cell::{Cell, RefCell},
     ops::Range,
-    sync::atomic::{AtomicUsize, Ordering},
+    sync::atomic::{AtomicU64, AtomicUsize, Ordering},
 };
 
 // The upper bound on the number of pages that are memory mapped from the
@@ -211,6 +211,11 @@ struct MemoryInstructionsStats {
     copy_page_count: AtomicUsize,
 }
 
+#[derive(Default)]
+pub struct MemoryTrackerMetrics {
+    pub sigsegv_handler_duration_nanos: AtomicU64,
+}
+
 pub struct SigsegvMemoryTracker {
     memory_area: MemoryArea,
     accessed_bitmap: RefCell<PageBitmap>,
@@ -225,6 +230,7 @@ pub struct SigsegvMemoryTracker {
     read_before_write_stats: ReadBeforeWriteStats,
     sigsegv_count: AtomicUsize,
     memory_instructions_stats: MemoryInstructionsStats,
+    pub metrics: MemoryTrackerMetrics,
 }
 
 impl SigsegvMemoryTracker {
@@ -270,6 +276,7 @@ impl SigsegvMemoryTracker {
                 mprotect_count: AtomicUsize::new(0),
                 copy_page_count: AtomicUsize::new(0),
             },
+            metrics: MemoryTrackerMetrics::default(),
         };
 
         // Map the memory and make the range inaccessible to track it with SIGSEGV.

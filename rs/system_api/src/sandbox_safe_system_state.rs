@@ -259,7 +259,7 @@ impl SystemStateModifications {
             | Ok(Ic00Method::SchnorrPublicKey)
             | Ok(Ic00Method::SignWithSchnorr)
             | Ok(Ic00Method::VetKdPublicKey)
-            | Ok(Ic00Method::VetKdDeriveEncryptedKey)
+            | Ok(Ic00Method::VetKdDeriveKey)
             | Ok(Ic00Method::ProvisionalTopUpCanister)
             | Ok(Ic00Method::BitcoinSendTransactionInternal)
             | Ok(Ic00Method::BitcoinGetSuccessors)
@@ -276,7 +276,11 @@ impl SystemStateModifications {
             | Ok(Ic00Method::ClearChunkStore)
             | Ok(Ic00Method::TakeCanisterSnapshot)
             | Ok(Ic00Method::ListCanisterSnapshots)
-            | Ok(Ic00Method::DeleteCanisterSnapshot) => Ok(None),
+            | Ok(Ic00Method::DeleteCanisterSnapshot)
+            | Ok(Ic00Method::ReadCanisterSnapshotMetadata)
+            | Ok(Ic00Method::ReadCanisterSnapshotData)
+            | Ok(Ic00Method::UploadCanisterSnapshotMetadata)
+            | Ok(Ic00Method::UploadCanisterSnapshotData) => Ok(None),
             Err(_) => Err(UserError::new(
                 ErrorCode::CanisterMethodNotFound,
                 format!("Management canister has no method '{}'", msg.method_name),

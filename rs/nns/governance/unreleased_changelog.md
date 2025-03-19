@@ -9,15 +9,11 @@ on the process that this file is part of, see
 
 ## Added
 
-* Added `NetworkEconomics.voting_power_economics.neuron_minimum_dissolve_delay_to_vote_seconds`.
-
 ## Changed
 
 ## Deprecated
 
 ## Removed
-
-* Removed a migration mechanism previously used for data migrations through heartbeat.
 
 ## Fixed
 
