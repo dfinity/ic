@@ -132,7 +132,7 @@ pub(super) fn fake_signature_request_args(key_id: MasterPublicKeyId) -> Threshol
         }),
         MasterPublicKeyId::VetKd(key_id) => ThresholdArguments::VetKd(VetKdArguments {
             key_id: key_id.clone(),
-            input: vec![1; 32],
+            input: Arc::new(vec![1; 32]),
             transport_public_key: vec![1; 32],
             ni_dkg_id: fake_dkg_id(key_id),
             height: Height::from(100),
@@ -146,7 +146,7 @@ pub(super) fn fake_signature_request_context(
     SignWithThresholdContext {
         request: RequestBuilder::new().build(),
         args: fake_signature_request_args(key_id),
-        derivation_path: vec![],
+        derivation_path: Arc::new(vec![]),
         batch_time: UNIX_EPOCH,
         pseudo_random_id: [0; 32],
         matched_pre_signature: None,
