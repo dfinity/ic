@@ -1,5 +1,5 @@
 [package]
-name = "ledger-archive-node-canister"
+name = "ic-icp-archive"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
@@ -17,6 +17,7 @@ ic-ledger-canister-core = { path = "../../common/ledger_canister_core" }
 ic-ledger-core = { path = "../../common/ledger_core" }
 ic-metrics-encoder = "1"
 ic-nns-constants = { path = "../../../nns/constants" }
+ic-stable-structures = { workspace = true }
 icp-ledger = { path = "../" }
 lazy_static = { workspace = true }
 serde = { workspace = true }
