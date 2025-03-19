@@ -28,8 +28,6 @@ idna = { workspace = true }
 instant-acme = "0.7.2"
 leb128 = "0.2.5"
 mockall = { workspace = true }
-opentelemetry = { version = "0.20", features = ["metrics", "trace"] }
-opentelemetry-prometheus = { version = "0.13" }
 pem = "1.1.0"
 prometheus = { workspace = true }
 rcgen = { workspace = true }

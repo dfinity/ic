@@ -1,0 +1,15 @@
+pull_request_rules:
+  - name: Auto-approve mainnet-canister-revisions
+    conditions:
+      - author=pr-creation-bot-dfinity
+      - files=mainnet-canister-revisions.json
+      - base=master
+      - "#files=1"
+      - 'title=chore: Update Mainnet IC revisions canisters file'
+    actions:
+      review:
+        type: APPROVE
+        message: Auto-approving changes to mainnet-canister-revisions.json
+      label:
+        add:
+          - automerge-squash
