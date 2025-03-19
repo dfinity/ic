@@ -88,8 +88,8 @@ fn v(v: u64) -> RegistryVersion {
 fn client_for_tests(
     latest_version: u64,
     responses: FakeRegistryResponses,
-) -> CanisterRegistryStore<DummyState> {
-    CanisterRegistryStore::<DummyState>::new(Box::new(FakeRegistry::new(
+) -> StableCanisterRegistryClient<DummyState> {
+    StableCanisterRegistryClient::<DummyState>::new(Box::new(FakeRegistry::new(
         RegistryVersion::new(latest_version),
         responses,
     )))

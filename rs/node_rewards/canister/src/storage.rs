@@ -1,4 +1,4 @@
-use ic_registry_canister_client::stable_memory::{
+use ic_registry_canister_client::{
     RegistryDataStableMemory, StorableRegistryKey, StorableRegistryValue,
 };
 use ic_stable_structures::memory_manager::{MemoryId, MemoryManager, VirtualMemory};

@@ -18,7 +18,7 @@ use std::sync::atomic::Ordering as AtomicOrdering;
 /// This implementation of CanisterRegistryClient uses StableMemory to store a copy of the
 /// Registry data in the canister.  An implementation of RegistryDataStableMemory trait that
 /// provides the StableBTreeMap is required to use it.
-pub struct CanisterRegistryStore<S: RegistryDataStableMemory> {
+pub struct StableCanisterRegistryClient<S: RegistryDataStableMemory> {
     // The type of the accessor for StableBTreeMap that holds the registry data.
     _stable_memory: PhantomData<S>,
     // cache of latest_version
@@ -27,7 +27,7 @@ pub struct CanisterRegistryStore<S: RegistryDataStableMemory> {
     registry: Box<dyn Registry>,
 }
 
-impl<S: RegistryDataStableMemory> CanisterRegistryStore<S> {
+impl<S: RegistryDataStableMemory> StableCanisterRegistryClient<S> {
     pub fn new(registry: Box<dyn Registry>) -> Self {
         Self {
             _stable_memory: PhantomData,
@@ -60,7 +60,7 @@ impl<S: RegistryDataStableMemory> CanisterRegistryStore<S> {
 }
 
 #[async_trait]
-impl<S: RegistryDataStableMemory> CanisterRegistryClient for CanisterRegistryStore<S> {
+impl<S: RegistryDataStableMemory> CanisterRegistryClient for StableCanisterRegistryClient<S> {
     fn get_versioned_value(
         &self,
         key: &str,

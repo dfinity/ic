@@ -3,8 +3,8 @@ use ic_nervous_system_canisters::registry::RegistryCanister;
 use ic_node_rewards_canister::canister::NodeRewardsCanister;
 use ic_node_rewards_canister::storage::RegistryStoreStableMemoryBorrower;
 use ic_node_rewards_canister_api::lifecycle_args::{InitArgs, UpgradeArgs};
-use ic_registry_canister_client::canister_registry_store::CanisterRegistryStore;
 use ic_registry_canister_client::CanisterRegistryClient;
+use ic_registry_canister_client::StableCanisterRegistryClient;
 use std::cell::RefCell;
 use std::sync::Arc;
 use std::time::Duration;
@@ -12,8 +12,8 @@ use std::time::Duration;
 fn main() {}
 
 thread_local! {
-    static REGISTRY_STORE: Arc<CanisterRegistryStore<RegistryStoreStableMemoryBorrower>> = {
-        let store = CanisterRegistryStore::<RegistryStoreStableMemoryBorrower>::new(
+    static REGISTRY_STORE: Arc<StableCanisterRegistryClient<RegistryStoreStableMemoryBorrower>> = {
+        let store = StableCanisterRegistryClient::<RegistryStoreStableMemoryBorrower>::new(
             Box::new(RegistryCanister::new_prod()));
         Arc::new(store)
     };
