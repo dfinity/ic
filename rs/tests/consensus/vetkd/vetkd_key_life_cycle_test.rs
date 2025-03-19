@@ -141,7 +141,8 @@ fn test(env: TestEnv) {
             let enc_key = EncryptedKey::deserialize(&encrypted_priv_key)
                 .expect("Failed to deserialize encrypted key");
 
-            let priv_key = enc_key.decrypt_and_verify(&transport_key, &dpk, INPUT.as_bytes())
+            let priv_key = enc_key
+                .decrypt_and_verify(&transport_key, &dpk, INPUT.as_bytes())
                 .expect("Failed to decrypt derived key");
 
             let msg = enc_msg
