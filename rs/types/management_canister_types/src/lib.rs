@@ -3680,10 +3680,34 @@ impl<'a> Payload<'a> for ReadCanisterSnapshotMetadataArgs {
     }
 }
 
-#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
+#[derive(Clone, Copy, Eq, PartialEq, Debug, CandidType, Deserialize)]
 pub enum SnapshotSource {
     TakenFromCanister,
     UploadedManually,
+}
+
+impl From<SnapshotSource> for i32 {
+    fn from(value: SnapshotSource) -> Self {
+        match value {
+            SnapshotSource::TakenFromCanister => 1,
+            SnapshotSource::UploadedManually => 2,
+        }
+    }
+}
+
+impl TryFrom<i32> for SnapshotSource {
+    type Error = ProxyDecodeError;
+
+    fn try_from(val: i32) -> Result<Self, Self::Error> {
+        match val {
+            1 => Ok(SnapshotSource::TakenFromCanister),
+            2 => Ok(SnapshotSource::UploadedManually),
+            _ => Err(ProxyDecodeError::ValueOutOfRange {
+                typ: "SnapshotSource",
+                err: format!("Unexpected value {}", val),
+            }),
+        }
+    }
 }
 
 /// Struct used for encoding/decoding
@@ -3736,12 +3760,15 @@ pub struct ReadCanisterSnapshotMetadataResponse {
 }
 
 /// An inner type of [`ReadCanisterSnapshotMetadataResponse`].
+///
+/// Corresponds to the internal `CanisterTimer`, but is candid de/encodable.  
 #[derive(Copy, Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
 pub enum GlobalTimer {
     Inactive,
     Active(u64),
 }
 
+// TODO: consolidate with rs/replicated_state/src/canister_state/execution_state.rs
 /// The possible values of a global variable.
 /// An inner type of [`ReadCanisterSnapshotMetadataResponse`].
 #[derive(Copy, Clone, PartialEq, Debug, EnumIter, CandidType, Deserialize, Serialize)]
@@ -3760,6 +3787,16 @@ pub enum OnLowWasmMemoryHookStatus {
     ConditionNotSatisfied,
     Ready,
     Executed,
+}
+
+impl From<OnLowWasmMemoryHookStatus> for i32 {
+    fn from(val: OnLowWasmMemoryHookStatus) -> i32 {
+        match val {
+            OnLowWasmMemoryHookStatus::ConditionNotSatisfied => 1,
+            OnLowWasmMemoryHookStatus::Ready => 2,
+            OnLowWasmMemoryHookStatus::Executed => 3,
+        }
+    }
 }
 
 impl OnLowWasmMemoryHookStatus {
@@ -3929,7 +3966,7 @@ pub struct ReadCanisterSnapshotDataResponse {
 #[derive(Clone, Debug, Deserialize, CandidType, Serialize)]
 pub struct UploadCanisterSnapshotMetadataArgs {
     pub canister_id: PrincipalId,
-    pub replace_snapshot: Option<Vec<u8>>,
+    pub replace_snapshot: Option<ByteBuf>,
     pub wasm_module_size: u64,
     pub exported_globals: Vec<Global>,
     pub wasm_memory_size: u64,
@@ -3956,7 +3993,7 @@ impl UploadCanisterSnapshotMetadataArgs {
     ) -> Self {
         Self {
             canister_id: canister_id.get(),
-            replace_snapshot,
+            replace_snapshot: replace_snapshot.map(ByteBuf::from),
             wasm_module_size,
             exported_globals,
             wasm_memory_size,

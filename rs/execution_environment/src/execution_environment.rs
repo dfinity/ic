@@ -1701,6 +1701,39 @@ impl ExecutionEnvironment {
                 }
             }
 
+            Ok(Ic00Method::ReadCanisterSnapshotData) => {
+                // TODO: EXC-1957
+                #[allow(clippy::bind_instead_of_map)]
+                let res = ReadCanisterSnapshotDataArgs::decode(payload)
+                    .and_then(|_args| Ok((vec![], None)));
+                ExecuteSubnetMessageResult::Finished {
+                    response: res,
+                    refund: msg.take_cycles(),
+                }
+            }
+
+            Ok(Ic00Method::UploadCanisterSnapshotMetadata) => {
+                // TODO: EXC-1959
+                #[allow(clippy::bind_instead_of_map)]
+                let res = UploadCanisterSnapshotMetadataArgs::decode(payload)
+                    .and_then(|_args| Ok((vec![], None)));
+                ExecuteSubnetMessageResult::Finished {
+                    response: res,
+                    refund: msg.take_cycles(),
+                }
+            }
+
+            Ok(Ic00Method::UploadCanisterSnapshotData) => {
+                // TODO: EXC-1960
+                #[allow(clippy::bind_instead_of_map)]
+                let res = UploadCanisterSnapshotDataArgs::decode(payload)
+                    .and_then(|_args| Ok((vec![], None)));
+                ExecuteSubnetMessageResult::Finished {
+                    response: res,
+                    refund: msg.take_cycles(),
+                }
+            }
+
             Err(ParseError::VariantNotFound) => {
                 let res = Err(UserError::new(
                     ErrorCode::CanisterMethodNotFound,
