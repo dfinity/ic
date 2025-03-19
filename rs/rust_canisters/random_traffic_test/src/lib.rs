@@ -2,11 +2,11 @@ use candid::CandidType;
 use ic_base_types::CanisterId;
 use ic_error_types::RejectCode;
 use ic_types::messages::MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64;
+use proptest::prop_compose;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::ops::RangeInclusive;
 use std::time::Duration;
-use proptest::prop_compose;
 
 /// A full config for generating random calls and replies. Ranges are stored as `(u32, u32)`
 /// because ranges don't implement `CandidType`.
