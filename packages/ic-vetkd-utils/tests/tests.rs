@@ -28,14 +28,16 @@ fn test_hkdf_test_vector() {
 
 #[test]
 fn test_second_level_public_key_derivation() {
-    let canister_key = DerivedPublicKey::deserialize(&hex::decode("972c4c6cc184b56121a1d27ef1ca3a2334d1a51be93573bd18e168f78f8fe15ce44fb029ffe8e9c3ee6bea2660f4f35e0774a35a80d6236c050fd8f831475b5e145116d3e83d26c533545f64b08464e4bcc755f990a381efa89804212d4eef5f").unwrap()).unwrap();
+    let canister_key = DerivedPublicKey::deserialize(&hex::decode("8bf165ea580742abf5fd5123eb848aa116dcf75c3ddb3cd3540c852cf99f0c5394e72dfc2f25dbcb5f9220f251cd04040a508a0bcb8b2543908d6626b46f09d614c924c5deb63a9949338ae4f4ac436bd77f8d0a392fd29de0f392a009fa61f3").unwrap()).unwrap();
 
-    let context = hex::decode("f00fee").unwrap();
+    // Empty context is a no-op
+    assert_eq!(canister_key, canister_key.derive_sub_key(&[]));
 
-    let derived_key = canister_key.derive_sub_key(&context);
+    let context = b"test-context";
+    let derived_key = canister_key.derive_sub_key(context);
 
     assert_eq!(hex::encode(derived_key.serialize()),
-               "b7da9e6f50a9484735256b9abf45c4c809d43e45b28b1845ff487704726a9de0bee4fbc3b8af7dfc85574c1d48c2411e09ecded5907a11760e6707a7a2f24a3457225d4bd68bc1fcfb1d1713031c7f5708eba28dcdf6ed10ffbc4268c9a8a567");
+               "9784a7db548f0271d7e35abf3bda4021d8a5993c7736bfe3cc8304d35f77441c0618bb47b53694e04a33382668a96012155cae5b0e48d586475a7148bc648a13ba680b847a2853a438a557c5e6ab2d430c8a5213042918145277aaa7c1ff75e2");
 }
 
 #[test]

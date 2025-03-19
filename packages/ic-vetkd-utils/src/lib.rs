@@ -141,7 +141,7 @@ impl DerivedPublicKey {
             return self.clone();
         }
 
-        let dst = "ic-vetkd-bls12-381-g2-derivation-domain";
+        let dst = "ic-vetkd-bls12-381-g2-context";
 
         let offset = hash_to_scalar(&prefix_with_len(context), dst);
 
