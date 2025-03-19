@@ -600,7 +600,7 @@ mod tests {
             generate_responses_to_remote_dkgs(&transcripts_for_remote_subnets[..], &no_op_logger());
         assert_eq!(result.len(), 1);
 
-        // Deserialize the `ReshareChainKeyResponse` and check the subnet id
+        // Deserialize the `ReshareChainKeyResponse`
         let payload = match &result[0].payload {
             Payload::Data(data) => data,
             Payload::Reject(_) => panic!("Payload was rejected unexpectedly"),
