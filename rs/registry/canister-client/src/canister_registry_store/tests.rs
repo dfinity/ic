@@ -10,6 +10,7 @@ use ic_stable_structures::{DefaultMemoryImpl, StableBTreeMap};
 use ic_types::{registry::RegistryDataProviderError, PrincipalId};
 use std::cell::RefCell;
 use std::collections::HashSet;
+use std::sync::{Arc, RwLock};
 
 const DELETED_KEY: &str = "\
     node_record_\
@@ -29,7 +30,7 @@ thread_local! {
 }
 struct DummyState;
 
-impl RegistryStoreStableMemory for DummyState {
+impl RegistryDataStableMemory for DummyState {
     fn with_registry_map<R>(
         f: impl FnOnce(&StableBTreeMap<StorableRegistryKey, StorableRegistryValue, VM>) -> R,
     ) -> R {
@@ -358,4 +359,72 @@ fn test_error_on_local_too_large() {
         error,
         "Registry version local 2 > remote 1, this should never happen"
     );
+}
+
+#[test]
+fn test_caching_behavior_of_get_latest_version() {
+    let mut responses = FakeRegistryResponses::new();
+    responses.insert(
+        2, // The version it will make the request about
+        Ok(vec![RegistryDelta {
+            key: "Foo".as_bytes().to_vec(),
+            values: vec![RegistryValue {
+                value: vec![4],
+                version: 4,
+                deletion_marker: false,
+            }],
+        }]),
+    );
+    let client = client_for_tests(4, responses);
+
+    let current_latest = client.get_latest_version();
+    assert_eq!(current_latest, ZERO_REGISTRY_VERSION);
+
+    client
+        .add_deltas(vec![RegistryDelta {
+            key: "Foo".as_bytes().to_vec(),
+            values: vec![
+                RegistryValue {
+                    value: vec![1],
+                    version: 1,
+                    deletion_marker: false,
+                },
+                RegistryValue {
+                    value: vec![2],
+                    version: 2,
+                    deletion_marker: false,
+                },
+            ],
+        }])
+        .expect("Couldn't add deltas");
+
+    let current_latest = client.get_latest_version();
+    assert_eq!(current_latest, RegistryVersion::new(2));
+
+    // This is not a code path that should be utilized in production but for testing
+    // we are going around the sync so we can test the caching behavior
+    client
+        .add_deltas(vec![RegistryDelta {
+            key: "Foo".as_bytes().to_vec(),
+            values: vec![RegistryValue {
+                value: vec![3],
+                version: 3,
+                deletion_marker: false,
+            }],
+        }])
+        .expect("Couldn't add deltas");
+
+    // Cache is not updated (b/c we didn't run sync
+    let current_latest = client.get_latest_version();
+    assert_eq!(current_latest, RegistryVersion::new(2));
+
+    client
+        .sync_registry_stored()
+        .now_or_never()
+        .unwrap()
+        .expect("syncing failed");
+
+    // Cache is updated
+    let current_latest = client.get_latest_version();
+    assert_eq!(current_latest, RegistryVersion::new(4));
 }

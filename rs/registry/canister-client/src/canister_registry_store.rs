@@ -1,4 +1,4 @@
-use crate::stable_memory::{RegistryStoreStableMemory, StorableRegistryKey, StorableRegistryValue};
+use crate::stable_memory::{RegistryDataStableMemory, StorableRegistryKey, StorableRegistryValue};
 use crate::CanisterRegistryClient;
 use async_trait::async_trait;
 use ic_interfaces_registry::{
@@ -14,11 +14,13 @@ use ic_types::{RegistryVersion, Time};
 use std::cmp::Ordering;
 use std::collections::BTreeMap;
 use std::marker::PhantomData;
+use std::sync::atomic::AtomicU64;
+use std::sync::atomic::Ordering as AtomicOrdering;
 
-pub struct CanisterRegistryStore<S: RegistryStoreStableMemory> {
+pub struct CanisterRegistryStore<S: RegistryDataStableMemory> {
     _stable_memory: PhantomData<S>,
     // TODO DO NOT MERGE make this cache work (where at)
-    latest_version: RegistryVersion,
+    latest_version: AtomicU64,
 
     registry: Box<dyn Registry>,
 }
@@ -34,11 +36,11 @@ pub fn current_time() -> Time {
     system_current_time()
 }
 
-impl<S: RegistryStoreStableMemory> CanisterRegistryStore<S> {
+impl<S: RegistryDataStableMemory> CanisterRegistryStore<S> {
     pub fn new(registry: Box<dyn Registry>) -> Self {
         Self {
             _stable_memory: PhantomData,
-            latest_version: ZERO_REGISTRY_VERSION,
+            latest_version: AtomicU64::new(0),
             registry,
         }
     }
@@ -67,7 +69,7 @@ impl<S: RegistryStoreStableMemory> CanisterRegistryStore<S> {
 }
 
 #[async_trait]
-impl<S: RegistryStoreStableMemory> CanisterRegistryClient for CanisterRegistryStore<S> {
+impl<S: RegistryDataStableMemory> CanisterRegistryClient for CanisterRegistryStore<S> {
     fn get_versioned_value(
         &self,
         key: &str,
@@ -85,9 +87,6 @@ impl<S: RegistryStoreStableMemory> CanisterRegistryClient for CanisterRegistrySt
 
         let result = S::with_registry_map(|map| {
             map.range(start_range..=end_range)
-                // TODO DO NOT MERGE change this to use stable-structures' reverse after upgrade
-                .collect::<Vec<_>>()
-                .into_iter()
                 .rev()
                 .find(|(stored_key, _)| stored_key.key == key)
                 .map(|(_, value)| RegistryTransportRecord {
@@ -136,19 +135,22 @@ impl<S: RegistryStoreStableMemory> CanisterRegistryClient for CanisterRegistrySt
         Ok(result)
     }
 
-    fn get_latest_version(&self) -> RegistryVersion {
-        // TODO add cache for this, as it could be quite expensive.
-        S::with_registry_map(|map| {
-            map.range(..)
-                .map(|(k, _)| k.version)
-                .max()
-                .map(RegistryVersion::new)
-                .unwrap_or(ZERO_REGISTRY_VERSION)
-        })
-    }
-
     fn get_value(&self, key: &str, version: RegistryVersion) -> RegistryClientResult<Vec<u8>> {
         self.get_versioned_value(key, version).map(|vr| vr.value)
+    }
+
+    fn get_latest_version(&self) -> RegistryVersion {
+        let mut latest = self.latest_version.load(AtomicOrdering::SeqCst);
+        if latest == 0 {
+            latest = S::with_registry_map(|map| {
+                map.range(..)
+                    .map(|(k, _)| k.version)
+                    .max()
+                    .unwrap_or(ZERO_REGISTRY_VERSION.get())
+            });
+            self.latest_version.store(latest, AtomicOrdering::SeqCst);
+        }
+        RegistryVersion::new(latest)
     }
 
     async fn sync_registry_stored(&self) -> Result<RegistryVersion, String> {
@@ -195,6 +197,8 @@ impl<S: RegistryStoreStableMemory> CanisterRegistryClient for CanisterRegistrySt
                     .unwrap_or(current_local_version.get()),
             );
 
+            self.latest_version
+                .store(current_local_version.get(), AtomicOrdering::SeqCst);
             self.add_deltas(remote_deltas)?;
         }
         Ok(current_local_version)

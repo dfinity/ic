@@ -1,5 +1,5 @@
 use ic_registry_canister_client::stable_memory::{
-    RegistryStoreStableMemory, StorableRegistryKey, StorableRegistryValue,
+    RegistryDataStableMemory, StorableRegistryKey, StorableRegistryValue,
 };
 use ic_stable_structures::memory_manager::{MemoryId, MemoryManager, VirtualMemory};
 use ic_stable_structures::{DefaultMemoryImpl, StableBTreeMap};
@@ -24,7 +24,7 @@ thread_local! {
 
 pub struct RegistryStoreStableMemoryBorrower;
 
-impl RegistryStoreStableMemory for RegistryStoreStableMemoryBorrower {
+impl RegistryDataStableMemory for RegistryStoreStableMemoryBorrower {
     fn with_registry_map<R>(
         f: impl FnOnce(&StableBTreeMap<StorableRegistryKey, StorableRegistryValue, VM>) -> R,
     ) -> R {

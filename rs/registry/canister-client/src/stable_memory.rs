@@ -62,7 +62,7 @@ impl Storable for StorableRegistryKey {
 
 type VM = VirtualMemory<DefaultMemoryImpl>;
 
-pub trait RegistryStoreStableMemory: Send + Sync {
+pub trait RegistryDataStableMemory: Send + Sync {
     fn with_registry_map<R>(
         f: impl FnOnce(&StableBTreeMap<StorableRegistryKey, StorableRegistryValue, VM>) -> R,
     ) -> R;
