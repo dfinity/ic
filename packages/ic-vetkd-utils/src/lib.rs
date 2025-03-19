@@ -39,7 +39,8 @@ pub struct TransportSecretKey {
 pub fn derive_symmetric_key(input: &[u8], domain_sep: &str, len: usize) -> Vec<u8> {
     let hk = hkdf::Hkdf::<sha2::Sha256>::new(None, input);
     let mut okm = vec![0u8; len];
-    hk.expand(domain_sep.as_bytes(), &mut okm).expect("Unsupported output length for HKDF");
+    hk.expand(domain_sep.as_bytes(), &mut okm)
+        .expect("Unsupported output length for HKDF");
     okm
 }
 
@@ -204,12 +205,15 @@ impl VetKey {
      * Typically this would have been created using [`VetKey::signature_bytes`]
      */
     pub fn deserialize(bytes: &[u8]) -> Result<Self, String> {
-        let bytes48 : [u8; 48] = bytes.try_into().map_err(|_e: TryFromSliceError| {
+        let bytes48: [u8; 48] = bytes.try_into().map_err(|_e: TryFromSliceError| {
             format!("Vetkey is unexpected length {}", bytes.len())
         })?;
 
         if let Some(pt) = option_from_ctoption(G1Affine::from_compressed(&bytes48)) {
-            Ok(Self { pt, pt_bytes: bytes48 })
+            Ok(Self {
+                pt,
+                pt_bytes: bytes48,
+            })
         } else {
             Err("Invalid VetKey".to_string())
         }
@@ -310,7 +314,7 @@ impl EncryptedKey {
 const IBE_SEED_BYTES: usize = 32;
 
 const IBE_HEADER_BYTES: usize = 8;
-const IBE_HEADER : [u8; IBE_HEADER_BYTES] = [ b'I', b'C', b' ', b'I', b'B', b'E', 0x00, 0x01 ];
+const IBE_HEADER: [u8; IBE_HEADER_BYTES] = [b'I', b'C', b' ', b'I', b'B', b'E', 0x00, 0x01];
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 /// An IBE (identity based encryption) ciphertext
@@ -343,7 +347,8 @@ impl IBEDomainSep {
 impl IBECiphertext {
     /// Serialize this IBE ciphertext
     pub fn serialize(&self) -> Vec<u8> {
-        let mut output = Vec::with_capacity(self.hdr.len() + G2AFFINE_BYTES + IBE_SEED_BYTES + self.c3.len());
+        let mut output =
+            Vec::with_capacity(self.hdr.len() + G2AFFINE_BYTES + IBE_SEED_BYTES + self.c3.len());
 
         output.extend_from_slice(&self.hdr);
         output.extend_from_slice(&self.c1.to_compressed());
@@ -365,7 +370,10 @@ impl IBECiphertext {
         let c1 = deserialize_g2(&bytes[IBE_HEADER_BYTES..(IBE_HEADER_BYTES + G2AFFINE_BYTES)])?;
 
         let mut c2 = [0u8; IBE_SEED_BYTES];
-        c2.copy_from_slice(&bytes[IBE_HEADER_BYTES + G2AFFINE_BYTES..(IBE_HEADER_BYTES + G2AFFINE_BYTES + IBE_SEED_BYTES)]);
+        c2.copy_from_slice(
+            &bytes[IBE_HEADER_BYTES + G2AFFINE_BYTES
+                ..(IBE_HEADER_BYTES + G2AFFINE_BYTES + IBE_SEED_BYTES)],
+        );
 
         let c3 = bytes[IBE_HEADER_BYTES + G2AFFINE_BYTES + IBE_SEED_BYTES..].to_vec();
 

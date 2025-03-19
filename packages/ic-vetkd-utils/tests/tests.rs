@@ -99,7 +99,10 @@ fn derivation_matches_expected_value() {
     let domain_sep = "ic-test-domain-sep";
 
     let key = vetkey.derive_symmetric_key(&domain_sep, 32);
-    assert_eq!(hex::encode(key), "3b7bd854033cdc119865ba3019dc1e35010fdaf90f8ff5c9cfe9d1d557dddb29");
+    assert_eq!(
+        hex::encode(key),
+        "3b7bd854033cdc119865ba3019dc1e35010fdaf90f8ff5c9cfe9d1d557dddb29"
+    );
 }
 
 #[test]
