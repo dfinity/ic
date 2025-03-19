@@ -3035,6 +3035,62 @@ fn yield_for_dirty_pages_copy_works_for_many_canisters() {
     assert_eq!(num_completed(), scheduler_cores);
 }
 
+#[test]
+fn heavy_install_code_prevents_another_install_code_to_start_in_the_same_round() {
+    let env = ic_state_machine_tests::StateMachineBuilder::new()
+        .with_subnet_type(SubnetType::Application)
+        .build();
+
+    let canister_id = env.create_canister_with_cycles(None, INITIAL_CYCLES_BALANCE, None);
+
+    let mut payload = ic_state_machine_tests::PayloadBuilder::new().with_nonce(0);
+    // Send two install code messages to the same canister.
+    for _ in 0..2 {
+        let canister_init = wasm()
+            // The instruction limit for subnet messages is 7 billion / 16 = ~438M
+            .instruction_counter_is_at_least(2_438_000_000)
+            .build();
+        payload = payload.ingress(
+            PrincipalId::new_anonymous(),
+            CanisterId::ic_00(),
+            Method::InstallCode,
+            InstallCodeArgs::new(
+                CanisterInstallMode::Reinstall,
+                canister_id,
+                UNIVERSAL_CANISTER_WASM.to_vec(),
+                canister_init,
+                None,
+                None,
+            )
+            .encode(),
+        );
+    }
+    let message_ids = payload.ingress_ids();
+    env.execute_payload(payload);
+
+    // Neither of messages should be completed after the first round.
+    assert_matches!(
+        ingress_state(env.ingress_status(&message_ids[0])),
+        Some(IngressState::Processing)
+    );
+    assert_matches!(
+        ingress_state(env.ingress_status(&message_ids[1])),
+        Some(IngressState::Received)
+    );
+
+    env.tick();
+
+    // Only the first message must be completed after two rounds.
+    assert_matches!(
+        ingress_state(env.ingress_status(&message_ids[0])),
+        Some(IngressState::Completed(_))
+    );
+    assert_matches!(
+        ingress_state(env.ingress_status(&message_ids[1])),
+        Some(IngressState::Received)
+    );
+}
+
 #[cfg(not(all(target_arch = "aarch64", target_vendor = "apple")))]
 const WRITE_MORE_THAN_1G_ON_INIT_WAT: &str = r#"
 (module
