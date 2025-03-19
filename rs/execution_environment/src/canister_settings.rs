@@ -118,7 +118,13 @@ impl TryFrom<CanisterSettingsArgs> for CanisterSettings {
                     }
                     Some(NumSeconds::from(num))
                 }
-                None => None,
+                // Value cannot fit in a 64-bit integer.
+                None => {
+                    return Err(UpdateSettingsError::FreezingThresholdOutOfRange {
+                        provided: ft,
+                        minimum: candid::Nat::from(MINIMUM_FREEZING_THRESHOLD),
+                    });
+                }
             },
             None => None,
         };
