@@ -283,7 +283,7 @@ pub(super) fn build_signature_inputs(
             let inputs = ThresholdSigInputsRef::Ecdsa(ThresholdEcdsaSigInputsRef::new(
                 ExtendedDerivationPath {
                     caller: context.request.sender.into(),
-                    derivation_path: context.derivation_path.clone(),
+                    derivation_path: context.derivation_path.to_vec(),
                 },
                 args.message_hash,
                 nonce,
@@ -317,7 +317,7 @@ pub(super) fn build_signature_inputs(
             let inputs = ThresholdSigInputsRef::Schnorr(ThresholdSchnorrSigInputsRef::new(
                 ExtendedDerivationPath {
                     caller: context.request.sender.into(),
-                    derivation_path: context.derivation_path.clone(),
+                    derivation_path: context.derivation_path.to_vec(),
                 },
                 args.message.clone(),
                 nonce,
@@ -337,7 +337,7 @@ pub(super) fn build_signature_inputs(
                     context: context.derivation_path.iter().flatten().cloned().collect(),
                 },
                 ni_dkg_id: args.ni_dkg_id.clone(),
-                input: args.input.clone(),
+                input: args.input.to_vec(),
                 transport_public_key: args.transport_public_key.clone(),
             });
             Ok((request_id, inputs))
