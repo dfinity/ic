@@ -468,10 +468,9 @@ impl IBECiphertext {
 
     /// Decrypt an IBE ciphertext
     ///
-    /// For proper operation k_bytes should be the result of calling
-    /// TransportSecretKey::decrypt where the same `derived_public_key_bytes`
-    /// and `context` were used when creating the ciphertext (with
-    /// IBECiphertext::encrypt).
+    /// The VetKey provided must be the VetKey produced by a request to the IC
+    /// for a given `input`,`context` pair where both `input` and `context` match
+    /// the value used during encryption.
     ///
     /// Returns the plaintext, or Err if decryption failed
     pub fn decrypt(&self, vetkey: &VetKey) -> Result<Vec<u8>, String> {
