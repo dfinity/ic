@@ -37,7 +37,7 @@ rust_library(
 )
 
 genrule(
-    name = "empty-disk-img.tar.zst",
+    name = "empty-disk-img-tar-zst",
     outs = ["empty-disk-img.tar.zst"],
     cmd = """
         truncate -s 101G disk.img
@@ -45,6 +45,7 @@ genrule(
     """,
     tags = ["manual"],
     target_compatible_with = ["@platforms//os:linux"],
+    visibility = ["//visibility:public"],
 )
 
 system_test_nns(

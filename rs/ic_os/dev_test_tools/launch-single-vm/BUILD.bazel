@@ -28,6 +28,12 @@ rust_binary(
     srcs = glob(["src/*.rs"]),
     aliases = ALIASES,
     crate_name = "launch_single_vm",
+    data = [
+        "//rs/tests/nested:empty-disk-img.tar.zst",
+    ],
+    env = {
+        "EMPTY_DISK_IMG_PATH": "$(location //rs/tests/nested:empty-disk-img.tar.zst)",
+    },
     proc_macro_deps = MACRO_DEPENDENCIES,
     target_compatible_with = [
         "@platforms//os:linux",

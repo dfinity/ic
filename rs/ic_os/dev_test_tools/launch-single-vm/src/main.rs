@@ -10,7 +10,6 @@ use ic_system_test_driver::driver::{
         AttachImageSpec, CreateVmRequest, Farm, GroupMetadata, GroupSpec, ImageLocation, VmType,
     },
     ic::{Subnet, VmAllocationStrategy},
-    resource::build_empty_image,
 };
 use ic_types::ReplicaVersion;
 use reqwest::blocking::Client;
@@ -97,14 +96,11 @@ fn main() {
 
     // Adjust VM configuration for nested setup
     let (image_location, vm_type, vm_size) = if args.nested {
-        // Create an empty image, this will be used as the "main" drive
-        let empty_image_name = "empty.img.tar.zst";
-        let tmp_dir = tempfile::tempdir().unwrap();
-        let empty_image = build_empty_image(tmp_dir.path(), empty_image_name).unwrap();
+        let empty_disk_img_path =
+            std::env::var("EMPTY_DISK_IMG_PATH").expect("EMPTY_DISK_IMG_PATH not set");
         let empty_image_id = farm
-            .upload_file(&group_name, empty_image, empty_image_name)
+            .upload_file(&group_name, empty_disk_img_path, "empty-disk-img.tar.zst")
             .unwrap();
-
         (
             ImageLocation::IcOsImageViaId { id: empty_image_id },
             VmType::Nested,
