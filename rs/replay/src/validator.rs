@@ -212,12 +212,12 @@ impl ReplayValidator {
         // This creates a new pool with just the genesis CUP.
         let mut pool = ConsensusPoolImpl::new(
             self.replica_cfg.node_id,
-            self.replica_cfg.subnet_id,
             cup,
             artifact_pool_config,
             MetricsRegistry::new(),
             self.log.clone(),
             self.time_source.clone(),
+            None,
         );
 
         let validated = consensus_pool.validated();

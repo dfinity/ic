@@ -1,5 +1,5 @@
 use flate2::read::GzDecoder;
-use http::Method;
+use http::{header, Method};
 use ic_crypto_sha2::Sha256;
 use ic_logger::{info, warn, ReplicaLogger};
 use reqwest::{Client, Response};
@@ -126,8 +126,15 @@ impl FileDownloader {
     }
 
     /// Perform a HTTP GET against the given URL
-    async fn http_get(&self, url: &str) -> FileDownloadResult<Response> {
-        let response = self.client.get(url).timeout(self.timeout).send().await?;
+    async fn http_get(&self, url: &str, start_byte: Option<u64>) -> FileDownloadResult<Response> {
+        let mut request = self.client.get(url).timeout(self.timeout);
+
+        // Add the Range header if a start byte is provided
+        if let Some(start) = start_byte {
+            request = request.header(header::RANGE, format!("bytes={}-", start));
+        }
+
+        let response = request.send().await?;
 
         if response.status().is_success() {
             Ok(response)

@@ -10,10 +10,7 @@ use ic_interfaces::p2p::consensus::MutablePool;
 use ic_interfaces::time_source::SysTimeSource;
 use ic_logger::replica_logger::no_op_logger;
 use ic_test_utilities_consensus::{fake::*, make_genesis};
-use ic_test_utilities_types::{
-    ids::{node_test_id, subnet_test_id},
-    messages::SignedIngressBuilder,
-};
+use ic_test_utilities_types::{ids::node_test_id, messages::SignedIngressBuilder};
 use ic_types::consensus::dkg::DkgDataPayload;
 use ic_types::consensus::{BlockPayload, DataPayload};
 use ic_types::{
@@ -33,12 +30,12 @@ where
     ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
         let mut consensus_pool = ConsensusPoolImpl::new(
             node_test_id(0),
-            subnet_test_id(0),
             (&make_genesis(ic_types::consensus::dkg::Summary::fake())).into(),
             pool_config,
             ic_metrics::MetricsRegistry::new(),
             no_op_logger(),
             std::sync::Arc::new(SysTimeSource::new()),
+            None,
         );
         test(&mut consensus_pool);
     })

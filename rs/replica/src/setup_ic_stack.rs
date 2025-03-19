@@ -1,6 +1,7 @@
 use crate::setup::get_subnet_type;
 use ic_artifact_pool::{
-    consensus_pool::ConsensusPoolImpl, ensure_persistent_pool_replica_version_compatibility,
+    backup::Backup, consensus_pool::ConsensusPoolImpl,
+    ensure_persistent_pool_replica_version_compatibility,
 };
 use ic_btc_adapter_client::{setup_bitcoin_adapter_clients, BitcoinAdapterClients};
 use ic_btc_consensus::BitcoinPayloadBuilder;
@@ -144,9 +145,23 @@ pub fn construct_ic_stack(
         artifact_pool_config.persistent_pool_db_path(),
     );
 
+    let backup = artifact_pool_config.backup_config.map(|config| {
+        Backup::new(
+            config.spool_path.clone(),
+            config
+                .spool_path
+                .join(subnet_id.to_string())
+                .join(ic_types::ReplicaVersion::default().to_string()),
+            Duration::from_secs(config.retention_time_secs),
+            Duration::from_secs(config.purging_interval_secs),
+            metrics_registry.clone(),
+            log.clone(),
+            Arc::new(SysTimeSource::new()),
+        )
+    });
+    let backup_sender = backup.map(|b| b.1.clone());
     let consensus_pool = Arc::new(RwLock::new(ConsensusPoolImpl::new(
         node_id,
-        subnet_id,
         // Note: it's important to pass the original proto which came from the command line (as
         // opposed to, for example, a proto which was first deserialized and then serialized
         // again). Since the proto file could have been produced and signed by nodes running a
@@ -161,6 +176,7 @@ pub fn construct_ic_stack(
         log.clone(),
         // TODO: use a builder pattern and remove the time source implementation from the constructor.
         Arc::new(SysTimeSource::new()),
+        backup_sender,
     )));
 
     // ---------- REPLICATED STATE DEPS FOLLOW ----------
@@ -295,7 +311,7 @@ pub fn construct_ic_stack(
     let state_sync = StateSync::new(state_manager.clone(), log.clone());
     let (max_certified_height_tx, max_certified_height_rx) = watch::channel(Height::from(0));
 
-    let (ingress_throttler, ingress_tx, p2p_runner) = setup_consensus_and_p2p(
+    let (ingress_throttler, ingress_tx, mut p2p_runner) = setup_consensus_and_p2p(
         log,
         metrics_registry,
         rt_handle_p2p,
@@ -352,6 +368,9 @@ pub fn construct_ic_stack(
         max_certified_height_rx,
         finalized_ingress_height_rx,
     );
+    if let Some((backup, _)) = backup {
+        p2p_runner.push(Box::new(backup));
+    }
 
     Ok((
         state_manager,

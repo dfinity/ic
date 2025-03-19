@@ -177,7 +177,6 @@ impl Player {
         // This would create a new pool with just the genesis CUP.
         let pool = ConsensusPoolImpl::new(
             NodeId::from(PrincipalId::new_anonymous()),
-            subnet_id,
             // Note: it's important to pass the original proto which came from the command line (as
             // opposed to, for example, a proto which was first deserialized and then serialized
             // again). Since the proto file could have been produced and signed by nodes running a
@@ -191,6 +190,7 @@ impl Player {
             MetricsRegistry::new(),
             log.clone(),
             time_source,
+            None,
         );
 
         let mut player = Player::new_with_params(

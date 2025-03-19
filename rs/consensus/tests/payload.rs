@@ -133,12 +133,12 @@ fn consensus_produces_expected_batches() {
         .expect("Failed to get DKG summary from CUP contents");
         let consensus_pool = Arc::new(RwLock::new(consensus_pool::ConsensusPoolImpl::new(
             node_id,
-            subnet_id,
             (&make_genesis(summary)).into(),
             pool_config.clone(),
             MetricsRegistry::new(),
             no_op_logger(),
             time_source.clone(),
+            None,
         )));
         let consensus_cache = consensus_pool.read().unwrap().get_cache();
         let dkg_key_manager = Arc::new(Mutex::new(DkgKeyManager::new(
