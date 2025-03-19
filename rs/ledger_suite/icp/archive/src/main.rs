@@ -124,15 +124,15 @@ fn set_archive_state(archive_state: ArchiveState) {
 }
 
 fn get_archive_state() -> ArchiveState {
+    if let Some(archive_state) = ARCHIVE_STATE_CACHE.with(|c| *c.borrow()) {
+        return archive_state;
+    }
     let archive_state = ARCHIVE_STATE.with(|cell| *cell.borrow().get());
     ARCHIVE_STATE_CACHE.with(|c| *c.borrow_mut() = Some(archive_state));
     archive_state
 }
 
 fn max_memory_size_bytes() -> u64 {
-    if let Some(archive_state) = ARCHIVE_STATE_CACHE.with(|c| *c.borrow()) {
-        return archive_state.max_memory_size_bytes;
-    }
     get_archive_state().max_memory_size_bytes
 }
 
@@ -144,20 +144,17 @@ fn set_max_memory_size_bytes(max_memory_size_bytes: u64) {
             total_block_size()
         ));
     }
-    let mut archive_state = ARCHIVE_STATE.with(|cell| *cell.borrow().get());
+    let mut archive_state = get_archive_state();
     archive_state.max_memory_size_bytes = max_memory_size_bytes;
     set_archive_state(archive_state);
 }
 
 fn block_height_offset() -> u64 {
-    if let Some(archive_state) = ARCHIVE_STATE_CACHE.with(|c| *c.borrow()) {
-        return archive_state.block_height_offset;
-    }
     get_archive_state().block_height_offset
 }
 
 fn set_block_height_offset(block_height_offset: u64) {
-    let mut archive_state = ARCHIVE_STATE.with(|cell| *cell.borrow().get());
+    let mut archive_state = get_archive_state();
     archive_state.block_height_offset = block_height_offset;
     set_archive_state(archive_state);
 }
@@ -167,14 +164,11 @@ fn total_block_size() -> u64 {
 }
 
 fn ledger_canister_id() -> CanisterId {
-    if let Some(archive_state) = ARCHIVE_STATE_CACHE.with(|c| *c.borrow()) {
-        return archive_state.ledger_canister_id;
-    }
     get_archive_state().ledger_canister_id
 }
 
 fn set_ledger_canister_id(ledger_canister_id: CanisterId) {
-    let mut archive_state = ARCHIVE_STATE.with(|cell| *cell.borrow().get());
+    let mut archive_state = get_archive_state();
     archive_state.ledger_canister_id = ledger_canister_id;
     set_archive_state(archive_state);
 }
