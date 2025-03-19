@@ -339,6 +339,8 @@ members = [
     "rs/sns/audit",
     "rs/sns/cli",
     "rs/sns/governance",
+    "rs/sns/governance/api",
+    "rs/sns/governance/api_helpers",
     "rs/sns/governance/proposal_criticality",
     "rs/sns/governance/protobuf_generator",
     "rs/sns/governance/token_valuation",
