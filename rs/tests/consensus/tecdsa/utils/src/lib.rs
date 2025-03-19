@@ -929,7 +929,7 @@ pub fn verify_ecdsa_signature(pk: &[u8], sig: &[u8], msg: &[u8]) -> bool {
 }
 
 pub fn verify_vetkd(public_key: &[u8], encrypted_key: &[u8], input: &[u8]) -> bool {
-    let dpk = DerivedPublicKey::deserialize(&public_key).expect("Failed to deserialize public key");
+    let dpk = DerivedPublicKey::deserialize(public_key).expect("Failed to deserialize public key");
     let enc_msg = IBECiphertext::encrypt(&dpk, input, MSG.as_bytes(), &SEED)
         .expect("Failed to encrypt message");
 
@@ -937,7 +937,7 @@ pub fn verify_vetkd(public_key: &[u8], encrypted_key: &[u8], input: &[u8]) -> bo
         .expect("Failed to generate transport secret key");
 
     let enc_key =
-        EncryptedKey::deserialize(&encrypted_key).expect("Failed to deserialize encrypted key");
+        EncryptedKey::deserialize(encrypted_key).expect("Failed to deserialize encrypted key");
 
     let priv_key = enc_key
         .decrypt_and_verify(&transport_key, &dpk, input)
