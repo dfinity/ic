@@ -690,15 +690,13 @@ impl PocketIc {
 
             let mut subnet_config_info: Vec<SubnetConfigInfo> = vec![];
 
-            let ii_subnet_split = subnet_configs.ii.is_some();
-
             for (subnet_kind, subnet_state_dir, instruction_config) in
                 fixed_range_subnets.into_iter().chain(flexible_subnets)
             {
                 let RangeConfig {
                     canister_id_ranges: ranges,
                     canister_allocation_range: alloc_range,
-                } = get_range_config(subnet_kind, &mut range_gen, ii_subnet_split);
+                } = get_range_config(subnet_kind, &mut range_gen);
 
                 let subnet_seed = compute_subnet_seed(ranges.clone(), alloc_range);
 
@@ -1059,30 +1057,15 @@ fn subnet_kind_from_canister_id(canister_id: CanisterId) -> SubnetKind {
     Application
 }
 
-fn get_range_config(
-    subnet_kind: rest::SubnetKind,
-    range_gen: &mut RangeGen,
-    ii_subnet_split: bool,
-) -> RangeConfig {
-    use rest::SubnetKind::*;
-    if matches!(subnet_kind, NNS) && !ii_subnet_split {
-        let range = gen_range("rwlgt-iiaaa-aaaaa-aaaaa-cai", "n5n4y-3aaaa-aaaaa-p777q-cai");
-        let canister_id_ranges = vec![range];
-        let canister_allocation_range = Some(range_gen.next_range());
-        RangeConfig {
-            canister_id_ranges,
-            canister_allocation_range,
-        }
-    } else {
-        let (canister_id_ranges, canister_allocation_range) =
-            match subnet_kind_canister_range(subnet_kind) {
-                Some(ranges) => (ranges, Some(range_gen.next_range())),
-                None => (vec![range_gen.next_range()], None),
-            };
-        RangeConfig {
-            canister_id_ranges,
-            canister_allocation_range,
-        }
+fn get_range_config(subnet_kind: rest::SubnetKind, range_gen: &mut RangeGen) -> RangeConfig {
+    let (canister_id_ranges, canister_allocation_range) =
+        match subnet_kind_canister_range(subnet_kind) {
+            Some(ranges) => (ranges, Some(range_gen.next_range())),
+            None => (vec![range_gen.next_range()], None),
+        };
+    RangeConfig {
+        canister_id_ranges,
+        canister_allocation_range,
     }
 }
 
