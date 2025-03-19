@@ -26,6 +26,7 @@ pub struct CanisterRegistryStore<S: RegistryDataStableMemory> {
     registry: Box<dyn Registry>,
 }
 
+// TODO do not merge, make these functions  depend on nervous_system/time_helpers
 #[cfg(target_arch = "wasm32")]
 pub fn current_time() -> Time {
     let current_time = ic_cdk::api::time();
