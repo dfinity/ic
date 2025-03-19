@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::ops::RangeInclusive;
 use std::time::Duration;
+use proptest::prop_compose;
 
 /// A full config for generating random calls and replies. Ranges are stored as `(u32, u32)`
 /// because ranges don't implement `CandidType`.
@@ -95,6 +96,31 @@ impl Config {
             downstream_call_percentage,
             best_effort_call_percentage,
         })
+    }
+}
+
+prop_compose! {
+    /// Generates a random `Config` using reasonable ranges of values; receivers is empty
+    /// and assumed to be populated manually.
+    pub fn arb_config(max_payload_bytes: u32, max_calls_per_heartbeat: u32)(
+        max_call_bytes in 0..=max_payload_bytes,
+        max_reply_bytes in 0..=max_payload_bytes,
+        calls_per_heartbeat in 0..=max_calls_per_heartbeat,
+        max_timeout_secs in 10..=100_u32,
+        downstream_call_percentage in 0..=100_u32,
+        best_effort_call_percentage in 0..=100_u32,
+    ) -> Config {
+        Config::try_new(
+            vec![],
+            0..=max_call_bytes,
+            0..=max_reply_bytes,
+            0..=0, // instructions_count
+            0..=max_timeout_secs,
+            calls_per_heartbeat,
+            downstream_call_percentage,
+            best_effort_call_percentage,
+        )
+        .expect("bad config inputs")
     }
 }
 

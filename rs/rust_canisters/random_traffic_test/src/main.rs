@@ -297,18 +297,24 @@ fn update_record(result: &CallResult<Reply>, index: u32) {
 
 /// Generates `calls_per_heartbeat` call futures. They are awaited; whenever a call concludes
 /// its record is updated (or removed in case of a synchronous rejection).
-#[heartbeat]
-async fn heartbeat() {
+///
+/// Returns the number of successful calls (i.e. calls that got a reply).
+#[update]
+async fn pulse(calls_count: u32) -> u32 {
     let (mut futures, mut record_indices) = (Vec::new(), Vec::new());
-    for _ in 0..CONFIG.with_borrow(|config| config.calls_per_heartbeat) {
+    for _ in 0..calls_count {
         let (future, index) = setup_call(next_call_tree_id(), 0);
         futures.push(Box::pin(future));
         record_indices.push(index);
     }
 
+    let mut calls_success_counter = 0;
     while !futures.is_empty() {
         // Wait for any call to conclude.
         let (result, index, remaining_futures) = select_all(futures).await;
+        if result.is_ok() {
+            calls_success_counter += 1;
+        }
 
         // Update records.
         update_record(&result, record_indices.remove(index));
@@ -316,6 +322,14 @@ async fn heartbeat() {
         // Continue awaiting the remaining futures.
         futures = remaining_futures;
     }
+
+    calls_success_counter
+}
+
+/// Calls `pulse(calls_per_heartbeat)` each round.
+#[heartbeat]
+async fn heartbeat() {
+    pulse(CONFIG.with_borrow(|config| config.calls_per_heartbeat)).await;
 }
 
 /// Handles incoming calls; this method is called from the heartbeat method.
