@@ -1,4 +1,4 @@
-use crate::certification::{CertificationCrypto, VerifierImpl};
+use crate::{CertificationCrypto, VerifierImpl};
 use ic_consensus_utils::{
     active_high_threshold_nidkg_id, aggregate, bouncer_metrics::BouncerMetrics,
     membership::Membership, registry_version_at_height, MINIMUM_CHAIN_LENGTH,
