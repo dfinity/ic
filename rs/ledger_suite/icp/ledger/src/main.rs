@@ -18,7 +18,6 @@ use ic_ledger_canister_core::ledger::LedgerContext;
 use ic_ledger_canister_core::runtime::heap_memory_size_bytes;
 use ic_ledger_canister_core::{
     archive::{Archive, ArchiveOptions},
-    blockchain::BlockData,
     ledger::{
         apply_transaction, archive_blocks, block_locations, find_block_in_archive, LedgerAccess,
         TransferError as CoreTransferError,
@@ -40,10 +39,11 @@ use icp_ledger::{
     from_proto_bytes, max_blocks_per_request, protobuf, to_proto_bytes, tokens_into_proto,
     AccountBalanceArgs, AccountIdBlob, AccountIdentifier, AccountIdentifierByteBuf, ArchiveInfo,
     ArchivedBlocksRange, ArchivedEncodedBlocksRange, Archives, BinaryAccountBalanceArgs, Block,
-    BlockArg, CandidBlock, Decimals, FeatureFlags, GetBlocksArgs, InitArgs, IterBlocksArgs,
-    IterBlocksRes, LedgerCanisterPayload, Memo, Name, Operation, PaymentError, QueryBlocksResponse,
-    QueryEncodedBlocksResponse, SendArgs, Subaccount, Symbol, TipOfChainRes, TotalSupplyArgs,
-    Transaction, TransferArgs, TransferError, TransferFee, TransferFeeArgs, MEMO_SIZE_BYTES,
+    BlockArg, CandidBlock, Decimals, FeatureFlags, GetBlocksArgs, GetBlocksRes, InitArgs,
+    IterBlocksArgs, IterBlocksRes, LedgerCanisterPayload, Memo, Name, Operation, PaymentError,
+    QueryBlocksResponse, QueryEncodedBlocksResponse, SendArgs, Subaccount, Symbol, TipOfChainRes,
+    TotalSupplyArgs, Transaction, TransferArgs, TransferError, TransferFee, TransferFeeArgs,
+    MEMO_SIZE_BYTES,
 };
 use icrc_ledger_types::icrc1::transfer::TransferError as Icrc1TransferError;
 use icrc_ledger_types::icrc2::allowance::{Allowance, AllowanceArgs};
@@ -62,9 +62,9 @@ use icrc_ledger_types::{
     icrc21::{errors::Icrc21Error, requests::ConsentMessageRequest, responses::ConsentInfo},
 };
 use ledger_canister::{
-    balances_len, clear_stable_allowance_data, clear_stable_balances_data, is_ready, ledger_state,
-    panic_if_not_ready, set_ledger_state, Ledger, LedgerField, LedgerState, LEDGER, LEDGER_VERSION,
-    MAX_MESSAGE_SIZE_BYTES, UPGRADES_MEMORY,
+    balances_len, clear_stable_allowance_data, clear_stable_balances_data,
+    clear_stable_blocks_data, is_ready, ledger_state, panic_if_not_ready, set_ledger_state, Ledger,
+    LedgerField, LedgerState, LEDGER, LEDGER_VERSION, MAX_MESSAGE_SIZE_BYTES, UPGRADES_MEMORY,
 };
 use num_traits::cast::ToPrimitive;
 #[allow(unused_imports)]
@@ -846,7 +846,11 @@ fn post_upgrade(args: Option<LedgerCanisterPayload>) {
         );
         PRE_UPGRADE_INSTRUCTIONS_CONSUMED
             .with(|n| *n.borrow_mut() = pre_upgrade_instructions_consumed);
-
+        if upgrade_from_version < 3 {
+            set_ledger_state(LedgerState::Migrating(LedgerField::Blocks));
+            print(format!("Upgrading from version {upgrade_from_version} which does not store blocks in stable structures, clearing stable blocks data.").as_str());
+            clear_stable_blocks_data();
+        }
         if upgrade_from_version < 2 {
             set_ledger_state(LedgerState::Migrating(LedgerField::Balances));
             print(format!("Upgrading from version {upgrade_from_version} which does not store balances in stable structures, clearing stable balances data.").as_str());
@@ -879,6 +883,7 @@ fn migrate_next_part(instruction_limit: u64) {
     let mut migrated_allowances = 0;
     let mut migrated_expirations = 0;
     let mut migrated_balances = 0;
+    let mut migrated_blocks = 0;
 
     print("Migrating part of the ledger state.");
 
@@ -907,13 +912,20 @@ fn migrate_next_part(instruction_limit: u64) {
                 if ledger.migrate_one_balance() {
                     migrated_balances += 1;
                 } else {
+                    set_ledger_state(LedgerState::Migrating(LedgerField::Blocks));
+                }
+            }
+            LedgerField::Blocks => {
+                if ledger.migrate_one_block() {
+                    migrated_blocks += 1;
+                } else {
                     set_ledger_state(LedgerState::Ready);
                 }
             }
         }
     }
     let instructions_migration = instruction_counter() - instructions_migration_start;
-    let msg = format!("Number of elements migrated: allowances: {migrated_allowances} expirations: {migrated_expirations} balances: {migrated_balances}. Migration step instructions: {instructions_migration}, total instructions used in message: {}, limit: {instruction_limit}." ,
+    let msg = format!("Number of elements migrated: allowances: {migrated_allowances} expirations: {migrated_expirations} balances: {migrated_balances} blocks: {migrated_blocks}. Migration step instructions: {instructions_migration}, total instructions used in message: {}, limit: {instruction_limit}." ,
         instruction_counter());
     if !is_ready() {
         print(format!(
@@ -1171,6 +1183,7 @@ fn notify_dfx_() {
 
 #[export_name = "canister_query block_pb"]
 fn block_() {
+    panic_if_not_ready();
     ic_cdk::setup();
     let arg: BlockArg =
         from_proto_bytes(arg_data_raw()).expect("failed to decode block_pb argument");
@@ -1181,6 +1194,7 @@ fn block_() {
 
 #[export_name = "canister_query tip_of_chain_pb"]
 fn tip_of_chain_() {
+    panic_if_not_ready();
     ic_cdk::setup();
     let _: protobuf::TipOfChainRequest =
         from_proto_bytes(arg_data_raw()).expect("failed to decode tip_of_chain_pb argument");
@@ -1281,6 +1295,8 @@ fn total_supply_() {
 /// with height 100.
 #[export_name = "canister_query iter_blocks_pb"]
 fn iter_blocks_() {
+    panic_if_not_ready();
+
     ic_cdk::setup();
     let args: IterBlocksArgs =
         from_proto_bytes(arg_data_raw()).expect("failed to decode iter_blocks_pb argument");
@@ -1289,14 +1305,10 @@ fn iter_blocks_() {
         args.length,
         max_blocks_per_request(&PrincipalId::from(caller())),
     ) as u64;
-    let start = args.start as u64;
-    let blocks = LEDGER
-        .read()
-        .unwrap()
-        .blockchain
-        .blocks
-        .get_blocks(start..start + length);
-
+    let archived_len = LEDGER.read().unwrap().blockchain.num_archived_blocks;
+    let start = archived_len + args.start as u64;
+    let end = start + length;
+    let blocks = LEDGER.read().unwrap().blockchain.get_blocks(start..end);
     let res =
         to_proto_bytes(IterBlocksRes(blocks)).expect("failed to encode iter_blocks_pb response");
     reply_raw(&res)
@@ -1306,6 +1318,8 @@ fn iter_blocks_() {
 /// range stored in the Node the result is an error.
 #[export_name = "canister_query get_blocks_pb"]
 fn get_blocks_() {
+    panic_if_not_ready();
+
     ic_cdk::setup();
     let args: GetBlocksArgs =
         from_proto_bytes(arg_data_raw()).expect("failed to decode get_blocks_pb argument");
@@ -1315,13 +1329,14 @@ fn get_blocks_() {
         max_blocks_per_request(&PrincipalId::from(caller())) as u64,
     );
     let blockchain = &LEDGER.read().unwrap().blockchain;
-    let start_offset = blockchain.num_archived_blocks();
-    let res = icp_ledger::get_blocks_ledger(
-        &blockchain.blocks,
-        start_offset,
-        args.start,
-        length as usize,
-    );
+    let local_blocks_range = blockchain.num_archived_blocks..blockchain.chain_length();
+    let requested_range = args.start..args.start + length;
+    let res = if !range_utils::is_subrange(&requested_range, &local_blocks_range) {
+        GetBlocksRes(Err(format!("Requested blocks outside the range stored in the ledger node. Requested [{} .. {}]. Available [{} .. {}].",
+            requested_range.start, requested_range.end, local_blocks_range.start, local_blocks_range.end)))
+    } else {
+        GetBlocksRes(Ok(blockchain.get_blocks(requested_range)))
+    };
     let res_proto = to_proto_bytes(res).expect("failed to encode get_blocks_pb respone");
     reply_raw(&res_proto)
 }
@@ -1329,6 +1344,7 @@ fn get_blocks_() {
 #[query]
 #[candid_method(query)]
 fn query_blocks(GetBlocksArgs { start, length }: GetBlocksArgs) -> QueryBlocksResponse {
+    panic_if_not_ready();
     let ledger = LEDGER.read().unwrap();
     let locations = block_locations(&*ledger, start, length.min(usize::MAX as u64) as usize);
 
@@ -1544,6 +1560,7 @@ fn http_request(req: HttpRequest) -> HttpResponse {
 fn query_encoded_blocks(
     GetBlocksArgs { start, length }: GetBlocksArgs,
 ) -> QueryEncodedBlocksResponse {
+    panic_if_not_ready();
     let ledger = LEDGER.read().unwrap();
     let locations = block_locations(&*ledger, start, length.min(usize::MAX as u64) as usize);
 
