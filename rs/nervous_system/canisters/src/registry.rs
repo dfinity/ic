@@ -25,19 +25,17 @@ pub struct RegistryCanister {
 }
 
 impl RegistryCanister {
-    pub fn new(canister_id: CanisterId) -> Self {
-        RegistryCanister { canister_id }
-    }
-
-    pub fn new_prod() -> Self {
-        Self::new(REGISTRY_CANISTER_ID)
+    pub fn new() -> Self {
+        Self {
+            canister_id: REGISTRY_CANISTER_ID,
+        }
     }
 }
 
 impl Default for RegistryCanister {
     fn default() -> Self {
         // This is safe in tests because it would just point to a test registry
-        Self::new_prod()
+        Self::new()
     }
 }
 

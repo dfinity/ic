@@ -66,9 +66,6 @@ impl<S: RegistryDataStableMemory> CanisterRegistryClient for StableCanisterRegis
         key: &str,
         version: RegistryVersion,
     ) -> RegistryClientVersionedResult<Vec<u8>> {
-        if version == ZERO_REGISTRY_VERSION {
-            return Ok(empty_zero_registry_record(key));
-        }
         if self.get_latest_version() < version {
             return Err(RegistryClientError::VersionNotAvailable { version });
         }
@@ -95,10 +92,6 @@ impl<S: RegistryDataStableMemory> CanisterRegistryClient for StableCanisterRegis
         key_prefix: &str,
         version: RegistryVersion,
     ) -> Result<Vec<String>, RegistryClientError> {
-        if version == ZERO_REGISTRY_VERSION {
-            return Ok(vec![]);
-        }
-
         if self.get_latest_version() < version {
             return Err(RegistryClientError::VersionNotAvailable { version });
         }

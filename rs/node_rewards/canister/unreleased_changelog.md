@@ -8,7 +8,7 @@ on the process that this file is part of, see
 
 ## Added
 
-* The Node Reward Canister will not sync changes from the Registry canister.
+* The Node Reward Canister will now sync changes from the Registry canister.
 
 ## Changed
 

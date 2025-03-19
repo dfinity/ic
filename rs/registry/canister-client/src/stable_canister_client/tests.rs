@@ -24,13 +24,13 @@ impl RegistryDataStableMemory for DummyState {
     fn with_registry_map<R>(
         f: impl FnOnce(&StableBTreeMap<StorableRegistryKey, StorableRegistryValue, VM>) -> R,
     ) -> R {
-        STATE.with_borrow(|state| f(state))
+        STATE.with_borrow(f)
     }
 
     fn with_registry_map_mut<R>(
         f: impl FnOnce(&mut StableBTreeMap<StorableRegistryKey, StorableRegistryValue, VM>) -> R,
     ) -> R {
-        STATE.with_borrow_mut(|state| f(state))
+        STATE.with_borrow_mut(f)
     }
 }
 
@@ -57,9 +57,9 @@ fn add_dummy_data() {
     add_record_helper(DELETED_KEY, 39663, None);
     add_record_helper(DELETED_KEY, 39664, Some(42));
     add_record_helper(DELETED_KEY, 39779, Some(42));
-    add_record_helper(&user42_key, 39_779, Some(40));
+    add_record_helper(&user42_key, 39779, Some(40));
     add_record_helper(DELETED_KEY, 39801, None);
-    add_record_helper(&user42_key, 39_972, Some(50));
+    add_record_helper(&user42_key, 39972, Some(50));
 }
 
 #[derive(PartialEq, Eq, Debug)]
@@ -203,15 +203,10 @@ fn can_retrieve_entries_correctly() {
 
     test_getter_value_not_err("A", 0, None);
     test_getter_value_not_err("A", 1, Some(1));
-    // assert_eq!(get_versioned("A", 2).unwrap().as_ref().unwrap(), &value(1));
     test_getter_value_not_err("A", 2, Some(1));
-    // assert_eq!(get_versioned("A", 3).unwrap().as_ref().unwrap(), &value(3));
     test_getter_value_not_err("A", 3, Some(3));
-    // assert_eq!(get_versioned("A", 4).unwrap().as_ref().unwrap(), &value(3));
     test_getter_value_not_err("A", 4, Some(3));
-    // assert_eq!(get_versioned("A", 5).unwrap().as_ref().unwrap(), &value(3));
     test_getter_value_not_err("A", 5, Some(3));
-    // assert_eq!(get_versioned("A", 6).unwrap().as_ref().unwrap(), &value(6));
     test_getter_value_not_err("A", 6, Some(6));
     assert!(get_versioned("A", latest_version + 1).is_err());
     assert!(get("A", latest_version + 1).is_err());

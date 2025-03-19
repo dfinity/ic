@@ -5,10 +5,7 @@ use ic_stable_structures::memory_manager::{MemoryId, MemoryManager, VirtualMemor
 use ic_stable_structures::{DefaultMemoryImpl, StableBTreeMap};
 use std::cell::RefCell;
 
-/// MemoryId for upgrades, if any.  This is reserved, but probably not going to be used.
-const _UPGRADES_MEMORY_ID: MemoryId = MemoryId::new(0);
-
-const REGISTRY_STORE_MEMORY_ID: MemoryId = MemoryId::new(1);
+const REGISTRY_STORE_MEMORY_ID: MemoryId = MemoryId::new(0);
 
 type VM = VirtualMemory<DefaultMemoryImpl>;
 
@@ -28,11 +25,11 @@ impl RegistryDataStableMemory for RegistryStoreStableMemoryBorrower {
     fn with_registry_map<R>(
         f: impl FnOnce(&StableBTreeMap<StorableRegistryKey, StorableRegistryValue, VM>) -> R,
     ) -> R {
-        REGISTRY_DATA_STORE_BTREE_MAP.with(|btree| f(&btree.borrow()))
+        REGISTRY_DATA_STORE_BTREE_MAP.with_borrow(f)
     }
     fn with_registry_map_mut<R>(
         f: impl FnOnce(&mut StableBTreeMap<StorableRegistryKey, StorableRegistryValue, VM>) -> R,
     ) -> R {
-        REGISTRY_DATA_STORE_BTREE_MAP.with(|btree| f(&mut btree.borrow_mut()))
+        REGISTRY_DATA_STORE_BTREE_MAP.with_borrow_mut(f)
     }
 }
