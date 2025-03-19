@@ -10,6 +10,7 @@ use ic_system_test_driver::driver::{
         AttachImageSpec, CreateVmRequest, Farm, GroupMetadata, GroupSpec, ImageLocation, VmType,
     },
     ic::{Subnet, VmAllocationStrategy},
+    test_env_api::{get_empty_disk_img_sha256, get_empty_disk_img_url},
 };
 use ic_types::ReplicaVersion;
 use reqwest::blocking::Client;
@@ -21,7 +22,6 @@ use std::path::PathBuf;
 use std::process::Command;
 use tempfile::tempdir;
 use url::Url;
-
 const FARM_BASE_URL: &str = "https://farm.dfinity.systems";
 
 /// Deploy a single ICOS VM to Farm
@@ -96,13 +96,13 @@ fn main() {
 
     // Adjust VM configuration for nested setup
     let (image_location, vm_type, vm_size) = if args.nested {
-        let empty_disk_img_path =
-            std::env::var("EMPTY_DISK_IMG_PATH").expect("EMPTY_DISK_IMG_PATH not set");
-        let empty_image_id = farm
-            .upload_file(&group_name, empty_disk_img_path, "empty-disk-img.tar.zst")
-            .unwrap();
+        let empty_disk_img_url = get_empty_disk_img_url().unwrap();
+        let empty_disk_img_sha256 = get_empty_disk_img_sha256().unwrap();
         (
-            ImageLocation::IcOsImageViaId { id: empty_image_id },
+            ImageLocation::IcOsImageViaUrl {
+                url: empty_disk_img_url,
+                sha256: empty_disk_img_sha256,
+            },
             VmType::Nested,
             Some(101.into()), // 101 GibiByte image
         )
