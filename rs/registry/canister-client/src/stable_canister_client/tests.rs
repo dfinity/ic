@@ -1,24 +1,14 @@
 use super::*;
 use crate::stable_memory::{StorableRegistryKey, StorableRegistryValue};
 use futures::FutureExt;
-use ic_interfaces_registry::RegistryVersionedRecord;
 use ic_nervous_system_canisters::registry::{FakeRegistry, FakeRegistryResponses};
 use ic_registry_keys::NODE_RECORD_KEY_PREFIX;
 use ic_registry_transport::pb::v1::{RegistryDelta, RegistryValue};
 use ic_stable_structures::memory_manager::{MemoryId, MemoryManager, VirtualMemory};
 use ic_stable_structures::{DefaultMemoryImpl, StableBTreeMap};
-use ic_types::{registry::RegistryDataProviderError, PrincipalId};
+use ic_types::PrincipalId;
 use std::cell::RefCell;
 use std::collections::HashSet;
-use std::sync::{Arc, RwLock};
-
-const DELETED_KEY: &str = "\
-    node_record_\
-    2hkvg-f3qgx-b5zoa-nz4k4-7q5v2-fiohf-x7o45-v6hds-5gf6w-o6lf6-gae";
-
-struct DummyRegistryDataProvider {
-    data: Arc<RwLock<Vec<RegistryTransportRecord>>>,
-}
 
 pub type VM = VirtualMemory<DefaultMemoryImpl>;
 
@@ -34,7 +24,7 @@ impl RegistryDataStableMemory for DummyState {
     fn with_registry_map<R>(
         f: impl FnOnce(&StableBTreeMap<StorableRegistryKey, StorableRegistryValue, VM>) -> R,
     ) -> R {
-        STATE.with_borrow(|state| f(&state))
+        STATE.with_borrow(|state| f(state))
     }
 
     fn with_registry_map_mut<R>(
@@ -52,6 +42,10 @@ pub fn add_record_helper(key: &str, version: u64, value: Option<u64>) {
         );
     });
 }
+
+const DELETED_KEY: &str = "\
+    node_record_\
+    2hkvg-f3qgx-b5zoa-nz4k4-7q5v2-fiohf-x7o45-v6hds-5gf6w-o6lf6-gae";
 
 fn add_dummy_data() {
     let user42_key = format!(

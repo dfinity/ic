@@ -1,15 +1,12 @@
 use candid::{Decode, Encode};
 use ic_interfaces_registry::RegistryValue;
-use ic_nns_test_utils::common::{
-    build_node_rewards_test_wasm, build_node_rewards_wasm, NnsInitPayloadsBuilder,
-};
+use ic_nns_test_utils::common::{build_node_rewards_test_wasm, NnsInitPayloadsBuilder};
 use ic_nns_test_utils::state_test_helpers::{
     query, setup_nns_canisters, state_machine_builder_for_nns_tests,
 };
 use ic_node_rewards_canister_api::lifecycle_args::InitArgs;
 use ic_protobuf::registry::subnet::v1::{SubnetRecord, SubnetType};
 use ic_registry_keys::make_subnet_record_key;
-use ic_state_machine_tests::StateMachine;
 use ic_types::{PrincipalId, SubnetId};
 use std::time::Duration;
 
