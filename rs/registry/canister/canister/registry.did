@@ -197,6 +197,19 @@ type ApiBoundaryNodeIdRecord = record {
   id : opt principal;
 };
 
+type GetChunkRequest = record {
+  content_sha256 : opt blob;
+};
+
+type GetChunkResponse = variant {
+  Ok : Chunk;
+  Err : text;
+};
+
+type Chunk = record {
+  content : opt blob;
+};
+
 type GetNodeOperatorsAndDcsOfNodeProviderResponse = variant {
   Ok : vec record { DataCenterRecord; NodeOperatorRecord };
   Err : text;
@@ -455,6 +468,7 @@ service : {
   deploy_hostos_to_some_nodes : (DeployHostosToSomeNodes) -> ();
   get_api_boundary_node_ids : (GetApiBoundaryNodeIdsRequest) -> (GetApiBoundaryNodeIdsResponse) query;
   get_build_metadata : () -> (text) query;
+  get_chunk : (GetChunkRequest) -> (GetChunkResponse) query;
   get_node_operators_and_dcs_of_node_provider : (principal) -> (GetNodeOperatorsAndDcsOfNodeProviderResponse) query;
   get_node_providers_monthly_xdr_rewards : () -> (GetNodeProvidersMonthlyXdrRewardsResponse) query;
   get_subnet_for_canister : (GetSubnetForCanisterRequest) -> (GetSubnetForCanisterResponse) query;
