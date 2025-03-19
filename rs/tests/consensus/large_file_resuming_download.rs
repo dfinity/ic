@@ -1,20 +1,49 @@
 use std::{path::PathBuf, str::FromStr};
 
 use ic_http_utils::file_downloader::{FileDownloadError, FileDownloader};
-use ic_system_test_driver::{driver::group::SystemTestGroup, driver::test_env::TestEnv, systest};
 
-fn test(_env: TestEnv) {
+async fn get_hash(downloader: FileDownloader, version: &str) -> String {
+    let url = format!(
+        "https://download.dfinity.systems/ic/{}/guest-os/update-img/SHA256SUMS",
+        version
+    );
+
+    let file_path = std::path::Path::new("/tmp/shasums");
+    downloader
+        .download_file(&url, &file_path, None)
+        .await
+        .unwrap();
+
+    std::fs::read_to_string(&file_path)
+        .unwrap()
+        .lines()
+        .find(|line| line.ends_with("update-img.tar.zst"))
+        .map(|line| line.split_once(' ').unwrap().0)
+        .unwrap()
+        .to_string()
+}
+
+fn main() {
+    let version = std::env::var("MAINNET_NNS_SUBNET_REVISION_ENV").unwrap();
+
     let runtime = tokio::runtime::Runtime::new().unwrap();
-    let url = "https://download.dfinity.systems/ic/64060e6a91446ed41be3e1fdfc0abae997d83d86/guest-os/update-img/update-img.tar.zst";
+    // Use a normal downloader since hash is required for further testing.
+    let downloader = FileDownloader::new_with_timeout(None, std::time::Duration::from_secs(30));
+    let hash = runtime.block_on(get_hash(downloader, version.as_ref()));
+
+    let url = format!(
+        "https://download.dfinity.systems/ic/{}/guest-os/update-img/update-img.tar.zst",
+        version
+    );
     let downloader = FileDownloader::new_with_timeout(None, std::time::Duration::from_secs(2));
 
     let output = PathBuf::from_str("/tmp/replica").unwrap();
     let mut last_iteration_size = 0;
     loop {
         let response = runtime.block_on(downloader.download_file(
-            url,
+            url.as_str(),
             output.as_path(),
-            Some("9125fa5fccf580a6796e6fcd0ad3efe8026d689af4f4e0feab1d8421aad31e66".to_string()),
+            Some(hash.clone()),
         ));
         if response.is_ok() {
             break;
@@ -36,12 +65,4 @@ fn test(_env: TestEnv) {
         );
         last_iteration_size = metadata.len();
     }
-}
-
-fn main() {
-    SystemTestGroup::new()
-        .with_setup(|_| ())
-        .add_test(systest!(test))
-        .execute_from_args()
-        .unwrap();
 }
