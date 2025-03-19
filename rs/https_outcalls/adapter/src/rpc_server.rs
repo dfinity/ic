@@ -433,7 +433,7 @@ impl HttpsOutcallsService for CanisterHttp {
             self.client
                 .request(http_req)
                 .await
-                .map_err(|e| format!("Failed to directly connect: {:?}", e))
+                .map_err(|e| format!("Failed to directly connect (Please note that only IPv6 access is guaranteed for applications): {:?}", e))
         }
         .map_err(|err| {
             debug!(self.logger, "Failed to connect: {}", err);
