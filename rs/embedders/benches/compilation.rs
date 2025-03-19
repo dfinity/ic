@@ -10,6 +10,11 @@ use ic_logger::replica_logger::no_op_logger;
 use ic_wasm_types::BinaryEncodedWasm;
 use std::io::Read;
 
+lazy_static::lazy_static! {
+    static ref GOVERNANCE_BENCH_CANISTER: Vec<u8> =
+        canister_test::Project::cargo_bin_maybe_from_env("governance-bench-canister", &[]).bytes();
+}
+
 /// Enable using the same number of rayon threads that we have in production.
 fn set_production_rayon_threads() {
     rayon::ThreadPoolBuilder::new()
@@ -102,6 +107,12 @@ fn generate_binaries() -> Vec<(String, BinaryEncodedWasm)> {
     let qrcode_wasm = BinaryEncodedWasm::new(buf);
 
     result.push(("qrcode".to_string(), qrcode_wasm));
+
+    let mut decoder = libflate::gzip::Decoder::new(&GOVERNANCE_BENCH_CANISTER[..]).unwrap();
+    let mut buf = vec![];
+    decoder.read_to_end(&mut buf).unwrap();
+    let governance_wasm = BinaryEncodedWasm::new(buf);
+    result.push(("governance".to_string(), governance_wasm));
 
     result
 }
