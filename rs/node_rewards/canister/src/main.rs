@@ -50,7 +50,7 @@ fn schedule_registry_sync() {
     ic_cdk_timers::set_timer_interval(REGISTRY_SYNC_INTERVAL_SECONDS, move || {
         spawn(async move {
             let store = REGISTRY_STORE.with(|s| s.clone());
-            // panicking here is okay because we are using an interval instead of a timer that '
+            // panicking here is okay because we are using an interval instead of a timer that
             // has to reschedule itself.
             store
                 .sync_registry_stored()
