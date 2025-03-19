@@ -1490,7 +1490,7 @@ fn inject_metering(
         MeteringType::None => Vec::new(),
         MeteringType::New => injections(code, mem_type),
     };
-    let expected_size = code.len() + initial_points.count() * 6;
+    let expected_size = code.len() + initial_points.len() * 6;
     let points = initial_points
         .iter()
         .filter(|point| match point.cost_detail {
@@ -1503,7 +1503,6 @@ fn inject_metering(
         });
     let orig_elems = code;
     let mut elems: Vec<Operator> = Vec::with_capacity(expected_size);
-    elems.reserve(additional);
     let mut last_injection_position = 0;
 
     use Operator::*;
