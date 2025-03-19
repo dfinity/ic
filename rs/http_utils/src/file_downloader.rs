@@ -56,9 +56,9 @@ impl FileDownloader {
     }
 
     fn log<S: Display>(&self, level: Level, message: S) {
-        self.logger
-            .as_ref()
-            .map(|logger| log!(logger, level, "{}", message));
+        if let Some(logger) = self.logger.as_ref() {
+            log!(logger, level, "{}", message);
+        }
     }
 
     fn info<S: Display>(&self, message: S) {
