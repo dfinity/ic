@@ -39,6 +39,7 @@ ic-subnet-splitting = { path = "../../recovery/subnet_splitting" }
 tempfile = { workspace = true }
 tokio = { workspace = true }
 url = { workspace = true }
+ic-http-utils.path= "../../http_utils"
 
 [[bin]]
 name = "ic-systest-consensus-performance"
@@ -91,6 +92,10 @@ path = "catch_up_loop_prevention_test.rs"
 [[bin]]
 name = "ic-systest-subnet-splitting"
 path = "subnet_splitting_test.rs"
+
+[[bin]]
+name = "ic-systest-large-file-download"
+path = "large_file_resuming_download.rs"
 
 [features]
 upload_perf_systest_results = []

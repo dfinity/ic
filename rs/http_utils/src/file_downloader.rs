@@ -346,8 +346,6 @@ impl Error for FileDownloadError {}
 
 #[cfg(test)]
 mod tests {
-    use std::str::FromStr;
-
     use assert_matches::assert_matches;
     use flate2::write::GzEncoder;
     use flate2::Compression;
@@ -572,49 +570,6 @@ mod tests {
         let logs = setup.logger.drain_logs();
         LogEntriesAssert::assert_that(logs)
             .has_only_one_message_containing(&Level::Warning, "Hash check failed");
-    }
-
-    #[test]
-    async fn test_download_large_file_from_aws() {
-        let url = "https://download.dfinity.systems/ic/64060e6a91446ed41be3e1fdfc0abae997d83d86/guest-os/update-img/update-img.tar.zst";
-        let downloader = FileDownloader::new_with_timeout(
-            Some(ReplicaLogger::from(&InMemoryReplicaLogger::new())),
-            std::time::Duration::from_secs(2),
-        );
-
-        let output = PathBuf::from_str("/tmp/replica").unwrap();
-        let mut last_iteration_size = 0;
-        loop {
-            let response = downloader
-                .download_file(
-                    url,
-                    output.as_path(),
-                    Some(
-                        "9125fa5fccf580a6796e6fcd0ad3efe8026d689af4f4e0feab1d8421aad31e66"
-                            .to_string(),
-                    ),
-                )
-                .await;
-            if response.is_ok() {
-                break;
-            }
-
-            if let Err(FileDownloadError::ReqwestError(e)) = response {
-                if !e.is_timeout() {
-                    panic!("Unexpected error: {:?}", e);
-                }
-            } else {
-                panic!("Unexpected error: {:?}", response);
-            }
-
-            let metadata = fs::metadata(&output).unwrap();
-            assert_ne!(
-                metadata.len(),
-                last_iteration_size,
-                "Sizes are the same in two iterations meaning there is a bug in the implementation"
-            );
-            last_iteration_size = metadata.len();
-        }
     }
 
     fn create_tar<W: Write>(writer: W) -> io::Result<()> {

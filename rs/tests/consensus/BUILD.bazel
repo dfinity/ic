@@ -366,3 +366,14 @@ system_test_nns(
         "@crate_index//:slog",
     ],
 )
+
+system_test(
+    name = "large_file_resuming_download",
+    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
+    deps = [
+        # Keep sorted.
+        "//rs/http_utils",
+        "//rs/tests/driver:ic-system-test-driver",
+        "@crate_index//:tokio",
+    ],
+)

@@ -14492,6 +14492,7 @@ dependencies = [
  "ic-agent",
  "ic-base-types",
  "ic-crypto-test-utils-reproducible-rng",
+ "ic-http-utils",
  "ic-management-canister-types-private",
  "ic-nns-constants",
  "ic-nns-governance-api",
