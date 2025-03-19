@@ -1145,31 +1145,29 @@ async fn icrc2_transfer_from(arg: TransferFromArgs) -> Result<Nat, TransferFromE
 #[cfg(feature = "notify-method")]
 #[export_name = "canister_update notify_dfx"]
 fn notify_dfx_() {
-    ic_cdk::spawn(async move {
-        ic_cdk::setup();
-        let icp_ledger::NotifyCanisterArgs {
-            block_height,
-            max_fee,
-            from_subaccount,
-            to_canister,
-            to_subaccount,
-        } = Decode!(&arg_data_raw(), icp_ledger::NotifyCanisterArgs)
-            .expect("failed to decode notify_dfx argument");
+    use dfn_candid::CandidOne;
+    use dfn_core::endpoint::over_async_may_reject_explicit;
 
-        match notify(
-            block_height,
-            max_fee,
-            from_subaccount,
-            to_canister,
-            to_subaccount,
-            true,
-        )
-        .await
-        {
-            Ok(_) => ic_cdk::api::call::reply(()),
-            Err(error) => reject(&error),
-        }
-    });
+    // we use over_init because it doesn't reply automatically so we can do explicit
+    // replies in the callback
+    over_async_may_reject_explicit(
+        |CandidOne(icp_ledger::NotifyCanisterArgs {
+             block_height,
+             max_fee,
+             from_subaccount,
+             to_canister,
+             to_subaccount,
+         })| {
+            notify(
+                block_height,
+                max_fee,
+                from_subaccount,
+                to_canister,
+                to_subaccount,
+                false,
+            )
+        },
+    );
 }
 
 #[export_name = "canister_query block_pb"]
