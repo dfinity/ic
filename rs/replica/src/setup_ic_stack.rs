@@ -36,7 +36,10 @@ use ic_types::{
     Height, NodeId, SubnetId,
 };
 use ic_xnet_payload_builder::XNetPayloadBuilderImpl;
-use std::sync::{Arc, RwLock};
+use std::{
+    sync::{Arc, RwLock},
+    time::Duration,
+};
 use tokio::sync::{
     mpsc::{channel, UnboundedSender},
     watch, OnceCell,
@@ -145,7 +148,7 @@ pub fn construct_ic_stack(
         artifact_pool_config.persistent_pool_db_path(),
     );
 
-    let backup = artifact_pool_config.backup_config.map(|config| {
+    let backup = artifact_pool_config.backup_config.as_ref().map(|config| {
         Backup::new(
             config.spool_path.clone(),
             config
@@ -159,7 +162,7 @@ pub fn construct_ic_stack(
             Arc::new(SysTimeSource::new()),
         )
     });
-    let backup_sender = backup.map(|b| b.1.clone());
+    let backup_sender = backup.as_ref().map(|b| b.1.clone());
     let consensus_pool = Arc::new(RwLock::new(ConsensusPoolImpl::new(
         node_id,
         // Note: it's important to pass the original proto which came from the command line (as
