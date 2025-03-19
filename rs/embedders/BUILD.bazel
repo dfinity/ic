@@ -76,7 +76,7 @@ ALIASES = {}
 
 DATA = [
     "//rs/rust_canisters/stable_structures:stable_structures_canister",
-    "//rs/nns/governance:governance-bench-canister"
+    "//rs/nns/governance:governance-bench-canister",
 ]
 
 ENV = {
