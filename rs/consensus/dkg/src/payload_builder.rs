@@ -1012,7 +1012,7 @@ fn create_remote_dkg_config(
 mod tests {
     use crate::tests::test_vet_key_config;
 
-    use super::{super::test_utils::complement_state_manager_with_remote_dkg_requests, *};
+    use super::{super::test_utils::complement_state_manager_with_setup_initial_dkg_request, *};
     use ic_consensus_mocks::{
         dependencies_with_subnet_params, dependencies_with_subnet_records_with_raw_state_manager,
         Dependencies,
@@ -1178,7 +1178,7 @@ mod tests {
                 let target_id = NiDkgTargetId::new([0u8; 32]);
                 // The first two times, the context will have a request for the given target and
                 // not afterwards.
-                complement_state_manager_with_remote_dkg_requests(
+                complement_state_manager_with_setup_initial_dkg_request(
                     state_manager.clone(),
                     registry.get_latest_version(),
                     vec![10, 11, 12],
@@ -1188,7 +1188,7 @@ mod tests {
                     Some(2),
                     Some(target_id),
                 );
-                complement_state_manager_with_remote_dkg_requests(
+                complement_state_manager_with_setup_initial_dkg_request(
                     state_manager.clone(),
                     registry.get_latest_version(),
                     vec![],

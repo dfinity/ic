@@ -398,7 +398,7 @@ impl<Pool: DkgPool> BouncerFactory<DkgMessageId, Pool> for DkgBouncer {
 
 #[cfg(test)]
 mod tests {
-    use super::{test_utils::complement_state_manager_with_remote_dkg_requests, *};
+    use super::{test_utils::complement_state_manager_with_setup_initial_dkg_request, *};
     use core::panic;
     use ic_artifact_pool::dkg_pool::DkgPoolImpl;
     use ic_consensus_mocks::{
@@ -686,7 +686,7 @@ mod tests {
                 );
 
                 let target_id = NiDkgTargetId::new([0u8; 32]);
-                complement_state_manager_with_remote_dkg_requests(
+                complement_state_manager_with_setup_initial_dkg_request(
                     state_manager,
                     registry.get_latest_version(),
                     vec![10, 11, 12],
@@ -792,7 +792,7 @@ mod tests {
             );
 
             let target_id = NiDkgTargetId::new([0u8; 32]);
-            complement_state_manager_with_remote_dkg_requests(
+            complement_state_manager_with_setup_initial_dkg_request(
                 state_manager,
                 registry.get_latest_version(),
                 vec![], // an erroneous request with no nodes.
@@ -1272,7 +1272,7 @@ mod tests {
                     [&dependencies_1, &dependencies_2]
                         .iter()
                         .for_each(|dependencies| {
-                            complement_state_manager_with_remote_dkg_requests(
+                            complement_state_manager_with_setup_initial_dkg_request(
                                 dependencies.state_manager.clone(),
                                 dependencies.registry.get_latest_version(),
                                 vec![],
@@ -1280,7 +1280,7 @@ mod tests {
                                 None,
                             );
 
-                            complement_state_manager_with_remote_dkg_requests(
+                            complement_state_manager_with_setup_initial_dkg_request(
                                 dependencies.state_manager.clone(),
                                 dependencies.registry.get_latest_version(),
                                 vec![10, 11, 12],
@@ -1468,7 +1468,7 @@ mod tests {
             );
 
             let target_id = NiDkgTargetId::new([0u8; 32]);
-            complement_state_manager_with_remote_dkg_requests(
+            complement_state_manager_with_setup_initial_dkg_request(
                 state_manager,
                 registry.get_latest_version(),
                 vec![10, 11, 12],
