@@ -658,7 +658,7 @@ mod tests {
                 }
                 MasterPublicKeyId::VetKd(_) => panic!("not applicable to vetKD"),
             },
-            derivation_path: vec![],
+            derivation_path: Arc::new(vec![]),
             pseudo_random_id: [0; 32],
             matched_pre_signature: pre_signature_id.map(|qid| (qid, Height::from(0))),
             nonce: None,

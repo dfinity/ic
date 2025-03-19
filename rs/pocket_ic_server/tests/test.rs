@@ -844,8 +844,8 @@ fn canister_state_dir(shutdown_signal: Option<Signal>) {
     let app_state_dir = state_dir.path().join(hex::encode(app_subnet_seed));
     let pic = PocketIcBuilder::new()
         .with_server_url(newest_server_url)
-        .with_nns_state(nns_subnet, nns_state_dir)
-        .with_subnet_state(SubnetKind::Application, app_subnet, app_state_dir)
+        .with_nns_state(nns_state_dir)
+        .with_subnet_state(SubnetKind::Application, app_state_dir)
         .build();
 
     // Check that the topology has been properly restored.
@@ -867,6 +867,68 @@ fn canister_state_dir(shutdown_signal: Option<Signal>) {
     // Check that the counters have been properly updated.
     check_counter(&pic, nns_canister_id, 4);
     check_counter(&pic, app_canister_id, 3);
+}
+
+/// The following test is similar to `canister_state_dir`,
+/// but creates two app subnets on the original PocketIC instance
+/// and then checks that each of the two app subnets
+/// can be separately restored from its state.
+/// No canisters are deployed to the app subnets
+/// as restoring such states is not supported yet.
+#[test]
+fn with_subnet_state() {
+    // Create a temporary state directory persisted throughout the test.
+    let state_dir = TempDir::new().unwrap();
+    let state_dir_path_buf = state_dir.path().to_path_buf();
+
+    // Create a PocketIC instance with NNS and app subnets.
+    let (server_url, _) = start_server_helper(None, None, false, false);
+    let pic = PocketIcBuilder::new()
+        .with_state_dir(state_dir_path_buf.clone())
+        .with_server_url(server_url)
+        .with_nns_subnet()
+        .with_application_subnet()
+        .with_application_subnet()
+        .build();
+
+    // Retrieve the NNS and app subnets from the topology.
+    let topology = pic.topology();
+    let nns_subnet = topology.get_nns().unwrap();
+    let first_app_subnet = topology.get_app_subnets()[0];
+    let second_app_subnet = topology.get_app_subnets()[1];
+
+    drop(pic);
+
+    for app_subnet in [first_app_subnet, second_app_subnet] {
+        // Start a new PocketIC server.
+        let (new_server_url, _) = start_server_helper(None, None, false, false);
+
+        // Create a PocketIC instance mounting the NNS and app state created so far.
+        let nns_subnet_seed = topology
+            .subnet_configs
+            .get(&nns_subnet)
+            .unwrap()
+            .subnet_seed;
+        let nns_state_dir = state_dir.path().join(hex::encode(nns_subnet_seed));
+        let app_subnet_seed = topology
+            .subnet_configs
+            .get(&app_subnet)
+            .unwrap()
+            .subnet_seed;
+        let app_state_dir = state_dir.path().join(hex::encode(app_subnet_seed));
+        let pic = PocketIcBuilder::new()
+            .with_server_url(new_server_url)
+            .with_nns_state(nns_state_dir)
+            .with_subnet_state(SubnetKind::Application, app_state_dir)
+            .build();
+
+        // Check that the topology has been properly restored.
+        let topology = pic.topology();
+        assert_eq!(topology.get_nns().unwrap(), nns_subnet);
+        assert_eq!(topology.get_app_subnets()[0], app_subnet);
+        // We only specified to restore one app subnet.
+        assert_eq!(topology.get_app_subnets().len(), 1);
+    }
 }
 
 /// Test that PocketIC can handle synchronous update calls, i.e. `/api/v3/.../call`.
