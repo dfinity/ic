@@ -3739,21 +3739,13 @@ pub struct ReadCanisterSnapshotMetadataResponse {
     pub on_low_wasm_memory_hook_status: OnLowWasmMemoryHookStatus,
 }
 
-// TODO: consolidate with rs/types/types/src/lib.rs
 /// An inner type of [`ReadCanisterSnapshotMetadataResponse`].
+///
+/// Corresponds to the internal `CanisterTimer`, but is candid de/encodable.  
 #[derive(Copy, Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
 pub enum GlobalTimer {
     Inactive,
     Active(u64),
-}
-
-impl GlobalTimer {
-    pub fn to_nanos_since_epoch(&self) -> u64 {
-        match self {
-            GlobalTimer::Inactive => 0,
-            GlobalTimer::Active(time) => *time,
-        }
-    }
 }
 
 // TODO: consolidate with rs/replicated_state/src/canister_state/execution_state.rs

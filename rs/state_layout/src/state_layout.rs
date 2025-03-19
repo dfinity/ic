@@ -1,7 +1,7 @@
 use ic_base_types::{NumBytes, NumSeconds};
 use ic_logger::{error, info, warn, ReplicaLogger};
 use ic_management_canister_types_private::{
-    GlobalTimer, LogVisibilityV2, OnLowWasmMemoryHookStatus, SnapshotSource,
+    LogVisibilityV2, OnLowWasmMemoryHookStatus, SnapshotSource,
 };
 use ic_metrics::{buckets::decimal_buckets, MetricsRegistry};
 use ic_protobuf::{
@@ -25,8 +25,8 @@ use ic_replicated_state::{
 use ic_sys::{fs::sync_path, mmap::ScopedMmap};
 use ic_types::{
     batch::TotalQueryStats, nominal_cycles::NominalCycles, AccumulatedPriority, CanisterId,
-    CanisterLog, ComputeAllocation, Cycles, ExecutionRound, Height, LongExecutionMode,
-    MemoryAllocation, NumInstructions, PrincipalId, SnapshotId, Time,
+    CanisterLog, CanisterTimer, ComputeAllocation, Cycles, ExecutionRound, Height,
+    LongExecutionMode, MemoryAllocation, NumInstructions, PrincipalId, SnapshotId, Time,
 };
 use ic_utils::thread::maybe_parallel_map;
 use ic_wasm_types::{CanisterModule, WasmHash};
@@ -210,7 +210,7 @@ pub struct CanisterSnapshotBits {
     /// Whether this snapshot comes from a canister or from a user upload.
     pub source: SnapshotSource,
     /// The state of the global timer
-    pub global_timer: GlobalTimer,
+    pub global_timer: CanisterTimer,
     /// The state of the low memory hook
     pub on_low_wasm_memory_hook_status: OnLowWasmMemoryHookStatus,
 }
@@ -2667,7 +2667,7 @@ impl From<CanisterSnapshotBits> for pb_canister_snapshot_bits::CanisterSnapshotB
                 .iter()
                 .map(|global| global.into())
                 .collect(),
-            global_timer_nanos: Some(item.global_timer.to_nanos_since_epoch()), // TODO: revisit option
+            global_timer_nanos: item.global_timer.to_nanos_since_unix_epoch(), // TODO: revisit option
             on_low_wasm_memory_hook_status: item.on_low_wasm_memory_hook_status.into(),
             source: item.source.into(),
         }
@@ -2699,10 +2699,7 @@ impl TryFrom<pb_canister_snapshot_bits::CanisterSnapshotBits> for CanisterSnapsh
         for global in item.exported_globals.into_iter() {
             exported_globals.push(global.try_into()?);
         }
-        let global_timer = match item.global_timer_nanos {
-            None => GlobalTimer::Inactive,
-            Some(time) => GlobalTimer::Active(time),
-        };
+        let global_timer = CanisterTimer::from_nanos_since_unix_epoch(item.global_timer_nanos);
         let on_low_wasm_memory_hook_status: pb_canister_state_bits::OnLowWasmMemoryHookStatus =
             pb_canister_state_bits::OnLowWasmMemoryHookStatus::try_from(
                 item.on_low_wasm_memory_hook_status,

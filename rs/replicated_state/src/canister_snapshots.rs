@@ -3,11 +3,9 @@ use crate::{
     canister_state::system_state::wasm_chunk_store::WasmChunkStore,
     CanisterState, NumWasmPages, PageMap,
 };
-use ic_management_canister_types_private::{
-    GlobalTimer, OnLowWasmMemoryHookStatus, SnapshotSource,
-};
+use ic_management_canister_types_private::{OnLowWasmMemoryHookStatus, SnapshotSource};
 use ic_sys::PAGE_SIZE;
-use ic_types::{CanisterId, NumBytes, SnapshotId, Time};
+use ic_types::{CanisterId, CanisterTimer, NumBytes, SnapshotId, Time};
 use ic_validate_eq::ValidateEq;
 use ic_validate_eq_derive::ValidateEq;
 use ic_wasm_types::CanisterModule;
@@ -301,7 +299,7 @@ pub struct ExecutionStateSnapshot {
     #[validate_eq(CompareWithValidateEq)]
     pub wasm_memory: PageMemory,
     /// Status of global timer
-    pub global_timer: GlobalTimer,
+    pub global_timer: CanisterTimer,
     /// Whether the hook is inactive, ready or executed.
     pub on_low_wasm_memory_hook_status: OnLowWasmMemoryHookStatus,
 }
@@ -368,7 +366,7 @@ impl CanisterSnapshot {
             exported_globals: execution_state.exported_globals.clone(),
             stable_memory: PageMemory::from(&execution_state.stable_memory),
             wasm_memory: PageMemory::from(&execution_state.wasm_memory),
-            global_timer: global_timer.into(),
+            global_timer,
             on_low_wasm_memory_hook_status: hook_status,
         };
 
@@ -498,7 +496,7 @@ mod tests {
                 page_map: PageMap::new_for_testing(),
                 size: NumWasmPages::new(10),
             },
-            global_timer: GlobalTimer::Inactive,
+            global_timer: CanisterTimer::Inactive,
             on_low_wasm_memory_hook_status: OnLowWasmMemoryHookStatus::ConditionNotSatisfied,
         };
         let snapshot = CanisterSnapshot::new(
