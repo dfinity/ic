@@ -402,7 +402,7 @@ pub async fn notify(
     to_subaccount: Option<Subaccount>,
     notify_using_protobuf: bool,
 ) -> Result<BytesS, String> {
-    use dfn_core::api::{call_bytes_with_cleanup, call_with_cleanup, Funds};
+    use dfn_core::api::call_with_cleanup;
     use dfn_protobuf::ProtoBuf;
 
     NOTIFY_METHOD_CALLS.with(|n| *n.borrow_mut() += 1);
@@ -496,21 +496,21 @@ pub async fn notify(
         let bytes = ProtoBuf(transaction_notification_args)
             .into_bytes()
             .expect("transaction notification serialization failed");
-        call_bytes_with_cleanup(
-            to_canister,
+        ic_cdk::api::call::call_raw(
+            to_canister.into(),
             "transaction_notification_pb",
             &bytes[..],
-            Funds::zero(),
+            0,
         )
         .await
     } else {
         let bytes = candid::encode_one(transaction_notification_args)
             .expect("transaction notification serialization failed");
-        call_bytes_with_cleanup(
-            to_canister,
+        ic_cdk::api::call::call_raw(
+            to_canister.into(),
             "transaction_notification",
             &bytes[..],
-            Funds::zero(),
+            0,
         )
         .await
     };
