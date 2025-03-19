@@ -1,5 +1,5 @@
 use flate2::read::GzDecoder;
-use http::{header, Method};
+use http::Method;
 use ic_crypto_sha2::Sha256;
 use ic_logger::{info, warn, ReplicaLogger};
 use reqwest::{Client, Response};
