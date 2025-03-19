@@ -1,8 +1,23 @@
+use ic_node_rewards_canister_api::monthly_rewards::{
+    GetNodeProvidersMonthlyXdrRewardsRequest, GetNodeProvidersMonthlyXdrRewardsResponse,
+};
 use ic_registry_canister_client::CanisterRegistryClient;
+use std::cell::RefCell;
 use std::sync::Arc;
+use std::thread::LocalKey;
 
 pub struct NodeRewardsCanister {
     registry_client: Arc<dyn CanisterRegistryClient>,
+}
+
+impl NodeRewardsCanister {
+    pub fn get_node_providers_monthly_xdr_rewards(
+        canister: &LocalKey<RefCell<NodeRewardsCanister>>,
+        registry_client: Arc<dyn CanisterRegistryClient>,
+        request: GetNodeProvidersMonthlyXdrRewardsRequest,
+    ) -> GetNodeProvidersMonthlyXdrRewardsResponse {
+        todo!()
+    }
 }
 
 impl NodeRewardsCanister {

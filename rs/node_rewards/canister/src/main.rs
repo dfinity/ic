@@ -1,10 +1,14 @@
+use candid::candid_method;
 #[cfg(any(test, feature = "test"))]
 use ic_cdk::query;
-use ic_cdk::{init, post_upgrade, pre_upgrade, spawn};
+use ic_cdk::{init, post_upgrade, pre_upgrade, spawn, update};
 use ic_nervous_system_canisters::registry::RegistryCanister;
 use ic_node_rewards_canister::canister::NodeRewardsCanister;
 use ic_node_rewards_canister::storage::RegistryStoreStableMemoryBorrower;
 use ic_node_rewards_canister_api::lifecycle_args::{InitArgs, UpgradeArgs};
+use ic_node_rewards_canister_api::monthly_rewards::{
+    GetNodeProvidersMonthlyXdrRewardsRequest, GetNodeProvidersMonthlyXdrRewardsResponse,
+};
 use ic_registry_canister_client::CanisterRegistryClient;
 use ic_registry_canister_client::StableCanisterRegistryClient;
 use std::cell::RefCell;
@@ -66,6 +70,17 @@ fn schedule_registry_sync() {
 #[query(hidden = true)]
 fn get_registry_value(key: String) -> Result<Option<Vec<u8>>, String> {
     CANISTER.with(|canister| canister.borrow().get_registry_value(key))
+}
+
+#[update]
+fn get_node_providers_monthly_xdr_rewards(
+    request: GetNodeProvidersMonthlyXdrRewardsRequest,
+) -> GetNodeProvidersMonthlyXdrRewardsResponse {
+    NodeRewardsCanister::get_node_providers_monthly_xdr_rewards(
+        &CANISTER,
+        REGISTRY_STORE.with(|s| s.clone()),
+        request,
+    )
 }
 
 #[cfg(test)]
