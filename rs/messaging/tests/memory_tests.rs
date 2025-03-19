@@ -57,11 +57,10 @@ fn check_message_memory_limits_are_respected_impl(
 
     let fixture = Fixture::new(FixtureConfig {
         local_canisters_count: 2,
-        local_max_instructions_per_round: 100_000_000,
         local_message_memory_capacity: LOCAL_MESSAGE_MEMORY_CAPACITY,
         remote_canisters_count: 1,
-        remote_max_instructions_per_round: 100_000_000,
         remote_message_memory_capacity: REMOTE_MESSAGE_MEMORY_CAPACITY,
+        ..FixtureConfig::default()
     });
 
     config.receivers = fixture.canisters();
