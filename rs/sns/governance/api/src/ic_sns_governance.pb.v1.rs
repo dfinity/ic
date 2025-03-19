@@ -93,7 +93,7 @@ pub struct Neuron {
     /// not support enum keys in maps.
     pub followees: BTreeMap<u64, neuron::Followees>,
     /// The neuron's followees, specified as a map of proposal topics IDs to followees neuron IDs.
-    pub topic_followees: Option<BTreeMap<topics::Topic, neuron::Followees>>,
+    pub topic_followees: Option<BTreeMap<u64, neuron::Followees>>,
     /// The accumulated unstaked maturity of the neuron, measured in "e8s equivalent", i.e., in equivalent of
     /// 10E-8 of a governance token.
     ///

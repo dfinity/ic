@@ -2304,7 +2304,7 @@ impl NeuronRecipe {
 
     // TODO[NNS1-3676]: Provide a proper implementation for this function once new SNSs are
     // TODO[NNS1-3676]: to begin using topics-based following.
-    pub(crate) fn construct_topic_followees(&self) -> BTreeMap<i32, Followees> {
+    pub(crate) fn construct_topic_followees(&self) -> BTreeMap<u64, Followees> {
         btreemap! {}
     }
 

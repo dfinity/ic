@@ -170,7 +170,7 @@ message Neuron {
   map<uint64, Followees> followees = 11;
 
   // The neuron's followees, specified as a map of proposal topics IDs to followees neuron IDs.
-  map<int32, Followees> topic_followees = 19;
+  map<uint64, Followees> topic_followees = 19;
 
   // The accumulated unstaked maturity of the neuron, measured in "e8s equivalent", i.e., in equivalent of
   // 10E-8 of a governance token.

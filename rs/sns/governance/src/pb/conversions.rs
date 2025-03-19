@@ -77,31 +77,14 @@ impl From<pb_api::DisburseMaturityInProgress> for pb::DisburseMaturityInProgress
     }
 }
 
-/// Converts an internal encoding of a topic into an optional `pb_api::Topic` instance.
-fn topic_id_to_api(topic_id: i32) -> Option<pb_api::topics::Topic> {
-    let Ok(topic) = pb::Topic::try_from(topic_id) else {
-        // The topic ID is invalid; this could happen in a highly unexpected situation, e.g.,
-        // if Governance is downgraded from a version that had new topics to an older version
-        // with fewer topics.
-        return None;
-    };
-    let Ok(topic) = pb_api::topics::Topic::try_from(topic) else {
-        // This is `pb::Topic::Unspecified`, which should be a forbidden value throughout
-        // the implementation of Governance. This case is there because of Prost's encoding
-        // of enumerations, which always starts with a special `0_i32` value.
-        return None;
-    };
-    Some(topic)
-}
-
 impl From<pb::Neuron> for pb_api::Neuron {
     fn from(item: pb::Neuron) -> Self {
         let topic_followees = Some(
             item.topic_followees
                 .into_iter()
-                .filter_map(|(topic_id, followees)| {
+                .map(|(topic, followees)| {
                     let followees = pb_api::neuron::Followees::from(followees);
-                    topic_id_to_api(topic_id).map(|topic| (topic, followees))
+                    (topic, followees)
                 })
                 .collect(),
         );
@@ -141,7 +124,6 @@ impl From<pb_api::Neuron> for pb::Neuron {
             .unwrap_or_default()
             .into_iter()
             .map(|(topic, followees)| {
-                let topic = i32::from(pb::Topic::from(topic));
                 let followees = pb::neuron::Followees::from(followees);
                 (topic, followees)
             })
@@ -228,6 +210,7 @@ impl From<pb::NervousSystemFunction> for pb_api::NervousSystemFunction {
         }
     }
 }
+
 impl From<pb_api::NervousSystemFunction> for pb::NervousSystemFunction {
     fn from(item: pb_api::NervousSystemFunction) -> Self {
         Self {
@@ -237,6 +220,23 @@ impl From<pb_api::NervousSystemFunction> for pb::NervousSystemFunction {
             function_type: item.function_type.map(|x| x.into()),
         }
     }
+}
+
+/// Converts an internal encoding of a topic into an optional `pb_api::Topic` instance.
+fn topic_id_to_api(topic_id: i32) -> Option<pb_api::topics::Topic> {
+    let Ok(topic) = pb::Topic::try_from(topic_id) else {
+        // The topic ID is invalid; this could happen in a highly unexpected situation, e.g.,
+        // if Governance is downgraded from a version that had new topics to an older version
+        // with fewer topics.
+        return None;
+    };
+    let Ok(topic) = pb_api::topics::Topic::try_from(topic) else {
+        // This is `pb::Topic::Unspecified`, which should be a forbidden value throughout
+        // the implementation of Governance. This case is there because of Prost's encoding
+        // of enumerations, which always starts with a special `0_i32` value.
+        return None;
+    };
+    Some(topic)
 }
 
 impl From<pb::nervous_system_function::GenericNervousSystemFunction>
@@ -252,6 +252,7 @@ impl From<pb::nervous_system_function::GenericNervousSystemFunction>
         }
     }
 }
+
 impl From<pb_api::nervous_system_function::GenericNervousSystemFunction>
     for pb::nervous_system_function::GenericNervousSystemFunction
 {

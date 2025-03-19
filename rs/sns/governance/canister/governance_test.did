@@ -520,7 +520,7 @@ type Neuron = record {
   vesting_period_seconds : opt nat64;
   disburse_maturity_in_progress : vec DisburseMaturityInProgress;
   followees : vec record { nat64; Followees };
-  topic_followees : opt vec record { Topic; Followees };
+  topic_followees : opt vec record { nat64; Followees };
   neuron_fees_e8s : nat64;
 };
 

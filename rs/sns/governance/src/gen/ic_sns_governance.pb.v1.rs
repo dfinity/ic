@@ -120,8 +120,8 @@ pub struct Neuron {
     #[prost(btree_map = "uint64, message", tag = "11")]
     pub followees: ::prost::alloc::collections::BTreeMap<u64, neuron::Followees>,
     /// The neuron's followees, specified as a map of proposal topics IDs to followees neuron IDs.
-    #[prost(btree_map = "int32, message", tag = "19")]
-    pub topic_followees: ::prost::alloc::collections::BTreeMap<i32, neuron::Followees>,
+    #[prost(btree_map = "uint64, message", tag = "19")]
+    pub topic_followees: ::prost::alloc::collections::BTreeMap<u64, neuron::Followees>,
     /// The accumulated unstaked maturity of the neuron, measured in "e8s equivalent", i.e., in equivalent of
     /// 10E-8 of a governance token.
     ///
