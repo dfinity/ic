@@ -996,24 +996,14 @@ mod tests {
         ]
     }
 
-    fn key_id_with_name(key_id: &MasterPublicKeyId, name: &str) -> MasterPublicKeyId {
+    fn clone_key_id_with_name(key_id: &MasterPublicKeyId, name: &str) -> MasterPublicKeyId {
+        let mut key_id = key_id.clone();
         match key_id {
-            MasterPublicKeyId::Ecdsa(ecdsa_key_id) => {
-                let mut key_id = ecdsa_key_id.clone();
-                key_id.name = name.to_string();
-                MasterPublicKeyId::Ecdsa(key_id)
-            }
-            MasterPublicKeyId::Schnorr(schnorr_key_id) => {
-                let mut key_id = schnorr_key_id.clone();
-                key_id.name = name.to_string();
-                MasterPublicKeyId::Schnorr(key_id)
-            }
-            MasterPublicKeyId::VetKd(vetkd_key_id) => {
-                let mut key_id = vetkd_key_id.clone();
-                key_id.name = name.to_string();
-                MasterPublicKeyId::VetKd(key_id)
-            }
+            MasterPublicKeyId::Ecdsa(ref mut key_id) => key_id.name = name.into(),
+            MasterPublicKeyId::Schnorr(ref mut key_id) => key_id.name = name.into(),
+            MasterPublicKeyId::VetKd(ref mut key_id) => key_id.name = name.into(),
         }
+        key_id
     }
 
     #[derive(Clone)]
@@ -1279,7 +1269,7 @@ mod tests {
             let key = setup.generate_key_transcript(&key_id1);
             let c1 = make_cup(Height::from(10), Some(key.clone()));
 
-            let key_id2 = key_id_with_name(&key_id1, "other_key");
+            let key_id2 = clone_key_id_with_name(&key_id1, "other_key");
             let c2 = if let (
                 MasterPublicKeyId::VetKd(ref key_id),
                 KeyTranscript::NiDkg(ref transcript),
