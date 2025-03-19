@@ -624,15 +624,15 @@ impl StreamHandlerImpl {
                         state,
                         available_guaranteed_response_memory,
                     ) {
-                        Ok(maybe_lost_cycles) => {
+                        Accept(maybe_lost_cycles) => {
                             // Reject response successfully inducted or dropped.
                             lost_cycles += maybe_lost_cycles;
                         }
-                        Err((RejectReason::CanisterMigrating, reject_response)) => {
+                        Reject(RejectReason::CanisterMigrating, reject_response) => {
                             // Canister is being migrated, reroute reject response.
                             reroute_response(reject_response, state, streams, &self.log);
                         }
-                        Err(_) => {
+                        Reject(..) => {
                             unreachable!(
                                 "Errors other than `CanisterMigrating` shouldn't be possible."
                             );
@@ -760,12 +760,12 @@ impl StreamHandlerImpl {
                 state,
                 available_guaranteed_response_memory,
             ) {
-                Ok(maybe_lost_cycles) => {
+                Accept(maybe_lost_cycles) => {
                     // Message successfully inducted or dropped.
                     stream.push_accept_signal();
                     maybe_lost_cycles
                 }
-                Err((reason, RequestOrResponse::Request(request)))
+                Reject(reason, RequestOrResponse::Request(request))
                     if state.metadata.certification_version < CertificationVersion::V19 =>
                 {
                     // Unable to induct a request, generate reject response and push it into `stream`.
@@ -773,17 +773,17 @@ impl StreamHandlerImpl {
                     stream.push_accept_signal();
                     Cycles::zero()
                 }
-                Err((reason, RequestOrResponse::Request(_))) => {
+                Reject(reason, RequestOrResponse::Request(_)) => {
                     // Unable to induct a request, push a reject signal.
                     stream.push_reject_signal(reason);
                     Cycles::zero()
                 }
-                Err((RejectReason::CanisterMigrating, RequestOrResponse::Response(_))) => {
+                Reject(RejectReason::CanisterMigrating, RequestOrResponse::Response(_)) => {
                     // Unable to deliver a response due to migrating canister, push reject signal.
                     stream.push_reject_signal(RejectReason::CanisterMigrating);
                     Cycles::zero()
                 }
-                Err((_, RequestOrResponse::Response(_))) => {
+                Reject(_, RequestOrResponse::Response(_)) => {
                     unreachable!("No signals are generated for response induction failures except for CanisterMigrating");
                 }
             }
@@ -812,12 +812,12 @@ impl StreamHandlerImpl {
     /// Inducts a message into `state`.
     ///
     /// There are 3 possible outcomes:
-    ///  * `msg` successfully inducted: returns `Ok(0)` (no cycles lost).
+    ///  * `msg` successfully inducted: returns `Accept(0)` (no cycles lost).
     ///  * `msg` silently dropped (e.g. late best-effort response): returns
-    ///    `Ok(lost_cycles)`, where `lost_cycles` is the amount of attached cycles
-    ///    that were lost.
-    ///  * `msg` failed to be inducted (error or canister migrating), returns an
-    ///    `Err` wrapping a `RejectReason` and the original `msg`. The caller is
+    ///    `Accept(lost_cycles)`, where `lost_cycles` is the amount of attached
+    ///    cycles that were lost (potentially zero).
+    ///  * `msg` failed to be inducted (error or canister migrating), returns a
+    ///    `Reject` wrapping a `RejectReason` and the original `msg`. The caller is
     ///    expected to produce a reject response or a reject signal.
     fn induct_message_impl(
         &self,
@@ -825,7 +825,7 @@ impl StreamHandlerImpl {
         msg_type: &str,
         state: &mut ReplicatedState,
         available_guaranteed_response_memory: &mut i64,
-    ) -> Result<Cycles, (RejectReason, RequestOrResponse)> {
+    ) -> InductionResult {
         // Subnet that should have received the message according to the routing table.
         let receiver_host_subnet = state
             .metadata
@@ -843,14 +843,14 @@ impl StreamHandlerImpl {
                     Ok(true) => {
                         self.observe_inducted_message_status(msg_type, LABEL_VALUE_SUCCESS);
                         self.observe_inducted_payload_size(payload_size);
-                        Ok(Cycles::zero())
+                        Accept(Cycles::zero())
                     }
 
                     // Message silently dropped, all done.
                     Ok(false) => {
                         self.observe_inducted_message_status(msg_type, LABEL_VALUE_DROPPED);
                         // Cycles were lost.
-                        Ok(msg_cycles)
+                        Accept(msg_cycles)
                     }
 
                     // Message not inducted.
@@ -879,7 +879,7 @@ impl StreamHandlerImpl {
                                     self.log,
                                     "Inducting request failed: {}\n{:?}", &err, &request
                                 );
-                                Err((reason, msg))
+                                Reject(reason, msg)
                             }
                             RequestOrResponse::Response(response) => {
                                 // Responses should always be inducted successfully (or silently dropped,
@@ -893,7 +893,7 @@ impl StreamHandlerImpl {
                                 );
                                 self.metrics.critical_error_induct_response_failed.inc();
                                 // Cycles are lost.
-                                Ok(response.refund)
+                                Accept(response.refund)
                             }
                         }
                     }
@@ -922,7 +922,7 @@ impl StreamHandlerImpl {
                         );
                     }
                 }
-                Err((RejectReason::CanisterMigrating, msg))
+                Reject(RejectReason::CanisterMigrating, msg)
             }
 
             // Receiver is not and was not (according to `migrating_canisters`) recently
@@ -942,7 +942,7 @@ impl StreamHandlerImpl {
                 );
                 self.metrics.critical_error_receiver_subnet_mismatch.inc();
                 // Cycles are lost.
-                Ok(msg.cycles())
+                Accept(msg.cycles())
             }
         }
     }
@@ -1233,3 +1233,21 @@ impl std::fmt::Display for StreamComponent {
         }
     }
 }
+
+/// The outcome of inducting a message.
+#[must_use]
+enum InductionResult {
+    /// Message was accepted (either inducted or silently dropped), with the caller
+    /// expected to produce (the equivalent of) an accept signal.
+    ///
+    /// If the message was silently dropped (e.g. a late best-effort response),
+    /// holds the cycles that had been attached to the message and were thus lost.
+    Accept(Cycles),
+
+    /// Message was rejected, with the caller expected to produce a reject response
+    /// or a reject signal.
+    ///
+    /// Wraps the reject reason and the original message.
+    Reject(RejectReason, RequestOrResponse),
+}
+use InductionResult::*;
