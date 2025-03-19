@@ -12577,6 +12577,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-sns-governance-api-helpers"
+version = "0.9.0"
+dependencies = [
+ "ic-nervous-system-common",
+ "ic-sns-governance-api",
+ "icrc-ledger-types",
+ "maplit",
+]
+
+[[package]]
 name = "ic-sns-governance-proposal-criticality"
 version = "0.0.1"
 dependencies = [
