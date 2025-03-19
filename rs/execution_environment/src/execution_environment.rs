@@ -2920,7 +2920,7 @@ impl ExecutionEnvironment {
             (*request).clone(),
             ThresholdArguments::VetKd(VetKdArguments {
                 key_id: args.key_id,
-                input: args.input,
+                input: Arc::new(args.input),
                 transport_public_key: args.transport_public_key.to_vec(),
                 ni_dkg_id: ni_dkg_id.clone(),
                 height: Height::new(current_round.get()),
@@ -3049,7 +3049,7 @@ impl ExecutionEnvironment {
             SubnetCallContext::SignWithThreshold(SignWithThresholdContext {
                 request,
                 args,
-                derivation_path,
+                derivation_path: Arc::new(derivation_path),
                 pseudo_random_id,
                 batch_time: state.metadata.batch_time,
                 matched_pre_signature: None,
