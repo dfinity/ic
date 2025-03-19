@@ -54,20 +54,18 @@ pub fn add_record_helper(key: &str, version: u64, value: Option<u64>) {
 }
 
 fn add_dummy_data() {
+    let user42_key = format!(
+        "{}{}",
+        NODE_RECORD_KEY_PREFIX,
+        PrincipalId::new_user_test_id(42),
+    );
     add_record_helper(DELETED_KEY, 39662, Some(42));
     add_record_helper(DELETED_KEY, 39663, None);
     add_record_helper(DELETED_KEY, 39664, Some(42));
     add_record_helper(DELETED_KEY, 39779, Some(42));
+    add_record_helper(&user42_key, 39_779, Some(40));
     add_record_helper(DELETED_KEY, 39801, None);
-    add_record_helper(
-        &format!(
-            "{}{}",
-            NODE_RECORD_KEY_PREFIX,
-            PrincipalId::new_user_test_id(42),
-        ),
-        39_972,
-        Some(50),
-    );
+    add_record_helper(&user42_key, 39_972, Some(50));
 }
 
 #[derive(PartialEq, Eq, Debug)]
@@ -100,8 +98,22 @@ fn test_absent_after_delete() {
     let client = client_for_tests(0, Default::default());
     add_dummy_data();
 
-    let result = client.get_key_family(NODE_RECORD_KEY_PREFIX, RegistryVersion::new(39_972));
+    // Version before it was deleted, it should show up.
+    let result = client.get_key_family(NODE_RECORD_KEY_PREFIX, RegistryVersion::new(39800));
+    assert_eq!(
+        result,
+        Ok(vec![
+            DELETED_KEY.to_string(),
+            format!(
+                "{}{}",
+                NODE_RECORD_KEY_PREFIX,
+                PrincipalId::new_user_test_id(42)
+            )
+        ])
+    );
 
+    let result = client.get_key_family(NODE_RECORD_KEY_PREFIX, RegistryVersion::new(39_972));
+    // DELETED_KEY should not be present in result, only principal 42.
     assert_eq!(
         result,
         Ok(vec![format!(
