@@ -136,17 +136,29 @@ impl FileDownloader {
                 .await?;
         }
 
-        self.info("Response read");
-        if let Some(expected_hash) = expected_sha256_hex.as_ref() {
-            if let Err(e) = check_file_hash(file_path, expected_hash) {
-                self.warn(format!("Hash check failed: {:?} - deleting file", e));
-
-                fs::remove_file(file_path)
-                    .map_err(|e| FileDownloadError::file_remove_error(file_path, e))?;
-                return Err(e);
+        match expected_sha256_hex.as_ref() {
+            Some(expected_hash) => {
+                self.info("Response read. Checking hash.");
+                check_file_hash(file_path, &expected_hash)
+                    .inspect(|_| self.info("Hash check passed successfully."))
+                    .map_err(|hash_invalid_err| {
+                        self.warn(format!(
+                            "Hash check failed: {:?} - deleting file",
+                            hash_invalid_err
+                        ));
+                        if let Err(file_delete_err) = fs::remove_file(file_path)
+                            .map_err(|err| FileDownloadError::file_remove_error(file_path, err))
+                        {
+                            return file_delete_err;
+                        }
+                        hash_invalid_err
+                    })
+            }
+            None => {
+                self.info("Response read. Skipping hash verification since it wasn't provided.");
+                Ok(())
             }
         }
-        Ok(())
     }
 
     async fn resuming_http_get(
@@ -484,7 +496,7 @@ mod tests {
 
         let logs = setup.logger.drain_logs();
         LogEntriesAssert::assert_that(logs)
-            .has_only_one_message_containing(&Level::Info, "Response read");
+            .has_only_one_message_containing(&Level::Info, "Response read. Checking hash.");
     }
 
     #[test]
@@ -511,7 +523,10 @@ mod tests {
         let logs = logger.drain_logs();
         LogEntriesAssert::assert_that(logs)
             .has_exactly_n_messages_containing(0, &Level::Info, "File already exists")
-            .has_only_one_message_containing(&Level::Info, "Response read");
+            .has_only_one_message_containing(
+                &Level::Info,
+                "Response read. Skipping hash verification since it wasn't provided.",
+            );
 
         // Download it again, this time expecting the correct hash
         let logger = InMemoryReplicaLogger::new();
@@ -528,7 +543,7 @@ mod tests {
         LogEntriesAssert::assert_that(logs).has_exactly_n_messages_containing(
             1,
             &Level::Info,
-            "Response read",
+            "Response read. Checking hash.",
         );
 
         setup.assert();

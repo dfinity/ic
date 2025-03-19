@@ -64,5 +64,6 @@ fn main() {
             "Sizes are the same in two iterations meaning there is a bug in the implementation"
         );
         last_iteration_size = metadata.len();
+        assert!(last_iteration_size > 0);
     }
 }
