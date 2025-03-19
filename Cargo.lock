@@ -12679,6 +12679,7 @@ dependencies = [
  "ic-base-types",
  "ic-canister-client-sender",
  "ic-canisters-http-types",
+ "ic-config",
  "ic-crypto",
  "ic-crypto-sha2",
  "ic-icrc1",
