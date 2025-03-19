@@ -18,17 +18,17 @@ use std::sync::Arc;
 const LOCAL_SUBNET_ID: SubnetId = ic_test_utilities_types::ids::SUBNET_0;
 const REMOTE_SUBNET_ID: SubnetId = ic_test_utilities_types::ids::SUBNET_1;
 
-const KB: u64 = 1024;
-const MB: u64 = KB * KB;
+pub const KB: u64 = 1024;
+pub const MB: u64 = KB * KB;
 
 #[derive(Debug)]
-struct FixtureConfig {
-    local_canisters_count: u64,
-    local_max_instructions_per_round: u64,
-    local_message_memory_capacity: u64,
-    remote_canisters_count: u64,
-    remote_max_instructions_per_round: u64,
-    remote_message_memory_capacity: u64,
+pub struct FixtureConfig {
+    pub local_canisters_count: u64,
+    pub local_max_instructions_per_round: u64,
+    pub local_message_memory_capacity: u64,
+    pub remote_canisters_count: u64,
+    pub remote_max_instructions_per_round: u64,
+    pub remote_message_memory_capacity: u64,
 }
 
 impl Default for FixtureConfig {
@@ -47,7 +47,7 @@ impl Default for FixtureConfig {
 impl FixtureConfig {
     /// Generates a `StateMachineConfig` using defaults for an application subnet, except for the
     /// subnet message memory capacity and the maximum number of instructions per round.
-    fn state_machine_config(
+    pub fn state_machine_config(
         subnet_message_memory_capacity: u64,
         max_instructions_per_round: u64,
     ) -> StateMachineConfig {
@@ -78,7 +78,7 @@ impl FixtureConfig {
     }
 
     /// Generates a `StateMachineConfig` for the `local_env`.
-    fn local_state_machine_config(&self) -> StateMachineConfig {
+    pub fn local_state_machine_config(&self) -> StateMachineConfig {
         Self::state_machine_config(
             self.local_message_memory_capacity,
             self.local_max_instructions_per_round,
@@ -86,7 +86,7 @@ impl FixtureConfig {
     }
 
     /// Generates a `StateMachineConfig` for the `remote_env`.
-    fn remote_state_machine_config(&self) -> StateMachineConfig {
+    pub fn remote_state_machine_config(&self) -> StateMachineConfig {
         Self::state_machine_config(
             self.remote_message_memory_capacity,
             self.remote_max_instructions_per_round,
@@ -95,7 +95,7 @@ impl FixtureConfig {
 }
 
 #[derive(Debug, Clone)]
-struct Fixture {
+pub struct Fixture {
     pub local_env: Arc<StateMachine>,
     pub local_canisters: BTreeSet<CanisterId>,
     pub remote_env: Arc<StateMachine>,
@@ -105,7 +105,7 @@ struct Fixture {
 impl Fixture {
     /// Generates a local environment with `local_canisters_count` canisters installed;
     /// and a remote environment with `remote_canisters_count` canisters installed.
-    fn new(config: FixtureConfig) -> Self {
+    pub fn new(config: FixtureConfig) -> Self {
         let mut routing_table = RoutingTable::new();
         routing_table_insert_subnet(&mut routing_table, LOCAL_SUBNET_ID).unwrap();
         routing_table_insert_subnet(&mut routing_table, REMOTE_SUBNET_ID).unwrap();
@@ -493,13 +493,13 @@ impl Fixture {
 
 /// Returned by `Fixture::failed_with_reason()`.
 #[allow(dead_code)]
-struct DebugInfo {
+pub struct DebugInfo {
     pub records: BTreeMap<CanisterId, BTreeMap<u32, CanisterRecord>>,
     pub fixture: Fixture,
 }
 
 /// Installs a 'random-traffic-test-canister' in `env`.
-fn install_canister(env: &StateMachine, wasm: Vec<u8>) -> CanisterId {
+pub fn install_canister(env: &StateMachine, wasm: Vec<u8>) -> CanisterId {
     env.install_canister_with_cycles(wasm, Vec::new(), None, Cycles::new(u128::MAX / 2))
         .expect("Installing random-traffic-test-canister failed")
 }
