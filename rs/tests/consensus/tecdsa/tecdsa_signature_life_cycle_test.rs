@@ -60,7 +60,7 @@ fn protocol_method_name(key_id: &MasterPublicKeyId) -> &str {
     match key_id {
         MasterPublicKeyId::Ecdsa(_) => "sign_with_ecdsa",
         MasterPublicKeyId::Schnorr(_) => "sign_with_schnorr",
-        MasterPublicKeyId::VetKd(_) => "vetkd_derive_encrypted_key",
+        MasterPublicKeyId::VetKd(_) => "vetkd_derive_key",
     }
 }
 

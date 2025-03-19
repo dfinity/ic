@@ -20,7 +20,7 @@ use ic_interfaces::execution_environment::HypervisorError;
 use ic_logger::{error, ReplicaLogger};
 use ic_management_canister_types_private::{
     CanisterChange, CanisterChangeDetails, CanisterChangeOrigin, CanisterStatusType,
-    LogVisibilityV2, OnLowWasmMemoryHookStatus,
+    LogVisibilityV2,
 };
 use ic_protobuf::proxy::{try_from_option_field, ProxyDecodeError};
 use ic_protobuf::state::canister_state_bits::v1 as pb;
@@ -798,7 +798,7 @@ impl SystemState {
         ingress_induction_cycles_debit: Cycles,
         reserved_balance: Cycles,
         reserved_balance_limit: Option<Cycles>,
-        task_queue: VecDeque<ExecutionTask>,
+        task_queue: TaskQueue,
         global_timer: CanisterTimer,
         canister_version: u64,
         canister_history: CanisterHistory,
@@ -810,7 +810,6 @@ impl SystemState {
         next_snapshot_id: u64,
         snapshots_memory_usage: NumBytes,
         metrics: &dyn CheckpointLoadingMetrics,
-        on_low_wasm_memory_hook_status: OnLowWasmMemoryHookStatus,
     ) -> Self {
         let system_state = Self {
             controllers,
@@ -826,11 +825,7 @@ impl SystemState {
             ingress_induction_cycles_debit,
             reserved_balance,
             reserved_balance_limit,
-            task_queue: TaskQueue::from_checkpoint(
-                task_queue,
-                on_low_wasm_memory_hook_status,
-                &canister_id,
-            ),
+            task_queue,
             global_timer,
             canister_version,
             canister_history,

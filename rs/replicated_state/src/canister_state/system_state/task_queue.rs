@@ -2,6 +2,8 @@ use crate::ExecutionTask;
 use ic_config::flag_status::FlagStatus;
 use ic_interfaces::execution_environment::ExecutionRoundType;
 use ic_management_canister_types_private::OnLowWasmMemoryHookStatus;
+use ic_protobuf::proxy::ProxyDecodeError;
+use ic_protobuf::state::canister_state_bits::v1 as pb;
 use ic_types::CanisterId;
 use ic_types::NumBytes;
 use num_traits::SaturatingSub;
@@ -29,7 +31,6 @@ impl TaskQueue {
     pub fn from_checkpoint(
         queue: VecDeque<ExecutionTask>,
         on_low_wasm_memory_hook_status: OnLowWasmMemoryHookStatus,
-        canister_id: &CanisterId,
     ) -> Self {
         let mut mut_queue = queue;
 
@@ -46,21 +47,11 @@ impl TaskQueue {
             | None => None,
         };
 
-        let queue = TaskQueue {
+        Self {
             paused_or_aborted_task,
             on_low_wasm_memory_hook_status,
             queue: mut_queue,
-        };
-
-        // Because paused tasks are not allowed in checkpoint rounds when
-        // checking dts invariants that is equivalent to disabling dts.
-        queue.check_dts_invariants(
-            FlagStatus::Disabled,
-            ExecutionRoundType::CheckpointRound,
-            canister_id,
-        );
-
-        queue
+        }
     }
 
     pub fn front(&self) -> Option<&ExecutionTask> {
@@ -295,6 +286,43 @@ impl TaskQueue {
     }
 }
 
+impl From<&TaskQueue> for pb::TaskQueue {
+    fn from(item: &TaskQueue) -> Self {
+        Self {
+            paused_or_aborted_task: item.paused_or_aborted_task.as_ref().map(|task| task.into()),
+            on_low_wasm_memory_hook_status: pb::OnLowWasmMemoryHookStatus::from(
+                &item.on_low_wasm_memory_hook_status,
+            )
+            .into(),
+            queue: item.queue.iter().map(|task| task.into()).collect(),
+        }
+    }
+}
+
+impl TryFrom<pb::TaskQueue> for TaskQueue {
+    type Error = ProxyDecodeError;
+
+    fn try_from(item: pb::TaskQueue) -> Result<Self, Self::Error> {
+        Ok(Self {
+            paused_or_aborted_task: item
+                .paused_or_aborted_task
+                .map(|task| task.try_into())
+                .transpose()?,
+            on_low_wasm_memory_hook_status: pb::OnLowWasmMemoryHookStatus::try_from(
+                item.on_low_wasm_memory_hook_status,
+            )
+            .map_err(|e| ProxyDecodeError::Other(
+                format!("Error while trying to decode pb::TaskQueue::on_low_wasm_memory_hook_status, {:?}", e)))?
+            .try_into()?,
+            queue: item
+                .queue
+                .into_iter()
+                .map(|task| task.try_into())
+                .collect::<Result<VecDeque<_>, _>>()?,
+        })
+    }
+}
+
 /// Condition for `OnLowWasmMemoryHook` is satisfied if the following holds:
 ///
 /// 1. In the case of `memory_allocation`
@@ -351,13 +379,11 @@ pub fn is_low_wasm_memory_hook_condition_satisfied(
 mod tests {
     use std::sync::Arc;
 
-    use crate::{
-        canister_state::system_state::OnLowWasmMemoryHookStatus,
-        metadata_state::subnet_call_context_manager::InstallCodeCallId, ExecutionTask,
-    };
+    use crate::{metadata_state::subnet_call_context_manager::InstallCodeCallId, ExecutionTask};
 
     use super::TaskQueue;
     use crate::canister_state::system_state::PausedExecutionId;
+    use ic_management_canister_types_private::OnLowWasmMemoryHookStatus;
     use ic_test_utilities_types::messages::IngressBuilder;
     use ic_types::{
         messages::{CanisterCall, CanisterMessageOrTask, CanisterTask},

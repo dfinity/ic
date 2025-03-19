@@ -2748,7 +2748,7 @@ icTests my_sub other_sub conf =
                                                                                                                  let userKey = genId cid "Hello!"
 
                                                                                                                  t <- getPOSIXTime
-                                                                                                                 let expiry = round ((t + 5 * 60) * 1000_000_000)
+                                                                                                                 let expiry = round ((t + 3 * 60) * 1000_000_000)
                                                                                                                  let delegation =
                                                                                                                        rec
                                                                                                                          [ "pubkey" =: GBlob (toPublicKey otherSK),
@@ -2765,7 +2765,7 @@ icTests my_sub other_sub conf =
                                                                                                                  let userKey = genId cid "Hello!"
 
                                                                                                                  t <- getPOSIXTime
-                                                                                                                 let expiry = round ((t + 5 * 60) * 1000_000_000)
+                                                                                                                 let expiry = round ((t + 3 * 60) * 1000_000_000)
                                                                                                                  let delegation =
                                                                                                                        rec
                                                                                                                          [ "pubkey" =: GBlob userKey,
