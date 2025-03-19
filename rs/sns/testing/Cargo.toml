@@ -7,8 +7,12 @@ documentation.workspace = true
 edition.workspace = true
 
 [[bin]]
-name = "sns"
-path = "src/main.rs"
+name = "sns-testing-init"
+path = "src/bin/init.rs"
+
+[[bin]]
+name = "sns-testing"
+path = "src/bin/main.rs"
 
 
 [[bin]]
