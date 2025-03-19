@@ -12239,7 +12239,6 @@ dependencies = [
  "base64 0.13.1",
  "candid",
  "clap 4.5.27",
- "dfn_candid",
  "dfn_protobuf",
  "futures",
  "hex",
