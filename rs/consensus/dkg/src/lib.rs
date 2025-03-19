@@ -398,9 +398,11 @@ impl<Pool: DkgPool> BouncerFactory<DkgMessageId, Pool> for DkgBouncer {
 
 #[cfg(test)]
 mod tests {
-    use crate::test_utils::complement_state_manager_with_reshare_chain_key_request;
-
-    use super::{test_utils::complement_state_manager_with_setup_initial_dkg_request, *};
+    use super::*;
+    use crate::test_utils::{
+        complement_state_manager_with_reshare_chain_key_request,
+        complement_state_manager_with_setup_initial_dkg_request,
+    };
     use core::panic;
     use ic_artifact_pool::dkg_pool::DkgPoolImpl;
     use ic_consensus_mocks::{
