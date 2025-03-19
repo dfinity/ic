@@ -1,10 +1,11 @@
 use flate2::read::GzDecoder;
 use http::Method;
 use ic_crypto_sha2::Sha256;
-use ic_logger::{info, warn, ReplicaLogger};
+use ic_logger::{log, ReplicaLogger};
 use reqwest::{Client, Response};
+use slog::Level;
 use std::error::Error;
-use std::fmt;
+use std::fmt::{self, Display};
 use std::fs::{self, File};
 use std::io;
 use std::io::prelude::*;
@@ -54,6 +55,20 @@ impl FileDownloader {
         Ok(())
     }
 
+    fn log<S: Display>(&self, level: Level, message: S) {
+        self.logger
+            .as_ref()
+            .map(|logger| log!(logger, level, "{}", message));
+    }
+
+    fn info<S: Display>(&self, message: S) {
+        self.log(Level::Info, message);
+    }
+
+    fn warn<S: Display>(&self, message: S) {
+        self.log(Level::Warning, message);
+    }
+
     /// Make a GET HTTP request to `url`, stream the response body to
     /// `file_path` and verify that the resulting file has hash
     /// `expected_sha256_hex`.
@@ -72,6 +87,12 @@ impl FileDownloader {
         file_path: &Path,
         expected_sha256_hex: Option<String>,
     ) -> FileDownloadResult<()> {
+        if expected_sha256_hex.is_none() && file_path.exists() {
+            self.info("Expected hash not provided and the file already exist. Removing file.");
+            fs::remove_file(file_path)
+                .map_err(|e| FileDownloadError::file_remove_error(file_path, e))?;
+        }
+
         let offset = if file_path.exists() {
             let metadata = fs::metadata(file_path).map_err(|e| {
                 FileDownloadError::IoError(
@@ -94,22 +115,17 @@ impl FileDownloader {
             ),
         };
 
-        if let Some(logger) = &self.logger {
-            info!(logger, "{}", message);
-        }
+        self.info(message);
 
         let maybe_response = self.resuming_http_get(url, offset).await?;
 
         // There are new bytes that should be written
         if let Some(response) = maybe_response {
-            if let Some(logger) = &self.logger {
-                info!(
-                    logger,
-                    "Download request initiated to {:?}, headers: {:?}",
-                    response.remote_addr(),
-                    response.headers()
-                );
-            }
+            self.info(format!(
+                "Download request initiated to {:?}, headers: {:?}",
+                response.remote_addr(),
+                response.headers()
+            ));
             let file = fs::OpenOptions::new()
                 .create(true)
                 .append(true)
@@ -120,17 +136,14 @@ impl FileDownloader {
                 .await?;
         }
 
-        if let Some(logger) = &self.logger {
-            info!(logger, "Response read");
-        }
+        self.info("Response read");
         if let Some(expected_hash) = expected_sha256_hex.as_ref() {
             if let Err(e) = check_file_hash(file_path, expected_hash) {
-                if let Some(logger) = &self.logger {
-                    warn!(logger, "Hash check failed: {:?} - deleting file", e);
-                    fs::remove_file(file_path)
-                        .map_err(|e| FileDownloadError::file_remove_error(file_path, e))?;
-                    return Err(e);
-                }
+                self.warn(format!("Hash check failed: {:?} - deleting file", e));
+
+                fs::remove_file(file_path)
+                    .map_err(|e| FileDownloadError::file_remove_error(file_path, e))?;
+                return Err(e);
             }
         }
         Ok(())
@@ -572,7 +585,16 @@ mod tests {
         let output = PathBuf::from_str("/tmp/replica").unwrap();
         let mut last_iteration_size = 0;
         loop {
-            let response = downloader.download_file(url, output.as_path(), None).await;
+            let response = downloader
+                .download_file(
+                    url,
+                    output.as_path(),
+                    Some(
+                        "9125fa5fccf580a6796e6fcd0ad3efe8026d689af4f4e0feab1d8421aad31e66"
+                            .to_string(),
+                    ),
+                )
+                .await;
             if response.is_ok() {
                 break;
             }
