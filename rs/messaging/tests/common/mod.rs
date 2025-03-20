@@ -11,6 +11,7 @@ use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::ReplicatedState;
 use ic_state_machine_tests::{StateMachine, StateMachineBuilder, StateMachineConfig, UserError};
 use ic_types::{messages::MessageId, Cycles};
+use proptest::prop_compose;
 use random_traffic_test::{extract_metrics, Config as CanisterConfig, Record as CanisterRecord};
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
@@ -502,4 +503,29 @@ pub struct DebugInfo {
 pub fn install_canister(env: &StateMachine, wasm: Vec<u8>) -> CanisterId {
     env.install_canister_with_cycles(wasm, Vec::new(), None, Cycles::new(u128::MAX / 2))
         .expect("Installing random-traffic-test-canister failed")
+}
+
+prop_compose! {
+    /// Generates a random `Config` using reasonable ranges of values; receivers is empty
+    /// and assumed to be populated manually.
+    pub fn arb_canister_config(max_payload_bytes: u32, max_calls_per_heartbeat: u32)(
+        max_call_bytes in 0..=max_payload_bytes,
+        max_reply_bytes in 0..=max_payload_bytes,
+        calls_per_heartbeat in 0..=max_calls_per_heartbeat,
+        max_timeout_secs in 10..=100_u32,
+        downstream_call_percentage in 0..=100_u32,
+        best_effort_call_percentage in 0..=100_u32,
+    ) -> CanisterConfig {
+        CanisterConfig::try_new(
+            vec![],
+            0..=max_call_bytes,
+            0..=max_reply_bytes,
+            0..=0, // instructions_count
+            0..=max_timeout_secs,
+            calls_per_heartbeat,
+            downstream_call_percentage,
+            best_effort_call_percentage,
+        )
+        .expect("bad config inputs")
+    }
 }

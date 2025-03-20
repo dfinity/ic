@@ -1,12 +1,12 @@
-mod fixture;
+pub mod common;
 
-use crate::fixture::{DebugInfo, Fixture, FixtureConfig, KB, MB};
+use common::{arb_canister_config, DebugInfo, Fixture, FixtureConfig, KB, MB};
 use ic_types::{
     ingress::{IngressState, IngressStatus},
     messages::MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64,
 };
 use proptest::prelude::*;
-use random_traffic_test::{arb_config as arb_canister_config, Config as CanisterConfig};
+use random_traffic_test::Config as CanisterConfig;
 
 const MAX_PAYLOAD_BYTES: u32 = MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64 as u32;
 
