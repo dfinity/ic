@@ -26,14 +26,15 @@ jobs:
       - name: Run Bazel Build All No Cache
         uses: ./.github/actions/bazel-test-all/
         with:
-          # --config=release is required for the BNs as they rely for both dev and prod deployment
-          # on images being uploaded to the S3 bucket
           BAZEL_COMMAND: >-
             build
 
 
-              --config=ci --config=release
+              --config=ci
               --repository_cache= --disk_cache= --noremote_accept_cached --remote_instance_name=${CI_COMMIT_SHA} --@rules_rust//rust/settings:pipelined_compilation=True
+          # required for the BNs as they rely for both dev and prod deployment
+          # on images being uploaded to the S3 bucket
+          RELEASE_BUILD: true
           BAZEL_TARGETS: //...
           CLOUD_CREDENTIALS_CONTENT: ${{ secrets.CLOUD_CREDENTIALS_CONTENT }}
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
