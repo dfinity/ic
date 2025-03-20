@@ -1611,8 +1611,7 @@ pub trait HasPublicApiUrl: HasTestEnv + Send + Sync {
     fn check_orchestrator_dashboard(ip: &str, timeout_secs: u64) -> bool {
         let dashboard_endpoint = format!("http://[{}]:7070", ip);
 
-        let client = match reqwest::blocking::Client::builder()
-            .danger_accept_invalid_certs(true)
+        let client = match Client::builder()
             .timeout(Duration::from_secs(timeout_secs))
             .build()
         {
