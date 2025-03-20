@@ -57,7 +57,6 @@ use ic_types::{
     malicious_flags::MaliciousFlags, replica_config::ReplicaConfig,
     replica_version::ReplicaVersion, Time,
 };
-pub use metrics::ValidatorMetrics;
 use std::{
     cell::RefCell,
     collections::BTreeMap,
@@ -255,7 +254,7 @@ impl ConsensusImpl {
                 message_routing.clone(),
                 dkg_pool,
                 logger.clone(),
-                ValidatorMetrics::new(metrics_registry.clone()),
+                &metrics_registry,
                 Arc::clone(&time_source),
             ),
             aggregator: ShareAggregator::new(

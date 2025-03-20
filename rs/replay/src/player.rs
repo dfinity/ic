@@ -9,7 +9,9 @@ use ic_artifact_pool::{
     consensus_pool::{ConsensusPoolImpl, UncachedConsensusPoolImpl},
 };
 use ic_config::{artifact_pool::ArtifactPoolConfig, subnet_config::SubnetConfig, Config};
-use ic_consensus::{certification::VerifierImpl, consensus::batch_delivery::deliver_batches};
+use ic_consensus::{
+    certification::VerifierImpl, consensus::batch_delivery::deliver_batches_without_metrics,
+};
 use ic_consensus_utils::{
     crypto_hashable_to_seed, lookup_replica_version, membership::Membership,
     pool_reader::PoolReader,
@@ -694,7 +696,7 @@ impl Player {
     ) -> Height {
         let expected_batch_height = message_routing.expected_batch_height();
         let last_batch_height = loop {
-            match deliver_batches(
+            match deliver_batches_without_metrics(
                 message_routing,
                 membership,
                 pool,
@@ -702,7 +704,6 @@ impl Player {
                 self.subnet_id,
                 &self.log,
                 replay_target_height,
-                None,
             ) {
                 Ok(h) => break h,
                 Err(MessageRoutingError::QueueIsFull) => std::thread::sleep(WAIT_DURATION),

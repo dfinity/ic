@@ -54,7 +54,6 @@ pub struct Finalizer {
 }
 
 impl Finalizer {
-    #[allow(clippy::too_many_arguments)]
     pub fn new(
         replica_config: ReplicaConfig,
         registry_client: Arc<dyn RegistryClient>,
@@ -104,10 +103,10 @@ impl Finalizer {
             &*self.registry_client,
             self.replica_config.subnet_id,
             &self.log,
-            None,
-            Some(&|result, block_stats, batch_stats| {
+            /*max_batch_height_to_deliver=*/ None,
+            |result, block_stats, batch_stats| {
                 self.process_batch_delivery_result(result, block_stats, batch_stats)
-            }),
+            },
         );
 
         // Try to finalize rounds from finalized_height + 1 up to (and including)
@@ -118,7 +117,6 @@ impl Finalizer {
     }
 
     /// Write logs, report metrics depending on the batch deliver result.
-    #[allow(clippy::too_many_arguments)]
     fn process_batch_delivery_result(
         &self,
         result: &Result<(), MessageRoutingError>,
