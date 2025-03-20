@@ -10,11 +10,11 @@ async fn get_hash(downloader: FileDownloader, version: &str) -> String {
 
     let file_path = std::path::Path::new("/tmp/shasums");
     downloader
-        .download_file(&url, &file_path, None)
+        .download_file(&url, file_path, None)
         .await
         .unwrap();
 
-    std::fs::read_to_string(&file_path)
+    std::fs::read_to_string(file_path)
         .unwrap()
         .lines()
         .find(|line| line.ends_with("update-img.tar.zst"))
