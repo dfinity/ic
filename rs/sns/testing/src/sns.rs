@@ -109,6 +109,8 @@ pub async fn create_sns<C: CallCanisters + ProgressNetwork>(
     )
     .await
     .unwrap();
+    println!("Proposal to create the SNS was adopted and executed");
+    println!("Waiting for the swap to be opened...");
     let sns_swap = sns.swap;
     await_swap_lifecycle(swap_treasury_agent, sns_swap, Lifecycle::Open, true)
         .await
@@ -178,6 +180,7 @@ async fn complete_sns_swap<C: CallCanisters + ProgressNetwork>(
     swap_parameters: SwapParameters,
     swap_canister: SwapCanister,
 ) {
+    println!("Performing direct swap participations...");
     let swap_participations = swap_direct_participations(swap_parameters);
     for (swap_participant_amount, swap_participant_agent) in swap_participations
         .iter()
@@ -206,6 +209,7 @@ async fn complete_sns_swap<C: CallCanisters + ProgressNetwork>(
         .await
         .unwrap();
     }
+    println!("Waiting for the swap to be completed...");
     await_swap_lifecycle(
         swap_treasury_agent,
         swap_canister,
