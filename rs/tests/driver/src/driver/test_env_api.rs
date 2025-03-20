@@ -1608,7 +1608,7 @@ pub trait HasPublicApiUrl: HasTestEnv + Send + Sync {
     }
 
     /// Checks if the Orchestrator dashboard endpoint is accessible
-    fn check_orchestrator_dashboard(ip: &str, timeout_secs: u64) -> bool {
+    fn is_orchestrator_dashboard_accessible(ip: &str, timeout_secs: u64) -> bool {
         let dashboard_endpoint = format!("http://[{}]:7070", ip);
 
         let client = match Client::builder()
@@ -1667,7 +1667,7 @@ pub trait HasPublicApiUrl: HasTestEnv + Send + Sync {
     }
 
     /// Waits until the Orchestrator dashboard endpoint is accessible
-    fn await_orchestrator_dashboard_available(&self) -> anyhow::Result<()> {
+    fn await_orchestrator_dashboard_accessible(&self) -> anyhow::Result<()> {
         let mut count = 0;
         retry_with_msg!(
             &format!(
@@ -1678,7 +1678,10 @@ pub trait HasPublicApiUrl: HasTestEnv + Send + Sync {
             READY_WAIT_TIMEOUT,
             RETRY_BACKOFF,
             || {
-                if Self::check_orchestrator_dashboard(&self.get_public_addr().ip().to_string(), 5) {
+                if Self::is_orchestrator_dashboard_accessible(
+                    &self.get_public_addr().ip().to_string(),
+                    5,
+                ) {
                     Ok(())
                 } else {
                     count += 1;

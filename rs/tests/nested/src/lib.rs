@@ -149,7 +149,7 @@ pub fn upgrade_hostos(env: TestEnv) {
     std::thread::sleep(std::time::Duration::from_secs(180));
 
     info!(logger, "Waiting for Orchestrator dashboard...");
-    host.await_orchestrator_dashboard_available().unwrap();
+    host.await_orchestrator_dashboard_accessible().unwrap();
 
     // Check the HostOS version again after upgrade
     info!(
