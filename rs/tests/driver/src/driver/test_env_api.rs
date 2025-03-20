@@ -1608,7 +1608,7 @@ pub trait HasPublicApiUrl: HasTestEnv + Send + Sync {
     }
 
     /// Checks if the Orchestrator dashboard endpoint is accessible
-    fn is_orchestrator_dashboard_accessible(ip: &str, timeout_secs: u64) -> bool {
+    fn is_orchestrator_dashboard_accessible(ip: Ipv6Addr, timeout_secs: u64) -> bool {
         let dashboard_endpoint = format!("http://[{}]:7070", ip);
 
         let client = match Client::builder()
@@ -1678,10 +1678,11 @@ pub trait HasPublicApiUrl: HasTestEnv + Send + Sync {
             READY_WAIT_TIMEOUT,
             RETRY_BACKOFF,
             || {
-                if Self::is_orchestrator_dashboard_accessible(
-                    &self.get_public_addr().ip().to_string(),
-                    5,
-                ) {
+                let ip = match self.get_public_addr().ip() {
+                    IpAddr::V6(ip) => ip,
+                    IpAddr::V4(_) => panic!("Expected IPv6 address"),
+                };
+                if Self::is_orchestrator_dashboard_accessible(ip, 5) {
                     Ok(())
                 } else {
                     count += 1;
