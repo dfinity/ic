@@ -11,6 +11,8 @@ on the process that this file is part of, see
 
 ## Changed
 
+- `SetTopcisForCustomProposals` proposal is now under the `CriticalDappOperations` topic.
+
 ## Deprecated
 
 ## Removed
