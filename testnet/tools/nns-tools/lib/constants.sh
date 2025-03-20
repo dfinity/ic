@@ -30,4 +30,4 @@ export GTC=renrk-eyaaa-aaaaa-aaada-cai
 export NNS_DAPP=qoctq-giaaa-aaaaa-aaaea-cai
 export ICP_ARCHIVE=qjdve-lqaaa-aaaaa-aaaeq-cai
 export SNS_W=qaa6y-5yaaa-aaaaa-aaafa-cai
-export NODE_REWARDS=todo-canister-id-after-creation
+export NODE_REWARDS=sgymv-uiaaa-aaaaa-aaaia-cai
