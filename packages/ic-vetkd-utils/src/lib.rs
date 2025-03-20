@@ -28,13 +28,6 @@ lazy_static::lazy_static! {
 const G1AFFINE_BYTES: usize = 48; // Size of compressed form
 const G2AFFINE_BYTES: usize = 96; // Size of compressed form
 
-#[cfg_attr(feature = "js", wasm_bindgen)]
-#[derive(Clone, Zeroize, ZeroizeOnDrop)]
-/// Secret key of the transport key pair
-pub struct TransportSecretKey {
-    secret_key: Scalar,
-}
-
 /// Derive a symmetric key using HKDF-SHA256
 pub fn derive_symmetric_key(input: &[u8], domain_sep: &str, len: usize) -> Vec<u8> {
     let hk = hkdf::Hkdf::<sha2::Sha256>::new(None, input);
@@ -64,6 +57,13 @@ fn prefix_with_len(bytes: &[u8]) -> Vec<u8> {
 }
 
 #[cfg_attr(feature = "js", wasm_bindgen)]
+#[derive(Clone, Zeroize, ZeroizeOnDrop)]
+/// Secret key of the transport key pair
+pub struct TransportSecretKey {
+    secret_key: Scalar,
+}
+
+#[cfg_attr(feature = "js", wasm_bindgen)]
 impl TransportSecretKey {
     #[cfg_attr(feature = "js", wasm_bindgen(constructor))]
     /// Creates a transport secret key from a 32-byte seed.
@@ -80,6 +80,26 @@ impl TransportSecretKey {
         let public_key = G1Affine::generator() * self.secret_key;
         use pairing::group::Curve;
         public_key.to_affine().to_compressed().to_vec()
+    }
+
+    /// Serialize this transport secret key to a bytestring
+    pub fn serialize(&self) -> Vec<u8> {
+        self.secret_key.to_bytes().to_vec()
+    }
+
+    /// Serialize this transport secret key to a bytestring
+    pub fn deserialize(bytes: &[u8]) -> Result<Self, String> {
+        if bytes.len() != 32 {
+            return Err(format!("TransportSecretKey must be exactly 32 bytes not {}", bytes.len()));
+        }
+
+        let bytes : [u8; 32] = bytes.try_into().expect("Length already checked");
+
+        if let Some(s) = Scalar::from_bytes(&bytes).into_option() {
+            Ok(Self { secret_key: s })
+        } else {
+            Err("Invalid TransportSecretKey bytes".to_string())
+        }
     }
 }
 
