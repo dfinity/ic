@@ -1767,7 +1767,7 @@ impl Default for ExecutionTestBuilder {
             execution_config: Config {
                 rate_limiting_of_instructions: FlagStatus::Disabled,
                 canister_sandboxing_flag: FlagStatus::Enabled,
-                composite_queries: FlagStatus::Disabled,
+                composite_queries: FlagStatus::Enabled,
                 allocatable_compute_capacity_in_percent: 100,
                 ..Config::default()
             },
@@ -2009,8 +2009,8 @@ impl ExecutionTestBuilder {
         self
     }
 
-    pub fn with_composite_queries(mut self) -> Self {
-        self.execution_config.composite_queries = FlagStatus::Enabled;
+    pub fn without_composite_queries(mut self) -> Self {
+        self.execution_config.composite_queries = FlagStatus::Disabled;
         self
     }
 
@@ -2413,7 +2413,6 @@ impl ExecutionTestBuilder {
         let query_handler = InternalHttpQueryHandler::new(
             self.log.clone(),
             hypervisor,
-            self.own_subnet_id,
             self.subnet_type,
             config.clone(),
             &metrics_registry,
