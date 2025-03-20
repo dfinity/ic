@@ -12,6 +12,7 @@ anyhow = { workspace = true }
 candid = { workspace = true }
 ic-agent = { workspace = true }
 ic-base-types = { path = "../../types/base_types" }
+ic-error-types = { path = "../../../packages/ic-error-types" }
 ic-management-canister-types = { workspace = true }
 ic-nns-common = { path = "../../nns/common" }
 ic-nervous-system-clients = { path = "../clients" }
