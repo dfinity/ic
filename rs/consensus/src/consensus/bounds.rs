@@ -2,12 +2,13 @@
 //! be always bounded in size. This module contains checks for invariants that we
 //! want to uphold at all times.
 
-use ic_consensus_utils::{pool_reader::PoolReader, registry_version_at_height};
+use super::notary::ACCEPTABLE_NOTARIZATION_CUP_GAP;
+use ic_consensus_utils::{
+    pool_reader::PoolReader, registry_version_at_height, MINIMUM_CHAIN_LENGTH,
+};
 use ic_interfaces_registry::RegistryClient;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_types::{consensus::get_faults_tolerated, replica_config::ReplicaConfig};
-
-use super::{notary::ACCEPTABLE_NOTARIZATION_CUP_GAP, MINIMUM_CHAIN_LENGTH};
 
 /// Summary of when the consensus pool exceeds certain bounds.
 #[derive(Eq, PartialEq, Debug)]

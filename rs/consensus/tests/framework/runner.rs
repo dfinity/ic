@@ -2,10 +2,8 @@ use super::delivery::*;
 use super::execution::*;
 use super::types::*;
 use ic_config::artifact_pool::ArtifactPoolConfig;
-use ic_consensus::{
-    certification::{CertificationCrypto, CertifierImpl},
-    idkg,
-};
+use ic_consensus::idkg;
+use ic_consensus_certification::{CertificationCrypto, CertifierImpl};
 use ic_consensus_dkg::DkgKeyManager;
 use ic_consensus_utils::crypto::ConsensusCrypto;
 use ic_consensus_utils::membership::Membership;

@@ -24,7 +24,7 @@ use crate::{
                 self, DisburseMaturityResponse, MergeMaturityResponse, StakeMaturityResponse,
             },
             nervous_system_function::FunctionType,
-            neuron::Followees,
+            neuron::{Followees, TopicFollowees},
             proposal::Action,
             ChunkedCanisterWasm, ClaimSwapNeuronsError, ClaimSwapNeuronsResponse,
             ClaimedSwapNeuronStatus, DefaultFollowees, DeregisterDappCanisters, Empty,
@@ -134,7 +134,7 @@ pub mod native_action_ids {
     pub const ADVANCE_SNS_TARGET_VERSION: u64 = 15;
 
     /// SetTopicsForCustomProposals Action.
-    pub const SET_CUSTOM_TOPICS_FOR_CUSTOM_PROPOSALS_ACTION: u64 = 16;
+    pub const SET_TOPICS_FOR_CUSTOM_PROPOSALS_ACTION: u64 = 16;
 
     // When adding something to this list, make sure to update the below function.
     pub fn nervous_system_functions() -> Vec<NervousSystemFunction> {
@@ -1244,7 +1244,7 @@ impl NervousSystemFunction {
 
     fn set_topics_for_custom_proposals() -> NervousSystemFunction {
         NervousSystemFunction {
-            id: native_action_ids::SET_CUSTOM_TOPICS_FOR_CUSTOM_PROPOSALS_ACTION,
+            id: native_action_ids::SET_TOPICS_FOR_CUSTOM_PROPOSALS_ACTION,
             name: "Set topics for custom proposals".to_string(),
             description: Some("Proposal to set the topics for custom SNS proposals.".to_string()),
             function_type: Some(FunctionType::NativeNervousSystemFunction(Empty {})),
@@ -1868,7 +1868,7 @@ impl From<&Action> for u64 {
             }
             Action::AdvanceSnsTargetVersion(_) => native_action_ids::ADVANCE_SNS_TARGET_VERSION,
             Action::SetTopicsForCustomProposals(_) => {
-                native_action_ids::SET_CUSTOM_TOPICS_FOR_CUSTOM_PROPOSALS_ACTION
+                native_action_ids::SET_TOPICS_FOR_CUSTOM_PROPOSALS_ACTION
             }
         }
     }
@@ -2299,6 +2299,14 @@ impl NeuronRecipe {
                 followees: followees.clone(),
             };
             btreemap! { catch_all => followees }
+        }
+    }
+
+    // TODO[NNS1-3676]: Provide a proper implementation for this function once new SNSs are
+    // TODO[NNS1-3676]: to begin using topics-based following.
+    pub(crate) fn construct_topic_followees(&self) -> TopicFollowees {
+        TopicFollowees {
+            topic_id_to_followees: btreemap! {},
         }
     }
 
