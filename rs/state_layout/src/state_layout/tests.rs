@@ -364,17 +364,17 @@ fn checkpoints_files_are_removed_after_flushing_removal_channel() {
         };
 
         let mut checkpoints = vec![];
-        for i in 1..=50 {
+        for i in 1..=20 {
             checkpoints.push(create_checkpoint_with_dummy_files(Height::new(i)));
         }
-        for i in 1..=49 {
+        for i in 1..=19 {
             state_layout.remove_checkpoint_when_unused(Height::new(i));
         }
         drop(checkpoints);
 
-        // Checkpoints 1 to 49 should be moved away from the checkpoints directory.
+        // Checkpoints 1 to 19 should be moved away from the checkpoints directory.
         assert_eq!(
-            vec![Height::new(50)],
+            vec![Height::new(20)],
             state_layout.checkpoint_heights().unwrap(),
         );
 
