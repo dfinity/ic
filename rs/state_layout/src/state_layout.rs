@@ -28,7 +28,7 @@ use ic_types::{
 };
 use ic_utils::thread::maybe_parallel_map;
 use ic_wasm_types::{CanisterModule, WasmHash};
-use prometheus::{Histogram, IntCounterVec};
+use prometheus::{Histogram, IntCounterVec, IntGauge};
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::convert::{identity, From, TryFrom, TryInto};
 use std::ffi::OsStr;
@@ -215,6 +215,7 @@ struct StateLayoutMetrics {
     state_layout_error_count: IntCounterVec,
     state_layout_sync_remove_checkpoint_duration: Histogram,
     state_layout_async_remove_checkpoint_duration: Histogram,
+    checkpoint_removal_channel_length: IntGauge,
 }
 
 impl StateLayoutMetrics {
@@ -234,6 +235,10 @@ impl StateLayoutMetrics {
                 "state_layout_async_remove_checkpoint_seconds_duration",
                 "Time elapsed in removing checkpoint asynchronously in the background thread.",
                 decimal_buckets(-3, 1),
+            ),
+            checkpoint_removal_channel_length: metric_registry.int_gauge(
+                "state_layout_checkpoint_removal_channel_length",
+                "Number of requests in the checkpoint removal channel.",
             ),
         }
     }
@@ -981,6 +986,11 @@ impl StateLayout {
 
         // Drops drop_after_rename once the checkpoint path is renamed to tmp_path.
         std::mem::drop(drop_after_rename);
+
+        self.metrics
+            .checkpoint_removal_channel_length
+            .set(self.checkpoint_removal_sender.len() as i64);
+
         self.checkpoint_removal_sender
             .send(CheckpointRemovalRequest::Remove(tmp_path))
             .expect("failed to send checkpoint removal request");
@@ -1112,6 +1122,10 @@ impl StateLayout {
     }
 
     pub fn flush_checkpoint_removal_channel(&self) {
+        self.metrics
+            .checkpoint_removal_channel_length
+            .set(self.checkpoint_removal_sender.len() as i64);
+
         let (sender, receiver) = bounded::<()>(1);
         self.checkpoint_removal_sender
             .send(CheckpointRemovalRequest::Wait { sender })
