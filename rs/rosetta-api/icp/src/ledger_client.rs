@@ -53,7 +53,7 @@ use ic_types::{
     CanisterId,
 };
 use icp_ledger::{BlockIndex, Symbol, TransferFee, TransferFeeArgs, DEFAULT_TRANSFER_FEE};
-use on_wire::{FromWire, IntoWire};
+use on_wire::FromWire;
 
 use crate::{
     convert,
@@ -213,18 +213,17 @@ impl LedgerClient {
         token_symbol: &str,
         canister_access: &CanisterAccess,
     ) -> Result<(), ApiError> {
-        let arg = CandidOne(())
-            .into_bytes()
+        let arg = Encode!(&())
             .map_err(|e| ApiError::internal_error(format!("Serialization failed: {:?}", e)))?;
 
-        let symbol_res: Result<Symbol, String> = canister_access
+        let symbol_res = canister_access
             .agent
             .query(&canister_access.canister_id.get().0, "symbol")
             .with_arg(arg)
             .call()
             .await
             .map_err(|e| format!("{}", e))
-            .and_then(|bytes| CandidOne::from_bytes(bytes).map(|c| c.0));
+            .and_then(|bytes| Decode!(&bytes, Result<Symbol, String>).unwrap());
 
         match symbol_res {
             Ok(Symbol { symbol }) => {
@@ -336,8 +335,7 @@ impl LedgerAccess for LedgerClient {
         }
         let agent = &self.canister_access.as_ref().unwrap().agent;
 
-        let arg = CandidOne(proposal_id)
-            .into_bytes()
+        let arg = Encode!(&proposal_id)
             .map_err(|e| ApiError::internal_error(format!("Serialization failed: {:?}", e)))?;
         let bytes = agent
             .query(&self.governance_canister_id.get().0, "get_proposal_info")
@@ -422,8 +420,7 @@ impl LedgerAccess for LedgerClient {
 
         let agent = &self.canister_access.as_ref().unwrap().agent;
 
-        let arg = CandidOne(acc_id)
-            .into_bytes()
+        let arg = Encode!(&acc_id)
             .map_err(|e| ApiError::internal_error(format!("Serialization failed: {:?}", e)))?;
         let bytes = if verified {
             agent
@@ -471,8 +468,7 @@ impl LedgerAccess for LedgerClient {
 
     async fn transfer_fee(&self) -> Result<TransferFee, ApiError> {
         let agent = &self.canister_access.as_ref().unwrap().agent;
-        let arg = CandidOne(TransferFeeArgs {})
-            .into_bytes()
+        let arg = Encode!(&TransferFeeArgs {})
             .map_err(|e| ApiError::internal_error(format!("Serialization failed: {:?}", e)))?;
 
         let res = agent
@@ -500,7 +496,7 @@ impl LedgerAccess for LedgerClient {
                     transfer_fee: DEFAULT_TRANSFER_FEE,
                 })
             }
-            Ok(bytes) => CandidOne::from_bytes(bytes).map(|c| c.0).map_err(|e| {
+            Ok(bytes) => Decode!(&bytes, TransferFee).map_err(|e| {
                 ApiError::internal_error(format!("Error querying transfer_fee: {}", e))
             }),
         }
