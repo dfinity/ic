@@ -1,5 +1,6 @@
 use std::{path::PathBuf, str::FromStr};
 
+use assert_matches::assert_matches;
 use ic_http_utils::file_downloader::{FileDownloadError, FileDownloader};
 
 async fn get_hash(downloader: FileDownloader, version: &str) -> String {
@@ -32,10 +33,10 @@ async fn test_large_file_download() {
     let hash = get_hash(downloader, version.as_ref()).await;
 
     let url = format!(
-        "https://download.dfinity.systems/ic/{}/guest-os/update-img/update-img.tar.zst",
+        "http://download.proxy-global.dfinity.network:8080/ic/{}/guest-os/update-img/update-img.tar.zst",
         version
     );
-    let downloader = FileDownloader::new_with_timeout(None, std::time::Duration::from_secs(2));
+    let downloader = FileDownloader::new_with_timeout(None, std::time::Duration::from_secs(5));
 
     let output = PathBuf::from_str("/tmp/replica").unwrap();
     let mut last_iteration_size = 0;
@@ -47,21 +48,13 @@ async fn test_large_file_download() {
             break;
         }
 
-        if let Err(FileDownloadError::ReqwestError(e)) = response {
-            if !e.is_timeout() {
-                panic!("Unexpected error: {:?}", e);
-            }
-        } else {
-            panic!("Unexpected error: {:?}", response);
-        }
+        assert_matches!(response, Err(FileDownloadError::ReqwestError(e)) if e.is_timeout());
 
         let metadata = std::fs::metadata(&output).unwrap();
-        assert_ne!(
-            metadata.len(),
-            last_iteration_size,
-            "Sizes are the same in two iterations meaning there is a bug in the implementation"
+        assert!(
+            metadata.len() > last_iteration_size,
+            "No data downloaded in this iteration, meaning that either s3 has a bug, timeout is too low or there is a bug in the code"
         );
         last_iteration_size = metadata.len();
-        assert!(last_iteration_size > 0);
     }
 }

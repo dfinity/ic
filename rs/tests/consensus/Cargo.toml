@@ -39,7 +39,6 @@ ic-subnet-splitting = { path = "../../recovery/subnet_splitting" }
 tempfile = { workspace = true }
 tokio = { workspace = true }
 url = { workspace = true }
-ic-http-utils.path= "../../http_utils"
 
 [[bin]]
 name = "ic-systest-consensus-performance"

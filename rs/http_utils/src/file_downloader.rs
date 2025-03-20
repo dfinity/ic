@@ -110,15 +110,13 @@ impl FileDownloader {
             0
         };
 
-        let message = match offset {
-            0 => format!("Downloading file from: {}", url),
-            _ => format!(
+        match offset {
+            0 => self.info(format!("Downloading file from: {}", url)),
+            _ => self.info(format!(
                 "Resuming downloading file from {} starting from byte {}",
                 url, offset
-            ),
+            )),
         };
-
-        self.info(message);
 
         let maybe_response = self.resuming_http_get(url, offset).await?;
 
@@ -142,20 +140,21 @@ impl FileDownloader {
         match expected_sha256_hex.as_ref() {
             Some(expected_hash) => {
                 self.info("Response read. Checking hash.");
-                check_file_hash(file_path, expected_hash)
-                    .inspect(|_| self.info("Hash check passed successfully."))
-                    .map_err(|hash_invalid_err| {
+                match check_file_hash(file_path, expected_hash) {
+                    Ok(()) => {
+                        self.info("Hash check passed successfully.");
+                        Ok(())
+                    }
+                    Err(hash_invalid_err) => {
                         self.warn(format!(
                             "Hash check failed: {:?} - deleting file",
                             hash_invalid_err
                         ));
-                        if let Err(file_delete_err) = fs::remove_file(file_path)
-                            .map_err(|err| FileDownloadError::file_remove_error(file_path, err))
-                        {
-                            return file_delete_err;
-                        }
-                        hash_invalid_err
-                    })
+                        fs::remove_file(file_path)
+                            .map_err(|err| FileDownloadError::file_remove_error(file_path, err))?;
+                        Err(hash_invalid_err)
+                    }
+                }
             }
             None => {
                 self.info("Response read. Skipping hash verification since it wasn't provided.");
