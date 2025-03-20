@@ -11619,6 +11619,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-registry-canister-chunks"
+version = "0.9.0"
+dependencies = [
+ "ic-crypto-sha2",
+ "ic-stable-structures",
+]
+
+[[package]]
 name = "ic-registry-canister-client"
 version = "0.9.0"
 dependencies = [
