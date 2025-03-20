@@ -905,11 +905,13 @@ fn canister_state_dir(shutdown_signal: Option<Signal>) {
 /// The following test is similar to `canister_state_dir`,
 /// but creates two app subnets on the original PocketIC instance
 /// and then checks that each of the two app subnets
-/// can be separately restored from its state.
+/// can be separately restored from its state
+/// along with creating a new empty subnet.
 /// This way, the test ensures that PocketIC properly retrieves
 /// the subnet configuration from the state of the subnet
 /// (since using the default configuration won't work
-/// for at least one of the two subnets).
+/// for at least one of the two subnets) and creates new empty subnets
+/// with disjoint canister ranges.
 #[test]
 fn with_subnet_state() {
     // Create a temporary state directory persisted throughout the test.
@@ -959,23 +961,22 @@ fn with_subnet_state() {
             .with_server_url(server_url.clone())
             .with_nns_state(nns_state_dir)
             .with_subnet_state(SubnetKind::Application, app_state_dir)
+            .with_application_subnet()
             .build();
 
-        // We only specified to restore one app subnet.
+        // We specified to restore one app subnet and create a new empty app subnet.
         let restored_topology = pic.topology();
-        assert_eq!(restored_topology.get_app_subnets().len(), 1);
+        assert_eq!(restored_topology.get_app_subnets().len(), 2);
 
         // Check that the topology has been properly restored.
-        let mut updated_topology = topology.clone();
-        // We remove the subnet that was not restored from the topology.
-        updated_topology
-            .subnet_configs
-            .retain(|subnet_id, _| *subnet_id == nns_subnet || *subnet_id == app_subnet);
-        // The default effective canister ID can change if a subnet is not restored
-        // => update its value to be ignored in the comparison.
-        updated_topology.default_effective_canister_id =
-            restored_topology.default_effective_canister_id.clone();
-        assert_eq!(restored_topology, updated_topology);
+        assert_eq!(
+            restored_topology.subnet_configs.get(&nns_subnet).unwrap(),
+            topology.subnet_configs.get(&nns_subnet).unwrap()
+        );
+        assert_eq!(
+            restored_topology.subnet_configs.get(&app_subnet).unwrap(),
+            topology.subnet_configs.get(&app_subnet).unwrap()
+        );
 
         check_counter(&pic, app_canister_id, counter);
     }

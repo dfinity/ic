@@ -52,7 +52,9 @@ use ic_metrics::MetricsRegistry;
 use ic_protobuf::registry::routing_table::v1::RoutingTable as PbRoutingTable;
 use ic_registry_keys::make_routing_table_record_key;
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
-use ic_registry_routing_table::{CanisterIdRange, RoutingTable, CANISTER_IDS_PER_SUBNET};
+use ic_registry_routing_table::{
+    are_disjoint, CanisterIdRange, RoutingTable, CANISTER_IDS_PER_SUBNET,
+};
 use ic_registry_subnet_type::SubnetType;
 use ic_state_machine_tests::{
     finalize_registry, StateMachine, StateMachineBuilder, StateMachineConfig, StateMachineStateDir,
@@ -715,9 +717,18 @@ impl PocketIc {
 
             let mut subnet_config_info: Vec<SubnetConfigInfo> = vec![];
 
-            for (subnet_kind, subnet_state_dir, instruction_config) in
-                fixed_range_subnets.into_iter().chain(flexible_subnets)
-            {
+            let mut all_subnets: Vec<_> = fixed_range_subnets
+                .into_iter()
+                .chain(flexible_subnets)
+                .collect();
+            // subnets with a given state must be sorted first
+            all_subnets.sort_by(
+                |(_, a, _): &(_, Option<PathBuf>, _), (_, b, _): &(_, Option<PathBuf>, _)| {
+                    a.is_none().cmp(&b.is_none())
+                },
+            );
+
+            for (subnet_kind, subnet_state_dir, instruction_config) in all_subnets {
                 let (ranges, alloc_range, subnet_id) =
                     if let Some(ref subnet_state_dir) = subnet_state_dir {
                         let state_manager = StateManagerImpl::new(
@@ -734,8 +745,15 @@ impl PocketIc {
                         );
                         let metadata = state_manager.get_latest_state().take().metadata.clone();
                         let subnet_id = metadata.own_subnet_id;
-                        let ranges = metadata.network_topology.routing_table.ranges(subnet_id);
-                        (ranges.iter().cloned().collect(), None, Some(subnet_id))
+                        let ranges: Vec<_> = metadata
+                            .network_topology
+                            .routing_table
+                            .ranges(subnet_id)
+                            .iter()
+                            .cloned()
+                            .collect();
+                        range_gen.add_assigned(ranges.clone());
+                        (ranges, None, Some(subnet_id))
                     } else {
                         let RangeConfig {
                             canister_id_ranges: ranges,
@@ -1112,7 +1130,10 @@ fn subnet_kind_from_canister_id(canister_id: CanisterId) -> SubnetKind {
 fn get_range_config(subnet_kind: rest::SubnetKind, range_gen: &mut RangeGen) -> RangeConfig {
     let (canister_id_ranges, canister_allocation_range) =
         match subnet_kind_canister_range(subnet_kind) {
-            Some(ranges) => (ranges, Some(range_gen.next_range())),
+            Some(ranges) => {
+                range_gen.add_assigned(ranges.clone());
+                (ranges, Some(range_gen.next_range()))
+            }
             None => (vec![range_gen.next_range()], None),
         };
     RangeConfig {
@@ -1124,6 +1145,7 @@ fn get_range_config(subnet_kind: rest::SubnetKind, range_gen: &mut RangeGen) -> 
 /// A stateful helper for finding available canister ranges.
 #[derive(Default)]
 struct RangeGen {
+    already_assigned: Vec<CanisterIdRange>,
     range_offset: u64,
 }
 
@@ -1132,15 +1154,27 @@ impl RangeGen {
         Default::default()
     }
 
+    pub fn add_assigned(&mut self, mut assigned: Vec<CanisterIdRange>) {
+        assigned.sort();
+        assert!(are_disjoint(self.already_assigned.iter(), assigned.iter()));
+        self.already_assigned.extend(assigned);
+        self.already_assigned.sort();
+    }
+
     /// Returns the next canister id range from the top
     pub fn next_range(&mut self) -> CanisterIdRange {
-        let offset = (u64::MAX / CANISTER_IDS_PER_SUBNET) - 1 - self.range_offset;
-        self.range_offset += 1;
-        let start = offset * CANISTER_IDS_PER_SUBNET;
-        let end = ((offset + 1) * CANISTER_IDS_PER_SUBNET) - 1;
-        CanisterIdRange {
-            start: CanisterId::from_u64(start),
-            end: CanisterId::from_u64(end),
+        loop {
+            let offset = (u64::MAX / CANISTER_IDS_PER_SUBNET) - 1 - self.range_offset;
+            self.range_offset += 1;
+            let start = offset * CANISTER_IDS_PER_SUBNET;
+            let end = ((offset + 1) * CANISTER_IDS_PER_SUBNET) - 1;
+            let range = CanisterIdRange {
+                start: CanisterId::from_u64(start),
+                end: CanisterId::from_u64(end),
+            };
+            if are_disjoint(self.already_assigned.iter(), [range].iter()) {
+                break range;
+            }
         }
     }
 }
