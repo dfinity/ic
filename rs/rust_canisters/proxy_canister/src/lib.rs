@@ -16,6 +16,12 @@ pub struct RemoteHttpRequest {
     pub cycles: u64,
 }
 
+#[derive(Clone, Debug, CandidType, Deserialize)]
+pub struct RemoteHttpStressRequest {
+    pub request: RemoteHttpRequest,
+    pub count: u64,
+}
+
 /// We create a custom type instead of reusing [`ic_management_canister_types_private::CanisterHttpRequestArgs`]
 /// as we don't want the body to be deserialized as a bounded vec.
 /// This allows us to test sending headers that are longer than the default limit and test.
@@ -50,6 +56,12 @@ pub struct RemoteHttpResponse {
     pub status: u128,
     pub headers: Vec<(String, String)>,
     pub body: String,
+}
+
+#[derive(Clone, Debug, CandidType, Deserialize)]
+pub struct RemoteHttpStressResponse {
+    pub response: RemoteHttpResponse,
+    pub duration_ns: u64,
 }
 
 impl RemoteHttpResponse {

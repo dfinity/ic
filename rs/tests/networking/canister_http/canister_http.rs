@@ -12,8 +12,8 @@ use ic_system_test_driver::driver::{
     test_env::{TestEnv, TestEnvAttribute},
     test_env_api::*,
 };
-use ic_system_test_driver::util::{self, create_and_install};
-pub use ic_types::{CanisterId, PrincipalId};
+use ic_system_test_driver::util::{self, create_and_install, create_and_install_with_cycles};
+pub use ic_types::{CanisterId, Cycles, PrincipalId};
 use slog::info;
 use std::env;
 use std::net::{Ipv4Addr, Ipv6Addr};
@@ -227,12 +227,56 @@ pub fn create_proxy_canister_with_name<'a>(
 
     Canister::new(runtime, CanisterId::unchecked_from_principal(principal_id))
 }
+
+pub fn create_proxy_canister_with_name_and_cycles<'a>(
+    env: &TestEnv,
+    runtime: &'a Runtime,
+    node: &IcNodeSnapshot,
+    canister_name: &str,
+    cycles: Cycles,
+) -> Canister<'a> {
+    info!(&env.logger(), "Installing proxy_canister with a custom cycle amount ({cycles:?}).");
+
+    let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
+    let proxy_canister_id = rt.block_on(create_and_install_with_cycles(
+        &node.build_default_agent(),
+        node.effective_canister_id(),
+        &load_wasm(
+            env::var("PROXY_WASM_PATH").expect("Environment variable PROXY_WASM_PATH not set"),
+        ),
+        cycles,
+    ));
+
+    info!(
+        &env.logger(),
+        "Proxy canister {:?} installed with cycles {:?}", proxy_canister_id, cycles
+    );
+
+    let principal_id = PrincipalId::from(proxy_canister_id);
+
+    // Write the canister ID to the environment so that other tests can read it.
+    env.write_json_object(canister_name, &principal_id)
+        .expect("Could not write proxy canister ID to TestEnv.");
+
+    // Return the `Canister` handle for further use in tests.
+    Canister::new(runtime, CanisterId::unchecked_from_principal(principal_id))
+}
+
 pub fn create_proxy_canister<'a>(
     env: &TestEnv,
     runtime: &'a Runtime,
     node: &IcNodeSnapshot,
 ) -> Canister<'a> {
     create_proxy_canister_with_name(env, runtime, node, PROXY_CANISTER_ID_PATH)
+}
+
+pub fn create_proxy_canister_with_cycles<'a>(
+    env: &TestEnv,
+    runtime: &'a Runtime,
+    node: &IcNodeSnapshot,
+    cycles: Cycles,
+) -> Canister<'a> {
+    create_proxy_canister_with_name_and_cycles(env, runtime, node, PROXY_CANISTER_ID_PATH, cycles)
 }
 
 pub fn get_proxy_canister_id_with_name(env: &TestEnv, name: &str) -> PrincipalId {
