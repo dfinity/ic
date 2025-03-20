@@ -36,7 +36,16 @@ rust_library(
 rust_test(
     name = "http_utils_test",
     crate = ":http_utils",
-    env = MAINNET_ENV,
-    tags = ["requires-network"],
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
+)
+
+rust_test(
+    name = "http_utils_long_test",
+    srcs = glob(["tests/**/*.rs"]),
+    env = MAINNET_ENV,
+    tags = [
+        "long_test",
+        "requires-network",
+    ],
+    deps = DEPENDENCIES + DEV_DEPENDENCIES + [":http_utils"],
 )
