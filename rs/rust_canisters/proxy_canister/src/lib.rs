@@ -19,6 +19,7 @@ pub struct RemoteHttpRequest {
 #[derive(Clone, Debug, CandidType, Deserialize)]
 pub struct RemoteHttpStressRequest {
     pub request: RemoteHttpRequest,
+    /// Number of requests to send concurrently.
     pub count: u64,
 }
 

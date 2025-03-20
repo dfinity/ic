@@ -21,21 +21,18 @@ use anyhow::Result;
 use canister_http::*;
 use canister_test::Canister;
 use dfn_candid::candid_one;
-use futures::future::join_all;
 use ic_cdk::api::call::RejectionCode;
 use ic_management_canister_types_private::{HttpMethod, TransformContext, TransformFunc};
 use ic_system_test_driver::driver::group::SystemTestGroup;
-use ic_system_test_driver::driver::resource;
 use ic_system_test_driver::driver::{
     test_env::TestEnv,
     test_env_api::{READY_WAIT_TIMEOUT, RETRY_BACKOFF},
 };
 use ic_system_test_driver::systest;
 use ic_system_test_driver::util::block_on;
-use ic_system_test_driver::util::deposit_cycles;
 use ic_types::Cycles;
 use proxy_canister::UnvalidatedCanisterHttpRequestArgs;
-use proxy_canister::{RemoteHttpRequest, RemoteHttpStressRequest, RemoteHttpStressResponse, RemoteHttpResponse};
+use proxy_canister::{RemoteHttpRequest, RemoteHttpStressRequest, RemoteHttpStressResponse};
 use slog::{info, Logger};
 
 const NS_IN_1_SEC: u64 = 1_000_000_000;
@@ -56,7 +53,8 @@ pub fn test(env: TestEnv) {
     let runtime = get_runtime_from_node(&node);
     // Because we are stressing the outcalls feature with ~100K requests, and each requests costs ~6-7 billion cycles,
     // the default 100T starting cycles would not be enough cover the cost of all the requests.
-    let proxy_canister = create_proxy_canister_with_cycles(&env, &runtime, &node, Cycles::new(1 << 127));
+    let proxy_canister =
+        create_proxy_canister_with_cycles(&env, &runtime, &node, Cycles::new(1 << 127));
     let webserver_ipv6 = get_universal_vm_address(&env);
 
     block_on(async {
@@ -118,7 +116,7 @@ async fn do_request(
 
     if !matches!(res, Ok(ref x) if x.response.status == 200 && x.response.body.contains(context)) {
         bail!("Http request failed response: {:?}", res);
-    } 
+    }
     let res = res.unwrap();
     info!(
         logger,
@@ -161,13 +159,12 @@ pub async fn test_proxy_canister(
         total_duration_ns += single_call_duration_ns;
     }
 
-    // One second has 1_000_000_000 nanoseconds.
     let elapsed_secs = total_duration_ns as f64 / NS_IN_1_SEC as f64;
     let qps = (concurrent_requests * experiments) as f64 / elapsed_secs;
-    println!(
+    info!(
+        logger,
         "average qps for {} concurrent request(s) and {} experiment(s) is {}",
         concurrent_requests, experiments, qps
     );
-    assert!(qps > 100);
+    assert!(qps > 100.0);
 }
-
