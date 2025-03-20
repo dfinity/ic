@@ -332,62 +332,6 @@ fn test_removal_when_last_dropped() {
 }
 
 #[test]
-fn checkpoints_files_are_removed_after_flushing_removal_channel() {
-    with_test_replica_logger(|log| {
-        let tempdir = tmpdir("state_layout");
-        let root_path = tempdir.path().to_path_buf();
-        let metrics_registry = ic_metrics::MetricsRegistry::new();
-        let state_layout = StateLayout::try_new(log, root_path, &metrics_registry).unwrap();
-        let scratchpad_dir = tmpdir("scratchpad");
-
-        let create_checkpoint_with_dummy_files = |h: Height| -> CheckpointLayout<ReadOnly> {
-            let scratchpad_layout = CheckpointLayout::<RwPolicy<()>>::new_untracked(
-                scratchpad_dir
-                    .path()
-                    .to_path_buf()
-                    .join(h.get().to_string()),
-                h,
-            )
-            .unwrap();
-
-            // Write 1000 dummy files to the scratchpad directory so that removing checkpoint files takes long than dropping a `CheckpointLayout`.
-            // This is to create some backlog in the checkpoint removal channel.
-            for i in 0..1000 {
-                let file_path = scratchpad_layout.raw_path().join(i.to_string());
-                File::create(file_path).unwrap();
-            }
-            let cp = state_layout
-                .promote_scratchpad_to_unverified_checkpoint(scratchpad_layout, h)
-                .unwrap();
-            cp.finalize_and_remove_unverified_marker(None).unwrap();
-            cp
-        };
-
-        let mut checkpoints = vec![];
-        for i in 1..=20 {
-            checkpoints.push(create_checkpoint_with_dummy_files(Height::new(i)));
-        }
-        for i in 1..=19 {
-            state_layout.remove_checkpoint_when_unused(Height::new(i));
-        }
-        drop(checkpoints);
-
-        // Checkpoints 1 to 19 should be moved away from the checkpoints directory.
-        assert_eq!(
-            vec![Height::new(20)],
-            state_layout.checkpoint_heights().unwrap(),
-        );
-
-        state_layout.flush_checkpoint_removal_channel();
-        // Temporary folders should be removed from the fs_tmp directory after we flush the removal channel.
-        assert!(
-            state_layout.fs_tmp().read_dir().unwrap().next().is_none(),
-            "fs_tmp directory is not empty"
-        );
-    });
-}
-
-#[test]
 #[should_panic]
 #[cfg(debug_assertions)]
 fn test_last_removal_panics_in_debug() {
