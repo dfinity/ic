@@ -51,11 +51,11 @@ fn hash_to_scalar(input: &[u8], domain_sep: &str) -> ic_bls12_381::Scalar {
     s[0]
 }
 
-pub struct DerivationPath {
+pub struct DerivationContext {
     delta: Scalar,
 }
 
-impl DerivationPath {
+impl DerivationContext {
     /// Create a new derivation path
     pub fn new(canister_id: &[u8], context: &[u8]) -> Self {
         let domain_sep = "ic-vetkd-bls12-381-context";
@@ -74,17 +74,17 @@ pub fn create_encrypted_key<R: CryptoRng + RngCore>(
     master_pk: &G2Affine,
     master_sk: &Scalar,
     transport_pk: &G1Affine,
-    derivation_path: &DerivationPath,
-    did: &[u8],
+    context: &DerivationContext,
+    input: &[u8],
 ) -> Vec<u8> {
-    let delta = derivation_path.delta();
+    let delta = context.delta();
 
     let dsk = delta + master_sk;
     let dpk = G2Affine::from(G2Affine::generator() * delta + master_pk);
 
     let r = random_scalar(rng);
 
-    let msg = augmented_hash_to_g1(&dpk, did);
+    let msg = augmented_hash_to_g1(&dpk, input);
 
     let c1 = G1Affine::from(G1Affine::generator() * r);
     let c2 = G2Affine::from(G2Affine::generator() * r);
