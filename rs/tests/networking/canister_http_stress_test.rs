@@ -164,7 +164,9 @@ pub async fn test_proxy_canister(
     info!(
         logger,
         "average qps for {} concurrent request(s) and {} experiment(s) is {}",
-        concurrent_requests, experiments, qps
+        concurrent_requests,
+        experiments,
+        qps
     );
     assert!(qps > 100.0);
 }

@@ -235,7 +235,10 @@ pub fn create_proxy_canister_with_name_and_cycles<'a>(
     canister_name: &str,
     cycles: Cycles,
 ) -> Canister<'a> {
-    info!(&env.logger(), "Installing proxy_canister with a custom cycle amount ({cycles:?}).");
+    info!(
+        &env.logger(),
+        "Installing proxy_canister with a custom cycle amount ({cycles:?})."
+    );
 
     let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
     let proxy_canister_id = rt.block_on(create_and_install_with_cycles(
