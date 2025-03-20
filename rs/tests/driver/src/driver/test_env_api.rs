@@ -203,7 +203,7 @@ use std::{
     fs,
     future::Future,
     io::{Read, Write},
-    net::{IpAddr, Ipv4Addr, SocketAddr, TcpStream},
+    net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, TcpStream},
     path::{Path, PathBuf},
     str::FromStr,
     sync::Arc,
@@ -1611,7 +1611,7 @@ pub trait HasPublicApiUrl: HasTestEnv + Send + Sync {
     fn is_orchestrator_dashboard_accessible(ip: Ipv6Addr, timeout_secs: u64) -> bool {
         let dashboard_endpoint = format!("http://[{}]:7070", ip);
 
-        let client = match Client::builder()
+        let client = match reqwest::blocking::Client::builder()
             .timeout(Duration::from_secs(timeout_secs))
             .build()
         {
