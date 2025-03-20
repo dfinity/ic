@@ -21,6 +21,7 @@ use pocket_ic::PocketIcBuilder;
 use reqwest::Url;
 
 #[derive(Debug, Parser)]
+#[clap(name = "sns-testing-cli", about = "A CLI for testing SNS", version)]
 struct SnsTestingOpts {
     #[clap(subcommand)]
     subcommand: SnsTestingSubCommand,
@@ -28,26 +29,39 @@ struct SnsTestingOpts {
 
 #[derive(Debug, Parser)]
 enum SnsTestingSubCommand {
+    /// Run the SNS lifecycle scenario.
+    /// The scenario will create the new SNS, and perform an upgrade for the SNS-controlled canister.
     RunBasicScenario(RunBasicScenarioOpts),
+    /// Start the new PocketIC-based network with NNS canisters.
+    /// exposes the newly created network on 'http://127.0.0.1:8080'
     NnsInit(NnsInitOpts),
 }
 
 #[derive(Debug, Parser)]
 struct RunBasicScenarioOpts {
+    /// The network to run the basic scenario on. This can be either dfx-compatible named network
+    /// identifier or the URL of a IC HTTP endpoint.
     #[arg(long)]
     network: String,
+    /// The name of the 'dfx' identity to use for the scenario. This identity is used to submit NNS
+    /// proposal to create the new SNS and is added as an initial neuron in the new SNS.
     #[arg(long)]
     dev_identity: String,
+    /// The ID of the canister to be controlled by the SNS created in the scenario.
     #[arg(long)]
     test_canister_id: CanisterId,
 }
 
 #[derive(Debug, Parser)]
 struct NnsInitOpts {
+    /// The URL of the 'pocket-ic-server' instance.
     #[arg(long)]
     server_url: Url,
+    /// The path to the state PocketIC instance state directory.
     #[arg(long)]
     state_dir: PathBuf,
+    /// The name of the 'dfx' identity. The principal of this identity will be used as the
+    /// hotkey for the NNS neuron with the majority voting power.
     #[arg(long)]
     dev_identity: String,
 }
