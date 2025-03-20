@@ -58,7 +58,7 @@ pub struct DerivationPath {
 impl DerivationPath {
     /// Create a new derivation path
     pub fn new(canister_id: &[u8], context: &[u8]) -> Self {
-        let domain_sep = "ic-crypto-vetkd-bls12-381-derivation-path";
+        let domain_sep = "ic-vetkd-bls12-381-context";
         let mut delta = hash_to_scalar(canister_id, domain_sep);
         delta += hash_to_scalar(context, domain_sep);
         Self { delta }
