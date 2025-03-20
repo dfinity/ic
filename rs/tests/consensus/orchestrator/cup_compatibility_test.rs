@@ -102,7 +102,7 @@ and the custom `ExhaustiveSet` implementation is removed at the same time.
 /// 1. It is possible to declare a dependency that can download and extract
 ///    g-zipped archives, and make them executable.
 /// 2. There is a way to automatically update the version of this dependency,
-///    Ideally such that it is in sync with mainnet-subnet-revisions.json
+///    Ideally such that it is in sync with mainnet-icos-revisions.json
 fn download_mainnet_binary(version: String, log: &Logger, target_dir: &Path) -> PathBuf {
     block_on(ic_system_test_driver::retry_with_msg_async!(
         "download mainnet binary",

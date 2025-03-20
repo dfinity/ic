@@ -564,8 +564,8 @@ pub async fn metrics_middleware(
         .cloned()
         .unwrap_or_default();
 
-    // Actual canister id is the one the request was routed to
-    // Might be different because of e.g. Bitcoin middleware
+    // Actual canister id is the one the request was routed to.
+    // Might be different from request canister id
     let canister_id_actual = response.extensions().get::<CanisterId>().cloned();
     let error_cause = response.extensions().get::<ErrorCause>().cloned();
     let retry_result = response.extensions().get::<RetryResult>().cloned();

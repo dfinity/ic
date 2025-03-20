@@ -170,6 +170,12 @@ impl NervousSystemError {
     }
 }
 
+impl From<NervousSystemError> for String {
+    fn from(value: NervousSystemError) -> Self {
+        value.error_message
+    }
+}
+
 impl fmt::Display for NervousSystemError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}", self.error_message)

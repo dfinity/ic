@@ -29,19 +29,26 @@ def _upload_artifact_impl(ctx):
         outputs = [checksum],
     )
 
+    uploader = ctx.file._artifacts_uploader
+
+    # If s3 upload is not enabled, then use a noop uploader.
+    if not s3_upload:
+        uploader = ctx.actions.declare_file("dummy_upload.sh")
+        ctx.actions.write(uploader, "#!/usr/bin/env bash\necho dummy upload for $1\ntouch $2", is_executable = True)
+
     allinputs = ctx.files.inputs + [checksum]
     for f in allinputs:
         filename = ctx.label.name + "_" + f.basename
         url = ctx.actions.declare_file(filename + ".url")
         ctx.actions.run(
-            executable = ctx.file._artifacts_uploader,
+            executable = uploader,
             arguments = [f.path, url.path],
             env = {
                 "RCLONE": ctx.file._rclone.path,
                 "REMOTE_SUBDIR": ctx.attr.remote_subdir,
                 "VERSION_FILE": ctx.version_file.path,
                 "VERSION_TXT": ctx.file._version_txt.path,
-            } | ({"UPLOAD_BUILD_ARTIFACTS": "1"} if s3_upload else {}),
+            },
             inputs = [f, ctx.version_file, ctx.file._version_txt],
             outputs = [url],
             tools = [ctx.file._rclone],

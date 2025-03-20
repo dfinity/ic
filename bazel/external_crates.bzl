@@ -892,14 +892,6 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                     "trace",
                 ],
             ),
-            "opentelemetry_0_20_0": crate.spec(
-                package = "opentelemetry",
-                version = "^0.20.0",
-                features = [
-                    "metrics",
-                    "trace",
-                ],
-            ),
             "opentelemetry-otlp": crate.spec(
                 version = "^0.27.0",
                 features = [
