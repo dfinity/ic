@@ -222,20 +222,20 @@ impl VetKey {
 
 #[derive(Copy, Clone, Debug)]
 /// Error indicating that deserializing an encrypted key failed
-pub enum EncryptedKeyDeserializationError {
+pub enum EncryptedVetKeyDeserializationError {
     /// Error indicating one or more of the points was invalid
-    InvalidEncryptedKey,
+    InvalidEncryptedVetKey,
 }
 
 /// An encrypted VetKey
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct EncryptedKey {
+pub struct EncryptedVetKey {
     c1: G1Affine,
     c2: G2Affine,
     c3: G1Affine,
 }
 
-impl EncryptedKey {
+impl EncryptedVetKey {
     /// The length of the serialized encoding of this type
     const BYTES: usize = 2 * G1AFFINE_BYTES + G2AFFINE_BYTES;
 
@@ -276,7 +276,7 @@ impl EncryptedKey {
     }
 
     /// Deserializes an encrypted key from a byte vector
-    pub fn deserialize(bytes: &[u8]) -> Result<EncryptedKey, String> {
+    pub fn deserialize(bytes: &[u8]) -> Result<EncryptedVetKey, String> {
         let ek_bytes: &[u8; Self::BYTES] = bytes.try_into().map_err(|_e: TryFromSliceError| {
             format!("key not {} bytes but {}", Self::BYTES, bytes.len())
         })?;
@@ -286,19 +286,19 @@ impl EncryptedKey {
     /// Deserializes an encrypted key from a byte array
     pub fn deserialize_array(
         val: &[u8; Self::BYTES],
-    ) -> Result<Self, EncryptedKeyDeserializationError> {
+    ) -> Result<Self, EncryptedVetKeyDeserializationError> {
         let c2_start = G1AFFINE_BYTES;
         let c3_start = G1AFFINE_BYTES + G2AFFINE_BYTES;
 
         let c1_bytes: &[u8; G1AFFINE_BYTES] = &val[..c2_start]
             .try_into()
-            .map_err(|_e| EncryptedKeyDeserializationError::InvalidEncryptedKey)?;
+            .map_err(|_e| EncryptedVetKeyDeserializationError::InvalidEncryptedVetKey)?;
         let c2_bytes: &[u8; G2AFFINE_BYTES] = &val[c2_start..c3_start]
             .try_into()
-            .map_err(|_e| EncryptedKeyDeserializationError::InvalidEncryptedKey)?;
+            .map_err(|_e| EncryptedVetKeyDeserializationError::InvalidEncryptedVetKey)?;
         let c3_bytes: &[u8; G1AFFINE_BYTES] = &val[c3_start..]
             .try_into()
-            .map_err(|_e| EncryptedKeyDeserializationError::InvalidEncryptedKey)?;
+            .map_err(|_e| EncryptedVetKeyDeserializationError::InvalidEncryptedVetKey)?;
 
         let c1 = option_from_ctoption(G1Affine::from_compressed(c1_bytes));
         let c2 = option_from_ctoption(G2Affine::from_compressed(c2_bytes));
@@ -306,7 +306,7 @@ impl EncryptedKey {
 
         match (c1, c2, c3) {
             (Some(c1), Some(c2), Some(c3)) => Ok(Self { c1, c2, c3 }),
-            (_, _, _) => Err(EncryptedKeyDeserializationError::InvalidEncryptedKey),
+            (_, _, _) => Err(EncryptedVetKeyDeserializationError::InvalidEncryptedVetKey),
         }
     }
 }

@@ -78,7 +78,7 @@ fn protocol_flow_with_emulated_server_side() {
         &context,
     );
 
-    let ek = EncryptedKey::deserialize(&ek_bytes).unwrap();
+    let ek = EncryptedVetKey::deserialize(&ek_bytes).unwrap();
 
     let dpk_bytes = derived_public_key.to_compressed().to_vec();
 
@@ -120,7 +120,7 @@ fn protocol_flow_with_fixed_rng_has_expected_outputs() {
 
     let dpk = DerivedPublicKey::deserialize(&hex::decode("972c4c6cc184b56121a1d27ef1ca3a2334d1a51be93573bd18e168f78f8fe15ce44fb029ffe8e9c3ee6bea2660f4f35e0774a35a80d6236c050fd8f831475b5e145116d3e83d26c533545f64b08464e4bcc755f990a381efa89804212d4eef5f").unwrap()).unwrap();
 
-    let ek = EncryptedKey::deserialize(&hex::decode("b1a13757eaae15a3c8884fc1a3453f8a29b88984418e65f1bd21042ce1d6809b2f8a49f7326c1327f2a3921e8ff1d6c3adde2a801f1f88de98ccb40c62e366a279e7aec5875a0ce2f2a9f3e109d9cb193f0197eadb2c5f5568ee4d6a87e115910662e01e604087246be8b081fc6b8a06b4b0100ed1935d8c8d18d9f70d61718c5dba23a641487e72b3b25884eeede8feb3c71599bfbcebe60d29408795c85b4bdf19588c034d898e7fc513be8dbd04cac702a1672f5625f5833d063b05df7503").unwrap()).unwrap();
+    let ek = EncryptedVetKey::deserialize(&hex::decode("b1a13757eaae15a3c8884fc1a3453f8a29b88984418e65f1bd21042ce1d6809b2f8a49f7326c1327f2a3921e8ff1d6c3adde2a801f1f88de98ccb40c62e366a279e7aec5875a0ce2f2a9f3e109d9cb193f0197eadb2c5f5568ee4d6a87e115910662e01e604087246be8b081fc6b8a06b4b0100ed1935d8c8d18d9f70d61718c5dba23a641487e72b3b25884eeede8feb3c71599bfbcebe60d29408795c85b4bdf19588c034d898e7fc513be8dbd04cac702a1672f5625f5833d063b05df7503").unwrap()).unwrap();
 
     let context = hex::decode("6d657373616765").unwrap();
 

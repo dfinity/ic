@@ -34,7 +34,7 @@ use ic_system_test_driver::{
 };
 use ic_types::{Height, PrincipalId, ReplicaVersion};
 use ic_types_test_utils::ids::subnet_test_id;
-use ic_vetkd_utils::{DerivedPublicKey, EncryptedKey, IBECiphertext, TransportSecretKey};
+use ic_vetkd_utils::{DerivedPublicKey, EncryptedVetKey, IBECiphertext, TransportSecretKey};
 use k256::ecdsa::{signature::hazmat::PrehashVerifier, Signature, VerifyingKey};
 use registry_canister::mutations::{
     do_create_subnet::{
@@ -937,7 +937,7 @@ pub fn verify_vetkd(public_key: &[u8], encrypted_key: &[u8], input: &[u8]) -> bo
         .expect("Failed to generate transport secret key");
 
     let enc_key =
-        EncryptedKey::deserialize(encrypted_key).expect("Failed to deserialize encrypted key");
+        EncryptedVetKey::deserialize(encrypted_key).expect("Failed to deserialize encrypted key");
 
     let priv_key = enc_key
         .decrypt_and_verify(&transport_key, &dpk, input)

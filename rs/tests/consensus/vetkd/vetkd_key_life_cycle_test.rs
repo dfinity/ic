@@ -41,7 +41,7 @@ use ic_system_test_driver::{
     util::{block_on, runtime_from_url, MessageCanister},
 };
 use ic_types::{Cycles, Height};
-use ic_vetkd_utils::{DerivedPublicKey, EncryptedKey, IBECiphertext, TransportSecretKey};
+use ic_vetkd_utils::{DerivedPublicKey, EncryptedVetKey, IBECiphertext, TransportSecretKey};
 use slog::info;
 use std::time::Duration;
 
@@ -138,7 +138,7 @@ fn test(env: TestEnv) {
             .await
             .expect("Failed to derive encrypted key");
 
-            let enc_key = EncryptedKey::deserialize(&encrypted_priv_key)
+            let enc_key = EncryptedVetKey::deserialize(&encrypted_priv_key)
                 .expect("Failed to deserialize encrypted key");
 
             let priv_key = enc_key
