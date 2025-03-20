@@ -35,8 +35,8 @@ for version in "${VERSIONS[@]}"; do
 
     # Update the mainnet-icos-revisions.json file with the current version and computed hash.
     if ! jq --arg ver "$version" --arg hash "$hash" \
-         '.hostos.latest_release.version = $ver | .hostos.latest_release.update_img_hash = $hash' \
-         "$REVISIONS_FILE" > "${REVISIONS_FILE}.tmp"; then
+        '.hostos.latest_release.version = $ver | .hostos.latest_release.update_img_hash = $hash' \
+        "$REVISIONS_FILE" >"${REVISIONS_FILE}.tmp"; then
         echo "Failed to update $REVISIONS_FILE for version $version."
         results["$version"]="JSON update failed"
         continue
