@@ -1,7 +1,11 @@
 #![allow(dead_code)]
+use backon::{BlockingRetryable, ExponentialBuilder};
+use itertools::Itertools;
 #[rustfmt::skip]
 use walkdir::WalkDir;
+use crate::driver::boundary_node::BoundaryNodeVm;
 use crate::driver::constants;
+use crate::driver::test_env_api::{HasTopologySnapshot, HasVmName, IcNodeContainer};
 use crate::driver::{
     farm::{Farm, HostFeature},
     resource::AllocatedVm,
@@ -679,6 +683,26 @@ impl SystemTestGroup {
                     let env = ensure_setup_env(group_ctx);
                     setup_fn(env.clone());
                     SetupResult {}.write_attribute(&env);
+                    let mut tried_to_register = false;
+                    for _ in 0..5 {
+                        match GroupSetup::try_read_attribute(&env) {
+                            Ok(group_setup) => {
+                                Self::register_with_service_disc(
+                                    group_setup.infra_group_name,
+                                    env.clone(),
+                                );
+                                tried_to_register = true;
+                                break;
+                            }
+                            Err(e) => {
+                                warn!(logger, "Failed to get group setup: {:?}", e);
+                                std::thread::sleep(KEEPALIVE_INTERVAL);
+                            }
+                        }
+                    }
+                    if !tried_to_register {
+                        panic!("Didn't try to register with service discovery because setup group attribute couldn't be read");
+                    }
                 },
                 &mut compose_ctx,
             );
@@ -787,6 +811,107 @@ impl SystemTestGroup {
             vec![report_plan, uvms_stream_plan],
             &mut compose_ctx,
         ))
+    }
+
+    fn register_with_service_disc(test_name: String, env: TestEnv) {
+        let logger = env.logger();
+        info!(logger, "Registering with service discovery");
+        let topology = env.maybe_topology_snapshot();
+        if topology.is_none() {
+            warn!(
+                logger,
+                "Topology snapshot cannot be made for testnet: {}", test_name
+            );
+            return;
+        }
+        let topology = topology.unwrap();
+        let root_subnet = topology.root_subnet();
+        let nns_urls = root_subnet
+            .nodes()
+            .map(|node| format!("\"http://[{}]:8080\"", node.get_ip_addr()))
+            .join(",");
+        let body = format!(
+            r#"
+                {{
+                    "name": "{}",
+                    "nns_urls": [{}]
+                }}
+            "#,
+            test_name, nns_urls
+        );
+        info!(logger, "Sending following body: {}", body);
+        let client = reqwest::blocking::Client::new();
+        Self::register_with_backoff(&client, "", logger.clone(), body);
+
+        for bn in env.get_deployed_boundary_nodes() {
+            let name = bn.vm_name();
+            let snapshot = match bn.get_snapshot() {
+                Ok(s) => s,
+                Err(e) => {
+                    warn!(
+                        logger,
+                        "Couldn't get the snapshot of the boundary node {} due to: {:?}", name, e
+                    );
+                    continue;
+                }
+            };
+            let ipv6 = snapshot.ipv6().to_string();
+            let body = format!(
+                r#"
+                {{
+                    "name": "{}-guest",
+                    "ic_name": "{}",
+                    "targets": ["{}"],
+                    "job_type": "node_exporter",
+                }}
+            "#,
+                name, test_name, ipv6,
+            );
+
+            Self::register_with_backoff(&client, "add_boundary_node", logger.clone(), body);
+        }
+    }
+
+    fn register_with_backoff(
+        client: &reqwest::blocking::Client,
+        path: &str,
+        logger: Logger,
+        body: String,
+    ) {
+        let request = || {
+            let response = client
+                .post(format!(
+                    "https://service-discovery.dm1-esmesh1.dfinity.network/{}",
+                    path
+                ))
+                .header("Content-Type", "application/json")
+                .timeout(Duration::from_secs(30))
+                .body(body.clone())
+                .send()
+                .map_err(|e| e.to_string());
+            match response {
+                Ok(r) => {
+                    if let Err(e) = r.error_for_status_ref() {
+                        let body = r.text().unwrap();
+                        let message = format!(
+                        "Failed to register with the service discovery: {:?}, Response text: {}",
+                        e, body
+                    );
+                        error!(logger, "{}", message);
+                        Err(message)
+                    } else {
+                        info!(logger, "Successfully registered with the service discovery");
+                        Ok(())
+                    }
+                }
+                Err(e) => {
+                    let message = format!("Failed to register with the service discovery: {:?}", e);
+                    error!(logger, "{}", message);
+                    Err(message)
+                }
+            }
+        };
+        let _ = request.retry(&ExponentialBuilder::default()).call();
     }
 
     pub fn execute(self) -> Result<Outcome> {
