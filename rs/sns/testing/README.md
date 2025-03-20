@@ -11,14 +11,26 @@ dfx identity new sns-testing --storage-mode=plaintext
 ```
 Mind the `--storage-mode=plaintext` as it is required to have `.pem` files in the `dfx` directory on the disk.
 
+The scenario was tested with `dfx` `0.24.3`.
+
 ## Run the basic scenario
 
 The scenario is supposed to be run from the root of `ic-sns-testing` crate (i.e. from `rs/sns/testing`).
 
+Since `bazel` doesn't allow to run multiple tasks in parallel, it's recommended to build all required
+targets before starting the scenario:
+```
+bazel build //rs/pocket_ic_server:pocket-ic-server
+bazel build //rs/sns/testing:cli
+bazel build //rs/sns/testing:sns_testing_canister
+```
+
 To run the scenario on the local PocketIC instance:
 1) Launch PocketIC server:
+   This command will launch the `pocket-ic-server` instance in the foreground, so this step has to be launched
+   in a separate terminal window.
    ```
-   bazel run //rs/pocket_ic_server:pocket-ic-server -- --ttl 6000 --port 8888
+   bazel run //rs/pocket_ic_server:pocket-ic-server -- --ttl 300 --port 8888
    ```
 2) Bootstrap the NNS on the launched PocketIC instance:
    ```
@@ -26,7 +38,6 @@ To run the scenario on the local PocketIC instance:
    ```
 3) Build and deploy `test` canister:
    ```
-   bazel build //rs/sns/testing:sns_testing_canister
    # 'r7inp-6aaaa-aaaaa-aaabq-cai' is the NNS Root canister
    dfx canister --network http://127.0.0.1:8080 --identity sns-testing create test --controller r7inp-6aaaa-aaaaa-aaabq-cai --controller sns-testing --no-wallet
    dfx canister --network http://127.0.0.1:8080 --identity sns-testing install test --wasm "$(bazel info bazel-bin)/rs/sns/testing/sns_testing_canister.wasm.gz"
@@ -38,8 +49,8 @@ To run the scenario on the local PocketIC instance:
      --test-canister-id "$(dfx canister --network http://127.0.0.1:8080 id test)"
    ```
 
-To start the scenario from scratch, you'll need to remove `$PWD/sns-testing` and `$PWD/.dfx` directories before
-doing the steps mentioned above.
+To start the scenario from scratch, you'll need to stop the running `pocket-ic-server` instance and
+remove `$PWD/sns-testing` and `$PWD/.dfx` directories before doing the steps mentioned above.
 
 ## Check the network state
 
