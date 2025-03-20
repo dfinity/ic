@@ -40,11 +40,11 @@ rust_test(
 )
 
 rust_test(
-    name = "http_utils_long_test",
+    name = "resuming_download_test",
     srcs = glob(["tests/**/*.rs"]),
     env = MAINNET_ENV,
     tags = [
-        "long_test",
+        "long_test",  # this test doesn't necessarily take long but it downloads a big image from download proxy so, to save bandwidth, we don't want to do that for every update to every PR and only run this on pushes to master.
         "requires-network",
     ],
     deps = DEPENDENCIES + DEV_DEPENDENCIES + [":http_utils"],
