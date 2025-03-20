@@ -24,7 +24,7 @@ use crate::{
                 self, DisburseMaturityResponse, MergeMaturityResponse, StakeMaturityResponse,
             },
             nervous_system_function::FunctionType,
-            neuron::Followees,
+            neuron::{Followees, TopicFollowees},
             proposal::Action,
             ChunkedCanisterWasm, ClaimSwapNeuronsError, ClaimSwapNeuronsResponse,
             ClaimedSwapNeuronStatus, DefaultFollowees, DeregisterDappCanisters, Empty,
@@ -2299,6 +2299,14 @@ impl NeuronRecipe {
                 followees: followees.clone(),
             };
             btreemap! { catch_all => followees }
+        }
+    }
+
+    // TODO[NNS1-3676]: Provide a proper implementation for this function once new SNSs are
+    // TODO[NNS1-3676]: to begin using topics-based following.
+    pub(crate) fn construct_topic_followees(&self) -> TopicFollowees {
+        TopicFollowees {
+            topic_id_to_followees: btreemap! {},
         }
     }
 
