@@ -14,6 +14,7 @@ use std::collections::BTreeMap;
 use std::marker::PhantomData;
 use std::sync::atomic::AtomicU64;
 use std::sync::atomic::Ordering as AtomicOrdering;
+use std::sync::Arc;
 
 /// This implementation of CanisterRegistryClient uses StableMemory to store a copy of the
 /// Registry data in the canister.  An implementation of RegistryDataStableMemory trait that
@@ -24,11 +25,11 @@ pub struct StableCanisterRegistryClient<S: RegistryDataStableMemory> {
     // cache of latest_version
     latest_version: AtomicU64,
     // Registry client to interact with the canister
-    registry: Box<dyn Registry>,
+    registry: Arc<dyn Registry>,
 }
 
 impl<S: RegistryDataStableMemory> StableCanisterRegistryClient<S> {
-    pub fn new(registry: Box<dyn Registry>) -> Self {
+    pub fn new(registry: Arc<dyn Registry>) -> Self {
         Self {
             _stable_memory: PhantomData,
             latest_version: AtomicU64::new(0),

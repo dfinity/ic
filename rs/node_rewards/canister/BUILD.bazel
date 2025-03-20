@@ -10,6 +10,7 @@ DEPENDENCIES = [
     "//rs/nervous_system/canisters",
     "//rs/node_rewards/canister/api",
     "//rs/registry/canister-client",
+    "//rs/registry/node_provider_rewards",
     "//rs/types/types",
     "@crate_index//:candid",
     "@crate_index//:ic-cdk",
@@ -24,6 +25,7 @@ DEV_DEPENDENCIES = [
     "//rs/registry/keys",
     "//rs/state_machine_tests",
     "@crate_index//:candid_parser",
+    "@crate_index//:maplit",
 ]
 
 MACRO_DEPENDENCIES = [

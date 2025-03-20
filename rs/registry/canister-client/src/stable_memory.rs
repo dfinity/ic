@@ -71,3 +71,28 @@ pub trait RegistryDataStableMemory: Send + Sync {
         f: impl FnOnce(&mut StableBTreeMap<StorableRegistryKey, StorableRegistryValue, VM>) -> R,
     ) -> R;
 }
+
+/// Usage: stable_memory_thread_local!(DummyState, MemoryId::new(0));
+/// That will produce an empty struct with RegistryDataStableMemory implemented for MemoryId 0,
+/// which will also initialize a BTreeMap to that position
+#[macro_export]
+macro_rules! registry_data_stable_memory_impl {
+    ($state_struct:ident, $local_key_btree_map:expr) => {
+
+        struct $state_struct;
+
+        impl RegistryDataStableMemory for $state_struct {
+            fn with_registry_map<R>(
+                f: impl FnOnce(&StableBTreeMap<StorableRegistryKey, StorableRegistryValue, VM>) -> R,
+            ) -> R {
+                $local_key_btree_map.with_borrow(f)
+            }
+
+            fn with_registry_map_mut<R>(
+                f: impl FnOnce(&mut StableBTreeMap<StorableRegistryKey, StorableRegistryValue, VM>) -> R,
+            ) -> R {
+                $local_key_btree_map.with_borrow_mut(f)
+            }
+        }
+    };
+}

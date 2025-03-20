@@ -4,6 +4,7 @@ use std::collections::BTreeMap;
 #[derive(CandidType, Deserialize)]
 pub struct GetNodeProvidersMonthlyXdrRewardsRequest {}
 
+#[derive(CandidType, Deserialize)]
 pub struct GetNodeProvidersMonthlyXdrRewardsResponse {
     pub rewards: Option<NodeProvidersMonthlyXdrRewards>,
     pub error: Option<String>,

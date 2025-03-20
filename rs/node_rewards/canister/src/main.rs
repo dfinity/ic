@@ -20,7 +20,7 @@ fn main() {}
 thread_local! {
     static REGISTRY_STORE: Arc<StableCanisterRegistryClient<RegistryStoreStableMemoryBorrower>> = {
         let store = StableCanisterRegistryClient::<RegistryStoreStableMemoryBorrower>::new(
-            Box::new(RegistryCanister::new()));
+            Arc::new(RegistryCanister::new()));
         Arc::new(store)
     };
     static CANISTER: RefCell<NodeRewardsCanister> = {

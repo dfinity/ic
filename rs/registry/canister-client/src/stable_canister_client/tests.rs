@@ -1,4 +1,5 @@
 use super::*;
+use crate::registry_data_stable_memory_impl;
 use crate::stable_memory::{StorableRegistryKey, StorableRegistryValue};
 use futures::FutureExt;
 use ic_nervous_system_canisters::registry::{FakeRegistry, FakeRegistryResponses};
@@ -15,24 +16,11 @@ pub type VM = VirtualMemory<DefaultMemoryImpl>;
 thread_local! {
     static STATE: RefCell<StableBTreeMap<StorableRegistryKey, StorableRegistryValue, VM>> = RefCell::new({
         let mgr = MemoryManager::init(DefaultMemoryImpl::default());
-            StableBTreeMap::init(mgr.get(MemoryId::new(0)))
+        StableBTreeMap::init(mgr.get(MemoryId::new(0)))
     });
 }
-struct DummyState;
 
-impl RegistryDataStableMemory for DummyState {
-    fn with_registry_map<R>(
-        f: impl FnOnce(&StableBTreeMap<StorableRegistryKey, StorableRegistryValue, VM>) -> R,
-    ) -> R {
-        STATE.with_borrow(f)
-    }
-
-    fn with_registry_map_mut<R>(
-        f: impl FnOnce(&mut StableBTreeMap<StorableRegistryKey, StorableRegistryValue, VM>) -> R,
-    ) -> R {
-        STATE.with_borrow_mut(f)
-    }
-}
+registry_data_stable_memory_impl!(DummyState, STATE);
 
 pub fn add_record_helper(key: &str, version: u64, value: Option<u64>) {
     STATE.with_borrow_mut(|map| {

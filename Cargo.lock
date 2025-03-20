@@ -11398,9 +11398,11 @@ dependencies = [
  "ic-protobuf",
  "ic-registry-canister-client",
  "ic-registry-keys",
+ "ic-registry-node-provider-rewards",
  "ic-stable-structures",
  "ic-state-machine-tests",
  "ic-types",
+ "maplit",
 ]
 
 [[package]]
