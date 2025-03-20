@@ -491,6 +491,11 @@ type NervousSystemParameters = record {
   automatically_advance_target_version : opt bool;
 };
 
+type FolloweesForTopic = record {
+  followees : vec NeuronId;
+  topic : opt Topic;
+};
+
 type Neuron = record {
   id : opt NeuronId;
   staked_maturity_e8s_equivalent : opt nat64;
@@ -507,7 +512,7 @@ type Neuron = record {
   disburse_maturity_in_progress : vec DisburseMaturityInProgress;
   followees : vec record { nat64; Followees };
   topic_followees : opt record {
-    topic_id_to_followees : vec record { nat64; Followees };
+    topic_id_to_followees : vec record { nat64; FolloweesForTopic };
   };
   neuron_fees_e8s : nat64;
 };

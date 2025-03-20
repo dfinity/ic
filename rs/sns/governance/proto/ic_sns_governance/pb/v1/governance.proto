@@ -164,9 +164,15 @@ message Neuron {
     repeated NeuronId followees = 1;
   }
 
+  // A list of a neuron's followees, possibly associated with a given topic.
+  message FolloweesForTopic {
+    repeated NeuronId followees = 1;
+    optional Topic topic = 2;
+  }
+
   // A collection of a neuron's followees (per topic).
   message TopicFollowees {
-    map<uint64, Followees> topic_id_to_followees = 1;
+    map<uint64, FolloweesForTopic> topic_id_to_followees = 1;
   }
 
   // The neuron's legacy followees (per proposal type), specified as a map of proposal functions IDs

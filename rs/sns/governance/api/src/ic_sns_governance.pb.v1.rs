@@ -155,7 +155,7 @@ pub struct Neuron {
 }
 /// Nested message and enum types in `Neuron`.
 pub mod neuron {
-    use std::collections::BTreeMap;
+    use super::*;
 
     /// A list of a neuron's followees for a specific function.
     #[derive(Default, candid::CandidType, candid::Deserialize, Debug, Clone, PartialEq)]
@@ -163,10 +163,17 @@ pub mod neuron {
         pub followees: Vec<super::NeuronId>,
     }
 
+    /// A list of a neuron's followees for a specific function.
+    #[derive(Default, candid::CandidType, candid::Deserialize, Debug, Clone, PartialEq)]
+    pub struct FolloweesForTopic {
+        pub followees: Vec<super::NeuronId>,
+        pub topic: Option<topics::Topic>,
+    }
+
     // A collection of a neuron's followees (per topic).
     #[derive(candid::CandidType, candid::Deserialize, Clone, Debug, PartialEq)]
     pub struct TopicFollowees {
-        pub topic_id_to_followees: BTreeMap<u64, Followees>,
+        pub topic_id_to_followees: BTreeMap<u64, FolloweesForTopic>,
     }
 
     /// The neuron's dissolve state, specifying whether the neuron is dissolving,
