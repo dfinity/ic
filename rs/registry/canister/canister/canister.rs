@@ -394,8 +394,8 @@ fn get_chunk() {
 }
 
 #[candid_method(query, rename = "get_chunk")]
-fn get_chunk_(_request: GetChunkRequest) -> Result<Chunk, String> {
-    todo!();
+fn get_chunk_(request: GetChunkRequest) -> Result<Chunk, String> {
+    registry().get_chunk(request)
 }
 
 #[export_name = "canister_update revise_elected_guestos_versions"]
