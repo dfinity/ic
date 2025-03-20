@@ -126,7 +126,7 @@ def _checksum_rule_impl(ctx):
     input_files = ctx.files.inputs
 
     # Declare output files (NOTE: not windows friendly)
-    out_checksums = ctx.actions.declare_file("_checksums/SHA256SUMS")
+    out_checksums = ctx.actions.declare_file("{}_checksums/SHA256SUMS".format(ctx.attr.name))
 
     def make_symlink(target):
         symlink = ctx.actions.declare_file("_checksums/" + target.basename)
