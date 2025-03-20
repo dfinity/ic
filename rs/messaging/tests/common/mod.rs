@@ -22,8 +22,10 @@ const REMOTE_SUBNET_ID: SubnetId = ic_test_utilities_types::ids::SUBNET_1;
 pub const KB: u64 = 1024;
 pub const MB: u64 = KB * KB;
 
+/// Config for `SubnetPair` including message memory limits
+/// and number of canisters for each subnet.
 #[derive(Debug)]
-pub struct FixtureConfig {
+pub struct SubnetPairConfig {
     pub local_canisters_count: u64,
     pub local_max_instructions_per_round: u64,
     pub local_message_memory_capacity: u64,
@@ -32,7 +34,7 @@ pub struct FixtureConfig {
     pub remote_message_memory_capacity: u64,
 }
 
-impl Default for FixtureConfig {
+impl Default for SubnetPairConfig {
     fn default() -> Self {
         Self {
             local_canisters_count: 2,
@@ -45,7 +47,7 @@ impl Default for FixtureConfig {
     }
 }
 
-impl FixtureConfig {
+impl SubnetPairConfig {
     /// Generates a `StateMachineConfig` using defaults for an application subnet, except for the
     /// subnet message memory capacity and the maximum number of instructions per round.
     pub fn state_machine_config(
@@ -95,18 +97,24 @@ impl FixtureConfig {
     }
 }
 
+/// Wrapper for two references to state machines, one considered the `local subnet` and the
+/// other the `remote subnet`, each subnet can have an arbitrary amount of
+/// 'random-traffic-canisters' installed.
+///
+/// The purpose of this struct is to simulate bidirectional XNet traffic between canisters
+/// installed on different subnets.
 #[derive(Debug, Clone)]
-pub struct Fixture {
+pub struct SubnetPair {
     pub local_env: Arc<StateMachine>,
     pub local_canisters: BTreeSet<CanisterId>,
     pub remote_env: Arc<StateMachine>,
     pub remote_canisters: BTreeSet<CanisterId>,
 }
 
-impl Fixture {
+impl SubnetPair {
     /// Generates a local environment with `local_canisters_count` canisters installed;
     /// and a remote environment with `remote_canisters_count` canisters installed.
-    pub fn new(config: FixtureConfig) -> Self {
+    pub fn new(config: SubnetPairConfig) -> Self {
         let mut routing_table = RoutingTable::new();
         routing_table_insert_subnet(&mut routing_table, LOCAL_SUBNET_ID).unwrap();
         routing_table_insert_subnet(&mut routing_table, REMOTE_SUBNET_ID).unwrap();
@@ -492,11 +500,11 @@ impl Fixture {
     }
 }
 
-/// Returned by `Fixture::failed_with_reason()`.
+/// Returned by `SubnetPair::failed_with_reason()`.
 #[allow(dead_code)]
 pub struct DebugInfo {
     pub records: BTreeMap<CanisterId, BTreeMap<u32, CanisterRecord>>,
-    pub fixture: Fixture,
+    pub fixture: SubnetPair,
 }
 
 /// Installs a 'random-traffic-test-canister' in `env`.

@@ -1,6 +1,6 @@
 pub mod common;
 
-use common::{arb_canister_config, DebugInfo, Fixture, FixtureConfig, KB, MB};
+use common::{arb_canister_config, DebugInfo, SubnetPair, SubnetPairConfig, KB, MB};
 use ic_types::{
     ingress::{IngressState, IngressStatus},
     messages::MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64,
@@ -55,28 +55,28 @@ fn check_message_memory_limits_are_respected_impl(
     // Limit imposed on both guaranteed response and best-effort message memory on `remote_env`.
     const REMOTE_MESSAGE_MEMORY_CAPACITY: u64 = 50 * MB;
 
-    let fixture = Fixture::new(FixtureConfig {
+    let subnets = SubnetPair::new(SubnetPairConfig {
         local_canisters_count: 2,
         local_message_memory_capacity: LOCAL_MESSAGE_MEMORY_CAPACITY,
         remote_canisters_count: 1,
         remote_message_memory_capacity: REMOTE_MESSAGE_MEMORY_CAPACITY,
-        ..FixtureConfig::default()
+        ..SubnetPairConfig::default()
     });
 
-    config.receivers = fixture.canisters();
+    config.receivers = subnets.canisters();
 
     // Send configs to canisters, seed the rng.
-    for (index, canister) in fixture.canisters().into_iter().enumerate() {
-        fixture.set_config(canister, config.clone());
-        fixture.seed_rng(canister, seeds[index]);
+    for (index, canister) in subnets.canisters().into_iter().enumerate() {
+        subnets.set_config(canister, config.clone());
+        subnets.seed_rng(canister, seeds[index]);
     }
 
     // Build up backlog and keep up chatter for while.
     for _ in 0..chatter_phase_round_count {
-        fixture.tick();
+        subnets.tick();
 
         // Check message memory limits are respected.
-        fixture.expect_message_memory_taken_at_most(
+        subnets.expect_message_memory_taken_at_most(
             "Chatter",
             LOCAL_MESSAGE_MEMORY_CAPACITY,
             REMOTE_MESSAGE_MEMORY_CAPACITY,
@@ -85,14 +85,14 @@ fn check_message_memory_limits_are_respected_impl(
 
     // Shut down chatter by putting a canister into `Stopping` state every 10 ticks until they are
     // all `Stopping` or `Stopped`.
-    for canister in fixture.canisters().into_iter() {
-        fixture.stop_chatter(canister);
-        fixture.stop_canister_non_blocking(canister);
+    for canister in subnets.canisters().into_iter() {
+        subnets.stop_chatter(canister);
+        subnets.stop_canister_non_blocking(canister);
         for _ in 0..10 {
-            fixture.tick();
+            subnets.tick();
 
             // Check message memory limits are respected.
-            fixture.expect_message_memory_taken_at_most(
+            subnets.expect_message_memory_taken_at_most(
                 "Shutdown",
                 LOCAL_MESSAGE_MEMORY_CAPACITY,
                 REMOTE_MESSAGE_MEMORY_CAPACITY,
@@ -101,8 +101,8 @@ fn check_message_memory_limits_are_respected_impl(
     }
 
     // Tick until all calls have concluded; or else fail the test.
-    fixture.tick_to_conclusion(shutdown_phase_max_rounds, |fixture| {
-        fixture.expect_message_memory_taken_at_most(
+    subnets.tick_to_conclusion(shutdown_phase_max_rounds, |subnets| {
+        subnets.expect_message_memory_taken_at_most(
             "Wrap up",
             LOCAL_MESSAGE_MEMORY_CAPACITY,
             REMOTE_MESSAGE_MEMORY_CAPACITY,
@@ -148,40 +148,40 @@ fn check_calls_conclude_with_migrating_canister_impl(
     seed: u64,
     mut config: CanisterConfig,
 ) -> Result<(), (String, DebugInfo)> {
-    let mut fixture = Fixture::new(FixtureConfig {
+    let mut subnets = SubnetPair::new(SubnetPairConfig {
         local_canisters_count: 2,
         remote_canisters_count: 5,
-        ..FixtureConfig::default()
+        ..SubnetPairConfig::default()
     });
 
-    config.receivers = fixture.canisters();
+    config.receivers = subnets.canisters();
 
-    let migrating_canister = *fixture.local_canisters.first().unwrap();
+    let migrating_canister = *subnets.local_canisters.first().unwrap();
 
     // Send config to `migrating_canister` and seed its rng.
-    fixture.set_config(migrating_canister, config);
-    fixture.seed_rng(migrating_canister, seed);
+    subnets.set_config(migrating_canister, config);
+    subnets.seed_rng(migrating_canister, seed);
 
     // Stop all canisters except `migrating_canister`.
-    for canister in fixture.canisters() {
+    for canister in subnets.canisters() {
         if canister != migrating_canister {
             // Make sure the canister doesn't make calls when it is
             // put into running state to read its records.
-            fixture.stop_chatter(canister);
-            fixture.stop_canister_non_blocking(canister);
+            subnets.stop_chatter(canister);
+            subnets.stop_canister_non_blocking(canister);
         }
     }
     // Make calls on `migrating_canister`.
     for _ in 0..chatter_phase_round_count {
-        fixture.tick();
+        subnets.tick();
     }
 
     // Stop making calls and migrate `migrating_canister`.
-    fixture.stop_chatter(migrating_canister);
-    fixture.migrate_canister(migrating_canister);
+    subnets.stop_chatter(migrating_canister);
+    subnets.migrate_canister(migrating_canister);
 
     // Tick until all calls have concluded; or else fail the test.
-    fixture.tick_to_conclusion(shutdown_phase_max_rounds, |_| Ok(()))
+    subnets.tick_to_conclusion(shutdown_phase_max_rounds, |_| Ok(()))
 }
 
 #[test_strategy::proptest(ProptestConfig::with_cases(3))]
@@ -219,22 +219,22 @@ fn check_canister_can_be_stopped_with_remote_subnet_stalling_impl(
     seeds: &[u64],
     mut config: CanisterConfig,
 ) -> Result<(), (String, DebugInfo)> {
-    let fixture = Fixture::new(FixtureConfig {
+    let subnets = SubnetPair::new(SubnetPairConfig {
         local_canisters_count: 1,
         remote_canisters_count: 1,
-        ..FixtureConfig::default()
+        ..SubnetPairConfig::default()
     });
 
-    config.receivers = fixture.canisters();
+    config.receivers = subnets.canisters();
 
-    let local_canister = *fixture.local_canisters.first().unwrap();
-    let remote_canister = *fixture.remote_canisters.first().unwrap();
+    let local_canister = *subnets.local_canisters.first().unwrap();
+    let remote_canister = *subnets.remote_canisters.first().unwrap();
 
-    fixture.seed_rng(local_canister, seeds[0]);
-    fixture.seed_rng(remote_canister, seeds[1]);
+    subnets.seed_rng(local_canister, seeds[0]);
+    subnets.seed_rng(remote_canister, seeds[1]);
 
     // Set the local `config` adapted such that only best-effort calls are made.
-    fixture.set_config(
+    subnets.set_config(
         local_canister,
         CanisterConfig {
             best_effort_call_percentage: 100,
@@ -242,36 +242,36 @@ fn check_canister_can_be_stopped_with_remote_subnet_stalling_impl(
         },
     );
     // Set the remote `config` as is.
-    fixture.set_config(remote_canister, config);
+    subnets.set_config(remote_canister, config);
 
     // Make calls on both canisters.
     for _ in 0..chatter_phase_round_count {
-        fixture.tick();
+        subnets.tick();
     }
     // Stop chatter on the local canister.
-    fixture.stop_chatter(local_canister);
+    subnets.stop_chatter(local_canister);
 
     // Put local canister into `Stopping` state.
-    let msg_id = fixture.stop_canister_non_blocking(local_canister);
+    let msg_id = subnets.stop_canister_non_blocking(local_canister);
 
     // Tick for up to `shutdown_phase_max_rounds` times on the local subnet only
     // or until the local canister has stopped.
     for _ in 0..shutdown_phase_max_rounds {
-        match fixture.local_env.ingress_status(&msg_id) {
+        match subnets.local_env.ingress_status(&msg_id) {
             IngressStatus::Known {
                 state: IngressState::Completed(_),
                 ..
             } => return Ok(()),
             _ => {
-                fixture.local_env.tick();
-                fixture
+                subnets.local_env.tick();
+                subnets
                     .local_env
                     .advance_time(std::time::Duration::from_secs(1));
             }
         }
     }
 
-    fixture.failed_with_reason(format!(
+    subnets.failed_with_reason(format!(
         "failed to stop local canister after {shutdown_phase_max_rounds} ticks"
     ))
 }
