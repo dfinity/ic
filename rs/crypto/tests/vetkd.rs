@@ -78,8 +78,9 @@ fn should_consistently_derive_the_same_vetkey_given_sufficient_shares() {
             Ok(())
         );
 
-        let encrypted_key = ic_vetkd_utils::EncryptedVetKey::deserialize(&encrypted_key.encrypted_key)
-            .expect("failed to deserialize encrypted VetKey");
+        let encrypted_key =
+            ic_vetkd_utils::EncryptedVetKey::deserialize(&encrypted_key.encrypted_key)
+                .expect("failed to deserialize encrypted VetKey");
 
         let derived_public_key = ic_vetkd_utils::DerivedPublicKey::deserialize(&derived_public_key)
             .expect("failed to deserialize derived public key");
