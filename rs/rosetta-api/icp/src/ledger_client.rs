@@ -223,7 +223,7 @@ impl LedgerClient {
             .call()
             .await
             .map_err(|e| format!("{}", e))
-            .and_then(|bytes| Decode!(&bytes, Result<Symbol, String>).unwrap());
+            .and_then(|bytes| Decode!(&bytes, Symbol).map_err(|e| e.to_string()));
 
         match symbol_res {
             Ok(Symbol { symbol }) => {
