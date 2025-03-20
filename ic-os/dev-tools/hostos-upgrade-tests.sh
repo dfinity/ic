@@ -6,10 +6,13 @@ IC_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 REVISIONS_FILE="${IC_ROOT}/mainnet-icos-revisions.json"
 
 # List of HostOS versions to test upgrades *from*
+# Note: doing more than 3 versions at a time may cause the devenv to run out of space
 VERSIONS=(
     "version1"
     "version2"
 )
+
+bazel clean --expunge
 
 declare -A results
 
