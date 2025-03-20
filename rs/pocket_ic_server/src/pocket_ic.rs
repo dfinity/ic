@@ -88,7 +88,7 @@ use pocket_ic::common::rest::{
     self, BinaryBlob, BlobCompression, CanisterHttpHeader, CanisterHttpMethod, CanisterHttpRequest,
     CanisterHttpResponse, ExtendedSubnetConfigSet, MockCanisterHttpResponse, RawAddCycles,
     RawCanisterCall, RawCanisterId, RawEffectivePrincipal, RawMessageId, RawSetStableMemory,
-    SubnetInstructionConfig, SubnetKind, SubnetSpec, TickConfigs, Topology,
+    SubnetInstructionConfig, SubnetKind, TickConfigs, Topology,
 };
 use pocket_ic::{ErrorCode, RejectCode, RejectResponse};
 use serde::{Deserialize, Serialize};
@@ -648,7 +648,7 @@ impl PocketIc {
             .with_bitcoin_testnet_uds_path(bitcoin_adapter_uds_path)
     }
 
-    pub(crate) fn new(
+    pub(crate) fn try_new(
         runtime: Arc<Runtime>,
         seed: u64,
         subnet_configs: ExtendedSubnetConfigSet,
@@ -656,7 +656,7 @@ impl PocketIc {
         nonmainnet_features: bool,
         log_level: Option<Level>,
         bitcoind_addr: Option<Vec<SocketAddr>>,
-    ) -> Self {
+    ) -> Result<Self, String> {
         let mut range_gen = RangeGen::new();
         let mut routing_table = RoutingTable::new();
         let mut nns_subnet = None;
@@ -752,13 +752,13 @@ impl PocketIc {
                             .iter()
                             .cloned()
                             .collect();
-                        range_gen.add_assigned(ranges.clone());
+                        range_gen.add_assigned(ranges.clone())?;
                         (ranges, None, Some(subnet_id))
                     } else {
                         let RangeConfig {
                             canister_id_ranges: ranges,
                             canister_allocation_range: alloc_range,
-                        } = get_range_config(subnet_kind, &mut range_gen);
+                        } = get_range_config(subnet_kind, &mut range_gen)?;
                         (ranges, alloc_range, None)
                     };
 
@@ -972,7 +972,7 @@ impl PocketIc {
 
         let state_label = StateLabel::new(seed);
 
-        Self {
+        Ok(Self {
             state_dir,
             subnets,
             routing_table,
@@ -985,7 +985,7 @@ impl PocketIc {
             log_level,
             bitcoind_addr,
             _bitcoin_adapter_parts,
-        }
+        })
     }
 
     pub(crate) fn bump_state_label(&mut self) {
@@ -1032,23 +1032,6 @@ impl PocketIc {
         } else {
             nns_subnet.get_delegation_for_subnet(subnet_id).ok()
         }
-    }
-}
-
-impl Default for PocketIc {
-    fn default() -> Self {
-        Self::new(
-            Runtime::new().unwrap().into(),
-            0,
-            ExtendedSubnetConfigSet {
-                application: vec![SubnetSpec::default()],
-                ..Default::default()
-            },
-            None,
-            false,
-            None,
-            None,
-        )
     }
 }
 
@@ -1127,19 +1110,22 @@ fn subnet_kind_from_canister_id(canister_id: CanisterId) -> SubnetKind {
     Application
 }
 
-fn get_range_config(subnet_kind: rest::SubnetKind, range_gen: &mut RangeGen) -> RangeConfig {
+fn get_range_config(
+    subnet_kind: rest::SubnetKind,
+    range_gen: &mut RangeGen,
+) -> Result<RangeConfig, String> {
     let (canister_id_ranges, canister_allocation_range) =
         match subnet_kind_canister_range(subnet_kind) {
             Some(ranges) => {
-                range_gen.add_assigned(ranges.clone());
+                range_gen.add_assigned(ranges.clone())?;
                 (ranges, Some(range_gen.next_range()))
             }
             None => (vec![range_gen.next_range()], None),
         };
-    RangeConfig {
+    Ok(RangeConfig {
         canister_id_ranges,
         canister_allocation_range,
-    }
+    })
 }
 
 /// A stateful helper for finding available canister ranges.
@@ -1154,11 +1140,14 @@ impl RangeGen {
         Default::default()
     }
 
-    pub fn add_assigned(&mut self, mut assigned: Vec<CanisterIdRange>) {
+    pub fn add_assigned(&mut self, mut assigned: Vec<CanisterIdRange>) -> Result<(), String> {
         assigned.sort();
-        assert!(are_disjoint(self.already_assigned.iter(), assigned.iter()));
+        if !are_disjoint(self.already_assigned.iter(), assigned.iter()) {
+            return Err("Invalid canister ranges.".to_string());
+        }
         self.already_assigned.extend(assigned);
         self.already_assigned.sort();
+        Ok(())
     }
 
     /// Returns the next canister id range from the top
@@ -2962,13 +2951,14 @@ fn systemtime_to_unix_epoch_nanos(st: SystemTime) -> u64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use pocket_ic::common::rest::SubnetSpec;
 
     #[tokio::test]
     async fn state_label_test() {
         let runtime = Arc::new(Runtime::new().unwrap());
         tokio::task::spawn_blocking(move || {
             // State label changes.
-            let mut pic0 = PocketIc::new(
+            let mut pic0 = PocketIc::try_new(
                 runtime.clone(),
                 0,
                 ExtendedSubnetConfigSet {
@@ -2979,8 +2969,9 @@ mod tests {
                 false,
                 None,
                 None,
-            );
-            let mut pic1 = PocketIc::new(
+            )
+            .unwrap();
+            let mut pic1 = PocketIc::try_new(
                 runtime.clone(),
                 1,
                 ExtendedSubnetConfigSet {
@@ -2991,7 +2982,8 @@ mod tests {
                 false,
                 None,
                 None,
-            );
+            )
+            .unwrap();
             assert_ne!(pic0.get_state_label(), pic1.get_state_label());
 
             let pic0_state_label = pic0.get_state_label();

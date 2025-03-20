@@ -982,6 +982,76 @@ fn with_subnet_state() {
     }
 }
 
+#[test]
+#[should_panic(expected = "Invalid canister ranges.")]
+fn with_invalid_subnet_state() {
+    // Create a temporary state directory persisted throughout the test.
+    let state_dir = TempDir::new().unwrap();
+    let state_dir_path_buf = state_dir.path().to_path_buf();
+
+    // Create a PocketIC instance with a single app subnet.
+    let (server_url, _) = start_server_helper(None, None, false, false);
+    let pic = PocketIcBuilder::new()
+        .with_state_dir(state_dir_path_buf.clone())
+        .with_server_url(server_url.clone())
+        .with_application_subnet()
+        .build();
+
+    // Retrieve the app subnet from the topology.
+    let topology = pic.topology();
+    let app_subnet = topology.get_app_subnets()[0];
+
+    drop(pic);
+
+    // Create a PocketIC instance mounting the app state twice.
+    let app_subnet_seed = topology
+        .subnet_configs
+        .get(&app_subnet)
+        .unwrap()
+        .subnet_seed;
+    let app_state_dir = state_dir.path().join(hex::encode(app_subnet_seed));
+    let _pic = PocketIcBuilder::new()
+        .with_server_url(server_url.clone())
+        .with_subnet_state(SubnetKind::Application, app_state_dir.clone())
+        .with_subnet_state(SubnetKind::Application, app_state_dir)
+        .build();
+}
+
+#[test]
+#[should_panic(expected = "Invalid canister ranges.")]
+fn with_invalid_nns_subnet_state() {
+    // Create a temporary state directory persisted throughout the test.
+    let state_dir = TempDir::new().unwrap();
+    let state_dir_path_buf = state_dir.path().to_path_buf();
+
+    // Create a PocketIC instance with the NNS subnet.
+    let (server_url, _) = start_server_helper(None, None, false, false);
+    let pic = PocketIcBuilder::new()
+        .with_state_dir(state_dir_path_buf.clone())
+        .with_server_url(server_url.clone())
+        .with_nns_subnet()
+        .build();
+
+    // Retrieve the NNS subnet from the topology.
+    let topology = pic.topology();
+    let nns_subnet = topology.get_nns().unwrap();
+
+    drop(pic);
+
+    // Create a PocketIC instance mounting the NNS subnet twice.
+    let nns_subnet_seed = topology
+        .subnet_configs
+        .get(&nns_subnet)
+        .unwrap()
+        .subnet_seed;
+    let nns_state_dir = state_dir.path().join(hex::encode(nns_subnet_seed));
+    let _pic = PocketIcBuilder::new()
+        .with_server_url(server_url.clone())
+        .with_nns_subnet()
+        .with_subnet_state(SubnetKind::Application, nns_state_dir)
+        .build();
+}
+
 /// Test that PocketIC can handle synchronous update calls, i.e. `/api/v3/.../call`.
 #[test]
 fn test_specified_id_call_v3() {
