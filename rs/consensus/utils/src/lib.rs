@@ -27,6 +27,10 @@ pub mod crypto;
 pub mod membership;
 pub mod pool_reader;
 
+/// When purging consensus or certification artifacts, we always keep a
+/// minimum chain length below the catch-up height.
+pub const MINIMUM_CHAIN_LENGTH: u64 = 50;
+
 /// Rotate on_state_change calls with a round robin schedule to ensure fairness.
 #[derive(Default)]
 pub struct RoundRobin {

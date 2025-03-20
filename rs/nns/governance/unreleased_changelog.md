@@ -11,6 +11,9 @@ on the process that this file is part of, see
 
 ## Changed
 
+* Refactor `prune_following` task to use the `timer_task` library, and therefore enables metrics to
+  be collected about its execution.
+
 ## Deprecated
 
 ## Removed

@@ -1,6 +1,6 @@
 use crate::logs::ERROR;
 use crate::pb::v1::{self as pb, NervousSystemFunction};
-use crate::types::native_action_ids::{self, SET_CUSTOM_TOPICS_FOR_CUSTOM_PROPOSALS_ACTION};
+use crate::types::native_action_ids::{self, SET_TOPICS_FOR_CUSTOM_PROPOSALS_ACTION};
 use crate::{governance::Governance, pb::v1::nervous_system_function::FunctionType};
 use ic_canister_log::log;
 use ic_sns_governance_api::pb::v1::topics::Topic;
@@ -74,7 +74,6 @@ pub fn topic_descriptions() -> [TopicInfo<NativeFunctions>; 7] {
                 native_functions: vec![
                     UPGRADE_SNS_TO_NEXT_VERSION,
                     ADVANCE_SNS_TARGET_VERSION,
-                    SET_CUSTOM_TOPICS_FOR_CUSTOM_PROPOSALS_ACTION,
                 ],
             },
             is_critical: false,
@@ -131,6 +130,7 @@ pub fn topic_descriptions() -> [TopicInfo<NativeFunctions>; 7] {
                     DEREGISTER_DAPP_CANISTERS,
                     ADD_GENERIC_NERVOUS_SYSTEM_FUNCTION,
                     REMOVE_GENERIC_NERVOUS_SYSTEM_FUNCTION,
+                    SET_TOPICS_FOR_CUSTOM_PROPOSALS_ACTION,
                 ],
             },
             is_critical: true,
