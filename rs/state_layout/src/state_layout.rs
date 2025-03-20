@@ -227,12 +227,12 @@ impl StateLayoutMetrics {
                 &["source"],
             ),
             state_layout_sync_remove_checkpoint_duration: metric_registry.histogram(
-                "state_layout_sync_remove_checkpoint_seconds_duration",
+                "state_layout_sync_remove_checkpoint_duration_seconds",
                 "Time elapsed in removing checkpoint synchronously.",
                 decimal_buckets(-3, 1),
             ),
             state_layout_async_remove_checkpoint_duration: metric_registry.histogram(
-                "state_layout_async_remove_checkpoint_seconds_duration",
+                "state_layout_async_remove_checkpoint_duration_seconds",
                 "Time elapsed in removing checkpoint asynchronously in the background thread.",
                 decimal_buckets(-3, 1),
             ),
@@ -492,15 +492,16 @@ fn spawn_checkpoint_removal_thread(
                                     "Failed to remove checkpoint directory. Error: {}.", err
                                 )
                             }
+                            let elapsed = start.elapsed();
                             metrics
                                 .state_layout_async_remove_checkpoint_duration
-                                .observe(start.elapsed().as_secs_f64());
+                                .observe(elapsed.as_secs_f64());
                             let remaining_requests = checkpoint_removal_receiver.len();
                             info!(
                                 log,
                                 "Asynchronously removed checkpoint from tmp path {} in {:?}. Number of remaining requests: {}",
                                 path.display(),
-                                start.elapsed(),
+                                elapsed,
                                 remaining_requests
                             );
                         }
