@@ -793,14 +793,17 @@ fn time_out_messages_updates_subnet_input_schedules_correctly() {
         .iter()
         .enumerate()
     {
-        let mut request = request_to(*receiver);
+        let mut request = Request {
+            payment: Cycles::new(13),
+            ..best_effort_request_to(*receiver)
+        };
         request.sender_reply_callback = CallbackId::from(i as u64);
         fixture.push_output_request(request, UNIX_EPOCH).unwrap();
     }
 
     // Time out everything, then check that subnet input schedules are as expected.
     fixture.state.metadata.batch_time = Time::from_nanos_since_unix_epoch(u64::MAX);
-    assert_eq!(3, fixture.state.time_out_messages());
+    assert_eq!((3, Cycles::zero()), fixture.state.time_out_messages());
 
     assert_eq!(2, fixture.local_subnet_input_schedule(&CANISTER_ID).len());
     for canister_id in [CANISTER_ID, OTHER_CANISTER_ID] {
@@ -820,15 +823,18 @@ fn time_out_messages_in_subnet_queues() {
 
     // Enqueue 2 incoming best-effort requests for `SUBNET_ID`.
     for i in 0..2 {
-        let mut request = request_to(SUBNET_ID.into());
-        request.deadline = CoarseTime::from_secs_since_unix_epoch(1000 + i as u32);
+        let request = Request {
+            deadline: CoarseTime::from_secs_since_unix_epoch(1000 + i as u32),
+            payment: Cycles::new(13),
+            ..best_effort_request_to(SUBNET_ID.into())
+        };
         assert!(fixture.push_input(request.into()).unwrap());
     }
 
     // Time out the first request.
     let second_request_deadline = CoarseTime::from_secs_since_unix_epoch(1001);
     fixture.state.metadata.batch_time = second_request_deadline.into();
-    assert_eq!(1, fixture.state.time_out_messages());
+    assert_eq!((1, Cycles::new(13)), fixture.state.time_out_messages());
 
     // Second request should still be in the queue.
     assert_matches!(
@@ -850,15 +856,17 @@ fn enforce_best_effort_message_limit() {
         .iter()
         .enumerate()
     {
-        let mut request = request_to(*receiver);
-        request.deadline = SOME_DEADLINE;
-        request.method_name = String::from_utf8(vec![b'x'; i * 10 + 1]).unwrap();
+        let request = Request {
+            method_name: String::from_utf8(vec![b'x'; i * 10 + 1]).unwrap(),
+            payment: Cycles::new(1 << i),
+            ..best_effort_request_to(*receiver)
+        };
         message_sizes.push(NumBytes::from(request.count_bytes() as u64));
         assert!(fixture.push_input(request.into()).unwrap());
     }
 
     assert_eq!(
-        (0, 0.into()),
+        (0, 0.into(), Cycles::zero()),
         fixture
             .state
             .enforce_best_effort_message_limit(u64::MAX.into()),
@@ -866,7 +874,7 @@ fn enforce_best_effort_message_limit() {
 
     let best_effort_memory_usage = fixture.state.best_effort_message_memory_taken();
     assert_eq!(
-        (0, 0.into()),
+        (0, 0.into(), Cycles::zero()),
         fixture
             .state
             .enforce_best_effort_message_limit(best_effort_memory_usage),
@@ -876,7 +884,11 @@ fn enforce_best_effort_message_limit() {
     // but the first message we enqueued.
     let mean_message_size = best_effort_memory_usage / 4;
     assert_eq!(
-        (3, message_sizes[1] + message_sizes[2] + message_sizes[3]),
+        (
+            3,
+            message_sizes[1] + message_sizes[2] + message_sizes[3],
+            Cycles::new((1 << 1) + (1 << 2) + (1 << 3))
+        ),
         fixture
             .state
             .enforce_best_effort_message_limit(mean_message_size),
@@ -884,7 +896,7 @@ fn enforce_best_effort_message_limit() {
 
     // A second identical call should be a no-op.
     assert_eq!(
-        (0, 0.into()),
+        (0, 0.into(), Cycles::zero()),
         fixture
             .state
             .enforce_best_effort_message_limit(mean_message_size),
@@ -1343,7 +1355,7 @@ fn iter_with_stale_entries_terminates(
     const NANOS_PER_SEC: u64 = 1_000_000_000;
     replicated_state.metadata.batch_time =
         Time::from_nanos_since_unix_epoch(batch_time_seconds as u64 * NANOS_PER_SEC);
-    let timed_out_messages = replicated_state.time_out_messages();
+    let timed_out_messages = replicated_state.time_out_messages().0;
 
     // Just consume all output messages.
     //
@@ -1371,7 +1383,7 @@ fn peek_next_loop_with_stale_entries_terminates(
     const NANOS_PER_SEC: u64 = 1_000_000_000;
     replicated_state.metadata.batch_time =
         Time::from_nanos_since_unix_epoch(batch_time_seconds as u64 * NANOS_PER_SEC);
-    let timed_out_messages = replicated_state.time_out_messages();
+    let timed_out_messages = replicated_state.time_out_messages().0;
 
     let mut output_iter = replicated_state.output_into_iter();
 

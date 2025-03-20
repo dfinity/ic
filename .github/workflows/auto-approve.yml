@@ -1,0 +1,15 @@
+name: Auto Approve PR
+
+on: 
+  pull_request_target:
+    paths:
+      - "mainnet-canister-revisions.json"
+
+jobs:
+  auto-approve:
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+    if: github.actor == 'pr-creation-bot-dfinity[bot]'
+    steps:
+      - uses: hmarr/auto-approve-action@93c80b3919aae15c0da0d3ca49c70f57e3c4a58f #v4.0.0
