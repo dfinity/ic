@@ -183,12 +183,7 @@ impl CallCanisters for PocketIcAgent<'_> {
     }
 
     fn is_canister_stopped_error(&self, err: &Self::Error) -> bool {
-        match err {
-            PocketIcCallError::PocketIc(err) => {
-                [ErrorCode::CanisterStopped, ErrorCode::CanisterStopping].contains(&err.error_code)
-            }
-            _ => false,
-        }
+        self.pocket_ic.is_canister_stopped_error(err)
     }
 }
 

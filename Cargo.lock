@@ -10267,6 +10267,7 @@ dependencies = [
  "cycles-minting-canister",
  "ic-agent",
  "ic-base-types",
+ "ic-error-types",
  "ic-management-canister-types",
  "ic-nervous-system-clients",
  "ic-nns-common",
