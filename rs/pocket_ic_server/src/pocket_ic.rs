@@ -744,6 +744,9 @@ impl PocketIc {
                             MaliciousFlags::default(),
                         );
                         let metadata = state_manager.get_latest_state().take().metadata.clone();
+                        // Shut down the temporary state manager to avoid race conditions.
+                        state_manager.flush_tip_channel();
+                        drop(state_manager);
                         let subnet_id = metadata.own_subnet_id;
                         let ranges: Vec<_> = metadata
                             .network_topology
