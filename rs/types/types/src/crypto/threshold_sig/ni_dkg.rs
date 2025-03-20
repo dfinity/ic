@@ -53,7 +53,9 @@ impl TryFrom<MasterPublicKeyId> for NiDkgMasterPublicKeyId {
             MasterPublicKeyId::VetKd(vet_kd_key_id) => {
                 Ok(NiDkgMasterPublicKeyId::VetKd(vet_kd_key_id))
             }
-            _ => Err("This is not a NiDkg key"),
+            MasterPublicKeyId::Ecdsa(_) | MasterPublicKeyId::Schnorr(_) => {
+                Err("This is not a NiDkg key")
+            }
         }
     }
 }

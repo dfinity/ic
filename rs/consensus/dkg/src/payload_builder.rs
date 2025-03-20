@@ -862,22 +862,21 @@ fn add_callback_ids_to_transcript_results(
 
     new_transcripts
         .into_iter()
-        .filter_map(|(id, result)| {
-            match id.target_subnet {
-                NiDkgTargetSubnet::Local => None,
-                NiDkgTargetSubnet::Remote(target_id) => {match callback_id_map.get(&target_id) {
-                    Some(&callback_id) => Some((id, callback_id, result)),
-                    None => {
-                        error!(
-                            log,
-                            "Unable to find callback id associated with remote dkg id {}, this should not happen",
-                            id
-                        );
-                        None
-                    },
-                }}
-            }}
-           )
+        .filter_map(|(id, result)| match id.target_subnet {
+            NiDkgTargetSubnet::Local => None,
+            NiDkgTargetSubnet::Remote(target_id) => match callback_id_map.get(&target_id) {
+                Some(&callback_id) => Some((id, callback_id, result)),
+                None => {
+                    error!(
+                        log,
+                        "Unable to find callback id associated with remote dkg id {},\
+                            this should not happen",
+                        id
+                    );
+                    None
+                }
+            },
+        })
         .collect()
 }
 
@@ -1873,6 +1872,4 @@ mod tests {
             }
         });
     }
-
-    // TODO: Test vet key remote transcript generation
 }
