@@ -10530,6 +10530,7 @@ dependencies = [
  "ic-nns-gtc",
  "ic-nns-handler-root",
  "ic-nns-test-utils",
+ "ic-nns-test-utils-golden-nns-state",
  "ic-nns-test-utils-macros",
  "ic-protobuf",
  "ic-registry-keys",
@@ -11281,6 +11282,7 @@ dependencies = [
  "ic-registry-subnet-type",
  "ic-state-machine-tests",
  "ic-types",
+ "pocket-ic",
  "tempfile",
 ]
 

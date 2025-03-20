@@ -159,6 +159,7 @@ impl PocketIc {
         let instance_id = match reqwest_client
             .post(server_url.join("instances").unwrap())
             .json(&instance_config)
+            .timeout(Duration::from_secs(1000))
             .send()
             .await
             .expect("Failed to get result")

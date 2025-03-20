@@ -76,6 +76,26 @@ pub fn maybe_download_and_untar_golden_state_or_panic(state_source: StateSource)
     }
 }
 
+pub fn golden_state_dir_from_env(state_source: StateSource) -> PathBuf {
+    match std::env::var_os("USE_EXISTING_STATE_DIR") {
+        Some(existing_state_dir_name) => {
+            let existing_state_dir = PathBuf::from(existing_state_dir_name.clone());
+            let existing_state = existing_state_dir.join(state_source.state_dir_name());
+            println!(">>> existing_state = {:?}", existing_state);
+            if !existing_state.exists() {
+                panic!(
+                    "USE_EXISTING_STATE_DIR is set to {:?}, but {:?} does not exist",
+                    existing_state_dir_name, existing_state
+                );
+            }
+            existing_state
+        }
+        None => {
+            panic!("Please set USE_EXISTING_STATE_DIR");
+        }
+    }
+}
+
 fn download_and_untar_golden_state_or_panic(state_source: StateSource) -> TempDir {
     let download_destination = bazel_test_compatible_temp_dir_or_panic();
     let download_destination = download_destination

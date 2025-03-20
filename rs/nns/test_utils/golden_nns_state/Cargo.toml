@@ -11,4 +11,5 @@ ic-registry-subnet-type = { path = "../../../registry/subnet_type" }
 ic-state-machine-tests = { path = "../../../state_machine_tests" }
 ic-nns-test-utils-prepare-golden-state = { path = "../prepare_golden_state" }
 ic-types = { path = "../../../types/types" }
+pocket-ic = { path = "../../../../packages/pocket-ic" }
 tempfile = { workspace = true }
