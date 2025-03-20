@@ -31,13 +31,15 @@ const WASM_PAGE_SIZE: u32 = wasmtime_environ::Memory::DEFAULT_PAGE_SIZE;
 
 /// Symbols that are reserved and cannot be exported by canisters.
 #[doc(hidden)] // pub for usage in tests
-pub const RESERVED_SYMBOLS: [&str; 6] = [
+pub const RESERVED_SYMBOLS: [&str; 8] = [
     "canister counter_instructions",
     "canister_start",
     DIRTY_PAGES_COUNTER_GLOBAL_NAME,
     ACCESSED_PAGES_COUNTER_GLOBAL_NAME,
     STABLE_MEMORY_NAME,
     STABLE_BYTEMAP_MEMORY_NAME,
+    "canister decr_instr_counter_entries",
+    "canister prev_resident_pages",
 ];
 
 /// System functions that can be exported by a canister
