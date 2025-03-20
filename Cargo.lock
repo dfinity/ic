@@ -18115,6 +18115,7 @@ dependencies = [
  "ic-replicated-state",
  "ic-starter",
  "ic-state-machine-tests",
+ "ic-state-manager",
  "ic-test-utilities",
  "ic-test-utilities-registry",
  "ic-types",
