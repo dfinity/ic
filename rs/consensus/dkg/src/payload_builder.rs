@@ -921,7 +921,6 @@ fn create_low_high_remote_dkg_configs(
         None,
     );
 
-    // TODO: Is it really an error, if only one of the two configs was created?
     let sibl_err = String::from("Failed to create the sibling config");
     match (low_thr_config, high_thr_config) {
         (Ok(config0), Ok(config1)) => Ok((config0, config1)),
