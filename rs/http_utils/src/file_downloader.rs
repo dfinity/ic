@@ -142,7 +142,7 @@ impl FileDownloader {
         match expected_sha256_hex.as_ref() {
             Some(expected_hash) => {
                 self.info("Response read. Checking hash.");
-                check_file_hash(file_path, &expected_hash)
+                check_file_hash(file_path, expected_hash)
                     .inspect(|_| self.info("Hash check passed successfully."))
                     .map_err(|hash_invalid_err| {
                         self.warn(format!(
