@@ -2,6 +2,8 @@
 Macro to upload artifacts.
 """
 
+load("//publish:defs.bzl", "checksum_rule")
+
 # TODO: re-upload SHA256SUMS
 
 # To avoid shooting ourselves in the foot, make sure that the upload rule invoker
@@ -14,7 +16,17 @@ def upload_artifacts(name, inputs, remote_subdir, visibility = ["//visibility:pu
       **kwargs: TODO
     """
 
-    input_locations = ["$(execpaths {})".format(ipt) for ipt in inputs]
+    checksum_name = name + "_checksums"
+    checksum_rule(
+        name = checksum_name,
+        inputs = inputs,
+        create_symlinks = True,
+        archives_only = False,
+    )
+
+    checksum_label = ":" + checksum_name
+
+    input_locations = "$(execpaths {})".format(checksum_label)
 
     native.sh_binary(
         name = name,
@@ -22,10 +34,10 @@ def upload_artifacts(name, inputs, remote_subdir, visibility = ["//visibility:pu
         srcs = ["//ci/src/artifacts:upload.sh"],
         env = {
             "RCLONE": "$(location @rclone//:rclone)",
-            "UPLOADABLES": " ".join(input_locations),
+            "UPLOADABLES": input_locations,
             "VERSION_TXT": "$(location //bazel:version.txt)",
             "REMOTE_SUBDIR": remote_subdir,
         },
-        data = inputs + ["//bazel:version.txt", "@rclone//:rclone"],
+        data = [checksum_label] + ["//bazel:version.txt", "@rclone//:rclone"],
         visibility = visibility,
     )
