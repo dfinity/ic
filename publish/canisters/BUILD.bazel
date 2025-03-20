@@ -172,7 +172,7 @@ filegroup(
 upload_artifacts(
     name = "upload",
     testonly = True,
-    inputs = [":canisters"] + ["canisters.did"],
+    inputs = [":canisters"] + [":canisters.did"],
     remote_subdir = "canisters",
     visibility = [
         "//testnet/tools:icos_deploy-pkg",

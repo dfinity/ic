@@ -30,6 +30,9 @@ def upload_artifacts(name, inputs, remote_subdir, **kwargs):
     ipts = [checksum_label] + inputs
     input_locations = ["$(execpaths {})".format(label) for label in ipts]
 
+    tags = kwargs.pop("tags", [])
+    tags.append("upload")
+
     native.sh_binary(
         name = name,
         srcs = ["//ci/src/artifacts:upload.sh"],
@@ -40,5 +43,6 @@ def upload_artifacts(name, inputs, remote_subdir, **kwargs):
             "REMOTE_SUBDIR": remote_subdir,
         },
         data = ipts + ["//bazel:version.txt", "@rclone//:rclone"],
+        tags = tags,
         **kwargs
     )

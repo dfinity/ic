@@ -94,8 +94,10 @@ if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
 fi
 rm "$url_out"
 
+upload_targets=$(bazel query "attr(tags, '\\bupload\\b', //...)")
+
 if [[ $release_build == true ]]; then
-    for tgt in //publish/canisters:upload //publish/binaries:upload; do
+    for tgt in $upload_targets; do
         bazel \
             --output_base=/var/tmp/bazel-output \
             run \
