@@ -7145,6 +7145,7 @@ dependencies = [
  "ic-btc-replica-types",
  "ic-config",
  "ic-consensus",
+ "ic-consensus-certification",
  "ic-consensus-dkg",
  "ic-consensus-mocks",
  "ic-consensus-utils",
@@ -7208,6 +7209,32 @@ dependencies = [
  "strum",
  "strum_macros",
  "tempfile",
+ "tokio",
+]
+
+[[package]]
+name = "ic-consensus-certification"
+version = "0.9.0"
+dependencies = [
+ "assert_matches",
+ "ic-artifact-pool",
+ "ic-consensus-mocks",
+ "ic-consensus-utils",
+ "ic-interfaces",
+ "ic-interfaces-registry",
+ "ic-interfaces-state-manager",
+ "ic-logger",
+ "ic-metrics",
+ "ic-replicated-state",
+ "ic-test-utilities",
+ "ic-test-utilities-consensus",
+ "ic-test-utilities-logger",
+ "ic-test-utilities-types",
+ "ic-types",
+ "ic-types-test-utils",
+ "prometheus",
+ "slog",
+ "strum_macros",
  "tokio",
 ]
 
@@ -10299,6 +10326,7 @@ dependencies = [
  "ic-nervous-system-common",
  "ic-nervous-system-runtime",
  "ic-nns-constants",
+ "ic-registry-transport",
  "icp-ledger",
  "icrc-ledger-types",
  "mockall",
@@ -11300,6 +11328,35 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-node-rewards-canister"
+version = "0.9.0"
+dependencies = [
+ "candid",
+ "candid_parser",
+ "ic-cdk 0.17.1",
+ "ic-cdk-timers",
+ "ic-interfaces-registry",
+ "ic-nervous-system-canisters",
+ "ic-nns-test-utils",
+ "ic-node-rewards-canister-api",
+ "ic-protobuf",
+ "ic-registry-canister-client",
+ "ic-registry-keys",
+ "ic-stable-structures",
+ "ic-state-machine-tests",
+ "ic-types",
+]
+
+[[package]]
+name = "ic-node-rewards-canister-api"
+version = "0.9.0"
+dependencies = [
+ "candid",
+ "ic-cdk 0.17.1",
+ "serde",
+]
+
+[[package]]
 name = "ic-p2p-test-utils"
 version = "0.9.0"
 dependencies = [
@@ -11622,23 +11679,16 @@ dependencies = [
 name = "ic-registry-canister-client"
 version = "0.9.0"
 dependencies = [
- "ic-cdk 0.17.1",
- "ic-interfaces-registry",
- "ic-registry-keys",
- "ic-types",
-]
-
-[[package]]
-name = "ic-registry-canister-data-provider"
-version = "0.9.0"
-dependencies = [
  "anyhow",
+ "async-trait",
  "candid",
+ "futures",
  "ic-cdk 0.17.1",
  "ic-interfaces-registry",
+ "ic-nervous-system-canisters",
  "ic-nns-common",
  "ic-nns-constants",
- "ic-registry-canister-client",
+ "ic-registry-keys",
  "ic-registry-transport",
  "ic-stable-structures",
  "ic-types",
@@ -11921,6 +11971,7 @@ dependencies = [
  "ic-canister-sandbox-backend-lib",
  "ic-config",
  "ic-consensus",
+ "ic-consensus-certification",
  "ic-consensus-dkg",
  "ic-consensus-utils",
  "ic-crypto-for-verification-only",
@@ -11976,6 +12027,7 @@ dependencies = [
  "ic-btc-consensus",
  "ic-config",
  "ic-consensus",
+ "ic-consensus-certification",
  "ic-consensus-dkg",
  "ic-crypto",
  "ic-crypto-sha2",
@@ -12038,6 +12090,7 @@ dependencies = [
  "ic-artifact-pool",
  "ic-config",
  "ic-consensus",
+ "ic-consensus-certification",
  "ic-consensus-dkg",
  "ic-consensus-manager",
  "ic-consensus-utils",
@@ -12214,18 +12267,6 @@ dependencies = [
  "sha2 0.10.8",
  "thiserror 1.0.69",
  "urlencoding",
-]
-
-[[package]]
-name = "ic-rewards-canister"
-version = "0.9.0"
-dependencies = [
- "candid",
- "candid_parser",
- "ic-cdk 0.17.1",
- "ic-nns-test-utils",
- "ic-state-machine-tests",
- "node-rewards-canister-api",
 ]
 
 [[package]]
@@ -12573,6 +12614,16 @@ dependencies = [
  "serde_json",
  "strum",
  "strum_macros",
+]
+
+[[package]]
+name = "ic-sns-governance-api-helpers"
+version = "0.9.0"
+dependencies = [
+ "ic-nervous-system-common",
+ "ic-sns-governance-api",
+ "icrc-ledger-types",
+ "maplit",
 ]
 
 [[package]]
@@ -16834,15 +16885,6 @@ name = "no-std-compat"
 version = "0.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b93853da6d84c2e3c7d730d6473e8817692dd89be387eb01b94d7f108ecb5b8c"
-
-[[package]]
-name = "node-rewards-canister-api"
-version = "0.9.0"
-dependencies = [
- "candid",
- "ic-cdk 0.17.1",
- "serde",
-]
 
 [[package]]
 name = "node-system-tests"

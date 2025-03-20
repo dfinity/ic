@@ -1232,6 +1232,15 @@ pub fn get_hostos_update_img_test_sha256() -> Result<String> {
     Ok(std::env::var("ENV_DEPS__HOSTOS_UPDATE_IMG_TEST_HASH")?)
 }
 
+pub fn get_empty_disk_img_url() -> Result<Url> {
+    let url = std::env::var("ENV_DEPS__EMPTY_DISK_IMG_URL")?;
+    Ok(Url::parse(&url)?)
+}
+
+pub fn get_empty_disk_img_sha256() -> Result<String> {
+    Ok(std::env::var("ENV_DEPS__EMPTY_DISK_IMG_HASH")?)
+}
+
 pub const FETCH_SHA256SUMS_RETRY_TIMEOUT: Duration = Duration::from_secs(120);
 pub const FETCH_SHA256SUMS_RETRY_BACKOFF: Duration = Duration::from_secs(5);
 

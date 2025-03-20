@@ -36,6 +36,18 @@ rust_library(
     deps = DEPENDENCIES,
 )
 
+genrule(
+    name = "empty-disk-img-tar-zst",
+    outs = ["empty-disk-img.tar.zst"],
+    cmd = """
+        truncate -s 101G disk.img
+        tar --zstd -Scf $@ disk.img
+    """,
+    tags = ["manual"],
+    target_compatible_with = ["@platforms//os:linux"],
+    visibility = ["//visibility:public"],
+)
+
 system_test_nns(
     name = "registration",
     env = MAINNET_ENV,
@@ -45,6 +57,7 @@ system_test_nns(
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     test_timeout = "eternal",
+    use_empty_image = True,
     uses_guestos_dev = True,
     uses_setupos_dev = True,
     runtime_deps = GUESTOS_RUNTIME_DEPS,
@@ -67,6 +80,7 @@ system_test_nns(
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     test_driver_target = ":upgrade_test_bin",
     test_timeout = "eternal",
+    use_empty_image = True,
     uses_guestos_dev = True,
     uses_hostos_dev_test = True,
     uses_setupos_dev = True,
