@@ -1,4 +1,5 @@
 load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+load("//rs/tests:common.bzl", "MAINNET_ENV")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -35,5 +36,7 @@ rust_library(
 rust_test(
     name = "http_utils_test",
     crate = ":http_utils",
+    env = MAINNET_ENV,
+    tags = ["requires-network"],
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )
