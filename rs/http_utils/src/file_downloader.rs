@@ -73,14 +73,17 @@ impl FileDownloader {
     /// `file_path` and verify that the resulting file has hash
     /// `expected_sha256_hex`.
     ///
-    /// Returns immediately if the file already exists with the given hash.
+    /// If the `expected_sha256_hex` is specified and the file exists,
+    /// resuming download will be performed, fetching only the missing
+    /// parts of the file (if any) with the [`Range`](https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Range)
+    /// header.
     ///
-    /// Deletes an existing file with an incorrect file hash or no
-    /// hash is given to this function.
+    /// If the `expected_sha256_hex` isn't specified and the file already
+    /// exists, the file will be removed and the download will be executed.
     ///
     /// Since existing files get deleted if they have an incorrect hash,
-    /// this code will also work if a crash happens throughout execution
-    /// leading to inconsistent data.
+    /// this code will also work if a crash or a timeout happens
+    /// throughout execution leading to inconsistent data.
     pub async fn download_file(
         &self,
         url: &str,
