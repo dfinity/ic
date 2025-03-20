@@ -37,7 +37,6 @@ use async_trait::async_trait;
 use reqwest::{Client, StatusCode};
 use tracing::{debug, error, warn};
 
-use dfn_candid::CandidOne;
 use ic_ledger_canister_blocks_synchronizer::{
     blocks::{Blocks, RosettaBlocksMode},
     canister_access::CanisterAccess,
@@ -53,7 +52,6 @@ use ic_types::{
     CanisterId,
 };
 use icp_ledger::{BlockIndex, Symbol, TransferFee, TransferFeeArgs, DEFAULT_TRANSFER_FEE};
-use on_wire::FromWire;
 
 use crate::{
     convert,
@@ -442,8 +440,8 @@ impl LedgerAccess for LedgerClient {
                 .await
         }
         .map_err(|e| ApiError::invalid_request(format!("{}", e)))?;
-        let ninfo: Result<Result<NeuronInfo, GovernanceError>, _> =
-            CandidOne::from_bytes(bytes).map(|c| c.0);
+        let ninfo: Result<Result<NeuronInfo, GovernanceError>, String> =
+            Decode!(&bytes, Result<NeuronInfo, GovernanceError>).map_err(|e| e.to_string());
         let ninfo = ninfo.map_err(|e| {
             ApiError::internal_error(format!(
                 "Deserialization of get_neuron_info response failed: {:?}",
