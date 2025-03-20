@@ -571,7 +571,6 @@ pub async fn validate_subnet_request(
     request.extensions_mut().insert(subnet_id);
 
     let resp = next.run(request).await;
-
     Ok(resp)
 }
 

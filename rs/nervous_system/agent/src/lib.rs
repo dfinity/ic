@@ -9,6 +9,8 @@ pub mod nns;
 mod null_request;
 pub mod pocketic_impl;
 pub mod sns;
+#[cfg(feature = "test")]
+pub mod state_machine_impl;
 
 // This is used to "seal" the CallCanisters trait so that it cannot be implemented outside of this crate.
 // This is useful because it means we can modify the trait in the future without worrying about

@@ -257,7 +257,6 @@ members = [
     "rs/registry/canister",
     "rs/registry/canister/api",
     "rs/registry/canister/protobuf_generator",
-    "rs/registry/canister_data_provider",
     "rs/registry/client",
     "rs/registry/canister-client",
     "rs/registry/fake",
@@ -339,6 +338,8 @@ members = [
     "rs/sns/audit",
     "rs/sns/cli",
     "rs/sns/governance",
+    "rs/sns/governance/api",
+    "rs/sns/governance/api_helpers",
     "rs/sns/governance/proposal_criticality",
     "rs/sns/governance/protobuf_generator",
     "rs/sns/governance/token_valuation",
@@ -582,7 +583,7 @@ ic-http-gateway = "0.2.0"
 ic-management-canister-types = "0.2.1"
 ic-response-verification = "3"
 ic-sha3 = "1.0.0"
-ic-stable-structures = "0.6.5"
+ic-stable-structures = "0.6.8"
 ic-transport-types = { version = "0.39.2" }
 ic-utils = { version = "0.39", features = ["raw"] }
 ic_bls12_381 = { version = "0.10.0", default-features = false, features = [
@@ -688,6 +689,7 @@ rustls = { version = "0.23.18", default-features = false, features = [
     "brotli",
 ] }
 schemars = { version = "0.8.21", features = ["derive"] }
+scopeguard = "1.2.0"
 serde = { version = "1.0.203", features = ["derive"] }
 serde_bytes = "0.11.15"
 serde_cbor = "0.11.2"

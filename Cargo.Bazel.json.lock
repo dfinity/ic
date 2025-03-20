@@ -1,5 +1,5 @@
 {
-  "checksum": "17e4754ea98e4b08e8762a655c27cb3b7084a68545de7fbdbbbb3183a71cb60c",
+  "checksum": "6b5cac5f03c3f73653b9fcc13d0d44e0d958cc37cd309d006ec71b5733d99f13",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -20741,7 +20741,7 @@
               "target": "ic_sha3"
             },
             {
-              "id": "ic-stable-structures 0.6.5",
+              "id": "ic-stable-structures 0.6.8",
               "target": "ic_stable_structures"
             },
             {
@@ -20773,7 +20773,7 @@
               "target": "ic0"
             },
             {
-              "id": "ic_bls12_381 0.10.0",
+              "id": "ic_bls12_381 0.10.1",
               "target": "ic_bls12_381"
             },
             {
@@ -20967,11 +20967,6 @@
             {
               "id": "openssh-keys 0.5.0",
               "target": "openssh_keys"
-            },
-            {
-              "id": "opentelemetry 0.20.0",
-              "target": "opentelemetry",
-              "alias": "opentelemetry_0_20_0"
             },
             {
               "id": "opentelemetry 0.27.0",
@@ -34824,14 +34819,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "ic-stable-structures 0.6.5": {
+    "ic-stable-structures 0.6.8": {
       "name": "ic-stable-structures",
-      "version": "0.6.5",
+      "version": "0.6.8",
       "package_url": "https://github.com/dfinity/stable-structures",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/ic-stable-structures/0.6.5/download",
-          "sha256": "03f3044466a69802de74e710dc0300b706a05696a0531c942ca856751a13b0db"
+          "url": "https://static.crates.io/crates/ic-stable-structures/0.6.8/download",
+          "sha256": "f0f5684f577e0146738cd11afed789109c4f51ba963c75823c48c1501dc53278"
         }
       },
       "targets": [
@@ -34863,7 +34858,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.6.5"
+        "version": "0.6.8"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -35257,7 +35252,7 @@
               "target": "hex"
             },
             {
-              "id": "ic_bls12_381 0.10.0",
+              "id": "ic_bls12_381 0.10.1",
               "target": "ic_bls12_381",
               "alias": "bls12_381"
             },
@@ -35333,7 +35328,7 @@
               "target": "hex"
             },
             {
-              "id": "ic_bls12_381 0.10.0",
+              "id": "ic_bls12_381 0.10.1",
               "target": "ic_bls12_381",
               "alias": "bls12_381"
             },
@@ -35667,14 +35662,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "ic_bls12_381 0.10.0": {
+    "ic_bls12_381 0.10.1": {
       "name": "ic_bls12_381",
-      "version": "0.10.0",
+      "version": "0.10.1",
       "package_url": "https://github.com/dfinity/bls12_381",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/ic_bls12_381/0.10.0/download",
-          "sha256": "22c65787944f32af084dffd0c68c1e544237b76e215654ddea8cd9f527dd8b69"
+          "url": "https://static.crates.io/crates/ic_bls12_381/0.10.1/download",
+          "sha256": "a1e828f9e804ccefe4b9b15b2195f474c60fd4f95ccd14fcb554eb6d7dfafde3"
         }
       },
       "targets": [
@@ -35750,7 +35745,7 @@
           ],
           "selects": {}
         },
-        "version": "0.10.0"
+        "version": "0.10.1"
       },
       "license": "MIT/Apache-2.0",
       "license_ids": [
@@ -49841,65 +49836,6 @@
       ],
       "license_file": "LICENSE"
     },
-    "opentelemetry 0.20.0": {
-      "name": "opentelemetry",
-      "version": "0.20.0",
-      "package_url": "https://github.com/open-telemetry/opentelemetry-rust",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/opentelemetry/0.20.0/download",
-          "sha256": "9591d937bc0e6d2feb6f71a559540ab300ea49955229c347a517a28d27784c54"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "opentelemetry",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "opentelemetry",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
-            "default",
-            "metrics",
-            "trace"
-          ],
-          "selects": {}
-        },
-        "deps": {
-          "common": [
-            {
-              "id": "opentelemetry_api 0.20.0",
-              "target": "opentelemetry_api"
-            },
-            {
-              "id": "opentelemetry_sdk 0.20.0",
-              "target": "opentelemetry_sdk"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2021",
-        "version": "0.20.0"
-      },
-      "license": "Apache-2.0",
-      "license_ids": [
-        "Apache-2.0"
-      ],
-      "license_file": "LICENSE"
-    },
     "opentelemetry 0.21.0": {
       "name": "opentelemetry",
       "version": "0.21.0",
@@ -50725,22 +50661,13 @@
         "crate_features": {
           "common": [
             "async-trait",
-            "crossbeam-channel",
-            "default",
             "metrics",
-            "percent-encoding",
-            "rand",
-            "regex",
-            "trace"
+            "regex"
           ],
           "selects": {}
         },
         "deps": {
           "common": [
-            {
-              "id": "crossbeam-channel 0.5.13",
-              "target": "crossbeam_channel"
-            },
             {
               "id": "futures-channel 0.3.31",
               "target": "futures_channel"
@@ -50764,14 +50691,6 @@
             {
               "id": "ordered-float 3.9.2",
               "target": "ordered_float"
-            },
-            {
-              "id": "percent-encoding 2.3.1",
-              "target": "percent_encoding"
-            },
-            {
-              "id": "rand 0.8.5",
-              "target": "rand"
             },
             {
               "id": "regex 1.11.1",
@@ -57045,7 +56964,7 @@
               "target": "heck"
             },
             {
-              "id": "itertools 0.11.0",
+              "id": "itertools 0.13.0",
               "target": "itertools"
             },
             {
@@ -57199,7 +57118,7 @@
               "target": "anyhow"
             },
             {
-              "id": "itertools 0.11.0",
+              "id": "itertools 0.13.0",
               "target": "itertools"
             },
             {
@@ -94364,7 +94283,7 @@
     "ic-metrics-encoder 1.1.1",
     "ic-response-verification 3.0.3",
     "ic-sha3 1.0.0",
-    "ic-stable-structures 0.6.5",
+    "ic-stable-structures 0.6.8",
     "ic-test-state-machine-client 3.0.1",
     "ic-transport-types 0.39.3",
     "ic-utils 0.39.0",
@@ -94372,7 +94291,7 @@
     "ic-wasm 0.8.4",
     "ic-xrc-types 1.2.0",
     "ic0 0.18.11",
-    "ic_bls12_381 0.10.0",
+    "ic_bls12_381 0.10.1",
     "ic_principal 0.1.1",
     "icrc1-test-env 0.1.1",
     "icrc1-test-suite 0.1.1",
@@ -94423,7 +94342,6 @@
     "num_cpus 1.16.0",
     "once_cell 1.19.0",
     "openssh-keys 0.5.0",
-    "opentelemetry 0.20.0",
     "opentelemetry 0.27.0",
     "opentelemetry-otlp 0.27.0",
     "opentelemetry-prometheus 0.13.0",

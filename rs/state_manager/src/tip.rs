@@ -960,7 +960,7 @@ fn serialize_canister_to_tip(
                 .scheduler_state
                 .time_of_last_allocation_charge
                 .as_nanos_since_unix_epoch(),
-            task_queue: canister_state.system_state.task_queue.get_queue().into(),
+            task_queue: canister_state.system_state.task_queue.clone(),
             global_timer_nanos: canister_state
                 .system_state
                 .global_timer
@@ -983,10 +983,6 @@ fn serialize_canister_to_tip(
             wasm_memory_limit: canister_state.system_state.wasm_memory_limit,
             next_snapshot_id: canister_state.system_state.next_snapshot_id,
             snapshots_memory_usage: canister_state.system_state.snapshots_memory_usage,
-            on_low_wasm_memory_hook_status: canister_state
-                .system_state
-                .task_queue
-                .peek_hook_status(),
         }
         .into(),
     )?;

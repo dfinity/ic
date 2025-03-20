@@ -46,7 +46,7 @@ use pocket_ic::RejectResponse;
 use serde::Serialize;
 use slog::Level;
 use std::str::FromStr;
-use std::{collections::BTreeMap, fs::File, sync::Arc, time::Duration};
+use std::{collections::BTreeMap, fs::File, sync::atomic::AtomicU64, sync::Arc, time::Duration};
 use tokio::{runtime::Runtime, sync::RwLock, time::Instant};
 use tower_http::limit::RequestBodyLimitLayer;
 use tracing::trace;
@@ -61,6 +61,7 @@ const RETRY_TIMEOUT_S: u64 = 300;
 #[derive(Clone)]
 pub struct AppState {
     pub api_state: Arc<ApiState>,
+    pub pending_requests: Arc<AtomicU64>,
     pub min_alive_until: Arc<RwLock<Instant>>,
     pub runtime: Arc<Runtime>,
     pub blob_store: Arc<dyn BlobStore>,
@@ -1074,9 +1075,8 @@ pub async fn handler_add_cycles(
 pub async fn handler_set_stable_memory(
     State(AppState {
         api_state,
-        min_alive_until: _,
-        runtime: _,
         blob_store,
+        ..
     }): State<AppState>,
     Path(instance_id): Path<InstanceId>,
     headers: HeaderMap,
@@ -1140,10 +1140,7 @@ fn contains_unimplemented(config: ExtendedSubnetConfigSet) -> bool {
 /// The new InstanceId will be returned.
 pub async fn create_instance(
     State(AppState {
-        api_state,
-        min_alive_until: _,
-        runtime,
-        blob_store: _,
+        api_state, runtime, ..
     }): State<AppState>,
     extract::Json(instance_config): extract::Json<InstanceConfig>,
 ) -> (StatusCode, Json<rest::CreateInstanceResponse>) {
