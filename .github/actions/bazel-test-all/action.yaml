@@ -10,6 +10,8 @@ inputs:
     required: false
   CLOUD_CREDENTIALS_CONTENT:
     required: false
+  RELEASE_BUILD:
+    required: false
   SSH_PRIVATE_KEY_BACKUP_POD:
     required: false
   GPG_PASSPHRASE:
@@ -59,10 +61,31 @@ runs:
         env:
           BAZEL_COMMAND: ${{ inputs.BAZEL_COMMAND }}
           BAZEL_TARGETS: ${{ inputs.BAZEL_TARGETS }}
+          RELEASE_BUILD: ${{ inputs.RELEASE_BUILD }}
           BRANCH_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           CI_EVENT_NAME: ${{ github.event_name }}
           CI_JOB_URL: "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
           MERGE_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+
+      - name: upload to S3
+        shell: bash
+        if: inputs.RELEASE_BUILD == 'true'
+        run: |
+          # Query for targets tagged with 'upload' which are expected to be run
+          # on release build (for uploading artifacts)
+          upload_targets=$(bazel query "attr(tags, '\\bupload\\b', //...)")
+          if [[ $RELEASE_BUILD == true ]]; then
+              for tgt in $upload_targets; do
+                  echo "running upload target '$upload_target'"
+                  bazel \
+                      --output_base=/var/tmp/bazel-output \
+                      run \
+                      --check_up_to_date \
+                      "$tgt" \
+                      --color=yes
+              done
+          fi
+
 
       - name: Export bazel build events to honeycomb
         shell: bash

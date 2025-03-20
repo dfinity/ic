@@ -2,6 +2,21 @@
 
 set -eEuo pipefail
 
+# If $UPLOADABLES is set, then we call ourselves again with every file
+# in $UPLOADABLES. This effectively avoids this whole file being one big
+# for loop and keeps the indentation down.
+if [ -n "${UPLOADABLES:-}" ]; then
+    for uploadable in $UPLOADABLES; do
+        echo found uploadable "$uploadable"
+        abs_path="$BUILD_WORKING_DIRECTORY/$uploadable"
+        env -u "UPLOADABLES" "$0" "$abs_path"
+    done
+
+    exit 0
+fi
+
+echo "uploading $1"
+
 # ~/.aws/credentials is needed by rclone. If home is not set, expect
 # VERSION_FILE to contain the $HOME.
 if [ -z "${HOME:-}" ]; then
@@ -53,7 +68,7 @@ echo "done uploading to AWS" >&2
 # Upload to Cloudflare's R2 (S3)
 # using profile 'cf' to look up the right creds in ~/.aws/credentials
 echo "uploading $f to Cloudflare" >&2
-echo AWS_PROFILE=cf "$RCLONE" -v \
+AWS_PROFILE=cf "$RCLONE" -v \
     "${rclone_common_flags[@]}" \
     --s3-provider=Cloudflare \
     --s3-endpoint=https://64059940cc95339fc7e5888f431876ee.r2.cloudflarestorage.com \

@@ -126,14 +126,14 @@ def _checksum_rule_impl(ctx):
     input_files = ctx.files.inputs
 
     # Declare output files (NOTE: not windows friendly)
-    out_checksums = ctx.actions.declare_file("_checksums/SHA256SUMS")
+    out_checksums = ctx.actions.declare_file("{}_checksums/SHA256SUMS".format(ctx.attr.name))
 
     def make_symlink(target):
         symlink = ctx.actions.declare_file("_checksums/" + target.basename)
         ctx.actions.symlink(output = symlink, target_file = target)
         return symlink
 
-    symlinks = [make_symlink(file) for file in input_files]
+    symlinks = [make_symlink(file) for file in input_files] if ctx.attr.create_symlinks else []
 
     # Compute checksums and print it to stdout & out file.
     # The filenames are stripped from anything but the basename.
@@ -144,6 +144,9 @@ def _checksum_rule_impl(ctx):
         arguments = [file.path for file in input_files],
         outputs = [out_checksums],
         tools = [ctx.executable._sha256],
+        env = {
+            "ARCHIVES_ONLY": "1" if ctx.attr.archives_only else "",
+        },
         command = """
         set -euo pipefail
 
@@ -151,7 +154,7 @@ def _checksum_rule_impl(ctx):
         output=$(mktemp) # temporary file bc sha256 doesn't support writing to stdout (or /dev/stdout) directly
 
         for input in "$@"; do
-            if ! [[ $input =~ (\\.tar|\\.gz) ]]; then
+            if [[ $ARCHIVES_ONLY == "1" ]] && ! [[ $input =~ (\\.tar|\\.gz) ]]; then
                 echo "skipping non-archive file $input"
                 continue
             fi
@@ -177,6 +180,12 @@ checksum_rule = rule(
         "inputs": attr.label_list(
             allow_files = True,
             mandatory = True,
+        ),
+        "create_symlinks": attr.bool(
+            default = True,
+        ),
+        "archives_only": attr.bool(
+            default = True,
         ),
         # The bazel-provided sha256 tool to avoid relying on tools from the container/env
         "_sha256": attr.label(
