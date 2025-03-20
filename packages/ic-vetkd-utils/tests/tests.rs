@@ -111,11 +111,17 @@ fn derivation_matches_expected_value() {
 fn protocol_flow_with_fixed_rng_has_expected_outputs() {
     let tsk = TransportSecretKey::from_seed(vec![0x42; 32]).unwrap();
 
-    assert_eq!(hex::encode(tsk.serialize()),
-               "763e63464c55014a26ac6825616867185cc7204283ca46bd34c1a1446e737b16");
+    assert_eq!(
+        hex::encode(tsk.serialize()),
+        "763e63464c55014a26ac6825616867185cc7204283ca46bd34c1a1446e737b16"
+    );
 
-    assert_eq!(TransportSecretKey::deserialize(&tsk.serialize()).unwrap().serialize(),
-               tsk.serialize());
+    assert_eq!(
+        TransportSecretKey::deserialize(&tsk.serialize())
+            .unwrap()
+            .serialize(),
+        tsk.serialize()
+    );
 
     let tpk = tsk.public_key();
 

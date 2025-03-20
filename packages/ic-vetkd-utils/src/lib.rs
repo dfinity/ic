@@ -90,10 +90,13 @@ impl TransportSecretKey {
     /// Serialize this transport secret key to a bytestring
     pub fn deserialize(bytes: &[u8]) -> Result<Self, String> {
         if bytes.len() != 32 {
-            return Err(format!("TransportSecretKey must be exactly 32 bytes not {}", bytes.len()));
+            return Err(format!(
+                "TransportSecretKey must be exactly 32 bytes not {}",
+                bytes.len()
+            ));
         }
 
-        let bytes : [u8; 32] = bytes.try_into().expect("Length already checked");
+        let bytes: [u8; 32] = bytes.try_into().expect("Length already checked");
 
         if let Some(s) = Scalar::from_bytes(&bytes).into_option() {
             Ok(Self { secret_key: s })
