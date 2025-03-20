@@ -26,7 +26,7 @@ DEPENDENCIES = [
     "//rs/nns/governance/api",
     "//rs/rosetta-api/common/rosetta_core:rosetta-core",
     "//rs/rosetta-api/icp/ledger_canister_blocks_synchronizer:ledger_canister_blocks_synchronizer_lib",
-    "//rs/rust_canisters/dfn_candid",    
+    "//rs/rust_canisters/dfn_candid",
     "//rs/rust_canisters/dfn_protobuf",
     "//rs/rust_canisters/on_wire",
     "//rs/types/types",
