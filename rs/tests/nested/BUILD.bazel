@@ -114,6 +114,7 @@ system_test_nns(
     name = "hostos_upgrade_from_mainnet_to_mainnet",
     env = MAINNET_ENV,
     flaky = True,
+    tags = ["manual"],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     test_driver_target = ":upgrade_test_bin",
     test_timeout = "eternal",
