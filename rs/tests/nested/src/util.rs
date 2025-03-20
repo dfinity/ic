@@ -103,7 +103,7 @@ pub(crate) fn setup_nested_vm(env: TestEnv, name: &str) {
 
     let nodes = vec![NestedNode::new(name.to_owned())];
 
-    let res_request = get_resource_request_for_nested_nodes(&nodes, &env, &group_name, &farm)
+    let res_request = get_resource_request_for_nested_nodes(&nodes, &env, &group_name)
         .expect("Failed to build resource request for nested test.");
     let res_group = allocate_resources(&farm, &res_request, &env)
         .expect("Failed to allocate resources for nested test.");

@@ -99,6 +99,7 @@ system_test_nns(
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     test_driver_target = ":upgrade_test_bin",
     test_timeout = "eternal",
+    use_empty_image = True,
     uses_guestos_dev = True,
     uses_hostos_dev_test = True,
     uses_setupos_mainnet = True,
@@ -116,6 +117,7 @@ system_test_nns(
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     test_driver_target = ":upgrade_test_bin",
     test_timeout = "eternal",
+    use_empty_image = True,
     uses_guestos_dev = True,
     uses_hostos_mainnet_update_img = True,
     uses_setupos_dev = True,
