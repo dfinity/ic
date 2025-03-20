@@ -1,0 +1,76 @@
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
+
+DEPENDENCIES = [
+    # Keep sorted.
+    "//rs/artifact_pool",
+    "//rs/config",
+    "//rs/crypto/utils/threshold_sig_der",
+    "//rs/cup_explorer",
+    "//rs/http_utils",
+    "//rs/interfaces",
+    "//rs/interfaces/registry",
+    "//rs/monitoring/metrics",
+    "//rs/orchestrator/registry_replicator",
+    "//rs/protobuf",
+    "//rs/registry/client",
+    "//rs/registry/helpers",
+    "//rs/registry/keys",
+    "//rs/registry/local_store",
+    "//rs/registry/nns_data_provider",
+    "//rs/registry/routing_table",
+    "//rs/registry/subnet_features",
+    "//rs/replay",
+    "//rs/state_manager",
+    "//rs/types/base_types",
+    "//rs/types/management_canister_types",
+    "//rs/types/types",
+    "@crate_index//:base64",
+    "@crate_index//:clap",
+    "@crate_index//:futures",
+    "@crate_index//:hex",
+    "@crate_index//:prost",
+    "@crate_index//:reqwest",
+    "@crate_index//:serde",
+    "@crate_index//:serde_cbor",
+    "@crate_index//:serde_json",
+    "@crate_index//:slog",
+    "@crate_index//:slog-async",
+    "@crate_index//:slog-term",
+    "@crate_index//:strum",
+    "@crate_index//:tokio",
+    "@crate_index//:url",
+]
+
+DEV_DEPENDENCIES = [
+    # Keep sorted.
+    "//rs/test_utilities/consensus",
+    "//rs/test_utilities/tmpdir",
+    "//rs/test_utilities/types",
+    "@crate_index//:tempfile",
+]
+
+MACRO_DEPENDENCIES = [
+    # Keep sorted.
+    "@crate_index//:strum_macros",
+]
+
+ALIASES = {}
+
+rust_binary(
+    name = "cup-signer",
+    srcs = ["src/main.rs"],
+    aliases = ALIASES,
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    visibility = [
+        "//rs:release-pkg",
+        "//rs:system-tests-pkg",
+    ],
+    deps = DEPENDENCIES,
+)
+
+rust_test(
+    name = "cup_signer_test",
+    compile_data = ["ic_public_key.pem"],
+    crate = ":cup_signer",
+    deps = DEPENDENCIES + DEV_DEPENDENCIES,
+)
