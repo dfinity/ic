@@ -776,7 +776,7 @@ fn canister_state_dir(shutdown_signal: Option<Signal>) {
 
     // We create a counter canister on the application subnet.
     let app_subnet = initial_topology.get_app_subnets()[0];
-    let app_canister_id = deploy_counter_canister_to_subnet(&pic, nns_subnet, 1);
+    let app_canister_id = deploy_counter_canister_to_subnet(&pic, app_subnet, 1);
 
     // We create a counter canister with a "specified" canister ID that exists on the IC mainnet,
     // but belongs to the canister ranges of no subnet on the PocketIC instance.
