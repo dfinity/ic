@@ -25,6 +25,14 @@ fn set_production_rayon_threads() {
         });
 }
 
+/// Unzip a the bytes before converting to a binary encoded Wasm.
+fn unzip_wasm(bytes: &[u8]) -> BinaryEncodedWasm {
+    let mut decoder = libflate::gzip::Decoder::new(bytes).unwrap();
+    let mut buf = vec![];
+    decoder.read_to_end(&mut buf).unwrap();
+    BinaryEncodedWasm::new(buf)
+}
+
 /// Tuples of (benchmark_name, compilation_cost, wasm) to run compilation benchmarks on.
 fn generate_binaries() -> Vec<(String, BinaryEncodedWasm)> {
     let mut result = vec![(
@@ -87,31 +95,17 @@ fn generate_binaries() -> Vec<(String, BinaryEncodedWasm)> {
     // This benchmark uses the open chat user canister which is stored as a
     // binary file in this repo.  It is generated from
     // https://github.com/dfinity/open-chat/tree/abk/for-replica-benchmarking
-    let mut decoder =
-        libflate::gzip::Decoder::new(&include_bytes!("test-data/user.wasm.gz")[..]).unwrap();
-    let mut buf = vec![];
-    decoder.read_to_end(&mut buf).unwrap();
-    let open_chat_wasm = BinaryEncodedWasm::new(buf);
-
+    let open_chat_wasm = unzip_wasm(&include_bytes!("test-data/user.wasm.gz")[..]);
     result.push(("open_chat".to_string(), open_chat_wasm));
 
     // This benchmark uses the QR code generator canister which is stored as a
     // binary file in this repo.  It is generated from the directory
     // `rust/qrcode` in
     // https://github.com/dfinity/examples/tree/abk/for-replica-benchmarking
-    let mut decoder =
-        libflate::gzip::Decoder::new(&include_bytes!("test-data/qrcode_backend.wasm.gz")[..])
-            .unwrap();
-    let mut buf = vec![];
-    decoder.read_to_end(&mut buf).unwrap();
-    let qrcode_wasm = BinaryEncodedWasm::new(buf);
-
+    let qrcode_wasm = unzip_wasm(&include_bytes!("test-data/qrcode_backend.wasm.gz")[..]);
     result.push(("qrcode".to_string(), qrcode_wasm));
 
-    let mut decoder = libflate::gzip::Decoder::new(&GOVERNANCE_BENCH_CANISTER[..]).unwrap();
-    let mut buf = vec![];
-    decoder.read_to_end(&mut buf).unwrap();
-    let governance_wasm = BinaryEncodedWasm::new(buf);
+    let governance_wasm = unzip_wasm(&GOVERNANCE_BENCH_CANISTER[..]);
     result.push(("governance".to_string(), governance_wasm));
 
     result
