@@ -11,6 +11,13 @@ here were moved from the adjacent `unreleased_changelog.md` file.
 INSERT NEW RELEASES HERE
 
 
+# 2025-03-21: Proposal 135936
+
+https://dashboard.internetcomputer.org/proposal/135936
+
+No behavior changes. This is just a maintenance upgrade.
+
+
 # 2025-02-15: Proposal 135316
 
 http://dashboard.internetcomputer.org/proposal/135316

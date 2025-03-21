@@ -17,9 +17,4 @@ on the process that this file is part of, see
 
 ## Fixed
 
-### Disable replacement of nodes that are active in subnets
-
-Direct node replacements of nodes that are active in a subnet may result in unexpected behavior and potential problems in the current Consensus code.
-So to be on the safe side we need to disable the functionality on the Registry side until the rest of the core protocol can handle it safely.
-
 ## Security

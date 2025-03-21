@@ -10,6 +10,19 @@ here were moved from the adjacent `unreleased_changelog.md` file.
 
 INSERT NEW RELEASES HERE
 
+
+# 2025-03-21: Proposal 135935
+
+http://dashboard.internetcomputer.org/proposal/135935
+
+## Added
+
+* Added `Neuron.topic_followees` to support the upcoming [SNS topics](https://forum.dfinity.org/t/sns-topics-design) feature.
+
+## Changed
+
+- `SetTopcisForCustomProposals` proposal is now under the `CriticalDappOperations` topic.
+
 # 2025-03-17: Proposal 135852
 
 https://dashboard.internetcomputer.org/proposal/135852
