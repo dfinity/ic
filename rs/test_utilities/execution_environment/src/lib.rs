@@ -2148,14 +2148,6 @@ impl ExecutionTestBuilder {
         self
     }
 
-    pub fn with_non_native_stable(mut self) -> Self {
-        self.execution_config
-            .embedders_config
-            .feature_flags
-            .wasm_native_stable_memory = FlagStatus::Disabled;
-        self
-    }
-
     pub fn with_best_effort_responses(mut self, stage: BestEffortResponsesFeature) -> Self {
         self.execution_config
             .embedders_config
