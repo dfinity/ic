@@ -1,5 +1,8 @@
 use crate::pb::v1::{
-    governance::{FollowersMap, GovernanceCachedMetrics, MakingSnsProposal, NeuronInFlightCommand},
+    governance::{
+        FollowersMap, GovernanceCachedMetrics, MakingSnsProposal, NeuronInFlightCommand,
+        VotingPowerSnapshot,
+    },
     neuron::Followees,
     Governance as GovernanceProto, MonthlyNodeProviderRewards, NetworkEconomics, Neuron,
     NeuronStakeTransfer, NodeProvider, ProposalData, RestoreAgingSummary, RewardEvent,
@@ -99,6 +102,7 @@ pub fn split_governance_proto(
     HashMap<i32, FollowersMap>,
     HeapGovernanceData,
     Option<[u8; 32]>,
+    Vec<VotingPowerSnapshot>,
 ) {
     // DO NOT USE THE .. CATCH-ALL SYNTAX HERE.
     // OTHERWISE, YOU WILL ALMOST CERTAINLY EXPERIENCE
@@ -128,6 +132,7 @@ pub fn split_governance_proto(
         xdr_conversion_rate,
         restore_aging_summary,
         rng_seed,
+        voting_power_snapshots,
     } = governance_proto;
 
     let neuron_management_voting_period_seconds =
@@ -170,6 +175,7 @@ pub fn split_governance_proto(
             restore_aging_summary,
         },
         rng_seed,
+        voting_power_snapshots,
     )
 }
 
@@ -180,6 +186,7 @@ pub fn reassemble_governance_proto(
     topic_followee_index: HashMap<i32, FollowersMap>,
     heap_governance_proto: HeapGovernanceData,
     rng_seed: Option<[u8; 32]>,
+    voting_power_snapshots: Vec<VotingPowerSnapshot>,
 ) -> GovernanceProto {
     // DO NOT USE THE .. CATCH-ALL SYNTAX HERE.
     // OTHERWISE, YOU WILL ALMOST CERTAINLY EXPERIENCE
@@ -235,6 +242,7 @@ pub fn reassemble_governance_proto(
         xdr_conversion_rate: Some(xdr_conversion_rate),
         restore_aging_summary,
         rng_seed: rng_seed.map(|seed| seed.to_vec()),
+        voting_power_snapshots,
     }
 }
 
@@ -287,6 +295,10 @@ mod tests {
             }),
             restore_aging_summary: None,
             rng_seed: Some(vec![1u8; 32]),
+            voting_power_snapshots: vec![VotingPowerSnapshot {
+                timestamp_seconds: 123,
+                deciding_voting_power: 456,
+            }],
         }
     }
 
@@ -294,14 +306,20 @@ mod tests {
     fn split_and_reassemble_equal() {
         let governance_proto = simple_governance_proto();
 
-        let (heap_neurons, topic_followee_index, heap_governance_data, rng_seed) =
-            split_governance_proto(governance_proto.clone());
+        let (
+            heap_neurons,
+            topic_followee_index,
+            heap_governance_data,
+            rng_seed,
+            voting_power_snapshots,
+        ) = split_governance_proto(governance_proto.clone());
 
         let reassembled_governance_proto = reassemble_governance_proto(
             heap_neurons,
             topic_followee_index,
             heap_governance_data,
             rng_seed,
+            voting_power_snapshots,
         );
 
         assert_eq!(reassembled_governance_proto, governance_proto);
@@ -314,13 +332,19 @@ mod tests {
             ..simple_governance_proto()
         };
 
-        let (heap_neurons, topic_followee_index, heap_governance_data, rng_seed) =
-            split_governance_proto(governance_proto.clone());
+        let (
+            heap_neurons,
+            topic_followee_index,
+            heap_governance_data,
+            rng_seed,
+            voting_power_snapshots,
+        ) = split_governance_proto(governance_proto.clone());
         let reassembled_governance_proto = reassemble_governance_proto(
             heap_neurons,
             topic_followee_index,
             heap_governance_data,
             rng_seed,
+            voting_power_snapshots,
         );
 
         assert_eq!(
@@ -339,7 +363,7 @@ mod tests {
             ..GovernanceProto::default()
         };
         // split_governance_proto should return a HeapGovernanceData where the neuron_management_voting_period_seconds is 0 when given a default input
-        let (_, _, heap_governance_proto, _) = split_governance_proto(governance_proto);
+        let (_, _, heap_governance_proto, _, _) = split_governance_proto(governance_proto);
         assert_eq!(
             heap_governance_proto.neuron_management_voting_period_seconds,
             48 * 60 * 60
