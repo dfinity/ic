@@ -214,6 +214,9 @@ fn test_canister_snapshots_decode() {
         wasm_memory_size: NumWasmPages::new(10),
         total_size: NumBytes::new(100),
         exported_globals: vec![Global::I32(1), Global::I64(2), Global::F64(0.1)],
+        source: SnapshotSource::TakenFromCanister,
+        global_timer: CanisterTimer::Inactive,
+        on_low_wasm_memory_hook_status: OnLowWasmMemoryHookStatus::ConditionNotSatisfied,
     };
 
     let pb_bits =
