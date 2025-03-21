@@ -35,7 +35,7 @@ use sha2::{Digest, Sha256};
 use slog::Level;
 use std::fs::File;
 use std::future::Future;
-use std::net::SocketAddr;
+use std::net::{IpAddr, SocketAddr};
 use std::path::PathBuf;
 use std::time::{Duration, SystemTime};
 use tracing::{debug, instrument, warn};
@@ -357,8 +357,9 @@ impl PocketIc {
     /// Returns the URL at which `/api/v2` requests
     /// for this instance can be made.
     #[instrument(skip(self), fields(instance_id=self.instance_id))]
-    pub async fn make_live(&mut self, listen_at: Option<u16>) -> Url {
-        self.make_live_with_params(listen_at, None, None).await
+    pub async fn make_live(&mut self, listen_at: Option<u16>, ip_addr: Option<IpAddr>) -> Url {
+        self.make_live_with_params(listen_at, None, None, ip_addr)
+            .await
     }
 
     /// Creates an HTTP gateway for this PocketIC instance listening
@@ -375,12 +376,13 @@ impl PocketIc {
         listen_at: Option<u16>,
         domains: Option<Vec<String>>,
         https_config: Option<HttpsConfig>,
+        ip_addr: Option<IpAddr>,
     ) -> Url {
         if let Some(url) = self.url() {
             return url;
         }
         self.auto_progress().await;
-        self.start_http_gateway(listen_at, domains, https_config)
+        self.start_http_gateway(listen_at, domains, https_config, ip_addr)
             .await
     }
 
@@ -389,10 +391,11 @@ impl PocketIc {
         port: Option<u16>,
         domains: Option<Vec<String>>,
         https_config: Option<HttpsConfig>,
+        ip_addr: Option<IpAddr>,
     ) -> Url {
         let endpoint = self.server_url.join("http_gateway").unwrap();
         let http_gateway_config = HttpGatewayConfig {
-            ip_addr: None,
+            ip_addr: ip_addr.map(|ip| ip.to_string()),
             port,
             forward_to: HttpGatewayBackend::PocketIcInstance(self.instance_id),
             domains: domains.clone(),
