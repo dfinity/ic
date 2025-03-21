@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The module `management_canister` used to contain interface types of the IC management canister. Those types have since been published on crates.io as `ic-management-canister-types`, so PocketIC can depend on that and remove the redundant types.
 - The subnet ID from the functions `SubnetSpec::with_state_dir`, `PocketIcBuilder::with_nns_state`, and `PocketIcBuilder::with_subnet_state`;
   the subnet ID from the type `SubnetStateConfig`; and the functions `SubnetSpec::get_subnet_id` and `SubnetStateConfig::get_subnet_id`.
+- The function `PocketIc::auto_progress_enabled` to determine whether the automatic progress was enabled for the PocketIC instance.
 
 ### Changed
 

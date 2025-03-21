@@ -326,6 +326,11 @@ impl PocketIc {
         self.instance_url()
     }
 
+    /// Returns whether automatic progress is enabled on the PocketIC instance.
+    pub async fn auto_progress_enabled(&self) -> bool {
+        self.get("auto_progress").await
+    }
+
     pub(crate) fn instance_url(&self) -> Url {
         self.server_url
             .join("/instances/")

@@ -25,6 +25,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - New endpoint `/instances/<instance_id>/update/set_certified_time` to set the current certified time on all subnets of the PocketIC instance.
 - The endpoint `/instances/<instance_id>/update/tick` takes an argument optionally containing the blockmaker and failed blockmakers
   for every subnet used by the endpoint `node_metrics_history` of the management canister.
+- The `GET` endpoint `/instances/<instance_id>/auto_progress` that returns whether the automatic progress was enable for the PocketIC instance.
 
 ### Fixed
 - Canisters created via `provisional_create_canister_with_cycles` with the management canister ID as the effective canister ID
