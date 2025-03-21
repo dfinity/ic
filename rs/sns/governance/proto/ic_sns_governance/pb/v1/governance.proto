@@ -68,6 +68,13 @@ message NeuronId {
   bytes id = 1;
 }
 
+// Neuron whose voting decisions are being followed.
+message Followee {
+  NeuronId neuron_id = 1;
+  // Human-readable alias that helps identify this followee among other neurons.
+  optional string alias = 2;
+}
+
 // A sequence of NeuronIds, which is used to get prost to generate a type isomorphic to Option<Vec<NeuronId>>.
 message NeuronIds {
   repeated NeuronId neuron_ids = 1;
@@ -166,7 +173,7 @@ message Neuron {
 
   // A list of a neuron's followees, possibly associated with a given topic.
   message FolloweesForTopic {
-    repeated NeuronId followees = 1;
+    repeated Followee followees = 1;
     optional Topic topic = 2;
   }
 
@@ -1324,6 +1331,7 @@ message Governance {
       ManageNeuron.RemoveNeuronPermissions remove_neuron_permissions = 8;
       ManageNeuron.Configure configure = 9;
       ManageNeuron.Follow follow = 10;
+      ManageNeuron.SetFollowingForTopics set_following_for_topics = 14;
       Proposal make_proposal = 11;
       ManageNeuron.RegisterVote register_vote = 12;
       ManageNeuron.FinalizeDisburseMaturity finalize_disburse_maturity = 13;
@@ -1781,6 +1789,11 @@ message ManageNeuron {
 
     // The list of followee neurons, specified by their neuron ID.
     repeated NeuronId followees = 2;
+  }
+
+  message SetFollowingForTopics {
+    // The neuron's followees, specified as a map of proposal topics IDs to followees neuron IDs.
+    optional Neuron.TopicFollowees topic_followees = 1;
   }
 
   // The operation that registers a given vote from the neuron for a given

@@ -30,6 +30,23 @@ impl From<pb_api::NeuronId> for pb::NeuronId {
     }
 }
 
+impl From<pb::Followee> for pb_api::Followee {
+    fn from(item: pb::Followee) -> Self {
+        Self {
+            neuron_id: item.neuron_id.map(pb_api::NeuronId::from),
+            alias: item.alias,
+        }
+    }
+}
+impl From<pb_api::Followee> for pb::Followee {
+    fn from(item: pb_api::Followee) -> Self {
+        Self {
+            neuron_id: item.neuron_id.map(pb::NeuronId::from),
+            alias: item.alias,
+        }
+    }
+}
+
 impl From<pb::NeuronIds> for pb_api::NeuronIds {
     fn from(item: pb::NeuronIds) -> Self {
         Self {
@@ -77,25 +94,48 @@ impl From<pb_api::DisburseMaturityInProgress> for pb::DisburseMaturityInProgress
     }
 }
 
+impl From<pb::neuron::TopicFollowees> for pb_api::neuron::TopicFollowees {
+    fn from(value: pb::neuron::TopicFollowees) -> Self {
+        let pb::neuron::TopicFollowees {
+            topic_id_to_followees,
+        } = value;
+
+        let topic_id_to_followees = topic_id_to_followees
+            .into_iter()
+            .map(|(topic, followees)| {
+                let followees = pb_api::neuron::FolloweesForTopic::from(followees);
+                (topic, followees)
+            })
+            .collect();
+
+        Self {
+            topic_id_to_followees,
+        }
+    }
+}
+
+impl From<pb_api::neuron::TopicFollowees> for pb::neuron::TopicFollowees {
+    fn from(value: pb_api::neuron::TopicFollowees) -> Self {
+        let pb_api::neuron::TopicFollowees {
+            topic_id_to_followees,
+        } = value;
+
+        let topic_id_to_followees = topic_id_to_followees
+            .into_iter()
+            .map(|(topic, followees)| {
+                let followees = pb::neuron::FolloweesForTopic::from(followees);
+                (topic, followees)
+            })
+            .collect();
+
+        Self {
+            topic_id_to_followees,
+        }
+    }
+}
+
 impl From<pb::Neuron> for pb_api::Neuron {
     fn from(item: pb::Neuron) -> Self {
-        let topic_followees = item.topic_followees.map(
-            |pb::neuron::TopicFollowees {
-                 topic_id_to_followees,
-             }| {
-                let topic_id_to_followees = topic_id_to_followees
-                    .into_iter()
-                    .map(|(topic, followees)| {
-                        let followees = pb_api::neuron::FolloweesForTopic::from(followees);
-                        (topic, followees)
-                    })
-                    .collect();
-                pb_api::neuron::TopicFollowees {
-                    topic_id_to_followees,
-                }
-            },
-        );
-
         Self {
             id: item.id.map(|x| x.into()),
             permissions: item.permissions.into_iter().map(|x| x.into()).collect(),
@@ -108,7 +148,9 @@ impl From<pb::Neuron> for pb_api::Neuron {
                 .into_iter()
                 .map(|(k, v)| (k, v.into()))
                 .collect(),
-            topic_followees,
+            topic_followees: item
+                .topic_followees
+                .map(pb_api::neuron::TopicFollowees::from),
             maturity_e8s_equivalent: item.maturity_e8s_equivalent,
             voting_power_percentage_multiplier: item.voting_power_percentage_multiplier,
             source_nns_neuron_id: item.source_nns_neuron_id,
@@ -126,23 +168,6 @@ impl From<pb::Neuron> for pb_api::Neuron {
 }
 impl From<pb_api::Neuron> for pb::Neuron {
     fn from(item: pb_api::Neuron) -> Self {
-        let topic_followees = item.topic_followees.map(
-            |pb_api::neuron::TopicFollowees {
-                 topic_id_to_followees,
-             }| {
-                let topic_id_to_followees = topic_id_to_followees
-                    .into_iter()
-                    .map(|(topic, followees)| {
-                        let followees = pb::neuron::FolloweesForTopic::from(followees);
-                        (topic, followees)
-                    })
-                    .collect();
-                pb::neuron::TopicFollowees {
-                    topic_id_to_followees,
-                }
-            },
-        );
-
         Self {
             id: item.id.map(|x| x.into()),
             permissions: item.permissions.into_iter().map(|x| x.into()).collect(),
@@ -155,7 +180,7 @@ impl From<pb_api::Neuron> for pb::Neuron {
                 .into_iter()
                 .map(|(k, v)| (k, v.into()))
                 .collect(),
-            topic_followees,
+            topic_followees: item.topic_followees.map(pb::neuron::TopicFollowees::from),
             maturity_e8s_equivalent: item.maturity_e8s_equivalent,
             voting_power_percentage_multiplier: item.voting_power_percentage_multiplier,
             source_nns_neuron_id: item.source_nns_neuron_id,
@@ -1524,6 +1549,11 @@ impl From<pb::governance::neuron_in_flight_command::Command>
             pb::governance::neuron_in_flight_command::Command::Follow(v) => {
                 pb_api::governance::neuron_in_flight_command::Command::Follow(v.into())
             }
+            pb::governance::neuron_in_flight_command::Command::SetFollowingForTopics(v) => {
+                pb_api::governance::neuron_in_flight_command::Command::SetFollowingForTopics(
+                    v.into(),
+                )
+            }
             pb::governance::neuron_in_flight_command::Command::MakeProposal(v) => {
                 pb_api::governance::neuron_in_flight_command::Command::MakeProposal(v.into())
             }
@@ -1572,6 +1602,9 @@ impl From<pb_api::governance::neuron_in_flight_command::Command>
             }
             pb_api::governance::neuron_in_flight_command::Command::Follow(v) => {
                 pb::governance::neuron_in_flight_command::Command::Follow(v.into())
+            }
+            pb_api::governance::neuron_in_flight_command::Command::SetFollowingForTopics(v) => {
+                pb::governance::neuron_in_flight_command::Command::SetFollowingForTopics(v.into())
             }
             pb_api::governance::neuron_in_flight_command::Command::MakeProposal(v) => {
                 pb::governance::neuron_in_flight_command::Command::MakeProposal(v.into())
@@ -2204,6 +2237,29 @@ impl From<pb::manage_neuron::Follow> for pb_api::manage_neuron::Follow {
         }
     }
 }
+
+impl From<pb_api::manage_neuron::SetFollowingForTopics>
+    for pb::manage_neuron::SetFollowingForTopics
+{
+    fn from(item: pb_api::manage_neuron::SetFollowingForTopics) -> Self {
+        Self {
+            topic_followees: item.topic_followees.map(pb::neuron::TopicFollowees::from),
+        }
+    }
+}
+
+impl From<pb::manage_neuron::SetFollowingForTopics>
+    for pb_api::manage_neuron::SetFollowingForTopics
+{
+    fn from(item: pb::manage_neuron::SetFollowingForTopics) -> Self {
+        Self {
+            topic_followees: item
+                .topic_followees
+                .map(pb_api::neuron::TopicFollowees::from),
+        }
+    }
+}
+
 impl From<pb_api::manage_neuron::Follow> for pb::manage_neuron::Follow {
     fn from(item: pb_api::manage_neuron::Follow) -> Self {
         Self {
