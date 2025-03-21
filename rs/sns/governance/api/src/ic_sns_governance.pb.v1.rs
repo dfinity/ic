@@ -156,7 +156,6 @@ pub struct Neuron {
 /// Nested message and enum types in `Neuron`.
 pub mod neuron {
     use super::*;
-
     /// A list of a neuron's followees for a specific function.
     #[derive(Default, candid::CandidType, candid::Deserialize, Debug, Clone, PartialEq)]
     pub struct Followees {
@@ -791,7 +790,7 @@ pub struct WaitForQuietState {
 }
 /// The ProposalData that contains everything related to a proposal:
 /// the proposal itself (immutable), as well as mutable data such as ballots.
-#[derive(candid::CandidType, candid::Deserialize, Debug, Clone, PartialEq)]
+#[derive(candid::CandidType, Default, candid::Deserialize, Debug, Clone, PartialEq)]
 pub struct ProposalData {
     /// The proposal's action.
     /// Types 0-999 are reserved for current (and future) core governance
@@ -2423,6 +2422,7 @@ pub struct Account {
     candid::Deserialize,
     Debug,
     clap::ValueEnum,
+    strum_macros::EnumIter,
     Clone,
     Copy,
     PartialEq,

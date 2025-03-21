@@ -73,6 +73,7 @@ fn notify(notify_data: &NotifyData) -> Response {
 
 fn create_hostos_upgrade_file(upgrade_url: &str, file_path: &str) -> Result<(), String> {
     let client = reqwest::blocking::Client::builder()
+        .timeout(std::time::Duration::from_secs(120))
         .build()
         .map_err(|err| format!("Could not build download client: {}", err))?;
 

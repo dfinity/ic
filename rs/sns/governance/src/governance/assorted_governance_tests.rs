@@ -5019,18 +5019,6 @@ fn test_list_topics() {
                             ),
                         ),
                     },
-                    NervousSystemFunction {
-                        id: 16,
-                        name: "Set topics for custom proposals".to_string(),
-                        description: Some(
-                            "Proposal to set the topics for custom SNS proposals.".to_string(),
-                        ),
-                        function_type: Some(
-                            FunctionType::NativeNervousSystemFunction(
-                                Empty {},
-                            ),
-                        ),
-                    },
                 ],
                 custom_functions: vec![
                     function_2
@@ -5188,6 +5176,18 @@ fn test_list_topics() {
                         name: "Remove nervous system function".to_string(),
                         description: Some(
                             "Proposal to remove a user-defined nervous system function, which will be no longer executable by proposal.".to_string(),
+                        ),
+                        function_type: Some(
+                            FunctionType::NativeNervousSystemFunction(
+                                Empty {},
+                            ),
+                        ),
+                    },
+                    NervousSystemFunction {
+                        id: 16,
+                        name: "Set topics for custom proposals".to_string(),
+                        description: Some(
+                            "Proposal to set the topics for custom SNS proposals.".to_string(),
                         ),
                         function_type: Some(
                             FunctionType::NativeNervousSystemFunction(

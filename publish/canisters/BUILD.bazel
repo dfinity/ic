@@ -52,6 +52,7 @@ CANISTERS = {
 
     # Node Rewards
     "node-rewards-canister.wasm.gz": "//rs/node_rewards/canister:node-rewards-canister",
+    "node-rewards-canister-test.wasm.gz": "//rs/node_rewards/canister:node-rewards-canister-test",
 }
 
 COMPRESSED_CANISTERS = {

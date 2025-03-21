@@ -111,7 +111,7 @@ fn fake_signature_request_args(key_id: MasterPublicKeyId, height: Height) -> Thr
         }),
         MasterPublicKeyId::VetKd(key_id) => ThresholdArguments::VetKd(VetKdArguments {
             key_id: key_id.clone(),
-            input: vec![1; 32],
+            input: Arc::new(vec![1; 32]),
             transport_public_key: vec![1; 32],
             ni_dkg_id: fake_dkg_id(key_id),
             height,
@@ -133,7 +133,7 @@ pub fn fake_signature_request_context(
     SignWithThresholdContext {
         request: RequestBuilder::new().build(),
         args: fake_signature_request_args(key_id, Height::from(0)),
-        derivation_path: vec![],
+        derivation_path: Arc::new(vec![]),
         batch_time: UNIX_EPOCH,
         pseudo_random_id,
         matched_pre_signature: None,
@@ -150,7 +150,7 @@ pub fn fake_signature_request_context_with_pre_sig(
     let context = SignWithThresholdContext {
         request: RequestBuilder::new().build(),
         args: fake_signature_request_args(key_id.into(), height),
-        derivation_path: vec![],
+        derivation_path: Arc::new(vec![]),
         batch_time: UNIX_EPOCH,
         pseudo_random_id: [request_id.callback_id.get() as u8; 32],
         matched_pre_signature: pre_signature.map(|pid| (pid, height)),
@@ -168,7 +168,7 @@ pub fn fake_signature_request_context_from_id(
     let context = SignWithThresholdContext {
         request: RequestBuilder::new().build(),
         args: fake_signature_request_args(key_id, height),
-        derivation_path: vec![],
+        derivation_path: Arc::new(vec![]),
         batch_time: UNIX_EPOCH,
         pseudo_random_id: [request_id.callback_id.get() as u8; 32],
         matched_pre_signature: Some((pre_sig_id, height)),

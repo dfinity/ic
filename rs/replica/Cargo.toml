@@ -15,6 +15,7 @@ ic-btc-adapter-client = { path = "../bitcoin/client" }
 ic-btc-consensus = { path = "../bitcoin/consensus" }
 ic-config = { path = "../config" }
 ic-consensus = { path = "../consensus" }
+ic-consensus-certification = { path = "../consensus/certification" }
 ic-consensus-dkg = { path = "../consensus/dkg" }
 ic-crypto = { path = "../crypto" }
 ic-crypto-sha2 = { path = "../crypto/sha2" }
