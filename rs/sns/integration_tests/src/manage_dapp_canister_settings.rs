@@ -60,7 +60,7 @@ fn test_manage_dapp_canister_settings_successful() {
                 .with_controllers(vec![canister_ids.root_canister_id.get()])
                 .with_compute_allocation(50)
                 .with_memory_allocation(1 << 30)
-                .with_freezing_threshold(100_000)
+                .with_freezing_threshold(700_000)
                 .with_reserved_cycles_limit(1_000_000_000_000)
                 .with_log_visibility(ic_management_canister_types_private::LogVisibilityV2::Public)
                 .with_wasm_memory_limit(1_000_000_000)
@@ -105,7 +105,7 @@ fn test_manage_dapp_canister_settings_successful() {
             vec![canister_ids.root_canister_id.get()],
             50,
             Some(1 << 30),
-            100_000,
+            700_000,
             Some(1_000_000_000),
             Some(0),
         ),
@@ -197,7 +197,7 @@ fn test_manage_dapp_canister_settings_failure() {
                 .with_controllers(vec![canister_ids.root_canister_id.get()])
                 .with_compute_allocation(50)
                 .with_memory_allocation(1 << 30)
-                .with_freezing_threshold(100_000)
+                .with_freezing_threshold(700_000)
                 .with_reserved_cycles_limit(1_000_000_000_000)
                 .with_wasm_memory_limit(1_000_000_000)
                 .with_log_visibility(ic_management_canister_types_private::LogVisibilityV2::Public)
@@ -234,7 +234,7 @@ fn test_manage_dapp_canister_settings_failure() {
             vec![canister_ids.root_canister_id.get()],
             50,
             Some(1 << 30),
-            100_000,
+            700_000,
             Some(1_000_000_000),
             Some(0),
         ),
@@ -306,7 +306,7 @@ fn test_manage_dapp_canister_settings_failure() {
             vec![canister_ids.root_canister_id.get()],
             50,
             Some(1 << 30),
-            100_000,
+            700_000,
             Some(1_000_000_000),
             Some(0),
         ),
