@@ -97,6 +97,7 @@ rust_ic_bench(
         "//rs/registry/helpers",
         "//rs/registry/keys",
         "//rs/registry/proto_data_provider",
+        "//rs/registry/subnet_type",
         "//rs/test_utilities",
         "//rs/test_utilities/registry",
         "//rs/test_utilities/state",
