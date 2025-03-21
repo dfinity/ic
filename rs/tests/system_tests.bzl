@@ -279,6 +279,8 @@ def system_test(
     if use_empty_image:
         icos_images["ENV_DEPS__EMPTY_DISK_IMG"] = "//rs/tests/nested:empty-disk-img.tar.zst"
 
+    visibility = kwargs.get("visibility", ["//visibility:public"])
+
     run_system_test(
         name = name,
         src = test_driver_target,
@@ -292,6 +294,7 @@ def system_test(
         target_compatible_with = ["@platforms//os:linux"],
         timeout = test_timeout,
         flaky = flaky,
+        visibility = visibility,
     )
 
     deps = []
@@ -310,8 +313,6 @@ def system_test(
 
     if colocated_test_driver_vm_forward_ssh_agent:
         env.update({"COLOCATED_TEST_DRIVER_VM_FORWARD_SSH_AGENT": "1"})
-
-    visibility = kwargs.get("visibility", ["//visibility:public"])
 
     run_system_test(
         name = name + "_colocate",

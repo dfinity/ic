@@ -7,7 +7,7 @@
 set -eufo pipefail
 
 # default behavior is to build targets specified in BAZEL_TARGETS and not upload to s3
-release_build="false"
+RELEASE_BUILD="${RELEASE_BUILD:-false}"
 
 # List of "protected" branches, i.e. branches (not necessarily "protected" in the GitHub sense) where we need
 # the full build to occur (including versioning
@@ -22,7 +22,7 @@ done
 # if we are on a "protected" branch or targeting a rc branch we upload all artifacts and run a release build
 # (with versioning)
 if [[ "${IS_PROTECTED_BRANCH:-}" == "true" ]]; then
-    release_build="true"
+    RELEASE_BUILD="true"
     RUN_ON_DIFF_ONLY="false"
 fi
 
@@ -70,7 +70,7 @@ bazel_args=(
     --build_metadata=BUILDBUDDY_LINKS="[CI Job](${CI_JOB_URL})"
 )
 
-if [[ $release_build == true ]]; then
+if [[ $RELEASE_BUILD == true ]]; then
     bazel_args+=(--config=release)
 fi
 

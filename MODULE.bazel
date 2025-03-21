@@ -878,3 +878,7 @@ mainnet_versions(
     name = "mainnet_versions",
     path = "//:mainnet-icos-revisions.json",
 )
+
+os_info = use_repo_rule("//bazel:os_info.bzl", "os_info")
+
+os_info(name = "os_info")

@@ -1,89 +1,50 @@
 """
-Rules to manipulate with artifacts: download, upload etc.
+Macro to upload artifacts.
 """
 
-load("@bazel_skylib//rules:common_settings.bzl", "BuildSettingInfo")
-
-def _upload_artifact_impl(ctx):
-    """
-    Uploads an artifact to s3 and returns download link to it
-    """
-
-    s3_upload = ctx.attr._s3_upload[BuildSettingInfo].value
-
-    out = []
-
-    for f in ctx.files.inputs:
-        filesum = ctx.actions.declare_file(ctx.label.name + "/" + f.basename + ".SHA256SUM")
-        ctx.actions.run_shell(
-            command = "(cd {path} && shasum --algorithm 256 --binary {src}) > {out}".format(path = f.dirname, src = f.basename, out = filesum.path),
-            inputs = [f],
-            outputs = [filesum],
-        )
-        out.append(filesum)
-
-    checksum = ctx.actions.declare_file(ctx.label.name + "/SHA256SUMS")
-    ctx.actions.run_shell(
-        command = "cat " + " ".join([f.path for f in out]) + " | sort -k 2 >" + checksum.path,
-        inputs = out,
-        outputs = [checksum],
-    )
-
-    uploader = ctx.file._artifacts_uploader
-
-    # If s3 upload is not enabled, then use a noop uploader.
-    if not s3_upload:
-        uploader = ctx.actions.declare_file("dummy_upload.sh")
-        ctx.actions.write(uploader, "#!/usr/bin/env bash\necho dummy upload for $1\ntouch $2", is_executable = True)
-
-    allinputs = ctx.files.inputs + [checksum]
-    for f in allinputs:
-        filename = ctx.label.name + "_" + f.basename
-        url = ctx.actions.declare_file(filename + ".url")
-        ctx.actions.run(
-            executable = uploader,
-            arguments = [f.path, url.path],
-            env = {
-                "RCLONE": ctx.file._rclone.path,
-                "REMOTE_SUBDIR": ctx.attr.remote_subdir,
-                "VERSION_FILE": ctx.version_file.path,
-                "VERSION_TXT": ctx.file._version_txt.path,
-            },
-            inputs = [f, ctx.version_file, ctx.file._version_txt],
-            outputs = [url],
-            tools = [ctx.file._rclone],
-        )
-        out.append(url)
-
-    return [DefaultInfo(files = depset(out), runfiles = ctx.runfiles(files = out))]
-
-_upload_artifacts = rule(
-    implementation = _upload_artifact_impl,
-    attrs = {
-        "inputs": attr.label_list(allow_files = True),
-        "remote_subdir": attr.string(mandatory = True),
-        "_rclone": attr.label(allow_single_file = True, default = "@rclone//:rclone"),
-        "_artifacts_uploader": attr.label(allow_single_file = True, default = ":upload.sh"),
-        "_version_txt": attr.label(allow_single_file = True, default = "//bazel:version.txt"),
-        "_s3_upload": attr.label(default = ":s3_upload"),
-    },
-)
+load("//publish:defs.bzl", "checksum_rule")
 
 # To avoid shooting ourselves in the foot, make sure that the upload rule invoker
 # states explicitly whether it expects statically linked openssl.
-def upload_artifacts(**kwargs):
+def upload_artifacts(name, inputs, remote_subdir, **kwargs):
     """
     Uploads artifacts to the S3 storage.
 
-    Wrapper around _upload_artifacts to always set required tags.
-
     Args:
-      **kwargs: all arguments to pass to _upload_artifacts
+      name: the name of the resulting executable.
+      inputs: the inputs to upload (will include an extra checksum file 'SHA256SUMS').
+      remote_subdir: the bucket "subdirectory" to use.
+      **kwargs: additional arguments to pass to the rules.
     """
 
-    tags = kwargs.get("tags", [])
-    for tag in ["requires-network"]:
-        if tag not in tags:
-            tags.append(tag)
-    kwargs["tags"] = tags
-    _upload_artifacts(**kwargs)
+    # Compute a checksum file for the inputs
+    checksum_name = name + "_checksums"
+    checksum_rule(
+        name = checksum_name,
+        inputs = inputs,
+        create_symlinks = False,  # don't copy inputs
+        archives_only = False,  # consider all targets
+        **kwargs
+    )
+    checksum_label = ":" + checksum_name
+
+    ipts = [checksum_label] + inputs
+    input_locations = ["$(execpaths {})".format(label) for label in ipts]
+
+    tags = kwargs.pop("tags", [])
+    tags.append("upload")
+
+    # run the upload script
+    native.sh_binary(
+        name = name,
+        srcs = ["//ci/src/artifacts:upload.sh"],
+        env = {
+            "RCLONE": "$(location @rclone//:rclone)",
+            "UPLOADABLES": " ".join(input_locations),
+            "VERSION_TXT": "$(location //bazel:version.txt)",
+            "REMOTE_SUBDIR": remote_subdir,
+        },
+        data = ipts + ["//bazel:version.txt", "@rclone//:rclone"],
+        tags = tags,
+        **kwargs
+    )

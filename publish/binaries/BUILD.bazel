@@ -1,3 +1,4 @@
+load("@os_info//:defs.bzl", "os_info")
 load("//bazel:defs.bzl", "gzip_compress")
 load("//ci/src/artifacts:upload.bzl", "upload_artifacts")
 load("//publish:defs.bzl", "checksum_rule", "release_nostrip_binary", "release_strip_binary", "release_strip_binary_test")
@@ -126,26 +127,18 @@ upload_artifacts(
     name = "upload",
     testonly = True,
     inputs = [":binaries"],
-    remote_subdir = "binaries/" + select({
-        "@platforms//cpu:x86_64": "x86_64",
-        "@platforms//cpu:arm64": "arm64",
-        "//conditions:default": "unknown",
-    }) + "-" + select({
-        "@platforms//os:linux": "linux",
-        "@platforms//os:osx": "darwin",
-        "//conditions:default": "unknown",
-    }),
+    remote_subdir = "binaries/" + os_info,
 )
 
 # https://dfinity.atlassian.net/browse/IDX-2599
 # various places in the source code, and possibly other repositories reference
-# the legacy upload path. Unwinding it without a will involve an unpredictable amount of time.
+# the legacy upload path. Unwinding it without a migration will involve an
+# unpredictable amount of time.
 upload_artifacts(
     name = "legacy_upload",
     testonly = True,
     inputs = [":binaries"],
     remote_subdir = "release",
-    target_compatible_with = ["@platforms//os:linux"],
     visibility = ["//testnet/tools:__pkg__"],
 )
 
