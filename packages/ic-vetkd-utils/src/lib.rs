@@ -343,7 +343,7 @@ const IBE_HEADER: [u8; IBE_HEADER_BYTES] = [b'I', b'C', b' ', b'I', b'B', b'E', 
 /// An IBE (identity based encryption) ciphertext
 #[cfg_attr(feature = "js", wasm_bindgen)]
 pub struct IBECiphertext {
-    hdr: Vec<u8>,
+    header: Vec<u8>,
     c1: G2Affine,
     c2: [u8; IBE_SEED_BYTES],
     c3: Vec<u8>,
@@ -371,9 +371,9 @@ impl IBECiphertext {
     /// Serialize this IBE ciphertext
     pub fn serialize(&self) -> Vec<u8> {
         let mut output =
-            Vec::with_capacity(self.hdr.len() + G2AFFINE_BYTES + IBE_SEED_BYTES + self.c3.len());
+            Vec::with_capacity(self.header.len() + G2AFFINE_BYTES + IBE_SEED_BYTES + self.c3.len());
 
-        output.extend_from_slice(&self.hdr);
+        output.extend_from_slice(&self.header);
         output.extend_from_slice(&self.c1.to_compressed());
         output.extend_from_slice(&self.c2);
         output.extend_from_slice(&self.c3);
@@ -389,7 +389,7 @@ impl IBECiphertext {
             return Err("IBECiphertext too short to be valid".to_string());
         }
 
-        let hdr = bytes[0..IBE_HEADER_BYTES].to_vec();
+        let header = bytes[0..IBE_HEADER_BYTES].to_vec();
         let c1 = deserialize_g2(&bytes[IBE_HEADER_BYTES..(IBE_HEADER_BYTES + G2AFFINE_BYTES)])?;
 
         let mut c2 = [0u8; IBE_SEED_BYTES];
@@ -400,17 +400,17 @@ impl IBECiphertext {
 
         let c3 = bytes[IBE_HEADER_BYTES + G2AFFINE_BYTES + IBE_SEED_BYTES..].to_vec();
 
-        if hdr != IBE_HEADER {
+        if header != IBE_HEADER {
             return Err("IBECiphertext has unknown header".to_string());
         }
 
-        Ok(Self { hdr, c1, c2, c3 })
+        Ok(Self { header, c1, c2, c3 })
     }
 
-    fn hash_to_mask(hdr: &[u8], seed: &[u8; IBE_SEED_BYTES], msg: &[u8]) -> Scalar {
+    fn hash_to_mask(header: &[u8], seed: &[u8; IBE_SEED_BYTES], msg: &[u8]) -> Scalar {
         let domain_sep = IBEDomainSep::HashToMask;
         let mut ro_input = Vec::with_capacity(seed.len() + msg.len());
-        ro_input.extend_from_slice(hdr);
+        ro_input.extend_from_slice(header);
         ro_input.extend_from_slice(seed);
         ro_input.extend_from_slice(msg);
 
@@ -474,9 +474,9 @@ impl IBECiphertext {
             .try_into()
             .map_err(|_e| format!("Provided seed must be {} bytes long ", IBE_SEED_BYTES))?;
 
-        let hdr = IBE_HEADER.to_vec();
+        let header = IBE_HEADER.to_vec();
 
-        let t = Self::hash_to_mask(&hdr, seed, msg);
+        let t = Self::hash_to_mask(&header, seed, msg);
 
         let pt = augmented_hash_to_g1(&dpk.point, context);
 
@@ -486,7 +486,7 @@ impl IBECiphertext {
         let c2 = Self::mask_seed(seed, &tsig);
         let c3 = Self::mask_msg(msg, seed);
 
-        Ok(Self { hdr, c1, c2, c3 })
+        Ok(Self { header, c1, c2, c3 })
     }
 
     /// Decrypt an IBE ciphertext
@@ -503,7 +503,7 @@ impl IBECiphertext {
 
         let msg = Self::mask_msg(&self.c3, &seed);
 
-        let t = Self::hash_to_mask(&self.hdr, &seed, &msg);
+        let t = Self::hash_to_mask(&self.header, &seed, &msg);
 
         let g_t = G2Affine::from(G2Affine::generator() * t);
 
