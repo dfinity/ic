@@ -21,6 +21,8 @@ ic-replicated-state = { path = "../replicated_state" }
 ic-types = { path = "../types/types" }
 ic-validator = { path = "../validator" }
 prometheus = { workspace = true }
+serde = { workspace = true }
+serde_cbor = { workspace = true }
 slog = { workspace = true }
 
 [dev-dependencies]
