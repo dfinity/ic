@@ -7,5 +7,5 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
-ic-crypto-sha2 = { path = "../../../crypto/sha2" }
+ic-crypto-sha2 = { path = "../../crypto/sha2" }
 ic-stable-structures = { workspace = true }
