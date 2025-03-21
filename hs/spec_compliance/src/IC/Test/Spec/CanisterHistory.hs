@@ -112,7 +112,7 @@ canister_history_tests ecid =
                   return (),
                 simpleTestCase "does not track all update_settings calls" ecid $ \unican -> do
                   cid <- ic_provisional_create ic00 ecid Nothing Nothing Nothing
-                  ic_set_freezing_threshold ic00 cid (2 ^ 10) -- not stored in canister history; canister version still bumped
+                  ic_set_freezing_threshold ic00 cid (30 * 86400) -- not stored in canister history; canister version still bumped
                   ic_install ic00 (enum #install) cid trivialWasmModule ""
 
                   info <- get_canister_info unican cid (Just 2)
