@@ -27,7 +27,7 @@ struct Cli {
     config_ini: ConfigIni,
 
     #[arg(long)]
-    private_key_path: Option<PathBuf>,
+    node_operator_private_key: bool,
 
     #[arg(long, value_delimiter = ',')]
     public_keys: Option<Vec<String>>,
@@ -110,15 +110,19 @@ async fn main() -> Result<(), Error> {
         .await
         .context("failed to copy config file")?;
 
-    // Update node-provider private-key
-    if let Some(private_key_path) = cli.private_key_path {
+    // If true, write the fixed private key to node_operator_private_key.pem
+    if cli.node_operator_private_key {
+        let key_content = "-----BEGIN EC PRIVATE KEY-----\n\
+MHQCAQEEIJ61mhHntzgHe39PaCg7JY6QJcbe0g3dvS1UnEEbKVzdoAcGBSuBBAAK\n\
+oUQDQgAEKSfx/T3gDtkfdGl1fiONzUHs0N7/hcfQ8zwcqIzwuvHK3qqSJ3EhY5OB\n\
+WIgAGf+2BAs2ac0RonxQZdQTmZMvrw==\n\
+-----END EC PRIVATE KEY-----\n";
+        let mut key_temp = NamedTempFile::new()?;
+        key_temp.write_all(key_content.as_bytes())?;
         config
-            .write_file(
-                &private_key_path,
-                Path::new("/node_operator_private_key.pem"),
-            )
+            .write_file(key_temp.path(), Path::new("/node_operator_private_key.pem"))
             .await
-            .context("failed to copy private-key")?;
+            .context("failed to write node_operator_private_key.pem")?;
     }
 
     // Print previous public keys
