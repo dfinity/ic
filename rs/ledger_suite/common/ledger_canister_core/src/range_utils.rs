@@ -103,7 +103,7 @@ pub fn contains_intersections(ranges: &[&Range<u64>]) -> bool {
     for i in 0..ranges.len() {
         if !ranges[i].is_empty() {
             for j in i + 1..ranges.len() {
-                if !ranges[j].is_empty() && intersect(&ranges[i], &ranges[j]).is_ok() {
+                if !ranges[j].is_empty() && intersect(ranges[i], ranges[j]).is_ok() {
                     return true;
                 }
             }
