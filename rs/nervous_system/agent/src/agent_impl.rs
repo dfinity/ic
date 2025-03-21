@@ -160,8 +160,8 @@ impl CallCanisters for Agent {
 impl ProgressNetwork for Agent {
     async fn progress(&self, duration: Duration) {
         if duration > Duration::from_secs(5) {
-            eprintln!("Waiting more than 5 seconds: {:?}", duration);
-            eprintln!("Consider checking 'progress' calls in the code.");
+            eprintln!("Warning: waiting for {:?}, this may take a while", duration);
+            eprintln!("Consider using shorter duration in 'progress' method calls");
         }
         tokio::time::sleep(duration).await;
     }
