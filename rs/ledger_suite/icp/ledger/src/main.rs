@@ -1,13 +1,13 @@
 use candid::{candid_method, Decode, Nat, Principal};
 #[cfg(feature = "notify-method")]
-use dfn_candid::CandidOne;
-#[cfg(feature = "notify-method")]
 use dfn_core::BytesS;
 #[cfg(feature = "notify-method")]
 use dfn_protobuf::protobuf;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_canister_log::{LogEntry, Sink};
 use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
+#[cfg(feature = "notify-method")]
+use ic_cdk::api::call::reject;
 use ic_cdk::api::{
     call::{arg_data_raw, reply_raw},
     caller, data_certificate, instruction_counter, print, set_certified_data, time, trap,
@@ -402,7 +402,7 @@ pub async fn notify(
     to_subaccount: Option<Subaccount>,
     notify_using_protobuf: bool,
 ) -> Result<BytesS, String> {
-    use dfn_core::api::{call_bytes_with_cleanup, call_with_cleanup, Funds};
+    use dfn_core::api::call_with_cleanup;
     use dfn_protobuf::ProtoBuf;
 
     NOTIFY_METHOD_CALLS.with(|n| *n.borrow_mut() += 1);
@@ -496,21 +496,21 @@ pub async fn notify(
         let bytes = ProtoBuf(transaction_notification_args)
             .into_bytes()
             .expect("transaction notification serialization failed");
-        call_bytes_with_cleanup(
-            to_canister,
+        ic_cdk::api::call::call_raw(
+            to_canister.into(),
             "transaction_notification_pb",
             &bytes[..],
-            Funds::zero(),
+            0,
         )
         .await
     } else {
         let bytes = candid::encode_one(transaction_notification_args)
             .expect("transaction notification serialization failed");
-        call_bytes_with_cleanup(
-            to_canister,
+        ic_cdk::api::call::call_raw(
+            to_canister.into(),
             "transaction_notification",
             &bytes[..],
-            Funds::zero(),
+            0,
         )
         .await
     };
@@ -1014,30 +1014,30 @@ async fn send_dfx(arg: SendArgs) -> BlockIndex {
 #[cfg(feature = "notify-method")]
 #[export_name = "canister_update notify_pb"]
 fn notify_() {
-    use dfn_core::endpoint::over_async_may_reject_explicit;
-    use dfn_protobuf::ProtoBuf;
+    ic_cdk::spawn(async move {
+        ic_cdk::setup();
+        let icp_ledger::NotifyCanisterArgs {
+            block_height,
+            max_fee,
+            from_subaccount,
+            to_canister,
+            to_subaccount,
+        } = from_proto_bytes(arg_data_raw()).expect("failed to decode notify_pb argument");
 
-    // we use over_init because it doesn't reply automatically so we can do explicit
-    // replies in the callback
-    over_async_may_reject_explicit(
-        |ProtoBuf(icp_ledger::NotifyCanisterArgs {
-             block_height,
-             max_fee,
-             from_subaccount,
-             to_canister,
-             to_subaccount,
-         })| async move {
-            notify(
-                block_height,
-                max_fee,
-                from_subaccount,
-                to_canister,
-                to_subaccount,
-                true,
-            )
-            .await
-        },
-    );
+        match notify(
+            block_height,
+            max_fee,
+            from_subaccount,
+            to_canister,
+            to_subaccount,
+            true,
+        )
+        .await
+        {
+            Ok(reply) => reply_raw(&reply.0),
+            Err(error) => reject(&error),
+        }
+    });
 }
 
 #[update]
@@ -1145,6 +1145,7 @@ async fn icrc2_transfer_from(arg: TransferFromArgs) -> Result<Nat, TransferFromE
 #[cfg(feature = "notify-method")]
 #[export_name = "canister_update notify_dfx"]
 fn notify_dfx_() {
+    use dfn_candid::CandidOne;
     use dfn_core::endpoint::over_async_may_reject_explicit;
 
     // we use over_init because it doesn't reply automatically so we can do explicit
