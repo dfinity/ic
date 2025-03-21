@@ -467,12 +467,30 @@ impl SystemStateBuilder {
         self
     }
 
-    pub fn on_low_wasm_memory_hook_status(
+    pub fn empty_task_queue_with_on_low_wasm_memory_hook_status(
         mut self,
         on_low_wasm_memory_hook_status: OnLowWasmMemoryHookStatus,
     ) -> Self {
-        self.system_state.task_queue =
-            TaskQueue::from_checkpoint(VecDeque::new(), on_low_wasm_memory_hook_status);
+        self.system_state.task_queue = TaskQueue::default();
+        match on_low_wasm_memory_hook_status {
+            // Default hook status is `ConditionNotSatisfied`.
+            OnLowWasmMemoryHookStatus::ConditionNotSatisfied => (),
+            // To make hook status `Ready`, we should enqueue `ExecutionTask::OnLowWasmMemory`.
+            OnLowWasmMemoryHookStatus::Ready => self
+                .system_state
+                .task_queue
+                .enqueue(ic_replicated_state::ExecutionTask::OnLowWasmMemory),
+            // To make hook status `Executed`, we should enqueue `ExecutionTask::OnLowWasmMemory`,
+            // followed by `pop_front()`, which from the standpoint of `TaskQueue` is equivalent to
+            // executing task.
+            OnLowWasmMemoryHookStatus::Executed => {
+                self.system_state
+                    .task_queue
+                    .enqueue(ic_replicated_state::ExecutionTask::OnLowWasmMemory);
+                self.system_state.task_queue.pop_front();
+            }
+        };
+
         self
     }
 
