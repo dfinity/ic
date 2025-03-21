@@ -10,6 +10,9 @@ const CHUNK_SIZE_BYTES: usize = 1_800_000;
 /// added later).
 ///
 /// Since chunks are keyed by their SHA256, modifying elements does not make sense.
+///
+/// This is backed by ic_stable_structures::Memory; thus, making it suitable for
+/// use with stable memory.
 pub struct Chunks<MyMemory: Memory> {
     chunk_sha256_to_content: StableBTreeMap<Vec<u8>, Vec<u8>, MyMemory>,
 }
