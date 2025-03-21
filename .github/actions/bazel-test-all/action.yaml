@@ -81,6 +81,10 @@ runs:
                 RUN_ON_DIFF_ONLY="false"
             fi
 
+            export BAZEL_TARGETS='${{ inputs.BAZEL_TARGETS }}'
+            export BAZEL_COMMAND='${{ inputs.BAZEL_COMMAND }}'
+
+
             if [[ "${RUN_ON_DIFF_ONLY:-}" == "true" ]]; then
                 # get bazel targets that changed within the MR
                 BAZEL_TARGETS=$("${CI_PROJECT_DIR:-}"/ci/bazel-scripts/diff.sh)
@@ -95,7 +99,7 @@ runs:
             echo "Building as user: $(whoami)"
             echo "Bazel version: $(bazel version)"
 
-            bazel ${{ inputs.BAZEL_COMMAND }} ${{ inputs.BAZEL_TARGETS }}
+            bazel ${{ inputs.BAZEL_COMMAND }} "$BAZEL_TARGETS"
 
       - name: Export bazel build events to honeycomb
         shell: bash
