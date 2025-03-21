@@ -11323,6 +11323,7 @@ dependencies = [
  "ic-nns-gtc-accounts",
  "ic-nns-handler-lifeline-interface",
  "ic-nns-handler-root",
+ "ic-node-rewards-canister-api",
  "ic-protobuf",
  "ic-registry-canister-api",
  "ic-registry-keys",
