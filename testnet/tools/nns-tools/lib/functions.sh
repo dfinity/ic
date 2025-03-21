@@ -66,7 +66,10 @@ canister_bazel_label() {
         "cycles-minting")
             echo "//rs/nns/cmc:cycles-minting-canister"
             ;;
-        # TODO identity, ledger, lifeline, nns-ui, registry
+        "node-rewards")
+            echo "//rs/node_rewards/canister:node-rewards-canister"
+            ;;
+        # TODO identity, ledger, lifeline, nns-ui
         *)
             echo "Sorry. I do not know how to build ${CANISTER_NAME}."
             exit 1
@@ -152,6 +155,7 @@ get_nns_canister_code_location() {
     code_location__identity="$RUST_DIR/nns/identity"
     code_location__nns_ui="$RUST_DIR/nns/nns-ui"
     code_location__sns_wasm="$RUST_DIR/nns/sns-wasm $SNS_INIT"
+    code_location__node_rewards="$RUST_DIR/node_rewards/canister $RUST_DIR/node_rewards $RUST_DIR/registry/node_provider_rewards"
 
     UNDERSCORED_CANISTER_NAME=$(echo "$CANISTER_NAME" | tr "-" "_")
     n=code_location__${UNDERSCORED_CANISTER_NAME}
