@@ -23,6 +23,7 @@ def icos_build(
         image_deps_func,
         mode = None,
         malicious = False,
+        max_file_sizes = None,
         upgrades = True,
         vuln_scan = True,
         visibility = None,
@@ -39,6 +40,7 @@ def icos_build(
       image_deps_func: Function to be used to generate image manifest
       mode: dev or prod. If not specified, will use the value of `name`
       malicious: if True, bundle the `malicious_replica`
+      max_file_sizes: mapping of output file to max allowed size
       upgrades: if True, build upgrade images as well
       vuln_scan: if True, create targets for vulnerability scanning
       visibility: See Bazel documentation
@@ -50,6 +52,9 @@ def icos_build(
 
     if mode == None:
         mode = name
+
+    if max_file_sizes == None:
+        max_file_sizes = {}
 
     image_deps = image_deps_func(mode, malicious)
 
@@ -337,6 +342,17 @@ def icos_build(
         tags = ["manual"],
     )
 
+    if "disk-img.tar.zst" in max_file_sizes:
+        native.sh_test(
+            name = "disk-img.tar.zst_compressed_size_test",
+            srcs = ["//ic-os:file_size_test.sh"],
+            data = ["disk-img.tar.zst"],
+            env = {
+                "FILE": "$(rootpath disk-img.tar.zst)",
+                "MAX_SIZE": max_file_sizes["disk-img.tar.zst"],
+            },
+        )
+
     # -------------------- Assemble upgrade image --------------------
 
     if upgrades:
@@ -358,6 +374,17 @@ def icos_build(
             tags = ["manual"],
         )
 
+        if "update-img.tar.zst" in max_file_sizes:
+            native.sh_test(
+                name = "update-img.tar.zst_compressed_size_test",
+                srcs = ["//ic-os:file_size_test.sh"],
+                data = ["update-img.tar.zst"],
+                env = {
+                    "FILE": "$(rootpath update-img.tar.zst)",
+                    "MAX_SIZE": max_file_sizes["update-img.tar.zst"],
+                },
+            )
+
         upgrade_image(
             name = "update-img-test.tar",
             boot_partition = ":partition-boot-test.tzst",
@@ -375,6 +402,17 @@ def icos_build(
             visibility = visibility,
             tags = ["manual"],
         )
+
+        if "update-img-test.tar.zst" in max_file_sizes:
+            native.sh_test(
+                name = "update-img-test.tar.zst_compressed_size_test",
+                srcs = ["//ic-os:file_size_test.sh"],
+                data = ["update-img-test.tar.zst"],
+                env = {
+                    "FILE": "$(rootpath update-img-test.tar.zst)",
+                    "MAX_SIZE": max_file_sizes["update-img.tar.zst"],
+                },
+            )
 
     # -------------------- Upload artifacts --------------------
 
