@@ -17,8 +17,6 @@ ic-logger = { path = "../monitoring/logger" }
 ic-management-canister-types-private = { path = "../types/management_canister_types" }
 ic-metrics = { path = "../monitoring/metrics" }
 ic-registry-client-helpers = { path = "../registry/helpers" }
-ic-registry-keys = { path = "../registry/keys" }
-ic-registry-subnet-type = { path = "../registry/subnet_type" }
 ic-replicated-state = { path = "../replicated_state" }
 ic-types = { path = "../types/types" }
 ic-validator = { path = "../validator" }
@@ -33,7 +31,9 @@ ic-config = { path = "../config" }
 ic-interfaces-mocks = { path = "../interfaces/mocks" }
 ic-interfaces-state-manager-mocks = { path = "../interfaces/state_manager/mocks" }
 ic-registry-client = { path = "../registry/client" }
+ic-registry-keys = { path = "../registry/keys" }
 ic-registry-proto-data-provider = { path = "../registry/proto_data_provider" }
+ic-registry-subnet-type = { path = "../registry/subnet_type" }
 ic-test-utilities = { path = "../test_utilities" }
 ic-test-utilities-logger = { path = "../test_utilities/logger" }
 ic-test-utilities-registry = { path = "../test_utilities/registry" }

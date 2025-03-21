@@ -5,6 +5,7 @@
 pub mod bouncer;
 mod ingress_handler;
 mod ingress_selector;
+mod metrics;
 
 #[cfg(test)]
 mod proptests;
@@ -18,7 +19,7 @@ use ic_interfaces::{
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::StateReader;
 use ic_logger::{error, warn, ReplicaLogger};
-use ic_metrics::{buckets::decimal_buckets, MetricsRegistry};
+use ic_metrics::MetricsRegistry;
 use ic_registry_client_helpers::crypto::root_of_trust::RegistryRootOfTrustProvider;
 use ic_registry_client_helpers::subnet::{IngressMessageSettings, SubnetRegistry};
 use ic_replicated_state::ReplicatedState;
@@ -34,7 +35,7 @@ use ic_types::{
 use ic_validator::{
     CanisterIdSet, HttpRequestVerifier, HttpRequestVerifierImpl, RequestValidationError,
 };
-use prometheus::{Histogram, IntGauge};
+use metrics::IngressManagerMetrics;
 use std::collections::hash_map::{DefaultHasher, RandomState};
 use std::hash::BuildHasher;
 use std::{
@@ -49,40 +50,6 @@ use std::{
 ///    branching.
 type IngressPayloadCache =
     BTreeMap<(Height, CryptoHashOf<BlockPayload>), Arc<HashSet<IngressMessageId>>>;
-
-/// Keeps the metrics to be exported by the IngressManager
-struct IngressManagerMetrics {
-    ingress_handler_time: Histogram,
-    ingress_selector_get_payload_time: Histogram,
-    ingress_selector_validate_payload_time: Histogram,
-    ingress_payload_cache_size: IntGauge,
-}
-
-impl IngressManagerMetrics {
-    fn new(metrics_registry: MetricsRegistry) -> Self {
-        Self {
-            ingress_handler_time: metrics_registry.histogram(
-                "ingress_handler_execution_time",
-                "Ingress Handler execution time in seconds",
-                decimal_buckets(-3, 1),
-            ),
-            ingress_selector_get_payload_time: metrics_registry.histogram(
-                "ingress_selector_get_payload_time",
-                "Ingress Selector get_payload execution time in seconds",
-                decimal_buckets(-3, 1),
-            ),
-            ingress_selector_validate_payload_time: metrics_registry.histogram(
-                "ingress_selector_validate_payload_time",
-                "Ingress Selector validate_payload execution time in seconds",
-                decimal_buckets(-3, 1),
-            ),
-            ingress_payload_cache_size: metrics_registry.int_gauge(
-                "ingress_payload_cache_size",
-                "The number of HashSets in payload builder's ingress payload cache.",
-            ),
-        }
-    }
-}
 
 /// The kind of RandomState you want to generate.
 pub enum RandomStateKind {
@@ -193,7 +160,7 @@ impl IngressManager {
             ingress_pool,
             registry_client,
             request_validator,
-            metrics: IngressManagerMetrics::new(metrics_registry),
+            metrics: IngressManagerMetrics::new(&metrics_registry),
             subnet_id,
             log,
             last_purge_time: RwLock::new(UNIX_EPOCH),

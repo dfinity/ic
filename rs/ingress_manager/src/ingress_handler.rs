@@ -21,8 +21,7 @@ impl<T: IngressPool> PoolMutationsProducer<T> for IngressManager {
     type Mutations = Mutations;
 
     fn on_state_change(&self, pool: &T) -> Mutations {
-        // Skip on_state_change when ingress_message_setting is not available in
-        // registry.
+        // Skip on_state_change when ingress_message_setting is not available in registry.
         let registry_version = self.registry_client.get_latest_version();
         let Some(ingress_message_settings) = self.get_ingress_message_settings(registry_version)
         else {
@@ -118,9 +117,9 @@ impl<T: IngressPool> PoolMutationsProducer<T> for IngressManager {
         // Also include finalized messages that were requested to purge.
         let mut to_purge = self.messages_to_purge.write().unwrap();
         while let Some(message_ids) = to_purge.pop() {
-            message_ids
-                .into_iter()
-                .for_each(|id| change_set.push(RemoveFromValidated(id)))
+            for id in message_ids {
+                change_set.push(RemoveFromValidated(id));
+            }
         }
 
         change_set
