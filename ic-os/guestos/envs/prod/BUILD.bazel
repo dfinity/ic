@@ -10,9 +10,9 @@ icos_build(
     name = "prod",
     image_deps_func = image_deps,
     max_file_sizes = {
-        "disk-img.tar.zst": "450" + ("0" * 6),  # currently at 418_574_098 bytes
-        "update-img.tar.zst": "450" + ("0" * 6),  # currently at 416_084_104 bytes
-        "update-img-test.tar.zst": "450" + ("0" * 6),  # currently at 416_084_121 bytes
+        "disk-img.tar.zst": str(450 * 1000 * 1000),  # 419 MB on 2025-03-21
+        "update-img.tar.zst": str(450 * 1000 * 1000),  # 416 MB on 2025-03-21
+        "update-img-test.tar.zst": str(450 * 1000 * 1000),  # 416 MB on 2025-03-21
     },
     upload_prefix = "guest-os",
     visibility = [
