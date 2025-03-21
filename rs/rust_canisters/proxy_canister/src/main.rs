@@ -6,19 +6,63 @@
 //! otherwise errors out.
 //!
 use candid::Principal;
+use futures::future::join_all;
 use ic_cdk::api::call::RejectionCode;
+use ic_cdk::api::time;
 use ic_cdk::caller;
 use ic_cdk_macros::{query, update};
 use ic_management_canister_types_private::{
     CanisterHttpResponsePayload, HttpHeader, Payload, TransformArgs,
 };
-use proxy_canister::{RemoteHttpRequest, RemoteHttpResponse};
+use proxy_canister::{
+    RemoteHttpRequest, RemoteHttpResponse, RemoteHttpStressRequest, RemoteHttpStressResponse,
+};
 use std::cell::RefCell;
 use std::collections::HashMap;
 
 thread_local! {
     #[allow(clippy::type_complexity)]
     pub static REMOTE_CALLS: RefCell<HashMap<String, Result<RemoteHttpResponse, (RejectionCode, String)>>>  = RefCell::new(HashMap::new());
+}
+
+#[update]
+async fn send_requests_in_parallel(
+    request: RemoteHttpStressRequest,
+) -> Result<RemoteHttpStressResponse, (RejectionCode, String)> {
+    let start = time();
+    if request.count == 0 {
+        return Err((
+            RejectionCode::CanisterError,
+            "Count cannot be 0".to_string(),
+        ));
+    }
+
+    const MAX_CONCURRENCY: usize = 500;
+
+    let mut all_results: Vec<Result<RemoteHttpResponse, (RejectionCode, String)>> = Vec::new();
+
+    let indices: Vec<u64> = (0..request.count).collect();
+    for chunk in indices.chunks(MAX_CONCURRENCY) {
+        let futures_iter = chunk.iter().map(|_| send_request(request.request.clone()));
+        let chunk_results = join_all(futures_iter).await;
+        all_results.extend(chunk_results);
+    }
+
+    let mut response = None;
+
+    for result in all_results {
+        match result {
+            Ok(rsp) => response = Some(rsp),
+            Err(err) => {
+                return Err(err);
+            }
+        }
+    }
+    let duration_ns = time() - start;
+    Ok(RemoteHttpStressResponse {
+        response: response.unwrap(),
+        duration_ns,
+    })
 }
 
 #[update]
