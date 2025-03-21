@@ -97,6 +97,7 @@ type ClaimedSwapNeurons = record {
 type Command = variant {
   Split : Split;
   Follow : Follow;
+  FollowOnTopics : FollowOnTopics;
   DisburseMaturity : DisburseMaturity;
   ClaimOrRefresh : ClaimOrRefresh;
   Configure : Configure;
@@ -113,6 +114,7 @@ type Command_1 = variant {
   Error : GovernanceError;
   Split : SplitResponse;
   Follow : record {};
+  FollowOnTopics : record {};
   DisburseMaturity : DisburseMaturityResponse;
   ClaimOrRefresh : ClaimOrRefreshResponse;
   Configure : record {};
@@ -128,6 +130,7 @@ type Command_1 = variant {
 type Command_2 = variant {
   Split : Split;
   Follow : Follow;
+  FollowOnTopics : FollowOnTopics;
   DisburseMaturity : DisburseMaturity;
   Configure : Configure;
   RegisterVote : RegisterVote;
@@ -210,6 +213,15 @@ type FinalizeDisburseMaturity = record {
 
 type Follow = record {
   function_id : nat64;
+  followees : vec NeuronId;
+};
+
+type Topics = record {
+  topics : vec Topic;
+};
+
+type FollowOnTopics = record {
+  topics : opt Topics;
   followees : vec NeuronId;
 };
 
