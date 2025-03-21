@@ -90,10 +90,27 @@ impl FileDownloader {
         file_path: &Path,
         expected_sha256_hex: Option<String>,
     ) -> FileDownloadResult<()> {
-        if expected_sha256_hex.is_none() && file_path.exists() {
-            self.info("Expected hash not provided and the file already exist. Removing file.");
-            fs::remove_file(file_path)
-                .map_err(|e| FileDownloadError::file_remove_error(file_path, e))?;
+        match expected_sha256_hex.as_ref() {
+            // If the file is already present on disk and
+            // a hash check is required, try the hash check
+            // first to save time if possible.
+            Some(hash) if file_path.exists() => match check_file_hash(file_path, hash) {
+                Ok(()) => return Ok(()),
+                Err(e) => {
+                    self.warn(format!(
+                        "Hash mismatch. Assuming incomplete file. Error: {:?}",
+                        e
+                    ));
+                }
+            },
+            // If the hash check wasn't required assume that
+            // the file on the disk is stale and remove it.
+            None if file_path.exists() => {
+                self.info("Expected hash not provided and the file already exist. Removing file.");
+                fs::remove_file(file_path)
+                    .map_err(|e| FileDownloadError::file_remove_error(file_path, e))?;
+            }
+            _ => {}
         }
 
         let offset = if file_path.exists() {
