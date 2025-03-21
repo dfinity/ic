@@ -538,6 +538,12 @@ impl PocketIc {
         runtime.block_on(async { self.pocket_ic.auto_progress().await })
     }
 
+    /// Returns whether automatic progress is enabled on the PocketIC instance.
+    pub fn auto_progress_enabled(&self) -> bool {
+        let runtime = self.runtime.clone();
+        runtime.block_on(async { self.pocket_ic.auto_progress_enabled().await })
+    }
+
     /// Stops automatic progress (see `auto_progress`) on the IC.
     #[instrument(skip(self), fields(instance_id=self.pocket_ic.instance_id))]
     pub fn stop_progress(&self) {
