@@ -19,8 +19,6 @@ DEPENDENCIES = [
     "//rs/types/types",
     "//rs/validator",
     "@crate_index//:prometheus",
-    "@crate_index//:serde",
-    "@crate_index//:serde_cbor",
     "@crate_index//:slog",
 ]
 

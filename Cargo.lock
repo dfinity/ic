@@ -9715,8 +9715,6 @@ dependencies = [
  "prometheus",
  "proptest 1.6.0",
  "rand 0.8.5",
- "serde",
- "serde_cbor",
  "slog",
  "tokio",
 ]

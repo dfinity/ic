@@ -1,8 +1,7 @@
 use ic_interfaces::{ingress_pool::UnvalidatedIngressArtifact, time_source::TimeSource};
 use ic_metrics::{buckets::decimal_buckets, MetricsRegistry};
 use ic_types::CountBytes;
-use prometheus::{Histogram, IntCounterVec, IntGauge};
-use serde::ser::Serialize;
+use prometheus::{Histogram, HistogramVec, IntCounterVec, IntGauge};
 
 /// Keeps the metrics to be exported by the IngressManager
 pub(crate) struct IngressManagerMetrics {
@@ -12,7 +11,7 @@ pub(crate) struct IngressManagerMetrics {
     pub(crate) ingress_payload_cache_size: IntGauge,
 
     validated_ingress_message_size: Histogram,
-    validated_ingress_message_signature_size: Histogram,
+    validated_ingress_message_part_size: HistogramVec,
     validated_ingress_message_time: Histogram,
 
     pub(crate) invalidated_ingress_message_count: IntCounterVec,
@@ -45,11 +44,12 @@ impl IngressManagerMetrics {
                 "The size of validated ingress message, in bytes",
                 decimal_buckets(0, 6),
             ),
-            validated_ingress_message_signature_size: metrics_registry.histogram(
-                "ingress_handler_validated_ingress_message_signature_size",
-                "The size of the signature of validated ingress message, in bytes. \
-                Just an estimate",
+            validated_ingress_message_part_size: metrics_registry.histogram_vec(
+                "ingress_handler_validated_ingress_message_part_size",
+                "The size of a given part (e.g. argument, method name, etc) of \
+                the ingress message, in bytes",
                 decimal_buckets(0, 6),
+                &["part"],
             ),
             validated_ingress_message_time: metrics_registry.histogram(
                 "ingress_handler_validated_ingress_message_time",
@@ -76,22 +76,32 @@ impl IngressManagerMetrics {
                 .saturating_duration_since(ingress.timestamp)
                 .as_secs_f64(),
         );
-        self.validated_ingress_message_size
-            .observe(ingress.message.signed_ingress.count_bytes() as f64);
 
-        // In order to estimate how many bytes of the CBOR encoded ingress message
-        // belong to the signature, we serialize the signature and count the bytes.
-        let mut serialized_bytes = Vec::new();
-        let mut serializer = serde_cbor::Serializer::new(&mut serialized_bytes);
-        if ingress
-            .message
-            .signed_ingress
-            .authentication()
-            .serialize(&mut serializer)
-            .is_ok()
-        {
-            self.validated_ingress_message_signature_size
-                .observe(serialized_bytes.len() as f64);
-        }
+        let signed_ingress = &ingress.message.signed_ingress;
+        self.validated_ingress_message_size
+            .observe(signed_ingress.count_bytes() as f64);
+
+        let arg_size = signed_ingress.content().arg().len();
+        let method_name_size = signed_ingress.content().method_name().len();
+        let nonce_size = signed_ingress
+            .content()
+            .nonce()
+            .map(Vec::len)
+            .unwrap_or_default();
+        let everything_else_size =
+            signed_ingress.count_bytes() - arg_size - method_name_size - nonce_size;
+
+        self.validated_ingress_message_part_size
+            .with_label_values(&["arg"])
+            .observe(arg_size as f64);
+        self.validated_ingress_message_part_size
+            .with_label_values(&["method_name"])
+            .observe(method_name_size as f64);
+        self.validated_ingress_message_part_size
+            .with_label_values(&["nonce"])
+            .observe(nonce_size as f64);
+        self.validated_ingress_message_part_size
+            .with_label_values(&["rest"])
+            .observe(everything_else_size as f64);
     }
 }
