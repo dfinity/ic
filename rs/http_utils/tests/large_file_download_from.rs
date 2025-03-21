@@ -36,7 +36,7 @@ async fn test_large_file_download() {
         "http://download.proxy-global.dfinity.network:8080/ic/{}/guest-os/update-img/update-img.tar.zst",
         version
     );
-    let downloader = FileDownloader::new_with_timeout(None, std::time::Duration::from_secs(5));
+    let downloader = FileDownloader::new_with_timeout(None, std::time::Duration::from_secs(2));
 
     let output = PathBuf::from_str("/tmp/replica").unwrap();
     let mut last_iteration_size = 0;
@@ -48,7 +48,7 @@ async fn test_large_file_download() {
             break;
         }
 
-        assert_matches!(response, Err(FileDownloadError::ReqwestError(e)) if e.is_timeout());
+        assert_matches!(response, Err(FileDownloadError::TimeoutError));
 
         let metadata = std::fs::metadata(&output).unwrap();
         assert!(

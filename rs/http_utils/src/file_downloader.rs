@@ -172,7 +172,6 @@ impl FileDownloader {
             .client
             .get(url)
             .header("range", format!("bytes={}-", offset))
-            .timeout(self.timeout)
             .send()
             .await?;
 
