@@ -88,9 +88,12 @@ pub struct Neuron {
     /// dissolving neurons always has age zero. The canonical value of
     /// this field for a dissolving neuron is `u64::MAX`.
     pub aging_since_timestamp_seconds: u64,
-    /// The neuron's followees, specified as a map of proposal functions IDs to followees neuron IDs.
-    /// The map's keys are represented by integers as Protobuf does not support enum keys in maps.
+    /// The neuron's legacy followees (per proposal type), specified as a map of
+    /// proposal functions IDs. The map's keys are represented by integers as Protobuf does
+    /// not support enum keys in maps.
     pub followees: BTreeMap<u64, neuron::Followees>,
+    /// The neuron's followees, specified as a map of proposal topics IDs to followees neuron IDs.
+    pub topic_followees: Option<neuron::TopicFollowees>,
     /// The accumulated unstaked maturity of the neuron, measured in "e8s equivalent", i.e., in equivalent of
     /// 10E-8 of a governance token.
     ///
@@ -152,11 +155,26 @@ pub struct Neuron {
 }
 /// Nested message and enum types in `Neuron`.
 pub mod neuron {
+    use super::*;
     /// A list of a neuron's followees for a specific function.
     #[derive(Default, candid::CandidType, candid::Deserialize, Debug, Clone, PartialEq)]
     pub struct Followees {
         pub followees: Vec<super::NeuronId>,
     }
+
+    /// A list of a neuron's followees for a specific function.
+    #[derive(Default, candid::CandidType, candid::Deserialize, Debug, Clone, PartialEq)]
+    pub struct FolloweesForTopic {
+        pub followees: Vec<super::NeuronId>,
+        pub topic: Option<topics::Topic>,
+    }
+
+    // A collection of a neuron's followees (per topic).
+    #[derive(candid::CandidType, candid::Deserialize, Clone, Debug, PartialEq)]
+    pub struct TopicFollowees {
+        pub topic_id_to_followees: BTreeMap<u64, FolloweesForTopic>,
+    }
+
     /// The neuron's dissolve state, specifying whether the neuron is dissolving,
     /// non-dissolving, or dissolved.
     ///

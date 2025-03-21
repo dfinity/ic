@@ -80,10 +80,6 @@ enum ConsensusSubcomponent {
     Purger,
 }
 
-/// When purging consensus or certification artifacts, we always keep a
-/// minimum chain length below the catch-up height.
-pub(crate) const MINIMUM_CHAIN_LENGTH: u64 = 50;
-
 /// Describe expected version and artifact version when there is a mismatch.
 #[derive(Debug)]
 pub(crate) struct ReplicaVersionMismatch {}
