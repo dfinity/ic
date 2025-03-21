@@ -22,7 +22,6 @@ env:
   CI_PROJECT_DIR: ${{ github.workspace }}
   BRANCH_NAME: ${{ github.event.workflow_run.head_branch || github.ref_name }}
   CI_RUN_ID: ${{ github.run_id }}
-  BUILDEVENT_DATASET: "github-ci-dfinity"
 
 anchors:
   image: &image
@@ -76,7 +75,6 @@ jobs:
           BAZEL_COMMAND: >-
             test --config=ci --keep_going --test_tag_filters=system_test_nightly
           BAZEL_TARGETS: //rs/tests/...
-          BUILDEVENT_APIKEY: ${{ secrets.HONEYCOMB_TOKEN }}
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
       - <<: *bazel-bep
 
@@ -92,7 +90,6 @@ jobs:
           BAZEL_COMMAND: >-
             test --config=ci --keep_going --test_tag_filters=system_test_staging
           BAZEL_TARGETS: //rs/tests/...
-          BUILDEVENT_APIKEY: ${{ secrets.HONEYCOMB_TOKEN }}
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
       - <<: *bazel-bep
 
@@ -109,7 +106,6 @@ jobs:
           BAZEL_COMMAND: >-
             test --config=ci --keep_going --test_tag_filters=system_test_hotfix
           BAZEL_TARGETS: //rs/tests/...
-          BUILDEVENT_APIKEY: ${{ secrets.HONEYCOMB_TOKEN }}
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
       - <<: *bazel-bep
 
@@ -180,7 +176,6 @@ jobs:
           BAZEL_COMMAND: |
             test --config=ci --config=systest --keep_going --test_timeout=7200 --test_env=OLD_VERSION=${{ matrix.version }}
           BAZEL_TARGETS: "//rs/tests/dre:guest_os_qualification"
-          BUILDEVENT_APIKEY: ${{ secrets.HONEYCOMB_TOKEN }}
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
       - <<: *bazel-bep
         name: Upload bazel bep for version ${{ matrix.version }}
