@@ -233,13 +233,13 @@ impl ProgressNetwork for PocketIc {
         // If PocketIC instance doesn't have a URL, thus it's not in the live mode and
         // we can progress it using 'advance_time' method.
         if self.url().is_none() {
-            self.tick().await;
             self.advance_time(duration).await;
+            self.tick().await;
         } else {
             // Otherwise, we have to wait for the time to pass "naturally".
             if duration > Duration::from_secs(5) {
-                eprintln!("Waiting more than 5 seconds: {:?}", duration);
-                eprintln!("Consider checking 'progress' calls in the code.");
+                eprintln!("Warning: waiting for {:?}, this may take a while", duration);
+                eprintln!("Consider using shorter duration in 'progress' method calls");
             }
             std::thread::sleep(duration);
         }
