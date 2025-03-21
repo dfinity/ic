@@ -97,7 +97,7 @@ type ClaimedSwapNeurons = record {
 type Command = variant {
   Split : Split;
   Follow : Follow;
-  FollowOnTopics : FollowOnTopics;
+  SetFollowingForTopics : SetFollowingForTopics;
   DisburseMaturity : DisburseMaturity;
   ClaimOrRefresh : ClaimOrRefresh;
   Configure : Configure;
@@ -114,7 +114,7 @@ type Command_1 = variant {
   Error : GovernanceError;
   Split : SplitResponse;
   Follow : record {};
-  FollowOnTopics : record {};
+  SetFollowingForTopics : record {};
   DisburseMaturity : DisburseMaturityResponse;
   ClaimOrRefresh : ClaimOrRefreshResponse;
   Configure : record {};
@@ -130,7 +130,7 @@ type Command_1 = variant {
 type Command_2 = variant {
   Split : Split;
   Follow : Follow;
-  FollowOnTopics : FollowOnTopics;
+  SetFollowingForTopics : SetFollowingForTopics;
   DisburseMaturity : DisburseMaturity;
   Configure : Configure;
   RegisterVote : RegisterVote;
@@ -216,13 +216,10 @@ type Follow = record {
   followees : vec NeuronId;
 };
 
-type Topics = record {
-  topics : vec Topic;
-};
-
-type FollowOnTopics = record {
-  topics : opt Topics;
-  followees : vec NeuronId;
+type SetFollowingForTopics = record {
+  topic_followees : opt record {
+    topic_id_to_followees : vec record { nat64; FolloweesForTopic };
+  };
 };
 
 type Followees = record {
@@ -504,7 +501,7 @@ type NervousSystemParameters = record {
 };
 
 type FolloweesForTopic = record {
-  followees : vec NeuronId;
+  followees : vec Followee;
   topic : opt Topic;
 };
 
@@ -531,6 +528,11 @@ type Neuron = record {
 
 type NeuronId = record {
   id : blob;
+};
+
+type Followee = record {
+  neuron_id : opt NeuronId;
+  alias : opt text;
 };
 
 type NeuronIds = record {
