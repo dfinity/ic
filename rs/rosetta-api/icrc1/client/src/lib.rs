@@ -179,7 +179,8 @@ impl RosettaClient {
         let request = SearchTransactionsRequest::builder(network_identifier.clone())
             .with_transaction_identifier(submit_response.transaction_identifier.clone())
             .build();
-        while tries < 10 {
+        const MAX_RETRIES: u64 = 30;
+        while tries < MAX_RETRIES {
             let transaction = self.search_transactions(&request).await?;
             if !transaction.transactions.is_empty() {
                 return Ok(submit_response);
@@ -190,7 +191,11 @@ impl RosettaClient {
         }
 
         Err(Error::unable_to_find_block(
-            &"Transaction was not added to the blockchain after 10 seconds".to_owned(),
+            &format!(
+                "Transaction was not added to the blockchain after {} seconds",
+                MAX_RETRIES
+            )
+            .to_owned(),
         ))
     }
 
