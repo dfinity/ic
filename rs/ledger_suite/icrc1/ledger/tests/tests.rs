@@ -519,6 +519,14 @@ fn test_archiving_in_chunks_returns_non_disjoint_block_range_locations() {
     );
 }
 
+#[test]
+fn test_get_blocks_returns_multiple_archive_callbacks() {
+    ic_ledger_suite_state_machine_tests::archiving::get_blocks_returns_multiple_archive_callbacks(
+        ledger_wasm(),
+        encode_init_args,
+    );
+}
+
 // #[test]
 // fn test_icrc1_test_suite() {
 //     ic_ledger_suite_state_machine_tests::test_icrc1_test_suite(ledger_wasm(), encode_init_args);

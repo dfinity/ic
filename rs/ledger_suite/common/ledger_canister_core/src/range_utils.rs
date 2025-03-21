@@ -84,37 +84,22 @@ pub fn offset(r: &Range<u64>, offset: u64) -> Range<u64> {
     Range { start, end }
 }
 
-/// Removes the intersection of two ranges from the first range.
-/// If the resulting range would be two disjoint ranges (i.e., if the
-/// `possibly_partially_intersecting_range` is in the middle of the `input_range`), return the
-/// first of the resulting disjoint ranges.
-pub fn remove_intersection(
-    input_range: &Range<u64>,
-    possibly_partially_intersecting_range: &Range<u64>,
-) -> Range<u64> {
-    let intersection = intersect(input_range, possibly_partially_intersecting_range);
-    match intersection {
-        Ok(intersection) => {
-            if input_range.start < intersection.start {
-                Range {
-                    start: input_range.start,
-                    end: intersection.start,
-                }
-            } else if input_range.end > intersection.end {
-                Range {
-                    start: intersection.end,
-                    end: input_range.end,
-                }
-            } else {
-                Range { start: 0, end: 0 }
-            }
-        }
-        Err(NoIntersection) => input_range.clone(),
+/// Remove any suffix of the `earlier_range` that intersects with the `later_range` by modifying
+/// the `earlier_range` in place.
+pub fn remove_suffix(earlier_range: &mut Range<u64>, later_range: &Range<u64>) {
+    if !earlier_range.is_empty() && !later_range.is_empty() {
+        debug_assert!(
+            earlier_range.start <= later_range.start,
+            "earlier_range: {:?}, later_range: {:?}",
+            earlier_range,
+            later_range
+        );
+        earlier_range.end = earlier_range.end.min(later_range.start);
     }
 }
 
 /// Checks if any of the provided ranges intersect.
-pub fn contains_intersections(ranges: &[Range<u64>]) -> bool {
+pub fn contains_intersections(ranges: &[&Range<u64>]) -> bool {
     for i in 0..ranges.len() {
         if !ranges[i].is_empty() {
             for j in i + 1..ranges.len() {
@@ -162,56 +147,53 @@ fn test_intersect() {
 }
 
 #[test]
-fn test_remove_intersection() {
+#[should_panic(expected = "earlier_range: 5..15, later_range: 0..10")]
+fn test_remove_suffix() {
     // Two ranges that do not intersect.
-    let input_range = Range { start: 0, end: 10 };
+    let mut input_range = Range { start: 0, end: 10 };
     let other_range = Range { start: 20, end: 30 };
-    assert_eq!(remove_intersection(&input_range, &other_range), input_range);
+    remove_suffix(&mut input_range, &other_range);
+    assert_eq!(input_range, Range { start: 0, end: 10 });
 
     // Two ranges that intersect, with the input range being "lower".
-    let input_range = Range { start: 0, end: 10 };
+    let mut input_range = Range { start: 0, end: 10 };
     let other_range = Range { start: 5, end: 15 };
-    assert_eq!(
-        remove_intersection(&input_range, &other_range),
-        Range { start: 0, end: 5 }
-    );
-
-    // Two ranges that intersect, with the input range being "higher".
-    let input_range = Range { start: 5, end: 15 };
-    let other_range = Range { start: 0, end: 10 };
-    assert_eq!(
-        remove_intersection(&input_range, &other_range),
-        Range { start: 10, end: 15 }
-    );
+    remove_suffix(&mut input_range, &other_range);
+    assert_eq!(input_range, Range { start: 0, end: 5 });
 
     // Two ranges that intersect, with the other range being a subrange inside the input range.
-    let input_range = Range { start: 0, end: 10 };
+    let mut input_range = Range { start: 0, end: 10 };
     let other_range = Range { start: 2, end: 5 };
-    assert_eq!(
-        remove_intersection(&input_range, &other_range),
-        Range { start: 0, end: 2 }
-    );
+    remove_suffix(&mut input_range, &other_range);
+    assert_eq!(input_range, Range { start: 0, end: 2 });
 
     // Two ranges that are equal.
-    let input_range = Range { start: 0, end: 10 };
+    let mut input_range = Range { start: 0, end: 10 };
     let other_range = Range { start: 0, end: 10 };
-    assert_eq!(
-        remove_intersection(&input_range, &other_range),
-        Range { start: 0, end: 0 }
-    );
+    remove_suffix(&mut input_range, &other_range);
+    assert_eq!(input_range, Range { start: 0, end: 0 });
 
     // Two empty ranges.
-    let input_range = Range { start: 0, end: 0 };
+    let mut input_range = Range { start: 0, end: 0 };
     let other_range = Range { start: 0, end: 0 };
-    assert_eq!(remove_intersection(&input_range, &other_range), input_range);
+    remove_suffix(&mut input_range, &other_range);
+    assert_eq!(input_range, Range { start: 0, end: 0 });
 
     // Two empty ranges with start not at 0.
-    let input_range = Range { start: 5, end: 5 };
+    let mut input_range = Range { start: 5, end: 5 };
     let other_range = Range { start: 5, end: 5 };
-    assert_eq!(remove_intersection(&input_range, &other_range), input_range);
+    remove_suffix(&mut input_range, &other_range);
+    assert_eq!(input_range, Range { start: 5, end: 5 });
 
     // Empty input range.
-    let input_range = Range { start: 0, end: 0 };
+    let mut input_range = Range { start: 0, end: 0 };
     let other_range = Range { start: 0, end: 10 };
-    assert_eq!(remove_intersection(&input_range, &other_range), input_range);
+    remove_suffix(&mut input_range, &other_range);
+    assert_eq!(input_range, Range { start: 0, end: 0 });
+
+    // Two ranges that intersect, with the input range being "higher".
+    // This should panic.
+    let mut input_range = Range { start: 5, end: 15 };
+    let other_range = Range { start: 0, end: 10 };
+    remove_suffix(&mut input_range, &other_range);
 }
