@@ -1,5 +1,5 @@
 [package]
-name = "ic-registry-canister-chunks"
+name = "ic-nervous-system-chunks"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
