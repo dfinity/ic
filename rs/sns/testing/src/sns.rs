@@ -8,7 +8,10 @@ use ic_nervous_system_agent::{
     helpers::{
         await_with_timeout,
         nns::propose_to_deploy_sns_and_wait,
-        sns::{await_swap_lifecycle, get_caller_neuron, participate_in_swap, propose_and_wait},
+        sns::{
+            await_swap_lifecycle, get_caller_neuron, get_principal_neurons, participate_in_swap,
+            propose, wait_for_proposal_execution,
+        },
     },
     nns::{ledger::transfer, sns_wasm::list_deployed_snses},
     sns::{governance::GovernanceCanister, swap::SwapCanister, Sns},
@@ -28,8 +31,8 @@ use ic_nns_governance_api::pb::v1::create_service_nervous_system::initial_token_
 
 use ic_nns_test_utils::common::modify_wasm_bytes;
 use ic_sns_governance_api::pb::v1::{
-    manage_neuron::Follow, proposal::Action, NeuronId as SnsNeuronId, Proposal,
-    UpgradeSnsControlledCanister,
+    get_proposal_response::Result as ProposalResult, manage_neuron::Follow, proposal::Action,
+    NeuronId as SnsNeuronId, Proposal, ProposalId, UpgradeSnsControlledCanister,
 };
 use ic_sns_swap::pb::v1::{BuyerState, Lifecycle, TransferableAmount};
 use icp_ledger::{AccountIdentifier, Memo, Tokens, TransferArgs, DEFAULT_TRANSFER_FEE};
@@ -63,6 +66,7 @@ pub async fn create_sns<C: CallCanisters + ProgressNetwork + BuildEphemeralAgent
     neuron_id: NeuronId,
     dev_participant_agent: &C,
     dapp_canister_ids: Vec<CanisterId>,
+    follow_dev_neuron: bool,
 ) -> Sns {
     let mut create_service_nervous_system = CreateServiceNervousSystemBuilder::default()
         .neurons_fund_participation(true)
@@ -122,7 +126,11 @@ pub async fn create_sns<C: CallCanisters + ProgressNetwork + BuildEphemeralAgent
         neuron_agent,
         sns_swap,
         sns_governance,
-        vec![dev_participant_neuron_id],
+        if follow_dev_neuron {
+            vec![dev_participant_neuron_id]
+        } else {
+            vec![]
+        },
     )
     .await
     .unwrap();
@@ -360,6 +368,68 @@ pub async fn complete_sns_swap<C: CallCanisters + ProgressNetwork + BuildEphemer
     Ok(())
 }
 
+pub async fn sns_proposal_upvote<C: CallCanisters + BuildEphemeralAgent + ProgressNetwork>(
+    agent: &C,
+    governance_canister: GovernanceCanister,
+    // Swap canister is needed to determine the number of direct participants.
+    swap_canister: SwapCanister,
+    proposal_id: u64,
+    wait: bool,
+) -> Result<(), String> {
+    let proposal_id = ProposalId { id: proposal_id };
+    let proposal_info = governance_canister
+        .get_proposal(agent, proposal_id)
+        .await
+        .map_err(|e| format!("Failed to get the proposal: {e}"))?;
+
+    match proposal_info
+        .result
+        .ok_or("Expecting the proposal result to be set")?
+    {
+        ProposalResult::Proposal(proposal_data) => {
+            if proposal_data.decided_timestamp_seconds > 0 {
+                return Err("The proposal was already decided".to_string());
+            }
+        }
+        ProposalResult::Error(e) => {
+            return Err(format!("Getting proposal returned a governance error: {e}"));
+        }
+    }
+
+    let swap_derived_state = swap_canister
+        .get_derived_state(agent)
+        .await
+        .map_err(|e| format!("Failed to get swap derived state: {e}"))?;
+
+    let direct_participant_count = swap_derived_state.direct_participant_count.unwrap_or(0);
+    // Our assumption is that there are at most 'direct_participant_count' known identities that participated
+    // in the swap within 'complete_sns_swap' function previously.
+    // We will use these identities to upvote the proposal.
+    let vote_participant_agents = swap_participant_agents(agent, direct_participant_count as usize);
+    for vote_participant_agent in vote_participant_agents {
+        let vote_participant_neurons = get_principal_neurons(
+            agent,
+            governance_canister,
+            vote_participant_agent.caller().unwrap().into(),
+        )
+        .await
+        .map_err(|e| format!("Failed to get principal neurons: {e}"))?;
+        if let Some(neuron) = vote_participant_neurons.first() {
+            governance_canister
+                .register_vote(&vote_participant_agent, neuron.clone(), proposal_id, 1)
+                .await
+                .map_err(|e| format!("Failed to upvote the proposal: {e}"))?;
+        }
+    }
+    if wait {
+        println!("Waiting for the proposal to be executed...");
+        wait_for_proposal_execution(agent, governance_canister, proposal_id)
+            .await
+            .map_err(|e| format!("Failed to wait for proposal execution: {e}"))?;
+    }
+    Ok(())
+}
+
 // Upgrades the test canister controlled by the SNS using arguments:
 // 1) dev_participant_agent - Agent for the identity that will be used to submit the proposal to upgrade the canister.
 //    It is expected that neuron associated with this identity has sufficient amount of voting power to adopt the proposal
@@ -367,12 +437,12 @@ pub async fn complete_sns_swap<C: CallCanisters + ProgressNetwork + BuildEphemer
 // 2) sns - SNS canisters.
 // 3) canister_id - ID of the canister that will be upgraded.
 // 4) upgrade_arg - Arguments that will be passed to the canister during the upgrade.
-pub async fn upgrade_sns_controlled_test_canister<C: CallCanisters + ProgressNetwork>(
+pub async fn propose_sns_controlled_test_canister_upgrade<C: CallCanisters + ProgressNetwork>(
     dev_participant_agent: &C,
     sns: Sns,
     canister_id: CanisterId,
     upgrade_arg: TestCanisterInitArgs,
-) {
+) -> ProposalId {
     // For now, we're using the same wasm module, but different init arguments used in 'post_upgrade' hook.
     let features = &[];
     let test_canister_wasm =
@@ -421,7 +491,7 @@ pub async fn upgrade_sns_controlled_test_canister<C: CallCanisters + ProgressNet
         .await
         .unwrap()
         .expect("Expecting the identity to have a Neuron");
-    let _ = propose_and_wait(
+    propose(
         dev_participant_agent,
         neuron_id,
         sns.governance,
@@ -441,17 +511,29 @@ pub async fn upgrade_sns_controlled_test_canister<C: CallCanisters + ProgressNet
         },
     )
     .await
-    .unwrap();
+    .unwrap()
+}
 
-    // TODO: @rvem: commented code below relates to the upgrade workflow that uses the
-    // 'upgrade_sns_controlled_canister::exec'
-    // wait_for_proposal_execution(dev_participant_agent, sns.governance, proposal_id)
-    //     .await
-    //     .expect("Failed to execute the proposal");
+
+// Waits for the upgrade proposal to be adopted and executed and then waits for the canister to become available
+// after upgrade using arguments:
+// 1) agent - Agent that will be used to check the status of the canister.
+// 2) proposal_id - ID of the proposal that will be waited for.
+// 3) canister_id - ID of the canister that receives an upgrade.
+// 4) sns - SNS canisters.
+pub async fn wait_for_sns_controlled_canister_upgrade<C: CallCanisters + ProgressNetwork>(
+    agent: &C,
+    proposal_id: ProposalId,
+    canister_id: CanisterId,
+    sns: Sns,
+) {
+    wait_for_proposal_execution(agent, sns.governance, proposal_id)
+        .await
+        .expect("Failed to execute the proposal");
 
     // Wait for the canister to become available
     await_with_timeout(
-        dev_participant_agent,
+        agent,
         0..EXPECTED_UPGRADE_DURATION_MAX_SECONDS,
         |agent: &C| async {
             let canister_status = sns
@@ -482,6 +564,7 @@ pub mod pocket_ic {
         install_canister_on_subnet, nns::ledger::mint_icp,
     };
     use ic_nns_constants::ROOT_CANISTER_ID;
+    use ic_sns_governance_api::pb::v1::ProposalId;
     use icp_ledger::{Tokens, DEFAULT_TRANSFER_FEE};
 
     use crate::utils::NNS_NEURON_ID;
@@ -514,6 +597,7 @@ pub mod pocket_ic {
         pocket_ic: &PocketIc,
         dev_participant_id: PrincipalId,
         dapp_canister_ids: Vec<CanisterId>,
+        follow_dev_neuron: bool,
     ) -> Sns {
         let dev_participant = PocketIcAgent::new(pocket_ic, dev_participant_id);
 
@@ -522,6 +606,7 @@ pub mod pocket_ic {
             NNS_NEURON_ID,
             &dev_participant,
             dapp_canister_ids,
+            follow_dev_neuron,
         )
         .await
     }
@@ -535,13 +620,13 @@ pub mod pocket_ic {
     // 3) sns - SNS canisters.
     // 4) canister_id - ID of the canister that will be upgraded.
     // 5) upgrade_arg - Arguments that will be passed to the canister during the upgrade.
-    pub async fn upgrade_sns_controlled_test_canister(
+    pub async fn propose_sns_controlled_test_canister_upgrade(
         pocket_ic: &PocketIc,
         dev_participant_id: PrincipalId,
         sns: Sns,
         canister_id: CanisterId,
         upgrade_arg: TestCanisterInitArgs,
-    ) {
+    ) -> ProposalId {
         let dev_participant_agent = PocketIcAgent::new(pocket_ic, dev_participant_id);
         mint_icp(
             pocket_ic,
@@ -553,12 +638,21 @@ pub mod pocket_ic {
         )
         .await;
 
-        super::upgrade_sns_controlled_test_canister(
+        super::propose_sns_controlled_test_canister_upgrade(
             &dev_participant_agent,
             sns,
             canister_id,
             upgrade_arg,
         )
-        .await;
+        .await
+    }
+    pub async fn wait_for_sns_controlled_canister_upgrade(
+        pocket_ic: &PocketIc,
+        proposal_id: ProposalId,
+        canister_id: CanisterId,
+        sns: Sns,
+    ) {
+        super::wait_for_sns_controlled_canister_upgrade(pocket_ic, proposal_id, canister_id, sns)
+            .await
     }
 }

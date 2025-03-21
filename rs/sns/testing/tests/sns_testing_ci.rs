@@ -1,14 +1,21 @@
+use std::path::PathBuf;
+
 use candid::{Decode, Encode, Principal};
 use canister_test::Wasm;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_management_canister_types::CanisterSettings;
+use ic_nervous_system_agent::pocketic_impl::PocketIcAgent;
 use ic_nervous_system_integration_tests::pocket_ic_helpers::{
     install_canister_on_subnet, load_registry_mutations, NnsInstaller, STARTING_CYCLES_PER_CANISTER,
 };
 use ic_nns_constants::{LEDGER_INDEX_CANISTER_ID, ROOT_CANISTER_ID};
 use ic_sns_testing::nns_dapp::bootstrap_nns;
+use ic_sns_testing::sns::sns_proposal_upvote;
 use ic_sns_testing::sns::{
-    pocket_ic::{create_sns, install_test_canister, upgrade_sns_controlled_test_canister},
+    pocket_ic::{
+        create_sns, install_test_canister, propose_sns_controlled_test_canister_upgrade,
+        wait_for_sns_controlled_canister_upgrade,
+    },
     TestCanisterInitArgs,
 };
 use ic_sns_testing::utils::{
@@ -16,14 +23,14 @@ use ic_sns_testing::utils::{
     SnsTestingNetworkValidationError, TREASURY_PRINCIPAL_ID,
 };
 use icp_ledger::Tokens;
+use pocket_ic::nonblocking::PocketIc;
 use pocket_ic::PocketIcBuilder;
 use tempfile::TempDir;
 
-#[tokio::test]
-async fn test_sns_testing_basic_scenario() {
+const DEV_PARTICIPANT_ID: PrincipalId = PrincipalId::new_user_test_id(1000);
+
+async fn prepare_network_for_test(dev_participant_id: PrincipalId, state_dir: PathBuf) -> PocketIc {
     // Preparing the PocketIC-based network
-    let state_dir = TempDir::new().unwrap();
-    let state_dir = state_dir.path().to_path_buf();
 
     let pocket_ic = PocketIcBuilder::new()
         .with_state_dir(state_dir.clone())
@@ -35,7 +42,6 @@ async fn test_sns_testing_basic_scenario() {
         .await;
     let registry_proto_path = state_dir.join("registry.proto");
     let initial_mutations = load_registry_mutations(registry_proto_path);
-    let dev_participant_id = PrincipalId::new_user_test_id(1000);
     let treasury_principal_id = *TREASURY_PRINCIPAL_ID;
 
     // Installing NNS canisters
@@ -50,18 +56,10 @@ async fn test_sns_testing_basic_scenario() {
     )
     .await;
     assert!(validate_network(&pocket_ic).await.is_empty());
-    // Installing a test canister
-    let greeting = "Hello there".to_string();
-    let test_canister_id = install_test_canister(
-        &pocket_ic,
-        TestCanisterInitArgs {
-            greeting: Some(greeting.clone()),
-        },
-    )
-    .await;
-    assert!(validate_target_canister(&pocket_ic, test_canister_id)
-        .await
-        .is_empty());
+    pocket_ic
+}
+
+async fn test_canister_query(pocket_ic: &PocketIc, test_canister_id: CanisterId, greeting: String) {
     let test_call_arg = "General Kenobi".to_string();
     let test_canister_response = pocket_ic
         .query_call(
@@ -76,33 +74,101 @@ async fn test_sns_testing_basic_scenario() {
         Decode!(&test_canister_response, String).expect("Failed to decode test canister response"),
         format!("{}, {}!", greeting, test_call_arg.clone()),
     );
+}
+
+async fn prepare_test_canister(pocket_ic: &PocketIc) -> CanisterId {
+    // Installing a test canister
+    let greeting = "Hello there".to_string();
+    let test_canister_id = install_test_canister(
+        pocket_ic,
+        TestCanisterInitArgs {
+            greeting: Some(greeting.clone()),
+        },
+    )
+    .await;
+    assert!(validate_target_canister(pocket_ic, test_canister_id)
+        .await
+        .is_empty());
+    test_canister_query(pocket_ic, test_canister_id, greeting).await;
+    test_canister_id
+}
+
+#[tokio::test]
+async fn test_sns_testing_basic_scenario_with_sns_neuron_following() {
+    let state_dir = TempDir::new().unwrap();
+    let state_dir = state_dir.path().to_path_buf();
+
+    let dev_participant_id = DEV_PARTICIPANT_ID;
+
+    let pocket_ic = prepare_network_for_test(dev_participant_id, state_dir).await;
+
+    let test_canister_id = prepare_test_canister(&pocket_ic).await;
+
     // Creating an SNS
-    let sns = create_sns(&pocket_ic, dev_participant_id, vec![test_canister_id]).await;
+    let sns = create_sns(&pocket_ic, dev_participant_id, vec![test_canister_id], true).await;
     let new_greeting = "Hi".to_string();
     // Upgrading the test canister via SNS voting
-    upgrade_sns_controlled_test_canister(
+    let proposal_id = propose_sns_controlled_test_canister_upgrade(
         &pocket_ic,
         dev_participant_id,
-        sns,
+        sns.clone(),
         test_canister_id,
         TestCanisterInitArgs {
             greeting: Some(new_greeting.clone()),
         },
     )
     .await;
-    let test_canister_response = pocket_ic
-        .query_call(
-            test_canister_id.into(),
-            Principal::anonymous(),
-            "greet",
-            Encode!(&test_call_arg).unwrap(),
-        )
-        .await
-        .expect("Call to a test canister failed");
-    assert_eq!(
-        Decode!(&test_canister_response, String).expect("Failed to decode test canister response"),
-        format!("{}, {}!", new_greeting, test_call_arg),
-    );
+    wait_for_sns_controlled_canister_upgrade(&pocket_ic, proposal_id, test_canister_id, sns).await;
+
+    test_canister_query(&pocket_ic, test_canister_id, new_greeting).await;
+}
+
+#[tokio::test]
+async fn test_sns_testing_basic_scenario_without_sns_neuron_following() {
+    let state_dir = TempDir::new().unwrap();
+    let state_dir = state_dir.path().to_path_buf();
+
+    let dev_participant_id = DEV_PARTICIPANT_ID;
+
+    let pocket_ic = prepare_network_for_test(dev_participant_id, state_dir).await;
+
+    let test_canister_id = prepare_test_canister(&pocket_ic).await;
+
+    // Creating an SNS
+    let sns = create_sns(
+        &pocket_ic,
+        dev_participant_id,
+        vec![test_canister_id],
+        false,
+    )
+    .await;
+
+    let new_greeting = "Hi".to_string();
+    // Upgrading the test canister via SNS voting
+    let proposal_id = propose_sns_controlled_test_canister_upgrade(
+        &pocket_ic,
+        dev_participant_id,
+        sns.clone(),
+        test_canister_id,
+        TestCanisterInitArgs {
+            greeting: Some(new_greeting.clone()),
+        },
+    )
+    .await;
+
+    sns_proposal_upvote(
+        &PocketIcAgent::new(&pocket_ic, Principal::anonymous()),
+        sns.governance,
+        sns.swap,
+        proposal_id.id,
+        true,
+    )
+    .await
+    .unwrap();
+
+    wait_for_sns_controlled_canister_upgrade(&pocket_ic, proposal_id, test_canister_id, sns).await;
+
+    test_canister_query(&pocket_ic, test_canister_id, new_greeting).await;
 }
 
 #[tokio::test]

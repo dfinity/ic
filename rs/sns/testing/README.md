@@ -117,7 +117,7 @@ The example will use `//rs/sns/testing:sns_testing_canister` canister as SNS-con
 4) Complete the swap for the newly created SNS
    ```
    SNS_NAME="$(yq -r .name ../cli/test_sns_init_v2.yaml)"
-   bazel run //rs/sns/testing:sns-testing -- --network http://127.0.0.1:8080 swap-complete --sns-name "SNS_NAME"
+   bazel run //rs/sns/testing:sns-testing -- --network http://127.0.0.1:8080 swap-complete --sns-name "$SNS_NAME"
    ```
 </details>
 
@@ -132,6 +132,77 @@ This command will generate required number of participations with the sufficient
 
 This command has optional `--follow-principal-neurons` and `--follow-neuron` arguments that accept `PrincipalId` and `NeuronId` to make swap
 participant neurons follow given neurons.
+
+### SNS voting
+
+The newly created SNS is now fully functional and is ready for proposals.
+
+The suggested way to submit SNS proposals is to use [`quill`](https://github.com/dfinity/quill/), for more info please refer to the [official documentation](https://internetcomputer.org/docs/building-apps/governing-apps/managing/making-proposals/).
+
+It's required to set `IC_URL="http://127.0.0.1:8080"` env variable for `quill` and use `--insecure-local-dev-mode` `quill` option
+to be able to use `quill` with network created by `sns-testing`.
+
+<details>
+<summary>Sample SNS-controlled canister upgrade workflow</summary>
+<br>
+
+At this point we assume that SNS named "Daniel" was created and its swap was successfully completed.
+
+1) Get SNS neuron ID contolled by `sns-testing` identity:
+   ```
+   IC_URL="http://127.0.0.1:8080" quill sns neuron-id --principal-id "$(dfx identity get-principal --identity sns-testing)" --memo 42
+   ```
+
+   ```
+   SNS Neuron Id: a96c889f2eab3fb4ae7aac3978f04eeb039e0ec8047516fcd8fae8b20bd75502
+   ```
+
+2) Prepare `sns_canister_ids.json`
+
+   Get SNS canister IDs:
+   ```
+   IC_URL="http://127.0.0.1:8080" quill --insecure-local-dev-mode sns list-deployed-snses
+   ```
+
+   ```
+   cat >> sns_canister_ids.json<< EOF
+   {
+      "root_canister_id":"7tjcv-pp777-77776-qaaaa-cai",
+      "governance_canister_id":"7uieb-cx777-77776-qaaaq-cai",
+      "index_canister_id":"7pnye-yp777-77776-qaaca-cai",
+      "swap_canister_id":"72kjj-zh777-77776-qaabq-cai",
+      "ledger_canister_id":"75lp5-u7777-77776-qaaba-cai"
+   }
+   EOF
+   ```
+
+   SNS canister IDs may vary for you.
+
+3) Prepare quill `message.json` with SNS-controlled canister upgrade proposal:
+   ```
+   quill sns --pem-file ~/.config/dfx/identity/sns-testing/identity.pem --canister-ids-file sns_canister_ids.json make-upgrade-canister-proposal \
+      --target-canister-id lxzze-o7777-77777-aaaaa-cai --wasm-path "$(bazel info bazel-bin)/rs/sns/testing/sns_testing_canister.wasm.gz" \
+      --title "Upgrade SNS-controlled-canister" --mode upgrade "<Neuron ID>" > message.json
+   ```
+
+4) Submit the message with SNS proposal:
+   ```
+   IC_URL="http://127.0.0.1:8080" quill --insecure-local-dev-mode send message.json
+   ```
+
+   This command will return the ID of the newly created proposal
+   ```
+   ...
+   Successfully created new proposal with ID 1
+   ```
+
+</details>
+
+Once the SNS proposal is created, the voting begins.
+To upvote the proposal using Neurons controlled by identities that participated in the swap on the previous step run:
+```
+bazel run //rs/sns/testing:sns-testing -- --network http://127.0.0.1:8080 sns-proposal-upvote --sns-name "<SNS name>" --proposal-id "<Proposal ID>" --wait
+```
 
 ## Check the network state
 

@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use clap::{ArgGroup, Parser};
+use clap::{ArgAction, ArgGroup, Parser};
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_sns_cli::neuron_id_to_candid_subaccount::ParsedSnsNeuron;
 use url::Url;
@@ -28,6 +28,7 @@ pub enum SnsTestingSubCommand {
     RunBasicScenario(RunBasicScenarioArgs),
     /// Complete the SNS swap by providing sufficient direct participations.
     SwapComplete(SwapCompleteArgs),
+    SnsProposalUpvote(SnsProposalUpvoteArgs),
 }
 
 #[derive(Debug, Parser)]
@@ -56,6 +57,26 @@ pub struct SwapCompleteArgs {
     /// Principal ID whose neurons swap participants will follow.
     #[clap(long, group = "neuron-follow-selection")]
     pub follow_principal_neurons: Option<PrincipalId>,
+}
+
+#[derive(Debug, Parser)]
+pub struct SnsProposalUpvoteArgs {
+    /// The ID of the proposal to upvote.
+    #[arg(long)]
+    pub proposal_id: u64,
+    /// The name of the SNS to upvote the proposal in.
+    #[arg(long)]
+    pub sns_name: String,
+    /// Wait for proposal execution.
+    #[arg(
+        long,
+        action = ArgAction::Set,
+        default_value_t = false,
+        default_missing_value = "true",
+        num_args = 0..=1,
+        require_equals = false,
+    )]
+    pub wait: bool,
 }
 
 #[derive(Debug, Parser)]

@@ -26,18 +26,29 @@ pub enum SnsProposalError {
     ProposalError(ProposalId, String),
 }
 
-pub async fn propose_and_wait<C: CallCanisters + ProgressNetwork>(
+pub async fn propose<C: CallCanisters + ProgressNetwork>(
     agent: &C,
     neuron_id: NeuronId,
     sns_governance_canister: GovernanceCanister,
     proposal: Proposal,
-) -> Result<ProposalData, SnsProposalError> {
+) -> Result<ProposalId, SnsProposalError> {
     let response = sns_governance_canister
         .submit_proposal(agent, neuron_id, proposal)
         .await
         .unwrap();
     let SubmittedProposal { proposal_id } =
         SubmittedProposal::try_from(response).map_err(SnsProposalError::ProposalSubmissionError)?;
+
+    Ok(proposal_id)
+}
+
+pub async fn propose_and_wait<C: CallCanisters + ProgressNetwork>(
+    agent: &C,
+    neuron_id: NeuronId,
+    sns_governance_canister: GovernanceCanister,
+    proposal: Proposal,
+) -> Result<ProposalData, SnsProposalError> {
+    let proposal_id = propose(agent, neuron_id, sns_governance_canister, proposal).await?;
 
     wait_for_proposal_execution(agent, sns_governance_canister, proposal_id).await
 }
@@ -149,7 +160,7 @@ pub async fn await_swap_lifecycle<C: CallCanisters + ProgressNetwork>(
         agent.progress(Duration::from_secs(48 * 60 * 60)).await;
     }
     let mut last_lifecycle = None;
-    for _attempt_count in 1..=100 {
+    for _attempt_count in 1..=200 {
         agent.progress(Duration::from_secs(1)).await;
         let response = sns_swap_canister.get_lifecycle(agent).await.unwrap();
         let lifecycle = Lifecycle::try_from(response.lifecycle.unwrap()).unwrap();
