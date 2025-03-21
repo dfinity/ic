@@ -1797,7 +1797,8 @@ impl CanisterManager {
         system_state
             .certified_data
             .clone_from(snapshot.certified_data());
-
+        system_state.global_timer = snapshot.execution_snapshot().global_timer;
+        // system_state.task_queue.peek_hook_status(); // TODO: how to set status?
         let wasm_execution_mode = new_execution_state
             .as_ref()
             .map_or(WasmExecutionMode::Wasm32, |exec_state| {
