@@ -79,12 +79,11 @@ use slog::Level;
 use std::os::unix::fs::OpenOptionsExt;
 use std::{
     fs::OpenOptions,
-    net::SocketAddr,
+    net::{IpAddr, SocketAddr},
     path::PathBuf,
     process::Command,
     sync::{mpsc::channel, Arc},
-    thread,
-    thread::JoinHandle,
+    thread::{self, JoinHandle},
     time::{Duration, SystemTime},
 };
 use strum_macros::EnumIter;
@@ -97,7 +96,7 @@ use wslpath::windows_to_wsl;
 pub mod common;
 pub mod nonblocking;
 
-const EXPECTED_SERVER_VERSION: &str = "8.0.0";
+pub const EXPECTED_SERVER_VERSION: &str = "8.0.0";
 
 // the default timeout of a PocketIC operation
 const DEFAULT_MAX_REQUEST_TIME_MS: u64 = 300_000;
@@ -560,9 +559,9 @@ impl PocketIc {
     /// Returns the URL at which `/api/v2` requests
     /// for this instance can be made.
     #[instrument(skip(self), fields(instance_id=self.pocket_ic.instance_id))]
-    pub fn make_live(&mut self, listen_at: Option<u16>) -> Url {
+    pub fn make_live(&mut self, listen_at: Option<u16>, ip_addr: Option<IpAddr>) -> Url {
         let runtime = self.runtime.clone();
-        runtime.block_on(async { self.pocket_ic.make_live(listen_at).await })
+        runtime.block_on(async { self.pocket_ic.make_live(listen_at, ip_addr).await })
     }
 
     /// Creates an HTTP gateway for this PocketIC instance listening
@@ -579,11 +578,12 @@ impl PocketIc {
         listen_at: Option<u16>,
         domains: Option<Vec<String>>,
         https_config: Option<HttpsConfig>,
+        ip_addr: Option<IpAddr>,
     ) -> Url {
         let runtime = self.runtime.clone();
         runtime.block_on(async {
             self.pocket_ic
-                .make_live_with_params(listen_at, domains, https_config)
+                .make_live_with_params(listen_at, domains, https_config, ip_addr)
                 .await
         })
     }

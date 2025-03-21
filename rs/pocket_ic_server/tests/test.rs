@@ -263,7 +263,7 @@ async fn test_gateway(server_url: Url, https: bool) {
         None
     };
     let port = pic
-        .make_live_with_params(None, domains.clone(), https_config.clone())
+        .make_live_with_params(None, domains.clone(), https_config.clone(), None)
         .await
         .port_or_known_default()
         .unwrap();
@@ -414,7 +414,7 @@ fn test_specified_id() {
         .with_nns_subnet()
         .with_application_subnet()
         .build();
-    let endpoint = pic.make_live(None);
+    let endpoint = pic.make_live(None, None);
 
     // We define a "specified" canister ID that exists on the IC mainnet,
     // but belongs to the canister ranges of no subnet on the PocketIC instance.
@@ -467,7 +467,7 @@ fn test_dashboard() {
     let canister_2 = pic.create_canister_on_subnet(None, None, app_subnet);
     assert_eq!(pic.get_subnet(canister_2).unwrap(), app_subnet);
 
-    let gateway = pic.make_live(None);
+    let gateway = pic.make_live(None, None);
 
     let client = Client::new();
     let instance_dashboard_url =
@@ -687,7 +687,7 @@ fn kill_gateway_with_signal(shutdown_signal: Signal) {
         .with_nns_subnet()
         .with_application_subnet()
         .build();
-    let _ = pic.make_live(None);
+    let _ = pic.make_live(None, None);
 
     send_signal_to_pic(pic, child, Some(shutdown_signal));
 }
@@ -939,7 +939,7 @@ fn test_specified_id_call_v3() {
         .with_nns_subnet()
         .with_application_subnet()
         .build();
-    let endpoint = pic.make_live(None);
+    let endpoint = pic.make_live(None, None);
 
     // Retrieve effective canister id for canister creation.
     let topology = pic.topology();
@@ -1068,7 +1068,7 @@ fn test_query_stats_live() {
     pic.install_canister(canister_id, counter_wasm, vec![], None);
 
     // Query stats should be collected in the live mode.
-    let endpoint = pic.make_live(None);
+    let endpoint = pic.make_live(None, None);
 
     let rt = tokio::runtime::Builder::new_current_thread()
         .enable_all()
@@ -1138,7 +1138,7 @@ fn test_subnet_read_state() {
     let counter_wasm = wat::parse_str(COUNTER_WAT).unwrap();
     pic.install_canister(canister_id, counter_wasm, vec![], None);
 
-    let endpoint = pic.make_live(None);
+    let endpoint = pic.make_live(None, None);
 
     let rt = tokio::runtime::Builder::new_current_thread()
         .enable_all()
@@ -1172,7 +1172,7 @@ fn test_gateway_ip_addr_host() {
     // We create a canister on the app subnet.
     pic.create_canister_on_subnet(None, None, app_subnet);
 
-    let mut endpoint = pic.make_live(None);
+    let mut endpoint = pic.make_live(None, None);
     endpoint
         .set_ip_host(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)))
         .unwrap();
@@ -1384,7 +1384,7 @@ fn http_gateway_route_underscore() {
         .with_nns_subnet()
         .with_application_subnet()
         .build();
-    let gateway = pic.make_live(None);
+    let gateway = pic.make_live(None, None);
 
     let client = Client::new();
 
