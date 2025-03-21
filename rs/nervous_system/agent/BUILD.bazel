@@ -43,6 +43,19 @@ rust_library(
     deps = DEPENDENCIES,
 )
 
+rust_library(
+    name = "test_agent",
+    testonly = True,
+    srcs = glob(["src/**/*.rs"]),
+    crate_features = ["test"],
+    crate_name = "ic_nervous_system_agent",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    version = "0.0.1",
+    deps = DEPENDENCIES + [
+        "//rs/state_machine_tests",
+    ],
+)
+
 rust_test(
     name = "agent_test",
     crate = ":agent",

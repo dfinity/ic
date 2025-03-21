@@ -12,7 +12,7 @@ use num_traits::ToPrimitive;
 use serde_bytes::ByteBuf;
 use std::{cmp, collections::HashMap, ops::RangeInclusive, sync::Arc};
 use tokio::sync::Mutex as AsyncMutex;
-use tracing::info;
+use tracing::{info, warn};
 
 // The Range of indices to be synchronized.
 // Contains the hashes of the top and end of the index range, which is used to ensure the fetched block interval is valid.
@@ -44,22 +44,19 @@ impl SyncRange {
 fn derive_synchronization_gaps(
     storage_client: Arc<StorageClient>,
 ) -> anyhow::Result<Vec<SyncRange>> {
-    let lowest_block_opt = storage_client.get_block_with_lowest_block_idx()?;
-
-    // If the database is empty then there cannot exist any gaps.
-    if lowest_block_opt.is_none() {
+    if !storage_client.does_blockchain_have_gaps()? {
         return Ok(vec![]);
     }
 
-    // Unwrap is safe.
-    let lowest_block = lowest_block_opt.unwrap();
-
-    // If the database is not empty we have to determine whether there is a gap in the database.
+    // If there is a gap, compute all the gaps.
     let gap = storage_client.get_blockchain_gaps()?;
 
     // The database should have at most one gap. Otherwise the database file was edited and it can no longer be guaranteed that it contains valid blocks.
     if gap.len() > 1 {
         bail!("The database has {} gaps. More than one gap means the database has been tampered with and can no longer be guaranteed to contain valid blocks",gap.len());
+    } else if gap.is_empty() {
+        warn!("The database has a gap but the list of gaps is empty. This should not happen. Resetting the blocks counter by counting the actual number of synced blocks.");
+        storage_client.reset_blocks_counter()?;
     }
 
     let mut sync_ranges = gap
@@ -76,6 +73,12 @@ fn derive_synchronization_gaps(
 
     // Gaps are only determined within stored block ranges. Blocks with indices that are below the lowest stored block and above the highest stored blocks are not considered.
     // Check if the lowest block that was stored is the genesis block.
+
+    let Some(lowest_block) = storage_client.get_block_with_lowest_block_idx()? else {
+        // If the database is empty then there cannot exist any gaps.
+        return Ok(vec![]);
+    };
+
     if lowest_block.index != 0 {
         // If the lowest stored block's index is not 0 that means there is a gap between the genesis block and the lowest stored block. Unwrapping parent hash is safe as only the genesis block does not have a parent hash.
         // The first interval to sync is between the genesis block and the lowest stored block.
