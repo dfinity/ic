@@ -112,12 +112,12 @@ where
         let summary = dkg::Summary::fake();
         let mut consensus_pool = ConsensusPoolImpl::new(
             node_test_id(0),
-            subnet_test_id(0),
             (&make_genesis(summary)).into(),
             pool_config.clone(),
             ic_metrics::MetricsRegistry::new(),
             no_op_logger(),
             time_source.clone(),
+            None,
         );
 
         let subnet_id = subnet_test_id(0);
