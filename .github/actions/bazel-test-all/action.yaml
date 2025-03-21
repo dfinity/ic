@@ -67,7 +67,7 @@ runs:
           CI_JOB_URL: "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
           MERGE_BASE_SHA: ${{ github.event.pull_request.base.sha }}
 
-      - name: upload to S3
+      - name: Upload to S3
         shell: bash
         if: inputs.RELEASE_BUILD == 'true'
         run: |
