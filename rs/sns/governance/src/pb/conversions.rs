@@ -2397,6 +2397,9 @@ impl From<pb::manage_neuron::Command> for pb_api::manage_neuron::Command {
             pb::manage_neuron::Command::Follow(v) => {
                 pb_api::manage_neuron::Command::Follow(v.into())
             }
+            pb::manage_neuron::Command::SetFollowingForTopics(v) => {
+                pb_api::manage_neuron::Command::SetFollowingForTopics(v.into())
+            }
             pb::manage_neuron::Command::MakeProposal(v) => {
                 pb_api::manage_neuron::Command::MakeProposal(v.into())
             }
@@ -2436,6 +2439,9 @@ impl From<pb_api::manage_neuron::Command> for pb::manage_neuron::Command {
             }
             pb_api::manage_neuron::Command::Follow(v) => {
                 pb::manage_neuron::Command::Follow(v.into())
+            }
+            pb_api::manage_neuron::Command::SetFollowingForTopics(v) => {
+                pb::manage_neuron::Command::SetFollowingForTopics(v.into())
             }
             pb_api::manage_neuron::Command::MakeProposal(v) => {
                 pb::manage_neuron::Command::MakeProposal(v.into())

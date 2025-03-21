@@ -4585,6 +4585,13 @@ impl Governance {
             C::Follow(f) => self
                 .follow(&neuron_id, caller, f)
                 .map(|_| ManageNeuronResponse::follow_response()),
+            C::SetFollowingForTopics(_) => {
+                // TODO[NNS1-3582]: Enable following on topics.
+                Err(GovernanceError::new_with_message(
+                    ErrorType::InvalidCommand,
+                    "SetFollowingForTopics is not supported yet.".to_string(),
+                ))
+            }
             C::MakeProposal(p) => self
                 .make_proposal(&neuron_id, caller, p)
                 .await
@@ -4646,6 +4653,7 @@ impl Governance {
             Disburse(_) => err("Disburse"),
             Split(_) => err("Split"),
             Follow(_)
+            | SetFollowingForTopics(_)
             | MakeProposal(_)
             | RegisterVote(_)
             | ClaimOrRefresh(_)
