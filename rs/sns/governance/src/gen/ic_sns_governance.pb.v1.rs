@@ -2341,7 +2341,7 @@ pub struct ManageNeuron {
     pub subaccount: ::prost::alloc::vec::Vec<u8>,
     #[prost(
         oneof = "manage_neuron::Command",
-        tags = "2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13"
+        tags = "2, 3, 4, 14, 5, 6, 7, 8, 9, 10, 11, 12, 13"
     )]
     pub command: ::core::option::Option<manage_neuron::Command>,
 }
@@ -2781,6 +2781,8 @@ pub mod manage_neuron {
         Disburse(Disburse),
         #[prost(message, tag = "4")]
         Follow(Follow),
+        #[prost(message, tag = "14")]
+        SetFollowingForTopics(SetFollowingForTopics),
         /// Making a proposal is defined by a proposal, which contains the proposer neuron.
         /// Making a proposal will implicitly cast a yes vote for the proposing neuron.
         #[prost(message, tag = "5")]

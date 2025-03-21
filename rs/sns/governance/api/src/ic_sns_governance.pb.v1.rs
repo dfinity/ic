@@ -1930,6 +1930,7 @@ pub mod manage_neuron {
         Configure(Configure),
         Disburse(Disburse),
         Follow(Follow),
+        SetFollowingForTopics(SetFollowingForTopics),
         /// Making a proposal is defined by a proposal, which contains the proposer neuron.
         /// Making a proposal will implicitly cast a yes vote for the proposing neuron.
         MakeProposal(super::Proposal),
