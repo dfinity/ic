@@ -1187,9 +1187,9 @@ pub async fn create_instance(
         None
     };
 
-    let (instance_id, topology) = api_state
+    match api_state
         .add_instance(move |seed| {
-            PocketIc::new(
+            PocketIc::try_new(
                 runtime,
                 seed,
                 subnet_configs,
@@ -1199,14 +1199,20 @@ pub async fn create_instance(
                 instance_config.bitcoind_addr,
             )
         })
-        .await;
-    (
-        StatusCode::CREATED,
-        Json(rest::CreateInstanceResponse::Created {
-            instance_id,
-            topology,
-        }),
-    )
+        .await
+    {
+        Ok((instance_id, topology)) => (
+            StatusCode::CREATED,
+            Json(rest::CreateInstanceResponse::Created {
+                instance_id,
+                topology,
+            }),
+        ),
+        Err(err) => (
+            StatusCode::BAD_REQUEST,
+            Json(rest::CreateInstanceResponse::Error { message: err }),
+        ),
+    }
 }
 
 pub async fn list_instances(

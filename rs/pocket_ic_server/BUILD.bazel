@@ -33,6 +33,7 @@ LIB_DEPENDENCIES = [
     "//rs/replicated_state",
     "//rs/starter:ic-starter-lib",
     "//rs/state_machine_tests",
+    "//rs/state_manager",
     "//rs/test_utilities",
     "//rs/test_utilities/registry",
     "//rs/types/management_canister_types",
