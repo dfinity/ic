@@ -1,9 +1,10 @@
 package_group(
     name = "default_visibility",
     packages = [
+        # Keep sorted.
         "//rs/nervous_system/...",
         "//rs/nns/...",
-        "//rs/registry/admin/...",
+        "//rs/registry/...",
         "//rs/sns/...",
         "//rs/tests/...",
     ],
