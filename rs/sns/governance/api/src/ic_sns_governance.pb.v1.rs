@@ -16,6 +16,7 @@ pub struct NeuronPermission {
     Default,
     candid::CandidType,
     candid::Deserialize,
+    comparable::Comparable,
     Debug,
     Eq,
     std::hash::Hash,
@@ -27,6 +28,25 @@ pub struct NeuronPermission {
 pub struct NeuronId {
     #[serde(with = "serde_bytes")]
     pub id: Vec<u8>,
+}
+/// Neuron whose voting decisions are being followed.
+#[derive(
+    Default,
+    candid::CandidType,
+    candid::Deserialize,
+    comparable::Comparable,
+    Debug,
+    Eq,
+    std::hash::Hash,
+    Clone,
+    PartialEq,
+    PartialOrd,
+    Ord,
+)]
+pub struct Followee {
+    pub neuron_id: Option<NeuronId>,
+    /// Human-readable alias that helps identify this followee among other neurons.
+    pub alias: Option<String>,
 }
 /// A sequence of NeuronIds, which is used to get prost to generate a type isomorphic to Option<Vec<NeuronId>>.
 #[derive(Default, candid::CandidType, candid::Deserialize, Debug, Clone, PartialEq)]
@@ -163,14 +183,24 @@ pub mod neuron {
     }
 
     /// A list of a neuron's followees for a specific function.
-    #[derive(Default, candid::CandidType, candid::Deserialize, Debug, Clone, PartialEq)]
+    #[derive(
+        Default,
+        candid::CandidType,
+        candid::Deserialize,
+        comparable::Comparable,
+        Debug,
+        Clone,
+        PartialEq,
+    )]
     pub struct FolloweesForTopic {
-        pub followees: Vec<super::NeuronId>,
+        pub followees: Vec<super::Followee>,
         pub topic: Option<topics::Topic>,
     }
 
     // A collection of a neuron's followees (per topic).
-    #[derive(candid::CandidType, candid::Deserialize, Clone, Debug, PartialEq)]
+    #[derive(
+        candid::CandidType, candid::Deserialize, Clone, comparable::Comparable, Debug, PartialEq,
+    )]
     pub struct TopicFollowees {
         pub topic_id_to_followees: BTreeMap<u64, FolloweesForTopic>,
     }
@@ -1371,6 +1401,7 @@ pub mod governance {
             RemoveNeuronPermissions(super::super::manage_neuron::RemoveNeuronPermissions),
             Configure(super::super::manage_neuron::Configure),
             Follow(super::super::manage_neuron::Follow),
+            SetFollowingForTopics(super::super::manage_neuron::SetFollowingForTopics),
             MakeProposal(super::super::Proposal),
             RegisterVote(super::super::manage_neuron::RegisterVote),
             FinalizeDisburseMaturity(super::super::manage_neuron::FinalizeDisburseMaturity),
@@ -1819,6 +1850,13 @@ pub mod manage_neuron {
         /// The list of followee neurons, specified by their neuron ID.
         pub followees: Vec<super::NeuronId>,
     }
+    #[derive(
+        candid::CandidType, candid::Deserialize, comparable::Comparable, Clone, Debug, PartialEq,
+    )]
+    pub struct SetFollowingForTopics {
+        /// The neuron's followees, specified as a map of proposal topics IDs to followees neuron IDs.
+        pub topic_followees: ::core::option::Option<super::neuron::TopicFollowees>,
+    }
     /// The operation that registers a given vote from the neuron for a given
     /// proposal (a directly cast vote as opposed to a vote that is cast as
     /// a result of a follow relation).
@@ -1892,6 +1930,7 @@ pub mod manage_neuron {
         Configure(Configure),
         Disburse(Disburse),
         Follow(Follow),
+        SetFollowingForTopics(SetFollowingForTopics),
         /// Making a proposal is defined by a proposal, which contains the proposer neuron.
         /// Making a proposal will implicitly cast a yes vote for the proposing neuron.
         MakeProposal(super::Proposal),
