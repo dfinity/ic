@@ -10333,6 +10333,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-nervous-system-chunks"
+version = "0.9.0"
+dependencies = [
+ "ic-crypto-sha2",
+ "ic-stable-structures",
+]
+
+[[package]]
 name = "ic-nervous-system-clients"
 version = "0.0.1"
 dependencies = [
@@ -19063,6 +19071,7 @@ dependencies = [
  "ic-cdk-macros 0.18.0-alpha.1",
  "ic-error-types",
  "ic-types",
+ "proptest 1.6.0",
  "rand 0.8.5",
  "serde",
  "serde_bytes",

@@ -86,7 +86,7 @@ impl From<pb::Neuron> for pb_api::Neuron {
                 let topic_id_to_followees = topic_id_to_followees
                     .into_iter()
                     .map(|(topic, followees)| {
-                        let followees = pb_api::neuron::Followees::from(followees);
+                        let followees = pb_api::neuron::FolloweesForTopic::from(followees);
                         (topic, followees)
                     })
                     .collect();
@@ -133,7 +133,7 @@ impl From<pb_api::Neuron> for pb::Neuron {
                 let topic_id_to_followees = topic_id_to_followees
                     .into_iter()
                     .map(|(topic, followees)| {
-                        let followees = pb::neuron::Followees::from(followees);
+                        let followees = pb::neuron::FolloweesForTopic::from(followees);
                         (topic, followees)
                     })
                     .collect();
@@ -183,6 +183,23 @@ impl From<pb_api::neuron::Followees> for pb::neuron::Followees {
     fn from(item: pb_api::neuron::Followees) -> Self {
         Self {
             followees: item.followees.into_iter().map(|x| x.into()).collect(),
+        }
+    }
+}
+
+impl From<pb::neuron::FolloweesForTopic> for pb_api::neuron::FolloweesForTopic {
+    fn from(item: pb::neuron::FolloweesForTopic) -> Self {
+        Self {
+            followees: item.followees.into_iter().map(|x| x.into()).collect(),
+            topic: item.topic.and_then(topic_id_to_api),
+        }
+    }
+}
+impl From<pb_api::neuron::FolloweesForTopic> for pb::neuron::FolloweesForTopic {
+    fn from(item: pb_api::neuron::FolloweesForTopic) -> Self {
+        Self {
+            followees: item.followees.into_iter().map(|x| x.into()).collect(),
+            topic: item.topic.map(|topic| i32::from(pb::Topic::from(topic))),
         }
     }
 }
