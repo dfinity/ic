@@ -347,7 +347,7 @@ impl From<&manage_neuron::Command> for neuron_in_flight_command::Command {
             S::Configure              (x) => D::Configure              (x),
             S::Disburse               (x) => D::Disburse               (x),
             S::Follow                 (x) => D::Follow                 (x),
-            S::SetFollowingForTopics  (x) => D::SetFollowingForTopics (x),
+            S::SetFollowingForTopics  (x) => D::SetFollowingForTopics  (x),
             S::MakeProposal           (x) => D::MakeProposal           (x),
             S::RegisterVote           (x) => D::RegisterVote           (x),
             S::Split                  (x) => D::Split                  (x),
