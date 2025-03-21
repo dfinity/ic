@@ -5,6 +5,7 @@ use clap::Parser;
 use futures::{stream, StreamExt};
 use ic_agent::Agent;
 use ic_nervous_system_agent::nns::sns_wasm;
+use ic_sns_governance_api::pb::v1::topics::ListTopicsResponse;
 use ic_sns_root::types::SnsCanisterType;
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
@@ -33,6 +34,8 @@ struct SnsHealthInfo {
     cycles: Vec<(Cycles, SnsCanisterType)>,
     num_remaining_upgrade_steps: usize,
     automatic_target_version_advancement: Option<bool>,
+    /// Information about this SNS's proposal topics. Emitted only if --json is selected.
+    proposal_topics: Option<ListTopicsResponse>,
 }
 
 impl TableRow for SnsHealthInfo {
@@ -186,12 +189,20 @@ pub async fn exec(args: HealthArgs, agent: &Agent) -> Result<()> {
                 .await?
                 .automatically_advance_target_version;
 
+            let proposal_topics = if args.json {
+                let topics = sns.governance.list_topics(agent).await?;
+                Some(topics)
+            } else {
+                None
+            };
+
             Result::<SnsHealthInfo, anyhow::Error>::Ok(SnsHealthInfo {
                 name,
                 memory_consumption,
                 cycles,
                 num_remaining_upgrade_steps,
                 automatic_target_version_advancement,
+                proposal_topics,
             })
         })
         .buffer_unordered(10)
