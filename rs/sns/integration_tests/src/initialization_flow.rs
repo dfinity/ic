@@ -1,4 +1,5 @@
-use candid::Nat;
+use candid::{Decode, Encode, Nat};
+use canister_test::WasmResult;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_nervous_system_common::{ExplosiveTokens, E8, ONE_DAY_SECONDS, ONE_TRILLION};
 use ic_nervous_system_common_test_keys::TEST_NEURON_1_OWNER_PRINCIPAL;
@@ -31,14 +32,14 @@ use ic_nns_test_utils::{
         sns_swap_get_auto_finalization_status,
     },
 };
-use ic_sns_governance::pb::v1::{
+use ic_sns_governance_api::pb::v1::{
     governance::Mode::{Normal, PreInitializationSwap},
-    ListNeurons,
+    ListNeurons, ListNeuronsResponse,
 };
 use ic_sns_swap::pb::v1::Lifecycle;
 use ic_sns_test_utils::state_test_helpers::{
     get_lifecycle, get_sns_canisters_summary, list_community_fund_participants,
-    participate_in_swap, sns_governance_list_neurons, state_machine_builder_for_sns_tests,
+    participate_in_swap, state_machine_builder_for_sns_tests,
 };
 use ic_state_machine_tests::StateMachine;
 use icp_ledger::DEFAULT_TRANSFER_FEE;
@@ -301,6 +302,32 @@ impl SnsInitializationFlowTestSetup {
             swap_canister_id
         );
     }
+}
+
+// TODO: Reuse this function from ic_sns_test_utils::state_test_helpers once that crate is ported
+// TODO: to use `ic_sns_governance_api` (rather than `ic_sns_governance`).
+fn sns_governance_list_neurons(
+    state_machine: &StateMachine,
+    sns_governance_canister_id: CanisterId,
+    request: &ListNeurons,
+) -> ListNeuronsResponse {
+    let result = state_machine
+        .execute_ingress(
+            sns_governance_canister_id,
+            "list_neurons",
+            Encode!(&request).unwrap(),
+        )
+        .unwrap();
+    let result = match result {
+        WasmResult::Reply(reply) => reply,
+        WasmResult::Reject(reject) => {
+            panic!(
+                "list_neurons was rejected by the governance canister: {:#?}",
+                reject
+            )
+        }
+    };
+    Decode!(&result, ListNeuronsResponse).unwrap()
 }
 
 #[test]
@@ -581,7 +608,7 @@ fn test_one_proposal_sns_initialization_success_with_neurons_fund_participation(
     .neurons;
     let mut at_least_one_sns_neuron_is_nf_controlled = false;
     for neuron in neurons {
-        if neuron.is_neurons_fund_controlled() {
+        if neuron.source_nns_neuron_id.is_some() {
             at_least_one_sns_neuron_is_nf_controlled = true;
             let from_neurons_fund = neuron.permissions.iter().any(|permission| {
                 cf_participants_principals.contains(&permission.principal.unwrap())

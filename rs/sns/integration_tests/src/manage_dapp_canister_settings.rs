@@ -1,18 +1,24 @@
 use candid::Encode;
 use canister_test::Wasm;
+use futures_util::future::FutureExt;
 use ic_base_types::PrincipalId;
 use ic_ledger_core::Tokens;
 use ic_management_canister_types_private::CanisterSettingsArgsBuilder;
+use ic_nervous_system_agent::{
+    sns::governance::{GovernanceCanister, SubmittedProposal},
+    state_machine_impl::StateMachineAgent,
+};
 use ic_nervous_system_clients::canister_status::DefiniteCanisterSettingsArgs;
 use ic_nervous_system_common::ONE_YEAR_SECONDS;
 use ic_nns_test_utils::state_test_helpers::{
-    create_canister, sns_claim_staked_neuron, sns_get_proposal, sns_make_proposal,
-    sns_stake_neuron, sns_wait_for_proposal_executed_or_failed, sns_wait_for_proposal_execution,
+    create_canister, sns_claim_staked_neuron, sns_get_proposal, sns_stake_neuron,
+    sns_wait_for_proposal_executed_or_failed, sns_wait_for_proposal_execution,
 };
-use ic_sns_governance::pb::v1::{
+use ic_sns_governance_api::pb::v1::{
     proposal::Action, LogVisibility, ManageDappCanisterSettings, NervousSystemParameters,
     NeuronPermissionList, NeuronPermissionType, Proposal,
 };
+use ic_sns_governance_api_helpers::default_nervous_system_parameters;
 use ic_sns_test_utils::{
     itest_helpers::SnsTestsInitPayloadBuilder,
     state_test_helpers::{
@@ -20,6 +26,7 @@ use ic_sns_test_utils::{
     },
 };
 use lazy_static::lazy_static;
+use strum::IntoEnumIterator;
 use tokio::time::Duration;
 
 // The minimum WASM payload.
@@ -37,15 +44,17 @@ fn test_manage_dapp_canister_settings_successful() {
 
     let system_params = NervousSystemParameters {
         neuron_claimer_permissions: Some(NeuronPermissionList {
-            permissions: NeuronPermissionType::all(),
+            permissions: NeuronPermissionType::iter()
+                .map(|permission| permission as i32)
+                .collect(),
         }),
-        ..NervousSystemParameters::with_default_values()
+        ..default_nervous_system_parameters()
     };
 
     // Step 1.2: Set up the SNS canisters.
     let sns_init_payload = SnsTestsInitPayloadBuilder::new()
         .with_ledger_account(user.0.into(), alloc)
-        .with_nervous_system_parameters(system_params)
+        .with_nervous_system_parameters(system_params.into())
         .build();
     let canister_ids = setup_sns_canisters(&state_machine, sns_init_payload);
 
@@ -127,18 +136,24 @@ fn test_manage_dapp_canister_settings_successful() {
         )),
         ..Default::default()
     };
-    let proposal_id = sns_make_proposal(
-        &state_machine,
-        canister_ids.governance_canister_id,
-        user,
-        neuron_id,
-        proposal,
-    )
-    .unwrap();
+
+    let state_machine_agent = StateMachineAgent::new(&state_machine, user);
+    let sns_governance = GovernanceCanister {
+        canister_id: canister_ids.governance_canister_id.get(),
+    };
+
+    let response = sns_governance
+        .submit_proposal(&state_machine_agent, neuron_id.into(), proposal)
+        .now_or_never()
+        .unwrap()
+        .unwrap();
+
+    let proposal_id = SubmittedProposal::try_from(response).unwrap().proposal_id;
+
     sns_wait_for_proposal_execution(
         &state_machine,
         canister_ids.governance_canister_id,
-        proposal_id,
+        proposal_id.into(),
     );
     for _ in 1..100 {
         state_machine.advance_time(Duration::from_secs(1));
@@ -174,15 +189,17 @@ fn test_manage_dapp_canister_settings_failure() {
 
     let system_params = NervousSystemParameters {
         neuron_claimer_permissions: Some(NeuronPermissionList {
-            permissions: NeuronPermissionType::all(),
+            permissions: NeuronPermissionType::iter()
+                .map(|permission| permission as i32)
+                .collect(),
         }),
-        ..NervousSystemParameters::with_default_values()
+        ..default_nervous_system_parameters()
     };
 
     // Step 1.2: Set up the SNS canisters.
     let sns_init_payload = SnsTestsInitPayloadBuilder::new()
         .with_ledger_account(user.0.into(), alloc)
-        .with_nervous_system_parameters(system_params)
+        .with_nervous_system_parameters(system_params.into())
         .build();
     let canister_ids = setup_sns_canisters(&state_machine, sns_init_payload);
 
@@ -264,18 +281,22 @@ fn test_manage_dapp_canister_settings_failure() {
         )),
         ..Default::default()
     };
-    let proposal_id = sns_make_proposal(
-        &state_machine,
-        canister_ids.governance_canister_id,
-        user,
-        neuron_id,
-        proposal,
-    )
-    .unwrap();
+    let state_machine_agent = StateMachineAgent::new(&state_machine, user);
+    let sns_governance = GovernanceCanister {
+        canister_id: canister_ids.governance_canister_id.get(),
+    };
+    let response = sns_governance
+        .submit_proposal(&state_machine_agent, neuron_id.into(), proposal)
+        .now_or_never()
+        .unwrap()
+        .unwrap();
+
+    let proposal_id = SubmittedProposal::try_from(response).unwrap().proposal_id;
+
     sns_wait_for_proposal_executed_or_failed(
         &state_machine,
         canister_ids.governance_canister_id,
-        proposal_id,
+        proposal_id.into(),
     );
     for _ in 1..100 {
         state_machine.advance_time(Duration::from_secs(1));
@@ -286,7 +307,7 @@ fn test_manage_dapp_canister_settings_failure() {
     let proposal = sns_get_proposal(
         &state_machine,
         canister_ids.governance_canister_id,
-        proposal_id,
+        proposal_id.into(),
     )
     .unwrap();
     let failure_reason = proposal.failure_reason.unwrap().error_message;
