@@ -80,10 +80,8 @@ impl<T: IngressPool> PoolMutationsProducer<T> for IngressManager {
                     registry_version,
                 ) {
                     Ok(()) => {
-                        self.metrics.observe_validated_ingress_message(
-                            self.time_source.as_ref(),
-                            &artifact,
-                        );
+                        self.metrics
+                            .observe_validated_ingress_message(self.time_source.as_ref(), artifact);
                         MoveToValidated(IngressMessageId::from(ingress_object))
                     }
                     Err(err) => {
