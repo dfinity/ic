@@ -1,0 +1,19 @@
+name: 'TODO'
+description: 'TODO'
+inputs:
+  run:
+    required: true
+
+runs:
+  using: "composite"
+  steps:
+    - name: TODO
+      shell: bash
+      run: |
+        set -euo pipefail
+
+        export BAZEL_ACTION_OLDPATH="$PATH"
+        PATH="${{ github.action_path }}/bin:$BAZEL_ACTION_OLDPATH"
+        hash -r
+
+        ${{ inputs.run }}
