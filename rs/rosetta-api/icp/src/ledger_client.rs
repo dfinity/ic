@@ -440,8 +440,8 @@ impl LedgerAccess for LedgerClient {
                 .await
         }
         .map_err(|e| ApiError::invalid_request(format!("{}", e)))?;
-        let ninfo: Result<Result<NeuronInfo, GovernanceError>, String> =
-            Decode!(&bytes, Result<NeuronInfo, GovernanceError>).map_err(|e| e.to_string());
+        let ninfo: Result<Result<NeuronInfo, GovernanceError>, _> =
+            Decode!(&bytes, Result<NeuronInfo, GovernanceError>);
         let ninfo = ninfo.map_err(|e| {
             ApiError::internal_error(format!(
                 "Deserialization of get_neuron_info response failed: {:?}",
