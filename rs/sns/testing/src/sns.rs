@@ -316,6 +316,8 @@ pub async fn upgrade_sns_controlled_test_canister<C: CallCanisters + ProgressNet
     .await
     .unwrap();
 
+    // TODO: @rvem: commented code below relates to the upgrade workflow that uses the
+    // 'upgrade_sns_controlled_canister::exec'
     // wait_for_proposal_execution(dev_participant_agent, sns.governance, proposal_id)
     //     .await
     //     .expect("Failed to execute the proposal");
