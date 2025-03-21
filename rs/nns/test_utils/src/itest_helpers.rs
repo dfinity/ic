@@ -29,6 +29,7 @@ use ic_nns_governance_api::{
 };
 use ic_nns_gtc::pb::v1::Gtc;
 use ic_nns_handler_root::init::RootCanisterInitPayload;
+use ic_node_rewards_canister_api::lifecycle_args::InitArgs as NRInitArgs;
 use ic_registry_transport::pb::v1::RegistryMutation;
 use ic_sns_wasm::{init::SnsWasmCanisterInitPayload, pb::v1::AddWasmRequest};
 use ic_test_utilities::universal_canister::{
@@ -57,6 +58,7 @@ pub struct NnsCanisters<'a> {
     pub identity: Canister<'a>,
     pub nns_ui: Canister<'a>,
     pub sns_wasms: Canister<'a>,
+    pub node_rewards: Canister<'a>,
 }
 
 impl NnsCanisters<'_> {
@@ -98,6 +100,7 @@ impl NnsCanisters<'_> {
         let identity = Canister::new(runtime, IDENTITY_CANISTER_ID);
         let nns_ui = Canister::new(runtime, NNS_UI_CANISTER_ID);
         let mut sns_wasms = Canister::new(runtime, SNS_WASM_CANISTER_ID);
+        let mut node_rewards = Canister::new(runtime, NODE_REWARDS_CANISTER_ID);
 
         // Install all the canisters
         // Registry and Governance need to first or the process hangs,
@@ -115,7 +118,8 @@ impl NnsCanisters<'_> {
             ),
             install_lifeline_canister(&mut lifeline, init_payloads.lifeline.clone()),
             install_genesis_token_canister(&mut genesis_token, init_payloads.genesis_token.clone()),
-            install_sns_wasm_canister(&mut sns_wasms, init_payloads.sns_wasms.clone())
+            install_sns_wasm_canister(&mut sns_wasms, init_payloads.sns_wasms.clone()),
+            install_node_rewards_canister(&mut node_rewards, init_payloads.node_rewards.clone())
         );
 
         eprintln!("NNS canisters installed after {:.1} s", since_start_secs());
@@ -134,6 +138,7 @@ impl NnsCanisters<'_> {
             identity.set_controller_with_retries(ROOT_CANISTER_ID.get()),
             nns_ui.set_controller_with_retries(ROOT_CANISTER_ID.get()),
             sns_wasms.set_controller_with_retries(ROOT_CANISTER_ID.get()),
+            node_rewards.set_controller_with_retries(ROOT_CANISTER_ID.get())
         )
         .unwrap();
 
@@ -150,6 +155,7 @@ impl NnsCanisters<'_> {
             identity,
             nns_ui,
             sns_wasms,
+            node_rewards,
         }
     }
 
@@ -205,6 +211,10 @@ impl NnsCanisters<'_> {
             .create_canister_at_id_max_cycles_with_retries(SNS_WASM_CANISTER_ID.get())
             .await
             .unwrap();
+        let mut node_rewards = runtime
+            .create_canister_at_id_max_cycles_with_retries(NODE_REWARDS_CANISTER_ID.get())
+            .await
+            .unwrap();
 
         // Install all the canisters
         // Registry and Governance need to first or the process hangs,
@@ -224,7 +234,8 @@ impl NnsCanisters<'_> {
             ),
             install_lifeline_canister(&mut lifeline, init_payloads.lifeline.clone()),
             install_genesis_token_canister(&mut genesis_token, init_payloads.genesis_token.clone()),
-            install_sns_wasm_canister(&mut sns_wasms, init_payloads.sns_wasms.clone())
+            install_sns_wasm_canister(&mut sns_wasms, init_payloads.sns_wasms.clone()),
+            install_node_rewards_canister(&mut node_rewards, init_payloads.node_rewards.clone())
         );
 
         eprintln!("NNS canisters installed after {:.1} s", since_start_secs());
@@ -243,6 +254,7 @@ impl NnsCanisters<'_> {
             identity.set_controller_with_retries(ROOT_CANISTER_ID.get()),
             nns_ui.set_controller_with_retries(ROOT_CANISTER_ID.get()),
             sns_wasms.set_controller_with_retries(ROOT_CANISTER_ID.get()),
+            node_rewards.set_controller_with_retries(ROOT_CANISTER_ID.get())
         )
         .unwrap();
 
@@ -259,6 +271,7 @@ impl NnsCanisters<'_> {
             identity,
             nns_ui,
             sns_wasms,
+            node_rewards,
         }
     }
 
@@ -274,6 +287,7 @@ impl NnsCanisters<'_> {
             &self.identity,
             &self.nns_ui,
             &self.sns_wasms,
+            &self.node_rewards,
         ]
     }
 
@@ -632,6 +646,11 @@ pub async fn install_sns_wasm_canister(
 ) {
     let encoded = Encode!(&init_payload).unwrap();
     install_rust_canister(canister, "sns-wasm-canister", &[], Some(encoded)).await;
+}
+
+pub async fn install_node_rewards_canister(canister: &mut Canister<'_>, init_payload: NRInitArgs) {
+    let encoded = Encode!(&init_payload).unwrap();
+    install_rust_canister(canister, "node-rewards-canister", &[], Some(encoded)).await;
 }
 
 /// Creates and installs the sns_wasm canister.
