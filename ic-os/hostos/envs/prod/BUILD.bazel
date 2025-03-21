@@ -10,9 +10,9 @@ icos_build(
     name = "prod",
     image_deps_func = image_deps,
     max_file_sizes = {
-        "disk-img.tar.zst": "900" + ("0" * 6),  # currently at 836_858_392 bytes
-        "update-img.tar.zst": "900" + ("0" * 6),  # currently at 834_864_396 bytes
-        "update-img-test.tar.zst": "900" + ("0" * 6),  # currently at 834_864_419 bytes
+        "disk-img.tar.zst": str(900 * 1000 * 1000),  # 837 MB on 2025-03-21
+        "update-img.tar.zst": str(900 * 1000 * 1000),  # 835 MB on 2025-03-21
+        "update-img-test.tar.zst": str(900 * 1000 * 1000),  # 835 MB on 2025-03-21
     },
     upload_prefix = "host-os",
     visibility = ["//rs:ic-os-pkg"],

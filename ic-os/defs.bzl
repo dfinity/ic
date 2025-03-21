@@ -343,14 +343,9 @@ def icos_build(
     )
 
     if "disk-img.tar.zst" in max_file_sizes:
-        native.sh_test(
-            name = "disk-img.tar.zst_compressed_size_test",
-            srcs = ["//ic-os:file_size_test.sh"],
-            data = ["disk-img.tar.zst"],
-            env = {
-                "FILE": "$(rootpath disk-img.tar.zst)",
-                "MAX_SIZE": max_file_sizes["disk-img.tar.zst"],
-            },
+        file_size_check(
+            name = "disk-img.tar.zst",
+            max_file_size = max_file_sizes["disk-img.tar.zst"],
         )
 
     # -------------------- Assemble upgrade image --------------------
@@ -375,14 +370,9 @@ def icos_build(
         )
 
         if "update-img.tar.zst" in max_file_sizes:
-            native.sh_test(
-                name = "update-img.tar.zst_compressed_size_test",
-                srcs = ["//ic-os:file_size_test.sh"],
-                data = ["update-img.tar.zst"],
-                env = {
-                    "FILE": "$(rootpath update-img.tar.zst)",
-                    "MAX_SIZE": max_file_sizes["update-img.tar.zst"],
-                },
+            file_size_check(
+                name = "update-img.tar.zst",
+                max_file_size = max_file_sizes["update-img.tar.zst"],
             )
 
         upgrade_image(
@@ -404,14 +394,9 @@ def icos_build(
         )
 
         if "update-img-test.tar.zst" in max_file_sizes:
-            native.sh_test(
-                name = "update-img-test.tar.zst_compressed_size_test",
-                srcs = ["//ic-os:file_size_test.sh"],
-                data = ["update-img-test.tar.zst"],
-                env = {
-                    "FILE": "$(rootpath update-img-test.tar.zst)",
-                    "MAX_SIZE": max_file_sizes["update-img.tar.zst"],
-                },
+            file_size_check(
+                name = "update-img-test.tar.zst",
+                max_file_size = max_file_sizes["update-img-test.tar.zst"],
             )
 
     # -------------------- Upload artifacts --------------------
@@ -627,6 +612,26 @@ EOF
     )
 
 # end def icos_build
+
+def file_size_check(
+        name,
+        max_file_size):
+    """
+    A check to make sure the given file is below the specified size.
+
+    Args:
+      name: Name of the file.
+      max_file_size: Max accepted size in bytes.
+    """
+    native.sh_test(
+        name = "%s_size_test" % name,
+        srcs = ["//ic-os:file_size_test.sh"],
+        data = [name],
+        env = {
+            "FILE": "$(rootpath %s)" % name,
+            "MAX_SIZE": max_file_size,
+        },
+    )
 
 def boundary_node_icos_build(
         name,
