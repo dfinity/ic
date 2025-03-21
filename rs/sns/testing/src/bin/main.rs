@@ -5,7 +5,8 @@ use ic_nervous_system_agent::helpers::sns::get_principal_neurons;
 use ic_nervous_system_agent::CallCanisters;
 use ic_sns_cli::utils::get_agent;
 use ic_sns_testing::sns::{
-    complete_sns_swap, create_sns, find_sns_by_name, upgrade_sns_controlled_test_canister,
+    complete_sns_swap, create_sns, find_sns_by_name, propose_sns_controlled_test_canister_upgrade,
+    sns_proposal_upvote as sns_proposal_upvote_impl, wait_for_sns_controlled_canister_upgrade,
     TestCanisterInitArgs,
 };
 use ic_sns_testing::utils::{
@@ -13,7 +14,8 @@ use ic_sns_testing::utils::{
     NNS_NEURON_ID,
 };
 use ic_sns_testing::{
-    RunBasicScenarioArgs, SnsTestingArgs, SnsTestingSubCommand, SwapCompleteArgs,
+    RunBasicScenarioArgs, SnsProposalUpvoteArgs, SnsTestingArgs, SnsTestingSubCommand,
+    SwapCompleteArgs,
 };
 
 async fn run_basic_scenario(network: String, args: RunBasicScenarioArgs) {
@@ -51,19 +53,22 @@ async fn run_basic_scenario(network: String, args: RunBasicScenarioArgs) {
         NNS_NEURON_ID,
         dev_agent,
         vec![args.test_canister_id],
+        true,
     )
     .await;
     println!("SNS created");
     println!("Upgrading SNS-controlled test canister...");
-    upgrade_sns_controlled_test_canister(
+    let proposal_id = propose_sns_controlled_test_canister_upgrade(
         dev_agent,
-        sns,
+        sns.clone(),
         args.test_canister_id,
         TestCanisterInitArgs {
             greeting: Some("Hi".to_string()),
         },
     )
     .await;
+    wait_for_sns_controlled_canister_upgrade(dev_agent, proposal_id, args.test_canister_id, sns)
+        .await;
     println!("Test canister upgraded")
 }
 
@@ -115,6 +120,38 @@ async fn swap_complete(network: String, args: SwapCompleteArgs) {
     }
 }
 
+async fn sns_proposal_upvote(network: String, args: SnsProposalUpvoteArgs) {
+    let agent = get_agent(&network, None).await.unwrap();
+
+    let target_snses = find_sns_by_name(&agent, args.sns_name.clone()).await;
+    let target_sns = target_snses.first();
+
+    if let Some(sns) = target_sns {
+        println!(
+            "Upvoting proposal {} for SNS \"{}\"...",
+            args.proposal_id, args.sns_name
+        );
+        if let Err(e) = sns_proposal_upvote_impl(
+            &agent,
+            sns.governance,
+            sns.swap,
+            args.proposal_id,
+            args.wait,
+        )
+        .await
+        {
+            eprintln!(
+                "Failed to upvote proposal {} for SNS {}: {}",
+                args.proposal_id, args.sns_name, e
+            );
+            exit(1);
+        }
+    } else {
+        eprintln!("No SNS found with the name: {}", args.sns_name);
+        exit(1);
+    }
+}
+
 #[tokio::main]
 async fn main() {
     let SnsTestingArgs {
@@ -126,5 +163,6 @@ async fn main() {
         SnsTestingSubCommand::ValidateNetwork(_) => validate_network(network).await,
         SnsTestingSubCommand::RunBasicScenario(args) => run_basic_scenario(network, args).await,
         SnsTestingSubCommand::SwapComplete(args) => swap_complete(network, args).await,
+        SnsTestingSubCommand::SnsProposalUpvote(args) => sns_proposal_upvote(network, args).await,
     }
 }
