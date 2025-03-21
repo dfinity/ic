@@ -40,7 +40,6 @@ jobs:
       group: zh1
       labels: dind-large
     env:
-      CLOUD_CREDENTIALS_CONTENT: ${{ secrets.CLOUD_CREDENTIALS_CONTENT }}
       # Only run ci/bazel-scripts/diff.sh on PRs that are not labeled with "CI_ALL_BAZEL_TARGETS".
       OVERRIDE_DIDC_CHECK: ${{ contains(github.event.pull_request.labels.*.name, 'CI_OVERRIDE_DIDC_CHECK') }}
       CI_OVERRIDE_BUF_BREAKING: ${{ contains(github.event.pull_request.labels.*.name, 'CI_OVERRIDE_BUF_BREAKING') }}
@@ -52,6 +51,7 @@ jobs:
           fetch-depth: ${{ github.event_name == 'pull_request' && 256 || 0 }}
       - name: Set BAZEL_EXTRA_ARGS
         shell: bash
+        id: bazel-extra-args
         run: |
           set -xeuo pipefail
           # Determine which tests to skip and append 'long_test' for pull requests, merge groups or push on dev-gh-*
@@ -78,29 +78,28 @@ jobs:
           # Prepend tags with '-' and join them with commas for Bazel
           TEST_TAG_FILTERS=$(IFS=,; echo "${EXCLUDED_TEST_TAGS[*]/#/-}")
           # Determine BAZEL_EXTRA_ARGS based on event type or branch name
-          BAZEL_EXTRA_ARGS="--test_tag_filters=$TEST_TAG_FILTERS"
+          BAZEL_EXTRA_ARGS=( "--test_tag_filters=$TEST_TAG_FILTERS" )
           if [[ "$CI_EVENT_NAME" == 'merge_group' ]]; then
-              BAZEL_EXTRA_ARGS+=" --test_timeout_filters=short,moderate --flaky_test_attempts=3"
+              BAZEL_EXTRA_ARGS+=( --test_timeout_filters=short,moderate --flaky_test_attempts=3 )
           elif [[ $BRANCH_NAME =~ ^hotfix-.* ]]; then
-              BAZEL_EXTRA_ARGS+=" --test_timeout_filters=short,moderate"
+              BAZEL_EXTRA_ARGS+=( --test_timeout_filters=short,moderate )
           else
-              BAZEL_EXTRA_ARGS+=" --keep_going"
+              BAZEL_EXTRA_ARGS+=( --keep_going )
           fi
-          # Export BAZEL_EXTRA_ARGS to environment
-          echo "BAZEL_EXTRA_ARGS=$BAZEL_EXTRA_ARGS" >> $GITHUB_ENV
+          echo "BAZEL_EXTRA_ARGS=${BAZEL_EXTRA_ARGS[@]}" >> $GITHUB_OUTPUT
       - name: Run Bazel Test All
         id: bazel-test-all
         uses: ./.github/actions/bazel-test-all/
         with:
-          BAZEL_COMMAND: test --config=ci ${{ env.BAZEL_EXTRA_ARGS }}
+          BAZEL_COMMAND: test --config=ci ${{ steps.bazel-extra-args.outputs.BAZEL_EXTRA_ARGS }}
           BAZEL_TARGETS: //...
           BUILDEVENT_APIKEY: ${{ secrets.HONEYCOMB_TOKEN }}
+          CLOUD_CREDENTIALS_CONTENT: ${{ secrets.CLOUD_CREDENTIALS_CONTENT }}
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
       - name: Upload SHA256SUMS (cache)
-        uses: actions/upload-artifact@v4
+        uses: ./.github/actions/bazel-upload-checksums/
         with:
-          name: shasums-cache
-          path: SHA256SUMS
+          artifact-name: shasums-cache
       - name: Upload bazel-bep
         # runs only if previous step succeeded or failed;
         # we avoid collecting artifacts of jobs that were cancelled
@@ -138,13 +137,11 @@ jobs:
       - name: Run Bazel Test Darwin x86-64
         id: bazel-test-darwin-x86-64
         uses: ./.github/actions/bazel-test-all/
-        env:
-          CLOUD_CREDENTIALS_CONTENT: ${{ secrets.CLOUD_CREDENTIALS_CONTENT }}
         with:
           BAZEL_COMMAND: >-
             test --config=ci --config=macos_ci --test_tag_filters=test_macos
           BAZEL_TARGETS: //rs/... //publish/binaries/...
-          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+          CLOUD_CREDENTIALS_CONTENT: ${{ secrets.CLOUD_CREDENTIALS_CONTENT }}
       - name: Upload bazel-bep
         # runs only if previous step succeeded or failed;
         # we avoid collecting artifacts of jobs that were cancelled
@@ -293,9 +290,6 @@ jobs:
           ln -s "/cache/job/${CI_JOB_NAME}/${CI_RUN_ID}/artifacts" /__w/$REPO_NAME/$REPO_NAME/artifacts
           "$CI_PROJECT_DIR"/ci/scripts/run-build-ic.sh
           rm -rf "/cache/job/${CI_JOB_NAME}/${CI_RUN_ID}"
-
-          # List and aggregate all SHA256SUMS files.
-          find -L bazel-out -name SHA256SUMS | xargs cat | sort | uniq > SHA256SUMS
         env:
           BAZEL_COMMAND: build --config=ci
           BAZEL_TARGETS: //...
@@ -303,10 +297,9 @@ jobs:
           BRANCH_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           RUN_ON_DIFF_ONLY: ${{ github.event_name == 'pull_request' && !contains(github.event.pull_request.labels.*.name, 'CI_ALL_BAZEL_TARGETS') }}
       - name: Upload SHA256SUMS (nocache)
-        uses: actions/upload-artifact@v4
+        uses: ./.github/actions/bazel-upload-checksums/
         with:
-          name: shasums-nocache
-          path: SHA256SUMS
+          artifact-name: shasums-nocache
   build-determinism:
     name: Build Determinism
     runs-on: ubuntu-latest

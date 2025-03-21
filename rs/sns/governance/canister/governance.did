@@ -6,6 +6,7 @@ type Account = record {
 type Action = variant {
   ManageNervousSystemParameters : NervousSystemParameters;
   AddGenericNervousSystemFunction : NervousSystemFunction;
+  SetTopicsForCustomProposals : SetTopicsForCustomProposals;
   ManageDappCanisterSettings : ManageDappCanisterSettings;
   RemoveGenericNervousSystemFunction : nat64;
   UpgradeSnsToNextVersion : record {};
@@ -226,7 +227,7 @@ type GenericNervousSystemFunction = record {
   target_canister_id : opt principal;
   validator_method_name : opt text;
   target_method_name : opt text;
-  topic: opt Topic;
+  topic : opt Topic;
 };
 
 type GetMaturityModulationResponse = record {
@@ -394,6 +395,10 @@ type AdvanceSnsTargetVersion = record {
   new_target : opt SnsVersion;
 };
 
+type SetTopicsForCustomProposals = record {
+  custom_function_id_to_topic : vec record { nat64; Topic };
+};
+
 type ManageLedgerParameters = record {
   token_symbol : opt text;
   transfer_fee : opt nat64;
@@ -486,6 +491,11 @@ type NervousSystemParameters = record {
   automatically_advance_target_version : opt bool;
 };
 
+type FolloweesForTopic = record {
+  followees : vec NeuronId;
+  topic : opt Topic;
+};
+
 type Neuron = record {
   id : opt NeuronId;
   staked_maturity_e8s_equivalent : opt nat64;
@@ -501,6 +511,9 @@ type Neuron = record {
   vesting_period_seconds : opt nat64;
   disburse_maturity_in_progress : vec DisburseMaturityInProgress;
   followees : vec record { nat64; Followees };
+  topic_followees : opt record {
+    topic_id_to_followees : vec record { nat64; FolloweesForTopic };
+  };
   neuron_fees_e8s : nat64;
 };
 
@@ -515,16 +528,6 @@ type NeuronIds = record {
 type NeuronInFlightCommand = record {
   command : opt Command_2;
   timestamp : nat64;
-};
-
-type NeuronParameters = record {
-  controller : opt principal;
-  dissolve_delay_seconds : opt nat64;
-  source_nns_neuron_id : opt nat64;
-  stake_e8s : opt nat64;
-  followees : vec NeuronId;
-  hotkey : opt principal;
-  neuron_id : opt NeuronId;
 };
 
 type NeuronPermission = record {
@@ -606,6 +609,7 @@ type ProposalData = record {
   minimum_yes_proportion_of_exercised : opt Percentage;
   is_eligible_for_rewards : bool;
   executed_timestamp_seconds : nat64;
+  topic : opt Topic;
 };
 
 type ProposalId = record {

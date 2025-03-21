@@ -164,9 +164,24 @@ message Neuron {
     repeated NeuronId followees = 1;
   }
 
-  // The neuron's followees, specified as a map of proposal functions IDs to followees neuron IDs.
-  // The map's keys are represented by integers as Protobuf does not support enum keys in maps.
+  // A list of a neuron's followees, possibly associated with a given topic.
+  message FolloweesForTopic {
+    repeated NeuronId followees = 1;
+    optional Topic topic = 2;
+  }
+
+  // A collection of a neuron's followees (per topic).
+  message TopicFollowees {
+    map<uint64, FolloweesForTopic> topic_id_to_followees = 1;
+  }
+
+  // The neuron's legacy followees (per proposal type), specified as a map of proposal functions IDs
+  // to followees neuron IDs. The map's keys are represented by integers as Protobuf does not
+  // support enum keys in maps.
   map<uint64, Followees> followees = 11;
+
+  // The neuron's followees, specified as a map of proposal topics IDs to followees neuron IDs.
+  optional TopicFollowees topic_followees = 19;
 
   // The accumulated unstaked maturity of the neuron, measured in "e8s equivalent", i.e., in equivalent of
   // 10E-8 of a governance token.
@@ -276,7 +291,7 @@ message NervousSystemFunction {
     // <method_name>(proposal_data: ProposalData) -> Result<String, String>
     optional string validator_method_name = 5;
 
-    // The topic this function belongs to
+    // The topic this proposal belongs to.
     optional Topic topic = 6;
   }
 
@@ -486,6 +501,10 @@ message AdvanceSnsTargetVersion {
   optional SnsVersion new_target = 1;
 }
 
+message SetTopicsForCustomProposals {
+  map<uint64, Topic> custom_function_id_to_topic = 1;
+}
+
 // A proposal is the immutable input of a proposal submission.
 message Proposal {
   // The proposal's title as a text, which can be at most 256 bytes.
@@ -598,6 +617,11 @@ message Proposal {
     //
     // Id = 15.
     AdvanceSnsTargetVersion advance_sns_target_version = 19;
+
+    // Change the mapping from custom proposal types to topics.
+    //
+    // Id = 16;
+    SetTopicsForCustomProposals set_topics_for_custom_proposals = 20;
   }
 }
 
@@ -792,6 +816,7 @@ message ProposalData {
   // Id 13 - ManageLedgerParameters proposals.
   // Id 14 - ManageDappCanisterSettings proposals.
   // Id 15 - AdvanceSnsTargetVersion proposals.
+  // Id 16 - SetTopicsForCustomProposals proposals.
   uint64 action = 1;
 
   // This is stored here temporarily. It is also stored on the map
@@ -932,6 +957,9 @@ message ProposalData {
     MintSnsTokensActionAuxiliary mint_sns_tokens = 23;
     AdvanceSnsTargetVersionActionAuxiliary advance_sns_target_version = 24;
   }
+
+  // This proposal's topic.
+  optional Topic topic = 25;
 }
 
 message Valuation {
@@ -2061,8 +2089,7 @@ message GetModeResponse {
 
 // The request for the `claim_swap_neurons` method.
 message ClaimSwapNeuronsRequest {
-  // Replacement for NeuronParameters. Contains the information needed to set up
-  // a neuron for a swap participant.
+  // Contains the information needed to set up a neuron for a swap participant.
   message NeuronRecipe {
     // The info that for a participant in the Neurons' Fund
     message NeuronsFund {
@@ -2087,6 +2114,7 @@ message ClaimSwapNeuronsRequest {
 
     // The duration in seconds that the neuron's dissolve delay will be set to.
     optional uint64 dissolve_delay_seconds = 4;
+
     // The neurons this neuron should follow
     optional NeuronIds followees = 5;
 

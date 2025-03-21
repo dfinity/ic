@@ -4,7 +4,10 @@ use cycles_minting_canister::{IcpXdrConversionRate, IcpXdrConversionRateCertifie
 use futures::future::FutureExt;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_ledger_core::tokens::CheckedSub;
-use ic_nervous_system_common::{cmc::CMC, ledger::IcpLedger, NervousSystemError};
+use ic_nervous_system_canisters::cmc::CMC;
+use ic_nervous_system_canisters::ledger::IcpLedger;
+use ic_nervous_system_common::NervousSystemError;
+use ic_nervous_system_timers::test::{advance_time_for_timers, set_time_for_timers};
 use ic_nns_common::{
     pb::v1::{NeuronId, ProposalId},
     types::UpdateIcpXdrConversionRatePayload,
@@ -113,10 +116,14 @@ pub struct FakeDriver {
 /// Create a default mock driver.
 impl Default for FakeDriver {
     fn default() -> Self {
-        Self {
+        let ret = Self {
             state: Arc::new(Mutex::new(Default::default())),
             error_on_next_ledger_call: Arc::new(Mutex::new(None)),
-        }
+        };
+        set_time_for_timers(std::time::Duration::from_secs(
+            ret.state.try_lock().unwrap().now,
+        ));
+        ret
     }
 }
 
@@ -130,6 +137,7 @@ impl FakeDriver {
 
     /// Constructs a mock driver that starts at the given timestamp.
     pub fn at(self, timestamp: u64) -> FakeDriver {
+        set_time_for_timers(std::time::Duration::from_secs(timestamp));
         self.state.lock().unwrap().now = timestamp;
         self
     }
@@ -178,6 +186,7 @@ impl FakeDriver {
 
     /// Increases the time by the given amount.
     pub fn advance_time_by(&mut self, delta_seconds: u64) {
+        advance_time_for_timers(std::time::Duration::from_secs(delta_seconds));
         self.state.lock().unwrap().now += delta_seconds;
     }
 
@@ -416,12 +425,12 @@ impl RandomnessGenerator for FakeDriver {
         Ok(bytes)
     }
 
-    fn seed_rng(&mut self, _seed: [u8; 32]) {
-        todo!()
+    fn seed_rng(&mut self, seed: [u8; 32]) {
+        self.state.try_lock().unwrap().rng = ChaCha20Rng::from_seed(seed);
     }
 
     fn get_rng_seed(&self) -> Option<[u8; 32]> {
-        todo!()
+        Some(self.state.try_lock().unwrap().rng.get_seed())
     }
 }
 
@@ -585,6 +594,12 @@ impl Environment for FakeDriver {
                 certificate: vec![],
             })
             .unwrap());
+        }
+
+        if method_name == "raw_rand" {
+            let mut bytes = [0u8; 32];
+            self.state.try_lock().unwrap().rng.fill_bytes(&mut bytes);
+            return Ok(Encode!(&bytes).unwrap());
         }
 
         println!(

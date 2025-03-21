@@ -259,7 +259,7 @@ impl SystemStateModifications {
             | Ok(Ic00Method::SchnorrPublicKey)
             | Ok(Ic00Method::SignWithSchnorr)
             | Ok(Ic00Method::VetKdPublicKey)
-            | Ok(Ic00Method::VetKdDeriveEncryptedKey)
+            | Ok(Ic00Method::VetKdDeriveKey)
             | Ok(Ic00Method::ProvisionalTopUpCanister)
             | Ok(Ic00Method::BitcoinSendTransactionInternal)
             | Ok(Ic00Method::BitcoinGetSuccessors)
@@ -276,7 +276,11 @@ impl SystemStateModifications {
             | Ok(Ic00Method::ClearChunkStore)
             | Ok(Ic00Method::TakeCanisterSnapshot)
             | Ok(Ic00Method::ListCanisterSnapshots)
-            | Ok(Ic00Method::DeleteCanisterSnapshot) => Ok(None),
+            | Ok(Ic00Method::DeleteCanisterSnapshot)
+            | Ok(Ic00Method::ReadCanisterSnapshotMetadata)
+            | Ok(Ic00Method::ReadCanisterSnapshotData)
+            | Ok(Ic00Method::UploadCanisterSnapshotMetadata)
+            | Ok(Ic00Method::UploadCanisterSnapshotData) => Ok(None),
             Err(_) => Err(UserError::new(
                 ErrorCode::CanisterMethodNotFound,
                 format!("Management canister has no method '{}'", msg.method_name),
@@ -856,6 +860,27 @@ impl SandboxSafeSystemState {
     pub(super) fn cycles_balance(&self) -> Cycles {
         let cycles_change = self.system_state_modifications.cycles_balance_change;
         cycles_change.apply(self.initial_cycles_balance)
+    }
+
+    /// Computes the current liquid main balance of the canister that the canister can spend
+    /// without getting frozen based on the initial value and the changes during the execution.
+    pub(super) fn liquid_cycles_balance(
+        &self,
+        current_memory_usage: NumBytes,
+        current_message_memory_usage: MessageMemoryUsage,
+    ) -> Cycles {
+        let cycles = self.cycles_balance();
+        let threshold = self.cycles_account_manager.freeze_threshold_cycles(
+            self.freeze_threshold,
+            self.memory_allocation,
+            current_memory_usage,
+            current_message_memory_usage,
+            self.compute_allocation,
+            self.subnet_size,
+            self.reserved_balance(),
+        );
+        // Here we rely on the saturating subtraction for Cycles.
+        cycles - threshold
     }
 
     /// Computes the current reserved balance of the canister based

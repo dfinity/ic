@@ -9,11 +9,11 @@ import urllib.request
 from enum import Enum
 from typing import List
 
-SAVED_VERSIONS_SUBNETS_PATH = "mainnet-subnet-revisions.json"
+MAINNET_ICOS_REVISIONS_FILE = "mainnet-icos-revisions.json"
 nns_subnet_id = "tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe"
 app_subnet_id = "io67a-2jmkw-zup3h-snbwi-g6a5n-rm5dn-b6png-lvdpl-nqnto-yih6l-gqe"
 PUBLIC_DASHBOARD_API = "https://ic-api.internetcomputer.org"
-SAVED_VERSIONS_CANISTERS_PATH = "mainnet-canister-revisions.json"
+SAVED_VERSIONS_CANISTERS_FILE = "mainnet-canister-revisions.json"
 
 
 class Command(Enum):
@@ -49,6 +49,7 @@ def commit_and_create_pr(
     logger: logging.Logger,
     commit_message: str,
     description: str,
+    enable_auto_merge: bool = False,
 ):
     git_modified_files = subprocess.check_output(["git", "ls-files", "--modified", "--others"], cwd=repo_root).decode(
         "utf8"
@@ -98,6 +99,11 @@ def commit_and_create_pr(
                 ],
                 cwd=repo_root,
             )
+        if enable_auto_merge:
+            pr_number = subprocess.check_output(
+                ["gh", "pr", "view", "--json", "number", "-q", ".number"], cwd=repo_root, text=True
+            ).strip()
+            subprocess.check_call(["gh", "pr", "merge", pr_number, "--auto"], cwd=repo_root)
 
 
 def get_saved_versions(repo_root: pathlib.Path, file_path: pathlib.Path):
@@ -106,8 +112,11 @@ def get_saved_versions(repo_root: pathlib.Path, file_path: pathlib.Path):
 
     Example of the file contents:
     {
-        "subnets": {
-            "tbd26...": "xxxxxREVISIONxxx"
+        "guestos": {
+            "subnets": {
+                "tdb26...": "xxxxxREVISIONxxx",
+                "io67a...": "xxxxxREVISIONxxx"
+            }
         },
     }
     The file can also be extended with other data, e.g., canister versions:
@@ -128,23 +137,24 @@ def get_saved_versions(repo_root: pathlib.Path, file_path: pathlib.Path):
 def update_saved_subnet_version(subnet: str, version: str, repo_root: pathlib.Path, file_path: pathlib.Path):
     """Update the version that we last saw on a particular IC subnet."""
     saved_versions = get_saved_versions(repo_root=repo_root, file_path=file_path)
-    subnet_versions = saved_versions.get("subnets", {})
+    guestos_versions = saved_versions.get("guestos", {})
+    subnet_versions = guestos_versions.get("subnets", {})
     subnet_versions[subnet] = version
-    saved_versions["subnets"] = subnet_versions
-    with open(repo_root / SAVED_VERSIONS_SUBNETS_PATH, "w", encoding="utf-8") as f:
+    guestos_versions["subnets"] = subnet_versions
+    with open(repo_root / file_path, "w", encoding="utf-8") as f:
         json.dump(saved_versions, f, indent=2)
 
 
 def get_saved_nns_subnet_version(repo_root: pathlib.Path, file_path: pathlib.Path):
     """Get the last known version running on the NNS subnet."""
     saved_versions = get_saved_versions(repo_root=repo_root, file_path=file_path)
-    return saved_versions.get("subnets", {}).get(nns_subnet_id, "")
+    return saved_versions.get("guestos", {}).get("subnets", {}).get(nns_subnet_id, "")
 
 
 def get_saved_app_subnet_version(repo_root: pathlib.Path, file_path: pathlib.Path):
     """Get the last known version running on an App subnet."""
     saved_versions = get_saved_versions(repo_root=repo_root, file_path=file_path)
-    return saved_versions.get("subnets", {}).get(app_subnet_id, "")
+    return saved_versions.get("guestos", {}).get("subnets", {}).get(app_subnet_id, "")
 
 
 def get_subnet_replica_version(subnet_id: str) -> str:
@@ -206,10 +216,10 @@ def get_parser() -> argparse.ArgumentParser:
 
     subparsers = parser.add_subparsers(title="subcommands", description="valid commands", help="sub-command help")
 
-    parser_subnets = subparsers.add_parser("subnets", help=f"Update {SAVED_VERSIONS_SUBNETS_PATH} file")
+    parser_subnets = subparsers.add_parser("subnets", help=f"Update {MAINNET_ICOS_REVISIONS_FILE} file")
     parser_subnets.set_defaults(command=Command.SUBNETS)
 
-    parser_canisters = subparsers.add_parser("canisters", help=f"Update {SAVED_VERSIONS_CANISTERS_PATH} file")
+    parser_canisters = subparsers.add_parser("canisters", help=f"Update {SAVED_VERSIONS_CANISTERS_FILE} file")
     parser_canisters.set_defaults(command=Command.CANISTERS)
 
     return parser
@@ -238,12 +248,12 @@ This PR is created automatically using [`mainnet_revisions.py`](https://github.c
     if args.command == Command.SUBNETS:
         branch = "ic-mainnet-revisions"
         sync_main_branch_and_checkout_branch(repo_root, main_branch, branch, logger)
-        update_mainnet_revisions_subnets_file(repo_root, logger, pathlib.Path(SAVED_VERSIONS_SUBNETS_PATH))
+        update_mainnet_revisions_subnets_file(repo_root, logger, pathlib.Path(MAINNET_ICOS_REVISIONS_FILE))
         commit_and_create_pr(
             repo,
             repo_root,
             branch,
-            [SAVED_VERSIONS_SUBNETS_PATH],
+            [MAINNET_ICOS_REVISIONS_FILE],
             logger,
             "chore: Update Mainnet IC revisions subnets file",
             pr_description.format(
@@ -258,12 +268,13 @@ This PR is created automatically using [`mainnet_revisions.py`](https://github.c
             repo,
             repo_root,
             branch,
-            [SAVED_VERSIONS_CANISTERS_PATH],
+            [SAVED_VERSIONS_CANISTERS_FILE],
             logger,
             "chore: Update Mainnet IC revisions canisters file",
             pr_description.format(
                 description="Update mainnet system canisters revisions file to include the latest WASM version released on the mainnet."
             ),
+            enable_auto_merge=True,
         )
     else:
         raise Exception("This shouldn't happen")

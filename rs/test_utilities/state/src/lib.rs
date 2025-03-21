@@ -2,7 +2,7 @@ use ic_base_types::NumSeconds;
 use ic_btc_replica_types::BitcoinAdapterRequestWrapper;
 use ic_management_canister_types_private::{
     CanisterStatusType, EcdsaCurve, EcdsaKeyId, LogVisibilityV2, MasterPublicKeyId,
-    SchnorrAlgorithm, SchnorrKeyId,
+    OnLowWasmMemoryHookStatus, SchnorrAlgorithm, SchnorrKeyId,
 };
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
 use ic_registry_subnet_features::SubnetFeatures;
@@ -10,7 +10,7 @@ use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
     canister_state::{
         execution_state::{CustomSection, CustomSectionType, WasmBinary, WasmMetadata},
-        system_state::{CyclesUseCase, OnLowWasmMemoryHookStatus, TaskQueue},
+        system_state::{CyclesUseCase, TaskQueue},
         testing::new_canister_output_queues_for_test,
     },
     metadata_state::{
@@ -471,11 +471,8 @@ impl SystemStateBuilder {
         mut self,
         on_low_wasm_memory_hook_status: OnLowWasmMemoryHookStatus,
     ) -> Self {
-        self.system_state.task_queue = TaskQueue::from_checkpoint(
-            VecDeque::new(),
-            on_low_wasm_memory_hook_status,
-            &self.system_state.canister_id,
-        );
+        self.system_state.task_queue =
+            TaskQueue::from_checkpoint(VecDeque::new(), on_low_wasm_memory_hook_status);
         self
     }
 

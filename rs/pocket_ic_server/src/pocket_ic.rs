@@ -1,5 +1,5 @@
 use crate::state_api::state::{HasStateLabel, OpOut, PocketIcError, StateLabel};
-use crate::{async_trait, copy_dir, BlobStore, OpId, Operation, SubnetBlockmaker};
+use crate::{copy_dir, BlobStore, OpId, Operation, SubnetBlockmaker};
 use askama::Template;
 use axum::{
     extract::State,
@@ -633,10 +633,6 @@ impl PocketIc {
     ) -> Self {
         let mut range_gen = RangeGen::new();
         let mut routing_table = RoutingTable::new();
-        let mut nns_subnet_id = subnet_configs.nns.as_ref().and_then(|x| {
-            x.get_subnet_id()
-                .map(|y| SubnetId::new(PrincipalId(y.into())))
-        });
         let mut nns_subnet = None;
 
         let topology: Option<RawTopologyInternal> = if let Some(ref state_dir) = state_dir {
@@ -657,7 +653,6 @@ impl PocketIc {
                     state_machine_state_dir: Box::new(
                         state_dir.as_ref().unwrap().join(subnet_seed.clone()),
                     ),
-                    subnet_id: Some(config.subnet_config.subnet_id),
                     ranges: config.subnet_config.ranges,
                     alloc_range: config.subnet_config.alloc_range,
                     subnet_kind: config.subnet_config.subnet_kind,
@@ -673,7 +668,6 @@ impl PocketIc {
                     (
                         SubnetKind::System,
                         spec.get_state_path(),
-                        spec.get_subnet_id(),
                         spec.get_instruction_config(),
                     )
                 });
@@ -681,7 +675,6 @@ impl PocketIc {
                     (
                         SubnetKind::Application,
                         spec.get_state_path(),
-                        spec.get_subnet_id(),
                         spec.get_instruction_config(),
                     )
                 });
@@ -689,7 +682,6 @@ impl PocketIc {
                     (
                         SubnetKind::VerifiedApplication,
                         spec.get_state_path(),
-                        spec.get_subnet_id(),
                         spec.get_instruction_config(),
                     )
                 });
@@ -698,15 +690,13 @@ impl PocketIc {
 
             let mut subnet_config_info: Vec<SubnetConfigInfo> = vec![];
 
-            let ii_subnet_split = subnet_configs.ii.is_some();
-
-            for (subnet_kind, subnet_state_dir, subnet_id, instruction_config) in
+            for (subnet_kind, subnet_state_dir, instruction_config) in
                 fixed_range_subnets.into_iter().chain(flexible_subnets)
             {
                 let RangeConfig {
                     canister_id_ranges: ranges,
                     canister_allocation_range: alloc_range,
-                } = get_range_config(subnet_kind, &mut range_gen, ii_subnet_split);
+                } = get_range_config(subnet_kind, &mut range_gen);
 
                 let subnet_seed = compute_subnet_seed(ranges.clone(), alloc_range);
 
@@ -720,7 +710,6 @@ impl PocketIc {
 
                 subnet_config_info.push(SubnetConfigInfo {
                     state_machine_state_dir,
-                    subnet_id: subnet_id.map(|raw| SubnetId::new(PrincipalId(raw.into()))),
                     ranges,
                     alloc_range,
                     subnet_kind,
@@ -742,7 +731,6 @@ impl PocketIc {
         // Create all StateMachines and subnet configs from the subnet config infos.
         for SubnetConfigInfo {
             state_machine_state_dir,
-            subnet_id,
             ranges,
             alloc_range,
             subnet_kind,
@@ -773,10 +761,6 @@ impl PocketIc {
 
             if subnet_kind == SubnetKind::NNS {
                 builder = builder.with_root_subnet_config();
-            }
-
-            if let Some(subnet_id) = subnet_id {
-                builder = builder.with_subnet_id(subnet_id);
             }
 
             if subnet_kind == SubnetKind::II || subnet_kind == SubnetKind::Fiduciary {
@@ -814,11 +798,6 @@ impl PocketIc {
 
             let subnet_id = sm.get_subnet_id();
 
-            // Store the actual NNS subnet ID if none was provided by the client.
-            if let (SubnetKind::NNS, None) = (subnet_kind, nns_subnet_id) {
-                nns_subnet_id = Some(subnet_id);
-            };
-
             if let SubnetKind::NNS = subnet_kind {
                 nns_subnet = Some(sm.clone());
             }
@@ -848,7 +827,10 @@ impl PocketIc {
             .map(|config| config.subnet_id)
             .collect();
         finalize_registry(
-            nns_subnet_id.unwrap_or(subnet_configs.values().next().unwrap().subnet_id),
+            nns_subnet
+                .as_ref()
+                .map(|nns_subnet| nns_subnet.get_subnet_id())
+                .unwrap_or(subnet_configs.values().next().unwrap().subnet_id),
             routing_table.clone(),
             subnet_list,
             registry_data_provider.clone(),
@@ -1075,30 +1057,15 @@ fn subnet_kind_from_canister_id(canister_id: CanisterId) -> SubnetKind {
     Application
 }
 
-fn get_range_config(
-    subnet_kind: rest::SubnetKind,
-    range_gen: &mut RangeGen,
-    ii_subnet_split: bool,
-) -> RangeConfig {
-    use rest::SubnetKind::*;
-    if matches!(subnet_kind, NNS) && !ii_subnet_split {
-        let range = gen_range("rwlgt-iiaaa-aaaaa-aaaaa-cai", "n5n4y-3aaaa-aaaaa-p777q-cai");
-        let canister_id_ranges = vec![range];
-        let canister_allocation_range = Some(range_gen.next_range());
-        RangeConfig {
-            canister_id_ranges,
-            canister_allocation_range,
-        }
-    } else {
-        let (canister_id_ranges, canister_allocation_range) =
-            match subnet_kind_canister_range(subnet_kind) {
-                Some(ranges) => (ranges, Some(range_gen.next_range())),
-                None => (vec![range_gen.next_range()], None),
-            };
-        RangeConfig {
-            canister_id_ranges,
-            canister_allocation_range,
-        }
+fn get_range_config(subnet_kind: rest::SubnetKind, range_gen: &mut RangeGen) -> RangeConfig {
+    let (canister_id_ranges, canister_allocation_range) =
+        match subnet_kind_canister_range(subnet_kind) {
+            Some(ranges) => (ranges, Some(range_gen.next_range())),
+            None => (vec![range_gen.next_range()], None),
+        };
+    RangeConfig {
+        canister_id_ranges,
+        canister_allocation_range,
     }
 }
 
@@ -1144,7 +1111,6 @@ struct RangeConfig {
 /// Internal struct used during initialization.
 struct SubnetConfigInfo {
     pub state_machine_state_dir: Box<dyn StateMachineStateDir>,
-    pub subnet_id: Option<SubnetId>,
     pub ranges: Vec<CanisterIdRange>,
     pub alloc_range: Option<CanisterIdRange>,
     pub subnet_kind: SubnetKind,
@@ -1375,7 +1341,7 @@ impl SingleResponseAdapter {
     }
 }
 
-#[tonic::async_trait]
+#[async_trait::async_trait]
 impl HttpsOutcallsService for SingleResponseAdapter {
     async fn https_outcall(
         &self,
@@ -1942,18 +1908,16 @@ pub struct StatusRequest {
 
 struct PocketHealth;
 
-#[async_trait]
 impl Health for PocketHealth {
-    async fn health(&self) -> ReplicaHealthStatus {
+    fn health(&self) -> ReplicaHealthStatus {
         ReplicaHealthStatus::Healthy
     }
 }
 
 struct PocketRootKey(pub Option<Vec<u8>>);
 
-#[async_trait]
 impl RootKey for PocketRootKey {
-    async fn root_key(&self) -> Option<Vec<u8>> {
+    fn root_key(&self) -> Option<Vec<u8>> {
         self.0.clone()
     }
 }
@@ -2040,6 +2004,7 @@ impl Operation for CallRequest {
                     Arc::new(RwLock::new(PocketIngressPoolThrottler)),
                     s,
                 )
+                .with_time_source(subnet.time_source.clone())
                 .build();
 
                 // Task that waits for call service to submit the ingress message, and
@@ -2170,6 +2135,7 @@ impl Operation for QueryRequest {
                     Arc::new(OnceCell::new_with(delegation)),
                     query_handler,
                 )
+                .with_time_source(subnet.time_source.clone())
                 .build_service();
 
                 let request = axum::http::Request::builder()
@@ -2225,6 +2191,7 @@ impl Operation for CanisterReadStateRequest {
                     Arc::new(StandaloneIngressSigVerifier),
                     Arc::new(OnceCell::new_with(delegation)),
                 )
+                .with_time_source(subnet.time_source.clone())
                 .build_service();
 
                 let request = axum::http::Request::builder()

@@ -13,7 +13,6 @@ canister-test = { path = "../../rust_canisters/canister_test" }
 cycles-minting-canister = { path = "../../nns/cmc" }
 dfn_candid = { path = "../../rust_canisters/dfn_candid" }
 dfn_http = { path = "../../rust_canisters/dfn_http" }
-dfn_json = { path = "../../rust_canisters/dfn_json" }
 dfn_protobuf = { path = "../../rust_canisters/dfn_protobuf" }
 flate2 = { workspace = true }
 futures = { workspace = true }

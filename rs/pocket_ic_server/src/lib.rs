@@ -39,7 +39,7 @@ pub mod state_api;
 
 use crate::state_api::state::OpOut;
 use ::pocket_ic::common::rest::{BinaryBlob, BlobId, RawSubnetBlockmaker};
-use axum::async_trait;
+use async_trait::async_trait;
 use candid::Principal;
 use ic_types::{NodeId, PrincipalId, SubnetId};
 use pocket_ic::PocketIc;

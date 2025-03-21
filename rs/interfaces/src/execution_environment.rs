@@ -21,6 +21,7 @@ use std::{
     convert::{Infallible, TryFrom},
     fmt, ops,
     sync::Arc,
+    time::Duration,
 };
 use strum_macros::EnumIter;
 use thiserror::Error;
@@ -60,6 +61,9 @@ pub struct InstanceStats {
     /// Number of pages loaded by copying the data.
     pub wasm_copy_page_count: usize,
 
+    /// Total time spent in SIGSEGV handler for heap.
+    pub wasm_sigsegv_handler_duration: Duration,
+
     /// Number of accessed OS pages (4KiB) in stable memory.
     pub stable_accessed_pages: usize,
 
@@ -85,6 +89,9 @@ pub struct InstanceStats {
 
     /// Number of pages loaded by copying the data in stable memory.
     pub stable_copy_page_count: usize,
+
+    /// Total time spent in SIGSEGV handler for stable memory.
+    pub stable_sigsegv_handler_duration: Duration,
 }
 
 impl InstanceStats {
@@ -146,6 +153,8 @@ pub enum SystemApiCallId {
     CanisterCycleBalance,
     /// Tracker for `ic0.canister_cycle_balance128()`
     CanisterCycleBalance128,
+    /// Tracker for `ic0.canister_liquid_cycle_balance128()`
+    CanisterLiquidCycleBalance128,
     /// Tracker for `ic0.canister_self_copy()`
     CanisterSelfCopy,
     /// Tracker for `ic0.canister_self_size()`
@@ -166,8 +175,8 @@ pub enum SystemApiCallId {
     CostSignWithEcdsa,
     /// Tracker for `ic0.cost_sign_with_schnorr()`
     CostSignWithSchnorr,
-    /// Tracker for `ic0.cost_vetkd_derive_encrypted_key()`
-    CostVetkdDeriveEncryptedKey,
+    /// Tracker for `ic0.cost_vetkd_derive_key()`
+    CostVetkdDeriveKey,
     /// Tracker for `ic0.cycles_burn128()`
     CyclesBurn128,
     /// Tracker for `ic0.data_certificate_copy()`
@@ -268,6 +277,8 @@ pub struct SystemApiCallCounters {
     pub canister_cycle_balance: usize,
     /// Counter for `ic0.canister_cycle_balance128()`
     pub canister_cycle_balance128: usize,
+    /// Counter for `ic0.canister_liquid_cycle_balance128()`
+    pub canister_liquid_cycle_balance128: usize,
     /// Counter for `ic0.time()`
     pub time: usize,
 }
@@ -283,6 +294,9 @@ impl SystemApiCallCounters {
         self.canister_cycle_balance128 = self
             .canister_cycle_balance128
             .saturating_add(rhs.canister_cycle_balance128);
+        self.canister_liquid_cycle_balance128 = self
+            .canister_liquid_cycle_balance128
+            .saturating_add(rhs.canister_liquid_cycle_balance128);
         self.time = self.time.saturating_add(rhs.time);
     }
 }
@@ -562,7 +576,7 @@ pub trait OutOfInstructionsHandler {
 
     // Invoked only when a long execution dirties many memory pages to yield control
     // and start the copy only in a new slice. This is a performance improvement.
-    fn yield_for_dirty_memory_copy(&self, instruction_counter: i64) -> HypervisorResult<i64>;
+    fn yield_for_dirty_memory_copy(&self) -> HypervisorResult<i64>;
 }
 
 /// Indicates the type of stable memory API being used.
@@ -986,7 +1000,7 @@ pub trait SystemApi {
     /// This system call is not part of the public spec and it is invoked when
     /// Wasm execution has a large number of dirty pages that, for performance reasons,
     /// should be copied in a new execution slice.
-    fn yield_for_dirty_memory_copy(&mut self, instruction_counter: i64) -> HypervisorResult<i64>;
+    fn yield_for_dirty_memory_copy(&mut self) -> HypervisorResult<i64>;
 
     /// This system call is not part of the public spec. It's called after a
     /// native `memory.grow` has been executed to check whether there's enough
@@ -1025,6 +1039,18 @@ pub trait SystemApi {
     /// and is copied in the canister memory starting
     /// starting at the location `dst`.
     fn ic0_canister_cycle_balance128(
+        &mut self,
+        dst: usize,
+        heap: &mut [u8],
+    ) -> HypervisorResult<()>;
+
+    /// This system call indicates the current liquid cycle balance
+    /// of the canister that the canister can spend without getting frozen.
+    ///
+    /// The amount of cycles is represented by a 128-bit value
+    /// and is copied in the canister memory starting
+    /// starting at the location `dst`.
+    fn ic0_canister_liquid_cycle_balance128(
         &mut self,
         dst: usize,
         heap: &mut [u8],
@@ -1289,7 +1315,7 @@ pub trait SystemApi {
     ) -> HypervisorResult<u32>;
 
     /// This system call indicates the cycle cost of vetkd key derivation,
-    /// i.e., the management canister's `vetkd_derive_encrypted_key` for the key
+    /// i.e., the management canister's `vetkd_derive_key` for the key
     /// (whose name is given by textual representation at heap location `src`
     /// with byte length `size`) and the provided curve.
     ///
@@ -1302,7 +1328,7 @@ pub trait SystemApi {
     /// The amount of cycles is represented by a 128-bit value and is copied
     /// to the canister memory starting at the location `dst` if the return
     /// value is 0.
-    fn ic0_cost_vetkd_derive_encrypted_key(
+    fn ic0_cost_vetkd_derive_key(
         &self,
         src: usize,
         size: usize,

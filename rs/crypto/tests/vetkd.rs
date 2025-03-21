@@ -12,7 +12,7 @@ use ic_types::crypto::threshold_sig::ni_dkg::config::NiDkgConfig;
 use ic_types::crypto::threshold_sig::ni_dkg::{NiDkgId, NiDkgTranscript};
 use ic_types::crypto::threshold_sig::ThresholdSigPublicKey;
 use ic_types::crypto::vetkd::VetKdArgs;
-use ic_types::crypto::vetkd::VetKdDerivationDomain;
+use ic_types::crypto::vetkd::VetKdDerivationContext;
 use ic_types::crypto::vetkd::VetKdEncryptedKey;
 use ic_types::crypto::vetkd::VetKdEncryptedKeyShare;
 use ic_types::crypto::AlgorithmId;
@@ -31,9 +31,9 @@ fn should_consistently_derive_the_same_vetkey_given_sufficient_shares() {
 
     let transcript = run_ni_dkg_and_load_transcript_for_receivers(&config, &crypto_components);
 
-    let derivation_domain = VetKdDerivationDomain {
+    let context = VetKdDerivationContext {
         caller: canister_test_id(234).get(),
-        domain: b"domain-123".to_vec(),
+        context: b"context-123".to_vec(),
     };
     let derived_public_key = ic_crypto_utils_canister_threshold_sig::derive_vetkd_public_key(
         &MasterPublicKey {
@@ -43,7 +43,7 @@ fn should_consistently_derive_the_same_vetkey_given_sufficient_shares() {
                 .into_bytes()
                 .to_vec(),
         },
-        &derivation_domain,
+        &context,
     )
     .expect("failed to compute derived public key");
     let transport_secret_key =
@@ -51,9 +51,9 @@ fn should_consistently_derive_the_same_vetkey_given_sufficient_shares() {
             .expect("failed to create transport secret key");
     let vetkd_args = VetKdArgs {
         ni_dkg_id: dkg_id,
-        derivation_domain,
-        derivation_id: b"some-derivation-id".to_vec(),
-        encryption_public_key: transport_secret_key.public_key(),
+        context,
+        input: b"some-input".to_vec(),
+        transport_public_key: transport_secret_key.public_key(),
     };
 
     let mut expected_decrypted_key: Option<Vec<u8>> = None;
@@ -82,7 +82,7 @@ fn should_consistently_derive_the_same_vetkey_given_sufficient_shares() {
             .decrypt(
                 &encrypted_key.encrypted_key,
                 &derived_public_key,
-                &vetkd_args.derivation_id,
+                &vetkd_args.input,
             )
             .expect("failed to decrypt vetKey");
 

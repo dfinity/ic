@@ -1,6 +1,5 @@
 use candid::Principal;
 use candid::{Decode, Encode, Nat};
-use dfn_candid::CandidOne;
 use dfn_protobuf::ProtoBuf;
 use ic_agent::identity::Identity;
 use ic_base_types::{CanisterId, PrincipalId};
@@ -286,20 +285,17 @@ fn test_anonymous_transfers() {
         amount: Nat::from(TRANSFER_AMOUNT),
         memo: None,
     };
-    let encoded_transfer_result = env
+    let transfer_error = env
         .execute_ingress_as(
             anon,
             canister_id,
             "icrc1_transfer",
             Encode!(&transfer_arg).unwrap(),
         )
-        .expect("failed to transfer funds")
-        .bytes();
-    let string_from_bytes_result = String::from_utf8(encoded_transfer_result.clone());
-    assert_eq!(
-        string_from_bytes_result,
-        Ok("Anonymous principal cannot hold tokens on the ledger.".to_string())
-    );
+        .unwrap_err();
+    assert!(transfer_error
+        .description()
+        .contains("Anonymous principal cannot hold tokens on the ledger."));
 
     // Transfer from the account of the anonymous principal using the ICP-specific `transfer` fails
     let transfer_args = icp_ledger::TransferArgs {
@@ -357,20 +353,17 @@ fn test_anonymous_approval() {
         expected_allowance: None,
         created_at_time: None,
     };
-    let encoded_transfer_result = env
+    let approve_error = env
         .execute_ingress_as(
             anon,
             canister_id,
             "icrc2_approve",
             Encode!(&approve_args).unwrap(),
         )
-        .expect("failed to approve transfer")
-        .bytes();
-    let string_from_bytes_result = String::from_utf8(encoded_transfer_result.clone());
-    assert_eq!(
-        string_from_bytes_result,
-        Ok("Anonymous principal cannot approve token transfers on the ledger.".to_string())
-    );
+        .unwrap_err();
+    assert!(approve_error
+        .description()
+        .contains("Anonymous principal cannot approve token transfers on the ledger."));
 }
 
 #[test]
@@ -536,12 +529,8 @@ fn check_new_init() {
         .token_symbol_and_name("ICP", "Internet Computer")
         .build()
         .unwrap();
-    env.install_canister(
-        ledger_wasm(),
-        CandidOne(payload).into_bytes().unwrap(),
-        None,
-    )
-    .expect("Unable to install the Ledger canister with the new init");
+    env.install_canister(ledger_wasm(), Encode!(&payload).unwrap(), None)
+        .expect("Unable to install the Ledger canister with the new init");
 }
 
 #[test]
@@ -553,11 +542,7 @@ fn check_memo() {
         .build()
         .unwrap();
     let ledger_id = env
-        .install_canister(
-            ledger_wasm(),
-            CandidOne(payload).into_bytes().unwrap(),
-            None,
-        )
+        .install_canister(ledger_wasm(), Encode!(&payload).unwrap(), None)
         .expect("Unable to install the Ledger canister with the new init");
 
     let mint_with_memo = |memo_size_bytes: usize| -> Result<Result<Nat, TransferError>, UserError> {
@@ -647,11 +632,7 @@ fn check_query_blocks_coherence() {
         .build()
         .unwrap();
     let canister_id = env
-        .install_canister(
-            ledger_wasm_current,
-            CandidOne(payload).into_bytes().unwrap(),
-            None,
-        )
+        .install_canister(ledger_wasm_current, Encode!(&payload).unwrap(), None)
         .expect("Unable to install the Ledger canister with the new init");
 
     transfer(&env, canister_id, p1.0, p2.0, 1_000_000).expect("transfer failed");
@@ -747,11 +728,7 @@ fn check_block_endpoint_limits() {
         .build()
         .unwrap();
     let canister_id = env
-        .install_canister(
-            ledger_wasm_current,
-            CandidOne(payload).into_bytes().unwrap(),
-            None,
-        )
+        .install_canister(ledger_wasm_current, Encode!(&payload).unwrap(), None)
         .expect("Unable to install the Ledger canister with the new init");
 
     let get_blocks_args = Encode!(&GetBlocksArgs {
@@ -934,11 +911,7 @@ fn check_archive_block_endpoint_limits() {
         .build()
         .unwrap();
     let canister_id = env
-        .install_canister(
-            ledger_wasm_current,
-            CandidOne(payload).into_bytes().unwrap(),
-            None,
-        )
+        .install_canister(ledger_wasm_current, Encode!(&payload).unwrap(), None)
         .expect("Unable to install the Ledger canister with the new init");
 
     for _ in 0..MAX_BLOCKS_PER_REQUEST {
@@ -1170,11 +1143,7 @@ fn test_block_transformation() {
         .build()
         .unwrap();
     let canister_id = env
-        .install_canister(
-            ledger_wasm_mainnet,
-            CandidOne(payload).into_bytes().unwrap(),
-            None,
-        )
+        .install_canister(ledger_wasm_mainnet, Encode!(&payload).unwrap(), None)
         .expect("Unable to install the Ledger canister with the new init");
 
     transfer(&env, canister_id, p1.0, p2.0, 1_000_000).expect("transfer failed");
@@ -1257,7 +1226,7 @@ fn test_upgrade_serialization(ledger_wasm_mainnet: Vec<u8>) {
         .build()
         .unwrap();
 
-    let init_args = CandidOne(payload).into_bytes().unwrap();
+    let init_args = Encode!(&payload).unwrap();
     let upgrade_args = Encode!(&LedgerCanisterPayload::Upgrade(None)).unwrap();
     ic_ledger_suite_state_machine_tests::test_upgrade_serialization::<Tokens>(
         ledger_wasm_mainnet,
@@ -1519,11 +1488,7 @@ fn test_feature_flags() {
         .build()
         .unwrap();
     let canister_id = env
-        .install_canister(
-            ledger_wasm.clone(),
-            CandidOne(payload).into_bytes().unwrap(),
-            None,
-        )
+        .install_canister(ledger_wasm.clone(), Encode!(&payload).unwrap(), None)
         .expect("Unable to install the Ledger canister with the new init");
 
     let approve_args = default_approve_args(spender.0, 150_000);

@@ -27,6 +27,10 @@ pub mod crypto;
 pub mod membership;
 pub mod pool_reader;
 
+/// When purging consensus or certification artifacts, we always keep a
+/// minimum chain length below the catch-up height.
+pub const MINIMUM_CHAIN_LENGTH: u64 = 50;
+
 /// Rotate on_state_change calls with a round robin schedule to ensure fairness.
 #[derive(Default)]
 pub struct RoundRobin {
@@ -247,13 +251,27 @@ pub fn lookup_replica_version(
 }
 
 /// Return the registry version to be used for the given height.
-/// Note that this can only look up for height that is greater than or equal
-/// to the latest catch-up package height, otherwise an error is returned.
+/// Note that this can only look up heights that are greater than or equal
+/// to the latest catch-up package height, otherwise `None` is returned.
 pub fn registry_version_at_height(
     reader: &dyn ConsensusPoolCache,
     height: Height,
 ) -> Option<RegistryVersion> {
     get_active_data_at(reader, height, get_registry_version_at_given_summary)
+}
+
+/// Return the registry version and DKG interval length to be used for the given height.
+/// Note that this can only look up heights that are greater than or equal
+/// to the latest catch-up package height, otherwise `None` is returned.
+pub fn get_registry_version_and_interval_length_at_height(
+    reader: &dyn ConsensusPoolCache,
+    height: Height,
+) -> Option<(RegistryVersion, Height)> {
+    get_active_data_at(reader, height, |block, height| {
+        let registry_version = get_registry_version_at_given_summary(block, height)?;
+        let dkg_interval_length = get_dkg_interval_length_at_given_summary(block, height)?;
+        Some((registry_version, dkg_interval_length))
+    })
 }
 
 /// Return the current low transcript for the given height if it was found.
@@ -356,6 +374,20 @@ fn get_registry_version_at_given_summary(
         Some(dkg_summary.registry_version)
     } else if dkg_summary.next_interval_includes(height) {
         Some(summary_block.context.registry_version)
+    } else {
+        None
+    }
+}
+
+fn get_dkg_interval_length_at_given_summary(
+    summary_block: &Block,
+    height: Height,
+) -> Option<Height> {
+    let dkg_summary = &summary_block.payload.as_ref().as_summary().dkg;
+    if dkg_summary.current_interval_includes(height) {
+        Some(dkg_summary.interval_length)
+    } else if dkg_summary.next_interval_includes(height) {
+        Some(dkg_summary.next_interval_length)
     } else {
         None
     }
@@ -630,7 +662,7 @@ mod tests {
                 }
                 MasterPublicKeyId::VetKd(_) => panic!("not applicable to vetKD"),
             },
-            derivation_path: vec![],
+            derivation_path: Arc::new(vec![]),
             pseudo_random_id: [0; 32],
             matched_pre_signature: pre_signature_id.map(|qid| (qid, Height::from(0))),
             nonce: None,

@@ -88,9 +88,12 @@ pub struct Neuron {
     /// dissolving neurons always has age zero. The canonical value of
     /// this field for a dissolving neuron is `u64::MAX`.
     pub aging_since_timestamp_seconds: u64,
-    /// The neuron's followees, specified as a map of proposal functions IDs to followees neuron IDs.
-    /// The map's keys are represented by integers as Protobuf does not support enum keys in maps.
+    /// The neuron's legacy followees (per proposal type), specified as a map of
+    /// proposal functions IDs. The map's keys are represented by integers as Protobuf does
+    /// not support enum keys in maps.
     pub followees: BTreeMap<u64, neuron::Followees>,
+    /// The neuron's followees, specified as a map of proposal topics IDs to followees neuron IDs.
+    pub topic_followees: Option<neuron::TopicFollowees>,
     /// The accumulated unstaked maturity of the neuron, measured in "e8s equivalent", i.e., in equivalent of
     /// 10E-8 of a governance token.
     ///
@@ -152,11 +155,26 @@ pub struct Neuron {
 }
 /// Nested message and enum types in `Neuron`.
 pub mod neuron {
+    use super::*;
     /// A list of a neuron's followees for a specific function.
     #[derive(Default, candid::CandidType, candid::Deserialize, Debug, Clone, PartialEq)]
     pub struct Followees {
         pub followees: Vec<super::NeuronId>,
     }
+
+    /// A list of a neuron's followees for a specific function.
+    #[derive(Default, candid::CandidType, candid::Deserialize, Debug, Clone, PartialEq)]
+    pub struct FolloweesForTopic {
+        pub followees: Vec<super::NeuronId>,
+        pub topic: Option<topics::Topic>,
+    }
+
+    // A collection of a neuron's followees (per topic).
+    #[derive(candid::CandidType, candid::Deserialize, Clone, Debug, PartialEq)]
+    pub struct TopicFollowees {
+        pub topic_id_to_followees: BTreeMap<u64, FolloweesForTopic>,
+    }
+
     /// The neuron's dissolve state, specifying whether the neuron is dissolving,
     /// non-dissolving, or dissolved.
     ///
@@ -473,6 +491,12 @@ pub struct AdvanceSnsTargetVersion {
     /// If not specified, the target will advance to the latest SNS version known to this SNS.
     pub new_target: Option<SnsVersion>,
 }
+#[derive(
+    candid::CandidType, candid::Deserialize, comparable::Comparable, Clone, Debug, PartialEq,
+)]
+pub struct SetTopicsForCustomProposals {
+    pub custom_function_id_to_topic: BTreeMap<u64, topics::Topic>,
+}
 /// A proposal is the immutable input of a proposal submission.
 #[derive(Default, candid::CandidType, candid::Deserialize, Debug, Clone, PartialEq)]
 pub struct Proposal {
@@ -584,6 +608,10 @@ pub mod proposal {
         ///
         /// Id = 15.
         AdvanceSnsTargetVersion(super::AdvanceSnsTargetVersion),
+        /// Set mapping from custom proposal types to topics.
+        ///
+        /// Id = 16;
+        SetTopicsForCustomProposals(super::SetTopicsForCustomProposals),
     }
 }
 #[derive(Default, candid::CandidType, candid::Deserialize, Debug, Clone, PartialEq)]
@@ -762,7 +790,7 @@ pub struct WaitForQuietState {
 }
 /// The ProposalData that contains everything related to a proposal:
 /// the proposal itself (immutable), as well as mutable data such as ballots.
-#[derive(Default, candid::CandidType, candid::Deserialize, Debug, Clone, PartialEq)]
+#[derive(candid::CandidType, Default, candid::Deserialize, Debug, Clone, PartialEq)]
 pub struct ProposalData {
     /// The proposal's action.
     /// Types 0-999 are reserved for current (and future) core governance
@@ -785,6 +813,7 @@ pub struct ProposalData {
     /// Id 13 - ManageLedgerParameters proposals.
     /// Id 14 - ManageDappCanisterSettings proposals.
     /// Id 15 - AdvanceSnsTargetVersion proposals.
+    /// Id 16 - SetTopicsForCustomProposals proposals.
     pub action: u64,
     /// This is stored here temporarily. It is also stored on the map
     /// that contains proposals.
@@ -886,6 +915,8 @@ pub struct ProposalData {
     /// In general, this holds data retrieved at proposal submission/creation time and used later
     /// during execution. This varies based on the action of the proposal.
     pub action_auxiliary: Option<proposal_data::ActionAuxiliary>,
+    /// This proposal's topic.
+    pub topic: Option<topics::Topic>,
 }
 /// Nested message and enum types in `ProposalData`.
 pub mod proposal_data {
@@ -2391,6 +2422,7 @@ pub struct Account {
     candid::Deserialize,
     Debug,
     clap::ValueEnum,
+    strum_macros::EnumIter,
     Clone,
     Copy,
     PartialEq,
