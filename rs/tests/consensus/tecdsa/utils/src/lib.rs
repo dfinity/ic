@@ -34,7 +34,7 @@ use ic_system_test_driver::{
 };
 use ic_types::{Height, PrincipalId, ReplicaVersion};
 use ic_types_test_utils::ids::subnet_test_id;
-use ic_vetkd_utils::{DerivedPublicKey, IBECiphertext, TransportSecretKey};
+use ic_vetkd_utils::{DerivedPublicKey, EncryptedVetKey, IBECiphertext, TransportSecretKey};
 use k256::ecdsa::{signature::hazmat::PrehashVerifier, Signature, VerifyingKey};
 use registry_canister::mutations::{
     do_create_subnet::{
@@ -929,14 +929,18 @@ pub fn verify_ecdsa_signature(pk: &[u8], sig: &[u8], msg: &[u8]) -> bool {
 }
 
 pub fn verify_vetkd(public_key: &[u8], encrypted_key: &[u8], input: &[u8]) -> bool {
-    let enc_msg = IBECiphertext::encrypt(public_key, input, MSG.as_bytes(), &SEED)
+    let dpk = DerivedPublicKey::deserialize(public_key).expect("Failed to deserialize public key");
+    let enc_msg = IBECiphertext::encrypt(&dpk, input, MSG.as_bytes(), &SEED)
         .expect("Failed to encrypt message");
 
     let transport_key = TransportSecretKey::from_seed(SEED.to_vec())
         .expect("Failed to generate transport secret key");
 
-    let priv_key = transport_key
-        .decrypt(encrypted_key, public_key, input)
+    let enc_key =
+        EncryptedVetKey::deserialize(encrypted_key).expect("Failed to deserialize encrypted key");
+
+    let priv_key = enc_key
+        .decrypt_and_verify(&transport_key, &dpk, input)
         .expect("Failed to decrypt derived key");
 
     let msg = enc_msg

@@ -41,7 +41,7 @@ use ic_system_test_driver::{
     util::{block_on, runtime_from_url, MessageCanister},
 };
 use ic_types::{Cycles, Height};
-use ic_vetkd_utils::{DerivedPublicKey, IBECiphertext, TransportSecretKey};
+use ic_vetkd_utils::{DerivedPublicKey, EncryptedVetKey, IBECiphertext, TransportSecretKey};
 use slog::info;
 use std::time::Duration;
 
@@ -106,10 +106,10 @@ fn test(env: TestEnv) {
                 .expect("Should successfully retrieve the public key");
 
             // Check that the key is well formed
-            let _key =
+            let dpk =
                 DerivedPublicKey::deserialize(&pub_key).expect("Failed to parse vetkd public key");
 
-            let enc_msg = IBECiphertext::encrypt(&pub_key, INPUT.as_bytes(), MSG.as_bytes(), &SEED)
+            let enc_msg = IBECiphertext::encrypt(&dpk, INPUT.as_bytes(), MSG.as_bytes(), &SEED)
                 .expect("Failed to encrypt message");
 
             let transport_key = TransportSecretKey::from_seed(SEED.to_vec())
@@ -138,8 +138,11 @@ fn test(env: TestEnv) {
             .await
             .expect("Failed to derive encrypted key");
 
-            let priv_key = transport_key
-                .decrypt(&encrypted_priv_key, &pub_key, INPUT.as_bytes())
+            let enc_key = EncryptedVetKey::deserialize(&encrypted_priv_key)
+                .expect("Failed to deserialize encrypted key");
+
+            let priv_key = enc_key
+                .decrypt_and_verify(&transport_key, &dpk, INPUT.as_bytes())
                 .expect("Failed to decrypt derived key");
 
             let msg = enc_msg

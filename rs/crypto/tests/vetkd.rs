@@ -78,13 +78,21 @@ fn should_consistently_derive_the_same_vetkey_given_sufficient_shares() {
             Ok(())
         );
 
-        let decrypted_key = transport_secret_key
-            .decrypt(
-                &encrypted_key.encrypted_key,
+        let encrypted_key =
+            ic_vetkd_utils::EncryptedVetKey::deserialize(&encrypted_key.encrypted_key)
+                .expect("failed to deserialize encrypted VetKey");
+
+        let derived_public_key = ic_vetkd_utils::DerivedPublicKey::deserialize(&derived_public_key)
+            .expect("failed to deserialize derived public key");
+        let decrypted_key = encrypted_key
+            .decrypt_and_verify(
+                &transport_secret_key,
                 &derived_public_key,
                 &vetkd_args.input,
             )
-            .expect("failed to decrypt vetKey");
+            .expect("failed to decrypt vetKey")
+            .signature_bytes()
+            .to_vec();
 
         if let Some(expected_decrypted_key) = &expected_decrypted_key {
             assert_eq!(&decrypted_key, expected_decrypted_key);
