@@ -510,6 +510,7 @@ mod tests {
         let high_capacity_registry_value = HighCapacityRegistryValue {
             content: Some(high_capacity_registry_value::Content::Value(value)),
             version,
+            timestamp: None,
         };
 
         let version = 43;
@@ -526,6 +527,7 @@ mod tests {
                 deletion_marker,
             )),
             version,
+            timestamp: None,
         };
 
         let key = b"name".to_vec();

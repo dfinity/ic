@@ -87,6 +87,9 @@ pub struct HighCapacityRegistryValue {
     /// The version at which this mutation happened.
     #[prost(uint64, tag = "2")]
     pub version: u64,
+    /// The timestamp at which the registry mutation happened.
+    #[prost(uint64, optional, tag = "5")]
+    pub timestamp: ::core::option::Option<u64>,
     #[prost(oneof = "high_capacity_registry_value::Content", tags = "1, 3, 4")]
     pub content: ::core::option::Option<high_capacity_registry_value::Content>,
 }
