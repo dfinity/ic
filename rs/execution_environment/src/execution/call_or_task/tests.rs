@@ -155,7 +155,9 @@ fn dts_update_concurrent_cycles_change_succeeds() {
         .with_manual_execution()
         .build();
 
-    let a_id = test.universal_canister().unwrap();
+    let a_id = test
+        .universal_canister_with_cycles(Cycles::new(10_000_000_000_000))
+        .unwrap();
     let b_id = test.universal_canister().unwrap();
 
     let transferred_cycles = Cycles::new(1000);
@@ -346,7 +348,9 @@ fn dts_update_concurrent_cycles_change_fails() {
         .with_manual_execution()
         .build();
 
-    let a_id = test.universal_canister().unwrap();
+    let a_id = test
+        .universal_canister_with_cycles(Cycles::new(10_000_000_000_000))
+        .unwrap();
     let b_id = test.universal_canister().unwrap();
 
     let transferred_cycles = Cycles::new(1000);

@@ -164,10 +164,7 @@ pub const MAX_CANISTER_HTTP_REQUESTS_IN_FLIGHT: usize = 3000;
 pub const DEFAULT_WASM_MEMORY_LIMIT: NumBytes = NumBytes::new(3 * GIB);
 
 /// The minimum allowed value for freezing threshold in seconds.
-pub const MINIMUM_FREEZING_THRESHOLD: u64 = 86400; // 1 day in seconds.
-
-/// The maximum allowed value for freezing threshold in seconds.
-pub const MAXIMUM_FREEZING_THRESHOLD: u64 = u64::MAX;
+pub const MINIMUM_FREEZING_THRESHOLD: u64 = 604800; // 1 week in seconds.
 
 #[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 #[serde(default)]

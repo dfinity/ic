@@ -1561,7 +1561,7 @@ fn canister_with_reserved_balance_is_not_uninstalled_too_early() {
             CanisterSettingsArgsBuilder::new()
                 .with_memory_allocation(memory_allocation)
                 .with_freezing_threshold(MINIMUM_FREEZING_THRESHOLD)
-                .with_reserved_cycles_limit(10 * T)
+                .with_reserved_cycles_limit(70 * T)
                 .build(),
         ),
         initial_cycles,
@@ -1572,7 +1572,7 @@ fn canister_with_reserved_balance_is_not_uninstalled_too_early() {
             CanisterSettingsArgsBuilder::new()
                 .with_memory_allocation(memory_allocation)
                 .with_freezing_threshold(MINIMUM_FREEZING_THRESHOLD)
-                .with_reserved_cycles_limit(10 * T)
+                .with_reserved_cycles_limit(70 * T)
                 .build(),
         ),
         initial_cycles,
