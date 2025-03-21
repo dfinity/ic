@@ -118,7 +118,12 @@ pub fn update_bench(
                     .unwrap();
                 total_duration += start.elapsed();
                 assert!(matches!(result, WasmResult::Reply(_)));
-                test.checkpoint_canister_memories();
+                match post_setup_action {
+                    PostSetupAction::PerformCheckpoint => {
+                        test.checkpoint_canister_memories();
+                    }
+                    PostSetupAction::None => {}
+                }
             }
             total_duration
         });
