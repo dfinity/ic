@@ -1,10 +1,11 @@
 use flate2::read::GzDecoder;
 use http::Method;
 use ic_crypto_sha2::Sha256;
-use ic_logger::{info, warn, ReplicaLogger};
+use ic_logger::{log, ReplicaLogger};
 use reqwest::{Client, Response};
+use slog::Level;
 use std::error::Error;
-use std::fmt;
+use std::fmt::{self, Display};
 use std::fs::{self, File};
 use std::io;
 use std::io::prelude::*;
@@ -54,83 +55,150 @@ impl FileDownloader {
         Ok(())
     }
 
+    fn log<S: Display>(&self, level: Level, message: S) {
+        if let Some(logger) = self.logger.as_ref() {
+            log!(logger, level, "{}", message);
+        }
+    }
+
+    fn info<S: Display>(&self, message: S) {
+        self.log(Level::Info, message);
+    }
+
+    fn warn<S: Display>(&self, message: S) {
+        self.log(Level::Warning, message);
+    }
+
     /// Make a GET HTTP request to `url`, stream the response body to
     /// `file_path` and verify that the resulting file has hash
     /// `expected_sha256_hex`.
     ///
-    /// Returns immediately if the file already exists with the given hash.
+    /// If the `expected_sha256_hex` is specified and the file exists,
+    /// resuming download will be performed, fetching only the missing
+    /// parts of the file (if any) with the [`Range`](https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Range)
+    /// header.
     ///
-    /// Deletes an existing file with an incorrect file hash or no
-    /// hash is given to this function.
+    /// If the `expected_sha256_hex` isn't specified and the file already
+    /// exists, the file will be removed and the download will be executed.
     ///
     /// Since existing files get deleted if they have an incorrect hash,
-    /// this code will also work if a crash happens throughout execution
-    /// leading to inconsistent data.
+    /// this code will also work if a crash or a timeout happens
+    /// throughout execution leading to inconsistent data.
     pub async fn download_file(
         &self,
         url: &str,
         file_path: &Path,
         expected_sha256_hex: Option<String>,
     ) -> FileDownloadResult<()> {
-        // In case the file already exists, check the file hash.
-        if file_path.exists() {
-            if let Some(expected_hash) = expected_sha256_hex.as_ref() {
-                match check_file_hash(file_path, expected_hash) {
-                    Ok(()) => {
-                        if let Some(logger) = &self.logger {
-                            info!(logger, "File already exists: {}", url);
-                        }
-                        return Ok(());
-                    }
+        match expected_sha256_hex.as_ref() {
+            // If the file is already present on disk and
+            // a hash check is required, try the hash check
+            // first to save time if possible.
+            Some(hash) if file_path.exists() => {
+                self.info("File already exists. Checking hash.");
+                match check_file_hash(file_path, hash) {
+                    Ok(()) => return Ok(()),
                     Err(e) => {
-                        if let Some(logger) = &self.logger {
-                            warn!(
-                                logger,
-                                "File already exists, but hash check failed: {:?} - deleting file",
-                                e
-                            );
-                        }
-                        fs::remove_file(file_path)
-                            .map_err(|e| FileDownloadError::file_remove_error(file_path, e))?;
+                        self.warn(format!(
+                            "Hash mismatch. Assuming incomplete file. Error: {:?}",
+                            e
+                        ));
                     }
                 }
-            } else {
+            }
+            // If the hash check wasn't required assume that
+            // the file on the disk is stale and remove it.
+            None if file_path.exists() => {
+                self.info("Expected hash not provided and the file already exist. Removing file.");
                 fs::remove_file(file_path)
                     .map_err(|e| FileDownloadError::file_remove_error(file_path, e))?;
             }
+            _ => {}
         }
 
-        if let Some(logger) = &self.logger {
-            info!(logger, "Downloading file from: {}", url);
-        }
-        let response = self.http_get(url).await?;
-        if let Some(logger) = &self.logger {
-            info!(
-                logger,
+        let offset = if file_path.exists() {
+            let metadata = fs::metadata(file_path).map_err(|e| {
+                FileDownloadError::IoError(
+                    format!("Failed to read metadata from path: {}", file_path.display()),
+                    e,
+                )
+            })?;
+            // We have some parts of the file but still require to fetch the
+            // rest from the server.
+            metadata.len()
+        } else {
+            0
+        };
+
+        match offset {
+            0 => self.info(format!("Downloading file from: {}", url)),
+            _ => self.info(format!(
+                "Resuming downloading file from {} starting from byte {}",
+                url, offset
+            )),
+        };
+
+        let maybe_response = self.resuming_http_get(url, offset).await?;
+
+        // There are new bytes that should be written
+        if let Some(response) = maybe_response {
+            self.info(format!(
                 "Download request initiated to {:?}, headers: {:?}",
                 response.remote_addr(),
                 response.headers()
-            );
-        }
-        self.stream_response_body_to_file(response, file_path)
-            .await?;
-        if let Some(logger) = &self.logger {
-            info!(logger, "Response read");
+            ));
+            let file = fs::OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(file_path)
+                .map_err(|e| FileDownloadError::file_open_error(file_path, e))?;
+
+            self.stream_response_body_to_file(response, file, file_path)
+                .await?;
         }
 
-        if let Some(expected_hash) = expected_sha256_hex.as_ref() {
-            check_file_hash(file_path, expected_hash)
-        } else {
-            Ok(())
+        match expected_sha256_hex.as_ref() {
+            Some(expected_hash) => {
+                self.info("Response read. Checking hash.");
+                match check_file_hash(file_path, expected_hash) {
+                    Ok(()) => {
+                        self.info("Hash check passed successfully.");
+                        Ok(())
+                    }
+                    Err(hash_invalid_err) => {
+                        self.warn(format!(
+                            "Hash check failed: {:?} - deleting file",
+                            hash_invalid_err
+                        ));
+                        fs::remove_file(file_path)
+                            .map_err(|err| FileDownloadError::file_remove_error(file_path, err))?;
+                        Err(hash_invalid_err)
+                    }
+                }
+            }
+            None => {
+                self.info("Response read. Skipping hash verification since it wasn't provided.");
+                Ok(())
+            }
         }
     }
 
-    /// Perform a HTTP GET against the given URL
-    async fn http_get(&self, url: &str) -> FileDownloadResult<Response> {
-        let response = self.client.get(url).timeout(self.timeout).send().await?;
+    async fn resuming_http_get(
+        &self,
+        url: &str,
+        offset: u64,
+    ) -> FileDownloadResult<Option<Response>> {
+        let response = self
+            .client
+            .get(url)
+            .header("range", format!("bytes={}-", offset))
+            .send()
+            .await?;
 
         if response.status().is_success() {
-            Ok(response)
+            Ok(Some(response))
+        } else if response.status() == http::StatusCode::RANGE_NOT_SATISFIABLE {
+            Ok(None)
         } else {
             Err(FileDownloadError::NonSuccessResponse(Method::GET, response))
         }
@@ -140,17 +208,14 @@ impl FileDownloader {
     async fn stream_response_body_to_file(
         &self,
         mut response: Response,
+        mut file: fs::File,
         file_path: &Path,
     ) -> FileDownloadResult<()> {
-        let mut output_file = File::create(file_path)
-            .map_err(|e| FileDownloadError::file_create_error(file_path, e))?;
-
         while let Some(chunk) = tokio::time::timeout(self.timeout, response.chunk())
             .await
             .map_err(|_| FileDownloadError::TimeoutError)??
         {
-            output_file
-                .write_all(&chunk)
+            file.write_all(&chunk)
                 .map_err(|e| FileDownloadError::file_write_error(file_path, e))?;
         }
         Ok(())
@@ -250,10 +315,6 @@ pub enum FileDownloadError {
 }
 
 impl FileDownloadError {
-    pub(crate) fn file_create_error(file_path: &Path, e: io::Error) -> Self {
-        FileDownloadError::IoError(format!("Failed to create file: {:?}", file_path), e)
-    }
-
     pub(crate) fn file_write_error(file_path: &Path, e: io::Error) -> Self {
         FileDownloadError::IoError(format!("Failed to write to file: {:?}", file_path), e)
     }
@@ -341,18 +402,43 @@ mod tests {
     }
 
     impl Setup {
-        fn new(body: &str) -> Self {
-            let mut server = mockito::Server::new();
+        async fn new(body: &str) -> Self {
+            let mut server = mockito::Server::new_async().await;
             let redirect = server
                 .mock("GET", "/redirect")
                 .with_status(301)
                 .with_header("Location", &server.url())
-                .create();
+                .create_async()
+                .await;
+            let body_owned = body.to_string();
             let data = server
                 .mock("GET", "/")
+                .match_header("range", mockito::Matcher::Regex(r"bytes=.*-".to_string()))
                 .with_status(200)
-                .with_body(body)
-                .create();
+                .with_body_from_request(move |request| {
+                    let header = request.header("range");
+                    println!("Received request for headers: {:?}", header);
+                    println!("Body: {}", body_owned);
+                    let offset = match header.first() {
+                        Some(h) => h
+                            .to_str()
+                            .unwrap()
+                            .trim_start_matches("bytes=")
+                            .trim_end_matches("-")
+                            .parse()
+                            .unwrap(),
+
+                        None => 0,
+                    };
+
+                    if offset > body_owned.len() {
+                        vec![]
+                    } else {
+                        body_owned[offset..].into()
+                    }
+                })
+                .create_async()
+                .await;
 
             let temp = NamedTempFile::new()
                 .expect("Failed to create tmp file")
@@ -396,7 +482,7 @@ mod tests {
     async fn test_file_downloader_handles_redirects() {
         let body = String::from("Success");
         let hash = hash(&body);
-        let setup = Setup::new(&body).expect_routes(1, 1);
+        let setup = Setup::new(&body).await.expect_routes(1, 1);
 
         let downloader = FileDownloader::new(None);
         downloader
@@ -418,7 +504,7 @@ mod tests {
         let body = String::from("Success");
         let hash = hash(&body);
         let invalid_hash = format!("invalid_{}", hash);
-        let setup = Setup::new(&body).expect_routes(1, 0);
+        let setup = Setup::new(&body).await.expect_routes(1, 0);
 
         let downloader = FileDownloader::new(Some(ReplicaLogger::from(&setup.logger)));
 
@@ -431,7 +517,7 @@ mod tests {
 
         let logs = setup.logger.drain_logs();
         LogEntriesAssert::assert_that(logs)
-            .has_only_one_message_containing(&Level::Info, "Response read");
+            .has_only_one_message_containing(&Level::Info, "Response read. Checking hash.");
     }
 
     #[test]
@@ -439,7 +525,7 @@ mod tests {
         let body = String::from("Success");
         let hash = hash(&body);
 
-        let setup = Setup::new(&body).expect_routes(1, 0);
+        let setup = Setup::new(&body).await.expect_routes(1, 0);
 
         // Correct file already exists
         std::fs::write(&setup.temp, &body).unwrap();
@@ -458,7 +544,10 @@ mod tests {
         let logs = logger.drain_logs();
         LogEntriesAssert::assert_that(logs)
             .has_exactly_n_messages_containing(0, &Level::Info, "File already exists")
-            .has_only_one_message_containing(&Level::Info, "Response read");
+            .has_only_one_message_containing(
+                &Level::Info,
+                "Response read. Skipping hash verification since it wasn't provided.",
+            );
 
         // Download it again, this time expecting the correct hash
         let logger = InMemoryReplicaLogger::new();
@@ -471,11 +560,10 @@ mod tests {
         let result = std::fs::read_to_string(&setup.temp).expect("Failed to read file");
         assert_eq!(result, body);
 
-        // We should not download anything, as the file already exists.
         let logs = logger.drain_logs();
         LogEntriesAssert::assert_that(logs)
             .has_only_one_message_containing(&Level::Info, "File already exists")
-            .has_exactly_n_messages_containing(0, &Level::Info, "Response read");
+            .has_exactly_n_messages_containing(0, &Level::Info, "Response read. Checking hash.");
 
         setup.assert();
     }
@@ -485,17 +573,28 @@ mod tests {
         let body = String::from("Success");
         let hash = hash(&body);
 
-        let setup = Setup::new(&body).expect_routes(1, 0);
+        let setup = Setup::new(&body).await.expect_routes(2, 0);
 
         // An unexpected file already exists
         std::fs::write(&setup.temp, "unexpected content").unwrap();
 
         // It should be overwritten with the correct file
         let downloader = FileDownloader::new(Some(ReplicaLogger::from(&setup.logger)));
+        let mismatch = downloader
+            .download_file(&setup.url(), &setup.temp, Some(hash.clone()))
+            .await;
+        // Since there is bad content first download will result in a mismatch
+        assert_matches!(
+            mismatch,
+            Err(FileDownloadError::FileHashMismatchError { .. })
+        );
+
+        assert!(!setup.temp.exists());
+
         downloader
             .download_file(&setup.url(), &setup.temp, Some(hash))
             .await
-            .expect("Download failed");
+            .expect("Failed to download");
 
         let result = std::fs::read_to_string(&setup.temp).expect("Failed to read file");
         assert_eq!(result, body);
@@ -503,10 +602,8 @@ mod tests {
         setup.assert();
 
         let logs = setup.logger.drain_logs();
-        LogEntriesAssert::assert_that(logs).has_only_one_message_containing(
-            &Level::Warning,
-            "File already exists, but hash check failed",
-        );
+        LogEntriesAssert::assert_that(logs)
+            .has_only_one_message_containing(&Level::Warning, "Hash check failed");
     }
 
     fn create_tar<W: Write>(writer: W) -> io::Result<()> {
