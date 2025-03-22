@@ -23,6 +23,7 @@ def icos_build(
         image_deps_func,
         mode = None,
         malicious = False,
+        max_file_sizes = None,
         upgrades = True,
         vuln_scan = True,
         visibility = None,
@@ -39,6 +40,7 @@ def icos_build(
       image_deps_func: Function to be used to generate image manifest
       mode: dev or prod. If not specified, will use the value of `name`
       malicious: if True, bundle the `malicious_replica`
+      max_file_sizes: mapping of output file to max allowed size
       upgrades: if True, build upgrade images as well
       vuln_scan: if True, create targets for vulnerability scanning
       visibility: See Bazel documentation
@@ -50,6 +52,9 @@ def icos_build(
 
     if mode == None:
         mode = name
+
+    if max_file_sizes == None:
+        max_file_sizes = {}
 
     image_deps = image_deps_func(mode, malicious)
 
@@ -337,6 +342,12 @@ def icos_build(
         tags = ["manual"],
     )
 
+    if "disk-img.tar.zst" in max_file_sizes:
+        file_size_check(
+            name = "disk-img.tar.zst",
+            max_file_size = max_file_sizes["disk-img.tar.zst"],
+        )
+
     # -------------------- Assemble upgrade image --------------------
 
     if upgrades:
@@ -358,6 +369,12 @@ def icos_build(
             tags = ["manual"],
         )
 
+        if "update-img.tar.zst" in max_file_sizes:
+            file_size_check(
+                name = "update-img.tar.zst",
+                max_file_size = max_file_sizes["update-img.tar.zst"],
+            )
+
         upgrade_image(
             name = "update-img-test.tar",
             boot_partition = ":partition-boot-test.tzst",
@@ -375,6 +392,12 @@ def icos_build(
             visibility = visibility,
             tags = ["manual"],
         )
+
+        if "update-img-test.tar.zst" in max_file_sizes:
+            file_size_check(
+                name = "update-img-test.tar.zst",
+                max_file_size = max_file_sizes["update-img-test.tar.zst"],
+            )
 
     # -------------------- Upload artifacts --------------------
 
@@ -589,6 +612,26 @@ EOF
     )
 
 # end def icos_build
+
+def file_size_check(
+        name,
+        max_file_size):
+    """
+    A check to make sure the given file is below the specified size.
+
+    Args:
+      name: Name of the file.
+      max_file_size: Max accepted size in bytes.
+    """
+    native.sh_test(
+        name = "%s_size_test" % name,
+        srcs = ["//ic-os:file_size_test.sh"],
+        data = [name],
+        env = {
+            "FILE": "$(rootpath %s)" % name,
+            "MAX_SIZE": max_file_size,
+        },
+    )
 
 def boundary_node_icos_build(
         name,
