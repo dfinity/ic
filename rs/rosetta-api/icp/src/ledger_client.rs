@@ -214,7 +214,7 @@ impl LedgerClient {
         let arg = Encode!(&())
             .map_err(|e| ApiError::internal_error(format!("Serialization failed: {:?}", e)))?;
 
-        let symbol_res = canister_access
+        let symbol_res: Result<Symbol, String> = canister_access
             .agent
             .query(&canister_access.canister_id.get().0, "symbol")
             .with_arg(arg)
