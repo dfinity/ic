@@ -6194,6 +6194,7 @@ dependencies = [
  "serde_regex",
  "serde_yaml",
  "simple_moving_average",
+ "siphasher 1.0.1",
  "slog",
  "strum",
  "tempfile",

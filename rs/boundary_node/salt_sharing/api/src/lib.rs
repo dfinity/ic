@@ -3,6 +3,9 @@ use serde::{Deserialize, Serialize};
 
 pub type GetSaltResponse = Result<SaltResponse, GetSaltError>;
 
+// Size of the shared salt in bytes
+pub const SALT_SIZE: usize = 32;
+
 #[derive(CandidType, Deserialize, Debug, Clone)]
 pub enum SaltGenerationStrategy {
     StartOfMonth,
