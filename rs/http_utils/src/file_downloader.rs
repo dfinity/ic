@@ -94,15 +94,18 @@ impl FileDownloader {
             // If the file is already present on disk and
             // a hash check is required, try the hash check
             // first to save time if possible.
-            Some(hash) if file_path.exists() => match check_file_hash(file_path, hash) {
-                Ok(()) => return Ok(()),
-                Err(e) => {
-                    self.warn(format!(
-                        "Hash mismatch. Assuming incomplete file. Error: {:?}",
-                        e
-                    ));
+            Some(hash) if file_path.exists() => {
+                self.info("File already exists. Checking hash.");
+                match check_file_hash(file_path, hash) {
+                    Ok(()) => return Ok(()),
+                    Err(e) => {
+                        self.warn(format!(
+                            "Hash mismatch. Assuming incomplete file. Error: {:?}",
+                            e
+                        ));
+                    }
                 }
-            },
+            }
             // If the hash check wasn't required assume that
             // the file on the disk is stale and remove it.
             None if file_path.exists() => {
@@ -522,7 +525,7 @@ mod tests {
         let body = String::from("Success");
         let hash = hash(&body);
 
-        let setup = Setup::new(&body).await.expect_routes(2, 0);
+        let setup = Setup::new(&body).await.expect_routes(1, 0);
 
         // Correct file already exists
         std::fs::write(&setup.temp, &body).unwrap();
@@ -558,11 +561,9 @@ mod tests {
         assert_eq!(result, body);
 
         let logs = logger.drain_logs();
-        LogEntriesAssert::assert_that(logs).has_exactly_n_messages_containing(
-            1,
-            &Level::Info,
-            "Response read. Checking hash.",
-        );
+        LogEntriesAssert::assert_that(logs)
+            .has_only_one_message_containing(&Level::Info, "File already exists")
+            .has_exactly_n_messages_containing(0, &Level::Info, "Response read. Checking hash.");
 
         setup.assert();
     }
