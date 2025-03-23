@@ -164,7 +164,6 @@ fn test_wasmtime_system_api() {
         .expect("call failed");
 }
 
-#[ignore]
 #[test]
 fn test_initial_wasmtime_config() {
     // The following proposals should be disabled: simd, relaxed_simd,
@@ -233,20 +232,4 @@ fn test_initial_wasmtime_config() {
             "Error expecting `{expected_err_msg}`, but got `{err_msg}`"
         );
     }
-}
-
-#[test]
-fn test_wasmtime_validation_error_is_ignored() {
-    let wat = r#"(module (import "env" "memory" (memory 1 1 shared)))"#;
-    let wasm_binary = BinaryEncodedWasm::new(wat::parse_str(wat).unwrap());
-    let err = validate_and_instrument_for_testing(
-        &WasmtimeEmbedder::new(EmbeddersConfig::default(), no_op_logger()),
-        &wasm_binary,
-    )
-    .err()
-    .unwrap();
-    assert_eq!(
-        format!("{:?}", err),
-        r#"InvalidWasm(WasmtimeValidation("wasmtime::Module::validate() failed"))"#
-    );
 }

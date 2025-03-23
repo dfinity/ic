@@ -15,10 +15,6 @@ on the process that this file is part of, see
 
 ## Removed
 
-* Remove (previously deprecated) airdrop neurons from initial SNS configuration.
-
-  `SnsInitPayload.initial_token_distribution` must not specify `airdrop_distribution`.
-
 ## Fixed
 
 ## Security

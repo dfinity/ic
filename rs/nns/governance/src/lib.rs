@@ -140,6 +140,7 @@ use std::{
     io,
     time::{Duration, SystemTime},
 };
+use timer_tasks::encode_timer_task_metrics;
 
 #[cfg(any(test, feature = "canbench-rs"))]
 pub mod test_utils;
@@ -162,7 +163,6 @@ pub mod governance;
 pub mod governance_proto_builder;
 mod heap_governance_data;
 mod known_neuron_index;
-mod migrations;
 mod network_economics;
 mod neuron;
 pub mod neuron_data_validation;
@@ -641,6 +641,9 @@ pub fn encode_metrics(
             .value(labels.as_slice(), Metric::into(*deadline_ts))
             .unwrap();
     }
+
+    // Timer tasks
+    encode_timer_task_metrics(w)?;
 
     // Periodically Calculated (almost entirely detailed neuron breakdowns/rollups)
 

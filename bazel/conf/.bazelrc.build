@@ -76,10 +76,14 @@ test:testnet --test_output=streamed --test_tag_filters=
 # TODO(IDX-2374): enable alltests in CI when we will have actual system tests.
 #test:ci --config=alltests
 
-# Run all tests once by default, run flaky tests up to 3 times in CI.
+# See the following for the exact semantics of --flaky_test_attempts:
+# https://bazel.build/reference/command-line-reference#flag--flaky_test_attempts
+# Locally we want a flaky test to fail explicitly on the first failure and not be retried.
 test    --flaky_test_attempts=1
+# On CI run tests marked as flaky up to 3 times.
 test:ci --flaky_test_attempts=default
-
+# On CI run all system-tests up to 3 times since they're known to be the most flaky since they require non-deterministic resources like the Internet.
+test:ci --flaky_test_attempts=//rs/tests/.*@3
 
 # So that developers can build in debug mode.
 build:dev --compilation_mode=fastbuild

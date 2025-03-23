@@ -63,7 +63,6 @@ system_test_nns(
         "ASSET_CANISTER_WASM_PATH": "$(rootpath @asset_canister//file)",
         "LONG_ASSET_CANISTER_WASM_PATH": "$(rootpath @long_asset_canister//file)",
     },
-    flaky = True,
     tags = [
         "system_test_hourly",
     ],
@@ -81,7 +80,6 @@ system_test_nns(
 
 system_test_nns(
     name = "bn_update_workload_test",
-    flaky = True,
     tags = [
         "manual",  # TODO(BOUN-1039): remove "manual" and add back "long_test" when the test is not flaky anymore
     ],

@@ -6,7 +6,7 @@ inputs:
     default: 'test'
   BAZEL_TARGETS:
     required: true
-  BUILDEVENT_APIKEY:
+  CLOUD_CREDENTIALS_CONTENT:
     required: false
   SSH_PRIVATE_KEY_BACKUP_POD:
     required: false
@@ -61,23 +61,6 @@ runs:
           CI_EVENT_NAME: ${{ github.event_name }}
           CI_JOB_URL: "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
           MERGE_BASE_SHA: ${{ github.event.pull_request.base.sha }}
-
-      - name: Export bazel build events to honeycomb
-        shell: bash
-        # only upload on success or failure but _not_ on canceled jobs
-        if: (success() || failure()) && inputs.BUILDEVENT_APIKEY != ''
-        run: |
-          if [ -f ./bazel-bep.pb ]; then
-              # avoid output unless an error occurs during bes export. This ensures
-              # only the (more relevant) output from the main bazel command is shown.
-              exportout=$(mktemp)
-              if ! BUILDEVENT_APIKEY='${{ inputs.BUILDEVENT_APIKEY }}' bazel run //bazel/exporter:exporter --build_event_binary_file= -- -f "$(pwd)/bazel-bep.pb" 2> "$exportout" >&2; then
-                echo "bes export failed:"
-                cat "$exportout"
-              fi
-              rm "$exportout"
-              echo "BEP events exported to honeycomb!"
-          fi
 
       - name: Encrypt build events
         shell: bash

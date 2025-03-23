@@ -33,7 +33,7 @@ use crate::{
                 DisburseMaturityResponse, MergeMaturityResponse, StakeMaturityResponse,
             },
             nervous_system_function::FunctionType,
-            neuron::{DissolveState, Followees},
+            neuron::{DissolveState, Followees, TopicFollowees},
             proposal::Action,
             proposal_data::ActionAuxiliary as ActionAuxiliaryPb,
             transfer_sns_treasury_funds::TransferFrom,
@@ -68,10 +68,7 @@ use crate::{
         canister_type_and_wasm_hash_for_upgrade, get_all_sns_canisters, get_canisters_to_upgrade,
         get_running_version, get_upgrade_params, get_wasm, SnsCanisterType, UpgradeSnsParams,
     },
-    types::{
-        function_id_to_proposal_criticality, is_registered_function_id, Environment,
-        HeapGrowthPotential, LedgerUpdateLock, Wasm,
-    },
+    types::{is_registered_function_id, Environment, HeapGrowthPotential, LedgerUpdateLock, Wasm},
 };
 use candid::{Decode, Encode};
 #[cfg(not(target_arch = "wasm32"))]
@@ -85,10 +82,10 @@ use ic_ledger_core::Tokens;
 use ic_management_canister_types_private::{
     CanisterChangeDetails, CanisterInfoRequest, CanisterInfoResponse, CanisterInstallMode,
 };
+use ic_nervous_system_canisters::cmc::CMC;
 use ic_nervous_system_clients::ledger_client::ICRC1Ledger;
 use ic_nervous_system_collections_union_multi_map::UnionMultiMap;
 use ic_nervous_system_common::{
-    cmc::CMC,
     i2d,
     ledger::{self, compute_distribution_subaccount_bytes},
     NervousSystemError, ONE_DAY_SECONDS,
@@ -106,7 +103,7 @@ use ic_sns_governance_token_valuation::Valuation;
 use icp_ledger::DEFAULT_TRANSFER_FEE as NNS_DEFAULT_TRANSFER_FEE;
 use icrc_ledger_types::icrc1::account::{Account, Subaccount};
 use lazy_static::lazy_static;
-use maplit::hashset;
+use maplit::{btreemap, hashset};
 use rust_decimal::Decimal;
 use rust_decimal_macros::dec;
 use std::{
@@ -1375,6 +1372,7 @@ impl Governance {
             created_timestamp_seconds: creation_timestamp_seconds,
             aging_since_timestamp_seconds: parent_neuron.aging_since_timestamp_seconds,
             followees: parent_neuron.followees.clone(),
+            topic_followees: parent_neuron.topic_followees.clone(),
             maturity_e8s_equivalent: 0,
             dissolve_state: parent_neuron.dissolve_state,
             voting_power_percentage_multiplier: parent_neuron.voting_power_percentage_multiplier,
@@ -3423,9 +3421,14 @@ impl Governance {
             .max_age_bonus_percentage
             .expect("NervousSystemParameters must have max_age_bonus_percentage");
 
+        // Define topic-based criticality based on the current mapping from proposals to topics.
+        let (proposal_topic, proposal_criticality) = self
+            .get_topic_and_criticality_for_action(action)
+            .map_err(|err| GovernanceError::new_with_message(ErrorType::InvalidProposal, err))?;
+
         // Voting duration parameters.
         let voting_duration_parameters =
-            action.voting_duration_parameters(nervous_system_parameters);
+            action.voting_duration_parameters(nervous_system_parameters, proposal_criticality);
         let initial_voting_period_seconds = voting_duration_parameters
             .initial_voting_period
             .seconds
@@ -3438,11 +3441,13 @@ impl Governance {
             .expect("Unable to determine the wait for quiet deadline increase amount.");
 
         // Voting power threshold parameters.
-        let voting_power_thresholds = action.voting_power_thresholds();
-        let minimum_yes_proportion_of_total =
-            voting_power_thresholds.minimum_yes_proportion_of_total;
-        let minimum_yes_proportion_of_exercised =
-            voting_power_thresholds.minimum_yes_proportion_of_exercised;
+        let (minimum_yes_proportion_of_total, minimum_yes_proportion_of_exercised) = {
+            let voting_power_thresholds = proposal_criticality.voting_power_thresholds();
+            (
+                voting_power_thresholds.minimum_yes_proportion_of_total,
+                voting_power_thresholds.minimum_yes_proportion_of_exercised,
+            )
+        };
 
         for (k, v) in self.proto.neurons.iter() {
             // If this neuron is eligible to vote, record its
@@ -3488,10 +3493,6 @@ impl Governance {
         // Create a new proposal ID for this proposal.
         let proposal_num = self.next_proposal_id();
         let proposal_id = ProposalId { id: proposal_num };
-
-        let proposal_topic = self
-            .get_topic_for_action(action)
-            .map_err(|err| GovernanceError::new_with_message(ErrorType::InvalidProposal, err))?;
 
         // Create the proposal.
         let mut proposal_data = ProposalData {
@@ -3544,6 +3545,7 @@ impl Governance {
             .neuron_fees_e8s += proposal_data.reject_cost_e8s;
 
         let function_id = u64::from(action);
+
         // Cast a 'yes'-vote for the proposer, including following.
         Governance::cast_vote_and_cascade_follow(
             &proposal_id,
@@ -3554,6 +3556,7 @@ impl Governance {
             &self.proto.neurons,
             now_seconds,
             &mut proposal_data.ballots,
+            proposal_criticality,
         );
 
         // Finally, add this proposal as an open proposal.
@@ -3583,6 +3586,7 @@ impl Governance {
         // particular, this has no impact on how the implications of following are deduced.
         now_seconds: u64,
         ballots: &mut BTreeMap<String, Ballot>, // This is ultimately what gets changed.
+        proposal_criticality: ProposalCriticality,
     ) {
         let fallback_pseudo_function_id = u64::from(&Action::Unspecified(Empty {}));
         assert!(function_id != fallback_pseudo_function_id);
@@ -3608,7 +3612,6 @@ impl Governance {
 
             push_member(function_id);
 
-            let proposal_criticality = function_id_to_proposal_criticality(function_id);
             match proposal_criticality {
                 ProposalCriticality::Normal => push_member(fallback_pseudo_function_id),
                 ProposalCriticality::Critical => (), // Do not use catch-all/fallback following.
@@ -3696,7 +3699,12 @@ impl Governance {
                     }
                 };
 
-                let follower_vote = follower_neuron.would_follow_ballots(function_id, ballots);
+                let follower_vote = follower_neuron.would_follow_ballots(
+                    function_id,
+                    ballots,
+                    proposal_criticality,
+                );
+
                 if follower_vote != Vote::Unspecified {
                     // follower_neuron would be swayed by its followees!
                     //
@@ -3753,6 +3761,7 @@ impl Governance {
         let proposal = self.proto.proposals.get_mut(&proposal_id.id).ok_or_else(||
             // Proposal not found.
             GovernanceError::new_with_message(ErrorType::NotFound, "Can't find proposal."))?;
+
         let action = proposal
             .proposal
             .as_ref()
@@ -3760,6 +3769,10 @@ impl Governance {
             .action
             .as_ref()
             .expect("Proposal must have an action");
+
+        // Take topic-based criticality as it was defined when the proposal was made.
+        let proposal_topic = proposal.topic();
+        let proposal_criticality = proposal_topic.proposal_criticality();
 
         let vote = Vote::try_from(request.vote).unwrap_or(Vote::Unspecified);
         if vote == Vote::Unspecified {
@@ -3801,6 +3814,7 @@ impl Governance {
             &self.proto.neurons,
             now_seconds,
             &mut proposal.ballots,
+            proposal_criticality,
         );
 
         self.process_proposal(proposal_id.id);
@@ -4098,6 +4112,9 @@ impl Governance {
             created_timestamp_seconds: now,
             aging_since_timestamp_seconds: now,
             followees: self.default_followees_or_panic().followees,
+            topic_followees: Some(TopicFollowees {
+                topic_id_to_followees: btreemap! {},
+            }),
             maturity_e8s_equivalent: 0,
             dissolve_state: Some(DissolveState::DissolveDelaySeconds(0)),
             // A neuron created through the `claim_or_refresh` ManageNeuron command will
@@ -4264,6 +4281,7 @@ impl Governance {
                 created_timestamp_seconds: now,
                 aging_since_timestamp_seconds: now,
                 followees: neuron_recipe.construct_followees(),
+                topic_followees: Some(neuron_recipe.construct_topic_followees()),
                 maturity_e8s_equivalent: 0,
                 dissolve_state: Some(DissolveState::DissolveDelaySeconds(
                     neuron_recipe.get_dissolve_delay_seconds_or_panic(),
