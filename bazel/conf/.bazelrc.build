@@ -114,6 +114,10 @@ build:afl --action_env="LD=afl-clang-lto++"
 build:afl --action_env="LLVM_CONFIG=llvm-config-18"
 build:afl --action_env="RANLIB=llvm-ranlib-18"
 build:afl --config=fuzzing
+# Note: Instrumenting with AFL is done by overriding the above variables, but
+# these are not respected by the hermetic toolchains. Instead, we use
+# toolchains from the host system.
+# For more context see: https://github.com/dfinity/ic/pull/3508
 build:afl --hermetic_cc=false
 build:afl --build_tag_filters=afl
 run:afl --run_under="//bin/fuzzing:afl_wrapper"

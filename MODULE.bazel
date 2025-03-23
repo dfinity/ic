@@ -847,6 +847,8 @@ os_info(name = "os_info")
 
 # Set up hermetic cc toolchains for binaries and canisters
 toolchains = use_extension("@hermetic_cc_toolchain//toolchain:ext.bzl", "toolchains")
+# The use_hermetic_cc setting is added to each toolchain to allow us to opt out
+# in favor of system toolchains, when needed.
 toolchains.extra_settings(settings = ["//bazel:use_hermetic_cc"])
 use_repo(toolchains, "zig_sdk")
 
