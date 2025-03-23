@@ -1,7 +1,9 @@
 """
-openssl-sys does not build with the vendored feature when using rules_rust, so
-we build it ourselves, here.
+With hermetic toolchains, we would like to not depend on the openssl from the
+build enviornment. Normally the vendored feature would build the library from
+source alongside the crate, but this does not work when using rules_rust:
 https://github.com/bazelbuild/rules_rust/issues/1519
+Instead, we build it ourselves, here.
 """
 
 load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")

@@ -1,4 +1,9 @@
 # Adjust target naming to match what zig expects.
+#
+# zig does not plan to change their target naming: https://github.com/ziglang/zig/issues/4911
+# and cc-rs is waiting on a 1.0 release to support zig's scheme: https://github.com/rust-lang/cc-rs/pull/986
+# Other related links: https://github.com/bazelbuild/rules_rust/issues/2529
+#                      https://github.com/Asana/cc-rs
 diff --git a/src/lib.rs b/src/lib.rs
 index f75b951..8e770a7 100644
 --- a/src/lib.rs

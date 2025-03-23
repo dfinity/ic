@@ -1,5 +1,8 @@
-# Extend hermetic_cc_toolchain with a wasm target that does not use wasi, and
-# add a path to put additional restrictions on the generated toolchains.
+# Extend hermetic_cc_toolchain with a wasm target that does not use wasi
+# (https://github.com/uber/hermetic_cc_toolchain/pull/214), and add a path to
+# put additional restrictions on the generated toolchains so that we can
+# restrict which targets pick up the toolchains
+# (https://github.com/uber/hermetic_cc_toolchain/pull/213).
 diff --git a/MODULE.bazel b/MODULE.bazel
 index 409d626..1265298 100644
 --- a/MODULE.bazel
