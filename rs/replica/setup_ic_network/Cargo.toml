@@ -12,6 +12,7 @@ ic-artifact-manager = { path = "../../p2p/artifact_manager" }
 ic-artifact-pool = { path = "../../artifact_pool" }
 ic-config = { path = "../../config" }
 ic-consensus = { path = "../../consensus" }
+ic-consensus-certification = { path = "../../consensus/certification" }
 ic-consensus-dkg = { path = "../../consensus/dkg" }
 ic-consensus-manager = { path = "../../p2p/consensus_manager" }
 ic-consensus-utils = { path = "../../consensus/utils" }
