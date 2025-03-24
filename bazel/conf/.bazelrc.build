@@ -149,4 +149,6 @@ test --test_env=CLICOLOR_FORCE=true
 common --local_termination_grace_seconds=90
 
 # Speed up compilation with zig cc
-build --sandbox_add_mount_pair=/tmp
+# Currently this is disabled as it breaks pocket-ic tests as the port files
+# collide across tests.
+# build --sandbox_add_mount_pair=/tmp
