@@ -858,8 +858,10 @@ register_toolchains(
     "@zig_sdk//toolchain:linux_amd64_gnu.2.28",
 
     # macOS toolchains
-    "@zig_sdk//toolchain:darwin_amd64",
-    "@zig_sdk//toolchain:darwin_arm64",
+    # Do not use hermetic toolchains for macOS until we have had a chance to
+    # wrap the various system libraries.
+    # "@zig_sdk//toolchain:darwin_amd64",
+    # "@zig_sdk//toolchain:darwin_arm64",
 
     # wasm toolchains
     "@zig_sdk//toolchain:none_wasm",
