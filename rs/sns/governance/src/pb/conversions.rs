@@ -1549,10 +1549,8 @@ impl From<pb::governance::neuron_in_flight_command::Command>
             pb::governance::neuron_in_flight_command::Command::Follow(v) => {
                 pb_api::governance::neuron_in_flight_command::Command::Follow(v.into())
             }
-            pb::governance::neuron_in_flight_command::Command::SetFollowingForTopics(v) => {
-                pb_api::governance::neuron_in_flight_command::Command::SetFollowingForTopics(
-                    v.into(),
-                )
+            pb::governance::neuron_in_flight_command::Command::SetFollowing(v) => {
+                pb_api::governance::neuron_in_flight_command::Command::SetFollowing(v.into())
             }
             pb::governance::neuron_in_flight_command::Command::MakeProposal(v) => {
                 pb_api::governance::neuron_in_flight_command::Command::MakeProposal(v.into())
@@ -1603,8 +1601,8 @@ impl From<pb_api::governance::neuron_in_flight_command::Command>
             pb_api::governance::neuron_in_flight_command::Command::Follow(v) => {
                 pb::governance::neuron_in_flight_command::Command::Follow(v.into())
             }
-            pb_api::governance::neuron_in_flight_command::Command::SetFollowingForTopics(v) => {
-                pb::governance::neuron_in_flight_command::Command::SetFollowingForTopics(v.into())
+            pb_api::governance::neuron_in_flight_command::Command::SetFollowing(v) => {
+                pb::governance::neuron_in_flight_command::Command::SetFollowing(v.into())
             }
             pb_api::governance::neuron_in_flight_command::Command::MakeProposal(v) => {
                 pb::governance::neuron_in_flight_command::Command::MakeProposal(v.into())
@@ -2238,24 +2236,26 @@ impl From<pb::manage_neuron::Follow> for pb_api::manage_neuron::Follow {
     }
 }
 
-impl From<pb_api::manage_neuron::SetFollowingForTopics>
-    for pb::manage_neuron::SetFollowingForTopics
-{
-    fn from(item: pb_api::manage_neuron::SetFollowingForTopics) -> Self {
+impl From<pb_api::manage_neuron::SetFollowing> for pb::manage_neuron::SetFollowing {
+    fn from(item: pb_api::manage_neuron::SetFollowing) -> Self {
         Self {
-            topic_followees: item.topic_followees.map(pb::neuron::TopicFollowees::from),
+            topic_following: item
+                .topic_following
+                .into_iter()
+                .map(pb::neuron::FolloweesForTopic::from)
+                .collect(),
         }
     }
 }
 
-impl From<pb::manage_neuron::SetFollowingForTopics>
-    for pb_api::manage_neuron::SetFollowingForTopics
-{
-    fn from(item: pb::manage_neuron::SetFollowingForTopics) -> Self {
+impl From<pb::manage_neuron::SetFollowing> for pb_api::manage_neuron::SetFollowing {
+    fn from(item: pb::manage_neuron::SetFollowing) -> Self {
         Self {
-            topic_followees: item
-                .topic_followees
-                .map(pb_api::neuron::TopicFollowees::from),
+            topic_following: item
+                .topic_following
+                .into_iter()
+                .map(pb_api::neuron::FolloweesForTopic::from)
+                .collect(),
         }
     }
 }
@@ -2397,8 +2397,8 @@ impl From<pb::manage_neuron::Command> for pb_api::manage_neuron::Command {
             pb::manage_neuron::Command::Follow(v) => {
                 pb_api::manage_neuron::Command::Follow(v.into())
             }
-            pb::manage_neuron::Command::SetFollowingForTopics(v) => {
-                pb_api::manage_neuron::Command::SetFollowingForTopics(v.into())
+            pb::manage_neuron::Command::SetFollowing(v) => {
+                pb_api::manage_neuron::Command::SetFollowing(v.into())
             }
             pb::manage_neuron::Command::MakeProposal(v) => {
                 pb_api::manage_neuron::Command::MakeProposal(v.into())
@@ -2440,8 +2440,8 @@ impl From<pb_api::manage_neuron::Command> for pb::manage_neuron::Command {
             pb_api::manage_neuron::Command::Follow(v) => {
                 pb::manage_neuron::Command::Follow(v.into())
             }
-            pb_api::manage_neuron::Command::SetFollowingForTopics(v) => {
-                pb::manage_neuron::Command::SetFollowingForTopics(v.into())
+            pb_api::manage_neuron::Command::SetFollowing(v) => {
+                pb::manage_neuron::Command::SetFollowing(v.into())
             }
             pb_api::manage_neuron::Command::MakeProposal(v) => {
                 pb::manage_neuron::Command::MakeProposal(v.into())
@@ -2599,6 +2599,21 @@ impl From<pb_api::manage_neuron_response::FollowResponse>
     }
 }
 
+impl From<pb::manage_neuron_response::SetFollowingResponse>
+    for pb_api::manage_neuron_response::SetFollowingResponse
+{
+    fn from(_: pb::manage_neuron_response::SetFollowingResponse) -> Self {
+        Self {}
+    }
+}
+impl From<pb_api::manage_neuron_response::SetFollowingResponse>
+    for pb::manage_neuron_response::SetFollowingResponse
+{
+    fn from(_: pb_api::manage_neuron_response::SetFollowingResponse) -> Self {
+        Self {}
+    }
+}
+
 impl From<pb::manage_neuron_response::MakeProposalResponse>
     for pb_api::manage_neuron_response::MakeProposalResponse
 {
@@ -2716,6 +2731,9 @@ impl From<pb::manage_neuron_response::Command> for pb_api::manage_neuron_respons
             pb::manage_neuron_response::Command::Follow(v) => {
                 pb_api::manage_neuron_response::Command::Follow(v.into())
             }
+            pb::manage_neuron_response::Command::SetFollowing(v) => {
+                pb_api::manage_neuron_response::Command::SetFollowing(v.into())
+            }
             pb::manage_neuron_response::Command::MakeProposal(v) => {
                 pb_api::manage_neuron_response::Command::MakeProposal(v.into())
             }
@@ -2760,6 +2778,9 @@ impl From<pb_api::manage_neuron_response::Command> for pb::manage_neuron_respons
             }
             pb_api::manage_neuron_response::Command::Follow(v) => {
                 pb::manage_neuron_response::Command::Follow(v.into())
+            }
+            pb_api::manage_neuron_response::Command::SetFollowing(v) => {
+                pb::manage_neuron_response::Command::SetFollowing(v.into())
             }
             pb_api::manage_neuron_response::Command::MakeProposal(v) => {
                 pb::manage_neuron_response::Command::MakeProposal(v.into())

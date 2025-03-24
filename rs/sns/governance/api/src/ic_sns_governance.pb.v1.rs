@@ -1401,7 +1401,7 @@ pub mod governance {
             RemoveNeuronPermissions(super::super::manage_neuron::RemoveNeuronPermissions),
             Configure(super::super::manage_neuron::Configure),
             Follow(super::super::manage_neuron::Follow),
-            SetFollowingForTopics(super::super::manage_neuron::SetFollowingForTopics),
+            SetFollowing(super::super::manage_neuron::SetFollowing),
             MakeProposal(super::super::Proposal),
             RegisterVote(super::super::manage_neuron::RegisterVote),
             FinalizeDisburseMaturity(super::super::manage_neuron::FinalizeDisburseMaturity),
@@ -1695,6 +1695,8 @@ pub struct ManageNeuron {
 }
 /// Nested message and enum types in `ManageNeuron`.
 pub mod manage_neuron {
+    use super::*;
+
     /// The operation that increases a neuron's dissolve delay. It can be
     /// increased up to a maximum defined in the nervous system parameters.
     #[derive(Default, candid::CandidType, candid::Deserialize, Debug, Clone, Copy, PartialEq)]
@@ -1853,9 +1855,9 @@ pub mod manage_neuron {
     #[derive(
         candid::CandidType, candid::Deserialize, comparable::Comparable, Clone, Debug, PartialEq,
     )]
-    pub struct SetFollowingForTopics {
-        /// The neuron's followees, specified as a map of proposal topics IDs to followees neuron IDs.
-        pub topic_followees: ::core::option::Option<super::neuron::TopicFollowees>,
+    pub struct SetFollowing {
+        /// The neuron's topic-based following, specified as a sequence of `FolloweesForTopic`.
+        pub topic_following: Vec<neuron::FolloweesForTopic>,
     }
     /// The operation that registers a given vote from the neuron for a given
     /// proposal (a directly cast vote as opposed to a vote that is cast as
@@ -1930,7 +1932,7 @@ pub mod manage_neuron {
         Configure(Configure),
         Disburse(Disburse),
         Follow(Follow),
-        SetFollowingForTopics(SetFollowingForTopics),
+        SetFollowing(SetFollowing),
         /// Making a proposal is defined by a proposal, which contains the proposer neuron.
         /// Making a proposal will implicitly cast a yes vote for the proposing neuron.
         MakeProposal(super::Proposal),
@@ -1989,6 +1991,11 @@ pub mod manage_neuron_response {
     /// The response to the ManageNeuron command 'follow'.
     #[derive(Default, candid::CandidType, candid::Deserialize, Debug, Clone, Copy, PartialEq)]
     pub struct FollowResponse {}
+
+    /// The response to the ManageNeuron command 'set_following'.
+    #[derive(Default, candid::CandidType, candid::Deserialize, Debug, Clone, Copy, PartialEq)]
+    pub struct SetFollowingResponse {}
+
     /// The response to the ManageNeuron command 'make_proposal'.
     #[derive(Default, candid::CandidType, candid::Deserialize, Debug, Clone, Copy, PartialEq)]
     pub struct MakeProposalResponse {
@@ -2023,6 +2030,7 @@ pub mod manage_neuron_response {
         Configure(ConfigureResponse),
         Disburse(DisburseResponse),
         Follow(FollowResponse),
+        SetFollowing(SetFollowingResponse),
         MakeProposal(MakeProposalResponse),
         RegisterVote(RegisterVoteResponse),
         Split(SplitResponse),

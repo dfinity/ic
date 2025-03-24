@@ -1893,7 +1893,7 @@ pub mod governance {
             #[prost(message, tag = "10")]
             Follow(super::super::manage_neuron::Follow),
             #[prost(message, tag = "14")]
-            SetFollowingForTopics(super::super::manage_neuron::SetFollowingForTopics),
+            SetFollowing(super::super::manage_neuron::SetFollowing),
             #[prost(message, tag = "11")]
             MakeProposal(super::super::Proposal),
             #[prost(message, tag = "12")]
@@ -2646,10 +2646,10 @@ pub mod manage_neuron {
         PartialEq,
         ::prost::Message,
     )]
-    pub struct SetFollowingForTopics {
-        /// The neuron's followees, specified as a map of proposal topics IDs to followees neuron IDs.
-        #[prost(message, optional, tag = "1")]
-        pub topic_followees: ::core::option::Option<super::neuron::TopicFollowees>,
+    pub struct SetFollowing {
+        /// The neuron's topic-based following, specified as a sequence of `FolloweesForTopic`.
+        #[prost(message, repeated, tag = "1")]
+        pub topic_following: ::prost::alloc::vec::Vec<super::neuron::FolloweesForTopic>,
     }
     /// The operation that registers a given vote from the neuron for a given
     /// proposal (a directly cast vote as opposed to a vote that is cast as
@@ -2782,7 +2782,7 @@ pub mod manage_neuron {
         #[prost(message, tag = "4")]
         Follow(Follow),
         #[prost(message, tag = "14")]
-        SetFollowingForTopics(SetFollowingForTopics),
+        SetFollowing(SetFollowing),
         /// Making a proposal is defined by a proposal, which contains the proposer neuron.
         /// Making a proposal will implicitly cast a yes vote for the proposing neuron.
         #[prost(message, tag = "5")]
@@ -2818,7 +2818,7 @@ pub mod manage_neuron {
 pub struct ManageNeuronResponse {
     #[prost(
         oneof = "manage_neuron_response::Command",
-        tags = "1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13"
+        tags = "1, 2, 3, 4, 14, 5, 6, 7, 8, 9, 10, 11, 12, 13"
     )]
     pub command: ::core::option::Option<manage_neuron_response::Command>,
 }
@@ -2916,6 +2916,17 @@ pub mod manage_neuron_response {
         ::prost::Message,
     )]
     pub struct FollowResponse {}
+    /// The response to the ManageNeuron command 'set_following'.
+    #[derive(
+        candid::CandidType,
+        candid::Deserialize,
+        comparable::Comparable,
+        Clone,
+        Copy,
+        PartialEq,
+        ::prost::Message,
+    )]
+    pub struct SetFollowingResponse {}
     /// The response to the ManageNeuron command 'make_proposal'.
     #[derive(
         candid::CandidType,
@@ -3010,6 +3021,8 @@ pub mod manage_neuron_response {
         Disburse(DisburseResponse),
         #[prost(message, tag = "4")]
         Follow(FollowResponse),
+        #[prost(message, tag = "14")]
+        SetFollowing(SetFollowingResponse),
         #[prost(message, tag = "5")]
         MakeProposal(MakeProposalResponse),
         #[prost(message, tag = "6")]
