@@ -1,0 +1,48 @@
+use ic_nervous_system_chunks::Chunks;
+use ic_nns_constants::REGISTRY_CANISTER_ID;
+use ic_nns_test_utils::{
+    common::NnsInitPayloadsBuilder,
+    state_test_helpers::{
+        registry_get_chunk, setup_nns_canisters, state_machine_builder_for_nns_tests,
+    },
+};
+use ic_stable_structures::memory_manager::{MemoryId, MemoryManager};
+use registry_canister::pb::v1::Chunk;
+use std::{cell::RefCell, rc::Rc};
+
+#[test]
+fn test_get_chunk() {
+    // Step 1: Prepare the world.
+    let state_machine = state_machine_builder_for_nns_tests().build();
+
+    let nns_init_payloads = NnsInitPayloadsBuilder::new()
+        .with_initial_invariant_compliant_mutations()
+        .build();
+    setup_nns_canisters(&state_machine, nns_init_payloads);
+
+    // TODO(NNS1-3682): Populate chunks via mutation, not by directly
+    // manipulating stable memory.
+    let stable_memory = Rc::new(RefCell::new(vec![]));
+    let memory_manager = MemoryManager::init(Rc::clone(&stable_memory));
+    let chunks_memory = memory_manager.get(MemoryId::new(1));
+    let mut chunks = Chunks::init(chunks_memory);
+    let mut chunk_keys = chunks.upsert_monolithic_blob(b"Hello, world!".to_vec());
+    let chunk_key = chunk_keys.pop().unwrap();
+    // Because the monolithic blob is small.
+    assert_eq!(chunk_keys, Vec::<Vec<u8>>::new());
+    // It should be possible to avoid clone, but I cannot figure out how to
+    // convert stable_memory to its inner Vec.
+    let stable_memory = <RefCell<std::vec::Vec<u8>> as Clone>::clone(&stable_memory).into_inner();
+    state_machine.set_stable_memory(REGISTRY_CANISTER_ID, &stable_memory);
+
+    // Step 2: Call code under test (i.e. get_chunk).
+    let response = registry_get_chunk(&state_machine, &chunk_key);
+
+    // Step 3: Verify result(s).
+    assert_eq!(
+        response,
+        Ok(Chunk {
+            content: Some(b"Hello, world!".to_vec())
+        })
+    );
+}
