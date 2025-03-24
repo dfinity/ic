@@ -259,7 +259,7 @@ fn should_create_state_machine_with_golden_nns_state() {
     // For breaking changes, e.g., if mainnet is running a version with balances and allowances in
     // stable structures, but master also has blocks in stable structures, `ledger_is_downgradable`
     // should be set to `false`, otherwise `true`.
-    setup.downgrade_to_mainnet(true, false);
+    setup.downgrade_to_mainnet(false, false);
 
     // Verify ledger balance and allowance state
     // As before, the allowance check needs to be skipped for the mainnet version of the ledger.

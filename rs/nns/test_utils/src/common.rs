@@ -457,6 +457,11 @@ pub fn build_node_rewards_wasm() -> Wasm {
     Project::cargo_bin_maybe_from_env("node-rewards-canister", &features)
 }
 
+pub fn build_node_rewards_test_wasm() -> Wasm {
+    let features = ["test"];
+    Project::cargo_bin_maybe_from_env("node-rewards-canister", &features)
+}
+
 /// Build mainnet Wasm for NNS Node Rewards canister
 pub fn build_mainnet_node_rewards_wasm() -> Wasm {
     panic!(

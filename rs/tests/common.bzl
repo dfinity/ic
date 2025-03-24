@@ -12,8 +12,8 @@ GUESTOS_RUNTIME_DEPS = [
     "//ic-os/components:hostos-scripts/build-bootstrap-config-image.sh",
 ]
 
-MAINNET_NNS_SUBNET_REVISION = mainnet_versions["subnets"]["tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe"]
-MAINNET_APPLICATION_SUBNET_REVISION = mainnet_versions["subnets"]["io67a-2jmkw-zup3h-snbwi-g6a5n-rm5dn-b6png-lvdpl-nqnto-yih6l-gqe"]
+MAINNET_NNS_SUBNET_REVISION = mainnet_versions["guestos"]["subnets"]["tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe"]
+MAINNET_APPLICATION_SUBNET_REVISION = mainnet_versions["guestos"]["subnets"]["io67a-2jmkw-zup3h-snbwi-g6a5n-rm5dn-b6png-lvdpl-nqnto-yih6l-gqe"]
 
 MAINNET_ENV = {
     "MAINNET_NNS_SUBNET_REVISION_ENV": MAINNET_NNS_SUBNET_REVISION,
