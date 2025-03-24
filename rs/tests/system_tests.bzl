@@ -4,7 +4,6 @@ Rules for system-tests.
 
 load("@bazel_skylib//rules:common_settings.bzl", "BuildSettingInfo")
 load("@bazel_skylib//rules:copy_file.bzl", "copy_file")
-load("@kubeconfig//:defs.bzl", "k8s_tags")
 load("@rules_oci//oci:defs.bzl", "oci_load")
 load("@rules_rust//rust:defs.bzl", "rust_binary")
 load("//bazel:defs.bzl", "mcopy", "zstd_compress")
@@ -174,6 +173,7 @@ def system_test(
         uses_setupos_dev = False,
         uses_hostos_dev_test = False,
         uses_boundary_guestos = False,
+        use_empty_image = False,
         env = {},
         env_inherit = [],
         additional_colocate_tags = [],
@@ -206,6 +206,7 @@ def system_test(
       uses_setupos_dev: the test uses ic-os/setupos/envs/dev (will be also automatically added as dependency).
       uses_hostos_dev_test: the test uses ic-os/hostos/envs/dev:update-img-test (will be also automatically added as dependency).
       uses_boundary_guestos: the test uses ic-os/boundary-guestos/envs/dev:disk-img (will be also automatically added as dependency).
+      use_empty_image: the test uses the empty disk image: //rs/tests/nested:empty_disk_image.tar.zst (will be also automatically added as dependency)
       env: environment variables to set in the test (subject to Make variable expansion)
       env_inherit: specifies additional environment variables to inherit from
       the external environment when the test is executed by bazel test.
@@ -275,6 +276,9 @@ def system_test(
     if uses_boundary_guestos:
         icos_images["ENV_DEPS__BOUNDARY_GUESTOS_DISK_IMG"] = "//ic-os/boundary-guestos/envs/dev:disk-img.tar.zst"
 
+    if use_empty_image:
+        icos_images["ENV_DEPS__EMPTY_DISK_IMG"] = "//rs/tests/nested:empty-disk-img.tar.zst"
+
     run_system_test(
         name = name,
         src = test_driver_target,
@@ -284,7 +288,6 @@ def system_test(
         icos_images = icos_images,
         env_inherit = env_inherit,
         tags = tags + ["requires-network", "system_test"] +
-               k8s_tags +
                (["manual"] if "experimental_system_test_colocation" in tags else []),
         target_compatible_with = ["@platforms//os:linux"],
         timeout = test_timeout,

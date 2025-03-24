@@ -1343,18 +1343,16 @@ pub fn syscalls<
         .unwrap();
 
     linker
-        .func_wrap("ic0", "cost_vetkd_derive_encrypted_key", {
+        .func_wrap("ic0", "cost_vetkd_derive_key", {
             move |mut caller: Caller<'_, StoreData>, src: I, size: I, curve: u32, dst: I| {
                 let src: usize = src.try_into().expect("Failed to convert I to usize");
                 let size: usize = size.try_into().expect("Failed to convert I to usize");
                 charge_for_cpu_and_mem(&mut caller, overhead::COST_VETKD, size)?;
                 with_memory_and_system_api(&mut caller, |s, memory| {
                     let dst: usize = dst.try_into().expect("Failed to convert I to usize");
-                    s.ic0_cost_vetkd_derive_encrypted_key(src, size, curve, dst, memory)
+                    s.ic0_cost_vetkd_derive_key(src, size, curve, dst, memory)
                 })
-                .map_err(|e| {
-                    anyhow::Error::msg(format!("ic0_cost_vetkd_derive_encrypted_key failed: {}", e))
-                })
+                .map_err(|e| anyhow::Error::msg(format!("ic0_cost_vetkd_derive_key failed: {}", e)))
             }
         })
         .unwrap();

@@ -764,6 +764,13 @@ mod tests {
     use strum::IntoEnumIterator;
 
     #[test]
+    fn global_exhaustive() {
+        for global in ic_management_canister_types_private::Global::iter() {
+            let _other: Global = global;
+        }
+    }
+
+    #[test]
     fn test_next_scheduled_method() {
         let mut values: BTreeSet<u8> = BTreeSet::new();
         let mut next_method = NextScheduledMethod::GlobalTimer;

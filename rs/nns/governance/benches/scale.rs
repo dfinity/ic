@@ -17,7 +17,9 @@ use async_trait::async_trait;
 use criterion::{criterion_group, criterion_main, Criterion};
 use futures::future::FutureExt;
 use ic_base_types::{CanisterId, PrincipalId};
-use ic_nervous_system_common::{cmc::FakeCmc, ledger::IcpLedger, NervousSystemError};
+use ic_nervous_system_canisters::cmc::FakeCmc;
+use ic_nervous_system_canisters::ledger::IcpLedger;
+use ic_nervous_system_common::NervousSystemError;
 use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_governance::governance::RandomnessGenerator;
 use ic_nns_governance::{

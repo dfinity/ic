@@ -642,14 +642,14 @@ mod test {
         let mut snapshot = generate_stub_snapshot(vec![]);
         snapshot.api_bns = vec![
             ApiBoundaryNode {
-                id: principal!("3hhby-wmtmw-umt4t-7ieyg-bbiig-xiylg-sblrt-voxgt-bqckd-a75bf-rqe"),
-                addr: ip1,
-                port: 31337,
+                _id: principal!("3hhby-wmtmw-umt4t-7ieyg-bbiig-xiylg-sblrt-voxgt-bqckd-a75bf-rqe"),
+                _addr: ip1,
+                _port: 31337,
             },
             ApiBoundaryNode {
-                id: principal!("3hhby-wmtmw-umt4t-7ieyg-bbiig-xiylg-sblrt-voxgt-bqckd-a75bf-rqe"),
-                addr: ip2,
-                port: 31337,
+                _id: principal!("3hhby-wmtmw-umt4t-7ieyg-bbiig-xiylg-sblrt-voxgt-bqckd-a75bf-rqe"),
+                _addr: ip2,
+                _port: 31337,
             },
         ];
 

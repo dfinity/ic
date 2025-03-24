@@ -4,7 +4,8 @@ use crate::governance::{test_helpers::DoNothingLedger, Governance};
 use crate::pb::v1::{self as pb, nervous_system_function};
 use crate::types::{native_action_ids::nervous_system_functions, test_helpers::NativeEnvironment};
 use ic_base_types::PrincipalId;
-use ic_nervous_system_common::cmc::FakeCmc;
+use ic_nervous_system_canisters::cmc::FakeCmc;
+use ic_sns_governance_proposal_criticality::ProposalCriticality;
 use maplit::btreemap;
 use pb::{ExecuteGenericNervousSystemFunction, NervousSystemFunction};
 
@@ -70,70 +71,112 @@ fn test_all_topics() {
         // DaoCommunitySettings
         (
             pb::proposal::Action::ManageNervousSystemParameters(Default::default()),
-            Ok(Some(pb::Topic::DaoCommunitySettings)),
+            Ok((
+                Some(pb::Topic::DaoCommunitySettings),
+                ProposalCriticality::Normal,
+            )),
         ),
         (
             pb::proposal::Action::ManageLedgerParameters(Default::default()),
-            Ok(Some(pb::Topic::DaoCommunitySettings)),
+            Ok((
+                Some(pb::Topic::DaoCommunitySettings),
+                ProposalCriticality::Normal,
+            )),
         ),
         (
             pb::proposal::Action::ManageSnsMetadata(Default::default()),
-            Ok(Some(pb::Topic::DaoCommunitySettings)),
+            Ok((
+                Some(pb::Topic::DaoCommunitySettings),
+                ProposalCriticality::Normal,
+            )),
         ),
         // SnsFrameworkManagement
         (
             pb::proposal::Action::UpgradeSnsToNextVersion(Default::default()),
-            Ok(Some(pb::Topic::SnsFrameworkManagement)),
+            Ok((
+                Some(pb::Topic::SnsFrameworkManagement),
+                ProposalCriticality::Normal,
+            )),
         ),
         (
             pb::proposal::Action::AdvanceSnsTargetVersion(Default::default()),
-            Ok(Some(pb::Topic::SnsFrameworkManagement)),
-        ),
-        (
-            pb::proposal::Action::SetTopicsForCustomProposals(Default::default()),
-            Ok(Some(pb::Topic::SnsFrameworkManagement)),
+            Ok((
+                Some(pb::Topic::SnsFrameworkManagement),
+                ProposalCriticality::Normal,
+            )),
         ),
         // DappCanisterManagement
         (
             pb::proposal::Action::UpgradeSnsControlledCanister(Default::default()),
-            Ok(Some(pb::Topic::DappCanisterManagement)),
+            Ok((
+                Some(pb::Topic::DappCanisterManagement),
+                ProposalCriticality::Normal,
+            )),
         ),
         (
             pb::proposal::Action::RegisterDappCanisters(Default::default()),
-            Ok(Some(pb::Topic::DappCanisterManagement)),
+            Ok((
+                Some(pb::Topic::DappCanisterManagement),
+                ProposalCriticality::Normal,
+            )),
         ),
         (
             pb::proposal::Action::ManageDappCanisterSettings(Default::default()),
-            Ok(Some(pb::Topic::DappCanisterManagement)),
+            Ok((
+                Some(pb::Topic::DappCanisterManagement),
+                ProposalCriticality::Normal,
+            )),
         ),
         // ApplicationBusinessLogic - skipped, since this topic is for custom proposals.
 
         // Governance
         (
             pb::proposal::Action::Motion(Default::default()),
-            Ok(Some(pb::Topic::Governance)),
+            Ok((Some(pb::Topic::Governance), ProposalCriticality::Normal)),
         ),
         // TreasuryAssetManagement
         (
             pb::proposal::Action::TransferSnsTreasuryFunds(Default::default()),
-            Ok(Some(pb::Topic::TreasuryAssetManagement)),
+            Ok((
+                Some(pb::Topic::TreasuryAssetManagement),
+                ProposalCriticality::Critical,
+            )),
         ),
         (
             pb::proposal::Action::MintSnsTokens(Default::default()),
-            Ok(Some(pb::Topic::TreasuryAssetManagement)),
+            Ok((
+                Some(pb::Topic::TreasuryAssetManagement),
+                ProposalCriticality::Critical,
+            )),
         ),
         // CriticalDappOperations
         (
             pb::proposal::Action::DeregisterDappCanisters(Default::default()),
-            Ok(Some(pb::Topic::CriticalDappOperations)),
+            Ok((
+                Some(pb::Topic::CriticalDappOperations),
+                ProposalCriticality::Critical,
+            )),
         ),
         (
             pb::proposal::Action::AddGenericNervousSystemFunction(Default::default()),
-            Ok(Some(pb::Topic::CriticalDappOperations)),
+            Ok((
+                Some(pb::Topic::CriticalDappOperations),
+                ProposalCriticality::Critical,
+            )),
         ),
         (
             pb::proposal::Action::RemoveGenericNervousSystemFunction(Default::default()),
-            Ok(Some(pb::Topic::CriticalDappOperations)),
+            Ok((
+                Some(pb::Topic::CriticalDappOperations),
+                ProposalCriticality::Critical,
+            )),
+        ),
+        (
+            pb::proposal::Action::SetTopicsForCustomProposals(Default::default()),
+            Ok((
+                Some(pb::Topic::CriticalDappOperations),
+                ProposalCriticality::Critical,
+            )),
         ),
     ];
 
@@ -158,7 +201,10 @@ fn test_all_topics() {
                 ..Default::default()
             },
         ),
-        Ok(Some(pb::Topic::ApplicationBusinessLogic)),
+        Ok((
+            Some(pb::Topic::ApplicationBusinessLogic),
+            ProposalCriticality::Normal,
+        )),
     ));
     test_cases.push((
         pb::proposal::Action::ExecuteGenericNervousSystemFunction(
@@ -167,12 +213,14 @@ fn test_all_topics() {
                 ..Default::default()
             },
         ),
-        Ok(None),
+        // Fallback to ProposalCriticality::Normal; it happens when the function corresponds to
+        // a custom proposal type for which a topic has not yet been selected.
+        Ok((None, ProposalCriticality::Normal)),
     ));
 
     // Run code under test.
     for (action, expected) in test_cases.into_iter() {
-        let observed = governance.get_topic_for_action(&action);
+        let observed = governance.get_topic_and_criticality_for_action(&action);
         assert_eq!(observed, expected);
     }
 }
