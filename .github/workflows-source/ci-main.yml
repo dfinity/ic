@@ -234,7 +234,7 @@ jobs:
   build-ic:
     name: Build IC
     runs-on:
-      group: ubuntu-24-large
+      labels: ubuntu-24-large
     container:
       <<: *image
       options: >-
