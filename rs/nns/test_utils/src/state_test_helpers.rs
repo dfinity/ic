@@ -524,15 +524,11 @@ pub fn create_canister_id_at_position(
     position: u64,
     canister_settings: Option<CanisterSettingsArgs>,
 ) -> CanisterId {
-    let mut canister_id = machine.create_canister(canister_settings.clone());
-    while canister_id_to_u64(canister_id) < position {
-        canister_id = machine.create_canister(canister_settings.clone());
-    }
-
-    // In case we tried using this when we are already past the sequence
-    assert_eq!(canister_id_to_u64(canister_id), position);
-
-    canister_id
+    machine.create_canister_with_cycles(
+        Some(CanisterId::from_u64(position).get()),
+        Cycles::zero(),
+        canister_settings,
+    )
 }
 
 pub fn setup_nns_governance_with_correct_canister_id(
