@@ -18,7 +18,7 @@ use ic_replicated_state::{
         },
     },
     page_map::{Shard, StorageLayout, StorageResult},
-    CallContextManager, CanisterStatus, ExecutionTask, ExportedFunctions, NumWasmPages,
+    CallContextManager, CanisterStatus, ExportedFunctions, NumWasmPages,
 };
 use ic_sys::{fs::sync_path, mmap::ScopedMmap};
 use ic_types::{
