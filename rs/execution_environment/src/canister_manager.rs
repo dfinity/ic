@@ -24,6 +24,7 @@ use ic_management_canister_types_private::{
     Method as Ic00Method, StoredChunksReply, UploadChunkReply,
 };
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
+use ic_replicated_state::canister_state::system_state::wasm_chunk_store::WasmChunkHash;
 use ic_replicated_state::{
     canister_snapshots::CanisterSnapshot,
     canister_state::{
@@ -1993,8 +1994,37 @@ impl CanisterManager {
     ) -> Result<Vec<u8>, CanisterManagerError> {
         // Check sender is a controller.
         validate_controller(canister, &sender)?;
-
-        todo!()
+        let Some(snapshot) = state.canister_snapshots.get(snapshot_id) else {
+            return Err(CanisterManagerError::CanisterSnapshotNotFound {
+                canister_id: canister.canister_id(),
+                snapshot_id: snapshot_id,
+            });
+        };
+        // Verify the provided `delete_snapshot_id` belongs to this canister.
+        if snapshot.canister_id() != canister.canister_id() {
+            return Err(CanisterManagerError::CanisterSnapshotInvalidOwnership {
+                canister_id: canister.canister_id(),
+                snapshot_id: snapshot_id,
+            });
+        }
+        match kind {
+            CanisterSnapshotDataKind::WasmModule { offset, size } => todo!(),
+            CanisterSnapshotDataKind::MainMemory { offset, size } => todo!(),
+            CanisterSnapshotDataKind::StableMemory { offset, size } => todo!(),
+            CanisterSnapshotDataKind::WasmChunk { hash } => {
+                let Ok(hash) = <WasmChunkHash>::try_from(hash.clone()) else {
+                    return Err(CanisterManagerError::WasmChunkStoreError {
+                        message: format!("Bytes {:02x?} are not a valid WasmChunkHash.", hash),
+                    });
+                };
+                let Some(chunk) = snapshot.chunk_store().get_chunk_complete(&hash) else {
+                    return Err(CanisterManagerError::WasmChunkStoreError {
+                        message: format!("WasmChunkHash {:02x?} not found.", hash),
+                    });
+                };
+                Ok(chunk)
+            }
+        }
     }
 }
 
