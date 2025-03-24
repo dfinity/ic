@@ -400,3 +400,23 @@ write_info_file_var = rule(
         "varname": attr.string(mandatory = True),
     },
 )
+
+def file_size_check(
+        name,
+        max_file_size):
+    """
+    A check to make sure the given file is below the specified size.
+
+    Args:
+      name: Name of the file.
+      max_file_size: Max accepted size in bytes.
+    """
+    native.sh_test(
+        name = "%s_size_test" % name,
+        srcs = ["//bazel:file_size_test.sh"],
+        data = [name],
+        env = {
+            "FILE": "$(rootpath %s)" % name,
+            "MAX_SIZE": str(max_file_size),
+        },
+    )
