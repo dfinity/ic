@@ -1551,6 +1551,8 @@ impl StateMachine {
             dummy_initial_dkg_transcript_with_master_key(&mut StdRng::from_seed(seed));
         let public_key = (&ni_dkg_transcript).try_into().unwrap();
         let public_key_der = threshold_sig_public_key_to_der(public_key).unwrap();
+        let subnet_id =
+            subnet_id.unwrap_or(PrincipalId::new_self_authenticating(&public_key_der).into());
 
         let mut sm_config = ic_config::state_manager::Config::new(state_dir.path().to_path_buf());
         if let Some(lsmt_override) = lsmt_override {
@@ -1563,9 +1565,6 @@ impl StateMachine {
             ..Default::default()
         };
 
-        // subnet ID used to bootstrap the initial state
-        let subnet_id =
-            subnet_id.unwrap_or(PrincipalId::new_self_authenticating(&public_key_der).into());
         let state_manager = Arc::new(StateManagerImpl::new(
             Arc::new(FakeVerifier),
             subnet_id,
@@ -1576,12 +1575,6 @@ impl StateMachine {
             None,
             malicious_flags.clone(),
         ));
-        // override with the subnet ID stored in the state
-        let subnet_id = state_manager
-            .get_latest_state()
-            .take()
-            .metadata
-            .own_subnet_id;
 
         let registry_client = make_nodes_registry(
             subnet_id,

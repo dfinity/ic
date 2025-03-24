@@ -204,6 +204,21 @@ pub mod neuron {
         #[prost(message, repeated, tag = "1")]
         pub followees: ::prost::alloc::vec::Vec<super::NeuronId>,
     }
+    /// A list of a neuron's followees, possibly associated with a given topic.
+    #[derive(
+        candid::CandidType,
+        candid::Deserialize,
+        comparable::Comparable,
+        Clone,
+        PartialEq,
+        ::prost::Message,
+    )]
+    pub struct FolloweesForTopic {
+        #[prost(message, repeated, tag = "1")]
+        pub followees: ::prost::alloc::vec::Vec<super::NeuronId>,
+        #[prost(enumeration = "super::Topic", optional, tag = "2")]
+        pub topic: ::core::option::Option<i32>,
+    }
     /// A collection of a neuron's followees (per topic).
     #[derive(
         candid::CandidType,
@@ -215,7 +230,7 @@ pub mod neuron {
     )]
     pub struct TopicFollowees {
         #[prost(btree_map = "uint64, message", tag = "1")]
-        pub topic_id_to_followees: ::prost::alloc::collections::BTreeMap<u64, Followees>,
+        pub topic_id_to_followees: ::prost::alloc::collections::BTreeMap<u64, FolloweesForTopic>,
     }
     /// The neuron's dissolve state, specifying whether the neuron is dissolving,
     /// non-dissolving, or dissolved.

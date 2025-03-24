@@ -7145,6 +7145,7 @@ dependencies = [
  "ic-btc-replica-types",
  "ic-config",
  "ic-consensus",
+ "ic-consensus-certification",
  "ic-consensus-dkg",
  "ic-consensus-mocks",
  "ic-consensus-utils",
@@ -7208,6 +7209,32 @@ dependencies = [
  "strum",
  "strum_macros",
  "tempfile",
+ "tokio",
+]
+
+[[package]]
+name = "ic-consensus-certification"
+version = "0.9.0"
+dependencies = [
+ "assert_matches",
+ "ic-artifact-pool",
+ "ic-consensus-mocks",
+ "ic-consensus-utils",
+ "ic-interfaces",
+ "ic-interfaces-registry",
+ "ic-interfaces-state-manager",
+ "ic-logger",
+ "ic-metrics",
+ "ic-replicated-state",
+ "ic-test-utilities",
+ "ic-test-utilities-consensus",
+ "ic-test-utilities-logger",
+ "ic-test-utilities-types",
+ "ic-types",
+ "ic-types-test-utils",
+ "prometheus",
+ "slog",
+ "strum_macros",
  "tokio",
 ]
 
@@ -10306,6 +10333,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-nervous-system-chunks"
+version = "0.9.0"
+dependencies = [
+ "ic-crypto-sha2",
+ "ic-stable-structures",
+]
+
+[[package]]
 name = "ic-nervous-system-clients"
 version = "0.0.1"
 dependencies = [
@@ -11944,6 +11979,7 @@ dependencies = [
  "ic-canister-sandbox-backend-lib",
  "ic-config",
  "ic-consensus",
+ "ic-consensus-certification",
  "ic-consensus-dkg",
  "ic-consensus-utils",
  "ic-crypto-for-verification-only",
@@ -11999,6 +12035,7 @@ dependencies = [
  "ic-btc-consensus",
  "ic-config",
  "ic-consensus",
+ "ic-consensus-certification",
  "ic-consensus-dkg",
  "ic-crypto",
  "ic-crypto-sha2",
@@ -12061,6 +12098,7 @@ dependencies = [
  "ic-artifact-pool",
  "ic-config",
  "ic-consensus",
+ "ic-consensus-certification",
  "ic-consensus-dkg",
  "ic-consensus-manager",
  "ic-consensus-utils",
@@ -18115,6 +18153,7 @@ dependencies = [
  "ic-replicated-state",
  "ic-starter",
  "ic-state-machine-tests",
+ "ic-state-manager",
  "ic-test-utilities",
  "ic-test-utilities-registry",
  "ic-types",
@@ -19034,6 +19073,7 @@ dependencies = [
  "ic-cdk-macros 0.18.0-alpha.1",
  "ic-error-types",
  "ic-types",
+ "proptest 1.6.0",
  "rand 0.8.5",
  "serde",
  "serde_bytes",
