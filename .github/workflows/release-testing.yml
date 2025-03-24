@@ -249,6 +249,10 @@ jobs:
           # - --hostos
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_branch }}
       - name: Run repro-check for ${{ github.sha }} with mirror ${{ matrix.mirror }}
         continue-on-error: ${{ github.ref != 'refs/heads/master' && !startsWith(github.ref, 'refs/heads/rc--')  }}
         shell: bash
