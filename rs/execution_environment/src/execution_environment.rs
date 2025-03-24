@@ -1670,8 +1670,12 @@ impl ExecutionEnvironment {
             Ok(Ic00Method::ReadCanisterSnapshotData) => {
                 // TODO: EXC-1957
                 #[allow(clippy::bind_instead_of_map)]
-                let res = ReadCanisterSnapshotDataArgs::decode(payload)
-                    .and_then(|_args| Ok((vec![], None)));
+                let res = ReadCanisterSnapshotDataArgs::decode(payload).and_then(|args| {
+                    let canister_id = args.get_canister_id();
+                    // TODO: do we need to account for copying the bytes -> costs and round_limits?
+                    self.read_snapshot_data(*msg.sender(), &state, args)
+                        .map(|res| (res, Some(canister_id)))
+                });
                 ExecuteSubnetMessageResult::Finished {
                     response: res,
                     refund: msg.take_cycles(),
@@ -2426,6 +2430,20 @@ impl ExecutionEnvironment {
         // Put canister back.
         state.put_canister_state(canister);
         result
+    }
+
+    fn read_snapshot_data(
+        &self,
+        sender: PrincipalId,
+        state: &ReplicatedState,
+        args: ReadCanisterSnapshotDataArgs,
+    ) -> Result<Vec<u8>, UserError> {
+        let canister = get_canister(args.get_canister_id(), state)?;
+        let result = self
+            .canister_manager
+            .read_snapshot_data(sender, &canister, args.get_snapshot_id(), args.kind, state)
+            .map_err(UserError::from)?;
+        Ok(Encode!(&result).unwrap())
     }
 
     fn node_metrics_history(

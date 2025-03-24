@@ -19,9 +19,9 @@ use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_interfaces::execution_environment::{IngressHistoryWriter, SubnetAvailableMemory};
 use ic_logger::{error, fatal, info, ReplicaLogger};
 use ic_management_canister_types_private::{
-    CanisterChangeDetails, CanisterChangeOrigin, CanisterInstallModeV2, CanisterSnapshotResponse,
-    CanisterStatusResultV2, CanisterStatusType, ChunkHash, Method as Ic00Method, StoredChunksReply,
-    UploadChunkReply,
+    CanisterChangeDetails, CanisterChangeOrigin, CanisterInstallModeV2, CanisterSnapshotDataKind,
+    CanisterSnapshotResponse, CanisterStatusResultV2, CanisterStatusType, ChunkHash,
+    Method as Ic00Method, StoredChunksReply, UploadChunkReply,
 };
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_replicated_state::{
@@ -1981,6 +1981,20 @@ impl CanisterManager {
             WasmExecutionMode::Wasm32 => self.config.max_canister_memory_size_wasm32,
             WasmExecutionMode::Wasm64 => self.config.max_canister_memory_size_wasm64,
         }
+    }
+
+    pub(crate) fn read_snapshot_data(
+        &self,
+        sender: PrincipalId,
+        canister: &CanisterState,
+        snapshot_id: SnapshotId,
+        kind: CanisterSnapshotDataKind,
+        state: &ReplicatedState,
+    ) -> Result<Vec<u8>, CanisterManagerError> {
+        // Check sender is a controller.
+        validate_controller(canister, &sender)?;
+
+        todo!()
     }
 }
 
