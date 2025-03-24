@@ -11,7 +11,7 @@ pub(crate) struct IngressManagerMetrics {
     pub(crate) ingress_payload_cache_size: IntGauge,
 
     validated_ingress_message_size: Histogram,
-    validated_ingress_message_part_size: HistogramVec,
+    validated_ingress_message_field_size: HistogramVec,
     validated_ingress_message_time: Histogram,
 
     pub(crate) invalidated_ingress_message_count: IntCounterVec,
@@ -44,9 +44,9 @@ impl IngressManagerMetrics {
                 "The size of validated ingress message, in bytes",
                 decimal_buckets(0, 6),
             ),
-            validated_ingress_message_part_size: metrics_registry.histogram_vec(
-                "ingress_handler_validated_ingress_message_part_size",
-                "The size of a given part (e.g. argument, method name, etc) of \
+            validated_ingress_message_field_size: metrics_registry.histogram_vec(
+                "ingress_handler_validated_ingress_message_field_size",
+                "The size of a given field (e.g. argument, method name, etc) of \
                 the ingress message, in bytes",
                 decimal_buckets(0, 6),
                 &["part"],
@@ -91,17 +91,17 @@ impl IngressManagerMetrics {
         let everything_else_size =
             signed_ingress.count_bytes() - arg_size - method_name_size - nonce_size;
 
-        self.validated_ingress_message_part_size
+        self.validated_ingress_message_field_size
             .with_label_values(&["arg"])
             .observe(arg_size as f64);
-        self.validated_ingress_message_part_size
+        self.validated_ingress_message_field_size
             .with_label_values(&["method_name"])
             .observe(method_name_size as f64);
-        self.validated_ingress_message_part_size
+        self.validated_ingress_message_field_size
             .with_label_values(&["nonce"])
             .observe(nonce_size as f64);
-        self.validated_ingress_message_part_size
-            .with_label_values(&["rest"])
+        self.validated_ingress_message_field_size
+            .with_label_values(&["remainder"])
             .observe(everything_else_size as f64);
     }
 }
