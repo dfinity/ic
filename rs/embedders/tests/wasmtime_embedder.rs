@@ -2176,6 +2176,11 @@ fn wasm64_import_system_api_functions() {
       (import "ic0" "cycles_burn128"
         (func $ic0_cycles_burn128 (param i64) (param i64) (param i64)))
 
+      (import "ic0" "root_key_size"
+        (func $ic0_root_key_size (result i64)))
+      (import "ic0" "root_key_copy"
+        (func $ic0_root_key_copy (param i64) (param i64) (param i64)))
+
       (import "ic0" "certified_data_set"
         (func $ic0_certified_data_set (param i64) (param i64)))
 
@@ -2623,6 +2628,77 @@ fn wasm64_reject_msg_copy() {
     let mut expected_heap = vec![0; dirty_heap_size];
     expected_heap[0..reject_msg.len()].copy_from_slice(reject_msg.as_bytes());
 
+    assert_eq!(wasm_heap, expected_heap);
+}
+
+#[test]
+fn wasm64_root_key() {
+    let wat = r#"
+    (module
+      (import "ic0" "root_key_copy"
+        (func $ic0_root_key_copy (param i64) (param i64) (param i64)))
+      (import "ic0" "root_key_size"
+        (func $ic0_root_key_size (result i64)))
+
+      (global $g1 (export "g1") (mut i64) (i64.const 0))
+      (func $test (export "canister_update test")
+        (call $ic0_root_key_size)
+        global.set $g1
+        (call $ic0_root_key_copy (i64.const 0) (i64.const 0) (call $ic0_root_key_size))
+      )
+
+      (memory (export "memory") i64 1)
+    )"#;
+
+    let api = ic_system_api::ApiType::update(
+        UNIX_EPOCH,
+        vec![],
+        Cycles::zero(),
+        user_test_id(24).get(),
+        call_context_test_id(13),
+    );
+
+    let mut config = ic_config::embedders::Config::default();
+    config.feature_flags.wasm64 = FlagStatus::Enabled;
+    let mut instance = WasmtimeInstanceBuilder::new()
+        .with_config(config)
+        .with_wat(wat)
+        .with_api_type(api)
+        .build();
+    let res = instance
+        .run(FuncRef::Method(WasmMethod::Update("test".to_string())))
+        .unwrap();
+
+    // After this call, we expect the instance to have a memory with size of 1 wasm page
+    // of which the first OS page was touched and contains relevant data at offset 0
+    assert_eq!(res.wasm_dirty_pages, vec![ic_sys::PageIndex::new(0)]);
+    let dirty_heap_size = ic_sys::PAGE_SIZE;
+    let wasm_heap: &[u8] = unsafe {
+        let addr = instance.heap_addr(CanisterMemoryType::Heap);
+        let size_in_bytes =
+            instance.heap_size(CanisterMemoryType::Heap).get() * WASM_PAGE_SIZE_IN_BYTES;
+        assert!(size_in_bytes >= dirty_heap_size);
+        std::slice::from_raw_parts_mut(addr as *mut _, dirty_heap_size)
+    };
+
+    let expected_size = instance
+        .store_data()
+        .system_api()
+        .unwrap()
+        .ic0_root_key_size()
+        .unwrap();
+    assert_eq!(
+        res.exported_globals[0],
+        Global::I64(expected_size.try_into().unwrap())
+    );
+
+    let mut expected_heap = vec![0; dirty_heap_size];
+    instance
+        .store_data_mut()
+        .system_api_mut()
+        .unwrap()
+        .ic0_root_key_copy(0, 0, expected_size, &mut expected_heap)
+        .unwrap();
     assert_eq!(wasm_heap, expected_heap);
 }
 

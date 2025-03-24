@@ -290,6 +290,8 @@ fn is_supported(api_type: SystemApiCallId, context: &str) -> bool {
         SystemApiCallId::Stable64Grow => vec!["*", "s"],
         SystemApiCallId::Stable64Write => vec!["*", "s"],
         SystemApiCallId::Stable64Read => vec!["*", "s"],
+        SystemApiCallId::RootKeySize => vec!["I", "G", "U", "RQ", "Ry", "Rt", "C", "T"],
+        SystemApiCallId::RootKeyCopy => vec!["I", "G", "U", "RQ", "Ry", "Rt", "C", "T"],
         SystemApiCallId::CertifiedDataSet => vec!["I", "G", "U", "Ry", "Rt", "T"],
         SystemApiCallId::DataCertificatePresent => vec!["*"],
         SystemApiCallId::DataCertificateSize => vec!["NRQ", "CQ"],
@@ -740,6 +742,26 @@ fn api_availability_test(
         SystemApiCallId::DataCertificateCopy => {
             assert_api_availability(
                 |mut api| api.ic0_data_certificate_copy(0, 0, 0, &mut [42; 128]),
+                api_type,
+                &system_state,
+                cycles_account_manager,
+                api_type_enum,
+                context,
+            );
+        }
+        SystemApiCallId::RootKeySize => {
+            assert_api_availability(
+                |api| api.ic0_root_key_size(),
+                api_type,
+                &system_state,
+                cycles_account_manager,
+                api_type_enum,
+                context,
+            );
+        }
+        SystemApiCallId::RootKeyCopy => {
+            assert_api_availability(
+                |api| api.ic0_root_key_copy(0, 0, 0, &mut [42; 128]),
                 api_type,
                 &system_state,
                 cycles_account_manager,

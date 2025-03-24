@@ -163,6 +163,10 @@ pub enum SystemApiCallId {
     CanisterStatus,
     /// Tracker for `ic0.canister_version()`
     CanisterVersion,
+    /// Tracker for `ic0.root_key_size()`
+    RootKeySize,
+    /// Tracker for `ic0.root_key_copy()`
+    RootKeyCopy,
     /// Tracker for `ic0.certified_data_set()`
     CertifiedDataSet,
     /// Tracker for `ic0.cost_call()`
@@ -1133,6 +1137,19 @@ pub trait SystemApi {
         &mut self,
         max_amount: Cycles,
         dst: usize,
+        heap: &mut [u8],
+    ) -> HypervisorResult<()>;
+
+    /// Used to look up the size of the root key.
+    fn ic0_root_key_size(&self) -> HypervisorResult<usize>;
+
+    /// Used to copy the root key to the calling canister's heap
+    /// at the location specified by `dst` and `offset`.
+    fn ic0_root_key_copy(
+        &self,
+        dst: usize,
+        offset: usize,
+        size: usize,
         heap: &mut [u8],
     ) -> HypervisorResult<()>;
 
