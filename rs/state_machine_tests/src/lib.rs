@@ -2704,9 +2704,6 @@ impl StateMachine {
             ic_types::Height::new(0),
         )
         .expect("failed to obtain tip");
-        let tip_canister_layout = tip
-            .canister(&canister_id)
-            .expect("failed to obtain canister layout");
         std::fs::create_dir_all(tip.canister_path(&canister_id))
             .expect("Failed to create checkpoint dir");
 
@@ -2745,7 +2742,6 @@ impl StateMachine {
         }
 
         let mut canister_state = ic_state_manager::checkpoint::load_canister_state(
-            &tip_canister_layout,
             &canister_id,
             &tip,
             ic_types::Height::new(0),

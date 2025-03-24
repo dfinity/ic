@@ -27,7 +27,7 @@ use ic_replicated_state::{
 };
 use ic_state_layout::{
     error::LayoutError, CanisterSnapshotBits, CanisterStateBits, CheckpointLayout,
-    ExecutionStateBits,  ReadOnly, RwPolicy, StateLayout, TipHandler, WasmFile,
+    ExecutionStateBits, ReadOnly, RwPolicy, StateLayout, TipHandler, WasmFile,
 };
 use ic_types::{malicious_flags::MaliciousFlags, CanisterId, Height, SnapshotId};
 use ic_utils::thread::parallel_map;
@@ -460,18 +460,15 @@ fn backup<T>(
     canister_id: CanisterId,
     snapshot_id: SnapshotId,
 ) -> Result<(), LayoutError> {
-    let canister_layout = layout.canister(&canister_id)?;
-    let snapshot_layout = layout.snapshot(&snapshot_id)?;
-
-    canister_layout
-        .vmemory_0()
-        .copy_or_hardlink_files_to(&snapshot_layout.vmemory_0(), log)?;
-    canister_layout
-        .stable_memory()
-        .copy_or_hardlink_files_to(&snapshot_layout.stable_memory(), log)?;
-    canister_layout
-        .wasm_chunk_store()
-        .copy_or_hardlink_files_to(&snapshot_layout.wasm_chunk_store(), log)?;
+    layout
+        .canister_vmemory_0(&canister_id)?
+        .copy_or_hardlink_files_to(&layout.snapshot_vmemory_0(&snapshot_id)?, log)?;
+    layout
+        .canister_stable_memory(&canister_id)?
+        .copy_or_hardlink_files_to(&layout.snapshot_stable_memory(&snapshot_id)?, log)?;
+    layout
+        .canister_wasm_chunk_store(&canister_id)?
+        .copy_or_hardlink_files_to(&layout.snapshot_wasm_chunk_store(&snapshot_id)?, log)?;
 
     WasmFile::hardlink_file(
         &layout.wasm(&canister_id)?,
@@ -491,21 +488,22 @@ fn restore<T>(
     canister_id: CanisterId,
     snapshot_id: SnapshotId,
 ) -> Result<(), LayoutError> {
-    let canister_layout = layout.canister(&canister_id)?;
-    let snapshot_layout = layout.snapshot(&snapshot_id)?;
-
-    canister_layout.vmemory_0().delete_files()?;
-    snapshot_layout
-        .vmemory_0()
-        .copy_or_hardlink_files_to(&canister_layout.vmemory_0(), log)?;
-    canister_layout.stable_memory().delete_files()?;
-    snapshot_layout
-        .stable_memory()
-        .copy_or_hardlink_files_to(&canister_layout.stable_memory(), log)?;
-    canister_layout.wasm_chunk_store().delete_files()?;
-    snapshot_layout
-        .wasm_chunk_store()
-        .copy_or_hardlink_files_to(&canister_layout.wasm_chunk_store(), log)?;
+    layout.canister_vmemory_0(&canister_id)?.delete_files()?;
+    layout
+        .snapshot_vmemory_0(&snapshot_id)?
+        .copy_or_hardlink_files_to(&layout.canister_vmemory_0(&canister_id)?, log)?;
+    layout
+        .canister_stable_memory(&canister_id)?
+        .delete_files()?;
+    layout
+        .snapshot_stable_memory(&snapshot_id)?
+        .copy_or_hardlink_files_to(&layout.canister_stable_memory(&canister_id)?, log)?;
+    layout
+        .canister_wasm_chunk_store(&canister_id)?
+        .delete_files()?;
+    layout
+        .snapshot_wasm_chunk_store(&snapshot_id)?
+        .copy_or_hardlink_files_to(&layout.canister_wasm_chunk_store(&canister_id)?, log)?;
 
     layout.wasm(&canister_id)?.try_delete_file()?;
     WasmFile::hardlink_file(
@@ -838,7 +836,6 @@ fn serialize_canister_to_tip(
     lsmt_config: &LsmtConfig,
 ) -> Result<(), CheckpointError> {
     let canister_id = canister_state.canister_id();
-    let canister_layout = tip.canister(&canister_id)?;
     tip.canister_queues(&canister_id)?
         .serialize(canister_state.system_state.queues().into())?;
 
@@ -867,13 +864,13 @@ fn serialize_canister_to_tip(
                 }
             }
             execution_state.wasm_memory.page_map.persist_delta(
-                &canister_layout.vmemory_0(),
+                &tip.canister_vmemory_0(&canister_id)?,
                 tip.height(),
                 lsmt_config,
                 metrics,
             )?;
             execution_state.stable_memory.page_map.persist_delta(
-                &canister_layout.stable_memory(),
+                &tip.canister_stable_memory(&canister_id)?,
                 tip.height(),
                 lsmt_config,
                 metrics,
@@ -891,8 +888,8 @@ fn serialize_canister_to_tip(
             })
         }
         None => {
-            canister_layout.vmemory_0().delete_files()?;
-            canister_layout.stable_memory().delete_files()?;
+            tip.canister_vmemory_0(&canister_id)?.delete_files()?;
+            tip.canister_stable_memory(&canister_id)?.delete_files()?;
             tip.wasm(&canister_id)?.try_delete_file()?;
             None
         }
@@ -903,7 +900,7 @@ fn serialize_canister_to_tip(
         .wasm_chunk_store
         .page_map()
         .persist_delta(
-            &canister_layout.wasm_chunk_store(),
+            &tip.canister_wasm_chunk_store(&canister_id)?,
             tip.height(),
             lsmt_config,
             metrics,
@@ -994,8 +991,6 @@ fn serialize_snapshot_to_tip(
     metrics: &StorageMetrics,
     lsmt_config: &LsmtConfig,
 ) -> Result<(), CheckpointError> {
-    let snapshot_layout = tip.snapshot(snapshot_id)?;
-
     // The protobuf is written at each checkpoint.
     tip.snapshot_canister_bits(snapshot_id)?.serialize(
         CanisterSnapshotBits {
@@ -1028,7 +1023,7 @@ fn serialize_snapshot_to_tip(
         .wasm_memory
         .page_map
         .persist_delta(
-            &snapshot_layout.vmemory_0(),
+            &tip.snapshot_vmemory_0(snapshot_id)?,
             tip.height(),
             lsmt_config,
             metrics,
@@ -1038,13 +1033,13 @@ fn serialize_snapshot_to_tip(
         .stable_memory
         .page_map
         .persist_delta(
-            &snapshot_layout.stable_memory(),
+            &tip.snapshot_stable_memory(&snapshot_id)?,
             tip.height(),
             lsmt_config,
             metrics,
         )?;
     canister_snapshot.chunk_store().page_map().persist_delta(
-        &snapshot_layout.wasm_chunk_store(),
+        &tip.snapshot_wasm_chunk_store(&snapshot_id)?,
         tip.height(),
         lsmt_config,
         metrics,

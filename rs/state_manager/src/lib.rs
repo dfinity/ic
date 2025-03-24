@@ -1061,13 +1061,12 @@ fn switch_to_checkpoint(
     fd_factory: &Arc<dyn PageAllocatorFileDescriptor>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     for (tip_id, tip_canister) in tip.canister_states.iter_mut() {
-        let canister_layout = layout.canister(tip_id).unwrap();
         tip_canister
             .system_state
             .wasm_chunk_store
             .page_map_mut()
             .switch_to_checkpoint(&PageMap::open(
-                Box::new(canister_layout.wasm_chunk_store()),
+                Box::new(layout.canister_wasm_chunk_store(&tip_id)?),
                 layout.height(),
                 Arc::clone(fd_factory),
             )?);
@@ -1077,7 +1076,7 @@ fn switch_to_checkpoint(
                 .wasm_memory
                 .page_map
                 .switch_to_checkpoint(&PageMap::open(
-                    Box::new(canister_layout.vmemory_0()),
+                    Box::new(layout.canister_vmemory_0(&tip_id)?),
                     layout.height(),
                     Arc::clone(fd_factory),
                 )?);
@@ -1085,7 +1084,7 @@ fn switch_to_checkpoint(
                 .stable_memory
                 .page_map
                 .switch_to_checkpoint(&PageMap::open(
-                    Box::new(canister_layout.stable_memory()),
+                    Box::new(layout.canister_stable_memory(&tip_id)?),
                     layout.height(),
                     Arc::clone(fd_factory),
                 )?);
@@ -1094,13 +1093,11 @@ fn switch_to_checkpoint(
 
     for (tip_id, tip_snapshot) in tip.canister_snapshots.iter_mut() {
         let new_snapshot = Arc::make_mut(tip_snapshot);
-        let snapshot_layout = layout.snapshot(tip_id).unwrap();
-
         new_snapshot
             .chunk_store_mut()
             .page_map_mut()
             .switch_to_checkpoint(&PageMap::open(
-                Box::new(snapshot_layout.wasm_chunk_store()),
+                Box::new(layout.snapshot_wasm_chunk_store(tip_id)?),
                 layout.height(),
                 Arc::clone(fd_factory),
             )?);
@@ -1110,7 +1107,7 @@ fn switch_to_checkpoint(
             .wasm_memory
             .page_map
             .switch_to_checkpoint(&PageMap::open(
-                Box::new(snapshot_layout.vmemory_0()),
+                Box::new(layout.snapshot_vmemory_0(&tip_id)?),
                 layout.height(),
                 Arc::clone(fd_factory),
             )?);
@@ -1119,7 +1116,7 @@ fn switch_to_checkpoint(
             .stable_memory
             .page_map
             .switch_to_checkpoint(&PageMap::open(
-                Box::new(snapshot_layout.stable_memory()),
+                Box::new(layout.snapshot_stable_memory(&tip_id)?),
                 layout.height(),
                 Arc::clone(fd_factory),
             )?);

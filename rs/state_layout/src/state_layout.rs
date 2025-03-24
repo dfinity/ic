@@ -1665,11 +1665,44 @@ where
         self.mark_files_readonly_and_sync(thread_pool)?;
         self.remove_unverified_checkpoint_marker()
     }
-    pub fn vmemory_snapshot(
+    pub fn canister_vmemory_0(
+        &self,
+        canister_id: &CanisterId,
+    ) -> Result<PageMapLayout<Permissions>, LayoutError> {
+        Ok(self.canister(canister_id)?.vmemory_0())
+    }
+    pub fn snapshot_vmemory_0(
         &self,
         snapshot_id: &SnapshotId,
     ) -> Result<PageMapLayout<Permissions>, LayoutError> {
         Ok(self.snapshot(snapshot_id)?.vmemory_0())
+    }
+
+    pub fn canister_stable_memory(
+        &self,
+        canister_id: &CanisterId,
+    ) -> Result<PageMapLayout<Permissions>, LayoutError> {
+        Ok(self.canister(canister_id)?.stable_memory())
+    }
+
+    pub fn snapshot_stable_memory(
+        &self,
+        snapshot_id: &SnapshotId,
+    ) -> Result<PageMapLayout<Permissions>, LayoutError> {
+        Ok(self.snapshot(snapshot_id)?.stable_memory())
+    }
+
+    pub fn canister_wasm_chunk_store(
+        &self,
+        canister_id: &CanisterId,
+    ) -> Result<PageMapLayout<Permissions>, LayoutError> {
+        Ok(self.canister(canister_id)?.wasm_chunk_store())
+    }
+        pub fn snapshot_wasm_chunk_store(
+        &self,
+        snapshot_id: &SnapshotId,
+    ) -> Result<PageMapLayout<Permissions>, LayoutError> {
+        Ok(self.snapshot(snapshot_id)?.wasm_chunk_store())
     }
 }
 
@@ -2114,7 +2147,7 @@ where
         Ok(result)
     }
 
-    pub fn vmemory_0(&self) -> PageMapLayout<Permissions> {
+    fn vmemory_0(&self) -> PageMapLayout<Permissions> {
         PageMapLayout {
             root: self.canister_root.clone(),
             name_stem: "vmemory_0".into(),
@@ -2123,7 +2156,7 @@ where
         }
     }
 
-    pub fn stable_memory(&self) -> PageMapLayout<Permissions> {
+    fn stable_memory(&self) -> PageMapLayout<Permissions> {
         PageMapLayout {
             root: self.canister_root.clone(),
             name_stem: "stable_memory".into(),
@@ -2132,7 +2165,7 @@ where
         }
     }
 
-    pub fn wasm_chunk_store(&self) -> PageMapLayout<Permissions> {
+    fn wasm_chunk_store(&self) -> PageMapLayout<Permissions> {
         PageMapLayout {
             root: self.canister_root.clone(),
             name_stem: "wasm_chunk_store".into(),
@@ -2195,7 +2228,7 @@ where
         Ok(result)
     }
 
-    pub fn vmemory_0(&self) -> PageMapLayout<Permissions> {
+    fn vmemory_0(&self) -> PageMapLayout<Permissions> {
         PageMapLayout {
             root: self.snapshot_root.clone(),
             name_stem: "vmemory_0".into(),
@@ -2204,7 +2237,7 @@ where
         }
     }
 
-    pub fn stable_memory(&self) -> PageMapLayout<Permissions> {
+    fn stable_memory(&self) -> PageMapLayout<Permissions> {
         PageMapLayout {
             root: self.snapshot_root.clone(),
             name_stem: "stable_memory".into(),
@@ -2213,7 +2246,7 @@ where
         }
     }
 
-    pub fn wasm_chunk_store(&self) -> PageMapLayout<Permissions> {
+     fn wasm_chunk_store(&self) -> PageMapLayout<Permissions> {
         PageMapLayout {
             root: self.snapshot_root.clone(),
             name_stem: "wasm_chunk_store".into(),
