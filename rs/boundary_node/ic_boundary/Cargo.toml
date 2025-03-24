@@ -83,8 +83,8 @@ serde_cbor = { workspace = true }
 serde_json = { workspace = true }
 serde_regex = "1.1"
 serde_yaml = { workspace = true }
+sha3 = { workspace = true }
 simple_moving_average = "1.0.2"
-siphasher = "1.0.1"
 slog = { workspace = true }
 strum = { workspace = true }
 thiserror = { workspace = true }

@@ -1207,9 +1207,6 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "simple_moving_average": crate.spec(
                 version = "^1.0.2",
             ),
-            "siphasher": crate.spec(
-                version = "^1.0.1",
-            ),
             "slog": crate.spec(
                 version = "^2.7.0",
                 features = [

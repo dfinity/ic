@@ -1,5 +1,5 @@
 {
-  "checksum": "b722e3d26cf38a4589f58dd9744e38c110e1e9386dfff644ae227483b368805e",
+  "checksum": "6b5cac5f03c3f73653b9fcc13d0d44e0d958cc37cd309d006ec71b5733d99f13",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -21276,10 +21276,6 @@
             {
               "id": "simple_moving_average 1.0.2",
               "target": "simple_moving_average"
-            },
-            {
-              "id": "siphasher 1.0.1",
-              "target": "siphasher"
             },
             {
               "id": "slog 2.7.0",
@@ -72746,52 +72742,6 @@
       ],
       "license_file": null
     },
-    "siphasher 1.0.1": {
-      "name": "siphasher",
-      "version": "1.0.1",
-      "package_url": "https://github.com/jedisct1/rust-siphash",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/siphasher/1.0.1/download",
-          "sha256": "56199f7ddabf13fe5074ce809e7d3f42b42ae711800501b5b16ea82ad029c39d"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "siphasher",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "siphasher",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
-            "default",
-            "std"
-          ],
-          "selects": {}
-        },
-        "edition": "2018",
-        "version": "1.0.1"
-      },
-      "license": "MIT/Apache-2.0",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "license_file": null
-    },
     "slab 0.4.8": {
       "name": "slab",
       "version": "0.4.8",
@@ -94473,7 +94423,6 @@
     "signature 2.2.0",
     "simple_asn1 0.6.2",
     "simple_moving_average 1.0.2",
-    "siphasher 1.0.1",
     "slog 2.7.0",
     "slog-async 2.8.0",
     "slog-envlogger 2.2.0",

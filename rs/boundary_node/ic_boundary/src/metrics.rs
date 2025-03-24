@@ -19,9 +19,9 @@ use prometheus::{
     IntGauge, IntGaugeVec, Registry, TextEncoder,
 };
 use salt_sharing_api::SALT_SIZE;
-use siphasher::sip::SipHasher;
+use sha3::Digest;
+use sha3::Sha3_256;
 use std::{
-    hash::{Hash, Hasher},
     sync::{Arc, RwLock},
     time::Instant,
 };
@@ -662,19 +662,13 @@ pub async fn metrics_middleware(
                 _ => return err_str,
             };
 
-            // Create a 16-byte key for the SipHasher (uses half of the salt length)
-            let key: &[u8; 16] = match salt[0..16].try_into() {
-                Ok(bytes) => bytes,
-                Err(_) => return err_str,
-            };
+            let mut hasher = Sha3_256::new();
+            hasher.update(salt.as_slice());
+            hasher.update(input);
 
-            let mut hasher = SipHasher::new_with_key(key);
+            let result = hasher.finalize();
 
-            // Hash the entire 32-byte salt to ensure all bytes are used
-            salt.hash(&mut hasher);
-            input.hash(&mut hasher);
-
-            format!("{:x}", hasher.finish())
+            hex::encode(&result[..8])
         };
 
         let remote_addr = hash_fn(&remote_addr);
