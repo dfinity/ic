@@ -7,6 +7,8 @@ REVISIONS_FILE="${IC_ROOT}/mainnet-icos-revisions.json"
 
 # List of HostOS versions to test upgrades *from*
 # Note: doing more than 3 versions at a time may cause the devenv to run out of space
+# Note: for older versions, you may have to update the setupos-inject-configuration
+# and setupos-disable-checks tools to to be compatible
 VERSIONS=(
     "version1"
     "version2"
