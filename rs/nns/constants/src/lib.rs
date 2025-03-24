@@ -147,7 +147,7 @@ pub const SNS_AGGREGATOR_CANISTER_ID: CanisterId =
 ///
 /// As of May 2024, it looks like this is only used by (a whole bunch of) tests, mostly as the
 /// argument to send_whitelist.
-pub const ALL_NNS_CANISTER_IDS: [&CanisterId; 11] = [
+pub const ALL_NNS_CANISTER_IDS: [&CanisterId; 17] = [
     &REGISTRY_CANISTER_ID,
     &GOVERNANCE_CANISTER_ID,
     &LEDGER_CANISTER_ID,
@@ -157,7 +157,13 @@ pub const ALL_NNS_CANISTER_IDS: [&CanisterId; 11] = [
     &GENESIS_TOKEN_CANISTER_ID,
     &IDENTITY_CANISTER_ID,
     &NNS_UI_CANISTER_ID,
+    &ICP_LEDGER_ARCHIVE_CANISTER_ID,
     &SNS_WASM_CANISTER_ID,
+    &LEDGER_INDEX_CANISTER_ID,
+    &ICP_LEDGER_ARCHIVE_1_CANISTER_ID,
+    &SUBNET_RENTAL_CANISTER_ID,
+    &ICP_LEDGER_ARCHIVE_2_CANISTER_ID,
+    &ICP_LEDGER_ARCHIVE_3_CANISTER_ID,
     &NODE_REWARDS_CANISTER_ID,
 ];
 
