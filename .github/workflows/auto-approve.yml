@@ -13,3 +13,4 @@ jobs:
     if: github.actor == 'pr-creation-bot-dfinity[bot]'
     steps:
       - uses: hmarr/auto-approve-action@93c80b3919aae15c0da0d3ca49c70f57e3c4a58f #v4.0.0
+        review-message: "Auto approving mainnet-canister-revisions.json changes."
