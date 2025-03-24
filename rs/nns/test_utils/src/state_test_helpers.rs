@@ -508,6 +508,7 @@ pub fn try_call_with_cycles_via_universal_canister(
 
     update(machine, sender, "update", universal_canister_payload)
 }
+
 /// Converts a canisterID to a u64 by relying on an implementation detail.
 fn canister_id_to_u64(canister_id: CanisterId) -> u64 {
     let bytes: [u8; 8] = canister_id.get().to_vec()[0..8]
@@ -517,18 +518,30 @@ fn canister_id_to_u64(canister_id: CanisterId) -> u64 {
     u64::from_be_bytes(bytes)
 }
 
-/// Create a canister at 0-indexed position (assuming canisters are created sequentially)
-/// This also creates all intermediate canisters
-pub fn create_canister_id_at_position(
+/// Check that a canister exists  at 0-indexed position (assuming canisters are created sequentially).
+/// If it does not, then create it (and all canisters in between).
+/// This approach is used because create_canister advances the canister ID counter in the underlying
+/// execution environment, which otherwise creates problems with creating other canisters
+/// with non-specified IDs.  If that bug is fixed, the behavior in this test helper can be changed.
+pub fn ensure_canister_id_exists_at_position(
     machine: &StateMachine,
     position: u64,
     canister_settings: Option<CanisterSettingsArgs>,
 ) -> CanisterId {
-    machine.create_canister_with_cycles(
-        Some(CanisterId::from_u64(position).get()),
-        Cycles::zero(),
-        canister_settings,
-    )
+    let canister_id = CanisterId::from_u64(position);
+    if machine.canister_exists(canister_id) {
+        canister_id
+    } else {
+        let mut canister_id = machine.create_canister(canister_settings.clone());
+        while canister_id_to_u64(canister_id) < position {
+            canister_id = machine.create_canister(canister_settings.clone());
+        }
+
+        // In case we tried using this when we are already past the sequence
+        assert_eq!(canister_id_to_u64(canister_id), position);
+
+        canister_id
+    }
 }
 
 pub fn setup_nns_governance_with_correct_canister_id(
@@ -536,7 +549,7 @@ pub fn setup_nns_governance_with_correct_canister_id(
     init_payload: Governance,
     features: &[&str],
 ) {
-    let canister_id = create_canister_id_at_position(
+    let canister_id = ensure_canister_id_exists_at_position(
         machine,
         GOVERNANCE_CANISTER_INDEX_IN_NNS_SUBNET,
         Some(
@@ -562,7 +575,7 @@ pub fn setup_nns_root_with_correct_canister_id(
     machine: &StateMachine,
     init_payload: RootCanisterInitPayload,
 ) {
-    let root_canister_id = create_canister_id_at_position(
+    let root_canister_id = ensure_canister_id_exists_at_position(
         machine,
         ROOT_CANISTER_INDEX_IN_NNS_SUBNET,
         Some(
@@ -591,7 +604,7 @@ pub fn setup_nns_sns_wasms_with_correct_canister_id(
     machine: &StateMachine,
     init_payload: SnsWasmCanisterInitPayload,
 ) {
-    let canister_id = create_canister_id_at_position(
+    let canister_id = ensure_canister_id_exists_at_position(
         machine,
         SNS_WASM_CANISTER_INDEX_IN_NNS_SUBNET,
         Some(
@@ -614,7 +627,7 @@ pub fn setup_nns_sns_wasms_with_correct_canister_id(
 }
 
 fn setup_nns_node_rewards_with_correct_canister_id(machine: &StateMachine, init: InitArgs) {
-    let canister_id = create_canister_id_at_position(
+    let canister_id = ensure_canister_id_exists_at_position(
         machine,
         NODE_REWARDS_CANISTER_INDEX_IN_NNS_SUBNET,
         Some(
@@ -2168,7 +2181,7 @@ pub fn setup_cycles_ledger(state_machine: &StateMachine) {
 }
 
 pub fn setup_subnet_rental_canister_with_correct_canister_id(state_machine: &StateMachine) {
-    let canister_id = create_canister_id_at_position(
+    let canister_id = ensure_canister_id_exists_at_position(
         state_machine,
         SUBNET_RENTAL_CANISTER_INDEX_IN_NNS_SUBNET,
         Some(
