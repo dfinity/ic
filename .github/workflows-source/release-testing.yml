@@ -194,7 +194,7 @@ jobs:
           - --guestos
           # - --setupos
           # - --hostos
-    runs-on: ubuntu-latest
+    <<: *dind-large-setup
     steps:
       - name: Checkout
         uses: actions/checkout@v4
