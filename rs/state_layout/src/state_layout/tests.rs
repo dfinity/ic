@@ -350,7 +350,7 @@ fn checkpoints_files_are_removed_after_flushing_removal_channel() {
             )
             .unwrap();
 
-            // Write 500 dummy files to the scratchpad directory so that removing checkpoint files takes long than dropping a `CheckpointLayout`.
+            // Write 500 dummy files to the scratchpad directory so that removing checkpoint files takes longer than dropping a `CheckpointLayout`.
             // This is to create some backlog in the checkpoint removal channel.
             for i in 0..500 {
                 let file_path = scratchpad_layout.raw_path().join(i.to_string());
@@ -372,14 +372,15 @@ fn checkpoints_files_are_removed_after_flushing_removal_channel() {
         }
         drop(checkpoints);
 
-        // Checkpoints 1 to 19 should be moved away from the checkpoints directory.
+        // Dropping `CheckpointLayout` should immediately remove checkpoints 1 through 19
+        // from the checkpoints directory, leaving only checkpoint @20.
         assert_eq!(
             vec![Height::new(20)],
             state_layout.checkpoint_heights().unwrap(),
         );
 
         state_layout.flush_checkpoint_removal_channel();
-        // Temporary folders should be removed from the fs_tmp directory after we flush the removal channel.
+        // After flushing the removal channel, all temporary folders of checkpoints should be cleared from the `fs_tmp` directory.
         assert!(
             state_layout.fs_tmp().read_dir().unwrap().next().is_none(),
             "fs_tmp directory is not empty"

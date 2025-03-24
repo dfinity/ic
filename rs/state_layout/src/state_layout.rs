@@ -956,6 +956,10 @@ impl StateLayout {
         self.backups().join(Self::checkpoint_name(h))
     }
 
+    /// Asynchronously removes a checkpoint for a given height if it exists.
+    /// The checkpoint is first moved to the `fs_tmp` directory, and the actual file deletion
+    /// is delegated to a background thread. This offloading helps avoid blocking the calling thread,
+    /// such as Consensus's purger.
     fn remove_checkpoint_async<T>(
         &self,
         height: Height,
@@ -1005,7 +1009,7 @@ impl StateLayout {
     }
 
     /// Removes a checkpoint for a given height if it exists.
-    /// Drops drop_after_rename once the checkpoint is moved to tmp.
+    /// Drops drop_after_rename once the checkpoint is moved to fs_tmp.
     ///
     /// Postcondition:
     ///   height ∉ self.checkpoint_heights()
@@ -1017,6 +1021,7 @@ impl StateLayout {
         self.remove_checkpoint_async(height, drop_after_rename)
     }
 
+    /// Synchronously removes a checkpoint for a given height if it exists.
     fn remove_checkpoint_sync<T>(
         &self,
         height: Height,
@@ -1070,6 +1075,8 @@ impl StateLayout {
     }
 
     pub fn force_remove_checkpoint(&self, height: Height) -> Result<(), LayoutError> {
+        // Perform a synchronous removal since performance is not a concern for forced removals.
+        // it is more suitable to remove the checkpoint immediately and in place for forced removals.
         self.remove_checkpoint_sync(height, ())
     }
 

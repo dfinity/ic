@@ -2302,12 +2302,12 @@ impl StateManagerImpl {
                 .with_label_values(&["wait_for_manifest_and_flush"])
                 .start_timer();
             // We need the previous manifest computation to complete because:
-            //   1) We need it it speed up the next manifest computation using ManifestDelta
+            //   1) We need it to speed up the next manifest computation using ManifestDelta
             //   2) We don't want to run too much ahead of the latest ready manifest.
             self.flush_tip_channel();
 
-            // We need the asynchronous checkpoint removal to complete before creating a new checkpoint.
-            // Otherwise, we may accumulate too many checkpoints in fs_tmp and use too much disk space.
+            // Ensure all pending asynchronous checkpoint removals are completed before creating a new one.
+            // This prevents excessive accumulation of checkpoints in `fs_tmp`, which could lead to high disk usage.
             self.state_layout.flush_checkpoint_removal_channel();
         }
 
