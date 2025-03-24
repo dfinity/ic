@@ -212,6 +212,15 @@ pub(super) fn update_next_key_transcript(
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+    use crate::idkg::{
+        test_utils::{
+            create_reshare_unmasked_transcript_param,
+            fake_master_public_key_ids_for_all_idkg_algorithms, set_up_idkg_payload,
+            IDkgPayloadTestHelper, TestIDkgBlockReader, TestIDkgTranscriptBuilder,
+        },
+        utils::algorithm_for_key_id,
+    };
     use ic_crypto_test_utils_canister_threshold_sigs::{
         dummy_values::dummy_initial_idkg_dealing_for_tests, generate_key_transcript, node::Nodes,
         CanisterThresholdSigTestEnvironment, IDkgParticipants,
@@ -226,17 +235,6 @@ mod tests {
         Height,
     };
     use std::str::FromStr;
-
-    use crate::idkg::{
-        test_utils::{
-            create_reshare_unmasked_transcript_param,
-            fake_master_public_key_ids_for_all_idkg_algorithms, set_up_idkg_payload,
-            IDkgPayloadTestHelper, TestIDkgBlockReader, TestIDkgTranscriptBuilder,
-        },
-        utils::algorithm_for_key_id,
-    };
-
-    use super::*;
 
     #[test]
     fn get_created_key_transcript_returns_some_test() {

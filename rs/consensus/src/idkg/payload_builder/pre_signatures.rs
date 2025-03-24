@@ -536,7 +536,6 @@ pub(super) mod test_utils {
 #[cfg(test)]
 pub(super) mod tests {
     use super::{test_utils::*, *};
-
     use crate::idkg::test_utils::{
         create_available_pre_signature, create_available_pre_signature_with_key_transcript,
         fake_ecdsa_idkg_master_public_key_id, fake_master_public_key_ids_for_all_idkg_algorithms,
@@ -561,7 +560,6 @@ pub(super) mod tests {
         SubnetId,
     };
     use idkg::IDkgTranscriptOperationRef;
-
     use strum::IntoEnumIterator;
 
     fn set_up(

@@ -160,6 +160,7 @@ pub(crate) fn update_signature_agreements(
 
 #[cfg(test)]
 mod tests {
+    use super::*;
     use crate::idkg::test_utils::{
         create_available_pre_signature, empty_idkg_payload_with_key_ids, empty_response,
         fake_ecdsa_idkg_master_public_key_id, fake_master_public_key_ids_for_all_idkg_algorithms,
@@ -180,8 +181,6 @@ mod tests {
         Height,
     };
     use std::collections::BTreeSet;
-
-    use super::*;
 
     fn set_up(
         should_create_key_transcript: bool,
