@@ -7,7 +7,7 @@ use ic_nns_test_utils::{
     },
 };
 use ic_stable_structures::memory_manager::{MemoryId, MemoryManager};
-use rand::{Rng, rngs::StdRng, SeedableRng};
+use rand::{rngs::StdRng, Rng, SeedableRng};
 use registry_canister::pb::v1::Chunk;
 use std::{cell::RefCell, rc::Rc};
 
@@ -66,15 +66,19 @@ fn test_get_chunk() {
     let reconstructed_big_monolithic_blob = big_responses
         .into_iter()
         .map(|big_response| -> Vec<u8> {
-            let Chunk {
-                content
-            } = big_response.unwrap();
+            let Chunk { content } = big_response.unwrap();
             content.unwrap()
         })
         .flatten()
         .collect::<Vec<u8>>();
-    assert_eq!(reconstructed_big_monolithic_blob[0..25], original_big_monolithic_blob[0..25]);
-    assert_eq!(reconstructed_big_monolithic_blob[big_len-25..big_len], original_big_monolithic_blob[big_len-25..big_len]);
+    assert_eq!(
+        reconstructed_big_monolithic_blob[0..25],
+        original_big_monolithic_blob[0..25]
+    );
+    assert_eq!(
+        reconstructed_big_monolithic_blob[big_len - 25..big_len],
+        original_big_monolithic_blob[big_len - 25..big_len]
+    );
     assert_eq!(reconstructed_big_monolithic_blob.len(), big_len);
     // assert_eq is not used here, because we do not want 5 MB of spam to be
     // dumped into the terminal.
