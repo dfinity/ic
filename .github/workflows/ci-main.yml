@@ -35,9 +35,7 @@ jobs:
       options: >-
         -e NODE_NAME --privileged --cgroupns host -v /cache:/cache -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp -v /ceph-s3-info:/ceph-s3-info
     timeout-minutes: 90
-    runs-on:
-      group: zh1
-      labels: dind-large
+    runs-on: ubuntu-24-large
     env:
       # Only run ci/bazel-scripts/diff.sh on PRs that are not labeled with "CI_ALL_BAZEL_TARGETS".
       OVERRIDE_DIDC_CHECK: ${{ contains(github.event.pull_request.labels.*.name, 'CI_OVERRIDE_DIDC_CHECK') }}
@@ -61,6 +59,8 @@ jobs:
               system_test_staging
               system_test_hotfix
               system_test_benchmark
+              system_test_colocation
+              system_test
               fuzz_test
               fi_tests_nightly
               nns_tests_nightly
@@ -92,8 +92,6 @@ jobs:
         with:
           BAZEL_COMMAND: test --config=ci ${{ steps.bazel-extra-args.outputs.BAZEL_EXTRA_ARGS }}
           BAZEL_TARGETS: //...
-          CLOUD_CREDENTIALS_CONTENT: ${{ secrets.CLOUD_CREDENTIALS_CONTENT }}
-          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
       - name: Upload SHA256SUMS (cache)
         uses: ./.github/actions/bazel-upload-checksums/
         with:
@@ -278,7 +276,6 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          # -v /cache:/cache -v /var/sysimage:/var/sysimage
           "$CI_PROJECT_DIR"/ci/scripts/run-build-ic.sh
         env:
           BAZEL_COMMAND: build --config=ci
