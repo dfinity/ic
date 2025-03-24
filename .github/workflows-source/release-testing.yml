@@ -205,7 +205,7 @@ jobs:
           cd curl-8.3.0
           ./configure --with-ssl --prefix=/home/ubuntu/curl/
           make -j$(nproc)
-          make install
+          sudo make install
       - name: Checkout
         uses: actions/checkout@v4
         with:
