@@ -485,6 +485,7 @@ fn spawn_checkpoint_removal_thread(
                 while let Ok(req) = checkpoint_removal_receiver.recv() {
                     match req {
                         CheckpointRemovalRequest::Remove(path) => {
+                            debug_assert_eq!(path.parent().unwrap().file_name().unwrap(), "fs_tmp",);
                             let start = Instant::now();
                             if let Err(err) = std::fs::remove_dir_all(&path) {
                                 error!(
