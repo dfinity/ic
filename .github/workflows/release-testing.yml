@@ -256,21 +256,20 @@ jobs:
         -e NODE_NAME --privileged --cgroupns host -v /cache:/cache -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp
     timeout-minutes: 180 # 3 hours
     steps:
+      - name: Setup curl 8.3.0
+        shell: bash
+        run: |
+          curl -LO https://curl.se/download/curl-8.3.0.tar.gz
+          tar -xzf curl-8.3.0.tar.gz
+          mkdir ~/curl
+          cd curl-8.3.0
+          ./configure --with-ssl --prefix=/home/ubuntu/curl/
+          make -j$(nproc)
+          make install
       - name: Checkout
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - name: Setup curl 8.3
-        shell: bash
-        run: |
-          mkdir ~/curl
-          cd /tmp
-          wget wget https://curl.se/download/curl-8.3.0.zip
-          unzip curl-8.3.0.zip
-          cd curl-8.3.0
-          ./configure --prefix=/home/ubuntu/curl/ --with-openssl
-          make
-          make install
       - name: Run repro-check for ${{ github.sha }} with mirror ${{ matrix.mirror }}
         continue-on-error: ${{ github.ref != 'refs/heads/master' && !startsWith(github.ref, 'refs/heads/rc--')  }}
         shell: bash
