@@ -1554,8 +1554,12 @@ fn auto_progress() {
 
     let t0 = pic.get_time();
 
+    assert!(!pic.auto_progress_enabled());
+
     // Starting auto progress on the IC => a corresponding log should be made and time should start incresing automatically now.
     pic.auto_progress();
+
+    assert!(pic.auto_progress_enabled());
 
     loop {
         let mut bytes = [0; 1000];
@@ -1577,6 +1581,8 @@ fn auto_progress() {
 
     // Stopping auto progress on the IC => a corresponding log should be made.
     pic.stop_progress();
+
+    assert!(!pic.auto_progress_enabled());
 
     loop {
         let mut bytes = [0; 1000];
