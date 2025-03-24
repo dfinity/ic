@@ -230,9 +230,7 @@ impl ProgressNetwork for PocketIcAgent<'_> {
 
 impl ProgressNetwork for PocketIc {
     async fn progress(&self, duration: Duration) {
-        // If PocketIC instance doesn't have a URL, thus it's not in the live mode and
-        // we can progress it using 'advance_time' method.
-        if self.url().is_none() {
+        if !self.auto_progress_enabled().await {
             self.advance_time(duration).await;
             self.tick().await;
         } else {
