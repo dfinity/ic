@@ -233,32 +233,31 @@ jobs:
 
   build-ic:
     name: Build IC
-    <<: *dind-large-setup
-    # keep options from dind-large-setup but run on dind-small-setup
     runs-on:
-      group: ch1
-      labels: dind-small
+      group: ubuntu-24-large
+    container:
+      <<: *image
+      options: >-
+        -e NODE_NAME
+        --privileged --cgroupns host
     if: ${{ github.event_name != 'merge_group' }}
     steps:
       - <<: *checkout
+
       - name: Run Build IC
         id: build-ic
         shell: bash
         run: |
           set -euo pipefail
-          REPO_NAME="${GITHUB_REPOSITORY##*/}"
-          rm -rf "/cache/job/${CI_JOB_NAME}/${CI_RUN_ID}"
-          mkdir -p "/cache/job/${CI_JOB_NAME}/${CI_RUN_ID}/artifacts"
-          ln -s "/cache/job/${CI_JOB_NAME}/${CI_RUN_ID}/artifacts" /__w/$REPO_NAME/$REPO_NAME/artifacts
+          # -v /cache:/cache -v /var/sysimage:/var/sysimage
           "$CI_PROJECT_DIR"/ci/scripts/run-build-ic.sh
-          rm -rf "/cache/job/${CI_JOB_NAME}/${CI_RUN_ID}"
-
         env:
           BAZEL_COMMAND: build --config=ci
           BAZEL_TARGETS: //...
           MERGE_BASE_SHA: ${{ github.event.pull_request.base.sha }}
           BRANCH_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           RUN_ON_DIFF_ONLY: ${{ github.event_name == 'pull_request' && !contains(github.event.pull_request.labels.*.name, 'CI_ALL_BAZEL_TARGETS') }}
+
       - name: Upload SHA256SUMS (nocache)
         uses: ./.github/actions/bazel-upload-checksums/
         with:
