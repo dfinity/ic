@@ -1,7 +1,7 @@
 use crate::common::{
     build_cmc_wasm, build_genesis_token_wasm, build_governance_wasm_with_features,
-    build_ledger_wasm, build_lifeline_wasm, build_registry_wasm, build_root_wasm,
-    build_sns_wasms_wasm, NnsInitPayloads,
+    build_ledger_wasm, build_lifeline_wasm, build_node_rewards_wasm, build_registry_wasm,
+    build_root_wasm, build_sns_wasms_wasm, NnsInitPayloads,
 };
 use candid::{CandidType, Decode, Encode, Nat};
 use canister_test::Wasm;
@@ -28,7 +28,8 @@ use ic_nns_constants::{
     canister_id_to_nns_canister_name, memory_allocation_of, CYCLES_LEDGER_CANISTER_ID,
     CYCLES_MINTING_CANISTER_ID, GENESIS_TOKEN_CANISTER_ID, GOVERNANCE_CANISTER_ID,
     GOVERNANCE_CANISTER_INDEX_IN_NNS_SUBNET, IDENTITY_CANISTER_ID, LEDGER_CANISTER_ID,
-    LIFELINE_CANISTER_ID, NNS_UI_CANISTER_ID, REGISTRY_CANISTER_ID, ROOT_CANISTER_ID,
+    LIFELINE_CANISTER_ID, NNS_UI_CANISTER_ID, NODE_REWARDS_CANISTER_ID,
+    NODE_REWARDS_CANISTER_INDEX_IN_NNS_SUBNET, REGISTRY_CANISTER_ID, ROOT_CANISTER_ID,
     ROOT_CANISTER_INDEX_IN_NNS_SUBNET, SNS_WASM_CANISTER_ID, SNS_WASM_CANISTER_INDEX_IN_NNS_SUBNET,
     SUBNET_RENTAL_CANISTER_ID, SUBNET_RENTAL_CANISTER_INDEX_IN_NNS_SUBNET,
 };
@@ -50,6 +51,7 @@ use ic_nns_governance_api::pb::v1::{
     ProposalActionRequest, ProposalInfo, RewardNodeProviders, Topic, Vote,
 };
 use ic_nns_handler_root::init::RootCanisterInitPayload;
+use ic_node_rewards_canister_api::lifecycle_args::InitArgs;
 use ic_registry_canister_api::GetChunkRequest;
 use ic_registry_transport::pb::v1::{
     RegistryGetChangesSinceRequest, RegistryGetChangesSinceResponse,
@@ -615,6 +617,29 @@ pub fn setup_nns_sns_wasms_with_correct_canister_id(
         .unwrap();
 }
 
+fn setup_nns_node_rewards_with_correct_canister_id(machine: &StateMachine, init: InitArgs) {
+    let canister_id = create_canister_id_at_position(
+        machine,
+        NODE_REWARDS_CANISTER_INDEX_IN_NNS_SUBNET,
+        Some(
+            CanisterSettingsArgsBuilder::new()
+                .with_controllers(vec![ROOT_CANISTER_ID.get()])
+                .build(),
+        ),
+    );
+
+    assert_eq!(canister_id, NODE_REWARDS_CANISTER_ID);
+
+    machine
+        .install_wasm_in_mode(
+            canister_id,
+            CanisterInstallMode::Install,
+            build_node_rewards_wasm().bytes(),
+            Encode!(&init).unwrap(),
+        )
+        .unwrap();
+}
+
 /// Sets up the NNS for StateMachine tests.
 pub fn setup_nns_canisters(machine: &StateMachine, init_payloads: NnsInitPayloads) {
     setup_nns_canisters_with_features(machine, init_payloads, &["test"])
@@ -702,6 +727,8 @@ pub fn setup_nns_canisters_with_features(
     assert_eq!(nns_ui_canister_id, NNS_UI_CANISTER_ID);
 
     setup_nns_sns_wasms_with_correct_canister_id(machine, init_payloads.sns_wasms);
+
+    setup_nns_node_rewards_with_correct_canister_id(machine, init_payloads.node_rewards);
 }
 
 pub fn mint_icp(state_machine: &StateMachine, destination: AccountIdentifier, amount: Tokens) {

@@ -648,7 +648,7 @@ pub async fn install_sns_wasm_canister(
     install_rust_canister(canister, "sns-wasm-canister", &[], Some(encoded)).await;
 }
 
-pub async fn install_node_rewards_canister(canister: &mut Canister<'_>, init_payload: NRInitArgs) {
+pub async fn install_node_rewards_canister(canister: &mut Canister<'_>, init_payload: NodeRewardsInitArgs) {
     let encoded = Encode!(&init_payload).unwrap();
     install_rust_canister(canister, "node-rewards-canister", &[], Some(encoded)).await;
 }
