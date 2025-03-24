@@ -42,20 +42,6 @@ anchors:
     uses: actions/checkout@v4
     with:
       ref: ${{ github.event.workflow_run.head_branch }}
-  bazel-bep: &bazel-bep
-    name: Upload bazel-bep
-    # runs only if previous step succeeded or failed;
-    # we avoid collecting artifacts of jobs that were cancelled
-    if: success() || failure()
-    uses: actions/upload-artifact@v4
-    with: &bazel-bep-with
-      name: ${{ github.job }}-bep
-      retention-days: 14
-      if-no-files-found: ignore
-      compression-level: 9
-      path: |
-        bazel-bep.pb.gpg
-        profile.json
 
 jobs:
   ci-main:
@@ -76,7 +62,6 @@ jobs:
             test --config=ci --keep_going --test_tag_filters=system_test_nightly
           BAZEL_TARGETS: //rs/tests/...
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
-      - <<: *bazel-bep
 
   bazel-system-test-staging:
     name: Bazel System Test Staging
@@ -91,7 +76,6 @@ jobs:
             test --config=ci --keep_going --test_tag_filters=system_test_staging
           BAZEL_TARGETS: //rs/tests/...
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
-      - <<: *bazel-bep
 
   bazel-system-test-hotfix:
     name: Bazel System Test Hotfix
@@ -107,7 +91,6 @@ jobs:
             test --config=ci --keep_going --test_tag_filters=system_test_hotfix
           BAZEL_TARGETS: //rs/tests/...
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
-      - <<: *bazel-bep
 
   dependency-scan-release-cut:
     name: Dependency Scan for Release
@@ -177,8 +160,3 @@ jobs:
             test --config=ci --config=systest --keep_going --test_timeout=7200 --test_env=OLD_VERSION=${{ matrix.version }}
           BAZEL_TARGETS: "//rs/tests/dre:guest_os_qualification"
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
-      - <<: *bazel-bep
-        name: Upload bazel bep for version ${{ matrix.version }}
-        with:
-          <<: *bazel-bep-with
-          name: ${{ github.job }}-${{ matrix.version }}-bep

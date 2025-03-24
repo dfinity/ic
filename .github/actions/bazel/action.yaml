@@ -1,0 +1,68 @@
+name: 'TODO'
+description: 'TODO'
+inputs:
+  run:
+    required: true
+  BUILDBUDDY_LINKS:
+    required: false
+  GPG_PASSPHRASE:
+    required: false
+    description: "GPG key to encrypt build events. If the key is not set, events won't be uploaded."
+
+runs:
+  using: "composite"
+  steps:
+
+    - id: metrics-tmpdir
+      shell: bash
+      run: |
+        metrics_out=$(mktemp -d)
+        echo "dir=$metrics_out" >> $GITHUB_OUTPUT
+
+    - name: TODO
+      shell: bash
+      run: |
+        set -euo pipefail
+
+        export BAZEL_ACTION_OLDPATH="$PATH"
+        # github.action_path doesn't seem to work
+        PATH="$PWD/.github/actions/bazel/bin:$BAZEL_ACTION_OLDPATH"
+        hash -r
+
+        metrics_out=$(mktemp -d)
+
+        export BUILDBUDDY_LINKS='${{ inputs.BUILDBUDDY_LINKS }}'
+        export BAZEL_ACTION_METRICS_OUT='${{ steps.metrics-tmpdir.outputs.dir }}'
+
+        ${{ inputs.run }}
+
+    - name: Encrypt build events
+      shell: bash
+      # only upload on success or failure but _not_ on canceled jobs
+      if: (success() || failure()) && inputs.GPG_PASSPHRASE != ''
+      run: |
+        for bep in $(find '${{ steps.metrics-tmpdir.outputs.dir }}' -name 'bazel-bep-*.pb'); do
+            gpg --symmetric --cipher-algo AES256 -o "$bep.gpg" \
+                --passphrase '${{ inputs.GPG_PASSPHRASE }}' --batch --yes "$bep"
+            rm -f "$bep"
+        done
+
+    - name: Upload bazel-bep
+      # runs only if previous steps succeeded or failed;
+      # we avoid collecting artifacts of jobs that were cancelled
+      if: success() || failure()
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ github.job }}-bep-${{ strategy.job-index }}
+        retention-days: 14
+        if-no-files-found: ignore
+        compression-level: 9
+        path: |
+          ${{ steps.metrics-tmpdir.outputs.dir }}/bazel-bep-*.pb.gpg
+          ${{ steps.metrics-tmpdir.outputs.dir }}/profile-*.json
+
+    - name: Cleanup
+      shell: bash
+      if: always()
+      run: |
+        rm -rf '${{ steps.metrics-tmpdir.outputs.dir }}'

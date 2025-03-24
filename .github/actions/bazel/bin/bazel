@@ -1,0 +1,103 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+BUILDBUDDY_LINKS="${BUILDBUDDY_LINKS:-}"
+
+PATH="$BAZEL_ACTION_OLDPATH"
+unset BAZEL_ACTION_OLDPATH
+
+# ARGUMENT PARSING
+
+while [[ $# -gt 0 ]]
+do
+    case $1 in
+        -*)
+            echo startup options are not supported
+            exit 1
+            ;;
+        *)
+            break
+            ;;
+    esac
+done
+
+echo "Bazel wrapper running" >&2
+
+startup_options=(
+    --output_base=/var/tmp/bazel-output # Output base wiped after run
+)
+
+bazel_command="$1"
+shift
+
+bazel_args=( "$@" )
+
+
+# Unless explicitly provided, we set a default --repository_cache to a volume mounted inside our runners
+# Only for Linux builds since there `/cache` is mounted to host local storage.
+if [[ ! " ${bazel_args[*]} " =~ [[:space:]]--repository_cache[[:space:]] ]] && [[ "$(uname)" == "Linux" ]]; then
+    echo "setting default repository cache"
+    bazel_args+=(--repository_cache=/cache/bazel)
+fi
+
+
+if [[ $bazel_command == "build" ]] || [[ $bazel_command == "test" ]]; then
+    bazel_args+=(
+        --color=yes
+        --build_event_binary_file="$BAZEL_ACTION_METRICS_OUT/bazel-bep-$RANDOM.pb"
+        --profile="$BAZEL_ACTION_METRICS_OUT/profile-$RANDOM.json"
+    )
+
+    if [ -n "${BUILDBUDDY_LINKS:-}" ]; then
+        bazel_args+=(
+            --build_metadata=BUILDBUDDY_LINKS="$BUILDBUDDY_LINKS"
+        )
+    fi
+fi
+
+# NOTE: this assumes --config=bes is enabled
+bazel_bes() {
+    # An awk (mawk) program used to process STDERR to make it easier
+    # to find the build event URL when going through logs.
+    # Finally we record the URL to 'url_out' (passed via variable)
+    url_out=$(mktemp)
+    stream_awk_program='
+      # When seeing the stream info line, grab the url and save it as stream_url
+      match($0, /Streaming build results to/) \
+        { stream_info_line = $0; \
+          match(stream_info_line, /https:\/\/[a-zA-Z0-9\/-.]*/); \
+          stream_url = substr(stream_info_line, RSTART, RLENGTH); \
+      } \
+      # In general, forward every line to the output
+      // { print } \
+      # Every N lines, repeat the stream info line
+      // { if ( stream_info_line != null && NR % 20 == 0 ) print stream_info_line } \
+      # Finally, record the URL
+      END { if (stream_url != null) print stream_url > url_out }'
+
+
+
+    bazel_exitcode="0"
+    bazel "$@" 2>&1 \
+        | awk -v url_out="$url_out" "$stream_awk_program" || bazel_exitcode="$?"
+
+
+    # Write the bes link & summary
+    echo "Build results uploaded to $(<"$url_out")"
+    if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
+        invocation=$(sed <"$url_out" 's;.*/;;') # grab invocation ID (last url part)
+        echo "BuildBuddy [$invocation]($(<"$url_out"))" >>"$GITHUB_STEP_SUMMARY"
+    fi
+    rm "$url_out"
+
+    return "$bazel_exitcode"
+}
+
+echo bazel "${startup_options[@]}" "$bazel_command" "${bazel_args[@]}"
+
+if [[ $bazel_command == "build" ]] || [[ $bazel_command == "test" ]]; then
+    bazel_bes "${startup_options[@]}" "$bazel_command" "${bazel_args[@]}"
+else
+    bazel "${startup_options[@]}" "$bazel_command" "${bazel_args[@]}"
+fi
