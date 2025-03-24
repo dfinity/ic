@@ -194,9 +194,13 @@ jobs:
           - --guestos
           # - --setupos
           # - --hostos
-    <<: *dind-large-setup
-      container:
-        image: ubuntu:latest
+    runs-on:
+      group: zh1
+      labels: dind-large
+    container:
+      image: ubuntu:latest
+      options: >-
+        -e NODE_NAME --privileged --cgroupns host -v /cache:/cache -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp
     steps:
       - name: Checkout
         uses: actions/checkout@v4
