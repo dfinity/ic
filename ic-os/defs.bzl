@@ -10,7 +10,7 @@ This macro defines the overall build process for ICOS images, including:
 """
 
 load("@bazel_skylib//rules:copy_file.bzl", "copy_file")
-load("//bazel:defs.bzl", "gzip_compress", "zstd_compress")
+load("//bazel:defs.bzl", "file_size_check", "gzip_compress", "zstd_compress")
 load("//ci/src/artifacts:upload.bzl", "upload_artifacts")
 load("//ic-os/bootloader:defs.bzl", "build_grub_partition")
 load("//ic-os/components:boundary-guestos.bzl", boundary_component_files = "component_files")
@@ -612,26 +612,6 @@ EOF
     )
 
 # end def icos_build
-
-def file_size_check(
-        name,
-        max_file_size):
-    """
-    A check to make sure the given file is below the specified size.
-
-    Args:
-      name: Name of the file.
-      max_file_size: Max accepted size in bytes.
-    """
-    native.sh_test(
-        name = "%s_size_test" % name,
-        srcs = ["//ic-os:file_size_test.sh"],
-        data = [name],
-        env = {
-            "FILE": "$(rootpath %s)" % name,
-            "MAX_SIZE": max_file_size,
-        },
-    )
 
 def boundary_node_icos_build(
         name,
