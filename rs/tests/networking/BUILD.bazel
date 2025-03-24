@@ -33,30 +33,6 @@ COMMON_DEPS = [
 ]
 
 system_test_nns(
-    name = "canister_http_stress_test",
-    env = {
-        "PROXY_WASM_PATH": "$(rootpath //rs/rust_canisters/proxy_canister:proxy_canister)",
-    },
-    extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on long_test.
-    tags = [
-        "k8s",
-        "manual",
-    ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    test_timeout = "eternal",
-    runtime_deps =
-        GUESTOS_RUNTIME_DEPS +
-        UNIVERSAL_VM_RUNTIME_DEPS +
-        CANISTER_HTTP_RUNTIME_DEPS + PROXY_CANISTER_RUNTIME_DEPS,
-    deps = CANISTER_HTTP_BASE_DEPS + [
-        "//rs/rust_canisters/canister_test",
-        "//rs/types/types",
-        "@crate_index//:futures",
-        "@crate_index//:tokio",
-    ],
-)
-
-system_test_nns(
     name = "canister_http_test",
     env = {
         "PROXY_WASM_PATH": "$(rootpath //rs/rust_canisters/proxy_canister:proxy_canister)",
@@ -75,6 +51,32 @@ system_test_nns(
 )
 
 system_test_nns(
+    name = "canister_http_stress_test",
+    env = {
+        "PROXY_WASM_PATH": "$(rootpath //rs/rust_canisters/proxy_canister:proxy_canister)",
+    },
+    extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on long_test.
+    tags = [
+        "dynamic_testnet",
+        # TODO(mihailjianu): figure out if we need k8s. what is this?
+        #"k8s",
+        "manual",
+    ],
+    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
+    test_timeout = "eternal",
+    runtime_deps =
+        GUESTOS_RUNTIME_DEPS +
+        UNIVERSAL_VM_RUNTIME_DEPS +
+        CANISTER_HTTP_RUNTIME_DEPS + PROXY_CANISTER_RUNTIME_DEPS,
+    deps = CANISTER_HTTP_BASE_DEPS + [
+        "//rs/rust_canisters/canister_test",
+        "//rs/types/types",
+        "@crate_index//:futures",
+        "@crate_index//:tokio",
+    ],
+)
+
+system_test_nns(
     name = "canister_http_socks_test",
     env = {
         "PROXY_WASM_PATH": "$(rootpath //rs/rust_canisters/proxy_canister:proxy_canister)",
@@ -84,6 +86,7 @@ system_test_nns(
         #"long_test",
         #"system_test_nightly",
         "manual",
+        "dynamic_testnet",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps =

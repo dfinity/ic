@@ -212,7 +212,7 @@ use std::{
 use tokio::{runtime::Runtime as Rt, sync::Mutex as TokioMutex};
 use url::Url;
 
-pub const READY_WAIT_TIMEOUT: Duration = Duration::from_secs(500);
+pub const READY_WAIT_TIMEOUT: Duration = Duration::from_secs(100);
 pub const SSH_RETRY_TIMEOUT: Duration = Duration::from_secs(500);
 pub const RETRY_BACKOFF: Duration = Duration::from_secs(5);
 const REGISTRY_QUERY_TIMEOUT: Duration = Duration::from_secs(5);

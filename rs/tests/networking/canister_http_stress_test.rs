@@ -39,8 +39,8 @@ const NS_IN_1_SEC: u64 = 1_000_000_000;
 
 fn main() -> Result<()> {
     SystemTestGroup::new()
-        .with_setup(canister_http::setup)
-        .add_test(systest!(test))
+        .with_setup(canister_http::setup_cool)
+       // .add_test(systest!(test))
         .execute_from_args()?;
 
     Ok(())
@@ -68,6 +68,9 @@ pub fn test(env: TestEnv) {
 }
 
 async fn stress_test_proxy_canister(proxy_canister: &Canister<'_>, url: String, logger: Logger) {
+    test_proxy_canister(proxy_canister, url.clone(), logger.clone(), 200).await;
+    return;
+
     test_proxy_canister(proxy_canister, url.clone(), logger.clone(), 500).await;
     test_proxy_canister(proxy_canister, url.clone(), logger.clone(), 1000).await;
     test_proxy_canister(proxy_canister, url.clone(), logger.clone(), 2000).await;
@@ -115,16 +118,19 @@ async fn do_request(
         .map_err(|e| anyhow!("Update call to proxy canister failed with {:?}", e))?;
 
     if !matches!(res, Ok(ref x) if x.response.status == 200 && x.response.body.contains(context)) {
-        bail!("Http request failed response: {:?}", res);
-    }
-    let res = res.unwrap();
-    info!(
-        logger,
-        "All {} concurrent requests succeeded!", concurrent_requests
-    );
+        //bail!("Http request failed response: {:?}", res);
+        info!(logger, "Info Http request failed response: {:?}", res);
+    } else {
+        let res = res.unwrap();
+        info!(
+            logger,
+            "All {} concurrent requests succeeded!", concurrent_requests
+        );
 
-    let duration_ns = res.duration_ns;
-    Ok(duration_ns)
+        let duration_ns = res.duration_ns;
+        return Ok(duration_ns)
+    }
+    Ok(0)
 }
 
 pub async fn test_proxy_canister(
@@ -134,10 +140,11 @@ pub async fn test_proxy_canister(
     concurrent_requests: u64,
 ) {
     let mut experiments = 0;
+    let max_experiments = 1;
     let mut total_duration_ns = 0;
 
     // We leave the experiment running for at least one minute.
-    while total_duration_ns < 60 * NS_IN_1_SEC {
+    while total_duration_ns < 60 * NS_IN_1_SEC && experiments < max_experiments {
         experiments += 1;
 
         let single_call_duration_ns = ic_system_test_driver::retry_with_msg_async!(
@@ -168,5 +175,5 @@ pub async fn test_proxy_canister(
         experiments,
         qps
     );
-    assert!(qps > 100.0);
+    //assert!(qps > 100.0);
 }

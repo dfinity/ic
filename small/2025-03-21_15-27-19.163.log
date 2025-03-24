@@ -1,0 +1,68 @@
+INFO: Invocation ID: 6e24db1f-592f-4395-a666-eee8ee3de3fe
+INFO: Streaming build results to: https://dash.idx.dfinity.network/invocation/6e24db1f-592f-4395-a666-eee8ee3de3fe
+Computing main repo mapping: 
+WARNING: Streamed test output requested. All tests will be run locally, without sharding, one at a time
+Loading: 
+Loading: 0 packages loaded
+WARNING: Build option --test_env has changed, discarding analysis cache (this can be expensive, see https://bazel.build/advanced/performance/iteration-speed).
+Analyzing: target //rs/tests/networking:canister_http_stress_test (0 packages loaded, 0 targets configured)
+Analyzing: target //rs/tests/networking:canister_http_stress_test (0 packages loaded, 0 targets configured)
+
+Analyzing: target //rs/tests/networking:canister_http_stress_test (0 packages loaded, 62613 targets configured)
+
+INFO: Analyzed target //rs/tests/networking:canister_http_stress_test (0 packages loaded, 62613 targets configured).
+[7,830 / 7,832] Compiling Rust rlib canister_http (1 files) [for tool]; 1s remote-cache, linux-sandbox
+ERROR: /ic/rs/tests/networking/canister_http/BUILD.bazel:10:13: Compiling Rust rlib canister_http (1 files) [for tool] failed: (Exit 1): process_wrapper failed: error executing Rustc command (from target //rs/tests/networking/canister_http:canister_http) bazel-out/k8-opt-exec-ST-d57f47055a04/bin/external/rules_rust/util/process_wrapper/process_wrapper --arg-file ... (remaining 176 arguments skipped)
+
+Use --sandbox_debug to see verbose messages from the sandbox and retain the sandbox build root for debugging
+error[E0425]: cannot find value `BN_NAME` in this scope
+  --> rs/tests/networking/canister_http/canister_http.rs:80:35
+   |
+80 |     let bn_vm = BoundaryNode::new(BN_NAME.to_string())
+   |                                   ^^^^^^^ not found in this scope
+
+error[E0433]: failed to resolve: use of undeclared crate or module `canister_http`
+  --> rs/tests/networking/canister_http/canister_http.rs:76:5
+   |
+76 |     canister_http::start_httpbin_on_uvm(&env);
+   |     ^^^^^^^^^^^^^ use of undeclared crate or module `canister_http`
+   |
+help: there is a crate or module with a similar name
+   |
+76 |     canister_test::start_httpbin_on_uvm(&env);
+   |     ~~~~~~~~~~~~~
+
+error[E0599]: no method named `get_deployed_boundary_node` found for struct `TestEnv` in the current scope
+   --> rs/tests/networking/canister_http/canister_http.rs:122:10
+    |
+121 |       let boundary_node_vm = env
+    |  ____________________________-
+122 | |         .get_deployed_boundary_node(BOUNDARY_NODE_NAME)
+    | |_________-^^^^^^^^^^^^^^^^^^^^^^^^^^
+   --> rs/tests/driver/src/driver/boundary_node.rs:680:8
+    |
+    = note: the method is available for `TestEnv` here
+    |
+    = help: items from traits can only be used if the trait is in scope
+help: there is a method `get_deployed_boundary_nodes` with a similar name, but with different arguments
+   --> rs/tests/driver/src/driver/boundary_node.rs:678:5
+help: trait `BoundaryNodeVm` which provides `get_deployed_boundary_node` is implemented but not in scope; perhaps you want to import it
+    |
+1   + use ic_system_test_driver::driver::boundary_node::BoundaryNodeVm;
+    |
+
+error: aborting due to 3 previous errors
+
+Some errors have detailed explanations: E0425, E0433, E0599.
+For more information about an error, try `rustc --explain E0425`.
+[7,831 / 7,832] 1 / 1 tests, 1 failed; checking cached actions
+Target //rs/tests/networking:canister_http_stress_test failed to build
+Use --verbose_failures to see the command lines of failed build steps.
+INFO: Elapsed time: 7.459s, Critical Path: 4.16s
+INFO: 2 processes: 2 internal.
+ERROR: Build did NOT complete successfully
+FAILED: 
+//rs/tests/networking:canister_http_stress_test                 FAILED TO BUILD
+
+Executed 0 out of 1 test: 1 fails to build.
+INFO: Streaming build results to: https://dash.idx.dfinity.network/invocation/6e24db1f-592f-4395-a666-eee8ee3de3fe

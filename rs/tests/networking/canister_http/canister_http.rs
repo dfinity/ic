@@ -12,12 +12,17 @@ use ic_system_test_driver::driver::{
     test_env::{TestEnv, TestEnvAttribute},
     test_env_api::*,
 };
+use ic_system_test_driver::driver::prometheus_vm::PrometheusVm;
+use ic_system_test_driver::driver::boundary_node::BoundaryNode;
+use ic_system_test_driver::driver::prometheus_vm::HasPrometheus;
+use ic_system_test_driver::driver::boundary_node::BoundaryNodeVm;
 use ic_system_test_driver::util::{self, create_and_install, create_and_install_with_cycles};
 pub use ic_types::{CanisterId, Cycles, PrincipalId};
 use slog::info;
 use std::env;
 use std::net::{Ipv4Addr, Ipv6Addr};
 use std::time::Duration;
+const BN_NAME: &str = "socks-bn";
 
 pub const UNIVERSAL_VM_NAME: &str = "httpbin";
 pub const EXPIRATION: Duration = Duration::from_secs(120);
@@ -52,9 +57,90 @@ pub fn install_nns_canisters(env: &TestEnv) {
     info!(&env.logger(), "NNS canisters installed");
 }
 
+pub fn setup_cool(env: TestEnv) {
+    println!("debuggg socks setup");
+    let logger = env.logger();
+    PrometheusVm::default()
+        .start(&env)
+        .expect("Failed to start prometheus VM");
+
+    // Set up Universal VM with HTTP Bin testing service
+
+    UniversalVm::new(String::from(UNIVERSAL_VM_NAME))
+        .with_config_img(get_dependency_path(
+            "rs/tests/networking/canister_http/http_uvm_config_image.zst",
+        ))
+        .enable_ipv4()
+        .start(&env)
+        .expect("failed to set up universal VM");
+
+    start_httpbin_on_uvm(&env);
+    info!(&logger, "Started Universal VM!");
+
+    // Create raw BN vm to get ipv6 address with which we configure IC.
+    let bn_vm = BoundaryNode::new(BN_NAME.to_string())
+        .allocate_vm(&env)
+        .unwrap();
+    let bn_ipv6 = bn_vm.ipv6();
+
+    info!(&logger, "Created raw BN with IP {}!", bn_ipv6);
+
+    // Create IC with injected socks proxy.
+    InternetComputer::new()
+        .with_socks_proxy(format!("socks5://[{bn_ipv6}]:1080"))
+        .add_subnet(
+            Subnet::new(SubnetType::System)
+                .with_features(SubnetFeatures {
+                    http_requests: true,
+                    ..SubnetFeatures::default()
+                })
+                .add_nodes(1),
+        )
+        .add_subnet(
+            Subnet::new(SubnetType::Application)
+                .with_features(SubnetFeatures {
+                    http_requests: true,
+                    ..SubnetFeatures::default()
+                })
+                .add_nodes(40),
+        )
+        .with_api_boundary_nodes(1)
+        .setup_and_start(&env)
+        .expect("failed to setup IC under test");
+
+    await_nodes_healthy(&env);
+    install_nns_canisters(&env);
+
+    // Start BN.
+    bn_vm
+        .for_ic(&env, "")
+        .start(&env)
+        .expect("failed to setup BoundaryNode VM");
+
+    env.sync_with_prometheus_by_name("", env.get_playnet_url(BN_NAME));
+
+    let boundary_node_vm = env
+        .get_deployed_boundary_node(BN_NAME)
+        .unwrap()
+        .get_snapshot()
+        .unwrap();
+
+    info!(
+        &logger,
+        "Boundary node {BN_NAME} has IPv4 {:?} and IPv6 {:?}",
+        boundary_node_vm.block_on_ipv4().unwrap(),
+        boundary_node_vm.ipv6()
+    );
+
+    info!(&logger, "Checking BN health");
+    boundary_node_vm
+        .await_status_is_healthy()
+        .expect("Boundary node did not come up healthy.");
+}
+
 pub fn setup(env: TestEnv) {
     std::thread::scope(|s| {
-        // Set up IC with 1 system subnet and 4 application subnets
+        // Set up IC with 1 system subnet with one node, and one application subnet with 40 nodes.
         s.spawn(|| {
             InternetComputer::new()
                 .add_subnet(Subnet::new(SubnetType::System).add_nodes(1))
@@ -64,7 +150,7 @@ pub fn setup(env: TestEnv) {
                             http_requests: true,
                             ..SubnetFeatures::default()
                         })
-                        .add_nodes(4),
+                        .add_nodes(40),
                 )
                 .setup_and_start(&env)
                 .expect("failed to setup IC under test");

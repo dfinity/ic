@@ -62,10 +62,13 @@ pub struct CanisterHttp {
     logger: ReplicaLogger,
     metrics: AdapterMetrics,
     http_connect_timeout_secs: u64,
+    failed_requests: Arc<RwLock<u64>>,
+    total_requests: Arc<RwLock<u64>>,
 }
 
 impl CanisterHttp {
     pub fn new(config: Config, logger: ReplicaLogger, metrics: &MetricsRegistry) -> Self {
+        info!(logger, "debuggg Creating CanisterHttp adapter");
         // Socks client setup
         let mut http_connector = HttpConnector::new();
         http_connector.enforce_http(false);
@@ -114,6 +117,8 @@ impl CanisterHttp {
             logger,
             metrics: AdapterMetrics::new(metrics),
             http_connect_timeout_secs: config.http_connect_timeout_secs,
+            failed_requests: Arc::new(RwLock::new(0)),
+            total_requests: Arc::new(RwLock::new(0)),  
         }
     }
 
@@ -308,6 +313,11 @@ impl HttpsOutcallsService for CanisterHttp {
         &self,
         request: Request<HttpsOutcallRequest>,
     ) -> Result<Response<HttpsOutcallResponse>, Status> {
+        // {
+        //     let mut total_requests = self.total_requests.write();
+        //     *total_requests += 1;
+        // }
+        info!(self.logger, "debugggg outcall");
         self.metrics.requests.inc();
 
         let req = request.into_inner();
@@ -441,6 +451,13 @@ impl HttpsOutcallsService for CanisterHttp {
                 .request_errors
                 .with_label_values(&[LABEL_CONNECT])
                 .inc();
+            // {
+            //     let mut failed_requests = self.failed_requests.write();
+            //     *failed_requests += 1;
+            //     let total_requests: parking_lot::lock_api::RwLockReadGuard<'_, parking_lot::RawRwLock, u64> = self.total_requests.read();
+            //     info!(self.logger, "debuggg failed_requests: {} out of total requests {}", *failed_requests, *total_requests);
+            // }
+            info!(self.logger, "debuggg outcall failed {:?}", err);
             Status::new(
                 tonic::Code::Unavailable,
                 format!(
@@ -450,6 +467,7 @@ impl HttpsOutcallsService for CanisterHttp {
                 ),
             )
         })?;
+        info!(self.logger, "debugggg outcall success");
         self.metrics
             .network_traffic
             .with_label_values(&[LABEL_UPLOAD])

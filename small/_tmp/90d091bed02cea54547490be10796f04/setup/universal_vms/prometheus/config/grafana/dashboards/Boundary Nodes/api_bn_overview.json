@@ -1,0 +1,6256 @@
+{
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": {
+          "type": "grafana",
+          "uid": "-- Grafana --"
+        },
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "target": {
+          "limit": 100,
+          "matchAny": false,
+          "tags": [],
+          "type": "dashboard"
+        },
+        "type": "dashboard"
+      }
+    ]
+  },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": 29,
+  "links": [],
+  "panels": [
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "custom": {
+            "fillOpacity": 70,
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineWidth": 0,
+            "spanNulls": false
+          },
+          "mappings": [],
+          "max": 1,
+          "min": 0,
+          "thresholds": {
+            "mode": "percentage",
+            "steps": [
+              {
+                "color": "semi-dark-red",
+                "value": null
+              },
+              {
+                "color": "semi-dark-red",
+                "value": 0
+              },
+              {
+                "color": "semi-dark-green",
+                "value": 100
+              }
+            ]
+          },
+          "unit": "percentunit"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 12,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "id": 44,
+      "options": {
+        "alignValue": "left",
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": false
+        },
+        "mergeValues": true,
+        "rowHeight": 0.9,
+        "showValue": "never",
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "11.3.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "\nlabel_replace(\n    up{job=\"ic_boundary\"},\n    \"ic_node\", \"$1\", \"ic_node\", \"([a-z0-9]+)-.*\"\n)",
+          "legendFormat": "{{ic_node}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "API BN Health",
+      "type": "state-timeline"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 12
+      },
+      "id": 34,
+      "panels": [],
+      "title": "Health Checking",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "custom": {
+            "fillOpacity": 100,
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineWidth": 0,
+            "spanNulls": false
+          },
+          "mappings": [],
+          "max": 1,
+          "min": 0,
+          "thresholds": {
+            "mode": "percentage",
+            "steps": [
+              {
+                "color": "dark-red",
+                "value": null
+              },
+              {
+                "color": "dark-red",
+                "value": 0
+              },
+              {
+                "color": "dark-red",
+                "value": 10
+              },
+              {
+                "color": "semi-dark-red",
+                "value": 20
+              },
+              {
+                "color": "red",
+                "value": 30
+              },
+              {
+                "color": "light-red",
+                "value": 40
+              },
+              {
+                "color": "dark-orange",
+                "value": 50
+              },
+              {
+                "color": "semi-dark-orange",
+                "value": 60
+              },
+              {
+                "color": "#EAB839",
+                "value": 70
+              },
+              {
+                "color": "light-green",
+                "value": 80
+              },
+              {
+                "color": "green",
+                "value": 90
+              },
+              {
+                "color": "dark-green",
+                "value": 100
+              }
+            ]
+          },
+          "unit": "percentunit"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 19,
+        "w": 24,
+        "x": 0,
+        "y": 13
+      },
+      "id": 36,
+      "options": {
+        "alignValue": "left",
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": false
+        },
+        "mergeValues": true,
+        "rowHeight": 0.9,
+        "showValue": "never",
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "11.3.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "count by(subnet_id) (ic_boundary_check_status{job=\"ic_boundary\",api_boundary_node=\"1\"} == 1) / count by(subnet_id) (ic_boundary_check_status{job=\"ic_boundary\",api_boundary_node=\"1\"})",
+          "legendFormat": "__auto",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "All Subnets Health Overview",
+      "type": "state-timeline"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 32
+      },
+      "id": 10,
+      "panels": [],
+      "title": "GuestOS",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "description": "",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "opacity",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 11,
+        "w": 6,
+        "x": 0,
+        "y": 33
+      },
+      "id": 2,
+      "options": {
+        "legend": {
+          "calcs": [
+            "lastNotNull",
+            "mean"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": false,
+          "sortBy": "Last *",
+          "sortDesc": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "pluginVersion": "11.3.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "avg(1 - rate(node_cpu_seconds_total{mode='idle',job=\"${job}\",ic=\"mercury\",api_boundary_node=\"1\"}[$__rate_interval])) * 100",
+          "legendFormat": "Avg",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "CPU Usage Overall",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "description": "",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 15,
+            "gradientMode": "opacity",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 11,
+        "w": 6,
+        "x": 6,
+        "y": 33
+      },
+      "id": 7,
+      "options": {
+        "legend": {
+          "calcs": [
+            "lastNotNull",
+            "mean"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": false,
+          "sortBy": "Last *",
+          "sortDesc": false
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "pluginVersion": "11.3.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "avg ((node_memory_MemFree_bytes{job=\"${job}\",ic=\"mercury\",api_boundary_node=\"1\"} + node_memory_Cached_bytes{job=\"${job}\",ic=\"mercury\",api_boundary_node=\"1\"} + node_memory_Buffers_bytes{job=\"${job}\",ic=\"mercury\",api_boundary_node=\"1\"} + node_memory_SReclaimable_bytes{job=\"${job}\",ic=\"mercury\",api_boundary_node=\"1\"}) / node_memory_MemTotal_bytes{job=\"${job}\",ic=\"mercury\",api_boundary_node=\"1\"} * 100)",
+          "legendFormat": "Avg",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Free Memory % Overall",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "description": "",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 15,
+            "gradientMode": "opacity",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "none"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 11,
+        "w": 6,
+        "x": 12,
+        "y": 33
+      },
+      "id": 8,
+      "options": {
+        "legend": {
+          "calcs": [
+            "lastNotNull",
+            "mean"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": false,
+          "sortBy": "Last *",
+          "sortDesc": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "pluginVersion": "11.3.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "avg (node_load5{job=\"${job}\",ic=\"mercury\",api_boundary_node=\"1\"})",
+          "legendFormat": "Avg",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Load Average (5m) Overall",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "description": "",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "opacity",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 11,
+        "w": 6,
+        "x": 18,
+        "y": 33
+      },
+      "id": 21,
+      "options": {
+        "legend": {
+          "calcs": [
+            "lastNotNull",
+            "mean"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true,
+          "sortBy": "Mean",
+          "sortDesc": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "pluginVersion": "11.3.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "avg by (ic_node)(1 - rate(node_cpu_seconds_total{mode='idle',job=\"${job}\",ic=\"mercury\",api_boundary_node=\"1\"}[$__rate_interval])) * 100",
+          "legendFormat": "__auto",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "CPU Usage By API BN",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "description": "",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 15,
+            "gradientMode": "opacity",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 11,
+        "w": 12,
+        "x": 0,
+        "y": 44
+      },
+      "id": 22,
+      "options": {
+        "legend": {
+          "calcs": [
+            "lastNotNull",
+            "mean"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true,
+          "sortBy": "Last *",
+          "sortDesc": false
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "pluginVersion": "11.3.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "avg by (ic_node)((node_memory_MemFree_bytes{job=\"${job}\",ic=\"mercury\",api_boundary_node=\"1\"} + node_memory_Cached_bytes{job=\"${job}\",ic=\"mercury\",api_boundary_node=\"1\"} + node_memory_Buffers_bytes{job=\"${job}\",ic=\"mercury\",api_boundary_node=\"1\"} + node_memory_SReclaimable_bytes{job=\"${job}\",ic=\"mercury\",api_boundary_node=\"1\"}) / node_memory_MemTotal_bytes{job=\"${job}\",ic=\"mercury\",api_boundary_node=\"1\"} * 100)",
+          "legendFormat": "__auto",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Free Memory % By API BN",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "description": "",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 15,
+            "gradientMode": "opacity",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "none"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 11,
+        "w": 12,
+        "x": 12,
+        "y": 44
+      },
+      "id": 23,
+      "options": {
+        "legend": {
+          "calcs": [
+            "lastNotNull",
+            "mean"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true,
+          "sortBy": "Last *",
+          "sortDesc": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "pluginVersion": "11.3.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "avg by(ic_node) (node_load5{job=\"${job}\",ic=\"mercury\",api_boundary_node=\"1\"})",
+          "legendFormat": "__auto",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Load Average (5m) By API BN",
+      "type": "timeseries"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 55
+      },
+      "id": 12,
+      "panels": [],
+      "title": "Requests",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "vertamedia-clickhouse-datasource",
+        "uid": "PABAB0CF1FFFED704"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 43,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "normal"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "noValue": "0",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "reqps"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 11,
+        "w": 6,
+        "x": 0,
+        "y": 56
+      },
+      "id": 5,
+      "interval": "1s",
+      "maxDataPoints": 300,
+      "options": {
+        "legend": {
+          "calcs": [
+            "lastNotNull",
+            "mean"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true,
+          "sortBy": "Mean",
+          "sortDesc": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "pluginVersion": "11.3.0",
+      "targets": [
+        {
+          "database": "default",
+          "datasource": {
+            "type": "vertamedia-clickhouse-datasource",
+            "uid": "PABAB0CF1FFFED704"
+          },
+          "dateColDataType": "",
+          "dateLoading": false,
+          "dateTimeColDataType": "date",
+          "dateTimeType": "DATETIME",
+          "datetimeLoading": false,
+          "extrapolate": true,
+          "format": "time_series",
+          "formattedQuery": "SELECT $timeSeries as t, count() FROM $table WHERE $timeFilter GROUP BY t ORDER BY t",
+          "intervalFactor": 1,
+          "query": "SELECT\n  $timeSeries as t,\n  ic_node_name,\n  ic_node_id,\n  count() /($__interval_ms / 1000)\nFROM\n  $table\nWHERE\n  $timeFilter\n  AND env = '${env}'\n  AND request_type != ''\nGROUP BY\n  t,\n  ic_node_name,\n  ic_node_id\nORDER BY t\n",
+          "rawQuery": "SELECT\n  (intDiv(toUInt32(date), 300) * 300) * 1000 as t,\n  ic_node_name,\n  ic_node_id,\n  count() /(300000 / 1000)\nFROM\n  default.ic_boundary\nWHERE\n  date >= toDateTime(1718193133) AND date <= toDateTime(1718279533)\n  AND env = 'PROD'\n  AND request_type != ''\nGROUP BY\n  t,\n  ic_node_name,\n  ic_node_id\nORDER BY t",
+          "refId": "A",
+          "round": "0s",
+          "skip_comments": true,
+          "table": "ic_boundary",
+          "tableLoading": false
+        }
+      ],
+      "title": "Requests Per Second By BN",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "vertamedia-clickhouse-datasource",
+        "uid": "PABAB0CF1FFFED704"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 56,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "normal"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "noValue": "0",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "reqps"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 11,
+        "w": 6,
+        "x": 6,
+        "y": 56
+      },
+      "id": 18,
+      "interval": "1s",
+      "maxDataPoints": 300,
+      "options": {
+        "legend": {
+          "calcs": [
+            "lastNotNull",
+            "mean"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true,
+          "sortBy": "Mean",
+          "sortDesc": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "pluginVersion": "11.3.0",
+      "targets": [
+        {
+          "database": "default",
+          "datasource": {
+            "type": "vertamedia-clickhouse-datasource",
+            "uid": "PABAB0CF1FFFED704"
+          },
+          "dateColDataType": "",
+          "dateLoading": false,
+          "dateTimeColDataType": "date",
+          "dateTimeType": "DATETIME",
+          "datetimeLoading": false,
+          "extrapolate": true,
+          "format": "time_series",
+          "formattedQuery": "SELECT $timeSeries as t, count() FROM $table WHERE $timeFilter GROUP BY t ORDER BY t",
+          "intervalFactor": 1,
+          "query": "SELECT\n  $timeSeries as t,\n  status,\n  count() /($__interval_ms / 1000)\nFROM\n  $table\nWHERE\n  $timeFilter\n  AND env = '${env}'\n  AND status > 0\nGROUP BY\n  t,\n  status\nORDER BY t\n",
+          "rawQuery": "SELECT\n  (intDiv(toUInt32(date), 300) * 300) * 1000 as t,\n  status,\n  count() /(300000 / 1000)\nFROM\n  default.ic_boundary\nWHERE\n  date >= toDateTime(1718193178) AND date <= toDateTime(1718279578)\n  AND env = 'PROD'\n  AND status > 0\nGROUP BY\n  t,\n  status\nORDER BY t",
+          "refId": "A",
+          "round": "0s",
+          "skip_comments": true,
+          "table": "ic_boundary",
+          "tableLoading": false
+        }
+      ],
+      "title": "Requests Per Second By Status",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "vertamedia-clickhouse-datasource",
+        "uid": "PABAB0CF1FFFED704"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 54,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "normal"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "noValue": "0",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "reqps"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 11,
+        "w": 6,
+        "x": 12,
+        "y": 56
+      },
+      "id": 4,
+      "interval": "1s",
+      "maxDataPoints": 300,
+      "options": {
+        "legend": {
+          "calcs": [
+            "lastNotNull",
+            "mean"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true,
+          "sortBy": "Mean",
+          "sortDesc": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "pluginVersion": "11.3.0",
+      "targets": [
+        {
+          "database": "default",
+          "datasource": {
+            "type": "vertamedia-clickhouse-datasource",
+            "uid": "PABAB0CF1FFFED704"
+          },
+          "dateColDataType": "",
+          "dateLoading": false,
+          "dateTimeColDataType": "date",
+          "dateTimeType": "DATETIME",
+          "datetimeLoading": false,
+          "extrapolate": true,
+          "format": "time_series",
+          "formattedQuery": "SELECT $timeSeries as t, count() FROM $table WHERE $timeFilter GROUP BY t ORDER BY t",
+          "intervalFactor": 1,
+          "query": "SELECT\n  $timeSeries as t,\n  toInt16(status/100)*100 as status,\n  count() /($__interval_ms / 1000)\nFROM\n  $table\nWHERE\n  $timeFilter\n  AND env = '${env}'\n  AND status > 0\nGROUP BY\n  t,\n  status\nORDER BY t\n",
+          "rawQuery": "SELECT\n  (intDiv(toUInt32(date), 300) * 300) * 1000 as t,\n  toInt16(status/100)*100 as status,\n  count() /(300000 / 1000)\nFROM\n  default.ic_boundary\nWHERE\n  date >= toDateTime(1718193255) AND date <= toDateTime(1718279655)\n  AND env = 'PROD'\n  AND status > 0\nGROUP BY\n  t,\n  status\nORDER BY t",
+          "refId": "A",
+          "round": "0s",
+          "skip_comments": true,
+          "table": "ic_boundary",
+          "tableLoading": false
+        }
+      ],
+      "title": "Requests Per Second By Status Group",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "vertamedia-clickhouse-datasource",
+        "uid": "PABAB0CF1FFFED704"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 53,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "normal"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "noValue": "0",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "reqps"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 11,
+        "w": 6,
+        "x": 18,
+        "y": 56
+      },
+      "id": 31,
+      "interval": "1s",
+      "maxDataPoints": 300,
+      "options": {
+        "legend": {
+          "calcs": [
+            "lastNotNull",
+            "mean"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true,
+          "sortBy": "Mean",
+          "sortDesc": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "pluginVersion": "11.3.0",
+      "targets": [
+        {
+          "database": "default",
+          "datasource": {
+            "type": "vertamedia-clickhouse-datasource",
+            "uid": "PABAB0CF1FFFED704"
+          },
+          "dateColDataType": "",
+          "dateLoading": false,
+          "dateTimeColDataType": "date",
+          "dateTimeType": "DATETIME",
+          "datetimeLoading": false,
+          "extrapolate": true,
+          "format": "time_series",
+          "formattedQuery": "SELECT $timeSeries as t, count() FROM $table WHERE $timeFilter GROUP BY t ORDER BY t",
+          "intervalFactor": 1,
+          "query": "SELECT\n  $timeSeries as t,\n  if(cache_status == '', 'UNKNOWN', cache_status) as cache_status,\n  count() / ($__interval_ms / 1000)\nFROM\n  $table\nWHERE\n  $timeFilter\n  AND env = '${env}'\n  AND status > 0\nGROUP BY\n  t,\n  cache_status\nORDER BY t\n",
+          "rawQuery": "SELECT\n  (intDiv(toUInt32(date), 300) * 300) * 1000 as t,\n  if(cache_status == '', 'UNKNOWN', cache_status) as cache_status,\n  count() / (300000 / 1000)\nFROM\n  default.ic_boundary\nWHERE\n  date >= toDateTime(1718194028) AND date <= toDateTime(1718280428)\n  AND env = 'PROD'\n  AND status > 0\nGROUP BY\n  t,\n  cache_status\nORDER BY t",
+          "refId": "A",
+          "round": "0s",
+          "skip_comments": true,
+          "table": "ic_boundary",
+          "tableLoading": false
+        }
+      ],
+      "title": "Requests Per Second By CacheStatus",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "vertamedia-clickhouse-datasource",
+        "uid": "PABAB0CF1FFFED704"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 30,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "smooth",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": 3600000,
+            "stacking": {
+              "group": "A",
+              "mode": "normal"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "reqps"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 12,
+        "x": 0,
+        "y": 67
+      },
+      "id": 53,
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "right",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "11.3.0",
+      "targets": [
+        {
+          "adHocFilters": [],
+          "adHocValuesQuery": "",
+          "add_metadata": true,
+          "contextWindowSize": "10",
+          "database": "default",
+          "datasource": {
+            "type": "vertamedia-clickhouse-datasource",
+            "uid": "PABAB0CF1FFFED704"
+          },
+          "dateTimeColDataType": "date",
+          "dateTimeType": "DATETIME",
+          "editorMode": "sql",
+          "extrapolate": true,
+          "format": "time_series",
+          "formattedQuery": "SELECT $timeSeries as t, count() FROM $table WHERE $timeFilter GROUP BY t ORDER BY t",
+          "interval": "",
+          "intervalFactor": 1,
+          "query": "SELECT\n  $timeSeries as t,\n  error_cause,\n  count() /($__interval_ms / 1000)\nFROM\n  $table\nWHERE\n  $timeFilter\n  AND env = '${env}'\n  AND error_cause NOT IN ('', 'none')\n  AND status > 0\nGROUP BY\n  t,\n  error_cause\nORDER BY t\n",
+          "rawQuery": "/* grafana dashboard=API Boundary Node Overview, user=0 */\nSELECT\n  (intDiv(toUInt32(undefined), 5) * 5) * 1000 as t,\n  error_cause,\n  count() /(5000 / 1000)\nFROM\n  default.ic_boundary\nWHERE\n  undefined >= toDateTime(1738748534) AND undefined <= toDateTime(1738752134)\n  AND env = 'PROD'\n  AND error_cause NOT IN ('', 'none')\n  AND status > 0\nGROUP BY\n  t,\n  error_cause\nORDER BY t",
+          "refId": "A",
+          "round": "0s",
+          "skip_comments": true,
+          "table": "ic_boundary"
+        }
+      ],
+      "title": "Requests by Error Cause (Rate)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "vertamedia-clickhouse-datasource",
+        "uid": "PABAB0CF1FFFED704"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 51,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineStyle": {
+              "fill": "solid"
+            },
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "normal"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "noValue": "0",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "reqps"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 6,
+        "x": 12,
+        "y": 67
+      },
+      "id": 19,
+      "interval": "1s",
+      "maxDataPoints": 300,
+      "options": {
+        "legend": {
+          "calcs": [
+            "lastNotNull",
+            "mean"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true,
+          "sortBy": "Mean",
+          "sortDesc": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "pluginVersion": "11.3.0",
+      "targets": [
+        {
+          "database": "default",
+          "datasource": {
+            "type": "vertamedia-clickhouse-datasource",
+            "uid": "PABAB0CF1FFFED704"
+          },
+          "dateColDataType": "",
+          "dateLoading": false,
+          "dateTimeColDataType": "date",
+          "dateTimeType": "DATETIME",
+          "datetimeLoading": false,
+          "extrapolate": true,
+          "format": "time_series",
+          "formattedQuery": "SELECT $timeSeries as t, count() FROM $table WHERE $timeFilter GROUP BY t ORDER BY t",
+          "intervalFactor": 1,
+          "query": "SELECT\n  $timeSeries as t,\n  subnet_id,\n  count() /($__interval_ms / 1000)\nFROM\n  $table\nWHERE\n  $timeFilter\n  AND env = '${env}'\n  AND subnet_id != ''\nGROUP BY\n  t,\n  subnet_id\nORDER BY t\n",
+          "rawQuery": "SELECT\n  (intDiv(toUInt32(date), 300) * 300) * 1000 as t,\n  subnet_id,\n  count() /(300000 / 1000)\nFROM\n  default.ic_boundary\nWHERE\n  date >= toDateTime(1718193700) AND date <= toDateTime(1718280100)\n  AND env = 'PROD'\n  AND subnet_id != ''\nGROUP BY\n  t,\n  subnet_id\nORDER BY t",
+          "refId": "A",
+          "round": "0s",
+          "skip_comments": true,
+          "table": "ic_boundary",
+          "tableLoading": false
+        }
+      ],
+      "title": "Requests Per Second By Subnet",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "vertamedia-clickhouse-datasource",
+        "uid": "PABAB0CF1FFFED704"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 42,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineStyle": {
+              "fill": "solid"
+            },
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "normal"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "reqps"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 6,
+        "x": 18,
+        "y": 67
+      },
+      "id": 20,
+      "interval": "1s",
+      "maxDataPoints": 300,
+      "options": {
+        "legend": {
+          "calcs": [
+            "lastNotNull",
+            "mean"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true,
+          "sortBy": "Mean",
+          "sortDesc": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "pluginVersion": "11.3.0",
+      "targets": [
+        {
+          "database": "default",
+          "datasource": {
+            "type": "vertamedia-clickhouse-datasource",
+            "uid": "PABAB0CF1FFFED704"
+          },
+          "dateColDataType": "",
+          "dateLoading": false,
+          "dateTimeColDataType": "date",
+          "dateTimeType": "DATETIME",
+          "datetimeLoading": false,
+          "extrapolate": true,
+          "format": "time_series",
+          "formattedQuery": "SELECT $timeSeries as t, count() FROM $table WHERE $timeFilter GROUP BY t ORDER BY t",
+          "intervalFactor": 1,
+          "query": "WITH busy_canisters AS (\n  SELECT\n    canister_id\n  FROM\n    $table\n  WHERE\n    date >= ($__to - ($__to - $__from)/2)/1000 - 900\n    AND date <= ($__to + ($__to - $__from)/2)/1000 + 900\n    AND env = '${env}'\n    AND canister_id != ''\n  GROUP BY\n    canister_id\n  ORDER BY\n    count(*) DESC\n  LIMIT 10\n)\nSELECT\n  $timeSeries as t,\n  canister_id,\n  count(*) /($__interval_ms / 1000)\nFROM\n  $table\nWHERE\n  $timeFilter\n  AND env = '${env}'\n  AND canister_id GLOBAL IN (SELECT canister_id FROM busy_canisters)\nGROUP BY\n  t,\n  canister_id\nORDER BY t\n",
+          "rawQuery": "WITH busy_canisters AS (\n  SELECT\n    canister_id\n  FROM\n    default.ic_boundary\n  WHERE\n    date >= (1718280103424 - (1718280103424 - 1718193703424)/2)/1000 - 900\n    AND date <= (1718280103424 + (1718280103424 - 1718193703424)/2)/1000 + 900\n    AND env = 'PROD'\n    AND canister_id != ''\n  GROUP BY\n    canister_id\n  ORDER BY\n    count(*) DESC\n  LIMIT 10\n)\nSELECT\n  (intDiv(toUInt32(date), 300) * 300) * 1000 as t,\n  canister_id,\n  count(*) /(300000 / 1000)\nFROM\n  default.ic_boundary\nWHERE\n  date >= toDateTime(1718193798) AND date <= toDateTime(1718280198)\n  AND env = 'PROD'\n  AND canister_id GLOBAL IN (SELECT canister_id FROM busy_canisters)\nGROUP BY\n  t,\n  canister_id\nORDER BY t",
+          "refId": "A",
+          "round": "0s",
+          "skip_comments": true,
+          "table": "ic_boundary",
+          "tableLoading": false
+        }
+      ],
+      "title": "Requests Per Second By Canister ID (top10 over last 30min)",
+      "type": "timeseries"
+    },
+    {
+      "collapsed": true,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 77
+      },
+      "id": 15,
+      "panels": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "description": "",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "axisBorderShow": false,
+                "axisCenteredZero": false,
+                "axisColorMode": "text",
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "barWidthFactor": 0.6,
+                "drawStyle": "line",
+                "fillOpacity": 50,
+                "gradientMode": "none",
+                "hideFrom": {
+                  "legend": false,
+                  "tooltip": false,
+                  "viz": false
+                },
+                "insertNulls": false,
+                "lineInterpolation": "linear",
+                "lineWidth": 1,
+                "pointSize": 5,
+                "scaleDistribution": {
+                  "type": "linear"
+                },
+                "showPoints": "auto",
+                "spanNulls": false,
+                "stacking": {
+                  "group": "A",
+                  "mode": "normal"
+                },
+                "thresholdsStyle": {
+                  "mode": "off"
+                }
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  },
+                  {
+                    "color": "red",
+                    "value": 80
+                  }
+                ]
+              },
+              "unit": "binbps"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 11,
+            "w": 8,
+            "x": 0,
+            "y": 121
+          },
+          "id": 6,
+          "options": {
+            "legend": {
+              "calcs": [
+                "lastNotNull",
+                "mean"
+              ],
+              "displayMode": "table",
+              "placement": "bottom",
+              "showLegend": true,
+              "sortBy": "Last *",
+              "sortDesc": true
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "pluginVersion": "11.3.0",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
+              "editorMode": "code",
+              "expr": "avg by (ic_node)((rate(node_network_receive_bytes_total{job=\"${job}\",ic=\"mercury\",api_boundary_node=\"1\"}[$__rate_interval])+rate(node_network_transmit_bytes_total{job=\"${job}\",ic=\"mercury\",api_boundary_node=\"1\"}[$__rate_interval]))*8)",
+              "legendFormat": "__auto",
+              "range": true,
+              "refId": "A"
+            }
+          ],
+          "title": "Total traffic (In+Out)",
+          "type": "timeseries"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "description": "",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "axisBorderShow": false,
+                "axisCenteredZero": false,
+                "axisColorMode": "text",
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "barWidthFactor": 0.6,
+                "drawStyle": "line",
+                "fillOpacity": 50,
+                "gradientMode": "none",
+                "hideFrom": {
+                  "legend": false,
+                  "tooltip": false,
+                  "viz": false
+                },
+                "insertNulls": false,
+                "lineInterpolation": "linear",
+                "lineWidth": 1,
+                "pointSize": 5,
+                "scaleDistribution": {
+                  "type": "linear"
+                },
+                "showPoints": "auto",
+                "spanNulls": false,
+                "stacking": {
+                  "group": "A",
+                  "mode": "normal"
+                },
+                "thresholdsStyle": {
+                  "mode": "off"
+                }
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  },
+                  {
+                    "color": "red",
+                    "value": 80
+                  }
+                ]
+              },
+              "unit": "pps"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 11,
+            "w": 8,
+            "x": 8,
+            "y": 121
+          },
+          "id": 13,
+          "options": {
+            "legend": {
+              "calcs": [
+                "lastNotNull",
+                "mean"
+              ],
+              "displayMode": "table",
+              "placement": "bottom",
+              "showLegend": true,
+              "sortBy": "Last *",
+              "sortDesc": true
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "pluginVersion": "11.3.0",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
+              "editorMode": "code",
+              "expr": "avg by (ic_node)((rate(node_network_receive_packets_total{job=\"${job}\",ic=\"mercury\",api_boundary_node=\"1\"}[$__rate_interval])+rate(node_network_transmit_packets_total{job=\"${job}\",ic=\"mercury\",api_boundary_node=\"1\"}[$__rate_interval]))*8)",
+              "legendFormat": "__auto",
+              "range": true,
+              "refId": "A"
+            }
+          ],
+          "title": "Total packets (In+Out)",
+          "type": "timeseries"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "description": "",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "axisBorderShow": false,
+                "axisCenteredZero": false,
+                "axisColorMode": "text",
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "barWidthFactor": 0.6,
+                "drawStyle": "line",
+                "fillOpacity": 50,
+                "gradientMode": "none",
+                "hideFrom": {
+                  "legend": false,
+                  "tooltip": false,
+                  "viz": false
+                },
+                "insertNulls": false,
+                "lineInterpolation": "linear",
+                "lineWidth": 1,
+                "pointSize": 5,
+                "scaleDistribution": {
+                  "type": "linear"
+                },
+                "showPoints": "auto",
+                "spanNulls": false,
+                "stacking": {
+                  "group": "A",
+                  "mode": "normal"
+                },
+                "thresholdsStyle": {
+                  "mode": "off"
+                }
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  },
+                  {
+                    "color": "red",
+                    "value": 80
+                  }
+                ]
+              },
+              "unit": "short"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 11,
+            "w": 8,
+            "x": 16,
+            "y": 121
+          },
+          "id": 16,
+          "options": {
+            "legend": {
+              "calcs": [
+                "lastNotNull",
+                "mean"
+              ],
+              "displayMode": "table",
+              "placement": "bottom",
+              "showLegend": true,
+              "sortBy": "Last *",
+              "sortDesc": true
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "pluginVersion": "11.3.0",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
+              "editorMode": "code",
+              "expr": "avg by (ic_node)(node_netstat_Tcp_CurrEstab{job=\"${job}\",ic=\"mercury\",api_boundary_node=\"1\"})",
+              "legendFormat": "__auto",
+              "range": true,
+              "refId": "A"
+            }
+          ],
+          "title": "TCP Connections",
+          "type": "timeseries"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "description": "",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "axisBorderShow": false,
+                "axisCenteredZero": false,
+                "axisColorMode": "text",
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "barWidthFactor": 0.6,
+                "drawStyle": "line",
+                "fillOpacity": 50,
+                "gradientMode": "none",
+                "hideFrom": {
+                  "legend": false,
+                  "tooltip": false,
+                  "viz": false
+                },
+                "insertNulls": false,
+                "lineInterpolation": "linear",
+                "lineWidth": 1,
+                "pointSize": 5,
+                "scaleDistribution": {
+                  "type": "linear"
+                },
+                "showPoints": "auto",
+                "spanNulls": false,
+                "stacking": {
+                  "group": "A",
+                  "mode": "normal"
+                },
+                "thresholdsStyle": {
+                  "mode": "off"
+                }
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  },
+                  {
+                    "color": "red",
+                    "value": 80
+                  }
+                ]
+              },
+              "unit": "short"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 9,
+            "w": 8,
+            "x": 0,
+            "y": 132
+          },
+          "id": 17,
+          "options": {
+            "legend": {
+              "calcs": [
+                "lastNotNull",
+                "mean"
+              ],
+              "displayMode": "table",
+              "placement": "bottom",
+              "showLegend": true,
+              "sortBy": "Last *",
+              "sortDesc": true
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "none"
+            }
+          },
+          "pluginVersion": "11.3.0",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
+              "editorMode": "code",
+              "expr": "avg by (ic_node)(rate(node_netstat_TcpExt_SyncookiesSent{job=\"${job}\",ic=\"mercury\",api_boundary_node=\"1\"}[$__rate_interval]))",
+              "legendFormat": "__auto",
+              "range": true,
+              "refId": "A"
+            }
+          ],
+          "title": "TCP SynCookies Sent",
+          "type": "timeseries"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "description": "",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "axisBorderShow": false,
+                "axisCenteredZero": false,
+                "axisColorMode": "text",
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "barWidthFactor": 0.6,
+                "drawStyle": "line",
+                "fillOpacity": 50,
+                "gradientMode": "none",
+                "hideFrom": {
+                  "legend": false,
+                  "tooltip": false,
+                  "viz": false
+                },
+                "insertNulls": false,
+                "lineInterpolation": "linear",
+                "lineWidth": 1,
+                "pointSize": 5,
+                "scaleDistribution": {
+                  "type": "linear"
+                },
+                "showPoints": "auto",
+                "spanNulls": false,
+                "stacking": {
+                  "group": "A",
+                  "mode": "normal"
+                },
+                "thresholdsStyle": {
+                  "mode": "off"
+                }
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  },
+                  {
+                    "color": "red",
+                    "value": 80
+                  }
+                ]
+              },
+              "unit": "short"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 9,
+            "w": 8,
+            "x": 8,
+            "y": 132
+          },
+          "id": 24,
+          "options": {
+            "legend": {
+              "calcs": [
+                "lastNotNull",
+                "mean"
+              ],
+              "displayMode": "table",
+              "placement": "bottom",
+              "showLegend": true,
+              "sortBy": "Last *",
+              "sortDesc": true
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "none"
+            }
+          },
+          "pluginVersion": "11.3.0",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
+              "editorMode": "code",
+              "expr": "avg by (ic_node)(rate(node_netstat_TcpExt_SyncookiesRecv{job=\"${job}\",ic=\"mercury\",api_boundary_node=\"1\"}[$__rate_interval]))",
+              "legendFormat": "__auto",
+              "range": true,
+              "refId": "A"
+            }
+          ],
+          "title": "TCP SynCookies Received",
+          "type": "timeseries"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "description": "",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "axisBorderShow": false,
+                "axisCenteredZero": false,
+                "axisColorMode": "text",
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "barWidthFactor": 0.6,
+                "drawStyle": "line",
+                "fillOpacity": 50,
+                "gradientMode": "none",
+                "hideFrom": {
+                  "legend": false,
+                  "tooltip": false,
+                  "viz": false
+                },
+                "insertNulls": false,
+                "lineInterpolation": "linear",
+                "lineWidth": 1,
+                "pointSize": 5,
+                "scaleDistribution": {
+                  "type": "linear"
+                },
+                "showPoints": "auto",
+                "spanNulls": false,
+                "stacking": {
+                  "group": "A",
+                  "mode": "normal"
+                },
+                "thresholdsStyle": {
+                  "mode": "off"
+                }
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  },
+                  {
+                    "color": "red",
+                    "value": 80
+                  }
+                ]
+              },
+              "unit": "short"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 9,
+            "w": 8,
+            "x": 16,
+            "y": 132
+          },
+          "id": 25,
+          "options": {
+            "legend": {
+              "calcs": [
+                "lastNotNull",
+                "mean"
+              ],
+              "displayMode": "table",
+              "placement": "bottom",
+              "showLegend": true,
+              "sortBy": "Last *",
+              "sortDesc": true
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "none"
+            }
+          },
+          "pluginVersion": "11.3.0",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
+              "editorMode": "code",
+              "expr": "avg by (ic_node)(rate(node_netstat_TcpExt_SyncookiesFailed{job=\"${job}\",ic=\"mercury\",api_boundary_node=\"1\"}[$__rate_interval]))",
+              "legendFormat": "__auto",
+              "range": true,
+              "refId": "A"
+            }
+          ],
+          "title": "TCP SynCookies Failed",
+          "type": "timeseries"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "description": "",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "axisBorderShow": false,
+                "axisCenteredZero": false,
+                "axisColorMode": "text",
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "barWidthFactor": 0.6,
+                "drawStyle": "line",
+                "fillOpacity": 50,
+                "gradientMode": "none",
+                "hideFrom": {
+                  "legend": false,
+                  "tooltip": false,
+                  "viz": false
+                },
+                "insertNulls": false,
+                "lineInterpolation": "linear",
+                "lineWidth": 1,
+                "pointSize": 5,
+                "scaleDistribution": {
+                  "type": "linear"
+                },
+                "showPoints": "auto",
+                "spanNulls": false,
+                "stacking": {
+                  "group": "A",
+                  "mode": "normal"
+                },
+                "thresholdsStyle": {
+                  "mode": "off"
+                }
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green"
+                  },
+                  {
+                    "color": "red",
+                    "value": 80
+                  }
+                ]
+              },
+              "unit": "short"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 9,
+            "w": 8,
+            "x": 0,
+            "y": 153
+          },
+          "id": 32,
+          "options": {
+            "legend": {
+              "calcs": [
+                "lastNotNull",
+                "mean"
+              ],
+              "displayMode": "table",
+              "placement": "bottom",
+              "showLegend": true,
+              "sortBy": "Last *",
+              "sortDesc": true
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "none"
+            }
+          },
+          "pluginVersion": "11.3.0",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
+              "editorMode": "code",
+              "expr": "avg by (ic_node)(rate(node_netstat_TcpExt_TCPTimeouts{job=\"${job}\",ic=\"mercury\",api_boundary_node=\"1\"}[$__rate_interval]))",
+              "legendFormat": "__auto",
+              "range": true,
+              "refId": "A"
+            }
+          ],
+          "title": "TCP Timeouts",
+          "type": "timeseries"
+        }
+      ],
+      "title": "Network",
+      "type": "row"
+    },
+    {
+      "collapsed": true,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 78
+      },
+      "id": 38,
+      "panels": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "custom": {
+                "fillOpacity": 70,
+                "hideFrom": {
+                  "legend": false,
+                  "tooltip": false,
+                  "viz": false
+                },
+                "insertNulls": false,
+                "lineWidth": 0,
+                "spanNulls": false
+              },
+              "mappings": [
+                {
+                  "options": {
+                    "pattern": "00.+",
+                    "result": {
+                      "color": "#000",
+                      "index": 0
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "01.+",
+                    "result": {
+                      "color": "#010",
+                      "index": 1
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "02.+",
+                    "result": {
+                      "color": "#020",
+                      "index": 2
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "03.+",
+                    "result": {
+                      "color": "#030",
+                      "index": 3
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "04.+",
+                    "result": {
+                      "color": "#040",
+                      "index": 4
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "05.+",
+                    "result": {
+                      "color": "#050",
+                      "index": 5
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "06.+",
+                    "result": {
+                      "color": "#060",
+                      "index": 6
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "07.+",
+                    "result": {
+                      "color": "#070",
+                      "index": 7
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "08.+",
+                    "result": {
+                      "color": "#080",
+                      "index": 8
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "09.+",
+                    "result": {
+                      "color": "#090",
+                      "index": 9
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "0a.+",
+                    "result": {
+                      "color": "#0a0",
+                      "index": 10
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "0b.+",
+                    "result": {
+                      "color": "#0b0",
+                      "index": 11
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "0c.+",
+                    "result": {
+                      "color": "#0c0",
+                      "index": 12
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "0d.+",
+                    "result": {
+                      "color": "#0d0",
+                      "index": 13
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "0e.+",
+                    "result": {
+                      "color": "#0e0",
+                      "index": 14
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "0f.+",
+                    "result": {
+                      "color": "#0f0",
+                      "index": 15
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "10.+",
+                    "result": {
+                      "color": "#100",
+                      "index": 16
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "11.+",
+                    "result": {
+                      "color": "#110",
+                      "index": 17
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "12.+",
+                    "result": {
+                      "color": "#120",
+                      "index": 18
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "13.+",
+                    "result": {
+                      "color": "#130",
+                      "index": 19
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "14.+",
+                    "result": {
+                      "color": "#140",
+                      "index": 20
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "15.+",
+                    "result": {
+                      "color": "#150",
+                      "index": 21
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "16.+",
+                    "result": {
+                      "color": "#160",
+                      "index": 22
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "17.+",
+                    "result": {
+                      "color": "#170",
+                      "index": 23
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "18.+",
+                    "result": {
+                      "color": "#180",
+                      "index": 24
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "19.+",
+                    "result": {
+                      "color": "#190",
+                      "index": 25
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "1a.+",
+                    "result": {
+                      "color": "#1a0",
+                      "index": 26
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "1b.+",
+                    "result": {
+                      "color": "#1b0",
+                      "index": 27
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "1c.+",
+                    "result": {
+                      "color": "#1c0",
+                      "index": 28
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "1d.+",
+                    "result": {
+                      "color": "#1d0",
+                      "index": 29
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "1e.+",
+                    "result": {
+                      "color": "#1e0",
+                      "index": 30
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "1f.+",
+                    "result": {
+                      "color": "#1f0",
+                      "index": 31
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "20.+",
+                    "result": {
+                      "color": "#200",
+                      "index": 32
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "21.+",
+                    "result": {
+                      "color": "#210",
+                      "index": 33
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "22.+",
+                    "result": {
+                      "color": "#220",
+                      "index": 34
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "23.+",
+                    "result": {
+                      "color": "#230",
+                      "index": 35
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "24.+",
+                    "result": {
+                      "color": "#240",
+                      "index": 36
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "25.+",
+                    "result": {
+                      "color": "#250",
+                      "index": 37
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "26.+",
+                    "result": {
+                      "color": "#260",
+                      "index": 38
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "27.+",
+                    "result": {
+                      "color": "#270",
+                      "index": 39
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "28.+",
+                    "result": {
+                      "color": "#280",
+                      "index": 40
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "29.+",
+                    "result": {
+                      "color": "#290",
+                      "index": 41
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "2a.+",
+                    "result": {
+                      "color": "#2a0",
+                      "index": 42
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "2b.+",
+                    "result": {
+                      "color": "#2b0",
+                      "index": 43
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "2c.+",
+                    "result": {
+                      "color": "#2c0",
+                      "index": 44
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "2d.+",
+                    "result": {
+                      "color": "#2d0",
+                      "index": 45
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "2e.+",
+                    "result": {
+                      "color": "#2e0",
+                      "index": 46
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "2f.+",
+                    "result": {
+                      "color": "#2f0",
+                      "index": 47
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "30.+",
+                    "result": {
+                      "color": "#300",
+                      "index": 48
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "31.+",
+                    "result": {
+                      "color": "#310",
+                      "index": 49
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "32.+",
+                    "result": {
+                      "color": "#320",
+                      "index": 50
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "33.+",
+                    "result": {
+                      "color": "#330",
+                      "index": 51
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "34.+",
+                    "result": {
+                      "color": "#340",
+                      "index": 52
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "35.+",
+                    "result": {
+                      "color": "#350",
+                      "index": 53
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "36.+",
+                    "result": {
+                      "color": "#360",
+                      "index": 54
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "37.+",
+                    "result": {
+                      "color": "#370",
+                      "index": 55
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "38.+",
+                    "result": {
+                      "color": "#380",
+                      "index": 56
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "39.+",
+                    "result": {
+                      "color": "#390",
+                      "index": 57
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "3a.+",
+                    "result": {
+                      "color": "#3a0",
+                      "index": 58
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "3b.+",
+                    "result": {
+                      "color": "#3b0",
+                      "index": 59
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "3c.+",
+                    "result": {
+                      "color": "#3c0",
+                      "index": 60
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "3d.+",
+                    "result": {
+                      "color": "#3d0",
+                      "index": 61
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "3e.+",
+                    "result": {
+                      "color": "#3e0",
+                      "index": 62
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "3f.+",
+                    "result": {
+                      "color": "#3f0",
+                      "index": 63
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "40.+",
+                    "result": {
+                      "color": "#400",
+                      "index": 64
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "41.+",
+                    "result": {
+                      "color": "#410",
+                      "index": 65
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "42.+",
+                    "result": {
+                      "color": "#420",
+                      "index": 66
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "43.+",
+                    "result": {
+                      "color": "#430",
+                      "index": 67
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "44.+",
+                    "result": {
+                      "color": "#440",
+                      "index": 68
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "45.+",
+                    "result": {
+                      "color": "#450",
+                      "index": 69
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "46.+",
+                    "result": {
+                      "color": "#460",
+                      "index": 70
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "47.+",
+                    "result": {
+                      "color": "#470",
+                      "index": 71
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "48.+",
+                    "result": {
+                      "color": "#480",
+                      "index": 72
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "49.+",
+                    "result": {
+                      "color": "#490",
+                      "index": 73
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "4a.+",
+                    "result": {
+                      "color": "#4a0",
+                      "index": 74
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "4b.+",
+                    "result": {
+                      "color": "#4b0",
+                      "index": 75
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "4c.+",
+                    "result": {
+                      "color": "#4c0",
+                      "index": 76
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "4d.+",
+                    "result": {
+                      "color": "#4d0",
+                      "index": 77
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "4e.+",
+                    "result": {
+                      "color": "#4e0",
+                      "index": 78
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "4f.+",
+                    "result": {
+                      "color": "#4f0",
+                      "index": 79
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "50.+",
+                    "result": {
+                      "color": "#500",
+                      "index": 80
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "51.+",
+                    "result": {
+                      "color": "#510",
+                      "index": 81
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "52.+",
+                    "result": {
+                      "color": "#520",
+                      "index": 82
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "53.+",
+                    "result": {
+                      "color": "#530",
+                      "index": 83
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "54.+",
+                    "result": {
+                      "color": "#540",
+                      "index": 84
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "55.+",
+                    "result": {
+                      "color": "#550",
+                      "index": 85
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "56.+",
+                    "result": {
+                      "color": "#560",
+                      "index": 86
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "57.+",
+                    "result": {
+                      "color": "#570",
+                      "index": 87
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "58.+",
+                    "result": {
+                      "color": "#580",
+                      "index": 88
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "59.+",
+                    "result": {
+                      "color": "#590",
+                      "index": 89
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "5a.+",
+                    "result": {
+                      "color": "#5a0",
+                      "index": 90
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "5b.+",
+                    "result": {
+                      "color": "#5b0",
+                      "index": 91
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "5c.+",
+                    "result": {
+                      "color": "#5c0",
+                      "index": 92
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "5d.+",
+                    "result": {
+                      "color": "#5d0",
+                      "index": 93
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "5e.+",
+                    "result": {
+                      "color": "#5e0",
+                      "index": 94
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "5f.+",
+                    "result": {
+                      "color": "#5f0",
+                      "index": 95
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "60.+",
+                    "result": {
+                      "color": "#600",
+                      "index": 96
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "61.+",
+                    "result": {
+                      "color": "#610",
+                      "index": 97
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "62.+",
+                    "result": {
+                      "color": "#620",
+                      "index": 98
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "63.+",
+                    "result": {
+                      "color": "#630",
+                      "index": 99
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "64.+",
+                    "result": {
+                      "color": "#640",
+                      "index": 100
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "65.+",
+                    "result": {
+                      "color": "#650",
+                      "index": 101
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "66.+",
+                    "result": {
+                      "color": "#660",
+                      "index": 102
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "67.+",
+                    "result": {
+                      "color": "#670",
+                      "index": 103
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "68.+",
+                    "result": {
+                      "color": "#680",
+                      "index": 104
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "69.+",
+                    "result": {
+                      "color": "#690",
+                      "index": 105
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "6a.+",
+                    "result": {
+                      "color": "#6a0",
+                      "index": 106
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "6b.+",
+                    "result": {
+                      "color": "#6b0",
+                      "index": 107
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "6c.+",
+                    "result": {
+                      "color": "#6c0",
+                      "index": 108
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "6d.+",
+                    "result": {
+                      "color": "#6d0",
+                      "index": 109
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "6e.+",
+                    "result": {
+                      "color": "#6e0",
+                      "index": 110
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "6f.+",
+                    "result": {
+                      "color": "#6f0",
+                      "index": 111
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "70.+",
+                    "result": {
+                      "color": "#700",
+                      "index": 112
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "71.+",
+                    "result": {
+                      "color": "#710",
+                      "index": 113
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "72.+",
+                    "result": {
+                      "color": "#720",
+                      "index": 114
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "73.+",
+                    "result": {
+                      "color": "#730",
+                      "index": 115
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "74.+",
+                    "result": {
+                      "color": "#740",
+                      "index": 116
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "75.+",
+                    "result": {
+                      "color": "#750",
+                      "index": 117
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "76.+",
+                    "result": {
+                      "color": "#760",
+                      "index": 118
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "77.+",
+                    "result": {
+                      "color": "#770",
+                      "index": 119
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "78.+",
+                    "result": {
+                      "color": "#780",
+                      "index": 120
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "79.+",
+                    "result": {
+                      "color": "#790",
+                      "index": 121
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "7a.+",
+                    "result": {
+                      "color": "#7a0",
+                      "index": 122
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "7b.+",
+                    "result": {
+                      "color": "#7b0",
+                      "index": 123
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "7c.+",
+                    "result": {
+                      "color": "#7c0",
+                      "index": 124
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "7d.+",
+                    "result": {
+                      "color": "#7d0",
+                      "index": 125
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "7e.+",
+                    "result": {
+                      "color": "#7e0",
+                      "index": 126
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "7f.+",
+                    "result": {
+                      "color": "#7f0",
+                      "index": 127
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "80.+",
+                    "result": {
+                      "color": "#800",
+                      "index": 128
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "81.+",
+                    "result": {
+                      "color": "#810",
+                      "index": 129
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "82.+",
+                    "result": {
+                      "color": "#820",
+                      "index": 130
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "83.+",
+                    "result": {
+                      "color": "#830",
+                      "index": 131
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "84.+",
+                    "result": {
+                      "color": "#840",
+                      "index": 132
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "85.+",
+                    "result": {
+                      "color": "#850",
+                      "index": 133
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "86.+",
+                    "result": {
+                      "color": "#860",
+                      "index": 134
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "87.+",
+                    "result": {
+                      "color": "#870",
+                      "index": 135
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "88.+",
+                    "result": {
+                      "color": "#880",
+                      "index": 136
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "89.+",
+                    "result": {
+                      "color": "#890",
+                      "index": 137
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "8a.+",
+                    "result": {
+                      "color": "#8a0",
+                      "index": 138
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "8b.+",
+                    "result": {
+                      "color": "#8b0",
+                      "index": 139
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "8c.+",
+                    "result": {
+                      "color": "#8c0",
+                      "index": 140
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "8d.+",
+                    "result": {
+                      "color": "#8d0",
+                      "index": 141
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "8e.+",
+                    "result": {
+                      "color": "#8e0",
+                      "index": 142
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "8f.+",
+                    "result": {
+                      "color": "#8f0",
+                      "index": 143
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "90.+",
+                    "result": {
+                      "color": "#900",
+                      "index": 144
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "91.+",
+                    "result": {
+                      "color": "#910",
+                      "index": 145
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "92.+",
+                    "result": {
+                      "color": "#920",
+                      "index": 146
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "93.+",
+                    "result": {
+                      "color": "#930",
+                      "index": 147
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "94.+",
+                    "result": {
+                      "color": "#940",
+                      "index": 148
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "95.+",
+                    "result": {
+                      "color": "#950",
+                      "index": 149
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "96.+",
+                    "result": {
+                      "color": "#960",
+                      "index": 150
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "97.+",
+                    "result": {
+                      "color": "#970",
+                      "index": 151
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "98.+",
+                    "result": {
+                      "color": "#980",
+                      "index": 152
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "99.+",
+                    "result": {
+                      "color": "#990",
+                      "index": 153
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "9a.+",
+                    "result": {
+                      "color": "#9a0",
+                      "index": 154
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "9b.+",
+                    "result": {
+                      "color": "#9b0",
+                      "index": 155
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "9c.+",
+                    "result": {
+                      "color": "#9c0",
+                      "index": 156
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "9d.+",
+                    "result": {
+                      "color": "#9d0",
+                      "index": 157
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "9e.+",
+                    "result": {
+                      "color": "#9e0",
+                      "index": 158
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "9f.+",
+                    "result": {
+                      "color": "#9f0",
+                      "index": 159
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "a0.+",
+                    "result": {
+                      "color": "#a00",
+                      "index": 160
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "a1.+",
+                    "result": {
+                      "color": "#a10",
+                      "index": 161
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "a2.+",
+                    "result": {
+                      "color": "#a20",
+                      "index": 162
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "a3.+",
+                    "result": {
+                      "color": "#a30",
+                      "index": 163
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "a4.+",
+                    "result": {
+                      "color": "#a40",
+                      "index": 164
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "a5.+",
+                    "result": {
+                      "color": "#a50",
+                      "index": 165
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "a6.+",
+                    "result": {
+                      "color": "#a60",
+                      "index": 166
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "a7.+",
+                    "result": {
+                      "color": "#a70",
+                      "index": 167
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "a8.+",
+                    "result": {
+                      "color": "#a80",
+                      "index": 168
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "a9.+",
+                    "result": {
+                      "color": "#a90",
+                      "index": 169
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "aa.+",
+                    "result": {
+                      "color": "#aa0",
+                      "index": 170
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "ab.+",
+                    "result": {
+                      "color": "#ab0",
+                      "index": 171
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "ac.+",
+                    "result": {
+                      "color": "#ac0",
+                      "index": 172
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "ad.+",
+                    "result": {
+                      "color": "#ad0",
+                      "index": 173
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "ae.+",
+                    "result": {
+                      "color": "#ae0",
+                      "index": 174
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "af.+",
+                    "result": {
+                      "color": "#af0",
+                      "index": 175
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "b0.+",
+                    "result": {
+                      "color": "#b00",
+                      "index": 176
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "b1.+",
+                    "result": {
+                      "color": "#b10",
+                      "index": 177
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "b2.+",
+                    "result": {
+                      "color": "#b20",
+                      "index": 178
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "b3.+",
+                    "result": {
+                      "color": "#b30",
+                      "index": 179
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "b4.+",
+                    "result": {
+                      "color": "#b40",
+                      "index": 180
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "b5.+",
+                    "result": {
+                      "color": "#b50",
+                      "index": 181
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "b6.+",
+                    "result": {
+                      "color": "#b60",
+                      "index": 182
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "b7.+",
+                    "result": {
+                      "color": "#b70",
+                      "index": 183
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "b8.+",
+                    "result": {
+                      "color": "#b80",
+                      "index": 184
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "b9.+",
+                    "result": {
+                      "color": "#b90",
+                      "index": 185
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "ba.+",
+                    "result": {
+                      "color": "#ba0",
+                      "index": 186
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "bb.+",
+                    "result": {
+                      "color": "#bb0",
+                      "index": 187
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "bc.+",
+                    "result": {
+                      "color": "#bc0",
+                      "index": 188
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "bd.+",
+                    "result": {
+                      "color": "#bd0",
+                      "index": 189
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "be.+",
+                    "result": {
+                      "color": "#be0",
+                      "index": 190
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "bf.+",
+                    "result": {
+                      "color": "#bf0",
+                      "index": 191
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "c0.+",
+                    "result": {
+                      "color": "#c00",
+                      "index": 192
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "c1.+",
+                    "result": {
+                      "color": "#c10",
+                      "index": 193
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "c2.+",
+                    "result": {
+                      "color": "#c20",
+                      "index": 194
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "c3.+",
+                    "result": {
+                      "color": "#c30",
+                      "index": 195
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "c4.+",
+                    "result": {
+                      "color": "#c40",
+                      "index": 196
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "c5.+",
+                    "result": {
+                      "color": "#c50",
+                      "index": 197
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "c6.+",
+                    "result": {
+                      "color": "#c60",
+                      "index": 198
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "c7.+",
+                    "result": {
+                      "color": "#c70",
+                      "index": 199
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "c8.+",
+                    "result": {
+                      "color": "#c80",
+                      "index": 200
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "c9.+",
+                    "result": {
+                      "color": "#c90",
+                      "index": 201
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "ca.+",
+                    "result": {
+                      "color": "#ca0",
+                      "index": 202
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "cb.+",
+                    "result": {
+                      "color": "#cb0",
+                      "index": 203
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "cc.+",
+                    "result": {
+                      "color": "#cc0",
+                      "index": 204
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "cd.+",
+                    "result": {
+                      "color": "#cd0",
+                      "index": 205
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "ce.+",
+                    "result": {
+                      "color": "#ce0",
+                      "index": 206
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "cf.+",
+                    "result": {
+                      "color": "#cf0",
+                      "index": 207
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "d0.+",
+                    "result": {
+                      "color": "#d00",
+                      "index": 208
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "d1.+",
+                    "result": {
+                      "color": "#d10",
+                      "index": 209
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "d2.+",
+                    "result": {
+                      "color": "#d20",
+                      "index": 210
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "d3.+",
+                    "result": {
+                      "color": "#d30",
+                      "index": 211
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "d4.+",
+                    "result": {
+                      "color": "#d40",
+                      "index": 212
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "d5.+",
+                    "result": {
+                      "color": "#d50",
+                      "index": 213
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "d6.+",
+                    "result": {
+                      "color": "#d60",
+                      "index": 214
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "d7.+",
+                    "result": {
+                      "color": "#d70",
+                      "index": 215
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "d8.+",
+                    "result": {
+                      "color": "#d80",
+                      "index": 216
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "d9.+",
+                    "result": {
+                      "color": "#d90",
+                      "index": 217
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "da.+",
+                    "result": {
+                      "color": "#da0",
+                      "index": 218
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "db.+",
+                    "result": {
+                      "color": "#db0",
+                      "index": 219
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "dc.+",
+                    "result": {
+                      "color": "#dc0",
+                      "index": 220
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "dd.+",
+                    "result": {
+                      "color": "#dd0",
+                      "index": 221
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "de.+",
+                    "result": {
+                      "color": "#de0",
+                      "index": 222
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "df.+",
+                    "result": {
+                      "color": "#df0",
+                      "index": 223
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "e0.+",
+                    "result": {
+                      "color": "#e00",
+                      "index": 224
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "e1.+",
+                    "result": {
+                      "color": "#e10",
+                      "index": 225
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "e2.+",
+                    "result": {
+                      "color": "#e20",
+                      "index": 226
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "e3.+",
+                    "result": {
+                      "color": "#e30",
+                      "index": 227
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "e4.+",
+                    "result": {
+                      "color": "#e40",
+                      "index": 228
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "e5.+",
+                    "result": {
+                      "color": "#e50",
+                      "index": 229
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "e6.+",
+                    "result": {
+                      "color": "#e60",
+                      "index": 230
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "e7.+",
+                    "result": {
+                      "color": "#e70",
+                      "index": 231
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "e8.+",
+                    "result": {
+                      "color": "#e80",
+                      "index": 232
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "e9.+",
+                    "result": {
+                      "color": "#e90",
+                      "index": 233
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "ea.+",
+                    "result": {
+                      "color": "#ea0",
+                      "index": 234
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "eb.+",
+                    "result": {
+                      "color": "#eb0",
+                      "index": 235
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "ec.+",
+                    "result": {
+                      "color": "#ec0",
+                      "index": 236
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "ed.+",
+                    "result": {
+                      "color": "#ed0",
+                      "index": 237
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "ee.+",
+                    "result": {
+                      "color": "#ee0",
+                      "index": 238
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "ef.+",
+                    "result": {
+                      "color": "#ef0",
+                      "index": 239
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "f0.+",
+                    "result": {
+                      "color": "#f00",
+                      "index": 240
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "f1.+",
+                    "result": {
+                      "color": "#f10",
+                      "index": 241
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "f2.+",
+                    "result": {
+                      "color": "#f20",
+                      "index": 242
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "f3.+",
+                    "result": {
+                      "color": "#f30",
+                      "index": 243
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "f4.+",
+                    "result": {
+                      "color": "#f40",
+                      "index": 244
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "f5.+",
+                    "result": {
+                      "color": "#f50",
+                      "index": 245
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "f6.+",
+                    "result": {
+                      "color": "#f60",
+                      "index": 246
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "f7.+",
+                    "result": {
+                      "color": "#f70",
+                      "index": 247
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "f8.+",
+                    "result": {
+                      "color": "#f80",
+                      "index": 248
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "f9.+",
+                    "result": {
+                      "color": "#f90",
+                      "index": 249
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "fa.+",
+                    "result": {
+                      "color": "#fa0",
+                      "index": 250
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "fb.+",
+                    "result": {
+                      "color": "#fb0",
+                      "index": 251
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "fc.+",
+                    "result": {
+                      "color": "#fc0",
+                      "index": 252
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "fd.+",
+                    "result": {
+                      "color": "#fd0",
+                      "index": 253
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "fe.+",
+                    "result": {
+                      "color": "#fe0",
+                      "index": 254
+                    }
+                  },
+                  "type": "regex"
+                },
+                {
+                  "options": {
+                    "pattern": "ff.+",
+                    "result": {
+                      "color": "#ff0",
+                      "index": 255
+                    }
+                  },
+                  "type": "regex"
+                }
+              ],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "transparent",
+                    "value": null
+                  }
+                ]
+              }
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 13,
+            "w": 17,
+            "x": 0,
+            "y": 163
+          },
+          "id": 40,
+          "options": {
+            "alignValue": "right",
+            "legend": {
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "mergeValues": true,
+            "rowHeight": 0.9,
+            "showValue": "auto",
+            "tooltip": {
+              "mode": "single",
+              "sort": "none"
+            }
+          },
+          "pluginVersion": "11.3.0",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
+              "editorMode": "code",
+              "expr": "label_replace(\n    label_replace(\n        (\n            ic_orchestrator_info{ic=\"mercury\", api_boundary_node=\"1\"}),\n        \"ic_node\", \"$1\", \"ic_node\", \"([a-z0-9]+)-.*\"\n    ),\n    \"ic_active_version\", \"$1\", \"ic_active_version\", \"([a-z0-9]{7}).*\"\n)\n",
+              "format": "table",
+              "legendFormat": "__auto",
+              "range": true,
+              "refId": "A"
+            }
+          ],
+          "title": "Version History",
+          "transformations": [
+            {
+              "id": "sortBy",
+              "options": {
+                "fields": {},
+                "sort": [
+                  {
+                    "field": "Value"
+                  }
+                ]
+              }
+            },
+            {
+              "id": "groupingToMatrix",
+              "options": {
+                "columnField": "ic_node",
+                "rowField": "Time",
+                "valueField": "ic_active_version"
+              }
+            },
+            {
+              "id": "convertFieldType",
+              "options": {
+                "conversions": [
+                  {
+                    "destinationType": "time",
+                    "targetField": "Time\\ic_node"
+                  }
+                ],
+                "fields": {}
+              }
+            }
+          ],
+          "type": "state-timeline"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "custom": {
+                "align": "left",
+                "cellOptions": {
+                  "type": "auto"
+                },
+                "inspect": true
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  },
+                  {
+                    "color": "red",
+                    "value": 80
+                  }
+                ]
+              }
+            },
+            "overrides": [
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "ic_node"
+                },
+                "properties": [
+                  {
+                    "id": "custom.width",
+                    "value": 90
+                  }
+                ]
+              }
+            ]
+          },
+          "gridPos": {
+            "h": 13,
+            "w": 7,
+            "x": 17,
+            "y": 163
+          },
+          "id": 42,
+          "options": {
+            "cellHeight": "sm",
+            "footer": {
+              "countRows": false,
+              "fields": "",
+              "reducer": [
+                "sum"
+              ],
+              "show": false
+            },
+            "showHeader": false
+          },
+          "pluginVersion": "11.3.0",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
+              "editorMode": "code",
+              "exemplar": false,
+              "expr": "label_replace(\n    ic_orchestrator_info{ic=\"mercury\", api_boundary_node=\"1\"}, \"ic_node\", \"$1\", \"ic_node\", \"([a-z0-9]+)-.*\"\n)",
+              "format": "table",
+              "instant": true,
+              "legendFormat": "__auto",
+              "range": false,
+              "refId": "A"
+            }
+          ],
+          "title": "Currently Active Versions",
+          "transformations": [
+            {
+              "id": "groupBy",
+              "options": {
+                "fields": {
+                  "ic_active_version": {
+                    "aggregations": [],
+                    "operation": "groupby"
+                  },
+                  "ic_node": {
+                    "aggregations": [],
+                    "operation": "groupby"
+                  }
+                }
+              }
+            }
+          ],
+          "type": "table"
+        }
+      ],
+      "title": "Versions Overview",
+      "type": "row"
+    },
+    {
+      "collapsed": true,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 79
+      },
+      "id": 50,
+      "panels": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "fixedColor": "super-light-yellow",
+                "mode": "fixed"
+              },
+              "custom": {
+                "align": "auto",
+                "cellOptions": {
+                  "type": "auto"
+                },
+                "inspect": false
+              },
+              "fieldMinMax": false,
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  }
+                ]
+              },
+              "unit": "none"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 11,
+            "w": 8,
+            "x": 0,
+            "y": 123
+          },
+          "id": 49,
+          "options": {
+            "cellHeight": "sm",
+            "footer": {
+              "countRows": false,
+              "fields": "",
+              "reducer": [
+                "sum"
+              ],
+              "show": false
+            },
+            "showHeader": false
+          },
+          "pluginVersion": "11.3.0",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
+              "editorMode": "code",
+              "exemplar": false,
+              "expr": "ic_boundary_generic_limiter_rules{api_boundary_node=\"1\", ic=\"mercury\"}",
+              "format": "table",
+              "instant": true,
+              "legendFormat": "{{ic_node}}",
+              "range": false,
+              "refId": "A"
+            }
+          ],
+          "title": "Active Rules per API BN",
+          "transformations": [
+            {
+              "id": "groupBy",
+              "options": {
+                "fields": {
+                  "Value": {
+                    "aggregations": [],
+                    "operation": "groupby"
+                  },
+                  "ic_node": {
+                    "aggregations": [],
+                    "operation": "groupby"
+                  }
+                }
+              }
+            }
+          ],
+          "type": "table"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "description": "",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "axisBorderShow": false,
+                "axisCenteredZero": false,
+                "axisColorMode": "text",
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "barWidthFactor": 0.6,
+                "drawStyle": "line",
+                "fillOpacity": 0,
+                "gradientMode": "none",
+                "hideFrom": {
+                  "legend": false,
+                  "tooltip": false,
+                  "viz": false
+                },
+                "insertNulls": false,
+                "lineInterpolation": "linear",
+                "lineWidth": 1,
+                "pointSize": 5,
+                "scaleDistribution": {
+                  "type": "linear"
+                },
+                "showPoints": "auto",
+                "spanNulls": false,
+                "stacking": {
+                  "group": "A",
+                  "mode": "none"
+                },
+                "thresholdsStyle": {
+                  "mode": "off"
+                }
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  }
+                ]
+              },
+              "unit": "reqps"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 11,
+            "w": 7,
+            "x": 8,
+            "y": 123
+          },
+          "id": 51,
+          "options": {
+            "legend": {
+              "calcs": [
+                "mean"
+              ],
+              "displayMode": "table",
+              "placement": "right",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "single",
+              "sort": "none"
+            }
+          },
+          "pluginVersion": "11.3.0",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
+              "editorMode": "code",
+              "expr": "rate(sum by (decision) (ic_boundary_generic_limiter_decisions{api_boundary_node=\"1\", ic=\"mercury\"})[$__rate_interval])",
+              "legendFormat": "__auto",
+              "range": true,
+              "refId": "A"
+            }
+          ],
+          "title": "Rate-Limiting Decisions (overall)",
+          "type": "timeseries"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "axisBorderShow": false,
+                "axisCenteredZero": false,
+                "axisColorMode": "text",
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "barWidthFactor": 0.6,
+                "drawStyle": "line",
+                "fillOpacity": 0,
+                "gradientMode": "none",
+                "hideFrom": {
+                  "legend": false,
+                  "tooltip": false,
+                  "viz": false
+                },
+                "insertNulls": false,
+                "lineInterpolation": "linear",
+                "lineWidth": 1,
+                "pointSize": 5,
+                "scaleDistribution": {
+                  "type": "linear"
+                },
+                "showPoints": "auto",
+                "spanNulls": false,
+                "stacking": {
+                  "group": "A",
+                  "mode": "none"
+                },
+                "thresholdsStyle": {
+                  "mode": "off"
+                }
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  },
+                  {
+                    "color": "red",
+                    "value": 80
+                  }
+                ]
+              },
+              "unit": "reqps"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 11,
+            "w": 9,
+            "x": 15,
+            "y": 123
+          },
+          "id": 52,
+          "options": {
+            "legend": {
+              "calcs": [],
+              "displayMode": "table",
+              "placement": "right",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "single",
+              "sort": "none"
+            }
+          },
+          "pluginVersion": "11.3.0",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
+              "editorMode": "code",
+              "expr": "sum by (ic_node) (rate(\n    label_replace(\n        ic_boundary_generic_limiter_fetches{api_boundary_node=\"1\", ic=\"mercury\", result=\"failure\"}[$__rate_interval],\n        \"ic_node\", \"$1\", \"ic_node\", \"([a-z0-9]+)-.*\"\n    )\n))",
+              "legendFormat": "{{ic_node}}",
+              "range": true,
+              "refId": "A"
+            }
+          ],
+          "title": "Fetch Failures",
+          "type": "timeseries"
+        }
+      ],
+      "title": "Rate-Limiting on the API BNs",
+      "type": "row"
+    },
+    {
+      "collapsed": true,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 80
+      },
+      "id": 45,
+      "panels": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  },
+                  {
+                    "color": "red",
+                    "value": 80
+                  }
+                ]
+              }
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 6,
+            "w": 4,
+            "x": 0,
+            "y": 124
+          },
+          "id": 47,
+          "options": {
+            "colorMode": "value",
+            "graphMode": "area",
+            "justifyMode": "auto",
+            "orientation": "auto",
+            "percentChangeColorMode": "standard",
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "showPercentChange": false,
+            "textMode": "auto",
+            "wideLayout": true
+          },
+          "pluginVersion": "11.3.0",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
+              "editorMode": "code",
+              "exemplar": false,
+              "expr": "active_config_version{ic=\"mercury\", instance=\"u637p-5aaaa-aaaaq-qaaca-cai.raw.ic0.app:443\", job=\"rate-limiting-canister\", owner=\"#eng-boundary-nodes\"}",
+              "instant": true,
+              "legendFormat": "Version",
+              "range": false,
+              "refId": "A"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
+              "editorMode": "code",
+              "exemplar": false,
+              "expr": "active_rules_count{ic=\"mercury\", instance=\"u637p-5aaaa-aaaaq-qaaca-cai.raw.ic0.app:443\", job=\"rate-limiting-canister\", owner=\"#eng-boundary-nodes\"}",
+              "hide": false,
+              "instant": true,
+              "legendFormat": "Rules",
+              "range": false,
+              "refId": "B"
+            }
+          ],
+          "title": "Active Configuration",
+          "type": "stat"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "continuous-GrYlRd"
+              },
+              "mappings": [],
+              "max": 1000000000,
+              "min": 0,
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  },
+                  {
+                    "color": "red",
+                    "value": 80
+                  }
+                ]
+              },
+              "unit": "bytes"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 6,
+            "w": 5,
+            "x": 4,
+            "y": 124
+          },
+          "id": 48,
+          "options": {
+            "colorMode": "value",
+            "graphMode": "area",
+            "justifyMode": "auto",
+            "orientation": "auto",
+            "percentChangeColorMode": "standard",
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "showPercentChange": false,
+            "textMode": "auto",
+            "wideLayout": true
+          },
+          "pluginVersion": "11.3.0",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
+              "editorMode": "code",
+              "exemplar": false,
+              "expr": "stable_memory_bytes{ic=\"mercury\", instance=\"u637p-5aaaa-aaaaq-qaaca-cai.raw.ic0.app:443\", job=\"rate-limiting-canister\", owner=\"#eng-boundary-nodes\"}",
+              "instant": true,
+              "legendFormat": "__auto",
+              "range": false,
+              "refId": "A"
+            }
+          ],
+          "title": "Stable Memory",
+          "type": "stat"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "text",
+                    "value": null
+                  }
+                ]
+              },
+              "unit": "dateTimeAsSystem"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 6,
+            "w": 12,
+            "x": 9,
+            "y": 124
+          },
+          "id": 46,
+          "options": {
+            "colorMode": "value",
+            "graphMode": "area",
+            "justifyMode": "auto",
+            "orientation": "auto",
+            "percentChangeColorMode": "standard",
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "showPercentChange": false,
+            "textMode": "auto",
+            "wideLayout": true
+          },
+          "pluginVersion": "11.3.0",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
+              "editorMode": "code",
+              "exemplar": false,
+              "expr": "last_successful_registry_poll{ic=\"mercury\", instance=\"u637p-5aaaa-aaaaq-qaaca-cai.raw.ic0.app:443\", job=\"rate-limiting-canister\", owner=\"#eng-boundary-nodes\"}/1000000",
+              "instant": true,
+              "legendFormat": "Last Poll",
+              "range": false,
+              "refId": "A"
+            }
+          ],
+          "title": "Last Registry Poll",
+          "type": "stat"
+        }
+      ],
+      "title": "Rate-Limiting Canister",
+      "type": "row"
+    },
+    {
+      "collapsed": true,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 81
+      },
+      "id": 54,
+      "panels": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  }
+                ]
+              }
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 2,
+            "w": 4,
+            "x": 0,
+            "y": 82
+          },
+          "id": 58,
+          "options": {
+            "colorMode": "value",
+            "graphMode": "area",
+            "justifyMode": "auto",
+            "orientation": "auto",
+            "percentChangeColorMode": "standard",
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "showPercentChange": false,
+            "textMode": "auto",
+            "wideLayout": true
+          },
+          "pluginVersion": "11.3.0",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
+              "editorMode": "code",
+              "exemplar": false,
+              "expr": "last_salt_id{ic=\"mercury\", job=\"salt-sharing-canister\"}",
+              "format": "table",
+              "instant": true,
+              "legendFormat": "__auto",
+              "range": false,
+              "refId": "A"
+            }
+          ],
+          "title": "Active Salt ID (Canister)",
+          "type": "stat"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "continuous-GrYlRd"
+              },
+              "mappings": [],
+              "max": 1000000000,
+              "min": 0,
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  },
+                  {
+                    "color": "red",
+                    "value": 80
+                  }
+                ]
+              },
+              "unit": "bytes"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 2,
+            "w": 3,
+            "x": 4,
+            "y": 82
+          },
+          "id": 59,
+          "options": {
+            "colorMode": "value",
+            "graphMode": "area",
+            "justifyMode": "auto",
+            "orientation": "auto",
+            "percentChangeColorMode": "standard",
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "showPercentChange": false,
+            "textMode": "auto",
+            "wideLayout": true
+          },
+          "pluginVersion": "11.3.0",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
+              "editorMode": "code",
+              "exemplar": false,
+              "expr": "stable_memory_bytes{ic=\"mercury\", instance=\"uz2z3-qyaaa-aaaaq-qaacq-cai.raw.ic0.app:443\", job=\"salt-sharing-canister\", owner=\"#eng-boundary-nodes\"}\n",
+              "instant": true,
+              "legendFormat": "__auto",
+              "range": false,
+              "refId": "A"
+            }
+          ],
+          "title": "Stable Memory",
+          "type": "stat"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "axisBorderShow": false,
+                "axisCenteredZero": false,
+                "axisColorMode": "text",
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "barWidthFactor": 0.6,
+                "drawStyle": "line",
+                "fillOpacity": 0,
+                "gradientMode": "none",
+                "hideFrom": {
+                  "legend": false,
+                  "tooltip": false,
+                  "viz": false
+                },
+                "insertNulls": false,
+                "lineInterpolation": "linear",
+                "lineWidth": 1,
+                "pointSize": 5,
+                "scaleDistribution": {
+                  "type": "linear"
+                },
+                "showPoints": "auto",
+                "spanNulls": false,
+                "stacking": {
+                  "group": "A",
+                  "mode": "none"
+                },
+                "thresholdsStyle": {
+                  "mode": "off"
+                }
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  },
+                  {
+                    "color": "red",
+                    "value": 80
+                  }
+                ]
+              },
+              "unit": "reqps"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 13,
+            "w": 8,
+            "x": 7,
+            "y": 82
+          },
+          "id": 56,
+          "options": {
+            "legend": {
+              "calcs": [],
+              "displayMode": "table",
+              "placement": "right",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "single",
+              "sort": "none"
+            }
+          },
+          "pluginVersion": "11.3.0",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
+              "editorMode": "code",
+              "expr": "sum by (ic_node) (rate(\n    label_replace(\n            ic_boundary_anonymization_salt_fetches{api_boundary_node=\"1\", ic=\"mercury\", status=\"failure\"}[$__rate_interval],\n        \"ic_node\", \"$1\", \"ic_node\", \"([a-z0-9]+)-.*\"\n    )\n))\n",
+              "legendFormat": "{{ic_node}}",
+              "range": true,
+              "refId": "A"
+            }
+          ],
+          "title": "Fetch Failures (by API BN)",
+          "transformations": [
+            {
+              "id": "formatString",
+              "options": {}
+            }
+          ],
+          "type": "timeseries"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "axisBorderShow": false,
+                "axisCenteredZero": false,
+                "axisColorMode": "text",
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "barWidthFactor": 0.6,
+                "drawStyle": "line",
+                "fillOpacity": 0,
+                "gradientMode": "none",
+                "hideFrom": {
+                  "legend": false,
+                  "tooltip": false,
+                  "viz": false
+                },
+                "insertNulls": false,
+                "lineInterpolation": "linear",
+                "lineWidth": 1,
+                "pointSize": 5,
+                "scaleDistribution": {
+                  "type": "linear"
+                },
+                "showPoints": "auto",
+                "spanNulls": false,
+                "stacking": {
+                  "group": "A",
+                  "mode": "none"
+                },
+                "thresholdsStyle": {
+                  "mode": "off"
+                }
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  },
+                  {
+                    "color": "red",
+                    "value": 80
+                  }
+                ]
+              },
+              "unit": "reqps"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 13,
+            "w": 9,
+            "x": 15,
+            "y": 82
+          },
+          "id": 57,
+          "options": {
+            "legend": {
+              "calcs": [],
+              "displayMode": "table",
+              "placement": "right",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "single",
+              "sort": "none"
+            }
+          },
+          "pluginVersion": "11.3.0",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
+              "editorMode": "code",
+              "expr": "sum by (message) (rate(ic_boundary_anonymization_salt_fetches{api_boundary_node=\"1\", ic=\"mercury\", status=\"failure\"}[$__rate_interval]))\n",
+              "legendFormat": "{{message}}",
+              "range": true,
+              "refId": "A"
+            }
+          ],
+          "title": "Fetch Failures (by failure type)",
+          "type": "timeseries"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "fixedColor": "super-light-yellow",
+                "mode": "fixed"
+              },
+              "custom": {
+                "align": "auto",
+                "cellOptions": {
+                  "type": "auto"
+                },
+                "inspect": false
+              },
+              "fieldMinMax": false,
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  }
+                ]
+              },
+              "unit": "none"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 11,
+            "w": 7,
+            "x": 0,
+            "y": 84
+          },
+          "id": 55,
+          "options": {
+            "cellHeight": "sm",
+            "footer": {
+              "countRows": false,
+              "fields": "",
+              "reducer": [
+                "sum"
+              ],
+              "show": false
+            },
+            "showHeader": false
+          },
+          "pluginVersion": "11.3.0",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
+              "editorMode": "code",
+              "exemplar": false,
+              "expr": "ic_boundary_anonymization_salt_last_salt_id{api_boundary_node=\"1\", ic=\"mercury\"}",
+              "format": "table",
+              "instant": true,
+              "legendFormat": "{{ic_node}}",
+              "range": false,
+              "refId": "A"
+            }
+          ],
+          "title": "Active Salt ID",
+          "transformations": [
+            {
+              "id": "groupBy",
+              "options": {
+                "fields": {
+                  "Value": {
+                    "aggregations": [],
+                    "operation": "groupby"
+                  },
+                  "ic_node": {
+                    "aggregations": [],
+                    "operation": "groupby"
+                  }
+                }
+              }
+            }
+          ],
+          "type": "table"
+        }
+      ],
+      "title": "Anonymization - Salt Sharing",
+      "type": "row"
+    }
+  ],
+  "preload": false,
+  "refresh": false,
+  "schemaVersion": 40,
+  "tags": [
+    "API Boundary Node"
+  ],
+  "templating": {
+    "list": [
+      {
+        "hide": 2,
+        "name": "job",
+        "query": "node_exporter",
+        "skipUrlSync": true,
+        "type": "constant"
+      },
+      {
+        "hide": 2,
+        "name": "env",
+        "query": "PROD",
+        "skipUrlSync": true,
+        "type": "constant"
+      },
+      {
+        "current": {
+          "text": "IC Metrics (cluster local)",
+          "value": "IC Metrics (cluster local)"
+        },
+        "includeAll": false,
+        "name": "datasource",
+        "options": [],
+        "query": "prometheus",
+        "refresh": 1,
+        "regex": "/^IC/",
+        "type": "datasource"
+      }
+    ]
+  },
+  "time": {
+    "from": "now-24h",
+    "to": "now"
+  },
+  "timepicker": {},
+  "timezone": "",
+  "title": "API Boundary Node Overview",
+  "uid": "-Z2E5KUSz",
+  "version": 1,
+  "weekStart": ""
+}

@@ -1,0 +1,76 @@
+INFO: Invocation ID: 83d44b55-49d0-451e-8c0e-77113999b6ed
+INFO: Streaming build results to: https://dash.idx.dfinity.network/invocation/83d44b55-49d0-451e-8c0e-77113999b6ed
+Computing main repo mapping: 
+WARNING: Streamed test output requested. All tests will be run locally, without sharding, one at a time
+Loading: 
+Loading: 0 packages loaded
+WARNING: Build option --test_env has changed, discarding analysis cache (this can be expensive, see https://bazel.build/advanced/performance/iteration-speed).
+Analyzing: target //rs/tests/networking:canister_http_stress_test (0 packages loaded, 0 targets configured)
+Analyzing: target //rs/tests/networking:canister_http_stress_test (0 packages loaded, 0 targets configured)
+
+Analyzing: target //rs/tests/networking:canister_http_stress_test (0 packages loaded, 62613 targets configured)
+
+INFO: Analyzed target //rs/tests/networking:canister_http_stress_test (0 packages loaded, 62613 targets configured).
+[7,831 / 7,832] Compiling Rust bin canister_http_stress_test_bin (1 files) [for tool]; 0s remote-cache, linux-sandbox
+ERROR: /ic/rs/tests/networking/BUILD.bazel:35:16: Compiling Rust bin canister_http_stress_test_bin (1 files) [for tool] failed: (Exit 1): process_wrapper failed: error executing Rustc command (from target //rs/tests/networking:canister_http_stress_test_bin) bazel-out/k8-opt-exec-ST-d57f47055a04/bin/external/rules_rust/util/process_wrapper/process_wrapper --arg-file ... (remaining 176 arguments skipped)
+
+Use --sandbox_debug to see verbose messages from the sandbox and retain the sandbox build root for debugging
+error: format argument must be a string literal
+   --> rs/tests/networking/canister_http_stress_test.rs:122:53
+    |
+122 |         info!("Http request failed response: {:?}", res);
+    |                                                     ^^^
+    |
+help: you might be missing a string literal to format with
+    |
+122 |         info!("Http request failed response: {:?}", "{}", res);
+    |                                                     +++++
+
+warning: unused import: `anyhow::bail`
+  --> rs/tests/networking/canister_http_stress_test.rs:19:5
+   |
+19 | use anyhow::bail;
+   |     ^^^^^^^^^^^^
+   |
+   = note: `#[warn(unused_imports)]` on by default
+
+warning: unreachable statement
+  --> rs/tests/networking/canister_http_stress_test.rs:74:5
+   |
+72 |     return;
+   |     ------ any code following this expression is unreachable
+73 |
+74 |     test_proxy_canister(proxy_canister, url.clone(), logger.clone(), 500).await;
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ unreachable statement
+   |
+   = note: `#[warn(unreachable_code)]` on by default
+
+error[E0308]: mismatched types
+   --> rs/tests/networking/canister_http_stress_test.rs:122:9
+    |
+122 |         info!("Http request failed response: {:?}", res);
+    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |         |
+    |         expected `&Logger<_>`, found `&&str`
+    |         arguments to this function are incorrect
+    |
+    = note: expected reference `&Logger<_>`
+               found reference `&&'static str`
+note: method defined here
+   --> external/crate_index__slog-2.7.0/src/lib.rs:1232:12
+    = note: this error originates in the macro `log` which comes from the expansion of the macro `info` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error: aborting due to 2 previous errors; 2 warnings emitted
+
+For more information about this error, try `rustc --explain E0308`.
+[7,832 / 7,832] 1 / 1 tests, 1 failed; no actions running
+Target //rs/tests/networking:canister_http_stress_test failed to build
+Use --verbose_failures to see the command lines of failed build steps.
+INFO: Elapsed time: 9.738s, Critical Path: 6.50s
+INFO: 2 processes: 2 internal.
+ERROR: Build did NOT complete successfully
+FAILED: 
+//rs/tests/networking:canister_http_stress_test                 FAILED TO BUILD
+
+Executed 0 out of 1 test: 1 fails to build.
+INFO: Streaming build results to: https://dash.idx.dfinity.network/invocation/83d44b55-49d0-451e-8c0e-77113999b6ed
