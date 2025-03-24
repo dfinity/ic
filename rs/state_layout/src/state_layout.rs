@@ -973,7 +973,7 @@ impl StateLayout {
 
         // Atomically removes the checkpoint by first renaming it into tmp_path, and then deleting tmp_path.
         // This way maintains the invariant that <root>/checkpoints/<height> are always internally consistent.
-        self.atomically_rename_to_tmp_path(&cp_path, &tmp_path)
+        self.rename_to_tmp_path(&cp_path, &tmp_path)
             .map_err(|err| LayoutError::IoError {
                 path: cp_path.clone(),
                 message: format!(
@@ -1034,7 +1034,7 @@ impl StateLayout {
 
         // Atomically removes the checkpoint by first renaming it into tmp_path, and then deleting tmp_path.
         // This way maintains the invariant that <root>/checkpoints/<height> are always internally consistent.
-        self.atomically_rename_to_tmp_path(&cp_path, &tmp_path)
+        self.rename_to_tmp_path(&cp_path, &tmp_path)
             .map_err(|err| LayoutError::IoError {
                 path: cp_path.clone(),
                 message: format!(
@@ -1208,7 +1208,7 @@ impl StateLayout {
         let tmp_path = self
             .fs_tmp()
             .join(format!("diverged_checkpoint_{}", &checkpoint_name));
-        self.atomically_rename_to_tmp_path(&cp_path, &tmp_path)
+        self.rename_to_tmp_path(&cp_path, &tmp_path)
             .map_err(|err| LayoutError::IoError {
                 path: cp_path.clone(),
                 message: format!(
@@ -1264,7 +1264,7 @@ impl StateLayout {
         let backup_name = Self::checkpoint_name(height);
         let backup_path = self.backups().join(&backup_name);
         let tmp_path = self.fs_tmp().join(format!("backup_{}", &backup_name));
-        self.atomically_rename_to_tmp_path(&backup_path, &tmp_path)
+        self.rename_to_tmp_path(&backup_path, &tmp_path)
             .map_err(|err| LayoutError::IoError {
                 path: backup_path.clone(),
                 message: format!("failed to rename backup {} to tmp path", height),
@@ -1393,10 +1393,13 @@ impl StateLayout {
         }
     }
 
-    fn atomically_rename_to_tmp_path(&self, path: &Path, tmp_path: &Path) -> std::io::Result<()> {
-        // We first move the checkpoint directory into a temporary directory to
-        // maintain the invariant that <root>/checkpoints/<height> are always
-        // internally consistent.
+    /// Renames a path to a temporary path and synchronizes the parent directory of the original path.
+    ///
+    /// This helper function is useful when removing a checkpoint because renaming the checkpoint to a temporary path
+    /// is an atomic operation. This ensures that the checkpoint will not be left in an inconsistent
+    /// state on disk if a crash occurs. After the rename, the parent directory of the original
+    /// path is synced to persist the change.
+    fn rename_to_tmp_path(&self, path: &Path, tmp_path: &Path) -> std::io::Result<()> {
         if let Some(parent) = tmp_path.parent() {
             self.ensure_dir_exists(parent)?;
         }
