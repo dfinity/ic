@@ -263,7 +263,7 @@ jobs:
   build-ic:
     name: Build IC
     runs-on:
-      group: ubuntu-24-large
+      labels: ubuntu-24-large
     container:
       image: ghcr.io/dfinity/ic-build@sha256:0583fe48201a6b683c69e9c8884a5c7b2f57b3fe182a2e0f3ce4e012a4c22675
       options: >-
