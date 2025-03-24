@@ -1986,9 +1986,9 @@ fn ic0_root_key_works(test: &mut ExecutionTest, root_key: Vec<u8>) {
             (func (export "canister_update test")
                 ;; heap[0..4] = root_key_size
                 (i32.store (i32.const 0) (call $root_key_size))
-                ;; heap[4..6] = root_key_bytes[0..6]
+                ;; heap[4..6] = root_key_bytes[0..2]
                 (call $root_key_copy (i32.const 4) (i32.const 0) (i32.const 2))
-                ;; heap[6..(4 + n)] = subnet_id_bytes[2..n]
+                ;; heap[6..(4 + n)] = root_key_bytes[2..n]
                 (call $root_key_copy (i32.const 6) (i32.const 2) (i32.sub (i32.load (i32.const 0)) (i32.const 2)))
                 ;; return heap[0..(4 + n)]
                 (call $msg_reply_data_append (i32.const 0) (i32.add (i32.const 4) (i32.load (i32.const 0))))

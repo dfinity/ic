@@ -1143,8 +1143,8 @@ pub trait SystemApi {
     /// Used to look up the size of the root key.
     fn ic0_root_key_size(&self) -> HypervisorResult<usize>;
 
-    /// Used to copy the root key to the calling canister's heap
-    /// at the location specified by `dst` and `offset`.
+    /// Used to copy the root key (starting at `offset` and copying `size` bytes)
+    /// to the calling canister's heap at the location specified by `dst`.
     fn ic0_root_key_copy(
         &self,
         dst: usize,

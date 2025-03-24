@@ -3290,7 +3290,7 @@ impl SystemApi for SystemApiImpl {
                 let root_key = self.sandbox_safe_system_state.get_root_key();
                 let root_key_bytes = root_key.as_slice();
                 let slice = valid_subslice(
-                    "ic0.root_key_copy id",
+                    "ic0.root_key_copy bytes",
                     InternalAddress::new(offset),
                     InternalAddress::new(size),
                     root_key_bytes,
