@@ -277,6 +277,7 @@ message HighCapacityRegistryGetValueResponse {
     LargeValueChunkKeys large_value_chunk_keys = 4;
   }
 
+  // The timestamp at which the registry mutation happened.
   uint64 timestamp_seconds = 5;
 }
 
@@ -347,6 +348,9 @@ message HighCapacityRegistryAtomicMutateRequest {
   repeated Precondition preconditions = 5;
 
   reserved 4;
+
+  // The timestamp at which the registry atomic mutate request happened.
+  uint64 timestamp_seconds = 6;
 }
 
 // A single mutation in the registry.

@@ -216,6 +216,7 @@ pub struct HighCapacityRegistryGetValueResponse {
     /// in the RegistryGetValueRequest.
     #[prost(uint64, tag = "2")]
     pub version: u64,
+    /// The timestamp at which the registry mutation happened.
     #[prost(uint64, tag = "5")]
     pub timestamp_seconds: u64,
     #[prost(
@@ -315,6 +316,9 @@ pub struct HighCapacityRegistryAtomicMutateRequest {
     /// Preconditions at the key level.
     #[prost(message, repeated, tag = "5")]
     pub preconditions: ::prost::alloc::vec::Vec<Precondition>,
+    /// The timestamp at which the registry atomic mutate request happened.
+    #[prost(uint64, tag = "6")]
+    pub timestamp_seconds: u64,
 }
 /// A single mutation in the registry.
 #[derive(candid::CandidType, candid::Deserialize, Eq, Clone, PartialEq, ::prost::Message)]

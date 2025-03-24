@@ -753,6 +753,7 @@ mod tests {
                     }
                 })
                 .collect(),
+            timestamp_seconds: 0,
         };
 
         // Ok if client starts using HighCapacity before server.
