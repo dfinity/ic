@@ -61,20 +61,6 @@ anchors:
     uses: actions/setup-python@v5
     with:
       python-version: '3.12'
-  bazel-bep: &bazel-bep
-    name: Upload bazel-bep
-    # runs only if previous step succeeded or failed;
-    # we avoid collecting artifacts of jobs that were cancelled
-    if: success() || failure()
-    uses: actions/upload-artifact@v4
-    with:
-      name: ${{ github.job }}-bep
-      retention-days: 14
-      if-no-files-found: ignore
-      compression-level: 9
-      path: |
-        bazel-bep.pb.gpg
-        profile.json
 
 jobs:
   bazel-test-all:
@@ -141,7 +127,6 @@ jobs:
         uses: ./.github/actions/bazel-upload-checksums/
         with:
           artifact-name: shasums-cache
-      - <<: *bazel-bep
 
   bazel-test-macos-intel:
     name: Bazel Test macOS Intel
@@ -171,7 +156,6 @@ jobs:
             --test_tag_filters=test_macos
           BAZEL_TARGETS: //rs/... //publish/binaries/...
           CLOUD_CREDENTIALS_CONTENT: ${{ secrets.CLOUD_CREDENTIALS_CONTENT }}
-      - <<: *bazel-bep
       - name: Purge Bazel Output
         if: always()
         shell: bash
@@ -192,7 +176,6 @@ jobs:
             build --config=ci --keep_going --config=fuzzing --build_tag_filters=libfuzzer
           BAZEL_TARGETS: //rs/...
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
-      - <<: *bazel-bep
 
   bazel-build-fuzzers-afl:
     name: Bazel Build Fuzzers AFL
@@ -206,7 +189,6 @@ jobs:
           BAZEL_COMMAND: build --config=ci --keep_going --config=afl
           BAZEL_TARGETS: //rs/...
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
-      - <<: *bazel-bep
 
   python-ci-tests:
     name: Python CI Tests

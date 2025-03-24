@@ -28,20 +28,6 @@ anchors:
   checkout: &checkout
     name: Checkout
     uses: actions/checkout@v4
-  bazel-bep: &bazel-bep
-    name: Upload bazel-bep
-    # runs only if previous step succeeded or failed;
-    # we avoid collecting artifacts of jobs that were cancelled
-    if: success() || failure()
-    uses: actions/upload-artifact@v4
-    with:
-      name: ${{ github.job }}-bep
-      retention-days: 14
-      if-no-files-found: ignore
-      compression-level: 9
-      path: |
-        bazel-bep.pb.gpg
-        profile.json
 
 jobs:
   bazel-build-all-no-cache:
@@ -61,7 +47,6 @@ jobs:
           BAZEL_TARGETS: //...
           CLOUD_CREDENTIALS_CONTENT: ${{ secrets.CLOUD_CREDENTIALS_CONTENT }}
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
-      - <<: *bazel-bep
 
   bazel-system-test-hourly:
     name: Bazel System Tests Hourly
@@ -81,7 +66,6 @@ jobs:
             test --config=ci --config=release --keep_going --test_tag_filters=system_test_hourly
           BAZEL_TARGETS: //rs/...
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
-      - <<: *bazel-bep
 
   bazel-run-fuzzers-hourly:
     name: Bazel Run Fuzzers Hourly
