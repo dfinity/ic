@@ -1,5 +1,4 @@
-use super::IDkgDealingContext;
-use crate::idkg::pre_signer::IDkgTranscriptBuilder;
+use crate::idkg::{payload_builder::IDkgDealingContext, pre_signer::IDkgTranscriptBuilder};
 use ic_logger::{warn, ReplicaLogger};
 use ic_management_canister_types_private::{
     ComputeInitialIDkgDealingsResponse, ReshareChainKeyResponse,
@@ -193,11 +192,10 @@ mod tests {
     use ic_logger::replica_logger::no_op_logger;
     use ic_management_canister_types_private::ComputeInitialIDkgDealingsResponse;
     use ic_test_utilities_types::ids::subnet_test_id;
-    use ic_types::consensus::idkg::IDkgMasterPublicKeyId;
-    use ic_types::consensus::idkg::IDkgPayload;
+    use ic_types::consensus::idkg::{IDkgMasterPublicKeyId, IDkgPayload};
 
-    use crate::idkg::payload_builder::filter_idkg_reshare_chain_key_contexts;
     use crate::idkg::{
+        payload_builder::filter_idkg_reshare_chain_key_contexts,
         test_utils::{
             create_reshare_request, dealings_context_from_reshare_request,
             fake_ecdsa_idkg_master_public_key_id,

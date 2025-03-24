@@ -1,3 +1,4 @@
+use crate::idkg::{metrics::IDkgPayloadMetrics, signer::ThresholdSignatureBuilder};
 use ic_error_types::RejectCode;
 use ic_management_canister_types_private::{Payload, SignWithECDSAReply, SignWithSchnorrReply};
 use ic_replicated_state::metadata_state::subnet_call_context_manager::IDkgSignWithThresholdContext;
@@ -7,8 +8,6 @@ use ic_types::{
     Time,
 };
 use std::collections::{BTreeMap, BTreeSet};
-
-use crate::{idkg::metrics::IDkgPayloadMetrics, idkg::signer::ThresholdSignatureBuilder};
 
 /// Helper to create a reject response to the management canister
 /// with the given code and message

@@ -1,17 +1,17 @@
-use std::collections::BTreeSet;
-
-use crate::idkg::{pre_signer::IDkgTranscriptBuilder, utils::algorithm_for_key_id};
+use crate::idkg::{
+    payload_builder::IDkgPayloadError, pre_signer::IDkgTranscriptBuilder,
+    utils::algorithm_for_key_id,
+};
 use ic_logger::{info, ReplicaLogger};
-use ic_types::consensus::idkg::HasIDkgMasterPublicKeyId;
 use ic_types::{
     consensus::idkg::{
-        self, IDkgBlockReader, IDkgUIDGenerator, MasterKeyTranscript, TranscriptAttributes,
+        self, HasIDkgMasterPublicKeyId, IDkgBlockReader, IDkgUIDGenerator, MasterKeyTranscript,
+        TranscriptAttributes,
     },
     crypto::canister_threshold_sig::idkg::IDkgTranscript,
     Height, NodeId, RegistryVersion,
 };
-
-use super::IDkgPayloadError;
+use std::collections::BTreeSet;
 
 pub(super) fn get_created_key_transcript(
     key_transcript: &idkg::MasterKeyTranscript,
@@ -220,9 +220,8 @@ mod tests {
     use ic_logger::replica_logger::no_op_logger;
     use ic_management_canister_types_private::{EcdsaKeyId, MasterPublicKeyId};
     use ic_test_utilities_types::ids::subnet_test_id;
-    use ic_types::consensus::idkg::HasIDkgMasterPublicKeyId;
-    use ic_types::consensus::idkg::IDkgMasterPublicKeyId;
     use ic_types::{
+        consensus::idkg::{HasIDkgMasterPublicKeyId, IDkgMasterPublicKeyId},
         crypto::{canister_threshold_sig::idkg::IDkgTranscript, AlgorithmId},
         Height,
     };
