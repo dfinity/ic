@@ -33,6 +33,8 @@ fi
 if [[ "${RUN_ON_DIFF_ONLY:-}" == "true" ]]; then
     # get bazel targets that changed within the MR
     BAZEL_TARGETS=$("${CI_PROJECT_DIR:-}"/ci/bazel-scripts/diff.sh)
+else
+    release_build="true"
 fi
 
 # if bazel targets is empty we don't need to run any tests
