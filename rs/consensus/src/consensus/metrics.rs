@@ -349,11 +349,11 @@ impl FinalizerMetrics {
             block_stats.block_height as i64 - block_stats.block_context_certified_height as i64,
         );
         self.canister_http_success_delivered
-            .inc_by(batch_stats.canister_http.responses as u64);
+            .inc_by(batch_stats.canister_http.responses() as u64);
         self.canister_http_timeouts_delivered
-            .inc_by(batch_stats.canister_http.timeouts as u64);
+            .inc_by(batch_stats.canister_http.timeouts() as u64);
         self.canister_http_divergences_delivered
-            .inc_by(batch_stats.canister_http.divergence_responses as u64);
+            .inc_by(batch_stats.canister_http.divergence_responses() as u64);
 
         if let Some(idkg) = &block_stats.idkg_stats {
             let set = |metric: &IntGaugeVec, counts: &CounterPerMasterPublicKeyId| {

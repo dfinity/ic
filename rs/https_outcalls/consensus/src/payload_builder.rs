@@ -59,9 +59,23 @@ mod utils;
 /// Statistics about the number of canister http message types in a canister http payload
 #[derive(Debug, Default)]
 pub struct CanisterHttpBatchStats {
-    pub responses: usize,
-    pub timeouts: usize,
-    pub divergence_responses: usize,
+    pub(crate) responses: usize,
+    pub(crate) timeouts: usize,
+    pub(crate) divergence_responses: usize,
+}
+
+impl CanisterHttpBatchStats {
+    pub fn responses(&self) -> usize {
+        self.responses
+    }
+
+    pub fn divergence_responses(&self) -> usize {
+        self.divergence_responses
+    }
+
+    pub fn timeouts(&self) -> usize {
+        self.timeouts
+    }
 }
 
 enum CandidateOrDivergence {
