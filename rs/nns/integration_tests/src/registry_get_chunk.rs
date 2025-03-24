@@ -7,6 +7,7 @@ use ic_nns_test_utils::{
     },
 };
 use ic_stable_structures::memory_manager::{MemoryId, MemoryManager};
+use rand::{Rng, rngs::StdRng, SeedableRng};
 use registry_canister::pb::v1::Chunk;
 use std::{cell::RefCell, rc::Rc};
 
@@ -26,23 +27,56 @@ fn test_get_chunk() {
     let memory_manager = MemoryManager::init(Rc::clone(&stable_memory));
     let chunks_memory = memory_manager.get(MemoryId::new(1));
     let mut chunks = Chunks::init(chunks_memory);
+
     let mut chunk_keys = chunks.upsert_monolithic_blob(b"Hello, world!".to_vec());
-    let chunk_key = chunk_keys.pop().unwrap();
+    let small_chunk_key = chunk_keys.pop().unwrap();
     // Because the monolithic blob is small.
     assert_eq!(chunk_keys, Vec::<Vec<u8>>::new());
+
+    let big_len = 5_123_456;
+    let big_monolithic_blob = StdRng::seed_from_u64(42)
+        .sample_iter(rand::distributions::Standard)
+        .take(big_len)
+        .collect::<Vec<u8>>();
+    let original_big_monolithic_blob = big_monolithic_blob.clone();
+    let big_chunk_keys = chunks.upsert_monolithic_blob(big_monolithic_blob);
+    assert_eq!(big_chunk_keys.len(), 3, "{:?}", big_chunk_keys);
+
     // It should be possible to avoid clone, but I cannot figure out how to
     // convert stable_memory to its inner Vec.
     let stable_memory = <RefCell<std::vec::Vec<u8>> as Clone>::clone(&stable_memory).into_inner();
     state_machine.set_stable_memory(REGISTRY_CANISTER_ID, &stable_memory);
 
     // Step 2: Call code under test (i.e. get_chunk).
-    let response = registry_get_chunk(&state_machine, &chunk_key);
+    let small_response = registry_get_chunk(&state_machine, &small_chunk_key);
+
+    let big_responses = big_chunk_keys
+        .iter()
+        .map(|big_chunk_key| registry_get_chunk(&state_machine, big_chunk_key))
+        .collect::<Vec<_>>();
 
     // Step 3: Verify result(s).
     assert_eq!(
-        response,
+        small_response,
         Ok(Chunk {
             content: Some(b"Hello, world!".to_vec())
         })
     );
+
+    let reconstructed_big_monolithic_blob = big_responses
+        .into_iter()
+        .map(|big_response| -> Vec<u8> {
+            let Chunk {
+                content
+            } = big_response.unwrap();
+            content.unwrap()
+        })
+        .flatten()
+        .collect::<Vec<u8>>();
+    assert_eq!(reconstructed_big_monolithic_blob[0..25], original_big_monolithic_blob[0..25]);
+    assert_eq!(reconstructed_big_monolithic_blob[big_len-25..big_len], original_big_monolithic_blob[big_len-25..big_len]);
+    assert_eq!(reconstructed_big_monolithic_blob.len(), big_len);
+    // assert_eq is not used here, because we do not want 5 MB of spam to be
+    // dumped into the terminal.
+    assert!(reconstructed_big_monolithic_blob == original_big_monolithic_blob);
 }
