@@ -195,6 +195,8 @@ jobs:
           # - --setupos
           # - --hostos
     <<: *dind-large-setup
+      container:
+        image: ubuntu:latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
