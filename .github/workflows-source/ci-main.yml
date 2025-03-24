@@ -243,7 +243,7 @@ jobs:
       - <<: *checkout
       - name: Run Build IC
         id: build-ic
-        run: "$CI_PROJECT_DIR"/ci/scripts/run-build-ic.sh
+        run: ./ci/scripts/run-build-ic.sh
         env:
           BAZEL_COMMAND: build --config=ci
           BAZEL_TARGETS: //...
