@@ -33,7 +33,7 @@ use ic_types::crypto::canister_threshold_sig::idkg::{
     IDkgTranscript, IDkgTranscriptOperation, InitialIDkgDealings,
 };
 use ic_types::crypto::canister_threshold_sig::MasterPublicKey;
-use ic_types::crypto::vetkd::{VetKdArgs, VetKdDerivationDomain};
+use ic_types::crypto::vetkd::{VetKdArgs, VetKdDerivationContext};
 use ic_types::crypto::{AlgorithmId, ExtendedDerivationPath};
 use ic_types::messages::CallbackId;
 use ic_types::registry::RegistryClientError;
@@ -283,7 +283,7 @@ pub(super) fn build_signature_inputs(
             let inputs = ThresholdSigInputsRef::Ecdsa(ThresholdEcdsaSigInputsRef::new(
                 ExtendedDerivationPath {
                     caller: context.request.sender.into(),
-                    derivation_path: context.derivation_path.clone(),
+                    derivation_path: context.derivation_path.to_vec(),
                 },
                 args.message_hash,
                 nonce,
@@ -317,7 +317,7 @@ pub(super) fn build_signature_inputs(
             let inputs = ThresholdSigInputsRef::Schnorr(ThresholdSchnorrSigInputsRef::new(
                 ExtendedDerivationPath {
                     caller: context.request.sender.into(),
-                    derivation_path: context.derivation_path.clone(),
+                    derivation_path: context.derivation_path.to_vec(),
                 },
                 args.message.clone(),
                 nonce,
@@ -332,13 +332,13 @@ pub(super) fn build_signature_inputs(
                 height: args.height,
             };
             let inputs = ThresholdSigInputsRef::VetKd(VetKdArgs {
-                derivation_domain: VetKdDerivationDomain {
+                context: VetKdDerivationContext {
                     caller: context.request.sender.into(),
-                    domain: context.derivation_path.iter().flatten().cloned().collect(),
+                    context: context.derivation_path.iter().flatten().cloned().collect(),
                 },
                 ni_dkg_id: args.ni_dkg_id.clone(),
-                derivation_id: args.derivation_id.clone(),
-                encryption_public_key: args.encryption_public_key.clone(),
+                input: args.input.to_vec(),
+                transport_public_key: args.transport_public_key.clone(),
             });
             Ok((request_id, inputs))
         }

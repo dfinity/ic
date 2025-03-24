@@ -73,8 +73,9 @@ use registry_canister::{
         reroute_canister_ranges::RerouteCanisterRangesPayload,
     },
     pb::v1::{
-        ApiBoundaryNodeIdRecord, GetApiBoundaryNodeIdsRequest, GetSubnetForCanisterRequest,
-        NodeProvidersMonthlyXdrRewards, RegistryCanisterStableStorage, SubnetForCanister,
+        ApiBoundaryNodeIdRecord, Chunk, GetApiBoundaryNodeIdsRequest, GetChunkRequest,
+        GetSubnetForCanisterRequest, NodeProvidersMonthlyXdrRewards, RegistryCanisterStableStorage,
+        SubnetForCanister,
     },
     proto_on_wire::protobuf,
     registry::{EncodedVersion, Registry, MAX_REGISTRY_DELTAS_SIZE},
@@ -385,6 +386,16 @@ fn atomic_mutate() {
 
     let bytes = serialize_atomic_mutate_response(response_pb).expect("Error serializing response");
     reply(&bytes)
+}
+
+#[export_name = "canister_query get_chunk"]
+fn get_chunk() {
+    over(candid_one, get_chunk_);
+}
+
+#[candid_method(query, rename = "get_chunk")]
+fn get_chunk_(_request: GetChunkRequest) -> Result<Chunk, String> {
+    todo!();
 }
 
 #[export_name = "canister_update revise_elected_guestos_versions"]

@@ -11,10 +11,10 @@ use ic_artifact_pool::{
 };
 use ic_config::{artifact_pool::ArtifactPoolConfig, transport::TransportConfig};
 use ic_consensus::{
-    certification::{CertificationCrypto, CertifierBouncer, CertifierImpl},
     consensus::{ConsensusBouncer, ConsensusImpl},
     idkg,
 };
+use ic_consensus_certification::{CertificationCrypto, CertifierBouncer, CertifierImpl};
 use ic_consensus_dkg::DkgBouncer;
 use ic_consensus_manager::{AbortableBroadcastChannel, AbortableBroadcastChannelBuilder};
 use ic_consensus_utils::{crypto::ConsensusCrypto, pool_reader::PoolReader};

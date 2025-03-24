@@ -21,6 +21,7 @@ use std::{
     convert::{Infallible, TryFrom},
     fmt, ops,
     sync::Arc,
+    time::Duration,
 };
 use strum_macros::EnumIter;
 use thiserror::Error;
@@ -60,6 +61,9 @@ pub struct InstanceStats {
     /// Number of pages loaded by copying the data.
     pub wasm_copy_page_count: usize,
 
+    /// Total time spent in SIGSEGV handler for heap.
+    pub wasm_sigsegv_handler_duration: Duration,
+
     /// Number of accessed OS pages (4KiB) in stable memory.
     pub stable_accessed_pages: usize,
 
@@ -85,6 +89,9 @@ pub struct InstanceStats {
 
     /// Number of pages loaded by copying the data in stable memory.
     pub stable_copy_page_count: usize,
+
+    /// Total time spent in SIGSEGV handler for stable memory.
+    pub stable_sigsegv_handler_duration: Duration,
 }
 
 impl InstanceStats {
@@ -168,8 +175,8 @@ pub enum SystemApiCallId {
     CostSignWithEcdsa,
     /// Tracker for `ic0.cost_sign_with_schnorr()`
     CostSignWithSchnorr,
-    /// Tracker for `ic0.cost_vetkd_derive_encrypted_key()`
-    CostVetkdDeriveEncryptedKey,
+    /// Tracker for `ic0.cost_vetkd_derive_key()`
+    CostVetkdDeriveKey,
     /// Tracker for `ic0.cycles_burn128()`
     CyclesBurn128,
     /// Tracker for `ic0.data_certificate_copy()`
@@ -1308,7 +1315,7 @@ pub trait SystemApi {
     ) -> HypervisorResult<u32>;
 
     /// This system call indicates the cycle cost of vetkd key derivation,
-    /// i.e., the management canister's `vetkd_derive_encrypted_key` for the key
+    /// i.e., the management canister's `vetkd_derive_key` for the key
     /// (whose name is given by textual representation at heap location `src`
     /// with byte length `size`) and the provided curve.
     ///
@@ -1321,7 +1328,7 @@ pub trait SystemApi {
     /// The amount of cycles is represented by a 128-bit value and is copied
     /// to the canister memory starting at the location `dst` if the return
     /// value is 0.
-    fn ic0_cost_vetkd_derive_encrypted_key(
+    fn ic0_cost_vetkd_derive_key(
         &self,
         src: usize,
         size: usize,

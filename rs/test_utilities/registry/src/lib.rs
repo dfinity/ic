@@ -14,6 +14,7 @@ use ic_registry_keys::{
     make_catch_up_package_contents_key, make_crypto_threshold_signing_pubkey_key,
     make_subnet_list_record_key, make_subnet_record_key,
 };
+use ic_registry_local_store::{compact_delta_to_changelog, LocalStoreImpl};
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_registry_subnet_features::ChainKeyConfig;
 use ic_registry_subnet_features::SubnetFeatures;
@@ -26,6 +27,7 @@ use ic_types::{
 };
 use std::sync::Arc;
 use std::time::Duration;
+use tempfile::TempDir;
 
 fn empty_ni_dkg_transcript_with_committee(
     committee: &[NodeId],
@@ -346,4 +348,17 @@ impl SubnetRecordBuilder {
     pub fn build(self) -> SubnetRecord {
         self.record
     }
+}
+
+/// Gets a `LocalStore` holding mainnet registry snapshot from around jan. 2022.
+pub fn get_mainnet_delta_00_6d_c1() -> (TempDir, LocalStoreImpl) {
+    let tempdir = TempDir::new().unwrap();
+
+    let changelog =
+        compact_delta_to_changelog(ic_registry_local_store_artifacts::MAINNET_DELTA_00_6D_C1)
+            .expect("")
+            .1;
+    let store = LocalStoreImpl::from_changelog(changelog, tempdir.path()).unwrap();
+
+    (tempdir, store)
 }

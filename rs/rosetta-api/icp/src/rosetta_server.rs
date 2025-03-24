@@ -271,6 +271,17 @@ async fn search_transactions(
     to_rosetta_response(res)
 }
 
+fn internal_error_response(e: impl std::fmt::Debug, resp: String) -> HttpResponse {
+    error!("Internal error: {:?}", e);
+    ENDPOINTS_METRICS
+        .rosetta_api_status_total
+        .with_label_values(&["700"])
+        .inc();
+    HttpResponse::InternalServerError()
+        .content_type("application/json")
+        .body(resp)
+}
+
 fn to_rosetta_response<S: serde::Serialize>(result: Result<S, ApiError>) -> HttpResponse {
     match result {
         Ok(x) => match serde_json::to_string(&x) {
@@ -283,38 +294,20 @@ fn to_rosetta_response<S: serde::Serialize>(result: Result<S, ApiError>) -> Http
                     .content_type("application/json")
                     .body(resp)
             }
-            Err(_) => {
-                ENDPOINTS_METRICS
-                    .rosetta_api_status_total
-                    .with_label_values(&["700"])
-                    .inc();
-                HttpResponse::InternalServerError()
-                    .content_type("application/json")
-                    .body(Error::serialization_error_json_str())
-            }
+            Err(e) => internal_error_response(e, Error::serialization_error_json_str()),
         },
-        Err(err) => {
-            let err = errors::convert_to_error(&err);
-            match serde_json::to_string(&err) {
+        Err(api_err) => {
+            let converted = errors::convert_to_error(&api_err);
+            match serde_json::to_string(&converted) {
                 Ok(resp) => {
-                    let err_code = format!("{}", err.0.code);
+                    let err_code = format!("{}", converted.0.code);
                     ENDPOINTS_METRICS
                         .rosetta_api_status_total
                         .with_label_values(&[&err_code])
                         .inc();
-                    HttpResponse::InternalServerError()
-                        .content_type("application/json")
-                        .body(resp)
+                    internal_error_response(converted, resp)
                 }
-                Err(_) => {
-                    ENDPOINTS_METRICS
-                        .rosetta_api_status_total
-                        .with_label_values(&["700"])
-                        .inc();
-                    HttpResponse::InternalServerError()
-                        .content_type("application/json")
-                        .body(Error::serialization_error_json_str())
-                }
+                Err(e) => internal_error_response(e, Error::serialization_error_json_str()),
             }
         }
     }

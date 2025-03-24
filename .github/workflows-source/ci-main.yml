@@ -31,11 +31,10 @@ env:
   CI_EVENT_NAME: ${{ github.event_name }}
   BRANCH_NAME: ${{ github.head_ref || github.ref_name }}
   CI_RUN_ID: ${{ github.run_id }}
-  BUILDEVENT_DATASET: "github-ci-dfinity"
 
 anchors:
   image: &image
-    image: ghcr.io/dfinity/ic-build@sha256:908c9b2abe0647cd54a2485117c263b0dae4a8aba8f25bc073813b09be9b1d59
+    image: ghcr.io/dfinity/ic-build@sha256:0583fe48201a6b683c69e9c8884a5c7b2f57b3fe182a2e0f3ce4e012a4c22675
   dind-large-setup: &dind-large-setup
     runs-on:
       labels: dind-large
@@ -135,15 +134,13 @@ jobs:
         with:
           BAZEL_COMMAND: test --config=ci ${{ steps.bazel-extra-args.outputs.BAZEL_EXTRA_ARGS }}
           BAZEL_TARGETS: //...
-          BUILDEVENT_APIKEY: ${{ secrets.HONEYCOMB_TOKEN }}
           CLOUD_CREDENTIALS_CONTENT: ${{ secrets.CLOUD_CREDENTIALS_CONTENT }}
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
 
       - name: Upload SHA256SUMS (cache)
-        uses: actions/upload-artifact@v4
+        uses: ./.github/actions/bazel-upload-checksums/
         with:
-          name: shasums-cache
-          path: SHA256SUMS
+          artifact-name: shasums-cache
       - <<: *bazel-bep
 
   bazel-test-macos-intel:
@@ -246,23 +243,7 @@ jobs:
       - <<: *checkout
       - name: Run Build IC
         id: build-ic
-        shell: bash
-        run: |
-          set -euo pipefail
-          REPO_NAME="${GITHUB_REPOSITORY##*/}"
-          rm -rf "/cache/job/${CI_JOB_NAME}/${CI_RUN_ID}"
-          mkdir -p "/cache/job/${CI_JOB_NAME}/${CI_RUN_ID}/artifacts"
-          ln -s "/cache/job/${CI_JOB_NAME}/${CI_RUN_ID}/artifacts" /__w/$REPO_NAME/$REPO_NAME/artifacts
-          "$CI_PROJECT_DIR"/ci/scripts/run-build-ic.sh
-          rm -rf "/cache/job/${CI_JOB_NAME}/${CI_RUN_ID}"
-
-          # List and aggregate all SHA256SUMS files (if bazel-out exists)
-          if [ -e bazel-out]; then
-            find -L bazel-out -name SHA256SUMS | xargs cat | sort | uniq > SHA256SUMS
-          else
-            touch SHA256SUMS
-          fi
-
+        run: ./ci/scripts/run-build-ic.sh
         env:
           BAZEL_COMMAND: build --config=ci
           BAZEL_TARGETS: //...
@@ -270,10 +251,9 @@ jobs:
           BRANCH_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           RUN_ON_DIFF_ONLY: ${{ github.event_name == 'pull_request' && !contains(github.event.pull_request.labels.*.name, 'CI_ALL_BAZEL_TARGETS') }}
       - name: Upload SHA256SUMS (nocache)
-        uses: actions/upload-artifact@v4
+        uses: ./.github/actions/bazel-upload-checksums/
         with:
-          name: shasums-nocache
-          path: SHA256SUMS
+          artifact-name: shasums-nocache
 
   build-determinism:
     name: Build Determinism

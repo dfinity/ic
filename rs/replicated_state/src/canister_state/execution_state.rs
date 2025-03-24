@@ -79,6 +79,20 @@ impl Global {
     }
 }
 
+// The purpose of this impl is that the two structs stay in sync.
+#[allow(clippy::from_over_into)]
+impl Into<Global> for ic_management_canister_types_private::Global {
+    fn into(self) -> Global {
+        match self {
+            ic_management_canister_types_private::Global::I32(x) => Global::I32(x),
+            ic_management_canister_types_private::Global::I64(x) => Global::I64(x),
+            ic_management_canister_types_private::Global::F32(x) => Global::F32(x),
+            ic_management_canister_types_private::Global::F64(x) => Global::F64(x),
+            ic_management_canister_types_private::Global::V128(x) => Global::V128(x),
+        }
+    }
+}
+
 impl Hash for Global {
     fn hash<H: Hasher>(&self, state: &mut H) {
         let bytes = match self {
@@ -852,6 +866,13 @@ mod tests {
     use ic_protobuf::state::canister_state_bits::v1 as pb;
     use std::collections::BTreeSet;
     use strum::IntoEnumIterator;
+
+    #[test]
+    fn global_exhaustive() {
+        for global in ic_management_canister_types_private::Global::iter() {
+            let _other: Global = global.into();
+        }
+    }
 
     #[test]
     fn test_next_scheduled_method() {

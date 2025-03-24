@@ -3877,7 +3877,7 @@ impl SystemApi for SystemApiImpl {
         Ok(CostReturnCode::Success as u32)
     }
 
-    fn ic0_cost_vetkd_derive_encrypted_key(
+    fn ic0_cost_vetkd_derive_key(
         &self,
         src: usize,
         size: usize,
@@ -3886,7 +3886,7 @@ impl SystemApi for SystemApiImpl {
         heap: &mut [u8],
     ) -> HypervisorResult<u32> {
         let key_bytes = valid_subslice(
-            "ic0.cost_vetkd_derive_encrypted_key heap",
+            "ic0.cost_vetkd_derive_key heap",
             InternalAddress::new(src),
             InternalAddress::new(size),
             heap,
@@ -3913,7 +3913,7 @@ impl SystemApi for SystemApiImpl {
             .sandbox_safe_system_state
             .get_cycles_account_manager()
             .vetkd_fee(subnet_size);
-        copy_cycles_to_heap(cost, dst, heap, "ic0_cost_vetkd_derive_encrypted_key")?;
+        copy_cycles_to_heap(cost, dst, heap, "ic0_cost_vetkd_derive_key")?;
         trace_syscall!(self, CostVetkdDeriveEncryptedKey, cost);
         Ok(CostReturnCode::Success as u32)
     }
