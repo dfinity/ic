@@ -67,11 +67,3 @@ pub fn as_indices(r: &Range<u64>) -> Range<usize> {
         end: r.end as usize,
     }
 }
-
-/// Converts the specified range into a range of indices relative to the specified offset.
-pub fn offset(r: &Range<u64>, offset: u64) -> Range<u64> {
-    debug_assert!(offset <= r.start);
-    let start = r.start.saturating_sub(offset);
-    let end = start + range_len(r);
-    Range { start, end }
-}
