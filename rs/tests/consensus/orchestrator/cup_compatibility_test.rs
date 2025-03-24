@@ -122,13 +122,24 @@ fn download_mainnet_binary(version: String, log: &Logger, target_dir: &Path) -> 
     .expect("Failed to Download")
 }
 
-fn test(env: TestEnv) {
+fn nns_version_test(env: TestEnv) {
+    test(env, get_mainnet_nns_revision())
+}
+
+fn application_subnet_version_test(env: TestEnv) {
+    test(env, get_mainnet_application_subnet_revision())
+}
+
+fn test(env: TestEnv, mainnet_version: String) {
     let log = env.logger();
 
-    let mainnet_version = get_mainnet_nns_revision();
     info!(log, "Continuing with mainnet version {mainnet_version}");
 
     let output_dir = PathBuf::from("cup_compatibility_test");
+    if output_dir.exists() {
+        // Remove potential left-overs from the other test runs
+        fs::remove_dir_all(&output_dir).expect("Failed to remove directory");
+    }
     let branch_test = get_dependency_path("rs/tests/cup_compatibility/binaries/types_test");
     let tmp_dir = tempfile::tempdir().unwrap();
     let mainnet_test = download_mainnet_binary(mainnet_version, &log, tmp_dir.path());
@@ -175,7 +186,8 @@ fn test(env: TestEnv) {
 fn main() -> Result<()> {
     SystemTestGroup::new()
         .with_setup(|_| ())
-        .add_test(systest!(test))
+        .add_test(systest!(nns_version_test))
+        .add_test(systest!(application_subnet_version_test))
         .execute_from_args()?;
     Ok(())
 }
