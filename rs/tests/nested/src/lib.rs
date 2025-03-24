@@ -115,7 +115,6 @@ pub fn upgrade_hostos(env: TestEnv) {
     let original_version = check_hostos_version(&host);
     info!(logger, "Version found is: '{}'", original_version);
 
-    // Add the node to a subnet to start the replica
     let node_id = new_topology.unassigned_nodes().next().unwrap().node_id;
 
     // Elect target HostOS version
