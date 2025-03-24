@@ -29,7 +29,7 @@ use ic_nns_governance_api::{
 };
 use ic_nns_gtc::pb::v1::Gtc;
 use ic_nns_handler_root::init::RootCanisterInitPayload;
-use ic_node_rewards_canister_api::lifecycle_args::InitArgs as NRInitArgs;
+use ic_node_rewards_canister_api::lifecycle_args::InitArgs as NodeRewardsInitArgs;
 use ic_registry_transport::pb::v1::RegistryMutation;
 use ic_sns_wasm::{init::SnsWasmCanisterInitPayload, pb::v1::AddWasmRequest};
 use ic_test_utilities::universal_canister::{
