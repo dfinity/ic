@@ -9900,6 +9900,7 @@ dependencies = [
  "ic-ledger-hash-of",
  "ic-limits",
  "ic-management-canister-types-private",
+ "ic-stable-structures",
  "ic-utils 0.9.0",
  "serde",
 ]

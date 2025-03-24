@@ -447,7 +447,7 @@ fn should_upgrade_and_downgrade_canister_suite() {
     setup.assert_index_ledger_parity(true);
 
     setup.upgrade_index_canister(UpgradeToVersion::MainNet);
-    setup.upgrade_ledger_canister(UpgradeToVersion::MainNet, true);
+    setup.upgrade_ledger_canister(UpgradeToVersion::MainNet, false);
     setup.upgrade_archive_canisters(UpgradeToVersion::MainNet);
 
     setup.assert_index_ledger_parity(true);
