@@ -417,6 +417,6 @@ fn vm_spec_from_nested_node(
         has_ipv4: false,
         vm_allocation: None,
         required_host_features: Vec::new(),
-        alternate_template: Some(VmType::Nested),
+        alternate_template: Some(VmType::Production),
     }
 }
