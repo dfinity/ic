@@ -80,9 +80,7 @@ jobs:
   bazel-test-all:
     name: Bazel Test All
     <<: *dind-large-setup
-    runs-on:
-      group: zh1
-      labels: dind-large
+    runs-on: ubuntu-24-large
     env:
       # Only run ci/bazel-scripts/diff.sh on PRs that are not labeled with "CI_ALL_BAZEL_TARGETS".
       OVERRIDE_DIDC_CHECK: ${{ contains(github.event.pull_request.labels.*.name, 'CI_OVERRIDE_DIDC_CHECK') }}
@@ -90,6 +88,7 @@ jobs:
       RUN_ON_DIFF_ONLY: ${{ github.event_name == 'pull_request' && !contains(github.event.pull_request.labels.*.name, 'CI_ALL_BAZEL_TARGETS') }}
     steps:
       - <<: *checkout
+
       - name: Set BAZEL_EXTRA_ARGS
         shell: bash
         id: bazel-extra-args
@@ -103,6 +102,8 @@ jobs:
               system_test_staging
               system_test_hotfix
               system_test_benchmark
+              system_test_colocation
+              system_test
               fuzz_test
               fi_tests_nightly
               nns_tests_nightly
@@ -128,19 +129,19 @@ jobs:
               BAZEL_EXTRA_ARGS+=( --keep_going )
           fi
           echo "BAZEL_EXTRA_ARGS=${BAZEL_EXTRA_ARGS[@]}" >> $GITHUB_OUTPUT
+
       - name: Run Bazel Test All
         id: bazel-test-all
         uses: ./.github/actions/bazel-test-all/
         with:
           BAZEL_COMMAND: test --config=ci ${{ steps.bazel-extra-args.outputs.BAZEL_EXTRA_ARGS }}
           BAZEL_TARGETS: //...
-          CLOUD_CREDENTIALS_CONTENT: ${{ secrets.CLOUD_CREDENTIALS_CONTENT }}
-          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
 
       - name: Upload SHA256SUMS (cache)
         uses: ./.github/actions/bazel-upload-checksums/
         with:
           artifact-name: shasums-cache
+
       - <<: *bazel-bep
 
   bazel-test-macos-intel:
@@ -248,7 +249,6 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          # -v /cache:/cache -v /var/sysimage:/var/sysimage
           "$CI_PROJECT_DIR"/ci/scripts/run-build-ic.sh
         env:
           BAZEL_COMMAND: build --config=ci
