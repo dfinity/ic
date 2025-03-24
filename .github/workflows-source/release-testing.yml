@@ -188,8 +188,8 @@ jobs:
     strategy:
       matrix:
         mirror:
-          - "https://downloads.dfinity.systems"
-          - "https://downloads.dfinity.network"
+          - "https://download.dfinity.systems"
+          - "https://download.dfinity.network"
         os:
           - --guestos
           # - --setupos
