@@ -150,4 +150,6 @@ common --noexperimental_inmemory_dotd_files
 test --test_env=CLICOLOR_FORCE=true
 
 # Speed up compilation with zig cc
-build --sandbox_add_mount_pair=/tmp
+# Currently this is disabled as it breaks pocket-ic tests as the port files
+# collide across tests.
+# build --sandbox_add_mount_pair=/tmp
