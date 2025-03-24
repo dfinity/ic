@@ -182,3 +182,22 @@ jobs:
         with:
           <<: *bazel-bep-with
           name: ${{ github.job }}-${{ matrix.version }}-bep
+
+  repro-checks:
+    name: Repro check using mirror ${{ matrix.mirror }} of `${{ matrix.os }}`
+    strategy:
+      matrix:
+        mirror:
+          - "https://downloads.dfinity.systems"
+          - "https://downloads.dfinity.network"
+        os:
+          - --guestos
+          # - --setupos
+          # - --hostos
+    runs-on: ubuntu-latest
+    steps:
+      - name: Run repro-check for ${{ github.sha }} with mirror ${{ matrix.mirror }}
+        continue-on-error: ${{ github.ref != 'refs/heads/master' && !startsWith(github.ref, 'refs/heads/rc--')  }}
+        shell: bash
+        run: |
+          sudo apt-get install -y curl && curl --proto '=https' --tlsv1.2 -sSLO https://raw.githubusercontent.com/dfinity/ic/${{ github.sha }}/ci/tools/repro-check.sh && chmod +x repro-check.sh && ./repro-check.sh -c 4833f30d3b5afd84a385dfb146581580285d8a7e ${{ matrix.os }} --mirror ${{ matrix.mirror }}

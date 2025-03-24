@@ -73,6 +73,7 @@ print_usage() {
     --guestos     verify only build reproducibility of GuestOS images
     --hostos      verify only build reproducibility of HostOS images
     --setupos     verify only build reproducibility of SetupOS images
+    --mirror      use a specific mirror as source to the artifacts
     -p            proposal id to check - the proposal has to be for an Elect Replica proposal
     -c            git revision/commit to use - the commit has to exist on master branch of
                   the IC repository on GitHub
@@ -158,6 +159,10 @@ while [[ "$#" -gt 0 ]]; do
             log "Verifying only build reproducibility of SetupOS"
             verify_guestos="false"
             verify_hostos="false"
+            ;;
+        --mirror)
+            mirror_url="$2"
+            shift
             ;;
         -p)
             proposal_id="$2"
@@ -289,15 +294,18 @@ mkdir -p "$ci_out/guestos" "$ci_out/hostos" "$ci_out/setupos"
 mkdir -p "$dev_out/guestos" "$dev_out/hostos" "$dev_out/setupos"
 mkdir -p "$proposal_out"
 
+artifact_base_url="${mirror_url:-https://download.dfinity.systems}"
+log "Using mirror: $artifact_base_url"
+
 #################### Check Proposal Hash
 # download and check the hash matches
 if [ -n "$proposal_id" ]; then
 
     log "Check the proposal url is correctly formatted"
     if [ "${guestos_proposal:-}" == "true" ]; then
-        expected_url="https://download.dfinity.systems/ic/$git_hash/guest-os/update-img/update-img.tar.zst"
+        expected_url="$artifact_base_url/ic/$git_hash/guest-os/update-img/update-img.tar.zst"
     else
-        expected_url="https://download.dfinity.systems/ic/$git_hash/host-os/update-img/update-img.tar.zst"
+        expected_url="$artifact_base_url/ic/$git_hash/host-os/update-img/update-img.tar.zst"
     fi
 
     if [ "$proposal_package_url" != "$expected_url" ]; then
@@ -319,7 +327,7 @@ fi
 
 # Download CI artifacts for the selected component
 download_ci_files() {
-    BASE_URL="https://download.dfinity.systems/ic/$git_hash"
+    BASE_URL="$artifact_base_url/ic/$git_hash"
 
     local os_type="$1"
     local output_dir="$2"
