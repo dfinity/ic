@@ -9311,6 +9311,30 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-icp-archive"
+version = "0.9.0"
+dependencies = [
+ "candid",
+ "candid_parser",
+ "ciborium",
+ "dfn_core",
+ "ic-base-types",
+ "ic-canisters-http-types",
+ "ic-cdk 0.17.1",
+ "ic-ledger-canister-core",
+ "ic-ledger-core",
+ "ic-ledger-test-utils",
+ "ic-metrics-encoder",
+ "ic-nns-constants",
+ "ic-stable-structures",
+ "icp-ledger",
+ "lazy_static",
+ "pocket-ic",
+ "serde",
+ "serde_bytes",
+]
+
+[[package]]
 name = "ic-icp-index"
 version = "0.9.0"
 dependencies = [
@@ -14683,6 +14707,7 @@ dependencies = [
  "ic-canisters-http-types",
  "ic-cdk 0.17.1",
  "ic-crypto-sha2",
+ "ic-icp-archive",
  "ic-icp-index",
  "ic-ledger-canister-core",
  "ic-ledger-core",
@@ -15691,29 +15716,6 @@ name = "leb128"
 version = "0.2.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "884e2677b40cc8c339eaefcb701c32ef1fd2493d71118dc0ca4b6a736c93bd67"
-
-[[package]]
-name = "ledger-archive-node-canister"
-version = "0.9.0"
-dependencies = [
- "candid",
- "candid_parser",
- "ciborium",
- "dfn_core",
- "ic-base-types",
- "ic-canisters-http-types",
- "ic-cdk 0.17.1",
- "ic-ledger-canister-core",
- "ic-ledger-core",
- "ic-ledger-test-utils",
- "ic-metrics-encoder",
- "ic-nns-constants",
- "icp-ledger",
- "lazy_static",
- "pocket-ic",
- "serde",
- "serde_bytes",
-]
 
 [[package]]
 name = "ledger-canister"
