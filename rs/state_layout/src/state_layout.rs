@@ -1,7 +1,7 @@
 use ic_base_types::{NumBytes, NumSeconds};
 use ic_logger::{error, info, warn, ReplicaLogger};
 use ic_management_canister_types_private::{
-    LogVisibilityV2, OnLowWasmMemoryHookStatus, SnapshotSource,
+    Global, LogVisibilityV2, OnLowWasmMemoryHookStatus, SnapshotSource,
 };
 use ic_metrics::{buckets::decimal_buckets, MetricsRegistry};
 use ic_protobuf::{
@@ -20,7 +20,7 @@ use ic_replicated_state::{
         },
     },
     page_map::{Shard, StorageLayout, StorageResult},
-    CallContextManager, CanisterStatus, ExecutionTask, ExportedFunctions, Global, NumWasmPages,
+    CallContextManager, CanisterStatus, ExecutionTask, ExportedFunctions, NumWasmPages,
 };
 use ic_sys::{fs::sync_path, mmap::ScopedMmap};
 use ic_types::{

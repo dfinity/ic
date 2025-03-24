@@ -1,3 +1,4 @@
+use candid::Encode;
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 
 use embedders_bench::PostSetupAction;
@@ -102,6 +103,12 @@ fn generate_binaries() -> Vec<(String, BinaryEncodedWasm)> {
     let qrcode_wasm = BinaryEncodedWasm::new(buf);
 
     result.push(("qrcode".to_string(), qrcode_wasm));
+
+    // This benchmark uses a canister from the motoko playground which is stored
+    // as a binary file in this repo.  It is generated from
+    // https://github.com/dfinity/motoko-playground/tree/abk/for-replica-benchmarking
+    let motoko_wasm = BinaryEncodedWasm::new(include_bytes!("test-data/pool.wasm").to_vec());
+    result.push(("motoko".to_string(), motoko_wasm));
 
     result
 }
@@ -250,9 +257,9 @@ fn execution(c: &mut Criterion) {
             c,
             &name,
             wasm.as_slice(),
-            &[],
+            &Encode!(&()).unwrap(),
             "go",
-            &[],
+            &Encode!(&()).unwrap(),
             None,
             PostSetupAction::None,
         );

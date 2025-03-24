@@ -3,7 +3,8 @@ mod framework;
 
 use crate::framework::ConsensusDriver;
 use ic_artifact_pool::{consensus_pool, dkg_pool, idkg_pool};
-use ic_consensus::{certification::CertifierImpl, idkg};
+use ic_consensus::idkg;
+use ic_consensus_certification::CertifierImpl;
 use ic_consensus_dkg::{get_dkg_summary_from_cup_contents, DkgKeyManager};
 use ic_consensus_utils::pool_reader::PoolReader;
 use ic_https_outcalls_consensus::test_utils::FakeCanisterHttpPayloadBuilder;

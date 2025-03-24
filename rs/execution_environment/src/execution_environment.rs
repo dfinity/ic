@@ -2920,7 +2920,7 @@ impl ExecutionEnvironment {
             (*request).clone(),
             ThresholdArguments::VetKd(VetKdArguments {
                 key_id: args.key_id,
-                input: args.input,
+                input: Arc::new(args.input),
                 transport_public_key: args.transport_public_key.to_vec(),
                 ni_dkg_id: ni_dkg_id.clone(),
                 height: Height::new(current_round.get()),
@@ -3049,7 +3049,7 @@ impl ExecutionEnvironment {
             SubnetCallContext::SignWithThreshold(SignWithThresholdContext {
                 request,
                 args,
-                derivation_path,
+                derivation_path: Arc::new(derivation_path),
                 pseudo_random_id,
                 batch_time: state.metadata.batch_time,
                 matched_pre_signature: None,
@@ -3089,8 +3089,6 @@ impl ExecutionEnvironment {
         Ok(())
     }
 
-    // TODO(CON-1416: Remove this directive)
-    #[allow(unreachable_code, unused_variables)]
     fn reshare_chain_key(
         &self,
         state: &mut ReplicatedState,
@@ -3110,12 +3108,6 @@ impl ExecutionEnvironment {
 
         let nodes = args.get_set_of_nodes()?;
         let registry_version = args.get_registry_version();
-
-        // TODO(CON-1416): Activate this endpoint
-        return Err(UserError::new(
-            ErrorCode::CanisterRejectedMessage,
-            "This key is not an idkg key",
-        ));
 
         state.metadata.subnet_call_context_manager.push_context(
             SubnetCallContext::ReshareChainKey(ReshareChainKeyContext {

@@ -1553,17 +1553,6 @@ impl StateMachine {
         let public_key_der = threshold_sig_public_key_to_der(public_key).unwrap();
         let subnet_id =
             subnet_id.unwrap_or(PrincipalId::new_self_authenticating(&public_key_der).into());
-        let registry_client = make_nodes_registry(
-            subnet_id,
-            subnet_type,
-            &chain_keys_enabled_status,
-            features,
-            registry_data_provider.clone(),
-            &nodes,
-            is_root_subnet,
-            public_key,
-            ni_dkg_transcript,
-        );
 
         let mut sm_config = ic_config::state_manager::Config::new(state_dir.path().to_path_buf());
         if let Some(lsmt_override) = lsmt_override {
@@ -1576,12 +1565,6 @@ impl StateMachine {
             ..Default::default()
         };
 
-        let cycles_account_manager = Arc::new(CyclesAccountManager::new(
-            subnet_config.scheduler_config.max_instructions_per_message,
-            subnet_type,
-            subnet_id,
-            subnet_config.cycles_account_manager_config,
-        ));
         let state_manager = Arc::new(StateManagerImpl::new(
             Arc::new(FakeVerifier),
             subnet_id,
@@ -1591,6 +1574,25 @@ impl StateMachine {
             &sm_config,
             None,
             malicious_flags.clone(),
+        ));
+
+        let registry_client = make_nodes_registry(
+            subnet_id,
+            subnet_type,
+            &chain_keys_enabled_status,
+            features,
+            registry_data_provider.clone(),
+            &nodes,
+            is_root_subnet,
+            public_key,
+            ni_dkg_transcript,
+        );
+
+        let cycles_account_manager = Arc::new(CyclesAccountManager::new(
+            subnet_config.scheduler_config.max_instructions_per_message,
+            subnet_type,
+            subnet_id,
+            subnet_config.cycles_account_manager_config,
         ));
 
         // get the CUP from the registry

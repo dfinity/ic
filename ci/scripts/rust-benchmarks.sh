@@ -1,14 +1,12 @@
 #!/usr/bin/env bash
-set -eEuo pipefail
+set -euo pipefail
 
-TARGET_LIST=$(bazel query "attr(tags, 'rust_bench', ${TARGETS:-'//rs/...'})")
-for TARGET in $TARGET_LIST; do
-    BAZEL_COMMAND=run BAZEL_TARGETS="$TARGET" time ./ci/bazel-scripts/main.sh
-done
-find -L ./bazel-out -name 'benchmark.json'
+while IFS= read -r tgt; do
+    BAZEL_COMMAND=run BAZEL_TARGETS="$tgt" time ./ci/bazel-scripts/main.sh
+done < <(bazel query "attr(tags, 'rust_bench', ${TARGETS:-'//rs/...'})")
 
-set -x
 while IFS= read -r bench_dir; do
+    echo "bench dir: $bench_dir"
     echo '{}' | jq -cMr \
         --slurpfile benchmark "$bench_dir/benchmark.json" \
         --slurpfile estimates "$bench_dir/estimates.json" \

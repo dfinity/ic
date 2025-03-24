@@ -11,6 +11,28 @@ here were moved from the adjacent `unreleased_changelog.md` file.
 INSERT NEW RELEASES HERE
 
 
+# 2025-03-21: Proposal 135933
+
+http://dashboard.internetcomputer.org/proposal/135933
+
+## Changed
+
+* Refactor `prune_following` task to use the `timer_task` library, and therefore enables metrics to
+  be collected about its execution.
+
+# 2025-03-17: Proposal 135847
+
+https://dashboard.internetcomputer.org/proposal/135847
+
+## Added
+
+* Added `NetworkEconomics.voting_power_economics.neuron_minimum_dissolve_delay_to_vote_seconds`.
+
+## Removed
+
+* Removed a migration mechanism previously used for data migrations through heartbeat.
+
+
 # 2025-03-08: Proposal 135702
 
 http://dashboard.internetcomputer.org/proposal/135702
