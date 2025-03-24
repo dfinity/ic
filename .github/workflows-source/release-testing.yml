@@ -185,15 +185,19 @@ jobs:
 
   repro-checks:
     name: Repro check using mirror ${{ matrix.mirror }} of `${{ matrix.os }}`
+    # `ci-main` is the job that pushes the images to the cloud storage
+    needs:
+      - ci-main
     strategy:
+      # This should spawn 6 jobs, all combinations of `mirror` x `os`
       matrix:
         mirror:
           - "https://download.dfinity.systems"
           - "https://download.dfinity.network"
         os:
           - --guestos
-          # - --setupos
-          # - --hostos
+          - --setupos
+          - --hostos
     <<: *dind-large-setup
     steps:
       - name: Setup curl 8.3.0
@@ -215,4 +219,4 @@ jobs:
         shell: bash
         run: |
           export PATH="/home/ubuntu/curl/bin:$PATH"
-          sudo apt-get install -y curl && curl --proto '=https' --tlsv1.2 -sSLO https://raw.githubusercontent.com/dfinity/ic/${{ github.sha }}/ci/tools/repro-check.sh && chmod +x repro-check.sh && ./repro-check.sh -c 4833f30d3b5afd84a385dfb146581580285d8a7e ${{ matrix.os }} --mirror ${{ matrix.mirror }}
+          sudo apt-get install -y curl && curl --proto '=https' --tlsv1.2 -sSLO https://raw.githubusercontent.com/dfinity/ic/${{ github.sha }}/ci/tools/repro-check.sh && chmod +x repro-check.sh && ./repro-check.sh -c ${{ github.sha }} ${{ matrix.os }} --mirror ${{ matrix.mirror }}
