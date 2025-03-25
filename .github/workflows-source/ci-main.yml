@@ -151,9 +151,7 @@ jobs:
         id: bazel-test-darwin-x86-64
         uses:  ./.github/actions/bazel-test-all/
         with:
-          BAZEL_COMMAND: >-
-            test --config=ci --config=macos_ci
-            --test_tag_filters=test_macos
+          BAZEL_COMMAND: test --config=ci --config=macos_ci --test_tag_filters=test_macos
           BAZEL_TARGETS: //rs/... //publish/binaries/...
           CLOUD_CREDENTIALS_CONTENT: ${{ secrets.CLOUD_CREDENTIALS_CONTENT }}
       - name: Purge Bazel Output
@@ -172,8 +170,7 @@ jobs:
         id: bazel-build-fuzzers
         uses:  ./.github/actions/bazel-test-all/
         with:
-          BAZEL_COMMAND: >-
-            build --config=ci --keep_going --config=fuzzing --build_tag_filters=libfuzzer
+          BAZEL_COMMAND: build --config=ci --keep_going --config=fuzzing --build_tag_filters=libfuzzer
           BAZEL_TARGETS: //rs/...
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
 

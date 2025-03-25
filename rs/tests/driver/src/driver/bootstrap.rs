@@ -670,7 +670,7 @@ pub fn configure_setupos_image(
         .arg(&uncompressed_image)
         .arg("--node-operator-private-key")
         .arg("--deployment-environment")
-        .arg("Testnet")
+        .arg("testnet")
         .arg("--mgmt-mac")
         .arg(&mac)
         .arg("--ipv6-prefix")
