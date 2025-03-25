@@ -982,53 +982,14 @@ fn with_subnet_state() {
     }
 }
 
-#[test]
-#[should_panic(expected = "Invalid canister ranges.")]
-fn with_invalid_subnet_state() {
+fn create_nns_subnet_state() -> (TempDir, PathBuf) {
     // Create a temporary state directory persisted throughout the test.
     let state_dir = TempDir::new().unwrap();
     let state_dir_path_buf = state_dir.path().to_path_buf();
 
-    // Create a PocketIC instance with a single app subnet.
-    let (server_url, _) = start_server_helper(None, None, false, false);
+    // Create a PocketIC instance with a single NNS subnet.
     let pic = PocketIcBuilder::new()
         .with_state_dir(state_dir_path_buf.clone())
-        .with_server_url(server_url.clone())
-        .with_application_subnet()
-        .build();
-
-    // Retrieve the app subnet from the topology.
-    let topology = pic.topology();
-    let app_subnet = topology.get_app_subnets()[0];
-
-    drop(pic);
-
-    // Create a PocketIC instance mounting the app state twice.
-    let app_subnet_seed = topology
-        .subnet_configs
-        .get(&app_subnet)
-        .unwrap()
-        .subnet_seed;
-    let app_state_dir = state_dir.path().join(hex::encode(app_subnet_seed));
-    let _pic = PocketIcBuilder::new()
-        .with_server_url(server_url.clone())
-        .with_subnet_state(SubnetKind::Application, app_state_dir.clone())
-        .with_subnet_state(SubnetKind::Application, app_state_dir)
-        .build();
-}
-
-#[test]
-#[should_panic(expected = "Invalid canister ranges.")]
-fn with_invalid_nns_subnet_state() {
-    // Create a temporary state directory persisted throughout the test.
-    let state_dir = TempDir::new().unwrap();
-    let state_dir_path_buf = state_dir.path().to_path_buf();
-
-    // Create a PocketIC instance with the NNS subnet.
-    let (server_url, _) = start_server_helper(None, None, false, false);
-    let pic = PocketIcBuilder::new()
-        .with_state_dir(state_dir_path_buf.clone())
-        .with_server_url(server_url.clone())
         .with_nns_subnet()
         .build();
 
@@ -1038,17 +999,76 @@ fn with_invalid_nns_subnet_state() {
 
     drop(pic);
 
-    // Create a PocketIC instance mounting the NNS subnet twice.
     let nns_subnet_seed = topology
         .subnet_configs
         .get(&nns_subnet)
         .unwrap()
         .subnet_seed;
     let nns_state_dir = state_dir.path().join(hex::encode(nns_subnet_seed));
+    (state_dir, nns_state_dir)
+}
+
+fn create_app_subnet_state() -> (TempDir, PathBuf) {
+    // Create a temporary state directory persisted throughout the test.
+    let state_dir = TempDir::new().unwrap();
+    let state_dir_path_buf = state_dir.path().to_path_buf();
+
+    // Create a PocketIC instance with a single app subnet.
+    let pic = PocketIcBuilder::new()
+        .with_state_dir(state_dir_path_buf.clone())
+        .with_application_subnet()
+        .build();
+
+    // Retrieve the app subnet from the topology.
+    let topology = pic.topology();
+    let app_subnet = topology.get_app_subnets()[0];
+
+    drop(pic);
+
+    let app_subnet_seed = topology
+        .subnet_configs
+        .get(&app_subnet)
+        .unwrap()
+        .subnet_seed;
+    let app_state_dir = state_dir.path().join(hex::encode(app_subnet_seed));
+    (state_dir, app_state_dir)
+}
+
+#[test]
+#[should_panic(expected = "Invalid canister ranges.")]
+fn with_app_subnet_state_twice() {
+    let (_state_dir, app_state_dir) = create_app_subnet_state();
+
+    // Create a PocketIC instance mounting the app state twice.
     let _pic = PocketIcBuilder::new()
-        .with_server_url(server_url.clone())
-        .with_nns_subnet()
+        .with_subnet_state(SubnetKind::Application, app_state_dir.clone())
+        .with_subnet_state(SubnetKind::Application, app_state_dir)
+        .build();
+}
+
+#[test]
+#[should_panic(
+    expected = "The actual subnet canister ranges [CanisterIdRange { start: CanisterId(rwlgt-iiaaa-aaaaa-aaaaa-cai), end: CanisterId(renrk-eyaaa-aaaaa-aaada-cai) }, CanisterIdRange { start: CanisterId(qoctq-giaaa-aaaaa-aaaea-cai), end: CanisterId(n5n4y-3aaaa-aaaaa-p777q-cai) }, CanisterIdRange { start: CanisterId(lxzze-o7777-77777-aaaaa-cai), end: CanisterId(x47dp-5x777-77777-p777q-cai) }] for the subnet kind Application are not disjoint from the canister ranges [CanisterIdRange { start: CanisterId(rwlgt-iiaaa-aaaaa-aaaaa-cai), end: CanisterId(renrk-eyaaa-aaaaa-aaada-cai) }, CanisterIdRange { start: CanisterId(qoctq-giaaa-aaaaa-aaaea-cai), end: CanisterId(n5n4y-3aaaa-aaaaa-p777q-cai) }] for a different subnet kind NNS."
+)]
+fn with_nns_as_app_subnet_state() {
+    let (_state_dir, nns_state_dir) = create_nns_subnet_state();
+
+    // Create a PocketIC instance mounting the NNS state as app state.
+    let _pic = PocketIcBuilder::new()
         .with_subnet_state(SubnetKind::Application, nns_state_dir)
+        .build();
+}
+
+#[test]
+#[should_panic(
+    expected = "The actual subnet canister ranges [CanisterIdRange { start: CanisterId(lxzze-o7777-77777-aaaaa-cai), end: CanisterId(x47dp-5x777-77777-p777q-cai) }] do not contain the canister ranges [CanisterIdRange { start: CanisterId(rwlgt-iiaaa-aaaaa-aaaaa-cai), end: CanisterId(renrk-eyaaa-aaaaa-aaada-cai) }, CanisterIdRange { start: CanisterId(qoctq-giaaa-aaaaa-aaaea-cai), end: CanisterId(n5n4y-3aaaa-aaaaa-p777q-cai) }] expected for the subnet kind NNS."
+)]
+fn with_app_as_nns_subnet_state() {
+    let (_state_dir, app_state_dir) = create_app_subnet_state();
+
+    // Create a PocketIC instance mounting the app state as NNS state.
+    let _pic = PocketIcBuilder::new()
+        .with_subnet_state(SubnetKind::NNS, app_state_dir)
         .build();
 }
 
