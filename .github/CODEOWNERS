@@ -23,7 +23,6 @@
 /bazel/fuzz_testing.bzl            @dfinity/idx @dfinity/product-security
 /BUILD.bazel                       @dfinity/idx
 /third_party/                      @dfinity/idx
-/mainnet-canister-revisions.json   @dfinity/idx @dfinity/nns-team
 /MODULE.bazel                      @dfinity/idx
 /WORKSPACE.bazel                   @dfinity/idx
 
@@ -83,6 +82,7 @@ go_deps.bzl               @dfinity/idx
 /ci/src/dependencies/resources/container_scanner_finding_failover_ignore_list_guestos.txt @dfinity/node
 /.pre-commit-config.yaml                                                 @dfinity/idx
 /pre-commit/                                                             @dfinity/idx
+/.mergify.yaml                                                           @dfinity/idx
 
 # [Testnet]
 /testnet/                                                  @dfinity/node @dfinity/dre
@@ -91,7 +91,7 @@ go_deps.bzl               @dfinity/idx
 /testnet/env/                                              @dfinity/platform-operations
 /testnet/release/                                          @dfinity/dre
 /testnet/tools/nns-tools/                                  @dfinity/nns-team
-/mainnet-subnet-revisions.json                             @dfinity/consensus @dfinity/dre
+/mainnet-icos-revisions.json                               @dfinity/consensus @dfinity/dre
 
 # [Rust]
 /rs/                                                    @dfinity/ic-interface-owners
@@ -300,3 +300,4 @@ go_deps.bzl               @dfinity/idx
 Cargo.toml
 .gitignore
 stackage_snapshot.json
+mainnet-canister-revisions.json # this file is auto-approved by mergify, therefore we remove condeowners

@@ -2,8 +2,8 @@ use candid::candid_method;
 use ic_base_types::PrincipalId;
 use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_cdk::{
-    api::{call::arg_data_raw, call_context_instruction_counter},
-    caller as ic_cdk_caller, heartbeat, post_upgrade, pre_upgrade, println, query, spawn, update,
+    api::call::arg_data_raw, caller as ic_cdk_caller, heartbeat, post_upgrade, pre_upgrade,
+    println, query, spawn, update,
 };
 use ic_nervous_system_canisters::cmc::CMCCanister;
 use ic_nervous_system_common::{
@@ -25,7 +25,6 @@ use ic_nns_governance::{
     canister_state::{governance, governance_mut, set_governance},
     encode_metrics,
     governance::Governance,
-    is_prune_following_enabled,
     neuron_data_validation::NeuronDataValidationSummary,
     pb::v1::{self as gov_pb, Governance as InternalGovernanceProto},
     storage::{grow_upgrades_memory_to, validate_stable_storage, with_upgrades_memory},
@@ -33,7 +32,7 @@ use ic_nns_governance::{
 };
 use ic_nns_governance_api::pb::v1::{
     claim_or_refresh_neuron_from_account_response::Result as ClaimOrRefreshNeuronFromAccountResponseResult,
-    governance::{GovernanceCachedMetrics, Migrations},
+    governance::GovernanceCachedMetrics,
     governance_error::ErrorType,
     manage_neuron::{
         claim_or_refresh::{By, MemoAndController},
@@ -77,47 +76,11 @@ pub(crate) const LOG_PREFIX: &str = "[Governance] ";
 
 fn schedule_timers() {
     schedule_adjust_neurons_storage(Duration::from_nanos(0), Bound::Unbounded);
-    schedule_prune_following(Duration::from_secs(0), Bound::Unbounded);
     schedule_spawn_neurons();
     schedule_unstake_maturity_of_dissolved_neurons();
     schedule_neuron_data_validation();
     schedule_vote_processing();
     schedule_tasks();
-}
-
-const PRUNE_FOLLOWING_INTERVAL: Duration = Duration::from_secs(10);
-
-// Once this amount of instructions is used by the
-// Governance::prune_some_following, it stops, saves where it is, schedules more
-// pruning later, and returns.
-//
-// Why this value seems to make sense:
-//
-// I think we can conservatively estimate that it takes 2e6 instructions to pull
-// a neuron from stable memory. If we assume 200e3 neurons are in stable memory,
-// then 400e9 instructions are needed to read all neurons in stable memory.
-// 400e9 instructions / 50e6 instructions per batch = 8e3 batches. If we process
-// 1 batch every 10 s (see PRUNE_FOLLOWING_INTERVAL), then it would take less
-// than 23 hours to complete a full pass.
-//
-// This comes to 1.08 full passes per day. If each full pass uses 400e9
-// instructions, then we use 432e9 instructions per day doing
-// prune_some_following. If we assume 1 terainstruction costs 1 XDR,
-// prune_some_following uses less than half an XDR per day.
-const MAX_PRUNE_SOME_FOLLOWING_INSTRUCTIONS: u64 = 50_000_000;
-
-fn schedule_prune_following(delay: Duration, original_begin: Bound<NeuronIdProto>) {
-    if !is_prune_following_enabled() {
-        return;
-    }
-
-    ic_cdk_timers::set_timer(delay, move || {
-        let carry_on =
-            || call_context_instruction_counter() < MAX_PRUNE_SOME_FOLLOWING_INSTRUCTIONS;
-        let new_begin = governance_mut().prune_some_following(original_begin, carry_on);
-
-        schedule_prune_following(PRUNE_FOLLOWING_INTERVAL, new_begin);
-    });
 }
 
 // The interval before adjusting neuron storage for the next batch of neurons starting from last
@@ -600,7 +563,7 @@ async fn heartbeat() {
 fn manage_neuron_pb() {
     debug_log("manage_neuron_pb");
     panic_with_probability(
-        0.7,
+        0.9,
         "manage_neuron_pb is deprecated. Please use manage_neuron instead.",
     );
 
@@ -635,7 +598,7 @@ fn list_proposals_pb() {
 fn list_neurons_pb() {
     debug_log("list_neurons_pb");
     panic_with_probability(
-        0.7,
+        0.9,
         "list_neurons_pb is deprecated. Please use list_neurons instead.",
     );
 
@@ -716,16 +679,6 @@ fn get_most_recent_monthly_node_provider_rewards() -> Option<MonthlyNodeProvider
 #[query(hidden = true)]
 fn get_neuron_data_validation_summary() -> NeuronDataValidationSummary {
     governance().neuron_data_validation_summary()
-}
-
-#[query(hidden = true)]
-fn get_migrations() -> Migrations {
-    let response = governance()
-        .heap_data
-        .migrations
-        .clone()
-        .unwrap_or_default();
-    Migrations::from(response)
 }
 
 #[query]

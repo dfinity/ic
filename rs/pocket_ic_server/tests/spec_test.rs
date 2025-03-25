@@ -111,6 +111,7 @@ fn setup_and_run_ic_ref_test(
     // create live PocketIc instance
     let mut pic = PocketIcBuilder::new()
         .with_nns_subnet()
+        .with_ii_subnet()
         .with_application_subnet()
         .build();
     let endpoint = pic.make_live(None);

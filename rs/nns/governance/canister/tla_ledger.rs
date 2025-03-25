@@ -1,7 +1,7 @@
 use async_trait::async_trait;
 use ic_base_types::CanisterId;
+use ic_nervous_system_canisters::ledger::IcpLedger;
 use ic_nervous_system_canisters::ledger::IcpLedgerCanister;
-use ic_nervous_system_common::ledger::IcpLedger;
 use ic_nervous_system_common::NervousSystemError;
 use ic_nervous_system_runtime::Runtime;
 use icp_ledger::{AccountIdentifier, Subaccount as IcpSubaccount, Tokens};

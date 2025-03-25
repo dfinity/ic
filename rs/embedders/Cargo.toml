@@ -14,6 +14,7 @@ ic-config = { path = "../config" }
 ic-cycles-account-manager = { path = "../cycles_account_manager" }
 ic-interfaces = { path = "../interfaces" }
 ic-logger = { path = "../monitoring/logger" }
+ic-management-canister-types-private = { path = "../types/management_canister_types" }
 ic-metrics = { path = "../monitoring/metrics" }
 ic-registry-subnet-type = { path = "../registry/subnet_type" }
 ic-replicated-state = { path = "../replicated_state" }
@@ -32,6 +33,7 @@ num-traits = { workspace = true }
 prometheus = { workspace = true }
 rayon = { workspace = true }
 rustc-demangle = { workspace = true }
+scopeguard = { workspace = true }
 serde = { workspace = true }
 serde_bytes = { workspace = true }
 slog = { workspace = true }
@@ -39,14 +41,14 @@ slog-term = { workspace = true }
 tempfile = { workspace = true }
 wasm-encoder = { workspace = true }
 wasmparser = { workspace = true }
-wasmtime = { version = "29.0.0", default-features = false, features = [
+wasmtime = { version = "30.0.2", default-features = false, features = [
     'cranelift',
     'gc',
     'gc-null',
     'parallel-compilation',
     'runtime',
 ] }
-wasmtime-environ = "29.0.0"
+wasmtime-environ = "30.0.2"
 
 # Wasmtime depends on 0.4.2 but specifies 0.4.1 in the toml file.
 # Enforce 0.4.2 using a dummy dependency until the upstream issue

@@ -7,6 +7,7 @@ DEPENDENCIES = [
     # Keep sorted.
     "//packages/ic-error-types",
     "//rs/config",
+    "//rs/consensus/certification",
     "//rs/consensus/dkg",
     "//rs/consensus/utils",
     "//rs/consensus/vetkd",
@@ -33,7 +34,6 @@ DEPENDENCIES = [
     "@crate_index//:rand",
     "@crate_index//:rand_chacha",
     "@crate_index//:slog",
-    "@crate_index//:tokio",
 ]
 
 DEV_DEPENDENCIES = [
@@ -76,6 +76,7 @@ DEV_DEPENDENCIES = [
     "@crate_index//:slog-term",
     "@crate_index//:strum",
     "@crate_index//:tempfile",
+    "@crate_index//:tokio",
 ]
 
 MALICIOUS_DEPENDENCIES = [

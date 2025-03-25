@@ -2,10 +2,11 @@ use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::Arc;
 
+use ic_management_canister_types_private::Global;
 use ic_replicated_state::{
     canister_state::execution_state::WasmBinary,
     canister_state::execution_state::WasmExecutionMode, page_map::PageAllocatorFileDescriptor,
-    ExportedFunctions, Global, Memory, NumWasmPages, PageMap,
+    ExportedFunctions, Memory, NumWasmPages, PageMap,
 };
 use ic_system_api::sandbox_safe_system_state::{SandboxSafeSystemState, SystemStateModifications};
 use ic_system_api::{ApiType, DefaultOutOfInstructionsHandler};
@@ -705,7 +706,7 @@ pub fn process(
         if execution_parameters.instruction_limits.slicing_enabled()
             && dirty_pages.get() > embedder.config().max_dirty_pages_without_optimization as u64
         {
-            if let Err(err) = system_api.yield_for_dirty_memory_copy(instruction_counter) {
+            if let Err(err) = system_api.yield_for_dirty_memory_copy() {
                 // If there was an error slicing, propagate this error to the main result and return.
                 // Otherwise, the regular message path takes place.
                 return (

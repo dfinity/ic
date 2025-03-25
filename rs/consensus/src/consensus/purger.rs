@@ -18,9 +18,9 @@
 //!
 //! 4. Replicated states below the certified height recorded in the block
 //!    in the latest CatchUpPackage can be purged.
-use super::{bounds::validated_pool_within_bounds, MINIMUM_CHAIN_LENGTH};
+use super::bounds::validated_pool_within_bounds;
 use crate::consensus::metrics::PurgerMetrics;
-use ic_consensus_utils::pool_reader::PoolReader;
+use ic_consensus_utils::{pool_reader::PoolReader, MINIMUM_CHAIN_LENGTH};
 use ic_interfaces::{
     consensus_pool::{ChangeAction, HeightRange, Mutations, PurgeableArtifactType},
     messaging::MessageRouting,
@@ -35,8 +35,7 @@ use ic_types::{
     replica_config::ReplicaConfig,
     Height,
 };
-use std::collections::BTreeSet;
-use std::{cell::RefCell, sync::Arc};
+use std::{cell::RefCell, collections::BTreeSet, sync::Arc};
 
 pub(crate) const VALIDATED_POOL_BOUNDS_CHECK_FREQUENCY: u64 = 10;
 
