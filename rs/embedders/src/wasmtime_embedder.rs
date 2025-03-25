@@ -1273,6 +1273,19 @@ impl WasmtimeInstance {
         }
     }
 
+    /// Sets the accessed pages global.
+    pub fn set_accessed_pages(&mut self, accessed_pages: i64) {
+        match self.store.data().num_prev_resident_pages {
+            Some(num_prev_resident_pages) => {
+                match num_prev_resident_pages.set(&mut self.store, Val::I64(accessed_pages)) {
+                    Ok(_) => (),
+                    Err(e) => panic!("couldn't set the accessed pages global: {:?}", e),
+                }
+            }
+            None => panic!("couldn't find the accessed pages global in the canister globals"),
+        }
+    }
+
     /// Returns the current instruction counter.
     pub fn instruction_counter(&mut self) -> i64 {
         let Some(num_instructions) = self.store.data().num_instructions_global else {

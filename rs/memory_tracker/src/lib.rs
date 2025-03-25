@@ -642,7 +642,7 @@ pub fn sigsegv_fault_handler_new(
                 // going to simply `mprotect` the range.
                 let prefetch_range = accessed_bitmap.restrict_range_to_marked(prefetch_range);
                 // Amortize the prefetch work based on the previously written pages.
-                let prefetch_range = dirty_bitmap.restrict_range_to_predicted(prefetch_range);
+                //let prefetch_range = dirty_bitmap.restrict_range_to_predicted(prefetch_range);
                 let page_start_addr = tracker.page_start_addr_from(faulting_page);
                 unsafe {
                     mprotect(
@@ -652,20 +652,16 @@ pub fn sigsegv_fault_handler_new(
                     )
                     .map_err(print_enomem_help)
                     .unwrap();
-
-                    // Call mlock2 to lock the pages in memory. This is needed to prevent the kernel
-                    // from swapping out the pages to disk.
-                    // If it fails, we just log a warning.
+                    // Call mlock2(MLOCK_ONFAULT) to lock the pages in memory.
+                    // This is important to avoid swap, which could lead to inconsistent outputs from mincore().
                     let ret = libc::mlock2(
                         page_start_addr,
                         range_size_in_bytes(&prefetch_range),
                         libc::MLOCK_ONFAULT,
                     );
                     if ret != 0 {
-                        let err = std::io::Error::last_os_error();
-                        eprintln!("mlock2 failed 1: {}", err);
-                    } else {
-                        eprintln!("mlock2 success 1");
+                        let errno = nix::errno::from_i32(ret);
+                        eprintln!("mlock2 failed with errno: {}", errno);
                     }
                 };
                 tracker
@@ -686,7 +682,7 @@ pub fn sigsegv_fault_handler_new(
                 // range have not been written to.
                 let prefetch_range = accessed_bitmap.restrict_range_to_unmarked(prefetch_range);
                 // Amortize the prefetch work based on the previously written pages.
-                let prefetch_range = dirty_bitmap.restrict_range_to_predicted(prefetch_range);
+                //let prefetch_range = dirty_bitmap.restrict_range_to_predicted(prefetch_range);
                 let prefetch_range = map_unaccessed_pages(
                     tracker,
                     ProtFlags::PROT_READ | ProtFlags::PROT_WRITE,
@@ -774,7 +770,7 @@ fn apply_memory_instructions(
                         offset as i64,
                     )
                     .map_err(print_enomem_help)
-                    .unwrap()
+                    .unwrap();
                 };
             }
             ic_replicated_state::page_map::MemoryMapOrData::Data(data) => {
@@ -793,20 +789,16 @@ fn apply_memory_instructions(
                         )
                         .map_err(print_enomem_help)
                         .unwrap();
-
-                        // Call mlock2 to lock the pages in memory. This is needed to prevent the kernel
-                        // from swapping out the pages to disk.
-                        // If it fails, we just log a warning.
+                        // Call mlock2(MLOCK_ONFAULT) to lock the pages in memory.
+                        // This is important to avoid swap, which could lead to inconsistent outputs from mincore().
                         let ret = libc::mlock2(
                             tracker.page_start_addr_from(prefetch_range.start),
                             range_size_in_bytes(&prefetch_range),
                             libc::MLOCK_ONFAULT,
                         );
                         if ret != 0 {
-                            let err = std::io::Error::last_os_error();
-                            println!("mlock2 failed 2: {}", err);
-                        } else {
-                            println!("mlock2 success 2");
+                            let errno = nix::errno::from_i32(ret);
+                            eprintln!("mlock2 failed with errno: {}", errno);
                         }
                     };
                     tracker
@@ -840,17 +832,16 @@ fn apply_memory_instructions(
             .map_err(print_enomem_help)
             .unwrap();
 
-            // Call mlock2 to lock the pages in memory. This is needed to prevent the kernel
-            // from swapping out the pages to disk.
-            // If it fails, we just log a warning.
+            // Call mlock2(MLOCK_ONFAULT) to lock the pages in memory.
+            // This is important to avoid swap, which could lead to inconsistent outputs from mincore().
             let ret = libc::mlock2(
                 tracker.page_start_addr_from(prefetch_range.start),
                 range_size_in_bytes(&prefetch_range),
                 libc::MLOCK_ONFAULT,
             );
             if ret != 0 {
-                let err = std::io::Error::last_os_error();
-                println!("mlock2 failed 3: {}", err);
+                let errno = nix::errno::from_i32(ret);
+                eprintln!("mlock2 failed with errno: {}", errno);
             }
         };
         tracker

@@ -672,6 +672,9 @@ pub fn process(
     // Set the instruction limit for the first slice.
     instance.set_instruction_counter(first_slice_instruction_limit.get() as i64);
 
+    // Set the accessed pages to 0.
+    instance.set_accessed_pages(0);
+
     // Execute Wasm code until it finishes or exceeds the message instruction
     // limit. With deterministic time slicing, this call may execute multiple
     // slices before it returns.

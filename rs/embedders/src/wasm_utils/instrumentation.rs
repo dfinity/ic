@@ -1033,11 +1033,6 @@ pub(super) fn instrument(
             prev_resident_pages_ix = num_globals + 2;
         }
     };
-    println!(
-        "decr_instr_counter_entries_ix: {}",
-        decr_instr_counter_entries_ix
-    );
-    println!("prev_resident_pages_ix: {}", prev_resident_pages_ix);
 
     let special_indices = SpecialIndices {
         instructions_counter_ix: num_globals,
@@ -1246,11 +1241,11 @@ fn export_additional_symbols<'a>(
         GlobalSet {
             global_index: special_indices.decr_instr_counter_entries_ix,
         },
-        // If the entries number is multiple of 10_000, call check_accessed_pages().
+        // If the entries number is multiple of 100_000, call check_accessed_pages().
         GlobalGet {
             global_index: special_indices.decr_instr_counter_entries_ix,
         },
-        I64Const { value: 10_000 },
+        I64Const { value: 100_000 },
         I64RemU,
         I64Eqz,
         If {

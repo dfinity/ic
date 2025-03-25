@@ -32,6 +32,9 @@ use std::convert::TryFrom;
 /// from wasm sandbox to the replica execution environment.
 const BYTE_TRANSMISSION_COST_FACTOR: usize = 50;
 
+const DEBUG_FOR_MINCORE_OUTPUT: bool = false;
+const NUM_MAX_RESIDENT_PAGES: usize = 131_072;
+
 fn unexpected_err(s: String) -> HypervisorError {
     HypervisorError::WasmEngineError(WasmEngineError::Unexpected(s))
 }
@@ -1058,7 +1061,6 @@ pub fn syscalls<
                         .data_mut()
                         .system_api_mut()?
                         .out_of_instructions(instruction_counter)?;
-                    //println!("I think we sliced!");
                     store_value(&global, instruction_counter, c)
                 })
             }
@@ -1110,6 +1112,8 @@ pub fn syscalls<
                     let heap_size = memory.len();
                     let num_pages = heap_size / 4096;
 
+                    let time_now = std::time::Instant::now();
+
                     let mut vec = vec![0u8; num_pages];
                     let res = unsafe {
                         libc::mincore(
@@ -1120,27 +1124,64 @@ pub fn syscalls<
                     };
                     if res == 0 {
                         // Count the number of accessed pages.
-                        let accessed_pages = vec.iter().filter(|&&x| x != 0).count();
+                        let accessed_pages = vec.iter().filter(|&&x| x == 1).count();
 
                         // Get old resident pages through the global.
                         let global_res_pages = get_num_resident_pages_global(c)?;
                         let old_resident_pages = load_value(&global_res_pages, c)? as usize;
 
-                        // println!(
-                        //     "Resident pages: {}, Accessed pages: {}",
-                        //     old_resident_pages, accessed_pages
-                        // );
-
-                        if accessed_pages - old_resident_pages >= 131072 {
+                        if accessed_pages - old_resident_pages >= NUM_MAX_RESIDENT_PAGES {
                             // If the number of accessed pages is greater than 500MiB,
                             // set instruction counter to 0 such that the canister would
                             // slice and start another round.
                             let global = get_num_instructions_global(c)?;
                             store_value(&global, 0, c)?;
                             store_value(&global_res_pages, accessed_pages as i64, c)?;
-                            println!("Accessed pages: {}", accessed_pages);
+                        }
+
+                        // Only run the following on debug mode.
+                        if DEBUG_FOR_MINCORE_OUTPUT {
+                            // Open /proc/self/smaps and check how many pages are locked.
+                            use std::io::Read;
+                            let mut file = std::fs::File::open("/proc/self/smaps").unwrap();
+                            let mut contents = String::new();
+                            file.read_to_string(&mut contents).unwrap();
+                            let mut locked_kbytes = 0;
+
+                            // Go through all the VMAs, check if on VmFlags: they have the "lo" flag set
+                            // and then if so, get the VMA size.
+                            let mut crnt_size = 0;
+                            let mut locked_flag = false;
+                            for line in contents.lines() {
+                                if line.starts_with("Size:") {
+                                    let size: u64 =
+                                        line.split_whitespace().nth(1).unwrap().parse().unwrap();
+                                    crnt_size = size;
+                                }
+                                if line.starts_with("VmFlags:") {
+                                    if line.contains("lo") {
+                                        locked_flag = true;
+                                    } else {
+                                        locked_flag = false;
+                                    }
+                                }
+
+                                if locked_flag {
+                                    // println!("locked size = {}", crnt_size);
+                                    locked_kbytes += crnt_size;
+                                    crnt_size = 0;
+                                    locked_flag = false;
+                                }
+                            }
+                            let locked_pages = locked_kbytes / 4;
+                            debug_assert!(locked_pages as usize >= accessed_pages);
+                            println!(
+                                "accessed pages = {}, locked pages = {}",
+                                accessed_pages, locked_pages
+                            );
                         }
                     }
+                    println!("mincore took  {:?}", time_now.elapsed());
 
                     Ok(())
                 })
