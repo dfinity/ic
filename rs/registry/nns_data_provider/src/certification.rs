@@ -1,16 +1,20 @@
+use candid::{Decode, Encode};
+use ic_canister_client::Agent;
 use ic_certification::{verify_certified_data, CertificateValidationError};
 use ic_crypto_tree_hash::{LabeledTree, MixedHashTree};
 use ic_interfaces_registry::RegistryTransportRecord;
+use ic_nns_constants::REGISTRY_CANISTER_ID;
 use ic_registry_transport::pb::v1::{
-    registry_mutation::Type, CertifiedResponse, RegistryAtomicMutateRequest,
+    high_capacity_registry_mutation, registry_mutation::Type, CertifiedResponse,
+    HighCapacityRegistryAtomicMutateRequest, HighCapacityRegistryMutation, LargeValueChunkKeys,
 };
 use ic_types::{
     crypto::threshold_sig::ThresholdSigPublicKey, CanisterId, RegistryVersion, SubnetId, Time,
 };
 use prost::Message;
+// DO NOT MERGE use registry_canister::pb::v1::GetChunkRequest;
 use serde::Deserialize;
-use std::collections::BTreeMap;
-use std::convert::TryFrom;
+use std::{collections::BTreeMap, convert::TryFrom, fmt::Debug};
 use tree_deserializer::{types::Leb128EncodedU64, LabeledTreeDeserializer};
 
 #[cfg(test)]
@@ -50,7 +54,7 @@ pub enum CertificationError {
 struct CertifiedPayload {
     current_version: Leb128EncodedU64,
     #[serde(default)]
-    delta: BTreeMap<u64, Protobuf<RegistryAtomicMutateRequest>>,
+    delta: BTreeMap<u64, Protobuf<HighCapacityRegistryAtomicMutateRequest>>,
 }
 
 fn embed_certificate_error(err: CertificateValidationError) -> CertificationError {
@@ -119,7 +123,8 @@ fn validate_version_range(
 }
 
 /// Decodes registry deltas from their hash tree representation.
-pub fn decode_hash_tree(
+pub async fn decode_hash_tree(
+    agent: &Agent,
     since_version: u64,
     hash_tree: MixedHashTree,
 ) -> Result<(Vec<RegistryTransportRecord>, RegistryVersion), CertificationError> {
@@ -145,26 +150,114 @@ pub fn decode_hash_tree(
     // format that RegistryClient wants.
     let current_version = validate_version_range(since_version, &certified_payload)?;
 
-    let changes = certified_payload
-        .delta
-        .into_iter()
-        .flat_map(|(v, mutate_req)| {
-            mutate_req.0.mutations.into_iter().map(move |m| {
-                let value = if m.mutation_type == Type::Delete as i32 {
-                    None
-                } else {
-                    Some(m.value)
-                };
-                RegistryTransportRecord {
-                    key: String::from_utf8_lossy(&m.key[..]).to_string(),
-                    value,
-                    version: RegistryVersion::from(v),
-                }
-            })
-        })
-        .collect();
+    let mut changes = vec![];
+    for (version, atomic_mutation) in certified_payload.delta {
+        let version = RegistryVersion::from(version);
+
+        for mutation in atomic_mutation.0.mutations {
+            let HighCapacityRegistryMutation {
+                mutation_type,
+                content,
+                key,
+            } = mutation;
+
+            let key = String::from_utf8_lossy(&key[..]).to_string();
+            let value: Option<Vec<u8>> =
+                normalize_mutation_content(agent, mutation_type, content).await?;
+
+            changes.push(RegistryTransportRecord {
+                key,
+                value,
+                version,
+            });
+        }
+    }
 
     Ok((changes, RegistryVersion::from(current_version)))
+}
+
+// DO NOT MERGE - Might make more sense for this to be defined in the registry/transport crate.
+async fn normalize_mutation_content(
+    agent: &Agent,
+    mutation_type: i32,
+    content: Option<high_capacity_registry_mutation::Content>,
+) -> Result<Option<Vec<u8>>, CertificationError> {
+    if mutation_type == Type::Delete as i32 {
+        return Ok(None);
+    }
+
+    use high_capacity_registry_mutation::Content as C;
+    let large_value_chunk_keys = match content {
+        Some(C::LargeValueChunkKeys(ok)) => ok,
+
+        Some(C::Value(value)) => {
+            return Ok(Some(value));
+        }
+
+        None => {
+            todo!(); // DO NOT MERGE
+        }
+    };
+
+    let monolithic_blob = reconstitute_monolithic_blob(agent, &large_value_chunk_keys).await?;
+    Ok(Some(monolithic_blob))
+}
+
+// DO NOT MERGE - Might make more sense for this to be defined in the registry/transport crate.
+async fn reconstitute_monolithic_blob(
+    agent: &Agent,
+    chunk_keys: &LargeValueChunkKeys,
+) -> Result<Vec<u8>, CertificationError> {
+    fn new_err(cause: impl Debug) -> CertificationError {
+        CertificationError::InvalidDeltas(format!(
+            "Unable to fetch chunk(s) of large registry record: {:?}",
+            cause,
+        ))
+    }
+
+    // DO NOT MERGE
+    #[derive(candid::CandidType)]
+    struct GetChunkRequest {
+        content_sha256: Option<Vec<u8>>,
+    }
+    #[derive(candid::Deserialize, candid::CandidType)]
+    struct Chunk {
+        content: Option<Vec<u8>>,
+    }
+
+    let mut result = vec![];
+    // This could be parallelized, but for simplicity, we just use for loop.
+    for content_sha256 in &chunk_keys.chunk_content_sha256s {
+        let content_sha256 = Some(content_sha256.clone()); // Here, we assume content_sha256 is small.
+
+        // Call get_chunk.
+        let request = Encode!(&GetChunkRequest { content_sha256 }).map_err(new_err)?;
+        let get_chunk_response = agent
+            .execute_query(
+                &REGISTRY_CANISTER_ID, // DO NOT MERGE - Is there a practical way to avoid avoid hard-coding?
+                "get_chunk",
+                request,
+            )
+            .await
+            .map_err(new_err)?
+            // I honestly do not know what it means if None is returned instead of
+            // Some(blob), but it really seems like something has gone wrong (not
+            // just empty reply, but rather, no reply at all), so we treat it as an
+            // error.
+            .ok_or_else(|| new_err("No reply (not even empty)"))?;
+
+        // Extract chunk from get_chunk call.
+        let Chunk { content } = Decode!(&get_chunk_response, Result<Chunk, String>)
+            .map_err(new_err)? // unable to decode
+            .map_err(new_err)?; // Registry canister returned Err.
+        let mut chunk_content =
+            content.ok_or_else(|| new_err("get_chunk response has no content (not even empty)"))?;
+
+        // Accumulate.
+        result.append(&mut chunk_content);
+    }
+
+    Ok(result)
 }
 
 /// Parses a response of the "get_certified_changes_since" registry method,
@@ -173,7 +266,8 @@ pub fn decode_hash_tree(
 ///   * The latest version available (might be greater than the version of the
 ///     last received delta if there were too many deltas to send in one go).
 ///   * The time when the received data was last certified by the subnet.
-pub fn decode_certified_deltas(
+pub(crate) async fn decode_certified_deltas(
+    agent: &Agent,
     since_version: u64,
     canister_id: &CanisterId,
     nns_pk: &ThresholdSigPublicKey,
@@ -209,7 +303,8 @@ pub fn decode_certified_deltas(
     )
     .map_err(embed_certificate_error)?;
 
-    let (changes, current_version) = decode_hash_tree(since_version, mixed_hash_tree)?;
+    let (changes, current_version) =
+        decode_hash_tree(agent, since_version, mixed_hash_tree).await?;
 
     Ok((changes, current_version, time))
 }
