@@ -130,6 +130,15 @@ fn test(env: TestEnv) {
                     .expect("failed to query");
                 assert_eq!(response, vec![n as u8]);
             }
+            assert_node_malicious(
+                malicious_node.clone(),
+                vec!["Replica diverged"],
+            ).await;
+            info!(log, "check Unexpected sandbox.");
+            assert_node_malicious(
+                malicious_node.clone(),
+                vec!["Unexpected sandbox"],
+            ).await;
         }
     });
 }

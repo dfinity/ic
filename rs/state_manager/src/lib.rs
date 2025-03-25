@@ -883,6 +883,7 @@ fn initialize_tip(
             if let SandboxMemory::Synced(_) =
                 *canister_state.wasm_memory.sandbox_memory.lock().unwrap()
             {
+                info!(log, "Unexpected sandbox");
                 panic!(
                     "Unexpected sandbox wasm_memory state for canister {}",
                     canister.canister_id()
@@ -891,6 +892,7 @@ fn initialize_tip(
             if let SandboxMemory::Synced(_) =
                 *canister_state.stable_memory.sandbox_memory.lock().unwrap()
             {
+                info!(log, "Unexpected sandbox");
                 panic!(
                     "Unexpected sandbox stable_memory state for canister {}",
                     canister.canister_id()
@@ -3277,7 +3279,7 @@ impl StateManager for StateManagerImpl {
         states.states_metadata.split_off(&height);
 
         self.release_lock_and_persist_metadata(states);
-
+        std::thread::sleep(std::time::Duration::from_secs(5));
         fatal!(self.log, "Replica diverged at height {}", height)
     }
 }
