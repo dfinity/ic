@@ -156,11 +156,6 @@ miscfiles_read_generic_certs(ic_replica_t)
 # Allow using locales
 miscfiles_read_localization(ic_replica_t)
 
-# Allow to turn anonymous memory executable (required for the native code
-# compiled from wasm inside the process). This is obviously not desirable
-# from security POV.
-allow ic_replica_t self : process { execmem };
-
 # Wants to set process group
 allow ic_replica_t self : process { getsched setpgid signal };
 
@@ -292,11 +287,6 @@ allow ic_canister_sandbox_t ic_canister_sandbox_exec_t:file { entrypoint execute
 allow ic_canister_sandbox_t ic_canister_sandbox_t:process { fork getsched };
 
 allow ic_canister_sandbox_t ic_canister_sandbox_exec_t : file { entrypoint execute map read };
-
-# Allow to turn anonymous memory executable (required for the native code
-# compiled from wasm inside the process). This is obviously not desirable
-# from security POV.
-allow ic_canister_sandbox_t self : process { execmem };
 
 # Allow to get own scheduler -- that's harmless, obviously.
 allow ic_canister_sandbox_t ic_canister_sandbox_t : process { getsched };
