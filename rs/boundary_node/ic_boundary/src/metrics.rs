@@ -18,7 +18,6 @@ use prometheus::{
     register_int_gauge_with_registry, Encoder, HistogramOpts, HistogramVec, IntCounterVec,
     IntGauge, IntGaugeVec, Registry, TextEncoder,
 };
-use salt_sharing_api::SALT_SIZE;
 use sha3::{Digest, Sha3_256};
 use std::{
     sync::{Arc, RwLock},
@@ -654,20 +653,18 @@ pub async fn metrics_middleware(
         let salt = anonymization_salt.load();
 
         let hash_fn = |input: &str| -> String {
-            let err_str = "N/A".to_string();
-
-            let salt = match salt.as_ref() {
-                Some(s) if s.len() == SALT_SIZE => s,
-                _ => return err_str,
-            };
-
             let mut hasher = Sha3_256::new();
 
-            hasher.update(salt.as_slice());
-            hasher.update(input);
+            if let Some(v) = salt.as_ref() {
+                hasher.update(v.as_slice());
+            } else {
+                return "N/A".to_string();
+            }
 
+            hasher.update(input);
             let result = hasher.finalize();
 
+            // SHA3-256 is guaranteed to be 32 bytes, so this is safe
             hex::encode(&result[..16])
         };
 
