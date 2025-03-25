@@ -6193,6 +6193,7 @@ dependencies = [
  "serde_json",
  "serde_regex",
  "serde_yaml",
+ "sha3",
  "simple_moving_average",
  "slog",
  "strum",
