@@ -38,7 +38,7 @@ type CanisterStatusResult = record {
   memory_size : nat;
   cycles : nat;
   settings : DefiniteCanisterSettings;
-  idle_cycles_burned_per_day : opt nat;
+  idle_cycles_burned_per_day : nat;
   module_hash : opt blob;
   reserved_cycles : opt nat;
   query_stats : opt QueryStats;
