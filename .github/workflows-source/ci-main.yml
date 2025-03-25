@@ -212,6 +212,7 @@ jobs:
   python-ci-tests:
     name: Python CI Tests
     <<: *dind-small-setup
+    runs-on: ubuntu-24-large
     steps:
       - <<: *checkout
       - <<: *python-setup
@@ -310,8 +311,7 @@ jobs:
   cargo-clippy-linux:
     name: Cargo Clippy Linux
     <<: *dind-small-setup
-    runs-on:
-      group: ch1
+    runs-on: ubuntu-24-large
     steps:
       - <<: *checkout
       - name: Filter Rust Files [*.{rs,toml,lock}]
@@ -341,8 +341,7 @@ jobs:
   cargo-build-release-linux:
     name: Cargo Build Release Linux
     <<: *dind-small-setup
-    runs-on:
-      group: ch1
+    runs-on: ubuntu-24-large
     steps:
       - <<: *checkout
       - name: Filter Rust Files [*.{rs,toml,lock}]
