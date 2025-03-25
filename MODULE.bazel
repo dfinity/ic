@@ -827,9 +827,9 @@ http_file(
     url = "https://curl.se/ca/cacert-2024-11-26.pem",
 )
 
-mainnet_versions = use_repo_rule("//bazel:mainnet-versions.bzl", "mainnet_versions")
+mainnet_icos_versions = use_repo_rule("//bazel:mainnet-icos-versions.bzl", "mainnet_icos_versions")
 
-mainnet_versions(
-    name = "mainnet_versions",
+mainnet_icos_versions(
+    name = "mainnet_icos_versions",
     path = "//:mainnet-icos-revisions.json",
 )

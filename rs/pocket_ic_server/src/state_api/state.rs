@@ -1061,6 +1061,12 @@ impl ApiState {
         }
     }
 
+    pub async fn get_auto_progress(&self, instance_id: InstanceId) -> bool {
+        let instances = self.instances.read().await;
+        let instance = instances[instance_id].lock().await;
+        instance.progress_thread.is_some()
+    }
+
     pub async fn stop_progress(&self, instance_id: InstanceId) {
         let instances = self.instances.read().await;
         let mut instance = instances[instance_id].lock().await;

@@ -1,5 +1,4 @@
-use super::IDkgDealingContext;
-use crate::idkg::pre_signer::IDkgTranscriptBuilder;
+use crate::idkg::{payload_builder::IDkgDealingContext, pre_signer::IDkgTranscriptBuilder};
 use ic_logger::{warn, ReplicaLogger};
 use ic_management_canister_types_private::{
     ComputeInitialIDkgDealingsResponse, ReshareChainKeyResponse,
@@ -184,20 +183,8 @@ fn reshare_request_from_dealings_context(
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    use assert_matches::assert_matches;
-    use ic_crypto_test_utils_canister_threshold_sigs::dummy_values::{
-        dummy_dealings, dummy_initial_idkg_dealing_for_tests,
-    };
-    use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
-    use ic_logger::replica_logger::no_op_logger;
-    use ic_management_canister_types_private::ComputeInitialIDkgDealingsResponse;
-    use ic_test_utilities_types::ids::subnet_test_id;
-    use ic_types::consensus::idkg::IDkgMasterPublicKeyId;
-    use ic_types::consensus::idkg::IDkgPayload;
-
-    use crate::idkg::payload_builder::filter_idkg_reshare_chain_key_contexts;
     use crate::idkg::{
+        payload_builder::filter_idkg_reshare_chain_key_contexts,
         test_utils::{
             create_reshare_request, dealings_context_from_reshare_request,
             fake_ecdsa_idkg_master_public_key_id,
@@ -206,6 +193,15 @@ mod tests {
         },
         utils::algorithm_for_key_id,
     };
+    use assert_matches::assert_matches;
+    use ic_crypto_test_utils_canister_threshold_sigs::dummy_values::{
+        dummy_dealings, dummy_initial_idkg_dealing_for_tests,
+    };
+    use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
+    use ic_logger::replica_logger::no_op_logger;
+    use ic_management_canister_types_private::ComputeInitialIDkgDealingsResponse;
+    use ic_test_utilities_types::ids::subnet_test_id;
+    use ic_types::consensus::idkg::{IDkgMasterPublicKeyId, IDkgPayload};
 
     fn set_up(
         key_ids: Vec<IDkgMasterPublicKeyId>,
