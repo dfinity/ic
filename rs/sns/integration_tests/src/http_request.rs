@@ -1,13 +1,15 @@
 use canister_test::Canister;
 use dfn_candid::candid_one;
 use ic_canisters_http_types::{HttpRequest, HttpResponse};
-use ic_sns_governance::pb::v1::{
+use ic_sns_governance_api::pb::v1::{
     NervousSystemParameters, NeuronPermissionList, NeuronPermissionType,
 };
+use ic_sns_governance_api_helpers::default_nervous_system_parameters;
 use ic_sns_test_utils::itest_helpers::{
     local_test_on_sns_subnet, SnsCanisters, SnsTestsInitPayloadBuilder,
 };
 use serde_bytes::ByteBuf;
+use strum::IntoEnumIterator;
 
 async fn test_http_request_decoding_quota_for_canister(canister: &Canister<'_>) {
     // The anonymous end-user sends a small HTTP request. This should succeed.
@@ -48,13 +50,15 @@ fn test_http_request_decoding_quota() {
     local_test_on_sns_subnet(|runtime| async move {
         let system_params = NervousSystemParameters {
             neuron_claimer_permissions: Some(NeuronPermissionList {
-                permissions: NeuronPermissionType::all(),
+                permissions: NeuronPermissionType::iter()
+                    .map(|permission| permission as i32)
+                    .collect(),
             }),
-            ..NervousSystemParameters::with_default_values()
+            ..default_nervous_system_parameters()
         };
 
         let sns_init_payload = SnsTestsInitPayloadBuilder::new()
-            .with_nervous_system_parameters(system_params.clone())
+            .with_nervous_system_parameters(system_params.clone().into())
             .build();
 
         let sns_canisters = SnsCanisters::set_up(&runtime, sns_init_payload).await;
