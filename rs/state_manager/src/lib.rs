@@ -869,6 +869,12 @@ fn initialize_tip(
     checkpoint_layout: CheckpointLayout<ReadOnly>,
 ) -> ReplicatedState {
     debug_assert_eq!(snapshot.height, checkpoint_layout.height());
+    info!(
+        log,
+        "initialize_tip from checkpoint @{} at path {:?} as tip",
+        snapshot.height,
+        checkpoint_layout.raw_path()
+    );
 
     // Since we initialize tip from checkpoint states, we expect a clean sandbox slate
     #[cfg(debug_assertions)]
@@ -878,7 +884,7 @@ fn initialize_tip(
                 *canister_state.wasm_memory.sandbox_memory.lock().unwrap()
             {
                 panic!(
-                    "Unexpected sandbox state for canister {}",
+                    "Unexpected sandbox wasm_memory state for canister {}",
                     canister.canister_id()
                 );
             }
@@ -886,7 +892,7 @@ fn initialize_tip(
                 *canister_state.stable_memory.sandbox_memory.lock().unwrap()
             {
                 panic!(
-                    "Unexpected sandbox state for canister {}",
+                    "Unexpected sandbox stable_memory state for canister {}",
                     canister.canister_id()
                 );
             }
@@ -2614,8 +2620,18 @@ impl StateManager for StateManagerImpl {
 
         let mut states = self.states.write();
         let (tip_height, mut tip) = states.tip.take().expect("failed to get TIP");
+        eprintln!("states.tip.take() get tip_height {}", tip_height);
+        let latest_snapshot = states.snapshots.back();
+        match latest_snapshot {
+            Some(snapshot) => {
+                eprintln!("latest_snapshot/target_snapshot height {}", snapshot.height);
+            }
+            None => {
+                eprintln!("no snapshot in states");
+            }
+        }
 
-        let (target_snapshot, target_hash) = match states.snapshots.back() {
+        let (target_snapshot, target_hash) = match latest_snapshot {
             Some(snapshot) if snapshot.height > tip_height => (
                 snapshot.clone(),
                 hash_at(snapshot.height, &states.certifications_metadata),
@@ -2677,7 +2693,7 @@ impl StateManager for StateManagerImpl {
             .api_call_duration
             .with_label_values(&["take_tip_at"])
             .start_timer();
-
+        eprintln!("take_tip_at height {}", height);
         let (tip_height, state) = self.take_tip();
 
         let mut states = self.states.write();

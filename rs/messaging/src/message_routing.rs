@@ -1576,7 +1576,7 @@ impl MessageRouting for MessageRoutingImpl {
         match self.batch_sender.try_send(batch) {
             Ok(_) => {
                 self.inc_deliver_batch(STATUS_SUCCESS);
-                debug!(self.log, "Inserted batch {}", batch_number);
+                info!(self.log, "Inserted batch {}", batch_number);
                 *self.last_seen_batch.write().unwrap() = batch_number;
                 Ok(())
             }
@@ -1585,7 +1585,7 @@ impl MessageRouting for MessageRoutingImpl {
             // resend the overflowing batches later.
             Err(TrySendError::Full(_)) => {
                 self.inc_deliver_batch(STATUS_QUEUE_FULL);
-                debug!(
+                info!(
                     self.log,
                     "Rejecting batch {}: execution queue overflow ({} batches queued)",
                     batch_number,
