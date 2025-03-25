@@ -663,12 +663,13 @@ pub async fn metrics_middleware(
             };
 
             let mut hasher = Sha3_256::new();
+
             hasher.update(salt.as_slice());
             hasher.update(input);
 
             let result = hasher.finalize();
 
-            hex::encode(&result[..8])
+            hex::encode(&result[..16])
         };
 
         let remote_addr = hash_fn(&remote_addr);
