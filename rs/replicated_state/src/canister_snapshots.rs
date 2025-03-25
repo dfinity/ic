@@ -1,7 +1,7 @@
 use crate::{
-    canister_state::execution_state::Memory,
-    canister_state::system_state::wasm_chunk_store::WasmChunkStore, CanisterState, NumWasmPages,
-    PageMap,
+    canister_state::{execution_state::Memory, system_state::wasm_chunk_store::WasmChunkStore},
+    page_map::Buffer,
+    CanisterState, NumWasmPages, PageMap,
 };
 use ic_management_canister_types_private::Global;
 use ic_sys::PAGE_SIZE;
@@ -454,6 +454,20 @@ impl CanisterSnapshot {
             });
         }
         Ok(module_bytes[(offset as usize)..(end as usize)].to_vec())
+    }
+
+    /// Get a user-defined chunk of the (stable/main) memory represented by `page_map`.
+    pub fn get_memory_chunk(
+        page_map: PageMap,
+        offset: u64,
+        size: u64,
+    ) -> Result<Vec<u8>, CanisterSnapshotError> {
+        let memory_buffer = Buffer::new(page_map);
+        let mut dst = vec![0; size as usize];
+        // TODO: what if the caller requests memory beyond what's valid?
+        // rn we'll return zeroes, but can we / should we truncate?
+        memory_buffer.read(&mut dst, offset as usize);
+        Ok(dst)
     }
 }
 

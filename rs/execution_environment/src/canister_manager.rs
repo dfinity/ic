@@ -2008,9 +2008,23 @@ impl CanisterManager {
             });
         }
         match kind {
-            CanisterSnapshotDataKind::WasmModule { .. } => Ok(vec![]),
-            CanisterSnapshotDataKind::MainMemory { .. } => Ok(vec![]),
             CanisterSnapshotDataKind::StableMemory { offset, size } => {
+                let stable_memory_page_map =
+                    snapshot.execution_snapshot().stable_memory.page_map.clone();
+                match CanisterSnapshot::get_memory_chunk(stable_memory_page_map, offset, size) {
+                    Ok(chunk) => Ok(chunk),
+                    Err(e) => Err(e.into()),
+                }
+            }
+            CanisterSnapshotDataKind::MainMemory { offset, size } => {
+                let main_memory_page_map =
+                    snapshot.execution_snapshot().wasm_memory.page_map.clone();
+                match CanisterSnapshot::get_memory_chunk(main_memory_page_map, offset, size) {
+                    Ok(chunk) => Ok(chunk),
+                    Err(e) => Err(e.into()),
+                }
+            }
+            CanisterSnapshotDataKind::WasmModule { offset, size } => {
                 match snapshot.get_wasm_module_chunk(offset, size) {
                     Ok(chunk) => Ok(chunk),
                     Err(e) => Err(e.into()),
