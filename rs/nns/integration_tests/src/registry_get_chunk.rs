@@ -90,5 +90,7 @@ fn test_get_chunk() {
         Err(ok) => ok,
         _ => panic!("{:#?}", garbage_response),
     };
-    assert!(err.to_lowercase().contains("not found"), "{:?}", err);
+    for key_word in ["no chunk", "sha256"] {
+        assert!(err.to_lowercase().contains(key_word), "{:?}", err);
+    }
 }
