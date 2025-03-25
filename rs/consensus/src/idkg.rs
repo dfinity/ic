@@ -217,12 +217,11 @@ pub mod malicious_pre_signer;
 pub(crate) mod metrics;
 pub(crate) mod payload_builder;
 pub(crate) mod payload_verifier;
-pub(crate) mod pre_signer;
-pub(crate) mod signer;
+pub mod pre_signer;
+pub mod signer;
 pub mod stats;
-#[cfg(test)]
-pub(crate) mod test_utils;
-pub(crate) mod utils;
+
+pub mod utils;
 
 pub(crate) use payload_builder::{
     create_data_payload, create_summary_payload, make_bootstrap_summary,

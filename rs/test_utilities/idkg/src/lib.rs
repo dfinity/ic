@@ -1,12 +1,12 @@
-use crate::idkg::{
+use core::convert::TryInto;
+use ic_artifact_pool::idkg_pool::IDkgPoolImpl;
+use ic_config::artifact_pool::ArtifactPoolConfig;
+use ic_consensus::idkg::{
     complaints::{IDkgComplaintHandlerImpl, IDkgTranscriptLoader, TranscriptLoadStatus},
     pre_signer::{IDkgPreSignerImpl, IDkgTranscriptBuilder},
     signer::{ThresholdSignatureBuilder, ThresholdSignerImpl},
     utils::algorithm_for_key_id,
 };
-use core::convert::TryInto;
-use ic_artifact_pool::idkg_pool::IDkgPoolImpl;
-use ic_config::artifact_pool::ArtifactPoolConfig;
 use ic_consensus_mocks::{dependencies, Dependencies};
 use ic_consensus_utils::crypto::ConsensusCrypto;
 use ic_crypto_temp_crypto::TempCryptoComponent;

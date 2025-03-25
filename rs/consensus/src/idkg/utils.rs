@@ -467,7 +467,7 @@ pub(crate) fn inspect_idkg_chain_key_initializations(
     Ok(initial_dealings_per_key_id)
 }
 
-pub(crate) fn algorithm_for_key_id(key_id: &IDkgMasterPublicKeyId) -> AlgorithmId {
+pub fn algorithm_for_key_id(key_id: &IDkgMasterPublicKeyId) -> AlgorithmId {
     match key_id.inner() {
         MasterPublicKeyId::Ecdsa(ecdsa_key_id) => match ecdsa_key_id.curve {
             EcdsaCurve::Secp256k1 => AlgorithmId::ThresholdEcdsaSecp256k1,

@@ -1,0 +1,46 @@
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+
+package(default_visibility = ["//visibility:public"])
+
+DEPENDENCIES = [
+    # Keep sorted.
+    "//rs/artifact_pool",
+    "//rs/config",
+    "//rs/consensus",
+    "//rs/consensus/mocks",
+    "//rs/consensus/utils",
+    "//rs/crypto/temp_crypto",
+    "//rs/crypto/test_utils/canister_threshold_sigs",
+    "//rs/crypto/test_utils/reproducible_rng",
+    "//rs/crypto/tree_hash",
+    "//rs/interfaces",
+    "//rs/interfaces/state_manager",
+    "//rs/monitoring/logger",
+    "//rs/monitoring/metrics",
+    "//rs/protobuf",
+    "//rs/replicated_state",
+    "//rs/test_utilities",
+    "//rs/test_utilities/artifact_pool",
+    "//rs/test_utilities/consensus",
+    "//rs/test_utilities/state",
+    "//rs/test_utilities/types",
+    "//rs/types/management_canister_types",
+    "//rs/types/types",
+    "//rs/types/types_test_utils",
+    "@crate_index//:rand",
+    "@crate_index//:strum",
+]
+
+rust_library(
+    name = "idkg",
+    testonly = True,
+    srcs = glob(["src/**"]),
+    crate_name = "ic_test_utilities_idkg",
+    version = "0.9.0",
+    deps = DEPENDENCIES,
+)
+
+rust_test(
+    name = "idkg_test",
+    crate = ":idkg",
+)
