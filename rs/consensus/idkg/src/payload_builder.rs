@@ -1,5 +1,5 @@
 //! This module implements the IDKG payload builder.
-use crate::idkg::{
+use crate::{
     metrics::{IDkgPayloadMetrics, CRITICAL_ERROR_MASTER_KEY_TRANSCRIPT_MISSING},
     pre_signer::{IDkgTranscriptBuilder, IDkgTranscriptBuilderImpl},
     signer::{ThresholdSignatureBuilder, ThresholdSignatureBuilderImpl},
@@ -96,7 +96,7 @@ pub(crate) fn filter_idkg_reshare_chain_key_contexts(
 
 /// Builds the very first idkg summary block. This would trigger the subsequent
 /// data blocks to create the initial key transcript.
-pub(crate) fn make_bootstrap_summary(
+pub fn make_bootstrap_summary(
     subnet_id: SubnetId,
     key_ids: Vec<IDkgMasterPublicKeyId>,
     height: Height,
@@ -111,7 +111,7 @@ pub(crate) fn make_bootstrap_summary(
 
 /// Builds the very first idkg summary block. This would trigger the subsequent
 /// data blocks to create the initial key transcript.
-pub(crate) fn make_bootstrap_summary_with_initial_dealings(
+pub fn make_bootstrap_summary_with_initial_dealings(
     subnet_id: SubnetId,
     height: Height,
     initial_dealings_per_key_id: BTreeMap<IDkgMasterPublicKeyId, InitialIDkgDealings>,
@@ -161,7 +161,7 @@ pub(crate) fn make_bootstrap_summary_with_initial_dealings(
 }
 
 /// Creates an IDKG summary payload.
-pub(crate) fn create_summary_payload(
+pub fn create_summary_payload(
     subnet_id: SubnetId,
     registry_client: &dyn RegistryClient,
     pool_reader: &PoolReader<'_>,
@@ -449,7 +449,7 @@ fn is_time_to_reshare_key_transcript(
 }
 
 /// Creates an IDKG batch payload.
-pub(crate) fn create_data_payload(
+pub fn create_data_payload(
     subnet_id: SubnetId,
     registry_client: &dyn RegistryClient,
     crypto: &dyn ConsensusCrypto,

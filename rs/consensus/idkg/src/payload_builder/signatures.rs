@@ -1,4 +1,4 @@
-use crate::idkg::{metrics::IDkgPayloadMetrics, signer::ThresholdSignatureBuilder};
+use crate::{metrics::IDkgPayloadMetrics, signer::ThresholdSignatureBuilder};
 use ic_error_types::RejectCode;
 use ic_management_canister_types_private::{Payload, SignWithECDSAReply, SignWithSchnorrReply};
 use ic_replicated_state::metadata_state::subnet_call_context_manager::IDkgSignWithThresholdContext;

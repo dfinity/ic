@@ -1,4 +1,4 @@
-use crate::idkg::{payload_builder::IDkgDealingContext, pre_signer::IDkgTranscriptBuilder};
+use crate::{payload_builder::IDkgDealingContext, pre_signer::IDkgTranscriptBuilder};
 use ic_logger::{warn, ReplicaLogger};
 use ic_management_canister_types_private::{
     ComputeInitialIDkgDealingsResponse, ReshareChainKeyResponse,

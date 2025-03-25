@@ -1,13 +1,11 @@
 #![deny(missing_docs)]
-use crate::{
-    consensus::{
-        metrics::BlockMakerMetrics,
-        status::{self, Status},
-        ConsensusCrypto,
-    },
-    idkg::{self, metrics::IDkgPayloadMetrics},
+use crate::consensus::{
+    metrics::BlockMakerMetrics,
+    status::{self, Status},
+    ConsensusCrypto,
 };
 use ic_consensus_dkg::payload_builder::create_payload as create_dkg_payload;
+use ic_consensus_idkg::{self as idkg, metrics::IDkgPayloadMetrics};
 use ic_consensus_utils::{
     find_lowest_ranked_non_disqualified_proposals, get_notarization_delay_settings,
     get_subnet_record, membership::Membership, pool_reader::PoolReader,

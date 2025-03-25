@@ -1,6 +1,5 @@
 //! The complaint handling
-
-use crate::idkg::{
+use crate::{
     metrics::{timed_call, IDkgComplaintMetrics},
     utils::{update_purge_height, IDkgBlockReaderImpl},
 };

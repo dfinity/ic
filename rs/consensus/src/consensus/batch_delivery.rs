@@ -2,14 +2,12 @@
 //! selections of ingress and xnet messages, and DKGs computed for other
 //! subnets.
 
-use crate::{
-    consensus::{
-        metrics::{BatchStats, BlockStats},
-        status::{self, Status},
-    },
-    idkg::utils::{get_idkg_subnet_public_keys, get_pre_signature_ids_to_deliver},
+use crate::consensus::{
+    metrics::{BatchStats, BlockStats},
+    status::{self, Status},
 };
 use ic_consensus_dkg::get_vetkey_public_keys;
+use ic_consensus_idkg::utils::{get_idkg_subnet_public_keys, get_pre_signature_ids_to_deliver};
 use ic_consensus_utils::{
     crypto_hashable_to_seed, membership::Membership, pool_reader::PoolReader,
 };

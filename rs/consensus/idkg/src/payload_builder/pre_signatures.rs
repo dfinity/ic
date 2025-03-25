@@ -1,4 +1,4 @@
-use crate::idkg::{
+use crate::{
     payload_builder::IDkgPayloadError, pre_signer::IDkgTranscriptBuilder,
     utils::algorithm_for_key_id,
 };

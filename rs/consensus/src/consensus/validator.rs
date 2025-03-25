@@ -1,16 +1,14 @@
 //! This module encapsulates functions required for validating consensus
 //! artifacts.
 
-use crate::{
-    consensus::{
-        check_protocol_version,
-        metrics::ValidatorMetrics,
-        status::{self, Status},
-        ConsensusMessageId,
-    },
-    idkg,
+use crate::consensus::{
+    check_protocol_version,
+    metrics::ValidatorMetrics,
+    status::{self, Status},
+    ConsensusMessageId,
 };
 use ic_consensus_dkg as dkg;
+use ic_consensus_idkg as idkg;
 use ic_consensus_utils::{
     active_high_threshold_nidkg_id, active_low_threshold_nidkg_id,
     crypto::ConsensusCrypto,

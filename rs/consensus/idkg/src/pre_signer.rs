@@ -1,6 +1,6 @@
 //! The pre signature process manager
 
-use crate::idkg::{
+use crate::{
     complaints::IDkgTranscriptLoader,
     metrics::{timed_call, IDkgPayloadMetrics, IDkgPreSignerMetrics},
     utils::{load_transcripts, transcript_op_summary, update_purge_height, IDkgBlockReaderImpl},

@@ -180,7 +180,7 @@
 //! Completed pre-signatures are delivered to the deterministic state machnine,
 //! where they are matched with incoming signature requests.
 
-use crate::idkg::{
+use crate::{
     complaints::{IDkgComplaintHandler, IDkgComplaintHandlerImpl},
     metrics::{timed_call, IDkgClientMetrics, CRITICAL_ERROR_IDKG_RETAIN_ACTIVE_TRANSCRIPTS},
     pre_signer::{IDkgPreSigner, IDkgPreSignerImpl},
@@ -214,7 +214,7 @@ use std::{
 pub(crate) mod complaints;
 #[cfg(any(feature = "malicious_code", test))]
 pub mod malicious_pre_signer;
-pub(crate) mod metrics;
+pub mod metrics;
 pub(crate) mod payload_builder;
 pub(crate) mod payload_verifier;
 pub(crate) mod pre_signer;
@@ -222,12 +222,13 @@ pub(crate) mod signer;
 pub mod stats;
 #[cfg(test)]
 pub(crate) mod test_utils;
-pub(crate) mod utils;
+pub mod utils;
 
-pub(crate) use payload_builder::{
+pub use payload_builder::{
     create_data_payload, create_summary_payload, make_bootstrap_summary,
+    make_bootstrap_summary_with_initial_dealings,
 };
-pub(crate) use payload_verifier::{
+pub use payload_verifier::{
     validate_payload, IDkgPayloadValidationFailure, InvalidIDkgPayloadReason,
 };
 pub use stats::IDkgStatsImpl;

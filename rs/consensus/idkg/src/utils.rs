@@ -1,6 +1,6 @@
 //! Common utils for the IDKG implementation.
 
-use crate::idkg::{
+use crate::{
     complaints::{IDkgTranscriptLoader, TranscriptLoadStatus},
     metrics::IDkgPayloadMetrics,
 };
@@ -54,7 +54,7 @@ use std::{
 };
 
 #[derive(Clone, PartialEq, Debug)]
-pub(crate) struct InvalidChainCacheError(String);
+pub struct InvalidChainCacheError(String);
 
 impl Display for InvalidChainCacheError {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
@@ -235,7 +235,7 @@ pub(super) fn block_chain_cache(
 
 #[derive(Debug)]
 #[allow(dead_code)]
-pub(crate) enum BuildSignatureInputsError {
+pub enum BuildSignatureInputsError {
     /// The context wasn't matched to a pre-signature yet, or is still missing its random nonce
     ContextIncomplete,
     /// The context was matched to a pre-signature which cannot be found in the latest block payload
@@ -401,7 +401,7 @@ pub(super) fn transcript_op_summary(op: &IDkgTranscriptOperation) -> String {
 
 /// Inspect chain_key_initializations field in the CUPContent.
 /// Return key_id and dealings.
-pub(crate) fn inspect_idkg_chain_key_initializations(
+pub fn inspect_idkg_chain_key_initializations(
     ecdsa_initializations: &[pb::EcdsaInitialization],
     chain_key_initializations: &[pb::ChainKeyInitialization],
 ) -> Result<BTreeMap<IDkgMasterPublicKeyId, InitialIDkgDealings>, String> {
@@ -482,7 +482,7 @@ pub(crate) fn algorithm_for_key_id(key_id: &IDkgMasterPublicKeyId) -> AlgorithmI
     }
 }
 
-pub(crate) fn get_idkg_chain_key_config_if_enabled(
+pub fn get_idkg_chain_key_config_if_enabled(
     subnet_id: SubnetId,
     registry_version: RegistryVersion,
     registry_client: &dyn RegistryClient,
@@ -511,7 +511,7 @@ pub(crate) fn get_idkg_chain_key_config_if_enabled(
 
 /// Return the set of pre-signature IDs to be delivered in the batch of this block.
 /// We deliver IDs of all available pre-signatures that were created using the current key transcript.
-pub(crate) fn get_pre_signature_ids_to_deliver(
+pub fn get_pre_signature_ids_to_deliver(
     block: &Block,
 ) -> BTreeMap<MasterPublicKeyId, BTreeSet<PreSigId>> {
     let Some(idkg) = block.payload.as_ref().as_idkg() else {
@@ -549,7 +549,7 @@ pub(crate) fn get_pre_signature_ids_to_deliver(
 /// - we can extract the threshold master public key from the transcript.
 ///
 /// Otherwise no keys are returned.
-pub(crate) fn get_idkg_subnet_public_keys(
+pub fn get_idkg_subnet_public_keys(
     current_block: &Block,
     last_dkg_summary_block: &Block,
     pool: &PoolReader<'_>,
