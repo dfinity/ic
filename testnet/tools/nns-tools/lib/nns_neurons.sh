@@ -31,8 +31,6 @@ nns_claim_or_refresh() {
       )"
 }
 
-
-
 ##: nns_list_my_neurons
 ## Usage: $1 <NNS_URL>
 ## List the neurons owned by the current dfx identity
