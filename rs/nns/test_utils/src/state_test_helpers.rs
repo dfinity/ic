@@ -528,11 +528,11 @@ pub fn ensure_canister_id_exists_at_position(
     position: u64,
     canister_settings: Option<CanisterSettingsArgs>,
 ) -> CanisterId {
-    let canister_id = CanisterId::from_u64(position);
+    let mut canister_id = CanisterId::from_u64(position);
     if machine.canister_exists(canister_id) {
         canister_id
     } else {
-        let mut canister_id = machine.create_canister(canister_settings.clone());
+        canister_id = machine.create_canister(canister_settings.clone());
         while canister_id_to_u64(canister_id) < position {
             canister_id = machine.create_canister(canister_settings.clone());
         }
