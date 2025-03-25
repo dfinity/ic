@@ -1159,11 +1159,7 @@ pub fn syscalls<
                                     crnt_size = size;
                                 }
                                 if line.starts_with("VmFlags:") {
-                                    if line.contains("lo") {
-                                        locked_flag = true;
-                                    } else {
-                                        locked_flag = false;
-                                    }
+                                    locked_flag = line.contains("lo");
                                 }
 
                                 if locked_flag {
