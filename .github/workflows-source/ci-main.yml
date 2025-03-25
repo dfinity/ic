@@ -183,6 +183,7 @@ jobs:
   bazel-build-fuzzers:
     name: Bazel Build Fuzzers
     <<: *dind-large-setup
+    runs-on: ubuntu-24-large
     steps:
       - <<: *checkout
       - name: Run Bazel Build Fuzzers
@@ -190,7 +191,7 @@ jobs:
         uses:  ./.github/actions/bazel-test-all/
         with:
           BAZEL_COMMAND: >-
-            build --config=ci --keep_going --config=fuzzing --build_tag_filters=libfuzzer
+            --noworkspace_rc --bazelrc=./bazel/conf/.bazelrc.build build --config=ci --keep_going --config=fuzzing --build_tag_filters=libfuzzer
           BAZEL_TARGETS: //rs/...
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
       - <<: *bazel-bep
@@ -198,13 +199,14 @@ jobs:
   bazel-build-fuzzers-afl:
     name: Bazel Build Fuzzers AFL
     <<: *dind-large-setup
+    runs-on: ubuntu-24-large
     steps:
       - <<: *checkout
       - name: Run Bazel Build Fuzzers AFL
         id: bazel-build-fuzzers-afl
         uses:  ./.github/actions/bazel-test-all/
         with:
-          BAZEL_COMMAND: build --config=ci --keep_going --config=afl
+          BAZEL_COMMAND: --noworkspace_rc --bazelrc=./bazel/conf/.bazelrc.build build --config=ci --keep_going --config=afl
           BAZEL_TARGETS: //rs/...
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
       - <<: *bazel-bep
