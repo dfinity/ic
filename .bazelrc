@@ -1,4 +1,4 @@
 # import default bazelrc fragments, see bazel/conf/README.md
 import %workspace%/bazel/conf/.bazelrc.build
-import %workspace%/bazel/conf/.bazelrc.internal
+#import %workspace%/bazel/conf/.bazelrc.internal
 try-import %workspace%/user.bazelrc
