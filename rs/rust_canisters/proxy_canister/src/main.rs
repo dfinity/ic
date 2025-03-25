@@ -65,6 +65,20 @@ async fn send_requests_in_parallel(
     })
 }
 
+async fn send_request_with_retries(
+    request: RemoteHttpRequest,
+) -> Result<RemoteHttpResponse, (RejectionCode, String)> {
+    loop {
+        let response = send_request(request.clone()).await;
+        match response {
+            Ok(rsp) => return Ok(rsp),
+            Err(e) => { 
+                // sleep
+            }
+        }
+    }
+}
+
 #[update]
 async fn send_request(
     request: RemoteHttpRequest,

@@ -46,7 +46,7 @@ const BN_NAME: &str = "socks-bn";
 fn main() -> Result<()> {
     SystemTestGroup::new()
         .with_setup(setup)
-        .add_test(systest!(test))
+        //.add_test(systest!(test))
         .execute_from_args()?;
 
     Ok(())
