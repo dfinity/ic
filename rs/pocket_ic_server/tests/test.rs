@@ -349,7 +349,12 @@ async fn test_gateway(server_url: Url, https: bool) {
         None
     };
     let port = pic
-        .make_live_with_params(None, domains.clone(), https_config.clone())
+        .make_live_with_params(
+            Some(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1))),
+            None,
+            domains.clone(),
+            https_config.clone(),
+        )
         .await
         .port_or_known_default()
         .unwrap();
