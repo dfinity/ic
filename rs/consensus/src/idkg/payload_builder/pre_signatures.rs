@@ -1,6 +1,7 @@
-use super::IDkgPayloadError;
-
-use crate::idkg::{pre_signer::IDkgTranscriptBuilder, utils::algorithm_for_key_id};
+use crate::idkg::{
+    payload_builder::IDkgPayloadError, pre_signer::IDkgTranscriptBuilder,
+    utils::algorithm_for_key_id,
+};
 use ic_logger::{debug, error, ReplicaLogger};
 use ic_management_canister_types_private::MasterPublicKeyId;
 use ic_registry_subnet_features::ChainKeyConfig;
@@ -534,9 +535,7 @@ pub(super) mod test_utils {
 
 #[cfg(test)]
 pub(super) mod tests {
-    use super::test_utils::*;
-    use super::*;
-
+    use super::{test_utils::*, *};
     use crate::idkg::test_utils::{
         create_available_pre_signature, create_available_pre_signature_with_key_transcript,
         fake_ecdsa_idkg_master_public_key_id, fake_master_public_key_ids_for_all_idkg_algorithms,
@@ -561,7 +560,6 @@ pub(super) mod tests {
         SubnetId,
     };
     use idkg::IDkgTranscriptOperationRef;
-
     use strum::IntoEnumIterator;
 
     fn set_up(

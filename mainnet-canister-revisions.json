@@ -1,7 +1,7 @@
 {
   "archive": {
-    "rev": "7c6309cb5bec7ab28ed657ac7672af08a59fc1ba",
-    "sha256": "92622a35dc03651a046ef02d48c3d3c3383a25307d719e4a7657601486fa9f4f"
+    "rev": "2fe8aefafcb2fbee6fdb2785374d5de715560269",
+    "sha256": "4c3b1fc147551ffd2ff79495f0c4050bb286dcf198d124ac28d99cff9e51b2b5"
   },
   "ck_btc_archive": {
     "rev": "c741e349451edf0c9792149ad439bb32a0161371",
@@ -72,8 +72,8 @@
     "sha256": "9568fd9abacc62731d4c2c8839ab9e4df0856cfd07f7689177d1772b8b6e82ae"
   },
   "index": {
-    "rev": "7c6309cb5bec7ab28ed657ac7672af08a59fc1ba",
-    "sha256": "7b884231f230f5fc66ad18e0baaec0c14921bd5da742db5dbaf51f824b8dfc63"
+    "rev": "2fe8aefafcb2fbee6fdb2785374d5de715560269",
+    "sha256": "49aaa674ef050749da4f8f3a844467a2a189b23ee3c3734440424993b6f036fe"
   },
   "ledger": {
     "rev": "2fe8aefafcb2fbee6fdb2785374d5de715560269",
