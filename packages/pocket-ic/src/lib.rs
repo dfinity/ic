@@ -79,7 +79,7 @@ use slog::Level;
 use std::os::unix::fs::OpenOptionsExt;
 use std::{
     fs::OpenOptions,
-    net::SocketAddr,
+    net::{IpAddr, SocketAddr},
     path::PathBuf,
     process::Command,
     sync::{mpsc::channel, Arc},
@@ -559,12 +559,13 @@ impl PocketIc {
         self.pocket_ic.url()
     }
 
-    /// Creates an HTTP gateway for this IC instance
-    /// listening on an optionally specified port
-    /// and configures the IC instance to make progress
-    /// automatically, i.e., periodically update the time
-    /// of the IC to the real time and execute rounds on the subnets.
-    /// Returns the URL at which `/api/v2` requests
+    /// Creates an HTTP gateway for this PocketIC instance binding to `127.0.0.1`
+    /// and an optionally specified port (defaults to choosing an arbitrary unassigned port);
+    /// listening on `localhost`;
+    /// and configures the PocketIC instance to make progress automatically, i.e.,
+    /// periodically update the time of the PocketIC instance to the real time
+    /// and process messages on the PocketIC instance.
+    /// Returns the URL at which `/api/v2` and `/api/v3` requests
     /// for this instance can be made.
     #[instrument(skip(self), fields(instance_id=self.pocket_ic.instance_id))]
     pub fn make_live(&mut self, listen_at: Option<u16>) -> Url {
@@ -572,17 +573,20 @@ impl PocketIc {
         runtime.block_on(async { self.pocket_ic.make_live(listen_at).await })
     }
 
-    /// Creates an HTTP gateway for this PocketIC instance listening
-    /// on an optionally specified port (defaults to choosing an arbitrary unassigned port)
-    /// and optionally specified domains (default to `localhost`)
+    /// Creates an HTTP gateway for this PocketIC instance binding
+    /// to an optionally specified IP address (defaults to `127.0.0.1`)
+    /// and port (defaults to choosing an arbitrary unassigned port);
+    /// listening on optionally specified domains (default to `localhost`);
     /// and using an optionally specified TLS certificate (if provided, an HTTPS gateway is created)
     /// and configures the PocketIC instance to make progress automatically, i.e.,
-    /// periodically update the time of the PocketIC instance to the real time and execute rounds on the subnets.
-    /// Returns the URL at which `/api/v2` requests
+    /// periodically update the time of the PocketIC instance to the real time
+    /// and process messages on the PocketIC instance.
+    /// Returns the URL at which `/api/v2` and `/api/v3` requests
     /// for this instance can be made.
     #[instrument(skip(self), fields(instance_id=self.pocket_ic.instance_id))]
     pub async fn make_live_with_params(
         &mut self,
+        ip_addr: Option<IpAddr>,
         listen_at: Option<u16>,
         domains: Option<Vec<String>>,
         https_config: Option<HttpsConfig>,
@@ -590,7 +594,7 @@ impl PocketIc {
         let runtime = self.runtime.clone();
         runtime.block_on(async {
             self.pocket_ic
-                .make_live_with_params(listen_at, domains, https_config)
+                .make_live_with_params(ip_addr, listen_at, domains, https_config)
                 .await
         })
     }
