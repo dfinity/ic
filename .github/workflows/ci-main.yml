@@ -273,10 +273,7 @@ jobs:
           fetch-depth: ${{ github.event_name == 'pull_request' && 256 || 0 }}
       - name: Run Build IC
         id: build-ic
-        shell: bash
-        run: |
-          set -euo pipefail
-          "$CI_PROJECT_DIR"/ci/scripts/run-build-ic.sh
+        run: ./ci/scripts/run-build-ic.sh
         env:
           BAZEL_COMMAND: build --config=ci
           BAZEL_TARGETS: //...

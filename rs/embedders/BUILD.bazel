@@ -17,6 +17,7 @@ DEPENDENCIES = [
     "//rs/replicated_state",
     "//rs/sys",
     "//rs/system_api",
+    "//rs/types/management_canister_types",
     "//rs/types/types",
     "//rs/types/wasm_types",
     "//rs/utils",
