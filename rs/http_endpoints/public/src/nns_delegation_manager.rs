@@ -250,7 +250,7 @@ mod tests {
     }
 
     #[tokio::test(start_paused = true)]
-    async fn poop_test() {
+    async fn should_not_return_an_invalid_delegation_test() {
         let override_nns_delegation = Arc::new(RwLock::new(None));
         let rt_handle = tokio::runtime::Handle::current();
         let (registry_client, tls_config) =
