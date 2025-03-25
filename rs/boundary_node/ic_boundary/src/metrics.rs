@@ -19,8 +19,7 @@ use prometheus::{
     IntGauge, IntGaugeVec, Registry, TextEncoder,
 };
 use salt_sharing_api::SALT_SIZE;
-use sha3::Digest;
-use sha3::Sha3_256;
+use sha3::{Digest, Sha3_256};
 use std::{
     sync::{Arc, RwLock},
     time::Instant,
