@@ -11920,6 +11920,7 @@ version = "0.9.0"
 name = "ic-registry-nns-data-provider"
 version = "0.9.0"
 dependencies = [
+ "candid",
  "chrono",
  "ic-canister-client",
  "ic-certification 0.9.0",

@@ -139,11 +139,13 @@ impl RegistryCanister {
             })?;
 
         crate::certification::decode_certified_deltas(
+            self.choose_random_agent(),
             version,
             &self.canister_id,
             nns_public_key,
             &response[..],
         )
+        .await
         .map_err(|err| Error::UnknownError(format!("{:?}", err)))
     }
 
