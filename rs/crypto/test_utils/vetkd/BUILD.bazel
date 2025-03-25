@@ -1,0 +1,17 @@
+load("@rules_rust//rust:defs.bzl", "rust_library")
+
+package(default_visibility = ["//visibility:public"])
+
+rust_library(
+    name = "vetkd",
+    testonly = True,
+    srcs = glob(["src/**"]),
+    crate_name = "ic_crypto_test_utils_vetkd",
+    version = "0.9.0",
+    deps = [
+        # Keep sorted.
+        "//rs/crypto/internal/crypto_lib/bls12_381/type",
+        "//rs/crypto/internal/crypto_lib/bls12_381/vetkd",
+        "@crate_index//:rand",
+    ],
+)

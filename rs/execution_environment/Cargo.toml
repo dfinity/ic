@@ -67,6 +67,7 @@ assert_matches = { workspace = true }
 canister-test = { path = "../rust_canisters/canister_test" }
 criterion = { workspace = true }
 execution-environment-bench = { path = "benches/lib" }
+ic-crypto-test-utils-vetkd = { path = "../crypto/test_utils/vetkd" }
 ic-interfaces-state-manager-mocks = { path = "../interfaces/state_manager/mocks" }
 ic-management-canister-types-private = { path = "../types/management_canister_types" }
 ic-state-machine-tests = { path = "../state_machine_tests" }
