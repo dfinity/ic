@@ -35,8 +35,7 @@ use ic_types::{
     replica_config::ReplicaConfig,
     Height,
 };
-use std::collections::BTreeSet;
-use std::{cell::RefCell, sync::Arc};
+use std::{cell::RefCell, collections::BTreeSet, sync::Arc};
 
 pub(crate) const VALIDATED_POOL_BOUNDS_CHECK_FREQUENCY: u64 = 10;
 
