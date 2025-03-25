@@ -108,28 +108,23 @@ def parse_args():
                         help="Clean up the download cache before running.")
     args = parser.parse_args()
 
-    # If no flags are given, we do "all" OS checks and interpret that as "no_option".
-    no_option = (
-        not args.guestos and
-        not args.hostos and
-        not args.setupos and
-        args.proposal_id == "" and
-        args.commit == ""
-    )
+    if not args.guestos and not args.hostos and not args.setupos:
+        args.guestos = True
+        args.hostos = True
+        args.setupos = True
 
-    return args, no_option
+    return args
 
 # ------------------------------------------------------------------------------
 # VERIFIER CLASS
 # ------------------------------------------------------------------------------
 class ReproducibilityVerifier:
-    def __init__(self, verify_guestos, verify_hostos, verify_setupos, proposal_id, git_commit, clean, no_option):
+    def __init__(self, verify_guestos, verify_hostos, verify_setupos, proposal_id, git_commit, clean):
         self.verify_guestos = verify_guestos
         self.verify_hostos = verify_hostos
         self.verify_setupos = verify_setupos
         self.proposal_id = proposal_id
         self.git_commit = git_commit
-        self.no_option = no_option
 
         self.git_hash = ""
         self.guestos_proposal = False
@@ -648,7 +643,7 @@ class ReproducibilityVerifier:
         """Clone or copy the IC repo, checkout the right commit."""
         # Opportunistically use the local cache if available
         ic_clone_path_cache = self.base_cache_dir / "repo"
-        if os.getenv("CI") is not None or self.no_option:
+        if os.getenv("CI") is not None:
             log(f"Copy IC repository from {Path.cwd()} to temporary directory")
             subprocess.run(["git", "clone", str(Path.cwd()), str(ic_clone_path)], check=True)
         else:
@@ -735,11 +730,6 @@ class ReproducibilityVerifier:
     def run(self):
         start_time = time.time()
 
-        # If no_option => check we're in an IC git repo
-        if self.no_option:
-            self.check_git_repo()
-            self.check_ic_repo()
-
         # Environment checks
         log("Check the environment")
         self.check_environment()
@@ -774,25 +764,15 @@ class ReproducibilityVerifier:
 # MAIN
 # ------------------------------------------------------------------------------
 def main():
-    args, no_option = parse_args()
-
-    # Decide how to interpret OS flags (like in the original script).
-    verify_guestos = True
-    verify_hostos = True
-    verify_setupos = True
-    if args.guestos or args.hostos or args.setupos:
-        verify_guestos = args.guestos
-        verify_hostos = args.hostos
-        verify_setupos = args.setupos
+    args = parse_args()
 
     verifier = ReproducibilityVerifier(
-        verify_guestos=verify_guestos,
-        verify_hostos=verify_hostos,
-        verify_setupos=verify_setupos,
+        verify_guestos=args.guestos,
+        verify_hostos=args.hostos,
+        verify_setupos=args.setupos,
         proposal_id=args.proposal_id,
         git_commit=args.commit,
         clean=args.clean,
-        no_option=no_option
     )
     verifier.run()
 
