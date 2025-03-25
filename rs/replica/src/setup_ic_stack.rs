@@ -15,7 +15,6 @@ use ic_interfaces::{
     execution_environment::QueryExecutionService, p2p::artifact_manager::JoinGuard,
     time_source::SysTimeSource,
 };
-use ic_interfaces_certified_stream_store::CertifiedStreamStore;
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::StateReader;
 use ic_logger::{info, ReplicaLogger};
@@ -67,7 +66,7 @@ pub fn construct_ic_stack(
     config: Config,
     node_id: NodeId,
     subnet_id: SubnetId,
-    registry: Arc<dyn RegistryClient + Send + Sync>,
+    registry: Arc<impl RegistryClient + 'static>,
     crypto: Arc<CryptoComponent>,
     catch_up_package: Option<pb::CatchUpPackage>,
     tracing_handle: ReloadHandles,
@@ -207,8 +206,7 @@ pub fn construct_ic_stack(
         &state_manager.state_layout().tmp(),
     );
     // ---------- MESSAGE ROUTING DEPS FOLLOW ----------
-    let certified_stream_store: Arc<dyn CertifiedStreamStore> =
-        Arc::clone(&state_manager) as Arc<_>;
+    let certified_stream_store = Arc::clone(&state_manager);
     let message_router = if config
         .malicious_behaviour
         .malicious_flags
@@ -224,7 +222,7 @@ pub fn construct_ic_stack(
     } else {
         MessageRoutingImpl::new(
             Arc::clone(&state_manager) as Arc<_>,
-            Arc::clone(&certified_stream_store) as Arc<_>,
+            Arc::clone(&certified_stream_store),
             execution_services.ingress_history_writer,
             execution_services.scheduler,
             config.hypervisor,
@@ -319,7 +317,7 @@ pub fn construct_ic_stack(
         Arc::clone(&crypto) as Arc<_>,
         Arc::clone(&crypto) as Arc<_>,
         registry.clone(),
-        execution_services.ingress_history_reader,
+        Box::new(execution_services.ingress_history_reader),
         cycles_account_manager,
         canister_http_adapter_client,
         config.nns_registry_replicator.poll_delay_duration_ms,

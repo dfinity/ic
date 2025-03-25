@@ -121,13 +121,26 @@ const API_URL_STREAMS: &str = "/api/v1/streams";
 const API_URL_STREAM_PREFIX: &str = "/api/v1/stream/";
 
 /// Struct passed to each request handled by `enqueue_task`.
-#[derive(Clone)]
-struct Context {
+struct Context<CertifiedStreamStore_: CertifiedStreamStore + 'static> {
     log: ReplicaLogger,
     semaphore: Arc<Semaphore>,
     metrics: Arc<XNetEndpointMetrics>,
-    certified_stream_store: Arc<dyn CertifiedStreamStore>,
+    certified_stream_store: Arc<CertifiedStreamStore_>,
     base_url: Url,
+}
+
+impl<CertifiedStreamStore_: CertifiedStreamStore + 'static> Clone
+    for Context<CertifiedStreamStore_>
+{
+    fn clone(&self) -> Self {
+        Self {
+            log: self.log.clone(),
+            semaphore: Arc::clone(&self.semaphore),
+            metrics: Arc::clone(&self.metrics),
+            certified_stream_store: Arc::clone(&self.certified_stream_store),
+            base_url: self.base_url.clone(),
+        }
+    }
 }
 
 fn ok<T>(t: T) -> Result<T, Infallible> {
@@ -137,7 +150,7 @@ fn ok<T>(t: T) -> Result<T, Infallible> {
 /// Handles an incoming HTTP request by taking a permit from the semaphore, parsing the URL,
 /// handing over to `route_request()` and replying with the produced response.
 async fn handle_xnet_request(
-    State(ctx): State<Context>,
+    State(ctx): State<Context<impl CertifiedStreamStore>>,
     request: Request<Body>,
 ) -> impl IntoResponse {
     let owned_permit = match ctx.semaphore.try_acquire_owned() {
@@ -183,10 +196,10 @@ async fn handle_xnet_request(
 fn start_server(
     address: SocketAddr,
     metrics: Arc<XNetEndpointMetrics>,
-    certified_stream_store: Arc<dyn CertifiedStreamStore>,
+    certified_stream_store: Arc<impl CertifiedStreamStore + 'static>,
     runtime_handle: runtime::Handle,
-    tls: Arc<dyn TlsConfig + Send + Sync>,
-    registry_client: Arc<dyn RegistryClient + Send + Sync>,
+    tls: Arc<impl TlsConfig + Send + Sync + 'static>,
+    registry_client: Arc<impl RegistryClient + 'static>,
     log: ReplicaLogger,
     shutdown_notify: Arc<Notify>,
 ) -> SocketAddr {
@@ -205,7 +218,7 @@ fn start_server(
 
     // Create a router that handles all requests by calling `enqueue_task`
     // and attaches the `Context` as state.
-    let router = any(handle_xnet_request).with_state(ctx);
+    let router = any(&handle_xnet_request).with_state(ctx);
 
     let hyper_service =
         hyper::service::service_fn(move |request: Request<Incoming>| router.clone().call(request));
@@ -294,9 +307,9 @@ impl XNetEndpoint {
     /// Creates and starts an `XNetEndpoint` to publish XNet `Streams`.
     pub fn new(
         runtime_handle: runtime::Handle,
-        certified_stream_store: Arc<dyn CertifiedStreamStore>,
-        tls: Arc<dyn TlsConfig + Send + Sync>,
-        registry_client: Arc<dyn RegistryClient + Send + Sync>,
+        certified_stream_store: Arc<impl CertifiedStreamStore + 'static>,
+        tls: Arc<impl TlsConfig + Send + Sync + 'static>,
+        registry_client: Arc<impl RegistryClient + 'static>,
         config: Config,
         metrics: &MetricsRegistry,
         log: ReplicaLogger,
@@ -344,7 +357,7 @@ impl XNetEndpoint {
 /// HTTP 404 Not Found response if the URL doesn't match any handler.
 fn route_request(
     url: Url,
-    certified_stream_store: &dyn CertifiedStreamStore,
+    certified_stream_store: &impl CertifiedStreamStore,
     metrics: &XNetEndpointMetrics,
 ) -> Response<Body> {
     let since = Instant::now();
@@ -433,7 +446,7 @@ fn handle_stream(
     msg_begin: Option<StreamIndex>,
     msg_limit: Option<usize>,
     byte_limit: Option<usize>,
-    certified_stream_store: &dyn CertifiedStreamStore,
+    certified_stream_store: &impl CertifiedStreamStore,
     metrics: &XNetEndpointMetrics,
 ) -> Response<Body> {
     let witness_begin = witness_begin.or(msg_begin);

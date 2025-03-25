@@ -39,20 +39,28 @@ pub(crate) trait StateMachine: Send {
         api_boundary_nodes: ApiBoundaryNodes,
     ) -> ReplicatedState;
 }
-pub(crate) struct StateMachineImpl {
-    scheduler: Box<dyn Scheduler<State = ReplicatedState>>,
+pub(crate) struct StateMachineImpl<Scheduler_, StreamBuilder_>
+where
+    Scheduler_: Scheduler<State = ReplicatedState>,
+    StreamBuilder_: StreamBuilder,
+{
+    scheduler: Scheduler_,
     demux: Box<dyn Demux>,
-    stream_builder: Box<dyn StreamBuilder>,
+    stream_builder: StreamBuilder_,
     best_effort_message_memory_capacity: NumBytes,
     log: ReplicaLogger,
     metrics: MessageRoutingMetrics,
 }
 
-impl StateMachineImpl {
+impl<Scheduler_, StreamBuilder_> StateMachineImpl<Scheduler_, StreamBuilder_>
+where
+    Scheduler_: Scheduler<State = ReplicatedState>,
+    StreamBuilder_: StreamBuilder,
+{
     pub(crate) fn new(
-        scheduler: Box<dyn Scheduler<State = ReplicatedState>>,
+        scheduler: Scheduler_,
         demux: Box<dyn Demux>,
-        stream_builder: Box<dyn StreamBuilder>,
+        stream_builder: StreamBuilder_,
         hypervisor_config: HypervisorConfig,
         log: ReplicaLogger,
         metrics: MessageRoutingMetrics,
@@ -78,7 +86,11 @@ impl StateMachineImpl {
     }
 }
 
-impl StateMachine for StateMachineImpl {
+impl<Scheduler_, StreamBuilder_> StateMachine for StateMachineImpl<Scheduler_, StreamBuilder_>
+where
+    Scheduler_: Scheduler<State = ReplicatedState>,
+    StreamBuilder_: StreamBuilder,
+{
     fn execute_round(
         &self,
         mut state: ReplicatedState,

@@ -25,8 +25,7 @@ use ic_base_types::PrincipalId;
 use ic_config::{execution_environment::Config, subnet_config::SchedulerConfig};
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_interfaces::execution_environment::{
-    IngressFilterService, IngressHistoryReader, IngressHistoryWriter, QueryExecutionService,
-    Scheduler,
+    IngressFilterService, QueryExecutionService, Scheduler,
 };
 use ic_interfaces_state_manager::StateReader;
 use ic_logger::ReplicaLogger;
@@ -81,11 +80,11 @@ pub enum NonReplicatedQueryKind {
 // This struct holds public facing components that are created by Execution.
 pub struct ExecutionServices {
     pub ingress_filter: IngressFilterService,
-    pub ingress_history_writer: Arc<dyn IngressHistoryWriter<State = ReplicatedState>>,
-    pub ingress_history_reader: Box<dyn IngressHistoryReader>,
+    pub ingress_history_writer: Arc<IngressHistoryWriterImpl>,
+    pub ingress_history_reader: IngressHistoryReaderImpl,
     pub query_execution_service: QueryExecutionService,
     pub https_outcalls_service: QueryExecutionService,
-    pub scheduler: Box<dyn Scheduler<State = ReplicatedState>>,
+    pub scheduler: SchedulerImpl,
     pub query_stats_payload_builder: QueryStatsPayloadBuilderParams,
 }
 
@@ -105,7 +104,7 @@ impl ExecutionServices {
         fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
         completed_execution_messages_tx: Sender<(MessageId, Height)>,
         temp_dir: &Path,
-    ) -> ExecutionServices {
+    ) -> Self {
         let hypervisor = Arc::new(Hypervisor::new(
             config.clone(),
             metrics_registry,
@@ -125,8 +124,7 @@ impl ExecutionServices {
             completed_execution_messages_tx,
             Arc::clone(&state_reader),
         ));
-        let ingress_history_reader =
-            Box::new(IngressHistoryReaderImpl::new(Arc::clone(&state_reader)));
+        let ingress_history_reader = IngressHistoryReaderImpl::new(Arc::clone(&state_reader));
 
         let (query_stats_collector, query_stats_payload_builder) =
             ic_query_stats::init_query_stats(logger.clone(), &config, metrics_registry);
@@ -192,7 +190,7 @@ impl ExecutionServices {
             ingress_filter_metrics.clone(),
         );
 
-        let scheduler = Box::new(SchedulerImpl::new(
+        let scheduler = SchedulerImpl::new(
             scheduler_config,
             own_subnet_id,
             Arc::clone(&ingress_history_writer) as Arc<_>,
@@ -204,7 +202,7 @@ impl ExecutionServices {
             config.rate_limiting_of_instructions,
             config.deterministic_time_slicing,
             Arc::clone(&fd_factory),
-        ));
+        );
 
         Self {
             ingress_filter,
@@ -217,22 +215,7 @@ impl ExecutionServices {
         }
     }
 
-    #[allow(clippy::type_complexity)]
-    pub fn into_parts(
-        self,
-    ) -> (
-        IngressFilterService,
-        Arc<dyn IngressHistoryWriter<State = ReplicatedState>>,
-        Box<dyn IngressHistoryReader>,
-        QueryExecutionService,
-        Box<dyn Scheduler<State = ReplicatedState>>,
-    ) {
-        (
-            self.ingress_filter,
-            self.ingress_history_writer,
-            self.ingress_history_reader,
-            self.query_execution_service,
-            self.scheduler,
-        )
+    pub fn scheduler(self) -> impl Scheduler<State = ReplicatedState> {
+        self.scheduler
     }
 }

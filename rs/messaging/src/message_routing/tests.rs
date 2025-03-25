@@ -221,7 +221,6 @@ fn message_routing_does_not_block() {
             }
         });
 
-        let mock_box = Box::new(mock);
         let mut state_manager = MockStateManager::new();
         state_manager
             .expect_latest_state_height()
@@ -231,7 +230,7 @@ fn message_routing_does_not_block() {
         let metrics_registry = MetricsRegistry::new();
         let metrics = MessageRoutingMetrics::new(&metrics_registry);
         let mr =
-            MessageRoutingImpl::from_batch_processor(state_manager, mock_box, metrics, log.clone());
+            MessageRoutingImpl::from_batch_processor(state_manager, mock, metrics, log.clone());
         // We need to submit one extra batch because the very first one
         // is removed from the queue by the background worker.
         for batch_number in 1..BATCH_QUEUE_BUFFER_SIZE + 2 {
@@ -652,11 +651,11 @@ impl StateMachine for FakeStateMachine {
 /// Generates an instance of `BatchProcessorImpl` along with an `Arc` to its metrics;
 /// an `Arc` to the underlying state manager; and an `Arc` to the registry settings
 /// which are stored by the fake state machine.
-fn make_batch_processor(
-    registry: Arc<impl RegistryClient + 'static>,
+fn make_batch_processor<RegistryClient_: RegistryClient + 'static>(
+    registry: Arc<RegistryClient_>,
     log: ReplicaLogger,
 ) -> (
-    BatchProcessorImpl,
+    BatchProcessorImpl<FakeStateManager, FakeStateMachine, RegistryClient_>,
     MessageRoutingMetrics,
     Arc<FakeStateManager>,
     Arc<Mutex<RegistryExecutionSettings>>,
@@ -671,7 +670,7 @@ fn make_batch_processor(
     }));
     let batch_processor = BatchProcessorImpl {
         state_manager: state_manager.clone(),
-        state_machine: Box::new(FakeStateMachine(registry_settings.clone())),
+        state_machine: FakeStateMachine(registry_settings.clone()),
         registry,
         bitcoin_config: BitcoinConfig::default(),
         metrics: metrics.clone(),
@@ -1936,13 +1935,13 @@ fn test_demux_delivers_certified_stream_slices() {
             })
             .collect::<BTreeMap<_, _>>();
 
-        let demux: Box<dyn Demux> = Box::new(DemuxImpl::new(
-            Box::new(FakeValidSetRule),
-            Box::new(FakeStreamHandler::new(expected_slices)),
+        let demux = DemuxImpl::new(
+            FakeValidSetRule,
+            FakeStreamHandler::new(expected_slices),
             dst_state_manager.clone(),
             MessageRoutingMetrics::new(&dst_metrics),
             log,
-        ));
+        );
 
         let (_, dst_state) = dst_state_manager.take_tip();
 

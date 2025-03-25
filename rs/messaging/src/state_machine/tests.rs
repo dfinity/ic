@@ -43,9 +43,9 @@ mock! {
 }
 
 struct StateMachineTestFixture {
-    scheduler: Box<dyn Scheduler<State = ReplicatedState>>,
+    scheduler: MockScheduler,
     demux: Box<dyn Demux>,
-    stream_builder: Box<dyn StreamBuilder>,
+    stream_builder: MockStreamBuilder,
     initial_state: ReplicatedState,
     network_topology: NetworkTopology,
     metrics: MessageRoutingMetrics,
@@ -80,7 +80,7 @@ fn test_fixture(provided_batch: &Batch) -> StateMachineTestFixture {
         .with(always(), eq(provided_batch.messages.clone()))
         .returning(|state, _| state);
 
-    let mut scheduler = Box::new(MockScheduler::new());
+    let mut scheduler = MockScheduler::new();
     scheduler
         .expect_execute_round()
         .times(1)
@@ -101,7 +101,7 @@ fn test_fixture(provided_batch: &Batch) -> StateMachineTestFixture {
         )
         .returning(|state, _, _, _, _, _, _, _| state);
 
-    let mut stream_builder = Box::new(MockStreamBuilder::new());
+    let mut stream_builder = MockStreamBuilder::new();
     stream_builder
         .expect_build_streams()
         .times(1)
@@ -154,14 +154,14 @@ fn state_machine_populates_network_topology() {
 
     with_test_replica_logger(|log| {
         let _ = &fixture;
-        let state_machine = Box::new(StateMachineImpl::new(
+        let state_machine = StateMachineImpl::new(
             fixture.scheduler,
             fixture.demux,
             fixture.stream_builder,
             Default::default(),
             log,
             fixture.metrics,
-        ));
+        );
 
         assert_ne!(
             fixture.initial_state.metadata.network_topology,

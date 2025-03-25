@@ -20,19 +20,30 @@ pub(crate) trait Demux: Send {
     fn process_payload(&self, state: ReplicatedState, messages: BatchMessages) -> ReplicatedState;
 }
 
-pub(crate) struct DemuxImpl<'a> {
-    valid_set_rule: Box<dyn ValidSetRule + 'a>,
-    stream_handler: Box<dyn StreamHandler + 'a>,
-    certified_stream_store: Arc<dyn CertifiedStreamStore>,
+pub(crate) struct DemuxImpl<ValidSetRule_, StreamHandler_, CertifiedStreamStore_>
+where
+    ValidSetRule_: ValidSetRule,
+    StreamHandler_: StreamHandler,
+    CertifiedStreamStore_: CertifiedStreamStore,
+{
+    valid_set_rule: ValidSetRule_,
+    stream_handler: StreamHandler_,
+    certified_stream_store: Arc<CertifiedStreamStore_>,
     metrics: MessageRoutingMetrics,
     log: ReplicaLogger,
 }
 
-impl<'a> DemuxImpl<'a> {
+impl<'a, ValidSetRule_, StreamHandler_, CertifiedStreamStore_>
+    DemuxImpl<ValidSetRule_, StreamHandler_, CertifiedStreamStore_>
+where
+    ValidSetRule_: ValidSetRule,
+    StreamHandler_: StreamHandler,
+    CertifiedStreamStore_: CertifiedStreamStore,
+{
     pub(crate) fn new(
-        valid_set_rule: Box<dyn ValidSetRule + 'a>,
-        stream_handler: Box<dyn StreamHandler + 'a>,
-        certified_stream_store: Arc<dyn CertifiedStreamStore>,
+        valid_set_rule: ValidSetRule_,
+        stream_handler: StreamHandler_,
+        certified_stream_store: Arc<CertifiedStreamStore_>,
         metrics: MessageRoutingMetrics,
         log: ReplicaLogger,
     ) -> Self {
@@ -46,7 +57,13 @@ impl<'a> DemuxImpl<'a> {
     }
 }
 
-impl Demux for DemuxImpl<'_> {
+impl<'a, ValidSetRule_, StreamHandler_, CertifiedStreamStore_> Demux
+    for DemuxImpl<ValidSetRule_, StreamHandler_, CertifiedStreamStore_>
+where
+    ValidSetRule_: ValidSetRule,
+    StreamHandler_: StreamHandler,
+    CertifiedStreamStore_: CertifiedStreamStore,
+{
     fn process_payload(
         &self,
         state: ReplicatedState,

@@ -140,7 +140,7 @@ impl SchedulerRoundLimits {
 
 ////////////////////////////////////////////////////////////////////////
 /// Scheduler Implementation
-pub(crate) struct SchedulerImpl {
+pub struct SchedulerImpl {
     config: SchedulerConfig,
     own_subnet_id: SubnetId,
     ingress_history_writer: Arc<dyn IngressHistoryWriter<State = ReplicatedState>>,

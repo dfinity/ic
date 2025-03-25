@@ -822,9 +822,9 @@ pub struct StateMachine {
     pub ingress_filter: Arc<Mutex<IngressFilterService>>,
     pocket_xnet: Arc<RwLock<Option<PocketXNetImpl>>>,
     payload_builder: Arc<RwLock<Option<PayloadBuilderImpl>>>,
-    message_routing: SyncMessageRouting,
+    message_routing: SyncMessageRouting<StateManagerImpl>,
     pub metrics_registry: MetricsRegistry,
-    ingress_history_reader: Box<dyn IngressHistoryReader>,
+    ingress_history_reader: IngressHistoryReaderImpl,
     pub query_handler: Arc<Mutex<QueryExecutionService>>,
     pub runtime: Arc<Runtime>,
     // The atomicity is required for internal mutability and sending across threads.

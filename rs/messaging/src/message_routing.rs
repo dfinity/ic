@@ -1,5 +1,7 @@
 use crate::{
-    routing, scheduling,
+    routing,
+    routing::stream_builder::{StreamBuilder, StreamBuilderImpl},
+    scheduling,
     state_machine::{StateMachine, StateMachineImpl},
 };
 use ic_config::embedders::BestEffortResponsesFeature;
@@ -535,10 +537,10 @@ impl MessageRoutingMetrics {
 }
 
 /// Implementation of the `MessageRouting` trait.
-pub struct MessageRoutingImpl {
+pub struct MessageRoutingImpl<StateManager_: StateManager<State = ReplicatedState>> {
     last_seen_batch: RwLock<Height>,
     batch_sender: std::sync::mpsc::SyncSender<Batch>,
-    state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
+    state_manager: Arc<StateManager_>,
     metrics: MessageRoutingMetrics,
     log: ReplicaLogger,
     // Handle to the batch processor thread.  Stored so that in `drop`, we can wait
@@ -550,15 +552,20 @@ pub struct MessageRoutingImpl {
 /// A component that executes Consensus [batches](Batch) sequentially, by
 /// retrieving the matching state, applying the batch and committing the result.
 #[cfg_attr(test, automock)]
-trait BatchProcessor: Send {
+pub trait BatchProcessor: Send {
     fn process_batch(&self, batch: Batch);
 }
 
 /// Implementation of [`BatchProcessor`].
-struct BatchProcessorImpl {
-    state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
-    state_machine: Box<dyn StateMachine>,
-    registry: Arc<dyn RegistryClient>,
+struct BatchProcessorImpl<StateManager_, StateMachine_, RegistryClient_>
+where
+    StateManager_: StateManager<State = ReplicatedState>,
+    StateMachine_: StateMachine,
+    RegistryClient_: RegistryClient,
+{
+    state_manager: Arc<StateManager_>,
+    state_machine: StateMachine_,
+    registry: Arc<RegistryClient_>,
     bitcoin_config: BitcoinConfig,
     metrics: MessageRoutingMetrics,
     log: ReplicaLogger,
@@ -616,13 +623,23 @@ pub(crate) type NodePublicKeys = BTreeMap<NodeId, Vec<u8>>;
 /// A mapping from node IDs to ApiBoundaryNodeEntry.
 pub(crate) type ApiBoundaryNodes = BTreeMap<NodeId, ApiBoundaryNodeEntry>;
 
-impl BatchProcessorImpl {
+impl<StateManager_, RegistryClient_, Scheduler_>
+    BatchProcessorImpl<
+        StateManager_,
+        StateMachineImpl<Scheduler_, StreamBuilderImpl>,
+        RegistryClient_,
+    >
+where
+    StateManager_: StateManager<State = ReplicatedState>,
+    RegistryClient_: RegistryClient,
+    Scheduler_: Scheduler<State = ReplicatedState>,
+{
     #[allow(clippy::too_many_arguments)]
     fn new(
-        state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
-        certified_stream_store: Arc<dyn CertifiedStreamStore>,
-        ingress_history_writer: Arc<dyn IngressHistoryWriter<State = ReplicatedState> + 'static>,
-        scheduler: Box<dyn Scheduler<State = ReplicatedState>>,
+        state_manager: Arc<StateManager_>,
+        certified_stream_store: Arc<impl CertifiedStreamStore + 'static>,
+        ingress_history_writer: Arc<impl IngressHistoryWriter<State = ReplicatedState> + 'static>,
+        scheduler: Scheduler_,
         hypervisor_config: HypervisorConfig,
         cycles_account_manager: Arc<CyclesAccountManager>,
         subnet_id: SubnetId,
@@ -631,27 +648,27 @@ impl BatchProcessorImpl {
         metrics: MessageRoutingMetrics,
         metrics_registry: &MetricsRegistry,
         log: ReplicaLogger,
-        registry: Arc<dyn RegistryClient>,
+        registry: Arc<RegistryClient_>,
         malicious_flags: MaliciousFlags,
-    ) -> BatchProcessorImpl {
+    ) -> BatchProcessorImpl<StateManager_, impl StateMachine, RegistryClient_> {
         let time_in_stream_metrics = Arc::new(Mutex::new(LatencyMetrics::new_time_in_stream(
             metrics_registry,
         )));
-        let stream_handler = Box::new(routing::stream_handler::StreamHandlerImpl::new(
+        let stream_handler = routing::stream_handler::StreamHandlerImpl::new(
             subnet_id,
             hypervisor_config.clone(),
             metrics_registry,
             &metrics,
             Arc::clone(&time_in_stream_metrics),
             log.clone(),
-        ));
-        let vsr = Box::new(scheduling::valid_set_rule::ValidSetRuleImpl::new(
+        );
+        let vsr = scheduling::valid_set_rule::ValidSetRuleImpl::new(
             ingress_history_writer,
             cycles_account_manager,
             metrics_registry,
             subnet_id,
             log.clone(),
-        ));
+        );
         let demux = Box::new(routing::demux::DemuxImpl::new(
             vsr,
             stream_handler,
@@ -659,7 +676,7 @@ impl BatchProcessorImpl {
             metrics.clone(),
             log.clone(),
         ));
-        let stream_builder = Box::new(routing::stream_builder::StreamBuilderImpl::new(
+        let stream_builder = routing::stream_builder::StreamBuilderImpl::new(
             subnet_id,
             max_stream_messages,
             target_stream_size_bytes,
@@ -672,17 +689,17 @@ impl BatchProcessorImpl {
                 .best_effort_responses
                 .clone(),
             log.clone(),
-        ));
-        let state_machine = Box::new(StateMachineImpl::new(
+        );
+        let state_machine = StateMachineImpl::new(
             scheduler,
             demux,
             stream_builder,
             hypervisor_config.clone(),
             log.clone(),
             metrics.clone(),
-        ));
+        );
 
-        Self {
+        BatchProcessorImpl {
             state_manager,
             state_machine,
             registry,
@@ -692,7 +709,15 @@ impl BatchProcessorImpl {
             malicious_flags,
         }
     }
+}
 
+impl<StateManager_, StateMachine_, RegistryClient_>
+    BatchProcessorImpl<StateManager_, StateMachine_, RegistryClient_>
+where
+    StateManager_: StateManager<State = ReplicatedState>,
+    StateMachine_: StateMachine,
+    RegistryClient_: RegistryClient,
+{
     /// Adds an observation to the `METRIC_PROCESS_BATCH_PHASE_DURATION`
     /// histogram for the given phase.
     fn observe_phase_duration(&self, phase: &str, since: &Instant) {
@@ -1209,7 +1234,13 @@ impl BatchProcessorImpl {
     }
 }
 
-impl BatchProcessor for BatchProcessorImpl {
+impl<StateManager_, StateMachine_, RegistryClient_> BatchProcessor
+    for BatchProcessorImpl<StateManager_, StateMachine_, RegistryClient_>
+where
+    StateManager_: StateManager<State = ReplicatedState>,
+    StateMachine_: StateMachine,
+    RegistryClient_: RegistryClient,
+{
     #[instrument(skip_all)]
     fn process_batch(&self, batch: Batch) {
         let _process_batch_start = Instant::now();
@@ -1337,19 +1368,30 @@ impl BatchProcessor for BatchProcessorImpl {
     }
 }
 
-pub(crate) struct FakeBatchProcessorImpl {
-    stream_builder: Box<dyn routing::stream_builder::StreamBuilder>,
-    state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
-    ingress_history_writer: Arc<dyn IngressHistoryWriter<State = ReplicatedState>>,
+pub(crate) struct FakeBatchProcessorImpl<StateManager_, StreamBuilder_, IngressHistoryWriter_>
+where
+    StateManager_: StateManager<State = ReplicatedState>,
+    StreamBuilder_: StreamBuilder,
+    IngressHistoryWriter_: IngressHistoryWriter<State = ReplicatedState>,
+{
+    stream_builder: StreamBuilder_,
+    state_manager: Arc<StateManager_>,
+    ingress_history_writer: Arc<IngressHistoryWriter_>,
     log: ReplicaLogger,
 }
 
-impl FakeBatchProcessorImpl {
+impl<StateManager_, StreamBuilder_, IngressHistoryWriter_>
+    FakeBatchProcessorImpl<StateManager_, StreamBuilder_, IngressHistoryWriter_>
+where
+    StateManager_: StateManager<State = ReplicatedState>,
+    StreamBuilder_: StreamBuilder,
+    IngressHistoryWriter_: IngressHistoryWriter<State = ReplicatedState>,
+{
     pub fn new(
         log: ReplicaLogger,
-        stream_builder: Box<dyn routing::stream_builder::StreamBuilder>,
-        state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
-        ingress_history_writer: Arc<dyn IngressHistoryWriter<State = ReplicatedState>>,
+        stream_builder: StreamBuilder_,
+        state_manager: Arc<StateManager_>,
+        ingress_history_writer: Arc<IngressHistoryWriter_>,
     ) -> Self {
         Self {
             stream_builder,
@@ -1360,7 +1402,13 @@ impl FakeBatchProcessorImpl {
     }
 }
 
-impl BatchProcessor for FakeBatchProcessorImpl {
+impl<StateManager_, StreamBuilder_, IngressHistoryWriter_> BatchProcessor
+    for FakeBatchProcessorImpl<StateManager_, StreamBuilder_, IngressHistoryWriter_>
+where
+    StateManager_: StateManager<State = ReplicatedState>,
+    StreamBuilder_: StreamBuilder,
+    IngressHistoryWriter_: IngressHistoryWriter<State = ReplicatedState>,
+{
     fn process_batch(&self, batch: Batch) {
         // Fetch the mutable tip from StateManager
         let mut state = match self
@@ -1436,10 +1484,13 @@ impl BatchProcessor for FakeBatchProcessorImpl {
     }
 }
 
-impl MessageRoutingImpl {
+impl<StateManager_> MessageRoutingImpl<StateManager_>
+where
+    StateManager_: StateManager<State = ReplicatedState> + 'static,
+{
     fn from_batch_processor(
-        state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
-        batch_processor: Box<dyn BatchProcessor>,
+        state_manager: Arc<StateManager_>,
+        batch_processor: impl BatchProcessor + 'static,
         metrics: MessageRoutingMetrics,
         log: ReplicaLogger,
     ) -> Self {
@@ -1476,20 +1527,20 @@ impl MessageRoutingImpl {
     /// provided `StateManager` and `ExecutionEnvironment`.
     #[allow(clippy::too_many_arguments)]
     pub fn new(
-        state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
-        certified_stream_store: Arc<dyn CertifiedStreamStore>,
-        ingress_history_writer: Arc<dyn IngressHistoryWriter<State = ReplicatedState> + 'static>,
-        scheduler: Box<dyn Scheduler<State = ReplicatedState>>,
+        state_manager: Arc<StateManager_>,
+        certified_stream_store: Arc<impl CertifiedStreamStore + 'static>,
+        ingress_history_writer: Arc<impl IngressHistoryWriter<State = ReplicatedState> + 'static>,
+        scheduler: impl Scheduler<State = ReplicatedState> + 'static,
         hypervisor_config: HypervisorConfig,
         cycles_account_manager: Arc<CyclesAccountManager>,
         subnet_id: SubnetId,
         metrics_registry: &MetricsRegistry,
         log: ReplicaLogger,
-        registry: Arc<dyn RegistryClient>,
+        registry: Arc<impl RegistryClient + 'static>,
         malicious_flags: MaliciousFlags,
     ) -> Self {
         let metrics = MessageRoutingMetrics::new(metrics_registry);
-        let batch_processor = Box::new(BatchProcessorImpl::new(
+        let batch_processor = BatchProcessorImpl::new(
             state_manager.clone(),
             certified_stream_store,
             ingress_history_writer,
@@ -1507,7 +1558,7 @@ impl MessageRoutingImpl {
             log.clone(),
             registry,
             malicious_flags,
-        ));
+        );
 
         Self::from_batch_processor(state_manager, batch_processor, metrics, log)
     }
@@ -1516,12 +1567,12 @@ impl MessageRoutingImpl {
     /// `BatchProcessor` and the provided `StateManager`.
     pub fn new_fake(
         subnet_id: SubnetId,
-        state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
-        ingress_history_writer: Arc<dyn IngressHistoryWriter<State = ReplicatedState> + 'static>,
+        state_manager: Arc<StateManager_>,
+        ingress_history_writer: Arc<impl IngressHistoryWriter<State = ReplicatedState> + 'static>,
         metrics_registry: &MetricsRegistry,
         log: ReplicaLogger,
     ) -> Self {
-        let stream_builder = Box::new(routing::stream_builder::StreamBuilderImpl::new(
+        let stream_builder = routing::stream_builder::StreamBuilderImpl::new(
             subnet_id,
             MAX_STREAM_MESSAGES,
             TARGET_STREAM_SIZE_BYTES,
@@ -1532,7 +1583,7 @@ impl MessageRoutingImpl {
             ))),
             BestEffortResponsesFeature::Enabled,
             log.clone(),
-        ));
+        );
 
         let batch_processor = FakeBatchProcessorImpl::new(
             log.clone(),
@@ -1542,7 +1593,7 @@ impl MessageRoutingImpl {
         );
         let metrics = MessageRoutingMetrics::new(metrics_registry);
 
-        Self::from_batch_processor(state_manager, Box::new(batch_processor), metrics, log)
+        Self::from_batch_processor(state_manager, batch_processor, metrics, log)
     }
 
     fn inc_deliver_batch(&self, status: &str) {
@@ -1553,7 +1604,10 @@ impl MessageRoutingImpl {
     }
 }
 
-impl MessageRouting for MessageRoutingImpl {
+impl<StateManager_> MessageRouting for MessageRoutingImpl<StateManager_>
+where
+    StateManager_: StateManager<State = ReplicatedState> + 'static,
+{
     #[instrument(skip_all)]
     fn deliver_batch(&self, batch: Batch) -> Result<(), MessageRoutingError> {
         let batch_number = batch.batch_number;
@@ -1611,20 +1665,23 @@ impl MessageRouting for MessageRoutingImpl {
 }
 
 /// An MessageRouting implementation that processes batches synchronously. Used for state machine tests.
-pub struct SyncMessageRouting {
+pub struct SyncMessageRouting<StateManager_: StateManager<State = ReplicatedState>> {
     batch_processor: Arc<Mutex<dyn BatchProcessor>>,
-    state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
+    state_manager: Arc<StateManager_>,
 }
 
-impl SyncMessageRouting {
+impl<StateManager_> SyncMessageRouting<StateManager_>
+where
+    StateManager_: StateManager<State = ReplicatedState> + 'static,
+{
     /// Creates a new `SyncMessageRoutingImpl` for the given subnet using the
     /// provided `StateManager` and `ExecutionEnvironment`.
     #[allow(clippy::too_many_arguments)]
     pub fn new(
-        state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
-        certified_stream_store: Arc<dyn CertifiedStreamStore>,
-        ingress_history_writer: Arc<dyn IngressHistoryWriter<State = ReplicatedState> + 'static>,
-        scheduler: Box<dyn Scheduler<State = ReplicatedState>>,
+        state_manager: Arc<StateManager_>,
+        certified_stream_store: Arc<impl CertifiedStreamStore + 'static>,
+        ingress_history_writer: Arc<impl IngressHistoryWriter<State = ReplicatedState> + 'static>,
+        scheduler: impl Scheduler<State = ReplicatedState> + 'static,
         hypervisor_config: HypervisorConfig,
         cycles_account_manager: Arc<CyclesAccountManager>,
         subnet_id: SubnetId,
@@ -1632,7 +1689,7 @@ impl SyncMessageRouting {
         target_stream_size_bytes: usize,
         metrics_registry: &MetricsRegistry,
         log: ReplicaLogger,
-        registry: Arc<dyn RegistryClient>,
+        registry: Arc<impl RegistryClient + 'static>,
         malicious_flags: MaliciousFlags,
     ) -> Self {
         let metrics = MessageRoutingMetrics::new(metrics_registry);
