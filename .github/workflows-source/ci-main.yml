@@ -194,7 +194,6 @@ jobs:
           BAZEL_COMMAND: >-
             --noworkspace_rc --bazelrc=./bazel/conf/.bazelrc.build build --config=ci --keep_going --config=fuzzing --build_tag_filters=libfuzzer
           BAZEL_TARGETS: //rs/...
-      - <<: *bazel-bep
 
   bazel-build-fuzzers-afl:
     name: Bazel Build Fuzzers AFL
@@ -208,7 +207,6 @@ jobs:
         with:
           BAZEL_COMMAND: --noworkspace_rc --bazelrc=./bazel/conf/.bazelrc.build build --config=ci --keep_going --config=afl
           BAZEL_TARGETS: //rs/...
-      - <<: *bazel-bep
 
   python-ci-tests:
     name: Python CI Tests
