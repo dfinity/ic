@@ -2317,6 +2317,18 @@ message Governance {
   // Reserved id for deprecated `genesis_neuron_accounts`
   reserved 24;
   reserved "genesis_neuron_accounts";
+
+  message VotingPowerSnapshot {
+    // The timestamp at which the snapshot were taken.
+    uint64 timestamp_seconds = 1;
+
+    // The snapshots of voting power.
+    uint64 deciding_voting_power = 2;
+  }
+
+  // Snapshots of voting power in the last few days. The snapshots can be used to detect a sudden
+  // surge in voting power.
+  repeated VotingPowerSnapshot voting_power_snapshots = 29;
 }
 
 message XdrConversionRate {

@@ -3022,6 +3022,10 @@ pub struct Governance {
     /// source of randomness (from the platform)
     #[prost(bytes = "vec", optional, tag = "28")]
     pub rng_seed: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
+    /// Snapshots of voting power in the last few days. The snapshots can be used to detect a sudden
+    /// surge in voting power.
+    #[prost(message, repeated, tag = "29")]
+    pub voting_power_snapshots: ::prost::alloc::vec::Vec<governance::VotingPowerSnapshot>,
 }
 /// Nested message and enum types in `Governance`.
 pub mod governance {
@@ -3306,6 +3310,24 @@ pub mod governance {
             #[prost(message, repeated, tag = "1")]
             pub followers: ::prost::alloc::vec::Vec<::ic_nns_common::pb::v1::NeuronId>,
         }
+    }
+    #[derive(
+        candid::CandidType,
+        candid::Deserialize,
+        serde::Serialize,
+        comparable::Comparable,
+        Clone,
+        Copy,
+        PartialEq,
+        ::prost::Message,
+    )]
+    pub struct VotingPowerSnapshot {
+        /// The timestamp at which the snapshot were taken.
+        #[prost(uint64, tag = "1")]
+        pub timestamp_seconds: u64,
+        /// The snapshots of voting power.
+        #[prost(uint64, tag = "2")]
+        pub deciding_voting_power: u64,
     }
 }
 #[derive(
