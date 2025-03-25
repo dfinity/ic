@@ -1456,7 +1456,7 @@ fn helper_test_on_low_wasm_memory(
     let mut state_builder = SystemStateBuilder::default()
         .wasm_memory_threshold(wasm_memory_threshold)
         .wasm_memory_limit(wasm_memory_limit)
-        .on_low_wasm_memory_hook_status(start_status)
+        .empty_task_queue_with_on_low_wasm_memory_hook_status(start_status)
         .initial_cycles(Cycles::from(10_000_000_000_000_000u128));
 
     if let Some(memory_allocation) = memory_allocation {
