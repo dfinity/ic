@@ -14,110 +14,7 @@ import urllib.request
 from datetime import datetime
 from pathlib import Path
 
-# ------------------------------------------------------------------------------
-# COLOR AND LOGGING UTILITIES
-# ------------------------------------------------------------------------------
-RESET = "\033[0m"
-RED = "\033[0;31m"
-GREEN = "\033[0;32m"
-YELLOW = "\033[0;33m"
-BLUE = "\033[0;34m"
-PURPLE = "\033[0;35m"
 
-def now_str():
-    """Matches the original date +'%Y/%m/%d | %H:%M:%S | %s' output."""
-    ts = time.time()
-    dt = datetime.fromtimestamp(ts)
-    return dt.strftime(f"%Y/%m/%d | %H:%M:%S | {int(ts)}")
-
-def print_red(msg):
-    print(f"{RED}{now_str()} {msg}{RESET}", file=sys.stderr)
-
-def print_green(msg):
-    print(f"{GREEN}{now_str()} {msg}{RESET}")
-
-def print_yellow(msg):
-    print(f"{YELLOW}{now_str()} {msg}{RESET}")
-
-def print_blue(msg):
-    print(f"{BLUE}{now_str()} {msg}{RESET}")
-
-def print_purple(msg):
-    print(f"{PURPLE}{now_str()} {msg}{RESET}")
-
-def log(msg):
-    """Used for normal info logs."""
-    print_blue(f"[ℹ️] {msg}")
-
-def log_success(msg):
-    """Used when something validated successfully."""
-    print_green(f"[✅] {msg}")
-
-def log_warning(msg):
-    """Used for warnings (like insufficient memory/disk)."""
-    print_yellow(f"[⚠️ Warning] {msg}")
-
-def log_stderr(msg):
-    """Used for important error messages."""
-    print_red(f"[❌] {msg}")
-
-def log_debug(msg):
-    """Debug prints only if $DEBUG is set (any non-empty value)."""
-    if os.getenv("DEBUG", ""):
-        print_purple(f"[🐞] {msg}")
-
-def fail(msg):
-    """Exit the script with an error."""
-    print_red(f"[💥] {msg}")
-    sys.exit(1)
-
-# ------------------------------------------------------------------------------
-# ARGUMENT PARSING
-# ------------------------------------------------------------------------------
-def parse_args():
-    parser = argparse.ArgumentParser(
-        description=(
-            "This script builds and diffs the update image between CI and build-ic.\n\n"
-            "By default (with no arguments), it:\n"
-            " - uses the current directory's HEAD commit\n"
-            " - checks all OS images (GuestOS, HostOS, SetupOS)\n"
-            " - verifies reproducibility.\n\n"
-            "Options:\n"
-            " -h, --help      Show this help message.\n"
-            " --guestos       Verify only GuestOS images.\n"
-            " --hostos        Verify only HostOS images.\n"
-            " --setupos       Verify only SetupOS images.\n"
-            " -p <proposal>   Proposal ID (for an Elect Replica or HostOS proposal).\n"
-            " -c <commit>     Git commit/branch/sha in the IC repo to verify.\n"
-            " --clean         Clean up the download cache before running.\n"
-        ),
-        formatter_class=argparse.RawTextHelpFormatter
-    )
-
-    parser.add_argument("--guestos", action="store_true",
-                        help="Verify only GuestOS images.")
-    parser.add_argument("--hostos", action="store_true",
-                        help="Verify only HostOS images.")
-    parser.add_argument("--setupos", action="store_true",
-                        help="Verify only SetupOS images.")
-    parser.add_argument("-p", "--proposal-id", type=str, default="",
-                        help="Proposal ID to check (for an Elect Replica or HostOS proposal).")
-    parser.add_argument("-c", "--commit", type=str, default="",
-                        help="Git revision/commit to use from the IC repository.")
-    parser.add_argument("--clean", action="store_true",
-                        help="Clean up the download cache before running.")
-    args = parser.parse_args()
-
-    if not args.guestos and not args.hostos and not args.setupos:
-        args.guestos = True
-        args.hostos = True
-        args.setupos = True
-
-    return args
-
-# ------------------------------------------------------------------------------
-# VERIFIER CLASS
-# ------------------------------------------------------------------------------
 class ReproducibilityVerifier:
     def __init__(self, verify_guestos, verify_hostos, verify_setupos, proposal_id, git_commit, clean):
         self.verify_guestos = verify_guestos
@@ -759,6 +656,93 @@ class ReproducibilityVerifier:
         m, s = divmod(rem, 60)
         log(f"Total time: {int(h)}h {int(m)}m {int(s)}s")
         sys.exit(0)
+
+# ------------------------------------------------------------------------------
+# COLOR AND LOGGING UTILITIES
+# ------------------------------------------------------------------------------
+COLORS = {
+    "reset": "\033[0m",
+    "red": "\033[0;31m",
+    "green": "\033[0;32m",
+    "yellow": "\033[0;33m",
+    "blue": "\033[0;34m",
+    "purple": "\033[0;35m",
+}
+
+def colored_print(color, text, to_stderr=False):
+    ts = time.time()
+    dt = datetime.fromtimestamp(ts)
+    now_str = dt.strftime(f"%Y/%m/%d | %H:%M:%S | {int(ts)}")
+    line = f"{COLORS[color]}{now_str} {text}{COLORS['reset']}"
+    if to_stderr:
+        print(line, file=sys.stderr)
+    else:
+        print(line)
+
+def log(msg):
+    colored_print("blue", f"[ℹ️] {msg}")
+
+def log_debug(msg):
+    if os.getenv("DEBUG", ""):
+        colored_print("purple", f"[🐞] {msg}")
+
+def log_success(msg):
+    colored_print("green", f"[✅] {msg}")
+
+def log_warning(msg):
+    colored_print("yellow", f"[⚠️ Warning] {msg}")
+
+def log_stderr(msg):
+    colored_print("red", f"[❌] {msg}", to_stderr=True)
+
+def fail(msg):
+    colored_print("red", f"[💥] {msg}", to_stderr=True)
+    sys.exit(1)
+
+
+# ------------------------------------------------------------------------------
+# ARGUMENT PARSING
+# ------------------------------------------------------------------------------
+def parse_args():
+    parser = argparse.ArgumentParser(
+        description=(
+            "This script builds and diffs the update image between CI and build-ic.\n\n"
+            "By default (with no arguments), it:\n"
+            " - uses the current directory's HEAD commit\n"
+            " - checks all OS images (GuestOS, HostOS, SetupOS)\n"
+            " - verifies reproducibility.\n\n"
+            "Options:\n"
+            " -h, --help      Show this help message.\n"
+            " --guestos       Verify only GuestOS images.\n"
+            " --hostos        Verify only HostOS images.\n"
+            " --setupos       Verify only SetupOS images.\n"
+            " -p <proposal>   Proposal ID (for an Elect Replica or HostOS proposal).\n"
+            " -c <commit>     Git commit/branch/sha in the IC repo to verify.\n"
+            " --clean         Clean up the download cache before running.\n"
+        ),
+        formatter_class=argparse.RawTextHelpFormatter
+    )
+
+    parser.add_argument("--guestos", action="store_true",
+                        help="Verify only GuestOS images.")
+    parser.add_argument("--hostos", action="store_true",
+                        help="Verify only HostOS images.")
+    parser.add_argument("--setupos", action="store_true",
+                        help="Verify only SetupOS images.")
+    parser.add_argument("-p", "--proposal-id", type=str, default="",
+                        help="Proposal ID to check (for an Elect Replica or HostOS proposal).")
+    parser.add_argument("-c", "--commit", type=str, default="",
+                        help="Git revision/commit to use from the IC repository.")
+    parser.add_argument("--clean", action="store_true",
+                        help="Clean up the download cache before running.")
+    args = parser.parse_args()
+
+    if not args.guestos and not args.hostos and not args.setupos:
+        args.guestos = True
+        args.hostos = True
+        args.setupos = True
+
+    return args
 
 # ------------------------------------------------------------------------------
 # MAIN
