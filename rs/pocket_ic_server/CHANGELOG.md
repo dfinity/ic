@@ -11,6 +11,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+### Added
+- The `GET` endpoint `/instances/<instance_id>/auto_progress` that returns whether the automatic progress was enable for the PocketIC instance.
+
+### Changed
+- The II canister always belongs to the dedicated II subnet (the II canister used to belong to the NNS subnet if no II subnet was specified).
+
+
+
 ## 8.0.0 - 2025-02-26
 
 ### Added
