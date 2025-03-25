@@ -1,8 +1,8 @@
 use super::{delivery::*, execution::*, types::*};
 use ic_config::artifact_pool::ArtifactPoolConfig;
-use ic_consensus::idkg;
 use ic_consensus_certification::{CertificationCrypto, CertifierImpl};
 use ic_consensus_dkg::DkgKeyManager;
+use ic_consensus_idkg as idkg;
 use ic_consensus_utils::{
     crypto::ConsensusCrypto, membership::Membership, pool_reader::PoolReader,
 };

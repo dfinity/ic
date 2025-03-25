@@ -203,7 +203,6 @@ use ic_types::{
     crypto::canister_threshold_sig::error::IDkgRetainKeysError, malicious_flags::MaliciousFlags,
     Height, NodeId, SubnetId,
 };
-
 use std::{
     cell::RefCell,
     collections::HashSet,
@@ -390,7 +389,7 @@ impl<T: IDkgPool> PoolMutationsProducer<T> for IDkgImpl {
             );
             #[cfg(any(feature = "malicious_code", test))]
             if self.malicious_flags.is_idkg_malicious() {
-                return super::idkg::malicious_pre_signer::maliciously_alter_changeset(
+                return crate::malicious_pre_signer::maliciously_alter_changeset(
                     changeset,
                     &self.pre_signer,
                     &self.malicious_flags,

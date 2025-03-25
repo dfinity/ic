@@ -161,7 +161,7 @@ pub(crate) fn update_signature_agreements(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::idkg::test_utils::{
+    use crate::test_utils::{
         create_available_pre_signature, empty_idkg_payload_with_key_ids, empty_response,
         fake_ecdsa_idkg_master_public_key_id, fake_master_public_key_ids_for_all_idkg_algorithms,
         fake_signature_request_context, fake_signature_request_context_from_id,

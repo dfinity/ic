@@ -620,7 +620,7 @@ fn validate_new_signature_agreements(
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::idkg::{
+    use crate::{
         payload_builder::{
             filter_idkg_reshare_chain_key_contexts,
             resharing::{initiate_reshare_requests, update_completed_reshare_requests},

@@ -622,7 +622,7 @@ pub(crate) fn update_purge_height(cell: &RefCell<Height>, new_height: Height) ->
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::idkg::test_utils::{
+    use crate::test_utils::{
         create_available_pre_signature_with_key_transcript, fake_ecdsa_idkg_master_public_key_id,
         fake_ecdsa_key_id, fake_master_public_key_ids_for_all_idkg_algorithms, set_up_idkg_payload,
         IDkgPayloadTestHelper,

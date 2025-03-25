@@ -476,9 +476,8 @@ fn get_pending_idkg_cup_heights(pool: &PoolReader<'_>) -> BTreeSet<Height> {
 
 #[cfg(test)]
 mod tests {
-    use crate::idkg::test_utils::empty_idkg_payload;
-
     use super::*;
+    use ic_consensus_idkg::test_utils::empty_idkg_payload;
     use ic_consensus_mocks::{dependencies, Dependencies};
     use ic_interfaces::p2p::consensus::MutablePool;
     use ic_interfaces_mocks::messaging::MockMessageRouting;

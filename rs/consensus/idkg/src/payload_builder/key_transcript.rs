@@ -213,7 +213,7 @@ pub(super) fn update_next_key_transcript(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::idkg::{
+    use crate::{
         test_utils::{
             create_reshare_unmasked_transcript_param,
             fake_master_public_key_ids_for_all_idkg_algorithms, set_up_idkg_payload,

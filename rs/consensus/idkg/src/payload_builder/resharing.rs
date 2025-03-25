@@ -183,7 +183,7 @@ fn reshare_request_from_dealings_context(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::idkg::{
+    use crate::{
         payload_builder::filter_idkg_reshare_chain_key_contexts,
         test_utils::{
             create_reshare_request, dealings_context_from_reshare_request,

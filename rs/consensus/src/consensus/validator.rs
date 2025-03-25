@@ -1894,17 +1894,15 @@ impl Validator {
 #[cfg(test)]
 pub mod test {
     use super::*;
-    use crate::{
-        consensus::block_maker::get_block_maker_delay,
-        idkg::test_utils::{
-            add_available_quadruple_to_payload, empty_idkg_payload,
-            fake_ecdsa_idkg_master_public_key_id, fake_signature_request_context_with_pre_sig,
-            fake_state_with_signature_requests,
-        },
-    };
+    use crate::consensus::block_maker::get_block_maker_delay;
     use assert_matches::assert_matches;
     use ic_artifact_pool::dkg_pool::DkgPoolImpl;
     use ic_config::artifact_pool::ArtifactPoolConfig;
+    use ic_consensus_idkg::test_utils::{
+        add_available_quadruple_to_payload, empty_idkg_payload,
+        fake_ecdsa_idkg_master_public_key_id, fake_signature_request_context_with_pre_sig,
+        fake_state_with_signature_requests, request_id,
+    };
     use ic_consensus_mocks::{
         dependencies_with_subnet_params, dependencies_with_subnet_records_with_raw_state_manager,
         Dependencies, RefMockPayloadBuilder,
@@ -1940,7 +1938,6 @@ pub mod test {
         signature::ThresholdSignature,
         CryptoHashOfState, ReplicaVersion, Time,
     };
-    use idkg::test_utils::request_id;
     use std::sync::{Arc, RwLock};
 
     pub fn assert_block_valid(results: &[ChangeAction], block: &BlockProposal) {

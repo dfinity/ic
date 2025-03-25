@@ -454,14 +454,12 @@ pub fn new_random_unmasked_config(
 #[cfg(test)]
 pub(super) mod test_utils {
     use super::*;
-    use crate::idkg::test_utils::IDkgPayloadTestHelper;
-
-    use std::collections::BTreeMap;
-
+    use crate::test_utils::IDkgPayloadTestHelper;
     use ic_types::{
         consensus::idkg::{self, IDkgMasterPublicKeyId, IDkgTranscriptParamsRef},
         NodeId, RegistryVersion,
     };
+    use std::collections::BTreeMap;
 
     pub fn create_new_pre_signature_in_creation(
         subnet_nodes: &[NodeId],
@@ -536,7 +534,7 @@ pub(super) mod test_utils {
 #[cfg(test)]
 pub(super) mod tests {
     use super::{test_utils::*, *};
-    use crate::idkg::test_utils::{
+    use crate::test_utils::{
         create_available_pre_signature, create_available_pre_signature_with_key_transcript,
         fake_ecdsa_idkg_master_public_key_id, fake_master_public_key_ids_for_all_idkg_algorithms,
         fake_schnorr_idkg_master_public_key_id, fake_schnorr_key_id,
