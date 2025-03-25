@@ -61,7 +61,8 @@ pub struct IDkgPreSignerImpl {
 }
 
 impl IDkgPreSignerImpl {
-    pub(crate) fn new(
+    /// Create a new [`IDkgPreSignerImpl`]
+    pub fn new(
         node_id: NodeId,
         consensus_block_cache: Arc<dyn ConsensusBlockCache>,
         crypto: Arc<dyn ConsensusCrypto>,
@@ -986,7 +987,8 @@ impl IDkgPreSigner for IDkgPreSignerImpl {
     }
 }
 
-pub(crate) trait IDkgTranscriptBuilder {
+/// TODO: Documentation
+pub trait IDkgTranscriptBuilder {
     /// Returns the specified transcript if it can be successfully
     /// built from the current entries in the IDKG pool
     fn get_completed_transcript(&self, transcript_id: IDkgTranscriptId) -> Option<IDkgTranscript>;
@@ -1356,7 +1358,7 @@ impl TranscriptState {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::idkg::{test_utils::*, utils::algorithm_for_key_id};
+    use crate::idkg::utils::algorithm_for_key_id;
     use assert_matches::assert_matches;
     use ic_crypto_test_utils_canister_threshold_sigs::{
         setup_masked_random_params, CanisterThresholdSigTestEnvironment, IDkgParticipants,
@@ -1364,6 +1366,7 @@ mod tests {
     use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
     use ic_interfaces::p2p::consensus::{MutablePool, UnvalidatedArtifact};
     use ic_test_utilities_consensus::IDkgStatsNoOp;
+    use ic_test_utilities_idkg::*;
     use ic_test_utilities_logger::with_test_replica_logger;
     use ic_test_utilities_types::ids::{NODE_1, NODE_2, NODE_3, NODE_4};
     use ic_types::{

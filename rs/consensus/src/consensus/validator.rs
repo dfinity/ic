@@ -1896,14 +1896,7 @@ impl Validator {
 #[cfg(test)]
 pub mod test {
     use super::*;
-    use crate::{
-        consensus::block_maker::get_block_maker_delay,
-        idkg::test_utils::{
-            add_available_quadruple_to_payload, empty_idkg_payload,
-            fake_ecdsa_idkg_master_public_key_id, fake_signature_request_context_with_pre_sig,
-            fake_state_with_signature_requests,
-        },
-    };
+    use crate::consensus::block_maker::get_block_maker_delay;
     use assert_matches::assert_matches;
     use ic_artifact_pool::dkg_pool::DkgPoolImpl;
     use ic_config::artifact_pool::ArtifactPoolConfig;
@@ -1924,6 +1917,11 @@ pub mod test {
     use ic_test_artifact_pool::consensus_pool::TestConsensusPool;
     use ic_test_utilities::{crypto::CryptoReturningOk, state_manager::RefMockStateManager};
     use ic_test_utilities_consensus::{assert_changeset_matches_pattern, fake::*, matches_pattern};
+    use ic_test_utilities_idkg::{
+        add_available_quadruple_to_payload, empty_idkg_payload,
+        fake_ecdsa_idkg_master_public_key_id, fake_signature_request_context_with_pre_sig,
+        fake_state_with_signature_requests,
+    };
     use ic_test_utilities_registry::{add_subnet_record, SubnetRecordBuilder};
     use ic_test_utilities_time::FastForwardTimeSource;
     use ic_test_utilities_types::{

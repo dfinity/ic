@@ -7187,6 +7187,7 @@ dependencies = [
  "ic-test-artifact-pool",
  "ic-test-utilities",
  "ic-test-utilities-consensus",
+ "ic-test-utilities-idkg",
  "ic-test-utilities-logger",
  "ic-test-utilities-registry",
  "ic-test-utilities-state",

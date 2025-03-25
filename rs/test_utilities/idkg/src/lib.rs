@@ -92,7 +92,7 @@ use std::{
 };
 use strum::IntoEnumIterator;
 
-pub(crate) fn dealings_context_from_reshare_request(
+pub fn dealings_context_from_reshare_request(
     request: idkg::IDkgReshareRequest,
 ) -> ReshareChainKeyContext {
     ReshareChainKeyContext {
@@ -105,7 +105,7 @@ pub(crate) fn dealings_context_from_reshare_request(
     }
 }
 
-pub(crate) fn empty_response() -> ic_types::batch::ConsensusResponse {
+pub fn empty_response() -> ic_types::batch::ConsensusResponse {
     ic_types::batch::ConsensusResponse::new(
         ic_types::messages::CallbackId::from(0),
         ic_types::messages::Payload::Data(vec![]),
@@ -261,7 +261,7 @@ impl HasPreSignature for ThresholdSigInputsRef {
 }
 
 #[derive(Clone)]
-pub(crate) struct TestTranscriptParams {
+pub struct TestTranscriptParams {
     pub(crate) idkg_transcripts: BTreeMap<TranscriptRef, IDkgTranscript>,
     pub(crate) transcript_params_ref: IDkgTranscriptParamsRef,
 }
@@ -305,7 +305,7 @@ impl From<&IDkgTranscriptParams> for TestTranscriptParams {
 }
 
 #[derive(Clone)]
-pub(crate) struct TestSigInputs {
+pub struct TestSigInputs {
     pub(crate) idkg_transcripts: BTreeMap<TranscriptRef, IDkgTranscript>,
     pub(crate) sig_inputs_ref: ThresholdSigInputsRef,
 }
@@ -388,7 +388,7 @@ impl From<&ThresholdSchnorrSigInputs> for TestSigInputs {
 
 // Test implementation of IDkgBlockReader to inject the test transcript params
 #[derive(Clone, Default)]
-pub(crate) struct TestIDkgBlockReader {
+pub struct TestIDkgBlockReader {
     height: Height,
     requested_transcripts: Vec<IDkgTranscriptParamsRef>,
     source_subnet_xnet_transcripts: Vec<IDkgTranscriptParamsRef>,
@@ -403,7 +403,7 @@ impl TestIDkgBlockReader {
         Default::default()
     }
 
-    pub(crate) fn for_pre_signer_test(
+    pub fn for_pre_signer_test(
         height: Height,
         transcript_params: Vec<TestTranscriptParams>,
     ) -> Self {
@@ -424,10 +424,7 @@ impl TestIDkgBlockReader {
         }
     }
 
-    pub(crate) fn for_signer_test(
-        height: Height,
-        sig_inputs: Vec<(PreSigId, TestSigInputs)>,
-    ) -> Self {
+    pub fn for_signer_test(height: Height, sig_inputs: Vec<(PreSigId, TestSigInputs)>) -> Self {
         let mut idkg_transcripts = BTreeMap::new();
         let mut available_pre_signatures = BTreeMap::new();
         for (pre_sig_id, sig_inputs) in sig_inputs {
@@ -447,7 +444,7 @@ impl TestIDkgBlockReader {
         }
     }
 
-    pub(crate) fn for_complainer_test(
+    pub fn for_complainer_test(
         key_id: &IDkgMasterPublicKeyId,
         height: Height,
         active_refs: Vec<TranscriptRef>,
@@ -467,7 +464,7 @@ impl TestIDkgBlockReader {
         }
     }
 
-    pub(crate) fn with_source_subnet_xnet_transcripts(
+    pub fn with_source_subnet_xnet_transcripts(
         mut self,
         refs: Vec<IDkgTranscriptParamsRef>,
     ) -> Self {
@@ -475,7 +472,7 @@ impl TestIDkgBlockReader {
         self
     }
 
-    pub(crate) fn with_target_subnet_xnet_transcripts(
+    pub fn with_target_subnet_xnet_transcripts(
         mut self,
         refs: Vec<IDkgTranscriptParamsRef>,
     ) -> Self {
@@ -483,20 +480,16 @@ impl TestIDkgBlockReader {
         self
     }
 
-    pub(crate) fn with_fail_to_resolve(mut self) -> Self {
+    pub fn with_fail_to_resolve(mut self) -> Self {
         self.fail_to_resolve = true;
         self
     }
 
-    pub(crate) fn add_transcript(
-        &mut self,
-        transcript_ref: TranscriptRef,
-        transcript: IDkgTranscript,
-    ) {
+    pub fn add_transcript(&mut self, transcript_ref: TranscriptRef, transcript: IDkgTranscript) {
         self.idkg_transcripts.insert(transcript_ref, transcript);
     }
 
-    pub(crate) fn add_available_pre_signature(
+    pub fn add_available_pre_signature(
         &mut self,
         pre_signature_id: PreSigId,
         pre_signature: PreSignatureRef,
@@ -558,26 +551,26 @@ impl IDkgBlockReader for TestIDkgBlockReader {
     }
 }
 
-pub(crate) enum TestTranscriptLoadStatus {
+pub enum TestTranscriptLoadStatus {
     Success,
     Failure,
     Complaints,
 }
 
-pub(crate) struct TestIDkgTranscriptLoader {
+pub struct TestIDkgTranscriptLoader {
     load_transcript_result: TestTranscriptLoadStatus,
     returned_complaints: Mutex<Vec<SignedIDkgComplaint>>,
 }
 
 impl TestIDkgTranscriptLoader {
-    pub(crate) fn new(load_transcript_result: TestTranscriptLoadStatus) -> Self {
+    pub fn new(load_transcript_result: TestTranscriptLoadStatus) -> Self {
         Self {
             load_transcript_result,
             returned_complaints: Mutex::new(Vec::new()),
         }
     }
 
-    pub(crate) fn returned_complaints(&self) -> Vec<SignedIDkgComplaint> {
+    pub fn returned_complaints(&self) -> Vec<SignedIDkgComplaint> {
         let complaints = self.returned_complaints.lock().unwrap();
         let mut ret = Vec::new();
         for complaint in complaints.iter() {
@@ -614,35 +607,28 @@ impl Default for TestIDkgTranscriptLoader {
     }
 }
 
-pub(crate) struct TestIDkgTranscriptBuilder {
+#[derive(Default)]
+pub struct TestIDkgTranscriptBuilder {
     transcripts: Mutex<BTreeMap<IDkgTranscriptId, IDkgTranscript>>,
     dealings: Mutex<BTreeMap<IDkgTranscriptId, Vec<SignedIDkgDealing>>>,
 }
 
 impl TestIDkgTranscriptBuilder {
-    pub(crate) fn new() -> Self {
+    pub fn new() -> Self {
         Self {
             transcripts: Mutex::new(BTreeMap::new()),
             dealings: Mutex::new(BTreeMap::new()),
         }
     }
 
-    pub(crate) fn add_transcript(
-        &self,
-        transcript_id: IDkgTranscriptId,
-        transcript: IDkgTranscript,
-    ) {
+    pub fn add_transcript(&self, transcript_id: IDkgTranscriptId, transcript: IDkgTranscript) {
         self.transcripts
             .lock()
             .unwrap()
             .insert(transcript_id, transcript);
     }
 
-    pub(crate) fn add_dealings(
-        &self,
-        transcript_id: IDkgTranscriptId,
-        dealings: Vec<SignedIDkgDealing>,
-    ) {
+    pub fn add_dealings(&self, transcript_id: IDkgTranscriptId, dealings: Vec<SignedIDkgDealing>) {
         self.dealings
             .lock()
             .unwrap()
@@ -669,12 +655,13 @@ impl IDkgTranscriptBuilder for TestIDkgTranscriptBuilder {
     }
 }
 
-pub(crate) struct TestThresholdSignatureBuilder {
+#[derive(Default)]
+pub struct TestThresholdSignatureBuilder {
     pub(crate) signatures: BTreeMap<RequestId, CombinedSignature>,
 }
 
 impl TestThresholdSignatureBuilder {
-    pub(crate) fn new() -> Self {
+    pub fn new() -> Self {
         Self {
             signatures: BTreeMap::new(),
         }
@@ -698,17 +685,17 @@ impl ThresholdSignatureBuilder for TestThresholdSignatureBuilder {
 }
 
 #[derive(Clone)]
-pub(crate) struct FakeCertifiedStateSnapshot {
+pub struct FakeCertifiedStateSnapshot {
     pub(crate) height: Height,
     pub(crate) state: Arc<ReplicatedState>,
 }
 
 impl FakeCertifiedStateSnapshot {
-    pub(crate) fn get_labeled_state(&self) -> Labeled<Arc<ReplicatedState>> {
+    pub fn get_labeled_state(&self) -> Labeled<Arc<ReplicatedState>> {
         Labeled::new(self.height, self.state.clone())
     }
 
-    pub(crate) fn inc_height_by(&mut self, height: u64) -> Height {
+    pub fn inc_height_by(&mut self, height: u64) -> Height {
         self.height += Height::from(height);
         self.height
     }
@@ -763,8 +750,8 @@ pub(crate) fn create_pre_signer_dependencies_with_crypto(
     (idkg_pool, pre_signer)
 }
 
-// Sets up the dependencies and creates the pre signer
-pub(crate) fn create_pre_signer_dependencies_and_pool(
+/// Sets up the dependencies and creates the pre signer
+pub fn create_pre_signer_dependencies_and_pool(
     pool_config: ArtifactPoolConfig,
     logger: ReplicaLogger,
 ) -> (IDkgPoolImpl, IDkgPreSignerImpl, TestConsensusPool) {
@@ -783,16 +770,16 @@ pub(crate) fn create_pre_signer_dependencies_and_pool(
     (idkg_pool, pre_signer, pool)
 }
 
-// Sets up the dependencies and creates the pre signer
-pub(crate) fn create_pre_signer_dependencies(
+/// Sets up the dependencies and creates the pre signer
+pub fn create_pre_signer_dependencies(
     pool_config: ArtifactPoolConfig,
     logger: ReplicaLogger,
 ) -> (IDkgPoolImpl, IDkgPreSignerImpl) {
     create_pre_signer_dependencies_with_crypto(pool_config, logger, None)
 }
 
-// Sets up the dependencies and creates the signer
-pub(crate) fn create_signer_dependencies_with_crypto(
+/// Sets up the dependencies and creates the signer
+pub fn create_signer_dependencies_with_crypto(
     pool_config: ArtifactPoolConfig,
     logger: ReplicaLogger,
     consensus_crypto: Option<Arc<dyn ConsensusCrypto>>,
@@ -818,15 +805,15 @@ pub(crate) fn create_signer_dependencies_with_crypto(
     (idkg_pool, signer)
 }
 
-// Sets up the dependencies and creates the signer
-pub(crate) fn create_signer_dependencies(
+/// Sets up the dependencies and creates the signer
+pub fn create_signer_dependencies(
     pool_config: ArtifactPoolConfig,
     logger: ReplicaLogger,
 ) -> (IDkgPoolImpl, ThresholdSignerImpl) {
     create_signer_dependencies_with_crypto(pool_config, logger, None)
 }
 
-pub(crate) fn create_signer_dependencies_and_state_manager(
+pub fn create_signer_dependencies_and_state_manager(
     pool_config: ArtifactPoolConfig,
     logger: ReplicaLogger,
 ) -> (IDkgPoolImpl, ThresholdSignerImpl, Arc<RefMockStateManager>) {
@@ -851,8 +838,8 @@ pub(crate) fn create_signer_dependencies_and_state_manager(
     (idkg_pool, signer, state_manager)
 }
 
-// Sets up the dependencies and creates the complaint handler
-pub(crate) fn create_complaint_dependencies_with_crypto_and_node_id(
+/// Sets up the dependencies and creates the complaint handler
+pub fn create_complaint_dependencies_with_crypto_and_node_id(
     pool_config: ArtifactPoolConfig,
     logger: ReplicaLogger,
     consensus_crypto: Option<Arc<dyn ConsensusCrypto>>,
@@ -874,7 +861,7 @@ pub(crate) fn create_complaint_dependencies_with_crypto_and_node_id(
 }
 
 // Sets up the dependencies and creates the complaint handler
-pub(crate) fn create_complaint_dependencies_and_pool(
+pub fn create_complaint_dependencies_and_pool(
     pool_config: ArtifactPoolConfig,
     logger: ReplicaLogger,
 ) -> (IDkgPoolImpl, IDkgComplaintHandlerImpl, TestConsensusPool) {
@@ -893,14 +880,14 @@ pub(crate) fn create_complaint_dependencies_and_pool(
     (idkg_pool, complaint_handler, pool)
 }
 
-pub(crate) fn create_complaint_dependencies(
+pub fn create_complaint_dependencies(
     pool_config: ArtifactPoolConfig,
     logger: ReplicaLogger,
 ) -> (IDkgPoolImpl, IDkgComplaintHandlerImpl) {
     create_complaint_dependencies_with_crypto(pool_config, logger, None)
 }
 
-pub(crate) fn create_complaint_dependencies_with_crypto(
+pub fn create_complaint_dependencies_with_crypto(
     pool_config: ArtifactPoolConfig,
     logger: ReplicaLogger,
     crypto: Option<Arc<dyn ConsensusCrypto>>,
@@ -908,20 +895,20 @@ pub(crate) fn create_complaint_dependencies_with_crypto(
     create_complaint_dependencies_with_crypto_and_node_id(pool_config, logger, crypto, NODE_1)
 }
 
-// Creates a TranscriptID for tests
-pub(crate) fn create_transcript_id(id: u64) -> IDkgTranscriptId {
+/// Creates a TranscriptID for tests
+pub fn create_transcript_id(id: u64) -> IDkgTranscriptId {
     use ic_crypto_test_utils_canister_threshold_sigs::dummy_values::dummy_idkg_transcript_id_for_tests;
     dummy_idkg_transcript_id_for_tests(id)
 }
 
-// Creates a TranscriptID for tests
-pub(crate) fn create_transcript_id_with_height(id: u64, height: Height) -> IDkgTranscriptId {
+/// Creates a TranscriptID for tests
+pub fn create_transcript_id_with_height(id: u64, height: Height) -> IDkgTranscriptId {
     let subnet = SubnetId::from(PrincipalId::new_subnet_test_id(314159));
     IDkgTranscriptId::new(subnet, id, height)
 }
 
-// Creates a test transcript
-pub(crate) fn create_transcript(
+/// Creates a test transcript
+pub fn create_transcript(
     key_id: &IDkgMasterPublicKeyId,
     transcript_id: IDkgTranscriptId,
     receiver_list: &[NodeId],
@@ -942,7 +929,7 @@ pub(crate) fn create_transcript(
 }
 
 /// Creates a test transcript param with registry version 0
-pub(crate) fn create_transcript_param(
+pub fn create_transcript_param(
     key_id: &IDkgMasterPublicKeyId,
     transcript_id: IDkgTranscriptId,
     dealer_list: &[NodeId],
@@ -958,7 +945,7 @@ pub(crate) fn create_transcript_param(
 }
 
 /// Creates a test transcript param for a specific registry version
-pub(crate) fn create_transcript_param_with_registry_version(
+pub fn create_transcript_param_with_registry_version(
     key_id: &IDkgMasterPublicKeyId,
     transcript_id: IDkgTranscriptId,
     dealer_list: &[NodeId],
@@ -999,8 +986,8 @@ pub(crate) fn create_transcript_param_with_registry_version(
     }
 }
 
-// Creates a ReshareUnmasked transcript params to reshare the given transcript
-pub(crate) fn create_reshare_unmasked_transcript_param(
+/// Creates a ReshareUnmasked transcript params to reshare the given transcript
+pub fn create_reshare_unmasked_transcript_param(
     unmasked_transcript: &IDkgTranscript,
     receiver_list: &[NodeId],
     registry_version: RegistryVersion,
@@ -1025,7 +1012,7 @@ pub(crate) fn create_reshare_unmasked_transcript_param(
 }
 
 /// Return a valid transcript for random sharing created by the first node of the environment
-pub(crate) fn create_valid_transcript<R: Rng + CryptoRng>(
+pub fn create_valid_transcript<R: Rng + CryptoRng>(
     env: &CanisterThresholdSigTestEnvironment,
     rng: &mut R,
     algorithm: AlgorithmId,
@@ -1048,7 +1035,7 @@ pub(crate) fn create_valid_transcript<R: Rng + CryptoRng>(
 
 /// Return a corrupt transcript for random sharing by changing ciphertexts intended
 /// for the first node of the environment
-pub(crate) fn create_corrupted_transcript<R: CryptoRng + Rng>(
+pub fn create_corrupted_transcript<R: CryptoRng + Rng>(
     env: &CanisterThresholdSigTestEnvironment,
     rng: &mut R,
     algorithm: AlgorithmId,
@@ -1065,7 +1052,7 @@ pub(crate) fn create_corrupted_transcript<R: CryptoRng + Rng>(
     (node_id, params, transcript)
 }
 
-pub(crate) fn get_dealings_and_support(
+pub fn get_dealings_and_support(
     env: &CanisterThresholdSigTestEnvironment,
     params: &IDkgTranscriptParams,
 ) -> (BTreeMap<NodeId, SignedIDkgDealing>, Vec<IDkgDealingSupport>) {
@@ -1099,19 +1086,16 @@ fn create_dealing_content(transcript_id: IDkgTranscriptId) -> IDkgDealing {
     idkg_dealing
 }
 
-// Creates a test signed dealing
-pub(crate) fn create_dealing(
-    transcript_id: IDkgTranscriptId,
-    dealer_id: NodeId,
-) -> SignedIDkgDealing {
+/// Creates a test signed dealing
+pub fn create_dealing(transcript_id: IDkgTranscriptId, dealer_id: NodeId) -> SignedIDkgDealing {
     SignedIDkgDealing {
         content: create_dealing_content(transcript_id),
         signature: BasicSignature::fake(dealer_id),
     }
 }
 
-// Creates a test signed dealing with internal payload
-pub(crate) fn create_dealing_with_payload<R: Rng + CryptoRng>(
+/// Creates a test signed dealing with internal payload
+pub fn create_dealing_with_payload<R: Rng + CryptoRng>(
     key_id: &IDkgMasterPublicKeyId,
     transcript_id: IDkgTranscriptId,
     dealer_id: NodeId,
@@ -1137,8 +1121,8 @@ pub(crate) fn create_dealing_with_payload<R: Rng + CryptoRng>(
     }
 }
 
-// Creates a test dealing and a support for the dealing
-pub(crate) fn create_support(
+/// Creates a test dealing and a support for the dealing
+pub fn create_support(
     transcript_id: IDkgTranscriptId,
     dealer_id: NodeId,
     signer: NodeId,
@@ -1384,8 +1368,8 @@ pub(crate) fn create_schnorr_sig_inputs_with_args(
     }
 }
 
-// Creates a test vetkd input
-pub(crate) fn create_vetkd_inputs_with_args(caller: u8, key_id: &VetKdKeyId) -> TestSigInputs {
+/// Creates a test vetkd input
+pub fn create_vetkd_inputs_with_args(caller: u8, key_id: &VetKdKeyId) -> TestSigInputs {
     let inputs = VetKdArgs {
         ni_dkg_id: fake_dkg_id(key_id.clone()),
         context: VetKdDerivationContext {
@@ -1403,12 +1387,12 @@ pub(crate) fn create_vetkd_inputs_with_args(caller: u8, key_id: &VetKdKeyId) -> 
 }
 
 // Creates a test signature input
-pub(crate) fn create_sig_inputs(caller: u8, key_id: &MasterPublicKeyId) -> TestSigInputs {
+pub fn create_sig_inputs(caller: u8, key_id: &MasterPublicKeyId) -> TestSigInputs {
     create_sig_inputs_with_height(caller, Height::new(0), key_id.clone())
 }
 
 // Creates a test signature share
-pub(crate) fn create_signature_share_with_nonce(
+pub fn create_signature_share_with_nonce(
     key_id: &MasterPublicKeyId,
     signer_id: NodeId,
     request_id: RequestId,
@@ -1441,7 +1425,7 @@ pub(crate) fn create_signature_share_with_nonce(
 }
 
 // Creates a test signature share
-pub(crate) fn create_signature_share(
+pub fn create_signature_share(
     key_id: &MasterPublicKeyId,
     signer_id: NodeId,
     request_id: RequestId,
@@ -1478,7 +1462,7 @@ pub(crate) fn create_complaint(
 }
 
 // Creates a test signed opening
-pub(crate) fn create_opening_with_nonce(
+pub fn create_opening_with_nonce(
     transcript_id: IDkgTranscriptId,
     dealer_id: NodeId,
     _complainer_id: NodeId,
@@ -1499,7 +1483,7 @@ pub(crate) fn create_opening_with_nonce(
 }
 
 // Creates a test signed opening
-pub(crate) fn create_opening(
+pub fn create_opening(
     transcript_id: IDkgTranscriptId,
     dealer_id: NodeId,
     complainer_id: NodeId,
@@ -1507,9 +1491,10 @@ pub(crate) fn create_opening(
 ) -> SignedIDkgOpening {
     create_opening_with_nonce(transcript_id, dealer_id, complainer_id, opener_id, 0)
 }
-// Checks that the dealing with the given id is being added to the validated
-// pool
-pub(crate) fn is_dealing_added_to_validated(
+
+/// Checks that the dealing with the given id is being added to the validated
+/// pool
+pub fn is_dealing_added_to_validated(
     change_set: &[IDkgChangeAction],
     transcript_id: &IDkgTranscriptId,
 ) -> bool {
@@ -1526,7 +1511,7 @@ pub(crate) fn is_dealing_added_to_validated(
 
 // Checks that the dealing support for the given dealing is being added to the
 // validated pool
-pub(crate) fn is_dealing_support_added_to_validated(
+pub fn is_dealing_support_added_to_validated(
     change_set: &[IDkgChangeAction],
     transcript_id: &IDkgTranscriptId,
     dealer_id: &NodeId,
@@ -1545,7 +1530,7 @@ pub(crate) fn is_dealing_support_added_to_validated(
 }
 
 // Checks that the complaint is being added to the validated pool
-pub(crate) fn is_complaint_added_to_validated(
+pub fn is_complaint_added_to_validated(
     change_set: &[IDkgChangeAction],
     transcript_id: &IDkgTranscriptId,
     dealer_id: &NodeId,
@@ -1566,7 +1551,7 @@ pub(crate) fn is_complaint_added_to_validated(
 }
 
 // Checks that the opening is being added to the validated pool
-pub(crate) fn is_opening_added_to_validated(
+pub fn is_opening_added_to_validated(
     change_set: &[IDkgChangeAction],
     transcript_id: &IDkgTranscriptId,
     dealer_id: &NodeId,
@@ -1588,7 +1573,7 @@ pub(crate) fn is_opening_added_to_validated(
 
 // Checks that the signature share with the given request is being added to the
 // validated pool
-pub(crate) fn is_signature_share_added_to_validated(
+pub fn is_signature_share_added_to_validated(
     change_set: &[IDkgChangeAction],
     expected_request_id: &RequestId,
     requested_height: Height,
@@ -1617,10 +1602,7 @@ pub(crate) fn is_signature_share_added_to_validated(
 }
 
 // Checks that artifact is being moved from unvalidated to validated pool
-pub(crate) fn is_moved_to_validated(
-    change_set: &[IDkgChangeAction],
-    msg_id: &IDkgMessageId,
-) -> bool {
+pub fn is_moved_to_validated(change_set: &[IDkgChangeAction], msg_id: &IDkgMessageId) -> bool {
     for action in change_set {
         if let IDkgChangeAction::MoveToValidated(msg) = action {
             if IDkgArtifactId::from(msg) == *msg_id {
@@ -1632,10 +1614,7 @@ pub(crate) fn is_moved_to_validated(
 }
 
 // Checks that artifact is being removed from validated pool
-pub(crate) fn is_removed_from_validated(
-    change_set: &[IDkgChangeAction],
-    msg_id: &IDkgMessageId,
-) -> bool {
+pub fn is_removed_from_validated(change_set: &[IDkgChangeAction], msg_id: &IDkgMessageId) -> bool {
     for action in change_set {
         if let IDkgChangeAction::RemoveValidated(id) = action {
             if *id == *msg_id {
@@ -1647,7 +1626,7 @@ pub(crate) fn is_removed_from_validated(
 }
 
 // Checks that artifact is being removed from unvalidated pool
-pub(crate) fn is_removed_from_unvalidated(
+pub fn is_removed_from_unvalidated(
     change_set: &[IDkgChangeAction],
     msg_id: &IDkgMessageId,
 ) -> bool {
@@ -1662,7 +1641,7 @@ pub(crate) fn is_removed_from_unvalidated(
 }
 
 // Checks that artifact is being dropped as invalid
-pub(crate) fn is_handle_invalid(change_set: &[IDkgChangeAction], msg_id: &IDkgMessageId) -> bool {
+pub fn is_handle_invalid(change_set: &[IDkgChangeAction], msg_id: &IDkgMessageId) -> bool {
     for action in change_set {
         if let IDkgChangeAction::HandleInvalid(id, _) = action {
             if *id == *msg_id {
@@ -1673,11 +1652,11 @@ pub(crate) fn is_handle_invalid(change_set: &[IDkgChangeAction], msg_id: &IDkgMe
     false
 }
 
-pub(crate) fn empty_idkg_payload(subnet_id: SubnetId) -> IDkgPayload {
+pub fn empty_idkg_payload(subnet_id: SubnetId) -> IDkgPayload {
     empty_idkg_payload_with_key_ids(subnet_id, vec![fake_ecdsa_idkg_master_public_key_id()])
 }
 
-pub(crate) fn empty_idkg_payload_with_key_ids(
+pub fn empty_idkg_payload_with_key_ids(
     subnet_id: SubnetId,
     key_ids: Vec<IDkgMasterPublicKeyId>,
 ) -> IDkgPayload {
@@ -1691,7 +1670,7 @@ pub(crate) fn empty_idkg_payload_with_key_ids(
     )
 }
 
-pub(crate) fn key_id_with_name(key_id: &MasterPublicKeyId, name: &str) -> MasterPublicKeyId {
+pub fn key_id_with_name(key_id: &MasterPublicKeyId, name: &str) -> MasterPublicKeyId {
     let mut key_id = key_id.clone();
     match key_id {
         MasterPublicKeyId::Ecdsa(ref mut key_id) => key_id.name = name.into(),
@@ -1705,7 +1684,7 @@ pub(crate) fn fake_ecdsa_key_id() -> EcdsaKeyId {
     EcdsaKeyId::from_str("Secp256k1:some_key").unwrap()
 }
 
-pub(crate) fn fake_ecdsa_idkg_master_public_key_id() -> IDkgMasterPublicKeyId {
+pub fn fake_ecdsa_idkg_master_public_key_id() -> IDkgMasterPublicKeyId {
     MasterPublicKeyId::Ecdsa(fake_ecdsa_key_id())
         .try_into()
         .unwrap()
@@ -1718,7 +1697,7 @@ pub(crate) fn fake_schnorr_key_id(algorithm: SchnorrAlgorithm) -> SchnorrKeyId {
     }
 }
 
-pub(crate) fn fake_schnorr_idkg_master_public_key_id(
+pub fn fake_schnorr_idkg_master_public_key_id(
     algorithm: SchnorrAlgorithm,
 ) -> IDkgMasterPublicKeyId {
     MasterPublicKeyId::Schnorr(fake_schnorr_key_id(algorithm))
@@ -1738,7 +1717,7 @@ pub(crate) fn fake_vetkd_key_id() -> VetKdKeyId {
     VetKdKeyId::from_str("bls12_381_g2:some_key").unwrap()
 }
 
-pub(crate) fn fake_vetkd_master_public_key_id() -> MasterPublicKeyId {
+pub fn fake_vetkd_master_public_key_id() -> MasterPublicKeyId {
     MasterPublicKeyId::VetKd(fake_vetkd_key_id())
 }
 
@@ -1766,7 +1745,7 @@ pub(crate) fn fake_master_public_key_ids_for_all_idkg_algorithms() -> Vec<IDkgMa
         .collect()
 }
 
-pub(crate) fn fake_master_public_key_ids_for_all_algorithms() -> Vec<MasterPublicKeyId> {
+pub fn fake_master_public_key_ids_for_all_algorithms() -> Vec<MasterPublicKeyId> {
     std::iter::once(fake_vetkd_master_public_key_id())
         .chain(
             fake_master_public_key_ids_for_all_idkg_algorithms()
@@ -1776,7 +1755,7 @@ pub(crate) fn fake_master_public_key_ids_for_all_algorithms() -> Vec<MasterPubli
         .collect()
 }
 
-pub(crate) fn create_reshare_request(
+pub fn create_reshare_request(
     key_id: IDkgMasterPublicKeyId,
     num_nodes: u64,
     registry_version: u64,
@@ -1788,11 +1767,11 @@ pub(crate) fn create_reshare_request(
     }
 }
 
-pub(crate) fn crypto_without_keys() -> Arc<dyn ConsensusCrypto> {
+pub fn crypto_without_keys() -> Arc<dyn ConsensusCrypto> {
     TempCryptoComponent::builder().build_arc()
 }
 
-pub(crate) fn add_available_quadruple_to_payload(
+pub fn add_available_quadruple_to_payload(
     idkg_payload: &mut IDkgPayload,
     pre_signature_id: PreSigId,
     registry_version: RegistryVersion,
@@ -1858,7 +1837,7 @@ pub fn create_available_pre_signature_with_key_transcript(
     pre_sig_id
 }
 
-pub(crate) fn set_up_idkg_payload(
+pub fn set_up_idkg_payload(
     rng: &mut ReproducibleRng,
     subnet_id: SubnetId,
     nodes_count: usize,
@@ -1916,7 +1895,8 @@ pub(crate) fn generate_key_transcript(
     (key_transcript, key_transcript_ref, with_attributes)
 }
 
-pub(crate) trait IDkgPayloadTestHelper {
+/// TODO: Documentation
+pub trait IDkgPayloadTestHelper {
     fn peek_next_transcript_id(&self) -> IDkgTranscriptId;
 
     #[allow(dead_code)]

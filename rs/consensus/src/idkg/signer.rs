@@ -56,7 +56,7 @@ enum CreateSigShareError {
 }
 
 #[derive(Clone, Debug)]
-enum VerifySigShareError {
+pub enum VerifySigShareError {
     Ecdsa(ThresholdEcdsaVerifySigShareError),
     Schnorr(ThresholdSchnorrVerifySigShareError),
     VetKd(VetKdKeyShareVerificationError),
@@ -94,7 +94,8 @@ impl CombineSigSharesError {
     }
 }
 
-pub(crate) trait ThresholdSigner: Send {
+/// The [`ThresholdSigner`] is the component responsible for signing the IDKG requests
+pub trait ThresholdSigner: Send {
     /// The on_state_change() called from the main IDKG path.
     fn on_state_change(
         &self,
@@ -103,7 +104,8 @@ pub(crate) trait ThresholdSigner: Send {
     ) -> IDkgChangeSet;
 }
 
-pub(crate) struct ThresholdSignerImpl {
+/// Implementation of the the [`ThresholdSigner`]
+pub struct ThresholdSignerImpl {
     node_id: NodeId,
     consensus_block_cache: Arc<dyn ConsensusBlockCache>,
     crypto: Arc<dyn ConsensusCrypto>,
@@ -115,7 +117,8 @@ pub(crate) struct ThresholdSignerImpl {
 }
 
 impl ThresholdSignerImpl {
-    pub(crate) fn new(
+    /// Create a new [`ThesholdSignerImpl`]
+    pub fn new(
         node_id: NodeId,
         consensus_block_cache: Arc<dyn ConsensusBlockCache>,
         crypto: Arc<dyn ConsensusCrypto>,
@@ -137,7 +140,7 @@ impl ThresholdSignerImpl {
 
     /// Generates signature shares for the newly added signature requests.
     /// The requests for new signatures come from the latest finalized block.
-    fn send_signature_shares(
+    pub fn send_signature_shares(
         &self,
         idkg_pool: &dyn IDkgPool,
         transcript_loader: &dyn IDkgTranscriptLoader,
@@ -183,7 +186,7 @@ impl ThresholdSignerImpl {
     }
 
     /// Processes the received signature shares
-    fn validate_signature_shares(
+    pub fn validate_signature_shares(
         &self,
         idkg_pool: &dyn IDkgPool,
         block_reader: &dyn IDkgBlockReader,
@@ -308,7 +311,7 @@ impl ThresholdSignerImpl {
     }
 
     /// Purges the entries no longer needed from the artifact pool
-    fn purge_artifacts(
+    pub fn purge_artifacts(
         &self,
         idkg_pool: &dyn IDkgPool,
         state_snapshot: &dyn CertifiedStateSnapshot<State = ReplicatedState>,
@@ -449,7 +452,7 @@ impl ThresholdSignerImpl {
     }
 
     /// Helper to verify the signature share
-    fn crypto_verify_sig_share(
+    pub fn crypto_verify_sig_share(
         &self,
         sig_inputs: &ThresholdSigInputs,
         share: SigShare,
@@ -657,7 +660,8 @@ impl ThresholdSigner for ThresholdSignerImpl {
     }
 }
 
-pub(crate) trait ThresholdSignatureBuilder {
+/// Components responsible for building IDKG signatures
+pub trait ThresholdSignatureBuilder {
     /// Returns the signature for the given context, if it can be successfully
     /// built from the current sig shares in the IDKG pool
     fn get_completed_signature(
@@ -858,7 +862,7 @@ impl Debug for Action<'_> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::idkg::{test_utils::*, utils::algorithm_for_key_id};
+    use crate::idkg::utils::algorithm_for_key_id;
     use assert_matches::assert_matches;
     use ic_crypto_test_utils_canister_threshold_sigs::{
         generate_key_transcript, generate_tecdsa_protocol_inputs,
@@ -873,6 +877,7 @@ mod tests {
     };
     use ic_test_utilities::crypto::CryptoReturningOk;
     use ic_test_utilities_consensus::IDkgStatsNoOp;
+    use ic_test_utilities_idkg::*;
     use ic_test_utilities_logger::with_test_replica_logger;
     use ic_test_utilities_types::{
         ids::{canister_test_id, subnet_test_id, user_test_id, NODE_1, NODE_2, NODE_3},

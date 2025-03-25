@@ -602,13 +602,12 @@ pub(super) fn is_time_to_make_block(
 
 #[cfg(test)]
 mod tests {
-    use crate::idkg::test_utils::create_idkg_pool;
-
     use super::*;
     use ic_consensus_mocks::{dependencies_with_subnet_params, Dependencies, MockPayloadBuilder};
     use ic_interfaces::consensus_pool::ConsensusPool;
     use ic_logger::replica_logger::no_op_logger;
     use ic_metrics::MetricsRegistry;
+    use ic_test_utilities_idkg::create_idkg_pool;
     use ic_test_utilities_registry::{add_subnet_record, SubnetRecordBuilder};
     use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
     use ic_types::{

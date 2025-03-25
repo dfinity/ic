@@ -467,6 +467,7 @@ pub(crate) fn inspect_idkg_chain_key_initializations(
     Ok(initial_dealings_per_key_id)
 }
 
+/// Return the [`AlgorithmId`] of a given [`IDkgMasterPublicKeyId`]
 pub fn algorithm_for_key_id(key_id: &IDkgMasterPublicKeyId) -> AlgorithmId {
     match key_id.inner() {
         MasterPublicKeyId::Ecdsa(ecdsa_key_id) => match ecdsa_key_id.curve {
@@ -622,11 +623,6 @@ pub(crate) fn update_purge_height(cell: &RefCell<Height>, new_height: Height) ->
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::idkg::test_utils::{
-        create_available_pre_signature_with_key_transcript, fake_ecdsa_idkg_master_public_key_id,
-        fake_ecdsa_key_id, fake_master_public_key_ids_for_all_idkg_algorithms, set_up_idkg_payload,
-        IDkgPayloadTestHelper,
-    };
     use ic_config::artifact_pool::ArtifactPoolConfig;
     use ic_consensus_mocks::{dependencies, Dependencies};
     use ic_crypto_test_utils_canister_threshold_sigs::{
@@ -639,6 +635,11 @@ mod tests {
     use ic_registry_client_fake::FakeRegistryClient;
     use ic_registry_subnet_features::KeyConfig;
     use ic_test_utilities_consensus::fake::Fake;
+    use ic_test_utilities_idkg::{
+        create_available_pre_signature_with_key_transcript, fake_ecdsa_idkg_master_public_key_id,
+        fake_ecdsa_key_id, fake_master_public_key_ids_for_all_idkg_algorithms, set_up_idkg_payload,
+        IDkgPayloadTestHelper,
+    };
     use ic_test_utilities_registry::{add_subnet_record, SubnetRecordBuilder};
     use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
     use ic_types::{

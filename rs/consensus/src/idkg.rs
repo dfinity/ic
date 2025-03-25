@@ -1,3 +1,4 @@
+#![allow(missing_docs)]
 //! This module provides the component responsible for generating and validating
 //! payloads relevant to canister threshold signatures.
 //!
@@ -211,7 +212,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-pub(crate) mod complaints;
+pub mod complaints;
 #[cfg(any(feature = "malicious_code", test))]
 pub mod malicious_pre_signer;
 pub(crate) mod metrics;
@@ -559,10 +560,10 @@ fn compute_bouncer(
 
 #[cfg(test)]
 mod tests {
-    use self::test_utils::TestIDkgBlockReader;
-
     use super::*;
     use ic_test_utilities::state_manager::RefMockStateManager;
+    use ic_test_utilities_idkg::request_id;
+    use ic_test_utilities_idkg::TestIDkgBlockReader;
     use ic_types::{
         consensus::idkg::{
             complaint_prefix, dealing_prefix, dealing_support_prefix, ecdsa_sig_share_prefix,
@@ -572,7 +573,6 @@ mod tests {
         crypto::{canister_threshold_sig::idkg::IDkgTranscriptId, CryptoHash},
     };
     use ic_types_test_utils::ids::{NODE_1, NODE_2, SUBNET_1, SUBNET_2};
-    use test_utils::request_id;
 
     #[test]
     fn test_idkg_priority_fn_args() {

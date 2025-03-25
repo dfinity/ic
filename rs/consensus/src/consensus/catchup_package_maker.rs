@@ -266,7 +266,7 @@ impl CatchUpPackageMaker {
 #[cfg(test)]
 mod tests {
     //! CatchUpPackageMaker unit tests
-    use crate::idkg::test_utils::{
+    use ic_test_utilities_idkg::{
         add_available_quadruple_to_payload, empty_idkg_payload,
         fake_ecdsa_idkg_master_public_key_id, fake_signature_request_context_with_pre_sig,
         fake_state_with_signature_requests, request_id,

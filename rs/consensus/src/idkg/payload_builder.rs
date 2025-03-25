@@ -740,10 +740,7 @@ mod tests {
     use super::*;
     use crate::{
         consensus::batch_delivery::generate_responses_to_signature_request_contexts,
-        idkg::{
-            test_utils::*,
-            utils::{algorithm_for_key_id, block_chain_reader},
-        },
+        idkg::utils::{algorithm_for_key_id, block_chain_reader},
     };
     use assert_matches::assert_matches;
     use ic_consensus_mocks::{dependencies, Dependencies};
@@ -760,6 +757,7 @@ mod tests {
     use ic_registry_subnet_features::KeyConfig;
     use ic_test_artifact_pool::consensus_pool::TestConsensusPool;
     use ic_test_utilities_consensus::fake::{Fake, FakeContentSigner};
+    use ic_test_utilities_idkg::*;
     use ic_test_utilities_registry::{add_subnet_record, SubnetRecordBuilder};
     use ic_test_utilities_types::ids::{node_test_id, subnet_test_id, user_test_id};
     use ic_types::{

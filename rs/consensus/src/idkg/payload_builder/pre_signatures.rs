@@ -454,14 +454,12 @@ pub fn new_random_unmasked_config(
 #[cfg(test)]
 pub(super) mod test_utils {
     use super::*;
-    use crate::idkg::test_utils::IDkgPayloadTestHelper;
-
-    use std::collections::BTreeMap;
-
+    use ic_test_utilities_idkg::IDkgPayloadTestHelper;
     use ic_types::{
         consensus::idkg::{self, IDkgMasterPublicKeyId, IDkgTranscriptParamsRef},
         NodeId, RegistryVersion,
     };
+    use std::collections::BTreeMap;
 
     pub fn create_new_pre_signature_in_creation(
         subnet_nodes: &[NodeId],
@@ -535,14 +533,7 @@ pub(super) mod test_utils {
 
 #[cfg(test)]
 pub(super) mod tests {
-    use super::{test_utils::*, *};
-    use crate::idkg::test_utils::{
-        create_available_pre_signature, create_available_pre_signature_with_key_transcript,
-        fake_ecdsa_idkg_master_public_key_id, fake_master_public_key_ids_for_all_idkg_algorithms,
-        fake_schnorr_idkg_master_public_key_id, fake_schnorr_key_id,
-        fake_signature_request_context_with_pre_sig, into_idkg_contexts, request_id,
-        set_up_idkg_payload, IDkgPayloadTestHelper, TestIDkgBlockReader, TestIDkgTranscriptBuilder,
-    };
+    use super::*;
     use assert_matches::assert_matches;
     use ic_crypto_test_utils_canister_threshold_sigs::{
         generate_key_transcript, CanisterThresholdSigTestEnvironment, IDkgParticipants,
@@ -551,6 +542,14 @@ pub(super) mod tests {
     use ic_logger::replica_logger::no_op_logger;
     use ic_management_canister_types_private::SchnorrAlgorithm;
     use ic_registry_subnet_features::KeyConfig;
+    use ic_test_utilities_idkg::*;
+    use ic_test_utilities_idkg::{
+        create_available_pre_signature, create_available_pre_signature_with_key_transcript,
+        fake_ecdsa_idkg_master_public_key_id, fake_master_public_key_ids_for_all_idkg_algorithms,
+        fake_schnorr_idkg_master_public_key_id, fake_schnorr_key_id,
+        fake_signature_request_context_with_pre_sig, into_idkg_contexts, request_id,
+        set_up_idkg_payload, IDkgPayloadTestHelper, TestIDkgBlockReader, TestIDkgTranscriptBuilder,
+    };
     use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
     use ic_types::{
         consensus::idkg::{

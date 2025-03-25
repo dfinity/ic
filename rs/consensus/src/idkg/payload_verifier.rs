@@ -626,7 +626,6 @@ mod test {
             resharing::{initiate_reshare_requests, update_completed_reshare_requests},
             signatures::update_signature_agreements,
         },
-        test_utils::*,
         utils::algorithm_for_key_id,
     };
     use assert_matches::assert_matches;
@@ -640,6 +639,7 @@ mod test {
         MasterPublicKeyId, Payload, SchnorrAlgorithm, SignWithECDSAReply,
     };
     use ic_test_utilities::crypto::CryptoReturningOk;
+    use ic_test_utilities_idg::*;
     use ic_test_utilities_types::ids::subnet_test_id;
     use ic_types::{
         consensus::idkg::{
