@@ -49,6 +49,10 @@ name = "ic-systest-adding-nodes-to-subnet-test"
 path = "adding_nodes_to_subnet_test.rs"
 
 [[bin]]
+name = "ic-systest-ssh-agent-forwarding-test"
+path = "ssh_agent_forwarding_test.rs"
+
+[[bin]]
 name = "ic-systest-node-graceful-leaving-test"
 path = "node_graceful_leaving_test.rs"
 
