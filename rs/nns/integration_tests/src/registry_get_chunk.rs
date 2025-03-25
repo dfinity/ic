@@ -55,6 +55,8 @@ fn test_get_chunk() {
         .map(|big_chunk_key| registry_get_chunk(&state_machine, big_chunk_key))
         .collect::<Vec<_>>();
 
+    let garbage_response = registry_get_chunk(&state_machine, b"garbage".as_ref());
+
     // Step 3: Verify result(s).
     assert_eq!(
         small_response,
@@ -83,4 +85,10 @@ fn test_get_chunk() {
     // assert_eq is not used here, because we do not want 5 MB of spam to be
     // dumped into the terminal.
     assert!(reconstructed_big_monolithic_blob == original_big_monolithic_blob);
+
+    let err: String = match garbage_response {
+        Err(ok) => ok,
+        _ => panic!("{:#?}", garbage_response),
+    };
+    assert!(err.to_lowercase().contains("not found"), "{:?}", err);
 }
