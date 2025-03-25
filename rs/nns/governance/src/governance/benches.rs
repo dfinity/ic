@@ -853,6 +853,6 @@ fn update_empty() {
 /// embedders crate.
 #[export_name = "canister_query go"]
 fn go() {
-    let _ = list_neurons_heap();
+    let _ = list_neurons_stable();
     ic_cdk::api::call::reply_raw(&[]);
 }
