@@ -217,7 +217,6 @@ pub fn canister_id_to_nns_canister_name(canister_id: CanisterId) -> String {
         ROOT_CANISTER_ID                 => "root",
         SNS_WASM_CANISTER_ID             => "sns-wasm",
         SUBNET_RENTAL_CANISTER_ID        => "subnet-rental",
-
     };
     debug_assert_eq!(
         id_to_name.len(),
