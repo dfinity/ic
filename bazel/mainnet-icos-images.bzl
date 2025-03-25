@@ -15,7 +15,7 @@ def base_download_url(git_commit_id, variant, update, test):
         test = "-test" if test else "",
     )
 
-def mainnet_images():
+def mainnet_icos_images():
     http_file(
         name = "mainnet_setupos_disk_image",
         downloaded_file_path = "disk-img.tar.zst",

@@ -14,7 +14,7 @@ exports_files([
     "rustfmt.toml",
     "WORKSPACE.bazel",
     "mainnet-canister-revisions.json",
-    "mainnet-images.bzl",
+    "mainnet-icos-images.bzl",
 ])
 
 alias(
