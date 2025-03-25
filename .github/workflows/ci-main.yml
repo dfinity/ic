@@ -228,11 +228,10 @@ jobs:
             profile.json
   python-ci-tests:
     name: Python CI Tests
-    runs-on:
-      labels: dind-small
     container:
       image: ghcr.io/dfinity/ic-build@sha256:0583fe48201a6b683c69e9c8884a5c7b2f57b3fe182a2e0f3ce4e012a4c22675
     timeout-minutes: 30
+    runs-on: ubuntu-24-large
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -335,8 +334,7 @@ jobs:
     container:
       image: ghcr.io/dfinity/ic-build@sha256:0583fe48201a6b683c69e9c8884a5c7b2f57b3fe182a2e0f3ce4e012a4c22675
     timeout-minutes: 30
-    runs-on:
-      group: ch1
+    runs-on: ubuntu-24-large
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -370,8 +368,7 @@ jobs:
     container:
       image: ghcr.io/dfinity/ic-build@sha256:0583fe48201a6b683c69e9c8884a5c7b2f57b3fe182a2e0f3ce4e012a4c22675
     timeout-minutes: 30
-    runs-on:
-      group: ch1
+    runs-on: ubuntu-24-large
     steps:
       - name: Checkout
         uses: actions/checkout@v4
