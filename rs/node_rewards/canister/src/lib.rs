@@ -9,4 +9,4 @@ pub mod canister;
 pub mod storage;
 
 #[cfg(test)]
-mod tests;
+mod test;

@@ -9,6 +9,8 @@ use ic_registry_canister_client::{registry_data_stable_memory_impl, StableCanist
 use ic_registry_canister_client::{
     CanisterRegistryClient, RegistryDataStableMemory, StorableRegistryKey, StorableRegistryValue,
 };
+use ic_registry_node_provider_rewards::logs::RewardsPerNodeProviderLog;
+use ic_registry_node_provider_rewards::RewardsPerNodeProvider;
 use ic_stable_structures::memory_manager::{MemoryId, MemoryManager, VirtualMemory};
 use ic_stable_structures::{DefaultMemoryImpl, StableBTreeMap};
 use ic_types::PrincipalId;
