@@ -12,7 +12,7 @@ use tokio_util::sync::CancellationToken;
 
 use crate::{load_root_delegation, metrics::DelegationManagerMetrics};
 
-const DELEGATION_UPDATE_INTERVAL: Duration = Duration::from_secs(15 * 60);
+const DELEGATION_UPDATE_INTERVAL: Duration = Duration::from_secs(10 * 60);
 
 /// Spawns a task which periodically fetches the nns delegation.
 pub fn start_nns_delegation_manager(
