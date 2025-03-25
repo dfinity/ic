@@ -134,7 +134,8 @@ fn setup_and_run_ic_ref_test(
     let ic_ref_test_path = std::env::var_os("IC_REF_TEST_BIN")
         .expect("Missing ic-ref-test")
         .into_string()
-        .unwrap();
+        .unwrap()
+        .into();
 
     // derive artifact paths
     let ic_ref_test_root = std::env::var_os("IC_REF_TEST_ROOT")
