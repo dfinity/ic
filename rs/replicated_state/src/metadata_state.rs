@@ -437,6 +437,9 @@ impl SubnetMetrics {
         use_case: CyclesUseCase,
         cycles: NominalCycles,
     ) {
+        if cycles.get() == 0 {
+            return;
+        }
         *self
             .consumed_cycles_by_use_case
             .entry(use_case)
@@ -474,6 +477,7 @@ impl SubnetMetrics {
                 | CyclesUseCase::CanisterCreation
                 | CyclesUseCase::SchnorrOutcalls
                 | CyclesUseCase::VetKd
+                | CyclesUseCase::DroppedMessages
                 | CyclesUseCase::BurnedCycles => total += *cycles,
             }
         }

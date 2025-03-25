@@ -13,10 +13,10 @@ use ic_interfaces::execution_environment::{
 };
 use ic_limits::SMALL_APP_SUBNET_MAX_SIZE;
 use ic_logger::replica_logger::no_op_logger;
+use ic_management_canister_types_private::OnLowWasmMemoryHookStatus;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
-    canister_state::system_state::OnLowWasmMemoryHookStatus, testing::CanisterQueuesTesting,
-    CallOrigin, Memory, NetworkTopology, NumWasmPages, SystemState,
+    testing::CanisterQueuesTesting, CallOrigin, Memory, NetworkTopology, NumWasmPages, SystemState,
 };
 use ic_system_api::{
     sandbox_safe_system_state::SandboxSafeSystemState, ApiType, DefaultOutOfInstructionsHandler,
@@ -269,6 +269,7 @@ fn is_supported(api_type: SystemApiCallId, context: &str) -> bool {
         SystemApiCallId::CanisterSelfCopy => vec!["*"],
         SystemApiCallId::CanisterCycleBalance => vec!["*"],
         SystemApiCallId::CanisterCycleBalance128 => vec!["*"],
+        SystemApiCallId::CanisterLiquidCycleBalance128 => vec!["*"],
         SystemApiCallId::CanisterStatus => vec!["*"],
         SystemApiCallId::CanisterVersion => vec!["*"],
         SystemApiCallId::MsgMethodNameSize => vec!["F"],
@@ -298,6 +299,12 @@ fn is_supported(api_type: SystemApiCallId, context: &str) -> bool {
         SystemApiCallId::PerformanceCounter => vec!["*", "s"],
         SystemApiCallId::IsController => vec!["*", "s"],
         SystemApiCallId::InReplicatedExecution => vec!["*", "s"],
+        SystemApiCallId::CostCall => vec!["*", "s"],
+        SystemApiCallId::CostCreateCanister => vec!["*", "s"],
+        SystemApiCallId::CostSignWithEcdsa=> vec!["*", "s"],
+        SystemApiCallId::CostHttpRequest=> vec!["*", "s"],
+        SystemApiCallId::CostSignWithSchnorr=> vec!["*", "s"],
+        SystemApiCallId::CostVetkdDeriveKey => vec!["*", "s"],
         SystemApiCallId::DebugPrint => vec!["*", "s"],
         SystemApiCallId::Trap => vec!["*", "s"],
         SystemApiCallId::MintCycles => vec!["U", "Ry", "Rt", "T"],
@@ -640,6 +647,16 @@ fn api_availability_test(
                 context,
             );
         }
+        SystemApiCallId::CanisterLiquidCycleBalance128 => {
+            assert_api_availability(
+                |mut api| api.ic0_canister_liquid_cycle_balance128(0, &mut [42; 128]),
+                api_type,
+                &system_state,
+                cycles_account_manager,
+                api_type_enum,
+                context,
+            );
+        }
         SystemApiCallId::MsgCyclesAvailable => {
             assert_api_availability(
                 |api| api.ic0_msg_cycles_available(),
@@ -822,6 +839,13 @@ fn api_availability_test(
         // OutOfInstructions and TryGrowWasmMemory are private
         SystemApiCallId::OutOfInstructions => {}
         SystemApiCallId::TryGrowWasmMemory => {}
+        // These are available in all contexts
+        SystemApiCallId::CostCall => {}
+        SystemApiCallId::CostCreateCanister => {}
+        SystemApiCallId::CostHttpRequest => {}
+        SystemApiCallId::CostSignWithEcdsa => {}
+        SystemApiCallId::CostSignWithSchnorr => {}
+        SystemApiCallId::CostVetkdDeriveKey => {}
     }
 }
 
@@ -1393,7 +1417,10 @@ fn growing_wasm_memory_updates_subnet_available_memory() {
 
     api.try_grow_wasm_memory(0, 1).unwrap();
     assert_eq!(api.get_allocated_bytes().get() as i64, wasm_page_size);
-    assert_eq!(api.get_allocated_message_bytes().get() as i64, 0);
+    assert_eq!(
+        api.get_allocated_guaranteed_response_message_bytes().get() as i64,
+        0
+    );
     assert_eq!(
         subnet_available_memory.get_wasm_custom_sections_memory(),
         wasm_custom_sections_available_memory_before
@@ -1401,7 +1428,10 @@ fn growing_wasm_memory_updates_subnet_available_memory() {
 
     api.try_grow_wasm_memory(0, 10).unwrap_err();
     assert_eq!(api.get_allocated_bytes().get() as i64, wasm_page_size);
-    assert_eq!(api.get_allocated_message_bytes().get() as i64, 0);
+    assert_eq!(
+        api.get_allocated_guaranteed_response_message_bytes().get() as i64,
+        0
+    );
     assert_eq!(
         subnet_available_memory.get_wasm_custom_sections_memory(),
         wasm_custom_sections_available_memory_before
@@ -1714,7 +1744,7 @@ fn push_output_request_respects_memory_limits() {
     assert_eq!(api.get_allocated_bytes().get(), 0);
     // `MAX_RESPONSE_COUNT_BYTES` are consumed for message memory.
     assert_eq!(
-        api.get_allocated_message_bytes().get(),
+        api.get_allocated_guaranteed_response_message_bytes().get(),
         MAX_RESPONSE_COUNT_BYTES as u64
     );
     assert_eq!(
@@ -1731,7 +1761,7 @@ fn push_output_request_respects_memory_limits() {
     // Without altering memory usage.
     assert_eq!(api.get_allocated_bytes().get(), 0,);
     assert_eq!(
-        api.get_allocated_message_bytes().get(),
+        api.get_allocated_guaranteed_response_message_bytes().get(),
         MAX_RESPONSE_COUNT_BYTES as u64
     );
     assert_eq!(
@@ -1823,7 +1853,10 @@ fn push_output_request_oversized_request_memory_limits() {
 
     // Memory usage unchanged.
     assert_eq!(0, api.get_allocated_bytes().get());
-    assert_eq!(0, api.get_allocated_message_bytes().get());
+    assert_eq!(
+        0,
+        api.get_allocated_guaranteed_response_message_bytes().get()
+    );
 
     // Slightly smaller, still oversized request.
     let req = RequestBuilder::default()
@@ -1844,7 +1877,7 @@ fn push_output_request_oversized_request_memory_limits() {
     assert_eq!(0, api.get_allocated_bytes().get());
     assert_eq!(
         req_size_bytes as u64,
-        api.get_allocated_message_bytes().get()
+        api.get_allocated_guaranteed_response_message_bytes().get()
     );
     assert_eq!(
         CANISTER_CURRENT_MEMORY_USAGE,

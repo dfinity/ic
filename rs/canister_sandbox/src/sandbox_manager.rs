@@ -34,9 +34,10 @@ use ic_interfaces::execution_environment::{
     ExecutionMode, HypervisorError, HypervisorResult, SystemApi, WasmExecutionOutput,
 };
 use ic_logger::ReplicaLogger;
+use ic_management_canister_types_private::Global;
 use ic_replicated_state::{
     page_map::{PageAllocatorRegistry, PageMapSerialization},
-    EmbedderCache, Global, Memory, PageMap,
+    EmbedderCache, Memory, PageMap,
 };
 use ic_types::CanisterId;
 
@@ -132,7 +133,7 @@ impl Execution {
                 wasm_result,
                 num_instructions_left,
                 allocated_bytes,
-                allocated_message_bytes,
+                allocated_guaranteed_response_message_bytes,
                 instance_stats,
                 system_api_call_counters,
             },
@@ -203,7 +204,7 @@ impl Execution {
                 let wasm_output = WasmExecutionOutput {
                     wasm_result,
                     allocated_bytes,
-                    allocated_message_bytes,
+                    allocated_guaranteed_response_message_bytes,
                     num_instructions_left,
                     instance_stats,
                     system_api_call_counters,
@@ -235,7 +236,7 @@ impl Execution {
                     wasm_result: Err(err),
                     num_instructions_left,
                     allocated_bytes,
-                    allocated_message_bytes,
+                    allocated_guaranteed_response_message_bytes,
                     instance_stats,
                     system_api_call_counters,
                 };

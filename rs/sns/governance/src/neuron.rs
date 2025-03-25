@@ -1,10 +1,7 @@
-use crate::{
-    pb::v1::{
-        governance_error::ErrorType, manage_neuron, neuron::DissolveState, proposal::Action,
-        Ballot, Empty, GovernanceError, Neuron, NeuronId, NeuronPermission, NeuronPermissionList,
-        NeuronPermissionType, Vote,
-    },
-    types::function_id_to_proposal_criticality,
+use crate::pb::v1::{
+    governance_error::ErrorType, manage_neuron, neuron::DissolveState, proposal::Action, Ballot,
+    Empty, GovernanceError, Neuron, NeuronId, NeuronPermission, NeuronPermissionList,
+    NeuronPermissionType, Vote,
 };
 use ic_base_types::PrincipalId;
 use ic_sns_governance_proposal_criticality::ProposalCriticality;
@@ -246,14 +243,14 @@ impl Neuron {
         std::cmp::min(vad_stake, u64::MAX as u128) as u64
     }
 
-    /// Given the specified `ballots`, determine how the neuron would
-    /// vote on a proposal of `action` based on which neurons this
-    /// neuron follows on this action (or on the default action if this
-    /// neuron doesn't specify any followees for `action`).
+    /// Given the specified `ballots` and `proposal_criticality`, determine how the neuron would
+    /// vote on a proposal of `action` based on which neurons this neuron follows on this action
+    /// (or on the default action if this neuron doesn't specify any followees for `action`).
     pub(crate) fn would_follow_ballots(
         &self,
         function_id: u64,
         ballots: &BTreeMap<String, Ballot>,
+        proposal_criticality: ProposalCriticality,
     ) -> Vote {
         // Step 1: Who are the relevant followees?
 
@@ -273,7 +270,7 @@ impl Neuron {
         // the function, then fall back to the "catch-all" following.
         if followee_neuron_ids.is_empty() {
             use ProposalCriticality::{Critical, Normal};
-            match function_id_to_proposal_criticality(function_id) {
+            match proposal_criticality {
                 Normal => {
                     let fallback_pseudo_function_id = u64::from(&Action::Unspecified(Empty {}));
                     followee_neuron_ids = get_followee_neuron_ids(fallback_pseudo_function_id);

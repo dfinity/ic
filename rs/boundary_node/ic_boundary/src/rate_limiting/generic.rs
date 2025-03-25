@@ -465,13 +465,14 @@ pub async fn middleware(
     Extension(ctx): Extension<Arc<RequestContext>>,
     Extension(subnet): Extension<Arc<RouteSubnet>>,
     Extension(conn_info): Extension<Arc<ConnInfo>>,
-    canister_id: Option<Extension<CanisterId>>,
     request: Request<Body>,
     next: Next,
 ) -> Result<impl IntoResponse, ErrorCause> {
+    let canister_id = request.extensions().get::<CanisterId>().copied();
+
     let ctx = Context {
         subnet_id: subnet.id,
-        canister_id: canister_id.map(|x| x.0.get().into()),
+        canister_id: canister_id.map(|x| x.get().into()),
         method: ctx.method_name.as_deref(),
         request_type: ctx.request_type,
         ip: conn_info.remote_addr.ip(),
@@ -641,14 +642,14 @@ mod test {
         let mut snapshot = generate_stub_snapshot(vec![]);
         snapshot.api_bns = vec![
             ApiBoundaryNode {
-                id: principal!("3hhby-wmtmw-umt4t-7ieyg-bbiig-xiylg-sblrt-voxgt-bqckd-a75bf-rqe"),
-                addr: ip1,
-                port: 31337,
+                _id: principal!("3hhby-wmtmw-umt4t-7ieyg-bbiig-xiylg-sblrt-voxgt-bqckd-a75bf-rqe"),
+                _addr: ip1,
+                _port: 31337,
             },
             ApiBoundaryNode {
-                id: principal!("3hhby-wmtmw-umt4t-7ieyg-bbiig-xiylg-sblrt-voxgt-bqckd-a75bf-rqe"),
-                addr: ip2,
-                port: 31337,
+                _id: principal!("3hhby-wmtmw-umt4t-7ieyg-bbiig-xiylg-sblrt-voxgt-bqckd-a75bf-rqe"),
+                _addr: ip2,
+                _port: 31337,
             },
         ];
 

@@ -108,8 +108,10 @@ where
                 Sysno::sendmsg,
                 Sysno::sigaltstack,
                 Sysno::futex,
+                Sysno::fcntl,
                 Sysno::close,
                 Sysno::restart_syscall,
+                Sysno::write,
             ]);
 
             let mut threads: Vec<_> = vec![];

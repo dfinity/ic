@@ -23,7 +23,7 @@ use ic_management_canister_types_private::{
 };
 use ic_metrics::MetricsRegistry;
 use ic_replicated_state::metadata_state::subnet_call_context_manager::{
-    EcdsaArguments, IDkgDealingsContext, IDkgSignWithThresholdContext, SchnorrArguments,
+    EcdsaArguments, IDkgSignWithThresholdContext, ReshareChainKeyContext, SchnorrArguments,
     SignWithThresholdContext, ThresholdArguments, VetKdArguments,
 };
 use ic_replicated_state::ReplicatedState;
@@ -58,9 +58,11 @@ use ic_types::crypto::canister_threshold_sig::{
     ThresholdSchnorrSigShare,
 };
 use ic_types::crypto::threshold_sig::ni_dkg::{
-    NiDkgId, NiDkgMasterPublicKeyId, NiDkgTag, NiDkgTargetSubnet,
+    NiDkgId, NiDkgMasterPublicKeyId, NiDkgTag, NiDkgTargetId, NiDkgTargetSubnet,
 };
-use ic_types::crypto::vetkd::{VetKdArgs, VetKdEncryptedKeyShare, VetKdEncryptedKeyShareContent};
+use ic_types::crypto::vetkd::{
+    VetKdArgs, VetKdDerivationContext, VetKdEncryptedKeyShare, VetKdEncryptedKeyShareContent,
+};
 use ic_types::crypto::{AlgorithmId, ExtendedDerivationPath};
 use ic_types::messages::CallbackId;
 use ic_types::time::UNIX_EPOCH;
@@ -78,13 +80,14 @@ use super::utils::algorithm_for_key_id;
 
 pub(crate) fn dealings_context_from_reshare_request(
     request: idkg::IDkgReshareRequest,
-) -> IDkgDealingsContext {
-    IDkgDealingsContext {
+) -> ReshareChainKeyContext {
+    ReshareChainKeyContext {
         request: RequestBuilder::new().build(),
-        key_id: request.key_id(),
+        key_id: request.key_id().into(),
         nodes: request.receiving_node_ids.into_iter().collect(),
         registry_version: request.registry_version,
         time: time::UNIX_EPOCH,
+        target_id: NiDkgTargetId::new([0; 32]),
     }
 }
 
@@ -108,8 +111,8 @@ fn fake_signature_request_args(key_id: MasterPublicKeyId, height: Height) -> Thr
         }),
         MasterPublicKeyId::VetKd(key_id) => ThresholdArguments::VetKd(VetKdArguments {
             key_id: key_id.clone(),
-            derivation_id: vec![1; 32],
-            encryption_public_key: vec![1; 32],
+            input: Arc::new(vec![1; 32]),
+            transport_public_key: vec![1; 32],
             ni_dkg_id: fake_dkg_id(key_id),
             height,
         }),
@@ -130,7 +133,7 @@ pub fn fake_signature_request_context(
     SignWithThresholdContext {
         request: RequestBuilder::new().build(),
         args: fake_signature_request_args(key_id, Height::from(0)),
-        derivation_path: vec![],
+        derivation_path: Arc::new(vec![]),
         batch_time: UNIX_EPOCH,
         pseudo_random_id,
         matched_pre_signature: None,
@@ -147,7 +150,7 @@ pub fn fake_signature_request_context_with_pre_sig(
     let context = SignWithThresholdContext {
         request: RequestBuilder::new().build(),
         args: fake_signature_request_args(key_id.into(), height),
-        derivation_path: vec![],
+        derivation_path: Arc::new(vec![]),
         batch_time: UNIX_EPOCH,
         pseudo_random_id: [request_id.callback_id.get() as u8; 32],
         matched_pre_signature: pre_signature.map(|pid| (pid, height)),
@@ -165,7 +168,7 @@ pub fn fake_signature_request_context_from_id(
     let context = SignWithThresholdContext {
         request: RequestBuilder::new().build(),
         args: fake_signature_request_args(key_id, height),
-        derivation_path: vec![],
+        derivation_path: Arc::new(vec![]),
         batch_time: UNIX_EPOCH,
         pseudo_random_id: [request_id.callback_id.get() as u8; 32],
         matched_pre_signature: Some((pre_sig_id, height)),
@@ -1371,12 +1374,12 @@ pub(crate) fn create_schnorr_sig_inputs_with_args(
 pub(crate) fn create_vetkd_inputs_with_args(caller: u8, key_id: &VetKdKeyId) -> TestSigInputs {
     let inputs = VetKdArgs {
         ni_dkg_id: fake_dkg_id(key_id.clone()),
-        derivation_path: ExtendedDerivationPath {
+        context: VetKdDerivationContext {
             caller: PrincipalId::try_from(&vec![caller]).unwrap(),
-            derivation_path: vec![],
+            context: vec![],
         },
-        derivation_id: vec![],
-        encryption_public_key: vec![1; 32],
+        input: vec![],
+        transport_public_key: vec![1; 32],
     };
 
     TestSigInputs {

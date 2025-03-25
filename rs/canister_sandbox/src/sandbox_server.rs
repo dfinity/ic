@@ -161,8 +161,11 @@ mod tests {
     use ic_interfaces::execution_environment::{ExecutionMode, SubnetAvailableMemory};
     use ic_limits::SMALL_APP_SUBNET_MAX_SIZE;
     use ic_logger::replica_logger::no_op_logger;
+    use ic_management_canister_types_private::Global;
     use ic_registry_subnet_type::SubnetType;
-    use ic_replicated_state::{Global, NumWasmPages, PageIndex, PageMap};
+    use ic_replicated_state::{
+        MessageMemoryUsage, NetworkTopology, NumWasmPages, PageIndex, PageMap,
+    };
     use ic_system_api::{
         sandbox_safe_system_state::{CanisterStatusView, SandboxSafeSystemState},
         ApiType, ExecutionParameters, InstructionLimits,
@@ -242,6 +245,7 @@ mod tests {
             caller,
             0,
             IS_WASM64_EXECUTION,
+            NetworkTopology::default(),
         )
     }
 
@@ -279,8 +283,8 @@ mod tests {
             func_ref: FuncRef::Method(WasmMethod::Update(method_name.to_string())),
             api_type,
             globals,
-            canister_current_memory_usage: NumBytes::from(0),
-            canister_current_message_memory_usage: NumBytes::from(0),
+            canister_current_memory_usage: NumBytes::new(0),
+            canister_current_message_memory_usage: MessageMemoryUsage::ZERO,
             execution_parameters: execution_parameters(),
             subnet_available_memory: SubnetAvailableMemory::new(
                 i64::MAX / 2,
@@ -311,8 +315,8 @@ mod tests {
             func_ref: FuncRef::Method(WasmMethod::Query(method_name.to_string())),
             api_type,
             globals,
-            canister_current_memory_usage: NumBytes::from(0),
-            canister_current_message_memory_usage: NumBytes::from(0),
+            canister_current_memory_usage: NumBytes::new(0),
+            canister_current_message_memory_usage: MessageMemoryUsage::ZERO,
             execution_parameters: execution_parameters(),
             subnet_available_memory: SubnetAvailableMemory::new(
                 i64::MAX / 2,

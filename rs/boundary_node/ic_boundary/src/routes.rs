@@ -51,11 +51,11 @@ const HEADERS_HIDE_HTTP_REQUEST: [&str; 4] =
 
 // Rust const/static concat is non-existent, so we have to repeat
 pub const PATH_STATUS: &str = "/api/v2/status";
-pub const PATH_QUERY: &str = "/api/v2/canister/:canister_id/query";
-pub const PATH_CALL: &str = "/api/v2/canister/:canister_id/call";
-pub const PATH_CALL_V3: &str = "/api/v3/canister/:canister_id/call";
-pub const PATH_READ_STATE: &str = "/api/v2/canister/:canister_id/read_state";
-pub const PATH_SUBNET_READ_STATE: &str = "/api/v2/subnet/:subnet_id/read_state";
+pub const PATH_QUERY: &str = "/api/v2/canister/{canister_id}/query";
+pub const PATH_CALL: &str = "/api/v2/canister/{canister_id}/call";
+pub const PATH_CALL_V3: &str = "/api/v3/canister/{canister_id}/call";
+pub const PATH_READ_STATE: &str = "/api/v2/canister/{canister_id}/read_state";
+pub const PATH_SUBNET_READ_STATE: &str = "/api/v2/subnet/{subnet_id}/read_state";
 pub const PATH_HEALTH: &str = "/health";
 
 lazy_static! {
@@ -326,14 +326,12 @@ pub trait Lookup: Sync + Send {
     fn lookup_subnet_by_id(&self, id: &SubnetId) -> Result<Arc<RouteSubnet>, ErrorCause>;
 }
 
-#[async_trait]
 pub trait Health: Sync + Send {
-    async fn health(&self) -> ReplicaHealthStatus;
+    fn health(&self) -> ReplicaHealthStatus;
 }
 
-#[async_trait]
 pub trait RootKey: Sync + Send {
-    async fn root_key(&self) -> Option<Vec<u8>>;
+    fn root_key(&self) -> Option<Vec<u8>>;
 }
 
 // Router that helps handlers do their job by looking up in routing table
@@ -343,6 +341,8 @@ pub struct ProxyRouter {
     http_client: Arc<dyn HttpClient>,
     published_routes: Arc<ArcSwapOption<Routes>>,
     published_registry_snapshot: Arc<ArcSwapOption<RegistrySnapshot>>,
+    subnets_alive_threshold: f64,
+    nodes_per_subnet_alive_threshold: f64,
 }
 
 impl ProxyRouter {
@@ -350,11 +350,15 @@ impl ProxyRouter {
         http_client: Arc<dyn HttpClient>,
         published_routes: Arc<ArcSwapOption<Routes>>,
         published_registry_snapshot: Arc<ArcSwapOption<RegistrySnapshot>>,
+        subnets_alive_threshold: f64,
+        nodes_per_subnet_alive_threshold: f64,
     ) -> Self {
         Self {
             http_client,
             published_routes,
             published_registry_snapshot,
+            subnets_alive_threshold,
+            nodes_per_subnet_alive_threshold,
         }
     }
 }
@@ -399,23 +403,52 @@ impl Lookup for ProxyRouter {
     }
 }
 
-#[async_trait]
 impl RootKey for ProxyRouter {
-    async fn root_key(&self) -> Option<Vec<u8>> {
+    fn root_key(&self) -> Option<Vec<u8>> {
         self.published_registry_snapshot
             .load_full()
             .map(|x| x.nns_public_key.clone())
     }
 }
 
-#[async_trait]
 impl Health for ProxyRouter {
-    async fn health(&self) -> ReplicaHealthStatus {
-        // Return healthy state if we have at least one healthy replica node
-        // TODO increase threshold? change logic?
-        match self.published_routes.load_full() {
-            Some(rt) => {
-                if rt.node_count > 0 {
+    fn health(&self) -> ReplicaHealthStatus {
+        match (
+            self.published_routes.load_full(),
+            self.published_registry_snapshot.load_full(),
+        ) {
+            (Some(rt), Some(snap)) => {
+                if snap.subnets.is_empty() {
+                    return ReplicaHealthStatus::CertifiedStateBehind;
+                }
+
+                // Count the number of healthy subnets
+                let healthy_subnets_count = snap
+                    .subnets
+                    .iter()
+                    .filter(|&subnet| {
+                        if subnet.nodes.is_empty() {
+                            return false;
+                        }
+
+                        // Get number of nodes in this subnet from the active routing table.
+                        // If, for some reason, the subnet isn't there (it should be) - assume the number is 0
+                        let healthy_nodes = rt
+                            .subnet_map
+                            .get(&subnet.id)
+                            .map(|x| x.nodes.len())
+                            .unwrap_or_default();
+
+                        // See if this subnet can be considered healthy
+                        (healthy_nodes as f64) / (subnet.nodes.len() as f64)
+                            >= self.nodes_per_subnet_alive_threshold
+                    })
+                    .count();
+
+                // See if we have enough healthy subnets to consider ourselves healthy
+                if (healthy_subnets_count as f64) / (snap.subnets.len() as f64)
+                    >= self.subnets_alive_threshold
+                {
                     ReplicaHealthStatus::Healthy
                 } else {
                     // There's no generic "Unhealthy" state it seems, should we use Starting?
@@ -424,7 +457,7 @@ impl Health for ProxyRouter {
             }
 
             // Usually this is only for the first 10sec after startup
-            None => ReplicaHealthStatus::Starting,
+            _ => ReplicaHealthStatus::Starting,
         }
     }
 }
@@ -538,7 +571,6 @@ pub async fn validate_subnet_request(
     request.extensions_mut().insert(subnet_id);
 
     let resp = next.run(request).await;
-
     Ok(resp)
 }
 
@@ -771,7 +803,7 @@ pub async fn postprocess_response(request: Request, next: Next) -> impl IntoResp
 
 // Handler: emit an HTTP status code that signals the service's state
 pub async fn health(State(h): State<Arc<dyn Health>>) -> impl IntoResponse {
-    if h.health().await == ReplicaHealthStatus::Healthy {
+    if h.health() == ReplicaHealthStatus::Healthy {
         StatusCode::NO_CONTENT
     } else {
         StatusCode::SERVICE_UNAVAILABLE
@@ -782,10 +814,10 @@ pub async fn health(State(h): State<Arc<dyn Health>>) -> impl IntoResponse {
 pub async fn status(
     State((rk, h)): State<(Arc<dyn RootKey>, Arc<dyn Health>)>,
 ) -> impl IntoResponse {
-    let health = h.health().await;
+    let health = h.health();
 
     let status = HttpStatusResponse {
-        root_key: rk.root_key().await.map(|x| x.into()),
+        root_key: rk.root_key().map(|x| x.into()),
         impl_version: None,
         impl_hash: None,
         replica_health_status: Some(health),

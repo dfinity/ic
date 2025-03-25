@@ -7,9 +7,10 @@ pub mod wasmtime_embedder;
 
 use std::{sync::Arc, time::Duration};
 
-pub use compilation_cache::{CompilationCache, StoredCompilation};
+pub use compilation_cache::{CompilationCache, CompilationCacheBuilder, StoredCompilation};
 use ic_interfaces::execution_environment::SubnetAvailableMemory;
-use ic_replicated_state::{Global, PageIndex};
+use ic_management_canister_types_private::Global;
+use ic_replicated_state::{MessageMemoryUsage, PageIndex};
 use ic_system_api::{
     sandbox_safe_system_state::SandboxSafeSystemState, ApiType, ExecutionParameters,
 };
@@ -32,7 +33,7 @@ pub struct WasmExecutionInput {
     pub api_type: ApiType,
     pub sandbox_safe_system_state: SandboxSafeSystemState,
     pub canister_current_memory_usage: NumBytes,
-    pub canister_current_message_memory_usage: NumBytes,
+    pub canister_current_message_memory_usage: MessageMemoryUsage,
     pub execution_parameters: ExecutionParameters,
     pub subnet_available_memory: SubnetAvailableMemory,
     pub func_ref: FuncRef,

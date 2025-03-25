@@ -2,10 +2,8 @@ use super::delivery::*;
 use super::execution::*;
 use super::types::*;
 use ic_config::artifact_pool::ArtifactPoolConfig;
-use ic_consensus::{
-    certification::{CertificationCrypto, CertifierImpl},
-    idkg,
-};
+use ic_consensus::idkg;
+use ic_consensus_certification::{CertificationCrypto, CertifierImpl};
 use ic_consensus_dkg::DkgKeyManager;
 use ic_consensus_utils::crypto::ConsensusCrypto;
 use ic_consensus_utils::membership::Membership;
@@ -160,6 +158,7 @@ impl<'a> ConsensusRunner<'a> {
             deps.self_validating_payload_builder.clone(),
             deps.canister_http_payload_builder.clone(),
             deps.query_stats_payload_builder.clone(),
+            deps.vetkd_payload_builder.clone(),
             deps.dkg_pool.clone(),
             deps.idkg_pool.clone(),
             dkg_key_manager.clone(),

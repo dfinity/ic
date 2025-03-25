@@ -941,6 +941,23 @@ pub fn syscalls<
         .unwrap();
 
     linker
+        .func_wrap("ic0", "canister_liquid_cycle_balance128", {
+            move |mut caller: Caller<'_, StoreData>, dst: I| {
+                let dst: usize = dst.try_into().expect("Failed to convert I to usize");
+                charge_for_cpu(&mut caller, overhead::CANISTER_LIQUID_CYCLE_BALANCE128)?;
+                with_memory_and_system_api(&mut caller, |s, memory| {
+                    s.ic0_canister_liquid_cycle_balance128(dst, memory)
+                })?;
+                if feature_flags.write_barrier == FlagStatus::Enabled {
+                    mark_writes_on_bytemap(&mut caller, dst, 16)
+                } else {
+                    Ok(())
+                }
+            }
+        })
+        .unwrap();
+
+    linker
         .func_wrap("ic0", "msg_cycles_available", {
             move |mut caller: Caller<'_, StoreData>| {
                 charge_for_cpu(&mut caller, overhead::MSG_CYCLES_AVAILABLE)?;
@@ -1244,6 +1261,98 @@ pub fn syscalls<
                     s.ic0_cycles_burn128(Cycles::from_parts(amount_high, amount_low), dst, memory)
                 })
                 .map_err(|e| anyhow::Error::msg(format!("ic0_cycles_burn128 failed: {}", e)))
+            }
+        })
+        .unwrap();
+
+    linker
+        .func_wrap("ic0", "cost_call", {
+            move |mut caller: Caller<'_, StoreData>,
+                  method_name_size: u64,
+                  payload_size: u64,
+                  dst: I| {
+                charge_for_cpu(&mut caller, overhead::COST_CALL)?;
+                with_memory_and_system_api(&mut caller, |s, memory| {
+                    let dst: usize = dst.try_into().expect("Failed to convert I to usize");
+                    s.ic0_cost_call(method_name_size, payload_size, dst, memory)
+                })
+                .map_err(|e| anyhow::Error::msg(format!("ic0_cost_call failed: {}", e)))
+            }
+        })
+        .unwrap();
+
+    linker
+        .func_wrap("ic0", "cost_create_canister", {
+            move |mut caller: Caller<'_, StoreData>, dst: I| {
+                charge_for_cpu(&mut caller, overhead::COST_CREATE_CANISTER)?;
+                with_memory_and_system_api(&mut caller, |s, memory| {
+                    let dst: usize = dst.try_into().expect("Failed to convert I to usize");
+                    s.ic0_cost_create_canister(dst, memory)
+                })
+                .map_err(|e| anyhow::Error::msg(format!("ic0_cost_create_canister failed: {}", e)))
+            }
+        })
+        .unwrap();
+
+    linker
+        .func_wrap("ic0", "cost_http_request", {
+            move |mut caller: Caller<'_, StoreData>,
+                  request_size: u64,
+                  max_res_bytes: u64,
+                  dst: I| {
+                charge_for_cpu(&mut caller, overhead::COST_HTTP_REQUEST)?;
+                with_memory_and_system_api(&mut caller, |s, memory| {
+                    let dst: usize = dst.try_into().expect("Failed to convert I to usize");
+                    s.ic0_cost_http_request(request_size, max_res_bytes, dst, memory)
+                })
+                .map_err(|e| anyhow::Error::msg(format!("ic0_cost_http_request failed: {}", e)))
+            }
+        })
+        .unwrap();
+
+    linker
+        .func_wrap("ic0", "cost_sign_with_ecdsa", {
+            move |mut caller: Caller<'_, StoreData>, src: I, size: I, curve: u32, dst: I| {
+                let src: usize = src.try_into().expect("Failed to convert I to usize");
+                let size: usize = size.try_into().expect("Failed to convert I to usize");
+                charge_for_cpu_and_mem(&mut caller, overhead::COST_ECDSA, size)?;
+                with_memory_and_system_api(&mut caller, |s, memory| {
+                    let dst: usize = dst.try_into().expect("Failed to convert I to usize");
+                    s.ic0_cost_sign_with_ecdsa(src, size, curve, dst, memory)
+                })
+                .map_err(|e| anyhow::Error::msg(format!("ic0_cost_sign_with_ecdsa failed: {}", e)))
+            }
+        })
+        .unwrap();
+
+    linker
+        .func_wrap("ic0", "cost_sign_with_schnorr", {
+            move |mut caller: Caller<'_, StoreData>, src: I, size: I, algorithm: u32, dst: I| {
+                let src: usize = src.try_into().expect("Failed to convert I to usize");
+                let size: usize = size.try_into().expect("Failed to convert I to usize");
+                charge_for_cpu_and_mem(&mut caller, overhead::COST_SCHNORR, size)?;
+                with_memory_and_system_api(&mut caller, |s, memory| {
+                    let dst: usize = dst.try_into().expect("Failed to convert I to usize");
+                    s.ic0_cost_sign_with_schnorr(src, size, algorithm, dst, memory)
+                })
+                .map_err(|e| {
+                    anyhow::Error::msg(format!("ic0_cost_sign_with_schnorr failed: {}", e))
+                })
+            }
+        })
+        .unwrap();
+
+    linker
+        .func_wrap("ic0", "cost_vetkd_derive_key", {
+            move |mut caller: Caller<'_, StoreData>, src: I, size: I, curve: u32, dst: I| {
+                let src: usize = src.try_into().expect("Failed to convert I to usize");
+                let size: usize = size.try_into().expect("Failed to convert I to usize");
+                charge_for_cpu_and_mem(&mut caller, overhead::COST_VETKD, size)?;
+                with_memory_and_system_api(&mut caller, |s, memory| {
+                    let dst: usize = dst.try_into().expect("Failed to convert I to usize");
+                    s.ic0_cost_vetkd_derive_key(src, size, curve, dst, memory)
+                })
+                .map_err(|e| anyhow::Error::msg(format!("ic0_cost_vetkd_derive_key failed: {}", e)))
             }
         })
         .unwrap();

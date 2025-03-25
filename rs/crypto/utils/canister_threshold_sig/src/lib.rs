@@ -1,7 +1,10 @@
-use ic_crypto_internal_bls12_381_vetkd::{DerivationPath, DerivedPublicKey, G2Affine};
+use ic_crypto_internal_bls12_381_vetkd::{
+    DerivationContext, DerivedPublicKey, G2Affine, TransportPublicKey,
+};
 use ic_crypto_internal_threshold_sig_canister_threshold_sig::DeriveThresholdPublicKeyError;
 use ic_types::crypto::canister_threshold_sig::error::CanisterThresholdGetPublicKeyError;
 use ic_types::crypto::canister_threshold_sig::{MasterPublicKey, PublicKey};
+use ic_types::crypto::vetkd::VetKdDerivationContext;
 use ic_types::crypto::AlgorithmId;
 use ic_types::crypto::ExtendedDerivationPath;
 use std::fmt;
@@ -30,23 +33,25 @@ pub fn derive_threshold_public_key(
 /// the given `extended_derivation_path`.
 pub fn derive_vetkd_public_key(
     master_public_key: &MasterPublicKey,
-    extended_derivation_path: &ExtendedDerivationPath,
+    context: &VetKdDerivationContext,
 ) -> Result<Vec<u8>, VetKdPublicKeyDeriveError> {
     match master_public_key.algorithm_id {
-        AlgorithmId::ThresBls12_381 => (),
+        AlgorithmId::VetKD => (),
         _ => return Err(VetKdPublicKeyDeriveError::InvalidAlgorithmId),
     };
 
     let key = G2Affine::deserialize(&master_public_key.public_key)
         .map_err(|_| VetKdPublicKeyDeriveError::InvalidPublicKey)?;
 
-    let derivation_path = DerivationPath::new(
-        extended_derivation_path.caller.as_slice(),
-        &extended_derivation_path.derivation_path,
-    );
+    let context = DerivationContext::new(context.caller.as_slice(), &context.context);
 
-    let derived_key = DerivedPublicKey::compute_derived_key(&key, &derivation_path);
+    let derived_key = DerivedPublicKey::compute_derived_key(&key, &context);
     Ok(derived_key.serialize().to_vec())
+}
+
+/// Checks if the given bytes deserialize into a correct public key
+pub fn is_valid_transport_public_key(transport_public_key: &[u8; 48]) -> bool {
+    TransportPublicKey::deserialize(transport_public_key).is_ok()
 }
 
 #[derive(Clone, Eq, PartialEq, Debug)]

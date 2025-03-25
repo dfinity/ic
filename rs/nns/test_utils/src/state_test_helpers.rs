@@ -34,7 +34,6 @@ use ic_nns_constants::{
 };
 use ic_nns_governance_api::pb::v1::{
     self as nns_governance_pb,
-    governance::Migrations,
     manage_neuron::{
         self,
         claim_or_refresh::{self, MemoAndController},
@@ -1316,18 +1315,6 @@ pub fn nns_stake_maturity(
     manage_neuron(state_machine, sender, neuron_id, command)
 }
 
-pub fn nns_get_migrations(state_machine: &StateMachine) -> Migrations {
-    let reply = query(
-        state_machine,
-        GOVERNANCE_CANISTER_ID,
-        "get_migrations",
-        Encode!(&Empty {}).unwrap(),
-    )
-    .unwrap();
-
-    Decode!(&reply, Migrations).unwrap()
-}
-
 pub fn nns_list_proposals(
     state_machine: &StateMachine,
     request: ListProposalInfo,
@@ -2098,7 +2085,7 @@ pub fn setup_cycles_ledger(state_machine: &StateMachine) {
     }
     #[derive(Clone, Eq, PartialEq, Debug, CandidType, Serialize)]
     struct Config {
-        pub max_transactions_per_request: u64,
+        pub max_blocks_per_request: u64,
         pub index_id: Option<candid::Principal>,
     }
 
@@ -2119,7 +2106,7 @@ pub fn setup_cycles_ledger(state_machine: &StateMachine) {
     )
     .unwrap();
     let arg = Encode!(&LedgerArgs::Init(Config {
-        max_transactions_per_request: 50,
+        max_blocks_per_request: 50,
         index_id: None,
     }))
     .unwrap();

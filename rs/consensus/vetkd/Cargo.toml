@@ -9,7 +9,7 @@ documentation.workspace = true
 [dependencies]
 ic-consensus-utils = { path = "../utils" }
 ic-crypto = { path = "../../crypto" }
-ic-error-types = { path = "../../types/error_types" }
+ic-error-types = { path = "../../../packages/ic-error-types" }
 ic-interfaces = { path = "../../interfaces" }
 ic-interfaces-registry = { path = "../../interfaces/registry" }
 ic-interfaces-state-manager = { path = "../../interfaces/state_manager" }
@@ -24,6 +24,7 @@ ic-types = { path = "../../types/types" }
 prometheus = { workspace = true }
 slog = { workspace = true }
 strum_macros = { workspace = true }
+num-traits = { workspace = true }
 
 [dev-dependencies]
 assert_matches = { workspace = true }

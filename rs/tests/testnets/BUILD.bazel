@@ -7,13 +7,13 @@ package(default_visibility = ["//rs:system-tests-pkg"])
 
 system_test(
     name = "single_large_node",
-    flaky = False,
     tags = [
         "dynamic_testnet",
         "k8s",
         "manual",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
+    visibility = ["//visibility:public"],  # public because part of top-level manual test suite
     runtime_deps = GUESTOS_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
@@ -25,7 +25,6 @@ system_test(
 
 system_test(
     name = "single_app_large_node",
-    flaky = False,
     tags = [
         "dynamic_testnet",
         "k8s",
@@ -43,7 +42,6 @@ system_test(
 
 system_test_nns(
     name = "single_app_large_node_with_nns",
-    flaky = False,
     tags = [
         "dynamic_testnet",
         "k8s",
@@ -60,9 +58,25 @@ system_test_nns(
     ],
 )
 
+system_test(
+    name = "single_app_small_node",
+    tags = [
+        "dynamic_testnet",
+        "k8s",
+        "manual",
+    ],
+    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
+    runtime_deps = GUESTOS_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS,
+    deps = [
+        # Keep sorted.
+        "//rs/registry/subnet_type",
+        "//rs/tests/driver:ic-system-test-driver",
+        "@crate_index//:anyhow",
+    ],
+)
+
 system_test_nns(
     name = "small",
-    flaky = False,
     tags = [
         "dynamic_testnet",
         "manual",
@@ -80,7 +94,6 @@ system_test_nns(
 
 system_test_nns(
     name = "small_bitcoin",
-    flaky = False,
     tags = [
         "dynamic_testnet",
         "manual",
@@ -99,7 +112,6 @@ system_test_nns(
 
 system_test_nns(
     name = "small_high_perf",
-    flaky = False,
     tags = [
         "dynamic_testnet",
         "manual",
@@ -119,7 +131,6 @@ system_test_nns(
 system_test(
     name = "from_config",
     env = NNS_CANISTER_ENV,
-    flaky = False,
     tags = [
         "dynamic_testnet",
         "manual",
@@ -136,7 +147,6 @@ system_test(
 
 system_test_nns(
     name = "small_nns",
-    flaky = False,
     tags = [
         "dynamic_testnet",
         "manual",
@@ -160,7 +170,6 @@ system_test_nns(
 
 system_test_nns(
     name = "small_with_api_bn",
-    flaky = False,
     tags = [
         "dynamic_testnet",
         "manual",
@@ -190,7 +199,6 @@ system_test_nns(
         "NNS_DAPP_WASM_PATH": "$(rootpath @nns_dapp_canister//file)",
         "SUBNET_RENTAL_WASM_PATH": "$(rootpath @subnet_rental_canister//file)",
     },
-    flaky = False,
     tags = [
         "dynamic_testnet",
         "manual",
@@ -219,7 +227,6 @@ system_test_nns(
         "SNS_AGGREGATOR_WASM_PATH": "$(rootpath @sns_aggregator//file)",
         "SUBNET_RENTAL_WASM_PATH": "$(rootpath @subnet_rental_canister//file)",
     },
-    flaky = False,
     tags = [
         "dynamic_testnet",
         "manual",
@@ -244,7 +251,6 @@ system_test_nns(
 
 system_test_nns(
     name = "medium",
-    flaky = False,
     tags = [
         "dynamic_testnet",
         "manual",
@@ -268,7 +274,6 @@ system_test_nns(
         "SNS_AGGREGATOR_WASM_PATH": "$(rootpath @sns_aggregator//file)",
         "SUBNET_RENTAL_WASM_PATH": "$(rootpath @subnet_rental_canister//file)",
     },
-    flaky = False,
     tags = [
         "dynamic_testnet",
         "manual",
@@ -299,7 +304,6 @@ system_test_nns(
         "SNS_AGGREGATOR_WASM_PATH": "$(rootpath @sns_aggregator//file)",
         "SUBNET_RENTAL_WASM_PATH": "$(rootpath @subnet_rental_canister//file)",
     },
-    flaky = False,
     tags = [
         "dynamic_testnet",
         "manual",
@@ -338,7 +342,6 @@ system_test(
     },
     env = NNS_CANISTER_ENV,
     env_inherit = ["SSH_AUTH_SOCK"],
-    flaky = True,
     tags = [
         "dynamic_testnet",
         "local",

@@ -11,13 +11,14 @@ use ic_artifact_pool::{
 };
 use ic_config::{artifact_pool::ArtifactPoolConfig, transport::TransportConfig};
 use ic_consensus::{
-    certification::{CertificationCrypto, CertifierBouncer, CertifierImpl},
     consensus::{ConsensusBouncer, ConsensusImpl},
     idkg,
 };
+use ic_consensus_certification::{CertificationCrypto, CertifierBouncer, CertifierImpl};
 use ic_consensus_dkg::DkgBouncer;
 use ic_consensus_manager::{AbortableBroadcastChannel, AbortableBroadcastChannelBuilder};
 use ic_consensus_utils::{crypto::ConsensusCrypto, pool_reader::PoolReader};
+use ic_consensus_vetkd::VetKdPayloadBuilderImpl;
 use ic_crypto_interfaces_sig_verification::IngressSigVerifier;
 use ic_crypto_tls_interfaces::TlsConfig;
 use ic_cycles_account_manager::CyclesAccountManager;
@@ -534,6 +535,17 @@ fn start_consensus(
         metrics_registry,
         log.clone(),
     ));
+
+    let vetkd_payload_builder = Arc::new(VetKdPayloadBuilderImpl::new(
+        artifact_pools.idkg_pool.clone(),
+        consensus_pool_cache.clone(),
+        consensus_crypto.clone(),
+        state_reader.clone(),
+        subnet_id,
+        registry_client.clone(),
+        metrics_registry,
+        log.clone(),
+    ));
     // ------------------------------------------------------------------------
 
     let replica_config = ReplicaConfig { node_id, subnet_id };
@@ -556,6 +568,7 @@ fn start_consensus(
         self_validating_payload_builder,
         https_outcalls_payload_builder,
         Arc::from(query_stats_payload_builder),
+        vetkd_payload_builder,
         Arc::clone(&artifact_pools.dkg_pool) as Arc<_>,
         Arc::clone(&artifact_pools.idkg_pool) as Arc<_>,
         Arc::clone(&dkg_key_manager) as Arc<_>,

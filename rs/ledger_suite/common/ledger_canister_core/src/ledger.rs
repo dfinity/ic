@@ -1,4 +1,9 @@
-use crate::{archive::ArchiveCanisterWasm, blockchain::Blockchain, range_utils, runtime::Runtime};
+use crate::{
+    archive::ArchiveCanisterWasm,
+    blockchain::{BlockDataContainer, Blockchain},
+    range_utils,
+    runtime::Runtime,
+};
 use ic_base_types::CanisterId;
 use ic_canister_log::{log, Sink};
 use ic_ledger_core::approvals::{
@@ -141,6 +146,7 @@ pub trait LedgerData: LedgerContext {
     type Transaction: LedgerTransaction<AccountId = Self::AccountId, Tokens = Self::Tokens>
         + Ord
         + Clone;
+    type BlockDataContainer: BlockDataContainer + Default;
 
     // Purge configuration
 
@@ -164,8 +170,11 @@ pub trait LedgerData: LedgerContext {
 
     // Ledger data structures
 
-    fn blockchain(&self) -> &Blockchain<Self::Runtime, Self::ArchiveWasm>;
-    fn blockchain_mut(&mut self) -> &mut Blockchain<Self::Runtime, Self::ArchiveWasm>;
+    fn blockchain(&self)
+        -> &Blockchain<Self::Runtime, Self::ArchiveWasm, Self::BlockDataContainer>;
+    fn blockchain_mut(
+        &mut self,
+    ) -> &mut Blockchain<Self::Runtime, Self::ArchiveWasm, Self::BlockDataContainer>;
 
     fn transactions_by_hash(&self) -> &BTreeMap<HashOf<Self::Transaction>, BlockIndex>;
     fn transactions_by_hash_mut(&mut self) -> &mut BTreeMap<HashOf<Self::Transaction>, BlockIndex>;

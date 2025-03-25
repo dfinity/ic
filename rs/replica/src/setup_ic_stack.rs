@@ -5,7 +5,7 @@ use ic_artifact_pool::{
 use ic_btc_adapter_client::{setup_bitcoin_adapter_clients, BitcoinAdapterClients};
 use ic_btc_consensus::BitcoinPayloadBuilder;
 use ic_config::{artifact_pool::ArtifactPoolConfig, subnet_config::SubnetConfig, Config};
-use ic_consensus::certification::VerifierImpl;
+use ic_consensus_certification::VerifierImpl;
 use ic_crypto::CryptoComponent;
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_execution_environment::ExecutionServices;

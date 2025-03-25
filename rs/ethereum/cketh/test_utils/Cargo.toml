@@ -16,7 +16,7 @@ ic-base-types = { path = "../../../types/base_types" }
 ic-canisters-http-types = { path = "../../../rust_canisters/http_types" }
 ic-cdk = { workspace = true }
 ic-cketh-minter = { path = "../minter" }
-ic-error-types = { path = "../../../types/error_types" }
+ic-error-types = { path = "../../../../packages/ic-error-types" }
 ic-ethereum-types = { path = "../../../../packages/ic-ethereum-types" }
 ic-icrc1-ledger = { path = "../../../ledger_suite/icrc1/ledger" }
 ic-ledger-suite-orchestrator = { path = "../../ledger-suite-orchestrator" }

@@ -2226,7 +2226,6 @@ fn system_subnets_are_not_rate_limited() {
     );
 }
 
-#[ignore]
 #[test]
 fn toolchain_error_message() {
     let sm = StateMachine::new();
@@ -3052,4 +3051,78 @@ fn failed_stable_memory_grow_cost_and_time_multiple_canisters() {
         "Test timed out after {elapsed_ms} ms and {cycles_m} M cycles"
     );
     assert!(cycles_m > 800);
+}
+
+/// Verifies that canister liquid cycle balance can be used to transfer as many cycles as possible.
+#[test]
+fn test_canister_liquid_cycle_balance() {
+    let env = StateMachine::new_with_config(StateMachineConfig::new(
+        SubnetConfig::new(SubnetType::Application),
+        HypervisorConfig::default(),
+    ));
+
+    // Install the universal canister.
+    let canister_id = create_universal_canister_with_cycles(&env, None, INITIAL_CYCLES_BALANCE);
+
+    // Read the liquid cycle balance of the universal canister.
+    let res = env
+        .execute_ingress(
+            canister_id,
+            "update",
+            wasm().liquid_cycles_balance128().append_and_reply().build(),
+        )
+        .unwrap();
+    let liquid_balance = match res {
+        WasmResult::Reply(blob) => u128::from_le_bytes(blob.try_into().unwrap()),
+        WasmResult::Reject(msg) => panic!("Unexpected reject: {}", msg),
+    };
+
+    // Install another universal canister to receive as many cycles as possible from the existing universal canister.
+    let callee = create_universal_canister_with_cycles(&env, None, INITIAL_CYCLES_BALANCE);
+
+    // Make an inter-canister call to the other universal canister attaching the maximum amount of cycles.
+    // The other universal canister accepts as many cycles as possible and replies with the actual amount of accepted cycles.
+    // The caller universal canister then forwards the actual amount of accepted cycles in the ingress message reply.
+    let res = env
+        .execute_ingress(
+            canister_id,
+            "update",
+            wasm()
+                .call_with_max_cycles(
+                    callee,
+                    "update",
+                    call_args()
+                        .other_side(
+                            wasm()
+                                .accept_cycles(u128::MAX.into())
+                                .append_and_reply()
+                                .build(),
+                        )
+                        .on_reject(wasm().reject_message().trap())
+                        .on_reply(wasm().message_payload().append_and_reply()),
+                )
+                .build(),
+        )
+        .unwrap();
+    let accepted_cycles = match res {
+        WasmResult::Reply(blob) => u128::from_le_bytes(blob.try_into().unwrap()),
+        WasmResult::Reject(msg) => panic!("Unexpected reject: {}", msg),
+    };
+    assert!(0 < accepted_cycles && accepted_cycles < liquid_balance);
+
+    // Lost cycles consist of the cost of an inter-canister call and the cost of an ingress message.
+    // We assert that the lost cycles are less than 100B (this value was derived by printing the actual value in the test and rounding up)
+    // and that the accepted cycles are way more than that.
+    let lost_cycles = liquid_balance - accepted_cycles;
+    assert!(lost_cycles < 100 * B);
+    assert!(accepted_cycles > INITIAL_CYCLES_BALANCE.get() - 100 * B);
+
+    // Finally, we assert that the cycles have indeed moved from one universal canister to the other one.
+    // The remaining balance of the sender is larger than the lost cycles by the unspent cycles in the execution of the ingress message,
+    // but still less than 100B.
+    let balance = env.cycle_balance(canister_id);
+    assert!(balance < 100 * B);
+    // The receiver now holds the joint cycles balance of both canisters at the beginning minus some overhead.
+    let receiver_balance = env.cycle_balance(callee);
+    assert!(receiver_balance > 2 * INITIAL_CYCLES_BALANCE.get() - 100 * B);
 }

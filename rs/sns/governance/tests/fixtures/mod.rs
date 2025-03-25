@@ -3,8 +3,9 @@ use async_trait::async_trait;
 use futures::future::FutureExt;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_ledger_core::Tokens;
+use ic_nervous_system_canisters::cmc::CMC;
 use ic_nervous_system_clients::ledger_client::ICRC1Ledger;
-use ic_nervous_system_common::{cmc::CMC, NervousSystemError, E8};
+use ic_nervous_system_common::{NervousSystemError, E8};
 use ic_sns_governance::{
     governance::{Governance, ValidGovernanceProto},
     pb::v1::{
@@ -215,7 +216,7 @@ impl CmcFixture {
 
 #[async_trait]
 impl CMC for CmcFixture {
-    async fn neuron_maturity_modulation(&mut self) -> Result<i32, String> {
+    async fn neuron_maturity_modulation(&self) -> Result<i32, String> {
         Ok(*self.maturity_modulation.try_lock().unwrap())
     }
 }

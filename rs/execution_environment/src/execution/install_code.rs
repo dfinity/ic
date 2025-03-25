@@ -16,7 +16,7 @@ use ic_management_canister_types_private::{
 };
 use ic_replicated_state::canister_state::system_state::ReservationError;
 use ic_replicated_state::metadata_state::subnet_call_context_manager::InstallCodeCallId;
-use ic_replicated_state::{num_bytes_try_from, CanisterState, ExecutionState};
+use ic_replicated_state::{num_bytes_try_from, CanisterState, ExecutionState, MessageMemoryUsage};
 use ic_state_layout::{CanisterLayout, CheckpointLayout, ReadOnly};
 use ic_sys::PAGE_SIZE;
 use ic_system_api::ExecutionParameters;
@@ -27,7 +27,7 @@ use ic_types::{
 use ic_wasm_types::WasmHash;
 
 use crate::{
-    canister_manager::{
+    canister_manager::types::{
         CanisterManagerError, CanisterMgrConfig, DtsInstallCodeResult, InstallCodeResult,
     },
     canister_settings::{validate_canister_settings, CanisterSettings},
@@ -113,7 +113,7 @@ pub(crate) struct InstallCodeHelper {
     execution_parameters: ExecutionParameters,
     // Bytes allocated and deallocated by the steps.
     allocated_bytes: NumBytes,
-    allocated_message_bytes: NumBytes,
+    allocated_guaranteed_response_message_bytes: NumBytes,
     allocated_wasm_custom_sections_bytes: NumBytes,
     deallocated_bytes: NumBytes,
     deallocated_wasm_custom_sections_bytes: NumBytes,
@@ -128,12 +128,12 @@ impl InstallCodeHelper {
             canister: clean_canister.clone(),
             message_instruction_limit: original.execution_parameters.instruction_limits.message(),
             execution_parameters: original.execution_parameters.clone(),
-            allocated_bytes: NumBytes::from(0),
-            allocated_message_bytes: NumBytes::from(0),
-            allocated_wasm_custom_sections_bytes: NumBytes::from(0),
-            deallocated_bytes: NumBytes::from(0),
-            deallocated_wasm_custom_sections_bytes: NumBytes::from(0),
-            total_heap_delta: NumBytes::from(0),
+            allocated_bytes: NumBytes::new(0),
+            allocated_guaranteed_response_message_bytes: NumBytes::new(0),
+            allocated_wasm_custom_sections_bytes: NumBytes::new(0),
+            deallocated_bytes: NumBytes::new(0),
+            deallocated_wasm_custom_sections_bytes: NumBytes::new(0),
+            total_heap_delta: NumBytes::new(0),
         }
     }
 
@@ -197,7 +197,7 @@ impl InstallCodeHelper {
         self.canister.memory_usage()
     }
 
-    pub fn canister_message_memory_usage(&self) -> NumBytes {
+    pub fn canister_message_memory_usage(&self) -> MessageMemoryUsage {
         self.canister.message_memory_usage()
     }
 
@@ -383,21 +383,21 @@ impl InstallCodeHelper {
         let mut subnet_available_memory = round_limits.subnet_available_memory;
         subnet_available_memory.increment(
             self.deallocated_bytes,
-            NumBytes::from(0),
+            NumBytes::new(0),
             self.deallocated_wasm_custom_sections_bytes,
         );
         if let Err(err) = subnet_available_memory.try_decrement(
             self.allocated_bytes,
-            self.allocated_message_bytes,
+            self.allocated_guaranteed_response_message_bytes,
             self.allocated_wasm_custom_sections_bytes,
         ) {
             match err {
                 SubnetAvailableMemoryError::InsufficientMemory {
                     execution_requested,
-                    message_requested: _,
+                    guaranteed_response_message_requested: _,
                     wasm_custom_sections_requested,
                     available_execution,
-                    available_messages: _,
+                    available_guaranteed_response_messages: _,
                     available_wasm_custom_sections,
                 } => {
                     let err = if wasm_custom_sections_requested.get() as i128
@@ -581,7 +581,7 @@ impl InstallCodeHelper {
             .canister
             .execution_state
             .as_ref()
-            .map_or(NumBytes::from(0), |es| es.metadata.memory_usage());
+            .map_or(NumBytes::new(0), |es| es.metadata.memory_usage());
 
         // Replace the execution state and maybe the stable memory.
         let mut execution_state =
@@ -801,11 +801,12 @@ impl InstallCodeHelper {
                 MemoryAllocation::Reserved(_) => {}
                 MemoryAllocation::BestEffort => {
                     self.allocated_bytes += output.allocated_bytes;
-                    self.allocated_message_bytes += output.allocated_message_bytes;
+                    self.allocated_guaranteed_response_message_bytes +=
+                        output.allocated_guaranteed_response_message_bytes;
                 }
             }
             self.total_heap_delta +=
-                NumBytes::from((output.instance_stats.dirty_pages() * PAGE_SIZE) as u64);
+                NumBytes::new((output.instance_stats.dirty_pages() * PAGE_SIZE) as u64);
         }
         (instructions_consumed, Ok(()))
     }

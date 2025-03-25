@@ -9,24 +9,30 @@ use ic_embedders::wasm_utils::instrumentation::WasmMemoryType;
 use ic_embedders::wasmtime_embedder::{system_api, StoreData};
 use ic_embedders::WasmtimeEmbedder;
 use ic_logger::replica_logger::no_op_logger;
-use ic_replicated_state::Memory;
-use ic_replicated_state::NumWasmPages;
+use ic_replicated_state::{Memory, MessageMemoryUsage, NumWasmPages};
 use ic_system_api::{ApiType, DefaultOutOfInstructionsHandler, SystemApiImpl};
 use ic_test_utilities_types::ids::user_test_id;
 use ic_types::{time::UNIX_EPOCH, NumBytes};
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use wasm_encoder::{
     EntityType, FuncType, ImportSection, Module, TypeSection, ValType as EncodedValType,
 };
 use wasmtime::{Engine, Extern, Store, StoreLimits, ValType};
 
-pub(crate) fn system_api_imports(config: EmbeddersConfig) -> Vec<u8> {
+pub struct SystemApiImportStore {
+    pub module: Vec<u8>,
+    pub type_section: TypeSection,
+    pub import_section: ImportSection,
+    pub import_mapping: BTreeMap<usize, FuncType>,
+}
+
+pub(crate) fn system_api_imports(config: EmbeddersConfig) -> SystemApiImportStore {
     let engine = Engine::new(&WasmtimeEmbedder::wasmtime_execution_config(&config))
         .expect("Failed to initialize Wasmtime engine");
     let api_type = ApiType::init(UNIX_EPOCH, vec![], user_test_id(24).get());
 
     let canister_current_memory_usage = NumBytes::from(0);
-    let canister_current_message_memory_usage = NumBytes::from(0);
+    let canister_current_message_memory_usage = MessageMemoryUsage::ZERO;
     let system_api = SystemApiImpl::new(
         api_type.clone(),
         get_system_state(api_type),
@@ -86,8 +92,15 @@ pub(crate) fn system_api_imports(config: EmbeddersConfig) -> Vec<u8> {
     let mut types = TypeSection::new();
     let mut imports = ImportSection::new();
     let mut type_mapping: HashMap<FuncType, usize> = HashMap::new();
+    let mut import_mapping: BTreeMap<usize, FuncType> = BTreeMap::new();
 
-    for (module_name, item_name, func) in system_api_imports.iter() {
+    // Inject type () -> ()
+    let params = vec![];
+    let results = vec![];
+    types.ty().function(params.clone(), results.clone());
+    type_mapping.insert(FuncType::new(params, results), 0);
+
+    for (index, (module_name, item_name, func)) in system_api_imports.iter().enumerate() {
         let ty = func.ty(&store);
         let params: Vec<EncodedValType> = ty.params().map(vtype).collect();
         let results: Vec<EncodedValType> = ty.results().map(vtype).collect();
@@ -102,12 +115,19 @@ pub(crate) fn system_api_imports(config: EmbeddersConfig) -> Vec<u8> {
             item_name,
             EntityType::Function(*func_index as u32),
         );
+        import_mapping.insert(index, func_type);
     }
 
     let mut module = Module::new();
     module.section(&types);
     module.section(&imports);
-    module.finish()
+
+    SystemApiImportStore {
+        module: module.finish(),
+        type_section: types,
+        import_section: imports,
+        import_mapping,
+    }
 }
 
 fn vtype(valtype: ValType) -> EncodedValType {

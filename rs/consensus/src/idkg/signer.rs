@@ -380,8 +380,11 @@ impl ThresholdSignerImpl {
         match self.crypto_create_sig_share(request_id, sig_inputs) {
             Err(err) => {
                 warn!(
+                    every_n_seconds => 15,
                     self.log,
-                    "Failed to create sig share: request_id = {:?}, {:?}", request_id, err
+                    "Failed to create sig share: request_id = {:?}, {:?}",
+                    request_id,
+                    err
                 );
                 self.metrics.sign_errors_inc("create_sig_share");
                 Default::default()
@@ -2007,7 +2010,7 @@ mod tests {
                         message_hash,
                     }),
                     pseudo_random_id: [1; 32],
-                    derivation_path: vec![],
+                    derivation_path: Arc::new(vec![]),
                     batch_time: UNIX_EPOCH,
                     matched_pre_signature: Some((pre_sig_id, req_id.height)),
                     nonce: Some([2; 32]),
@@ -2145,7 +2148,7 @@ mod tests {
                         taproot_tree_root: None,
                     }),
                     pseudo_random_id: [1; 32],
-                    derivation_path: vec![],
+                    derivation_path: Arc::new(vec![]),
                     batch_time: UNIX_EPOCH,
                     matched_pre_signature: Some((pre_sig_id, req_id.height)),
                     nonce: Some([2; 32]),
@@ -2261,13 +2264,13 @@ mod tests {
                     request: RequestBuilder::new().sender(canister_test_id(1)).build(),
                     args: ThresholdArguments::VetKd(VetKdArguments {
                         key_id: key_id.clone(),
-                        derivation_id: vec![],
-                        encryption_public_key: vec![],
+                        input: Arc::new(vec![]),
+                        transport_public_key: vec![],
                         ni_dkg_id: fake_dkg_id(key_id),
                         height,
                     }),
                     pseudo_random_id: [1; 32],
-                    derivation_path: vec![],
+                    derivation_path: Arc::new(vec![]),
                     batch_time: UNIX_EPOCH,
                     matched_pre_signature: None,
                     nonce: None,

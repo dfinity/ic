@@ -1,7 +1,11 @@
+use crate::benches_util::check_projected_instructions;
+use crate::governance::REWARD_DISTRIBUTION_PERIOD_SECONDS;
+use crate::pb::v1::{RewardEvent, VotingPowerEconomics, WaitForQuietState};
+use crate::test_utils::MockRandomness;
 use crate::{
     governance::{
         test_data::CREATE_SERVICE_NERVOUS_SYSTEM_WITH_MATCHED_FUNDING, Governance,
-        MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS,
+        MAX_NUMBER_OF_NEURONS,
     },
     neuron::{DissolveStateAndAge, Neuron, NeuronBuilder},
     neuron_store::NeuronStore,
@@ -23,6 +27,7 @@ use canbench_rs::{bench, bench_fn, BenchResult};
 use futures::FutureExt;
 use ic_base_types::PrincipalId;
 use ic_crypto_sha2::Sha256;
+use ic_ledger_core::Tokens;
 use ic_nervous_system_proto::pb::v1::Image;
 use ic_nns_common::{
     pb::v1::{NeuronId as NeuronIdProto, ProposalId},
@@ -32,10 +37,11 @@ use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_nns_governance_api::pb::v1::list_neurons::NeuronSubaccount;
 use ic_nns_governance_api::pb::v1::ListNeurons;
 use icp_ledger::Subaccount;
-use maplit::hashmap;
+use maplit::{btreemap, hashmap};
 use rand::{Rng, SeedableRng};
 use rand_chacha::ChaCha20Rng;
 use std::collections::{BTreeMap, HashMap};
+use std::sync::Arc;
 
 enum SetUpStrategy {
     // Every neuron follows a single neuron.
@@ -329,9 +335,10 @@ fn cast_vote_cascade_helper(strategy: SetUpStrategy, topic: Topic) -> BenchResul
     };
     let mut governance = Governance::new(
         governance_proto,
-        Box::new(MockEnvironment::new(Default::default(), 0)),
-        Box::new(StubIcpLedger {}),
-        Box::new(StubCMC {}),
+        Arc::new(MockEnvironment::new(Default::default(), 0)),
+        Arc::new(StubIcpLedger {}),
+        Arc::new(StubCMC {}),
+        Box::new(MockRandomness::new()),
     );
 
     let neuron_id = set_up(strategy, &mut rng, &mut governance, topic);
@@ -361,9 +368,13 @@ fn make_neuron(
     let subaccount = Subaccount::try_from(account.as_slice()).unwrap();
 
     let now = 123_456_789;
+    let dissolve_delay_seconds =
+        VotingPowerEconomics::DEFAULT_NEURON_MINIMUM_DISSOLVE_DELAY_TO_VOTE_SECONDS;
+    let aging_since_timestamp_seconds = now - dissolve_delay_seconds;
+
     let dissolve_state_and_age = DissolveStateAndAge::NotDissolving {
-        dissolve_delay_seconds: MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS,
-        aging_since_timestamp_seconds: now - MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS,
+        dissolve_delay_seconds,
+        aging_since_timestamp_seconds,
     };
 
     let hot_keys = (0..15).map(PrincipalId::new_user_test_id).collect();
@@ -488,10 +499,11 @@ fn centralized_following_all_stable() -> BenchResult {
 #[bench(raw)]
 fn compute_ballots_for_new_proposal_with_stable_neurons() -> BenchResult {
     let now_seconds = 1732817584;
+    let num_neurons = 100;
 
     let _a = temporarily_enable_allow_active_neurons_in_stable_memory();
     let _b = temporarily_enable_migrate_active_neurons_to_stable_memory();
-    let neurons = (0..100)
+    let neurons = (0..num_neurons)
         .map(|id| {
             (
                 id,
@@ -512,12 +524,13 @@ fn compute_ballots_for_new_proposal_with_stable_neurons() -> BenchResult {
 
     let mut governance = Governance::new(
         governance_proto,
-        Box::new(MockEnvironment::new(vec![], now_seconds)),
-        Box::new(StubIcpLedger {}),
-        Box::new(StubCMC {}),
+        Arc::new(MockEnvironment::new(vec![], now_seconds)),
+        Arc::new(StubIcpLedger {}),
+        Arc::new(StubCMC {}),
+        Box::new(MockRandomness::new()),
     );
 
-    bench_fn(|| {
+    let bench_result = bench_fn(|| {
         governance
             .compute_ballots_for_new_proposal(
                 &Action::RegisterKnownNeuron(KnownNeuron {
@@ -528,11 +541,87 @@ fn compute_ballots_for_new_proposal_with_stable_neurons() -> BenchResult {
                 123_456_789,
             )
             .expect("Failed!");
-    })
+    });
+
+    check_projected_instructions(
+        bench_result,
+        num_neurons,
+        MAX_NUMBER_OF_NEURONS as u64,
+        25_000_000_000,
+    )
+}
+
+#[bench(raw)]
+fn distribute_rewards_with_stable_neurons() -> BenchResult {
+    let now_seconds = 1732817584;
+
+    let _a = temporarily_enable_allow_active_neurons_in_stable_memory();
+    let _b = temporarily_enable_migrate_active_neurons_to_stable_memory();
+    let neurons = (0..100)
+        .map(|id| {
+            (
+                id,
+                NeuronProto::from(make_neuron(
+                    id,
+                    PrincipalId::new_user_test_id(id),
+                    1_000_000_000,
+                    hashmap! {}, // get the default followees
+                )),
+            )
+        })
+        .collect::<BTreeMap<u64, NeuronProto>>();
+
+    let ballots = neurons
+        .iter()
+        .map(|n| {
+            (
+                *n.0,
+                Ballot {
+                    vote: Vote::Yes.into(),
+                    voting_power: n.1.cached_neuron_stake_e8s,
+                },
+            )
+        })
+        .collect();
+    let governance_proto = GovernanceProto {
+        genesis_timestamp_seconds: now_seconds - REWARD_DISTRIBUTION_PERIOD_SECONDS * 101,
+        latest_reward_event: Some(RewardEvent {
+            day_after_genesis: 100,
+            actual_timestamp_seconds: now_seconds - REWARD_DISTRIBUTION_PERIOD_SECONDS - 1,
+            settled_proposals: vec![],
+            distributed_e8s_equivalent: 0,
+            total_available_e8s_equivalent: 0,
+            latest_round_available_e8s_equivalent: None,
+            rounds_since_last_distribution: Some(0),
+        }),
+        neurons,
+        proposals: btreemap! {
+            1 => ProposalData {
+                id: Some(ProposalId { id: 1 }),
+                wait_for_quiet_state: Some(WaitForQuietState {current_deadline_timestamp_seconds: now_seconds - 200}),
+                decided_timestamp_seconds: now_seconds - 100,
+                executed_timestamp_seconds: now_seconds - 100,
+                ballots ,
+                ..Default::default()
+            }
+        },
+        ..GovernanceProto::default()
+    };
+
+    let mut governance = Governance::new(
+        governance_proto,
+        Arc::new(MockEnvironment::new(vec![], now_seconds)),
+        Arc::new(StubIcpLedger {}),
+        Arc::new(StubCMC {}),
+        Box::new(MockRandomness::new()),
+    );
+
+    bench_fn(|| governance.distribute_rewards(Tokens::new(10_000_000, 0).unwrap()))
 }
 
 fn list_neurons_by_subaccount_benchmark() -> BenchResult {
-    let neurons = (0..100)
+    let num_neurons = 100;
+    let neurons = (0..num_neurons)
         .map(|id| {
             (id, {
                 let mut neuron: NeuronProto = make_neuron(
@@ -562,9 +651,10 @@ fn list_neurons_by_subaccount_benchmark() -> BenchResult {
 
     let governance = Governance::new(
         governance_proto,
-        Box::new(MockEnvironment::new(Default::default(), 0)),
-        Box::new(StubIcpLedger {}),
-        Box::new(StubCMC {}),
+        Arc::new(MockEnvironment::new(Default::default(), 0)),
+        Arc::new(StubIcpLedger {}),
+        Arc::new(StubCMC {}),
+        Box::new(MockRandomness::new()),
     );
 
     let request = ListNeurons {
@@ -605,9 +695,10 @@ fn list_neurons_benchmark() -> BenchResult {
 
     let governance = Governance::new(
         governance_proto,
-        Box::new(MockEnvironment::new(Default::default(), 0)),
-        Box::new(StubIcpLedger {}),
-        Box::new(StubCMC {}),
+        Arc::new(MockEnvironment::new(Default::default(), 0)),
+        Arc::new(StubIcpLedger {}),
+        Arc::new(StubCMC {}),
+        Box::new(MockRandomness::new()),
     );
 
     let request = ListNeurons {
@@ -693,9 +784,10 @@ fn list_proposals_benchmark() -> BenchResult {
 
     let mut governance = Governance::new(
         governance_proto,
-        Box::new(MockEnvironment::new(Default::default(), 0)),
-        Box::new(StubIcpLedger {}),
-        Box::new(StubCMC {}),
+        Arc::new(MockEnvironment::new(Default::default(), 0)),
+        Arc::new(StubIcpLedger {}),
+        Arc::new(StubCMC {}),
+        Box::new(MockRandomness::new()),
     );
 
     let request = ListProposalInfo {
@@ -706,7 +798,7 @@ fn list_proposals_benchmark() -> BenchResult {
 
     let proposal_actions = vec![
         Action::ExecuteNnsFunction(ExecuteNnsFunction {
-            nns_function: NnsFunction::NnsCanisterUpgrade as i32,
+            nns_function: NnsFunction::HardResetNnsRootToVersion as i32,
             payload: vec![0u8; 1 << 20], // 1 MiB
         }),
         Action::InstallCode(InstallCode {
