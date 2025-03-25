@@ -1,5 +1,10 @@
 #![allow(clippy::disallowed_types)]
 
+use std::{
+    sync::{Arc, RwLock},
+    time::Instant,
+};
+
 use anyhow::Error;
 use arc_swap::ArcSwapOption;
 use async_trait::async_trait;
@@ -19,10 +24,6 @@ use prometheus::{
     IntGauge, IntGaugeVec, Registry, TextEncoder,
 };
 use sha3::{Digest, Sha3_256};
-use std::{
-    sync::{Arc, RwLock},
-    time::Instant,
-};
 use tikv_jemalloc_ctl::{epoch, stats};
 use tower_http::request_id::RequestId;
 use tracing::info;
