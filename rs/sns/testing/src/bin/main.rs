@@ -10,13 +10,14 @@ use ic_sns_testing::sns::{
     TestCanisterInitArgs,
 };
 use ic_sns_testing::utils::{
-    get_nns_neuron_hotkeys, validate_network as validate_network_impl, validate_target_canister,
-    NNS_NEURON_ID,
+    get_nns_neuron_hotkeys, transfer_icp_from_treasury, validate_network as validate_network_impl,
+    validate_target_canister, NNS_NEURON_ID,
 };
 use ic_sns_testing::{
     RunBasicScenarioArgs, SnsProposalUpvoteArgs, SnsTestingArgs, SnsTestingSubCommand,
-    SwapCompleteArgs,
+    SwapCompleteArgs, TransferICPArgs, TransferRecipientArg,
 };
+use icp_ledger::{AccountIdentifier, Subaccount};
 
 async fn run_basic_scenario(network: String, args: RunBasicScenarioArgs) {
     let dev_agent = &get_agent(&network, args.dev_identity).await.unwrap();
@@ -152,6 +153,20 @@ async fn sns_proposal_upvote(network: String, args: SnsProposalUpvoteArgs) {
     }
 }
 
+pub async fn transfer_icp(network: String, args: TransferICPArgs) {
+    let agent = get_agent(&network, None).await.unwrap();
+    let recipient = match args.recipient {
+        TransferRecipientArg::Account { account } => account.0,
+        TransferRecipientArg::Principal {
+            principal_id,
+            subaccount,
+        } => AccountIdentifier::new(principal_id, subaccount.map(|a| Subaccount(a.0))).to_address(),
+    };
+    transfer_icp_from_treasury(&agent, recipient, args.amount.0)
+        .await
+        .unwrap();
+}
+
 #[tokio::main]
 async fn main() {
     let SnsTestingArgs {
@@ -164,5 +179,6 @@ async fn main() {
         SnsTestingSubCommand::RunBasicScenario(args) => run_basic_scenario(network, args).await,
         SnsTestingSubCommand::SwapComplete(args) => swap_complete(network, args).await,
         SnsTestingSubCommand::SnsProposalUpvote(args) => sns_proposal_upvote(network, args).await,
+        SnsTestingSubCommand::TransferICP(args) => transfer_icp(network, args).await,
     }
 }

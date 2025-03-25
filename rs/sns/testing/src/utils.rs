@@ -7,6 +7,7 @@ use ic_agent::{identity::Secp256k1Identity, Agent};
 use ic_base_types::CanisterId;
 use ic_base_types::PrincipalId;
 use ic_nervous_system_agent::nns::governance::list_neurons;
+use ic_nervous_system_agent::nns::ledger::transfer;
 use ic_nervous_system_agent::nns::sns_wasm::{get_latest_sns_version_pretty, get_sns_subnet_ids};
 use ic_nervous_system_agent::pocketic_impl::PocketIcAgent;
 use ic_nervous_system_agent::CallCanisters;
@@ -18,6 +19,7 @@ use ic_nns_constants::{
     REGISTRY_CANISTER_ID, ROOT_CANISTER_ID, SNS_WASM_CANISTER_ID,
 };
 use ic_nns_governance_api::pb::v1::{ListNeurons, Neuron};
+use icp_ledger::{AccountIdBlob, Memo, Tokens, TransferArgs, TransferError, DEFAULT_TRANSFER_FEE};
 use k256::SecretKey;
 use lazy_static::lazy_static;
 use thiserror::Error;
@@ -246,4 +248,25 @@ pub async fn validate_target_canister<C: CallCanisters>(
         }
     }
     validation_errors
+}
+
+pub async fn transfer_icp_from_treasury<C: CallCanisters + BuildEphemeralAgent>(
+    agent: &C,
+    to: AccountIdBlob,
+    amount: Tokens,
+) -> Result<u64, TransferError> {
+    let treasury_agent = agent.build_ephemeral_agent(TREASURY_SECRET_KEY.clone());
+    transfer(
+        &treasury_agent,
+        TransferArgs {
+            to,
+            amount,
+            fee: DEFAULT_TRANSFER_FEE,
+            memo: Memo(0),
+            from_subaccount: None,
+            created_at_time: None,
+        },
+    )
+    .await
+    .unwrap()
 }

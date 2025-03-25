@@ -1,8 +1,10 @@
-use std::path::PathBuf;
+use std::{path::PathBuf, str::FromStr};
 
-use clap::{ArgAction, ArgGroup, Parser};
+use clap::{ArgAction, ArgGroup, Parser, Subcommand};
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_sns_cli::neuron_id_to_candid_subaccount::ParsedSnsNeuron;
+use icp_ledger::Tokens;
+use rust_decimal::Decimal;
 use url::Url;
 
 pub mod nns_dapp;
@@ -28,7 +30,10 @@ pub enum SnsTestingSubCommand {
     RunBasicScenario(RunBasicScenarioArgs),
     /// Complete the SNS swap by providing sufficient direct participations.
     SwapComplete(SwapCompleteArgs),
+    /// Upvote the proposal in the specified SNS.
     SnsProposalUpvote(SnsProposalUpvoteArgs),
+    /// Transfer ICP tokens from the treasury to the specified account.
+    TransferICP(TransferICPArgs),
 }
 
 #[derive(Debug, Parser)]
@@ -77,6 +82,124 @@ pub struct SnsProposalUpvoteArgs {
         require_equals = false,
     )]
     pub wait: bool,
+}
+
+// A wrapper to parse 32-byte hex-encoded string.
+// Used to parse ICP account and subaccount.
+#[derive(Clone, Debug)]
+pub struct ParsedAccount(pub [u8; 32]);
+
+impl FromStr for ParsedAccount {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let hex_decoded = hex::decode(s).map_err(|e| e.to_string())?;
+        let bytes: [u8; 32] = hex_decoded
+            .try_into()
+            .map_err(|_| "Invalid length, must be 32 bytes")?;
+        Ok(Self(bytes))
+    }
+}
+
+#[derive(Debug, Subcommand)]
+pub enum TransferRecipientArg {
+    /// Transfer ICP to the specified account.
+    #[command(name = "--to")]
+    Account {
+        /// Recepient account, 32-byte hex-encoded.
+        account: ParsedAccount,
+    },
+    /// Transfer ICP to the specified principal's subaccount.
+    #[command(name = "--to-principal")]
+    Principal {
+        /// The recipient principal ID.
+        principal_id: PrincipalId,
+        /// The subaccount, 32-byte hex-encoded.
+        subaccount: Option<ParsedAccount>,
+    },
+}
+
+#[derive(Debug, Parser)]
+#[command(subcommand_value_name = "RECIPIENT")]
+pub struct TransferICPArgs {
+    /// The recipient of the transfer.
+    #[command(subcommand, name = "recipient")]
+    pub recipient: TransferRecipientArg,
+    /// The amount of e8s to transfer.
+    #[arg(long)]
+    pub amount: ParsedTokens,
+}
+
+/// A wrapper to parse ICP tokens from a decimal number.
+/// This is required because the internal representation of Tokens is u64 rather than decimal.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ParsedTokens(pub Tokens);
+
+impl FromStr for ParsedTokens {
+    // For now, the errors aren't used for anything other than reporting them to the user in stderr.
+    // So the bare 'String' type is used.
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let decimal_tokens = Decimal::from_str(s).map_err(|e| e.to_string())?;
+        if decimal_tokens.scale() > 8 {
+            return Err(
+                "The number of decimal places for ICP token must be less than or equal to 8"
+                    .to_string(),
+            );
+        }
+        if decimal_tokens.is_sign_negative() {
+            return Err("The amount of ICP tokens must be positive".to_string());
+        }
+        // Tokens are supposed to have at most 8 decimal places.
+        // The mantissa is multiplied by 10^(8 - scale) to get the amount in e8s.
+        let e8s: i128 = decimal_tokens.mantissa() * 10i128.pow(8 - decimal_tokens.scale());
+        if e8s > i128::from(u64::MAX) {
+            return Err(
+                "The amount of e8s tokens must be less than or equal to 2^64 - 1".to_string(),
+            );
+        }
+        Ok(Self(Tokens::from(e8s as u64)))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_successfully_parsed_tokens() {
+        let parsed = ParsedTokens::from_str("1.234567");
+        assert_eq!(parsed, Ok(ParsedTokens(Tokens::from(123456700))));
+    }
+    #[test]
+    fn test_scale_overflow() {
+        let parsed = ParsedTokens::from_str("1.000000001");
+        assert_eq!(
+            parsed,
+            Err(
+                "The number of decimal places for ICP token must be less than or equal to 8"
+                    .to_string()
+            )
+        );
+    }
+    #[test]
+    fn test_negative_amount() {
+        let parsed = ParsedTokens::from_str("-1.234567");
+        assert_eq!(
+            parsed,
+            Err("The amount of ICP tokens must be positive".to_string())
+        );
+    }
+    #[test]
+    fn test_tokens_overflow() {
+        // 4503599627370496.0 = 2^52
+        let parsed = ParsedTokens::from_str("4503599627370496.0");
+        assert_eq!(
+            parsed,
+            Err("The amount of e8s tokens must be less than or equal to 2^64 - 1".to_string())
+        );
+    }
 }
 
 #[derive(Debug, Parser)]

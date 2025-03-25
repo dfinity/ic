@@ -30,6 +30,7 @@ DEPENDENCIES = [
     "@crate_index//:clap",
     "@crate_index//:dfx-core",
     "@crate_index//:futures",
+    "@crate_index//:hex",
     "@crate_index//:ic-agent",
     "@crate_index//:ic-management-canister-types",
     "@crate_index//:k256",
@@ -37,6 +38,7 @@ DEPENDENCIES = [
     "@crate_index//:rand",
     "@crate_index//:rand_chacha",
     "@crate_index//:reqwest",
+    "@crate_index//:rust_decimal",
     "@crate_index//:slog",
     "@crate_index//:tempfile",
     "@crate_index//:thiserror",
@@ -123,6 +125,12 @@ rust_library(
     testonly = True,
     srcs = glob(["src/**/*.rs"]),
     crate_name = "ic_sns_testing",
+    deps = DEPENDENCIES,
+)
+
+rust_test(
+    name = "sns_testing_test",
+    srcs = glob(["src/**/*.rs"]),
     deps = DEPENDENCIES,
 )
 
