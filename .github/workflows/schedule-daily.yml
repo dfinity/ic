@@ -83,19 +83,6 @@ jobs:
           BAZEL_TARGETS: //rs/ledger_suite/...
           SSH_PRIVATE_KEY_BACKUP_POD: ${{ secrets.SSH_PRIVATE_KEY_BACKUP_POD }}
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
-      - name: Upload bazel-bep
-        # runs only if previous step succeeded or failed;
-        # we avoid collecting artifacts of jobs that were cancelled
-        if: success() || failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ github.job }}-bep
-          retention-days: 14
-          if-no-files-found: ignore
-          compression-level: 9
-          path: |
-            bazel-bep.pb.gpg
-            profile.json
   nns-tests-nightly:
     name: Bazel Test NNS Nightly
     runs-on:
@@ -122,19 +109,6 @@ jobs:
           BAZEL_TARGETS: //rs/nns/...
           SSH_PRIVATE_KEY_BACKUP_POD: ${{ secrets.SSH_PRIVATE_KEY_BACKUP_POD }}
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
-      - name: Upload bazel-bep
-        # runs only if previous step succeeded or failed;
-        # we avoid collecting artifacts of jobs that were cancelled
-        if: success() || failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ github.job }}-bep
-          retention-days: 14
-          if-no-files-found: ignore
-          compression-level: 9
-          path: |
-            bazel-bep.pb.gpg
-            profile.json
   system-tests-benchmarks-nightly:
     name: Bazel System Test Benchmarks
     runs-on:
@@ -166,19 +140,6 @@ jobs:
               --test_tag_filters=system_test_benchmark --//bazel:enable_upload_perf_systest_results=True --keep_going --jobs 1
           BAZEL_TARGETS: ${{ env.BENCHMARK_TARGETS }}
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
-      - name: Upload bazel-bep
-        # runs only if previous step succeeded or failed;
-        # we avoid collecting artifacts of jobs that were cancelled
-        if: success() || failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ github.job }}-bep
-          retention-days: 14
-          if-no-files-found: ignore
-          compression-level: 9
-          path: |
-            bazel-bep.pb.gpg
-            profile.json
       - name: Post Slack Notification
         uses: slackapi/slack-github-action@6c661ce58804a1a20f6dc5fbee7f0381b469e001 # v1.25.0
         if: failure()
