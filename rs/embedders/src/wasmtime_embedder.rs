@@ -15,6 +15,7 @@ use std::{
     time::Duration,
 };
 
+use ic_management_canister_types_private::Global;
 use ic_system_api::{ModificationTracking, SystemApiImpl};
 use wasmtime::{
     unix::StoreExt, Engine, Instance, InstancePre, Linker, Memory, Module, Mutability, Store,
@@ -29,7 +30,7 @@ use ic_interfaces::execution_environment::{
 use ic_logger::{debug, error, fatal, ReplicaLogger};
 use ic_replicated_state::{
     canister_state::{execution_state, WASM_PAGE_SIZE_IN_BYTES},
-    EmbedderCache, Global, NumWasmPages, PageIndex, PageMap,
+    EmbedderCache, NumWasmPages, PageIndex, PageMap,
 };
 use ic_sys::PAGE_SIZE;
 use ic_types::{

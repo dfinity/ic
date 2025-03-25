@@ -14,11 +14,11 @@ use ic_ledger_suite_state_machine_tests::{
 use ic_state_machine_tests::{ErrorCode, StateMachine, UserError};
 use icp_ledger::{
     AccountIdBlob, AccountIdentifier, AccountIdentifierByteBuf, ArchiveOptions,
-    ArchivedBlocksRange, Block, CandidBlock, CandidOperation, CandidTransaction, FeatureFlags,
-    GetBlocksArgs, GetBlocksRes, GetBlocksResult, GetEncodedBlocksResult, IcpAllowanceArgs,
-    InitArgs, IterBlocksArgs, IterBlocksRes, LedgerCanisterInitPayload, LedgerCanisterPayload,
-    LedgerCanisterUpgradePayload, Operation, QueryBlocksResponse, QueryEncodedBlocksResponse,
-    SendArgs, TimeStamp, UpgradeArgs, DEFAULT_TRANSFER_FEE,
+    ArchivedBlocksRange, Block, BlockArg, CandidBlock, CandidOperation, CandidTransaction,
+    FeatureFlags, GetBlocksArgs, GetBlocksRes, GetBlocksResult, GetEncodedBlocksResult,
+    IcpAllowanceArgs, InitArgs, IterBlocksArgs, IterBlocksRes, LedgerCanisterInitPayload,
+    LedgerCanisterPayload, LedgerCanisterUpgradePayload, Operation, QueryBlocksResponse,
+    QueryEncodedBlocksResponse, SendArgs, TimeStamp, UpgradeArgs, DEFAULT_TRANSFER_FEE,
     MAX_BLOCKS_PER_INGRESS_REPLICATED_QUERY_REQUEST, MAX_BLOCKS_PER_REQUEST,
 };
 use icrc_ledger_types::icrc1::{
@@ -104,6 +104,14 @@ fn encode_init_args(
         .feature_flags(FeatureFlags { icrc2: true })
         .build()
         .unwrap()
+}
+
+fn encode_init_args_no_archiving(
+    args: ic_ledger_suite_state_machine_tests::InitArgs,
+) -> LedgerCanisterInitPayload {
+    let mut args = args.clone();
+    args.archive_options.trigger_threshold = 1_000_000_000;
+    encode_init_args(args)
 }
 
 fn encode_upgrade_args() -> LedgerCanisterUpgradePayload {
@@ -1204,6 +1212,11 @@ fn test_block_transformation() {
 }
 
 #[test]
+fn test_upgrade_serialization_from_mainnet() {
+    test_upgrade_serialization(ledger_wasm_mainnet());
+}
+
+#[test]
 fn test_upgrade_serialization_from_v3() {
     test_upgrade_serialization(ledger_wasm_mainnet_v3());
 }
@@ -1282,6 +1295,16 @@ fn get_all_blocks(state_machine: &StateMachine, ledger_id: CanisterId) -> Vec<En
 }
 
 #[test]
+fn test_multi_step_migration_from_mainnet() {
+    ic_ledger_suite_state_machine_tests::icrc1_test_multi_step_migration(
+        ledger_wasm_mainnet(),
+        ledger_wasm_low_instruction_limits(),
+        encode_init_args,
+        get_all_blocks,
+    );
+}
+
+#[test]
 fn test_multi_step_migration_from_v3() {
     ic_ledger_suite_state_machine_tests::icrc1_test_multi_step_migration(
         ledger_wasm_mainnet_v3(),
@@ -1308,8 +1331,13 @@ fn test_downgrade_from_incompatible_version() {
         ledger_wasm_next_version(),
         ledger_wasm(),
         encode_init_args,
-        true,
+        false,
     );
+}
+
+#[test]
+fn test_stable_migration_endpoints_disabled_from_mainnet() {
+    test_stable_migration_endpoints_disabled(ledger_wasm_mainnet());
 }
 
 #[test]
@@ -1346,14 +1374,44 @@ fn test_stable_migration_endpoints_disabled(ledger_wasm_mainnet: Vec<u8>) {
     })
     .unwrap();
 
+    let get_blocks_pb_args = ProtoBuf(GetBlocksArgs {
+        start: 0,
+        length: 1u64,
+    })
+    .into_bytes()
+    .unwrap();
+
+    let iter_blocks_pb_args = ProtoBuf(IterBlocksArgs {
+        start: 0,
+        length: 1,
+    })
+    .into_bytes()
+    .unwrap();
+
+    let get_blocks_args = Encode!(&GetBlocksArgs {
+        start: 0,
+        length: 1
+    })
+    .unwrap();
+
+    let empty_arg_pb = ProtoBuf(()).into_bytes().unwrap();
+
+    let block_pb_args = ProtoBuf(BlockArg(1)).into_bytes().unwrap();
+
     ic_ledger_suite_state_machine_tests::icrc1_test_stable_migration_endpoints_disabled(
         ledger_wasm_mainnet,
         ledger_wasm_low_instruction_limits(),
-        encode_init_args,
+        encode_init_args_no_archiving,
         vec![
             ("send_pb", send_pb_args),
             ("send_dfx", send_dfx_args),
             ("transfer", transfer_args),
+            ("get_blocks_pb", get_blocks_pb_args),
+            ("iter_blocks_pb", iter_blocks_pb_args),
+            ("query_blocks", get_blocks_args.clone()),
+            ("query_encoded_blocks", get_blocks_args),
+            ("tip_of_chain_pb", empty_arg_pb),
+            ("block_pb", block_pb_args),
         ],
     );
 }
