@@ -4,7 +4,7 @@ Rules for system-tests.
 
 load("@bazel_skylib//rules:common_settings.bzl", "BuildSettingInfo")
 load("@bazel_skylib//rules:copy_file.bzl", "copy_file")
-load("@mainnet_versions//:defs.bzl", "mainnet_versions")
+load("@mainnet_icos_versions//:defs.bzl", "mainnet_icos_versions")
 load("@rules_oci//oci:defs.bzl", "oci_load")
 load("@rules_rust//rust:defs.bzl", "rust_binary")
 load("//bazel:defs.bzl", "mcopy", "zstd_compress")
@@ -273,10 +273,10 @@ def system_test(
         icos_images["ENV_DEPS__HOSTOS_UPDATE_IMG_TEST"] = "//ic-os/hostos/envs/dev:update-img-test.tar.zst"
 
     if uses_hostos_mainnet_update_img:
-        mainnet_hostos_version = mainnet_versions["hostos"]["latest_release"]["version"]
+        mainnet_hostos_version = mainnet_icos_versions["hostos"]["latest_release"]["version"]
         env["ENV_DEPS__HOSTOS_UPDATE_IMG_VERSION"] = mainnet_hostos_version
         env["ENV_DEPS__HOSTOS_UPDATE_IMG_URL"] = base_download_url(mainnet_hostos_version, "host-os", True, False) + "update-img.tar.zst"
-        env["ENV_DEPS__HOSTOS_UPDATE_IMG_SHA"] = mainnet_versions["hostos"]["latest_release"]["update_img_hash"]
+        env["ENV_DEPS__HOSTOS_UPDATE_IMG_SHA"] = mainnet_icos_versions["hostos"]["latest_release"]["update_img_hash"]
 
     if uses_setupos_mainnet:
         # Note: SetupOS is still passed directly by path, as it needs some local processing.
