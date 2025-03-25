@@ -449,6 +449,9 @@ pub fn socket_read_messages<
             handler(frame);
         }
 
+        // sleep for 500ms.
+        std::thread::sleep(Duration::from_millis(500));
+
         let num_bytes_received =
             match reader.receive_message(&mut buf, &mut fds, 0, Some(config.idle_timeout)) {
                 Some(bytes) => bytes,
