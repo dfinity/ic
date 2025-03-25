@@ -69,15 +69,23 @@ runs:
                 fi
             done
 
-            # if we are on a "protected" branch or targeting an rc branch we upload all artifacts and run a release build
-            # (with versioning)
             if [[ "${IS_PROTECTED_BRANCH:-}" == "true" ]]; then
+                # if we are on a "protected" branch or targeting an rc branch we
+                # upload all artifacts and run a release build (with versioning)
                 release_build="true"
                 RUN_ON_DIFF_ONLY="false"
-            fi
-
-            if [[ "${CI_EVENT_NAME:-}" == "merge_group" ]]; then
+            elif [[ "${CI_EVENT_NAME:-}" == "merge_group" ]]; then
+                # else, if we are on a merge group, we build all targets, but do _not_
+                # upload artifacts (i.e. no release build) to avoid cluttering the
+                # buckets
+                release_build="false"
                 RUN_ON_DIFF_ONLY="false"
+            else
+                # otherwise, we go for the simplest possible build and only
+                # build a subset of targets if necessary and don't upload
+                # artifacts (i.e. no release build)
+                release_build="false"
+                RUN_ON_DIFF_ONLY="true"
             fi
 
             # Some environment variables needed by diff.sh
