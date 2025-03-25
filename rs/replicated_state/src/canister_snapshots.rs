@@ -1,9 +1,9 @@
 use crate::{
-    canister_state::execution_state::{Global, Memory},
-    canister_state::system_state::wasm_chunk_store::WasmChunkStore,
-    CanisterState, NumWasmPages, PageMap,
+    canister_state::execution_state::Memory,
+    canister_state::system_state::wasm_chunk_store::WasmChunkStore, CanisterState, NumWasmPages,
+    PageMap,
 };
-use ic_management_canister_types_private::{OnLowWasmMemoryHookStatus, SnapshotSource};
+use ic_management_canister_types_private::{Global, OnLowWasmMemoryHookStatus, SnapshotSource};
 use ic_sys::PAGE_SIZE;
 use ic_types::{CanisterId, CanisterTimer, NumBytes, SnapshotId, Time};
 use ic_validate_eq::ValidateEq;

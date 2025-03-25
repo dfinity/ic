@@ -1,7 +1,7 @@
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_cdk::{api::time, trap};
 use ic_ledger_canister_core::archive::ArchiveCanisterWasm;
-use ic_ledger_canister_core::blockchain::{Blockchain, HeapBlockData};
+use ic_ledger_canister_core::blockchain::{BlockDataContainer, Blockchain};
 use ic_ledger_canister_core::ledger::{
     self as core_ledger, LedgerContext, LedgerData, TransactionInfo,
 };
@@ -76,6 +76,7 @@ const UPGRADES_MEMORY_ID: MemoryId = MemoryId::new(0);
 const ALLOWANCES_MEMORY_ID: MemoryId = MemoryId::new(1);
 const ALLOWANCES_EXPIRATIONS_MEMORY_ID: MemoryId = MemoryId::new(2);
 const BALANCES_MEMORY_ID: MemoryId = MemoryId::new(3);
+const BLOCKS_MEMORY_ID: MemoryId = MemoryId::new(4);
 
 #[derive(Clone, Debug, Encode, Decode)]
 struct StorableAllowance {
@@ -147,6 +148,10 @@ thread_local! {
     // account -> tokens - map storing ledger balances.
     pub static BALANCES_MEMORY: RefCell<StableBTreeMap<AccountIdentifier, Tokens, VirtualMemory<DefaultMemoryImpl>>> =
         MEMORY_MANAGER.with(|memory_manager| RefCell::new(StableBTreeMap::init(memory_manager.borrow().get(BALANCES_MEMORY_ID))));
+
+    // block_index -> block
+    pub static BLOCKS_MEMORY: RefCell<StableBTreeMap<u64, Vec<u8>, VirtualMemory<DefaultMemoryImpl>>> =
+        MEMORY_MANAGER.with(|memory_manager| RefCell::new(StableBTreeMap::init(memory_manager.borrow().get(BLOCKS_MEMORY_ID))));
 }
 
 #[derive(Copy, Clone, Serialize, Deserialize, Debug)]
@@ -154,6 +159,7 @@ pub enum LedgerField {
     Allowances,
     AllowancesExpirations,
     Balances,
+    Blocks,
 }
 
 #[derive(Copy, Clone, Serialize, Deserialize, Debug)]
@@ -175,11 +181,12 @@ impl Default for LedgerState {
 ///   * 0 - the whole ledger state is stored on the heap.
 ///   * 1 - the allowances are stored in stable structures.
 ///   * 2 - the balances are stored in stable structures.
+///   * 3 - the blocks are stored in stable structures.
 #[cfg(not(feature = "next-ledger-version"))]
-pub const LEDGER_VERSION: u64 = 2;
+pub const LEDGER_VERSION: u64 = 3;
 
 #[cfg(feature = "next-ledger-version")]
-pub const LEDGER_VERSION: u64 = 3;
+pub const LEDGER_VERSION: u64 = 4;
 
 type StableLedgerBalances = Balances<StableBalances>;
 
@@ -192,7 +199,7 @@ pub struct Ledger {
     approvals: LedgerAllowances,
     #[serde(default)]
     stable_approvals: AllowanceTable<StableAllowancesData>,
-    pub blockchain: Blockchain<CdkRuntime, IcpLedgerArchiveWasm, HeapBlockData>,
+    pub blockchain: Blockchain<CdkRuntime, IcpLedgerArchiveWasm, StableBlockDataContainer>,
     // DEPRECATED
     pub maximum_number_of_accounts: usize,
     // DEPRECATED
@@ -272,7 +279,7 @@ impl LedgerData for Ledger {
     type ArchiveWasm = IcpLedgerArchiveWasm;
     type Transaction = Transaction;
     type Block = Block;
-    type BlockData = HeapBlockData;
+    type BlockDataContainer = StableBlockDataContainer;
 
     fn transaction_window(&self) -> Duration {
         self.transaction_window
@@ -294,13 +301,15 @@ impl LedgerData for Ledger {
         &self.token_symbol
     }
 
-    fn blockchain(&self) -> &Blockchain<Self::Runtime, Self::ArchiveWasm, Self::BlockData> {
+    fn blockchain(
+        &self,
+    ) -> &Blockchain<Self::Runtime, Self::ArchiveWasm, Self::BlockDataContainer> {
         &self.blockchain
     }
 
     fn blockchain_mut(
         &mut self,
-    ) -> &mut Blockchain<Self::Runtime, Self::ArchiveWasm, Self::BlockData> {
+    ) -> &mut Blockchain<Self::Runtime, Self::ArchiveWasm, Self::BlockDataContainer> {
         &mut self.blockchain
     }
 
@@ -603,6 +612,10 @@ impl Ledger {
         }
     }
 
+    pub fn migrate_one_block(&mut self) -> bool {
+        self.blockchain.migrate_one_block()
+    }
+
     pub fn clear_arrivals(&mut self) {
         self.approvals.allowances_data.clear_arrivals();
     }
@@ -667,6 +680,12 @@ pub fn clear_stable_allowance_data() {
 pub fn clear_stable_balances_data() {
     BALANCES_MEMORY.with_borrow_mut(|balances| {
         balances.clear_new();
+    });
+}
+
+pub fn clear_stable_blocks_data() {
+    BLOCKS_MEMORY.with_borrow_mut(|blocks| {
+        blocks.clear_new();
     });
 }
 
@@ -792,5 +811,22 @@ impl BalancesStore for StableBalances {
                 Ok(new_v)
             }
         }
+    }
+}
+
+#[derive(Debug, Deserialize, Serialize, Default)]
+pub struct StableBlockDataContainer {}
+
+impl BlockDataContainer for StableBlockDataContainer {
+    fn with_blocks<R>(
+        f: impl FnOnce(&StableBTreeMap<u64, Vec<u8>, VirtualMemory<DefaultMemoryImpl>>) -> R,
+    ) -> R {
+        BLOCKS_MEMORY.with(|cell| f(&cell.borrow()))
+    }
+
+    fn with_blocks_mut<R>(
+        f: impl FnOnce(&mut StableBTreeMap<u64, Vec<u8>, VirtualMemory<DefaultMemoryImpl>>) -> R,
+    ) -> R {
+        BLOCKS_MEMORY.with(|cell| f(&mut cell.borrow_mut()))
     }
 }

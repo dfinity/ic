@@ -11,8 +11,9 @@ use ic_embedders::{
 use ic_interfaces::execution_environment::{
     CanisterBacktrace, ExecutionMode, HypervisorError, SystemApi, TrapCode,
 };
+use ic_management_canister_types_private::Global;
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::{canister_state::WASM_PAGE_SIZE_IN_BYTES, Global};
+use ic_replicated_state::canister_state::WASM_PAGE_SIZE_IN_BYTES;
 use ic_test_utilities_embedders::{WasmtimeInstanceBuilder, DEFAULT_NUM_INSTRUCTIONS};
 use ic_test_utilities_types::ids::{call_context_test_id, user_test_id};
 use ic_types::{

@@ -9,15 +9,9 @@ on the process that this file is part of, see
 
 ## Added
 
+* Added the (currently disabled) `SetFollowing` neuron command.
+
 ## Changed
-
-* Proposal criticality is now defined based on topics. This makes the following two native proposal
-  types critical:
-    * `AddGenericNervousSystemFunction`
-    * `RemoveGenericNervousSystemFunction`
-
-    For more details, please refer to
-    [PSA(SNS): Proposal criticality to be defined based on proposal topics](https://forum.dfinity.org/t/psa-sns-proposal-criticality-to-be-defined-based-on-proposal-topics/41685).
 
 ## Deprecated
 
