@@ -1,9 +1,10 @@
 use crate::logs::ERROR;
 use crate::pb::v1::{self as pb, NervousSystemFunction};
-use crate::types::native_action_ids::{self, SET_CUSTOM_TOPICS_FOR_CUSTOM_PROPOSALS_ACTION};
+use crate::types::native_action_ids::{self, SET_TOPICS_FOR_CUSTOM_PROPOSALS_ACTION};
 use crate::{governance::Governance, pb::v1::nervous_system_function::FunctionType};
 use ic_canister_log::log;
 use ic_sns_governance_api::pb::v1::topics::Topic;
+use ic_sns_governance_proposal_criticality::ProposalCriticality;
 use itertools::Itertools;
 use std::collections::{BTreeMap, HashMap};
 
@@ -42,7 +43,7 @@ pub struct ListTopicsResponse {
 
 /// Returns an exhaustive list of topic descriptions, each corresponding to a topic.
 /// Topics may be nested within other topics, and each topic may have a list of built-in functions that are categorized within that topic.
-pub fn topic_descriptions() -> Vec<TopicInfo<NativeFunctions>> {
+pub fn topic_descriptions() -> [TopicInfo<NativeFunctions>; 7] {
     use crate::types::native_action_ids::{
         ADD_GENERIC_NERVOUS_SYSTEM_FUNCTION, ADVANCE_SNS_TARGET_VERSION, DEREGISTER_DAPP_CANISTERS,
         MANAGE_DAPP_CANISTER_SETTINGS, MANAGE_LEDGER_PARAMETERS, MANAGE_NERVOUS_SYSTEM_PARAMETERS,
@@ -51,7 +52,7 @@ pub fn topic_descriptions() -> Vec<TopicInfo<NativeFunctions>> {
         UPGRADE_SNS_CONTROLLED_CANISTER, UPGRADE_SNS_TO_NEXT_VERSION,
     };
 
-    vec![
+    [
         TopicInfo::<NativeFunctions> {
             topic: Topic::DaoCommunitySettings,
             name: "DAO community settings".to_string(),
@@ -73,7 +74,6 @@ pub fn topic_descriptions() -> Vec<TopicInfo<NativeFunctions>> {
                 native_functions: vec![
                     UPGRADE_SNS_TO_NEXT_VERSION,
                     ADVANCE_SNS_TARGET_VERSION,
-                    SET_CUSTOM_TOPICS_FOR_CUSTOM_PROPOSALS_ACTION,
                 ],
             },
             is_critical: false,
@@ -130,6 +130,7 @@ pub fn topic_descriptions() -> Vec<TopicInfo<NativeFunctions>> {
                     DEREGISTER_DAPP_CANISTERS,
                     ADD_GENERIC_NERVOUS_SYSTEM_FUNCTION,
                     REMOVE_GENERIC_NERVOUS_SYSTEM_FUNCTION,
+                    SET_TOPICS_FOR_CUSTOM_PROPOSALS_ACTION,
                 ],
             },
             is_critical: true,
@@ -172,10 +173,7 @@ impl Governance {
             })
             .into_group_map();
 
-        let topics: Vec<TopicInfo<NativeFunctions>> = topic_descriptions();
-
-        let topics = topics
-            .into_iter()
+        let topics = topic_descriptions()
             .map(|topic| TopicInfo {
                 topic: topic.topic,
                 name: topic.name,
@@ -195,7 +193,7 @@ impl Governance {
                 },
                 is_critical: topic.is_critical,
             })
-            .collect();
+            .to_vec();
 
         ListTopicsResponse {
             topics,
@@ -203,12 +201,12 @@ impl Governance {
         }
     }
 
-    pub fn get_topic_for_action(
+    pub fn get_topic_and_criticality_for_action(
         &self,
         action: &pb::proposal::Action,
-    ) -> Result<Option<pb::Topic>, String> {
+    ) -> Result<(Option<pb::Topic>, ProposalCriticality), String> {
         if let Some(topic) = pb::Topic::get_topic_for_native_action(action) {
-            return Ok(Some(topic));
+            return Ok((Some(topic), topic.proposal_criticality()));
         };
 
         let action_code = u64::from(action);
@@ -232,14 +230,15 @@ impl Governance {
         };
 
         let Some(custom_proposal_topic_id) = custom_proposal_topic_id else {
-            return Ok(None);
+            // Fall back to default proposal criticality (if a topic isn't defined).
+            return Ok((None, ProposalCriticality::default()));
         };
 
         let Ok(topic) = pb::Topic::try_from(custom_proposal_topic_id) else {
             return Err(format!("Invalid topic ID {custom_proposal_topic_id}."));
         };
 
-        Ok(Some(topic))
+        Ok((Some(topic), topic.proposal_criticality()))
     }
 }
 
@@ -295,10 +294,25 @@ impl pb::Governance {
 }
 
 impl pb::Topic {
-    pub fn is_critical(&self) -> bool {
+    fn is_critical(&self) -> bool {
+        // Fall back to default proposal criticality (if a topic isn't defined).
+        //
+        // Handled explicitly to avoid any doubts.
+        if *self == Self::Unspecified {
+            return false;
+        }
+
         topic_descriptions()
             .iter()
-            .any(|topic| Self::from(topic.topic) == *self && topic.is_critical)
+            .any(|topic| *self == Self::from(topic.topic) && topic.is_critical)
+    }
+
+    pub fn proposal_criticality(&self) -> ProposalCriticality {
+        if self.is_critical() {
+            ProposalCriticality::Critical
+        } else {
+            ProposalCriticality::Normal
+        }
     }
 
     pub fn get_topic_for_native_action(action: &pb::proposal::Action) -> Option<Self> {

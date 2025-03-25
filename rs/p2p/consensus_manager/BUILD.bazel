@@ -58,6 +58,5 @@ rust_test(
 rust_test_suite(
     name = "consensus_manager_integration",
     srcs = ["tests/test.rs"],
-    flaky = True,
     deps = [":consensus_manager"] + DEPENDENCIES + DEV_DEPENDENCIES,
 )

@@ -161,9 +161,10 @@ mod tests {
     use ic_interfaces::execution_environment::{ExecutionMode, SubnetAvailableMemory};
     use ic_limits::SMALL_APP_SUBNET_MAX_SIZE;
     use ic_logger::replica_logger::no_op_logger;
+    use ic_management_canister_types_private::Global;
     use ic_registry_subnet_type::SubnetType;
     use ic_replicated_state::{
-        Global, MessageMemoryUsage, NetworkTopology, NumWasmPages, PageIndex, PageMap,
+        MessageMemoryUsage, NetworkTopology, NumWasmPages, PageIndex, PageMap,
     };
     use ic_system_api::{
         sandbox_safe_system_state::{CanisterStatusView, SandboxSafeSystemState},

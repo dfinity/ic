@@ -344,6 +344,7 @@ rust_bench(
         # Keep sorted.
         ":governance",
         "//rs/ledger_suite/icp:icp_ledger",
+        "//rs/nervous_system/canisters",
         "//rs/nervous_system/common",
         "//rs/nns/common",
         "//rs/types/base_types",

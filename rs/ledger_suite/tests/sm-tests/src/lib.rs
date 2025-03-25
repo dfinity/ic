@@ -2758,13 +2758,13 @@ pub fn icrc1_test_stable_migration_endpoints_disabled<T>(
 
     const APPROVE_AMOUNT: u64 = 150_000;
 
-    for i in 2..40 {
+    for i in 2..60 {
         let spender = Account::from(PrincipalId::new_user_test_id(i).0);
         let approve_args = default_approve_args(spender, APPROVE_AMOUNT);
         send_approval(&env, canister_id, account.owner, &approve_args).expect("approval failed");
     }
 
-    for i in 2..40 {
+    for i in 2..60 {
         let to = Account::from(PrincipalId::new_user_test_id(i).0);
         transfer(&env, canister_id, account, to, 100).expect("failed to transfer funds");
     }
@@ -3093,8 +3093,8 @@ pub fn test_migration_resumes_from_frozen<T>(
     const APPROVE_AMOUNT: u64 = 150_000;
     const TRANSFER_AMOUNT: u64 = 100;
 
-    const NUM_APPROVALS: u64 = 20;
-    const NUM_TRANSFERS: u64 = 30;
+    const NUM_APPROVALS: u64 = 40;
+    const NUM_TRANSFERS: u64 = 40;
 
     let send_approvals = || {
         for i in 2..2 + NUM_APPROVALS {

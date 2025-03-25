@@ -1,12 +1,15 @@
-use super::IDkgDealingContext;
-use crate::idkg::pre_signer::IDkgTranscriptBuilder;
+use crate::idkg::{payload_builder::IDkgDealingContext, pre_signer::IDkgTranscriptBuilder};
 use ic_logger::{warn, ReplicaLogger};
+use ic_management_canister_types_private::{
+    ComputeInitialIDkgDealingsResponse, ReshareChainKeyResponse,
+};
 use ic_types::{
+    batch::ConsensusResponse,
     consensus::idkg::{self, HasIDkgMasterPublicKeyId, IDkgBlockReader, IDkgReshareRequest},
     crypto::canister_threshold_sig::{
         error::InitialIDkgDealingsValidationError, idkg::InitialIDkgDealings,
     },
-    messages::CallbackId,
+    messages::{CallbackId, Payload},
 };
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -56,20 +59,24 @@ fn make_reshare_dealings_response(
     request: &IDkgReshareRequest,
     initial_dealings: &InitialIDkgDealings,
     idkg_dealings_contexts: &BTreeMap<CallbackId, IDkgDealingContext<'_>>,
-) -> Option<ic_types::batch::ConsensusResponse> {
+) -> Option<ConsensusResponse> {
     idkg_dealings_contexts
         .iter()
         .find(|(_, context)| *request == reshare_request_from_dealings_context(context))
-        .map(|(callback_id, _)| {
-            ic_types::batch::ConsensusResponse::new(
-                *callback_id,
-                ic_types::messages::Payload::Data(
-                    ic_management_canister_types_private::ComputeInitialIDkgDealingsResponse {
-                        initial_dkg_dealings: initial_dealings.into(),
-                    }
-                    .encode(),
-                ),
-            )
+        .map(|(callback_id, context)| {
+            let data = match context.request.method_name.as_str() {
+                // TODO(CRP-2613): Remove the different cases and always return a ReshareChainKeyResponse
+                // once the registry has been migrated
+                "reshare_chain_key" => {
+                    ReshareChainKeyResponse::IDkg(initial_dealings.into()).encode()
+                }
+                _ => ComputeInitialIDkgDealingsResponse {
+                    initial_dkg_dealings: initial_dealings.into(),
+                }
+                .encode(),
+            };
+
+            ConsensusResponse::new(*callback_id, Payload::Data(data))
         })
 }
 
@@ -176,20 +183,8 @@ fn reshare_request_from_dealings_context(
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    use assert_matches::assert_matches;
-    use ic_crypto_test_utils_canister_threshold_sigs::dummy_values::{
-        dummy_dealings, dummy_initial_idkg_dealing_for_tests,
-    };
-    use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
-    use ic_logger::replica_logger::no_op_logger;
-    use ic_management_canister_types_private::ComputeInitialIDkgDealingsResponse;
-    use ic_test_utilities_types::ids::subnet_test_id;
-    use ic_types::consensus::idkg::IDkgMasterPublicKeyId;
-    use ic_types::consensus::idkg::IDkgPayload;
-
-    use crate::idkg::payload_builder::filter_idkg_reshare_chain_key_contexts;
     use crate::idkg::{
+        payload_builder::filter_idkg_reshare_chain_key_contexts,
         test_utils::{
             create_reshare_request, dealings_context_from_reshare_request,
             fake_ecdsa_idkg_master_public_key_id,
@@ -198,6 +193,15 @@ mod tests {
         },
         utils::algorithm_for_key_id,
     };
+    use assert_matches::assert_matches;
+    use ic_crypto_test_utils_canister_threshold_sigs::dummy_values::{
+        dummy_dealings, dummy_initial_idkg_dealing_for_tests,
+    };
+    use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
+    use ic_logger::replica_logger::no_op_logger;
+    use ic_management_canister_types_private::ComputeInitialIDkgDealingsResponse;
+    use ic_test_utilities_types::ids::subnet_test_id;
+    use ic_types::consensus::idkg::{IDkgMasterPublicKeyId, IDkgPayload};
 
     fn set_up(
         key_ids: Vec<IDkgMasterPublicKeyId>,

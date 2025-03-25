@@ -76,14 +76,6 @@ pub fn as_indices(r: &Range<u64>) -> Range<usize> {
     }
 }
 
-/// Converts the specified range into a range of indices relative to the specified offset.
-pub fn offset(r: &Range<u64>, offset: u64) -> Range<u64> {
-    debug_assert!(offset <= r.start);
-    let start = r.start.saturating_sub(offset);
-    let end = start + range_len(r);
-    Range { start, end }
-}
-
 /// Remove any suffix of the `earlier_range` that intersects with the `later_range` by modifying
 /// the `earlier_range` in place.
 pub fn remove_suffix(earlier_range: &mut Range<u64>, later_range: &Range<u64>) {

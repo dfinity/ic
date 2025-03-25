@@ -239,19 +239,6 @@ fn run_benchmark<G, I, W, R>(
     group.finish();
 }
 
-fn check_sandbox_defined() -> bool {
-    if std::env::var("SANDBOX_BINARY").is_err()
-        || std::env::var("LAUNCHER_BINARY").is_err()
-        || std::env::var("COMPILER_BINARY").is_err()
-    {
-        eprintln!("WARNING: The SANDBOX_BINARY or LAUNCHER_BINARY or COMPILER_BINARY env variables are not defined.");
-        eprintln!("         Please use `bazel run ...` instead or define the variables manually.");
-        eprintln!("         Skipping the benchmark...");
-        return false;
-    }
-    true
-}
-
 /// Run all benchmark in the list.
 /// List of benchmarks: benchmark id (name), WAT, expected number of instructions.
 pub fn run_benchmarks<G, R>(c: &mut Criterion, group: G, benchmarks: &[Benchmark], routine: R)
@@ -259,9 +246,6 @@ where
     G: AsRef<str>,
     R: Fn(&str, &ExecutionEnvironment, u64, BenchmarkArgs) + Copy,
 {
-    if !check_sandbox_defined() {
-        return;
-    }
     let log = no_op_logger();
     let own_subnet_id = subnet_test_id(1);
     let own_subnet_type = SubnetType::Application;

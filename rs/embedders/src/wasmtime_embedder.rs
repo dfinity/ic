@@ -12,8 +12,10 @@ use std::{
     fs::File,
     mem::size_of,
     sync::{atomic::Ordering, Arc, Mutex},
+    time::Duration,
 };
 
+use ic_management_canister_types_private::Global;
 use ic_system_api::{ModificationTracking, SystemApiImpl};
 use wasmtime::{
     unix::StoreExt, Engine, Instance, InstancePre, Linker, Memory, Module, Mutability, Store,
@@ -28,7 +30,7 @@ use ic_interfaces::execution_environment::{
 use ic_logger::{debug, error, fatal, ReplicaLogger};
 use ic_replicated_state::{
     canister_state::{execution_state, WASM_PAGE_SIZE_IN_BYTES},
-    EmbedderCache, Global, NumWasmPages, PageIndex, PageMap,
+    EmbedderCache, NumWasmPages, PageIndex, PageMap,
 };
 use ic_sys::PAGE_SIZE;
 use ic_types::{
@@ -809,6 +811,7 @@ pub struct PageAccessResults {
     pub wasm_mmap_count: usize,
     pub wasm_mprotect_count: usize,
     pub wasm_copy_page_count: usize,
+    pub wasm_sigsegv_handler_duration: Duration,
     pub stable_dirty_pages: Vec<PageIndex>,
     pub stable_accessed_pages: usize,
     pub stable_read_before_write_count: usize,
@@ -817,6 +820,7 @@ pub struct PageAccessResults {
     pub stable_mmap_count: usize,
     pub stable_mprotect_count: usize,
     pub stable_copy_page_count: usize,
+    pub stable_sigsegv_handler_duration: Duration,
 }
 
 /// Encapsulates a Wasmtime instance on the Internet Computer.
@@ -905,22 +909,9 @@ impl WasmtimeInstance {
                 "Memory tracking disabled. Returning empty list of dirty pages"
             );
             Ok(PageAccessResults {
-                wasm_dirty_pages: vec![],
-                wasm_num_accessed_pages: 0,
-                wasm_read_before_write_count: 0,
-                wasm_direct_write_count: 0,
-                wasm_sigsegv_count: 0,
-                wasm_mmap_count: 0,
-                wasm_mprotect_count: 0,
-                wasm_copy_page_count: 0,
                 stable_dirty_pages,
-                stable_accessed_pages: 0,
-                stable_read_before_write_count: 0,
-                stable_direct_write_count: 0,
-                stable_sigsegv_count: 0,
-                stable_mmap_count: 0,
-                stable_mprotect_count: 0,
-                stable_copy_page_count: 0,
+                stable_accessed_pages,
+                ..PageAccessResults::default()
             })
         } else {
             let wasm_dirty_pages = match self.modification_tracking {
@@ -956,6 +947,13 @@ impl WasmtimeInstance {
                 .lock()
                 .unwrap();
 
+            let wasm_sigsegv_handler_duration = Duration::from_nanos(
+                wasm_tracker
+                    .metrics
+                    .sigsegv_handler_duration_nanos
+                    .load(Ordering::Relaxed),
+            );
+
             // We don't have a tracker for stable memory.
             if !self
                 .memory_trackers
@@ -970,6 +968,7 @@ impl WasmtimeInstance {
                     wasm_mmap_count: wasm_tracker.mmap_count(),
                     wasm_mprotect_count: wasm_tracker.mprotect_count(),
                     wasm_copy_page_count: wasm_tracker.copy_page_count(),
+                    wasm_sigsegv_handler_duration,
                     stable_dirty_pages,
                     stable_accessed_pages,
                     ..Default::default()
@@ -983,6 +982,13 @@ impl WasmtimeInstance {
                 .lock()
                 .unwrap();
 
+            let stable_sigsegv_handler_duration = Duration::from_nanos(
+                stable_tracker
+                    .metrics
+                    .sigsegv_handler_duration_nanos
+                    .load(Ordering::Relaxed),
+            );
+
             Ok(PageAccessResults {
                 wasm_dirty_pages,
                 wasm_num_accessed_pages: wasm_tracker.num_accessed_pages(),
@@ -992,6 +998,7 @@ impl WasmtimeInstance {
                 wasm_mmap_count: wasm_tracker.mmap_count(),
                 wasm_mprotect_count: wasm_tracker.mprotect_count(),
                 wasm_copy_page_count: wasm_tracker.copy_page_count(),
+                wasm_sigsegv_handler_duration,
                 stable_dirty_pages,
                 stable_accessed_pages,
                 stable_read_before_write_count: stable_tracker.read_before_write_count(),
@@ -1000,6 +1007,7 @@ impl WasmtimeInstance {
                 stable_mmap_count: stable_tracker.mmap_count(),
                 stable_mprotect_count: stable_tracker.mprotect_count(),
                 stable_copy_page_count: stable_tracker.copy_page_count(),
+                stable_sigsegv_handler_duration,
             })
         }
     }
@@ -1021,25 +1029,29 @@ impl WasmtimeInstance {
 
     fn set_instance_stats(&mut self, access_results: &PageAccessResults) {
         // Wasm stats.
-        self.instance_stats.wasm_accessed_pages += access_results.wasm_num_accessed_pages;
-        self.instance_stats.wasm_dirty_pages += access_results.wasm_dirty_pages.len();
-        self.instance_stats.wasm_read_before_write_count +=
+        self.instance_stats.wasm_accessed_pages = access_results.wasm_num_accessed_pages;
+        self.instance_stats.wasm_dirty_pages = access_results.wasm_dirty_pages.len();
+        self.instance_stats.wasm_read_before_write_count =
             access_results.wasm_read_before_write_count;
-        self.instance_stats.wasm_direct_write_count += access_results.wasm_direct_write_count;
-        self.instance_stats.wasm_sigsegv_count += access_results.wasm_sigsegv_count;
-        self.instance_stats.wasm_mmap_count += access_results.wasm_mmap_count;
-        self.instance_stats.wasm_mprotect_count += access_results.wasm_mprotect_count;
-        self.instance_stats.wasm_copy_page_count += access_results.wasm_copy_page_count;
+        self.instance_stats.wasm_direct_write_count = access_results.wasm_direct_write_count;
+        self.instance_stats.wasm_sigsegv_count = access_results.wasm_sigsegv_count;
+        self.instance_stats.wasm_mmap_count = access_results.wasm_mmap_count;
+        self.instance_stats.wasm_mprotect_count = access_results.wasm_mprotect_count;
+        self.instance_stats.wasm_copy_page_count = access_results.wasm_copy_page_count;
+        self.instance_stats.wasm_sigsegv_handler_duration =
+            access_results.wasm_sigsegv_handler_duration;
         // Stable stats.
-        self.instance_stats.stable_accessed_pages += access_results.stable_accessed_pages;
-        self.instance_stats.stable_dirty_pages += access_results.stable_dirty_pages.len();
-        self.instance_stats.stable_read_before_write_count +=
+        self.instance_stats.stable_accessed_pages = access_results.stable_accessed_pages;
+        self.instance_stats.stable_dirty_pages = access_results.stable_dirty_pages.len();
+        self.instance_stats.stable_read_before_write_count =
             access_results.stable_read_before_write_count;
-        self.instance_stats.stable_direct_write_count += access_results.stable_direct_write_count;
-        self.instance_stats.stable_sigsegv_count += access_results.stable_sigsegv_count;
-        self.instance_stats.stable_mmap_count += access_results.stable_mmap_count;
-        self.instance_stats.stable_mprotect_count += access_results.stable_mprotect_count;
-        self.instance_stats.stable_copy_page_count += access_results.stable_copy_page_count;
+        self.instance_stats.stable_direct_write_count = access_results.stable_direct_write_count;
+        self.instance_stats.stable_sigsegv_count = access_results.stable_sigsegv_count;
+        self.instance_stats.stable_mmap_count = access_results.stable_mmap_count;
+        self.instance_stats.stable_mprotect_count = access_results.stable_mprotect_count;
+        self.instance_stats.stable_copy_page_count = access_results.stable_copy_page_count;
+        self.instance_stats.stable_sigsegv_handler_duration =
+            access_results.stable_sigsegv_handler_duration;
     }
 
     /// Executes first exported method on an embedder instance, whose name

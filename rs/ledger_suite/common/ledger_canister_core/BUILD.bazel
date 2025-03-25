@@ -22,6 +22,7 @@ rust_library(
         "//rs/utils",
         "@crate_index//:candid",
         "@crate_index//:ic-cdk",
+        "@crate_index//:ic-stable-structures",
         "@crate_index//:serde",
     ],
 )
