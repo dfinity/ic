@@ -2441,7 +2441,7 @@ impl ExecutionEnvironment {
         let canister = get_canister(args.get_canister_id(), state)?;
         let result = self
             .canister_manager
-            .read_snapshot_data(sender, &canister, args.get_snapshot_id(), args.kind, state)
+            .read_snapshot_data(sender, canister, args.get_snapshot_id(), args.kind, state)
             .map_err(UserError::from)?;
         Ok(Encode!(&result).unwrap())
     }

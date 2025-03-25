@@ -447,7 +447,11 @@ impl CanisterSnapshot {
         let module_bytes = self.execution_snapshot.wasm_binary.as_slice();
         let end = u64::min(module_bytes.len() as u64, offset + size);
         if end < offset {
-            return Err(CanisterSnapshotError::InvalidSlice);
+            return Err(CanisterSnapshotError::InvalidSubslice {
+                offset,
+                size,
+                actual_size: module_bytes.len() as u64,
+            });
         }
         Ok(module_bytes[(offset as usize)..(end as usize)].to_vec())
     }
@@ -459,7 +463,11 @@ pub enum CanisterSnapshotError {
     ///  The canister is missing the execution state because it's empty (newly created or uninstalled).
     EmptyExecutionState(CanisterId),
     /// The provided offset/size exceed the module's or memory's size.
-    InvalidSlice,
+    InvalidSubslice {
+        offset: u64,
+        size: u64,
+        actual_size: u64,
+    },
 }
 
 /// Describes the types of unflushed changes that can be stored by the `SnapshotManager`.

@@ -1997,20 +1997,25 @@ impl CanisterManager {
         let Some(snapshot) = state.canister_snapshots.get(snapshot_id) else {
             return Err(CanisterManagerError::CanisterSnapshotNotFound {
                 canister_id: canister.canister_id(),
-                snapshot_id: snapshot_id,
+                snapshot_id,
             });
         };
         // Verify the provided `delete_snapshot_id` belongs to this canister.
         if snapshot.canister_id() != canister.canister_id() {
             return Err(CanisterManagerError::CanisterSnapshotInvalidOwnership {
                 canister_id: canister.canister_id(),
-                snapshot_id: snapshot_id,
+                snapshot_id,
             });
         }
         match kind {
-            CanisterSnapshotDataKind::WasmModule { offset, size } => todo!(),
-            CanisterSnapshotDataKind::MainMemory { offset, size } => todo!(),
-            CanisterSnapshotDataKind::StableMemory { offset, size } => todo!(),
+            CanisterSnapshotDataKind::WasmModule { .. } => Ok(vec![]),
+            CanisterSnapshotDataKind::MainMemory { .. } => Ok(vec![]),
+            CanisterSnapshotDataKind::StableMemory { offset, size } => {
+                match snapshot.get_wasm_module_chunk(offset, size) {
+                    Ok(chunk) => Ok(chunk),
+                    Err(e) => Err(e.into()),
+                }
+            }
             CanisterSnapshotDataKind::WasmChunk { hash } => {
                 let Ok(hash) = <WasmChunkHash>::try_from(hash.clone()) else {
                     return Err(CanisterManagerError::WasmChunkStoreError {
