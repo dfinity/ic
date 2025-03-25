@@ -34,7 +34,7 @@ env:
 
 anchors:
   image: &image
-    image: ghcr.io/dfinity/ic-build@sha256:0583fe48201a6b683c69e9c8884a5c7b2f57b3fe182a2e0f3ce4e012a4c22675
+    image: ghcr.io/dfinity/ic-build@sha256:45535cf9304320f8b3b995fd8eec6eeac77ec314deb6d560cfa7d34e2d755683
   dind-large-setup: &dind-large-setup
     runs-on:
       labels: dind-large
@@ -61,20 +61,6 @@ anchors:
     uses: actions/setup-python@v5
     with:
       python-version: '3.12'
-  bazel-bep: &bazel-bep
-    name: Upload bazel-bep
-    # runs only if previous step succeeded or failed;
-    # we avoid collecting artifacts of jobs that were cancelled
-    if: success() || failure()
-    uses: actions/upload-artifact@v4
-    with:
-      name: ${{ github.job }}-bep
-      retention-days: 14
-      if-no-files-found: ignore
-      compression-level: 9
-      path: |
-        bazel-bep.pb.gpg
-        profile.json
 
 jobs:
   bazel-test-all:
@@ -143,8 +129,6 @@ jobs:
         with:
           artifact-name: shasums-cache
 
-      - <<: *bazel-bep
-
   bazel-test-macos-intel:
     name: Bazel Test macOS Intel
     timeout-minutes: 130
@@ -173,7 +157,6 @@ jobs:
             --test_tag_filters=test_macos
           BAZEL_TARGETS: //rs/... //publish/binaries/...
           CLOUD_CREDENTIALS_CONTENT: ${{ secrets.CLOUD_CREDENTIALS_CONTENT }}
-      - <<: *bazel-bep
       - name: Purge Bazel Output
         if: always()
         shell: bash
