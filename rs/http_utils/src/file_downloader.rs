@@ -125,8 +125,14 @@ impl FileDownloader {
             })?;
             // We have some parts of the file but still require to fetch the
             // rest from the server.
-            metadata.len()
+            let offset = metadata.len();
+            self.info(format!(
+                "Resuming downloading file from {} starting from byte {}",
+                url, offset
+            ));
+            offset
         } else {
+            self.info(format!("Downloading file from: {}", url));
             0
         };
 
@@ -198,6 +204,10 @@ impl FileDownloader {
         if response.status().is_success() {
             Ok(Some(response))
         } else if response.status() == http::StatusCode::RANGE_NOT_SATISFIABLE {
+            self.warn(format!(
+                "Requesting resource '{}' from offset {}, resulted in `RANGE_NOT_SATISFIABLE`",
+                url, offset,
+            ));
             Ok(None)
         } else {
             Err(FileDownloadError::NonSuccessResponse(Method::GET, response))
@@ -383,7 +393,7 @@ mod tests {
     use flate2::write::GzEncoder;
     use flate2::Compression;
     use ic_test_utilities_in_memory_logger::{assertions::LogEntriesAssert, InMemoryReplicaLogger};
-    use mockito::{Mock, ServerGuard};
+    use mockito::{Mock, Request, ServerGuard};
     use slog::Level;
     use tar::Builder;
     use tempfile::tempdir;
@@ -397,8 +407,25 @@ mod tests {
         pub server: ServerGuard,
         pub data: Mock,
         pub redirect: Mock,
+        pub data_out_of_range: Mock,
         pub temp: TempPath,
         pub logger: InMemoryReplicaLogger,
+    }
+
+    fn extract_offset(request: &Request) -> usize {
+        let header = request.header("range");
+        println!("Received request for headers: {:?}", header);
+        match header.first() {
+            Some(h) => h
+                .to_str()
+                .unwrap()
+                .trim_start_matches("bytes=")
+                .trim_end_matches("-")
+                .parse()
+                .unwrap(),
+
+            None => 0,
+        }
     }
 
     impl Setup {
@@ -416,27 +443,21 @@ mod tests {
                 .match_header("range", mockito::Matcher::Regex(r"bytes=.*-".to_string()))
                 .with_status(200)
                 .with_body_from_request(move |request| {
-                    let header = request.header("range");
-                    println!("Received request for headers: {:?}", header);
-                    println!("Body: {}", body_owned);
-                    let offset = match header.first() {
-                        Some(h) => h
-                            .to_str()
-                            .unwrap()
-                            .trim_start_matches("bytes=")
-                            .trim_end_matches("-")
-                            .parse()
-                            .unwrap(),
-
-                        None => 0,
-                    };
-
+                    let offset = extract_offset(request);
                     if offset > body_owned.len() {
                         vec![]
                     } else {
                         body_owned[offset..].into()
                     }
                 })
+                .create_async()
+                .await;
+
+            let data_out_of_range = server
+                .mock("GET", "/out-of-range")
+                .match_header("range", mockito::Matcher::Regex(r"bytes=.*-".to_string()))
+                .with_status(416)
+                .with_body(vec![])
                 .create_async()
                 .await;
 
@@ -450,13 +471,20 @@ mod tests {
                 data,
                 redirect,
                 temp,
+                data_out_of_range,
                 logger: InMemoryReplicaLogger::new(),
             }
         }
 
-        fn expect_routes(mut self, data_hits: usize, redirect_hits: usize) -> Self {
+        fn expect_routes(
+            mut self,
+            data_hits: usize,
+            redirect_hits: usize,
+            data_out_of_range_hits: usize,
+        ) -> Self {
             self.data = self.data.expect(data_hits);
             self.redirect = self.redirect.expect(redirect_hits);
+            self.data_out_of_range = self.data_out_of_range.expect(data_out_of_range_hits);
             self
         }
 
@@ -467,6 +495,7 @@ mod tests {
         fn assert(&self) {
             self.data.assert();
             self.redirect.assert();
+            self.data_out_of_range.assert();
         }
     }
 
@@ -482,7 +511,7 @@ mod tests {
     async fn test_file_downloader_handles_redirects() {
         let body = String::from("Success");
         let hash = hash(&body);
-        let setup = Setup::new(&body).await.expect_routes(1, 1);
+        let setup = Setup::new(&body).await.expect_routes(1, 1, 0);
 
         let downloader = FileDownloader::new(None);
         downloader
@@ -504,7 +533,7 @@ mod tests {
         let body = String::from("Success");
         let hash = hash(&body);
         let invalid_hash = format!("invalid_{}", hash);
-        let setup = Setup::new(&body).await.expect_routes(1, 0);
+        let setup = Setup::new(&body).await.expect_routes(1, 0, 0);
 
         let downloader = FileDownloader::new(Some(ReplicaLogger::from(&setup.logger)));
 
@@ -518,6 +547,8 @@ mod tests {
         let logs = setup.logger.drain_logs();
         LogEntriesAssert::assert_that(logs)
             .has_only_one_message_containing(&Level::Info, "Response read. Checking hash.");
+
+        assert!(!setup.temp.exists())
     }
 
     #[test]
@@ -525,7 +556,7 @@ mod tests {
         let body = String::from("Success");
         let hash = hash(&body);
 
-        let setup = Setup::new(&body).await.expect_routes(1, 0);
+        let setup = Setup::new(&body).await.expect_routes(1, 0, 0);
 
         // Correct file already exists
         std::fs::write(&setup.temp, &body).unwrap();
@@ -560,6 +591,7 @@ mod tests {
         let result = std::fs::read_to_string(&setup.temp).expect("Failed to read file");
         assert_eq!(result, body);
 
+        // We should not download anything, as the file already exists.
         let logs = logger.drain_logs();
         LogEntriesAssert::assert_that(logs)
             .has_only_one_message_containing(&Level::Info, "File already exists")
@@ -573,7 +605,7 @@ mod tests {
         let body = String::from("Success");
         let hash = hash(&body);
 
-        let setup = Setup::new(&body).await.expect_routes(2, 0);
+        let setup = Setup::new(&body).await.expect_routes(2, 0, 0);
 
         // An unexpected file already exists
         std::fs::write(&setup.temp, "unexpected content").unwrap();
@@ -604,6 +636,44 @@ mod tests {
         let logs = setup.logger.drain_logs();
         LogEntriesAssert::assert_that(logs)
             .has_only_one_message_containing(&Level::Warning, "Hash check failed");
+    }
+
+    #[test]
+    async fn test_range_not_satisfiable() {
+        let body = String::from("Success");
+        let hash = hash(&body);
+
+        let setup = Setup::new(&body).await.expect_routes(1, 0, 1);
+
+        // An unexpected file with content lenght greater than `body`
+        std::fs::write(&setup.temp, "unexpected longer content").unwrap();
+
+        let downloader = FileDownloader::new(Some(ReplicaLogger::from(&setup.logger)));
+        let url = format!("{}/out-of-range", setup.url());
+        let mismatch = downloader
+            .download_file(&url, &setup.temp, Some(hash.clone()))
+            .await;
+
+        // Since there is bad content first download will result in a mismatch
+        assert_matches!(
+            mismatch,
+            Err(FileDownloadError::FileHashMismatchError { .. })
+        );
+
+        assert!(!setup.temp.exists());
+
+        downloader
+            .download_file(&setup.url(), &setup.temp, Some(hash))
+            .await
+            .expect("Failed to download");
+
+        assert!(setup.temp.exists());
+
+        let logs = setup.logger.drain_logs();
+        LogEntriesAssert::assert_that(logs)
+            .has_only_one_message_containing(&Level::Warning, "Requesting resource '")
+            .has_only_one_message_containing(&Level::Warning, "Hash check failed")
+            .has_exactly_n_messages_containing(2, &Level::Info, "Response read. Checking hash");
     }
 
     fn create_tar<W: Write>(writer: W) -> io::Result<()> {
