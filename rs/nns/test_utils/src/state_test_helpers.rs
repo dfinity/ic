@@ -128,9 +128,9 @@ pub fn registry_get_changes_since(
 
 pub fn registry_get_chunk(
     state_machine: &StateMachine,
-    chunk_content_sha256: &Vec<u8>,
+    chunk_content_sha256: &[u8],
 ) -> Result<registry_canister::pb::v1::Chunk, String> {
-    let content_sha256 = Some(chunk_content_sha256.clone());
+    let content_sha256 = Some(chunk_content_sha256.to_vec());
     let request = GetChunkRequest { content_sha256 };
 
     let result = state_machine

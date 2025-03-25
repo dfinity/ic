@@ -63,13 +63,13 @@ fn test_get_chunk() {
         })
     );
 
+    assert_eq!(big_responses.len(), 3, "{:?}", big_responses);
     let reconstructed_big_monolithic_blob = big_responses
         .into_iter()
-        .map(|big_response| -> Vec<u8> {
+        .flat_map(|big_response| -> Vec<u8> {
             let Chunk { content } = big_response.unwrap();
             content.unwrap()
         })
-        .flatten()
         .collect::<Vec<u8>>();
     assert_eq!(
         reconstructed_big_monolithic_blob[0..25],
