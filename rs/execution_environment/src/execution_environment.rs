@@ -2437,10 +2437,10 @@ impl ExecutionEnvironment {
     ) -> Result<Vec<u8>, UserError> {
         let canister = get_canister(args.get_canister_id(), state)?;
         let snapshot_id = args.get_snapshot_id();
-        let result =
-            self.canister_manager
-                .read_snapshot_metadata(sender, snapshot_id, canister, state);
-        todo!()
+        self.canister_manager
+            .read_snapshot_metadata(sender, snapshot_id, canister, state)
+            .map(|res| Encode!(&res).unwrap())
+            .map_err(|e| e.into())
     }
 
     fn node_metrics_history(
