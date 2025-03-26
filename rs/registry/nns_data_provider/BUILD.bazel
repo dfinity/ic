@@ -26,16 +26,27 @@ DEV_DEPENDENCIES = [
     "@crate_index//:leb128",
 ]
 
+MACRO_DEPENDENCIES = [
+    # Keep sorted.
+    "@crate_index//:async-trait",
+]
+
+MACRO_DEV_DEPENDENCIES = [
+    # Keep sorted.
+]
+
 rust_library(
     name = "nns_data_provider",
     srcs = glob(["src/**/*.rs"]),
     crate_name = "ic_registry_nns_data_provider",
     version = "0.9.0",
+    proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES,
 )
 
 rust_test(
     name = "nns_data_provider_test",
     crate = ":nns_data_provider",
+    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     deps = DEV_DEPENDENCIES,
 )
