@@ -16,11 +16,49 @@ pub const MAX_NEURON_ALIAS_BYTES: usize = 128;
 /// Maximum number of followees that a neuron can have for a given topic.
 pub const MAX_FOLLOWEES_PER_TOPIC: usize = 15;
 
+
+#[derive(Debug, PartialEq)]
+pub(crate) struct ValidatedSetFollowing {
+    /// Keys cannot contain `Topic::Unspecified`. Values cannot be empty.
+    pub topic_following: BTreeMap<Topic, ValidatedFolloweesForTopic>,
+}
+
+#[derive(Debug, PartialEq)]
+pub(crate) struct ValidatedFolloweesForTopic {
+    /// If this is empty, it means that the neuron is not following any other neurons on this topic.
+    /// An empty set is used also to unset the followees for a given topic.
+    pub followees: BTreeSet<ValidatedFollowee>,
+
+    pub topic: Topic,
+}
+
 #[derive(Clone, Eq, PartialEq, Ord)]
 pub(crate) struct ValidatedFollowee {
     topic: Topic,
-    alias: Option<String>,
+
     neuron_id: NeuronId,
+
+    /// Alias is optional. If it is set, it must be unique for the same neuron ID.
+    ///
+    /// For example, the following is a valid topic-based following configuration:
+    /// ```
+    /// [
+    ///     Followee(topic: T1, neuron_id: 41, alias: "Alice"),
+    ///     Followee(topic: T2, neuron_id: 42, alias: "Alice"),
+    /// ]
+    /// ```
+    /// because the alias "Alice" is unique for each neuron ID (e.g., the user Alice may control
+    /// both neurons 41 and 42).
+    ///
+    /// And the following is not valid:
+    /// ```
+    /// [
+    ///     Followee(topic: T1, neuron_id: 42, alias: "Alice"),
+    ///     Followee(topic: T2, neuron_id: 42, alias: "Bob"),
+    /// ]
+    /// ```
+    /// because the neuron ID 42 cannot be associated with two different aliases.
+    alias: Option<String>,
 }
 
 impl fmt::Display for ValidatedFollowee {
@@ -42,19 +80,22 @@ impl fmt::Display for ValidatedFollowee {
 }
 
 /// Defines lexicographic ordering for `ValidatedFollowee` instances. This ordering is helpful for
-/// grouping followees by topic or alias first, and then by neuron ID, which is helpful
-/// for detecting inconsistencies across multiple followees.
+/// grouping followees by factors in the following lexicographic order:
+/// 1. topic
+/// 2. alias
+/// 3. neuron ID
+/// This ordering is helpful for detecting inconsistencies across multiple followees.
 impl PartialOrd for ValidatedFollowee {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         match self.topic.partial_cmp(&other.topic) {
             Some(Ordering::Equal) => {}
             ord => return ord,
         }
-        match self.alias.partial_cmp(&other.alias) {
+        match self.neuron_id.partial_cmp(&other.neuron_id) {
             Some(Ordering::Equal) => {}
             ord => return ord,
         }
-        self.neuron_id.partial_cmp(&other.neuron_id)
+        self.alias.partial_cmp(&other.alias)
     }
 }
 
@@ -67,8 +108,10 @@ impl fmt::Debug for ValidatedFollowee {
 /// Represents followees grouped by neuron ID.
 pub(crate) type FolloweeGroups = BTreeMap<Topic, BTreeMap<NeuronId, Vec<ValidatedFollowee>>>;
 
-/// Helper function to aid checking the invariant: Followees on a given topic must have
-/// unique neuron IDs. Example pattern:
+/// Helper function to aid checking the invariant: **Followees on a given topic must have
+/// unique neuron IDs.**
+///
+/// Example pattern:
 ///
 /// ```
 /// let duplicate_followee_groups = get_duplicate_followee_groups(&followees_for_this_topic);
@@ -78,15 +121,18 @@ pub(crate) type FolloweeGroups = BTreeMap<Topic, BTreeMap<NeuronId, Vec<Validate
 /// }
 /// ```
 ///
-/// To that end, this function returns the map of neuron IDs (from `followees`) that have duplicate
-/// neuron IDs. The map values are the actual followee instances for the corresponding neuron IDs.
+/// Returns the nested map from topics to duplicate neuron IDs (from `followees`). The map values
+/// are the actual followee instances for the corresponding neuron IDs.
 ///
 /// Assumption: `followees` all correspond to the same topic.
+///
+/// The implementation of this function relies on the fact that `ValidatedFollowee` instances are
+/// ordered by topic and *then* neuron ID, which is enforced by the `PartialOrd` implementation.
 pub(crate) fn get_duplicate_followee_groups(
     followees: &BTreeSet<ValidatedFollowee>,
 ) -> FolloweeGroups {
     followees
-        .iter()
+        .into_iter()
         .group_by(|followee| followee.topic)
         .into_iter()
         .filter_map(|(topic, group_for_this_topic)| {
@@ -148,48 +194,44 @@ fn fmt_neuron_groups(followee_groups: &FolloweeGroups) -> String {
 /// and the topics are associated with each neuron ID for auditability, i.e., if followee aliases
 /// are inconsistent, it should be possible to report which exact topics are misconfigured (since
 /// the same followee can appear under multiple topics).
-pub(crate) type FolloweeAliasGroups = BTreeMap<String, BTreeMap<NeuronId, Vec<ValidatedFollowee>>>;
+pub(crate) type FolloweeAliasGroups = BTreeMap<NeuronId, BTreeSet<ValidatedFollowee>>;
 
-/// Helper function to aid checking the invariant: followees with the same alias must have
-/// the same neuron ID.
+/// Helper function to aid checking the invariant: **followees with the same alias must have
+/// the same neuron ID.**
 ///
-/// To that end, this function returns the map of followee aliases (from `followees`) that have
-/// multiple neuron IDs. The map values represent the corresponding sets of `(neuron_id, topic)`
-/// pairs.
+/// Example pattern:
+///
+/// ```
+/// let inconsistent_aliases = get_inconsistent_aliases(&followees_for_this_topic);
+///
+/// if !inconsistent_aliases.is_empty() {
+///     return Err(Error(inconsistent_aliases));
+/// }
+/// ```
+///
+/// Returns the map of followee neuron IDs (from `followees`) that have multiple aliases. The map
+/// values represent the corresponding sets followees.
+///
+/// The implementation of this function relies on the fact that `ValidatedFollowee` instances are
+/// ordered by neuron ID and *then* alias, which is enforced by the `PartialOrd` implementation.
 pub(crate) fn get_inconsistent_aliases(
     followees: &BTreeSet<ValidatedFollowee>,
 ) -> FolloweeAliasGroups {
     followees
         .into_iter()
-        // Aliases are optional, and only the ones that are *present* may cause inconsistencies.
-        // Thus, we filter out the followees that do not have an alias.
-        .filter_map(|followee| followee.clone().alias.map(|alias| (alias, followee)))
-        .group_by(|(alias, _)| alias.clone())
+        .group_by(|followee| followee.neuron_id.clone())
         .into_iter()
-        .filter_map(|(alias, group_for_this_alias)| {
-            let followees_for_this_alias = group_for_this_alias
+        .filter_map(|(neuron_id, group)| {
+            let followees_with_this_neuron_id = group
                 .into_iter()
-                .map(|(_, followees)| followees);
+                // Aliases are optional, and only the ones that are *present* may cause
+                // inconsistencies. Thus, we filter out the followees that do not have an alias.
+                .filter(|followee| followee.alias.is_some())
+                .cloned()
+                .collect::<BTreeSet<ValidatedFollowee>>();
 
-            let duplicate_followees_for_this_alias = followees_for_this_alias
-                .group_by(|followee| followee.neuron_id.clone())
-                .into_iter()
-                .filter_map(|(neuron_id, group_for_this_neuron_id)| {
-                    let followees_with_this_neuron_id = group_for_this_neuron_id
-                        .into_iter()
-                        .cloned()
-                        .collect::<Vec<_>>();
-
-                    if followees_with_this_neuron_id.len() > 1 {
-                        Some((neuron_id, followees_with_this_neuron_id))
-                    } else {
-                        None
-                    }
-                })
-                .collect::<BTreeMap<NeuronId, Vec<ValidatedFollowee>>>();
-
-            if duplicate_followees_for_this_alias.len() > 1 {
-                Some((alias.clone(), duplicate_followees_for_this_alias))
+            if followees_with_this_neuron_id.len() > 1 {
+                Some((neuron_id.clone(), followees_with_this_neuron_id))
             } else {
                 None
             }
@@ -200,28 +242,20 @@ pub(crate) fn get_inconsistent_aliases(
 fn fmt_alias_groups(followees: &FolloweeAliasGroups) -> String {
     followees
         .iter()
-        .map(|(alias, neuron_ids_to_followees)| {
-            let neuron_ids_to_followees = neuron_ids_to_followees
+        .map(|(neuron_id, followees_for_this_neuron_id)| {
+            let followees_for_this_neuron_id = followees_for_this_neuron_id
                 .iter()
-                .map(|(neuron_id, followees_for_this_neuron_id)| {
-                    let followees_for_this_neuron_id = followees_for_this_neuron_id
-                        .iter()
-                        .map(|followee| format!("{}", followee))
-                        .collect::<Vec<_>>()
-                        .join(", ");
-
-                    format!("{}: [{}]", neuron_id, followees_for_this_neuron_id)
-                })
+                .map(|followee| format!("{}", followee))
                 .collect::<Vec<_>>()
                 .join(", ");
 
-            format!("{}: [{}]", alias, neuron_ids_to_followees)
+            format!("{}: [{}]", neuron_id, followees_for_this_neuron_id)
         })
         .collect::<Vec<_>>()
         .join(", ")
 }
 
-#[derive(Error, Debug)]
+#[derive(Error, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub(crate) enum FolloweeValidationError {
     #[error("field neuron_id must be specified")]
     NeuronIdNotSpecified,
@@ -229,8 +263,8 @@ pub(crate) enum FolloweeValidationError {
     #[error("alias cannot be the empty string")]
     AliasCannotBeEmptyString,
 
-    #[error("alias cannot exceed {} bytes", MAX_NEURON_ALIAS_BYTES)]
-    AliasTooLong,
+    #[error("alias cannot exceed {} bytes, got {} bytes", MAX_NEURON_ALIAS_BYTES, .0)]
+    AliasTooLong(usize),
 }
 
 impl TryFrom<(Followee, Topic)> for ValidatedFollowee {
@@ -249,7 +283,7 @@ impl TryFrom<(Followee, Topic)> for ValidatedFollowee {
             }
 
             if alias.len() > MAX_NEURON_ALIAS_BYTES {
-                return Err(Self::Error::AliasTooLong);
+                return Err(Self::Error::AliasTooLong(alias.len()));
             }
         }
 
@@ -261,12 +295,7 @@ impl TryFrom<(Followee, Topic)> for ValidatedFollowee {
     }
 }
 
-pub(crate) struct ValidatedFolloweesForTopic {
-    pub followees: BTreeSet<ValidatedFollowee>,
-    pub topic: Topic,
-}
-
-#[derive(Error, Debug)]
+#[derive(Error, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub(crate) enum FolloweesForTopicValidationError {
     #[error("topic must be set to one from SnsGov.list_topics()")]
     UnspecifiedTopic,
@@ -279,9 +308,6 @@ pub(crate) enum FolloweesForTopicValidationError {
 
     #[error("followees on a given topic must have unique neuron IDs, got: {}", fmt_neuron_groups(.0))]
     DuplicateFolloweeNeuronId(FolloweeGroups),
-
-    #[error("followees with the same alias must have the same neuron ID, got: {}", fmt_alias_groups(.0))]
-    InconsistentFolloweeAliases(FolloweeAliasGroups),
 }
 
 impl TryFrom<FolloweesForTopic> for ValidatedFolloweesForTopic {
@@ -290,8 +316,11 @@ impl TryFrom<FolloweesForTopic> for ValidatedFolloweesForTopic {
     fn try_from(value: FolloweesForTopic) -> Result<Self, Self::Error> {
         let FolloweesForTopic { followees, topic } = value;
 
-        let Some(Ok(topic)) = topic.map(Topic::try_from) else {
-            return Err(Self::Error::UnspecifiedTopic);
+        let topic = match topic.map(Topic::try_from) {
+            Some(Ok(topic)) if topic != Topic::Unspecified => topic,
+            _ => {
+                return Err(Self::Error::UnspecifiedTopic);
+            }
         };
 
         if followees.len() > MAX_FOLLOWEES_PER_TOPIC {
@@ -318,23 +347,8 @@ impl TryFrom<FolloweesForTopic> for ValidatedFolloweesForTopic {
             return Err(Self::Error::DuplicateFolloweeNeuronId(duplicate_neuron_ids));
         }
 
-        let inconsistent_aliases = get_inconsistent_aliases(&followees);
-
-        if !inconsistent_aliases.is_empty() {
-            return Err(Self::Error::InconsistentFolloweeAliases(
-                inconsistent_aliases,
-            ));
-        }
-
         Ok(Self { followees, topic })
     }
-}
-
-// #[error("topics must be unique, but found a duplicate: {:?}", .0)]
-//     DuplicateTopics(Topic),
-
-pub(crate) struct ValidatedSetFollowing {
-    pub topic_following: BTreeMap<Topic, BTreeSet<ValidatedFollowee>>,
 }
 
 fn fmt_topics(topics: &Vec<Topic>) -> String {
@@ -345,16 +359,16 @@ fn fmt_topics(topics: &Vec<Topic>) -> String {
         .join(", ")
 }
 
-#[derive(Error, Debug)]
+#[derive(Error, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub(crate) enum SetFollowingValidationError {
     #[error("topic_following must contain at least one element")]
-    NoTopicFollowsSpecified,
+    NoTopicFollowingSpecified,
 
     #[error("topic_followees cannot contain more than {} elements (got {})", Topic::iter().count(), .0)]
     TooManyTopicFollows(usize),
 
     #[error("some followees were not specified correctly: {:?}", .0)]
-    FolloweesForTopicValidationError(Vec<FolloweesForTopicValidationError>),
+    FolloweesForTopicValidationError(BTreeSet<FolloweesForTopicValidationError>),
 
     #[error("topics must be unique, but the following topics had duplicates: {}", fmt_topics(.0))]
     DuplicateTopics(Vec<Topic>),
@@ -370,14 +384,14 @@ impl TryFrom<SetFollowing> for ValidatedSetFollowing {
         let SetFollowing { topic_following } = value;
 
         if topic_following.is_empty() {
-            return Err(Self::Error::NoTopicFollowsSpecified);
+            return Err(Self::Error::NoTopicFollowingSpecified);
         }
 
         if topic_following.len() > Topic::iter().count() {
             return Err(Self::Error::TooManyTopicFollows(topic_following.len()));
         }
 
-        let (topic_following, errors): (Vec<_>, Vec<_>) =
+        let (topic_following, errors): (Vec<_>, BTreeSet<_>) =
             topic_following.into_iter().partition_map(|topic_follow| {
                 match ValidatedFolloweesForTopic::try_from(topic_follow) {
                     Ok(topic_follow) => Either::Left(topic_follow),
@@ -423,7 +437,7 @@ impl TryFrom<SetFollowing> for ValidatedSetFollowing {
 
         let topic_following = topic_following
             .into_iter()
-            .map(|ValidatedFolloweesForTopic { followees, topic }| (topic, followees))
+            .map(|followees_for_topic| (followees_for_topic.topic, followees_for_topic))
             .collect();
 
         Ok(Self { topic_following })
