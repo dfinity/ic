@@ -53,7 +53,7 @@ runs:
         uses: ./.github/actions/bazel
         env:
           MERGE_BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          RANCH_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          BRANCH_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         with:
           BUILDBUDDY_LINKS: "[CI Job](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})"
           GPG_PASSPHRASE: ${{ inputs.GPG_PASSPHRASE }}
