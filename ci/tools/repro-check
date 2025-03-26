@@ -134,7 +134,14 @@ def get_download_sources(mode: str):
 # ------------------------------------------------------------------------------
 class ReproducibilityVerifier:
     def __init__(
-        self, verify_guestos, verify_hostos, verify_setupos, proposal_id, git_commit, clean, download_source_mode: str
+        self,
+        verify_guestos: bool,
+        verify_hostos: bool,
+        verify_setupos: bool,
+        proposal_id: str,
+        git_commit: str,
+        clean: bool,
+        download_source_mode: str,
     ):
         self.verify_guestos = verify_guestos
         self.verify_hostos = verify_hostos
@@ -153,6 +160,7 @@ class ReproducibilityVerifier:
 
         # Ephemeral directories
         self.tmpdir: Path = Path()
+        self._tmpdir_obj = None  # A reference to the TemporaryDirectory object, for cleanup
         self.out_dir: Path = Path()
         self.cdn_out: Path = Path()
         self.dev_out: Path = Path()
@@ -516,13 +524,14 @@ class ReproducibilityVerifier:
         self.start_download(self.proposal_package_urls, proposal_target, "proposal")
 
     def prepare_directories(self):
-        debug_mode = bool(os.getenv("DEBUG", ""))
-        if debug_mode:
+        # If not debug mode, we create a real TemporaryDirectory object and store it
+        # so that it gets cleaned up after run() finishes.
+        if os.getenv("DEBUG", ""):
             tmpdir_str = tempfile.mkdtemp(prefix="repro-check_")
-            log_debug("DEBUG mode, not automatically removing the tempdir.")
+            log_debug("DEBUG mode => not automatically removing the tempdir.")
         else:
-            tmpdir_obj = tempfile.TemporaryDirectory(prefix="repro-check_")
-            tmpdir_str = tmpdir_obj.name
+            self._tmpdir_obj = tempfile.TemporaryDirectory(prefix="repro-check_")
+            tmpdir_str = self._tmpdir_obj.name
 
         self.tmpdir = Path(tmpdir_str)
         log(f"Using temporary directory: {self.tmpdir}")
@@ -712,49 +721,52 @@ class ReproducibilityVerifier:
     def run(self):
         start_time = time.time()
 
-        # Decide which proposal or commit
-        self.process_proposal()
-        self.decide_git_hash()
+        try:
+            # Decide which proposal or commit
+            self.process_proposal()
+            self.decide_git_hash()
 
-        # Now that we know the git hash, init cache
-        self.init_cache()
+            # Now that we know the git hash, init cache
+            self.init_cache()
 
-        # Prepare directories
-        self.prepare_directories()
+            # Prepare directories
+            self.prepare_directories()
 
-        # Schedule downloads for the proposal artifact, if any
-        self.start_proposal_download_if_needed()
+            # Schedule downloads for the proposal artifact, if any
+            self.start_proposal_download_if_needed()
 
-        # Schedule CDN downloads for whichever OS the user wants
-        if self.verify_guestos:
-            self.start_cdn_downloads_for_os("guest-os")
-        if self.verify_hostos:
-            self.start_cdn_downloads_for_os("host-os")
-        if self.verify_setupos:
-            self.start_cdn_downloads_for_os("setup-os")
+            # Schedule CDN downloads for whichever OS the user wants
+            if self.verify_guestos:
+                self.start_cdn_downloads_for_os("guest-os")
+            if self.verify_hostos:
+                self.start_cdn_downloads_for_os("host-os")
+            if self.verify_setupos:
+                self.start_cdn_downloads_for_os("setup-os")
 
-        # Meanwhile, check environment (done in parallel to the above downloads)
-        self.check_environment()
+            # Meanwhile, check environment (done in parallel to the above downloads)
+            self.check_environment()
 
-        # Now verify the proposal (blocks on its artifact)
-        self.verify_proposal_artifacts()
+            # Now verify the proposal (blocks on its artifact)
+            self.verify_proposal_artifacts()
 
-        # Compare proposal vs. CDN (which also blocks on the relevant OS downloads)
-        self.compare_proposal_vs_cdn()
+            # Compare proposal vs. CDN (which also blocks on the relevant OS downloads)
+            self.compare_proposal_vs_cdn()
 
-        # Build locally and compare (which also re-checks / blocks on downloads if needed)
-        self.build_and_compare_locally()
+            # Build locally and compare (which also re-checks / blocks on downloads if needed)
+            self.build_and_compare_locally()
 
-        elapsed = time.time() - start_time
-        h, rem = divmod(elapsed, 3600)
-        m, s = divmod(rem, 60)
-        log(f"Total time: {int(h)}h {int(m)}m {int(s)}s")
-        sys.exit(0)
+            elapsed = time.time() - start_time
+            h, rem = divmod(elapsed, 3600)
+            m, s = divmod(rem, 60)
+            log(f"Total time: {int(h)}h {int(m)}m {int(s)}s")
+
+        finally:
+            # Clean up the temporary directory if we're not in DEBUG mode
+            if self._tmpdir_obj and not os.getenv("DEBUG", ""):
+                log_debug("Cleaning up temporary directory.")
+                self._tmpdir_obj.cleanup()
 
 
-# ------------------------------------------------------------------------------
-# MAIN
-# ------------------------------------------------------------------------------
 def main():
     args = parse_args()
 
