@@ -3094,7 +3094,7 @@ fn test_canister_liquid_cycle_balance() {
                     call_args()
                         .other_side(
                             wasm()
-                                .accept_cycles(u128::MAX.into())
+                                .accept_cycles(u128::MAX)
                                 .append_and_reply()
                                 .build(),
                         )
