@@ -211,13 +211,13 @@ impl Verifier for FakeVerifier {
     }
 }
 
-/// Updates global registry records in the registry managed by the registry data provider:
-/// - root subnet record (if provided);
-/// - routing table;
+/// Adds global registry records to the registry managed by the registry data provider:
+/// - root subnet record;
+/// - routing table record;
 /// - subnet list record;
 /// - chain key records;
-pub fn update_global_registry_records(
-    nns_subnet_id: Option<SubnetId>,
+pub fn add_global_registry_records(
+    nns_subnet_id: SubnetId,
     routing_table: RoutingTable,
     subnet_list: Vec<SubnetId>,
     chain_keys: BTreeMap<MasterPublicKeyId, Vec<SubnetId>>,
@@ -230,20 +230,21 @@ pub fn update_global_registry_records(
         RegistryVersion::from(latest_registry_version.get() + 1)
     };
 
-    if let Some(nns_subnet_id) = nns_subnet_id {
-        let root_subnet_id_proto = SubnetIdProto {
-            principal_id: Some(PrincipalIdIdProto {
-                raw: nns_subnet_id.get_ref().to_vec(),
-            }),
-        };
-        registry_data_provider
-            .add(
-                ROOT_SUBNET_ID_KEY,
-                registry_version,
-                Some(root_subnet_id_proto),
-            )
-            .unwrap();
-    }
+    // root subnet record
+    let root_subnet_id_proto = SubnetIdProto {
+        principal_id: Some(PrincipalIdIdProto {
+            raw: nns_subnet_id.get_ref().to_vec(),
+        }),
+    };
+    registry_data_provider
+        .add(
+            ROOT_SUBNET_ID_KEY,
+            registry_version,
+            Some(root_subnet_id_proto),
+        )
+        .unwrap();
+
+    // routing table record
     let pb_routing_table = PbRoutingTable::from(routing_table.clone());
     registry_data_provider
         .add(
@@ -252,7 +253,11 @@ pub fn update_global_registry_records(
             Some(pb_routing_table),
         )
         .unwrap();
+
+    // subnet list record
     add_subnet_list_record(&registry_data_provider, registry_version.get(), subnet_list);
+
+    // chain key records
     for (key_id, subnets) in chain_keys {
         let subnets = subnets
             .into_iter()
@@ -272,12 +277,14 @@ pub fn update_global_registry_records(
     }
 }
 
-/// Adds global registry records to the registry managed by the registry data provider:
+/// Adds initial registry records to the registry managed by the registry data provider:
 /// - provisional whitelist record;
 /// - blessed replica versions record;
 /// - replica version record.
-pub fn add_global_registry_records(registry_data_provider: Arc<ProtoRegistryDataProvider>) {
+pub fn add_initial_registry_records(registry_data_provider: Arc<ProtoRegistryDataProvider>) {
     let registry_version = INITIAL_REGISTRY_VERSION;
+
+    // provisional whitelist record
     let pb_whitelist = PbProvisionalWhitelist::from(ProvisionalWhitelist::All);
     registry_data_provider
         .add(
@@ -286,6 +293,8 @@ pub fn add_global_registry_records(registry_data_provider: Arc<ProtoRegistryData
             Some(pb_whitelist),
         )
         .unwrap();
+
+    // blessed replica versions record
     let replica_version = ReplicaVersion::default();
     let blessed_replica_version = BlessedReplicaVersions {
         blessed_version_ids: vec![replica_version.clone().into()],
@@ -297,6 +306,8 @@ pub fn add_global_registry_records(registry_data_provider: Arc<ProtoRegistryData
             Some(blessed_replica_version),
         )
         .unwrap();
+
+    // replica version record
     let replica_version_record = ReplicaVersionRecord {
         release_package_sha256_hex: "".to_string(),
         release_package_urls: vec![],
@@ -319,7 +330,8 @@ pub fn add_global_registry_records(registry_data_provider: Arc<ProtoRegistryData
 /// - subnet record;
 /// - subnet threshold key record.
 ///
-/// Note: global registry records must be added to the registry
+/// Note: initial and global registry records must be added to the registry
+/// (using the fuctions `add_initial_registry_records` and `add_global_registry_records`)
 /// before any messages are executed on the `StateMachine`.
 fn add_subnet_local_registry_records(
     subnet_id: SubnetId,
@@ -1244,9 +1256,9 @@ impl StateMachineBuilder {
                 }
             })
             .collect();
-        add_global_registry_records(registry_data_provider.clone());
-        update_global_registry_records(
-            Some(nns_subnet_id.unwrap_or(subnet_id)),
+        add_initial_registry_records(registry_data_provider.clone());
+        add_global_registry_records(
+            nns_subnet_id.unwrap_or(subnet_id),
             routing_table,
             subnet_list,
             chain_keys,

@@ -3,7 +3,7 @@ use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable, CANISTER_IDS_PER_SUBNET};
 use ic_registry_subnet_type::SubnetType;
 use ic_state_machine_tests::{
-    add_global_registry_records, update_global_registry_records, StateMachine, StateMachineBuilder,
+    add_global_registry_records, add_initial_registry_records, StateMachine, StateMachineBuilder,
     StateMachineConfig, Subnets,
 };
 use ic_test_utilities_types::ids::user_test_id;
@@ -97,10 +97,10 @@ fn counter_canister_call_test() {
     // Set up subnet list for registry.
     let subnet_list = vec![subnet_id1, subnet_id2];
 
-    // Add global registry records.
-    add_global_registry_records(registry_data_provider.clone());
-    update_global_registry_records(
-        Some(subnet_id1),
+    // Add initial and global registry records.
+    add_initial_registry_records(registry_data_provider.clone());
+    add_global_registry_records(
+        subnet_id1,
         routing_table,
         subnet_list,
         BTreeMap::new(),

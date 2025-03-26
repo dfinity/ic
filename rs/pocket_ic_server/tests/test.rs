@@ -766,7 +766,7 @@ fn canister_state_dir(shutdown_signal: Option<Signal>) {
 
     // Check the registry version.
     // The registry version should be 5 as we have two subnets on the PocketIC instance,
-    // every subnet creation bumps the registry version twice, and global registry records
+    // every subnet creation bumps the registry version twice, and initial registry records
     // are added at a separate registry version.
     let registry_proto_path = state_dir_path_buf.join("registry.proto");
     let registry_data_provider = ProtoRegistryDataProvider::load_from_file(registry_proto_path);

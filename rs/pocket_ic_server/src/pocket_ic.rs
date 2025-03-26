@@ -55,7 +55,7 @@ use ic_registry_routing_table::{
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_state_machine_tests::{
-    add_global_registry_records, update_global_registry_records, StateMachine, StateMachineBuilder,
+    add_global_registry_records, add_initial_registry_records, StateMachine, StateMachineBuilder,
     StateMachineConfig, StateMachineStateDir, SubmitIngressError, Subnets,
 };
 use ic_state_manager::StateManagerImpl;
@@ -401,6 +401,10 @@ impl Subnet {
         }
     }
 
+    fn get_subnet_id(&self) -> SubnetId {
+        self.state_machine.get_subnet_id()
+    }
+
     fn set_delegation_from_nns(&self, delegation_from_nns: CertificateDelegation) {
         self.delegation_from_nns.set(delegation_from_nns).unwrap();
     }
@@ -530,7 +534,7 @@ impl PocketIcSubnets {
         bitcoind_addr: Option<Vec<SocketAddr>>,
     ) -> Self {
         let registry_data_provider = Arc::new(ProtoRegistryDataProvider::new());
-        add_global_registry_records(registry_data_provider.clone());
+        add_initial_registry_records(registry_data_provider.clone());
         let routing_table = RoutingTable::new();
         let chain_keys = BTreeMap::new();
         Self {
@@ -682,20 +686,17 @@ impl PocketIcSubnets {
             self.routing_table.insert(alloc_range, subnet_id).unwrap();
         }
 
-        let nns_subnet_id = if self.nns_subnet.is_none() {
+        if self.nns_subnet.is_none() {
             self.nns_subnet = Some(self.subnets.get_subnet(subnet_id).unwrap());
-            Some(subnet_id)
-        } else {
-            None
-        };
+        }
         let subnet_list = self
             .subnets
             .get_all()
             .into_iter()
-            .map(|subnet| subnet.state_machine.get_subnet_id())
+            .map(|subnet| subnet.get_subnet_id())
             .collect();
-        update_global_registry_records(
-            nns_subnet_id,
+        add_global_registry_records(
+            self.nns_subnet.clone().unwrap().get_subnet_id(),
             self.routing_table.clone(),
             subnet_list,
             self.chain_keys.clone(),
@@ -1384,7 +1385,7 @@ fn http_header_from(
 fn get_canister_http_requests(pic: &PocketIc) -> Vec<CanisterHttpRequest> {
     let mut res = vec![];
     for subnet in pic.subnets.get_all() {
-        let subnet_id = subnet.state_machine.get_subnet_id().get().0;
+        let subnet_id = subnet.get_subnet_id().get().0;
         let canister_http = subnet.canister_http.lock().unwrap();
         let mut cur: Vec<_> = subnet
             .state_machine
@@ -1748,7 +1749,7 @@ impl Operation for Tick {
         }
 
         for subnet in pic.subnets.get_all() {
-            let subnet_id = subnet.state_machine.get_subnet_id();
+            let subnet_id = subnet.get_subnet_id();
             let blockmaker_metrics = blockmakers_per_subnet.as_ref().and_then(|bm_per_subnet| {
                 bm_per_subnet
                     .iter()
@@ -2005,7 +2006,7 @@ impl Operation for DashboardRequest {
             .map(|subnet| {
                 (
                     subnet.state_machine.state_manager.get_latest_state(),
-                    subnet.state_machine.get_subnet_id(),
+                    subnet.get_subnet_id(),
                 )
             })
             .collect();
