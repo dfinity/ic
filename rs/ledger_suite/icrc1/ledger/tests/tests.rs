@@ -513,9 +513,17 @@ fn test_archiving_lots_of_blocks_after_enabling_archiving() {
 }
 
 #[test]
-fn test_archiving_in_chunks_returns_non_disjoint_block_range_locations() {
-    ic_ledger_suite_state_machine_tests::archiving::archiving_in_chunks_returns_non_disjoint_block_range_locations(
+fn test_archiving_in_chunks_returns_disjoint_block_range_locations() {
+    ic_ledger_suite_state_machine_tests::archiving::archiving_in_chunks_returns_disjoint_block_range_locations(
         ledger_wasm(), encode_init_args
+    );
+}
+
+#[test]
+fn test_get_blocks_returns_multiple_archive_callbacks() {
+    ic_ledger_suite_state_machine_tests::archiving::get_blocks_returns_multiple_archive_callbacks(
+        ledger_wasm(),
+        encode_init_args,
     );
 }
 
