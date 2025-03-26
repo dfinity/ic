@@ -1,7 +1,8 @@
 use crate::{
     common::LOG_PREFIX,
     pb::v1::{
-        registry_stable_storage::Version as ReprVersion, ChangelogEntry, RegistryStableStorage,
+        registry_stable_storage::Version as ReprVersion, ChangelogEntry, Chunk, GetChunkRequest,
+        RegistryStableStorage,
     },
 };
 use ic_certified_map::RbTree;
@@ -147,6 +148,21 @@ impl Registry {
             return None;
         }
         Some(value)
+    }
+
+    pub fn get_chunk(&self, request: GetChunkRequest) -> Result<Chunk, String> {
+        let GetChunkRequest { content_sha256 } = request;
+
+        let Some(content_sha256) = content_sha256 else {
+            return Err("Request does not specify content_sha256.".to_string());
+        };
+
+        let content = crate::storage::with_chunks(|chunks| chunks.get_chunk(&content_sha256))
+            .ok_or_else(|| format!("No chunk with SHA256 = {:X?}", content_sha256))?;
+
+        Ok(Chunk {
+            content: Some(content),
+        })
     }
 
     /// Computes the number of deltas with version greater than `since_version`

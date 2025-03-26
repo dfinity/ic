@@ -43,10 +43,11 @@ use ic_management_canister_types_private::{
     EmptyBlob, InstallChunkedCodeArgs, InstallCodeArgsV2, ListCanisterSnapshotArgs,
     LoadCanisterSnapshotArgs, MasterPublicKeyId, Method as Ic00Method, NodeMetricsHistoryArgs,
     Payload as Ic00Payload, ProvisionalCreateCanisterWithCyclesArgs, ProvisionalTopUpCanisterArgs,
-    ReadCanisterSnapshotMetadataArgs, ReshareChainKeyArgs, SchnorrAlgorithm, SchnorrPublicKeyArgs,
-    SchnorrPublicKeyResponse, SetupInitialDKGArgs, SignWithECDSAArgs, SignWithSchnorrArgs,
-    SignWithSchnorrAux, StoredChunksArgs, SubnetInfoArgs, SubnetInfoResponse,
-    TakeCanisterSnapshotArgs, UninstallCodeArgs, UpdateSettingsArgs, UploadChunkArgs,
+    ReadCanisterSnapshotDataArgs, ReadCanisterSnapshotMetadataArgs, ReshareChainKeyArgs,
+    SchnorrAlgorithm, SchnorrPublicKeyArgs, SchnorrPublicKeyResponse, SetupInitialDKGArgs,
+    SignWithECDSAArgs, SignWithSchnorrArgs, SignWithSchnorrAux, StoredChunksArgs, SubnetInfoArgs,
+    SubnetInfoResponse, TakeCanisterSnapshotArgs, UninstallCodeArgs, UpdateSettingsArgs,
+    UploadCanisterSnapshotDataArgs, UploadCanisterSnapshotMetadataArgs, UploadChunkArgs,
     VetKdDeriveKeyArgs, VetKdPublicKeyArgs, VetKdPublicKeyResult, IC_00,
 };
 use ic_metrics::MetricsRegistry;
@@ -1666,6 +1667,39 @@ impl ExecutionEnvironment {
                 }
             }
 
+            Ok(Ic00Method::ReadCanisterSnapshotData) => {
+                // TODO: EXC-1957
+                #[allow(clippy::bind_instead_of_map)]
+                let res = ReadCanisterSnapshotDataArgs::decode(payload)
+                    .and_then(|_args| Ok((vec![], None)));
+                ExecuteSubnetMessageResult::Finished {
+                    response: res,
+                    refund: msg.take_cycles(),
+                }
+            }
+
+            Ok(Ic00Method::UploadCanisterSnapshotMetadata) => {
+                // TODO: EXC-1959
+                #[allow(clippy::bind_instead_of_map)]
+                let res = UploadCanisterSnapshotMetadataArgs::decode(payload)
+                    .and_then(|_args| Ok((vec![], None)));
+                ExecuteSubnetMessageResult::Finished {
+                    response: res,
+                    refund: msg.take_cycles(),
+                }
+            }
+
+            Ok(Ic00Method::UploadCanisterSnapshotData) => {
+                // TODO: EXC-1960
+                #[allow(clippy::bind_instead_of_map)]
+                let res = UploadCanisterSnapshotDataArgs::decode(payload)
+                    .and_then(|_args| Ok((vec![], None)));
+                ExecuteSubnetMessageResult::Finished {
+                    response: res,
+                    refund: msg.take_cycles(),
+                }
+            }
+
             Err(ParseError::VariantNotFound) => {
                 let res = Err(UserError::new(
                     ErrorCode::CanisterMethodNotFound,
@@ -2886,7 +2920,7 @@ impl ExecutionEnvironment {
             (*request).clone(),
             ThresholdArguments::VetKd(VetKdArguments {
                 key_id: args.key_id,
-                input: args.input,
+                input: Arc::new(args.input),
                 transport_public_key: args.transport_public_key.to_vec(),
                 ni_dkg_id: ni_dkg_id.clone(),
                 height: Height::new(current_round.get()),
@@ -3015,7 +3049,7 @@ impl ExecutionEnvironment {
             SubnetCallContext::SignWithThreshold(SignWithThresholdContext {
                 request,
                 args,
-                derivation_path,
+                derivation_path: Arc::new(derivation_path),
                 pseudo_random_id,
                 batch_time: state.metadata.batch_time,
                 matched_pre_signature: None,
@@ -3055,8 +3089,6 @@ impl ExecutionEnvironment {
         Ok(())
     }
 
-    // TODO(CON-1416: Remove this directive)
-    #[allow(unreachable_code, unused_variables)]
     fn reshare_chain_key(
         &self,
         state: &mut ReplicatedState,
@@ -3076,12 +3108,6 @@ impl ExecutionEnvironment {
 
         let nodes = args.get_set_of_nodes()?;
         let registry_version = args.get_registry_version();
-
-        // TODO(CON-1416): Activate this endpoint
-        return Err(UserError::new(
-            ErrorCode::CanisterRejectedMessage,
-            "This key is not an idkg key",
-        ));
 
         state.metadata.subnet_call_context_manager.push_context(
             SubnetCallContext::ReshareChainKey(ReshareChainKeyContext {

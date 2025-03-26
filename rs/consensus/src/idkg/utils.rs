@@ -1,11 +1,15 @@
 //! Common utils for the IDKG implementation.
 
-use crate::idkg::complaints::{IDkgTranscriptLoader, TranscriptLoadStatus};
-use crate::idkg::metrics::IDkgPayloadMetrics;
+use crate::idkg::{
+    complaints::{IDkgTranscriptLoader, TranscriptLoadStatus},
+    metrics::IDkgPayloadMetrics,
+};
 use ic_consensus_utils::pool_reader::PoolReader;
 use ic_crypto::get_master_public_key_from_transcript;
-use ic_interfaces::consensus_pool::ConsensusBlockChain;
-use ic_interfaces::idkg::{IDkgChangeAction, IDkgChangeSet, IDkgPool};
+use ic_interfaces::{
+    consensus_pool::ConsensusBlockChain,
+    idkg::{IDkgChangeAction, IDkgChangeSet, IDkgPool},
+};
 use ic_interfaces_registry::RegistryClient;
 use ic_logger::{warn, ReplicaLogger};
 use ic_management_canister_types_private::{
@@ -17,27 +21,29 @@ use ic_registry_subnet_features::ChainKeyConfig;
 use ic_replicated_state::metadata_state::subnet_call_context_manager::{
     SignWithThresholdContext, ThresholdArguments,
 };
-use ic_types::consensus::idkg::common::{PreSignatureRef, SignatureScheme, ThresholdSigInputsRef};
-use ic_types::consensus::idkg::ecdsa::ThresholdEcdsaSigInputsRef;
-use ic_types::consensus::idkg::schnorr::ThresholdSchnorrSigInputsRef;
-use ic_types::consensus::idkg::{HasIDkgMasterPublicKeyId, IDkgMasterPublicKeyId};
-use ic_types::consensus::Block;
-use ic_types::consensus::{
-    idkg::{
-        IDkgBlockReader, IDkgMessage, IDkgTranscriptParamsRef, PreSigId, RequestId,
-        TranscriptLookupError, TranscriptRef,
+use ic_types::{
+    consensus::{
+        idkg::{
+            common::{PreSignatureRef, SignatureScheme, ThresholdSigInputsRef},
+            ecdsa::ThresholdEcdsaSigInputsRef,
+            schnorr::ThresholdSchnorrSigInputsRef,
+            HasIDkgMasterPublicKeyId, IDkgBlockReader, IDkgMasterPublicKeyId, IDkgMessage,
+            IDkgTranscriptParamsRef, PreSigId, RequestId, TranscriptLookupError, TranscriptRef,
+        },
+        Block, HasHeight,
     },
-    HasHeight,
+    crypto::{
+        canister_threshold_sig::{
+            idkg::{IDkgTranscript, IDkgTranscriptOperation, InitialIDkgDealings},
+            MasterPublicKey,
+        },
+        vetkd::{VetKdArgs, VetKdDerivationContext},
+        AlgorithmId, ExtendedDerivationPath,
+    },
+    messages::CallbackId,
+    registry::RegistryClientError,
+    Height, RegistryVersion, SubnetId,
 };
-use ic_types::crypto::canister_threshold_sig::idkg::{
-    IDkgTranscript, IDkgTranscriptOperation, InitialIDkgDealings,
-};
-use ic_types::crypto::canister_threshold_sig::MasterPublicKey;
-use ic_types::crypto::vetkd::{VetKdArgs, VetKdDerivationContext};
-use ic_types::crypto::{AlgorithmId, ExtendedDerivationPath};
-use ic_types::messages::CallbackId;
-use ic_types::registry::RegistryClientError;
-use ic_types::{Height, RegistryVersion, SubnetId};
 use phantom_newtype::Id;
 use std::{
     cell::RefCell,
@@ -283,7 +289,7 @@ pub(super) fn build_signature_inputs(
             let inputs = ThresholdSigInputsRef::Ecdsa(ThresholdEcdsaSigInputsRef::new(
                 ExtendedDerivationPath {
                     caller: context.request.sender.into(),
-                    derivation_path: context.derivation_path.clone(),
+                    derivation_path: context.derivation_path.to_vec(),
                 },
                 args.message_hash,
                 nonce,
@@ -317,7 +323,7 @@ pub(super) fn build_signature_inputs(
             let inputs = ThresholdSigInputsRef::Schnorr(ThresholdSchnorrSigInputsRef::new(
                 ExtendedDerivationPath {
                     caller: context.request.sender.into(),
-                    derivation_path: context.derivation_path.clone(),
+                    derivation_path: context.derivation_path.to_vec(),
                 },
                 args.message.clone(),
                 nonce,
@@ -337,7 +343,7 @@ pub(super) fn build_signature_inputs(
                     context: context.derivation_path.iter().flatten().cloned().collect(),
                 },
                 ni_dkg_id: args.ni_dkg_id.clone(),
-                input: args.input.clone(),
+                input: args.input.to_vec(),
                 transport_public_key: args.transport_public_key.clone(),
             });
             Ok((request_id, inputs))

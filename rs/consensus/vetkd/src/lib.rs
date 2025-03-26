@@ -235,7 +235,7 @@ impl VetKdPayloadBuilderImpl {
                         context: context.derivation_path.iter().flatten().cloned().collect(),
                     },
                     ni_dkg_id: ctxt_args.ni_dkg_id.clone(),
-                    input: ctxt_args.input.clone(),
+                    input: ctxt_args.input.to_vec(),
                     transport_public_key: ctxt_args.transport_public_key.clone(),
                 };
                 let key_id = context.key_id();
@@ -352,7 +352,7 @@ impl VetKdPayloadBuilderImpl {
                 context: context.derivation_path.iter().flatten().cloned().collect(),
             },
             ni_dkg_id: ctxt_args.ni_dkg_id.clone(),
-            input: ctxt_args.input.clone(),
+            input: ctxt_args.input.to_vec(),
             transport_public_key: ctxt_args.transport_public_key.clone(),
         };
         let reply = match VetKdDeriveKeyResult::decode(&data) {
