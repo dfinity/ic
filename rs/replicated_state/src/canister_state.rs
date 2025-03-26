@@ -371,7 +371,7 @@ impl CanisterState {
         self.execution_memory_usage()
             + self.canister_history_memory_usage()
             + self.wasm_chunk_store_memory_usage()
-            + self.system_state.snapshots_memory_usage
+            + self.snapshots_memory_usage()
     }
 
     /// Returns the amount of Wasm memory currently used by the canister in bytes.
@@ -379,6 +379,27 @@ impl CanisterState {
         self.execution_state
             .as_ref()
             .map_or(NumBytes::new(0), |es| es.wasm_memory_usage())
+    }
+
+    /// Returns the amount of stable memory currently used by the canister in bytes.
+    pub fn stable_memory_usage(&self) -> NumBytes {
+        self.execution_state
+            .as_ref()
+            .map_or(NumBytes::from(0), |es| es.stable_memory_usage())
+    }
+
+    /// Returns the amount of memory currently used by global variables of the canister in bytes.
+    pub fn global_memory_usage(&self) -> NumBytes {
+        self.execution_state
+            .as_ref()
+            .map_or(NumBytes::from(0), |es| es.global_memory_usage())
+    }
+
+    /// Returns the amount of memory currently used by the wasm binary.
+    pub fn wasm_binary_memory_usage(&self) -> NumBytes {
+        self.execution_state
+            .as_ref()
+            .map_or(NumBytes::from(0), |es| es.wasm_binary_memory_usage())
     }
 
     /// Returns the amount of execution memory (heap, stable, globals, Wasm)
@@ -412,8 +433,12 @@ impl CanisterState {
     }
 
     /// Returns the memory usage of the wasm chunk store in bytes.
-    pub(super) fn wasm_chunk_store_memory_usage(&self) -> NumBytes {
+    pub fn wasm_chunk_store_memory_usage(&self) -> NumBytes {
         self.system_state.wasm_chunk_store.memory_usage()
+    }
+
+    pub fn snapshots_memory_usage(&self) -> NumBytes {
+        self.system_state.snapshots_memory_usage
     }
 
     /// Returns the snapshot size estimation in bytes based on the current canister's state.

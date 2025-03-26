@@ -28,8 +28,6 @@ jobs:
           token: ${{ steps.app-token.outputs.token }}
 
       - name: Update IC versions file
-        env:
-          GH_TOKEN: ${{ steps.app-token.outputs.token }}
         run: |
           set -eEuxo pipefail
 
@@ -63,8 +61,6 @@ jobs:
           version: 2.53.0
 
       - name: Update Mainnet canisters file
-        env:
-          GH_TOKEN: ${{ steps.app-token.outputs.token }}
         run: |
           set -eEuxo pipefail
 

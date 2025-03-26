@@ -13,6 +13,6 @@ ssh -o StrictHostKeyChecking=no -6 admin@${hostos} << EOF
    sudo systemctl stop guestos
    sudo virsh shutdown guestos_upgrader
    tar xaf /tmp/disk-img.tar.zst -C /tmp disk.img
-   sudo dd if=/tmp/disk.img of=/dev/hostlvm/guestos bs=8M
+   sudo dd if=/tmp/disk.img of=/dev/hostlvm/guestos bs=8M conv=sparse
    sudo systemctl start guestos
 EOF

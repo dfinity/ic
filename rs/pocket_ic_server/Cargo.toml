@@ -1,6 +1,6 @@
 [package]
 name = "pocket-ic-server"
-version = "7.0.0"
+version = "8.0.0"
 edition = "2021"
 
 [dependencies]
@@ -71,6 +71,7 @@ serde = { workspace = true }
 serde_cbor = { workspace = true }
 serde_json = { workspace = true }
 slog = { workspace = true }
+strum = { workspace = true }
 tempfile = { workspace = true }
 time = { workspace = true }
 tokio = { workspace = true }

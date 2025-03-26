@@ -1,4 +1,5 @@
 use backoff::backoff::Backoff;
+use candid::{CandidType, Deserialize};
 use core::future::Future;
 use dfn_candid::{candid, candid_multi_arity};
 use ic_canister_client::{Agent, Sender};
@@ -13,7 +14,8 @@ pub use ic_types::{ingress::WasmResult, CanisterId, Cycles, PrincipalId};
 use on_wire::{FromWire, IntoWire, NewType};
 
 use ic_management_canister_types_private::{
-    CanisterSettingsArgsBuilder, CanisterStatusResultV2, UpdateSettingsArgs,
+    CanisterSettingsArgsBuilder, CanisterStatusType, DefiniteCanisterSettingsArgs, QueryStats,
+    UpdateSettingsArgs,
 };
 use ic_replica_tests::{canister_test_async, LocalTestRuntime};
 pub use ic_replica_tests::{canister_test_with_config_async, get_ic_config};
@@ -26,6 +28,33 @@ use std::{
     path::Path,
     time::Duration,
 };
+
+// Temporary copy of `ic_management_canister_types_private::CanisterStatusResultV2`
+// without the new `memory_metrics` field until the change is rolled out to production.
+#[derive(Eq, PartialEq, Debug, CandidType, Deserialize)]
+pub struct CanisterStatusResultV2 {
+    status: CanisterStatusType,
+    module_hash: Option<Vec<u8>>,
+    controller: candid::Principal,
+    settings: DefiniteCanisterSettingsArgs,
+    memory_size: candid::Nat,
+    cycles: candid::Nat,
+    balance: Vec<(Vec<u8>, candid::Nat)>,
+    freezing_threshold: candid::Nat,
+    idle_cycles_burned_per_day: candid::Nat,
+    reserved_cycles: candid::Nat,
+    query_stats: QueryStats,
+}
+
+impl CanisterStatusResultV2 {
+    pub fn controllers(&self) -> Vec<PrincipalId> {
+        self.settings.controllers()
+    }
+
+    pub fn status(&self) -> CanisterStatusType {
+        self.status.clone()
+    }
+}
 
 const MIN_BACKOFF_INTERVAL: Duration = Duration::from_millis(250);
 // The value must be smaller than `ic_http_handler::MAX_TCP_PEEK_TIMEOUT_SECS`.
@@ -737,32 +766,6 @@ impl<'a> Canister<'a> {
     /// out of date.
     pub fn set_wasm(&mut self, wasm: Vec<u8>) {
         self.wasm = Some(Wasm::from_bytes(wasm));
-    }
-
-    pub async fn add_controller(&self, additional_controller: PrincipalId) -> Result<(), String> {
-        let status_res: CanisterStatusResultV2 = self
-            .runtime
-            .get_management_canister_with_effective_canister_id(self.canister_id().into())
-            .update_("canister_status", candid, (self.as_record(),))
-            .await?;
-
-        let mut controllers = status_res.controllers();
-        controllers.push(additional_controller);
-
-        self.runtime
-            .get_management_canister_with_effective_canister_id(self.canister_id().into())
-            .update_(
-                ic00::Method::UpdateSettings.to_string(),
-                dfn_candid::candid_multi_arity,
-                (UpdateSettingsArgs {
-                    canister_id: self.canister_id.into(),
-                    settings: CanisterSettingsArgsBuilder::new()
-                        .with_controllers(controllers)
-                        .build(),
-                    sender_canister_version: None,
-                },),
-            )
-            .await
     }
 
     pub async fn set_controller(&self, new_controller: PrincipalId) -> Result<(), String> {
