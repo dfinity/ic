@@ -222,8 +222,7 @@ pub async fn decode_hash_tree(
 
         for mutation in atomic_mutation.0.mutations {
             let key = String::from_utf8_lossy(&mutation.key[..]).to_string();
-            let value: Option<Vec<u8>> =
-                get_monolithic_value(mutation, fetch_large_value).await?;
+            let value: Option<Vec<u8>> = get_monolithic_value(mutation, fetch_large_value).await?;
 
             changes.push(RegistryTransportRecord {
                 key,
