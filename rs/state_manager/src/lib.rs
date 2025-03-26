@@ -870,6 +870,8 @@ fn initialize_tip(
 ) -> ReplicatedState {
     debug_assert_eq!(snapshot.height, checkpoint_layout.height());
 
+    info!(log, "Recovering checkpoint @{} as tip", snapshot.height);
+
     // Since we initialize tip from checkpoint states, we expect a clean sandbox slate
     #[cfg(debug_assertions)]
     for canister in snapshot.state.canisters_iter() {
@@ -892,8 +894,6 @@ fn initialize_tip(
             }
         }
     }
-
-    info!(log, "Recovering checkpoint @{} as tip", snapshot.height);
 
     tip_channel
         .send(TipRequest::ResetTipAndMerge {
@@ -1934,6 +1934,12 @@ impl StateManagerImpl {
         }
 
         if !is_snapshot_present {
+            info!(
+                self.log,
+                "Completed StateSync for state {} that we already have a StateMetadata locally for",
+                height
+            );
+
             states.snapshots.push_back(Snapshot {
                 height,
                 state: Arc::new(state),
@@ -1959,6 +1965,12 @@ impl StateManagerImpl {
             .sum();
 
         if !is_state_metadata_present {
+            info!(
+                self.log,
+                "Completed StateSync for state {} that we already have a in-memory state locally for",
+                height
+            );
+
             states.states_metadata.insert(
                 height,
                 StateMetadata {
@@ -2649,10 +2661,10 @@ impl StateManager for StateManagerImpl {
         let checkpoint_layout = states
             .states_metadata
             .get(&target_snapshot.height)
-            .unwrap()
+            .expect("Attempting to initialize tip from a non-checkpoint height")
             .checkpoint_layout
             .as_ref()
-            .unwrap()
+            .expect("Missing CheckpointLayout")
             .clone();
         std::mem::drop(states);
 
