@@ -298,9 +298,12 @@ pub fn test(env: TestEnv) {
         use LookupStatus::Found;
         let hash_tree: MixedHashTree = serde_cbor::from_slice(&data_certificate.hash_tree).unwrap();
 
+        let mut index_bytes = Vec::with_capacity(10);
+        leb128::write::unsigned(&mut index_bytes, 1_u64).unwrap();
+
         assert_eq!(
             hash_tree.lookup(&[b"last_block_index"]),
-            Found(&mleaf((1_u64).to_be_bytes()))
+            Found(&mleaf(&index_bytes))
         );
 
         assert_eq!(
