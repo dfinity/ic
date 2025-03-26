@@ -477,22 +477,26 @@ fn get_pending_idkg_cup_heights(pool: &PoolReader<'_>) -> BTreeSet<Height> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ic_consensus_idkg::test_utils::empty_idkg_payload;
     use ic_consensus_mocks::{dependencies, Dependencies};
     use ic_interfaces::p2p::consensus::MutablePool;
     use ic_interfaces_mocks::messaging::MockMessageRouting;
     use ic_logger::replica_logger::no_op_logger;
+    use ic_management_canister_types_private::{EcdsaKeyId, MasterPublicKeyId};
     use ic_metrics::MetricsRegistry;
     use ic_test_artifact_pool::consensus_pool::TestConsensusPool;
     use ic_test_utilities::message_routing::FakeMessageRouting;
     use ic_test_utilities_consensus::fake::FakeContentUpdate;
     use ic_types::{
-        consensus::{BlockPayload, BlockProposal, Payload, Rank},
+        consensus::{
+            idkg::{IDkgPayload, KeyTranscriptCreation, MasterKeyTranscript},
+            BlockPayload, BlockProposal, Payload, Rank,
+        },
         crypto::CryptoHash,
         CryptoHashOfState, SubnetId,
     };
     use std::{
         collections::HashSet,
+        str::FromStr,
         sync::{Arc, RwLock},
     };
 
@@ -739,7 +743,16 @@ mod tests {
     /// then insert it into the test pool.
     fn init_idkg_in_next_round(pool: &mut TestConsensusPool, subnet_id: SubnetId) {
         let mut block: BlockProposal = pool.make_next_block();
-        let idkg_payload = empty_idkg_payload(subnet_id);
+        let idkg_payload = IDkgPayload::empty(
+            Height::new(0),
+            subnet_id,
+            vec![MasterKeyTranscript::new(
+                MasterPublicKeyId::Ecdsa(EcdsaKeyId::from_str("Secp256k1:some_key").unwrap())
+                    .try_into()
+                    .unwrap(),
+                KeyTranscriptCreation::Begin,
+            )],
+        );
         let mut block_payload = block.as_ref().payload.as_ref().clone();
         match &mut block_payload {
             BlockPayload::Summary(summary) => summary.idkg = Some(idkg_payload),

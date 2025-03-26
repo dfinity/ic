@@ -601,11 +601,11 @@ pub(super) fn is_time_to_make_block(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ic_consensus_idkg::test_utils::create_idkg_pool;
     use ic_consensus_mocks::{dependencies_with_subnet_params, Dependencies, MockPayloadBuilder};
     use ic_interfaces::consensus_pool::ConsensusPool;
     use ic_logger::replica_logger::no_op_logger;
     use ic_metrics::MetricsRegistry;
+    use ic_test_utilities_consensus::IDkgStatsNoOp;
     use ic_test_utilities_registry::{add_subnet_record, SubnetRecordBuilder};
     use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
     use ic_types::{
@@ -840,10 +840,12 @@ mod tests {
                 MetricsRegistry::new(),
                 no_op_logger(),
             )));
-            let idkg_pool = Arc::new(RwLock::new(create_idkg_pool(
+
+            let idkg_pool = Arc::new(RwLock::new(ic_artifact_pool::idkg_pool::IDkgPoolImpl::new(
                 pool_config,
                 no_op_logger(),
                 MetricsRegistry::new(),
+                Box::new(IDkgStatsNoOp {}),
             )));
 
             state_manager
