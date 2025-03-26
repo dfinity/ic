@@ -765,11 +765,12 @@ fn canister_state_dir(shutdown_signal: Option<Signal>) {
         .build();
 
     // Check the registry version.
-    // The registry version should be 2 as we have two subnets on the PocketIC instance
-    // and every subnet creation bumps the registry version.
+    // The registry version should be 5 as we have two subnets on the PocketIC instance,
+    // every subnet creation bumps the registry version twice, and global registry records
+    // are added at a separate registry version.
     let registry_proto_path = state_dir_path_buf.join("registry.proto");
     let registry_data_provider = ProtoRegistryDataProvider::load_from_file(registry_proto_path);
-    assert_eq!(registry_data_provider.latest_version(), 2.into());
+    assert_eq!(registry_data_provider.latest_version(), 5.into());
 
     // There is one application subnet in the initial topology.
     let initial_topology = pic.topology();
@@ -790,11 +791,11 @@ fn canister_state_dir(shutdown_signal: Option<Signal>) {
     deploy_counter_canister_to_id(&pic, spec_canister_id, 3);
 
     // Check the registry version.
-    // The registry version should be 3 as we have three subnets on the PocketIC instance now
-    // and every subnet creation bumps the registry version.
+    // The registry version should be 7 as a new subnet has been created,
+    // every subnet creation bumps the registry version twice.
     let registry_proto_path = state_dir_path_buf.join("registry.proto");
     let registry_data_provider = ProtoRegistryDataProvider::load_from_file(registry_proto_path);
-    assert_eq!(registry_data_provider.latest_version(), 3.into());
+    assert_eq!(registry_data_provider.latest_version(), 7.into());
 
     // There are two application subnets in the final topology.
     let final_topology = pic.topology();
