@@ -215,7 +215,6 @@ jobs:
     <<: *dind-large-setup
     # keep options from dind-large-setup but run on dind-small-setup
     runs-on:
-      group: ch1
       labels: dind-small
     if: ${{ github.event_name != 'merge_group' }}
     steps:
@@ -282,8 +281,6 @@ jobs:
   cargo-clippy-linux:
     name: Cargo Clippy Linux
     <<: *dind-small-setup
-    runs-on:
-      group: ch1
     steps:
       - <<: *checkout
       - name: Filter Rust Files [*.{rs,toml,lock}]
@@ -313,8 +310,6 @@ jobs:
   cargo-build-release-linux:
     name: Cargo Build Release Linux
     <<: *dind-small-setup
-    runs-on:
-      group: ch1
     steps:
       - <<: *checkout
       - name: Filter Rust Files [*.{rs,toml,lock}]
