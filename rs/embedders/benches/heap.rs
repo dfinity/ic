@@ -1,5 +1,5 @@
 use criterion::{criterion_group, criterion_main, Criterion, Throughput};
-use embedders_bench::PostSetupAction;
+use embedders_bench::SetupAction;
 
 const HEAP_WAT: &[u8] = include_bytes!("test-data/heap.wat");
 
@@ -50,8 +50,8 @@ fn query_bench(c: &mut Criterion, method: &str, step: usize, source: Source) {
     let wasm64 = load_wat_and_prepare(true);
     let throughput = accessed_pages(step);
     let action = match source {
-        Source::Checkpoint => PostSetupAction::PerformCheckpoint,
-        Source::PageDelta => PostSetupAction::None,
+        Source::Checkpoint => SetupAction::PerformCheckpoint,
+        Source::PageDelta => SetupAction::None,
     };
     let name_wasm32 = bench_name("wasm32", method, source);
     let name_wasm64 = bench_name("wasm64", method, source);
@@ -82,8 +82,8 @@ fn update_bench(c: &mut Criterion, method: &str, step: usize, source: Source) {
     let wasm64 = load_wat_and_prepare(true);
     let throughput = accessed_pages(step);
     let action = match source {
-        Source::Checkpoint => PostSetupAction::PerformCheckpoint,
-        Source::PageDelta => PostSetupAction::None,
+        Source::Checkpoint => SetupAction::PerformCheckpoint,
+        Source::PageDelta => SetupAction::None,
     };
     let name_wasm32 = bench_name("wasm32", method, source);
     let name_wasm64 = bench_name("wasm64", method, source);

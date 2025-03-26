@@ -661,7 +661,7 @@ fn configure_setupos_image(
     cmd.arg("--image-path")
         .arg(&uncompressed_image)
         .arg("--deployment-environment")
-        .arg("Testnet")
+        .arg("testnet")
         .arg("--mgmt-mac")
         .arg(&mac)
         .arg("--ipv6-prefix")
