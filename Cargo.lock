@@ -12171,6 +12171,7 @@ dependencies = [
  "ic-consensus",
  "ic-consensus-certification",
  "ic-consensus-dkg",
+ "ic-consensus-idkg",
  "ic-consensus-manager",
  "ic-consensus-utils",
  "ic-consensus-vetkd",

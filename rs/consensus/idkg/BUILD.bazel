@@ -31,7 +31,6 @@ DEV_DEPENDENCIES = [
     "//rs/consensus/mocks",
     "//rs/crypto/temp_crypto",
     "//rs/crypto/test_utils/reproducible_rng",
-    "//rs/crypto/tree_hash",
     "//rs/registry/fake",
     "//rs/test_utilities",
     "//rs/test_utilities/artifact_pool",
