@@ -153,7 +153,6 @@ jobs:
       - name: Run qualification for version
         uses: ./.github/actions/bazel-test-all/
         with:
-          BAZEL_COMMAND: |
-            test --config=ci --config=systest --keep_going --test_timeout=7200
+          BAZEL_COMMAND: test --config=ci --config=systest --keep_going --test_timeout=7200
           BAZEL_TARGETS: "//rs/tests/dre:guest_os_qualification"
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
