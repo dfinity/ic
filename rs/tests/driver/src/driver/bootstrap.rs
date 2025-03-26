@@ -689,7 +689,7 @@ pub fn configure_setupos_image(
         .arg("type3.1")
         .env(path_key, &new_path);
 
-    if let Ok(node_key) = std::env::var("NODE_OPERATOR_PRIVATE_KEY") {
+    if let Ok(node_key) = std::env::var("NODE_OPERATOR_PRIV_KEY_PATH") {
         cmd.arg("--node-operator-private-key").arg(node_key);
     }
 
