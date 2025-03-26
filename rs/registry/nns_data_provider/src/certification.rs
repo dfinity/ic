@@ -123,7 +123,7 @@ fn validate_version_range(
     Ok(p.current_version.0)
 }
 
-
+/// Converts LargeValueChunkKeys into a blob by calling Registry canister's get_chunk method.
 #[async_trait]
 pub trait FetchLargeValue {
     async fn get_chunk(&self, content_sha256: &[u8]) -> Result<Vec<u8>, String>;
@@ -136,6 +136,56 @@ pub trait FetchLargeValue {
         }
         Ok(result)
     }
+}
+
+// Returns a blob.
+//
+// If the mutation was a delete, returns None.
+//
+// If the content has the blob inline, returns that.
+//
+// Otherwise, content uses LargeValueChunkKeys. In this case, fetches the
+// chunks, concatenates them, and returns the resulting monolithic blob.
+//
+// Possible reasons for returning Err:
+//
+//   1. get_chunk call fail.
+//   2. content does not have value
+async fn get_monolithic_value(
+    mutation: HighCapacityRegistryMutation,
+    fetch_large_value: &(impl FetchLargeValue + Sync),
+) -> Result<Option<Vec<u8>>, CertificationError> {
+    let HighCapacityRegistryMutation {
+        key,
+        mutation_type,
+        content,
+    } = mutation;
+
+    // DO NOT MERGE - Here, we assume that other mutation types have some
+    // content associated with them.
+    if mutation_type == Type::Delete as i32 {
+        return Ok(None);
+    }
+
+    let Some(content) = content else {
+        return Ok(Some(vec![]));
+    };
+
+    use high_capacity_registry_mutation::Content as C;
+    let large_value_chunk_keys = match content {
+        C::LargeValueChunkKeys(ok) => ok,
+
+        C::Value(value) => {
+            return Ok(Some(value));
+        }
+    };
+
+    let monolithic_blob = fetch_large_value
+        .fetch_large_value(&large_value_chunk_keys)
+        .await
+        .map_err(CertificationError::InvalidDeltas)?;
+
+    Ok(Some(monolithic_blob))
 }
 
 /// Decodes registry deltas from their hash tree representation.
@@ -171,15 +221,9 @@ pub async fn decode_hash_tree(
         let version = RegistryVersion::from(version);
 
         for mutation in atomic_mutation.0.mutations {
-            let HighCapacityRegistryMutation {
-                mutation_type,
-                content,
-                key,
-            } = mutation;
-
-            let key = String::from_utf8_lossy(&key[..]).to_string();
+            let key = String::from_utf8_lossy(&mutation.key[..]).to_string();
             let value: Option<Vec<u8>> =
-                normalize_mutation_content(mutation_type, content, fetch_large_value).await?;
+                get_monolithic_value(mutation, fetch_large_value).await?;
 
             changes.push(RegistryTransportRecord {
                 key,
@@ -190,37 +234,6 @@ pub async fn decode_hash_tree(
     }
 
     Ok((changes, RegistryVersion::from(current_version)))
-}
-
-// DO NOT MERGE - Might make more sense for this to be defined in the registry/transport crate.
-async fn normalize_mutation_content(
-    mutation_type: i32,
-    content: Option<high_capacity_registry_mutation::Content>,
-    fetch_large_value: &(impl FetchLargeValue + Sync),
-) -> Result<Option<Vec<u8>>, CertificationError> {
-    if mutation_type == Type::Delete as i32 {
-        return Ok(None);
-    }
-
-    use high_capacity_registry_mutation::Content as C;
-    let large_value_chunk_keys = match content {
-        Some(C::LargeValueChunkKeys(ok)) => ok,
-
-        Some(C::Value(value)) => {
-            return Ok(Some(value));
-        }
-
-        None => {
-            todo!(); // DO NOT MERGE
-        }
-    };
-
-    let monolithic_blob = fetch_large_value
-        .fetch_large_value(&large_value_chunk_keys)
-        .await
-        .map_err(CertificationError::InvalidDeltas)?;
-
-    Ok(Some(monolithic_blob))
 }
 
 /// Parses a response of the "get_certified_changes_since" registry method,
