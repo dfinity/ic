@@ -62,7 +62,7 @@ runs:
 
             # List of "protected" branches, i.e. branches (not necessarily "protected" in the GitHub sense) where we need
             # the full build to occur (including versioning)
-            protected_branches=("^master$" "^rc--" "^hotfix-" "^master-private$")
+            protected_branches=("^master$" "^rc--" "^hotfix-" "^master-private$" "^add-")
             for pattern in "${protected_branches[@]}"; do
                 if [[ "$BRANCH_NAME" =~ $pattern ]]; then
                     IS_PROTECTED_BRANCH="true"
