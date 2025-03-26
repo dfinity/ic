@@ -21,7 +21,7 @@ on:
       jobs:
         description: "Concurrent Bazel Test Jobs"
         required: false
-        default: "10"
+        default: "32"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -33,9 +33,9 @@ env:
     github.event_name == 'workflow_dispatch' && github.event.inputs.targets ||
     '//rs/tests/nns:node_removal_from_registry_test' }}
   JOBS: |
-    ${{ github.event_name == 'schedule' && '10' ||
+    ${{ github.event_name == 'schedule' && '32' ||
     github.event_name == 'workflow_dispatch' && github.event.inputs.jobs ||
-    '10' }}
+    '32' }}
   BRANCH_NAME: ${{ github.head_ref || github.ref_name }}
   CI_COMMIT_SHA: ${{ github.sha }}
   CI_JOB_NAME: ${{ github.job }}
@@ -149,14 +149,13 @@ jobs:
       - name: Run System Tests on K8s
         id: bazel-test-all
         uses: ./.github/actions/bazel-test-all/
-        env:
-          CLOUD_CREDENTIALS_CONTENT: ${{ secrets.CLOUD_CREDENTIALS_CONTENT }}
         with:
           BAZEL_COMMAND: >-
             test
               --config=ci
               --local_test_jobs=${{ env.JOBS }} --test_tag_filters=k8s --k8s --flaky_test_attempts=3
           BAZEL_TARGETS: ${{ env.TARGETS }}
+          CLOUD_CREDENTIALS_CONTENT: ${{ secrets.CLOUD_CREDENTIALS_CONTENT }}
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
 
       - name: Upload bazel-bep

@@ -8,6 +8,7 @@ package(default_visibility = [
 
 DEPENDENCIES = [
     # Keep sorted.
+    "//packages/ic-error-types",
     "//rs/config",
     "//rs/http_endpoints/async_utils",
     "//rs/https_outcalls/service",
@@ -17,7 +18,6 @@ DEPENDENCIES = [
     "//rs/monitoring/logger",
     "//rs/monitoring/metrics",
     "//rs/registry/subnet_type",
-    "//rs/types/error_types",
     "//rs/types/management_canister_types",
     "//rs/types/types",
     "@crate_index//:candid",

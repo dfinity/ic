@@ -6,8 +6,8 @@ use aide::{
     },
     openapi::{Info, OpenApi},
 };
+use async_trait::async_trait;
 use axum::{
-    async_trait,
     extract::{DefaultBodyLimit, Path, State},
     http,
     http::{HeaderMap, StatusCode},
@@ -164,13 +164,13 @@ async fn start(runtime: Arc<Runtime>) {
         .directory_route("/blobstore", post(set_blob_store_entry))
         //
         // Get a blob store entry.
-        .directory_route("/blobstore/:id", get(get_blob_store_entry))
+        .directory_route("/blobstore/{id}", get(get_blob_store_entry))
         //
         // Verify signature.
         .directory_route("/verify_signature", post(verify_signature))
         //
         // Read state: Poll a result based on a received Started{} reply.
-        .directory_route("/read_graph/:state_label/:op_id", get(handler_read_graph))
+        .directory_route("/read_graph/{state_label}/{op_id}", get(handler_read_graph))
         //
         // All instance routes.
         .nest("/instances", instances_routes::<AppState>())
@@ -491,5 +491,55 @@ impl BlobStore for InMemoryBlobStore {
     async fn fetch(&self, blob_id: BlobId) -> Option<BinaryBlob> {
         let m = self.map.read().await;
         m.get(&blob_id).cloned()
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use std::sync::Arc;
+
+    use clap::Parser;
+    use ic_agent::agent::route_provider::RoundRobinRouteProvider;
+    use ic_bn_lib::tls::prepare_client_config;
+    use ic_gateway::{setup_router, Cli};
+
+    #[test]
+    fn test_setup_router() {
+        let args = vec![
+            "",
+            "--domain",
+            "ic0.app",
+            "--domain-canister-id-from-query-params",
+        ];
+        let cli = Cli::parse_from(args);
+
+        rustls::crypto::ring::default_provider()
+            .install_default()
+            .unwrap();
+
+        let mut http_client_opts: ic_bn_lib::http::client::Options<ic_bn_lib::http::dns::Resolver> =
+            (&cli.http_client).into();
+        http_client_opts.tls_config = Some(prepare_client_config(&[
+            &rustls::version::TLS13,
+            &rustls::version::TLS12,
+        ]));
+        let http_client =
+            Arc::new(ic_bn_lib::http::ReqwestClient::new(http_client_opts.clone()).unwrap());
+
+        let route_provider = RoundRobinRouteProvider::new(vec!["https://icp-api.io"]).unwrap();
+
+        let mut tasks = ic_bn_lib::tasks::TaskManager::new();
+
+        let _ = setup_router(
+            &cli,
+            vec![],
+            &mut tasks,
+            http_client,
+            Arc::new(route_provider),
+            &prometheus::Registry::new(),
+            None,
+            None,
+        )
+        .unwrap();
     }
 }

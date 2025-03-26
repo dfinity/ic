@@ -179,42 +179,25 @@ pub fn ic_embedders_config(memory64_enabled: bool) -> EmbeddersConfig {
 }
 
 fn get_persisted_global(g: wasmparser::Global) -> Option<Global> {
-    match g.ty.content_type {
-        ValType::I32 => Some(Global::I32(
-            g.init_expr
-                .get_binary_reader()
-                .read_var_i32()
-                .expect("Failed to parse GlobalType i32"),
-        )),
-        ValType::I64 => Some(Global::I64(
-            g.init_expr
-                .get_binary_reader()
-                .read_var_i64()
-                .expect("Failed to parse GlobalType i64"),
-        )),
-        ValType::F32 => Some(Global::F32(f32::from_bits(
-            g.init_expr
-                .get_binary_reader()
-                .read_f32()
-                .expect("Failed to parse GlobalType f32")
-                .bits(),
-        ))),
-        ValType::F64 => Some(Global::F64(f64::from_bits(
-            g.init_expr
-                .get_binary_reader()
-                .read_f64()
-                .expect("Failed to parse GlobalType f64")
-                .bits(),
-        ))),
-        ValType::V128 => Some(Global::V128(u128::from_le_bytes(
-            g.init_expr
-                .get_binary_reader()
-                .read_bytes(16)
-                .expect("Failed to parse GlobalType v128")[..]
-                .try_into()
-                .unwrap(),
-        ))),
-        _ => None,
+    match (
+        g.ty.content_type,
+        g.init_expr
+            .get_binary_reader()
+            .read_operator()
+            .expect("Unable to read operator for ConstExpr"),
+    ) {
+        (ValType::I32, Operator::I32Const { value }) => Some(Global::I32(value)),
+        (ValType::I64, Operator::I64Const { value }) => Some(Global::I64(value)),
+        (ValType::F32, Operator::F32Const { value }) => {
+            Some(Global::F32(f32::from_bits(value.bits())))
+        }
+        (ValType::F64, Operator::F64Const { value }) => {
+            Some(Global::F64(f64::from_bits(value.bits())))
+        }
+        (ValType::V128, Operator::V128Const { value }) => {
+            Some(Global::V128(u128::from_le_bytes(*value.bytes())))
+        }
+        (_, _) => None,
     }
 }
 

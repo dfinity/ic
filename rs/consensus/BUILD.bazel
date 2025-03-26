@@ -5,9 +5,11 @@ package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
     # Keep sorted.
+    "//packages/ic-error-types",
     "//rs/config",
     "//rs/consensus/dkg",
     "//rs/consensus/utils",
+    "//rs/consensus/vetkd",
     "//rs/crypto",
     "//rs/crypto/prng",
     "//rs/crypto/utils/threshold_sig_der",
@@ -24,7 +26,6 @@ DEPENDENCIES = [
     "//rs/registry/subnet_features",
     "//rs/registry/subnet_type",
     "//rs/replicated_state",
-    "//rs/types/error_types",
     "//rs/types/management_canister_types",
     "//rs/types/types",
     "@crate_index//:num-traits",

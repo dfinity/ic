@@ -27,7 +27,7 @@ use ic_types::{
 use ic_wasm_types::WasmHash;
 
 use crate::{
-    canister_manager::{
+    canister_manager::types::{
         CanisterManagerError, CanisterMgrConfig, DtsInstallCodeResult, InstallCodeResult,
     },
     canister_settings::{validate_canister_settings, CanisterSettings},

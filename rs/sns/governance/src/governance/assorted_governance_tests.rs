@@ -801,8 +801,17 @@ async fn test_disallow_enabling_voting_rewards_while_in_pre_initialization_swap(
     };
 
     let err = err.error_message.to_lowercase();
-    assert!(err.contains("mode"), "{:#?}", err);
-    assert!(err.contains("vot"), "{:#?}", err);
+    assert!(
+        err.contains("manage nervous system parameters"),
+        "{:#?}",
+        err
+    );
+    assert!(err.contains("not allowed"), "{:#?}", err);
+    assert!(
+        err.contains("in preinitializationswap (2) mode"),
+        "{:#?}",
+        err
+    );
 }
 
 #[tokio::test]
@@ -3518,75 +3527,6 @@ fn test_add_generic_nervous_system_function_succeeds() {
     assert_eq!(governance.proto.id_to_nervous_system_functions[&id], valid);
 }
 
-// TODO(NNS1-3625): Remove this test once proposal criticality is determined by the topic
-#[test]
-fn test_cant_add_generic_nervous_system_functions_to_critical_topics() {
-    let root_canister_id = *TEST_ROOT_CANISTER_ID;
-    let governance_canister_id = *TEST_GOVERNANCE_CANISTER_ID;
-    let ledger_canister_id = *TEST_LEDGER_CANISTER_ID;
-    let swap_canister_id = *TEST_SWAP_CANISTER_ID;
-
-    let env = NativeEnvironment::new(Some(governance_canister_id));
-    let mut governance = Governance::new(
-        GovernanceProto {
-            proposals: btreemap! {},
-            root_canister_id: Some(root_canister_id.get()),
-            ledger_canister_id: Some(ledger_canister_id.get()),
-            swap_canister_id: Some(swap_canister_id.get()),
-            ..basic_governance_proto()
-        }
-        .try_into()
-        .unwrap(),
-        Box::new(env),
-        Box::new(DoNothingLedger {}),
-        Box::new(DoNothingLedger {}),
-        Box::new(FakeCmc::new()),
-    );
-
-    let critical_topics = governance
-        .list_topics()
-        .topics
-        .into_iter()
-        .filter_map(|topic_info| {
-            if topic_info.is_critical {
-                Some(topic_info.topic)
-            } else {
-                None
-            }
-        })
-        .collect::<Vec<Topic>>();
-
-    for topic in critical_topics {
-        let id = 1000;
-        let valid = NervousSystemFunction {
-            id,
-            name: "a".to_string(),
-            description: None,
-            function_type: Some(FunctionType::GenericNervousSystemFunction(
-                GenericNervousSystemFunction {
-                    topic: Some(topic as i32),
-                    target_canister_id: Some(CanisterId::from(200).get()),
-                    target_method_name: Some("test_method".to_string()),
-                    validator_canister_id: Some(CanisterId::from(100).get()),
-                    validator_method_name: Some("test_validator_method".to_string()),
-                },
-            )),
-        };
-
-        match governance.perform_add_generic_nervous_system_function(valid.clone()) {
-            Ok(_) => panic!(
-                "Should not be able to add generic nervous system functions to critical topics, but was able to add it for topic {:?}",
-                topic
-            ),
-            Err(err) => assert_eq!(
-                ErrorType::try_from(err.error_type).unwrap(),
-                ErrorType::PreconditionFailed,
-                "Should not be able to add generic nervous system functions to critical topics on the basis that it's precondition failed.",
-            ),
-        }
-    }
-}
-
 #[test]
 fn test_cant_add_generic_nervous_system_function_without_topic() {
     let id = 1000;
@@ -5066,6 +5006,18 @@ fn test_list_topics() {
                         name: "Advance SNS target version".to_string(),
                         description: Some(
                             "Proposal to advance the target version of this SNS.".to_string(),
+                        ),
+                        function_type: Some(
+                            FunctionType::NativeNervousSystemFunction(
+                                Empty {},
+                            ),
+                        ),
+                    },
+                    NervousSystemFunction {
+                        id: 16,
+                        name: "Set topics for custom proposals".to_string(),
+                        description: Some(
+                            "Proposal to set the topics for custom SNS proposals.".to_string(),
                         ),
                         function_type: Some(
                             FunctionType::NativeNervousSystemFunction(

@@ -13,6 +13,8 @@ component_files = {
     Label("early-boot/save-machine-id/save-machine-id.service"): "/etc/systemd/system/save-machine-id.service",
     Label("early-boot/fstab/fstab-guestos"): "/etc/fstab",
     Label("early-boot/locale"): "/etc/default/locale",
+    Label("early-boot/initramfs-tools/guestos/amd64-microcode"): "/etc/default/amd64-microcode",
+    Label("early-boot/initramfs-tools/guestos/intel-microcode"): "/etc/default/intel-microcode",
     Label("early-boot/initramfs-tools/guestos/hooks/veritysetup"): "/etc/initramfs-tools/hooks/veritysetup",
     Label("early-boot/initramfs-tools/guestos/initramfs.conf"): "/etc/initramfs-tools/initramfs.conf",
     Label("early-boot/initramfs-tools/guestos/modules"): "/etc/initramfs-tools/modules",

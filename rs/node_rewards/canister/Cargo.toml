@@ -1,0 +1,24 @@
+[package]
+name = "ic-rewards-canister"
+version.workspace = true
+authors.workspace = true
+description.workspace = true
+documentation.workspace = true
+edition.workspace = true
+
+[[bin]]
+name = "node-rewards-canister"
+path = "src/main.rs"
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+ic-cdk = { workspace = true }
+candid = { workspace = true }
+node-rewards-canister-api = { path = "./api" }
+
+[dev-dependencies]
+candid_parser = { workspace = true }
+ic-state-machine-tests = { path = "../../state_machine_tests" }
+ic-nns-test-utils = { path = "../../nns/test_utils" }

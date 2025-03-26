@@ -34,7 +34,7 @@ def _upload_artifact_impl(ctx):
         outputs = [checksum],
     )
 
-    allinputs = ctx.files.inputs + [checksum] if s3_upload else [checksum]
+    allinputs = ctx.files.inputs + [checksum]
     for f in allinputs:
         filename = ctx.label.name + "_" + f.basename
         url = ctx.actions.declare_file(filename + ".url")
@@ -48,7 +48,7 @@ def _upload_artifact_impl(ctx):
                 "REMOTE_SUBDIR": ctx.attr.remote_subdir,
                 "VERSION_FILE": ctx.version_file.path,
                 "VERSION_TXT": ctx.file._version_txt.path,
-            },
+            } | ({"UPLOAD_BUILD_ARTIFACTS": "1"} if s3_upload else {}),
             inputs = [f, ctx.version_file, rclone_config, ctx.file._version_txt],
             outputs = [url],
             tools = [ctx.file._rclone],
@@ -85,7 +85,7 @@ def upload_artifacts(**kwargs):
     """
 
     tags = kwargs.get("tags", [])
-    for tag in ["requires-network", "upload"]:
+    for tag in ["requires-network"]:
         if tag not in tags:
             tags.append(tag)
     kwargs["tags"] = tags
