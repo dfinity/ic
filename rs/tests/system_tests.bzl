@@ -274,7 +274,7 @@ def system_test(
         env["ENV_DEPS__HOSTOS_UPDATE_IMG_URL"] = base_download_url(mainnet_hostos_version, "host-os", True, False) + "update-img.tar.zst"
         env["ENV_DEPS__HOSTOS_UPDATE_IMG_SHA"] = mainnet_icos_versions["hostos"]["latest_release"]["update_img_hash"]
     else:
-        env["RUN_SCRIPT_HOSTOS_UPDATE_IMG"] = "1"
+        env["RUN_SCRIPT_HOSTOS_UPDATE_IMG_TEST"] = "1"
 
     if uses_setupos_mainnet:
         # Note: SetupOS is still passed directly by path, as it needs some local processing.
