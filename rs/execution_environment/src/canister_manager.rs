@@ -1997,13 +1997,21 @@ impl CanisterManager {
     ) -> Result<ReadCanisterSnapshotMetadataResponse, CanisterManagerError> {
         // Check sender is a controller.
         validate_controller(canister, &sender)?;
+        // If not found, the operation fails due to invalid parameters.
         let Some(snapshot) = state.canister_snapshots.get(snapshot_id) else {
-            // If not found, the operation fails due to invalid parameters.
             return Err(CanisterManagerError::CanisterSnapshotNotFound {
                 canister_id: canister.canister_id(),
                 snapshot_id,
             });
         };
+        // Verify the provided `snapshot_id` belongs to this canister.
+        if snapshot.canister_id() != canister.canister_id() {
+            return Err(CanisterManagerError::CanisterSnapshotInvalidOwnership {
+                canister_id: canister.canister_id(),
+                snapshot_id,
+            });
+        }
+
         Ok(ReadCanisterSnapshotMetadataResponse {
             source: snapshot.source(),
             taken_at_timestamp: snapshot.taken_at_timestamp().as_nanos_since_unix_epoch(),
