@@ -2651,7 +2651,11 @@ impl From<CanisterSnapshotBits> for pb_canister_snapshot_bits::CanisterSnapshotB
                 .map(|global| global.into())
                 .collect(),
             global_timer_nanos: item.global_timer.to_nanos_since_unix_epoch(),
-            on_low_wasm_memory_hook_status: item.on_low_wasm_memory_hook_status.into(),
+            on_low_wasm_memory_hook_status:
+                pb_canister_state_bits::OnLowWasmMemoryHookStatus::from(
+                    &item.on_low_wasm_memory_hook_status,
+                )
+                .into(),
             source: item.source.into(),
         }
     }

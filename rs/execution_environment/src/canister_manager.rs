@@ -1797,11 +1797,6 @@ impl CanisterManager {
         system_state
             .certified_data
             .clone_from(snapshot.certified_data());
-        // TODO: EXC-2004 let the user decide whether to load these or not
-        // system_state.global_timer = snapshot.execution_snapshot().global_timer;
-        // system_state
-        //     .task_queue
-        //     .set_hook_status(snapshot.execution_snapshot().on_low_wasm_memory_hook_status);
         let wasm_execution_mode = new_execution_state
             .as_ref()
             .map_or(WasmExecutionMode::Wasm32, |exec_state| {

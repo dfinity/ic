@@ -102,11 +102,6 @@ impl TaskQueue {
         self.on_low_wasm_memory_hook_status
     }
 
-    /// Needed for canister snapshot loading.
-    pub fn set_hook_status(&mut self, status: OnLowWasmMemoryHookStatus) {
-        self.on_low_wasm_memory_hook_status = status;
-    }
-
     /// `check_dts_invariants` should only be called after round execution.
     ///
     /// It checks that the following properties are satisfied:
