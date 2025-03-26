@@ -20,7 +20,8 @@ if [ ! -s "${MIN_FILE}" ]; then
 fi
 BASELINE_FILE="${BASELINE_DIR}/${MIN_FILE##*/}"
 if [ ! -s "${BASELINE_FILE}" ]; then
-    echo "    No baseline found in ${BASELINE_FILE}" >&2 && exit 0
+    # Return an error, so the calling script can retry.
+    echo "    No baseline found in ${BASELINE_FILE}" >&2 && exit 1
 fi
 
 echo_diff() {
