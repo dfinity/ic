@@ -44,10 +44,6 @@ fn cycles_into_parts<Cycles: Into<u128>>(cycles: Cycles) -> (u64, u64) {
     (high, low)
 }
 
-fn cycles_from_parts(high: u64, low: u64) -> u128 {
-    (high << 64) as u128 | low as u128
-}
-
 /// A succinct shortcut for creating a `PayloadBuilder`, which is used to encode
 /// instructions to be executed by the UC.
 ///
@@ -586,13 +582,8 @@ impl PayloadBuilder {
     pub fn call<C: Into<Call>>(mut self, call: C) -> Self {
         let call = call.into();
         let call_args = call.get_call_args();
-        let (cycles_high, cycles_low) = call.cycles;
-        self = self.call_with_cycles(
-            call.callee,
-            call.method,
-            call_args,
-            cycles_from_parts(cycles_high, cycles_low),
-        );
+        let cycles = call.cycles;
+        self = self.call_with_cycles(call.callee, call.method, call_args, cycles);
         self
     }
 
@@ -789,7 +780,7 @@ pub struct Call {
     callee: Vec<u8>,
     method: String,
     args: CallArgs,
-    cycles: (u64, u64),
+    cycles: u128,
 }
 
 impl CallInterface for Call {
@@ -806,7 +797,7 @@ impl Call {
             callee: callee_vec,
             method: method.into(),
             args: CallArgs::default(),
-            cycles: (0, 0),
+            cycles: 0,
         }
     }
 
@@ -818,11 +809,11 @@ impl Call {
 pub trait CallInterface {
     fn call(&mut self) -> &mut Call;
 
-    fn cycles(mut self, cycles: (u64, u64)) -> Self
+    fn cycles<Cycles: Into<u128>>(mut self, cycles: Cycles) -> Self
     where
         Self: std::marker::Sized,
     {
-        self.call().cycles = cycles;
+        self.call().cycles = cycles.into();
         self
     }
 
