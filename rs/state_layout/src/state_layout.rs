@@ -968,7 +968,7 @@ impl StateLayout {
             .unwrap_or_default();
         let tmp_path = self
             .fs_tmp()
-            .join(format!("{}_{}", cp_name, timestamp.as_millis()));
+            .join(format!("{}_{}", cp_name, timestamp.as_nanos()));
 
         // Atomically removes the checkpoint by first renaming it into tmp_path, and then deleting tmp_path.
         // This way maintains the invariant that <root>/checkpoints/<height> are always internally consistent.
@@ -1030,7 +1030,7 @@ impl StateLayout {
             .unwrap_or_default();
         let tmp_path = self
             .fs_tmp()
-            .join(format!("{}_{}", cp_name, timestamp.as_millis()));
+            .join(format!("{}_{}", cp_name, timestamp.as_nanos()));
 
         // Atomically removes the checkpoint by first renaming it into tmp_path, and then deleting tmp_path.
         // This way maintains the invariant that <root>/checkpoints/<height> are always internally consistent.
