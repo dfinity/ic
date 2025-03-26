@@ -9,6 +9,7 @@ DEPENDENCIES = [
     "//rs/config",
     "//rs/consensus/certification",
     "//rs/consensus/dkg",
+    "//rs/consensus/idkg",
     "//rs/consensus/utils",
     "//rs/consensus/vetkd",
     "//rs/crypto",

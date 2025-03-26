@@ -7,7 +7,10 @@ use crate::consensus::{
     status::{self, Status},
 };
 use ic_consensus_dkg::get_vetkey_public_keys;
-use ic_consensus_idkg::utils::{get_idkg_subnet_public_keys, get_pre_signature_ids_to_deliver};
+use ic_consensus_idkg::{
+    generate_responses_to_signature_request_contexts,
+    utils::{get_idkg_subnet_public_keys, get_pre_signature_ids_to_deliver},
+};
 use ic_consensus_utils::{
     crypto_hashable_to_seed, membership::Membership, pool_reader::PoolReader,
 };
@@ -28,7 +31,7 @@ use ic_protobuf::{
 use ic_types::{
     batch::{Batch, BatchMessages, BatchSummary, BlockmakerMetrics, ConsensusResponse},
     consensus::{
-        idkg::{self, CompletedSignature},
+        idkg::{self},
         Block, HasVersion,
     },
     crypto::threshold_sig::{
@@ -476,20 +479,6 @@ fn generate_dkg_response_payload(
         )),
         _ => None,
     }
-}
-
-/// Creates responses to `SignWithECDSA` and `SignWithSchnorr` system calls with the computed
-/// signature.
-pub fn generate_responses_to_signature_request_contexts(
-    idkg_payload: &idkg::IDkgPayload,
-) -> Vec<ConsensusResponse> {
-    let mut consensus_responses = Vec::new();
-    for completed in idkg_payload.signature_agreements.values() {
-        if let CompletedSignature::Unreported(response) = completed {
-            consensus_responses.push(response.clone());
-        }
-    }
-    consensus_responses
 }
 
 /// Creates responses to `ComputeInitialIDkgDealingsArgs` system calls with the initial

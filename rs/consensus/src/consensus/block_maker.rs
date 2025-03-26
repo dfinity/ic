@@ -601,7 +601,7 @@ pub(super) fn is_time_to_make_block(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::test_utils::create_idkg_pool;
+    use ic_consensus_idkg::test_utils::create_idkg_pool;
     use ic_consensus_mocks::{dependencies_with_subnet_params, Dependencies, MockPayloadBuilder};
     use ic_interfaces::consensus_pool::ConsensusPool;
     use ic_logger::replica_logger::no_op_logger;
