@@ -9,6 +9,7 @@ BASE_DEPENDENCIES = [
     "//rs/ledger_suite/common/ledger_core",
     "//rs/ledger_suite/icp:icp_ledger",
     "//rs/limits",
+    "//rs/nervous_system/chunks",  # TODO(NNS1-3682): Delete.
     "//rs/nervous_system/clients",
     "//rs/nervous_system/common",
     "//rs/nervous_system/common/test_keys",

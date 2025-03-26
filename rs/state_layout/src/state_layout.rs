@@ -1,6 +1,8 @@
 use ic_base_types::{NumBytes, NumSeconds};
 use ic_logger::{error, info, warn, ReplicaLogger};
-use ic_management_canister_types_private::{Global, LogVisibilityV2};
+use ic_management_canister_types_private::{
+    Global, LogVisibilityV2, OnLowWasmMemoryHookStatus, SnapshotSource,
+};
 use ic_metrics::{buckets::decimal_buckets, MetricsRegistry};
 use ic_protobuf::{
     proxy::{try_from_option_field, ProxyDecodeError},
@@ -18,18 +20,18 @@ use ic_replicated_state::{
         },
     },
     page_map::{Shard, StorageLayout, StorageResult},
-    CallContextManager, CanisterStatus, ExecutionTask, ExportedFunctions, NumWasmPages,
+    CallContextManager, CanisterStatus, ExportedFunctions, NumWasmPages,
 };
 use ic_sys::{fs::sync_path, mmap::ScopedMmap};
 use ic_types::{
     batch::TotalQueryStats, nominal_cycles::NominalCycles, AccumulatedPriority, CanisterId,
-    CanisterLog, ComputeAllocation, Cycles, ExecutionRound, Height, LongExecutionMode,
-    MemoryAllocation, NumInstructions, PrincipalId, SnapshotId, Time,
+    CanisterLog, CanisterTimer, ComputeAllocation, Cycles, ExecutionRound, Height,
+    LongExecutionMode, MemoryAllocation, NumInstructions, PrincipalId, SnapshotId, Time,
 };
 use ic_utils::thread::maybe_parallel_map;
 use ic_wasm_types::{CanisterModule, WasmHash};
 use prometheus::{Histogram, IntCounterVec};
-use std::collections::{BTreeMap, BTreeSet, VecDeque};
+use std::collections::{BTreeMap, BTreeSet};
 use std::convert::{identity, From, TryFrom, TryInto};
 use std::ffi::OsStr;
 use std::fs::OpenOptions;
@@ -205,6 +207,12 @@ pub struct CanisterSnapshotBits {
     pub total_size: NumBytes,
     /// State of the exported Wasm globals.
     pub exported_globals: Vec<Global>,
+    /// Whether this snapshot comes from a canister or from a user upload.
+    pub source: SnapshotSource,
+    /// The state of the global timer
+    pub global_timer: CanisterTimer,
+    /// The state of the low memory hook
+    pub on_low_wasm_memory_hook_status: OnLowWasmMemoryHookStatus,
 }
 
 #[derive(Clone)]
@@ -520,14 +528,8 @@ impl StateLayout {
         thread_pool: &mut Option<scoped_threadpool::Pool>,
     ) -> Result<(), LayoutError> {
         for height in self.checkpoint_heights()? {
-            let path = self.checkpoint_verified(height)?.raw_path().to_path_buf();
-            mark_files_readonly_and_sync(&path, thread_pool.as_mut()).map_err(|err| {
-                LayoutError::IoError {
-                    path,
-                    message: format!("Could not sync and mark readonly checkpoint {}", height),
-                    io_err: err,
-                }
-            })?;
+            let cp_layout = self.checkpoint_verified(height)?;
+            cp_layout.mark_files_readonly_and_sync(thread_pool.as_mut())?;
         }
         Ok(())
     }
@@ -1550,20 +1552,51 @@ impl<Permissions: AccessPolicy> CheckpointLayout<Permissions> {
         !self.unverified_checkpoint_marker().exists()
     }
 
+    /// Recursively set permissions to readonly for all files under the checkpoint
+    /// except for the unverified checkpoint marker file.
     pub fn mark_files_readonly_and_sync(
         &self,
-        thread_pool: Option<&mut scoped_threadpool::Pool>,
+        mut thread_pool: Option<&mut scoped_threadpool::Pool>,
     ) -> Result<(), LayoutError> {
-        mark_files_readonly_and_sync(self.raw_path(), thread_pool).map_err(|err| {
+        let checkpoint_path = self.raw_path();
+        let convert_io_err = |err: std::io::Error| -> LayoutError {
             LayoutError::IoError {
-                path: self.raw_path().to_path_buf(),
+                path: checkpoint_path.to_path_buf(),
                 message: format!(
                     "Could not mark files readonly and sync for checkpoint {}",
                     self.height()
                 ),
                 io_err: err,
             }
-        })
+        };
+
+        let mut paths = dir_list_recursive(checkpoint_path).map_err(convert_io_err)?;
+        // Remove the unverified checkpoint marker from the list of paths,
+        // since another thread might also be validating the checkpoint and may have already deleted the marker.
+        // Marking the unverified marker as read-only is unnecessary for this function's purpose and may cause an error.
+        paths.retain(|p| p != &self.unverified_checkpoint_marker());
+        let results = maybe_parallel_map(&mut thread_pool, paths.iter(), |p| {
+            mark_readonly_if_file(p)?;
+            #[cfg(not(target_os = "linux"))]
+            sync_path(p)?;
+            Ok::<(), std::io::Error>(())
+        });
+
+        results
+            .into_iter()
+            .try_for_each(identity)
+            .map_err(convert_io_err)?;
+        #[cfg(target_os = "linux")]
+        {
+            let f = std::fs::File::open(checkpoint_path).map_err(convert_io_err)?;
+            use std::os::fd::AsRawFd;
+            unsafe {
+                if libc::syncfs(f.as_raw_fd()) == -1 {
+                    return Err(convert_io_err(std::io::Error::last_os_error()));
+                }
+            }
+        }
+        Ok(())
     }
 }
 
@@ -2360,12 +2393,6 @@ impl From<CanisterStateBits> for pb_canister_state_bits::CanisterStateBits {
             heap_delta_debit: item.heap_delta_debit.get(),
             install_code_debit: item.install_code_debit.get(),
             time_of_last_allocation_charge_nanos: Some(item.time_of_last_allocation_charge_nanos),
-            task_queue: item
-                .task_queue
-                .get_queue()
-                .iter()
-                .map(|v| v.into())
-                .collect(),
             global_timer_nanos: item.global_timer_nanos,
             canister_version: item.canister_version,
             consumed_cycles_by_use_cases: item
@@ -2393,12 +2420,6 @@ impl From<CanisterStateBits> for pb_canister_state_bits::CanisterStateBits {
             wasm_memory_limit: item.wasm_memory_limit.map(|v| v.get()),
             next_snapshot_id: item.next_snapshot_id,
             snapshots_memory_usage: item.snapshots_memory_usage.get(),
-            on_low_wasm_memory_hook_status: Some(
-                pb_canister_state_bits::OnLowWasmMemoryHookStatus::from(
-                    &item.task_queue.peek_hook_status(),
-                )
-                .into(),
-            ),
             tasks: Some((&item.task_queue).into()),
         }
     }
@@ -2454,40 +2475,10 @@ impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
             );
         }
 
-        let pb_task_queue: Result<pb_canister_state_bits::TaskQueue, ProxyDecodeError> =
-            try_from_option_field(value.tasks, "CanisterStateBits::tasks");
+        let tasks: pb_canister_state_bits::TaskQueue =
+            try_from_option_field(value.tasks, "CanisterStateBits::tasks").unwrap_or_default();
 
-        let task_queue = match pb_task_queue {
-            Ok(tasks) => TaskQueue::try_from(tasks)?,
-            Err(_) => {
-                let task_queue: VecDeque<ExecutionTask> = value
-                    .task_queue
-                    .into_iter()
-                    .map(|v| v.try_into())
-                    .collect::<Result<VecDeque<_>, _>>()?;
-                if task_queue.len() > 1 {
-                    return Err(ProxyDecodeError::Other(format!(
-                        "Expecting at most one task queue entry. Found {:?}",
-                        task_queue
-                    )));
-                }
-
-                let on_low_wasm_memory_hook_status: Option<
-                    pb_canister_state_bits::OnLowWasmMemoryHookStatus,
-                > = value.on_low_wasm_memory_hook_status.map(|v| {
-                    pb_canister_state_bits::OnLowWasmMemoryHookStatus::try_from(v)
-                        .unwrap_or_default()
-                });
-                TaskQueue::from_checkpoint(
-                    task_queue,
-                    try_from_option_field(
-                        on_low_wasm_memory_hook_status,
-                        "CanisterStateBits::on_low_wasm_memory_hook_status",
-                    )
-                    .unwrap_or_default(),
-                )
-            }
-        };
+        let task_queue = TaskQueue::try_from(tasks)?;
 
         Ok(Self {
             controllers,
@@ -2659,6 +2650,9 @@ impl From<CanisterSnapshotBits> for pb_canister_snapshot_bits::CanisterSnapshotB
                 .iter()
                 .map(|global| global.into())
                 .collect(),
+            global_timer_nanos: item.global_timer.to_nanos_since_unix_epoch(),
+            on_low_wasm_memory_hook_status: item.on_low_wasm_memory_hook_status.into(),
+            source: item.source.into(),
         }
     }
 }
@@ -2688,7 +2682,16 @@ impl TryFrom<pb_canister_snapshot_bits::CanisterSnapshotBits> for CanisterSnapsh
         for global in item.exported_globals.into_iter() {
             exported_globals.push(global.try_into()?);
         }
+        let global_timer = CanisterTimer::from_nanos_since_unix_epoch(item.global_timer_nanos);
+        let on_low_wasm_memory_hook_status: pb_canister_state_bits::OnLowWasmMemoryHookStatus =
+            pb_canister_state_bits::OnLowWasmMemoryHookStatus::try_from(
+                item.on_low_wasm_memory_hook_status,
+            )
+            .unwrap_or_default();
+        let on_low_wasm_memory_hook_status =
+            OnLowWasmMemoryHookStatus::try_from(on_low_wasm_memory_hook_status).unwrap_or_default();
 
+        let source = SnapshotSource::try_from(item.source)?;
         Ok(Self {
             snapshot_id: SnapshotId::from((canister_id, item.snapshot_id)),
             canister_id,
@@ -2705,6 +2708,9 @@ impl TryFrom<pb_canister_snapshot_bits::CanisterSnapshotBits> for CanisterSnapsh
             wasm_memory_size: NumWasmPages::from(item.wasm_memory_size as usize),
             total_size: NumBytes::from(item.total_size),
             exported_globals,
+            global_timer,
+            on_low_wasm_memory_hook_status,
+            source,
         })
     }
 }
@@ -2763,34 +2769,6 @@ fn dir_list_recursive(path: &Path) -> std::io::Result<Vec<PathBuf>> {
     }
     add_content(path, &mut result)?;
     Ok(result)
-}
-
-/// Recursively set permissions to readonly for all files under the given
-/// `path`.
-fn mark_files_readonly_and_sync(
-    path: &Path,
-    mut thread_pool: Option<&mut scoped_threadpool::Pool>,
-) -> std::io::Result<()> {
-    let paths = dir_list_recursive(path)?;
-    let results = maybe_parallel_map(&mut thread_pool, paths.iter(), |p| {
-        mark_readonly_if_file(p)?;
-        #[cfg(not(target_os = "linux"))]
-        sync_path(p)?;
-        Ok::<(), std::io::Error>(())
-    });
-
-    results.into_iter().try_for_each(identity)?;
-    #[cfg(target_os = "linux")]
-    {
-        let f = std::fs::File::open(path)?;
-        use std::os::fd::AsRawFd;
-        unsafe {
-            if libc::syncfs(f.as_raw_fd()) == -1 {
-                return Err(std::io::Error::last_os_error());
-            }
-        }
-    }
-    Ok(())
 }
 
 #[derive(Copy, Clone)]
