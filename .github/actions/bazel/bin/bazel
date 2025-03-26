@@ -5,7 +5,7 @@
 #
 #
 
-set -euo pipefail
+set -euox pipefail
 
 log() {
     echo "$@" >&2
