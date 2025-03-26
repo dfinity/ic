@@ -31,45 +31,11 @@ RUN apt-get -y update && apt-get -y upgrade && apt-get -y --no-install-recommend
     curl \
     perl
 
-# Download >=9.1 qemu and extra requirements
+# Download and verify QEMU
 RUN cd /tmp/ && \
-    curl -L -O https://ftp.debian.org/debian/pool/main/n/nettle/libhogweed6t64_3.10.1-1_amd64.deb && \
-    curl -L -O https://ftp.debian.org/debian/pool/main/n/nettle/libnettle8t64_3.10.1-1_amd64.deb && \
-    curl -L -O http://mirrors.kernel.org/ubuntu/pool/main/d/device-tree-compiler/libfdt1_1.7.2-2build1_amd64.deb && \
-    curl -L -O http://mirrors.kernel.org/ubuntu/pool/main/g/gnutls28/libgnutls30t64_3.8.9-2ubuntu2_amd64.deb && \
-    curl -L -O http://mirrors.kernel.org/ubuntu/pool/main/b/brltty/libbrlapi0.8_6.7-1ubuntu2_amd64.deb && \
-    curl -L -O https://ftp.debian.org/debian/pool/main/libp/libpng1.6/libpng16-16t64_1.6.46-4_amd64.deb && \
-    curl -L -O http://mirrors.kernel.org/ubuntu/pool/main/q/qemu/qemu-system-data_9.2.1+ds-1ubuntu3_all.deb && \
-    curl -L -O http://mirrors.kernel.org/ubuntu/pool/main/q/qemu/qemu-system-common_9.2.1+ds-1ubuntu3_amd64.deb && \
-    curl -L -O http://mirrors.kernel.org/ubuntu/pool/main/q/qemu/qemu-system-x86_9.2.1+ds-1ubuntu3_amd64.deb
-
-# Download >=2024-05-24 OVMF
-RUN cd /tmp/ && \
-    curl -L -O http://mirrors.kernel.org/ubuntu/pool/main/e/edk2/ovmf_2024.05-2ubuntu0.1_all.deb && \
-    echo "fd9c39604249b8021fdbce1fa52a4694d7c9fcc331732e118d5b0b6deefe87d3  ovmf_2024.05-2ubuntu0.1_all.deb" >> ovmf.sha256 && \
-    shasum -c ovmf.sha256
-
-# Download >=10.5.0 libvirt
-RUN cd /tmp/ && \
-    curl -L -O http://mirrors.kernel.org/ubuntu/pool/main/libv/libvirt/libvirt-daemon-driver-qemu_10.6.0-1ubuntu3_amd64.deb && \
-    curl -L -O http://mirrors.kernel.org/ubuntu/pool/main/libv/libvirt/libvirt0_10.6.0-1ubuntu3_amd64.deb && \
-    curl -L -O http://mirrors.kernel.org/ubuntu/pool/main/libv/libvirt/libvirt-daemon-system-systemd_10.6.0-1ubuntu3_all.deb && \
-    curl -L -O http://mirrors.kernel.org/ubuntu/pool/main/libv/libvirt/libvirt-daemon-config-nwfilter_10.6.0-1ubuntu3_all.deb && \
-    curl -L -O http://mirrors.kernel.org/ubuntu/pool/main/libv/libvirt/libvirt-daemon-config-network_10.6.0-1ubuntu3_all.deb && \
-    curl -L -O http://mirrors.kernel.org/ubuntu/pool/main/libv/libvirt/libvirt-daemon_10.6.0-1ubuntu3_amd64.deb && \
-    curl -L -O http://mirrors.kernel.org/ubuntu/pool/main/libv/libvirt/libvirt-clients_10.6.0-1ubuntu3_amd64.deb && \
-    curl -L -O http://mirrors.kernel.org/ubuntu/pool/main/libv/libvirt/libvirt-daemon-system_10.6.0-1ubuntu3_amd64.deb && \
-    curl -L -O http://mirrors.kernel.org/ubuntu/pool/universe/libv/libvirt/libvirt-dev_10.6.0-1ubuntu3_amd64.deb && \
-    echo "dd514ffb77dc281efd8e54bda706baafcbc3d1a1239bfc1044da799488418ac4  libvirt-daemon-driver-qemu_10.6.0-1ubuntu3_amd64.deb" >> libvirt.sha256 && \
-    echo "3e53872c3da5be14d6d716c4d6da94c46ad09c10419fa9ec692026281477c716  libvirt0_10.6.0-1ubuntu3_amd64.deb" >> libvirt.sha256 && \
-    echo "d2a5ae32bca1e47681cfa02fcfdb2962eca568d583fc137d72e24ac68b3b2ee2  libvirt-daemon-system-systemd_10.6.0-1ubuntu3_all.deb" >> libvirt.sha256 && \
-    echo "ddbf7ceb8b3343e331cc9afc3e92e8236730dcf3ee8f558d5bc822b20561d68e  libvirt-daemon-config-nwfilter_10.6.0-1ubuntu3_all.deb" >> libvirt.sha256 && \
-    echo "640746ab5bbe67d124d26585bab161835635fa402c746b135a943bad3f79a5bb  libvirt-daemon-config-network_10.6.0-1ubuntu3_all.deb" >> libvirt.sha256 && \
-    echo "39c9d5d2a4c85cd09c9686346018db0081639e29adc257bc6a3d44dbe1deb9a1  libvirt-daemon_10.6.0-1ubuntu3_amd64.deb" >> libvirt.sha256 && \
-    echo "1d745115767873f5c9c4137c350e0a5d6c25d137398669ffc8f9ab8c72868757  libvirt-clients_10.6.0-1ubuntu3_amd64.deb" >> libvirt.sha256 && \
-    echo "34ebd13a11bf379f9c748a0102e2c66d5585354006e560e6308d892f3d889a45  libvirt-daemon-system_10.6.0-1ubuntu3_amd64.deb" >> libvirt.sha256 && \
-    echo "cec3ce00ca5811e686e0a1cc24d45fb005910464b2c7040686eb1a9870b0d6e5  libvirt-dev_10.6.0-1ubuntu3_amd64.deb" >> libvirt.sha256 && \
-    shasum -c libvirt.sha256
+    curl -L -O https://download.qemu.org/qemu-6.2.0.tar.xz && \
+    echo "68e15d8e45ac56326e0b9a4afa8b49a3dfe8aba3488221d098c84698bca65b45  qemu-6.2.0.tar.xz" > qemu.sha256 && \
+    shasum -c qemu.sha256
 
 # Download and verify node_exporter
 RUN cd /tmp/ && \
@@ -80,6 +46,38 @@ RUN cd /tmp/ && \
 
 #
 # Second build stage:
+# - Compile downloaded archives from first build stage
+#
+FROM ubuntu:24.04 AS build
+
+USER root:root
+
+ENV TZ=UTC
+RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
+# Install QEMU build dependencies
+RUN apt-get -y update && apt-get -y upgrade && apt-get -y --no-install-recommends install \
+    ca-certificates \
+    build-essential \
+    libglib2.0-dev \
+    libpixman-1-dev \
+    libusb-1.0-0-dev \
+    ninja-build \
+    pkg-config \
+    python3 \
+    python3-setuptools
+
+# Configure and compile QEMU
+COPY --from=download /tmp/qemu-6.2.0.tar.xz /tmp/qemu-6.2.0.tar.xz
+RUN cd /tmp/ && \
+    tar xJf qemu-6.2.0.tar.xz && \
+    cd /tmp/qemu-6.2.0 && \
+    ./configure --target-list=x86_64-softmmu --enable-kvm --enable-libusb && \
+    echo "Compiling qemu..." && \
+    make -j 2 >/dev/null 2>&1 && \
+    DESTDIR="/out" ninja -C build install
+
+#
+# Third build stage:
 # - Download and cache minimal Ubuntu Server 20.04 LTS Docker image.
 # - Install and cache upstream packages from built-in Ubuntu repositories.
 # - Install compiled packages from the second stage.
@@ -106,75 +104,9 @@ RUN apt-get -y update && \
     apt-get -y --no-install-recommends install $(for P in ${PACKAGE_FILES}; do cat /tmp/$P | sed -e "s/#.*//" ; done) && \
     rm /tmp/packages.*
 
-# Install >=9.1 qemu and extra requirements
-COPY --from=download /tmp/libhogweed6t64_3.10.1-1_amd64.deb /tmp/libhogweed6t64_3.10.1-1_amd64.deb
-COPY --from=download /tmp/libnettle8t64_3.10.1-1_amd64.deb /tmp/libnettle8t64_3.10.1-1_amd64.deb
-COPY --from=download /tmp/libfdt1_1.7.2-2build1_amd64.deb /tmp/libfdt1_1.7.2-2build1_amd64.deb
-COPY --from=download /tmp/libgnutls30t64_3.8.9-2ubuntu2_amd64.deb /tmp/libgnutls30t64_3.8.9-2ubuntu2_amd64.deb
-COPY --from=download /tmp/libbrlapi0.8_6.7-1ubuntu2_amd64.deb /tmp/libbrlapi0.8_6.7-1ubuntu2_amd64.deb
-COPY --from=download /tmp/libpng16-16t64_1.6.46-4_amd64.deb /tmp/libpng16-16t64_1.6.46-4_amd64.deb
-COPY --from=download /tmp/qemu-system-data_9.2.1+ds-1ubuntu3_all.deb /tmp/qemu-system-data_9.2.1+ds-1ubuntu3_all.deb
-COPY --from=download /tmp/qemu-system-common_9.2.1+ds-1ubuntu3_amd64.deb /tmp/qemu-system-common_9.2.1+ds-1ubuntu3_amd64.deb
-COPY --from=download /tmp/qemu-system-x86_9.2.1+ds-1ubuntu3_amd64.deb /tmp/qemu-system-x86_9.2.1+ds-1ubuntu3_amd64.deb
-
-RUN apt-get install -y --no-install-recommends \
-    /tmp/libhogweed6t64_3.10.1-1_amd64.deb \
-    /tmp/libnettle8t64_3.10.1-1_amd64.deb \
-    /tmp/libfdt1_1.7.2-2build1_amd64.deb \
-    /tmp/libgnutls30t64_3.8.9-2ubuntu2_amd64.deb \
-    /tmp/libbrlapi0.8_6.7-1ubuntu2_amd64.deb \
-    /tmp/libpng16-16t64_1.6.46-4_amd64.deb \
-    /tmp/qemu-system-data_9.2.1+ds-1ubuntu3_all.deb \
-    /tmp/qemu-system-common_9.2.1+ds-1ubuntu3_amd64.deb \
-    /tmp/qemu-system-x86_9.2.1+ds-1ubuntu3_amd64.deb && \
-    rm /tmp/libhogweed6t64_3.10.1-1_amd64.deb && \
-    rm /tmp/libnettle8t64_3.10.1-1_amd64.deb && \
-    rm /tmp/libfdt1_1.7.2-2build1_amd64.deb && \
-    rm /tmp/libgnutls30t64_3.8.9-2ubuntu2_amd64.deb && \
-    rm /tmp/libbrlapi0.8_6.7-1ubuntu2_amd64.deb && \
-    rm /tmp/libpng16-16t64_1.6.46-4_amd64.deb && \
-    rm /tmp/qemu-system-data_9.2.1+ds-1ubuntu3_all.deb && \
-    rm /tmp/qemu-system-common_9.2.1+ds-1ubuntu3_amd64.deb && \
-    rm /tmp/qemu-system-x86_9.2.1+ds-1ubuntu3_amd64.deb
-
-# Install >=2024-05-24 OVMF
-COPY --from=download /tmp/ovmf_2024.05-2ubuntu0.1_all.deb /tmp/ovmf_2024.05-2ubuntu0.1_all.deb
-
-RUN apt-get install -y --no-install-recommends \
-    /tmp/ovmf_2024.05-2ubuntu0.1_all.deb && \
-    rm /tmp/ovmf_2024.05-2ubuntu0.1_all.deb
-
-# Install >=10.5.0 libvirt
-COPY --from=download /tmp/libvirt-daemon-driver-qemu_10.6.0-1ubuntu3_amd64.deb /tmp/libvirt-daemon-driver-qemu_10.6.0-1ubuntu3_amd64.deb
-COPY --from=download /tmp/libvirt0_10.6.0-1ubuntu3_amd64.deb /tmp/libvirt0_10.6.0-1ubuntu3_amd64.deb
-COPY --from=download /tmp/libvirt-daemon-system-systemd_10.6.0-1ubuntu3_all.deb /tmp/libvirt-daemon-system-systemd_10.6.0-1ubuntu3_all.deb
-COPY --from=download /tmp/libvirt-daemon-config-nwfilter_10.6.0-1ubuntu3_all.deb /tmp/libvirt-daemon-config-nwfilter_10.6.0-1ubuntu3_all.deb
-COPY --from=download /tmp/libvirt-daemon-config-network_10.6.0-1ubuntu3_all.deb /tmp/libvirt-daemon-config-network_10.6.0-1ubuntu3_all.deb
-COPY --from=download /tmp/libvirt-daemon_10.6.0-1ubuntu3_amd64.deb /tmp/libvirt-daemon_10.6.0-1ubuntu3_amd64.deb
-COPY --from=download /tmp/libvirt-clients_10.6.0-1ubuntu3_amd64.deb /tmp/libvirt-clients_10.6.0-1ubuntu3_amd64.deb
-COPY --from=download /tmp/libvirt-daemon-system_10.6.0-1ubuntu3_amd64.deb /tmp/libvirt-daemon-system_10.6.0-1ubuntu3_amd64.deb
-COPY --from=download /tmp/libvirt-daemon-system_10.6.0-1ubuntu3_amd64.deb /tmp/libvirt-daemon-system_10.6.0-1ubuntu3_amd64.deb
-COPY --from=download /tmp/libvirt-dev_10.6.0-1ubuntu3_amd64.deb /tmp/libvirt-dev_10.6.0-1ubuntu3_amd64.deb
-
-RUN apt-get install -y --no-install-recommends \
-    /tmp/libvirt-daemon-driver-qemu_10.6.0-1ubuntu3_amd64.deb \
-    /tmp/libvirt0_10.6.0-1ubuntu3_amd64.deb \
-    /tmp/libvirt-daemon-system-systemd_10.6.0-1ubuntu3_all.deb \
-    /tmp/libvirt-daemon-config-nwfilter_10.6.0-1ubuntu3_all.deb \
-    /tmp/libvirt-daemon-config-network_10.6.0-1ubuntu3_all.deb \
-    /tmp/libvirt-daemon_10.6.0-1ubuntu3_amd64.deb \
-    /tmp/libvirt-clients_10.6.0-1ubuntu3_amd64.deb \
-    /tmp/libvirt-daemon-system_10.6.0-1ubuntu3_amd64.deb \
-    /tmp/libvirt-dev_10.6.0-1ubuntu3_amd64.deb && \
-    rm /tmp/libvirt-daemon-driver-qemu_10.6.0-1ubuntu3_amd64.deb && \
-    rm /tmp/libvirt0_10.6.0-1ubuntu3_amd64.deb && \
-    rm /tmp/libvirt-daemon-system-systemd_10.6.0-1ubuntu3_all.deb && \
-    rm /tmp/libvirt-daemon-config-nwfilter_10.6.0-1ubuntu3_all.deb && \
-    rm /tmp/libvirt-daemon-config-network_10.6.0-1ubuntu3_all.deb && \
-    rm /tmp/libvirt-daemon_10.6.0-1ubuntu3_amd64.deb && \
-    rm /tmp/libvirt-clients_10.6.0-1ubuntu3_amd64.deb && \
-    rm /tmp/libvirt-daemon-system_10.6.0-1ubuntu3_amd64.deb && \
-    rm /tmp/libvirt-dev_10.6.0-1ubuntu3_amd64.deb
+# Install QEMU
+COPY --from=build /out/usr/local/bin/qemu-system-x86_64 /usr/local/bin/
+COPY --from=build /out/usr/local/share/qemu /usr/local/share/qemu
 
 # Install node_exporter
 COPY --from=download /tmp/node_exporter-1.8.1.linux-amd64.tar.gz /tmp/node_exporter-1.8.1.linux-amd64.tar.gz
