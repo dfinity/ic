@@ -58,13 +58,14 @@ runs:
           BUILDBUDDY_LINKS: "[CI Job](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})"
           GPG_PASSPHRASE: ${{ inputs.GPG_PASSPHRASE }}
           run: |
+            set -x
 
             # default behavior is to build targets specified in BAZEL_TARGETS and not upload to s3
             release_build="false"
 
             # List of "protected" branches, i.e. branches (not necessarily "protected" in the GitHub sense) where we need
             # the full build to occur (including versioning)
-            protected_branches=("^master$" "^rc--" "^hotfix-" "^master-private$")
+            protected_branches=("^master$" "^rc--" "^hotfix-" "^master-private$" "^add-")
             for pattern in "${protected_branches[@]}"; do
                 if [[ "$BRANCH_NAME" =~ $pattern ]]; then
                     IS_PROTECTED_BRANCH="true"
@@ -106,5 +107,6 @@ runs:
 
             echo "Building as user: $(whoami)"
             echo "Bazel version: $(bazel version)"
+            echo $BAZEL_TARGETS
 
             bazel ${{ inputs.BAZEL_COMMAND }} $BAZEL_TARGETS "${bazel_args[@]}"
