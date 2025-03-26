@@ -689,10 +689,6 @@ pub fn configure_setupos_image(
         .arg("type3.1")
         .env(path_key, &new_path);
 
-    if let Ok(node_key) = std::env::var("NODE_OPERATOR_PRIVATE_KEY") {
-        cmd.arg("--node-operator-private-key").arg(node_key);
-    }
-
     if !admin_keys.is_empty() {
         cmd.arg("--public-keys");
         for key in admin_keys {
