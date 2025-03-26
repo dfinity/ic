@@ -21,6 +21,7 @@ use ic_protobuf::proxy::ProxyDecodeError;
 use ic_protobuf::proxy::{try_decode_hash, try_from_option_field};
 use ic_protobuf::registry::crypto::v1::PublicKey;
 use ic_protobuf::registry::subnet::v1::{InitialIDkgDealings, InitialNiDkgTranscriptRecord};
+use ic_protobuf::state::canister_snapshot_bits::v1 as pb_canister_snapshot_bits;
 use ic_protobuf::state::canister_state_bits::v1 as pb_canister_state_bits;
 use ic_protobuf::types::v1 as pb_types;
 use ic_protobuf::types::v1::CanisterInstallModeV2 as CanisterInstallModeV2Proto;
@@ -3766,26 +3767,39 @@ pub enum SnapshotSource {
     UploadedManually,
 }
 
-impl From<SnapshotSource> for i32 {
+impl From<SnapshotSource> for pb_canister_snapshot_bits::SnapshotSource {
     fn from(value: SnapshotSource) -> Self {
         match value {
-            SnapshotSource::TakenFromCanister => 1,
-            SnapshotSource::UploadedManually => 2,
+            SnapshotSource::TakenFromCanister => {
+                pb_canister_snapshot_bits::SnapshotSource::TakenFromCanister
+            }
+            SnapshotSource::UploadedManually => {
+                pb_canister_snapshot_bits::SnapshotSource::UploadedManually
+            }
         }
     }
 }
 
-impl TryFrom<i32> for SnapshotSource {
+impl TryFrom<pb_canister_snapshot_bits::SnapshotSource> for SnapshotSource {
     type Error = ProxyDecodeError;
 
-    fn try_from(val: i32) -> Result<Self, Self::Error> {
-        match val {
-            1 => Ok(SnapshotSource::TakenFromCanister),
-            2 => Ok(SnapshotSource::UploadedManually),
-            _ => Err(ProxyDecodeError::ValueOutOfRange {
-                typ: "SnapshotSource",
-                err: format!("Unexpected value {}", val),
-            }),
+    fn try_from(value: pb_canister_snapshot_bits::SnapshotSource) -> Result<Self, Self::Error> {
+        match value {
+            pb_canister_snapshot_bits::SnapshotSource::Unspecified => {
+                Err(ProxyDecodeError::ValueOutOfRange {
+                    typ: "SnapshotSource",
+                    err: format!(
+                        "Unexpected value of status of on low wasm memory hook: {:?}",
+                        value
+                    ),
+                })
+            }
+            pb_canister_snapshot_bits::SnapshotSource::TakenFromCanister => {
+                Ok(SnapshotSource::TakenFromCanister)
+            }
+            pb_canister_snapshot_bits::SnapshotSource::UploadedManually => {
+                Ok(SnapshotSource::UploadedManually)
+            }
         }
     }
 }
