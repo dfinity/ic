@@ -1,0 +1,783 @@
+#!/usr/bin/env python3
+
+import argparse
+import concurrent.futures
+import hashlib
+import json
+import os
+import platform
+import shutil
+import subprocess
+import sys
+import tempfile
+import time
+import urllib.parse
+import urllib.request
+from datetime import datetime
+from pathlib import Path
+
+# ------------------------------------------------------------------------------
+# COLOR AND LOGGING UTILITIES
+# ------------------------------------------------------------------------------
+COLORS = {
+    "reset": "\033[0m",
+    "red": "\033[0;31m",
+    "green": "\033[0;32m",
+    "yellow": "\033[0;33m",
+    "blue": "\033[0;34m",
+    "purple": "\033[0;35m",
+}
+
+
+def colored_print(color, text, to_stderr=False):
+    ts = time.time()
+    dt = datetime.fromtimestamp(ts)
+    now_str = dt.strftime(f"%Y/%m/%d | %H:%M:%S | {int(ts)}")
+    line = f"{COLORS[color]}{now_str} {text}{COLORS['reset']}"
+    if to_stderr:
+        print(line, file=sys.stderr)
+    else:
+        print(line)
+
+
+def log(msg):
+    colored_print("blue", f"[ℹ️] {msg}")
+
+
+def log_debug(msg):
+    if os.getenv("DEBUG", ""):
+        colored_print("purple", f"[🐞] {msg}")
+
+
+def log_success(msg):
+    colored_print("green", f"[✅] {msg}")
+
+
+def log_warning(msg):
+    colored_print("yellow", f"[⚠️ Warning] {msg}")
+
+
+def log_stderr(msg):
+    colored_print("red", f"[❌] {msg}", to_stderr=True)
+
+
+def fail(msg):
+    colored_print("red", f"[💥] {msg}", to_stderr=True)
+    sys.exit(1)
+
+
+# ------------------------------------------------------------------------------
+# ARGUMENT PARSING
+# ------------------------------------------------------------------------------
+def parse_args():
+    parser = argparse.ArgumentParser(
+        description=(
+            "This script builds and diffs the update image between CI and build-ic.\n\n"
+            "By default (with no arguments), it:\n"
+            " - uses the current directory's HEAD commit\n"
+            " - checks all OS images (GuestOS, HostOS, SetupOS)\n"
+            " - verifies reproducibility, downloading artifacts from download.dfinity.systems and .network.\n\n"
+            "Options:\n"
+            " -h, --help                Show this help message.\n"
+            " --guestos                 Verify only GuestOS images.\n"
+            " --hostos                  Verify only HostOS images.\n"
+            " --setupos                 Verify only SetupOS images.\n"
+            " -p <proposal>             Proposal ID (for an Elect Replica or HostOS proposal).\n"
+            " -c <commit>               Git commit/branch/sha in the IC repo to verify.\n"
+            " --clean                   Clean up the download cache before running.\n"
+            " --download-source <which> 'systems', 'network', or 'both' (default: systems).\n"
+        ),
+        formatter_class=argparse.RawTextHelpFormatter,
+    )
+
+    parser.add_argument("--guestos", action="store_true", help="Verify only GuestOS images.")
+    parser.add_argument("--hostos", action="store_true", help="Verify only HostOS images.")
+    parser.add_argument("--setupos", action="store_true", help="Verify only SetupOS images.")
+    parser.add_argument(
+        "-p",
+        "--proposal-id",
+        type=str,
+        default="",
+        help="Proposal ID to check (for an Elect Replica or HostOS proposal).",
+    )
+    parser.add_argument(
+        "-c", "--commit", type=str, default="", help="Git revision/commit to use from the IC repository."
+    )
+    parser.add_argument("--clean", action="store_true", help="Clean up the download cache before running.")
+    parser.add_argument("--debug", "--verbose", action="store_true", help="Enable debug mode output.")
+    parser.add_argument(
+        "--download-source",
+        choices=["systems", "network", "both"],
+        default="both",
+        help="Which source to download from: .systems, .network, or both (default: both).",
+    )
+
+    args = parser.parse_args()
+
+    if args.debug:
+        os.environ["DEBUG"] = "1"
+
+    # If user didn't specify any of these OS flags, we check all three
+    if not args.guestos and not args.hostos and not args.setupos:
+        args.guestos = True
+        args.hostos = True
+        args.setupos = True
+
+    return args
+
+
+def get_download_sources(mode: str):
+    """Return the list of base CDN domain from which the images should be downloaded."""
+    if mode == "systems":
+        return ["download.dfinity.systems"]
+    elif mode == "network":
+        return ["download.dfinity.network"]
+    elif mode == "both":
+        return ["download.dfinity.systems", "download.dfinity.network"]
+    else:
+        fail(f"Invalid download source mode: {mode}")
+
+
+# ------------------------------------------------------------------------------
+# REPRODUCIBILITY VERIFIER
+# ------------------------------------------------------------------------------
+class ReproducibilityVerifier:
+    def __init__(
+        self, verify_guestos, verify_hostos, verify_setupos, proposal_id, git_commit, clean, download_source_mode: str
+    ):
+        self.verify_guestos = verify_guestos
+        self.verify_hostos = verify_hostos
+        self.verify_setupos = verify_setupos
+        self.proposal_id = proposal_id
+        self.git_commit = git_commit
+
+        self.cdn_domains = get_download_sources(download_source_mode)  # list of base URLs
+        log_debug(f"CDNs selected: {self.cdn_domains}")
+
+        self.git_hash = ""
+        self.guestos_proposal = False
+        self.hostos_proposal = False
+        self.proposal_package_urls = []
+        self.proposal_package_sha256_hex = ""
+
+        # Ephemeral directories
+        self.tmpdir: Path = Path()
+        self.out_dir: Path = Path()
+        self.cdn_out: Path = Path()
+        self.dev_out: Path = Path()
+        self.proposal_out: Path = Path()
+
+        # Cache
+        self.base_cache_dir = Path("/tmp/ic-repro-cache")
+        if clean and self.base_cache_dir.is_dir():
+            shutil.rmtree(self.base_cache_dir)
+        self.cache_for_this_hash: Path = Path()
+
+        self.download_executor = concurrent.futures.ThreadPoolExecutor(max_workers=8)
+        self.download_futures = []
+
+    # --------------------------------------------------------------------------
+    # ENVIRONMENT CHECKS
+    # --------------------------------------------------------------------------
+    def check_architecture(self):
+        if platform.machine() == "x86_64":
+            log_success("x86_64 architecture detected")
+        else:
+            fail("Please run this script on x86_64 architecture")
+
+    def check_os_version(self):
+        release_files = ["/etc/os-release", "/usr/lib/os-release"]
+        os_info = {}
+        for fpath in release_files:
+            p = Path(fpath)
+            if p.is_file():
+                with p.open("r", encoding="utf-8") as f:
+                    for line in f:
+                        line = line.strip()
+                        if "=" in line:
+                            k, v = line.split("=", 1)
+                            os_info[k] = v.strip('"')
+
+        os_name = os_info.get("NAME", "")
+        if os_name == "Ubuntu":
+            log_success("Ubuntu OS detected")
+        else:
+            log_warning("Please run this script on Ubuntu OS")
+
+        try:
+            version_id = float(os_info.get("VERSION_ID", "0"))
+            if version_id >= 22.04:
+                log_success("Version ≥22.04 detected")
+            else:
+                log_warning("Please run this script on Ubuntu version 22.04 or higher")
+        except ValueError:
+            pass
+
+    def check_memory_at_least_gb(self, required_gb=16):
+        p = Path("/proc/meminfo")
+        try:
+            with p.open("r") as f:
+                for line in f:
+                    if line.startswith("MemTotal:"):
+                        parts = line.split()
+                        if len(parts) >= 2:
+                            mem_kb = int(parts[1])
+                            mem_gb = mem_kb // 1024 // 1024
+                            if mem_gb < required_gb:
+                                log_warning(f"You need at least {required_gb}GB of RAM on this machine")
+                            else:
+                                log_success(f"{required_gb}GB or more RAM detected")
+                        return
+            log_warning("Could not detect memory from /proc/meminfo")
+        except Exception:
+            log_warning("Memory check failed. Could not parse /proc/meminfo")
+
+    def check_disk_at_least_gb(self, required_gb=100):
+        try:
+            st = os.statvfs(".")
+            free_bytes = st.f_bavail * st.f_frsize
+            free_gb = free_bytes / (1024 * 1024 * 1024)
+            if free_gb < required_gb:
+                log_warning(f"You need at least {required_gb}GB of free disk space on this machine")
+            else:
+                log_success(f"More than {required_gb}GB of free disk space detected")
+        except Exception:
+            log_warning("Disk check failed. Could not run statvfs on '.'")
+
+    def check_and_install_dependencies(self):
+        deps = ["git", "podman"]
+        log("Check and install needed dependencies")
+        for d in deps:
+            if shutil.which(d) is None:
+                log(f"Installing missing package: {d}")
+                try:
+                    subprocess.run(["sudo", "apt-get", "install", "-y", d], check=True)
+                except subprocess.CalledProcessError:
+                    fail(f"Failed to install {d}. Exiting.")
+            else:
+                log_success(f"{d} is already installed")
+
+    def check_git_repo(self):
+        log_debug("Check we are inside a Git repository")
+        try:
+            cmd = ["git", "rev-parse", "--is-inside-work-tree"]
+            inside = subprocess.check_output(cmd, stderr=subprocess.DEVNULL).decode().strip()
+            if inside != "true":
+                fail("Please run this script inside of a git repository")
+            log_debug("Inside git repository")
+        except subprocess.CalledProcessError:
+            fail("Please run this script inside of a git repository")
+
+    def check_ic_repo(self):
+        log_debug("Check the repository is an IC repository")
+        try:
+            cmd = ["git", "config", "--get", "remote.origin.url"]
+            git_remote = subprocess.check_output(cmd, stderr=subprocess.DEVNULL).decode().strip()
+            if "/ic" not in git_remote:
+                fail("When not specifying any option please run this script inside an IC git repository")
+            log_debug("Inside IC repository")
+        except subprocess.CalledProcessError:
+            fail("When not specifying any option please run this script inside an IC git repository")
+
+    def check_environment(self):
+        self.check_architecture()
+        self.check_os_version()
+        self.check_memory_at_least_gb(16)
+        self.check_disk_at_least_gb(100)
+        self.check_and_install_dependencies()
+
+    # --------------------------------------------------------------------------
+    # JSON & Hashing Helpers
+    # --------------------------------------------------------------------------
+    @staticmethod
+    def compute_sha256(file_path: Path) -> str:
+        sha = hashlib.sha256()
+        with file_path.open("rb") as f:
+            for chunk in iter(lambda: f.read(8192), b""):
+                sha.update(chunk)
+        return sha.hexdigest()
+
+    @staticmethod
+    def fetch_url_to_file(url: str, dest_path: Path):
+        log_debug(f"Downloading {url} to {dest_path}")
+        dest_path.parent.mkdir(parents=True, exist_ok=True)
+
+        # Download into a temporary file, e.g. "myfile.tar.zst.part"
+        tmp_file = dest_path.with_suffix(dest_path.suffix + ".part")
+
+        try:
+            req = urllib.request.Request(url, headers={"User-Agent": "ReproducibilityVerifier/1.0"})
+            with urllib.request.urlopen(req) as response, tmp_file.open("wb") as out_file:
+                chunk = response.read(64*1024)
+                while chunk:
+                    out_file.write(chunk)
+                    chunk = response.read(64*1024)
+
+            # If we reach here, download succeeded—rename to final destination
+            tmp_file.rename(dest_path)
+            log(f"Downloaded {url} to {dest_path}")
+
+        except Exception as e:
+            # If the download was interrupted or failed, remove the partial file
+            if tmp_file.is_file():
+                tmp_file.unlink()
+            fail(f"Could not download {url} -> {dest_path}. Error: {e}")
+
+    @staticmethod
+    def extract_field_json(data, field_spec: str) -> str:
+        if not field_spec.startswith("."):
+            fail(f"Invalid JSON path: {field_spec}")
+        path = field_spec[1:]  # remove leading dot
+
+        obj = data
+        parts = path.split(".")
+        for p in parts:
+            if "[" in p and "]" in p:
+                bracket_index = p.index("[")
+                key = p[:bracket_index]
+                idx_str = p[bracket_index + 1 : p.index("]")]
+                idx = int(idx_str)
+                obj = obj[key][idx]
+            else:
+                if p:
+                    obj = obj[p]
+        if obj is None:
+            fail(f"Field {field_spec} is null in the JSON data.")
+        return str(obj)
+
+    @staticmethod
+    def verify_sha256_against_sums(binary_path: Path, sums_file: Path, git_rev: str) -> str:
+        lines = sums_file.read_text(encoding="utf-8").splitlines()
+        binary_filename = binary_path.name
+
+        found_line = None
+        for line in lines:
+            parts = line.split()
+            if len(parts) >= 2:
+                file_part = parts[1].lstrip("*")
+                if file_part == binary_filename:
+                    found_line = line
+                    break
+        if not found_line:
+            log(f"Contents of {sums_file}:\n{''.join(lines)}")
+            fail(f"Couldn't find {binary_filename} in {sums_file}")
+
+        listed_hash = found_line.split()[0]
+        local_hash = ReproducibilityVerifier.compute_sha256(binary_path)
+        if local_hash != listed_hash:
+            fail(
+                f"The hash for {binary_path} doesn't match the CDN sha256 sum for the git revision: {git_rev}\n"
+                f"Local: {local_hash}\n"
+                f"Published: {listed_hash}"
+            )
+        return listed_hash
+
+    @staticmethod
+    def compare_hashes(local_hash_value: str, remote_hash_value: str, os_type: str):
+        if local_hash_value != remote_hash_value:
+            log_stderr(
+                f"Error! The sha256 sum from the remote does not match the one we just built for {os_type}.\n"
+                f"\tThe sha256 sum we just built:\t\t{local_hash_value}\n"
+                f"\tThe sha256 sum from remote:\t\t{remote_hash_value}."
+            )
+        else:
+            log_success(f"Verification successful for {os_type}!")
+            log_success(
+                f"The shasum for {os_type} from the artifact built locally and the one "
+                f"fetched from remote match:\n"
+                f"\t\tLocal = {local_hash_value}\n"
+                f"\t\tRemote = {remote_hash_value}\n"
+            )
+
+    # --------------------------------------------------------------------------
+    # Cache management + download scheduling
+    # --------------------------------------------------------------------------
+    def init_cache(self):
+        self.base_cache_dir.mkdir(parents=True, exist_ok=True)
+        self.trim_old_caches(keep=2)
+        self.cache_for_this_hash = self.base_cache_dir / self.git_hash
+        if not self.cache_for_this_hash.exists():
+            self.cache_for_this_hash.mkdir(parents=True)
+        self.cache_for_this_hash.touch()
+
+    def trim_old_caches(self, keep=2):
+        if not self.base_cache_dir.is_dir():
+            return
+        entries = [sub for sub in self.base_cache_dir.iterdir() if sub.is_dir()]
+        entries.sort(key=lambda p: p.stat().st_mtime, reverse=True)
+        for older in entries[keep:]:
+            log_debug(f"Removing old cache: {older}")
+            shutil.rmtree(older, ignore_errors=True)
+
+    def cached_download(self, url: str, target_file: Path, os_type: str):
+        """
+        Actually performs the download if not in cache. This function is called
+        inside a thread from the executor.
+        """
+        dest_dir = self.cache_for_this_hash / urllib.parse.urlparse(url).netloc / os_type
+        dest_dir.mkdir(parents=True, exist_ok=True)
+
+        cache_file = dest_dir / target_file.name
+        if not (cache_file.exists() and cache_file.stat().st_size > 0):
+            log_debug(f"Cache miss, downloading: {url}")
+            self.fetch_url_to_file(url, cache_file)
+        else:
+            log_debug(f"File already cached, skipping download: {url}")
+
+        # Hard-link from cache into target_file
+        target_file.parent.mkdir(parents=True, exist_ok=True)
+        if target_file.exists():
+            target_file.unlink()
+        os.link(cache_file, target_file)
+
+    def start_download(self, url: str, target_file: Path, os_type: str):
+        """Submits a single file download to the executor. We'll block on it later."""
+        future = self.download_executor.submit(self.cached_download, url, target_file, os_type)
+        self.download_futures.append(future)
+
+    def wait_for_downloads(self):
+        """Block until all scheduled downloads are complete."""
+        log("Waiting for downloads to finish...")
+        for f in self.download_futures:
+            f.result()
+        self.download_futures = []
+
+    # --------------------------------------------------------------------------
+    # Core logic restructured to start downloads early
+    # --------------------------------------------------------------------------
+    def process_proposal(self):
+        """
+        If a proposal is given, fetch the proposal JSON to figure out the version (git hash),
+        also store the proposal's release package fields. Then schedule the proposal artifact download.
+        """
+        if not self.proposal_id:
+            return
+        proposal_json_path = Path("proposal-body.json")
+        proposal_url = f"https://ic-api.internetcomputer.org/api/v3/proposals/{self.proposal_id}"
+        log_debug(f"Fetching proposal {proposal_url}")
+        try:
+            with urllib.request.urlopen(proposal_url) as resp:
+                if not (200 <= resp.status < 300):
+                    fail(f"Could not fetch proposal {self.proposal_id}, HTTP code {resp.status}")
+                data = resp.read()
+            proposal_json_path.write_bytes(data)
+        except Exception as e:
+            fail(f"Could not fetch {self.proposal_id}. Error: {e}")
+
+        proposal_data = json.loads(proposal_json_path.read_text(encoding="utf-8"))
+        self.proposal_package_urls = self.extract_field_json(proposal_data, ".payload.release_package_urls")
+        self.proposal_package_sha256_hex = self.extract_field_json(
+            proposal_data, ".payload.release_package_sha256_hex"
+        )
+
+        # Check if guestos or hostos proposal
+        prop_str = json.dumps(proposal_data)
+        if "replica_version_to_elect" in prop_str:
+            self.guestos_proposal = True
+            self.git_hash = self.extract_field_json(proposal_data, ".payload.replica_version_to_elect")
+        elif "hostos_version_to_elect" in prop_str:
+            self.hostos_proposal = True
+            self.git_hash = self.extract_field_json(proposal_data, ".payload.hostos_version_to_elect")
+        else:
+            fail(f"Proposal #{self.proposal_id} is missing replica_version_to_elect or hostos_version_to_elect")
+
+    def decide_git_hash(self):
+        """If the user didn't pass a proposal, we figure out the hash from command line or local HEAD."""
+        if self.proposal_id:
+            return
+        if self.git_commit:
+            self.git_hash = self.git_commit
+        else:
+            self.check_git_repo()
+            self.git_hash = subprocess.check_output(["git", "rev-parse", "HEAD"]).decode().strip()
+
+    def start_cdn_downloads_for_os(self, os_type: str):
+        """
+        Queue up downloads for the artifact (update-img.tar.zst or disk-img.tar.zst)
+        plus the corresponding SHA256SUMS from all selected domains.
+        """
+        if os_type == "setup-os":
+            artifact = "disk-img"
+        else:
+            artifact = "update-img"
+
+        tar_name = f"{artifact}.tar.zst"
+
+        for cdn_domain in self.cdn_domains:
+            artifact_url = f"https://{cdn_domain}/ic/{self.git_hash}/{os_type}/{artifact}/{tar_name}"
+            sums_url = f"https://{cdn_domain}/ic/{self.git_hash}/{os_type}/{artifact}/SHA256SUMS"
+
+            subdir = self.cdn_out / cdn_domain / os_type
+            local_artifact_path = subdir / tar_name
+            local_sums_path = subdir / "SHA256SUMS"
+
+            # Schedule both to be downloaded
+            self.start_download(artifact_url, local_artifact_path, os_type)
+            self.start_download(sums_url, local_sums_path, os_type)
+
+    def start_proposal_download_if_needed(self):
+        """If there's a proposal, schedule the proposal package download immediately."""
+        if not self.proposal_id:
+            return
+        # We assume self.proposal_package_urls is a single URL string (as the code references it).
+        # If in practice it's a list, adapt accordingly.
+        proposal_target = self.proposal_out / "update-img.tar.zst"
+        self.start_download(self.proposal_package_urls, proposal_target, "proposal")
+
+    def prepare_directories(self):
+        debug_mode = bool(os.getenv("DEBUG", ""))
+        if debug_mode:
+            tmpdir_str = tempfile.mkdtemp(prefix="repro-check_")
+            log_debug("DEBUG mode, not automatically removing the tempdir.")
+        else:
+            tmpdir_obj = tempfile.TemporaryDirectory(prefix="repro-check_")
+            tmpdir_str = tmpdir_obj.name
+
+        self.tmpdir = Path(tmpdir_str)
+        log(f"Using temporary directory: {self.tmpdir}")
+
+        self.out_dir = self.tmpdir / "disk-images" / self.git_hash
+        self.cdn_out = self.out_dir / "cdn-img"
+        self.dev_out = self.out_dir / "dev-img"
+        self.proposal_out = self.out_dir / "proposal-img"
+
+    # --------------------------------------------------------------------------
+    # Verification steps (these now wait on downloads that were queued earlier)
+    # --------------------------------------------------------------------------
+    def verify_proposal_artifacts(self):
+        if not self.proposal_id:
+            return
+
+        # Block until the proposal artifact is fully downloaded
+        self.wait_for_downloads()
+
+        # Check hash
+        proposal_target = self.proposal_out / "update-img.tar.zst"
+        actual_hash = self.compute_sha256(proposal_target)
+        if actual_hash != self.proposal_package_sha256_hex:
+            fail(
+                "The proposal's artifacts hash does not match!\n"
+                f"Expected: {self.proposal_package_sha256_hex}\n"
+                f"Actual:   {actual_hash}"
+            )
+        log_success("The proposal's artifacts and hash match")
+
+    def compare_cdn_hash(self, os_type: str) -> str:
+        """
+        Once the downloads are scheduled, this method
+        waits on them, verifies the sums, and returns the final artifact hash.
+        """
+        if os_type == "setup-os":
+            artifact = "disk-img"
+        else:
+            artifact = "update-img"
+
+        # Wait for all relevant downloads to finish
+        self.wait_for_downloads()
+
+        final_hashes = []
+
+        for idx, cdn_domain in enumerate(self.cdn_domains):
+            subdir = self.cdn_out / cdn_domain / os_type
+            local_sums_path = subdir / "SHA256SUMS"
+            local_tar_name = subdir / f"{artifact}.tar.zst"
+
+            # Verify the artifact matches the sums in that subdir
+            h = self.verify_sha256_against_sums(local_sums_path, local_tar_name, self.git_hash)
+            final_hashes.append(h)
+
+        # Check that all sources matched the same hash
+        if len(set(final_hashes)) != 1:
+            fail(f"The sources for {os_type} do not all match! {final_hashes}")
+
+        return final_hashes[0]
+
+    def compare_proposal_vs_cdn(self):
+        """Compare the proposal package hash vs. the hash from the first remote, if needed."""
+        if not self.proposal_id:
+            return
+
+        if self.guestos_proposal:
+            cdn_hash = self.compare_cdn_hash("guest-os")
+            if cdn_hash != self.proposal_package_sha256_hex:
+                fail(
+                    "The sha256 sum from the proposal does not match the one from the CDN storage for GuestOS.\n"
+                    f"Proposal sum: {self.proposal_package_sha256_hex}\n"
+                    f"CDN sum:      {cdn_hash}"
+                )
+            else:
+                log_success("The guest-os shasum from the proposal and remote match")
+        else:
+            cdn_hash = self.compare_cdn_hash("host-os")
+            if self.verify_hostos:
+                if cdn_hash != self.proposal_package_sha256_hex:
+                    fail(
+                        "The sha256 sum from the proposal does not match the one from the CDN storage for HostOS.\n"
+                        f"Proposal sum: {self.proposal_package_sha256_hex}\n"
+                        f"CDN sum:      {cdn_hash}"
+                    )
+                else:
+                    log_success("The hostos shasum from the proposal and remote match")
+
+    def clone_and_checkout_repo(self, ic_clone_path: Path):
+        """
+        If in CI or if we do not want to use GitHub approach,
+        we copy local. Else we clone from GitHub with a local cache to speed up.
+        Then we checkout the chosen commit or hash.
+        """
+        ic_clone_path_cache = self.base_cache_dir / "repo"
+        if os.getenv("CI") is not None:
+            log(f"Copy IC repository from {Path.cwd()} to temporary directory")
+            subprocess.run(["git", "clone", str(Path.cwd()), str(ic_clone_path)], check=True)
+        else:
+            log("Clone IC repository from GitHub")
+            try:
+                subprocess.run(
+                    ["git", "-C", str(ic_clone_path_cache), "fsck"],
+                    check=True,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                )
+            except subprocess.CalledProcessError:
+                log_debug(f"Git fsck failed in cache {ic_clone_path_cache}, removing IC repo git cache")
+                shutil.rmtree(ic_clone_path_cache, ignore_errors=True)
+            subprocess.run(
+                [
+                    "git",
+                    "clone",
+                    "--reference-if-able",
+                    str(ic_clone_path_cache),
+                    "--dissociate",
+                    "https://github.com/dfinity/ic",
+                    str(ic_clone_path),
+                ],
+                check=True,
+            )
+        os.chdir(ic_clone_path)
+
+        if self.git_commit:
+            self.check_git_repo()
+            self.check_ic_repo()
+            try:
+                subprocess.run(["git", "cat-file", "-e", f"{self.git_commit}^{{commit}}"], check=True)
+            except subprocess.CalledProcessError:
+                fail("When specifying -c, please provide a git hash on a branch of the IC repository.")
+
+        log(f"Checkout {self.git_hash}")
+        subprocess.run(["git", "fetch", "--quiet", "origin", self.git_hash], check=True)
+        subprocess.run(["git", "checkout", "--quiet", self.git_hash], check=True)
+
+        # Update local repo cache
+        shutil.rmtree(ic_clone_path_cache, ignore_errors=True)
+        shutil.copytree(ic_clone_path, ic_clone_path_cache)
+
+    def build_and_compare_locally(self):
+        """Builds the IC OS images locally, then compares them to the CDN artifacts."""
+        ic_clone_path = self.tmpdir / "ic"
+        self.clone_and_checkout_repo(ic_clone_path)
+
+        log("Build IC-OS (./ci/container/build-ic.sh --icos)")
+        subprocess.run(["./ci/container/build-ic.sh", "--icos"], check=True)
+        log_success("Built IC-OS successfully")
+
+        artifacts_path = ic_clone_path / "artifacts" / "icos"
+
+        def move_artifact(os_name: str, filename: str):
+            src = artifacts_path / os_name / filename
+            dst = self.dev_out / os_name / filename
+            dst.parent.mkdir(parents=True, exist_ok=True)
+            shutil.move(src, dst)
+
+        if self.verify_guestos:
+            move_artifact("guestos", "update-img.tar.zst")
+        if self.verify_hostos:
+            move_artifact("hostos", "update-img.tar.zst")
+        if self.verify_setupos:
+            move_artifact("setupos", "disk-img.tar.zst")
+
+        # Compare final hashes
+        log("Check if the hash of locally built artifact matches the remote's for each OS")
+        if self.verify_guestos:
+            local_path = self.dev_out / "guestos" / "update-img.tar.zst"
+            local_hash = self.compute_sha256(local_path)
+            cdn_hash = self.compare_cdn_hash("guest-os")
+            self.compare_hashes(local_hash, cdn_hash, "GuestOS")
+
+        if self.verify_hostos:
+            local_path = self.dev_out / "hostos" / "update-img.tar.zst"
+            local_hash = self.compute_sha256(local_path)
+            cdn_hash = self.compare_cdn_hash("host-os")
+            self.compare_hashes(local_hash, cdn_hash, "HostOS")
+
+        if self.verify_setupos:
+            local_path = self.dev_out / "setupos" / "disk-img.tar.zst"
+            local_hash = self.compute_sha256(local_path)
+            cdn_hash = self.compare_cdn_hash("setup-os")
+            self.compare_hashes(local_hash, cdn_hash, "SetupOS")
+
+    # --------------------------------------------------------------------------
+    # MAIN RUN
+    # --------------------------------------------------------------------------
+    def run(self):
+        start_time = time.time()
+
+        # Decide which proposal or commit
+        self.process_proposal()
+        self.decide_git_hash()
+
+        # Now that we know the git hash, init cache
+        self.init_cache()
+
+        # Prepare directories
+        self.prepare_directories()
+
+        # Schedule downloads for the proposal artifact, if any
+        self.start_proposal_download_if_needed()
+
+        # Schedule CDN downloads for whichever OS the user wants
+        if self.verify_guestos:
+            self.start_cdn_downloads_for_os("guest-os")
+        if self.verify_hostos:
+            self.start_cdn_downloads_for_os("host-os")
+        if self.verify_setupos:
+            self.start_cdn_downloads_for_os("setup-os")
+
+        # Meanwhile, check environment (done in parallel to the above downloads)
+        self.check_environment()
+
+        # Now verify the proposal (blocks on its artifact)
+        self.verify_proposal_artifacts()
+
+        # Compare proposal vs. CDN (which also blocks on the relevant OS downloads)
+        self.compare_proposal_vs_cdn()
+
+        # Build locally and compare (which also re-checks / blocks on downloads if needed)
+        self.build_and_compare_locally()
+
+        elapsed = time.time() - start_time
+        h, rem = divmod(elapsed, 3600)
+        m, s = divmod(rem, 60)
+        log(f"Total time: {int(h)}h {int(m)}m {int(s)}s")
+        sys.exit(0)
+
+
+# ------------------------------------------------------------------------------
+# MAIN
+# ------------------------------------------------------------------------------
+def main():
+    args = parse_args()
+
+    verifier = ReproducibilityVerifier(
+        verify_guestos=args.guestos,
+        verify_hostos=args.hostos,
+        verify_setupos=args.setupos,
+        proposal_id=args.proposal_id,
+        git_commit=args.commit,
+        clean=args.clean,
+        download_source_mode=args.download_source,
+    )
+    verifier.run()
+
+
+if __name__ == "__main__":
+    main()
