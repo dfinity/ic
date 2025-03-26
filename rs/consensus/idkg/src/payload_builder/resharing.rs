@@ -186,9 +186,7 @@ mod tests {
     use crate::{
         payload_builder::filter_idkg_reshare_chain_key_contexts,
         test_utils::{
-            create_reshare_request, dealings_context_from_reshare_request,
-            fake_ecdsa_idkg_master_public_key_id,
-            fake_master_public_key_ids_for_all_idkg_algorithms, set_up_idkg_payload,
+            create_reshare_request, dealings_context_from_reshare_request, set_up_idkg_payload,
             TestIDkgBlockReader, TestIDkgTranscriptBuilder,
         },
         utils::algorithm_for_key_id,
@@ -200,6 +198,7 @@ mod tests {
     use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
     use ic_logger::replica_logger::no_op_logger;
     use ic_management_canister_types_private::ComputeInitialIDkgDealingsResponse;
+    use ic_test_utilities_consensus::idkg::*;
     use ic_test_utilities_types::ids::subnet_test_id;
     use ic_types::consensus::idkg::{IDkgMasterPublicKeyId, IDkgPayload};
 

@@ -757,7 +757,10 @@ mod tests {
     use ic_protobuf::types::v1 as pb;
     use ic_registry_subnet_features::KeyConfig;
     use ic_test_artifact_pool::consensus_pool::TestConsensusPool;
-    use ic_test_utilities_consensus::fake::{Fake, FakeContentSigner};
+    use ic_test_utilities_consensus::{
+        fake::{Fake, FakeContentSigner},
+        idkg::*,
+    };
     use ic_test_utilities_registry::{add_subnet_record, SubnetRecordBuilder};
     use ic_test_utilities_types::ids::{node_test_id, subnet_test_id, user_test_id};
     use ic_types::{

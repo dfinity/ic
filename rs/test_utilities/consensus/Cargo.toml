@@ -13,8 +13,10 @@ ic-crypto-test-utils-ni-dkg = { path = "../../crypto/test_utils/ni-dkg" }
 ic-interfaces = { path = "../../interfaces" }
 ic-protobuf = { path = "../../protobuf" }
 ic-test-utilities-types = { path = "../types" }
+ic-management-canister-types-private = { path = "../../types/management_canister_types" }
 ic-types = { path = "../../types/types" }
 mockall = { workspace = true }
 phantom_newtype = { path = "../../phantom_newtype" }
 prost = { workspace = true }
 serde = { workspace = true }
+strum = { workspace = true }

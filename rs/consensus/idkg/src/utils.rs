@@ -623,8 +623,7 @@ pub(crate) fn update_purge_height(cell: &RefCell<Height>, new_height: Height) ->
 mod tests {
     use super::*;
     use crate::test_utils::{
-        create_available_pre_signature_with_key_transcript, fake_ecdsa_idkg_master_public_key_id,
-        fake_ecdsa_key_id, fake_master_public_key_ids_for_all_idkg_algorithms, set_up_idkg_payload,
+        create_available_pre_signature_with_key_transcript, set_up_idkg_payload,
         IDkgPayloadTestHelper,
     };
     use ic_config::artifact_pool::ArtifactPoolConfig;
@@ -638,7 +637,7 @@ mod tests {
     use ic_protobuf::registry::subnet::v1::EcdsaInitialization;
     use ic_registry_client_fake::FakeRegistryClient;
     use ic_registry_subnet_features::KeyConfig;
-    use ic_test_utilities_consensus::fake::Fake;
+    use ic_test_utilities_consensus::{fake::Fake, idkg::*};
     use ic_test_utilities_registry::{add_subnet_record, SubnetRecordBuilder};
     use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
     use ic_types::{

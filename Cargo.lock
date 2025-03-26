@@ -13755,6 +13755,7 @@ dependencies = [
  "ic-base-types",
  "ic-crypto-test-utils-ni-dkg",
  "ic-interfaces",
+ "ic-management-canister-types-private",
  "ic-protobuf",
  "ic-test-utilities-types",
  "ic-types",
@@ -13762,6 +13763,7 @@ dependencies = [
  "phantom_newtype",
  "prost 0.13.4",
  "serde",
+ "strum",
 ]
 
 [[package]]
