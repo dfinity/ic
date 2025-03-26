@@ -36,12 +36,12 @@ impl FileDownloader {
 
     /// Creates a new `FileDownloader` with a specified `chunk_timeout`. By default
     /// `overall_timeout` will be set to `chunk_timeout * OVERALL_TIMEOUT_MULTIPLIER`
-    pub fn new_with_timeout(logger: Option<ReplicaLogger>, timeout: Duration) -> Self {
+    pub fn new_with_timeout(logger: Option<ReplicaLogger>, chunk_timeout: Duration) -> Self {
         Self {
             client: Client::new(),
             logger,
-            chunk_timeout: timeout,
-            overall_timeout: timeout.mul_f32(OVERALL_TIMEOUT_MULTIPLIER),
+            chunk_timeout,
+            overall_timeout: chunk_timeout.mul_f32(OVERALL_TIMEOUT_MULTIPLIER),
         }
     }
 
@@ -224,7 +224,18 @@ impl FileDownloader {
     ) -> FileDownloadResult<()> {
         while let Some(chunk) = tokio::time::timeout(self.chunk_timeout, response.chunk())
             .await
-            .map_err(|_| FileDownloadError::TimeoutError)??
+            // This error comes from `tokio::time::timeout`
+            .map_err(|_| FileDownloadError::TimeoutError)?
+            // Since we use streaming, this error can only be one of:
+            //   * `overall_timeout` - client side
+            //   * 5xx error from the server or proxy serving the chunks
+            .map_err(|e| {
+                if e.is_timeout() {
+                    FileDownloadError::TimeoutError
+                } else {
+                    FileDownloadError::ReqwestError(e)
+                }
+            })?
         {
             file.write_all(&chunk)
                 .map_err(|e| FileDownloadError::file_write_error(file_path, e))?;
