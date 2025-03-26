@@ -2656,7 +2656,7 @@ impl From<CanisterSnapshotBits> for pb_canister_snapshot_bits::CanisterSnapshotB
                     &item.on_low_wasm_memory_hook_status,
                 )
                 .into(),
-            source: item.source.into(),
+            source: pb_canister_snapshot_bits::SnapshotSource::from(item.source).into(),
         }
     }
 }
@@ -2687,15 +2687,16 @@ impl TryFrom<pb_canister_snapshot_bits::CanisterSnapshotBits> for CanisterSnapsh
             exported_globals.push(global.try_into()?);
         }
         let global_timer = CanisterTimer::from_nanos_since_unix_epoch(item.global_timer_nanos);
-        let on_low_wasm_memory_hook_status: pb_canister_state_bits::OnLowWasmMemoryHookStatus =
+        let on_low_wasm_memory_hook_status =
             pb_canister_state_bits::OnLowWasmMemoryHookStatus::try_from(
                 item.on_low_wasm_memory_hook_status,
             )
             .unwrap_or_default();
         let on_low_wasm_memory_hook_status =
             OnLowWasmMemoryHookStatus::try_from(on_low_wasm_memory_hook_status).unwrap_or_default();
-
-        let source = SnapshotSource::try_from(item.source)?;
+        let source =
+            pb_canister_snapshot_bits::SnapshotSource::try_from(item.source).unwrap_or_default();
+        let source = SnapshotSource::try_from(source)?;
         Ok(Self {
             snapshot_id: SnapshotId::from((canister_id, item.snapshot_id)),
             canister_id,
