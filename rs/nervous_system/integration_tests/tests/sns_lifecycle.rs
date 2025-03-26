@@ -276,7 +276,6 @@ async fn test_sns_lifecycle(
             .map(|(account_identifier, balance_icp, _)| (*account_identifier, *balance_icp))
             .collect();
 
-        let with_mainnet_nns_canister_versions = false;
         let neurons_fund_hotkeys = neurons_fund_config.hotkeys;
         let mut nns_installer = NnsInstaller::default();
 
@@ -284,15 +283,10 @@ async fn test_sns_lifecycle(
             .with_ledger_balances(direct_participant_initial_icp_balances)
             .with_neurons_fund_hotkeys(neurons_fund_hotkeys);
 
-        if with_mainnet_nns_canister_versions {
-            nns_installer.with_mainnet_nns_canister_versions();
-        } else {
-            nns_installer.with_current_nns_canister_versions();
-        }
+        nns_installer
+            .with_current_nns_canister_versions()
+            .with_test_governance_canister();
 
-        if let Some(custom_registry_mutations) = None {
-            nns_installer.with_custom_registry_mutations(custom_registry_mutations);
-        }
         let nns_neuron_controller_principal_ids = nns_installer.install(&pocket_ic).await;
 
         let with_mainnet_sns_wasms = false;
