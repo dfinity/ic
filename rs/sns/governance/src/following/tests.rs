@@ -374,7 +374,6 @@ fn test_validate_followees_for_topic() {
             "Happy scenario IV: Maximum possible number of followees for a topic.",
             FolloweesForTopic {
                 followees: (0..15)
-                    .into_iter()
                     .map(|i| Followee {
                         neuron_id: Some(nid(i)),
                         alias: None,
@@ -384,7 +383,6 @@ fn test_validate_followees_for_topic() {
             },
             Ok(ValidatedFolloweesForTopic {
                 followees: (0..15)
-                    .into_iter()
                     .map(|i| ValidatedFollowee {
                         topic: Topic::DappCanisterManagement,
                         neuron_id: nid(i),
@@ -398,7 +396,6 @@ fn test_validate_followees_for_topic() {
             "Problem I: Too many followees for a topic.",
             FolloweesForTopic {
                 followees: (0..16)
-                    .into_iter()
                     .map(|i| Followee {
                         neuron_id: Some(nid(i)),
                         alias: None,

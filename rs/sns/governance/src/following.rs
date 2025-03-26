@@ -38,7 +38,7 @@ pub(crate) struct ValidatedFolloweesForTopic {
     pub topic: Topic,
 }
 
-#[derive(Clone, Eq, PartialEq, Ord)]
+#[derive(Clone, Eq, PartialEq)]
 pub(crate) struct ValidatedFollowee {
     topic: Topic,
 
@@ -90,24 +90,31 @@ impl fmt::Display for ValidatedFollowee {
 /// 1. topic
 /// 2. alias
 /// 3. neuron ID
+///
 /// This ordering is helpful for detecting inconsistencies across multiple followees.
+impl Ord for ValidatedFollowee {
+    fn cmp(&self, other: &Self) -> Ordering {
+        match self.topic.cmp(&other.topic) {
+            Ordering::Equal => {}
+            ord => return ord,
+        }
+        match self.neuron_id.cmp(&other.neuron_id) {
+            Ordering::Equal => {}
+            ord => return ord,
+        }
+        self.alias.cmp(&other.alias)
+    }
+}
+
 impl PartialOrd for ValidatedFollowee {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        match self.topic.partial_cmp(&other.topic) {
-            Some(Ordering::Equal) => {}
-            ord => return ord,
-        }
-        match self.neuron_id.partial_cmp(&other.neuron_id) {
-            Some(Ordering::Equal) => {}
-            ord => return ord,
-        }
-        self.alias.partial_cmp(&other.alias)
+        Some(self.cmp(other))
     }
 }
 
 impl fmt::Debug for ValidatedFollowee {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", format!("{}", self))
+        write!(f, "{}", format_args!("{}", self))
     }
 }
 
@@ -138,7 +145,7 @@ pub(crate) fn get_duplicate_followee_groups(
     followees: &BTreeSet<ValidatedFollowee>,
 ) -> FolloweeGroups {
     followees
-        .into_iter()
+        .iter()
         .group_by(|followee| followee.topic)
         .into_iter()
         .filter_map(|(topic, group_for_this_topic)| {
@@ -224,7 +231,7 @@ pub(crate) fn get_inconsistent_aliases(
     followees: &BTreeSet<ValidatedFollowee>,
 ) -> FolloweeAliasGroups {
     followees
-        .into_iter()
+        .iter()
         .sorted_by(|x, y| x.neuron_id.cmp(&y.neuron_id))
         .group_by(|followee| followee.neuron_id.clone())
         .into_iter()
@@ -364,7 +371,7 @@ impl TryFrom<FolloweesForTopic> for ValidatedFolloweesForTopic {
     }
 }
 
-fn fmt_topics(topics: &Vec<Topic>) -> String {
+fn fmt_topics(topics: &[Topic]) -> String {
     topics
         .iter()
         .map(|topic| format!("{} ({})", topic, *topic as i32))
@@ -418,7 +425,7 @@ impl TryFrom<SetFollowing> for ValidatedSetFollowing {
 
         let duplicate_topics = topic_following
             .iter()
-            .group_by(|topic_following| topic_following.topic.clone())
+            .group_by(|topic_following| topic_following.topic)
             .into_iter()
             .filter_map(
                 |(topic, group)| {
