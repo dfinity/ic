@@ -158,22 +158,15 @@ impl RegistryCanister {
                 }
 
                 fn new_err(cause: impl std::fmt::Debug) -> String {
-                    format!(
-                        "Unable to fetch large registry record: {:?}",
-                        cause,
-                    )
+                    format!("Unable to fetch large registry record: {:?}", cause,)
                 }
 
                 // Call get_chunk.
                 let content_sha256 = Some(content_sha256.to_vec());
-                let request = Encode!(&GetChunkRequest { content_sha256 })
-                    .map_err(new_err)?;
-                let get_chunk_response = self.agent
-                    .execute_query(
-                        &self.registry_canister_id,
-                        "get_chunk",
-                        request,
-                    )
+                let request = Encode!(&GetChunkRequest { content_sha256 }).map_err(new_err)?;
+                let get_chunk_response = self
+                    .agent
+                    .execute_query(&self.registry_canister_id, "get_chunk", request)
                     .await
                     .map_err(new_err)?
                     // I honestly do not know what it means if None is returned
@@ -194,7 +187,7 @@ impl RegistryCanister {
             &self.canister_id,
             nns_public_key,
             &response[..],
-            & Fetcher {
+            &Fetcher {
                 registry_canister_id: self.canister_id,
                 agent: &self.agent.choose(&mut rand::thread_rng()).unwrap(),
             },
