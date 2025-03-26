@@ -84,14 +84,16 @@ system_test_nns(
     uses_guestos_dev = True,
     uses_hostos_dev_test = True,
     uses_setupos_dev = True,
-    runtime_deps = GUESTOS_RUNTIME_DEPS,
+    runtime_deps = GUESTOS_RUNTIME_DEPS + ["//ic-os/setupos:config/node_operator_private_key.pem"],
     deps = RUNNER_DEPENDENCIES,
 )
 
 # Tests if "latest_release" in mainnet-icos-revisions.json can successfully upgrade to current commit
 system_test_nns(
     name = "hostos_upgrade_from_latest_release_to_current",
-    env = MAINNET_ENV,
+    env = MAINNET_ENV | {
+        "NODE_OPERATOR_PRIV_KEY_PATH": "$(rootpath //ic-os/setupos:config/node_operator_private_key.pem)",
+    },
     flaky = True,  # flakiness rate of 5% over the month from 2025-02-11 till 2025-03-11.
     tags = [
         "system_test_hourly",
@@ -103,7 +105,7 @@ system_test_nns(
     uses_guestos_dev = True,
     uses_hostos_dev_test = True,
     uses_setupos_mainnet = True,
-    runtime_deps = GUESTOS_RUNTIME_DEPS,
+    runtime_deps = GUESTOS_RUNTIME_DEPS + ["//ic-os/setupos:config/node_operator_private_key.pem"],
     deps = RUNNER_DEPENDENCIES,
 )
 
@@ -112,7 +114,10 @@ system_test_nns(
 # *to* an arbitrary mainnet version ("latest_release" in mainnet-icos-revisions.json)
 system_test_nns(
     name = "hostos_upgrade_from_mainnet_to_mainnet",
-    env = MAINNET_ENV,
+    data = ["//ic-os/setupos:config/node_operator_private_key.pem"],
+    env = MAINNET_ENV | {
+        "NODE_OPERATOR_PRIV_KEY_PATH": "$(rootpath //ic-os/setupos:config/node_operator_private_key.pem)",
+    },
     flaky = True,
     tags = ["manual"],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
