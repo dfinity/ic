@@ -5207,7 +5207,7 @@ pub mod archiving {
         assert_eq!(archived_args.length, Nat::from(1u64));
     }
 
-    pub fn archiving_in_chunks_returns_non_disjoint_block_range_locations<T>(
+    pub fn archiving_in_chunks_returns_disjoint_block_range_locations<T>(
         ledger_wasm: Vec<u8>,
         encode_init_args: fn(InitArgs) -> T,
     ) where
@@ -5250,7 +5250,7 @@ pub mod archiving {
         assert!(list_archives(&env, ledger_id).is_empty());
 
         // Perform a transaction. This should spawn an archive, and archive `num_blocks_to_archive`,
-        // but since there are so many, the archiving will be done in chunks.
+        // but since there are so many blocks to archive, the archiving will be done in chunks.
         let transfer_message_id = env.send_ingress(
             p1,
             ledger_id,
@@ -5279,6 +5279,30 @@ pub mod archiving {
             check_if_block_in_ledger_and_archive(&env, 0, &get_blocks_res),
             BlockInLedgerAndArchive::NoArchiveInfo
         );
+        // Verify that the block was already archived. Since the archiving is done in chunks, the
+        // archiving is not yet completed, so the ledger reports the block `0` to be present only
+        // in the ledger, even though it is also present in the archive by now.
+        let archive_id = archive_info
+            .first()
+            .expect("should return one archive info")
+            .canister_id;
+        let get_blocks_res = icrc3_get_blocks(
+            &env,
+            CanisterId::unchecked_from_principal(PrincipalId::from(archive_id)),
+            0,
+            1,
+        );
+        assert_eq!(
+            0,
+            get_blocks_res
+                .blocks
+                .first()
+                .expect("archive should contain the first block")
+                .id
+                .0
+                .to_u64()
+                .expect("block ID should fit into a u64")
+        );
 
         // Tick until the transfer completes, meaning the archiving also completes.
         const MAX_TICKS: usize = 500;
@@ -5299,9 +5323,27 @@ pub mod archiving {
         .expect("transfer should succeed");
         assert_eq!(transfer_result, NUM_INITIAL_BALANCES);
 
-        // Verify that the ledger now does not return the first block, but reports that it is in the archive.
+        // Verify that the ledger now does not return the first block, but reports that it is in
+        // the first archive.
         let get_blocks_res = icrc3_get_blocks(&env, ledger_id, 0, 1);
         assert!(get_blocks_res.blocks.is_empty());
+        let first_archive_info = get_blocks_res
+            .archived_blocks
+            .first()
+            .expect("should return one archive info");
+        let archive_args = first_archive_info
+            .args
+            .first()
+            .expect("should return one archive args");
+        let archived_range = range_utils::make_range(
+            archive_args.start.0.to_u64().unwrap(),
+            archive_args.length.0.to_u64().unwrap() as usize,
+        );
+        assert!(
+            archived_range.contains(&0u64),
+            "expected archived_range {:?} to contain block number 0",
+            archived_range
+        );
     }
 
     pub fn get_blocks_returns_multiple_archive_callbacks<T>(
