@@ -209,9 +209,9 @@ pub struct CanisterSnapshotBits {
     pub exported_globals: Vec<Global>,
     /// Whether this snapshot comes from a canister or from a user upload.
     pub source: SnapshotSource,
-    /// The state of the global timer
+    /// The state of the global timer.
     pub global_timer: CanisterTimer,
-    /// The state of the low memory hook
+    /// The state of the low memory hook.
     pub on_low_wasm_memory_hook_status: OnLowWasmMemoryHookStatus,
 }
 
