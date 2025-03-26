@@ -54,14 +54,6 @@ MACRO_DEPENDENCIES = [
     "@crate_index//:strum_macros",
 ]
 
-DATA = [
-    "//rs/rust_canisters/stable_structures:stable_structures_canister",
-]
-
-ENV = {
-    "STABLE_STRUCTURES_CANISTER_WASM_PATH": "$(rootpath //rs/rust_canisters/stable_structures:stable_structures_canister)",
-}
-
 rust_library(
     name = "idkg",
     srcs = glob(["src/**/*.rs"]),
