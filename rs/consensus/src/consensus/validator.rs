@@ -1899,9 +1899,7 @@ pub mod test {
     use ic_artifact_pool::dkg_pool::DkgPoolImpl;
     use ic_config::artifact_pool::ArtifactPoolConfig;
     use ic_consensus_idkg::test_utils::{
-        add_available_quadruple_to_payload, empty_idkg_payload,
-        fake_ecdsa_idkg_master_public_key_id, fake_signature_request_context_with_pre_sig,
-        fake_state_with_signature_requests, request_id,
+        fake_signature_request_context_with_pre_sig, fake_state_with_signature_requests,
     };
     use ic_consensus_mocks::{
         dependencies_with_subnet_params, dependencies_with_subnet_records_with_raw_state_manager,
@@ -1919,7 +1917,15 @@ pub mod test {
     use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
     use ic_test_artifact_pool::consensus_pool::TestConsensusPool;
     use ic_test_utilities::{crypto::CryptoReturningOk, state_manager::RefMockStateManager};
-    use ic_test_utilities_consensus::{assert_changeset_matches_pattern, fake::*, matches_pattern};
+    use ic_test_utilities_consensus::{
+        assert_changeset_matches_pattern,
+        fake::*,
+        idkg::{
+            add_available_quadruple_to_payload, empty_idkg_payload,
+            fake_ecdsa_idkg_master_public_key_id, request_id,
+        },
+        matches_pattern,
+    };
     use ic_test_utilities_registry::{add_subnet_record, SubnetRecordBuilder};
     use ic_test_utilities_time::FastForwardTimeSource;
     use ic_test_utilities_types::{
