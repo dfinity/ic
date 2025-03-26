@@ -35,12 +35,7 @@ use ic_https_outcalls_service::https_outcalls_service_server::HttpsOutcallsServi
 use ic_https_outcalls_service::https_outcalls_service_server::HttpsOutcallsServiceServer;
 use ic_https_outcalls_service::HttpsOutcallRequest;
 use ic_https_outcalls_service::HttpsOutcallResponse;
-use ic_interfaces::{
-    certification::{Verifier, VerifierError},
-    crypto::BasicSigner,
-    ingress_pool::IngressPoolThrottler,
-    validation::ValidationResult,
-};
+use ic_interfaces::{crypto::BasicSigner, ingress_pool::IngressPoolThrottler};
 use ic_interfaces_adapter_client::NonBlockingChannel;
 use ic_interfaces_state_manager::StateReader;
 use ic_logger::{no_op_logger, ReplicaLogger};
@@ -55,8 +50,8 @@ use ic_registry_routing_table::{
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_state_machine_tests::{
-    add_global_registry_records, add_initial_registry_records, StateMachine, StateMachineBuilder,
-    StateMachineConfig, StateMachineStateDir, SubmitIngressError, Subnets,
+    add_global_registry_records, add_initial_registry_records, FakeVerifier, StateMachine,
+    StateMachineBuilder, StateMachineConfig, StateMachineStateDir, SubmitIngressError, Subnets,
 };
 use ic_state_manager::StateManagerImpl;
 use ic_types::batch::BlockmakerMetrics;
@@ -68,7 +63,6 @@ use ic_types::{
         CanisterHttpRequestId, CanisterHttpResponse as AdapterCanisterHttpResponse,
         CanisterHttpResponseContent,
     },
-    consensus::certification::Certification,
     crypto::{BasicSig, BasicSigOf, CryptoResult, Signable},
     malicious_flags::MaliciousFlags,
     messages::{
@@ -581,7 +575,10 @@ impl PocketIcSubnets {
             .unwrap_or(GENESIS.into())
     }
 
-    fn create_subnet(&mut self, subnet_config_info: SubnetConfigInfo) -> SubnetConfigInternal {
+    fn create_subnet(
+        &mut self,
+        subnet_config_info: SubnetConfigInfo,
+    ) -> ([u8; 32], SubnetConfigInternal) {
         let SubnetConfigInfo {
             ranges,
             alloc_range,
@@ -724,39 +721,26 @@ impl PocketIcSubnets {
         }
 
         let nns_subnet = self.get_nns().unwrap();
-        if nns_subnet.get_subnet_id() != subnet_id {
-            if let Ok(delegation) = nns_subnet.get_delegation_for_subnet(subnet_id) {
-                let subnet = self.subnets.get_subnet(subnet_id).unwrap();
-                subnet.set_delegation_from_nns(delegation);
-            }
+        if subnet_id != nns_subnet.get_subnet_id() {
+            let delegation = nns_subnet.get_delegation_for_subnet(subnet_id).unwrap();
+            let subnet = self.subnets.get_subnet(subnet_id).unwrap();
+            subnet.set_delegation_from_nns(delegation);
         }
 
-        SubnetConfigInternal {
+        let subnet_config_internal = SubnetConfigInternal {
             subnet_id,
             subnet_kind,
             instruction_config,
             ranges,
             alloc_range,
-        }
+        };
+        (subnet_seed, subnet_config_internal)
     }
 
     fn get_nns(&self) -> Option<Arc<StateMachine>> {
         self.nns_subnet
             .as_ref()
             .map(|subnet| subnet.state_machine.clone())
-    }
-}
-
-struct FakeVerifier;
-
-impl Verifier for FakeVerifier {
-    fn validate(
-        &self,
-        _: SubnetId,
-        _: &Certification,
-        _: RegistryVersion,
-    ) -> ValidationResult<VerifierError> {
-        Ok(())
     }
 }
 
@@ -928,23 +912,27 @@ impl PocketIc {
                 sys.chain(app).chain(verified_app)
             };
 
-            let mut subnet_config_info: Vec<SubnetConfigInfo> = vec![];
-
             let mut all_subnets: Vec<_> = fixed_range_subnets
                 .into_iter()
                 .chain(flexible_subnets)
                 .collect();
-            // subnets with a given state must be sorted first
+
+            // we sort subnets with a given state first
+            // so that their canister ranges do not conflict with canister ranges
+            // of fresh subnets (which are more flexible)
             all_subnets.sort_by(
                 |(_, a, _): &(_, Option<PathBuf>, _), (_, b, _): &(_, Option<PathBuf>, _)| {
                     a.is_none().cmp(&b.is_none())
                 },
             );
 
+            let mut subnet_config_info: Vec<SubnetConfigInfo> = vec![];
+
             for (subnet_kind, subnet_state_dir, instruction_config) in all_subnets {
                 let (ranges, alloc_range, subnet_id) = if let Some(ref subnet_state_dir) =
                     subnet_state_dir
                 {
+                    // We create a temporary state manager used to read the given state metadata.
                     let state_manager = StateManagerImpl::new(
                         Arc::new(FakeVerifier),
                         SubnetId::new(PrincipalId::default()),
@@ -961,6 +949,7 @@ impl PocketIc {
                     // Shut down the temporary state manager to avoid race conditions.
                     state_manager.flush_tip_channel();
                     drop(state_manager);
+
                     let subnet_id = metadata.own_subnet_id;
                     let ranges: Vec<_> = metadata
                         .network_topology
@@ -969,6 +958,9 @@ impl PocketIc {
                         .iter()
                         .cloned()
                         .collect();
+                    range_gen.add_assigned(ranges.clone())?;
+
+                    // We validate the given canister ranges.
                     let mut sorted_ranges = ranges.clone();
                     sorted_ranges.sort();
                     if let Some(mut subnet_kind_ranges) = subnet_kind_canister_range(subnet_kind) {
@@ -992,13 +984,14 @@ impl PocketIc {
                             }
                         }
                     }
-                    range_gen.add_assigned(ranges.clone())?;
+
                     (ranges, None, Some(subnet_id))
                 } else {
                     let RangeConfig {
                         canister_id_ranges: ranges,
                         canister_allocation_range: alloc_range,
                     } = get_range_config(subnet_kind, &mut range_gen)?;
+
                     (ranges, alloc_range, None)
                 };
 
@@ -1023,7 +1016,7 @@ impl PocketIc {
             non_nns1.cmp(&non_nns2)
         });
 
-        // Create all StateMachines and subnet configs from the subnet config infos.
+        // Create all subnets and store their configs.
         let mut subnets = PocketIcSubnets::new(
             runtime.clone(),
             state_dir,
@@ -1033,11 +1026,7 @@ impl PocketIc {
         );
         let mut subnet_configs = BTreeMap::new();
         for subnet_config_info in subnet_config_info.into_iter() {
-            let subnet_seed = compute_subnet_seed(
-                subnet_config_info.ranges.clone(),
-                subnet_config_info.alloc_range,
-            );
-            let subnet_config_internal = subnets.create_subnet(subnet_config_info);
+            let (subnet_seed, subnet_config_internal) = subnets.create_subnet(subnet_config_info);
             subnet_configs.insert(subnet_seed, subnet_config_internal);
         }
 
@@ -2829,18 +2818,16 @@ fn route(
                     // and all existing canister ranges within the PocketIC instance and thus we use
                     // `RangeGen::next_range()` to produce such a canister range.
                     let canister_allocation_range = pic.range_gen.next_range();
-                    let ranges = vec![range];
-                    let alloc_range = Some(canister_allocation_range);
-                    let subnet_seed = compute_subnet_seed(ranges.clone(), alloc_range);
-                    let subnet_config_internal = pic.subnets.create_subnet(SubnetConfigInfo {
-                        ranges: vec![range],
-                        alloc_range: Some(canister_allocation_range),
-                        subnet_id: None,
-                        subnet_state_dir: None,
-                        subnet_kind,
-                        instruction_config,
-                        time: GENESIS.into(),
-                    });
+                    let (subnet_seed, subnet_config_internal) =
+                        pic.subnets.create_subnet(SubnetConfigInfo {
+                            ranges: vec![range],
+                            alloc_range: Some(canister_allocation_range),
+                            subnet_id: None,
+                            subnet_state_dir: None,
+                            subnet_kind,
+                            instruction_config,
+                            time: GENESIS.into(),
+                        });
                     pic.topology
                         .subnet_configs
                         .insert(subnet_seed, subnet_config_internal);

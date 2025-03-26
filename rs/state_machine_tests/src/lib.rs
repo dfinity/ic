@@ -198,7 +198,7 @@ pub enum SubmitIngressError {
     UserError(UserError),
 }
 
-struct FakeVerifier;
+pub struct FakeVerifier;
 
 impl Verifier for FakeVerifier {
     fn validate(
