@@ -668,10 +668,11 @@ pub fn configure_setupos_image(
     let mut cmd = Command::new(setupos_inject_configs);
     cmd.arg("--image-path")
         .arg(&uncompressed_image)
-        .arg("--node-operator-private-key")
         .arg("--deployment-environment")
         .arg("testnet")
         .arg("--mgmt-mac")
+        .arg(&mac)
+        .arg("--mgmt-mac-2")
         .arg(&mac)
         .arg("--ipv6-prefix")
         .arg(&prefix)
@@ -690,7 +691,9 @@ pub fn configure_setupos_image(
         .env(path_key, &new_path);
 
     if let Ok(node_key) = std::env::var("NODE_OPERATOR_PRIV_KEY_PATH") {
-        cmd.arg("--node-operator-private-key").arg(node_key);
+        if !node_key.trim().is_empty() {
+            cmd.arg("--node-operator-private-key").arg(node_key);
+        }
     }
 
     if !admin_keys.is_empty() {
